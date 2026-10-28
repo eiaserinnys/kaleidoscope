@@ -107,8 +107,12 @@ function CodeEditor({ path, session, text }: { path: string; session: FileEditor
 
   useEffect(() => {
     const view = viewRef.current;
-    if (!view || view.state.doc.toString() === text) return;
+    // sliceDoc()은 lineSeparator(CRLF 파일이면 "\r\n")로 이어 준다. doc.toString()은 늘 "\n"이라
+    // CRLF 파일에서 매번 다르다고 보고 문서를 통째로 바꿔 커서가 맨 앞으로 갔다.
+    if (!view || view.state.sliceDoc() === text) return;
+    const head = view.state.selection.main.head;
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+    view.dispatch({ selection: { anchor: Math.min(head, view.state.doc.length) } });
   }, [text]);
 
   return <div className="ks-editor-view" ref={hostRef} />;

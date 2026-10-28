@@ -33,7 +33,7 @@ export function createMarkdownEditorState(
     ]),
     EditorView.lineWrapping,
     EditorView.updateListener.of((update) => {
-      if (update.docChanged) onChange(update.state.doc.toString());
+      if (update.docChanged) onChange(update.state.sliceDoc());
     }),
     EditorView.contentAttributes.of({ "aria-label": "마크다운 편집기" }),
   ];
