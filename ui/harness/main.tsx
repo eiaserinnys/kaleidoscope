@@ -1,0 +1,145 @@
+import { useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
+import type { App, AppDefinition, AppVersion, AppWindow, ShellSnapshot } from "../src/contract/contract";
+import {
+  AppWindowContent,
+  createFakeTransport,
+  createHttpTransport,
+  createShellStore,
+  useShellSnapshot,
+  type FakeTransport,
+} from "@kaleidoscope/ui";
+import "@kaleidoscope/ui/styles.css";
+import "./harness.css";
+import mdEditorJson from "../../examples/md-editor.json";
+import mdViewerJson from "../../examples/md-viewer.json";
+
+const mdEditor = mdEditorJson as AppDefinition;
+const mdViewer = mdViewerJson as AppDefinition;
+const definitions = [mdEditor, mdViewer];
+const timestamp = "2026-10-28T00:00:00Z";
+
+function makeWindow(definition: AppDefinition, id: string, z: number): AppWindow {
+  return {
+    id,
+    desktop_id: "desktop-1",
+    app_id: definition.id,
+    app_version: 1,
+    rect: { x: 0, y: 0, width: 640, height: 520 },
+    z,
+    state: { current_file: null },
+    created_at: timestamp,
+    updated_at: timestamp,
+  };
+}
+
+const apps: App[] = definitions.map((definition) => ({
+  id: definition.id,
+  name: definition.name,
+  current_version: 1,
+  created_at: timestamp,
+  updated_at: timestamp,
+}));
+const appVersions: AppVersion[] = definitions.map((definition) => ({
+  app_id: definition.id,
+  version: 1,
+  definition,
+  created_at: timestamp,
+}));
+
+const initialSnapshot: ShellSnapshot = {
+  shared: {
+    apps,
+    app_versions: appVersions,
+    workspaces: [{ id: "workspace-1", name: "kaleidoscope", created_at: timestamp, updated_at: timestamp }],
+    desktops: [{ id: "desktop-1", workspace_id: "workspace-1", name: "작업", position: 0, created_at: timestamp, updated_at: timestamp }],
+    windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(mdViewer, "viewer-window", 2)],
+  },
+  device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [] },
+  supported: { blocks: 1, modules: { files: 1 } },
+};
+
+const sampleDocument = `# kaleidoscope 작업 메모
+
+이 문서는 편집기와 읽기 화면의 줄바꿈, 제목 위계, 한국어 본문을 확인하기 위한 예시입니다. 문장을 길게 두어도 오른쪽 패널을 밀어내지 않고 읽기 폭 안에서 자연스럽게 이어집니다.
+
+## 진행 중인 일
+
+| 항목 | 상태 | 다음 동작 |
+| --- | --- | --- |
+| 블록 렌더러 | 구현 중 | 파일을 골라 편집 |
+| 마크다운 보기 | 준비됨 | 표와 코드 확인 |
+
+### 짧은 코드 예시
+
+    const workspace = "kaleidoscope";
+    console.log(workspace);
+
+[프로젝트 안내](https://example.com) · ![표식 아이콘](marker.png)
+`;
+
+const fakeTransport = createFakeTransport({
+  snapshot: initialSnapshot,
+  folder: { root_path: "/fake/docs", root_name: "문서" },
+  files: {
+    "README.md": "# 첫 문서\n\n편집과 자동 저장을 확인합니다.\n",
+    "Kaleidoscope.md": sampleDocument,
+    "notes/meeting.md": "# 회의 메모\n\n다음 내용을 이어 씁니다.\n",
+    "notes/line-endings.md": "첫 줄\r\n둘째 줄\r\n",
+    "notes/READ-ME.MD": "# 대문자 확장자\n",
+    "notes/skip.txt": "트리에서 숨길 파일입니다",
+  },
+});
+
+const coreUrl = new URLSearchParams(window.location.search).get("core");
+const transport = coreUrl ? createHttpTransport(coreUrl) : fakeTransport;
+const store = createShellStore(transport);
+
+function Harness() {
+  const snapshot = useShellSnapshot(store);
+  const editorWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-editor");
+  const viewerWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-viewer");
+
+  return (
+    <main className="ks-harness">
+      <header className="ks-harness-header">
+        <h1>kaleidoscope</h1>
+        <span>블록 검수 창</span>
+      </header>
+      <div className="ks-harness-apps">
+        <section aria-label="md-editor" className="ks-harness-window" data-testid="app-window-md-editor">
+          <header className="ks-harness-window-header">md-editor</header>
+          <div className="ks-harness-window-content">
+            {editorWindow
+              ? <AppWindowContent store={store} windowId={editorWindow.id} />
+              : <div className="ks-harness-loading">불러오는 중</div>}
+          </div>
+        </section>
+        <section aria-label="md-viewer" className="ks-harness-window" data-testid="app-window-md-viewer">
+          <header className="ks-harness-window-header">md-viewer</header>
+          <div className="ks-harness-window-content">
+            {viewerWindow
+              ? <AppWindowContent store={store} windowId={viewerWindow.id} />
+              : <div className="ks-harness-loading">불러오는 중</div>}
+          </div>
+        </section>
+      </div>
+      {!coreUrl ? <FakeFilePanel transport={fakeTransport} /> : null}
+    </main>
+  );
+}
+
+function FakeFilePanel({ transport: files }: { transport: FakeTransport }) {
+  const [currentFiles, setCurrentFiles] = useState(files.getFiles());
+
+  useEffect(() => files.subscribeFiles(() => setCurrentFiles(files.getFiles())), [files]);
+
+  return (
+    <details className="ks-harness-dev-panel" data-testid="fake-files-panel">
+      <summary>가상 파일</summary>
+      <pre>{Object.entries(currentFiles).map(([path, contents]) => `${path}\n${contents}`).join("\n")}</pre>
+    </details>
+  );
+}
+
+createRoot(document.getElementById("root")!).render(<Harness />);

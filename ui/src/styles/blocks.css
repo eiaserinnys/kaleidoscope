@@ -1,0 +1,280 @@
+.ks-file-tree {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ks-color-surface);
+}
+
+.ks-file-tree-ungranted {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ks-space-2);
+  padding: var(--ks-space-4);
+}
+
+.ks-file-tree-header {
+  display: flex;
+  min-width: 0;
+  min-height: var(--ks-control-height);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ks-space-2);
+  border-block-end: var(--ks-line-width) solid var(--ks-color-border);
+  padding: var(--ks-space-2) var(--ks-space-3);
+}
+
+.ks-file-tree-root-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--ks-type-title);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ks-file-tree-list {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: var(--ks-space-2);
+}
+
+.ks-file-tree-entry {
+  min-width: 0;
+}
+
+.ks-file-tree-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--ks-control-height);
+  align-items: center;
+  gap: var(--ks-space-2);
+  border: var(--ks-line-width) solid transparent;
+  border-radius: var(--ks-radius-small);
+  background: transparent;
+  color: var(--ks-color-text);
+  cursor: pointer;
+  font-size: var(--ks-type-body);
+  line-height: var(--ks-line-body);
+  padding: var(--ks-space-1) var(--ks-space-2);
+  text-align: start;
+}
+
+.ks-file-tree-row:hover {
+  background: var(--ks-color-surface-raised);
+}
+
+.ks-file-tree-row.is-selected {
+  background: var(--ks-color-selection);
+}
+
+.ks-file-tree-icon {
+  display: inline-grid;
+  width: var(--ks-space-4);
+  height: var(--ks-space-4);
+  flex: 0 0 var(--ks-space-4);
+  place-items: center;
+  color: var(--ks-color-muted);
+}
+
+.ks-file-tree-icon svg {
+  display: block;
+  width: var(--ks-space-4);
+  height: var(--ks-space-4);
+}
+
+.ks-chevron {
+  transform: rotate(0deg);
+  transition: transform 120ms ease;
+}
+
+.ks-chevron.is-expanded {
+  transform: rotate(90deg);
+}
+
+.ks-file-tree-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ks-file-tree-children {
+  min-width: 0;
+  margin-inline-start: var(--ks-space-4);
+}
+
+.ks-markdown-editor {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: var(--ks-color-surface);
+}
+
+.ks-editor-content {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ks-editor-view,
+.ks-editor-view .cm-editor,
+.ks-editor-view .cm-scroller {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ks-editor-view .cm-editor {
+  background: var(--ks-color-surface);
+  color: var(--ks-color-text);
+  font-family: var(--ks-font-family);
+  font-size: var(--ks-type-editor);
+  line-height: var(--ks-line-editor);
+}
+
+.ks-editor-view .cm-scroller {
+  overflow: auto;
+  font-family: inherit;
+}
+
+.ks-editor-view .cm-content {
+  min-height: 100%;
+  padding: var(--ks-space-4);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ks-editor-view .cm-line {
+  padding-inline: 0;
+}
+
+.ks-editor-view .cm-content:focus {
+  outline: none;
+}
+
+.ks-editor-view .cm-editor.cm-focused {
+  box-shadow: inset 0 0 0 var(--ks-focus-width) var(--ks-color-focus);
+}
+
+.ks-editor-status {
+  min-height: var(--ks-control-height);
+  border-block-start: var(--ks-line-width) solid var(--ks-color-border);
+  padding: var(--ks-space-1) var(--ks-space-3);
+  text-align: end;
+}
+
+.ks-markdown-view {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--ks-color-surface);
+  color: var(--ks-color-text);
+  font-size: var(--ks-type-body);
+  line-height: var(--ks-line-body);
+  padding: var(--ks-space-4);
+  overflow-wrap: anywhere;
+}
+
+.ks-markdown-view > :first-child {
+  margin-block-start: 0;
+}
+
+.ks-markdown-view h1 {
+  font-size: var(--ks-type-page);
+  line-height: var(--ks-line-body);
+}
+
+.ks-markdown-view h2 {
+  font-size: var(--ks-type-section);
+  line-height: var(--ks-line-body);
+}
+
+.ks-markdown-view h3,
+.ks-markdown-view h4,
+.ks-markdown-view h5,
+.ks-markdown-view h6 {
+  font-size: var(--ks-type-title);
+  line-height: var(--ks-line-body);
+}
+
+.ks-markdown-view p,
+.ks-markdown-view ul,
+.ks-markdown-view ol,
+.ks-markdown-view blockquote,
+.ks-markdown-view table,
+.ks-markdown-view pre {
+  margin-block: var(--ks-space-3);
+}
+
+.ks-markdown-view a {
+  color: var(--ks-color-accent);
+  text-decoration: underline;
+  text-underline-offset: var(--ks-space-1);
+}
+
+.ks-markdown-view code {
+  border-radius: var(--ks-radius-small);
+  background: var(--ks-color-code);
+  font-family: var(--ks-font-code);
+  font-size: var(--ks-type-body);
+  padding-inline: var(--ks-space-1);
+}
+
+.ks-markdown-view pre {
+  overflow: auto;
+  border-radius: var(--ks-radius-small);
+  background: var(--ks-color-code);
+  padding: var(--ks-space-3);
+}
+
+.ks-markdown-view pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.ks-markdown-view table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ks-markdown-view th,
+.ks-markdown-view td {
+  border: var(--ks-line-width) solid var(--ks-color-border);
+  padding: var(--ks-space-2);
+  text-align: start;
+}
+
+.ks-markdown-view th {
+  background: var(--ks-color-surface-raised);
+}
+
+.ks-markdown-view blockquote {
+  border-inline-start: var(--ks-space-1) solid var(--ks-color-border);
+  color: var(--ks-color-muted);
+  margin-inline: 0;
+  padding-inline-start: var(--ks-space-3);
+}
+
+.ks-markdown-image-alt {
+  color: var(--ks-color-muted);
+  font-style: italic;
+}
