@@ -1,0 +1,266 @@
+use std::fs;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+
+use kaleidoscope_contract::{
+    CoreError, CoreReply, ErrorCode, FileAccess, FileEntry, FileKind, PermissionDecl,
+    FILE_READ_MAX_BYTES,
+};
+use sha2::{Digest, Sha256};
+
+use crate::error;
+use crate::CoreState;
+
+pub(crate) fn permission(
+    state: &CoreState,
+    window_id: &str,
+    permission_id: &str,
+    write: bool,
+) -> Result<FileAccess, CoreError> {
+    let window = state
+        .shared
+        .windows
+        .iter()
+        .find(|window| window.id == window_id)
+        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+    let version = state
+        .shared
+        .app_versions
+        .iter()
+        .find(|version| version.app_id == window.app_id && version.version == window.app_version)
+        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+    let permission = version
+        .definition
+        .permissions
+        .iter()
+        .find(|permission| permission.id() == permission_id)
+        .ok_or_else(|| error::make(ErrorCode::PermissionDenied))?;
+    let access = match permission {
+        PermissionDecl::Files { access, .. } => *access,
+    };
+    if write && access != FileAccess::Readwrite {
+        return Err(error::make(ErrorCode::PermissionDenied));
+    }
+    Ok(access)
+}
+
+pub(crate) fn list(
+    state: &CoreState,
+    window_id: &str,
+    permission_id: &str,
+    dir: &str,
+) -> Result<CoreReply, CoreError> {
+    let root = granted_root(state, window_id, permission_id, false)?;
+    let directory = resolve_path(&root, dir, true, false)?;
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(&directory).map_err(|error| error::io_error(&error))? {
+        let entry = entry.map_err(|error| error::io_error(&error))?;
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| error::make(ErrorCode::Io))?;
+        if name.starts_with('.') {
+            continue;
+        }
+        let path = if dir.is_empty() {
+            name.clone()
+        } else {
+            format!("{dir}/{name}")
+        };
+        let resolved = resolve_path(&root, &path, false, true)?;
+        let kind = match fs::metadata(&resolved) {
+            Ok(metadata) if metadata.is_dir() => FileKind::Dir,
+            Ok(_) => FileKind::File,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => FileKind::File,
+            Err(error) => return Err(error::io_error(&error)),
+        };
+        entries.push(FileEntry { name, path, kind });
+    }
+    entries.sort_by(|left, right| {
+        let kind_order = kind_order(left.kind).cmp(&kind_order(right.kind));
+        kind_order
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    Ok(CoreReply::FilesList { entries })
+}
+
+pub(crate) fn read(
+    state: &CoreState,
+    window_id: &str,
+    permission_id: &str,
+    path: &str,
+) -> Result<CoreReply, CoreError> {
+    let root = granted_root(state, window_id, permission_id, false)?;
+    let resolved = resolve_path(&root, path, false, false)?;
+    let file = fs::File::open(resolved).map_err(|error| error::io_error(&error))?;
+    let mut bytes = Vec::new();
+    file.take(FILE_READ_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| error::io_error(&error))?;
+    if bytes.len() as u64 > FILE_READ_MAX_BYTES {
+        return Err(error::make(ErrorCode::Io));
+    }
+    let text = String::from_utf8(bytes.clone()).map_err(|_| error::make(ErrorCode::Io))?;
+    Ok(CoreReply::FilesRead {
+        path: path.to_string(),
+        text,
+        revision: revision(&bytes),
+    })
+}
+
+pub(crate) fn write(
+    state: &CoreState,
+    window_id: &str,
+    permission_id: &str,
+    path: &str,
+    text: &str,
+    expected_revision: Option<&str>,
+) -> Result<CoreReply, CoreError> {
+    let root = granted_root(state, window_id, permission_id, true)?;
+    let resolved = resolve_path(&root, path, false, true)?;
+
+    match expected_revision {
+        Some(expected) => {
+            let current = match fs::read(&resolved) {
+                Ok(bytes) => bytes,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    return Err(error::make(ErrorCode::Conflict));
+                }
+                Err(error) => return Err(error::io_error(&error)),
+            };
+            if revision(&current) != expected {
+                return Err(error::make(ErrorCode::Conflict));
+            }
+        }
+        None => match fs::symlink_metadata(&resolved) {
+            Ok(_) => return Err(error::make(ErrorCode::Conflict)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error::io_error(&error)),
+        },
+    }
+
+    fs::write(&resolved, text.as_bytes()).map_err(|error| error::io_error(&error))?;
+    Ok(CoreReply::FilesWrite {
+        path: path.to_string(),
+        revision: revision(text.as_bytes()),
+    })
+}
+
+fn granted_root(
+    state: &CoreState,
+    window_id: &str,
+    permission_id: &str,
+    write: bool,
+) -> Result<PathBuf, CoreError> {
+    permission(state, window_id, permission_id, write)?;
+    let grant = state
+        .device
+        .grants
+        .iter()
+        .find(|grant| grant.window_id == window_id && grant.permission == permission_id)
+        .ok_or_else(|| error::make(ErrorCode::NotGranted))?;
+    let stored_root = PathBuf::from(&grant.root_path);
+    let root = fs::canonicalize(&stored_root).map_err(|error| error::io_error(&error))?;
+    if root != stored_root || !root.is_dir() {
+        return Err(error::make(ErrorCode::PathOutsideRoot));
+    }
+    Ok(root)
+}
+
+fn resolve_path(
+    root: &Path,
+    relative: &str,
+    allow_root: bool,
+    allow_missing: bool,
+) -> Result<PathBuf, CoreError> {
+    if !valid_relative_path(relative, allow_root) {
+        return Err(error::make(ErrorCode::PathOutsideRoot));
+    }
+    let candidate = if relative.is_empty() {
+        root.to_path_buf()
+    } else {
+        root.join(relative)
+    };
+    match fs::canonicalize(&candidate) {
+        Ok(canonical) => {
+            if canonical.starts_with(root) {
+                Ok(canonical)
+            } else {
+                Err(error::make(ErrorCode::PathOutsideRoot))
+            }
+        }
+        Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
+            ensure_missing_path_inside(root, &candidate)?;
+            if allow_missing {
+                Ok(candidate)
+            } else {
+                Err(error::make(ErrorCode::NotFound))
+            }
+        }
+        Err(io_error) => Err(error::io_error(&io_error)),
+    }
+}
+
+fn ensure_missing_path_inside(root: &Path, candidate: &Path) -> Result<(), CoreError> {
+    match fs::canonicalize(candidate) {
+        Ok(canonical) => {
+            if canonical.starts_with(root) {
+                Ok(())
+            } else {
+                Err(error::make(ErrorCode::PathOutsideRoot))
+            }
+        }
+        Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
+            if let Ok(metadata) = fs::symlink_metadata(candidate) {
+                if metadata.file_type().is_symlink() {
+                    let target =
+                        fs::read_link(candidate).map_err(|error| error::io_error(&error))?;
+                    let target = if target.is_absolute() {
+                        target
+                    } else {
+                        candidate
+                            .parent()
+                            .ok_or_else(|| error::make(ErrorCode::NotFound))?
+                            .join(target)
+                    };
+                    return ensure_missing_path_inside(root, &target);
+                }
+            }
+            let parent = candidate
+                .parent()
+                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            let canonical_parent =
+                fs::canonicalize(parent).map_err(|error| error::io_error(&error))?;
+            if canonical_parent.starts_with(root) {
+                Ok(())
+            } else {
+                Err(error::make(ErrorCode::PathOutsideRoot))
+            }
+        }
+        Err(io_error) => Err(error::io_error(&io_error)),
+    }
+}
+
+pub(crate) fn valid_relative_path(path: &str, allow_root: bool) -> bool {
+    if path.is_empty() {
+        return allow_root;
+    }
+    if path.contains('\\') || path.contains(':') || path.contains('\0') {
+        return false;
+    }
+    path.split('/')
+        .all(|part| !part.is_empty() && part != "." && part != "..")
+}
+
+fn revision(bytes: &[u8]) -> String {
+    let hash = Sha256::digest(bytes);
+    format!("{hash:x}")[..16].to_string()
+}
+
+fn kind_order(kind: FileKind) -> u8 {
+    match kind {
+        FileKind::Dir => 0,
+        FileKind::File => 1,
+    }
+}
