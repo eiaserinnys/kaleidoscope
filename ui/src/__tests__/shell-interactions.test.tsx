@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WindowFrame } from "../../../app/src/shell/window-frame";
 import { makeNewWindowRect } from "../../../app/src/shell/window-geometry";
 import { importAppDefinition } from "../../../app/src/shell/import-definition";
@@ -251,6 +251,16 @@ describe("window dragging", () => {
 });
 
 describe("app definition import", () => {
+  beforeEach(() => {
+    document.documentElement.style.setProperty("--ks-window-min-width", "360px");
+    document.documentElement.style.setProperty("--ks-window-min-height", "240px");
+  });
+
+  afterEach(() => {
+    document.documentElement.style.removeProperty("--ks-window-min-width");
+    document.documentElement.style.removeProperty("--ks-window-min-height");
+  });
+
   it("opens an imported app only when the active desktop has no window for it", async () => {
     const snapshot = makeTestSnapshot();
     snapshot.shared.windows = snapshot.shared.windows.filter((window) => window.app_id !== "md-viewer");
@@ -280,24 +290,67 @@ describe("app definition import", () => {
     expect(calls).toEqual([{ op: "app.import", definition_json: JSON.stringify(mdViewerDefinition) }]);
   });
 
-  it("fits and positions new windows inside the usable desktop area", () => {
+  it("cascades new windows by position before fitting their size", () => {
     expect(makeNewWindowRect({ width: 960, height: 552 }, 0)).toEqual({
       x: 48,
-      y: 12,
+      y: 48,
       width: 880,
-      height: 528,
+      height: 492,
     });
-    expect(makeNewWindowRect({ width: 500, height: 300 }, 8)).toEqual({
-      x: 12,
-      y: 12,
-      width: 476,
-      height: 276,
+    expect(makeNewWindowRect({ width: 960, height: 552 }, 1)).toEqual({
+      x: 80,
+      y: 80,
+      width: 868,
+      height: 460,
+    });
+    expect(makeNewWindowRect({ width: 960, height: 552 }, 2)).toEqual({
+      x: 112,
+      y: 112,
+      width: 836,
+      height: 428,
+    });
+    expect(makeNewWindowRect({ width: 960, height: 552 }, 3)).toEqual({
+      x: 144,
+      y: 144,
+      width: 804,
+      height: 396,
+    });
+    expect(makeNewWindowRect({ width: 1440, height: 852 }, 0)).toEqual({
+      x: 48,
+      y: 48,
+      width: 880,
+      height: 600,
     });
     expect(makeNewWindowRect({ width: 1440, height: 852 }, 1)).toEqual({
       x: 80,
       y: 80,
       width: 880,
       height: 600,
+    });
+  });
+
+  it("restarts the cascade when the next position would make a window too small", () => {
+    expect(makeNewWindowRect({ width: 500, height: 300 }, 1)).toEqual({
+      x: 48, y: 48, width: 440, height: 240,
+    });
+    expect(makeNewWindowRect({ width: 420, height: 700 }, 1)).toEqual({
+      x: 48, y: 48, width: 360, height: 600,
+    });
+    expect(makeNewWindowRect({ width: 960, height: 552 }, 8)).toEqual({
+      x: 48, y: 48, width: 880, height: 492,
+    });
+  });
+
+  it("uses the whole usable area when the first position is too small", () => {
+    expect(makeNewWindowRect({ width: 300, height: 200 }, 0)).toEqual({
+      x: 12, y: 12, width: 276, height: 176,
+    });
+  });
+
+  it("uses the configured minimum-size tokens for the restart decision", () => {
+    document.documentElement.style.setProperty("--ks-window-min-height", "260px");
+    expect(makeNewWindowRect({ width: 500, height: 300 }, 1)).toEqual({
+      x: 12, y: 12, width: 476, height: 276,
     });
   });
 });

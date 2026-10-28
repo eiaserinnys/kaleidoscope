@@ -27,6 +27,26 @@ export function makeNewWindowRect(
   area: { width: number; height: number },
   windowCount: number,
 ): Rect {
-  const offset = windowCount % 8;
-  return fitWindowRect({ x: 48 + 32 * offset, y: 48 + 32 * offset, width: 880, height: 600 }, area);
+  const usable = usableWindowArea(area);
+  const style = getComputedStyle(document.documentElement);
+  const minWidth = Number.parseFloat(style.getPropertyValue("--ks-window-min-width"));
+  const minHeight = Number.parseFloat(style.getPropertyValue("--ks-window-min-height"));
+  if (!Number.isFinite(minWidth) || !Number.isFinite(minHeight)) {
+    throw new Error("필수 창 최소 크기 토큰을 읽을 수 없습니다");
+  }
+
+  const rectFor = (offset: number): Rect => {
+    const position = 48 + 32 * offset;
+    return {
+      x: position,
+      y: position,
+      width: Math.min(880, usable.x + usable.width - position),
+      height: Math.min(600, usable.y + usable.height - position),
+    };
+  };
+
+  let rect = rectFor(windowCount % 8);
+  if (rect.width < minWidth || rect.height < minHeight) rect = rectFor(0);
+  if (rect.width < minWidth || rect.height < minHeight) return usable;
+  return rect;
 }
