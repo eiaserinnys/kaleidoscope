@@ -67,7 +67,7 @@ jobs:
             Set-Content -Path $capturePath -Value $captureScript -Encoding utf8
             $capture = Start-Process -FilePath "powershell.exe" -ArgumentList @(
               "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $capturePath
-            ) -PassThru -Wait
+            ) -WindowStyle Hidden -PassThru -Wait
             if ($capture.ExitCode -ne 0) { throw "Screen capture failed with exit code $($capture.ExitCode)" }
             if (-not (Test-Path (Join-Path $env:GITHUB_WORKSPACE "smoke.png"))) { throw "smoke.png was not created" }
           }
