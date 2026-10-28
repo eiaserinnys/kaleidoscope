@@ -1,0 +1,136 @@
+@import "pretendard/dist/web/variable/pretendardvariable.css";
+
+:root {
+  --ks-font-family: "Pretendard Variable", "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+  --ks-font-code: "Cascadia Mono", Consolas, monospace;
+
+  --ks-type-page: 20px;
+  --ks-type-section: 16px;
+  --ks-type-title: 15px;
+  --ks-type-body: 14px;
+  --ks-type-meta: 12px;
+  --ks-type-editor: 15px;
+  --ks-line-body: 1.5;
+  --ks-line-editor: 1.7;
+
+  --ks-space-1: 4px;
+  --ks-space-2: 8px;
+  --ks-space-3: 12px;
+  --ks-space-4: 16px;
+  --ks-space-5: 24px;
+  --ks-space-6: 32px;
+  --ks-radius-small: 6px;
+  --ks-radius-large: 10px;
+  --ks-control-height: 32px;
+  --ks-icon-button-size: 28px;
+  --ks-split-handle-size: 16px;
+  --ks-pane-min-size: 160px;
+  --ks-line-width: 1px;
+  --ks-focus-width: 2px;
+  --ks-focus-offset: 2px;
+
+  color-scheme: light;
+  --ks-color-background: #f4f6f9;
+  --ks-color-surface: #ffffff;
+  --ks-color-surface-raised: #fafbfd;
+  --ks-color-border: #d9dee7;
+  --ks-color-text: #222935;
+  --ks-color-muted: #687382;
+  --ks-color-accent: #315da8;
+  --ks-color-accent-contrast: #ffffff;
+  --ks-color-selection: #e4ecfb;
+  --ks-color-focus: #4c7ed1;
+  --ks-color-danger: #a9363d;
+  --ks-color-danger-surface: #fff0f0;
+  --ks-color-notice: #edf3ff;
+  --ks-color-code: #f0f2f6;
+  --ks-color-scroll-thumb: #a4aebb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --ks-color-background: #15191f;
+    --ks-color-surface: #1d232b;
+    --ks-color-surface-raised: #252c36;
+    --ks-color-border: #3b4552;
+    --ks-color-text: #e7ebf2;
+    --ks-color-muted: #a5afbe;
+    --ks-color-accent: #94b5ff;
+    --ks-color-accent-contrast: #15203a;
+    --ks-color-selection: #2b3a58;
+    --ks-color-focus: #94b5ff;
+    --ks-color-danger: #ff9ba1;
+    --ks-color-danger-surface: #3a2227;
+    --ks-color-notice: #26334b;
+    --ks-color-code: #252c36;
+    --ks-color-scroll-thumb: #5b6675;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--ks-color-background);
+  color: var(--ks-color-text);
+  font-family: var(--ks-font-family);
+  font-size: var(--ks-type-body);
+  line-height: var(--ks-line-body);
+}
+
+button {
+  color: inherit;
+  font: inherit;
+}
+
+* {
+  scrollbar-color: var(--ks-color-scroll-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: var(--ks-space-1);
+  height: var(--ks-space-1);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--ks-color-scroll-thumb);
+  border-radius: var(--ks-radius-large);
+}
+
+*:focus-visible {
+  outline: var(--ks-focus-width) solid var(--ks-color-focus);
+  outline-offset: var(--ks-focus-offset);
+}
+
+.ks-app-window-content,
+.ks-app-content-loading,
+.ks-app-content-error {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ks-app-content-loading,
+.ks-app-content-error,
+.ks-editor-loading,
+.ks-editor-error,
+.ks-markdown-loading,
+.ks-markdown-error {
+  display: grid;
+  place-items: center;
+  padding: var(--ks-space-4);
+}
