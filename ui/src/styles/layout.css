@@ -51,6 +51,7 @@
 .ks-split-column .ks-split-handle:hover::after,
 .ks-split-column .ks-split-handle:active::after,
 .ks-split-column .ks-split-handle:focus-visible::after {
+  width: 100%;
   height: var(--ks-focus-width);
 }
 
