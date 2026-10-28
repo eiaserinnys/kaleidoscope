@@ -67,12 +67,15 @@ pub(crate) fn list(
         } else {
             format!("{dir}/{name}")
         };
-        let resolved = resolve_path(&root, &path, false, true)?;
+        // 밖을 가리키는 링크나 정션(Windows 문서 폴더의 My Music 등), 읽을 수 없는 항목은
+        // 목록 전체를 실패시키지 않고 건너뛴다.
+        let Ok(resolved) = resolve_path(&root, &path, false, true) else {
+            continue;
+        };
         let kind = match fs::metadata(&resolved) {
             Ok(metadata) if metadata.is_dir() => FileKind::Dir,
             Ok(_) => FileKind::File,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => FileKind::File,
-            Err(error) => return Err(error::io_error(&error)),
+            Err(_) => continue,
         };
         entries.push(FileEntry { name, path, kind });
     }
@@ -99,9 +102,13 @@ pub(crate) fn read(
         .read_to_end(&mut bytes)
         .map_err(|error| error::io_error(&error))?;
     if bytes.len() as u64 > FILE_READ_MAX_BYTES {
-        return Err(error::make(ErrorCode::Io));
+        return Err(error::with_message(
+            ErrorCode::Io,
+            "파일이 너무 큽니다(5MB 초과).",
+        ));
     }
-    let text = String::from_utf8(bytes.clone()).map_err(|_| error::make(ErrorCode::Io))?;
+    let text = String::from_utf8(bytes.clone())
+        .map_err(|_| error::with_message(ErrorCode::Io, "UTF-8 텍스트 파일이 아닙니다."))?;
     Ok(CoreReply::FilesRead {
         path: path.to_string(),
         text,

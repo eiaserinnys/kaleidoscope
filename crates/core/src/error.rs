@@ -8,6 +8,14 @@ pub(crate) fn make(code: ErrorCode) -> CoreError {
     }
 }
 
+pub(crate) fn with_message(code: ErrorCode, message: &str) -> CoreError {
+    CoreError {
+        message: message.to_string(),
+        code,
+        details: Vec::new(),
+    }
+}
+
 pub(crate) fn with_details(code: ErrorCode, details: Vec<String>) -> CoreError {
     CoreError {
         message: message(code).to_string(),

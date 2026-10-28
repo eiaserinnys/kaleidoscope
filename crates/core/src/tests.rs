@@ -160,7 +160,7 @@ fn file_paths_reject_traversal_absolute_windows_and_outside_symlinks() {
         symlink(outside.join("new.md"), root.join("broken-escape.md")).unwrap();
         expect_error(
             core.handle(CoreRequest::FilesWrite {
-                window_id,
+                window_id: window_id.clone(),
                 permission: "docs".into(),
                 path: "broken-escape.md".into(),
                 text: "outside".into(),
@@ -169,6 +169,25 @@ fn file_paths_reject_traversal_absolute_windows_and_outside_symlinks() {
             ErrorCode::PathOutsideRoot,
         );
         assert!(!outside.join("new.md").exists());
+
+        // 밖을 가리키는 링크가 있어도 폴더 목록은 실패하지 않고 그 항목만 뺀다.
+        symlink(&outside, root.join("escape-dir")).unwrap();
+        fs::write(root.join("inside.md"), "inside").unwrap();
+        let names = match core
+            .handle(CoreRequest::FilesList {
+                window_id,
+                permission: "docs".into(),
+                dir: String::new(),
+            })
+            .unwrap()
+        {
+            CoreReply::FilesList { entries } => entries
+                .into_iter()
+                .map(|entry| entry.name)
+                .collect::<Vec<_>>(),
+            reply => panic!("unexpected reply: {reply:?}"),
+        };
+        assert_eq!(names, vec!["inside.md".to_string()]);
     }
 }
 
