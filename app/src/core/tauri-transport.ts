@@ -1,14 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { CoreError, CoreEvent, CoreReply, CoreRequest } from "../../../ui/src/contract/contract";
-
-export type RequestFor<K extends CoreRequest["op"]> = Extract<CoreRequest, { op: K }>;
-export type ReplyFor<K extends CoreRequest["op"]> = Extract<CoreReply, { op: K }>;
-
-export interface CoreTransport {
-  call<K extends CoreRequest["op"]>(request: RequestFor<K>): Promise<ReplyFor<K>>;
-  subscribe(listener: (event: CoreEvent) => void): () => void;
-}
+import type { CoreError, CoreEvent, CoreRequest, CoreTransport, ReplyFor, RequestFor } from "@kaleidoscope/ui";
 
 function isCoreError(value: unknown): value is CoreError {
   if (typeof value !== "object" || value === null) return false;

@@ -9,9 +9,9 @@
   --ks-type-title: 15px;
   --ks-type-body: 14px;
   --ks-type-meta: 12px;
-  --ks-type-editor: 15px;
+  --ks-type-document: 15px;
   --ks-line-body: 1.5;
-  --ks-line-editor: 1.7;
+  --ks-line-document: 1.7;
 
   --ks-space-1: 4px;
   --ks-space-2: 8px;
@@ -28,6 +28,13 @@
   --ks-line-width: 1px;
   --ks-focus-width: 2px;
   --ks-focus-offset: 2px;
+  --ks-workspace-label-max-width: 200px;
+  --ks-desktop-tab-max-width: 160px;
+  --ks-desktop-tab-min-width: 104px;
+  --ks-window-min-width: 360px;
+  --ks-window-min-height: 240px;
+  --ks-shadow-popover: 0 var(--ks-space-2) var(--ks-space-4) rgb(25 35 48 / 18%);
+  --ks-shadow-window: 0 var(--ks-space-4) var(--ks-space-6) rgb(15 20 28 / 24%);
 
   color-scheme: light;
   --ks-color-background: #f4f6f9;
@@ -35,7 +42,8 @@
   --ks-color-surface-raised: #fafbfd;
   --ks-color-border: #d9dee7;
   --ks-color-text: #222935;
-  --ks-color-muted: #687382;
+  --ks-color-muted: #626b78;
+  --ks-color-hover: rgb(34 41 53 / 7%);
   --ks-color-accent: #315da8;
   --ks-color-accent-contrast: #ffffff;
   --ks-color-selection: #e4ecfb;
@@ -56,6 +64,7 @@
     --ks-color-border: #3b4552;
     --ks-color-text: #e7ebf2;
     --ks-color-muted: #a5afbe;
+    --ks-color-hover: rgb(231 235 242 / 9%);
     --ks-color-accent: #94b5ff;
     --ks-color-accent-contrast: #15203a;
     --ks-color-selection: #2b3a58;
@@ -65,6 +74,8 @@
     --ks-color-notice: #26334b;
     --ks-color-code: #252c36;
     --ks-color-scroll-thumb: #5b6675;
+    --ks-shadow-popover: 0 var(--ks-space-2) var(--ks-space-4) rgb(0 0 0 / 45%);
+    --ks-shadow-window: 0 var(--ks-space-4) var(--ks-space-6) rgb(0 0 0 / 55%);
   }
 }
 
@@ -95,19 +106,24 @@ button {
   font: inherit;
 }
 
-* {
-  scrollbar-color: var(--ks-color-scroll-thumb) transparent;
-  scrollbar-width: thin;
+*::-webkit-scrollbar {
+  width: var(--ks-space-2);
+  height: var(--ks-space-2);
 }
 
-*::-webkit-scrollbar {
-  width: var(--ks-space-1);
-  height: var(--ks-space-1);
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
 }
 
 *::-webkit-scrollbar-thumb {
   background: var(--ks-color-scroll-thumb);
   border-radius: var(--ks-radius-large);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 *:focus-visible {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { EditorView } from "@codemirror/view";
 import type { Block } from "../contract/contract";
-import { EmptyState, Notice, Button, StatusText } from "../components/primitives";
+import { Notice, Button, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
 import { FileEditorSession } from "./file-editor-session";
@@ -42,12 +42,7 @@ export function MarkdownEditorBlock({ block, context }: { block: MarkdownEditorB
     return () => window.removeEventListener("focus", refresh);
   }, [session]);
 
-  if (!hasGrant) {
-    return <EmptyState icon={<DocumentIcon />} text="폴더를 먼저 선택하세요" />;
-  }
-  if (path === null) {
-    return <EmptyState icon={<DocumentIcon />} text="파일을 선택하세요" />;
-  }
+  if (!hasGrant || path === null) return null;
   if (!state.loaded) {
     return <div className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
   }
@@ -66,7 +61,7 @@ export function MarkdownEditorBlock({ block, context }: { block: MarkdownEditorB
           ]}
           role="alert"
         >
-          {state.conflict.message}
+          디스크에서 바뀌었습니다
         </Notice>
       ) : null}
       <div className="ks-editor-content">
@@ -76,11 +71,14 @@ export function MarkdownEditorBlock({ block, context }: { block: MarkdownEditorB
           session={session}
           text={state.text}
         />
-      </div>
-      <div className="ks-editor-status">
-        <StatusText>
-          {state.status === "saving" ? "저장 중" : state.status === "saved" ? "저장됨" : "저장 안 됨"}
-        </StatusText>
+        {state.status !== "saved" && !state.error && !state.conflict ? (
+          <span
+            aria-label={state.status === "saving" ? "저장 중" : "저장 대기"}
+            className="ks-editor-save-indicator"
+            role="status"
+            title={state.status === "saving" ? "저장 중" : "저장 대기"}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -116,13 +114,4 @@ function CodeEditor({ path, session, text }: { path: string; session: FileEditor
   }, [text]);
 
   return <div className="ks-editor-view" ref={hostRef} />;
-}
-
-function DocumentIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="M6 3.5h8l4 4v13H6z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.5" />
-      <path d="M14 3.5v4h4M9 12h6M9 15.5h6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-    </svg>
-  );
 }

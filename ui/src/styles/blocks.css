@@ -71,12 +71,12 @@
   text-align: start;
 }
 
-.ks-file-tree-row:hover {
-  background: var(--ks-color-surface-raised);
-}
-
 .ks-file-tree-row.is-selected {
   background: var(--ks-color-selection);
+}
+
+.ks-file-tree-row:hover {
+  background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
 
 .ks-file-tree-icon {
@@ -121,17 +121,39 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   align-content: start;
   overflow: hidden;
   background: var(--ks-color-surface);
 }
 
 .ks-editor-content {
+  position: relative;
   grid-row: 2;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.ks-editor-content:focus-within::after {
+  position: absolute;
+  z-index: 1;
+  border: var(--ks-focus-width) solid var(--ks-color-focus);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+}
+
+.ks-editor-save-indicator {
+  position: absolute;
+  z-index: 2;
+  top: var(--ks-space-2);
+  right: var(--ks-space-2);
+  width: var(--ks-space-2);
+  height: var(--ks-space-2);
+  border-radius: 50%;
+  background: var(--ks-color-muted);
+  pointer-events: none;
 }
 
 .ks-editor-view,
@@ -147,8 +169,8 @@
   background: var(--ks-color-surface);
   color: var(--ks-color-text);
   font-family: var(--ks-font-family);
-  font-size: var(--ks-type-editor);
-  line-height: var(--ks-line-editor);
+  font-size: var(--ks-type-document);
+  line-height: var(--ks-line-document);
 }
 
 .ks-editor-view .cm-scroller {
@@ -171,18 +193,6 @@
   outline: none;
 }
 
-.ks-editor-view .cm-editor.cm-focused {
-  box-shadow: inset 0 0 0 var(--ks-focus-width) var(--ks-color-focus);
-}
-
-.ks-editor-status {
-  grid-row: 3;
-  min-height: var(--ks-control-height);
-  border-block-start: var(--ks-line-width) solid var(--ks-color-border);
-  padding: var(--ks-space-1) var(--ks-space-3);
-  text-align: end;
-}
-
 .ks-markdown-view {
   width: 100%;
   height: 100%;
@@ -191,8 +201,8 @@
   overflow: auto;
   background: var(--ks-color-surface);
   color: var(--ks-color-text);
-  font-size: var(--ks-type-body);
-  line-height: var(--ks-line-body);
+  font-size: var(--ks-type-document);
+  line-height: var(--ks-line-document);
   padding: var(--ks-space-4);
   overflow-wrap: anywhere;
 }
@@ -202,21 +212,21 @@
 }
 
 .ks-markdown-view h1 {
-  font-size: var(--ks-type-page);
-  line-height: var(--ks-line-body);
+  font-size: 1.333em;
+  line-height: var(--ks-line-document);
 }
 
 .ks-markdown-view h2 {
-  font-size: var(--ks-type-section);
-  line-height: var(--ks-line-body);
+  font-size: 1.067em;
+  line-height: var(--ks-line-document);
 }
 
 .ks-markdown-view h3,
 .ks-markdown-view h4,
 .ks-markdown-view h5,
 .ks-markdown-view h6 {
-  font-size: var(--ks-type-title);
-  line-height: var(--ks-line-body);
+  font-size: 1em;
+  line-height: var(--ks-line-document);
 }
 
 .ks-markdown-view p,
@@ -238,7 +248,7 @@
   border-radius: var(--ks-radius-small);
   background: var(--ks-color-code);
   font-family: var(--ks-font-code);
-  font-size: var(--ks-type-body);
+  font-size: 1em;
   padding-inline: var(--ks-space-1);
 }
 

@@ -1,10 +1,10 @@
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 
 export interface ButtonProps {
   children: ReactNode;
   variant?: "default" | "emphasis";
   disabled?: boolean;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   type?: "button" | "submit";
 }
 
@@ -31,10 +31,11 @@ export interface IconButtonProps {
   "aria-label": string;
   children: ReactNode;
   disabled?: boolean;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+  title?: string;
 }
 
-export function IconButton({ "aria-label": label, children, disabled, onClick }: IconButtonProps) {
+export function IconButton({ "aria-label": label, children, disabled, onClick, title }: IconButtonProps) {
   return (
     <button
       aria-label={label}
@@ -42,6 +43,7 @@ export function IconButton({ "aria-label": label, children, disabled, onClick }:
       disabled={disabled}
       onClick={onClick}
       type="button"
+      title={title ?? label}
     >
       {children}
     </button>
@@ -54,13 +56,13 @@ export function EmptyState({
   action,
 }: {
   icon: ReactNode;
-  text: string;
+  text?: string;
   action?: ReactNode;
 }) {
   return (
-    <div className="ks-empty-state">
+    <div className={`ks-empty-state${text ? "" : " ks-empty-state-without-text"}`}>
       <span aria-hidden="true" className="ks-empty-state-icon">{icon}</span>
-      <span className="ks-empty-state-text">{text}</span>
+      {text ? <span className="ks-empty-state-text">{text}</span> : null}
       {action ? <span className="ks-empty-state-action">{action}</span> : null}
     </div>
   );

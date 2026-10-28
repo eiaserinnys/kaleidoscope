@@ -6,7 +6,7 @@ import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
-import { grantFor, makeTestSeed, mdEditorDefinition } from "./fixtures";
+import { grantFor, makeTestSeed, mdEditorDefinition, mdViewerDefinition } from "./fixtures";
 
 const rangeGetClientRects = Object.getOwnPropertyDescriptor(Range.prototype, "getClientRects");
 
@@ -88,6 +88,52 @@ describe("app definition renderer", () => {
 
     expect((await screen.findByRole("alert", {}, { timeout: 3_000 })).textContent).toContain("파일을 쓸 수 없습니다");
     expect(screen.getByRole("textbox", { name: "마크다운 편집기" })).toBeTruthy();
-    expect(screen.getByText("저장 안 됨")).toBeTruthy();
+    expect(screen.queryByRole("status", { name: "저장 대기" })).toBeNull();
+  });
+
+  it("shows a pending dot while edited and removes it after saving", async () => {
+    const transport = createFakeTransport(makeTestSeed({
+      editorPath: "README.md",
+      grants: [grantFor("editor-window", "docs")],
+      files: { "README.md": "# Pending" },
+    }));
+    const store = createShellStore(transport);
+    render(<AppWindowContent store={store} windowId="editor-window" />);
+
+    const editor = await screen.findByRole("textbox", { name: "마크다운 편집기" });
+    const user = userEvent.setup();
+    await user.click(editor);
+    await user.keyboard("X");
+
+    expect(screen.getByRole("status", { name: "저장 대기" })).toBeTruthy();
+    await user.keyboard("{Control>}s{/Control}");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.queryByRole("status", { name: "저장 대기" })).toBeNull();
+    expect(screen.queryByRole("status", { name: "저장 중" })).toBeNull();
+  });
+
+  it("leaves editor and viewer content blank until a path is selected", async () => {
+    const editorStore = createShellStore(createFakeTransport(makeTestSeed({
+      editorPath: null,
+      grants: [grantFor("editor-window", "docs")],
+    })));
+    const editorView = render(<AppWindowContent store={editorStore} windowId="editor-window" />);
+
+    expect(await screen.findByRole("tree", { name: "파일 목록" })).toBeTruthy();
+    expect(screen.queryByText("폴더를 먼저 선택하세요")).toBeNull();
+    expect(screen.queryByText("파일을 선택하세요")).toBeNull();
+    editorView.unmount();
+
+    const viewerStore = createShellStore(createFakeTransport(makeTestSeed({
+      definitions: [mdViewerDefinition],
+      viewerPath: null,
+    })));
+    render(<AppWindowContent store={viewerStore} windowId="viewer-window" />);
+
+    expect(screen.queryByText("폴더를 먼저 선택하세요")).toBeNull();
+    expect(screen.queryByText("파일을 선택하세요")).toBeNull();
+    expect(screen.queryByRole("img")).toBeNull();
   });
 });
