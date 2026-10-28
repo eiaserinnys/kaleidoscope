@@ -17,5 +17,6 @@ export default defineConfig({
     baseURL: "http://localhost:1420",
     viewport: { width: 1440, height: 900 },
     trace: "retain-on-failure",
+    launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] },
   },
 });
