@@ -160,9 +160,9 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   const smallWindow = await editorWindow.boundingBox();
   if (!smallArea || !smallWindow) throw new Error("작은 창의 위치를 확인하지 못했습니다");
   expect(smallWindow.x - smallArea.x).toBe(48);
-  expect(smallWindow.y - smallArea.y).toBe(0);
+  expect(smallWindow.y - smallArea.y).toBe(12);
   expect(smallWindow.width).toBe(880);
-  expect(smallWindow.height).toBe(540);
+  expect(smallWindow.height).toBe(528);
   expect(smallWindow.y + smallWindow.height).toBeLessThanOrEqual(smallArea.y + smallArea.height - 12);
   measurements.newWindowRect960 = { area: smallArea, window: smallWindow };
   await captureThemePair("small-window-empty-path-960");
@@ -183,8 +183,8 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await page.mouse.move(resizeX, resizeTargetY);
   await page.mouse.up();
   const expectedResizedHeight = Math.min(
-    Math.round(540 + resizeTargetY - resizeStartY),
-    smallArea.height - 12,
+    Math.round(528 + resizeTargetY - resizeStartY),
+    smallArea.height - 24,
   );
   await expect(editorWindow).toHaveCSS("height", `${expectedResizedHeight}px`);
   const resizedBounds = await editorWindow.boundingBox();
@@ -201,7 +201,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await page.mouse.down();
   await page.mouse.move(bottomHandle.x + bottomHandle.width / 2, shrinkStartY + 160);
   await page.mouse.up();
-  await expect(editorWindow).toHaveCSS("height", "540px");
+  await expect(editorWindow).toHaveCSS("height", "528px");
   const shrunkBounds = await editorWindow.boundingBox();
   if (!shrunkBounds) throw new Error("하단 손잡이로 줄인 창의 위치를 확인하지 못했습니다");
   expect(shrunkBounds.y + shrunkBounds.height).toBeLessThanOrEqual(resizedArea.y + resizedArea.height);
@@ -213,12 +213,12 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   if (!tallHandle) throw new Error("창의 크기 조절 띠를 찾지 못했습니다");
   await page.mouse.move(tallHandle.x + tallHandle.width / 2, tallHandle.y + tallHandle.height / 2);
   await page.mouse.down();
-  await page.mouse.move(tallHandle.x + tallHandle.width / 2, tallHandle.y + tallHandle.height / 2 + 160);
+  await page.mouse.move(tallHandle.x + tallHandle.width / 2, tallHandle.y + tallHandle.height / 2 + 172);
   await page.mouse.up();
   await expect(editorWindow).toHaveCSS("height", "700px");
   await captureMatrix("tall-window");
   await page.setViewportSize({ width: 960, height: 600 });
-  await expect(editorWindow).toHaveCSS("height", "540px");
+  await expect(editorWindow).toHaveCSS("height", "528px");
   const frameMetrics = await editorWindow.evaluate((element) => {
     const frame = element.querySelector(".ks-window-frame");
     if (!frame) throw new Error("창 틀을 찾지 못했습니다");
@@ -247,7 +247,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await page.mouse.move(handleX, handleY - 120);
   const titleBeforeRelease = await editorWindow.locator(".ks-window-titlebar").boundingBox();
   await page.mouse.up();
-  await expect(editorWindow).toHaveCSS("height", "420px");
+  await expect(editorWindow).toHaveCSS("height", "408px");
   const titleAfterRelease = await editorWindow.locator(".ks-window-titlebar").boundingBox();
   if (!titleBeforeRelease || !titleAfterRelease) throw new Error("창 제목 줄을 찾지 못했습니다");
   expect(titleAfterRelease.y - titleBeforeRelease.y).toBe(0);
@@ -565,6 +565,85 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   measurements.conflictNotice = await conflictNotice.innerText();
   await captureMatrix("editor-conflict");
   await conflictNotice.getByRole("button", { name: "다시 불러오기" }).click();
+
+  const area1440 = await page.locator(".ks-desktop-area").boundingBox();
+  const finalTitle = await editorWindow.locator(".ks-window-titlebar").boundingBox();
+  if (!area1440 || !finalTitle) throw new Error("데스크톱이나 창 제목 줄을 찾지 못했습니다");
+  await page.mouse.move(finalTitle.x + 60, finalTitle.y + 16);
+  await page.mouse.down();
+  await page.mouse.move(area1440.x + 2, area1440.y + 2);
+  await page.mouse.up();
+  await expect(editorWindow).not.toHaveClass(/ks-window-gesturing/);
+  await expect(editorWindow).toHaveCSS("left", "12px");
+  await expect(editorWindow).toHaveCSS("top", "12px");
+
+  const maxCorner = await editorWindow.locator(".ks-window-resize-corner").boundingBox();
+  if (!maxCorner) throw new Error("창 모서리 크기 조절 영역을 찾지 못했습니다");
+  await page.mouse.move(maxCorner.x + 6, maxCorner.y + 6);
+  await page.mouse.down();
+  await page.mouse.move(area1440.x + area1440.width - 1, area1440.y + area1440.height - 1);
+  await page.mouse.up();
+  await expect(editorWindow).not.toHaveClass(/ks-window-gesturing/);
+
+  const windowGaps = async () => {
+    const area = await page.locator(".ks-desktop-area").boundingBox();
+    const window = await editorWindow.boundingBox();
+    if (!area || !window) throw new Error("데스크톱이나 창의 위치를 찾지 못했습니다");
+    return {
+      area,
+      window,
+      gaps: {
+        left: window.x - area.x,
+        top: window.y - area.y,
+        right: area.x + area.width - window.x - window.width,
+        bottom: area.y + area.height - window.y - window.height,
+      },
+    };
+  };
+  const max1440 = await windowGaps();
+  expect(max1440.gaps).toEqual({ left: 12, top: 12, right: 12, bottom: 12 });
+  measurements.symmetricMax1440 = max1440;
+  await captureThemePair("symmetric-max-1440");
+
+  await page.setViewportSize({ width: 960, height: 600 });
+  await expect(editorWindow).toHaveCSS("width", "936px");
+  await expect(editorWindow).toHaveCSS("height", "528px");
+  const fitted960 = await windowGaps();
+  expect(fitted960.gaps).toEqual({ left: 12, top: 12, right: 12, bottom: 12 });
+  measurements.symmetricFitted960 = fitted960;
+  await captureThemePair("symmetric-fitted-960");
+
+  const dragResizeHandle = async (selector: string, dx: number, dy: number) => {
+    const handle = await editorWindow.locator(selector).boundingBox();
+    if (!handle) throw new Error(`크기 조절 영역을 찾지 못했습니다: ${selector}`);
+    const x = handle.x + handle.width / 2;
+    const y = handle.y + handle.height / 2;
+    const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.className, { x, y });
+    expect(hit).toContain(selector.slice(1));
+    const before = await windowGaps();
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y + dy);
+    await page.mouse.up();
+    await expect(editorWindow).not.toHaveClass(/ks-window-gesturing/);
+    const after = await windowGaps();
+    expect(after.window.width - before.window.width).toBe(dx);
+    expect(after.window.height - before.window.height).toBe(dy);
+    return { hit, before: before.window, after: after.window };
+  };
+  measurements.resizeHandles960 = {
+    east: await dragResizeHandle(".ks-window-resize-east", -40, 0),
+    south: await dragResizeHandle(".ks-window-resize-south", 0, -40),
+    corner: await dragResizeHandle(".ks-window-resize-corner", -30, -30),
+  };
+  const beforeReload = await windowGaps();
+  await page.reload();
+  await expect(editorWindow).toBeVisible();
+  await expect(editorWindow).toHaveCSS("width", `${beforeReload.window.width}px`);
+  const afterReload = await windowGaps();
+  expect(afterReload.window).toEqual(beforeReload.window);
+  measurements.symmetricReload960 = { before: beforeReload.window, after: afterReload.window };
+  await captureThemePair("symmetric-after-reload-960");
 
   await writeFile(testInfo.outputPath("measurements.json"), JSON.stringify(measurements, null, 2), "utf8");
 });

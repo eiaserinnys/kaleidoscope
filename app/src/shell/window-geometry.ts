@@ -4,8 +4,10 @@ const RESIZE_CORNER_SIZE = 12;
 
 export function usableWindowArea(area: { width: number; height: number }) {
   return {
-    width: Math.max(0, area.width - RESIZE_CORNER_SIZE),
-    height: Math.max(0, area.height - RESIZE_CORNER_SIZE),
+    x: RESIZE_CORNER_SIZE,
+    y: RESIZE_CORNER_SIZE,
+    width: Math.max(0, area.width - 2 * RESIZE_CORNER_SIZE),
+    height: Math.max(0, area.height - 2 * RESIZE_CORNER_SIZE),
   };
 }
 
@@ -14,8 +16,8 @@ export function fitWindowRect(rect: Rect, area: { width: number; height: number 
   const width = Math.min(rect.width, usable.width);
   const height = Math.min(rect.height, usable.height);
   return {
-    x: Math.round(Math.min(Math.max(rect.x, 0), usable.width - width)),
-    y: Math.round(Math.min(Math.max(rect.y, 0), usable.height - height)),
+    x: Math.round(Math.min(Math.max(rect.x, usable.x), usable.x + usable.width - width)),
+    y: Math.round(Math.min(Math.max(rect.y, usable.y), usable.y + usable.height - height)),
     width,
     height,
   };

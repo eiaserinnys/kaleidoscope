@@ -72,8 +72,8 @@ export function WindowFrame({ area, appName, isTop, onCall, window: appWindow, c
       const minWidth = tokenPixels(MIN_WIDTH, titleRef.current);
       const minHeight = tokenPixels(MIN_HEIGHT, titleRef.current);
       const usable = usableWindowArea(area);
-      const maxWidth = usable.width - gesture.startRect.x;
-      const maxHeight = usable.height - gesture.startRect.y;
+      const maxWidth = usable.x + usable.width - gesture.startRect.x;
+      const maxHeight = usable.y + usable.height - gesture.startRect.y;
       next = {
         ...gesture.startRect,
         width: gesture.kind === "south" ? gesture.startRect.width : clamp(Math.round(gesture.startRect.width + dx), Math.min(minWidth, maxWidth), maxWidth),
