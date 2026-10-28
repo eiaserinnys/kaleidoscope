@@ -1,0 +1,202 @@
+use std::convert::Infallible;
+use std::env;
+use std::ffi::OsString;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use axum::body::Bytes;
+use axum::extract::{Request, State};
+use axum::http::{header, HeaderValue, Method, StatusCode};
+use axum::middleware::{self, Next};
+use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::response::{IntoResponse, Response};
+use axum::routing::{get, post};
+use axum::{Json, Router};
+use kaleidoscope_contract::{CoreError, CoreEvent, CoreRequest, ErrorCode};
+use kaleidoscope_core::{Core, CoreConfig, Host};
+use tokio::sync::broadcast;
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
+use tower_http::cors::CorsLayer;
+
+const DEV_UI_ORIGIN: &str = "http://localhost:1420";
+
+#[derive(Clone)]
+struct AppState {
+    core: Arc<Core>,
+    events: broadcast::Sender<CoreEvent>,
+}
+
+struct DevHost;
+
+impl Host for DevHost {
+    fn pick_folder(&self) -> Option<PathBuf> {
+        env::var_os("KALEIDOSCOPE_DEV_PICK").map(PathBuf::from)
+    }
+}
+
+struct Args {
+    data_dir: PathBuf,
+    port: u16,
+    seeds: Vec<PathBuf>,
+}
+
+#[tokio::main]
+async fn main() {
+    if let Err(error) = run().await {
+        eprintln!("{error}");
+        std::process::exit(1);
+    }
+}
+
+async fn run() -> Result<(), String> {
+    let args = parse_args(env::args_os().skip(1))?;
+    let seed_definitions = args
+        .seeds
+        .iter()
+        .map(|path| {
+            std::fs::read_to_string(path).map_err(|error| {
+                format!("앱 정의를 읽을 수 없습니다 ({}): {error}", path.display())
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let core = Arc::new(
+        Core::open(
+            CoreConfig {
+                data_dir: args.data_dir,
+                seed_definitions,
+            },
+            Arc::new(DevHost),
+        )
+        .map_err(|error| format!("코어를 열 수 없습니다: {}", error.message))?,
+    );
+    let (events, _) = broadcast::channel(100);
+    let event_sender = events.clone();
+    core.subscribe(Box::new(move |event| {
+        let _ = event_sender.send(event.clone());
+    }));
+    let state = AppState { core, events };
+    let cors = CorsLayer::new()
+        .allow_origin(HeaderValue::from_static(DEV_UI_ORIGIN))
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([header::CONTENT_TYPE]);
+    let app = Router::new()
+        .route("/core", post(post_core))
+        .route("/events", get(get_events))
+        .with_state(state)
+        .layer(cors)
+        .layer(middleware::from_fn(restrict_origin));
+
+    let address = format!("127.0.0.1:{}", args.port);
+    let listener = tokio::net::TcpListener::bind(&address)
+        .await
+        .map_err(|error| format!("개발용 HTTP 다리에 바인드할 수 없습니다: {error}"))?;
+    eprintln!("개발용 HTTP 다리: http://{address}");
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async {
+            if let Err(error) = tokio::signal::ctrl_c().await {
+                eprintln!("종료 신호를 기다릴 수 없습니다: {error}");
+            }
+        })
+        .await
+        .map_err(|error| format!("개발용 HTTP 다리가 종료됐습니다: {error}"))
+}
+
+async fn restrict_origin(request: Request, next: Next) -> Response {
+    if request
+        .headers()
+        .get(header::ORIGIN)
+        .is_some_and(|origin| origin.as_bytes() != DEV_UI_ORIGIN.as_bytes())
+    {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    next.run(request).await
+}
+
+async fn post_core(State(state): State<AppState>, body: Bytes) -> Response {
+    let request = match serde_json::from_slice::<CoreRequest>(&body) {
+        Ok(request) => request,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(CoreError {
+                    code: ErrorCode::InvalidRequest,
+                    message: "요청 형식이 올바르지 않습니다.".into(),
+                    details: Vec::new(),
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    let core = state.core.clone();
+    match tokio::task::spawn_blocking(move || core.handle(request)).await {
+        Ok(Ok(reply)) => (StatusCode::OK, Json(reply)).into_response(),
+        Ok(Err(error)) => (StatusCode::BAD_REQUEST, Json(error)).into_response(),
+        Err(join_error) => {
+            eprintln!("코어 명령 실행 태스크가 실패했습니다: {join_error}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(CoreError {
+                    code: ErrorCode::Io,
+                    message: "코어 명령을 실행할 수 없습니다.".into(),
+                    details: Vec::new(),
+                }),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn get_events(State(state): State<AppState>) -> impl IntoResponse {
+    let stream = BroadcastStream::new(state.events.subscribe()).filter_map(|result| match result {
+        Ok(event) => Some(Ok::<Event, Infallible>(Event::default().data(
+            serde_json::to_string(&event).expect("CoreEvent JSON 직렬화는 실패하지 않습니다"),
+        ))),
+        Err(_) => None,
+    });
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+fn parse_args(args: impl Iterator<Item = OsString>) -> Result<Args, String> {
+    let mut args = args;
+    let mut data_dir = None;
+    let mut port = None;
+    let mut seeds = Vec::new();
+
+    while let Some(argument) = args.next() {
+        match argument.to_string_lossy().as_ref() {
+            "--data-dir" => {
+                data_dir = Some(PathBuf::from(
+                    args.next()
+                        .ok_or_else(|| "--data-dir 값이 필요합니다".to_string())?,
+                ));
+            }
+            "--port" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--port 값이 필요합니다".to_string())?;
+                let value = value
+                    .to_str()
+                    .ok_or_else(|| "--port 값이 올바르지 않습니다".to_string())?;
+                port = Some(
+                    value
+                        .parse::<u16>()
+                        .map_err(|_| "--port 값이 올바르지 않습니다".to_string())?,
+                );
+            }
+            "--seed" => seeds.push(PathBuf::from(
+                args.next()
+                    .ok_or_else(|| "--seed 값이 필요합니다".to_string())?,
+            )),
+            other => return Err(format!("알 수 없는 인자입니다: {other}")),
+        }
+    }
+
+    Ok(Args {
+        data_dir: data_dir.ok_or_else(|| "--data-dir가 필요합니다".to_string())?,
+        port: port.ok_or_else(|| "--port가 필요합니다".to_string())?,
+        seeds,
+    })
+}
