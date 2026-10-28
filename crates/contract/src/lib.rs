@@ -1,8 +1,16 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 1판, 261028)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 2판, 261029)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
 //! 생성된 TS는 손으로 고치지 않는다. 계약을 바꾸려면 이 파일을 고치고 다시 생성한다.
+//!
+//! 같은 크레이트에 둘이 더 있다.
+//! - [`validate`]: 앱 정의 검사. 코어(가져오기)와 오케스트레이터(에이전트가 올릴 때)가 같이 쓴다.
+//! - [`registry`]: 코어와 오케스트레이터 사이 HTTP 약속(기기 연결, 앱 올리기, 이벤트 스트림).
+//!
+//! 2판에서 바뀐 것: 오케스트레이터 연결 상태 [`LinkStatus`]와 `link.*` 명령, 연결했을 때 `app.import`가
+//! 오케스트레이터를 거치는 것, 에이전트가 앱을 띄워 달라고 할 때의 `app.open_requested` 이벤트,
+//! 오류 코드 `server`.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -26,14 +34,23 @@
 //! 파일 읽기, 목록, 쓰기는 상태를 바꾸지 않으므로 이벤트가 없다.
 //!
 //! # 저장과 동기화 경계
-//! - [`SharedState`]: 앱 레지스트리, 워크스페이스, 데스크톱, 앱 창. 지금은 코어가 앱 데이터 폴더의
-//!   `state.json`에 두고, 2단계에서 오케스트레이터가 정본이 되어 기기 사이에 맞춘다. 모양은 그때도 같다.
+//! - [`SharedState`]: 앱 레지스트리, 워크스페이스, 데스크톱, 앱 창. 코어가 앱 데이터 폴더의 `state.json`에 둔다.
+//!   - 앱과 앱 버전: 오케스트레이터에 연결했으면 오케스트레이터 레지스트리가 정본이고 `state.json`은 그
+//!     캐시다. 코어는 레지스트리의 앱마다 지금 버전 하나만 캐시에 둔다(창은 늘 지금 버전을 그리므로).
+//!     연결하지 않았으면 1판처럼 코어가 정본이다.
+//!   - 워크스페이스, 데스크톱, 앱 창: 아직 코어가 정본이다. 기기 사이 동기화는 다음 단계다.
 //! - [`DeviceState`]: 지금 고른 워크스페이스와 데스크톱, 고른 폴더. 그 기기의 `device.json`에만 둔다.
+//! - 오케스트레이터 연결 정보(서버 주소, 기기 id, 기기 토큰)는 그 기기의 `link.json`에만 두고 화면에
+//!   보내지 않는다. 화면은 [`LinkStatus`]만 본다.
 
 use std::collections::BTreeMap;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+
+pub mod registry;
+pub mod validate;
 
 /// 창 상태와 앱 정의의 상태 기본값에 쓰는 임의 JSON 값.
 pub type JsonValue = serde_json::Value;
@@ -195,6 +212,41 @@ pub struct ShellSnapshot {
     pub shared: SharedState,
     pub device: DeviceState,
     pub supported: Supported,
+    pub link: LinkStatus,
+}
+
+/// 이 기기와 오케스트레이터의 연결 상태. `state`로 가른다.
+///
+/// 흐름: `unlinked` → (`link.start`) `pairing` → (에이전트가 코드를 승인) `connected` ⇄ `offline`.
+/// 승인 전에 코드가 만료되거나 `link.cancel`이면 `unlinked`로 돌아간다. 서버가 기기 토큰을 거부하면
+/// `revoked`이고, 다시 `link.start`로 연결한다. `link.unlink`는 어느 상태에서든 `unlinked`로 간다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "state", rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum LinkStatus {
+    /// 연결하지 않았다. 앱은 이 기기에만 있고 `app.import`는 1판처럼 로컬로 가져온다.
+    Unlinked {},
+    /// 연결 코드를 받아 에이전트의 승인을 기다린다. 코어가 `interval_secs`마다 승인 여부를 묻는다.
+    Pairing {
+        server_url: String,
+        /// 사람이 읽고 에이전트에게 전하는 코드. 예: `K7PQ-4XMR`.
+        user_code: String,
+        expires_at: String,
+    },
+    /// 연결했고 이벤트 스트림이 이어져 있다. 레지스트리의 앱이 캐시와 맞춰져 있다.
+    Connected {
+        server_url: String,
+        device_name: String,
+    },
+    /// 연결했지만 지금 서버에 닿지 않는다(시작 직후 포함). 코어가 다시 잇는다. 캐시의 앱은 그대로 쓴다.
+    Offline {
+        server_url: String,
+        device_name: String,
+        /// 마지막으로 실패한 까닭. 사람이 읽는 한국어 한 줄.
+        reason: String,
+    },
+    /// 서버가 이 기기의 토큰을 거부했다(에이전트가 기기 연결을 끊음 등). 캐시의 앱은 그대로 쓴다.
+    Revoked { server_url: String },
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +268,7 @@ pub struct ShellSnapshot {
 ///    - 정의에 직접 적은 경로(문자열 `path`)는 [`FileRef`]의 경로 규칙을 지킨다. 어기면 고른 폴더 밖을
 ///      요구하는 정의로 보고 거부한다.
 ///    - `split`의 `children`은 둘 이상이고, `sizes`가 있으면 개수가 같고 모두 0보다 크다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct AppDefinition {
@@ -238,7 +290,7 @@ pub struct AppDefinition {
 }
 
 /// 앱이 필요로 하는 블록 세트와 모듈의 버전.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct Requires {
@@ -248,7 +300,7 @@ pub struct Requires {
 }
 
 /// 앱이 쓰겠다고 선언하는 권한. 실제로 허락하는 것은 기기마다 사용자다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(tag = "module", rename_all = "snake_case", deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub enum PermissionDecl {
@@ -269,7 +321,7 @@ impl PermissionDecl {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "contract.ts")]
 pub enum FileAccess {
@@ -280,7 +332,7 @@ pub enum FileAccess {
 }
 
 /// 블록. 블록 세트 1판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub enum Block {
@@ -315,7 +367,7 @@ pub enum Block {
     MarkdownView { file: FileRef },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "contract.ts")]
 pub enum SplitDirection {
@@ -326,7 +378,7 @@ pub enum SplitDirection {
 }
 
 /// 창 상태 키 하나를 읽는다. 예: `{ "state": "current_file" }`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct StateRef {
@@ -334,7 +386,7 @@ pub struct StateRef {
 }
 
 /// 블록 이벤트의 값을 창 상태 키 하나에 쓴다. 예: `{ "set_state": "current_file" }`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct SetState {
@@ -342,7 +394,7 @@ pub struct SetState {
 }
 
 /// 권한 하나가 가리키는 폴더(고른 폴더 자체).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct FolderRef {
@@ -357,7 +409,7 @@ pub struct FolderRef {
 /// - 빈 문자열은 폴더 자체이고 `files.list`의 `dir`에서만 쓴다.
 /// - 코어는 실행할 때 심볼릭 링크를 풀어 실제 경로가 고른 폴더의 실제 경로 안에 있는지 다시 확인하고,
 ///   밖이면 `path_outside_root`로 거부한다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct FileRef {
@@ -367,7 +419,7 @@ pub struct FileRef {
 
 /// 경로 값. 창 상태에서 읽거나(`{ "state": "current_file" }`) 정의에 직접 적는다(`"notes/todo.md"`).
 /// 상태 값이 null이거나 문자열이 아니면 열 파일이 없는 것이다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(untagged)]
 #[ts(export, export_to = "contract.ts")]
 pub enum PathValue {
@@ -441,8 +493,26 @@ pub enum CoreRequest {
     /// 같은 id의 앱이 있으면 새 버전이 되고, 그 앱의 열린 창은 새 버전으로 옮긴다.
     /// 옮긴 창의 상태에서 새 정의에 없는 키는 버리고 새 키는 기본값으로 채운다.
     /// 고른 폴더는 권한 id가 같고 모듈이 같으면 이어 쓰고 아니면 지운다.
+    ///
+    /// 연결 상태에 따라 갈린다.
+    /// - `unlinked`: 위처럼 로컬에서 가져온다. 버전 번호는 로컬에서 센다.
+    /// - `connected`: 오케스트레이터에 올리고(`registry` 모듈의 앱 올리기), 서버가 돌려준 앱과 버전을
+    ///   위 규칙대로 캐시에 반영한 뒤 응답한다. 검사 실패는 서버의 오류를 그대로 돌려준다.
+    /// - `pairing`, `offline`, `revoked`: `server`로 거부한다(로컬과 레지스트리가 갈라지지 않게).
     #[serde(rename = "app.import")]
     AppImport { definition_json: String },
+
+    /// 오케스트레이터 연결을 시작한다. 서버에 연결 코드를 받아 `pairing`으로 가고, 응답에 코드를 준다.
+    /// 이미 `pairing`이면 진행 중인 것을 버리고 새로 받는다. `connected`, `offline`이면 `invalid_request`.
+    /// 서버에 닿지 않으면 `server`.
+    #[serde(rename = "link.start")]
+    LinkStart {},
+    /// 진행 중인 연결 시도를 그만두고 `unlinked`로 간다. `pairing`이 아니면 아무것도 하지 않는다.
+    #[serde(rename = "link.cancel")]
+    LinkCancel {},
+    /// 이 기기의 연결 정보(`link.json`)를 지우고 `unlinked`로 간다. 캐시의 앱과 창은 그대로 둔다.
+    #[serde(rename = "link.unlink")]
+    LinkUnlink {},
 
     /// 이 기기의 폴더 고르기 창을 띄워 창의 권한 하나에 폴더를 준다. 이미 있으면 바꾼다.
     /// 사용자가 취소하면 `grant`가 null이다.
@@ -523,6 +593,13 @@ pub enum CoreReply {
     #[serde(rename = "app.import")]
     AppImport { app: App, version: AppVersion },
 
+    #[serde(rename = "link.start")]
+    LinkStart { user_code: String, expires_at: String },
+    #[serde(rename = "link.cancel")]
+    LinkCancel {},
+    #[serde(rename = "link.unlink")]
+    LinkUnlink {},
+
     #[serde(rename = "files.pick_folder")]
     FilesPickFolder { grant: Option<Grant> },
     #[serde(rename = "files.list")]
@@ -560,9 +637,15 @@ pub enum FileKind {
 #[serde(tag = "event")]
 #[ts(export, export_to = "contract.ts")]
 pub enum CoreEvent {
-    /// 공유 상태나 기기 상태가 바뀌었다. 화면은 저장소를 이 snapshot으로 바꾼다.
+    /// 공유 상태나 기기 상태, 연결 상태가 바뀌었다. 화면은 저장소를 이 snapshot으로 바꾼다.
     #[serde(rename = "state.changed")]
     StateChanged { snapshot: ShellSnapshot },
+    /// 에이전트가 앱을 띄워 달라고 했다(앱을 올리며 띄우기를 요청했거나 앱 열기를 요청함).
+    /// 코어는 그 앱을 캐시에 반영한 `state.changed`를 먼저 보내고 이 이벤트를 보낸다.
+    /// 화면은 지금 보는 데스크톱에 그 앱의 창이 없으면 새 창 자리 규칙대로 `window.open`을 부르고,
+    /// 있으면 그 창을 `window.raise`로 올린다. 화면이 여럿이면(개발용 다리) 각자 처리한다.
+    #[serde(rename = "app.open_requested")]
+    AppOpenRequested { app_id: String },
 }
 
 /// 명령의 실패.
@@ -599,6 +682,54 @@ pub enum ErrorCode {
     Conflict,
     /// 파일을 읽고 쓰다 실패했다(텍스트가 아님, 너무 큼 포함).
     Io,
+    /// 오케스트레이터에 닿지 않거나, 연결이 필요한데 연결되어 있지 않거나, 서버가 요청을 처리하지 못했다.
+    Server,
+}
+
+impl ErrorCode {
+    /// 코드마다의 기본 한국어 설명.
+    pub fn default_message(self) -> &'static str {
+        match self {
+            ErrorCode::InvalidRequest => "명령을 처리할 수 없습니다.",
+            ErrorCode::NotFound => "요청한 항목을 찾을 수 없습니다.",
+            ErrorCode::InvalidAppDefinition => "앱 정의가 유효하지 않습니다.",
+            ErrorCode::UnsupportedApp => "앱이 지원되지 않는 블록이나 모듈 버전을 요구합니다.",
+            ErrorCode::PermissionDenied => {
+                "앱에 선언되지 않았거나 쓰기가 허용되지 않은 권한입니다."
+            }
+            ErrorCode::NotGranted => "이 기기에서 폴더를 선택해야 합니다.",
+            ErrorCode::PathOutsideRoot => "고른 폴더 밖의 경로입니다.",
+            ErrorCode::Conflict => "파일이 읽은 뒤 바뀌었거나 이미 존재합니다.",
+            ErrorCode::Io => "파일을 읽거나 쓸 수 없습니다.",
+            ErrorCode::Server => "kaleidoscope 서버에 연결되어 있지 않거나 서버가 요청을 처리하지 못했습니다.",
+        }
+    }
+}
+
+impl CoreError {
+    /// 기본 설명을 단 오류.
+    pub fn new(code: ErrorCode) -> Self {
+        CoreError {
+            code,
+            message: code.default_message().to_string(),
+            details: Vec::new(),
+        }
+    }
+
+    /// 기본 설명과 걸린 것 목록을 단 오류.
+    pub fn with_details(code: ErrorCode, details: Vec<String>) -> Self {
+        CoreError {
+            code,
+            message: code.default_message().to_string(),
+            details,
+        }
+    }
+}
+
+/// 앱 정의의 JSON Schema. 오케스트레이터 MCP가 앱 올리기 도구의 입력 스키마로 보여 준다.
+/// 설명은 이 파일의 doc 주석에서 나온다. 형식 검사 뒤의 의미 검사는 [`validate`]가 한다.
+pub fn app_definition_schema() -> serde_json::Value {
+    serde_json::to_value(schemars::schema_for!(AppDefinition)).expect("schema serializes")
 }
 
 #[cfg(test)]
@@ -667,6 +798,44 @@ mod tests {
 
         let err = serde_json::from_str::<CoreRequest>(r#"{"op":"state.get","extra":1}"#);
         assert!(err.is_err(), "모르는 필드는 거부한다");
+    }
+
+    #[test]
+    fn validator_accepts_examples_and_rejects_outside_path() {
+        for name in ["md-editor.json", "md-viewer.json"] {
+            validate::parse_app_definition(&example(name)).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        }
+        let outside = example("md-viewer.json").replace(
+            r#""path": { "state": "current_file" }"#,
+            r#""path": "../secret.md""#,
+        );
+        assert_ne!(outside, example("md-viewer.json"), "예제의 경로 자리를 바꿨는지 확인");
+        let error = validate::parse_app_definition(&outside).unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidAppDefinition);
+        assert!(error.details.iter().any(|d| d.contains("고른 폴더 밖")), "{error:?}");
+    }
+
+    #[test]
+    fn app_definition_schema_lists_block_types() {
+        let schema = app_definition_schema().to_string();
+        for block in ["split", "file_tree", "markdown_editor", "markdown_view"] {
+            assert!(schema.contains(&format!("\"{block}\"")), "스키마에 {block}이 없다");
+        }
+    }
+
+    #[test]
+    fn link_status_uses_state_tag() {
+        assert_eq!(
+            serde_json::to_string(&LinkStatus::Unlinked {}).unwrap(),
+            r#"{"state":"unlinked"}"#
+        );
+        let event = CoreEvent::AppOpenRequested {
+            app_id: "md-viewer".into(),
+        };
+        assert_eq!(
+            serde_json::to_string(&event).unwrap(),
+            r#"{"event":"app.open_requested","app_id":"md-viewer"}"#
+        );
     }
 
     #[test]

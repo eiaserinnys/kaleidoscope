@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use kaleidoscope_contract::{App, AppDefinition, AppVersion, CoreError, CoreReply, SharedState};
 
-use crate::app_definition;
+use kaleidoscope_contract::validate as app_definition;
 use crate::state_commands::timestamp;
 use crate::CoreState;
 
@@ -10,7 +10,7 @@ pub(crate) fn import(
     state: &mut CoreState,
     definition_json: String,
 ) -> Result<CoreReply, CoreError> {
-    let definition = app_definition::parse(&definition_json)?;
+    let definition = app_definition::parse_app_definition(&definition_json)?;
     Ok(import_definition(state, definition))
 }
 

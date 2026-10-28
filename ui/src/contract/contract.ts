@@ -112,17 +112,17 @@ details: Array<string>, };
 /**
  * 코어가 화면에 보내는 이벤트. `event`로 가른다.
  */
-export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, };
+export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "app.open_requested", app_id: string, };
 
 /**
  * 코어의 응답. `op`는 명령과 같다.
  */
-export type CoreReply = { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, };
+export type CoreReply = { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "link.start", user_code: string, expires_at: string, } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, };
 
 /**
  * 화면이 코어에 보내는 명령. `op`로 가른다. 응답은 같은 `op`의 [`CoreReply`]다.
  */
-export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, };
+export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, };
 
 /**
  * 화면 한 장. 앱 창 배치를 가진다.
@@ -142,7 +142,7 @@ export type DeviceState = { active_workspace_id: string | null,
  */
 active_desktop_ids: { [key in string]: string }, grants: Array<Grant>, };
 
-export type ErrorCode = "invalid_request" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "io";
+export type ErrorCode = "invalid_request" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "io" | "server";
 
 export type FileAccess = "read" | "readwrite";
 
@@ -192,6 +192,23 @@ root_path: string,
 root_name: string, granted_at: string, };
 
 /**
+ * 이 기기와 오케스트레이터의 연결 상태. `state`로 가른다.
+ *
+ * 흐름: `unlinked` → (`link.start`) `pairing` → (에이전트가 코드를 승인) `connected` ⇄ `offline`.
+ * 승인 전에 코드가 만료되거나 `link.cancel`이면 `unlinked`로 돌아간다. 서버가 기기 토큰을 거부하면
+ * `revoked`이고, 다시 `link.start`로 연결한다. `link.unlink`는 어느 상태에서든 `unlinked`로 간다.
+ */
+export type LinkStatus = { "state": "unlinked", } | { "state": "pairing", server_url: string, 
+/**
+ * 사람이 읽고 에이전트에게 전하는 코드. 예: `K7PQ-4XMR`.
+ */
+user_code: string, expires_at: string, } | { "state": "connected", server_url: string, device_name: string, } | { "state": "offline", server_url: string, device_name: string, 
+/**
+ * 마지막으로 실패한 까닭. 사람이 읽는 한국어 한 줄.
+ */
+reason: string, } | { "state": "revoked", server_url: string, };
+
+/**
  * 경로 값. 창 상태에서 읽거나(`{ "state": "current_file" }`) 정의에 직접 적는다(`"notes/todo.md"`).
  * 상태 값이 null이거나 문자열이 아니면 열 파일이 없는 것이다.
  */
@@ -226,7 +243,7 @@ export type SharedState = { apps: Array<App>, app_versions: Array<AppVersion>, w
 /**
  * 화면이 보는 상태 전체.
  */
-export type ShellSnapshot = { shared: SharedState, device: DeviceState, supported: Supported, };
+export type ShellSnapshot = { shared: SharedState, device: DeviceState, supported: Supported, link: LinkStatus, };
 
 export type SplitDirection = "row" | "column";
 

@@ -1,5 +1,4 @@
 mod app_commands;
-mod app_definition;
 mod error;
 mod files;
 mod state_commands;
@@ -227,5 +226,7 @@ fn snapshot(state: &CoreState) -> ShellSnapshot {
         shared: state.shared.clone(),
         device: state.device.clone(),
         supported: kaleidoscope_contract::Supported::current(),
+        // 오케스트레이터 연결은 다음 PR(코어 연결 작업)에서 구현한다.
+        link: kaleidoscope_contract::LinkStatus::Unlinked {},
     }
 }
