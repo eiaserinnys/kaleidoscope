@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+# Tauri 앱 크레이트(app/src-tauri)는 뼈대 작업(U0)에서 members에 더하고,
+# default-members는 crates/만 남겨 `cargo test`가 웹뷰 스택을 빌드하지 않게 한다.
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ts-rs = { version = "12", features = ["serde-json-impl", "no-serde-warnings"] }
