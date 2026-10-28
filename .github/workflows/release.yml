@@ -39,6 +39,49 @@ jobs:
           releaseBody: 'See the assets below to download this version.'
           prerelease: ${{ contains(github.ref_name, '-') }}
 
+      - name: Capture Windows shell smoke screen
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:GITHUB_WORKSPACE "target/release/kaleidoscope-app.exe"
+          if (-not (Test-Path $exe)) { throw "Release executable not found: $exe" }
+
+          $app = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 15
+            $captureScript = @'
+          Add-Type -AssemblyName System.Drawing
+          Add-Type -AssemblyName System.Windows.Forms
+          $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+          $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
+          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+          try {
+            $graphics.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $bounds.Size)
+            $bitmap.Save((Join-Path $env:GITHUB_WORKSPACE "smoke.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+          }
+          finally {
+            $graphics.Dispose()
+            $bitmap.Dispose()
+          }
+          '@
+            $capturePath = Join-Path $env:RUNNER_TEMP "capture-smoke.ps1"
+            Set-Content -Path $capturePath -Value $captureScript -Encoding utf8
+            $capture = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+              "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $capturePath
+            ) -PassThru -Wait
+            if ($capture.ExitCode -ne 0) { throw "Screen capture failed with exit code $($capture.ExitCode)" }
+            if (-not (Test-Path (Join-Path $env:GITHUB_WORKSPACE "smoke.png"))) { throw "smoke.png was not created" }
+          }
+          finally {
+            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload Windows shell smoke screen
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-smoke-${{ github.ref_name }}
+          path: smoke.png
+          if-no-files-found: error
+
       - name: Upload example app definitions
         run: gh release upload "${{ github.ref_name }}" examples/md-editor.json examples/md-viewer.json --clobber
         env:

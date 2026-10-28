@@ -28,6 +28,13 @@
   --ks-line-width: 1px;
   --ks-focus-width: 2px;
   --ks-focus-offset: 2px;
+  --ks-workspace-label-max-width: 200px;
+  --ks-desktop-tab-max-width: 160px;
+  --ks-window-min-width: 360px;
+  --ks-window-min-height: 240px;
+  --ks-window-visible-width: 64px;
+  --ks-shadow-popover: 0 var(--ks-space-2) var(--ks-space-4) rgb(25 35 48 / 18%);
+  --ks-shadow-window: 0 var(--ks-space-4) var(--ks-space-6) rgb(15 20 28 / 24%);
 
   color-scheme: light;
   --ks-color-background: #f4f6f9;
@@ -65,6 +72,8 @@
     --ks-color-notice: #26334b;
     --ks-color-code: #252c36;
     --ks-color-scroll-thumb: #5b6675;
+    --ks-shadow-popover: 0 var(--ks-space-2) var(--ks-space-4) rgb(0 0 0 / 45%);
+    --ks-shadow-window: 0 var(--ks-space-4) var(--ks-space-6) rgb(0 0 0 / 55%);
   }
 }
 

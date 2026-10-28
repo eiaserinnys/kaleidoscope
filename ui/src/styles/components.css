@@ -125,3 +125,83 @@
   font-size: var(--ks-type-body);
   padding: var(--ks-space-2) var(--ks-space-3);
 }
+
+.ks-text-input {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--ks-control-height);
+  border: var(--ks-line-width) solid var(--ks-color-border);
+  border-radius: var(--ks-radius-small);
+  background: var(--ks-color-surface);
+  color: var(--ks-color-text);
+  font-size: var(--ks-type-body);
+  line-height: var(--ks-line-body);
+  padding: 0 var(--ks-space-2);
+}
+
+.ks-text-input:focus {
+  border-color: var(--ks-color-focus);
+  outline: var(--ks-focus-width) solid var(--ks-color-focus);
+  outline-offset: var(--ks-focus-offset);
+}
+
+.ks-menu {
+  position: fixed;
+  z-index: 10000;
+  display: flex;
+  max-width: calc(100vw - 2 * var(--ks-space-3));
+  flex-direction: column;
+  border: var(--ks-line-width) solid var(--ks-color-border);
+  border-radius: var(--ks-radius-small);
+  background: var(--ks-color-surface-raised);
+  box-shadow: var(--ks-shadow-popover);
+  color: var(--ks-color-text);
+  padding: var(--ks-space-1) 0;
+}
+
+.ks-menu-item {
+  display: flex;
+  width: 100%;
+  min-height: var(--ks-control-height);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ks-space-3);
+  border: 0;
+  background: transparent;
+  color: var(--ks-color-text);
+  cursor: pointer;
+  font-size: var(--ks-type-body);
+  line-height: var(--ks-line-body);
+  padding: var(--ks-space-2) var(--ks-space-3);
+  text-align: start;
+  white-space: nowrap;
+}
+
+.ks-menu-item:hover:not(:disabled),
+.ks-menu-item:focus-visible:not(:disabled) {
+  background: var(--ks-color-selection);
+}
+
+.ks-menu-item:disabled {
+  color: var(--ks-color-muted);
+  cursor: default;
+}
+
+.ks-menu-item-danger {
+  color: var(--ks-color-danger);
+}
+
+.ks-menu-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ks-menu-check {
+  color: var(--ks-color-accent);
+}
+
+.ks-menu-separator {
+  height: var(--ks-line-width);
+  background: var(--ks-color-border);
+  margin: var(--ks-space-1) var(--ks-space-3);
+}
