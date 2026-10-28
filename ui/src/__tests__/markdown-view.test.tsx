@@ -28,19 +28,23 @@ describe("markdown_view block", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it.each(["editor-window", "viewer-window"])("shows the folder prompt in %s until its permission is granted", async (windowId) => {
+  it.each(["editor-window", "viewer-window"])("keeps %s content blank until its folder permission is granted", async (windowId) => {
     const transport = createFakeTransport(makeTestSeed());
     const store = createShellStore(transport);
-    render(<AppWindowContent store={store} windowId={windowId} />);
-    expect(await screen.findByText("폴더를 먼저 선택하세요")).toBeTruthy();
+    const { container } = render(<AppWindowContent store={store} windowId={windowId} />);
+    expect(screen.queryByText("폴더를 먼저 선택하세요")).toBeNull();
+    expect(screen.queryByText("파일을 선택하세요")).toBeNull();
+    expect(container.querySelector(".ks-markdown-view")).toBeNull();
   });
 
-  it.each(["editor-window", "viewer-window"])("shows the file prompt in %s after permission is granted without a selected path", async (windowId) => {
+  it.each(["editor-window", "viewer-window"])("keeps %s content blank after permission is granted without a selected path", async (windowId) => {
     const transport = createFakeTransport(makeTestSeed({
       grants: [grantFor("editor-window", "docs"), grantFor("viewer-window", "docs")],
     }));
     const store = createShellStore(transport);
-    render(<AppWindowContent store={store} windowId={windowId} />);
-    expect(await screen.findByText("파일을 선택하세요")).toBeTruthy();
+    const { container } = render(<AppWindowContent store={store} windowId={windowId} />);
+    expect(screen.queryByText("폴더를 먼저 선택하세요")).toBeNull();
+    expect(screen.queryByText("파일을 선택하세요")).toBeNull();
+    expect(container.querySelector(".ks-markdown-view")).toBeNull();
   });
 });
