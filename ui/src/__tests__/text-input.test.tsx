@@ -6,6 +6,14 @@ import { TextInput } from "../components/text-input";
 afterEach(cleanup);
 
 describe("TextInput", () => {
+  it("selects the current name when rename input opens", () => {
+    render(<TextInput aria-label="이름" value="작업 1" onCommit={vi.fn()} onCancel={vi.fn()} />);
+
+    const input = screen.getByRole("textbox", { name: "이름" }) as HTMLInputElement;
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe("작업 1".length);
+  });
+
   it("commits the edited value with Enter", async () => {
     const user = userEvent.setup();
     const onCommit = vi.fn();

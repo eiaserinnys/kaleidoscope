@@ -1,4 +1,4 @@
-import { useRef, useState, type InputHTMLAttributes } from "react";
+import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
 
 export interface TextInputProps extends Omit<
   InputHTMLAttributes<HTMLInputElement>,
@@ -12,6 +12,11 @@ export interface TextInputProps extends Omit<
 export function TextInput({ value, onCommit, onCancel, ...props }: TextInputProps) {
   const [draft, setDraft] = useState(value);
   const finished = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.select();
+  }, []);
 
   const finish = () => {
     if (finished.current) return;
@@ -31,6 +36,7 @@ export function TextInput({ value, onCommit, onCancel, ...props }: TextInputProp
       {...props}
       autoFocus
       className="ks-text-input"
+      ref={inputRef}
       onBlur={finish}
       onChange={(event) => setDraft(event.currentTarget.value)}
       onKeyDown={(event) => {

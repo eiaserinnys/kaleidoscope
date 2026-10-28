@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Block } from "../contract/contract";
-import { EmptyState, Notice, StatusText } from "../components/primitives";
+import { Notice, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
 import { toCoreError } from "../core/core-transport";
@@ -61,8 +61,7 @@ export function MarkdownViewBlock({ block, context }: { block: MarkdownViewBlock
     return () => window.removeEventListener("focus", refresh);
   }, [readFile]);
 
-  if (!grant) return <EmptyState icon={<DocumentIcon />} text="폴더를 먼저 선택하세요" />;
-  if (path === null) return <EmptyState icon={<DocumentIcon />} text="파일을 선택하세요" />;
+  if (!grant || path === null) return null;
   if (loading) return <div className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
   if (error) return <div className="ks-markdown-error"><Notice role="alert">{error}</Notice></div>;
 
@@ -80,14 +79,5 @@ export function MarkdownViewBlock({ block, context }: { block: MarkdownViewBlock
         {text}
       </ReactMarkdown>
     </article>
-  );
-}
-
-function DocumentIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="M6 3.5h8l4 4v13H6z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.5" />
-      <path d="M14 3.5v4h4M9 12h6M9 15.5h6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-    </svg>
   );
 }

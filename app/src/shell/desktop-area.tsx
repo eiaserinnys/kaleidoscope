@@ -14,6 +14,7 @@ import { WindowFrame } from "./window-frame";
 export interface DesktopAreaProps {
   activeDesktopId: string;
   activeWorkspaceId: string;
+  onAreaChange: (area: { width: number; height: number }) => void;
   onCall: (request: CoreRequest) => void;
   onOpenApps: (anchor: HTMLElement) => void;
   snapshot: ShellSnapshot;
@@ -23,6 +24,7 @@ export interface DesktopAreaProps {
 export function DesktopArea({
   activeDesktopId,
   activeWorkspaceId,
+  onAreaChange,
   onCall,
   onOpenApps,
   snapshot,
@@ -36,10 +38,11 @@ export function DesktopArea({
     if (!element) return;
     const observer = new ResizeObserver(([entry]) => {
       setArea({ width: entry.contentRect.width, height: entry.contentRect.height });
+      onAreaChange({ width: entry.contentRect.width, height: entry.contentRect.height });
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [onAreaChange]);
 
   const desktops = [...snapshot.shared.desktops].sort((a, b) => a.position - b.position);
 
@@ -64,7 +67,6 @@ export function DesktopArea({
                   </Button>
                 )}
                 icon={<AppsIcon />}
-                text="열린 앱이 없습니다"
               />
             ) : windows.map((appWindow) => (
               <DesktopWindow

@@ -1,5 +1,6 @@
 .ks-button {
   display: inline-flex;
+  height: var(--ks-control-height);
   min-height: var(--ks-control-height);
   align-items: center;
   justify-content: center;
@@ -10,12 +11,12 @@
   cursor: pointer;
   font-size: var(--ks-type-body);
   line-height: 1;
-  padding: var(--ks-space-2) var(--ks-space-3);
+  padding: 0 var(--ks-space-3);
 }
 
 .ks-button:hover:not(:disabled),
 .ks-icon-button:hover:not(:disabled) {
-  background: var(--ks-color-surface-raised);
+  background: var(--ks-color-hover);
 }
 
 .ks-button-emphasis {
@@ -81,6 +82,10 @@
 
 .ks-empty-state-action {
   margin-block-start: var(--ks-space-2);
+}
+
+.ks-empty-state-without-text .ks-empty-state-action {
+  margin-block-start: 0;
 }
 
 .ks-notice {
@@ -179,7 +184,7 @@
 
 .ks-menu-item:hover:not(:disabled),
 .ks-menu-item:focus-visible:not(:disabled) {
-  background: var(--ks-color-selection);
+  background: var(--ks-color-hover);
 }
 
 .ks-menu-item:disabled {

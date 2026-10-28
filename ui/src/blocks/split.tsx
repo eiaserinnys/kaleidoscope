@@ -13,13 +13,13 @@ function initialWeights(block: SplitBlockData): number[] {
 function buildTemplate(weights: number[]): string {
   return weights.flatMap((weight, index) => index === 0
     ? [`minmax(var(--ks-pane-min-size), ${weight}fr)`]
-    : ["var(--ks-split-handle-size)", `minmax(var(--ks-pane-min-size), ${weight}fr)`]).join(" ");
+    : ["var(--ks-line-width)", `minmax(var(--ks-pane-min-size), ${weight}fr)`]).join(" ");
 }
 
 function readSplitSizes(element: HTMLElement) {
   const styles = getComputedStyle(element);
   return {
-    handleSize: Number.parseFloat(styles.getPropertyValue("--ks-split-handle-size")),
+    handleSize: Number.parseFloat(styles.getPropertyValue("--ks-line-width")),
     minPaneSize: Number.parseFloat(styles.getPropertyValue("--ks-pane-min-size")),
   };
 }

@@ -61,15 +61,25 @@
   flex: 1 1 auto;
   align-items: center;
   gap: var(--ks-space-1);
-  overflow-x: auto;
+}
+
+.ks-desktop-tab-scroll {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: var(--ks-space-1);
+  overflow-x: scroll;
   overflow-y: hidden;
   overscroll-behavior-inline: contain;
+  padding-block-start: var(--ks-space-2);
 }
 
 .ks-desktop-tab-wrap {
-  min-width: 0;
+  min-width: var(--ks-desktop-tab-min-width);
   max-width: var(--ks-desktop-tab-max-width);
-  flex: 0 0 auto;
+  flex: 0 1 auto;
 }
 
 .ks-desktop-tab-wrap .ks-text-input {
@@ -77,10 +87,11 @@
 }
 
 .ks-desktop-tab {
-  display: block;
+  display: flex;
   width: 100%;
   min-width: 0;
   height: var(--ks-control-height);
+  align-items: center;
   overflow: hidden;
   border: var(--ks-line-width) solid transparent;
   border-radius: var(--ks-radius-small);
@@ -95,8 +106,15 @@
   white-space: nowrap;
 }
 
+.ks-desktop-tab-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ks-desktop-tab:hover {
-  background: var(--ks-color-surface-raised);
+  background-color: var(--ks-color-hover);
 }
 
 .ks-desktop-tab-active {
@@ -105,7 +123,7 @@
 }
 
 .ks-desktop-tab-active:hover {
-  background: var(--ks-color-selection);
+  background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
 
 .ks-shell-actions {
@@ -142,6 +160,17 @@
 
 .ks-window {
   position: absolute;
+  overflow: visible;
+}
+
+.ks-window-bottom-edge {
+  border-radius: var(--ks-radius-large);
+  background: var(--ks-color-surface);
+}
+
+.ks-window-frame {
+  position: absolute;
+  inset: 0;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -151,6 +180,10 @@
   border-radius: var(--ks-radius-large);
   background: var(--ks-color-surface);
   box-shadow: var(--ks-shadow-window);
+}
+
+.ks-window-bottom-edge .ks-window-frame {
+  inset: 0 0 calc(var(--ks-space-2) + var(--ks-space-1));
 }
 
 .ks-window-gesturing,
@@ -205,26 +238,34 @@
 
 .ks-window-resize-east {
   top: 0;
-  right: 0;
-  bottom: var(--ks-space-2);
+  right: calc(-1 * var(--ks-space-2));
+  bottom: 0;
   width: var(--ks-space-2);
   cursor: ew-resize;
 }
 
 .ks-window-resize-south {
-  right: var(--ks-space-2);
-  bottom: 0;
+  right: 0;
+  bottom: calc(-1 * var(--ks-space-2));
   left: 0;
   height: var(--ks-space-2);
   cursor: ns-resize;
 }
 
+.ks-window-bottom-edge .ks-window-resize-south {
+  bottom: var(--ks-space-1);
+}
+
 .ks-window-resize-corner {
-  right: 0;
-  bottom: 0;
-  width: var(--ks-space-2);
-  height: var(--ks-space-2);
+  right: -12px;
+  bottom: -12px;
+  width: 12px;
+  height: 12px;
   cursor: nwse-resize;
+}
+
+.ks-window-bottom-edge .ks-window-resize-corner {
+  bottom: 0;
 }
 
 .ks-shell-notice-layer {
@@ -246,7 +287,7 @@
 
 .ks-notice-details {
   display: block;
-  color: var(--ks-color-muted);
+  color: var(--ks-color-text);
   font-size: var(--ks-type-meta);
   line-height: var(--ks-line-body);
   margin-block-start: var(--ks-space-1);

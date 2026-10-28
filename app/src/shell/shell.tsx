@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   Button,
   EmptyState,
@@ -20,6 +20,7 @@ import {
 import { AppsIcon, ChevronDownIcon, ImportIcon, PlusIcon } from "./icons";
 import { DesktopArea } from "./desktop-area";
 import { importAppDefinition } from "./import-definition";
+import { makeNewWindowRect } from "./window-geometry";
 
 interface OpenMenu {
   anchor: HTMLElement;
@@ -33,7 +34,16 @@ export function Shell({ store }: { store: ShellStore }) {
   const [notice, setNotice] = useState<CoreError | null>(null);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
   const [renamingDesktopId, setRenamingDesktopId] = useState<string | null>(null);
+  const [desktopArea, setDesktopArea] = useState({ width: 0, height: 0 });
+  const activeDesktopTabRef = useRef<HTMLDivElement>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
+  const reportArea = useCallback((area: { width: number; height: number }) => setDesktopArea(area), []);
+
+  const activeWorkspace = snapshot ? selectWorkspace(snapshot) : undefined;
+  const activeDesktop = snapshot && activeWorkspace ? selectDesktop(snapshot, activeWorkspace) : undefined;
+  useEffect(() => {
+    activeDesktopTabRef.current?.scrollIntoView?.({ inline: "nearest", block: "nearest" });
+  }, [activeDesktop?.id]);
 
   const runCommand = useCallback(async (request: CoreRequest): Promise<CoreReply | undefined> => {
     try {
@@ -49,8 +59,6 @@ export function Shell({ store }: { store: ShellStore }) {
     return <main className="app-root"><EmptyState icon={<AppsIcon />} text="코어에 연결할 수 없습니다" /></main>;
   }
 
-  const activeWorkspace = selectWorkspace(snapshot);
-  const activeDesktop = activeWorkspace ? selectDesktop(snapshot, activeWorkspace) : undefined;
   if (!activeWorkspace || !activeDesktop) {
     return <main className="app-root"><EmptyState icon={<AppsIcon />} text="코어에 연결할 수 없습니다" /></main>;
   }
@@ -60,12 +68,27 @@ export function Shell({ store }: { store: ShellStore }) {
     .filter((desktop) => desktop.workspace_id === activeWorkspace.id)
     .sort((a, b) => a.position - b.position);
 
+  const newWindowRect = (desktopId: string, current: ShellSnapshot) => {
+    const count = current.shared.windows.filter((window) => window.desktop_id === desktopId).length;
+    return makeNewWindowRect(
+      desktopArea,
+      count,
+      tokenPixels("--ks-window-min-width"),
+      tokenPixels("--ks-window-min-height"),
+    );
+  };
+
   const openAppMenu = (anchor: HTMLElement) => {
     const entries: MenuEntry[] = snapshot.shared.apps.length > 0
       ? snapshot.shared.apps.map((app) => ({
         id: `app-${app.id}`,
         label: app.name,
-        onSelect: () => void runCommand({ op: "window.open", desktop_id: activeDesktop.id, app_id: app.id }),
+        onSelect: () => void runCommand({
+          op: "window.open",
+          desktop_id: activeDesktop.id,
+          app_id: app.id,
+          rect: newWindowRect(activeDesktop.id, snapshot),
+        }),
       }))
       : [{ id: "no-apps", label: "앱 없음", disabled: true }];
     setMenu({ anchor, entries });
@@ -142,7 +165,7 @@ export function Shell({ store }: { store: ShellStore }) {
       const workspace = latest ? selectWorkspace(latest) : undefined;
       const desktop = latest && workspace ? selectDesktop(latest, workspace) : undefined;
       if (!desktop) return;
-      await importAppDefinition(store, desktop.id, definition);
+      await importAppDefinition(store, desktop.id, definition, newWindowRect(desktop.id, latest!));
     } catch (reason) {
       setNotice(toCoreError(reason));
     }
@@ -171,36 +194,42 @@ export function Shell({ store }: { store: ShellStore }) {
         </div>
 
         <nav aria-label="데스크톱" className="ks-desktop-tabs">
-          {desktops.map((desktop) => (
-            <div className="ks-desktop-tab-wrap" key={desktop.id}>
-              {renamingDesktopId === desktop.id ? (
-                <TextInput
-                  aria-label="데스크톱 이름"
-                  onCancel={() => setRenamingDesktopId(null)}
-                  onCommit={(name) => {
-                    setRenamingDesktopId(null);
-                    void runCommand({ op: "desktop.rename", desktop_id: desktop.id, name });
-                  }}
-                  value={desktop.name}
-                />
-              ) : (
-                <button
-                  aria-pressed={desktop.id === activeDesktop.id}
-                  className={`ks-desktop-tab${desktop.id === activeDesktop.id ? " ks-desktop-tab-active" : ""}`}
-                  onClick={() => void runCommand({ op: "desktop.activate", desktop_id: desktop.id })}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    openDesktopMenu(event.currentTarget, desktop);
-                  }}
-                  onDoubleClick={() => setRenamingDesktopId(desktop.id)}
-                  title={desktop.name}
-                  type="button"
-                >
-                  {desktop.name}
-                </button>
-              )}
-            </div>
-          ))}
+          <div className="ks-desktop-tab-scroll">
+            {desktops.map((desktop) => (
+              <div
+                className="ks-desktop-tab-wrap"
+                key={desktop.id}
+                ref={desktop.id === activeDesktop.id ? activeDesktopTabRef : undefined}
+              >
+                {renamingDesktopId === desktop.id ? (
+                  <TextInput
+                    aria-label="데스크톱 이름"
+                    onCancel={() => setRenamingDesktopId(null)}
+                    onCommit={(name) => {
+                      setRenamingDesktopId(null);
+                      void runCommand({ op: "desktop.rename", desktop_id: desktop.id, name });
+                    }}
+                    value={desktop.name}
+                  />
+                ) : (
+                  <button
+                    aria-pressed={desktop.id === activeDesktop.id}
+                    className={`ks-desktop-tab${desktop.id === activeDesktop.id ? " ks-desktop-tab-active" : ""}`}
+                    onClick={() => void runCommand({ op: "desktop.activate", desktop_id: desktop.id })}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      openDesktopMenu(event.currentTarget, desktop);
+                    }}
+                    onDoubleClick={() => setRenamingDesktopId(desktop.id)}
+                    title={desktop.name}
+                    type="button"
+                  >
+                    <span className="ks-desktop-tab-name">{desktop.name}</span>
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
           <IconButton aria-label="데스크톱 추가" onClick={createDesktop} title="데스크톱 추가">
             <PlusIcon />
           </IconButton>
@@ -227,6 +256,7 @@ export function Shell({ store }: { store: ShellStore }) {
       <DesktopArea
         activeDesktopId={activeDesktop.id}
         activeWorkspaceId={activeWorkspace.id}
+        onAreaChange={reportArea}
         onCall={(request) => void runCommand(request)}
         onOpenApps={openAppMenu}
         snapshot={snapshot}
@@ -273,4 +303,10 @@ function nextName(prefix: string, existing: string[]): string {
   let index = 1;
   while (names.has(`${prefix} ${index}`)) index += 1;
   return `${prefix} ${index}`;
+}
+
+function tokenPixels(name: string): number {
+  const value = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name));
+  if (!Number.isFinite(value)) throw new Error(`필수 UI 토큰을 읽을 수 없습니다: ${name}`);
+  return value;
 }

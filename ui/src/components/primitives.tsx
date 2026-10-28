@@ -56,13 +56,13 @@ export function EmptyState({
   action,
 }: {
   icon: ReactNode;
-  text: string;
+  text?: string;
   action?: ReactNode;
 }) {
   return (
-    <div className="ks-empty-state">
+    <div className={`ks-empty-state${text ? "" : " ks-empty-state-without-text"}`}>
       <span aria-hidden="true" className="ks-empty-state-icon">{icon}</span>
-      <span className="ks-empty-state-text">{text}</span>
+      {text ? <span className="ks-empty-state-text">{text}</span> : null}
       {action ? <span className="ks-empty-state-action">{action}</span> : null}
     </div>
   );
