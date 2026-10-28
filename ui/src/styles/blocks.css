@@ -71,15 +71,11 @@
   text-align: start;
 }
 
-.ks-file-tree-row:hover {
-  background: var(--ks-color-hover);
-}
-
 .ks-file-tree-row.is-selected {
   background: var(--ks-color-selection);
 }
 
-.ks-file-tree-row.is-selected:hover {
+.ks-file-tree-row:hover {
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
 

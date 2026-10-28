@@ -70,12 +70,7 @@ export function Shell({ store }: { store: ShellStore }) {
 
   const newWindowRect = (desktopId: string, current: ShellSnapshot) => {
     const count = current.shared.windows.filter((window) => window.desktop_id === desktopId).length;
-    return makeNewWindowRect(
-      desktopArea,
-      count,
-      tokenPixels("--ks-window-min-width"),
-      tokenPixels("--ks-window-min-height"),
-    );
+    return makeNewWindowRect(desktopArea, count);
   };
 
   const openAppMenu = (anchor: HTMLElement) => {
@@ -257,7 +252,7 @@ export function Shell({ store }: { store: ShellStore }) {
         activeDesktopId={activeDesktop.id}
         activeWorkspaceId={activeWorkspace.id}
         onAreaChange={reportArea}
-        onCall={(request) => void runCommand(request)}
+        onCall={runCommand}
         onOpenApps={openAppMenu}
         snapshot={snapshot}
         store={store}
@@ -303,10 +298,4 @@ function nextName(prefix: string, existing: string[]): string {
   let index = 1;
   while (names.has(`${prefix} ${index}`)) index += 1;
   return `${prefix} ${index}`;
-}
-
-function tokenPixels(name: string): number {
-  const value = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name));
-  if (!Number.isFinite(value)) throw new Error(`필수 UI 토큰을 읽을 수 없습니다: ${name}`);
-  return value;
 }

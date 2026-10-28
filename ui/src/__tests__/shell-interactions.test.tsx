@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WindowFrame } from "../../../app/src/shell/window-frame";
 import { makeNewWindowRect } from "../../../app/src/shell/window-geometry";
@@ -18,14 +18,15 @@ if (!window.PointerEvent) {
 describe("window dragging", () => {
   it("clamps only the drawn rectangle to a small desktop", () => {
     const appWindow = makeTestSnapshot().shared.windows[0] as AppWindow;
-    appWindow.rect = { x: 48, y: 48, width: 880, height: 600 };
+    appWindow.rect = { x: 48, y: 48, width: 1076, height: 700 };
     const savedRect = { ...appWindow.rect };
+    const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window: appWindow });
     render(
       <WindowFrame
         area={{ width: 960, height: 552 }}
         appName="Markdown 편집기"
         isTop
-        onCall={vi.fn() as ShellStore["call"]}
+        onCall={onCall as ShellStore["call"]}
         window={appWindow}
       >
         <div>content</div>
@@ -34,27 +35,39 @@ describe("window dragging", () => {
 
     const frame = screen.getByTestId("app-window-md-editor") as HTMLElement;
     expect(frame.style.top).toBe("0px");
-    expect(frame.style.width).toBe("880px");
-    expect(frame.style.height).toBe("552px");
+    expect(frame.style.left).toBe("0px");
+    expect(frame.style.width).toBe("948px");
+    expect(frame.style.height).toBe("540px");
     expect(appWindow.rect).toEqual(savedRect);
+    expect(onCall).not.toHaveBeenCalled();
   });
 
-  it("reserves the bottom handle area when the drawn window reaches the desktop edge", () => {
+  it("saves the complete displayed rectangle when a clamped window is resized", () => {
     const appWindow = makeTestSnapshot().shared.windows[0] as AppWindow;
-    appWindow.rect = { x: 48, y: 0, width: 640, height: 600 };
+    appWindow.rect = { x: 48, y: 48, width: 1076, height: 700 };
+    const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window: appWindow });
     render(
       <WindowFrame
         area={{ width: 960, height: 552 }}
         appName="Markdown 편집기"
         isTop
-        onCall={vi.fn() as ShellStore["call"]}
+        onCall={onCall as ShellStore["call"]}
         window={appWindow}
       >
         <div>content</div>
       </WindowFrame>,
     );
 
-    expect(screen.getByTestId("app-window-md-editor").className).toContain("ks-window-bottom-edge");
+    const edge = document.querySelector(".ks-window-resize-south") as HTMLElement;
+    fireEvent.pointerDown(edge, { pointerId: 2, clientX: 300, clientY: 540 });
+    fireEvent.pointerMove(edge, { pointerId: 2, clientX: 300, clientY: 420 });
+    fireEvent.pointerUp(edge, { pointerId: 2, clientX: 300, clientY: 420 });
+
+    expect(onCall).toHaveBeenCalledWith({
+      op: "window.set_rect",
+      window_id: appWindow.id,
+      rect: { x: 0, y: 0, width: 948, height: 420 },
+    });
   });
 
   it("keeps a dragged window within the desktop bottom edge", () => {
@@ -75,7 +88,6 @@ describe("window dragging", () => {
 
     const title = screen.getByText("Markdown 편집기").closest(".ks-window-titlebar") as HTMLElement;
     title.style.setProperty("--ks-control-height", "32px");
-    title.style.setProperty("--ks-window-visible-width", "64px");
     fireEvent.pointerDown(title, { pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(title, { pointerId: 1, clientX: 10, clientY: 510 });
     fireEvent.pointerUp(title, { pointerId: 1, clientX: 10, clientY: 510 });
@@ -83,7 +95,7 @@ describe("window dragging", () => {
     expect(onCall).toHaveBeenCalledWith({
       op: "window.set_rect",
       window_id: appWindow.id,
-      rect: { ...appWindow.rect, x: 48, y: 72 },
+      rect: { ...appWindow.rect, x: 48, y: 60 },
     });
   });
 
@@ -111,14 +123,14 @@ describe("window dragging", () => {
     expect(onCall).toHaveBeenCalledWith({
       op: "window.set_rect",
       window_id: appWindow.id,
-      rect: { ...appWindow.rect, height: 552 },
+      rect: { ...appWindow.rect, height: 540 },
     });
   });
 
   it("writes the final rectangle once, on pointer release", () => {
     const window = makeTestSnapshot().shared.windows[0] as AppWindow;
     const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window });
-    render(
+    const view = render(
       <WindowFrame
         area={{ width: 1000, height: 800 }}
         appName="Markdown 편집기"
@@ -135,18 +147,56 @@ describe("window dragging", () => {
     fireEvent.pointerDown(title, { pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(title, { pointerId: 1, clientX: 35, clientY: 40 });
     expect(onCall).not.toHaveBeenCalled();
+    const frame = screen.getByTestId("app-window-md-editor") as HTMLElement;
+    expect(frame.style.left).toBe("25px");
+    expect(frame.style.top).toBe("30px");
 
     fireEvent.pointerUp(title, { pointerId: 1, clientX: 35, clientY: 40 });
 
+    expect(frame.style.left).toBe("25px");
+    expect(frame.style.top).toBe("30px");
     expect(onCall).toHaveBeenCalledOnce();
     expect(onCall).toHaveBeenCalledWith({
       op: "window.set_rect",
       window_id: window.id,
       rect: { ...window.rect, x: window.rect.x + 25, y: window.rect.y + 30 },
     });
+
+    const updated = { ...window, rect: { ...window.rect, x: 25, y: 30 } };
+    view.rerender(
+      <WindowFrame area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={updated}>
+        <div>content</div>
+      </WindowFrame>,
+    );
+    view.rerender(
+      <WindowFrame area={{ width: 600, height: 400 }} appName="Markdown 편집기" isTop onCall={onCall} window={updated}>
+        <div>content</div>
+      </WindowFrame>,
+    );
+    expect(frame.style.left).toBe("0px");
+    expect(frame.style.top).toBe("0px");
+    expect(frame.style.width).toBe("588px");
+    expect(frame.style.height).toBe("388px");
   });
 
-  it("keeps the saved and displayed rectangle at the horizontal visibility limit", () => {
+  it("restores the saved rectangle when saving a gesture fails", async () => {
+    const appWindow = makeTestSnapshot().shared.windows[0] as AppWindow;
+    const onCall = vi.fn().mockResolvedValue(undefined);
+    render(
+      <WindowFrame area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={appWindow}>
+        <div>content</div>
+      </WindowFrame>,
+    );
+    const title = screen.getByText("Markdown 편집기").closest(".ks-window-titlebar") as HTMLElement;
+    fireEvent.pointerDown(title, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(title, { pointerId: 1, clientX: 35, clientY: 40 });
+    fireEvent.pointerUp(title, { pointerId: 1, clientX: 35, clientY: 40 });
+    const frame = screen.getByTestId("app-window-md-editor") as HTMLElement;
+    await waitFor(() => expect(frame.style.left).toBe("0px"));
+    expect(frame.style.top).toBe("0px");
+  });
+
+  it("keeps the whole window inside the desktop when dragged horizontally", () => {
     const appWindow = makeTestSnapshot().shared.windows[0] as AppWindow;
     const onCall = vi.fn(async (request: CoreRequest) => {
       if (request.op === "window.set_rect") Object.assign(appWindow.rect, request.rect);
@@ -167,7 +217,6 @@ describe("window dragging", () => {
     const title = screen.getByText("Markdown 편집기").closest(".ks-window-titlebar") as HTMLElement | null;
     if (!title) throw new Error("창 제목 줄을 찾지 못했습니다");
     title.style.setProperty("--ks-control-height", "32px");
-    title.style.setProperty("--ks-window-visible-width", "64px");
     fireEvent.pointerDown(title, { pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(title, { pointerId: 1, clientX: 1010, clientY: 10 });
     fireEvent.pointerUp(title, { pointerId: 1, clientX: 1010, clientY: 10 });
@@ -175,9 +224,9 @@ describe("window dragging", () => {
     expect(onCall).toHaveBeenCalledWith({
       op: "window.set_rect",
       window_id: appWindow.id,
-      rect: { ...appWindow.rect, x: 936, y: 0 },
+      rect: { ...appWindow.rect, x: 988 - appWindow.rect.width, y: 0 },
     });
-    expect((screen.getByTestId("app-window-md-editor") as HTMLElement).style.left).toBe("936px");
+    expect((screen.getByTestId("app-window-md-editor") as HTMLElement).style.left).toBe(`${988 - appWindow.rect.width}px`);
   });
 });
 
@@ -211,18 +260,24 @@ describe("app definition import", () => {
     expect(calls).toEqual([{ op: "app.import", definition_json: JSON.stringify(mdViewerDefinition) }]);
   });
 
-  it("stacks new windows in the desktop area and keeps the minimum size", () => {
-    expect(makeNewWindowRect({ width: 960, height: 552 }, 0, 360, 240)).toEqual({
+  it("fits and positions new windows inside the usable desktop area", () => {
+    expect(makeNewWindowRect({ width: 960, height: 552 }, 0)).toEqual({
       x: 48,
-      y: 48,
+      y: 0,
       width: 880,
-      height: 480,
+      height: 540,
     });
-    expect(makeNewWindowRect({ width: 500, height: 300 }, 8, 360, 240)).toEqual({
-      x: 48,
-      y: 48,
-      width: 428,
-      height: 240,
+    expect(makeNewWindowRect({ width: 500, height: 300 }, 8)).toEqual({
+      x: 0,
+      y: 0,
+      width: 488,
+      height: 288,
+    });
+    expect(makeNewWindowRect({ width: 1440, height: 852 }, 1)).toEqual({
+      x: 80,
+      y: 80,
+      width: 880,
+      height: 600,
     });
   });
 });

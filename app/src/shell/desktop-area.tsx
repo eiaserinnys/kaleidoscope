@@ -4,6 +4,7 @@ import {
   Button,
   EmptyState,
   type AppWindow,
+  type CoreReply,
   type CoreRequest,
   type ShellSnapshot,
   type ShellStore,
@@ -15,7 +16,7 @@ export interface DesktopAreaProps {
   activeDesktopId: string;
   activeWorkspaceId: string;
   onAreaChange: (area: { width: number; height: number }) => void;
-  onCall: (request: CoreRequest) => void;
+  onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
   onOpenApps: (anchor: HTMLElement) => void;
   snapshot: ShellSnapshot;
   store: ShellStore;
@@ -97,7 +98,7 @@ function DesktopWindow({
   appWindow: AppWindow;
   area: { width: number; height: number };
   isTop: boolean;
-  onCall: (request: CoreRequest) => void;
+  onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
   snapshot: ShellSnapshot;
   store: ShellStore;
 }) {
@@ -112,7 +113,7 @@ function DesktopWindow({
       area={area}
       appName={appName}
       isTop={isTop}
-      onCall={onCall as ShellStore["call"]}
+      onCall={onCall}
       window={appWindow}
     >
       <AppWindowContent store={store} windowId={appWindow.id} />

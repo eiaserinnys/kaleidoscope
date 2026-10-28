@@ -33,7 +33,6 @@
   --ks-desktop-tab-min-width: 104px;
   --ks-window-min-width: 360px;
   --ks-window-min-height: 240px;
-  --ks-window-visible-width: 64px;
   --ks-shadow-popover: 0 var(--ks-space-2) var(--ks-space-4) rgb(25 35 48 / 18%);
   --ks-shadow-window: 0 var(--ks-space-4) var(--ks-space-6) rgb(15 20 28 / 24%);
 

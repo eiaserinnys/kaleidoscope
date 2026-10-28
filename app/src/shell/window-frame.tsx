@@ -1,12 +1,13 @@
-import { useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { IconButton, type ShellStore, type AppWindow, type Rect } from "@kaleidoscope/ui";
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { IconButton, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { CloseIcon } from "./icons";
+import { fitWindowRect, usableWindowArea } from "./window-geometry";
 
 export interface WindowFrameProps {
   area: { width: number; height: number };
   appName: string;
   isTop: boolean;
-  onCall: ShellStore["call"];
+  onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
   window: AppWindow;
   children: ReactNode;
 }
@@ -16,27 +17,33 @@ type Gesture = {
   pointerId: number;
   startX: number;
   startY: number;
-  // 화면에 그린 rect를 조작 기준으로 쓰고, 이동은 저장된 크기를 보존한다.
+  // 화면에 그린 rect를 조작과 저장의 기준으로 쓴다.
   startRect: Rect;
 };
 
 const MIN_WIDTH = "--ks-window-min-width";
 const MIN_HEIGHT = "--ks-window-min-height";
-const VISIBLE_WIDTH = "--ks-window-visible-width";
 
 export function WindowFrame({ area, appName, isTop, onCall, window: appWindow, children }: WindowFrameProps) {
   const titleRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const previewRef = useRef<Rect | null>(null);
   const [preview, setPreview] = useState<Rect | null>(null);
-  const displayRect = preview ?? clampSavedRect(appWindow.rect, area, titleRef.current);
-  const bottomEdge = displayRect.y + displayRect.height >= area.height;
+  const displayRect = fitWindowRect(preview ?? appWindow.rect, area);
+
+  useEffect(() => {
+    const pending = previewRef.current;
+    if (gestureRef.current || !pending || pending.x !== appWindow.rect.x || pending.y !== appWindow.rect.y
+      || pending.width !== appWindow.rect.width || pending.height !== appWindow.rect.height) return;
+    previewRef.current = null;
+    setPreview(null);
+  }, [appWindow.rect.x, appWindow.rect.y, appWindow.rect.width, appWindow.rect.height]);
 
   const beginGesture = (kind: Gesture["kind"], event: PointerEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    const startRect = previewRef.current ?? displayRect;
+    const startRect = displayRect;
     gestureRef.current = {
       kind,
       pointerId: event.pointerId,
@@ -56,22 +63,23 @@ export function WindowFrame({ area, appName, isTop, onCall, window: appWindow, c
     let next: Rect;
 
     if (gesture.kind === "move") {
-      const visibleWidth = tokenPixels(VISIBLE_WIDTH, titleRef.current);
-      next = clampWindowPosition({
+      next = fitWindowRect({
         ...gesture.startRect,
         x: gesture.startRect.x + dx,
         y: gesture.startRect.y + dy,
-      }, area, visibleWidth);
+      }, area);
     } else {
       const minWidth = tokenPixels(MIN_WIDTH, titleRef.current);
       const minHeight = tokenPixels(MIN_HEIGHT, titleRef.current);
-      const maxHeight = Math.max(minHeight, area.height - gesture.startRect.y);
+      const usable = usableWindowArea(area);
+      const maxWidth = usable.width - gesture.startRect.x;
+      const maxHeight = usable.height - gesture.startRect.y;
       next = {
         ...gesture.startRect,
-        width: gesture.kind === "south" ? gesture.startRect.width : Math.max(minWidth, Math.round(gesture.startRect.width + dx)),
+        width: gesture.kind === "south" ? gesture.startRect.width : clamp(Math.round(gesture.startRect.width + dx), Math.min(minWidth, maxWidth), maxWidth),
         height: gesture.kind === "east"
           ? gesture.startRect.height
-          : clamp(Math.round(gesture.startRect.height + dy), minHeight, maxHeight),
+          : clamp(Math.round(gesture.startRect.height + dy), Math.min(minHeight, maxHeight), maxHeight),
       };
     }
 
@@ -83,9 +91,8 @@ export function WindowFrame({ area, appName, isTop, onCall, window: appWindow, c
     const gesture = gestureRef.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     gestureRef.current = null;
-    const next = previewRef.current ?? gesture.startRect;
-    previewRef.current = null;
-    setPreview(null);
+    const next = fitWindowRect(previewRef.current ?? gesture.startRect, area);
+    previewRef.current = next;
     const changed = gesture.kind === "move"
       ? next.x !== gesture.startRect.x || next.y !== gesture.startRect.y
       : gesture.kind === "east"
@@ -94,14 +101,15 @@ export function WindowFrame({ area, appName, isTop, onCall, window: appWindow, c
           ? next.height !== gesture.startRect.height
           : next.width !== gesture.startRect.width || next.height !== gesture.startRect.height;
     if (changed) {
-      const rect = gesture.kind === "move"
-        ? { ...appWindow.rect, x: next.x, y: next.y }
-        : gesture.kind === "east"
-          ? { ...appWindow.rect, width: next.width }
-          : gesture.kind === "south"
-            ? { ...appWindow.rect, height: next.height }
-            : { ...appWindow.rect, width: next.width, height: next.height };
-      void onCall({ op: "window.set_rect", window_id: appWindow.id, rect });
+      void onCall({ op: "window.set_rect", window_id: appWindow.id, rect: next }).then((reply) => {
+        if (!reply && !gestureRef.current && previewRef.current === next) {
+          previewRef.current = null;
+          setPreview(null);
+        }
+      });
+    } else {
+      previewRef.current = null;
+      setPreview(null);
     }
   };
 
@@ -114,7 +122,7 @@ export function WindowFrame({ area, appName, isTop, onCall, window: appWindow, c
 
   return (
     <section
-      className={`ks-window${preview ? " ks-window-gesturing" : ""}${bottomEdge ? " ks-window-bottom-edge" : ""}`}
+      className={`ks-window${preview ? " ks-window-gesturing" : ""}`}
       data-testid={`app-window-${appWindow.app_id}`}
       onPointerDownCapture={() => {
         if (!isTop) void onCall({ op: "window.raise", window_id: appWindow.id });
@@ -167,34 +175,6 @@ export function WindowFrame({ area, appName, isTop, onCall, window: appWindow, c
       />
     </section>
   );
-}
-
-function clampSavedRect(rect: Rect, area: { width: number; height: number }, element: HTMLElement | null): Rect {
-  const drawnRect = {
-    ...rect,
-    width: Math.min(rect.width, area.width),
-    height: Math.min(rect.height, area.height),
-  };
-  return clampWindowPosition(
-    drawnRect,
-    area,
-    tokenPixels(VISIBLE_WIDTH, element),
-  );
-}
-
-function clampWindowPosition(
-  rect: Rect,
-  area: { width: number; height: number },
-  visibleWidth: number,
-): Rect {
-  const minX = Math.min(0, visibleWidth - rect.width);
-  const maxX = Math.max(area.width - visibleWidth, 0);
-  const maxY = Math.max(area.height - rect.height, 0);
-  return {
-    ...rect,
-    x: Math.round(clamp(rect.x, minX, maxX)),
-    y: Math.round(clamp(rect.y, 0, maxY)),
-  };
 }
 
 function tokenPixels(name: string, element: HTMLElement | null): number {

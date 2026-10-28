@@ -16,17 +16,13 @@
 
 .ks-button:hover:not(:disabled),
 .ks-icon-button:hover:not(:disabled) {
-  background: var(--ks-color-hover);
+  background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
 
 .ks-button-emphasis {
   border-color: var(--ks-color-accent);
   background: var(--ks-color-accent);
   color: var(--ks-color-accent-contrast);
-}
-
-.ks-button-emphasis:hover:not(:disabled) {
-  filter: brightness(0.95);
 }
 
 .ks-button:disabled,
@@ -184,7 +180,7 @@
 
 .ks-menu-item:hover:not(:disabled),
 .ks-menu-item:focus-visible:not(:disabled) {
-  background: var(--ks-color-hover);
+  background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
 
 .ks-menu-item:disabled {

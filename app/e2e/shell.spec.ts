@@ -51,6 +51,11 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
     const activeRect = rect(active);
     const plusRect = rect(plus);
     const scrollRect = rect(scroller);
+    const tabs = [...scroller.querySelectorAll(".ks-desktop-tab")];
+    const lastTab = tabs.at(-1);
+    const name = active.querySelector(".ks-desktop-tab-name");
+    if (!lastTab || !name) throw new Error("탭 이름을 찾지 못했습니다");
+    const nameRect = rect(name);
     return {
       workspaceHeight: workspaceRect.height,
       workspaceCenterY: workspaceRect.top + workspaceRect.height / 2,
@@ -58,6 +63,11 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
       activeVisible: activeRect.left >= scrollRect.left && activeRect.right <= scrollRect.right,
       plusVisible: plusRect.left >= 0 && plusRect.right <= window.innerWidth,
       plusOutsideScroll: plusRect.left >= scrollRect.right,
+      plusGap: plusRect.left - scrollRect.right,
+      lastTabGap: plusRect.left - rect(lastTab).right,
+      tabGap: Number.parseFloat(getComputedStyle(scroller).columnGap),
+      nameLeftGap: nameRect.left - activeRect.left,
+      nameRightGap: activeRect.right - nameRect.right,
       overflowing: (scroller as HTMLElement).scrollWidth > (scroller as HTMLElement).clientWidth,
       buttonHeights: [...document.querySelectorAll<HTMLElement>(".ks-button")]
         .filter((button) => button.getBoundingClientRect().height > 0)
@@ -68,6 +78,10 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await expect(page.getByText("열린 앱이 없습니다")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "앱 열기" }).first()).toBeVisible();
   await captureMatrix("empty-desktop");
+  const wideTabMetrics = await tabMetrics();
+  expect(wideTabMetrics.lastTabGap).toBe(wideTabMetrics.tabGap);
+  expect(Math.abs(wideTabMetrics.nameLeftGap - wideTabMetrics.nameRightGap)).toBeLessThanOrEqual(1);
+  measurements.tabs1440 = wideTabMetrics;
   await page.setViewportSize({ width: 960, height: 600 });
   await captureThemePair("tabs-one-desktop-960");
   const oneTabMetrics = await tabMetrics();
@@ -128,6 +142,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   expect(tenTabMetrics.activeVisible).toBe(true);
   expect(tenTabMetrics.plusVisible).toBe(true);
   expect(tenTabMetrics.plusOutsideScroll).toBe(true);
+  expect(tenTabMetrics.plusGap).toBe(tenTabMetrics.tabGap);
   expect(tenTabMetrics.buttonHeights.every((height) => height === 32)).toBe(true);
   measurements.tabsWithOverflow = tenTabMetrics;
 
@@ -145,10 +160,10 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   const smallWindow = await editorWindow.boundingBox();
   if (!smallArea || !smallWindow) throw new Error("작은 창의 위치를 확인하지 못했습니다");
   expect(smallWindow.x - smallArea.x).toBe(48);
-  expect(smallWindow.y - smallArea.y).toBe(48);
+  expect(smallWindow.y - smallArea.y).toBe(0);
   expect(smallWindow.width).toBe(880);
-  expect(smallWindow.height).toBe(480);
-  expect(smallWindow.y + smallWindow.height).toBeLessThanOrEqual(smallArea.y + smallArea.height);
+  expect(smallWindow.height).toBe(540);
+  expect(smallWindow.y + smallWindow.height).toBeLessThanOrEqual(smallArea.y + smallArea.height - 12);
   measurements.newWindowRect960 = { area: smallArea, window: smallWindow };
   await captureThemePair("small-window-empty-path-960");
   await expect(editorWindow.getByText("폴더를 먼저 선택하세요")).toHaveCount(0);
@@ -164,12 +179,12 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   const resizeStartY = southHandleBounds.y + southHandleBounds.height / 2;
   await page.mouse.move(resizeX, resizeStartY);
   await page.mouse.down();
-  const resizeTargetY = resizeStartY + 160;
+  const resizeTargetY = resizeStartY - 32;
   await page.mouse.move(resizeX, resizeTargetY);
   await page.mouse.up();
   const expectedResizedHeight = Math.min(
-    Math.round(480 + resizeTargetY - resizeStartY),
-    smallArea.height - 48,
+    Math.round(540 + resizeTargetY - resizeStartY),
+    smallArea.height - 12,
   );
   await expect(editorWindow).toHaveCSS("height", `${expectedResizedHeight}px`);
   const resizedBounds = await editorWindow.boundingBox();
@@ -180,21 +195,64 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await captureThemePair("small-window-bottom-resize-960");
 
   const bottomHandle = await southHandle.boundingBox();
-  if (!bottomHandle) throw new Error("하단에 닿은 창의 크기 조절 띠를 찾지 못했습니다");
-  expect(bottomHandle.y).toBeGreaterThanOrEqual(resizedArea.y + resizedArea.height - 12);
-  expect(bottomHandle.y + bottomHandle.height).toBeLessThanOrEqual(resizedArea.y + resizedArea.height);
+  if (!bottomHandle) throw new Error("창의 크기 조절 띠를 찾지 못했습니다");
   const shrinkStartY = bottomHandle.y + bottomHandle.height / 2;
   await page.mouse.move(bottomHandle.x + bottomHandle.width / 2, shrinkStartY);
   await page.mouse.down();
-  await page.mouse.move(bottomHandle.x + bottomHandle.width / 2, shrinkStartY - 32);
+  await page.mouse.move(bottomHandle.x + bottomHandle.width / 2, shrinkStartY + 160);
   await page.mouse.up();
-  const expectedShrunkHeight = expectedResizedHeight - 32;
-  await expect(editorWindow).toHaveCSS("height", `${expectedShrunkHeight}px`);
+  await expect(editorWindow).toHaveCSS("height", "540px");
   const shrunkBounds = await editorWindow.boundingBox();
   if (!shrunkBounds) throw new Error("하단 손잡이로 줄인 창의 위치를 확인하지 못했습니다");
   expect(shrunkBounds.y + shrunkBounds.height).toBeLessThanOrEqual(resizedArea.y + resizedArea.height);
-  measurements.bottomShrink960 = { area: resizedArea, window: shrunkBounds, handle: bottomHandle };
-  await captureThemePair("small-window-bottom-shrink-960");
+  measurements.bottomGrow960 = { area: resizedArea, window: shrunkBounds, handle: bottomHandle };
+  await captureThemePair("small-window-bottom-grow-960");
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const tallHandle = await southHandle.boundingBox();
+  if (!tallHandle) throw new Error("창의 크기 조절 띠를 찾지 못했습니다");
+  await page.mouse.move(tallHandle.x + tallHandle.width / 2, tallHandle.y + tallHandle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(tallHandle.x + tallHandle.width / 2, tallHandle.y + tallHandle.height / 2 + 160);
+  await page.mouse.up();
+  await expect(editorWindow).toHaveCSS("height", "700px");
+  await captureMatrix("tall-window");
+  await page.setViewportSize({ width: 960, height: 600 });
+  await expect(editorWindow).toHaveCSS("height", "540px");
+  const frameMetrics = await editorWindow.evaluate((element) => {
+    const frame = element.querySelector(".ks-window-frame");
+    if (!frame) throw new Error("창 틀을 찾지 못했습니다");
+    const outer = element.getBoundingClientRect();
+    const inner = frame.getBoundingClientRect();
+    const outerStyle = getComputedStyle(element);
+    return { bottomDifference: outer.bottom - inner.bottom, background: outerStyle.backgroundColor, border: outerStyle.borderBottomWidth };
+  });
+  expect(frameMetrics.bottomDifference).toBe(0);
+  expect(frameMetrics.background).toBe("rgba(0, 0, 0, 0)");
+  expect(frameMetrics.border).toBe("0px");
+  measurements.windowFrame = frameMetrics;
+  await captureThemePair("bottom-window-frame-960");
+  const frameBounds = await editorWindow.boundingBox();
+  if (!frameBounds) throw new Error("창 틀을 찾지 못했습니다");
+  await page.screenshot({
+    path: testInfo.outputPath("bottom-window-frame-detail-960.png"),
+    clip: { x: frameBounds.x, y: frameBounds.y + frameBounds.height - 20, width: frameBounds.width, height: 32 },
+  });
+  const clampedHandle = await southHandle.boundingBox();
+  if (!clampedHandle) throw new Error("축소된 창의 크기 조절 띠를 찾지 못했습니다");
+  const handleX = clampedHandle.x + clampedHandle.width / 2;
+  const handleY = clampedHandle.y + clampedHandle.height / 2;
+  await page.mouse.move(handleX, handleY);
+  await page.mouse.down();
+  await page.mouse.move(handleX, handleY - 120);
+  const titleBeforeRelease = await editorWindow.locator(".ks-window-titlebar").boundingBox();
+  await page.mouse.up();
+  await expect(editorWindow).toHaveCSS("height", "420px");
+  const titleAfterRelease = await editorWindow.locator(".ks-window-titlebar").boundingBox();
+  if (!titleBeforeRelease || !titleAfterRelease) throw new Error("창 제목 줄을 찾지 못했습니다");
+  expect(titleAfterRelease.y - titleBeforeRelease.y).toBe(0);
+  measurements.shrinkAfterViewportResize = { titleBeforeRelease, titleAfterRelease };
+  await captureThemePair("viewport-shrink-release-960");
 
   await editorWindow.getByRole("button", { name: "문서 폴더 고르기" }).click();
   await editorWindow.getByRole("button", { name: "a.md" }).click();
@@ -329,8 +387,25 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
     ]);
     return viewerZ > editorZ;
   }).toBe(true);
-  await viewerWindow.getByRole("button", { name: "창 닫기" }).click();
+  const viewerEast = await viewerWindow.locator(".ks-window-resize-east").boundingBox();
+  if (!viewerEast) throw new Error("뷰어 창의 크기 조절 띠를 찾지 못했습니다");
+  await page.mouse.move(viewerEast.x + viewerEast.width / 2, viewerEast.y + 80);
+  await page.mouse.down();
+  await page.mouse.move(viewerEast.x + viewerEast.width / 2 + 180, viewerEast.y + 80);
+  await page.mouse.up();
+  await expect.poll(async () => (await viewerWindow.boundingBox())?.width ?? 0).toBeGreaterThan(948);
+  await captureMatrix("wide-viewer");
+  await page.setViewportSize({ width: 960, height: 600 });
+  const narrowArea = await page.locator(".ks-desktop-area").boundingBox();
+  const wideClose = viewerWindow.getByRole("button", { name: "창 닫기" });
+  const wideCloseBounds = await wideClose.boundingBox();
+  if (!narrowArea || !wideCloseBounds) throw new Error("뷰어 닫기 단추를 찾지 못했습니다");
+  expect(wideCloseBounds.x + wideCloseBounds.width).toBeLessThanOrEqual(narrowArea.x + narrowArea.width - 12);
+  measurements.wideWindowClose = { area: narrowArea, close: wideCloseBounds };
+  await captureThemePair("wide-viewer-close-960");
+  await wideClose.click();
   await expect(viewerWindow).toBeHidden();
+  await page.setViewportSize({ width: 1440, height: 900 });
 
   const longDocument = "긴 문서.md";
   await editorWindow.getByRole("button", { name: longDocument }).click();
@@ -388,11 +463,30 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   measurements.editorScrollbar = { ...scrollMetrics, scrollTopAfterDrag };
   await captureThemePair("editor-scrollbar-after-drag");
 
+  await editorWindow.getByRole("button", { name: "notes", exact: true }).click();
+  const treeList = editorWindow.locator(".ks-file-tree-list");
+  const treeScrollbar = await treeList.evaluate((element) => {
+    const node = element as HTMLElement;
+    const bounds = node.getBoundingClientRect();
+    const thumbHeight = Math.max(20, node.clientHeight * node.clientHeight / node.scrollHeight);
+    return { x: bounds.right - 4, startY: bounds.top + thumbHeight / 2, endY: bounds.bottom - thumbHeight / 2, scrollHeight: node.scrollHeight, clientHeight: node.clientHeight, before: node.scrollTop };
+  });
+  expect(treeScrollbar.scrollHeight).toBeGreaterThan(treeScrollbar.clientHeight);
+  await captureMatrix("tree-scrollbar-before-drag");
+  await page.mouse.move(treeScrollbar.x, treeScrollbar.startY);
+  await page.mouse.down();
+  await page.mouse.move(treeScrollbar.x, treeScrollbar.endY, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(() => treeList.evaluate((element) => (element as HTMLElement).scrollTop)).toBeGreaterThan(treeScrollbar.before);
+  measurements.treeScrollbar = { ...treeScrollbar, after: await treeList.evaluate((element) => (element as HTMLElement).scrollTop) };
+  await captureMatrix("tree-scrollbar-after-drag");
+
   const treeHeader = await editorWindow.locator(".ks-file-tree-header").boundingBox();
   const splitHandle = await editorWindow.locator(".ks-split-handle").boundingBox();
   if (!treeHeader || !splitHandle) throw new Error("분할 기준선을 측정하지 못했습니다");
-  const dividerGap = Math.abs(treeHeader.x + treeHeader.width - (splitHandle.x + splitHandle.width / 2));
+  const dividerGap = Math.abs(treeHeader.x + treeHeader.width - splitHandle.x);
   expect(dividerGap).toBeLessThanOrEqual(0.5);
+  await editor.click();
   const editorContent = editorWindow.locator(".ks-editor-content");
   const focusBorderWidth = await editorContent.evaluate((element) => getComputedStyle(element, "::after").borderTopWidth);
   expect(focusBorderWidth).toBe("2px");
@@ -419,6 +513,27 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
     },
   });
 
+  await editorWindow.getByRole("button", { name: "notes", exact: true }).click();
+  const selectedTreeRow = editorWindow.getByRole("button", { name: longDocument });
+  const selectedTab = page.getByRole("button", { name: "데스크톱 2" });
+  for (const [name, locator] of [["tree", selectedTreeRow], ["tab", selectedTab]] as const) {
+    for (const scheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.mouse.move(0, 0);
+      const before = await locator.evaluate((element) => getComputedStyle(element).backgroundColor);
+      await locator.hover();
+      const after = await locator.evaluate((element) => ({ color: getComputedStyle(element).backgroundColor, image: getComputedStyle(element).backgroundImage }));
+      expect(after.color).toBe(before);
+      expect(after.image).toContain("linear-gradient");
+      measurements[`selectedHover-${name}-${scheme}`] = { before, after };
+      await page.screenshot({ path: testInfo.outputPath(`selected-hover-${name}-1440-${scheme}.png`) });
+      await page.setViewportSize({ width: 960, height: 600 });
+      await locator.hover();
+      await page.screenshot({ path: testInfo.outputPath(`selected-hover-${name}-960-${scheme}.png`) });
+      await page.setViewportSize({ width: 1440, height: 900 });
+    }
+  }
+  await page.emulateMedia({ colorScheme: "light" });
   await editorWindow.getByRole("button", { name: "a.md" }).hover();
   measurements.hoverFileRow = await editorWindow.getByRole("button", { name: "a.md" }).evaluate((element) => getComputedStyle(element).backgroundColor);
   await captureThemePair("hover-file-row");

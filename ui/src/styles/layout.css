@@ -18,7 +18,7 @@
   z-index: 1;
   width: var(--ks-split-handle-size);
   height: 100%;
-  justify-self: center;
+  justify-self: start;
   background: transparent;
   cursor: col-resize;
   touch-action: none;
@@ -27,28 +27,26 @@
 .ks-split-column .ks-split-handle {
   width: 100%;
   height: var(--ks-split-handle-size);
-  align-self: center;
+  align-self: start;
   cursor: row-resize;
 }
 
 .ks-split-handle::after {
   position: absolute;
   top: 0;
-  left: 50%;
+  left: 0;
   width: var(--ks-line-width);
   height: 100%;
-  transform: translateX(-50%);
   background: var(--ks-color-border);
   content: "";
   pointer-events: none;
 }
 
 .ks-split-column .ks-split-handle::after {
-  top: 50%;
+  top: 0;
   left: 0;
   width: 100%;
   height: var(--ks-line-width);
-  transform: translateY(-50%);
 }
 
 .ks-split-handle:hover::after,
