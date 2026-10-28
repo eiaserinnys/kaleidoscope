@@ -31,7 +31,7 @@ describe("TextInput", () => {
       </>,
     );
 
-    const input = screen.getByRole("textbox", { name: "이름" });
+    screen.getByRole("textbox", { name: "이름" });
     await user.keyboard("{Escape}");
     expect(onCancel).toHaveBeenCalledOnce();
 

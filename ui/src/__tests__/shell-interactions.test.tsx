@@ -30,7 +30,7 @@ describe("window dragging", () => {
       </WindowFrame>,
     );
 
-    const title = screen.getByText("Markdown 편집기").closest(".ks-window-titlebar");
+    const title = screen.getByText("Markdown 편집기").closest(".ks-window-titlebar") as HTMLElement | null;
     if (!title) throw new Error("창 제목 줄을 찾지 못했습니다");
     fireEvent.pointerDown(title, { pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(title, { pointerId: 1, clientX: 35, clientY: 40 });
@@ -64,7 +64,7 @@ describe("window dragging", () => {
       </WindowFrame>,
     );
 
-    const title = screen.getByText("Markdown 편집기").closest(".ks-window-titlebar");
+    const title = screen.getByText("Markdown 편집기").closest(".ks-window-titlebar") as HTMLElement | null;
     if (!title) throw new Error("창 제목 줄을 찾지 못했습니다");
     title.style.setProperty("--ks-control-height", "32px");
     title.style.setProperty("--ks-window-visible-width", "64px");
