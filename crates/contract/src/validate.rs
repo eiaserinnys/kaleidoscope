@@ -1,26 +1,31 @@
+//! 앱 정의 검사. 쉘의 코어와 오케스트레이터가 이 한 곳의 검사를 같이 쓴다.
+//! 규칙은 [`AppDefinition`]의 doc 주석에 있다.
+
 use std::collections::{BTreeMap, HashSet};
 
-use kaleidoscope_contract::{
-    AppDefinition, Block, CoreError, ErrorCode, FileAccess, BLOCK_SET_VERSION, MODULE_VERSIONS,
-};
 use serde_json::Value;
 
-use crate::error;
+use crate::{
+    AppDefinition, Block, CoreError, ErrorCode, FileAccess, PathValue, PermissionDecl,
+    BLOCK_SET_VERSION, MODULE_VERSIONS,
+};
 
-pub(crate) fn parse(definition_json: &str) -> Result<AppDefinition, CoreError> {
+/// 앱 정의 JSON 원문을 읽고 검사한다. 통과하면 정의를, 걸리면 `unsupported_app`이나
+/// `invalid_app_definition`(걸린 것은 `details`)을 돌려준다.
+pub fn parse_app_definition(definition_json: &str) -> Result<AppDefinition, CoreError> {
     let value: Value = serde_json::from_str(definition_json).map_err(|parse_error| {
-        error::with_details(
+        CoreError::with_details(
             ErrorCode::InvalidAppDefinition,
             vec![format!("앱 정의 JSON을 읽을 수 없습니다: {parse_error}")],
         )
     })?;
 
     if requires_unsupported(&value) {
-        return Err(error::make(ErrorCode::UnsupportedApp));
+        return Err(CoreError::new(ErrorCode::UnsupportedApp));
     }
 
     let definition: AppDefinition = serde_json::from_value(value).map_err(|parse_error| {
-        error::with_details(
+        CoreError::with_details(
             ErrorCode::InvalidAppDefinition,
             vec![format!("앱 정의 형식이 올바르지 않습니다: {parse_error}")],
         )
@@ -30,14 +35,15 @@ pub(crate) fn parse(definition_json: &str) -> Result<AppDefinition, CoreError> {
     if details.is_empty() {
         Ok(definition)
     } else {
-        Err(error::with_details(
+        Err(CoreError::with_details(
             ErrorCode::InvalidAppDefinition,
             details,
         ))
     }
 }
 
-pub(crate) fn permission_modules(definition: &AppDefinition) -> BTreeMap<String, String> {
+/// 권한 id → 그 권한의 모듈 이름. 새 버전으로 옮긴 창의 고른 폴더를 이어 쓸지 가를 때 쓴다.
+pub fn permission_modules(definition: &AppDefinition) -> BTreeMap<String, String> {
     definition
         .permissions
         .iter()
@@ -149,7 +155,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 .iter()
                 .find(|permission| permission.id() == file.permission)
                 .map(|permission| match permission {
-                    kaleidoscope_contract::PermissionDecl::Files { access, .. } => *access,
+                    PermissionDecl::Files { access, .. } => *access,
                 });
             if access.is_some_and(|access| access != FileAccess::Readwrite) {
                 details.push(format!(
@@ -190,16 +196,28 @@ fn validate_state_key(key: &str, definition: &AppDefinition, details: &mut Vec<S
 }
 
 fn validate_file_path(
-    path: &kaleidoscope_contract::PathValue,
+    path: &PathValue,
     definition: &AppDefinition,
     details: &mut Vec<String>,
     at: &str,
 ) {
-    if let kaleidoscope_contract::PathValue::State(reference) = path {
+    if let PathValue::State(reference) = path {
         validate_state_key(&reference.state, definition, details, at);
-    } else if let kaleidoscope_contract::PathValue::Literal(path) = path {
-        if !crate::files::valid_relative_path(path, false) {
+    } else if let PathValue::Literal(path) = path {
+        if !valid_relative_path(path, false) {
             details.push(format!("{at}: 고른 폴더 밖 경로를 요구합니다: {path}"));
         }
     }
+}
+
+/// [`crate::FileRef`]의 경로 규칙. `allow_root`면 빈 문자열(고른 폴더 자체)을 허락한다.
+pub fn valid_relative_path(path: &str, allow_root: bool) -> bool {
+    if path.is_empty() {
+        return allow_root;
+    }
+    if path.contains('\\') || path.contains(':') || path.contains('\0') {
+        return false;
+    }
+    path.split('/')
+        .all(|part| !part.is_empty() && part != "." && part != "..")
 }

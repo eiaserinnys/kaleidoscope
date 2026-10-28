@@ -426,6 +426,10 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
             })
         }
         CoreRequest::AppImport { definition_json } => app_commands::import(state, definition_json),
+        // 오케스트레이터 연결은 다음 PR(코어 연결 작업)에서 구현한다. 그 전까지는 서버 오류로 거부한다.
+        CoreRequest::LinkStart {} | CoreRequest::LinkCancel {} | CoreRequest::LinkUnlink {} => {
+            Err(error::make(ErrorCode::Server))
+        }
         CoreRequest::StateGet {}
         | CoreRequest::FilesPickFolder { .. }
         | CoreRequest::FilesList { .. }

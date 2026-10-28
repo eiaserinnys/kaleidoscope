@@ -79,6 +79,7 @@ export function makeTestSnapshot(options: {
       grants: options.grants ?? [],
     },
     supported: { blocks: 1, modules: { files: 1 } },
+    link: { state: "unlinked" },
   };
 }
 

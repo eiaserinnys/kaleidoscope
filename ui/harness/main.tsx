@@ -57,6 +57,7 @@ const initialSnapshot: ShellSnapshot = {
   },
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [] },
   supported: { blocks: 1, modules: { files: 1 } },
+  link: { state: "unlinked" },
 };
 
 const sampleDocument = `# kaleidoscope 작업 메모

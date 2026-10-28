@@ -249,16 +249,7 @@ fn ensure_missing_path_inside(root: &Path, candidate: &Path) -> Result<(), CoreE
     }
 }
 
-pub(crate) fn valid_relative_path(path: &str, allow_root: bool) -> bool {
-    if path.is_empty() {
-        return allow_root;
-    }
-    if path.contains('\\') || path.contains(':') || path.contains('\0') {
-        return false;
-    }
-    path.split('/')
-        .all(|part| !part.is_empty() && part != "." && part != "..")
-}
+use kaleidoscope_contract::validate::valid_relative_path;
 
 fn revision(bytes: &[u8]) -> String {
     let hash = Sha256::digest(bytes);
