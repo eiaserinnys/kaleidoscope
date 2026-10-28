@@ -27,4 +27,20 @@ describe("markdown_view block", () => {
     expect(link.dispatchEvent(event)).toBe(false);
     expect(event.defaultPrevented).toBe(true);
   });
+
+  it.each(["editor-window", "viewer-window"])("shows the folder prompt in %s until its permission is granted", async (windowId) => {
+    const transport = createFakeTransport(makeTestSeed());
+    const store = createShellStore(transport);
+    render(<AppWindowContent store={store} windowId={windowId} />);
+    expect(await screen.findByText("폴더를 먼저 선택하세요")).toBeTruthy();
+  });
+
+  it.each(["editor-window", "viewer-window"])("shows the file prompt in %s after permission is granted without a selected path", async (windowId) => {
+    const transport = createFakeTransport(makeTestSeed({
+      grants: [grantFor("editor-window", "docs"), grantFor("viewer-window", "docs")],
+    }));
+    const store = createShellStore(transport);
+    render(<AppWindowContent store={store} windowId={windowId} />);
+    expect(await screen.findByText("파일을 선택하세요")).toBeTruthy();
+  });
 });

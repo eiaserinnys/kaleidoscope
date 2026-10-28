@@ -30,7 +30,7 @@
 }
 
 .ks-split-handle::after {
-  width: var(--ks-space-1);
+  width: var(--ks-line-width);
   height: 100%;
   background: var(--ks-color-border);
   content: "";
@@ -38,12 +38,20 @@
 
 .ks-split-column .ks-split-handle::after {
   width: 100%;
-  height: var(--ks-space-1);
+  height: var(--ks-line-width);
 }
 
 .ks-split-handle:hover::after,
+.ks-split-handle:active::after,
 .ks-split-handle:focus-visible::after {
+  width: var(--ks-focus-width);
   background: var(--ks-color-accent);
+}
+
+.ks-split-column .ks-split-handle:hover::after,
+.ks-split-column .ks-split-handle:active::after,
+.ks-split-column .ks-split-handle:focus-visible::after {
+  height: var(--ks-focus-width);
 }
 
 .ks-unknown-block {

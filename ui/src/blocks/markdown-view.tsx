@@ -61,8 +61,8 @@ export function MarkdownViewBlock({ block, context }: { block: MarkdownViewBlock
     return () => window.removeEventListener("focus", refresh);
   }, [readFile]);
 
-  if (path === null) return <EmptyState icon={<DocumentIcon />} text="파일을 선택하세요" />;
   if (!grant) return <EmptyState icon={<DocumentIcon />} text="폴더를 먼저 선택하세요" />;
+  if (path === null) return <EmptyState icon={<DocumentIcon />} text="파일을 선택하세요" />;
   if (loading) return <div className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
   if (error) return <div className="ks-markdown-error"><Notice role="alert">{error}</Notice></div>;
 

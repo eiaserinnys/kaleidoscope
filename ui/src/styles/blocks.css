@@ -122,11 +122,13 @@
   min-width: 0;
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: start;
   overflow: hidden;
   background: var(--ks-color-surface);
 }
 
 .ks-editor-content {
+  grid-row: 2;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -174,6 +176,7 @@
 }
 
 .ks-editor-status {
+  grid-row: 3;
   min-height: var(--ks-control-height);
   border-block-start: var(--ks-line-width) solid var(--ks-color-border);
   padding: var(--ks-space-1) var(--ks-space-3);
