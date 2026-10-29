@@ -114,6 +114,8 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 });
             }
         }
+        // 연결 목록은 코어 데이터 런타임 PR에서 받는다.
+        DeviceEvent::ConnectionsSnapshot { .. } => {}
     }
     link::is_current(inner, generation)
 }

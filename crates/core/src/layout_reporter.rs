@@ -110,5 +110,7 @@ fn device_layout(state: &CoreState) -> DeviceLayout {
             .collect(),
         active_workspace_id: state.device.active_workspace_id.clone(),
         active_desktop_ids: state.device.active_desktop_ids.clone(),
+        // 식 오류 보고는 코어 데이터 런타임 PR에서 채운다.
+        data_errors: Vec::new(),
     }
 }

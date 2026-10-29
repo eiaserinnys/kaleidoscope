@@ -1,0 +1,259 @@
+{
+  "id": "block-gallery",
+  "name": "블록 견본",
+  "description": "블록 세트 4판의 블록을 탭마다 모아 보인다",
+  "requires": { "blocks": 4, "modules": { "files": 1 } },
+  "permissions": [
+    { "module": "files", "id": "media", "access": "read", "label": "이미지와 소리 폴더" },
+    { "module": "files", "id": "notes", "access": "readwrite", "label": "설정 파일 폴더" }
+  ],
+  "state": {
+    "tab": 0,
+    "item": "b",
+    "node": null,
+    "query": "",
+    "lang": "both",
+    "compact": false,
+    "count": 0,
+    "picture": null,
+    "sound": null,
+    "config": null
+  },
+  "sources": {
+    "pictures": { "kind": "folder", "permission": "media", "recursive": true, "extensions": ["png", "jpg", "jpeg", "webp", "gif"] },
+    "sounds": { "kind": "folder", "permission": "media", "recursive": true, "extensions": ["mp3", "wav", "ogg", "m4a", "mp4", "webm"] }
+  },
+  "ui": {
+    "type": "tabs",
+    "selected": { "state": "tab" },
+    "on_change": { "set_state": "tab" },
+    "tabs": [
+      {
+        "label": "목록",
+        "child": {
+          "type": "split",
+          "direction": "row",
+          "sizes": [40, 60],
+          "children": [
+            {
+              "type": "stack",
+              "direction": "column",
+              "gap": "none",
+              "children": [
+                {
+                  "type": "toolbar",
+                  "start": [
+                    { "type": "input", "kind": "search", "value": { "state": "query" }, "on_change": { "set_state": "query" }, "placeholder": "거르기" }
+                  ],
+                  "end": [
+                    { "type": "toggle", "label": "격자", "value": { "state": "compact" }, "on_change": { "set_state": "compact" } }
+                  ]
+                },
+                {
+                  "type": "list",
+                  "grouped": true,
+                  "selected": { "state": "item" },
+                  "on_select": { "set_state": "item" },
+                  "items": { "expr": "( $q := $lowercase($state.query); $all := [{\"key\": \"a\", \"title\": \"첫 화면 다듬기\", \"subtitle\": \"화면\", \"meta\": \"10-28\", \"color\": \"#7a6bd1\", \"badges\": [{\"text\": \"완료\", \"color\": \"#2f7d4f\"}]}, {\"key\": \"b\", \"title\": \"연결 설계\", \"subtitle\": \"서버\", \"meta\": \"10-29\", \"color\": \"#d08a3c\", \"badges\": [{\"text\": \"진행\", \"color\": \"#315da8\"}]}, {\"key\": \"c\", \"title\": \"블록 견본\", \"subtitle\": \"화면\", \"meta\": \"10-30\", \"badges\": [\"새로\"]}, {\"key\": \"d\", \"title\": \"설치본 내기\", \"subtitle\": \"릴리스\", \"meta\": \"10-31\"}][$contains($lowercase(title), $q)]; [{\"title\": \"화면\", \"meta\": $string($count($all[subtitle = \"화면\"])), \"items\": [$all[subtitle = \"화면\"]]}, {\"title\": \"그 밖\", \"meta\": $string($count($all[subtitle != \"화면\"])), \"items\": [$all[subtitle != \"화면\"]]}][$count(items) > 0] )" }
+                }
+              ]
+            },
+            {
+              "type": "properties",
+              "fields": [
+                { "label": "고른 항목", "value": { "state": "item" }, "format": "code" },
+                { "label": "검색어", "value": { "expr": "$state.query = '' ? null : $state.query" } },
+                { "label": "상태", "value": { "text": "진행", "color": "#315da8" }, "format": "badge" },
+                { "label": "고친 때", "value": "2026-10-30T01:20:00Z", "format": "date" },
+                { "label": "메모", "value": "**마크다운**으로 쓴 속성 값.\n두 줄째.", "format": "markdown" }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "label": "표와 트리",
+        "child": {
+          "type": "split",
+          "direction": "row",
+          "sizes": [35, 65],
+          "children": [
+            {
+              "type": "tree",
+              "by": "path",
+              "selected": { "state": "node" },
+              "on_select": { "set_state": "node" },
+              "items": [
+                { "key": "1", "path": "화면/쉘/창.md", "meta": "3" },
+                { "key": "2", "path": "화면/쉘/메뉴.md" },
+                { "key": "3", "path": "화면/블록/목록.md", "badges": ["새로"] },
+                { "key": "4", "path": "서버/연결.md" },
+                { "key": "5", "path": "읽어 보기.md" }
+              ]
+            },
+            {
+              "type": "table",
+              "sort": { "field": "updated", "desc": true },
+              "selected": { "state": "node" },
+              "on_select": { "set_state": "node" },
+              "columns": [
+                { "field": "title", "label": "제목" },
+                { "field": "status", "label": "상태", "width": "narrow", "format": "badge" },
+                { "field": "size", "label": "크기", "width": "narrow", "format": "number" },
+                { "field": "updated", "label": "고친 때", "width": "medium", "format": "date" }
+              ],
+              "rows": [
+                { "key": "1", "title": "창", "status": { "text": "완료", "color": "#2f7d4f" }, "size": 1204, "updated": "2026-10-28T09:00:00Z" },
+                { "key": "2", "title": "메뉴", "status": "검토", "size": 380, "updated": "2026-10-29T12:30:00Z" },
+                { "key": "3", "title": "목록", "status": { "text": "진행", "color": "#315da8" }, "size": 15020, "updated": "2026-10-30T01:10:00Z" },
+                { "key": "4", "title": "연결", "status": { "text": "막힘", "color": "#a9363d" }, "size": 88, "updated": "2026-10-27T18:45:00Z" }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "label": "흐름과 글",
+        "child": {
+          "type": "split",
+          "direction": "row",
+          "sizes": [55, 45],
+          "children": [
+            {
+              "type": "stack",
+              "direction": "column",
+              "gap": "none",
+              "children": [
+                {
+                  "type": "toolbar",
+                  "start": [
+                    { "type": "select", "style": "segmented", "value": { "state": "lang" }, "on_change": { "set_state": "lang" }, "options": [{ "value": "ko", "label": "한국어" }, { "value": "en", "label": "영어" }, { "value": "both", "label": "둘 다" }] }
+                  ]
+                },
+                {
+                  "type": "feed",
+                  "grouped": true,
+                  "entries": { "expr": "( $lines := [{\"key\": \"1\", \"name\": \"서소영\", \"color\": \"#7a6bd1\", \"ko\": \"먼저 짚고 넘어가겠습니다.\\n순서가 조금 다릅니다.\", \"en\": \"Let me point one thing out.\\nThe order is a little off.\"}, {\"key\": \"2\", \"name\": \"디렉터\", \"color\": \"#d08a3c\", \"ko\": \"그래, 고쳐 줘.\", \"en\": \"Sure, fix it.\"}]; $pick := function($l) { $state.lang = 'ko' ? [$l.ko] : $state.lang = 'en' ? [$l.en] : [$l.ko, $l.en] }; [{\"title\": \"대화\", \"meta\": $string($count($lines)), \"items\": [$lines.{\"key\": key, \"name\": name, \"color\": color, \"body\": $pick($)}]}, {\"title\": \"알림\", \"items\": [{\"key\": \"n\", \"body\": \"흐름 블록은 줄바꿈을 지킨다.\", \"tone\": \"muted\"}]}] )" }
+                }
+              ]
+            },
+            {
+              "type": "stack",
+              "direction": "column",
+              "children": [
+                {
+                  "type": "section",
+                  "title": "고른 언어",
+                  "meta": { "state": "lang" },
+                  "collapsible": true,
+                  "child": { "type": "text", "value": { "expr": "'지금 보는 언어: ' & ($state.lang = 'ko' ? '한국어' : $state.lang = 'en' ? '영어' : '둘 다')" } }
+                },
+                {
+                  "type": "section",
+                  "title": "마크다운 글",
+                  "child": { "type": "text", "format": "markdown", "value": "## 제목\n\n- 목록 하나\n- 목록 둘\n\n`코드`와 **굵은 글**." }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "label": "입력",
+        "child": {
+          "type": "stack",
+          "direction": "column",
+          "children": [
+            {
+              "type": "toolbar",
+              "start": [
+                { "type": "button", "label": "하나 더", "icon": "plus", "variant": "primary", "on_click": [{ "set_state": "count", "value": { "expr": "$state.count + 1" } }] },
+                { "type": "button", "label": "되돌리기", "icon": "rotate-ccw", "icon_only": true, "on_click": [{ "set_state": "count", "value": 0 }], "disabled": { "expr": "$state.count = 0" } },
+                { "type": "text", "style": "meta", "value": { "expr": "$string($state.count) & '번'" } }
+              ],
+              "end": [
+                { "type": "button", "label": "모두 지우기", "variant": "danger", "confirm": { "title": "모두 지울까요?", "body": { "expr": "'지금 ' & $string($state.count) & '번을 지웁니다.'" }, "ok": "지우기" }, "on_click": [{ "set_state": "count", "value": 0 }, { "set_state": "query", "value": "" }] }
+              ]
+            },
+            {
+              "type": "section",
+              "title": "글 입력",
+              "child": { "type": "input", "multiline": true, "value": { "state": "query" }, "on_change": { "set_state": "query" }, "placeholder": "여러 줄 입력" }
+            },
+            {
+              "type": "section",
+              "title": "고르기",
+              "child": { "type": "select", "value": { "state": "lang" }, "on_change": { "set_state": "lang" }, "options": ["ko", "en", "both"] }
+            }
+          ]
+        }
+      },
+      {
+        "label": "코드",
+        "child": {
+          "type": "split",
+          "direction": "row",
+          "children": [
+            {
+              "type": "code_view",
+              "language": "json",
+              "value": { "expr": "$string({\"tab\": $state.tab, \"item\": $state.item, \"count\": $state.count, \"lang\": $state.lang}, true)" }
+            },
+            {
+              "type": "split",
+              "direction": "column",
+              "sizes": [35, 65],
+              "children": [
+                { "type": "file_tree", "root": { "permission": "notes" }, "extensions": ["json", "yaml", "yml", "toml"], "selected": { "state": "config" }, "on_select": { "set_state": "config" } },
+                { "type": "code_editor", "file": { "permission": "notes", "path": { "state": "config" } } }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "label": "미디어",
+        "child": {
+          "type": "split",
+          "direction": "row",
+          "sizes": [45, 55],
+          "children": [
+            {
+              "type": "tabs",
+              "tabs": [
+                {
+                  "label": "그림",
+                  "child": {
+                    "type": "list",
+                    "layout": "grid",
+                    "selected": { "state": "picture" },
+                    "on_select": { "set_state": "picture" },
+                    "items": { "expr": "$data.pictures[kind = 'file'].{ \"key\": path, \"title\": name, \"meta\": $string($round(size / 1024)) & ' KB', \"image\": { \"permission\": \"media\", \"path\": path } }" }
+                  }
+                },
+                {
+                  "label": "소리",
+                  "child": {
+                    "type": "list",
+                    "selected": { "state": "sound" },
+                    "on_select": { "set_state": "sound" },
+                    "items": { "expr": "$data.sounds[kind = 'file'].{ \"key\": path, \"title\": name, \"subtitle\": $substringBefore(path, name), \"meta\": ext }" }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "split",
+              "direction": "column",
+              "sizes": [75, 25],
+              "children": [
+                { "type": "image", "zoom": true, "src": { "expr": "$state.picture ? { \"permission\": \"media\", \"path\": $state.picture }" } },
+                { "type": "media", "autoplay": true, "src": { "expr": "$state.sound ? { \"permission\": \"media\", \"path\": $state.sound }" } }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

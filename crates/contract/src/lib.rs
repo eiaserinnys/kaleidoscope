@@ -1,13 +1,14 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 5판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 6판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
 //! 화면이 지키는 한도 상수는 같은 테스트가 `ui/src/contract/limits.ts`로 생성한다.
 //! 생성된 TS는 손으로 고치지 않는다. 계약을 바꾸려면 이 파일을 고치고 다시 생성한다.
 //!
-//! 같은 크레이트에 둘이 더 있다.
+//! 같은 크레이트에 셋이 더 있다.
 //! - [`validate`]: 앱 정의 검사. 코어(가져오기)와 오케스트레이터(에이전트가 올릴 때)가 같이 쓴다.
-//! - [`registry`]: 코어와 오케스트레이터 사이 HTTP 약속(기기 연결, 앱 올리기, 이벤트 스트림).
+//! - [`registry`]: 코어와 오케스트레이터 사이 HTTP 약속(기기 연결, 앱 올리기, 이벤트 스트림, 연결 중계).
+//! - [`data`]: 앱 데이터(원천, 식 바인딩, 동작)와 4판 블록이 받는 데이터 모양, 바인딩 자리 규칙.
 //!
 //! 2판에서 바뀐 것: 오케스트레이터 연결 상태 [`LinkStatus`]와 `link.*` 명령, 연결했을 때 `app.import`가
 //! 오케스트레이터를 거치는 것, 에이전트가 앱을 띄워 달라고 할 때의 `app.open_requested` 이벤트,
@@ -28,6 +29,13 @@
 //! 앱 정의의 `opens`(이 앱이 여는 파일 확장자), `files.open`과 `web.*` 명령, `web.update` 이벤트,
 //! 오류 코드 `unavailable`. 블록마다 처음 생긴 판보다 낮은 `requires.blocks`로 그 블록을 쓰면 거부한다.
 //! 서버는 기기마다 그 쉘이 그릴 수 있는 앱만 보낸다([`registry`]의 「기기마다 그릴 수 있는 앱만」 절).
+//!
+//! 6판에서 바뀐 것(범용 블록 확충, 카드 #809): 블록 세트 4판(배치 `stack`, `tabs`, `toolbar`, `section`, 데이터
+//! `list`, `table`, `properties`, `tree`, `feed`, `text`, 입력 `input`, `select`, `toggle`, `button`, 문서와 미디어
+//! `code_editor`, `code_view`, `image`, `media`)과 앱 정의의 `sources`, 4판 블록의 식 바인딩과 동작([`data`]),
+//! 모듈 `connection` 1판(서버에 등록한 이름 붙인 연결, `connection` 권한), `data.*`와 `connection.login` 명령,
+//! `data.update` 이벤트. 블록은 서비스의 데이터 모양을 모르고, 앱 정의의 JSONata 식이 데이터를 블록의 모양으로
+//! 바꾼다(결정 「쉘은 OS처럼 범용 기능과 범용 애셋만 (261030)」). 서버 쪽은 [`registry`]의 「연결」 절에 있다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -66,8 +74,11 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+pub mod data;
 pub mod registry;
 pub mod validate;
+
+use data::{Actions, Binding, SourceDecl};
 
 /// 창 상태와 앱 정의의 상태 기본값에 쓰는 임의 JSON 값.
 pub type JsonValue = serde_json::Value;
@@ -84,14 +95,19 @@ pub const TAURI_EVENT: &str = "core-event";
 /// - 1판: `split`, `file_tree`, `markdown_editor`, `markdown_view`.
 /// - 2판: 1판 + `agent_chat`.
 /// - 3판: 2판 + `web_view`, `explorer`, 앱 정의의 `opens`.
-pub const BLOCK_SET_VERSION: u32 = 3;
+/// - 4판: 3판 + `stack`, `tabs`, `toolbar`, `section`, `list`, `table`, `properties`, `tree`, `feed`, `text`,
+///   `input`, `select`, `toggle`, `button`, `code_editor`, `code_view`, `image`, `media`, 앱 정의의 `sources`.
+pub const BLOCK_SET_VERSION: u32 = 4;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 /// - `agent` 1판: 창이 있는 워크스페이스의 PAS와 대화(`agent.*` 명령).
 /// - `agent` 2판: 1판 + 첨부(보내기, 기록에서 보기와 열기). 모듈의 새 판도 더하기만 하므로
 ///   `agent: 1`을 요구하는 정의는 2판 쉘에서 그대로 돌고 첨부도 쓴다.
 /// - `web` 1판: 창 안에 웹 페이지를 띄우는 웹 화면(`web.*` 명령). 쉘이 그린 화면 위에 따로 뜬다.
-pub const MODULE_VERSIONS: &[(&str, u32)] = &[("files", 1), ("agent", 2), ("web", 1)];
+/// - `connection` 1판: 서버에 등록한 이름 붙인 연결(`connection` 권한). 원천 받기, 동작의 연결 부르기,
+///   이미지와 소리 받기. 연결은 서버가 헤더를 쥐고 대신 부르는 `relay`와 이 기기가 로그인해 직접 부르는
+///   `oauth` 두 가지다([`registry`]의 「연결」 절).
+pub const MODULE_VERSIONS: &[(&str, u32)] = &[("files", 1), ("agent", 2), ("web", 1), ("connection", 1)];
 
 /// 지원 범위를 알리지 않는 옛 쉘(블록 세트 3판 전)이 그릴 수 있는 블록 세트 판. 서버가 그런 기기에 보낼 앱을
 /// 거를 때 쓴다([`registry`]의 「기기마다 그릴 수 있는 앱만」 절).
@@ -300,7 +316,7 @@ pub enum LinkStatus {
 }
 
 // ---------------------------------------------------------------------------
-// 앱 정의 (블록 세트 3판)
+// 앱 정의 (블록 세트 4판)
 // ---------------------------------------------------------------------------
 
 /// 앱 정의. 에이전트가 쓰는 JSON 문서이고, 가져오면 앱 버전 하나가 된다.
@@ -324,6 +340,19 @@ pub enum LinkStatus {
 ///    - `web_view`는 정의에 하나까지이고, 쓰면 `requires.modules`에 `web`이 있다. 정의에 직접 적은 주소는
 ///      `http://`나 `https://`로 시작하고 공백이 없다.
 ///    - `opens`의 확장자는 하나 이상이고 각각 소문자와 숫자 1~16자이며, 권한과 상태 키는 선언되어 있다.
+///    - (4판) `sources`를 쓰면 `requires.blocks`가 4 이상이다. 원천 이름은 [`data::valid_source_name`]을 지킨다.
+///      `request` 원천의 권한은 `connection` 모듈, `file`과 `folder`의 권한은 `files` 모듈이다.
+///      `refresh_secs`는 [`data::SOURCE_REFRESH_MIN_SECS`] 이상이다. 원천의 값 자리 식은 `$data`, `$event`, `$item`을
+///      쓰지 않는다. 정의에 직접 적은 `request` 경로는 `/`로 시작하고, `file` 경로는 [`FileRef`]의 경로 규칙을 지킨다.
+///    - (4판) 모든 식(`expr`)은 JSONata로 읽혀야 하고, 식이 `$data.이름`으로 읽는 원천은 `sources`에 있다.
+///      `state`나 `expr` 하나만 가진 객체를 리터럴 바인딩으로 쓰지 않는다(모양이 틀린 바인딩).
+///    - (4판) 동작의 상태 키는 선언되어 있고, `refresh`의 원천은 있다. `call`의 권한은 `connection` 모듈이고,
+///      GET이 아니면 `readwrite`다.
+///    - (4판) `connection` 권한을 쓰면 `requires.modules`에 `connection`이 있다. 연결 이름은 소문자, 숫자, `-` 1~64자다.
+///    - (4판) `toolbar`의 자식은 `input`, `select`, `toggle`, `button`, `text`뿐이다. `stack`의 `fill`은 자식 안의
+///      순서다. `tabs`와 `stack`에는 자식이 하나 이상 있다. `table`의 열은 하나 이상이고 `field`가 겹치지 않는다.
+///      `button`의 `icon`은 [`data::ICON_NAMES`]에 있다. `code_editor`의 권한은 `readwrite`다.
+///      `code_view`는 `value`와 `file` 가운데 꼭 하나를 쓴다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
@@ -346,6 +375,10 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub opens: Option<OpensDecl>,
+    /// (블록 세트 4판) 이름 붙인 원천. 식에서 `$data.이름`으로 읽는다. 규칙은 [`data`] 모듈 머리글에 있다.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[ts(optional, as = "Option<BTreeMap<String, SourceDecl>>")]
+    pub sources: BTreeMap<String, SourceDecl>,
     /// 창 안을 채우는 블록 트리의 뿌리.
     pub ui: Block,
 }
@@ -385,12 +418,37 @@ pub enum PermissionDecl {
         /// 폴더를 고르라고 할 때 보일 이름(예: "문서 폴더").
         label: String,
     },
+    /// (모듈 `connection` 1판) 서버에 등록한 연결 하나. 주소와 인증은 서버의 연결 설정에 있고 앱 정의에는 이름만 둔다.
+    /// `read`는 GET만, `readwrite`는 동작의 연결 부르기에서 다른 메서드도 쓴다(서버의 연결도 쓰기를 허락해야 한다).
+    /// 연결이 기기 로그인(`oauth`)이면 이 기기에서 처음 쓸 때 로그인 단추가 보인다.
+    Connection {
+        id: String,
+        /// 서버에 등록한 연결 이름(소문자, 숫자, `-` 1~64자).
+        connection: String,
+        access: FileAccess,
+        /// 로그인을 구할 때와 오류에 보일 이름(예: "카드 보드").
+        label: String,
+    },
 }
 
 impl PermissionDecl {
     pub fn id(&self) -> &str {
         match self {
-            PermissionDecl::Files { id, .. } => id,
+            PermissionDecl::Files { id, .. } | PermissionDecl::Connection { id, .. } => id,
+        }
+    }
+
+    /// 이 권한의 모듈 이름.
+    pub fn module(&self) -> &'static str {
+        match self {
+            PermissionDecl::Files { .. } => "files",
+            PermissionDecl::Connection { .. } => "connection",
+        }
+    }
+
+    pub fn access(&self) -> FileAccess {
+        match self {
+            PermissionDecl::Files { access, .. } | PermissionDecl::Connection { access, .. } => *access,
         }
     }
 }
@@ -405,7 +463,12 @@ pub enum FileAccess {
     Readwrite,
 }
 
-/// 블록. 블록 세트 3판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
+/// 블록. 블록 세트 4판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
+///
+/// 4판 블록의 값 자리는 [`Binding`](리터럴, 창 상태, 식)이고, 이벤트 자리는 [`Actions`]다. 블록이 받는 데이터
+/// 모양은 [`data`] 모듈의 [`data::ListItem`] 등에 있다. 식의 값이 아직 없으면(원천을 받는 중, 실패, 로그인 필요)
+/// 데이터 블록은 그 상태를 그 자리에 보인다. 4판 블록은 쉘의 토큰과 공통 부품만으로 그리고, 앱이 색이나 크기를
+/// 정하지 않는다(항목의 `color`와 배지 색만 예외).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
@@ -485,6 +548,257 @@ pub enum Block {
     ///   있는 앱이 없다고 보인다. 파일의 오른쪽 클릭 메뉴도 같은 앱 목록이다.
     /// - 쉘 창이 포커스를 다시 얻으면 펼친 폴더를 다시 읽는다.
     Explorer { root: FolderRef },
+
+    // ----- 블록 세트 4판: 배치 -----
+    /// (4판) 자식을 한 줄로 쌓는다. 끌어서 크기를 바꾸지 않는다(그건 `split`). 자식은 제 크기만 차지하고,
+    /// `fill`번째 자식(없으면 마지막)이 남은 자리를 모두 차지한다. 넘치면 그 칸 안에서 스크롤한다.
+    Stack {
+        direction: SplitDirection,
+        #[serde(default)]
+        #[ts(optional, as = "Option<Gap>")]
+        gap: Gap,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        fill: Option<u32>,
+        children: Vec<Block>,
+    },
+    /// (4판) 탭. 고른 탭의 자식만 그린다. `selected`를 주면 고른 탭의 순서(0부터)를 창 상태에서 읽고 바꿀 때
+    /// `on_change`로 쓴다(다시 열어도 그 탭). 없으면 쉘이 들고 저장하지 않는다.
+    Tabs {
+        tabs: Vec<Tab>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_change: Option<SetState>,
+    },
+    /// (4판) 도구 막대. 한 줄의 컨트롤을 앞(`start`)과 끝(`end`)으로 나눠 놓는다. 자식은 `input`, `select`,
+    /// `toggle`, `button`, `text`뿐이다. 높이와 여백, 아래 구분은 쉘이 정한다. `input`은 남은 폭을 차지한다.
+    Toolbar {
+        start: Vec<Block>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(optional, as = "Option<Vec<Block>>")]
+        end: Vec<Block>,
+    },
+    /// (4판) 제목이 있는 구역. `collapsible`이면 머리를 눌러 접고 편다(저장하지 않음). `collapsed`는 처음 모습이다.
+    Section {
+        title: Binding,
+        /// 제목 옆에 작게 보일 부가 정보(개수 등).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        meta: Option<Binding>,
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        collapsible: bool,
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        collapsed: bool,
+        child: Box<Block>,
+    },
+
+    // ----- 블록 세트 4판: 데이터 보기 -----
+    /// (4판) 목록. `items`는 [`data::ListItem`] 배열이고, `grouped`면 [`data::Group`]`<ListItem>` 배열이다.
+    /// `layout`이 `grid`면 그림 칸의 격자다(그림이 없는 항목은 빈 칸에 제목만). 항목을 누르면 `on_select`가
+    /// `$event`(항목의 `key`)와 `$item`(항목)으로 돈다. `selected`의 값과 `key`가 같은 항목을 고른 것으로 보인다.
+    /// 화살표 키로 옮겨 다니고 Enter로 고른다. 긴 목록은 보이는 줄만 그린다.
+    List {
+        items: Binding,
+        #[serde(default)]
+        #[ts(optional, as = "Option<ListLayout>")]
+        layout: ListLayout,
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        grouped: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_select: Option<Actions>,
+    },
+    /// (4판) 표. `rows`는 객체 배열이고 각 행에 `key`(문자열)가 있다. 칸은 `columns`의 `field`로 행에서 읽는다.
+    /// 열 머리를 누르면 오름차순, 내림차순, 처음 순서로 돈다(저장하지 않음, `sort`가 처음 모습). 머리는 위에
+    /// 붙어 있고 긴 표는 보이는 줄만 그린다. 고르기는 `list`와 같다.
+    Table {
+        rows: Binding,
+        columns: Vec<Column>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        sort: Option<SortSpec>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_select: Option<Actions>,
+    },
+    /// (4판) 속성 이름과 값의 목록(상세 보기). 값이 null이거나 빈 글이면 그 줄을 뺀다. 값을 고르고 복사할 수 있다.
+    Properties { fields: Vec<PropertyField> },
+    /// (4판) 데이터 트리. `items`는 [`data::TreeItem`] 배열이다. `by`가 `path`면 항목의 `path`를 `/`로 나눠 폴더를
+    /// 만든다. 아래 항목이 있는 것(폴더)은 펴고 접기만 하고, 끝 항목을 누르면 `on_select`가 돈다. 고른 항목의
+    /// 위 폴더는 처음에 펴 둔다. 편 상태는 저장하지 않는다.
+    Tree {
+        items: Binding,
+        #[serde(default)]
+        #[ts(optional, as = "Option<TreeBy>")]
+        by: TreeBy,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_select: Option<Actions>,
+    },
+    /// (4판) 흐름. 대화 기록, 대사, 로그처럼 이름과 본문이 이어지는 것. `entries`는 [`data::FeedEntry`] 배열이고,
+    /// `grouped`면 [`data::Group`]`<FeedEntry>` 배열이다(묶음 머리에 제목과 부가 정보). 본문은 줄바꿈을 지키고
+    /// 글을 고르고 복사할 수 있다. `format`이 `markdown`이면 본문을 마크다운으로 그린다(HTML은 그리지 않는다).
+    /// `follow`면 끝에 붙어 있을 때 새 항목이 오면 끝을 따라간다. `on_select`가 있으면 항목을 누를 수 있다
+    /// (글을 고르는 중의 누르기는 고르기가 아니다).
+    Feed {
+        entries: Binding,
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        grouped: bool,
+        #[serde(default)]
+        #[ts(optional, as = "Option<TextFormat>")]
+        format: TextFormat,
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        follow: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_select: Option<Actions>,
+    },
+    /// (4판) 글. 값이 문자열이 아니면 JSON으로 보인다. `format`이 `markdown`이면 마크다운으로 그린다(HTML은
+    /// 그리지 않는다). 글을 고르고 복사할 수 있다. 넘치면 그 칸 안에서 스크롤한다.
+    Text {
+        value: Binding,
+        #[serde(default)]
+        #[ts(optional, as = "Option<TextFormat>")]
+        format: TextFormat,
+        #[serde(default)]
+        #[ts(optional, as = "Option<TextStyle>")]
+        style: TextStyle,
+    },
+
+    // ----- 블록 세트 4판: 입력과 동작 -----
+    /// (4판) 글 입력. `value`의 상태를 보이고, 입력이 멈추고 0.3초 뒤와 포커스를 잃을 때 `on_change`가 `$event`
+    /// (입력한 글, `number`면 숫자나 null)로 돈다. 입력 중에는 상태가 바뀌어도 글을 덮지 않는다. `search`는 앞에
+    /// 돋보기, 글이 있으면 끝에 지우기 단추가 붙는다. `multiline`이면 한 줄로 시작해 글을 따라 자란다(최대 8줄).
+    /// Enter는 `on_submit`이 있으면 그것을 부른다(`multiline`에서는 Ctrl+Enter). 한글 조합 중의 Enter는 보내지 않는다.
+    Input {
+        value: StateRef,
+        on_change: Actions,
+        #[serde(default)]
+        #[ts(optional, as = "Option<InputKind>")]
+        kind: InputKind,
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        multiline: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        placeholder: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_submit: Option<Actions>,
+    },
+    /// (4판) 고르기. `options`는 [`data::SelectOption`] 배열이다. 고르면 `on_change`가 `$event`(고른 값)로 돈다.
+    /// `segmented`는 선택지가 한 줄에 다 보이는 모양이다(선택지 2~5개에 쓴다).
+    Select {
+        value: StateRef,
+        on_change: Actions,
+        options: Binding,
+        #[serde(default)]
+        #[ts(optional, as = "Option<SelectStyle>")]
+        style: SelectStyle,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        placeholder: Option<String>,
+    },
+    /// (4판) 켜고 끄기. 바꾸면 `on_change`가 `$event`(참이나 거짓)로 돈다.
+    Toggle {
+        value: StateRef,
+        on_change: Actions,
+        label: String,
+    },
+    /// (4판) 단추. 누르면 `on_click`이 돈다(`$event`는 null). 도는 동안 단추는 쉬고, 실패하면 창 아래에 오류
+    /// 한 줄이 보인다. `confirm`이 있으면 확인 대화상자에서 확인했을 때만 돈다. `icon_only`면 아이콘만 보이고
+    /// `label`은 도움말과 읽어 주기에 쓴다. `disabled`가 참이면 누를 수 없다.
+    Button {
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        icon: Option<String>,
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        icon_only: bool,
+        #[serde(default)]
+        #[ts(optional, as = "Option<ButtonVariant>")]
+        variant: ButtonVariant,
+        on_click: Actions,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        confirm: Option<Confirm>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        disabled: Option<Binding>,
+    },
+
+    // ----- 블록 세트 4판: 문서와 미디어 -----
+    /// (4판) 코드와 설정 파일 편집기. 저장, 충돌, 다시 읽기는 `markdown_editor`와 같다(원문 보존, 자동 저장).
+    /// `language`가 없으면 확장자로 정한다. 권한은 `readwrite`다.
+    CodeEditor {
+        file: FileRef,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        language: Option<CodeLanguage>,
+    },
+    /// (4판) 코드와 로그 보기(읽기만). `value`(식이나 상태의 글)나 `file` 가운데 하나를 보인다. `file`이면 쉘 창이
+    /// 포커스를 다시 얻을 때 다시 읽는다. `follow`면 끝에 붙어 있을 때 글이 늘면 끝을 따라간다. `wrap`이면 긴 줄을
+    /// 접는다. 줄 번호가 보이고 글을 고르고 복사할 수 있다.
+    CodeView {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        value: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        file: Option<FileRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        language: Option<CodeLanguage>,
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        follow: bool,
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        wrap: bool,
+    },
+    /// (4판) 이미지 하나. `src`는 [`data::MediaRef`]이고 그 `crop`대로 자른다. `zoom`이면 휠과 단추로 확대하고
+    /// 끌어서 옮기며, 두 번 누르면 맞춤으로 돌아간다. 이미지가 없으면 빈 상태를 보인다.
+    Image {
+        src: Binding,
+        #[serde(default)]
+        #[ts(optional, as = "Option<ImageFit>")]
+        fit: ImageFit,
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        zoom: bool,
+    },
+    /// (4판) 소리나 영상 재생기. `src`는 [`data::MediaRef`]다. `kind`가 없으면 받은 MIME으로 정한다. 재생, 멈춤,
+    /// 위치 끌기, 시간, 소리 크기를 쉘이 그린다. `autoplay`면 `src`가 바뀔 때 바로 재생한다(목록에서 고르면 듣기).
+    Media {
+        src: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        kind: Option<MediaKind>,
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        autoplay: bool,
+    },
 }
 
 impl Block {
@@ -497,8 +811,292 @@ impl Block {
             | Block::MarkdownView { .. } => 1,
             Block::AgentChat {} => 2,
             Block::WebView { .. } | Block::Explorer { .. } => 3,
+            Block::Stack { .. }
+            | Block::Tabs { .. }
+            | Block::Toolbar { .. }
+            | Block::Section { .. }
+            | Block::List { .. }
+            | Block::Table { .. }
+            | Block::Properties { .. }
+            | Block::Tree { .. }
+            | Block::Feed { .. }
+            | Block::Text { .. }
+            | Block::Input { .. }
+            | Block::Select { .. }
+            | Block::Toggle { .. }
+            | Block::Button { .. }
+            | Block::CodeEditor { .. }
+            | Block::CodeView { .. }
+            | Block::Image { .. }
+            | Block::Media { .. } => 4,
         }
     }
+
+    /// JSON의 `type` 이름.
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Block::Split { .. } => "split",
+            Block::FileTree { .. } => "file_tree",
+            Block::MarkdownEditor { .. } => "markdown_editor",
+            Block::MarkdownView { .. } => "markdown_view",
+            Block::AgentChat {} => "agent_chat",
+            Block::WebView { .. } => "web_view",
+            Block::Explorer { .. } => "explorer",
+            Block::Stack { .. } => "stack",
+            Block::Tabs { .. } => "tabs",
+            Block::Toolbar { .. } => "toolbar",
+            Block::Section { .. } => "section",
+            Block::List { .. } => "list",
+            Block::Table { .. } => "table",
+            Block::Properties { .. } => "properties",
+            Block::Tree { .. } => "tree",
+            Block::Feed { .. } => "feed",
+            Block::Text { .. } => "text",
+            Block::Input { .. } => "input",
+            Block::Select { .. } => "select",
+            Block::Toggle { .. } => "toggle",
+            Block::Button { .. } => "button",
+            Block::CodeEditor { .. } => "code_editor",
+            Block::CodeView { .. } => "code_view",
+            Block::Image { .. } => "image",
+            Block::Media { .. } => "media",
+        }
+    }
+}
+
+/// `stack`의 자식 사이 간격. 쉘의 간격 토큰 가운데 하나다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum Gap {
+    None,
+    Small,
+    #[default]
+    Medium,
+    Large,
+}
+
+/// 탭 하나.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct Tab {
+    pub label: String,
+    pub child: Block,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ListLayout {
+    /// 한 줄에 항목 하나.
+    #[default]
+    Rows,
+    /// 그림 칸의 격자.
+    Grid,
+}
+
+/// 표의 열.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct Column {
+    /// 행 객체의 키.
+    pub field: String,
+    pub label: String,
+    #[serde(default)]
+    #[ts(optional, as = "Option<ColumnWidth>")]
+    pub width: ColumnWidth,
+    #[serde(default)]
+    #[ts(optional, as = "Option<CellFormat>")]
+    pub format: CellFormat,
+}
+
+/// 열 너비. 남은 폭은 `fill` 열들이 나눈다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ColumnWidth {
+    Narrow,
+    Medium,
+    Wide,
+    #[default]
+    Fill,
+}
+
+/// 칸 값을 보이는 방법. `number`와 `date`는 끝에 맞추고, 나머지는 앞에 맞춘다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum CellFormat {
+    /// 글 한 줄(넘치면 말줄임).
+    #[default]
+    Text,
+    /// 숫자(천 단위 구분).
+    Number,
+    /// RFC 3339 시각을 이 기기의 날짜와 시각으로.
+    Date,
+    /// [`data::Badge`] 하나.
+    Badge,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct SortSpec {
+    pub field: String,
+    #[serde(default)]
+    #[ts(optional, as = "Option<bool>")]
+    pub desc: bool,
+}
+
+/// 속성 한 줄.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct PropertyField {
+    pub label: String,
+    pub value: Binding,
+    #[serde(default)]
+    #[ts(optional, as = "Option<FieldFormat>")]
+    pub format: FieldFormat,
+}
+
+/// 속성 값을 보이는 방법.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum FieldFormat {
+    /// 글(줄바꿈 지킴).
+    #[default]
+    Text,
+    /// 마크다운(HTML은 그리지 않는다).
+    Markdown,
+    /// [`data::Badge`] 하나나 배열.
+    Badge,
+    /// RFC 3339 시각을 이 기기의 날짜와 시각으로.
+    Date,
+    /// 고정폭 글(식별자, 경로).
+    Code,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum TreeBy {
+    /// 항목의 `children`으로 내려간다.
+    #[default]
+    Children,
+    /// 항목의 `path`를 `/`로 나눠 폴더를 만든다.
+    Path,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum TextFormat {
+    #[default]
+    Plain,
+    Markdown,
+}
+
+/// 글의 크기와 결. 쉘의 글자 토큰 가운데 하나다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum TextStyle {
+    #[default]
+    Body,
+    Title,
+    Meta,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum InputKind {
+    #[default]
+    Text,
+    Search,
+    Number,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum SelectStyle {
+    #[default]
+    Dropdown,
+    Segmented,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ButtonVariant {
+    #[default]
+    Default,
+    /// 강조. 한 화면에 하나만 쓴다.
+    Primary,
+    /// 지우기처럼 되돌리기 어려운 것.
+    Danger,
+    /// 테두리 없는 가벼운 단추.
+    Ghost,
+}
+
+/// 단추를 누른 뒤 묻는 확인 대화상자. `ok`가 없으면 단추의 `label`을 쓴다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct Confirm {
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub body: Option<Binding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub ok: Option<String>,
+}
+
+/// 코드 편집기와 보기의 언어(색 입히기). 확장자로 정할 때: json, yaml/yml, toml, js/mjs/cjs/jsx, ts/tsx, py,
+/// rs, css, html/htm, sql, sh/bash/zsh/ps1, xml/svg, md/markdown, 그 밖은 plain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum CodeLanguage {
+    Plain,
+    Json,
+    Yaml,
+    Toml,
+    Javascript,
+    Typescript,
+    Python,
+    Rust,
+    Css,
+    Html,
+    Sql,
+    Shell,
+    Xml,
+    Markdown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ImageFit {
+    /// 칸 안에 다 보이게.
+    #[default]
+    Contain,
+    /// 칸을 다 채우게(넘치는 부분은 잘림).
+    Cover,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum MediaKind {
+    Audio,
+    Video,
 }
 
 /// 주소 값. 창 상태에서 읽거나(`{ "state": "url" }`) 정의에 직접 적는다(`"https://example.com"`).
@@ -802,6 +1400,63 @@ pub enum CoreRequest {
         item_id: String,
         index: u32,
     },
+
+    /// (블록 세트 4판) 창의 데이터를 잇는다. 4판 블록이 든 창이 그려질 때 한 번 부른다. 코어는 아직 받지 않은
+    /// 원천을 받기 시작하고, 지금 모습 전체를 돌려준다. 그 뒤 바뀐 것은 `data.update`로 온다. 같은 창을 여러 화면이
+    /// 이어도 된다(개발용 다리). 앱의 지금 버전에 `sources`도 식 바인딩도 없으면 빈 모습이다. 없는 창이면 `not_found`.
+    /// 이어 둔 동안만 `refresh_secs`와 포커스 때 다시 받기가 돈다. 받은 값은 창이 닫히거나 앱의 새 버전으로 옮길
+    /// 때까지 코어가 들고 있어, 다른 데스크톱에 갔다 와도 다시 받지 않는다.
+    #[serde(rename = "data.attach")]
+    DataAttach { window_id: String },
+    /// 창의 데이터 잇기를 놓는다. 블록이 화면에서 빠질 때 부른다. 이어 둔 화면이 하나도 없으면 다시 받기를 멈춘다.
+    #[serde(rename = "data.detach")]
+    DataDetach { window_id: String },
+    /// 동작 자리 하나를 실행한다. `pointer`는 그 자리([`data::ui_actions`]), `event`는 `$event`, `item`은 `$item`이다.
+    /// 모두 마치면 응답한다. 상태를 쓰면 `state.changed`가, 원천이나 식 값이 바뀌면 `data.update`가 따라온다.
+    /// 없는 자리면 `invalid_request`, 상태 크기 초과도 `invalid_request`, 연결 부르기가 실패하면 `server`(응답 상태와
+    /// 본문 앞부분이 `message`에), 권한이 모자라면 `permission_denied`, 로그인이 필요하면 `not_granted`다.
+    #[serde(rename = "data.act")]
+    DataAct {
+        window_id: String,
+        pointer: String,
+        #[serde(default)]
+        #[ts(optional, as = "Option<JsonValue>")]
+        event: JsonValue,
+        #[serde(default)]
+        #[ts(optional, as = "Option<JsonValue>")]
+        item: JsonValue,
+    },
+    /// 원천을 다시 받는다(값의 `retry`, 창 아래 오류 줄의 다시 받기). 빈 배열이면 모든 원천이다. 받기를 시작하면
+    /// 바로 응답하고, 결과는 `data.update`로 온다. 모르는 원천 이름은 넘긴다.
+    #[serde(rename = "data.refresh")]
+    DataRefresh {
+        window_id: String,
+        #[serde(default)]
+        #[ts(optional, as = "Option<Vec<String>>")]
+        sources: Vec<String>,
+    },
+    /// 이미지와 소리 원본 하나를 받는다. `media`의 권한은 그 창의 앱이 선언한 것이어야 한다(`permission_denied`).
+    /// 코어는 원본을 (권한, 경로, 쿼리)로 캐시한다. 이미지이고 `max_px`가 있으면 긴 변이 그 값을 넘지 않게 줄여서
+    /// 보낸다(PNG, JPEG, WebP, GIF 첫 장. 투명이 있으면 PNG, 아니면 JPEG). 원본이 [`data::MEDIA_MAX_BYTES`]보다
+    /// 크면 `io`, 파일이 없으면 `not_found`, 연결이 실패하면 `server`, 로그인이 필요하면 `not_granted`다.
+    #[serde(rename = "data.media")]
+    DataMedia {
+        window_id: String,
+        media: data::MediaRef,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        max_px: Option<u32>,
+    },
+    /// (모듈 `connection` 1판) 창의 `connection` 권한이 가리키는 기기 로그인(`oauth`) 연결에 로그인한다. 코어가 이
+    /// 기기의 기본 브라우저로 로그인 쪽을 열고, 로그인을 마치거나 [`data::LOGIN_TIMEOUT_SECS`]가 지나면 응답한다.
+    /// 마치면 그 연결을 쓰는 모든 창의 `login_required` 원천을 다시 받는다. 사용자가 그만두거나 시간이 지나면
+    /// `invalid_request`, 연결이 `relay`면 `invalid_request`, 이 쉘이 브라우저를 열 수 없으면(개발용 다리) `unavailable`,
+    /// 로그인 쪽이 실패하면 `server`.
+    #[serde(rename = "connection.login")]
+    ConnectionLogin {
+        window_id: String,
+        permission: String,
+    },
 }
 
 /// 보낼 첨부 하나(모듈 `agent` 2판).
@@ -931,6 +1586,19 @@ pub enum CoreReply {
     },
     #[serde(rename = "agent.attachment_open")]
     AgentAttachmentOpen {},
+
+    #[serde(rename = "data.attach")]
+    DataAttach { view: data::DataView },
+    #[serde(rename = "data.detach")]
+    DataDetach {},
+    #[serde(rename = "data.act")]
+    DataAct {},
+    #[serde(rename = "data.refresh")]
+    DataRefresh {},
+    #[serde(rename = "data.media")]
+    DataMedia { media: data::MediaData },
+    #[serde(rename = "connection.login")]
+    ConnectionLogin {},
 }
 
 /// 워크스페이스 PAS 하나.
@@ -1080,6 +1748,14 @@ pub enum CoreEvent {
     /// 페이지 전체를 보낸다. 웹 화면을 이은(`web.attach`) 창의 것만 온다.
     #[serde(rename = "web.update")]
     WebUpdate { window_id: String, page: WebPage },
+    /// (블록 세트 4판) 이은(`data.attach`) 창의 원천 상태나 식 값이 바뀌었다. 바뀐 것만 담는다. 화면은 받은 열쇠만
+    /// 바꾸고 나머지는 둔다. 앱의 새 버전으로 옮긴 창은 화면이 블록을 다시 그리며 `data.attach`를 다시 부른다.
+    #[serde(rename = "data.update")]
+    DataUpdate {
+        window_id: String,
+        #[serde(default)]
+        view: data::DataView,
+    },
 }
 
 /// 명령의 실패.
@@ -1186,6 +1862,8 @@ mod tests {
             "workspace-pas.json",
             "web-browser.json",
             "explorer.json",
+            "block-gallery.json",
+            "card-board.json",
         ] {
             let def: AppDefinition =
                 serde_json::from_str(&example(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
@@ -1314,11 +1992,19 @@ mod tests {
              /** 말 하나에 붙인 첨부의 합의 최대 바이트 수. */\n\
              export const AGENT_ATTACHMENTS_TOTAL_MAX_BYTES = {};\n\
              /** 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위). */\n\
-             export const AGENT_MESSAGE_MAX_CHARS = {};\n",
+             export const AGENT_MESSAGE_MAX_CHARS = {};\n\
+             /** 단추 아이콘으로 쓸 수 있는 Lucide 아이콘 이름(블록 세트 4판). */\n\
+             export const ICON_NAMES = [{}] as const;\n\
+             export type IconName = (typeof ICON_NAMES)[number];\n",
             AGENT_ATTACHMENTS_MAX,
             AGENT_ATTACHMENT_MAX_BYTES,
             AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
             registry::AGENT_MESSAGE_MAX_CHARS,
+            data::ICON_NAMES
+                .iter()
+                .map(|name| format!("\"{name}\""))
+                .collect::<Vec<_>>()
+                .join(", "),
         );
         let dir = std::env::var("TS_RS_EXPORT_DIR").expect("TS_RS_EXPORT_DIR는 .cargo/config.toml에 있다");
         let path = std::path::Path::new(&dir).join("limits.ts");
@@ -1403,6 +2089,24 @@ mod tests {
             "agent_chat",
             "web_view",
             "explorer",
+            "stack",
+            "tabs",
+            "toolbar",
+            "section",
+            "list",
+            "table",
+            "properties",
+            "tree",
+            "feed",
+            "text",
+            "input",
+            "select",
+            "toggle",
+            "button",
+            "code_editor",
+            "code_view",
+            "image",
+            "media",
         ] {
             assert!(schema.contains(&format!("\"{block}\"")), "스키마에 {block}이 없다");
         }
@@ -1522,7 +2226,7 @@ mod tests {
         assert!(!current.renders(&unknown_module));
         assert_eq!(
             serde_json::to_string(&current).unwrap(),
-            r#"{"blocks":3,"modules":{"agent":2,"files":1,"web":1}}"#
+            r#"{"blocks":4,"modules":{"agent":2,"connection":1,"files":1,"web":1}}"#
         );
     }
 
@@ -1569,6 +2273,198 @@ mod tests {
             serde_json::to_value(CoreError::new(ErrorCode::Unavailable)).unwrap()["code"],
             "unavailable"
         );
+    }
+
+    #[test]
+    fn block_set_four_examples_validate() {
+        for name in ["block-gallery.json", "card-board.json"] {
+            validate::parse_app_definition(&example(name)).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        }
+        rejected(
+            &example("block-gallery.json").replace(r#""blocks": 4"#, r#""blocks": 3"#),
+            "블록 세트 4판",
+        );
+        rejected(
+            &example("card-board.json").replace(r#""modules": { "connection": 1 }"#, r#""modules": { "files": 1 }"#),
+            "connection 모듈",
+        );
+    }
+
+    #[test]
+    fn binding_and_action_pointers_follow_json_paths() {
+        let board = validate::parse_app_definition(&example("card-board.json")).unwrap();
+        let bindings: Vec<String> = data::ui_bindings(&board)
+            .into_iter()
+            .filter(|(_, binding)| matches!(binding, data::Binding::Expr(_)))
+            .map(|(pointer, _)| pointer)
+            .collect();
+        assert_eq!(
+            bindings,
+            vec![
+                "/ui/children/0/children/1/items",
+                "/ui/children/1/children/0/start/0/value",
+                "/ui/children/1/children/0/end/0/confirm/body",
+                "/ui/children/1/children/0/end/0/disabled",
+                "/ui/children/1/children/1/fields/0/value",
+                "/ui/children/1/children/1/fields/1/value",
+                "/ui/children/1/children/1/fields/2/value",
+                "/ui/children/1/children/1/fields/3/value",
+            ]
+        );
+        let actions: Vec<String> = data::ui_actions(&board).into_iter().map(|(pointer, _)| pointer).collect();
+        assert_eq!(
+            actions,
+            vec![
+                "/ui/children/0/children/0/start/0/on_change",
+                "/ui/children/0/children/0/end/0/on_change",
+                "/ui/children/0/children/0/end/1/on_click",
+                "/ui/children/0/children/1/on_select",
+                "/ui/children/1/children/0/end/0/on_click",
+            ]
+        );
+        // 자리는 앱 정의 JSON에서 그 값을 그대로 가리킨다.
+        let json: serde_json::Value = serde_json::from_str(&example("card-board.json")).unwrap();
+        for pointer in bindings.iter().chain(&actions) {
+            assert!(json.pointer(pointer).is_some(), "{pointer}");
+        }
+        let gallery = validate::parse_app_definition(&example("block-gallery.json")).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&example("block-gallery.json")).unwrap();
+        for (pointer, _) in data::ui_bindings(&gallery) {
+            assert!(json.pointer(&pointer).is_some(), "{pointer}");
+        }
+        for (pointer, _) in data::ui_actions(&gallery) {
+            assert!(json.pointer(&pointer).is_some(), "{pointer}");
+        }
+        let exprs = data::all_exprs(&board);
+        assert!(exprs.iter().any(|(pointer, _)| pointer == "/sources/detail/path"));
+        assert!(exprs
+            .iter()
+            .any(|(pointer, _)| pointer == "/ui/children/1/children/0/end/0/on_click/0/call/path"));
+    }
+
+    #[test]
+    fn data_refs_and_names() {
+        assert_eq!(
+            data::data_refs("$data.narrative.files[filePath = $state.file] ~> $count() + $count($data.master.x) + $count($data.narrative)"),
+            vec!["narrative".to_string(), "master".to_string()]
+        );
+        assert!(data::data_refs("$database.x").is_empty());
+        assert!(data::valid_source_name("narrative_2"));
+        assert!(!data::valid_source_name("2cards"));
+        assert!(!data::valid_source_name("my-cards"));
+        assert!(validate::valid_request_path("/api/cards"));
+        assert!(validate::valid_request_path("/"));
+        assert!(validate::valid_request_path("/media/portrait/a%20b.png"));
+        for bad in ["api/cards", "//evil.example/x", "/a/../b", "/a?b=c", "/a\\b", "/a b", "/a//b", "/%2e%2e/x"] {
+            assert!(!validate::valid_request_path(bad), "{bad}");
+        }
+    }
+
+    fn with_ui(ui: &str, extra: &str) -> String {
+        format!(
+            r#"{{"id":"t","name":"시험","requires":{{"blocks":4,"modules":{{"files":1,"connection":1}}}},
+            "permissions":[{{"module":"files","id":"docs","access":"read","label":"문서"}},
+                           {{"module":"connection","id":"board","connection":"board","access":"read","label":"보드"}}],
+            "state":{{"q":"","sel":null}}{extra},
+            "ui":{ui}}}"#
+        )
+    }
+
+    #[test]
+    fn block_set_four_rules() {
+        let ok = with_ui(r#"{"type":"list","items":{"expr":"$data.cards.items"}}"#, r#","sources":{"cards":{"kind":"request","permission":"board","path":"/api/items"}}"#);
+        validate::parse_app_definition(&ok).unwrap_or_else(|e| panic!("{e:?}"));
+
+        rejected(&with_ui(r#"{"type":"list","items":{"expr":"$data.cards["}}"#, ""), "식을 읽을 수 없습니다");
+        rejected(&with_ui(r#"{"type":"list","items":{"expr":"$data.cardz.items"}}"#, r#","sources":{"cards":{"kind":"request","permission":"board","path":"/api/items"}}"#), "없는 원천");
+        rejected(&with_ui(r#"{"type":"text","value":"x"}"#, r#","sources":{"cards":{"kind":"request","permission":"board","path":{"expr":"'/api/' & $data.x"}}}"#), "$state만");
+        rejected(&with_ui(r#"{"type":"text","value":{"state":1}}"#, ""), "바인딩 모양");
+        rejected(&with_ui(r#"{"type":"text","value":{"state":"nope"}}"#, ""), "선언되지 않은 상태 키");
+        rejected(&with_ui(r#"{"type":"toolbar","start":[{"type":"list","items":[]}]}"#, ""), "toolbar에는");
+        rejected(&with_ui(r#"{"type":"button","label":"a","icon":"rocket","on_click":{"set_state":"q"}}"#, ""), "없는 아이콘");
+        rejected(&with_ui(r#"{"type":"code_view","value":"a","file":{"permission":"docs","path":"a.json"}}"#, ""), "꼭 하나");
+        rejected(&with_ui(r#"{"type":"code_editor","file":{"permission":"docs","path":"a.json"}}"#, ""), "readwrite");
+        rejected(&with_ui(r#"{"type":"button","label":"a","on_click":[{"call":{"permission":"board","method":"POST","path":"/api/x"}}]}"#, ""), "readwrite");
+        rejected(&with_ui(r#"{"type":"button","label":"a","on_click":[{"call":{"permission":"docs","method":"GET","path":"/api/x"}}]}"#, ""), "connection 권한");
+        rejected(&with_ui(r#"{"type":"button","label":"a","on_click":[{"refresh":["nope"]}]}"#, ""), "없는 원천을 다시");
+        rejected(&with_ui(r#"{"type":"button","label":"a","on_click":[{"set_state":"nope","value":1}]}"#, ""), "선언되지 않은 상태 키");
+        rejected(&with_ui(r#"{"type":"stack","direction":"column","fill":3,"children":[{"type":"text","value":"a"}]}"#, ""), "fill");
+        rejected(&with_ui(r#"{"type":"table","rows":[],"columns":[{"field":"a","label":"A"},{"field":"a","label":"B"}]}"#, ""), "겹칩니다");
+        rejected(&with_ui(r#"{"type":"text","value":"a"}"#, r#","sources":{"Cards":{"kind":"request","permission":"board","path":"/api"}}"#), "원천 이름");
+        rejected(&with_ui(r#"{"type":"text","value":"a"}"#, r#","sources":{"cards":{"kind":"file","permission":"board","path":"a.json"}}"#), "files 권한");
+        rejected(&with_ui(r#"{"type":"text","value":"a"}"#, r#","sources":{"cards":{"kind":"request","permission":"board","path":"api"}}"#), "/로 시작");
+        rejected(&with_ui(r#"{"type":"text","value":"a"}"#, r#","sources":{"cards":{"kind":"file","permission":"docs","path":"../a.json"}}"#), "고른 폴더 밖");
+        rejected(&with_ui(r#"{"type":"text","value":"a"}"#, r#","sources":{"cards":{"kind":"request","permission":"board","path":"/a","refresh_secs":3}}"#), "refresh_secs");
+        rejected(&with_ui(r#"{"type":"file_tree","root":{"permission":"board"},"selected":{"state":"sel"},"on_select":{"set_state":"sel"}}"#, ""), "files 권한");
+
+        // 식은 4판부터다.
+        let old = r#"{"id":"t","name":"시험","requires":{"blocks":3},"ui":{"type":"text","value":{"expr":"1"}}}"#;
+        rejected(old, "블록 세트 4판");
+        // 바인딩이 아닌 리터럴 객체는 그대로 받는다.
+        let literal = with_ui(r##"{"type":"properties","fields":[{"label":"상태","value":{"text":"진행","color":"#315da8"},"format":"badge"}]}"##, "");
+        validate::parse_app_definition(&literal).unwrap_or_else(|e| panic!("{e:?}"));
+    }
+
+    #[test]
+    fn data_messages_round_trip() {
+        let act: CoreRequest =
+            serde_json::from_str(r#"{"op":"data.act","window_id":"w","pointer":"/ui/on_click"}"#).unwrap();
+        assert_eq!(
+            act,
+            CoreRequest::DataAct {
+                window_id: "w".into(),
+                pointer: "/ui/on_click".into(),
+                event: JsonValue::Null,
+                item: JsonValue::Null
+            }
+        );
+        let media: CoreRequest = serde_json::from_str(
+            r#"{"op":"data.media","window_id":"w","media":{"permission":"shots","path":"a.png","crop":{"x":0.1,"y":0.2,"w":0.5,"h":0.5}},"max_px":256}"#,
+        )
+        .unwrap();
+        assert!(matches!(media, CoreRequest::DataMedia { max_px: Some(256), .. }));
+        let event = CoreEvent::DataUpdate {
+            window_id: "w".into(),
+            view: data::DataView {
+                sources: [(
+                    "cards".to_string(),
+                    data::SourceStatus::Loading { has_value: false },
+                )]
+                .into_iter()
+                .collect(),
+                values: [
+                    ("/ui/items".to_string(), data::BindingValue::Loading {}),
+                    (
+                        "/ui/title".to_string(),
+                        data::BindingValue::Ready { value: JsonValue::String("가".into()) },
+                    ),
+                    (
+                        "/ui/children/1/items".to_string(),
+                        data::BindingValue::LoginRequired { permission: "shay".into() },
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            },
+        };
+        assert_eq!(
+            serde_json::to_string(&event).unwrap(),
+            r#"{"event":"data.update","window_id":"w","view":{"sources":{"cards":{"state":"loading","has_value":false}},"values":{"/ui/children/1/items":{"status":"login_required","permission":"shay"},"/ui/items":{"status":"loading"},"/ui/title":{"status":"ready","value":"가"}}}}"#
+        );
+        let item: data::ListItem = serde_json::from_str(
+            r##"{"key":"a","title":"가","badges":["새로",{"text":"완료","color":"#2f7d4f"}],"image":{"permission":"m","path":"/p.png"},"extra":1}"##,
+        )
+        .expect("블록이 받는 모양은 모르는 필드를 넘긴다");
+        assert_eq!(item.badges.len(), 2);
+        let actions: data::Actions = serde_json::from_str(r#"{"set_state":"card"}"#).unwrap();
+        assert!(matches!(actions, data::Actions::One(_)));
+        let actions: data::Actions = serde_json::from_str(
+            r#"[{"set_state":"file","value":{"expr":"$item.file"}},{"refresh":[]},{"call":{"permission":"b","method":"DELETE","path":"/x"}}]"#,
+        )
+        .unwrap();
+        let data::Actions::Many(list) = actions else { panic!() };
+        assert_eq!(list.len(), 3);
+        assert!(matches!(list[2], data::Action::Call(_)));
     }
 
     #[test]

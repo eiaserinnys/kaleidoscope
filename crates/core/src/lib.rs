@@ -263,6 +263,15 @@ impl Core {
             | CoreRequest::WebDetach { .. } => {
                 Err(error::make(kaleidoscope_contract::ErrorCode::Unavailable))
             }
+            // 계약 6판의 앱 데이터(원천, 식, 동작, 미디어)와 기기 로그인은 다음 PR(코어 데이터 런타임)에서 채운다.
+            CoreRequest::DataAttach { .. }
+            | CoreRequest::DataDetach { .. }
+            | CoreRequest::DataAct { .. }
+            | CoreRequest::DataRefresh { .. }
+            | CoreRequest::DataMedia { .. }
+            | CoreRequest::ConnectionLogin { .. } => {
+                Err(error::make(kaleidoscope_contract::ErrorCode::Unavailable))
+            }
             request => self.handle_state_change(request),
         }
     }
