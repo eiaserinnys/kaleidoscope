@@ -46,6 +46,7 @@ function setup(options: {
   items?: AgentItem[];
   models?: AgentModel[];
   rejectSend?: boolean;
+  sendGate?: Promise<void>;
 } = {}) {
   const snapshot = makeTestSnapshot({ definitions: [definition] });
   snapshot.link = options.link ?? { state: "connected", server_url: "https://example.test", device_name: "Test PC" };
@@ -58,6 +59,7 @@ function setup(options: {
       return { op: "agent.create", agent: makeAgent(request.workspace_id) };
     }
     if (request.op === "agent.send") {
+      await options.sendGate;
       if (options.rejectSend) throw { code: "server", message: "보낼 수 없습니다", details: [] };
       return { op: "agent.send" };
     }
@@ -139,6 +141,23 @@ describe("agent_chat block", () => {
 
     expect((await screen.findByRole("alert")).textContent).toContain("보낼 수 없습니다");
     expect((input as HTMLTextAreaElement).value).toBe("보존할 문장");
+  });
+
+  it("keeps a new draft typed while the previous send is in flight", async () => {
+    let releaseSend: (() => void) | undefined;
+    const sendGate = new Promise<void>((resolve) => { releaseSend = resolve; });
+    const state = setup({ agent: makeAgent(), sendGate });
+    render(<AgentChatBlock block={{ type: "agent_chat" }} context={state.context} />);
+    const input = await screen.findByRole("textbox", { name: "메시지" });
+
+    fireEvent.change(input, { target: { value: "첫 요청" } });
+    const sendButton = screen.getByRole("button", { name: "보내기" }) as HTMLButtonElement;
+    fireEvent.click(sendButton);
+    fireEvent.change(input, { target: { value: "다음 초안" } });
+    releaseSend?.();
+
+    await waitFor(() => expect(sendButton.disabled).toBe(false));
+    expect((input as HTMLTextAreaElement).value).toBe("다음 초안");
   });
 
   it("appends deltas, clears them on the final assistant item, and ignores other workspaces", async () => {

@@ -111,13 +111,14 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   };
 
   const send = async () => {
-    const text = draft.trim();
+    const submittedDraft = draft;
+    const text = submittedDraft.trim();
     if (!text || sending) return;
     setSending(true);
     setSendError(null);
     try {
       await context.store.call({ op: "agent.send", workspace_id: workspaceId, text });
-      setDraft("");
+      setDraft((current) => current === submittedDraft ? "" : current);
     } catch (reason) {
       setSendError(toCoreError(reason).message);
     } finally {
