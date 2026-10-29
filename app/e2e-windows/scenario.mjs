@@ -14,10 +14,12 @@ function capture(name) {
   record('screen', name);
 }
 async function waitForCdp() {
+  let error;
   for (let i = 0; i < 60; i++) {
-    try { return await chromium.connectOverCDP('http://127.0.0.1:9222'); } catch { await new Promise(r => setTimeout(r, 1000)); }
+    try { return await chromium.connectOverCDP('http://127.0.0.1:9222'); } catch (cause) { error = String(cause); await new Promise(r => setTimeout(r, 1000)); }
   }
-  throw new Error('WebView2 디버그 연결 시간 초과');
+  record('debug-connection-error', error);
+  throw new Error(`WebView2 디버그 연결 시간 초과: ${error}`);
 }
 const browser = await waitForCdp();
 try {

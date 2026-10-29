@@ -34,7 +34,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir app build
-      - run: cargo build -p kaleidoscope-app --release --features tauri/custom-protocol
+      - name: 실행 파일 캐시 복원
+        id: executable-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: target/release/kaleidoscope-app.exe
+          key: windows-webview-exe-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/*.rs', 'crates/**/Cargo.toml', 'app/src-tauri/**', 'app/src/**', 'app/index.html', 'app/package.json', 'ui/src/**', 'ui/package.json', 'pnpm-lock.yaml', 'examples/**') }}
+      - if: steps.executable-cache.outputs.cache-hit != 'true'
+        run: cargo build -p kaleidoscope-app --release --features tauri/custom-protocol
+      - name: 실행 파일 캐시 저장
+        if: steps.executable-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: target/release/kaleidoscope-app.exe
+          key: ${{ steps.executable-cache.outputs.cache-primary-key }}
       - name: 실제 웹뷰 시나리오
         shell: pwsh
         run: |
@@ -44,6 +57,14 @@ jobs:
           $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222 --remote-allow-origins=*'
           $app = Start-Process -FilePath (Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe') -PassThru
           try {
+            New-Item -ItemType Directory -Force (Join-Path $env:GITHUB_WORKSPACE 'windows-e2e') | Out-Null
+            Start-Sleep -Seconds 8
+            $app.Refresh()
+            $info = @{ pid = $app.Id; exited = $app.HasExited; webview_processes = @(Get-Process -Name msedgewebview2 -ErrorAction SilentlyContinue | Select-Object Id, ProcessName) }
+            try { $info.debug_endpoint = (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:9222/json/version' -TimeoutSec 3).Content } catch { $info.debug_error = $_.Exception.Message }
+            $info | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 (Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/startup.json')
+            $capture = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $env:GITHUB_WORKSPACE 'app/e2e-windows/capture.ps1'), (Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/00-startup.png')) -WindowStyle Hidden -Wait -PassThru
+            if ($capture.ExitCode -ne 0) { throw '시작 화면 캡처 실패' }
             node app/e2e-windows/scenario.mjs
             if ($LASTEXITCODE -ne 0) { throw "E2E 실패: $LASTEXITCODE" }
           } finally { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
