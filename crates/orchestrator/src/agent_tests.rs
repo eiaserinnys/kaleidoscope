@@ -161,3 +161,79 @@ async fn creates_fallback_sets_instructions_sends_and_resumes_cursor() {
     assert_eq!(state.agent_row("w").unwrap().unwrap().cursor, 3);
     task.abort();
 }
+
+#[tokio::test]
+async fn creation_finishes_and_broadcasts_after_client_disconnects() {
+    #[derive(Clone)]
+    struct Gate {
+        started: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    }
+    async fn delayed_create(MockState(gate): MockState<Gate>, Json(_): Json<Value>) -> Response {
+        gate.started.notify_one();
+        gate.release.notified().await;
+        (
+            StatusCode::CREATED,
+            Json(json!({"session":{"session_id":"delayed-pas"}})),
+        )
+            .into_response()
+    }
+    let gate = Gate {
+        started: Arc::new(tokio::sync::Notify::new()),
+        release: Arc::new(tokio::sync::Notify::new()),
+    };
+    let app = Router::new()
+        .route("/api/persistent-sessions", post(delayed_create))
+        .route(
+            "/api/persistent-sessions/{id}",
+            axum::routing::put(|| async { Json(json!({})) }),
+        )
+        .route(
+            "/api/persistent-sessions/{id}/instructions",
+            post(|| async { Json(json!({})) }),
+        )
+        .route("/api/sessions/{id}/events", get(|| async { "" }))
+        .with_state(gate.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let mut state = AppState::in_memory("secret");
+    state.configure_soulstream(
+        Some(format!("http://{address}")),
+        Some("token".into()),
+        "seosoyoung".into(),
+        None,
+    );
+    let mut events = state.0.events.subscribe();
+    let handler_state = state.clone();
+    let handler = tokio::spawn(async move {
+        create_agent(
+            State(handler_state),
+            Path("w".into()),
+            Extension(("d".into(), "pc".into())),
+            Ok(Json(AgentCreateRequest {
+                workspace_name: "작업".into(),
+                model_preset: "codex-6.1-sol".into(),
+            })),
+        )
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(5), gate.started.notified())
+        .await
+        .unwrap();
+    handler.abort();
+    assert!(handler.await.unwrap_err().is_cancelled());
+    gate.release.notify_one();
+    let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(event, DeviceEvent::AgentUpdate {workspace_id,update:AgentUpdate::Created {..}} if workspace_id == "w")
+    );
+    assert_eq!(
+        state.agent_row("w").unwrap().unwrap().session_id,
+        "delayed-pas"
+    );
+    server.abort();
+}

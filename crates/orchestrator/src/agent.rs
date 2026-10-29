@@ -238,7 +238,10 @@ pub(super) async fn create_agent(
     let Ok(Json(request)) = body else {
         return response::<Value>(Err(bad()));
     };
-    response(create(&state, &id, &device.0, request).await)
+    match tokio::spawn(async move { create(&state, &id, &device.0, request).await }).await {
+        Ok(result) => response(result),
+        Err(_) => response::<AgentInfo>(Err(server("PAS 만들기 작업이 실패했습니다."))),
+    }
 }
 
 async fn create(
