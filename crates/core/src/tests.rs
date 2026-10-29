@@ -2042,3 +2042,41 @@ fn layout_report_sends_sanitized_initial_state_and_debounces_changes() {
 
 mod data_tests;
 mod oauth_tests;
+#[test]
+fn explorer_opens_and_reuses_editor_with_folder_grant() {
+    let data = TempDir::new().unwrap();
+    let docs = TempDir::new().unwrap();
+    fs::write(docs.path().join("a.MD"), "a").unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(data.path(), vec![MD_EDITOR.into(), include_str!("../../../examples/explorer.json").into()], &host);
+    let (_, desktop) = active_ids(&core);
+    let explorer = open_window(&core, &desktop, "explorer");
+    host.choose(Some(docs.path().into()));
+    core.handle(CoreRequest::FilesPickFolder { window_id: explorer.clone(), permission: "folder".into() }).unwrap();
+    let open = || core.handle(CoreRequest::FilesOpen { window_id: explorer.clone(), permission: "folder".into(), path: "a.MD".into(), app_id: "md-editor".into(), rect: None });
+    let window = match open().unwrap() { CoreReply::FilesOpen { window } => window, other => panic!("{other:?}") };
+    assert_eq!(window.state["current_file"], json!("a.MD"));
+    assert_eq!(snapshot(&core).device.grants.iter().find(|g| g.window_id == window.id).unwrap().root_path, fs::canonicalize(docs.path()).unwrap().to_string_lossy());
+    let revision = match core.handle(CoreRequest::FilesRead { window_id: window.id.clone(), permission: "docs".into(), path: "a.MD".into() }).unwrap() { CoreReply::FilesRead { revision, .. } => revision, _ => unreachable!() };
+    core.handle(CoreRequest::FilesWrite { window_id: window.id.clone(), permission: "docs".into(), path: "a.MD".into(), text: "changed".into(), expected_revision: Some(revision) }).unwrap();
+    assert!(matches!(open().unwrap(), CoreReply::FilesOpen { window: w } if w.id == window.id));
+}
+
+#[test]
+fn explorer_open_reports_missing_grant_file_and_extension() {
+    let data = TempDir::new().unwrap();
+    let docs = TempDir::new().unwrap();
+    fs::write(docs.path().join("a.txt"), "a").unwrap();
+    fs::create_dir(docs.path().join("dir.md")).unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(data.path(), vec![MD_EDITOR.into(), include_str!("../../../examples/explorer.json").into()], &host);
+    let (_, desktop) = active_ids(&core);
+    let explorer = open_window(&core, &desktop, "explorer");
+    let open = |path: &str| core.handle(CoreRequest::FilesOpen { window_id: explorer.clone(), permission: "folder".into(), path: path.into(), app_id: "md-editor".into(), rect: None });
+    expect_error(open("a.md"), ErrorCode::NotGranted);
+    host.choose(Some(docs.path().into()));
+    core.handle(CoreRequest::FilesPickFolder { window_id: explorer.clone(), permission: "folder".into() }).unwrap();
+    expect_error(open("a.md"), ErrorCode::NotFound);
+    expect_error(open("a.txt"), ErrorCode::InvalidRequest);
+    expect_error(open("dir.md"), ErrorCode::InvalidRequest);
+}
