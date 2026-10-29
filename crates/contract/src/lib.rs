@@ -2355,7 +2355,29 @@ mod tests {
         assert!(validate::valid_request_path("/api/cards"));
         assert!(validate::valid_request_path("/"));
         assert!(validate::valid_request_path("/media/portrait/a%20b.png"));
-        for bad in ["api/cards", "//evil.example/x", "/a/../b", "/a?b=c", "/a\\b", "/a b", "/a//b", "/%2e%2e/x"] {
+        assert!(validate::valid_request_path("/files/a.%2econfig"), "점이 섞인 보통 이름은 받는다");
+        assert!(
+            validate::valid_request_path("/api/narrative/narrative%2F_rev2%2Fx.yaml"),
+            "점 조각이 없는 인코딩 / 는 식별자로 받는다"
+        );
+        for bad in [
+            "api/cards",
+            "//evil.example/x",
+            "/a/../b",
+            "/a?b=c",
+            "/a\\b",
+            "/a b",
+            "/a//b",
+            "/%2e%2e/x",
+            "/safe/%2e./secret",
+            "/safe/.%2E/secret",
+            "/safe/%2E%2e/secret",
+            "/safe/%2e/x",
+            "/safe/..%2Fsecret",
+            "/safe/a%2F..%2Fb",
+            "/safe/%5C..%5Csecret",
+            "/safe/a%00",
+        ] {
             assert!(!validate::valid_request_path(bad), "{bad}");
         }
     }
