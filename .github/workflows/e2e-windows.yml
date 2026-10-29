@@ -22,7 +22,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.ref }}
+          # PR은 기본값(main과 합친 판)을 받는다. 워크플로 정의도 합친 판에서 읽히므로 코드와 시나리오가 어긋나지 않는다.
+          ref: ${{ inputs.ref || '' }}
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
           version: 10.32.1
