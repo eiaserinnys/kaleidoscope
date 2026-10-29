@@ -10,7 +10,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 const SERVER_URL: &str =
-    option_env!("KALEIDOSCOPE_SERVER_URL").unwrap_or("https://kaleidoscope.eiaserinnys.me");
+    option_env!("KALEIDOSCOPE_SERVER_URL").unwrap_or("https://eiaserinnys.me/kaleidoscope");
 
 struct DialogHost {
     app: AppHandle,

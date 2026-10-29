@@ -5,7 +5,7 @@
 //! 이 파일의 타입은 화면에 가지 않으므로 TS로 만들지 않는다.
 //!
 //! # 주소와 인증
-//! 코어의 `server_url`(끝에 `/` 없음, 예: `https://kaleidoscope.eiaserinnys.me`) 뒤에 아래 경로를 붙인다.
+//! 코어의 `server_url`(끝에 `/` 없음, 예: `https://eiaserinnys.me/kaleidoscope`) 뒤에 아래 경로를 붙인다.
 //!
 //! | 메서드와 경로 | 인증 | 요청 본문 | 성공 | 실패 |
 //! |---|---|---|---|---|
