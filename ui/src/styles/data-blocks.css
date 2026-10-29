@@ -24,7 +24,7 @@
 .ks-data-section { min-width: 0; min-height: 0; }
 .ks-data-section-child > .ks-data-stack { height: auto; }
 .ks-data-section-header { display: flex; width: 100%; align-items: center; gap: var(--ks-space-2); }
-.ks-data-section-toggle { display: inline-flex; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.ks-data-section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .ks-data-section-title { font-size: var(--ks-type-title); font-weight: 600; }
 .ks-data-section-meta { font-size: var(--ks-type-meta); color: var(--ks-color-muted); }
 .ks-data-text { white-space: pre-wrap; user-select: text; overflow: auto; }

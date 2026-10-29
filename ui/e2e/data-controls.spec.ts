@@ -76,6 +76,19 @@ test("확인 대화상자와 실패한 구역 머리의 조작을 격리한다",
   await expect(app.getByText("구역 내용")).toBeVisible();
   await capture(page, "section-retry");
 
+  // 머리 전체가 접기 단추다: 제목이 아닌 머리의 빈 곳(상태 단추 왼쪽)을 눌러도 접히고 다시 펴진다.
+  const readyHeader = app.locator(".ks-data-section-header").first();
+  const readyToggle = readyHeader.locator("button[aria-expanded]");
+  const headerBox = (await readyHeader.boundingBox())!;
+  const toggleBox = (await readyToggle.boundingBox())!;
+  expect(toggleBox.width).toBeGreaterThan(headerBox.width * 0.6);
+  const blank = { x: toggleBox.x + toggleBox.width - 8, y: toggleBox.y + toggleBox.height / 2 };
+  await expect(readyToggle).toHaveAttribute("aria-expanded", "true");
+  await page.mouse.click(blank.x, blank.y);
+  await expect(readyToggle).toHaveAttribute("aria-expanded", "false");
+  await page.mouse.click(blank.x, blank.y);
+  await expect(readyToggle).toHaveAttribute("aria-expanded", "true");
+
   await app.getByRole("button", { name: "실행" }).click();
   await expect(app.getByRole("alert").filter({ hasText: "요청을 처리하지 못했습니다" })).toBeVisible();
   const opener = app.getByRole("button", { name: "삭제" });

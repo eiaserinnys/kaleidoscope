@@ -46,16 +46,22 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
   const title = useBinding(`${pointer}/title`, block.title);
   const meta = useBinding(`${pointer}/meta`, block.meta ?? null);
   const [collapsed, setCollapsed] = useState(Boolean(block.collapsed));
+  // 머리 전체가 접기 단추다(빈 곳을 눌러도 접힌다). 상태 단추(로그인, 다시 받기)는 단추 밖 형제로 둔다.
+  const titleText = title.status === "ready" ? <span className="ks-data-section-title">{display(title.value)}</span> : null;
+  const titleState = title.status !== "ready" ? <DataState value={title} compact /> : null;
+  const metaText = block.meta !== undefined && meta.status === "ready" ? <span className="ks-data-section-meta">{display(meta.value)}</span> : null;
+  const metaState = block.meta !== undefined && meta.status !== "ready" ? <div className="ks-data-section-meta"><DataState value={meta} compact /></div> : null;
   return <section className="ks-data-section">
     <div className="ks-data-section-header">
       {block.collapsible
         ? <button className="ks-data-section-toggle" aria-expanded={!collapsed} aria-label={title.status === "ready" ? undefined : collapsed ? "펼치기" : "접기"} onClick={() => setCollapsed(!collapsed)} type="button">
           {collapsed ? <ChevronRight size="inline" /> : <ChevronDown size="inline" />}
-          {title.status === "ready" ? <span className="ks-data-section-title">{display(title.value)}</span> : null}
+          {titleText}
+          {metaText}
         </button>
-        : title.status === "ready" ? <span className="ks-data-section-title">{display(title.value)}</span> : null}
-      {title.status !== "ready" ? <DataState value={title} compact /> : null}
-      {block.meta !== undefined ? <div className="ks-data-section-meta">{meta.status === "ready" ? display(meta.value) : <DataState value={meta} compact />}</div> : null}
+        : <>{titleText}{metaText}</>}
+      {titleState}
+      {metaState}
     </div>
     {!collapsed ? <div className="ks-data-section-child">{renderBlock(block.child, context, `${pointer}/child`)}</div> : null}
   </section>;
