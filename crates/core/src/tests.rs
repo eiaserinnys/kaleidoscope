@@ -10,11 +10,12 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use kaleidoscope_contract::registry::{
-    DeviceEvent, DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply,
-    PairStartRequest, RegistryApp,
+    AgentCreateRequest, AgentSendRequest, DeviceAgentReply, DeviceEvent, DeviceLayout,
+    DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply, PairStartRequest,
+    RegistryApp,
 };
 use kaleidoscope_contract::{
-    App, AppVersion, CoreEvent, ErrorCode, JsonValue, LinkStatus, Rect, ShellSnapshot,
+    AgentInfo, App, AppVersion, CoreEvent, ErrorCode, JsonValue, LinkStatus, Rect, ShellSnapshot,
 };
 use serde_json::{json, Value};
 use tempfile::TempDir;
@@ -116,6 +117,14 @@ struct FakeRegistryClient {
     uploads: Mutex<VecDeque<Result<RegistryApp, RegistryError>>>,
     streams: Mutex<VecDeque<Result<Vec<DeviceEvent>, RegistryError>>>,
     upload_requests: Mutex<Vec<DeviceUploadRequest>>,
+    agent_gets: Mutex<Vec<String>>,
+    agent_get_replies: Mutex<VecDeque<Result<DeviceAgentReply, RegistryError>>>,
+    agent_creates: Mutex<Vec<(String, AgentCreateRequest)>>,
+    agent_create_replies: Mutex<VecDeque<Result<AgentInfo, RegistryError>>>,
+    agent_sends: Mutex<Vec<(String, AgentSendRequest)>>,
+    agent_send_replies: Mutex<VecDeque<Result<(), RegistryError>>>,
+    layouts: Mutex<Vec<DeviceLayout>>,
+    layout_replies: Mutex<VecDeque<Result<(), RegistryError>>>,
     open_calls: AtomicUsize,
 }
 
@@ -177,6 +186,85 @@ impl RegistryClient for FakeRegistryClient {
             Some(Err(error)) => Err(error),
             None => Err(RegistryError::Failure("no stream configured".into())),
         }
+    }
+
+    fn agent_get(
+        &self,
+        _server_url: &str,
+        _token: &str,
+        workspace_id: &str,
+    ) -> Result<DeviceAgentReply, RegistryError> {
+        self.agent_gets.lock().unwrap().push(workspace_id.into());
+        self.agent_get_replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or_else(|| {
+                Ok(DeviceAgentReply {
+                    agent: None,
+                    items: vec![],
+                    models: vec![],
+                })
+            })
+    }
+
+    fn agent_create(
+        &self,
+        _server_url: &str,
+        _token: &str,
+        workspace_id: &str,
+        request: &AgentCreateRequest,
+    ) -> Result<AgentInfo, RegistryError> {
+        self.agent_creates
+            .lock()
+            .unwrap()
+            .push((workspace_id.into(), request.clone()));
+        self.agent_create_replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or_else(|| {
+                Ok(AgentInfo {
+                    workspace_id: workspace_id.into(),
+                    model_preset: request.model_preset.clone(),
+                    model_label: "Argon".into(),
+                    busy: true,
+                    tool: None,
+                    created_at: "2026-10-29T00:00:00Z".into(),
+                })
+            })
+    }
+
+    fn agent_send(
+        &self,
+        _server_url: &str,
+        _token: &str,
+        workspace_id: &str,
+        request: &AgentSendRequest,
+    ) -> Result<(), RegistryError> {
+        self.agent_sends
+            .lock()
+            .unwrap()
+            .push((workspace_id.into(), request.clone()));
+        self.agent_send_replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or(Ok(()))
+    }
+
+    fn put_layout(
+        &self,
+        _server_url: &str,
+        _token: &str,
+        layout: &DeviceLayout,
+    ) -> Result<(), RegistryError> {
+        self.layouts.lock().unwrap().push(layout.clone());
+        self.layout_replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or(Ok(()))
     }
 }
 
@@ -1238,4 +1326,341 @@ fn cancel_and_unlink_clear_only_connection_state() {
     assert!(matches!(snapshot(&core).link, LinkStatus::Unlinked {}));
     assert!(!data_dir.join("link.json").exists());
     assert_eq!(snapshot(&core).shared, before);
+}
+
+#[test]
+fn agent_commands_require_connection_and_a_local_workspace() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(
+        &temp.path().join("data"),
+        vec![],
+        &host,
+        Arc::clone(&client),
+    );
+
+    expect_error(
+        core.handle(CoreRequest::AgentGet {
+            workspace_id: "missing".into(),
+        }),
+        ErrorCode::Server,
+    );
+    expect_error(
+        core.handle(CoreRequest::AgentCreate {
+            workspace_id: "missing".into(),
+            model_preset: "gemini-4-argon".into(),
+        }),
+        ErrorCode::Server,
+    );
+    expect_error(
+        core.handle(CoreRequest::AgentSend {
+            workspace_id: "missing".into(),
+            text: "hello".into(),
+        }),
+        ErrorCode::Server,
+    );
+    mark_connected(&core);
+    expect_error(
+        core.handle(CoreRequest::AgentGet {
+            workspace_id: "missing".into(),
+        }),
+        ErrorCode::NotFound,
+    );
+    expect_error(
+        core.handle(CoreRequest::AgentCreate {
+            workspace_id: "missing".into(),
+            model_preset: "gemini-4-argon".into(),
+        }),
+        ErrorCode::NotFound,
+    );
+    expect_error(
+        core.handle(CoreRequest::AgentSend {
+            workspace_id: "missing".into(),
+            text: "hello".into(),
+        }),
+        ErrorCode::NotFound,
+    );
+    assert!(client.agent_gets.lock().unwrap().is_empty());
+
+    let workspace_id = snapshot(&core).shared.workspaces[0].id.clone();
+    assert!(matches!(
+        core.handle(CoreRequest::AgentGet { workspace_id }),
+        Ok(CoreReply::AgentGet { .. })
+    ));
+    assert_eq!(client.agent_gets.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn agent_create_sends_workspace_name_and_agent_commands_do_not_emit_state() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(
+        &temp.path().join("data"),
+        vec![],
+        &host,
+        Arc::clone(&client),
+    );
+    mark_connected(&core);
+    let (workspace_id, workspace_name) = {
+        let state = core.inner.state.lock().unwrap();
+        let workspace = &state.shared.workspaces[0];
+        (workspace.id.clone(), workspace.name.clone())
+    };
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        let _ = tx.send(event.clone());
+    }));
+
+    assert!(matches!(
+        core.handle(CoreRequest::AgentCreate {
+            workspace_id: workspace_id.clone(),
+            model_preset: "gemini-4-argon".into(),
+        }),
+        Ok(CoreReply::AgentCreate { .. })
+    ));
+    assert_eq!(
+        client.agent_creates.lock().unwrap()[0],
+        (
+            workspace_id.clone(),
+            AgentCreateRequest {
+                workspace_name,
+                model_preset: "gemini-4-argon".into(),
+            }
+        )
+    );
+    assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn agent_send_trims_text_counts_characters_and_rejects_invalid_input_before_network() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(
+        &temp.path().join("data"),
+        vec![],
+        &host,
+        Arc::clone(&client),
+    );
+    mark_connected(&core);
+    let workspace_id = snapshot(&core).shared.workspaces[0].id.clone();
+
+    for text in [
+        " \n \t ".to_string(),
+        "가".repeat(kaleidoscope_contract::registry::AGENT_MESSAGE_MAX_CHARS + 1),
+    ] {
+        expect_error(
+            core.handle(CoreRequest::AgentSend {
+                workspace_id: workspace_id.clone(),
+                text,
+            }),
+            ErrorCode::InvalidRequest,
+        );
+    }
+    assert!(client.agent_sends.lock().unwrap().is_empty());
+
+    core.handle(CoreRequest::AgentSend {
+        workspace_id: workspace_id.clone(),
+        text: "  안녕\n ".into(),
+    })
+    .unwrap();
+    assert_eq!(
+        client.agent_sends.lock().unwrap().as_slice(),
+        &[(
+            workspace_id,
+            AgentSendRequest {
+                text: "안녕".into()
+            }
+        )]
+    );
+}
+
+#[test]
+fn agent_http_core_errors_are_returned_unchanged() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(
+        &temp.path().join("data"),
+        vec![],
+        &host,
+        Arc::clone(&client),
+    );
+    mark_connected(&core);
+    let workspace_id = snapshot(&core).shared.workspaces[0].id.clone();
+    let expected = CoreError {
+        code: ErrorCode::NotFound,
+        message: "이 워크스페이스에는 PAS가 없습니다.".into(),
+        details: vec!["server detail".into()],
+    };
+    client
+        .agent_get_replies
+        .lock()
+        .unwrap()
+        .push_back(Err(RegistryError::Validation(expected.clone())));
+
+    assert_eq!(
+        core.handle(CoreRequest::AgentGet { workspace_id })
+            .unwrap_err(),
+        expected
+    );
+}
+
+#[test]
+fn registry_events_route_workspace_targets_and_agent_updates() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(
+        &temp.path().join("data"),
+        vec![MD_EDITOR.into()],
+        &host,
+        Arc::clone(&client),
+    );
+    mark_connected(&core);
+    let workspace_id = snapshot(&core).shared.workspaces[0].id.clone();
+    let unknown_workspace_id = "workspace-from-another-device".to_string();
+    client.streams.lock().unwrap().push_back(Ok(vec![
+        DeviceEvent::AppsSnapshot { apps: vec![] },
+        DeviceEvent::AppOpen {
+            app_id: "md-editor".into(),
+            workspace_id: Some(unknown_workspace_id.clone()),
+        },
+        DeviceEvent::AppOpen {
+            app_id: "md-editor".into(),
+            workspace_id: Some(workspace_id.clone()),
+        },
+        DeviceEvent::AppPublished {
+            app: registry_app(10, MD_EDITOR),
+            open: true,
+            workspace_id: Some("workspace-from-another-device".into()),
+        },
+        DeviceEvent::AppPublished {
+            app: registry_app(11, MD_EDITOR),
+            open: true,
+            workspace_id: Some(workspace_id.clone()),
+        },
+        DeviceEvent::AgentUpdate {
+            workspace_id: unknown_workspace_id,
+            update: kaleidoscope_contract::AgentUpdate::Activity {
+                busy: true,
+                tool: None,
+            },
+        },
+        DeviceEvent::AgentUpdate {
+            workspace_id: workspace_id.clone(),
+            update: kaleidoscope_contract::AgentUpdate::Activity {
+                busy: true,
+                tool: Some("search".into()),
+            },
+        },
+    ]));
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        let _ = tx.send(event.clone());
+    }));
+    crate::link::start_stream(Arc::clone(&core.inner), 0, connected_link_file());
+
+    let mut events = Vec::new();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < deadline {
+        if let Ok(event) = rx.recv_timeout(Duration::from_millis(50)) {
+            events.push(event);
+        }
+        if events
+            .iter()
+            .any(|event| matches!(event, CoreEvent::AgentUpdate { .. }))
+        {
+            break;
+        }
+    }
+    let open_requests = events
+        .iter()
+        .filter_map(|event| match event {
+            CoreEvent::AppOpenRequested {
+                app_id,
+                workspace_id,
+            } => Some((app_id.as_str(), workspace_id.as_deref())),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        open_requests,
+        [
+            ("md-editor", Some(workspace_id.as_str())),
+            ("md-editor", Some(workspace_id.as_str()))
+        ]
+    );
+    assert_eq!(
+        snapshot(&core)
+            .shared
+            .apps
+            .iter()
+            .find(|app| app.id == "md-editor")
+            .unwrap()
+            .current_version,
+        11
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event, CoreEvent::AgentUpdate { workspace_id: id, .. } if id == &workspace_id))
+            .count(),
+        1
+    );
+    assert!(!events.iter().any(|event| matches!(event,
+        CoreEvent::AgentUpdate { workspace_id: id, .. } if id == "workspace-from-another-device"
+    )));
+}
+
+#[test]
+fn layout_report_sends_sanitized_initial_state_and_debounces_changes() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(
+        &temp.path().join("data"),
+        vec![MD_EDITOR.into()],
+        &host,
+        Arc::clone(&client),
+    );
+    mark_connected(&core);
+    let (workspace_id, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let root = temp.path().join("private-folder");
+    fs::create_dir_all(&root).unwrap();
+    host.choose(Some(root.clone()));
+    pick_folder(&core, &window_id);
+
+    crate::layout_reporter::start(Arc::clone(&core.inner), 0, 0);
+    wait_until(|| client.layouts.lock().unwrap().len() == 1);
+    let first = client.layouts.lock().unwrap()[0].clone();
+    assert_eq!(first.workspaces[0].id, workspace_id);
+    assert_eq!(first.folders[0].window_id, window_id);
+    assert_eq!(first.folders[0].root_name, "private-folder");
+    assert!(!serde_json::to_string(&first)
+        .unwrap()
+        .contains(&root.to_string_lossy().to_string()));
+
+    core.handle(CoreRequest::WorkspaceCreate {
+        name: "두 번째".into(),
+    })
+    .unwrap();
+    core.handle(CoreRequest::WorkspaceCreate {
+        name: "세 번째".into(),
+    })
+    .unwrap();
+    wait_until(|| client.layouts.lock().unwrap().len() == 2);
+    thread::sleep(Duration::from_millis(1200));
+    assert_eq!(client.layouts.lock().unwrap().len(), 2);
+    assert_eq!(client.layouts.lock().unwrap()[1].workspaces.len(), 3);
+
+    core.inner.emit(&CoreEvent::StateChanged {
+        snapshot: snapshot(&core),
+    });
+    thread::sleep(Duration::from_millis(1200));
+    assert_eq!(client.layouts.lock().unwrap().len(), 2);
+    core.handle(CoreRequest::LinkUnlink {}).unwrap();
 }

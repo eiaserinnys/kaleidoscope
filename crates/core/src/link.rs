@@ -13,10 +13,11 @@ use kaleidoscope_contract::{CoreError, CoreEvent, CoreReply, ErrorCode, LinkStat
 use crate::app_commands;
 use crate::error;
 use crate::registry_client::{parse_event_line, RegistryError};
+use crate::registry_events;
 use crate::storage::{self, LinkFile};
 use crate::{snapshot, Inner};
 
-const NOT_CONNECTED_MESSAGE: &str =
+pub(crate) const NOT_CONNECTED_MESSAGE: &str =
     "kaleidoscope 서버에 연결되어 있지 않아 앱을 가져올 수 없습니다.";
 
 pub(crate) fn registry_error_to_core(error: RegistryError, message: &str) -> CoreError {
@@ -32,7 +33,7 @@ pub(crate) fn registry_error_to_core(error: RegistryError, message: &str) -> Cor
     }
 }
 
-fn server_error(message: &str, details: Vec<String>) -> CoreError {
+pub(crate) fn server_error(message: &str, details: Vec<String>) -> CoreError {
     CoreError {
         code: ErrorCode::Server,
         message: message.into(),
@@ -146,8 +147,9 @@ pub(crate) fn import_app(
     };
     match status {
         LinkStatus::Unlinked {} => {
-            let (reply, event) =
-                apply_registry_change(inner, |state| app_commands::import(state, definition_json))?;
+            let (reply, event) = registry_events::apply_registry_change(inner, |state| {
+                app_commands::import(state, definition_json)
+            })?;
             let reply = reply?;
             if let Some(event) = event {
                 inner.emit(&event);
@@ -181,7 +183,7 @@ pub(crate) fn import_app(
                 app: received.app.clone(),
                 version: received.version.clone(),
             };
-            let (_, event) = apply_registry_change(inner, |state| {
+            let (_, event) = registry_events::apply_registry_change(inner, |state| {
                 app_commands::import_registry(state, received)
             })?;
             if let Some(event) = event {
@@ -194,6 +196,8 @@ pub(crate) fn import_app(
         }
     }
 }
+
+pub(crate) use crate::agent_commands::handle as handle_agent;
 
 fn poll_pairing(
     inner: Arc<Inner>,
@@ -329,7 +333,7 @@ fn run_stream(inner: Arc<Inner>, generation: u64, file: LinkFile) {
                     if matches!(event, DeviceEvent::AppsSnapshot { .. }) {
                         delay = 1;
                     }
-                    if !apply_event(&inner, generation, event) {
+                    if !registry_events::apply_event(&inner, generation, event) {
                         return;
                     }
                 }
@@ -349,133 +353,11 @@ fn run_stream(inner: Arc<Inner>, generation: u64, file: LinkFile) {
     }
 }
 
-fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEvent) -> bool {
-    if !is_current(inner, generation) {
-        return false;
-    }
-    match event {
-        DeviceEvent::AppsSnapshot { apps } => {
-            let link = inner.link_file.lock().unwrap().clone();
-            let result = apply_registry_change(inner, |state| {
-                if inner.generation.load(Ordering::SeqCst) != generation {
-                    return None;
-                }
-                for app in apps {
-                    app_commands::import_registry(state, app);
-                }
-                let status = LinkStatus::Connected {
-                    server_url: link
-                        .as_ref()
-                        .map(|link| link.server_url.clone())
-                        .unwrap_or_default(),
-                    device_name: link
-                        .as_ref()
-                        .map(|link| link.device_name.clone())
-                        .unwrap_or_default(),
-                };
-                set_link_locked(state, status);
-                Some(())
-            });
-            let (applied, event) = match result {
-                Ok(result) => result,
-                Err(error) => {
-                    set_offline(inner, generation, &load_link(inner), error.message);
-                    return true;
-                }
-            };
-            if applied.is_none() {
-                return false;
-            }
-            if let Some(event) = event {
-                inner.emit(&event);
-            }
-        }
-        DeviceEvent::AppPublished { app, open, .. } => {
-            let result = apply_registry_change(inner, |state| {
-                if inner.generation.load(Ordering::SeqCst) != generation {
-                    return None;
-                }
-                app_commands::import_registry(state, app.clone());
-                Some(())
-            });
-            let (applied, event) = match result {
-                Ok(result) => result,
-                Err(error) => {
-                    set_offline(inner, generation, &load_link(inner), error.message);
-                    return true;
-                }
-            };
-            if applied.is_none() {
-                return false;
-            }
-            if let Some(event) = event {
-                inner.emit(&event);
-            }
-            if open {
-                inner.emit(&CoreEvent::AppOpenRequested {
-                    app_id: app.app.id,
-                    workspace_id: None,
-                });
-            }
-        }
-        DeviceEvent::AppOpen { app_id, .. } => {
-            let exists = inner
-                .state
-                .lock()
-                .unwrap()
-                .shared
-                .apps
-                .iter()
-                .any(|app| app.id == app_id);
-            if exists {
-                inner.emit(&CoreEvent::AppOpenRequested {
-                    app_id,
-                    workspace_id: None,
-                });
-            }
-        }
-        // 워크스페이스 PAS 중계와 workspace_id로 겨눈 띄우기는 다음 PR(코어의 PAS 연결)에서 구현한다.
-        DeviceEvent::AgentUpdate { .. } => {}
-    }
-    is_current(inner, generation)
-}
-
-fn load_link(inner: &Inner) -> LinkFile {
+pub(crate) fn load_link(inner: &Inner) -> LinkFile {
     inner.link_file.lock().unwrap().as_ref().unwrap().clone()
 }
 
-fn apply_registry_change<T>(
-    inner: &Inner,
-    update: impl FnOnce(&mut crate::CoreState) -> T,
-) -> Result<(T, Option<CoreEvent>), CoreError> {
-    let mut state = inner.state.lock().unwrap();
-    let before = state.clone();
-    let result = update(&mut state);
-    let shared_changed = before.shared != state.shared;
-    let device_changed = before.device != state.device;
-    let link_changed = before.link != state.link;
-
-    if shared_changed || device_changed {
-        if let Err(error) = storage::save_changed_state(
-            &inner.data_dir,
-            &state.shared,
-            &state.device,
-            shared_changed,
-            device_changed,
-        ) {
-            *state = before;
-            return Err(error);
-        }
-    }
-
-    let event =
-        (shared_changed || device_changed || link_changed).then(|| CoreEvent::StateChanged {
-            snapshot: snapshot(&state),
-        });
-    Ok((result, event))
-}
-
-fn set_offline(inner: &Arc<Inner>, generation: u64, file: &LinkFile, reason: String) {
+pub(crate) fn set_offline(inner: &Arc<Inner>, generation: u64, file: &LinkFile, reason: String) {
     let changed = {
         let mut state = inner.state.lock().unwrap();
         if inner.generation.load(Ordering::SeqCst) != generation {
@@ -496,7 +378,7 @@ fn set_offline(inner: &Arc<Inner>, generation: u64, file: &LinkFile, reason: Str
     }
 }
 
-fn token_rejected(inner: &Arc<Inner>, file: LinkFile) {
+pub(crate) fn token_rejected(inner: &Arc<Inner>, file: LinkFile) {
     let changed = {
         let mut state = inner.state.lock().unwrap();
         if inner
@@ -535,11 +417,11 @@ fn wait_before_retry(inner: &Inner, generation: u64, seconds: u64) -> bool {
     is_current(inner, generation)
 }
 
-fn is_current(inner: &Inner, generation: u64) -> bool {
+pub(crate) fn is_current(inner: &Inner, generation: u64) -> bool {
     inner.generation.load(Ordering::SeqCst) == generation
 }
 
-fn set_link_locked(state: &mut crate::CoreState, status: LinkStatus) -> bool {
+pub(crate) fn set_link_locked(state: &mut crate::CoreState, status: LinkStatus) -> bool {
     if state.link == status {
         return false;
     }

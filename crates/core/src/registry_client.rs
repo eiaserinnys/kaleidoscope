@@ -3,9 +3,10 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use kaleidoscope_contract::registry::{
-    DeviceEvent, DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply,
-    PairStartRequest, RegistryApp, DEVICE_APPS_PATH, DEVICE_EVENTS_PATH, PAIR_POLL_PATH,
-    PAIR_START_PATH,
+    device_agent_messages_path, device_agent_path, AgentCreateRequest, AgentSendRequest,
+    DeviceAgentReply, DeviceEvent, DeviceLayout, DeviceUploadRequest, PairPollReply,
+    PairPollRequest, PairStartReply, PairStartRequest, RegistryApp, DEVICE_APPS_PATH,
+    DEVICE_EVENTS_PATH, DEVICE_LAYOUT_PATH, PAIR_POLL_PATH, PAIR_START_PATH,
 };
 use kaleidoscope_contract::CoreError;
 
@@ -36,6 +37,36 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         token: &str,
         request: &DeviceUploadRequest,
     ) -> Result<RegistryApp, RegistryError>;
+
+    fn agent_get(
+        &self,
+        server_url: &str,
+        token: &str,
+        workspace_id: &str,
+    ) -> Result<DeviceAgentReply, RegistryError>;
+
+    fn agent_create(
+        &self,
+        server_url: &str,
+        token: &str,
+        workspace_id: &str,
+        request: &AgentCreateRequest,
+    ) -> Result<kaleidoscope_contract::AgentInfo, RegistryError>;
+
+    fn agent_send(
+        &self,
+        server_url: &str,
+        token: &str,
+        workspace_id: &str,
+        request: &AgentSendRequest,
+    ) -> Result<(), RegistryError>;
+
+    fn put_layout(
+        &self,
+        server_url: &str,
+        token: &str,
+        layout: &DeviceLayout,
+    ) -> Result<(), RegistryError>;
 
     fn open_events(
         &self,
@@ -131,6 +162,79 @@ impl RegistryClient for HttpRegistryClient {
         success_json(response)
     }
 
+    fn agent_get(
+        &self,
+        server_url: &str,
+        token: &str,
+        workspace_id: &str,
+    ) -> Result<DeviceAgentReply, RegistryError> {
+        let response = self
+            .requests()?
+            .get(format!("{server_url}{}", device_agent_path(workspace_id)))
+            .bearer_auth(token)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        agent_success_json(response)
+    }
+
+    fn agent_create(
+        &self,
+        server_url: &str,
+        token: &str,
+        workspace_id: &str,
+        request: &AgentCreateRequest,
+    ) -> Result<kaleidoscope_contract::AgentInfo, RegistryError> {
+        let response = self
+            .requests()?
+            .post(format!("{server_url}{}", device_agent_path(workspace_id)))
+            .bearer_auth(token)
+            .json(request)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        agent_success_json(response)
+    }
+
+    fn agent_send(
+        &self,
+        server_url: &str,
+        token: &str,
+        workspace_id: &str,
+        request: &AgentSendRequest,
+    ) -> Result<(), RegistryError> {
+        let response = self
+            .requests()?
+            .post(format!(
+                "{server_url}{}",
+                device_agent_messages_path(workspace_id)
+            ))
+            .bearer_auth(token)
+            .json(request)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        agent_success_json::<serde_json::Value>(response).map(|_| ())
+    }
+
+    fn put_layout(
+        &self,
+        server_url: &str,
+        token: &str,
+        layout: &DeviceLayout,
+    ) -> Result<(), RegistryError> {
+        let response = self
+            .requests()?
+            .put(format!("{server_url}{DEVICE_LAYOUT_PATH}"))
+            .bearer_auth(token)
+            .json(layout)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.bytes().unwrap_or_default();
+            check_status(status, &body)?;
+        }
+        Ok(())
+    }
+
     fn open_events(
         &self,
         server_url: &str,
@@ -159,6 +263,21 @@ fn success_json<T: serde::de::DeserializeOwned>(
 
     let body = response.bytes().unwrap_or_default();
     check_status(status, &body)?;
+    Err(RegistryError::Failure(format!("HTTP {status}")))
+}
+
+fn agent_success_json<T: serde::de::DeserializeOwned>(
+    response: reqwest::blocking::Response,
+) -> Result<T, RegistryError> {
+    let status = response.status();
+    if status.is_success() {
+        return response
+            .json()
+            .map_err(|error| RegistryError::Failure(error.to_string()));
+    }
+
+    let body = response.bytes().unwrap_or_default();
+    check_agent_status(status, &body)?;
     Err(RegistryError::Failure(format!("HTTP {status}")))
 }
 
@@ -192,4 +311,38 @@ mod tests {
     fn regression_successful_event_stream_status_is_accepted() {
         assert!(check_status(reqwest::StatusCode::OK, &[]).is_ok());
     }
+
+    #[test]
+    fn agent_404_preserves_core_error_but_unstructured_route_miss_is_failure() {
+        let error = CoreError::new(kaleidoscope_contract::ErrorCode::NotFound);
+        let body = serde_json::to_vec(&error).unwrap();
+        assert!(matches!(
+            check_agent_status(reqwest::StatusCode::NOT_FOUND, &body),
+            Err(RegistryError::Validation(actual)) if actual == error
+        ));
+        let error = CoreError {
+            code: kaleidoscope_contract::ErrorCode::InvalidRequest,
+            message: "bad request".into(),
+            details: vec!["detail".into()],
+        };
+        let body = serde_json::to_vec(&error).unwrap();
+        assert!(matches!(
+            check_agent_status(reqwest::StatusCode::BAD_REQUEST, &body),
+            Err(RegistryError::Validation(actual)) if actual == error
+        ));
+        assert!(matches!(
+            check_agent_status(reqwest::StatusCode::NOT_FOUND, b"not found"),
+            Err(RegistryError::Failure(_))
+        ));
+    }
+}
+
+fn check_agent_status(status: reqwest::StatusCode, body: &[u8]) -> Result<(), RegistryError> {
+    if status.as_u16() == 404 {
+        return match serde_json::from_slice::<CoreError>(body) {
+            Ok(error) => Err(RegistryError::Validation(error)),
+            Err(_) => Err(RegistryError::Failure(format!("HTTP {status}"))),
+        };
+    }
+    check_status(status, body)
 }

@@ -1,8 +1,11 @@
+mod agent_commands;
 mod app_commands;
 mod error;
 mod files;
+mod layout_reporter;
 mod link;
 mod registry_client;
+mod registry_events;
 mod state_commands;
 mod storage;
 
@@ -12,7 +15,7 @@ mod tests;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
 use kaleidoscope_contract::{
     CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, Grant, LinkStatus, SharedState,
@@ -51,6 +54,38 @@ pub(crate) struct Inner {
     pub(crate) registry: Arc<dyn RegistryClient>,
     pub(crate) link_file: Mutex<Option<storage::LinkFile>>,
     pub(crate) generation: AtomicU64,
+    pub(crate) layout_connection_epoch: AtomicU64,
+    pub(crate) layout_reported_epoch: Mutex<Option<u64>>,
+    pub(crate) layout_signal: LayoutSignal,
+}
+
+pub(crate) struct LayoutSignal {
+    sequence: Mutex<u64>,
+    changed: Condvar,
+}
+
+impl LayoutSignal {
+    pub(crate) fn notify(&self) {
+        let mut sequence = self.sequence.lock().unwrap();
+        *sequence = sequence.wrapping_add(1);
+        self.changed.notify_all();
+    }
+
+    pub(crate) fn sequence(&self) -> u64 {
+        *self.sequence.lock().unwrap()
+    }
+
+    pub(crate) fn wait_after(&self, sequence: u64, duration: std::time::Duration) -> u64 {
+        let current = self.sequence.lock().unwrap();
+        if *current != sequence {
+            return *current;
+        }
+        let (current, _) = self
+            .changed
+            .wait_timeout_while(current, duration, |current| *current == sequence)
+            .unwrap();
+        *current
+    }
 }
 
 pub struct Core {
@@ -108,6 +143,12 @@ impl Core {
             registry,
             link_file: Mutex::new(link_file.clone()),
             generation: AtomicU64::new(0),
+            layout_connection_epoch: AtomicU64::new(0),
+            layout_reported_epoch: Mutex::new(None),
+            layout_signal: LayoutSignal {
+                sequence: Mutex::new(0),
+                changed: Condvar::new(),
+            },
         });
         {
             let state = inner.state.lock().unwrap();
@@ -141,6 +182,9 @@ impl Core {
             CoreRequest::AppImport { definition_json } => {
                 link::import_app(&self.inner, definition_json)
             }
+            request @ (CoreRequest::AgentGet { .. }
+            | CoreRequest::AgentCreate { .. }
+            | CoreRequest::AgentSend { .. }) => link::handle_agent(&self.inner, request),
             CoreRequest::FilesList {
                 window_id,
                 permission,
@@ -274,6 +318,9 @@ impl Core {
 
 impl Inner {
     pub(crate) fn emit(&self, event: &CoreEvent) {
+        if matches!(event, CoreEvent::StateChanged { .. }) {
+            self.layout_signal.notify();
+        }
         let listeners = self.listeners.lock().unwrap().clone();
         for listener in listeners {
             listener(event);
