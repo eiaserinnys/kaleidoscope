@@ -233,7 +233,7 @@ export function FileBrowserTree({
     <>
       {creating?.directory === directory ? (
         <div className="ks-file-tree-entry" role="treeitem">
-          <div className="ks-file-tree-row ks-file-tree-create-row">
+          <div className="ks-row ks-file-tree-row ks-file-tree-create-row">
             <span aria-hidden="true" className="ks-file-tree-icon"><FileText size="inline" /></span>
             <TextInput
               key={`${directory}:${creating.attempt}`}
@@ -260,7 +260,7 @@ export function FileBrowserTree({
           >
             <button
               aria-current={isSelected ? "page" : undefined}
-              className={`ks-file-tree-row${isSelected ? " is-selected" : ""}`}
+              className={`ks-row ks-file-tree-row${isSelected ? " is-selected" : ""}`}
               onClick={(event) => {
                 if (isDirectory) {
                   if (event.detail !== 2) toggleDirectory(entry.path);

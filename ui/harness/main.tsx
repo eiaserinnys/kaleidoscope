@@ -11,16 +11,21 @@ import {
 } from "@kaleidoscope/ui";
 import "@kaleidoscope/ui/styles.css";
 import "./harness.css";
+import galleryJson from "../../examples/block-gallery.json";
+import sampleOne from "./assets/landscape.png";
+import sampleTwo from "./assets/shapes.png";
 import mdEditorJson from "../../examples/md-editor.json";
 import mdViewerJson from "../../examples/md-viewer.json";
 import workspacePasJson from "../../examples/workspace-pas.json";
+import { dataViewsApp } from "./data-views-app";
 import { dataLayoutApp } from "./data-layout-app";
 import pluginsDocument from "./create-plugins.txt?raw";
 
 const mdEditor = mdEditorJson as AppDefinition;
 const mdViewer = mdViewerJson as AppDefinition;
 const workspacePas = workspacePasJson as unknown as AppDefinition;
-const definitions = [mdEditor, mdViewer, workspacePas, dataLayoutApp];
+const gallery = galleryJson as AppDefinition;
+const definitions = [mdEditor, mdViewer, workspacePas, dataLayoutApp, gallery, dataViewsApp];
 const timestamp = "2026-10-28T00:00:00Z";
 
 function makeWindow(definition: AppDefinition, id: string, z: number): AppWindow {
@@ -57,7 +62,7 @@ const initialSnapshot: ShellSnapshot = {
     app_versions: appVersions,
     workspaces: [{ id: "workspace-1", name: "kaleidoscope", created_at: timestamp, updated_at: timestamp }],
     desktops: [{ id: "desktop-1", workspace_id: "workspace-1", name: "작업", position: 0, created_at: timestamp, updated_at: timestamp }],
-  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(mdViewer, "viewer-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4)],
+  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(mdViewer, "viewer-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4), makeWindow(gallery, "gallery-window", 5), makeWindow(dataViewsApp, "views-window", 6)],
   },
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [] },
   supported: { blocks: 1, modules: { files: 1 } },
@@ -180,7 +185,8 @@ const greetingItems: AgentItem[] = [
 
 const fakeTransport = createFakeTransport({
   snapshot: demoSnapshot,
-  data: { sources: { sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
+  data: { sources: { pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
+  media: { "landscape.png": sampleOne, "shapes.png": sampleTwo },
   folder: { root_path: "/fake/docs", root_name: "문서" },
   agentModels,
   agentGetDelayMs: pasMode === "loading" ? 5000 : undefined,
@@ -213,6 +219,8 @@ function Harness() {
   const editorWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-editor");
   const viewerWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-viewer");
   const dataWindow = snapshot?.shared.windows.find((item) => item.app_id === "data-controls");
+  const viewsWindow = snapshot?.shared.windows.find((item) => item.app_id === "data-views-test");
+  const galleryWindow = snapshot?.shared.windows.find((item) => item.app_id === "block-gallery");
   const pasWindow = snapshot?.shared.windows.find((item) => item.app_id === "workspace-pas");
 
   return (
@@ -250,8 +258,16 @@ function Harness() {
           <header className="ks-harness-window-header">범용 블록</header>
           <div className="ks-harness-window-content">{dataWindow ? <AppWindowContent store={store} windowId={dataWindow.id} /> : null}</div>
         </section>
+        <section aria-label="block-gallery" className={`ks-harness-window${previewAppId !== "block-gallery" ? " is-hidden" : ""}`} data-app-id="block-gallery" data-testid="app-window-block-gallery">
+          <header className="ks-harness-window-header">블록 견본</header>
+          <div className="ks-harness-window-content">{galleryWindow ? <AppWindowContent store={store} windowId={galleryWindow.id} /> : null}</div>
+        </section>
+        <section aria-label="data-views-test" className={`ks-harness-window${previewAppId !== "data-views-test" ? " is-hidden" : ""}`} data-app-id="data-views-test" data-testid="app-window-data-views-test">
+          <header className="ks-harness-window-header">보기 시험</header>
+          <div className="ks-harness-window-content">{viewsWindow ? <AppWindowContent store={store} windowId={viewsWindow.id} /> : null}</div>
+        </section>
       </div>
-      {!coreUrl && !(previewOnly && previewAppId === "data-controls") ? <FakeFilePanel transport={fakeTransport} /> : null}
+      {!coreUrl && !(previewOnly && (previewAppId === "data-controls" || previewAppId === "block-gallery" || previewAppId === "data-views-test")) ? <FakeFilePanel transport={fakeTransport} /> : null}
     </main>
   );
 }

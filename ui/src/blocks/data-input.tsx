@@ -10,6 +10,7 @@ import { ChevronDown, X } from "../components/icons";
 import { Menu } from "../components/menu";
 import { Button, IconButton } from "../components/primitives";
 import { display } from "./data-layout";
+import { asArray } from "./data-view-common";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 
@@ -67,7 +68,7 @@ export function SelectBlock({ block, context, pointer }: Props<"select">) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const close = useCallback(() => setAnchor(null), []);
   if (options.status !== "ready") return <DataState value={options} compact />;
-  const items = Array.isArray(options.value) ? options.value.filter(validOption) : [];
+  const items = asArray(options.value).filter(validOption);
   const current = context.window.state[block.value.state];
   const selected = items.find((item) => equal(current, optionValue(item)));
   const select = (item: SelectOption) => { void data.act(`${pointer}/on_change`, optionValue(item)); };

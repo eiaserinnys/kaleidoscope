@@ -18,6 +18,7 @@ function enqueue(store: ShellStore, id: string, task: () => Promise<void>) {
 }
 
 export class WindowData {
+  readonly mediaCache = new Map<string, Promise<string | null>>();
   private values: DataView["values"] = {};
   private sources: DataView["sources"] = emptySources;
   private listeners = new Map<string, Set<() => void>>();
@@ -81,6 +82,7 @@ export class WindowData {
     globalThis.window.addEventListener("focus", onFocus);
     return () => {
       this.active = false;
+      this.mediaCache.clear();
       this.unsubscribe?.();
       globalThis.window.removeEventListener("focus", onFocus);
       enqueue(this.store, this.windowId, async () => { await this.store.call({ op: "data.detach", window_id: this.windowId }).catch(() => undefined); });
