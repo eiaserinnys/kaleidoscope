@@ -92,10 +92,11 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       return;
     }
     const maxHeight = lineHeight * 8 + verticalPadding + border;
+    const contentHeight = input.scrollHeight + border;
     input.style.maxHeight = `${maxHeight}px`;
     input.style.height = "auto";
-    input.style.height = `${Math.min(input.scrollHeight, maxHeight)}px`;
-    input.style.overflowY = input.scrollHeight > maxHeight ? "auto" : "hidden";
+    input.style.height = `${Math.min(contentHeight, maxHeight)}px`;
+    input.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
   }, [draft, agent]);
 
   const start = async () => {
@@ -153,7 +154,6 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
               key={model.preset}
               aria-pressed={selectedPreset === model.preset}
               disabled={creating}
-              variant={selectedPreset === model.preset ? "emphasis" : "default"}
               onClick={() => setSelectedPreset(model.preset)}
             >
               {model.label}
@@ -184,20 +184,22 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         {delta ? <div className="ks-agent-chat-assistant"><div className="ks-agent-chat-assistant-content"><MarkdownText>{delta}</MarkdownText></div></div> : null}
         {busy ? <div className="ks-agent-chat-working">작업 중{tool ? ` · ${tool}` : ""}</div> : null}
       </div>
-      {sendError ? <Notice role="alert">{sendError}</Notice> : null}
-      <div className="ks-agent-chat-input-row">
-        <textarea
-          aria-label="메시지"
-          className="ks-agent-chat-input"
-          onChange={(event) => setDraft(event.currentTarget.value)}
-          onKeyDown={onInputKeyDown}
-          ref={inputRef}
-          rows={1}
-          value={draft}
-        />
-        <IconButton aria-label="보내기" disabled={!draft.trim() || sending} onClick={() => void send()}>
-          <SendIcon />
-        </IconButton>
+      <div className="ks-agent-chat-input-area">
+        {sendError ? <Notice role="alert">{sendError}</Notice> : null}
+        <div className="ks-agent-chat-input-row">
+          <textarea
+            aria-label="메시지"
+            className="ks-text-input ks-agent-chat-input"
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            onKeyDown={onInputKeyDown}
+            ref={inputRef}
+            rows={1}
+            value={draft}
+          />
+          <IconButton aria-label="보내기" disabled={!draft.trim() || sending} onClick={() => void send()}>
+            <SendIcon />
+          </IconButton>
+        </div>
       </div>
     </section>
   );

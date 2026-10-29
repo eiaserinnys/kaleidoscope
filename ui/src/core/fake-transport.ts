@@ -22,6 +22,9 @@ export interface FakeTransportSeed {
   files: Record<string, string>;
   agents?: Record<string, FakeAgentSeed>;
   agentModels?: AgentModel[];
+  agentGetDelayMs?: number;
+  agentGetError?: string;
+  agentSendError?: string;
 }
 
 export interface FakeAgentSeed {
@@ -160,6 +163,8 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       case "state.get":
         return { op: "state.get", snapshot: clone(snapshot) };
       case "agent.get": {
+        if (seed.agentGetDelayMs) await delay(seed.agentGetDelayMs);
+        if (seed.agentGetError) return fail("server", seed.agentGetError);
         const session = agentFor(request.workspace_id);
         return {
           op: "agent.get",
@@ -186,6 +191,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         return { op: "agent.create", agent: clone(agent) };
       }
       case "agent.send": {
+        if (seed.agentSendError) return fail("server", seed.agentSendError);
         const session = agentFor(request.workspace_id);
         if (!session.agent) return fail("not_found", "이 작업의 PAS가 없습니다");
         addAgentItem(request.workspace_id, "user", request.text);

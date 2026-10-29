@@ -100,8 +100,12 @@ describe("agent_chat block", () => {
     const state = setup();
     render(<AgentChatBlock block={{ type: "agent_chat" }} context={state.context} />);
 
-    expect((await screen.findByRole("button", { name: "Argon" })).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("button", { name: "Sol" }).getAttribute("aria-pressed")).toBe("false");
+    const argonButton = await screen.findByRole("button", { name: "Argon" });
+    const solButton = screen.getByRole("button", { name: "Sol" });
+    expect(argonButton.getAttribute("aria-pressed")).toBe("true");
+    expect(argonButton.classList.contains("is-selected")).toBe(true);
+    expect(solButton.getAttribute("aria-pressed")).toBe("false");
+    expect(solButton.classList.contains("is-selected")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Sol" }));
     fireEvent.click(screen.getByRole("button", { name: "시작" }));
 
@@ -139,7 +143,9 @@ describe("agent_chat block", () => {
     fireEvent.change(input, { target: { value: "보존할 문장" } });
     fireEvent.click(screen.getByRole("button", { name: "보내기" }));
 
-    expect((await screen.findByRole("alert")).textContent).toContain("보낼 수 없습니다");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("보낼 수 없습니다");
+    expect(alert.closest(".ks-agent-chat-input-area")).toBeTruthy();
     expect((input as HTMLTextAreaElement).value).toBe("보존할 문장");
   });
 

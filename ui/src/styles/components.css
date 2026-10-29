@@ -25,6 +25,10 @@
   color: var(--ks-color-accent-contrast);
 }
 
+.ks-button.is-selected {
+  background: var(--ks-color-selection);
+}
+
 .ks-button:disabled,
 .ks-icon-button:disabled {
   cursor: default;

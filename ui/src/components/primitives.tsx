@@ -19,7 +19,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`ks-button ks-button-${variant}`}
+      className={`ks-button ks-button-${variant}${pressed === true ? " is-selected" : ""}`}
       disabled={disabled}
       aria-pressed={pressed}
       onClick={onClick}

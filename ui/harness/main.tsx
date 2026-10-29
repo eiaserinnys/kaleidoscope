@@ -135,20 +135,35 @@ const params = new URLSearchParams(window.location.search);
 const pasMode = params.get("pas");
 const previewAppId = params.get("preview") || "md-editor";
 const previewOnly = params.has("preview");
+const mdViewerSnapshot: ShellSnapshot = params.has("md-ready")
+  ? {
+    ...initialSnapshot,
+    shared: {
+      ...initialSnapshot.shared,
+      windows: initialSnapshot.shared.windows.map((item) => item.id === "viewer-window"
+        ? { ...item, state: { ...item.state, current_file: "Kaleidoscope.md" } }
+        : item),
+    },
+    device: {
+      ...initialSnapshot.device,
+      grants: [{ window_id: "viewer-window", permission: "docs", root_path: "/fake/docs", root_name: "문서", granted_at: timestamp }],
+    },
+  }
+  : initialSnapshot;
 const agentModels: AgentModel[] = [
   { preset: "gemini-4-argon", label: "Argon" },
   { preset: "claude-opus-5.5", label: "Opus" },
   { preset: "codex-6.1-sol", label: "Sol 6.1" },
 ];
 const connectedSnapshot: ShellSnapshot = {
-  ...initialSnapshot,
+  ...mdViewerSnapshot,
   link: { state: "connected", server_url: "https://kaleidoscope.example", device_name: "개발 PC" },
 };
-const demoSnapshot: ShellSnapshot = pasMode === "ready" || pasMode === "empty"
+const demoSnapshot: ShellSnapshot = ["ready", "empty", "loading", "load-error", "send-error"].includes(pasMode ?? "")
   ? connectedSnapshot
   : pasMode === "offline"
-    ? { ...initialSnapshot, link: { state: "offline", server_url: "https://kaleidoscope.example", device_name: "개발 PC", reason: "서버에 닿지 않습니다" } }
-    : initialSnapshot;
+    ? { ...mdViewerSnapshot, link: { state: "offline", server_url: "https://kaleidoscope.example", device_name: "개발 PC", reason: "서버에 닿지 않습니다" } }
+    : mdViewerSnapshot;
 const greetingAgent: AgentInfo = {
   workspace_id: "workspace-1",
   model_preset: "gemini-4-argon",
@@ -166,7 +181,10 @@ const fakeTransport = createFakeTransport({
   snapshot: demoSnapshot,
   folder: { root_path: "/fake/docs", root_name: "문서" },
   agentModels,
-  agents: pasMode === "ready"
+  agentGetDelayMs: pasMode === "loading" ? 5000 : undefined,
+  agentGetError: pasMode === "load-error" ? "작업 PAS를 불러오지 못했습니다" : undefined,
+  agentSendError: pasMode === "send-error" ? "메시지를 보내지 못했습니다" : undefined,
+  agents: pasMode === "ready" || pasMode === "send-error"
     ? { "workspace-1": { agent: greetingAgent, items: greetingItems, models: agentModels } }
     : {},
   files: {
