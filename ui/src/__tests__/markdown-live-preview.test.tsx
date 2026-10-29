@@ -31,6 +31,24 @@ async function openEditor() {
 }
 
 describe("마크다운 실시간 보기", () => {
+  it("코드 블록 밖에서는 펜스를 감추고 블록 안에서는 원문 전체를 보인다", async () => {
+    const text = "# Title\n\n```ts\nconst value = 1;\n```\n\nEnd";
+    const transport = createFakeTransport(makeTestSeed({ editorPath: "README.md", grants: [grantFor("editor-window", "docs")], files: { "README.md": text } }));
+    render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
+    const editor = await screen.findByRole("textbox", { name: "마크다운 편집기" });
+    const view = EditorView.findFromDOM(editor)!;
+    expect(ensureSyntaxTree(view.state, view.state.doc.length, 5000)).not.toBeNull();
+    act(() => view.dispatch({ selection: { anchor: 0 } }));
+    const lines = editor.querySelectorAll(".ks-live-code-block");
+    expect(lines).toHaveLength(3);
+    expect(lines[0].textContent).not.toContain("```");
+    expect(lines[0].textContent).not.toContain("ts");
+    expect(lines[2].textContent).not.toContain("```");
+    act(() => { view.focus(); view.dispatch({ selection: { anchor: view.state.doc.line(4).from } }); });
+    expect(editor.textContent).toContain("```ts");
+    expect(editor.textContent).toContain("const value = 1;");
+  });
+
   it("표를 렌더하고 HTML을 실행하지 않으며 선택과 클릭만으로 원문을 저장하지 않는다", async () => {
     const { editor, view, call } = await openEditor();
     const table = editor.querySelector("table");

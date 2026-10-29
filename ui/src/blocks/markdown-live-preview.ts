@@ -110,40 +110,72 @@ class TableWidget extends WidgetType {
   ignoreEvent() { return false; }
 }
 
-function makeDecorations(state: EditorState, focused: boolean): DecorationSet {
+function selectionTouches(state: EditorState, focused: boolean, from: number, to: number): boolean {
+  return focused && state.selection.ranges.some((range) => range.from <= to && range.to >= from);
+}
+
+function findTables(state: EditorState): SyntaxNode[] {
+  const tables: SyntaxNode[] = [];
+  const containers = new Set(["Document", "Blockquote", "BulletList", "OrderedList", "ListItem"]);
+  syntaxTree(state).iterate({ enter(ref) {
+    if (ref.name === "Table") { tables.push(ref.node); return false; }
+    return containers.has(ref.name);
+  } });
+  return tables;
+}
+
+function tableSelection(state: EditorState, focused: boolean, tables: SyntaxNode[]): string {
+  return tables.filter((table) => selectionTouches(state, focused, table.from, table.to)).map((table) => table.from).join(",");
+}
+
+function makeTableDecorations(state: EditorState, focused: boolean, tables: SyntaxNode[]): DecorationSet {
+  return Decoration.set(tables.filter((table) => !selectionTouches(state, focused, table.from, table.to)).map((table) =>
+    Decoration.replace({ widget: new TableWidget(table, state), block: true }).range(table.from, table.to)), true);
+}
+
+function makeInlineDecorations(view: EditorView): DecorationSet {
+  const { state } = view;
   const ranges: Range<Decoration>[] = [];
-  const selection = focused ? state.selection.ranges : [];
-  const active = (from: number, to: number) => selection.some((range) => range.from <= to && range.to >= from);
+  const active = (from: number, to: number) => selectionTouches(state, view.hasFocus, from, to);
   const lineActive = (position: number) => {
     const line = state.doc.lineAt(position);
     return active(line.from, line.to);
   };
-  const replace = (from: number, to: number, widget?: WidgetType, block = false) => {
-    if (from < to) ranges.push(Decoration.replace({ widget, block }).range(from, to));
+  const replace = (from: number, to: number, widget?: WidgetType) => {
+    if (from < to) ranges.push(Decoration.replace({ widget }).range(from, to));
   };
   const mark = (from: number, to: number, className: string) => {
     if (from < to) ranges.push(Decoration.mark({ class: className }).range(from, to));
   };
   const line = (pos: number, className: string) => ranges.push(Decoration.line({ class: className }).range(state.doc.lineAt(pos).from));
-  syntaxTree(state).iterate({
+  const seen = new Set<string>();
+  for (const visible of view.visibleRanges) syntaxTree(state).iterate({
+    from: visible.from,
+    to: visible.to,
     enter(ref) {
       const node = ref.node;
       const name = node.name;
-      if (name === "Table") {
-        if (!active(node.from, node.to)) replace(node.from, node.to, new TableWidget(node, state), true);
-        return false;
-      }
+      if (name === "Table") return false;
+      const key = `${name}:${node.from}:${node.to}`;
+      if (seen.has(key)) return;
+      seen.add(key);
       if (name === "FencedCode" || name === "CodeBlock") {
         if (name === "FencedCode" && active(node.from, node.to)) return false;
-        let current = state.doc.lineAt(node.from);
-        const end = state.doc.lineAt(node.to).number;
-        while (current.number <= end) {
-          if (!lineActive(current.from)) line(current.from, "ks-live-code-block");
-          if (current.number === end) break;
-          current = state.doc.line(current.number + 1);
-        }
-        if (name === "FencedCode") {
-          for (const child of children(node).filter((part) => part.name === "CodeMark" || part.name === "CodeInfo")) mark(child.from, child.to, "ks-live-muted");
+        const done = new Set<number>();
+        const fenceLines = new Set(children(node).filter((child) => child.name === "CodeMark").map((child) => state.doc.lineAt(child.from).number));
+        for (const visiblePart of view.visibleRanges) {
+          if (visiblePart.to < node.from || visiblePart.from > node.to) continue;
+          let current = state.doc.lineAt(Math.max(node.from, visiblePart.from));
+          const end = state.doc.lineAt(Math.min(node.to, visiblePart.to)).number;
+          while (current.number <= end) {
+            if (!done.has(current.number) && !lineActive(current.from)) {
+              line(current.from, "ks-live-code-block");
+              if (name === "FencedCode" && fenceLines.has(current.number)) replace(current.from, current.to);
+              done.add(current.number);
+            }
+            if (current.number === end) break;
+            current = state.doc.line(current.number + 1);
+          }
         }
         return false;
       }
@@ -192,35 +224,47 @@ function makeDecorations(state: EditorState, focused: boolean): DecorationSet {
   return Decoration.set(ranges, true);
 }
 
-interface PreviewState { focused: boolean; decorations: DecorationSet }
+interface PreviewState { focused: boolean; tables: SyntaxNode[]; selected: string; decorations: DecorationSet }
 const previewField = StateField.define<PreviewState>({
-  create(state) { return { focused: false, decorations: makeDecorations(state, false) }; },
+  create(state) {
+    const tables = findTables(state);
+    return { focused: false, tables, selected: "", decorations: makeTableDecorations(state, false, tables) };
+  },
   update(value, transaction) {
     let focused = value.focused;
-    let refresh = transaction.docChanged || transaction.selection !== undefined;
+    let refresh = transaction.docChanged;
     for (const effect of transaction.effects) {
-      if (effect.is(focusEffect)) { focused = effect.value; refresh = true; }
+      if (effect.is(focusEffect)) focused = effect.value;
       if (effect.is(refreshEffect)) refresh = true;
     }
-    return refresh ? { focused, decorations: makeDecorations(transaction.state, focused) } : value;
+    const tables = refresh ? findTables(transaction.state) : value.tables;
+    const selected = tableSelection(transaction.state, focused, tables);
+    const decorations = refresh || selected !== value.selected
+      ? makeTableDecorations(transaction.state, focused, tables) : value.decorations;
+    return { focused, tables, selected, decorations };
   },
   provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
 });
 
-const treeUpdates = ViewPlugin.fromClass(class {
+const inlinePreview = ViewPlugin.fromClass(class {
+  decorations: DecorationSet;
   private timer: ReturnType<typeof setTimeout> | undefined;
-  update(update: { startState: EditorState; state: EditorState; view: EditorView }) {
+  constructor(view: EditorView) { this.decorations = makeInlineDecorations(view); }
+  update(update: { startState: EditorState; state: EditorState; view: EditorView; docChanged: boolean; selectionSet: boolean; viewportChanged: boolean; focusChanged: boolean }) {
+    if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+      this.decorations = makeInlineDecorations(update.view);
+    }
     if (syntaxTree(update.startState) !== syntaxTree(update.state)) {
       clearTimeout(this.timer);
       this.timer = setTimeout(() => update.view.dispatch({ effects: refreshEffect.of(null) }), 0);
     }
   }
   destroy() { clearTimeout(this.timer); }
-});
+}, { decorations: (plugin) => plugin.decorations });
 
 export const markdownLivePreview: Extension = [
   previewField,
-  treeUpdates,
+  inlinePreview,
   EditorView.domEventHandlers({
     focus: (_event, view) => { view.dispatch({ effects: focusEffect.of(true) }); },
     blur: (_event, view) => { view.dispatch({ effects: focusEffect.of(false) }); },
