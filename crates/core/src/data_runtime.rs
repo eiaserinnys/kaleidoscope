@@ -421,6 +421,36 @@ pub(crate) fn connections_changed(inner: &Arc<Inner>, changed: &[String]) {
     }
 }
 
+pub(crate) fn refresh_login_required(inner: &Arc<Inner>, connection: &str) {
+    let retries: Vec<_> = {
+        let windows = inner.data_runtimes.windows.lock().unwrap();
+        windows
+            .iter()
+            .filter_map(|(window, runtime)| {
+                let names: Vec<_> = runtime
+                    .sources
+                    .iter()
+                    .filter_map(|(name, source)| {
+                        let SourceStatus::LoginRequired { permission } = &source.status else {
+                            return None;
+                        };
+                        let uses_connection = runtime.definition.permissions.iter().any(|decl| {
+                            matches!(decl, kaleidoscope_contract::PermissionDecl::Connection {
+                                id, connection: declared, ..
+                            } if id == permission && declared == connection)
+                        });
+                        uses_connection.then(|| name.clone())
+                    })
+                    .collect();
+                (!names.is_empty()).then(|| (window.clone(), names))
+            })
+            .collect()
+    };
+    for (window, names) in retries {
+        let _ = refresh(inner, &window, &names, false);
+    }
+}
+
 pub(crate) fn start_timer(inner: Weak<Inner>) {
     if let Some(receiver) = inner
         .upgrade()

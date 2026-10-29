@@ -85,7 +85,10 @@ pub(crate) fn remove_link(data_dir: &Path) -> Result<(), CoreError> {
     }
 }
 
-fn load_file<T: DeserializeOwned + Default>(path: &Path, file_name: &str) -> Result<T, CoreError> {
+pub(crate) fn load_file<T: DeserializeOwned + Default>(
+    path: &Path,
+    file_name: &str,
+) -> Result<T, CoreError> {
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(T::default()),
@@ -159,7 +162,7 @@ fn save_device(data_dir: &Path, device: &DeviceState) -> Result<(), CoreError> {
     )
 }
 
-fn save_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), CoreError> {
+pub(crate) fn save_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), CoreError> {
     let bytes = serde_json::to_vec_pretty(value)
         .map_err(|_| error::make(kaleidoscope_contract::ErrorCode::Io))?;
     let file_name = path

@@ -33,6 +33,24 @@ impl Host for DevHost {
     fn pick_folder(&self) -> Option<PathBuf> {
         env::var_os("KALEIDOSCOPE_DEV_PICK").map(PathBuf::from)
     }
+
+    fn open_url(&self, _: &str) -> std::io::Result<()> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "개발용 다리에서는 브라우저를 열 수 없습니다",
+        ))
+    }
+}
+
+#[cfg(test)]
+mod host_tests {
+    use super::{DevHost, Host};
+
+    #[test]
+    fn devbridge_does_not_open_oauth_urls() {
+        let error = DevHost.open_url("https://auth.example").unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::Unsupported);
+    }
 }
 
 struct Args {
