@@ -114,7 +114,7 @@ describe("마크다운 실시간 보기", () => {
     const cell = table!.querySelectorAll("td")[1];
     act(() => { fireEvent.mouseDown(cell); });
     expect(editor.querySelector("table")).toBeTruthy();
-    act(() => { fireEvent.mouseUp(cell); fireEvent.click(cell); });
+    act(() => { fireEvent.mouseUp(cell); });
     await waitFor(() => expect(editor.querySelector("table")).toBeNull());
     expect(view.state.sliceDoc()).toBe(source);
     expect(call.mock.calls.filter(([command]) => command.op === "files.write")).toHaveLength(0);

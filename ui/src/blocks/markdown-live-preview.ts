@@ -102,11 +102,10 @@ class TableWidget extends WidgetType {
         const td = document.createElement(row.name === "TableHeader" ? "th" : "td");
         td.style.textAlign = alignment[index] ?? "left";
         if (cell.node) appendInline(td, cell.node, this.state, view.plugin(referencePreview)!.index);
-        td.addEventListener("mousedown", (event) => { event.preventDefault(); });
-        td.addEventListener("click", (event) => {
+        td.addEventListener("mousedown", (event) => {
+          if (event.button !== 0) return;
           event.preventDefault();
-          view.focus();
-          view.dispatch({ selection: { anchor: cell.node?.from ?? cell.from }, scrollIntoView: true });
+          view.plugin(pointerPreview)?.selectTableOnRelease(cell.node?.from ?? cell.from);
         });
         tr.append(td);
       }
@@ -114,14 +113,9 @@ class TableWidget extends WidgetType {
     }
     wrap.append(table);
     wrap.addEventListener("mousedown", (event) => {
-      if (event.target !== wrap && event.target !== table) return;
+      if (event.button !== 0 || (event.target !== wrap && event.target !== table)) return;
       event.preventDefault();
-    });
-    wrap.addEventListener("click", (event) => {
-      if (event.target !== wrap && event.target !== table) return;
-      event.preventDefault();
-      view.focus();
-      view.dispatch({ selection: { anchor: this.node.from }, scrollIntoView: true });
+      view.plugin(pointerPreview)?.selectTableOnRelease(this.node.from);
     });
     return wrap;
   }
@@ -341,32 +335,65 @@ const inlinePreview = ViewPlugin.fromClass(class {
 
 const pointerPreview = ViewPlugin.fromClass(class {
   private listening = false;
-  private destroyed = false;
+  private clickStart: { focused: boolean; selection: EditorSelection } | null = null;
+  private tablePosition: number | null = null;
+  private readonly window: Window;
   constructor(private readonly view: EditorView) {
+    this.window = view.dom.ownerDocument.defaultView!;
     // 위젯이 CodeMirror 이벤트를 무시해도 누름 시작을 먼저 잡는다.
     view.contentDOM.addEventListener("mousedown", this.start, true);
+    this.window.addEventListener("blur", this.cancel);
+    this.window.addEventListener("pointercancel", this.cancel, true);
+    this.window.addEventListener("pointermove", this.move);
   }
   private readonly release = (event: MouseEvent) => {
     if (event.button !== 0) return;
-    this.view.dom.ownerDocument.removeEventListener("mouseup", this.release);
+    this.finish(true);
+  };
+  private finish(openTable: boolean) {
+    if (!this.listening) return;
+    this.window.removeEventListener("mouseup", this.release);
     this.listening = false;
-    // CodeMirror가 문서 mouseup으로 선택을 마친 뒤 렌더 범위를 반영한다.
-    queueMicrotask(() => {
-      if (!this.destroyed && !this.listening) this.view.dispatch({ effects: pointerEffect.of(null) });
-    });
+    const position = this.tablePosition;
+    this.tablePosition = null;
+    if (openTable && position !== null) {
+      this.view.focus();
+      this.view.dispatch({ selection: { anchor: position }, effects: pointerEffect.of(null), scrollIntoView: true });
+    } else {
+      this.view.dispatch({ effects: pointerEffect.of(null) });
+    }
+  }
+  private readonly cancel = () => { this.clickStart = null; this.finish(false); };
+  private readonly move = (event: PointerEvent) => {
+    if (this.listening && event.buttons === 0) this.cancel();
   };
   private readonly start = (event: MouseEvent) => {
-    if (event.button !== 0 || this.listening) return;
+    if (event.button !== 0) return;
+    if (this.listening) this.cancel();
+    const current = { focused: this.view.hasFocus, selection: this.view.state.selection };
+    if (event.detail < 2 || !this.clickStart) this.clickStart = current;
     this.listening = true;
-    this.view.dispatch({ effects: pointerEffect.of({ focused: this.view.hasFocus, selection: this.view.state.selection }) });
-    this.view.dom.ownerDocument.addEventListener("mouseup", this.release);
+    this.view.dispatch({ effects: pointerEffect.of(current) });
+    // CodeMirror는 document 버블에서 mouseup을 처리하므로 window 버블은 그 뒤다.
+    this.window.addEventListener("mouseup", this.release);
   };
-  destroy() {
-    this.destroyed = true;
-    this.view.contentDOM.removeEventListener("mousedown", this.start, true);
-    this.view.dom.ownerDocument.removeEventListener("mouseup", this.release);
+  beforeSelection(event: MouseEvent) {
+    // 대상 판정 뒤, CodeMirror가 클릭 좌표를 읽기 전에 첫 누름의 배치를 복원한다.
+    if (event.detail >= 2 && this.listening && this.clickStart) {
+      this.view.dispatch({ effects: pointerEffect.of(this.clickStart) });
+    }
+    return false;
   }
-});
+  selectTableOnRelease(position: number) { this.tablePosition = position; }
+  update(update: ViewUpdate) { if (update.docChanged) this.clickStart = null; }
+  destroy() {
+    this.view.contentDOM.removeEventListener("mousedown", this.start, true);
+    this.window.removeEventListener("mouseup", this.release);
+    this.window.removeEventListener("blur", this.cancel);
+    this.window.removeEventListener("pointercancel", this.cancel, true);
+    this.window.removeEventListener("pointermove", this.move);
+  }
+}, { eventHandlers: { mousedown(event) { return this.beforeSelection(event); } } });
 
 function enterTable(view: EditorView, forward: boolean): boolean {
   const selection = view.state.selection.main;
