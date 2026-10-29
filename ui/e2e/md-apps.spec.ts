@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
+
 test("opens, edits, autosaves, and reads a markdown file in both app definitions", async ({ page }) => {
   await page.goto("/");
   const editor = page.getByTestId("app-window-md-editor");

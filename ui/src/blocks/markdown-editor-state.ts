@@ -5,6 +5,7 @@ import { EditorState } from "@codemirror/state";
 import { keymap, EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { GFM } from "@lezer/markdown";
+import { markdownLivePreview } from "./markdown-live-preview";
 
 const markdownHighlighting = HighlightStyle.define([
   { tag: tags.heading, color: "var(--ks-color-text)", fontWeight: "600" },
@@ -24,6 +25,7 @@ export function createMarkdownEditorState(
   const extensions = [
     ...(text.includes("\r\n") ? [EditorState.lineSeparator.of("\r\n")] : []),
     markdown({ extensions: GFM }),
+    markdownLivePreview,
     syntaxHighlighting(markdownHighlighting),
     history(),
     keymap.of([

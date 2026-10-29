@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { Block, FileEntry } from "../contract/contract";
 import { toCoreError } from "../core/core-transport";
 import { Button, IconButton, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
+import { SplitPaneContext } from "./split-pane-context";
 
 type FileTreeBlockData = Extract<Block, { type: "file_tree" }>;
 
@@ -12,6 +13,18 @@ function extensionOf(name: string): string {
 }
 
 export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; context: BlockContext }) {
+  const pane = useContext(SplitPaneContext);
+  const treeRef = useRef<HTMLDivElement>(null);
+  const restoreToggleFocus = useRef(false);
+  useLayoutEffect(() => {
+    if (!restoreToggleFocus.current) return;
+    restoreToggleFocus.current = false;
+    treeRef.current?.querySelector<HTMLButtonElement>(pane?.collapsed ? ".ks-file-tree-expand button" : ".ks-file-tree-collapse button")?.focus();
+  }, [pane?.collapsed]);
+  const togglePane = () => {
+    restoreToggleFocus.current = true;
+    pane?.toggle();
+  };
   const { snapshot, store, window, definition } = context;
   const permission = block.root.permission;
   const grant = snapshot.device.grants.find((item) => item.window_id === window.id && item.permission === permission) ?? null;
@@ -156,8 +169,10 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
   );
 
   return (
-    <div className="ks-file-tree">
-      {!grant ? (
+    <div className={`ks-file-tree${pane?.collapsed ? " is-collapsed" : ""}`} ref={treeRef}>
+      {pane?.collapsed ? (
+        <span className="ks-file-tree-expand"><IconButton aria-label="목록 펼치기" onClick={togglePane}><Chevron expanded={false} /></IconButton></span>
+      ) : !grant ? (
         <div className="ks-file-tree-ungranted">
           <Button onClick={pickFolder}>{permissionLabel} 고르기</Button>
           {actionError ? <span className="ks-inline-error" role="alert">{actionError}</span> : null}
@@ -166,6 +181,7 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
         <>
           <div className="ks-file-tree-header">
             <span className="ks-file-tree-root-name" title={grant.root_name}>{grant.root_name}</span>
+            {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><Chevron expanded={false} direction="left" /></IconButton></span> : null}
             <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}>
               <FolderChangeIcon />
             </IconButton>
@@ -182,9 +198,9 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
   );
 }
 
-function Chevron({ expanded }: { expanded: boolean }) {
+function Chevron({ expanded, direction = "right" }: { expanded: boolean; direction?: "left" | "right" }) {
   return (
-    <svg aria-hidden="true" className={`ks-chevron${expanded ? " is-expanded" : ""}`} viewBox="0 0 16 16">
+    <svg aria-hidden="true" className={`ks-chevron${expanded ? " is-expanded" : ""}${direction === "left" ? " is-left" : ""}`} viewBox="0 0 16 16">
       <path d="m5.5 3.5 4.5 4.5-4.5 4.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
     </svg>
   );

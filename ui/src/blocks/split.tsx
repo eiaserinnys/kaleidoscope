@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type Keyboard
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { renderBlock } from "../render/render-block";
+import { SplitPaneContext } from "./split-pane-context";
 
 type SplitBlockData = Extract<Block, { type: "split" }>;
 
@@ -10,10 +11,10 @@ function initialWeights(block: SplitBlockData): number[] {
   return block.children.map(() => 1);
 }
 
-function buildTemplate(weights: number[]): string {
+function buildTemplate(weights: number[], collapsed: Set<number>): string {
   return weights.flatMap((weight, index) => index === 0
-    ? [`minmax(var(--ks-pane-min-size), ${weight}fr)`]
-    : ["var(--ks-line-width)", `minmax(var(--ks-pane-min-size), ${weight}fr)`]).join(" ");
+    ? [collapsed.has(index) ? "var(--ks-icon-button-size)" : `minmax(var(--ks-pane-min-size), ${weight}fr)`]
+    : ["var(--ks-line-width)", collapsed.has(index) ? "var(--ks-icon-button-size)" : `minmax(var(--ks-pane-min-size), ${weight}fr)`]).join(" ");
 }
 
 function readSplitSizes(element: HTMLElement) {
@@ -26,6 +27,7 @@ function readSplitSizes(element: HTMLElement) {
 
 export function SplitBlock({ block, context }: { block: SplitBlockData; context: BlockContext }) {
   const [weights, setWeights] = useState(() => initialWeights(block));
+  const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     index: number;
@@ -35,7 +37,7 @@ export function SplitBlock({ block, context }: { block: SplitBlockData; context:
     pairWeight: number;
     minPaneSize: number;
   } | null>(null);
-  const template = useMemo(() => buildTemplate(weights), [weights]);
+  const template = useMemo(() => buildTemplate(weights, collapsed), [weights, collapsed]);
   const sizesKey = block.sizes?.join(",") ?? `equal-${block.children.length}`;
   const style: CSSProperties = block.direction === "row"
     ? { gridTemplateColumns: template }
@@ -54,6 +56,7 @@ export function SplitBlock({ block, context }: { block: SplitBlockData; context:
   }
 
   function beginDrag(event: PointerEvent<HTMLDivElement>, index: number) {
+    if (collapsed.has(index) || collapsed.has(index + 1)) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect || !containerRef.current) return;
     const { handleSize, minPaneSize } = readSplitSizes(containerRef.current);
@@ -88,6 +91,7 @@ export function SplitBlock({ block, context }: { block: SplitBlockData; context:
   }
 
   function resizeByKey(event: KeyboardEvent<HTMLDivElement>, index: number) {
+    if (collapsed.has(index) || collapsed.has(index + 1)) return;
     const decrement = block.direction === "row" ? "ArrowLeft" : "ArrowUp";
     const increment = block.direction === "row" ? "ArrowRight" : "ArrowDown";
     if (event.key !== decrement && event.key !== increment) return;
@@ -118,7 +122,16 @@ export function SplitBlock({ block, context }: { block: SplitBlockData; context:
     >
       {block.children.map((child, index) => (
         <div className="ks-split-pane" key={index}>
-          {renderBlock(child, context)}
+          <SplitPaneContext.Provider value={{
+            collapsed: collapsed.has(index),
+            toggle: () => setCollapsed((current) => {
+              const next = new Set(current);
+              if (next.has(index)) next.delete(index); else next.add(index);
+              return next;
+            }),
+          }}>
+            {renderBlock(child, context)}
+          </SplitPaneContext.Provider>
         </div>
       )).flatMap((child, index) => index === 0
         ? [child]
@@ -131,7 +144,7 @@ export function SplitBlock({ block, context }: { block: SplitBlockData; context:
             onKeyDown={(event) => resizeByKey(event, index - 1)}
             onPointerDown={(event) => beginDrag(event, index - 1)}
             role="separator"
-            tabIndex={0}
+            tabIndex={collapsed.has(index - 1) || collapsed.has(index) ? -1 : 0}
           />,
           child,
         ])}

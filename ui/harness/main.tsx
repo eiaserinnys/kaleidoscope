@@ -13,6 +13,7 @@ import "@kaleidoscope/ui/styles.css";
 import "./harness.css";
 import mdEditorJson from "../../examples/md-editor.json";
 import mdViewerJson from "../../examples/md-viewer.json";
+import pluginsDocument from "./create-plugins.txt?raw";
 
 const mdEditor = mdEditorJson as AppDefinition;
 const mdViewer = mdViewerJson as AppDefinition;
@@ -79,20 +80,74 @@ const sampleDocument = `# kaleidoscope 작업 메모
 [프로젝트 안내](https://example.com) · ![표식 아이콘](marker.png)
 `;
 
+const previewDocument = `# Create plugins
+
+> Create custom plugins to extend Claude Code with skills, agents, hooks, and MCP servers.
+
+Plugins let you extend Claude Code with custom functionality that can be shared across projects and teams. This guide covers creating your own plugins with skills, agents, hooks, and MCP servers.
+
+Looking to install existing plugins? See [Discover and install plugins](/en/discover-plugins). For complete technical specifications, see [Plugins reference](/en/plugins-reference).
+
+## When to use plugins vs standalone configuration
+
+Claude Code supports two ways to add custom skills, agents, and hooks:
+
+| Approach | Skill names | Best for |
+| :--- | :--- | :--- |
+| **Standalone** (\`.claude/\` directory) | \`/hello\` | Personal workflows, project-specific customizations, quick experiments |
+| **Plugins** (directories with a \`.claude-plugin/plugin.json\`) | \`/plugin-name:hello\` | Sharing with teammates, distributing to community, versioned releases, reusable across projects |
+
+**Use standalone configuration when:**
+
+* You're customizing Claude Code for a single project
+* The configuration is personal and doesn't need to be shared
+* You're experimenting with skills or hooks before packaging them
+
+### Example
+
+\`\`\`sh
+claude --plugin-dir ./my-plugin
+\`\`\`
+`;
+
+const reclickDocument = `# 다시 누르기 시험
+
+## 제목 줄 글자
+
+> 인용 줄 안의 글자들
+
+본문에 [안내 링크](https://example.com/a/very/long/path) 뒤의 글자들이 있다.
+
+    첫째 코드 줄
+    둘째 코드 줄
+
+끝.
+
+| 항목 | 상태 |
+| --- | --- |
+| 하나 | 둘 |
+| **굵은 글자** | \`코드 낱말\` |
+`;
+
 const fakeTransport = createFakeTransport({
   snapshot: initialSnapshot,
   folder: { root_path: "/fake/docs", root_name: "문서" },
   files: {
     "README.md": "# 첫 문서\n\n편집과 자동 저장을 확인합니다.\n",
     "Kaleidoscope.md": sampleDocument,
+    "Create-plugins.md": pluginsDocument,
+    "Create-plugins-preview.md": previewDocument,
+    "large.md": `${"Long paragraph with **bold** and [link](/example).\n\n".repeat(20000)}`,
     "notes/meeting.md": "# 회의 메모\n\n다음 내용을 이어 씁니다.\n",
     "notes/line-endings.md": "첫 줄\r\n둘째 줄\r\n",
     "notes/READ-ME.MD": "# 대문자 확장자\n",
     "notes/skip.txt": "트리에서 숨길 파일입니다",
+    "reclick.md": reclickDocument,
   },
 });
 
 const coreUrl = new URLSearchParams(window.location.search).get("core");
+const previewOnly = new URLSearchParams(window.location.search).has("preview");
 const transport = coreUrl ? createHttpTransport(coreUrl) : fakeTransport;
 const store = createShellStore(transport);
 
@@ -107,7 +162,7 @@ function Harness() {
         <h1>kaleidoscope</h1>
         <span>블록 검수 창</span>
       </header>
-      <div className="ks-harness-apps">
+      <div className={`ks-harness-apps${previewOnly ? " is-preview" : ""}`}>
         <section aria-label="md-editor" className="ks-harness-window" data-testid="app-window-md-editor">
           <header className="ks-harness-window-header">md-editor</header>
           <div className="ks-harness-window-content">

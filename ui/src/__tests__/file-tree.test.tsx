@@ -11,6 +11,16 @@ afterEach(() => {
 });
 
 describe("file_tree block", () => {
+  it("목록 접기와 펼치기 뒤 짝이 되는 단추에 포커스를 유지한다", async () => {
+    const store = createShellStore(createFakeTransport(makeTestSeed({ grants: [grantFor("editor-window", "docs")] })));
+    render(<AppWindowContent store={store} windowId="editor-window" />);
+    const collapse = await screen.findByRole("button", { name: "목록 접기" });
+    collapse.focus();
+    fireEvent.click(collapse);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "목록 펼치기" }));
+    fireEvent.click(screen.getByRole("button", { name: "목록 펼치기" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "목록 접기" }));
+  });
   it("asks for the declared folder and lists files after it is granted", async () => {
     const transport = createFakeTransport(makeTestSeed({
       files: { "README.md": "# Hello", "notes.txt": "skip" },
