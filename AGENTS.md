@@ -15,6 +15,7 @@
 | `crates/contract` | 코어와 화면 사이 계약(명령, 응답, 이벤트, 앱 정의, 엔티티). Rust 타입이 정본이고 ts-rs로 TS를 만든다 |
 | `crates/core` | 코어. 파일, 저장, 권한 집행. Tauri에 의존하지 않는다 |
 | `crates/devbridge` | 개발용 HTTP 다리. 브라우저에서 실제 코어로 화면을 검증할 때 쓴다 |
+| `crates/orchestrator` | 앱 레지스트리, 기기 연결과 에이전트용 MCP 서버 |
 | `ui/` | 블록 렌더러와 블록(pnpm 패키지 `@kaleidoscope/ui`). `ui/src/contract/`는 생성물이라 손대지 않는다 |
 | `app/` | Tauri 앱. `app/src-tauri`는 코어를 얇게 감싸고, `app/src`는 쉘 화면이다 |
 | `examples/` | 예제 앱 정의(md-editor, md-viewer). 계약 테스트가 이 파일을 읽어 확인한다 |
@@ -23,6 +24,7 @@
 
 - 계약 TS 다시 만들기와 계약 테스트: `cargo test -p kaleidoscope-contract` (생성물이 바뀌면 함께 커밋한다)
 - 코어 테스트: `cargo test -p kaleidoscope-core`
+- 오케스트레이터 로컬 실행: `KALEIDOSCOPE_MCP_TOKEN=dev KALEIDOSCOPE_DB_PATH=/tmp/ks.db cargo run -p kaleidoscope-orchestrator`
 - Windows 설치본은 GitHub Actions에서만 빌드한다. 개발 서버(eiaserinnys)에서는 Tauri 전체 빌드를 하지 않는다.
 
 ## 지킬 것
