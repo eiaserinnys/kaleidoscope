@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import type { AgentInfo, AgentItem, AgentModel, AgentUpdate, Block } from "../contract/contract";
 import { Button, EmptyState, IconButton, Notice, StatusText } from "../components/primitives";
-import { ArrowUp, MessageSquare } from "../components/icons";
+import { ArrowUp, MessageSquare, Paperclip } from "../components/icons";
+import { AGENT_ATTACHMENTS_MAX, AGENT_ATTACHMENT_MAX_BYTES, AGENT_ATTACHMENTS_TOTAL_MAX_BYTES } from "../contract/limits";
 import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
 import { MarkdownText } from "./markdown-text";
 import { ThinkingOrb } from "thinking-orbs";
+import { DraftChip, HistoryAttachment, ImagePreview, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
 
 type AgentChatBlockData = Extract<Block, { type: "agent_chat" }>;
 
@@ -22,7 +24,9 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState("");
-  const [pending, setPending] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ text: string; attachments: DraftAttachment[] } | null>(null);
+  const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
+  const [preview, setPreview] = useState<Preview | null>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -30,9 +34,11 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const [delta, setDelta] = useState("");
   const historyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const followTail = useRef(true);
   const loadGeneration = useRef(0);
   const pendingUpdates = useRef<AgentUpdate[] | null>(null);
+  const closePreview = useCallback(() => setPreview(null), []);
 
   const applyUpdate = useCallback((update: AgentUpdate) => {
     if (update.kind === "created") {
@@ -156,22 +162,50 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const send = async (returnFocus = false) => {
     const submittedDraft = draft;
     const text = submittedDraft.trim();
-    if (!text || sending) return;
+    const submittedAttachments = attachments;
+    if ((!text && submittedAttachments.length === 0) || sending) return;
     followTail.current = true;
-    setPending(text);
+    setPending({ text, attachments: submittedAttachments });
     setDraft("");
+    setAttachments([]);
     setSending(true);
     setSendError(null);
     if (returnFocus) inputRef.current?.focus();
     try {
-      await context.store.call({ op: "agent.send", workspace_id: workspaceId, text });
+      const uploads = await Promise.all(submittedAttachments.map(readUpload));
+      await context.store.call({ op: "agent.send", workspace_id: workspaceId, text, ...(uploads.length ? { attachments: uploads } : {}) });
     } catch (reason) {
       setPending(null);
       setSendError(toCoreError(reason).message);
       setDraft((current) => current ? `${submittedDraft}\n${current}` : submittedDraft);
+      setAttachments((current) => [...submittedAttachments, ...current]);
     } finally {
       setSending(false);
     }
+  };
+
+  const addAttachments = (newAttachments: DraftAttachment[]) => {
+    setSendError(null);
+    const accepted = [...attachments];
+    let total = accepted.reduce((sum, item) => sum + item.file.size, 0);
+    for (const attachment of newAttachments) {
+      if (accepted.length >= AGENT_ATTACHMENTS_MAX) { setSendError("첨부는 한 번에 10개까지입니다"); break; }
+      if (attachment.file.size > AGENT_ATTACHMENT_MAX_BYTES) { setSendError(`${attachment.name}은 20MB를 넘어 첨부할 수 없습니다`); continue; }
+      if (total + attachment.file.size > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES) { setSendError("첨부의 합은 30MB까지입니다"); continue; }
+      accepted.push(attachment);
+      total += attachment.file.size;
+    }
+    setAttachments(accepted);
+  };
+
+  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const data = event.clipboardData;
+    const files = Array.from(data.files);
+    const pasted = files.length ? files : Array.from(data.items).filter((item) => item.kind === "file").map((item) => item.getAsFile()).filter((file): file is File => file !== null);
+    if (!pasted.length) return;
+    if (!Array.from(data.types).includes("text/plain")) event.preventDefault();
+    const extensions: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };
+    addAttachments(pasted.map((file) => makeDraftAttachment(file, extensions[file.type] ? `붙여넣은 이미지.${extensions[file.type]}` : file.name || "붙여넣은 파일")));
   };
 
   const onInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -227,8 +261,8 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         ref={historyRef}
         role="log"
       >
-        {items.map((item) => <HistoryItem key={item.id} item={item} />)}
-        {pending !== null ? <div className="ks-agent-chat-user is-pending">{pending}</div> : null}
+        {items.map((item) => <HistoryItem key={item.id} item={item} workspaceId={workspaceId} store={context.store} onPreview={setPreview} onError={setSendError} />)}
+        {pending !== null ? <div className="ks-agent-chat-user is-pending">{pending.text}{pending.attachments.length ? <div className={`ks-agent-attachment-history${pending.text ? " has-text" : ""}`}>{pending.attachments.map((attachment) => <PendingAttachment key={attachment.id} attachment={attachment} onPreview={setPreview} />)}</div> : null}</div> : null}
         {delta ? <div className="ks-agent-chat-assistant"><div className="ks-agent-chat-assistant-content"><MarkdownText>{delta}</MarkdownText></div></div> : null}
         {(busy || pending !== null) && !delta ? (
           <div className="ks-agent-chat-working">
@@ -239,27 +273,35 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       </div>
       <div className="ks-agent-chat-input-area">
         {sendError ? <Notice role="alert">{sendError}</Notice> : null}
+        {attachments.length ? <div className="ks-agent-attachment-list">{attachments.map((attachment) => <DraftChip key={attachment.id} attachment={attachment} onPreview={setPreview} onRemove={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))} />)}</div> : null}
         <div className="ks-agent-chat-input-row">
+          <input type="file" multiple hidden ref={fileRef} onChange={(event) => {
+            addAttachments(Array.from(event.currentTarget.files ?? []).map((file) => makeDraftAttachment(file, file.name)));
+            event.currentTarget.value = "";
+          }} />
+          <IconButton aria-label="파일 첨부" onClick={() => fileRef.current?.click()}><Paperclip /></IconButton>
           <textarea
             aria-label="메시지"
             className="ks-text-input ks-agent-chat-input"
             onChange={(event) => setDraft(event.currentTarget.value)}
             onKeyDown={onInputKeyDown}
+            onPaste={onPaste}
             ref={inputRef}
             rows={1}
             value={draft}
           />
-          <IconButton aria-label="보내기" disabled={!draft.trim() || sending} onClick={() => void send(true)}>
+          <IconButton aria-label="보내기" disabled={(!draft.trim() && !attachments.length) || sending} onClick={() => void send(true)}>
             <ArrowUp />
           </IconButton>
         </div>
       </div>
+      {preview ? <ImagePreview preview={preview} onClose={closePreview} /> : null}
     </section>
   );
 }
 
-function HistoryItem({ item }: { item: AgentItem }) {
-  if (item.kind === "user") return <div className="ks-agent-chat-user">{item.text}</div>;
+function HistoryItem({ item, workspaceId, store, onPreview, onError }: { item: AgentItem; workspaceId: string; store: BlockContext["store"]; onPreview: (preview: Preview) => void; onError: (message: string) => void }) {
+  if (item.kind === "user") return <div className="ks-agent-chat-user">{item.text}{item.attachments?.length ? <div className={`ks-agent-attachment-history${item.text ? " has-text" : ""}`}>{item.attachments.map((attachment, index) => <HistoryAttachment key={index} attachment={attachment} workspaceId={workspaceId} itemId={item.id} index={index} store={store} onPreview={onPreview} onError={onError} />)}</div> : null}</div>;
   if (item.kind === "assistant") {
     return <div className="ks-agent-chat-assistant"><div className="ks-agent-chat-assistant-content"><MarkdownText>{item.text}</MarkdownText></div></div>;
   }

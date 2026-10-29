@@ -11,11 +11,13 @@ import { makeTestSnapshot } from "./fixtures";
 
 beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null as unknown as CanvasRenderingContext2D);
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:preview"), revokeObjectURL: vi.fn() }));
 });
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 const definition: AppDefinition = {
@@ -72,6 +74,8 @@ function setup(options: {
       if (options.rejectSend) throw { code: "server", message: "보낼 수 없습니다", details: [] };
       return { op: "agent.send" };
     }
+    if (request.op === "agent.attachment") return { op: "agent.attachment", name: "image.png", mime: "image/png", data_base64: "aGVsbG8=" };
+    if (request.op === "agent.attachment_open") return { op: "agent.attachment_open" };
     throw new Error(`Unexpected request ${request.op}`);
   });
   const store = {
@@ -313,5 +317,113 @@ describe("agent_chat block", () => {
     await sending;
     expect(updates.some((event) => event.event === "agent.update" && event.update.kind === "item" && event.update.item.kind === "user")).toBe(true);
     store.dispose();
+  });
+});
+
+describe("agent_chat attachments", () => {
+  async function ready(options: Parameters<typeof setup>[0] = {}) {
+    const state = setup({ agent: makeAgent(), ...options });
+    const view = render(<AgentChatBlock block={{ type: "agent_chat" }} context={state.context} />);
+    const input = await screen.findByRole("textbox", { name: "메시지" });
+    return { state, view, input, picker: view.container.querySelector('input[type="file"]') as HTMLInputElement };
+  }
+
+  it("selects, removes and sends an attachment without text", async () => {
+    const { state, input, picker } = await ready();
+    fireEvent.change(picker, { target: { files: [new File(["hello"], "note.txt", { type: "text/plain" }), new File(["x"], "other.txt")] } });
+    fireEvent.click(screen.getByRole("button", { name: "other.txt 빼기" }));
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "agent.send", workspace_id: "workspace-1", text: "", attachments: [{ name: "note.txt", mime: "text/plain", data_base64: "aGVsbG8=" }] }));
+    expect(screen.queryByRole("button", { name: "note.txt 빼기" })).toBeNull();
+  });
+
+  it("removes an image without leaving its preview on the following file chip", async () => {
+    const { picker } = await ready();
+    fireEvent.change(picker, { target: { files: [new File(["image"], "사진.png", { type: "image/png" }), new File(["memo"], "메모.txt", { type: "text/plain" })] } });
+    await screen.findByRole("button", { name: /^사진\.png$/ });
+    fireEvent.click(screen.getByRole("button", { name: "사진.png 빼기" }));
+    const chip = screen.getByRole("button", { name: "메모.txt 빼기" }).closest(".ks-agent-attachment-chip")!;
+    expect(chip.querySelector("img")).toBeNull();
+    expect(chip.querySelector(".lucide-file")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^메모\.txt$/ })).toBeNull();
+  });
+
+  it("keeps Tab focus inside the image dialog and restores the background inert state", async () => {
+    const { picker, input } = await ready();
+    const background = Array.from(document.body.children).find((element) => element.contains(input))!;
+    const originallyInert = document.createElement("div");
+    originallyInert.setAttribute("inert", "");
+    document.body.appendChild(originallyInert);
+    fireEvent.change(picker, { target: { files: [new File(["image"], "사진.png", { type: "image/png" })] } });
+    const thumbnail = await screen.findByRole("button", { name: /^사진\.png$/ });
+    thumbnail.focus();
+    fireEvent.click(thumbnail);
+    const dialog = screen.getByRole("dialog");
+    expect(background.hasAttribute("inert")).toBe(true);
+    const user = userEvent.setup();
+    await user.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await user.tab({ shift: true });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(background.hasAttribute("inert")).toBe(false);
+    expect(originallyInert.hasAttribute("inert")).toBe(true);
+    expect(document.activeElement).toBe(thumbnail);
+    originallyInert.remove();
+  });
+
+  it("adds pasted images, prevents image-only paste and preserves text paste", async () => {
+    const { input } = await ready();
+    const image = new File(["image"], "image.png", { type: "image/png" });
+    const imageOnly = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(imageOnly, "clipboardData", { value: { files: [image], types: ["Files"], items: [] } });
+    fireEvent(input, imageOnly);
+    expect(imageOnly.defaultPrevented).toBe(true);
+    expect(screen.getByRole("button", { name: "붙여넣은 이미지.png 빼기" })).toBeTruthy();
+    const withText = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(withText, "clipboardData", { value: { files: [], types: ["text/plain", "Files"], items: [{ kind: "file", getAsFile: () => image }] } });
+    fireEvent(input, withText);
+    expect(withText.defaultPrevented).toBe(false);
+    expect(screen.getAllByRole("button", { name: "붙여넣은 이미지.png 빼기" })).toHaveLength(2);
+  });
+
+  it("enforces count, file size and total size limits", async () => {
+    const { picker } = await ready();
+    fireEvent.change(picker, { target: { files: Array.from({ length: 11 }, (_, i) => new File(["a"], `${i}.txt`)) } });
+    expect(screen.getByRole("alert").textContent).toContain("첨부는 한 번에 10개까지입니다");
+    for (let i = 0; i < 10; i++) fireEvent.click(screen.getByRole("button", { name: `${i}.txt 빼기` }));
+    const big = new File([], "big.bin"); Object.defineProperty(big, "size", { value: 20 * 1024 * 1024 + 1 });
+    fireEvent.change(picker, { target: { files: [big] } });
+    expect(screen.getByRole("alert").textContent).toContain("big.bin은 20MB를 넘어 첨부할 수 없습니다");
+    const a = new File([], "a.bin"); const b = new File([], "b.bin");
+    Object.defineProperty(a, "size", { value: 20 * 1024 * 1024 }); Object.defineProperty(b, "size", { value: 11 * 1024 * 1024 });
+    fireEvent.change(picker, { target: { files: [a, b] } });
+    expect(screen.getByRole("alert").textContent).toContain("첨부의 합은 30MB까지입니다");
+    expect(screen.queryByRole("button", { name: "b.bin 빼기" })).toBeNull();
+  });
+
+  it("restores the draft and attachments when a send fails", async () => {
+    const { picker, input } = await ready({ rejectSend: true });
+    fireEvent.change(input, { target: { value: "요청" } });
+    fireEvent.change(picker, { target: { files: [new File(["a"], "retry.txt")] } });
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await screen.findByRole("alert");
+    expect((input as HTMLTextAreaElement).value).toBe("요청");
+    expect(screen.getByRole("button", { name: "retry.txt 빼기" })).toBeTruthy();
+  });
+
+  it("loads a history image once, opens it and restores focus after Escape, and opens a file", async () => {
+    const item = { ...makeItem("attachment-test", "user", "첨부"), attachments: [{ name: "image.png", mime: "image/png" }, { name: "note.txt", mime: "text/plain" }] };
+    const { state, view } = await ready({ items: [item] });
+    const thumb = await screen.findByRole("button", { name: "image.png" });
+    await waitFor(() => expect(thumb.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,aGVsbG8="));
+    view.rerender(<AgentChatBlock block={{ type: "agent_chat" }} context={state.context} />);
+    expect(state.call.mock.calls.filter(([request]) => request.op === "agent.attachment")).toHaveLength(1);
+    thumb.focus(); fireEvent.click(thumb);
+    expect(screen.getByRole("button", { name: "닫기" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(document.activeElement).toBe(thumb));
+    fireEvent.click(screen.getByRole("button", { name: "note.txt" }));
+    await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "agent.attachment_open", workspace_id: "workspace-1", item_id: "attachment-test", index: 1 }));
   });
 });

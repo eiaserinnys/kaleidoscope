@@ -5,6 +5,7 @@ import type {
   AgentItem,
   AgentModel,
   AgentUpdate,
+  AgentUpload,
   CoreError,
   CoreEvent,
   CoreReply,
@@ -40,6 +41,7 @@ export interface FakeTransport extends CoreTransport {
   /** Test and harness controls; the real core does not expose these methods. */
   setLink(status: LinkStatus): void;
   emit(event: CoreEvent): void;
+  getOpenedAttachments(): Array<{ workspace_id: string; item_id: string; index: number }>;
 }
 
 interface FakeFile {
@@ -77,6 +79,8 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     Object.entries(seed.agents ?? {}).map(([workspaceId, session]) => [workspaceId, clone(session)]),
   );
   const nextAgentIds = new Map<string, number>();
+  const agentAttachments = new Map<string, AgentUpload>();
+  const openedAttachments: Array<{ workspace_id: string; item_id: string; index: number }> = [];
 
   for (const [path, text] of Object.entries(seed.files)) {
     files.set(path, { text, revision: `fake-revision-${revisionNumber++}` });
@@ -105,11 +109,12 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     emit({ event: "agent.update", workspace_id: workspaceId, update });
   };
 
-  const addAgentItem = (workspaceId: string, kind: AgentItem["kind"], text: string) => {
+  const addAgentItem = (workspaceId: string, kind: AgentItem["kind"], text: string, attachments: AgentUpload[] = []) => {
     const session = agentFor(workspaceId);
     const id = (nextAgentIds.get(workspaceId) ?? session.items.length) + 1;
     nextAgentIds.set(workspaceId, id);
-    const item: AgentItem = { id: String(id), kind, text, at: new Date().toISOString() };
+    const item: AgentItem = { id: String(id), kind, text, at: new Date().toISOString(), attachments: attachments.map(({ name, mime }) => ({ name, mime })) };
+    attachments.forEach((attachment, index) => agentAttachments.set(JSON.stringify([workspaceId, item.id, index]), attachment));
     session.items.push(item);
     emitAgent(workspaceId, { kind: "item", item });
   };
@@ -197,10 +202,18 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         if (seed.agentSendError) return fail("server", seed.agentSendError);
         const session = agentFor(request.workspace_id);
         if (!session.agent) return fail("not_found", "이 작업의 PAS가 없습니다");
-        addAgentItem(request.workspace_id, "user", request.text);
+        addAgentItem(request.workspace_id, "user", request.text, request.attachments ?? []);
         void streamReply(request.workspace_id, "## 살펴볼 내용\n\n- 요청한 내용을 정리했습니다.\n- 다음 동작을 이어가겠습니다.", "문서 읽기");
         return { op: "agent.send" };
       }
+      case "agent.attachment": {
+        const attachment = agentAttachments.get(JSON.stringify([request.workspace_id, request.item_id, request.index]));
+        if (!attachment) return fail("not_found", "첨부를 찾을 수 없습니다");
+        return { op: "agent.attachment", ...attachment };
+      }
+      case "agent.attachment_open":
+        openedAttachments.push({ workspace_id: request.workspace_id, item_id: request.item_id, index: request.index });
+        return { op: "agent.attachment_open" };
       case "link.start": {
         const userCode = "K7PQ-4XMR";
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
@@ -345,5 +358,6 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       emitState();
     },
     emit,
+    getOpenedAttachments() { return clone(openedAttachments); },
   };
 }
