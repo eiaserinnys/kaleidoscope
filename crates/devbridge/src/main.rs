@@ -38,6 +38,8 @@ impl Host for DevHost {
 struct Args {
     data_dir: PathBuf,
     port: u16,
+    server: String,
+    device_name: String,
     seeds: Vec<PathBuf>,
 }
 
@@ -65,6 +67,8 @@ async fn run() -> Result<(), String> {
             CoreConfig {
                 data_dir: args.data_dir,
                 seed_definitions,
+                server_url: args.server,
+                device_name: args.device_name,
             },
             Arc::new(DevHost),
         )
@@ -163,6 +167,8 @@ fn parse_args(args: impl Iterator<Item = OsString>) -> Result<Args, String> {
     let mut args = args;
     let mut data_dir = None;
     let mut port = None;
+    let mut server = "http://127.0.0.1:4219".to_string();
+    let mut device_name = "devbridge".to_string();
     let mut seeds = Vec::new();
 
     while let Some(argument) = args.next() {
@@ -186,6 +192,20 @@ fn parse_args(args: impl Iterator<Item = OsString>) -> Result<Args, String> {
                         .map_err(|_| "--port 값이 올바르지 않습니다".to_string())?,
                 );
             }
+            "--server" => {
+                server = args
+                    .next()
+                    .ok_or_else(|| "--server 값이 필요합니다".to_string())?
+                    .to_string_lossy()
+                    .into_owned();
+            }
+            "--device-name" => {
+                device_name = args
+                    .next()
+                    .ok_or_else(|| "--device-name 값이 필요합니다".to_string())?
+                    .to_string_lossy()
+                    .into_owned();
+            }
             "--seed" => seeds.push(PathBuf::from(
                 args.next()
                     .ok_or_else(|| "--seed 값이 필요합니다".to_string())?,
@@ -197,6 +217,8 @@ fn parse_args(args: impl Iterator<Item = OsString>) -> Result<Args, String> {
     Ok(Args {
         data_dir: data_dir.ok_or_else(|| "--data-dir가 필요합니다".to_string())?,
         port: port.ok_or_else(|| "--port가 필요합니다".to_string())?,
+        server,
+        device_name,
         seeds,
     })
 }

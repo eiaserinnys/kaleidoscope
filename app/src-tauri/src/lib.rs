@@ -1,3 +1,4 @@
+use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -7,6 +8,9 @@ use kaleidoscope_core::kaleidoscope_contract::{
 use kaleidoscope_core::{Core, CoreConfig, Host};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+
+const SERVER_URL: &str =
+    option_env!("KALEIDOSCOPE_SERVER_URL").unwrap_or("https://kaleidoscope.eiaserinnys.me");
 
 struct DialogHost {
     app: AppHandle,
@@ -29,10 +33,7 @@ impl Host for DialogHost {
 }
 
 #[tauri::command]
-async fn core(
-    request: CoreRequest,
-    core: State<'_, Arc<Core>>,
-) -> Result<CoreReply, CoreError> {
+async fn core(request: CoreRequest, core: State<'_, Arc<Core>>) -> Result<CoreReply, CoreError> {
     let core = Arc::clone(core.inner());
 
     tauri::async_runtime::spawn_blocking(move || core.handle(request))
@@ -55,6 +56,10 @@ pub fn run() {
                 CoreConfig {
                     data_dir,
                     seed_definitions: vec![include_str!("../../../examples/md-editor.json").into()],
+                    server_url: SERVER_URL.into(),
+                    device_name: env::var("COMPUTERNAME")
+                        .or_else(|_| env::var("HOSTNAME"))
+                        .unwrap_or_else(|_| "kaleidoscope".into()),
                 },
                 Arc::new(DialogHost {
                     app: app.handle().clone(),

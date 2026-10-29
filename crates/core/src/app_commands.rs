@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 
+use kaleidoscope_contract::registry::RegistryApp;
 use kaleidoscope_contract::{App, AppDefinition, AppVersion, CoreError, CoreReply, SharedState};
 
-use kaleidoscope_contract::validate as app_definition;
 use crate::state_commands::timestamp;
 use crate::CoreState;
+use kaleidoscope_contract::validate as app_definition;
 
 pub(crate) fn import(
     state: &mut CoreState,
@@ -55,19 +56,74 @@ fn import_definition(state: &mut CoreState, definition: AppDefinition) -> CoreRe
         definition: definition.clone(),
         created_at: now,
     };
-    let new_permissions = app_definition::permission_modules(&definition);
+    apply_version(state, app, version.clone(), false);
+    CoreReply::AppImport {
+        app: version_app(state, &version),
+        version,
+    }
+}
 
-    if existing.is_some() {
+pub(crate) fn import_registry(state: &mut CoreState, received: RegistryApp) -> bool {
+    if state
+        .shared
+        .apps
+        .iter()
+        .any(|app| app.id == received.app.id && app.current_version == received.app.current_version)
+        && state.shared.app_versions.iter().any(|version| {
+            version.app_id == received.app.id
+                && version.version == received.app.current_version
+                && version.definition == received.version.definition
+        })
+    {
+        return false;
+    }
+
+    let app_id = received.app.id.clone();
+    let definition_json = match serde_json::to_string(&received.version.definition) {
+        Ok(json) => json,
+        Err(error) => {
+            eprintln!("레지스트리 앱 반영을 건너뜁니다: app_id={app_id}, code=serialization");
+            let _ = error;
+            return false;
+        }
+    };
+    if let Err(error) = app_definition::parse_app_definition(&definition_json) {
+        eprintln!(
+            "레지스트리 앱 반영을 건너뜁니다: app_id={app_id}, code={:?}",
+            error.code
+        );
+        return false;
+    }
+
+    apply_version(state, received.app, received.version, true);
+    true
+}
+
+fn version_app(state: &CoreState, version: &AppVersion) -> App {
+    state
+        .shared
+        .apps
+        .iter()
+        .find(|app| app.id == version.app_id)
+        .expect("imported app is in shared state")
+        .clone()
+}
+
+fn apply_version(state: &mut CoreState, app: App, version: AppVersion, replace_history: bool) {
+    let definition = &version.definition;
+    let new_permissions = app_definition::permission_modules(definition);
+
+    if state.shared.apps.iter().any(|current| current.id == app.id) {
         let windows_to_update = state
             .shared
             .windows
             .iter()
-            .filter(|window| window.app_id == definition.id)
+            .filter(|window| window.app_id == app.id)
             .map(|window| (window.id.clone(), window.app_version, window.state.clone()))
             .collect::<Vec<_>>();
         let mut old_permissions_by_window = BTreeMap::new();
         for (window_id, old_version, old_state) in windows_to_update {
-            let old_permissions = definition_for(&state.shared, &definition.id, old_version)
+            let old_permissions = definition_for(&state.shared, &app.id, old_version)
                 .map(|old| app_definition::permission_modules(&old))
                 .unwrap_or_default();
             let mut next_state = definition.state.clone();
@@ -83,7 +139,7 @@ fn import_definition(state: &mut CoreState, definition: AppDefinition) -> CoreRe
                 .find(|window| window.id == window_id)
                 .unwrap();
             window.state = next_state;
-            window.app_version = version_number;
+            window.app_version = version.version;
             window.updated_at = version.created_at.clone();
             old_permissions_by_window.insert(window_id, old_permissions);
         }
@@ -102,13 +158,17 @@ fn import_definition(state: &mut CoreState, definition: AppDefinition) -> CoreRe
         .shared
         .apps
         .iter_mut()
-        .find(|current| current.id == definition.id)
+        .find(|current| current.id == app.id)
     {
-        *current = app.clone();
+        *current = app;
     } else {
-        state.shared.apps.push(app.clone());
+        state.shared.apps.push(app);
+    }
+    if replace_history {
+        state
+            .shared
+            .app_versions
+            .retain(|existing| existing.app_id != version.app_id);
     }
     state.shared.app_versions.push(version.clone());
-
-    CoreReply::AppImport { app, version }
 }
