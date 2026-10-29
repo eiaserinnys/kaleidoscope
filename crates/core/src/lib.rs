@@ -14,6 +14,7 @@ mod registry_client;
 mod registry_events;
 mod state_commands;
 mod storage;
+mod web;
 
 #[cfg(test)]
 mod logins_tests;
@@ -29,8 +30,8 @@ use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Condvar, Mutex};
 
 use kaleidoscope_contract::{
-    CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, Grant, LinkStatus, SharedState,
-    ShellSnapshot,
+    CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, Grant, LinkStatus, Rect,
+    SharedState, ShellSnapshot, WebHistoryAction, WebPage,
 };
 use registry_client::{HttpRegistryClient, RegistryClient};
 
@@ -39,11 +40,23 @@ pub use kaleidoscope_contract;
 pub trait Host: Send + Sync + 'static {
     /// 폴더 고르기 창을 띄우고 고른 폴더의 절대 경로를 돌려준다. 취소하면 None이다.
     fn pick_folder(&self) -> Option<PathBuf>;
-
     /// 기본 브라우저에서 OAuth 인가 주소를 연다.
     fn open_url(&self, url: &str) -> io::Result<()> {
         opener::open_browser(url).map_err(|error| io::Error::other(error.to_string()))
     }
+    fn web(&self) -> Option<&dyn WebHost> {
+        None
+    }
+}
+
+/// 플랫폼 웹뷰의 수명과 조작. 페이지 변화는 Core::web_update로 알린다.
+pub trait WebHost: Send + Sync + 'static {
+    fn attach(&self, window_id: &str, url: &str) -> Result<WebPage, CoreError>;
+    fn place(&self, window_id: &str, bounds: Option<Rect>) -> Result<(), CoreError>;
+    fn navigate(&self, window_id: &str, url: &str) -> Result<(), CoreError>;
+    fn history(&self, window_id: &str, action: WebHistoryAction) -> Result<(), CoreError>;
+    fn capture(&self, window_id: &str) -> Result<Option<Vec<u8>>, CoreError>;
+    fn detach(&self, window_id: &str) -> Result<(), CoreError>;
 }
 
 pub(crate) trait AttachmentOpener: Send + Sync + 'static {
@@ -96,6 +109,7 @@ pub(crate) struct Inner {
     pub(crate) login_store: Arc<logins::Logins>,
     pub(crate) login_in_progress: Mutex<HashSet<String>>,
     pub(crate) media_cache: media::MediaCache,
+    pub(crate) web_attached: Mutex<std::collections::HashSet<String>>,
 }
 
 pub(crate) struct LayoutSignal {
@@ -195,6 +209,7 @@ impl Core {
             generation: AtomicU64::new(0),
             layout_connection_epoch: AtomicU64::new(0),
             layout_reported_epoch: Mutex::new(None),
+            web_attached: Mutex::new(std::collections::HashSet::new()),
             layout_signal: LayoutSignal {
                 sequence: Mutex::new(0),
                 changed: Condvar::new(),
@@ -280,15 +295,12 @@ impl Core {
                 window_id,
                 permission,
             } => self.pick_folder(&window_id, &permission),
-            // 계약 5판의 탐색기 열기와 웹 화면은 다음 PR(코어 구현)에서 채운다. 그 전까지는 쓸 수 없다고 답한다.
-            CoreRequest::WebAttach { .. }
+            request @ (CoreRequest::WebAttach { .. }
             | CoreRequest::WebPlace { .. }
             | CoreRequest::WebNavigate { .. }
             | CoreRequest::WebHistory { .. }
             | CoreRequest::WebCapture { .. }
-            | CoreRequest::WebDetach { .. } => {
-                Err(error::make(kaleidoscope_contract::ErrorCode::Unavailable))
-            }
+            | CoreRequest::WebDetach { .. }) => web::handle(&self.inner, request),
             CoreRequest::DataAttach { window_id } => data_runtime::attach(&self.inner, &window_id),
             CoreRequest::DataDetach { window_id } => data_runtime::detach(&self.inner, &window_id),
             CoreRequest::DataAct {
@@ -381,6 +393,7 @@ impl Core {
             snapshot: snapshot(&state),
         };
         drop(state);
+        web::detach_removed(&self.inner);
         self.inner.emit(&event);
 
         Ok(reply)

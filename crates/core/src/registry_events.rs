@@ -181,5 +181,7 @@ pub(crate) fn apply_registry_change<T>(
         (shared_changed || device_changed || link_changed).then(|| CoreEvent::StateChanged {
             snapshot: snapshot(&state),
         });
+    drop(state);
+    crate::web::detach_removed(inner);
     Ok((result, event))
 }

@@ -1,3 +1,6 @@
+#[cfg(windows)]
+mod web_host;
+
 use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,10 +20,15 @@ const SERVER_URL: &str = match option_env!("KALEIDOSCOPE_SERVER_URL") {
 
 struct DialogHost {
     app: AppHandle,
+    #[cfg(windows)]
+    web: web_host::TauriWebHost,
 }
 
 impl Host for DialogHost {
     fn pick_folder(&self) -> Option<PathBuf> {
+        if let Some(path) = env::var_os("KALEIDOSCOPE_E2E_PICK_FOLDER") {
+            return Some(path.into());
+        }
         let parent = self
             .app
             .get_webview_window("main")
@@ -32,6 +40,10 @@ impl Host for DialogHost {
             .set_parent(&parent)
             .blocking_pick_folder()
             .and_then(|path| path.into_path().ok())
+    }
+    #[cfg(windows)]
+    fn web(&self) -> Option<&dyn kaleidoscope_core::WebHost> {
+        Some(&self.web)
     }
 }
 
@@ -66,6 +78,8 @@ pub fn run() {
                 },
                 Arc::new(DialogHost {
                     app: app.handle().clone(),
+                    #[cfg(windows)]
+                    web: web_host::TauriWebHost::new(app.handle().clone()),
                 }),
             ) {
                 Ok(core) => Arc::new(core),
@@ -95,4 +109,15 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![core])
         .run(tauri::generate_context!())
         .expect("error while running kaleidoscope application");
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn capability_is_restricted_to_main_webview() {
+        let value: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        assert_eq!(value["webviews"], serde_json::json!(["main"]));
+        assert!(value.get("windows").is_none());
+    }
 }

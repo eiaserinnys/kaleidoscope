@@ -2108,9 +2108,12 @@ name = "kaleidoscope-app"
 version = "0.3.2"
 dependencies = [
  "kaleidoscope-core",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "webview2-com",
+ "windows",
 ]
 
 [[package]]

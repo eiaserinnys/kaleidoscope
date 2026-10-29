@@ -1,0 +1,56 @@
+name: Windows WebView E2E
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 시험할 브랜치 또는 커밋
+        required: false
+        type: string
+  pull_request:
+    paths:
+      - '.github/workflows/e2e-windows.yml'
+      - 'app/e2e-windows/**'
+      - 'app/src-tauri/**'
+      - 'crates/core/**'
+      - 'crates/contract/**'
+      - 'Cargo.lock'
+
+jobs:
+  windows-e2e:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.ref }}
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir app build
+      - run: cargo build -p kaleidoscope-app --release
+      - name: 실제 웹뷰 시나리오
+        shell: pwsh
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-e2e-appdata'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-e2e-localappdata'
+          New-Item -ItemType Directory -Force $env:APPDATA, $env:LOCALAPPDATA | Out-Null
+          $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222 --remote-allow-origins=*'
+          $app = Start-Process -FilePath (Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe') -PassThru
+          try {
+            node app/e2e-windows/scenario.mjs
+            if ($LASTEXITCODE -ne 0) { throw "E2E 실패: $LASTEXITCODE" }
+          } finally { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
+      - name: 캡처와 로그 보존
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-webview-e2e
+          path: windows-e2e/
+          if-no-files-found: warn
