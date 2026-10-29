@@ -113,10 +113,17 @@
 
 .ks-notice-actions {
   display: inline-flex;
+  max-width: 100%;
   flex: 0 0 auto;
+  flex-wrap: wrap;
   white-space: nowrap;
   align-items: center;
   gap: var(--ks-space-2);
+}
+
+.ks-notice-actions > * {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .ks-status-text {

@@ -35,13 +35,16 @@ for (const kind of ["code", "markdown"] as const) {
         const page = await context.newPage();
         await conflict(page, kind);
         const notice = page.getByRole("alert").filter({ hasText: "디스크에서 바뀌었습니다" });
-        const bounds = await notice.evaluate((el) => ({ notice: el.getBoundingClientRect().toJSON(), message: el.querySelector('.ks-notice-message')!.getBoundingClientRect().toJSON(), buttons: [...el.querySelectorAll('button')].map((button) => button.getBoundingClientRect().toJSON()) }));
+        const bounds = await notice.evaluate((el) => ({ notice: el.getBoundingClientRect().toJSON(), message: el.querySelector('.ks-notice-message')!.getBoundingClientRect().toJSON(), buttons: [...el.querySelectorAll('button')].map((button) => ({ ...button.getBoundingClientRect().toJSON(), textFits: button.scrollWidth <= button.clientWidth })) }));
         console.log(`conflict-${kind}-${width}-${action}: ${JSON.stringify(bounds)}`);
         await page.screenshot({ path: info.outputPath(`${kind}-conflict-${width}-${action}.png`) });
         for (const button of bounds.buttons) {
           expect(button.left).toBeGreaterThanOrEqual(bounds.notice.left);
           expect(button.right).toBeLessThanOrEqual(bounds.notice.right);
+          expect(button.textFits).toBe(true);
         }
+        if (width === 1440) expect(bounds.buttons[0].top).toBe(bounds.buttons[1].top);
+        if (kind === "code" && width === 400) expect(bounds.buttons[1].top).toBeGreaterThan(bounds.buttons[0].top);
         await notice.getByRole("button", { name: action }).click();
         await expect(notice).toHaveCount(0);
         await context.close();
