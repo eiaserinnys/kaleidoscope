@@ -6,31 +6,32 @@ use std::{
 };
 
 use axum::{
+    Json, Router,
     extract::{Request, State},
-    http::{header, HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     middleware::{self, Next},
     response::{
-        sse::{Event, Sse},
         IntoResponse, Response,
+        sse::{Event, Sse},
     },
     routing::{get, post},
-    Json, Router,
 };
 use chrono::{SecondsFormat, Utc};
-use futures::{stream, Stream, StreamExt};
+use futures::{Stream, StreamExt, stream};
 use kaleidoscope_contract::{
+    App, AppDefinition, AppVersion, CoreError, ErrorCode, LEGACY_BLOCK_SET_VERSION, Requires,
+    Supported,
     registry::{
         self, DeviceEvent, DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply,
         PairStartRequest, RegistryApp,
     },
     validate::parse_app_definition,
-    App, AppDefinition, AppVersion, CoreError, ErrorCode,
 };
-use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use schemars::{Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use tokio::sync::{broadcast, Mutex as AsyncMutex};
+use serde_json::{Value, json};
+use tokio::sync::{Mutex as AsyncMutex, broadcast};
 use uuid::Uuid;
 
 const USER_CODE_ALPHABET: &[u8] = b"23456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -43,6 +44,7 @@ struct Inner {
     db: Mutex<Connection>,
     events: broadcast::Sender<DeviceEvent>,
     connections: Mutex<HashMap<String, usize>>,
+    device_support: Mutex<HashMap<String, Option<Supported>>>,
     device_workspaces: Mutex<HashMap<String, HashSet<String>>>,
     pairings: AsyncMutex<HashMap<String, Pairing>>,
     mcp_token: String,
@@ -120,6 +122,7 @@ impl AppState {
             db: Mutex::new(connection),
             events,
             connections: Mutex::new(HashMap::new()),
+            device_support: Mutex::new(HashMap::new()),
             device_workspaces: Mutex::new(device_workspaces),
             pairings: AsyncMutex::new(HashMap::new()),
             mcp_token,
@@ -239,11 +242,77 @@ impl AppState {
             )
             .map_err(db_error)
     }
+    fn device_can_render(&self, device_id: &str, requires: &Requires) -> bool {
+        let support = self
+            .0
+            .device_support
+            .lock()
+            .ok()
+            .and_then(|devices| devices.get(device_id).cloned())
+            .flatten();
+        match support {
+            Some(supported) => supported.renders(requires),
+            None => requires.blocks <= LEGACY_BLOCK_SET_VERSION,
+        }
+    }
+
+    fn unsupported_connected_devices(&self, requires: &Requires) -> Vec<String> {
+        let Ok(connections) = self.0.connections.lock() else {
+            return Vec::new();
+        };
+        let Ok(support) = self.0.device_support.lock() else {
+            return Vec::new();
+        };
+        let mut devices: Vec<_> = connections
+            .iter()
+            .filter(|(_, count)| **count > 0)
+            .filter(|(id, _)| match support.get(*id).cloned().flatten() {
+                Some(supported) => !supported.renders(requires),
+                None => requires.blocks > LEGACY_BLOCK_SET_VERSION,
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        devices.sort();
+        devices
+    }
+
+    fn connected_count_for_app(&self, workspace_id: Option<&str>, requires: &Requires) -> usize {
+        let Ok(connections) = self.0.connections.lock() else {
+            return 0;
+        };
+        let Ok(support) = self.0.device_support.lock() else {
+            return 0;
+        };
+        let Ok(workspaces) = self.0.device_workspaces.lock() else {
+            return 0;
+        };
+        let connected: Vec<_> = connections
+            .iter()
+            .filter(|(_, count)| **count > 0)
+            .filter(|(id, _)| {
+                workspace_id.is_none_or(|workspace| {
+                    workspaces
+                        .get(*id)
+                        .is_some_and(|ids| ids.contains(workspace))
+                })
+            })
+            .filter(|(id, _)| match support.get(*id).cloned().flatten() {
+                Some(supported) => supported.renders(requires),
+                None => requires.blocks <= LEGACY_BLOCK_SET_VERSION,
+            })
+            .collect();
+        if workspace_id.is_some() {
+            connected.len()
+        } else {
+            connected.iter().map(|(_, count)| **count).sum()
+        }
+    }
+
     fn connected_count(&self) -> usize {
         self.0
             .connections
             .lock()
-            .map(|m| m.values().sum())
+            .map(|connections| connections.values().sum())
             .unwrap_or(0)
     }
 

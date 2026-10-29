@@ -60,9 +60,10 @@ impl McpServer {
 }
 
 use rmcp::{
+    ErrorData, ServerHandler,
     handler::server::wrapper::Parameters,
     model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig},
-    tool, tool_handler, tool_router, ErrorData, ServerHandler,
+    tool, tool_handler, tool_router,
 };
 
 #[tool_router]
@@ -82,18 +83,29 @@ impl McpServer {
         {
             Ok((row, unchanged)) => {
                 let sent = if args.open {
-                    self.state.connected_count_for(args.workspace_id.as_deref())
+                    self.state.connected_count_for_app(
+                        args.workspace_id.as_deref(),
+                        &row.version.definition.requires,
+                    )
                 } else {
                     0
                 };
                 let mut value = json!({"app_id":row.app.id,"name":row.app.name,"version":row.version.version,"unchanged":unchanged,"open_sent_to":sent});
-                if args.open && sent == 0 {
+                if args.open
+                    && sent == 0
+                    && self.state.connected_count_for(args.workspace_id.as_deref()) == 0
+                {
                     value["note"] = if args.workspace_id.is_some() {
                         json!("그 작업을 가진 쉘이 연결돼 있지 않아 창은 열리지 않았습니다")
                     } else {
                         json!("연결된 쉘이 없어 창은 열리지 않았습니다")
                     };
                 }
+                add_unsupported_device_note(
+                    &mut value,
+                    self.state
+                        .unsupported_connected_devices(&row.version.definition.requires),
+                );
                 Ok(json_result(value))
             }
             Err(error) => Ok(json_error(error)),
@@ -131,17 +143,28 @@ impl McpServer {
         Parameters(args): Parameters<AppIdArgs>,
     ) -> Result<CallToolResult, ErrorData> {
         match self.state.app(&args.app_id, None) {
-            Ok(Some(_)) => {
+            Ok(Some(app)) => {
                 let _ = self.state.0.events.send(DeviceEvent::AppOpen {
-                    app_id: args.app_id,
+                    app_id: args.app_id.clone(),
                     workspace_id: args.workspace_id.clone(),
                 });
-                let sent = self.state.connected_count_for(args.workspace_id.as_deref());
+                let sent = self.state.connected_count_for_app(
+                    args.workspace_id.as_deref(),
+                    &app.version.definition.requires,
+                );
                 let mut value = json!({"open_sent_to":sent});
-                if sent == 0 && args.workspace_id.is_some() {
+                if sent == 0
+                    && args.workspace_id.is_some()
+                    && self.state.connected_count_for(args.workspace_id.as_deref()) == 0
+                {
                     value["note"] =
                         json!("그 작업을 가진 쉘이 연결돼 있지 않아 창은 열리지 않았습니다");
                 }
+                add_unsupported_device_note(
+                    &mut value,
+                    self.state
+                        .unsupported_connected_devices(&app.version.definition.requires),
+                );
                 Ok(json_result(value))
             }
             Ok(None) => Ok(json_error(server_error("앱을 찾을 수 없습니다."))),
@@ -209,7 +232,13 @@ impl McpServer {
 #[tool_handler]
 impl ServerHandler for McpServer {
     fn get_info(&self) -> ServerConfig {
-        let instructions=format!("kaleidoscope는 디렉터의 데스크톱 쉘입니다. 앱 정의 JSON을 올리면 연결된 디렉터 PC의 쉘에 창으로 뜹니다.\n앱 정의는 쉘의 블록과 모듈만 씁니다. 형식은 upload_app 입력 스키마가 정본입니다.\n파일 경로는 기기마다 디렉터가 고른 폴더 기준 상대 경로이며 폴더 밖은 거부됩니다.\n고칠 때는 list_apps → get_app → 수정 후 upload_app 순서로 합니다. 같은 id면 새 버전이 되고 열린 창은 새 버전으로 바뀝니다.\n디렉터가 쉘의 연결 코드를 주면 approve_device로 승인합니다.\n작업 PAS는 지시에 적힌 workspace_id를 upload_app과 open_app에 넣어 그 작업에 띄운다.\nget_workspace로 작업의 데스크톱과 창(앱, 버전, 연 파일)을 읽는다.\nmd-editor 예제: {}\nmd-viewer 예제: {}", include_str!("../../../examples/md-editor.json"),include_str!("../../../examples/md-viewer.json"));
+        let instructions = format!(
+            "kaleidoscope는 디렉터의 데스크톱 쉘입니다. 앱 정의 JSON을 올리면 연결된 디렉터 PC의 쉘에 창으로 뜹니다.\n앱 정의는 쉘의 블록과 모듈만 씁니다. 형식은 upload_app 입력 스키마가 정본입니다.\n파일 경로는 기기마다 디렉터가 고른 폴더 기준 상대 경로이며 폴더 밖은 거부됩니다.\n파일을 여는 앱은 opens(확장자, 폴더를 이어 받을 권한, 경로를 쓸 상태 키)를 선언합니다. 탐색기에서 그 확장자 파일을 열면 그 앱 창이 뜹니다.\n고칠 때는 list_apps → get_app → 수정 후 upload_app 순서로 합니다. 같은 id면 새 버전이 되고 열린 창은 새 버전으로 바뀝니다.\n디렉터가 쉘의 연결 코드를 주면 approve_device로 승인합니다.\n작업 PAS는 지시에 적힌 workspace_id를 upload_app과 open_app에 넣어 그 작업에 띄운다.\nget_workspace로 작업의 데스크톱과 창(앱, 버전, 연 파일)을 읽는다.\nmd-editor 예제: {}\nmd-viewer 예제: {}\nweb-browser 예제: {}\nexplorer 예제: {}",
+            include_str!("../../../examples/md-editor.json"),
+            include_str!("../../../examples/md-viewer.json"),
+            include_str!("../../../examples/web-browser.json"),
+            include_str!("../../../examples/explorer.json")
+        );
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("kaleidoscope", "0.1.0"))
             .with_instructions(instructions)
@@ -225,6 +254,23 @@ fn json_error(error: CoreError) -> CallToolResult {
     )])
 }
 
+fn add_unsupported_device_note(value: &mut Value, mut devices: Vec<String>) {
+    if devices.is_empty() {
+        return;
+    }
+    devices.sort();
+    let line = format!(
+        "이 앱을 그릴 수 없는 옛 쉘이라 받지 못한 기기: {} (쉘을 새로 깔아야 합니다)",
+        devices.join(", ")
+    );
+    let note = value["note"].as_str().unwrap_or_default();
+    value["note"] = json!(if note.is_empty() {
+        line
+    } else {
+        format!("{note}\n{line}")
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -232,6 +278,7 @@ mod tests {
 
     #[tokio::test]
     async fn open_counts_connected_devices_with_the_requested_workspace() {
+        use kaleidoscope_contract::Supported;
         let state = AppState::in_memory("secret");
         for id in ["a", "b"] {
             state
@@ -245,9 +292,15 @@ mod tests {
         }
         let layout: DeviceLayout = serde_json::from_value(json!({"workspaces":[{"id":"w","name":"작업","created_at":"t","updated_at":"t"}],"desktops":[],"windows":[],"folders":[],"active_workspace_id":null,"active_desktop_ids":{}})).unwrap();
         state.save_layout("a", &layout).unwrap();
-        let _a = state.stream("a".into()).unwrap();
-        let _a_second = state.stream("a".into()).unwrap();
-        let _b = state.stream("b".into()).unwrap();
+        let _a = state
+            .stream("a".into(), Some(Supported::current()))
+            .unwrap();
+        let _a_second = state
+            .stream("a".into(), Some(Supported::current()))
+            .unwrap();
+        let _b = state
+            .stream("b".into(), Some(Supported::current()))
+            .unwrap();
         let server = McpServer::new(state);
         let app: Value =
             serde_json::from_str(include_str!("../../../examples/md-editor.json")).unwrap();
@@ -291,5 +344,104 @@ mod tests {
                 .unwrap(),
         );
         assert_eq!(targeted["open_sent_to"], 1);
+    }
+
+    #[tokio::test]
+    async fn upload_and_open_report_connected_shells_that_cannot_render_the_app() {
+        use kaleidoscope_contract::Supported;
+
+        let state = AppState::in_memory("secret");
+        let _old = state.stream("AD02028236".into(), None).unwrap();
+        let _current = state
+            .stream("current".into(), Some(Supported::current()))
+            .unwrap();
+        let server = McpServer::new(state);
+        let browser: Value =
+            serde_json::from_str(include_str!("../../../examples/web-browser.json")).unwrap();
+        let value = |result: CallToolResult| {
+            let json = serde_json::to_value(result).unwrap();
+            serde_json::from_str::<Value>(json["content"][0]["text"].as_str().unwrap()).unwrap()
+        };
+
+        let uploaded = value(
+            server
+                .upload_app(Parameters(UploadArgs {
+                    definition: browser,
+                    open: false,
+                    workspace_id: None,
+                }))
+                .await
+                .unwrap(),
+        );
+        assert_eq!(
+            uploaded["note"],
+            "이 앱을 그릴 수 없는 옛 쉘이라 받지 못한 기기: AD02028236 (쉘을 새로 깔아야 합니다)"
+        );
+
+        let opened = value(
+            server
+                .open_app(Parameters(AppIdArgs {
+                    app_id: "web-browser".into(),
+                    workspace_id: None,
+                }))
+                .await
+                .unwrap(),
+        );
+        assert_eq!(opened["open_sent_to"], 1);
+        assert_eq!(opened["note"], uploaded["note"]);
+    }
+
+    #[tokio::test]
+    async fn compatible_upload_result_has_no_unsupported_shell_note() {
+        use kaleidoscope_contract::Supported;
+
+        let state = AppState::in_memory("secret");
+        let _current = state
+            .stream("current".into(), Some(Supported::current()))
+            .unwrap();
+        let server = McpServer::new(state);
+        let definition: Value =
+            serde_json::from_str(include_str!("../../../examples/web-browser.json")).unwrap();
+        let result = server
+            .upload_app(Parameters(UploadArgs {
+                definition,
+                open: false,
+                workspace_id: None,
+            }))
+            .await
+            .unwrap();
+        let json = serde_json::to_value(result).unwrap();
+        let value: Value =
+            serde_json::from_str(json["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert!(value.get("note").is_none());
+    }
+
+    #[tokio::test]
+    async fn upload_with_only_an_old_shell_does_not_claim_no_shell_is_connected() {
+        let state = AppState::in_memory("secret");
+        let _old = state.stream("AD02028236".into(), None).unwrap();
+        let server = McpServer::new(state);
+        let definition: Value =
+            serde_json::from_str(include_str!("../../../examples/web-browser.json")).unwrap();
+        let result = server
+            .upload_app(Parameters(UploadArgs {
+                definition,
+                open: true,
+                workspace_id: None,
+            }))
+            .await
+            .unwrap();
+        let json = serde_json::to_value(result).unwrap();
+        let value: Value =
+            serde_json::from_str(json["content"][0]["text"].as_str().unwrap()).unwrap();
+
+        assert_eq!(value["open_sent_to"], 0);
+        assert!(
+            value["note"]
+                .as_str()
+                .unwrap()
+                .contains("그릴 수 없는 옛 쉘")
+        );
+        assert!(!value["note"].as_str().unwrap().contains("연결된 쉘이 없어"));
     }
 }

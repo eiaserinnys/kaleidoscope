@@ -3,6 +3,8 @@ use axum::body::Body;
 use tower::ServiceExt;
 
 const EDITOR: &str = include_str!("../../../examples/md-editor.json");
+const BROWSER: &str = include_str!("../../../examples/web-browser.json");
+const LEGACY_APP: &str = include_str!("../../../examples/workspace-pas.json");
 
 #[test]
 fn app_upload_versions_and_deduplicates_identical_definitions() {
@@ -36,10 +38,11 @@ fn invalid_definitions_and_outside_paths_are_rejected_without_saving() {
     let err = state
         .publish_app(&outside, "agent", false, None)
         .unwrap_err();
-    assert!(err
-        .details
-        .iter()
-        .any(|detail| detail.contains("고른 폴더 밖")));
+    assert!(
+        err.details
+            .iter()
+            .any(|detail| detail.contains("고른 폴더 밖"))
+    );
     let count: i64 = state
         .lock_db()
         .unwrap()
@@ -158,11 +161,99 @@ async fn event_stream_starts_with_snapshot_then_published_app() {
     let mut body_stream = body.into_data_stream();
     let first = String::from_utf8(body_stream.next().await.unwrap().unwrap().to_vec()).unwrap();
     assert!(first.contains("apps.snapshot"), "{first}");
-    state.publish_app(EDITOR, "agent", true, None).unwrap();
+    state.publish_app(LEGACY_APP, "agent", true, None).unwrap();
     let second = String::from_utf8(body_stream.next().await.unwrap().unwrap().to_vec()).unwrap();
     assert!(second.contains("app.published"), "{second}");
     assert!(second.contains("\"open\":true"), "{second}");
     assert_eq!(state.0.connections.lock().unwrap().get(&id), Some(&1));
+}
+
+#[tokio::test]
+async fn event_stream_snapshot_filters_apps_by_supported_header() {
+    use kaleidoscope_contract::{Supported, registry::SUPPORTED_HEADER};
+
+    let state = AppState::in_memory("secret");
+    state.publish_app(LEGACY_APP, "agent", false, None).unwrap();
+    state.publish_app(BROWSER, "agent", false, None).unwrap();
+    let (old_id, old_token) = make_device(&state);
+    let (_, current_token) = make_device(&state);
+
+    let old = router(state.clone())
+        .oneshot(request(
+            "GET",
+            "/api/device/events",
+            Some(&old_token),
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    let mut old_stream = old.into_body().into_data_stream();
+    let old_snapshot = next_device_event(&mut old_stream).await;
+    let old_ids: Vec<_> = serde_json::from_value::<Vec<RegistryApp>>(old_snapshot["apps"].clone())
+        .unwrap()
+        .into_iter()
+        .map(|app| app.app.id)
+        .collect();
+    assert_eq!(old_ids, ["workspace-pas"]);
+
+    let supported = serde_json::to_string(&Supported::current()).unwrap();
+    let current_request = Request::builder()
+        .method("GET")
+        .uri("/api/device/events")
+        .header(header::AUTHORIZATION, format!("Bearer {current_token}"))
+        .header(SUPPORTED_HEADER, supported)
+        .body(Body::empty())
+        .unwrap();
+    let current = router(state.clone())
+        .oneshot(current_request)
+        .await
+        .unwrap();
+    let mut current_stream = current.into_body().into_data_stream();
+    let current_snapshot = next_device_event(&mut current_stream).await;
+    let current_ids: Vec<_> =
+        serde_json::from_value::<Vec<RegistryApp>>(current_snapshot["apps"].clone())
+            .unwrap()
+            .into_iter()
+            .map(|app| app.app.id)
+            .collect();
+    assert_eq!(current_ids, ["web-browser", "workspace-pas"]);
+    assert!(state.0.connections.lock().unwrap().contains_key(&old_id));
+}
+
+#[tokio::test]
+async fn legacy_stream_does_not_receive_unrenderable_publish_or_open_events() {
+    let state = AppState::in_memory("secret");
+    let (device_id, token) = make_device(&state);
+    let response = router(state.clone())
+        .oneshot(request(
+            "GET",
+            "/api/device/events",
+            Some(&token),
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    let mut stream = response.into_body().into_data_stream();
+    let _ = next_device_event(&mut stream).await;
+
+    let (browser, _) = state.publish_app(BROWSER, "agent", false, None).unwrap();
+    let published = state.event_for_device(
+        &device_id,
+        DeviceEvent::AppPublished {
+            app: browser.clone(),
+            open: false,
+            workspace_id: None,
+        },
+    );
+    let opened = state.event_for_device(
+        &device_id,
+        DeviceEvent::AppOpen {
+            app_id: browser.app.id,
+            workspace_id: None,
+        },
+    );
+    assert!(published.is_none());
+    assert!(opened.is_none());
 }
 
 fn request(method: &str, path: &str, token: Option<&str>, body: Body) -> Request<Body> {
@@ -171,6 +262,19 @@ fn request(method: &str, path: &str, token: Option<&str>, body: Body) -> Request
         builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }
     builder.body(body).unwrap()
+}
+
+fn current_shell_request(method: &str, path: &str, token: &str, body: Body) -> Request<Body> {
+    use kaleidoscope_contract::registry::SUPPORTED_HEADER;
+    let mut request = request(method, path, Some(token), body);
+    request.headers_mut().insert(
+        SUPPORTED_HEADER,
+        serde_json::to_string(&kaleidoscope_contract::Supported::current())
+            .unwrap()
+            .parse()
+            .unwrap(),
+    );
+    request
 }
 
 fn make_device(state: &AppState) -> (String, String) {
@@ -313,7 +417,7 @@ async fn next_device_event(stream: &mut axum::body::BodyDataStream) -> Value {
 
 #[tokio::test]
 async fn targeted_events_follow_each_devices_last_report_and_survive_restart() {
-    use kaleidoscope_contract::{registry::DeviceLayout, AgentUpdate, Workspace};
+    use kaleidoscope_contract::{AgentUpdate, Workspace, registry::DeviceLayout};
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("registry.db");
     let state = AppState::open(&path, "secret".into()).unwrap();
@@ -344,10 +448,10 @@ async fn targeted_events_follow_each_devices_last_report_and_survive_restart() {
     let app = router(state.clone());
     let mut stream_a = app
         .clone()
-        .oneshot(request(
+        .oneshot(current_shell_request(
             "GET",
             "/api/device/events",
-            Some(&token_a),
+            &token_a,
             Body::empty(),
         ))
         .await
@@ -355,10 +459,10 @@ async fn targeted_events_follow_each_devices_last_report_and_survive_restart() {
         .into_body()
         .into_data_stream();
     let mut stream_b = app
-        .oneshot(request(
+        .oneshot(current_shell_request(
             "GET",
             "/api/device/events",
-            Some(&token_b),
+            &token_b,
             Body::empty(),
         ))
         .await

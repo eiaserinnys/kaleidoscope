@@ -5,8 +5,8 @@ use subtle::ConstantTimeEq;
 
 pub fn router(state: AppState) -> Router {
     use rmcp::transport::{
-        streamable_http_server::{session::local::LocalSessionManager, StreamableHttpService},
         StreamableHttpServerConfig,
+        streamable_http_server::{StreamableHttpService, session::local::LocalSessionManager},
     };
     let mcp_state = state.clone();
     let service = StreamableHttpService::new(
@@ -132,7 +132,11 @@ async fn device_events(State(state): State<AppState>, headers: HeaderMap) -> Res
         Ok(Some(v)) => v,
         Ok(None) | Err(_) => return error_response(StatusCode::UNAUTHORIZED, device_auth_error()),
     };
-    match state.stream(device.0) {
+    let supported = headers
+        .get(registry::SUPPORTED_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| serde_json::from_str::<Supported>(value).ok());
+    match state.stream(device.0, supported) {
         Ok(stream) => (StatusCode::OK, Sse::new(stream)).into_response(),
         Err(error) => error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
     }
