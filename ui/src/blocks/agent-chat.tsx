@@ -92,9 +92,9 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       return;
     }
     const maxHeight = lineHeight * 8 + verticalPadding + border;
+    input.style.height = "auto";
     const contentHeight = input.scrollHeight + border;
     input.style.maxHeight = `${maxHeight}px`;
-    input.style.height = "auto";
     input.style.height = `${Math.min(contentHeight, maxHeight)}px`;
     input.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
   }, [draft, agent]);
