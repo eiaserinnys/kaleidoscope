@@ -54,7 +54,8 @@ jobs:
           $env:APPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-e2e-appdata'
           $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-e2e-localappdata'
           $env:KALEIDOSCOPE_E2E_OUT = Join-Path $env:GITHUB_WORKSPACE 'windows-e2e'
-          New-Item -ItemType Directory -Force $env:APPDATA, $env:LOCALAPPDATA, $env:KALEIDOSCOPE_E2E_OUT | Out-Null
+          $env:KALEIDOSCOPE_E2E_PICK_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-e2e-docs'
+          New-Item -ItemType Directory -Force $env:APPDATA, $env:LOCALAPPDATA, $env:KALEIDOSCOPE_E2E_OUT, $env:KALEIDOSCOPE_E2E_PICK_FOLDER | Out-Null
           $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-e2e-webview'
           $app = Start-Process -FilePath (Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe') -PassThru
           try {

@@ -5,13 +5,15 @@ use kaleidoscope_contract::{
 };
 
 fn web_block(block: &Block) -> Option<Option<String>> {
-    match block {
-        Block::WebView { on_navigate, .. } => {
-            Some(on_navigate.as_ref().map(|s| s.set_state.clone()))
+    let mut result = None;
+    kaleidoscope_contract::data::walk_blocks(block, "", &mut |_, child| {
+        if result.is_none() {
+            if let Block::WebView { on_navigate, .. } = child {
+                result = Some(on_navigate.as_ref().map(|s| s.set_state.clone()));
+            }
         }
-        Block::Split { children, .. } => children.iter().find_map(web_block),
-        _ => None,
-    }
+    });
+    result
 }
 
 fn window_web(state: &CoreState, id: &str) -> Result<Option<String>, CoreError> {

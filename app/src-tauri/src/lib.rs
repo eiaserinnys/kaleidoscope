@@ -28,13 +28,13 @@ struct DialogHost {
 
 impl Host for DialogHost {
     fn pick_folder(&self) -> Option<PathBuf> {
+        let parent = self
+            .app
+            .get_window("main")
+            .expect("main window must exist while picking a folder");
         if let Some(path) = env::var_os("KALEIDOSCOPE_E2E_PICK_FOLDER") {
             return Some(path.into());
         }
-        let parent = self
-            .app
-            .get_webview_window("main")
-            .expect("main window must exist while picking a folder");
 
         self.app
             .dialog()

@@ -1,5 +1,7 @@
 use super::*;
 
+mod nested;
+
 #[test]
 fn explorer_opens_and_reuses_editor_with_folder_grant() {
     let data = TempDir::new().unwrap();

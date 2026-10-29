@@ -139,7 +139,7 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
     let window_id = match call(
         core,
         CoreRequest::WindowOpen {
-            desktop_id,
+            desktop_id: desktop_id.clone(),
             app_id: "web-browser".into(),
             rect: Some(Rect {
                 x: 48,
@@ -273,6 +273,57 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
     })?;
     record(log, "child.ipc", json!({"url": page.url}))?;
     ipc_denied(&page.url)?;
+
+    let editor_id = match call(
+        core,
+        CoreRequest::WindowOpen {
+            desktop_id,
+            app_id: "md-editor".into(),
+            rect: None,
+        },
+    )? {
+        CoreReply::WindowOpen { window } => window.id,
+        reply => return Err(format!("unexpected editor response: {reply:?}")),
+    };
+    app.get_webview(&format!("web-{window_id}"))
+        .ok_or("child webview disappeared before folder selection")?;
+    record(
+        log,
+        "files.pick_folder.request",
+        json!({"window_id": editor_id}),
+    )?;
+    let expected = fs::canonicalize(
+        env::var_os("KALEIDOSCOPE_E2E_PICK_FOLDER").ok_or("folder selection fixture is missing")?,
+    )
+    .map_err(|error| error.to_string())?;
+    let grant = match call(
+        core,
+        CoreRequest::FilesPickFolder {
+            window_id: editor_id.clone(),
+            permission: "docs".into(),
+        },
+    )? {
+        CoreReply::FilesPickFolder { grant: Some(grant) } => grant,
+        reply => return Err(format!("folder selection did not grant access: {reply:?}")),
+    };
+    if grant.window_id != editor_id
+        || grant.permission != "docs"
+        || Path::new(&grant.root_path) != expected
+    {
+        return Err(format!("unexpected folder grant: {grant:?}"));
+    }
+    let snapshot = match call(core, CoreRequest::StateGet {})? {
+        CoreReply::StateGet { snapshot } => snapshot,
+        reply => return Err(format!("unexpected state response: {reply:?}")),
+    };
+    if !snapshot.device.grants.contains(&grant) {
+        return Err("folder grant was not saved in device state".into());
+    }
+    record(
+        log,
+        "files.pick_folder",
+        json!({"window_id": editor_id, "permission": "docs", "granted": true}),
+    )?;
     record(log, "complete", json!({"ok": true}))
 }
 
