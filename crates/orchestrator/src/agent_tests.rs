@@ -1,5 +1,6 @@
 use super::*;
 use axum::{extract::State as MockState, http::HeaderMap as MockHeaders};
+use kaleidoscope_contract::registry::AgentSendRequest;
 
 #[derive(Clone, Default)]
 struct Mock(Arc<Mutex<Vec<(String, Value)>>>);
@@ -101,14 +102,20 @@ async fn creates_fallback_sets_instructions_sends_and_resumes_cursor() {
     let empty = send_message(
         State(state.clone()),
         Path("w".into()),
-        Ok(Json(AgentSendRequest { text: "  ".into(), attachments: vec![] })),
+        Ok(Json(AgentSendRequest {
+            text: "  ".into(),
+            attachments: vec![],
+        })),
     )
     .await;
     assert_eq!(empty.status(), StatusCode::BAD_REQUEST);
     let missing = send_message(
         State(state.clone()),
         Path("missing".into()),
-        Ok(Json(AgentSendRequest { text: "a".into(), attachments: vec![] })),
+        Ok(Json(AgentSendRequest {
+            text: "a".into(),
+            attachments: vec![],
+        })),
     )
     .await;
     assert_eq!(missing.status(), StatusCode::NOT_FOUND);

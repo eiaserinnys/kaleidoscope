@@ -1,5 +1,6 @@
 use super::mcp::McpServer;
 use super::*;
+use axum::extract::DefaultBodyLimit;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
@@ -27,7 +28,12 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/workspaces/{workspace_id}/agent/messages",
-            post(super::agent::send_message),
+            post(super::agent::send_message)
+                .layer(DefaultBodyLimit::max(registry::AGENT_SEND_BODY_MAX_BYTES)),
+        )
+        .route(
+            "/workspaces/{workspace_id}/agent/items/{item_id}/attachments/{index}",
+            get(super::agent::get_attachment),
         )
         .route_layer(middleware::from_fn_with_state(state.clone(), device_auth))
         .with_state(state.clone());

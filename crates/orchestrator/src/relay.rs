@@ -1,5 +1,5 @@
 use super::*;
-use crate::agent::{initial_instruction, AgentRow};
+use crate::agent::{initial_instruction, AgentRow, StoredAgentAttachment};
 use kaleidoscope_contract::{AgentItemKind, AgentUpdate};
 
 const SILENT: &str = "[SILENT]";
@@ -123,8 +123,8 @@ fn process(
     data: &Value,
     projection: &mut Projection,
 ) -> Result<(), CoreError> {
-    let item = |kind, text: &str| -> Result<(), CoreError> {
-        let item = state.add_item(workspace, kind, text)?;
+    let item = |kind, text: &str, attachments: &[StoredAgentAttachment]| -> Result<(), CoreError> {
+        let item = state.add_item(workspace, kind, text, attachments)?;
         state.emit(workspace, AgentUpdate::Item { item });
         Ok(())
     };
@@ -132,12 +132,36 @@ fn process(
         "user_message" | "intervention_sent" => {
             let source = data["caller_info"]["source"].as_str().unwrap_or("");
             let text = data["text"].as_str().unwrap_or("");
+            let attachments: Vec<_> = data["attachments"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(|path| {
+                    let name = attachment_name(path);
+                    let mime = mime_guess::from_path(&name)
+                        .first_or_octet_stream()
+                        .to_string();
+                    StoredAgentAttachment {
+                        name,
+                        mime,
+                        path: path.to_string(),
+                    }
+                })
+                .collect();
             if ["kaleidoscope", "browser", "soul-app", "slack"].contains(&source)
                 && text.trim() != CACHE_MESSAGE
                 && !text.trim().ends_with(initial.trim())
             {
-                item(AgentItemKind::User, text)?;
-                state.activity(workspace, true, None);
+                let text = text
+                    .lines()
+                    .filter(|line| !line.starts_with("[첨부 파일 로컬 경로: "))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if !text.trim().is_empty() || !attachments.is_empty() {
+                    item(AgentItemKind::User, &text, &attachments)?;
+                    state.activity(workspace, true, None);
+                }
             }
         }
         "text_start" => *projection = Projection::default(),
@@ -158,7 +182,7 @@ fn process(
             *projection = Projection::default();
             let text = data["content"].as_str().unwrap_or("");
             if !text.trim().is_empty() && text.trim() != SILENT {
-                item(AgentItemKind::Assistant, text)?;
+                item(AgentItemKind::Assistant, text, &[])?;
             }
         }
         "tool_start" => state.activity(
@@ -176,12 +200,59 @@ fn process(
                 .as_str()
                 .or_else(|| data["error"].as_str())
                 .unwrap_or("턴이 실패했습니다.");
-            item(AgentItemKind::Error, text)?;
+            item(AgentItemKind::Error, text, &[])?;
             state.activity(workspace, false, None);
         }
         _ => {}
     }
     Ok(())
+}
+
+fn attachment_name(path: &str) -> String {
+    let filename = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    let Some(prefix) = filename.get(..25) else {
+        return filename.to_string();
+    };
+    let bytes = prefix.as_bytes();
+    let timestamp_shape = bytes.len() == 25
+        && bytes[0..4].iter().all(u8::is_ascii_digit)
+        && bytes[4] == b'-'
+        && bytes[5..7].iter().all(u8::is_ascii_digit)
+        && bytes[7] == b'-'
+        && bytes[8..10].iter().all(u8::is_ascii_digit)
+        && bytes[10] == b'T'
+        && bytes[11..13].iter().all(u8::is_ascii_digit)
+        && bytes[13] == b'-'
+        && bytes[14..16].iter().all(u8::is_ascii_digit)
+        && bytes[16] == b'-'
+        && bytes[17..19].iter().all(u8::is_ascii_digit)
+        && bytes[19] == b'.'
+        && bytes[20..23].iter().all(u8::is_ascii_digit)
+        && bytes[23] == b'Z'
+        && bytes[24] == b'-';
+    if !timestamp_shape {
+        return filename.to_string();
+    }
+    let rest = &filename[25..];
+    let (stem, extension) = match rest.rsplit_once('.') {
+        Some((stem, extension)) if !extension.is_empty() => (stem, Some(extension)),
+        _ => (rest, None),
+    };
+    let Some((name, hash)) = stem.rsplit_once('-') else {
+        return filename.to_string();
+    };
+    if name.is_empty()
+        || hash.len() != 32
+        || !hash
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return filename.to_string();
+    }
+    match extension {
+        Some(extension) => format!("{name}.{extension}"),
+        None => name.to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -367,3 +438,7 @@ mod tests {
         assert_eq!(history, vec!["안녕", "답변"]);
     }
 }
+
+#[cfg(test)]
+#[path = "relay_attachment_tests.rs"]
+mod attachment_tests;
