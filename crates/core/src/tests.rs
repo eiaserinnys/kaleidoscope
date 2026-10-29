@@ -10,19 +10,20 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use kaleidoscope_contract::registry::{
-    AgentCreateRequest, AgentSendRequest, DeviceAgentReply, DeviceEvent, DeviceLayout,
-    DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply, PairStartRequest,
-    RegistryApp,
+    AgentAttachmentReply, AgentCreateRequest, AgentSendRequest, DeviceAgentReply, DeviceEvent,
+    DeviceLayout, DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply,
+    PairStartRequest, RegistryApp,
 };
 use kaleidoscope_contract::{
-    AgentInfo, App, AppVersion, CoreEvent, ErrorCode, JsonValue, LinkStatus, Rect, ShellSnapshot,
+    AgentInfo, AgentUpload, App, AppVersion, CoreEvent, CoreReply, CoreRequest, ErrorCode,
+    JsonValue, LinkStatus, Rect, ShellSnapshot,
 };
 use serde_json::{json, Value};
 use tempfile::TempDir;
 
 use crate::registry_client::{RegistryClient, RegistryError};
 use crate::storage::LinkFile;
-use crate::{Core, CoreConfig, CoreError, CoreReply, CoreRequest, Host};
+use crate::{Core, CoreConfig, CoreError, Host};
 
 const MD_EDITOR: &str = include_str!("../../../examples/md-editor.json");
 const MD_VIEWER: &str = include_str!("../../../examples/md-viewer.json");
@@ -41,6 +42,24 @@ impl FakeHost {
 impl Host for FakeHost {
     fn pick_folder(&self) -> Option<PathBuf> {
         self.selected.lock().unwrap().clone()
+    }
+}
+
+#[derive(Default)]
+struct FakeAttachmentOpener {
+    opened: Mutex<Vec<PathBuf>>,
+    revealed: Mutex<Vec<PathBuf>>,
+}
+
+impl crate::AttachmentOpener for FakeAttachmentOpener {
+    fn open(&self, path: &Path) -> std::io::Result<()> {
+        self.opened.lock().unwrap().push(path.to_path_buf());
+        Ok(())
+    }
+
+    fn reveal(&self, path: &Path) -> std::io::Result<()> {
+        self.revealed.lock().unwrap().push(path.to_path_buf());
+        Ok(())
     }
 }
 
@@ -123,6 +142,8 @@ struct FakeRegistryClient {
     agent_create_replies: Mutex<VecDeque<Result<AgentInfo, RegistryError>>>,
     agent_sends: Mutex<Vec<(String, AgentSendRequest)>>,
     agent_send_replies: Mutex<VecDeque<Result<(), RegistryError>>>,
+    agent_attachments: Mutex<Vec<(String, String, u32)>>,
+    agent_attachment_replies: Mutex<VecDeque<Result<AgentAttachmentReply, RegistryError>>>,
     layouts: Mutex<Vec<DeviceLayout>>,
     layout_replies: Mutex<VecDeque<Result<(), RegistryError>>>,
     open_calls: AtomicUsize,
@@ -253,6 +274,25 @@ impl RegistryClient for FakeRegistryClient {
             .unwrap_or(Ok(()))
     }
 
+    fn agent_attachment(
+        &self,
+        _server_url: &str,
+        _token: &str,
+        workspace_id: &str,
+        item_id: &str,
+        index: u32,
+    ) -> Result<AgentAttachmentReply, RegistryError> {
+        self.agent_attachments
+            .lock()
+            .unwrap()
+            .push((workspace_id.into(), item_id.into(), index));
+        self.agent_attachment_replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or_else(|| Err(RegistryError::Failure("unexpected attachment read".into())))
+    }
+
     fn put_layout(
         &self,
         _server_url: &str,
@@ -278,7 +318,23 @@ fn open_core_with_client(
     host: &Arc<FakeHost>,
     client: Arc<FakeRegistryClient>,
 ) -> Core {
-    Core::open_with_client(
+    open_core_with_attachment_opener(
+        data_dir,
+        definitions,
+        host,
+        client,
+        Arc::new(crate::SystemAttachmentOpener),
+    )
+}
+
+fn open_core_with_attachment_opener(
+    data_dir: &Path,
+    definitions: Vec<String>,
+    host: &Arc<FakeHost>,
+    client: Arc<FakeRegistryClient>,
+    attachment_opener: Arc<dyn crate::AttachmentOpener>,
+) -> Core {
+    Core::open_with_client_and_opener(
         CoreConfig {
             data_dir: data_dir.to_path_buf(),
             seed_definitions: definitions,
@@ -287,6 +343,7 @@ fn open_core_with_client(
         },
         host.clone(),
         client,
+        attachment_opener,
     )
     .unwrap()
 }
@@ -624,6 +681,8 @@ fn import_seeds_versions_migrates_window_state_and_rejects_newer_requirements() 
 
     let mut definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
     definition["name"] = json!("마크다운 편집기 새 버전");
+    // 상태 키를 바꾸므로 예제의 opens(current_file을 가리킴)는 뺀다.
+    definition.as_object_mut().unwrap().remove("opens");
     definition["state"] = json!({"new_key": "default"});
     definition["ui"] = json!({
         "type": "markdown_view",
@@ -977,6 +1036,7 @@ fn registry_events_update_cache_dedupe_versions_and_order_open_requests() {
 
     let mut next_definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
     next_definition["name"] = json!("레지스트리 편집기");
+    next_definition.as_object_mut().unwrap().remove("opens");
     next_definition["state"] = json!({"new_key": "기본값"});
     next_definition["ui"] = json!({
         "type": "markdown_view",
@@ -1174,6 +1234,7 @@ fn regression_unlinked_import_persists_removed_folder_grants() {
     ]);
     next_definition["ui"]["children"][0]["root"]["permission"] = json!("manuals");
     next_definition["ui"]["children"][1]["file"]["permission"] = json!("manuals");
+    next_definition["opens"]["permission"] = json!("manuals");
     import(&core, &next_definition.to_string());
     assert!(snapshot(&core).device.grants.is_empty());
     drop(core);
@@ -1208,6 +1269,7 @@ fn connected_import_persists_removed_folder_grants() {
     ]);
     next_definition["ui"]["children"][0]["root"]["permission"] = json!("manuals");
     next_definition["ui"]["children"][1]["file"]["permission"] = json!("manuals");
+    next_definition["opens"]["permission"] = json!("manuals");
     let definition_json = next_definition.to_string();
     client
         .uploads
@@ -1357,6 +1419,23 @@ fn agent_commands_require_connection_and_a_local_workspace() {
         core.handle(CoreRequest::AgentSend {
             workspace_id: "missing".into(),
             text: "hello".into(),
+            attachments: vec![],
+        }),
+        ErrorCode::Server,
+    );
+    expect_error(
+        core.handle(CoreRequest::AgentAttachment {
+            workspace_id: "missing".into(),
+            item_id: "7".into(),
+            index: 0,
+        }),
+        ErrorCode::Server,
+    );
+    expect_error(
+        core.handle(CoreRequest::AgentAttachmentOpen {
+            workspace_id: "missing".into(),
+            item_id: "7".into(),
+            index: 0,
         }),
         ErrorCode::Server,
     );
@@ -1378,6 +1457,15 @@ fn agent_commands_require_connection_and_a_local_workspace() {
         core.handle(CoreRequest::AgentSend {
             workspace_id: "missing".into(),
             text: "hello".into(),
+            attachments: vec![],
+        }),
+        ErrorCode::NotFound,
+    );
+    expect_error(
+        core.handle(CoreRequest::AgentAttachment {
+            workspace_id: "missing".into(),
+            item_id: "7".into(),
+            index: 0,
         }),
         ErrorCode::NotFound,
     );
@@ -1455,6 +1543,7 @@ fn agent_send_trims_text_counts_characters_and_rejects_invalid_input_before_netw
             core.handle(CoreRequest::AgentSend {
                 workspace_id: workspace_id.clone(),
                 text,
+                attachments: vec![],
             }),
             ErrorCode::InvalidRequest,
         );
@@ -1464,6 +1553,7 @@ fn agent_send_trims_text_counts_characters_and_rejects_invalid_input_before_netw
     core.handle(CoreRequest::AgentSend {
         workspace_id: workspace_id.clone(),
         text: "  안녕\n ".into(),
+        attachments: vec![],
     })
     .unwrap();
     assert_eq!(
@@ -1471,9 +1561,258 @@ fn agent_send_trims_text_counts_characters_and_rejects_invalid_input_before_netw
         &[(
             workspace_id,
             AgentSendRequest {
-                text: "안녕".into()
+                text: "안녕".into(),
+                attachments: vec![],
             }
         )]
+    );
+}
+
+#[test]
+fn agent_send_forwards_attachments_in_order_and_allows_attachment_only_messages() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(
+        &temp.path().join("data"),
+        vec![],
+        &host,
+        Arc::clone(&client),
+    );
+    mark_connected(&core);
+    let workspace_id = snapshot(&core).shared.workspaces[0].id.clone();
+    let attachments = vec![
+        AgentUpload {
+            name: "첫째.png".into(),
+            mime: "image/png".into(),
+            data_base64: "aW1hZ2U=".into(),
+        },
+        AgentUpload {
+            name: "둘째.txt".into(),
+            mime: "text/plain".into(),
+            data_base64: "dGV4dA==".into(),
+        },
+    ];
+
+    core.handle(CoreRequest::AgentSend {
+        workspace_id: workspace_id.clone(),
+        text: "  함께 보냄  ".into(),
+        attachments: attachments.clone(),
+    })
+    .unwrap();
+    core.handle(CoreRequest::AgentSend {
+        workspace_id: workspace_id.clone(),
+        text: " \n ".into(),
+        attachments: vec![attachments[0].clone()],
+    })
+    .unwrap();
+
+    assert_eq!(
+        client.agent_sends.lock().unwrap().as_slice(),
+        &[
+            (
+                workspace_id.clone(),
+                AgentSendRequest {
+                    text: "함께 보냄".into(),
+                    attachments: attachments.clone(),
+                },
+            ),
+            (
+                workspace_id.clone(),
+                AgentSendRequest {
+                    text: "".into(),
+                    attachments: vec![attachments[0].clone()],
+                },
+            ),
+        ]
+    );
+
+    expect_error(
+        core.handle(CoreRequest::AgentSend {
+            workspace_id: workspace_id.clone(),
+            text: " \t ".into(),
+            attachments: vec![],
+        }),
+        ErrorCode::InvalidRequest,
+    );
+    expect_error(
+        core.handle(CoreRequest::AgentSend {
+            workspace_id,
+            text: "".into(),
+            attachments: vec![attachments[0].clone(); 11],
+        }),
+        ErrorCode::InvalidRequest,
+    );
+    assert_eq!(client.agent_sends.lock().unwrap().len(), 2);
+}
+
+#[test]
+fn agent_attachment_returns_server_reply_and_preserves_attachment_errors() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(
+        &temp.path().join("data"),
+        vec![],
+        &host,
+        Arc::clone(&client),
+    );
+    mark_connected(&core);
+    let workspace_id = snapshot(&core).shared.workspaces[0].id.clone();
+    let reply = AgentAttachmentReply {
+        name: "회의 사진.png".into(),
+        mime: "image/png".into(),
+        data_base64: "aW1hZ2U=".into(),
+    };
+    client
+        .agent_attachment_replies
+        .lock()
+        .unwrap()
+        .push_back(Ok(reply.clone()));
+
+    assert_eq!(
+        core.handle(CoreRequest::AgentAttachment {
+            workspace_id: workspace_id.clone(),
+            item_id: "7".into(),
+            index: 0,
+        })
+        .unwrap(),
+        CoreReply::AgentAttachment {
+            name: reply.name,
+            mime: reply.mime,
+            data_base64: reply.data_base64,
+        }
+    );
+    assert_eq!(
+        client.agent_attachments.lock().unwrap().as_slice(),
+        &[(workspace_id.clone(), "7".into(), 0)]
+    );
+
+    client
+        .agent_attachment_replies
+        .lock()
+        .unwrap()
+        .push_back(Err(RegistryError::NotFound));
+    expect_error(
+        core.handle(CoreRequest::AgentAttachment {
+            workspace_id: workspace_id.clone(),
+            item_id: "8".into(),
+            index: 0,
+        }),
+        ErrorCode::NotFound,
+    );
+    client
+        .agent_attachment_replies
+        .lock()
+        .unwrap()
+        .push_back(Err(RegistryError::Validation(CoreError::new(
+            ErrorCode::InvalidRequest,
+        ))));
+    expect_error(
+        core.handle(CoreRequest::AgentAttachment {
+            workspace_id,
+            item_id: "7".into(),
+            index: 0,
+        }),
+        ErrorCode::InvalidRequest,
+    );
+}
+
+#[test]
+fn agent_attachment_open_saves_sanitized_names_and_selects_open_or_reveal() {
+    let temp = TempDir::new().unwrap();
+    let data_dir = temp.path().join("data");
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let attachment_opener = Arc::new(FakeAttachmentOpener::default());
+    let core = open_core_with_attachment_opener(
+        &data_dir,
+        vec![],
+        &host,
+        Arc::clone(&client),
+        attachment_opener.clone(),
+    );
+    mark_connected(&core);
+    let workspace_id = snapshot(&core).shared.workspaces[0].id.clone();
+    for (name, mime, data_base64) in [
+        ("회의 사진.png", "image/png", "cG5nLWJ5dGVz"),
+        ("a:b?.txt", "text/plain", "dGV4dC1ieXRlcw=="),
+        ("setup.exe", "application/octet-stream", "ZXhlLWJ5dGVz"),
+        (".exe", "application/octet-stream", "ZG90LWV4ZS1ieXRlcw=="),
+        (".LNK", "application/octet-stream", "ZG90LWxuay1ieXRlcw=="),
+    ] {
+        client
+            .agent_attachment_replies
+            .lock()
+            .unwrap()
+            .push_back(Ok(AgentAttachmentReply {
+                name: name.into(),
+                mime: mime.into(),
+                data_base64: data_base64.into(),
+            }));
+    }
+
+    for index in 0..5 {
+        assert_eq!(
+            core.handle(CoreRequest::AgentAttachmentOpen {
+                workspace_id: workspace_id.clone(),
+                item_id: "7".into(),
+                index,
+            })
+            .unwrap(),
+            CoreReply::AgentAttachmentOpen {}
+        );
+    }
+
+    assert_eq!(
+        fs::read(data_dir.join("attachments/7-0/회의 사진.png")).unwrap(),
+        b"png-bytes"
+    );
+    assert_eq!(
+        fs::read(data_dir.join("attachments/7-1/a_b_.txt")).unwrap(),
+        b"text-bytes"
+    );
+    assert_eq!(
+        fs::read(data_dir.join("attachments/7-2/setup.exe")).unwrap(),
+        b"exe-bytes"
+    );
+    assert_eq!(
+        fs::read(data_dir.join("attachments/7-3/.exe")).unwrap(),
+        b"dot-exe-bytes"
+    );
+    assert_eq!(
+        fs::read(data_dir.join("attachments/7-4/.LNK")).unwrap(),
+        b"dot-lnk-bytes"
+    );
+    assert_eq!(
+        attachment_opener.opened.lock().unwrap().as_slice(),
+        &[
+            data_dir.join("attachments/7-0/회의 사진.png"),
+            data_dir.join("attachments/7-1/a_b_.txt"),
+        ]
+    );
+    assert_eq!(
+        attachment_opener.revealed.lock().unwrap().as_slice(),
+        &[
+            data_dir.join("attachments/7-2/setup.exe"),
+            data_dir.join("attachments/7-3/.exe"),
+            data_dir.join("attachments/7-4/.LNK"),
+        ]
+    );
+
+    let requests_before = client.agent_attachments.lock().unwrap().len();
+    expect_error(
+        core.handle(CoreRequest::AgentAttachmentOpen {
+            workspace_id,
+            item_id: "7/attachments/0#/../../../../../../escape".into(),
+            index: 0,
+        }),
+        ErrorCode::InvalidRequest,
+    );
+    assert_eq!(
+        client.agent_attachments.lock().unwrap().len(),
+        requests_before,
+        "잘못된 item id는 네트워크 요청과 파일 쓰기 전에 거부한다"
     );
 }
 

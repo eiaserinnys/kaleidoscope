@@ -13,7 +13,8 @@ mod storage;
 mod tests;
 
 use std::fs;
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -28,6 +29,23 @@ pub use kaleidoscope_contract;
 pub trait Host: Send + Sync + 'static {
     /// 폴더 고르기 창을 띄우고 고른 폴더의 절대 경로를 돌려준다. 취소하면 None이다.
     fn pick_folder(&self) -> Option<PathBuf>;
+}
+
+pub(crate) trait AttachmentOpener: Send + Sync + 'static {
+    fn open(&self, path: &Path) -> io::Result<()>;
+    fn reveal(&self, path: &Path) -> io::Result<()>;
+}
+
+pub(crate) struct SystemAttachmentOpener;
+
+impl AttachmentOpener for SystemAttachmentOpener {
+    fn open(&self, path: &Path) -> io::Result<()> {
+        opener::open(path).map_err(|error| io::Error::other(error.to_string()))
+    }
+
+    fn reveal(&self, path: &Path) -> io::Result<()> {
+        opener::reveal(path).map_err(|error| io::Error::other(error.to_string()))
+    }
 }
 
 pub struct CoreConfig {
@@ -52,6 +70,7 @@ pub(crate) struct Inner {
     pub(crate) server_url: String,
     pub(crate) device_name: String,
     pub(crate) registry: Arc<dyn RegistryClient>,
+    pub(crate) attachment_opener: Arc<dyn AttachmentOpener>,
     pub(crate) link_file: Mutex<Option<storage::LinkFile>>,
     pub(crate) generation: AtomicU64,
     pub(crate) layout_connection_epoch: AtomicU64,
@@ -103,6 +122,15 @@ impl Core {
         host: Arc<dyn Host>,
         registry: Arc<dyn RegistryClient>,
     ) -> Result<Core, CoreError> {
+        Self::open_with_client_and_opener(config, host, registry, Arc::new(SystemAttachmentOpener))
+    }
+
+    fn open_with_client_and_opener(
+        config: CoreConfig,
+        host: Arc<dyn Host>,
+        registry: Arc<dyn RegistryClient>,
+        attachment_opener: Arc<dyn AttachmentOpener>,
+    ) -> Result<Core, CoreError> {
         fs::create_dir_all(&config.data_dir).map_err(|error| error::io_error(&error))?;
 
         let link_file = storage::load_link(&config.data_dir)?;
@@ -141,6 +169,7 @@ impl Core {
             server_url: config.server_url,
             device_name: config.device_name,
             registry,
+            attachment_opener,
             link_file: Mutex::new(link_file.clone()),
             generation: AtomicU64::new(0),
             layout_connection_epoch: AtomicU64::new(0),
@@ -184,7 +213,9 @@ impl Core {
             }
             request @ (CoreRequest::AgentGet { .. }
             | CoreRequest::AgentCreate { .. }
-            | CoreRequest::AgentSend { .. }) => link::handle_agent(&self.inner, request),
+            | CoreRequest::AgentSend { .. }
+            | CoreRequest::AgentAttachment { .. }
+            | CoreRequest::AgentAttachmentOpen { .. }) => link::handle_agent(&self.inner, request),
             CoreRequest::FilesList {
                 window_id,
                 permission,
@@ -222,6 +253,16 @@ impl Core {
                 window_id,
                 permission,
             } => self.pick_folder(&window_id, &permission),
+            // 계약 5판의 탐색기 열기와 웹 화면은 다음 PR(코어 구현)에서 채운다. 그 전까지는 쓸 수 없다고 답한다.
+            CoreRequest::FilesOpen { .. }
+            | CoreRequest::WebAttach { .. }
+            | CoreRequest::WebPlace { .. }
+            | CoreRequest::WebNavigate { .. }
+            | CoreRequest::WebHistory { .. }
+            | CoreRequest::WebCapture { .. }
+            | CoreRequest::WebDetach { .. } => {
+                Err(error::make(kaleidoscope_contract::ErrorCode::Unavailable))
+            }
             request => self.handle_state_change(request),
         }
     }

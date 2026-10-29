@@ -4,8 +4,8 @@ use axum::{
     extract::{Extension, Path},
 };
 use kaleidoscope_contract::{
-    registry::{AgentCreateRequest, AgentSendRequest, DeviceAgentReply},
-    AgentInfo, AgentItem, AgentItemKind, AgentUpdate,
+    registry::{AgentCreateRequest, DeviceAgentReply},
+    AgentAttachment, AgentInfo, AgentItem, AgentItemKind, AgentUpdate,
 };
 
 #[derive(Clone)]
@@ -25,6 +25,13 @@ pub(super) struct AgentRow {
     pub workspace_name: String,
     pub created_at: String,
     pub cursor: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) struct StoredAgentAttachment {
+    pub name: String,
+    pub mime: String,
+    pub path: String,
 }
 
 type ApiResult<T> = Result<T, (StatusCode, CoreError)>;
@@ -139,7 +146,7 @@ impl AppState {
     }
     pub(super) fn history(&self, workspace_id: &str) -> Result<Vec<AgentItem>, CoreError> {
         let db = self.lock_db()?;
-        let mut stmt = db.prepare("SELECT id,kind,text,at FROM (SELECT id,kind,text,at FROM agent_items WHERE workspace_id=?1 ORDER BY id DESC LIMIT ?2) ORDER BY id").map_err(db_error)?;
+        let mut stmt = db.prepare("SELECT id,kind,text,at,attachments FROM (SELECT id,kind,text,at,attachments FROM agent_items WHERE workspace_id=?1 ORDER BY id DESC LIMIT ?2) ORDER BY id").map_err(db_error)?;
         let rows = stmt
             .query_map(
                 params![workspace_id, registry::AGENT_HISTORY_LIMIT as i64],
@@ -151,11 +158,27 @@ impl AppState {
                         "error" => AgentItemKind::Error,
                         _ => AgentItemKind::Notice,
                     };
+                    let stored: String = r.get(4)?;
+                    let stored: Vec<StoredAgentAttachment> = serde_json::from_str(&stored)
+                        .map_err(|error| {
+                            rusqlite::Error::FromSqlConversionFailure(
+                                4,
+                                rusqlite::types::Type::Text,
+                                Box::new(error),
+                            )
+                        })?;
                     Ok(AgentItem {
                         id: r.get::<_, i64>(0)?.to_string(),
                         kind,
                         text: r.get(2)?,
                         at: r.get(3)?,
+                        attachments: stored
+                            .into_iter()
+                            .map(|attachment| AgentAttachment {
+                                name: attachment.name,
+                                mime: attachment.mime,
+                            })
+                            .collect(),
                     })
                 },
             )
@@ -167,6 +190,7 @@ impl AppState {
         workspace_id: &str,
         kind: AgentItemKind,
         text: &str,
+        attachments: &[StoredAgentAttachment],
     ) -> Result<AgentItem, CoreError> {
         let at = timestamp();
         let db = self.lock_db()?;
@@ -176,9 +200,11 @@ impl AppState {
             AgentItemKind::Error => "error",
             AgentItemKind::Notice => "notice",
         };
+        let stored = serde_json::to_string(attachments)
+            .map_err(|_| server_error("대화 첨부를 저장할 수 없습니다."))?;
         db.execute(
-            "INSERT INTO agent_items(workspace_id,kind,text,at) VALUES(?1,?2,?3,?4)",
-            params![workspace_id, kind_string, text, at],
+            "INSERT INTO agent_items(workspace_id,kind,text,at,attachments) VALUES(?1,?2,?3,?4,?5)",
+            params![workspace_id, kind_string, text, at, stored],
         )
         .map_err(db_error)?;
         Ok(AgentItem {
@@ -186,7 +212,39 @@ impl AppState {
             kind,
             text: text.into(),
             at,
+            attachments: attachments
+                .iter()
+                .map(|attachment| AgentAttachment {
+                    name: attachment.name.clone(),
+                    mime: attachment.mime.clone(),
+                })
+                .collect(),
         })
+    }
+    pub(super) fn stored_attachment(
+        &self,
+        workspace_id: &str,
+        item_id: &str,
+        index: u32,
+    ) -> Result<Option<StoredAgentAttachment>, CoreError> {
+        let Ok(item_id) = item_id.parse::<i64>() else {
+            return Ok(None);
+        };
+        let stored: Option<String> = self
+            .lock_db()?
+            .query_row(
+                "SELECT attachments FROM agent_items WHERE workspace_id=?1 AND id=?2",
+                params![workspace_id, item_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(db_error)?;
+        let Some(stored) = stored else {
+            return Ok(None);
+        };
+        let attachments: Vec<StoredAgentAttachment> = serde_json::from_str(&stored)
+            .map_err(|_| server_error("대화 첨부 기록을 읽을 수 없습니다."))?;
+        Ok(attachments.get(index as usize).cloned())
     }
     pub(super) fn emit(&self, workspace_id: &str, update: AgentUpdate) {
         let _ = self.0.events.send(DeviceEvent::AgentUpdate {
@@ -344,6 +402,7 @@ async fn create(
                         label(&request.model_preset),
                         label(&preset)
                     ),
+                    &[],
                 )
                 .map_err(db_fail)?,
         )
@@ -371,54 +430,6 @@ async fn create(
     Ok(info)
 }
 
-pub(super) async fn send_message(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    body: Result<Json<AgentSendRequest>, JsonRejection>,
-) -> Response {
-    let Ok(Json(request)) = body else {
-        return response::<Value>(Err(bad()));
-    };
-    match tokio::spawn(async move { send(&state, &id, request).await }).await {
-        Ok(result) => response(result),
-        Err(_) => response::<Value>(Err(server("PAS 메시지 보내기 작업이 실패했습니다."))),
-    }
-}
-
-async fn send(state: &AppState, id: &str, request: AgentSendRequest) -> ApiResult<Value> {
-    let text = request.text.trim();
-    if text.is_empty() || text.chars().count() > registry::AGENT_MESSAGE_MAX_CHARS {
-        return Err(bad());
-    }
-    let row = state.agent_row(id).map_err(db_fail)?.ok_or_else(|| {
-        failure(
-            StatusCode::NOT_FOUND,
-            ErrorCode::NotFound,
-            "작업 PAS를 찾을 수 없습니다.",
-        )
-    })?;
-    let soul = state
-        .0
-        .soulstream
-        .as_ref()
-        .ok_or_else(|| server("소울스트림 연결 설정이 없습니다."))?;
-    let result = soul
-        .client
-        .post(format!(
-            "{}/api/sessions/{}/intervene",
-            soul.url, row.session_id
-        ))
-        .bearer_auth(&soul.token)
-        .json(&json!({"text":text,"caller_info":{"source":"kaleidoscope","display_name":"디렉터"}}))
-        .send()
-        .await
-        .map_err(|_| server("소울스트림에 말을 보내지 못했습니다."))?;
-    if !result.status().is_success() {
-        return Err(server("소울스트림에 말을 보내지 못했습니다."));
-    }
-    Ok(json!({}))
-}
-
 pub(super) fn initial_instruction(name: &str, id: &str) -> String {
     format!(
         "{}\n\n처음 시작이다. 도구를 쓰지 말고 이 작업의 PAS로서 한두 줄로 인사해 다오.",
@@ -429,6 +440,14 @@ pub(super) fn initial_instruction(name: &str, id: &str) -> String {
 pub(super) fn role_text(name: &str, id: &str) -> String {
     format!("이 세션은 kaleidoscope 쉘의 작업 「{name}」을 맡은 PAS다(workspace_id: {id}).\n- 디렉터는 쉘 안의 「작업 PAS」 창에서 말한다. caller_info.source가 kaleidoscope인 말이 디렉터의 말이다.\n- 앱을 만들거나 고치면 kaleidoscope MCP의 upload_app에 workspace_id \"{id}\"를 넣어 이 작업에 띄운다. 이미 있는 앱을 다시 띄울 때는 open_app에 같은 workspace_id를 넣는다.\n- 「이 창」, 「지금 보는 것」처럼 화면을 가리키면 먼저 get_workspace(workspace_id \"{id}\")로 지금 펼친 데스크톱과 창(앱, 버전, 연 파일)을 읽는다. 고칠 때는 get_app으로 정의를 받아 고친 뒤 upload_app으로 올린다.\n- 앱 만들기와 고치기, 화면 읽기처럼 이 창에서 끝나는 일은 카드를 만들지 않고 바로 한다. 답은 짧게 한다.")
 }
+
+#[path = "agent_attachments.rs"]
+mod attachments;
+pub(super) use attachments::{get_attachment, send_message};
+
+#[cfg(test)]
+#[path = "agent_attachment_tests.rs"]
+mod attachment_tests;
 
 #[cfg(test)]
 #[path = "agent_tests.rs"]

@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashSet};
 use serde_json::Value;
 
 use crate::{
-    AppDefinition, Block, CoreError, ErrorCode, FileAccess, PathValue, PermissionDecl,
+    AppDefinition, Block, CoreError, ErrorCode, FileAccess, PathValue, PermissionDecl, UrlValue,
     BLOCK_SET_VERSION, MODULE_VERSIONS,
 };
 
@@ -101,8 +101,58 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
         }
     }
 
+    if let Some(opens) = &definition.opens {
+        if definition.requires.blocks < 3 {
+            details.push("opens는 블록 세트 3판이라 requires.blocks가 3 이상이어야 합니다".into());
+        }
+        if opens.extensions.is_empty() {
+            details.push("opens.extensions에 확장자가 하나 이상 있어야 합니다".into());
+        }
+        for extension in &opens.extensions {
+            if !valid_extension(extension) {
+                details.push(format!(
+                    "opens.extensions의 확장자는 점 없이 소문자와 숫자 1~16자여야 합니다: {extension}"
+                ));
+            }
+        }
+        validate_permission(&opens.permission, definition, &mut details, "opens");
+        validate_state_key(&opens.state, definition, &mut details, "opens");
+    }
+
     validate_block(&definition.ui, definition, &mut details, "ui");
+    let web_views = count_blocks(&definition.ui, &|block| matches!(block, Block::WebView { .. }));
+    if web_views > 1 {
+        details.push(format!("web_view는 정의에 하나까지 둘 수 있습니다(지금 {web_views}개)"));
+    }
     details
+}
+
+fn count_blocks(block: &Block, matches: &dyn Fn(&Block) -> bool) -> usize {
+    let own = usize::from(matches(block));
+    match block {
+        Block::Split { children, .. } => {
+            own + children
+                .iter()
+                .map(|child| count_blocks(child, matches))
+                .sum::<usize>()
+        }
+        _ => own,
+    }
+}
+
+fn valid_extension(value: &str) -> bool {
+    (1..=16).contains(&value.len())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+}
+
+/// 정의에 직접 적은 웹 주소의 규칙. `http://`나 `https://`로 시작하고 그 뒤가 비어 있지 않으며 공백이 없다.
+pub fn valid_web_url(url: &str) -> bool {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"));
+    rest.is_some_and(|rest| !rest.is_empty() && !url.chars().any(char::is_whitespace))
 }
 
 fn valid_id(value: &str) -> bool {
@@ -114,6 +164,12 @@ fn valid_id(value: &str) -> bool {
 }
 
 fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<String>, at: &str) {
+    let introduced_in = block.introduced_in();
+    if definition.requires.blocks < introduced_in {
+        details.push(format!(
+            "{at}: 이 블록은 블록 세트 {introduced_in}판이라 requires.blocks가 {introduced_in} 이상이어야 합니다"
+        ));
+    }
     match block {
         Block::Split {
             sizes, children, ..
@@ -175,6 +231,33 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                     "{at}: agent_chat이 사용하는 agent 모듈을 requires.modules에 선언해야 합니다"
                 ));
             }
+        }
+        Block::WebView {
+            url, on_navigate, ..
+        } => {
+            if !definition.requires.modules.contains_key("web") {
+                details.push(format!(
+                    "{at}: web_view가 사용하는 web 모듈을 requires.modules에 선언해야 합니다"
+                ));
+            }
+            match url {
+                UrlValue::State(reference) => {
+                    validate_state_key(&reference.state, definition, details, at)
+                }
+                UrlValue::Literal(url) => {
+                    if !valid_web_url(url) {
+                        details.push(format!(
+                            "{at}: web_view 주소는 http:// 나 https:// 로 시작하고 공백이 없어야 합니다: {url}"
+                        ));
+                    }
+                }
+            }
+            if let Some(on_navigate) = on_navigate {
+                validate_state_key(&on_navigate.set_state, definition, details, at);
+            }
+        }
+        Block::Explorer { root } => {
+            validate_permission(&root.permission, definition, details, at);
         }
     }
 }

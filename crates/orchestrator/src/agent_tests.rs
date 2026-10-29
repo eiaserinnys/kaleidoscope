@@ -1,5 +1,6 @@
 use super::*;
 use axum::{extract::State as MockState, http::HeaderMap as MockHeaders};
+use kaleidoscope_contract::registry::AgentSendRequest;
 
 #[derive(Clone, Default)]
 struct Mock(Arc<Mutex<Vec<(String, Value)>>>);
@@ -93,6 +94,7 @@ async fn creates_fallback_sets_instructions_sends_and_resumes_cursor() {
         Path("w".into()),
         Ok(Json(AgentSendRequest {
             text: "  안녕  ".into(),
+            attachments: vec![],
         })),
     )
     .await;
@@ -100,14 +102,20 @@ async fn creates_fallback_sets_instructions_sends_and_resumes_cursor() {
     let empty = send_message(
         State(state.clone()),
         Path("w".into()),
-        Ok(Json(AgentSendRequest { text: "  ".into() })),
+        Ok(Json(AgentSendRequest {
+            text: "  ".into(),
+            attachments: vec![],
+        })),
     )
     .await;
     assert_eq!(empty.status(), StatusCode::BAD_REQUEST);
     let missing = send_message(
         State(state.clone()),
         Path("missing".into()),
-        Ok(Json(AgentSendRequest { text: "a".into() })),
+        Ok(Json(AgentSendRequest {
+            text: "a".into(),
+            attachments: vec![],
+        })),
     )
     .await;
     assert_eq!(missing.status(), StatusCode::NOT_FOUND);
@@ -283,6 +291,7 @@ async fn intervention_finishes_after_client_disconnects() {
             Path("w".into()),
             Ok(Json(AgentSendRequest {
                 text: "  다시 봐 줘  ".into(),
+                attachments: vec![],
             })),
         )
         .await

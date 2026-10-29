@@ -195,7 +195,7 @@ fn migration_upgrades_v1_without_losing_devices() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
     assert_eq!(
         db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -205,6 +205,33 @@ fn migration_upgrades_v1_without_losing_devices() {
         db.query_row("SELECT count(*) FROM agents", [], |r| r.get::<_, i64>(0))
             .unwrap(),
         0
+    );
+}
+
+#[test]
+fn migration_upgrades_v2_agent_history_with_empty_attachments() {
+    let db = Connection::open_in_memory().unwrap();
+    db.execute_batch("CREATE TABLE apps (id TEXT PRIMARY KEY,name TEXT NOT NULL,current_version INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+        CREATE TABLE app_versions (app_id TEXT NOT NULL REFERENCES apps(id),version INTEGER NOT NULL,definition TEXT NOT NULL,created_at TEXT NOT NULL,created_by TEXT NOT NULL,PRIMARY KEY(app_id,version));
+        CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
+        CREATE TABLE device_layouts (device_id TEXT PRIMARY KEY REFERENCES devices(id), layout TEXT NOT NULL, reported_at TEXT NOT NULL);
+        CREATE TABLE agents (workspace_id TEXT PRIMARY KEY, device_id TEXT NOT NULL, session_id TEXT NOT NULL UNIQUE, model_preset TEXT NOT NULL, workspace_name TEXT NOT NULL, created_at TEXT NOT NULL, cursor INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE agent_items (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id TEXT NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, at TEXT NOT NULL);
+        INSERT INTO agent_items(workspace_id,kind,text,at) VALUES('w','user','예전 기록','now');
+        PRAGMA user_version=2;").unwrap();
+    migrate(&db).unwrap();
+    let version: i64 = db
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 3);
+    assert_eq!(
+        db.query_row(
+            "SELECT text || ':' || attachments FROM agent_items WHERE workspace_id='w'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap(),
+        "예전 기록:[]"
     );
 }
 

@@ -3,10 +3,11 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use kaleidoscope_contract::registry::{
-    device_agent_messages_path, device_agent_path, AgentCreateRequest, AgentSendRequest,
-    DeviceAgentReply, DeviceEvent, DeviceLayout, DeviceUploadRequest, PairPollReply,
-    PairPollRequest, PairStartReply, PairStartRequest, RegistryApp, DEVICE_APPS_PATH,
-    DEVICE_EVENTS_PATH, DEVICE_LAYOUT_PATH, PAIR_POLL_PATH, PAIR_START_PATH,
+    device_agent_attachment_path, device_agent_messages_path, device_agent_path,
+    AgentAttachmentReply, AgentCreateRequest, AgentSendRequest, DeviceAgentReply, DeviceEvent,
+    DeviceLayout, DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply,
+    PairStartRequest, RegistryApp, DEVICE_APPS_PATH, DEVICE_EVENTS_PATH, DEVICE_LAYOUT_PATH,
+    PAIR_POLL_PATH, PAIR_START_PATH,
 };
 use kaleidoscope_contract::CoreError;
 
@@ -60,6 +61,15 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         workspace_id: &str,
         request: &AgentSendRequest,
     ) -> Result<(), RegistryError>;
+
+    fn agent_attachment(
+        &self,
+        server_url: &str,
+        token: &str,
+        workspace_id: &str,
+        item_id: &str,
+        index: u32,
+    ) -> Result<AgentAttachmentReply, RegistryError>;
 
     fn put_layout(
         &self,
@@ -218,6 +228,29 @@ impl RegistryClient for HttpRegistryClient {
             .send()
             .map_err(|error| RegistryError::Failure(error.to_string()))?;
         agent_success_json::<serde_json::Value>(response).map(|_| ())
+    }
+
+    fn agent_attachment(
+        &self,
+        server_url: &str,
+        token: &str,
+        workspace_id: &str,
+        item_id: &str,
+        index: u32,
+    ) -> Result<AgentAttachmentReply, RegistryError> {
+        let response = self
+            .requests()?
+            .get(format!(
+                "{server_url}{}",
+                device_agent_attachment_path(workspace_id, item_id, index)
+            ))
+            .bearer_auth(token)
+            .timeout(Duration::from_secs(
+                kaleidoscope_contract::registry::AGENT_SEND_TIMEOUT_SECS,
+            ))
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        agent_success_json(response)
     }
 
     fn put_layout(

@@ -12,7 +12,7 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
             PRAGMA user_version=1;
             COMMIT;")?;
-    } else if version > 2 {
+    } else if version > 3 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 2 {
@@ -23,6 +23,14 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE INDEX agent_items_workspace_id ON agent_items(workspace_id,id);
             PRAGMA user_version=2;
             COMMIT;")?;
+    }
+    if version < 3 {
+        db.execute_batch(
+            "BEGIN IMMEDIATE;
+            ALTER TABLE agent_items ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]';
+            PRAGMA user_version=3;
+            COMMIT;",
+        )?;
     }
     Ok(())
 }

@@ -2,11 +2,12 @@
   "id": "md-editor",
   "name": "마크다운 편집기",
   "description": "고른 폴더의 md 파일을 열어 원문 그대로 고친다",
-  "requires": { "blocks": 1, "modules": { "files": 1 } },
+  "requires": { "blocks": 3, "modules": { "files": 1 } },
   "permissions": [
     { "module": "files", "id": "docs", "access": "readwrite", "label": "문서 폴더" }
   ],
   "state": { "current_file": null },
+  "opens": { "extensions": ["md"], "permission": "docs", "state": "current_file" },
   "ui": {
     "type": "split",
     "direction": "row",
