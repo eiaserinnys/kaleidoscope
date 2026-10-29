@@ -18,6 +18,7 @@ const errorCodes = new Set<CoreError["code"]>([
   "path_outside_root",
   "conflict",
   "server",
+  "unavailable",
   "io",
 ]);
 

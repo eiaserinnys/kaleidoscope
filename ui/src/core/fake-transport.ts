@@ -16,6 +16,7 @@ import type {
   ShellSnapshot,
 } from "../contract/contract";
 import { toCoreError, type CoreTransport } from "./core-transport";
+import { createFakeData, type FakeDataSeed } from "./fake-data";
 
 export interface FakeTransportSeed {
   snapshot: ShellSnapshot;
@@ -27,6 +28,7 @@ export interface FakeTransportSeed {
   agentGetError?: string;
   agentSendError?: string;
   agentSendDelayMs?: number;
+  data?: FakeDataSeed;
 }
 
 export interface FakeAgentSeed {
@@ -147,6 +149,10 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     .find((version) => version.app_id === window.app_id && version.version === window.app_version)
     ?.definition ?? null;
 
+  const data = createFakeData(seed.data ?? {}, findWindow, (window) => definitionFor(window) ?? undefined,
+    async (windowId, state) => { await callRequest({ op: "window.set_state", window_id: windowId, state }); },
+    (windowId, view) => emit({ event: "data.update", window_id: windowId, view }));
+
   const permissionFor = (windowId: string, permission: string) => {
     const window = findWindow(windowId);
     const definition = definitionFor(window);
@@ -168,6 +174,19 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     switch (request.op) {
       case "state.get":
         return { op: "state.get", snapshot: clone(snapshot) };
+      case "data.attach":
+        return { op: "data.attach", view: await data.attach(request.window_id) };
+      case "data.detach":
+        data.detach(request.window_id);
+        return { op: "data.detach" };
+      case "data.refresh":
+        await data.refresh(request.window_id, request.sources ?? []);
+        return { op: "data.refresh" };
+      case "data.act":
+        await data.act(request.window_id, request.pointer, request.event ?? null, request.item);
+        return { op: "data.act" };
+      case "connection.login":
+        return fail("unavailable", "로그인을 사용할 수 없습니다");
       case "agent.get": {
         if (seed.agentGetDelayMs) await delay(seed.agentGetDelayMs);
         if (seed.agentGetError) return fail("server", seed.agentGetError);
@@ -252,6 +271,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
           },
         };
         emitState();
+        await data.stateChanged(updated);
         return { op: "window.set_state", window: clone(updated) };
       }
       case "files.pick_folder": {

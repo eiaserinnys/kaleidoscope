@@ -14,12 +14,13 @@ import "./harness.css";
 import mdEditorJson from "../../examples/md-editor.json";
 import mdViewerJson from "../../examples/md-viewer.json";
 import workspacePasJson from "../../examples/workspace-pas.json";
+import { dataLayoutApp } from "./data-layout-app";
 import pluginsDocument from "./create-plugins.txt?raw";
 
 const mdEditor = mdEditorJson as AppDefinition;
 const mdViewer = mdViewerJson as AppDefinition;
 const workspacePas = workspacePasJson as unknown as AppDefinition;
-const definitions = [mdEditor, mdViewer, workspacePas];
+const definitions = [mdEditor, mdViewer, workspacePas, dataLayoutApp];
 const timestamp = "2026-10-28T00:00:00Z";
 
 function makeWindow(definition: AppDefinition, id: string, z: number): AppWindow {
@@ -30,7 +31,7 @@ function makeWindow(definition: AppDefinition, id: string, z: number): AppWindow
     app_version: 1,
     rect: { x: 0, y: 0, width: 640, height: 520 },
     z,
-    state: { current_file: null },
+    state: { ...definition.state },
     created_at: timestamp,
     updated_at: timestamp,
   };
@@ -56,7 +57,7 @@ const initialSnapshot: ShellSnapshot = {
     app_versions: appVersions,
     workspaces: [{ id: "workspace-1", name: "kaleidoscope", created_at: timestamp, updated_at: timestamp }],
     desktops: [{ id: "desktop-1", workspace_id: "workspace-1", name: "작업", position: 0, created_at: timestamp, updated_at: timestamp }],
-  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(mdViewer, "viewer-window", 2), makeWindow(workspacePas, "pas-window", 3)],
+  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(mdViewer, "viewer-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4)],
   },
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [] },
   supported: { blocks: 1, modules: { files: 1 } },
@@ -179,6 +180,7 @@ const greetingItems: AgentItem[] = [
 
 const fakeTransport = createFakeTransport({
   snapshot: demoSnapshot,
+  data: { sources: { sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
   folder: { root_path: "/fake/docs", root_name: "문서" },
   agentModels,
   agentGetDelayMs: pasMode === "loading" ? 5000 : undefined,
@@ -210,6 +212,7 @@ function Harness() {
   const snapshot = useShellSnapshot(store);
   const editorWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-editor");
   const viewerWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-viewer");
+  const dataWindow = snapshot?.shared.windows.find((item) => item.app_id === "data-controls");
   const pasWindow = snapshot?.shared.windows.find((item) => item.app_id === "workspace-pas");
 
   return (
@@ -242,6 +245,10 @@ function Harness() {
               ? <AppWindowContent store={store} windowId={pasWindow.id} />
               : <div className="ks-harness-loading">불러오는 중</div>}
           </div>
+        </section>
+        <section aria-label="data-controls" className={`ks-harness-window${previewOnly && previewAppId !== "data-controls" ? " is-hidden" : ""}`} data-app-id="data-controls" data-testid="app-window-data-controls">
+          <header className="ks-harness-window-header">범용 블록</header>
+          <div className="ks-harness-window-content">{dataWindow ? <AppWindowContent store={store} windowId={dataWindow.id} /> : null}</div>
         </section>
       </div>
       {!coreUrl ? <FakeFilePanel transport={fakeTransport} /> : null}
