@@ -7,15 +7,21 @@ mod error;
 mod files;
 mod layout_reporter;
 mod link;
+mod logins;
 mod media;
+mod oauth;
 mod registry_client;
 mod registry_events;
 mod state_commands;
 mod storage;
 
 #[cfg(test)]
+mod logins_tests;
+
+#[cfg(test)]
 mod tests;
 
+use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -33,6 +39,11 @@ pub use kaleidoscope_contract;
 pub trait Host: Send + Sync + 'static {
     /// 폴더 고르기 창을 띄우고 고른 폴더의 절대 경로를 돌려준다. 취소하면 None이다.
     fn pick_folder(&self) -> Option<PathBuf>;
+
+    /// 기본 브라우저에서 OAuth 인가 주소를 연다.
+    fn open_url(&self, url: &str) -> io::Result<()> {
+        opener::open_browser(url).map_err(|error| io::Error::other(error.to_string()))
+    }
 }
 
 pub(crate) trait AttachmentOpener: Send + Sync + 'static {
@@ -82,7 +93,8 @@ pub(crate) struct Inner {
     pub(crate) layout_signal: LayoutSignal,
     pub(crate) data_runtimes: data_runtime::DataRuntimes,
     pub(crate) connections: Mutex<Vec<kaleidoscope_contract::registry::ConnectionInfo>>,
-    pub(crate) login_store: Arc<dyn connections::LoginStore>,
+    pub(crate) login_store: Arc<logins::Logins>,
+    pub(crate) login_in_progress: Mutex<HashSet<String>>,
     pub(crate) media_cache: media::MediaCache,
 }
 
@@ -154,6 +166,7 @@ impl Core {
             device: storage::load_device(&config.data_dir)?,
             link,
         };
+        let login_store = Arc::new(logins::Logins::open(&config.data_dir)?);
 
         if state.shared.workspaces.is_empty() {
             let now = state_commands::timestamp();
@@ -188,7 +201,8 @@ impl Core {
             },
             data_runtimes: data_runtime::DataRuntimes::default(),
             connections: Mutex::new(Vec::new()),
-            login_store: Arc::new(connections::EmptyLoginStore),
+            login_store,
+            login_in_progress: Mutex::new(HashSet::new()),
             media_cache: media::MediaCache::default(),
         });
         {
@@ -295,9 +309,10 @@ impl Core {
             } => Ok(CoreReply::DataMedia {
                 media: media::get(&self.inner, &window_id, &media, max_px)?,
             }),
-            CoreRequest::ConnectionLogin { .. } => {
-                Err(error::make(kaleidoscope_contract::ErrorCode::Unavailable))
-            }
+            CoreRequest::ConnectionLogin {
+                window_id,
+                permission,
+            } => connections::login(&self.inner, &window_id, &permission),
             request => self.handle_state_change(request),
         }
     }

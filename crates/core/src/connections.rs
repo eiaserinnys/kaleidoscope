@@ -17,16 +17,9 @@ use crate::{app_commands, error, Inner};
 
 pub(crate) trait LoginStore: Send + Sync {
     fn token(&self, connection: &str) -> Option<String>;
-    fn invalidate(&self, connection: &str);
+    fn refresh(&self, connection: &str, rejected_token: &str) -> Option<String>;
+    fn invalidate(&self, connection: &str, access_token: &str);
 }
-pub(crate) struct EmptyLoginStore;
-impl LoginStore for EmptyLoginStore {
-    fn token(&self, _: &str) -> Option<String> {
-        None
-    }
-    fn invalidate(&self, _: &str) {}
-}
-
 #[derive(Debug)]
 pub(crate) enum RequestError {
     Core(CoreError),
@@ -85,13 +78,81 @@ pub(crate) fn request(
                 return Err(RequestError::Login(permission.into()));
             };
             let reply = oauth_request(&info, &token, &req)?;
+            if reply.status != 401 {
+                return Ok(reply);
+            }
+            let Some(refreshed) = inner.login_store.refresh(&connection, &token) else {
+                return Err(RequestError::Login(permission.into()));
+            };
+            let reply = oauth_request(&info, &refreshed, &req)?;
             if reply.status == 401 {
-                inner.login_store.invalidate(&connection);
+                inner.login_store.invalidate(&connection, &refreshed);
                 return Err(RequestError::Login(permission.into()));
             }
             Ok(reply)
         }
     }
+}
+
+pub(crate) fn login(
+    inner: &Arc<Inner>,
+    window_id: &str,
+    permission: &str,
+) -> Result<kaleidoscope_contract::CoreReply, CoreError> {
+    let connection_name = {
+        let state = inner.state.lock().unwrap();
+        let window = state
+            .shared
+            .windows
+            .iter()
+            .find(|window| window.id == window_id)
+            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        let definition =
+            app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
+                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        match definition
+            .permissions
+            .iter()
+            .find(|decl| decl.id() == permission)
+        {
+            Some(PermissionDecl::Connection { connection, .. }) => connection.clone(),
+            _ => return Err(error::make(ErrorCode::PermissionDenied)),
+        }
+    };
+    let info = inner
+        .connections
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|info| info.name == connection_name)
+        .cloned()
+        .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+    if info.kind != ConnectionKind::Oauth {
+        return Err(error::make(ErrorCode::InvalidRequest));
+    }
+    {
+        let mut active = inner.login_in_progress.lock().unwrap();
+        if !active.insert(connection_name.clone()) {
+            return Err(error::with_message(
+                ErrorCode::InvalidRequest,
+                "이미 로그인하는 중입니다",
+            ));
+        }
+    }
+    let result = crate::oauth::login(
+        &info,
+        &inner.device_name,
+        inner.host.as_ref(),
+        &inner.login_store,
+    );
+    inner
+        .login_in_progress
+        .lock()
+        .unwrap()
+        .remove(&connection_name);
+    result?;
+    crate::data_runtime::refresh_login_required(inner, &connection_name);
+    Ok(kaleidoscope_contract::CoreReply::ConnectionLogin {})
 }
 
 pub(crate) fn authorize(
