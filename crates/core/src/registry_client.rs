@@ -1,4 +1,5 @@
 use std::io::{BufRead, BufReader};
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use kaleidoscope_contract::registry::{
@@ -44,25 +45,44 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
 }
 
 pub(crate) struct HttpRegistryClient {
-    requests: reqwest::blocking::Client,
-    events: reqwest::blocking::Client,
+    requests: OnceLock<Result<reqwest::blocking::Client, RegistryError>>,
+    events: OnceLock<Result<reqwest::blocking::Client, RegistryError>>,
 }
 
 impl HttpRegistryClient {
-    pub(crate) fn new() -> Result<Self, RegistryError> {
-        let requests = reqwest::blocking::Client::builder()
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(15))
-            .build()
-            .map_err(|error| RegistryError::Failure(error.to_string()))?;
-        let events = reqwest::blocking::Client::builder()
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(
-                kaleidoscope_contract::registry::STREAM_IDLE_TIMEOUT_SECS,
-            ))
-            .build()
-            .map_err(|error| RegistryError::Failure(error.to_string()))?;
-        Ok(Self { requests, events })
+    pub(crate) fn new() -> Self {
+        Self {
+            requests: OnceLock::new(),
+            events: OnceLock::new(),
+        }
+    }
+
+    fn requests(&self) -> Result<&reqwest::blocking::Client, RegistryError> {
+        self.requests
+            .get_or_init(|| {
+                reqwest::blocking::Client::builder()
+                    .connect_timeout(Duration::from_secs(10))
+                    .timeout(Duration::from_secs(15))
+                    .build()
+                    .map_err(|error| RegistryError::Failure(error.to_string()))
+            })
+            .as_ref()
+            .map_err(Clone::clone)
+    }
+
+    fn events(&self) -> Result<&reqwest::blocking::Client, RegistryError> {
+        self.events
+            .get_or_init(|| {
+                reqwest::blocking::Client::builder()
+                    .connect_timeout(Duration::from_secs(10))
+                    .timeout(Duration::from_secs(
+                        kaleidoscope_contract::registry::STREAM_IDLE_TIMEOUT_SECS,
+                    ))
+                    .build()
+                    .map_err(|error| RegistryError::Failure(error.to_string()))
+            })
+            .as_ref()
+            .map_err(Clone::clone)
     }
 }
 
@@ -73,7 +93,7 @@ impl RegistryClient for HttpRegistryClient {
         request: &PairStartRequest,
     ) -> Result<PairStartReply, RegistryError> {
         let response = self
-            .requests
+            .requests()?
             .post(format!("{server_url}{PAIR_START_PATH}"))
             .json(request)
             .send()
@@ -87,7 +107,7 @@ impl RegistryClient for HttpRegistryClient {
         request: &PairPollRequest,
     ) -> Result<PairPollReply, RegistryError> {
         let response = self
-            .requests
+            .requests()?
             .post(format!("{server_url}{PAIR_POLL_PATH}"))
             .json(request)
             .send()
@@ -102,7 +122,7 @@ impl RegistryClient for HttpRegistryClient {
         request: &DeviceUploadRequest,
     ) -> Result<RegistryApp, RegistryError> {
         let response = self
-            .requests
+            .requests()?
             .post(format!("{server_url}{DEVICE_APPS_PATH}"))
             .bearer_auth(token)
             .json(request)
@@ -117,7 +137,7 @@ impl RegistryClient for HttpRegistryClient {
         token: &str,
     ) -> Result<Box<dyn BufRead + Send>, RegistryError> {
         let response = self
-            .events
+            .events()?
             .get(format!("{server_url}{DEVICE_EVENTS_PATH}"))
             .bearer_auth(token)
             .send()

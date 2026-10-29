@@ -59,9 +59,7 @@ pub struct Core {
 
 impl Core {
     pub fn open(config: CoreConfig, host: Arc<dyn Host>) -> Result<Core, CoreError> {
-        let registry = Arc::new(HttpRegistryClient::new().map_err(|error| {
-            link::registry_error_to_core(error, "kaleidoscope 서버에 닿지 않습니다")
-        })?);
+        let registry = Arc::new(HttpRegistryClient::new());
         Self::open_with_client(config, host, registry)
     }
 
