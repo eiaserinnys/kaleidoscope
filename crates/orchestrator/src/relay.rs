@@ -129,7 +129,7 @@ fn process(
         Ok(())
     };
     match event {
-        "user_message" => {
+        "user_message" | "intervention_sent" => {
             let source = data["caller_info"]["source"].as_str().unwrap_or("");
             let text = data["text"].as_str().unwrap_or("");
             if ["kaleidoscope", "browser", "soul-app", "slack"].contains(&source)
@@ -270,6 +270,47 @@ mod tests {
             state.0.activity.lock().unwrap().get("w"),
             Some(&(false, None))
         );
+    }
+
+    #[test]
+    fn intervention_is_recorded_as_user_except_system_messages() {
+        let state = AppState::in_memory("secret");
+        let mut events = state.0.events.subscribe();
+        let mut projection = Projection::default();
+        let send = |text: &str, source: &str, projection: &mut Projection| {
+            process(
+                &state,
+                "w",
+                "처음 지시",
+                "intervention_sent",
+                &json!({"text":text,"caller_info":{"source":source}}),
+                projection,
+            )
+            .unwrap();
+        };
+        send(CACHE_MESSAGE, "kaleidoscope", &mut projection);
+        send("앞글 처음 지시", "browser", &mut projection);
+        send("에이전트 말", "agent", &mut projection);
+        assert!(state.history("w").unwrap().is_empty());
+        assert!(events.try_recv().is_err());
+        send("회의록을 살펴봐", "kaleidoscope", &mut projection);
+        let history = state.history("w").unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].kind, AgentItemKind::User);
+        assert_eq!(history[0].text, "회의록을 살펴봐");
+        assert!(
+            matches!(events.try_recv().unwrap(), DeviceEvent::AgentUpdate { update: AgentUpdate::Item { item }, .. } if item.kind == AgentItemKind::User)
+        );
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            DeviceEvent::AgentUpdate {
+                update: AgentUpdate::Activity {
+                    busy: true,
+                    tool: None
+                },
+                ..
+            }
+        ));
     }
 
     #[test]
