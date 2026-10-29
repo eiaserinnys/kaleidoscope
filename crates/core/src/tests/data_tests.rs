@@ -103,7 +103,8 @@ fn connection_definition() -> String {
             {"type":"list","items":{"expr":"$data.items"},"on_select":[
                 {"set_state":"selected","value":{"expr":"$item.key"}},
                 {"refresh":["items"]},
-                {"call":{"permission":"api","method":"POST","path":"/save","body":{"expr":"$state.selected"}}}
+                {"call":{"permission":"api","method":"POST","path":"/save","body":{"expr":"$state.selected"}}},
+                {"set_state":"selected","value":"should-not-run"}
             ]},
             {"type":"button","label":"clear","on_click":[{"set_state":"selected","value":null}]},
             {"type":"button","label":"event","on_click":[{"set_state":"selected"}]}
@@ -192,7 +193,6 @@ fn late_source_results_are_discarded_and_calls_are_ordered() {
             .iter()
             .any(|request| request.path == "/new")
     });
-    release.send(()).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut new_value = false;
     while Instant::now() < deadline {
@@ -206,6 +206,15 @@ fn late_source_results_are_discarded_and_calls_are_ordered() {
         }
     }
     assert!(new_value);
+    release.send(()).unwrap();
+    let deadline = Instant::now() + Duration::from_millis(300);
+    while Instant::now() < deadline {
+        if let Ok(CoreEvent::DataUpdate { view, .. }) = rx.recv_timeout(Duration::from_millis(50)) {
+            assert!(
+                !matches!(view.values.get("/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == &json!([{"key":"old"}]))
+            );
+        }
+    }
     let err = core
         .handle(CoreRequest::DataAct {
             window_id: window.clone(),
