@@ -385,8 +385,12 @@ pub fn valid_web_url(url: &str) -> bool {
 }
 
 /// 연결 경로의 규칙(정의에 적은 것, 식이 낸 것, 코어와 서버가 실행 때 보는 것 모두).
-/// `/`로 시작하고, `?`와 `#`를 담지 않으며(쿼리는 `query`로), 조각마다 `.`, `..`가 아니고 `\`와 공백이 없다.
-/// `//`로 시작하지 않는다(다른 호스트로 읽힐 수 있어서). 빈 조각(`/a//b`)은 허락하지 않는다. `/`만은 허락한다.
+/// `/`로 시작하고, `?`와 `#`를 담지 않으며(쿼리는 `query`로), `\`와 공백이 없다. `//`로 시작하지 않는다(다른 호스트로
+/// 읽힐 수 있어서). 빈 조각(`/a//b`)은 허락하지 않는다. `/`만은 허락한다.
+/// 조각은 점만으로 된 것(`.`, `..`)이 아니어야 한다. 조각 안의 퍼센트 인코딩 `%2e`(점), `%2f`(`/`), `%5c`(`\`)를
+/// 풀어 본 결과(대소문자 무시)에 `.`이나 `..` 조각이 생겨도 거부한다(`%2e.`, `.%2e`, `%2e%2e`, `..%2fadmin` 등).
+/// URL 파서나 원천 앞의 웹 서버(nginx 등)가 이것을 풀고 정규화해 연결 주소나 허용 경로 밖으로 나갈 수 있어서다.
+/// 점이 끼지 않은 인코딩 `/`(예: `narrative%2Fa.yaml` 같은 식별자)는 받는다. NUL(`%00`)은 거부한다.
 pub fn valid_request_path(path: &str) -> bool {
     if path == "/" {
         return true;
@@ -397,11 +401,19 @@ pub fn valid_request_path(path: &str) -> bool {
     if path.contains(['?', '#', '\\']) || path.chars().any(char::is_whitespace) {
         return false;
     }
+    if path.to_ascii_lowercase().contains("%00") {
+        return false;
+    }
     let rest = rest.strip_suffix('/').unwrap_or(rest);
     !rest.is_empty()
-        && rest
-            .split('/')
-            .all(|part| !part.is_empty() && part != "." && part != ".." && !part.eq_ignore_ascii_case("%2e%2e"))
+        && rest.split('/').all(|part| {
+            let decoded = part
+                .to_ascii_lowercase()
+                .replace("%2e", ".")
+                .replace("%2f", "/")
+                .replace("%5c", "/");
+            !part.is_empty() && decoded.split('/').all(|piece| piece != "." && piece != "..")
+        })
 }
 
 fn valid_id(value: &str) -> bool {
