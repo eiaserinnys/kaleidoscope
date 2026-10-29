@@ -22,6 +22,11 @@ fn explorer_opens_and_reuses_editor_with_folder_grant() {
         permission: "folder".into(),
     })
     .unwrap();
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let observed_copy = observed.clone();
+    core.subscribe(Box::new(move |event| {
+        observed_copy.lock().unwrap().push(event.clone())
+    }));
     let open = || {
         core.handle(CoreRequest::FilesOpen {
             window_id: explorer.clone(),
@@ -35,6 +40,15 @@ fn explorer_opens_and_reuses_editor_with_folder_grant() {
         CoreReply::FilesOpen { window } => window,
         other => panic!("{other:?}"),
     };
+    assert_eq!(
+        observed
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|event| matches!(event, CoreEvent::StateChanged { .. }))
+            .count(),
+        1
+    );
     assert_eq!(window.state["current_file"], json!("a.MD"));
     assert_eq!(
         snapshot(&core)
@@ -220,6 +234,11 @@ fn web_commands_validate_and_delegate_and_emit_updates() {
         url: "https://example.org".into(),
     })
     .unwrap();
+    core.handle(CoreRequest::WebHistory {
+        window_id: window.clone(),
+        action: kaleidoscope_contract::WebHistoryAction::Back,
+    })
+    .unwrap();
     assert!(
         matches!(core.handle(CoreRequest::WebCapture { window_id: window.clone() }).unwrap(), CoreReply::WebCapture { image: Some(s) } if s == "data:image/png;base64,AQID")
     );
@@ -271,6 +290,7 @@ fn web_commands_validate_and_delegate_and_emit_updates() {
     .unwrap();
     let calls = host.web.calls.lock().unwrap();
     assert!(calls.contains(&format!("place {window}")));
+    assert!(calls.contains(&format!("history {window}")));
     assert!(calls.contains(&format!("navigate {window} https://example.org")));
     assert!(calls.contains(&format!("detach {window}")));
 }
