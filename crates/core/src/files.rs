@@ -156,7 +156,7 @@ pub(crate) fn write(
     })
 }
 
-fn granted_root(
+pub(crate) fn granted_root(
     state: &CoreState,
     window_id: &str,
     permission_id: &str,
@@ -177,7 +177,7 @@ fn granted_root(
     Ok(root)
 }
 
-fn resolve_path(
+pub(crate) fn resolve_path(
     root: &Path,
     relative: &str,
     allow_root: bool,

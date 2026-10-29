@@ -147,9 +147,36 @@ struct FakeRegistryClient {
     layouts: Mutex<Vec<DeviceLayout>>,
     layout_replies: Mutex<VecDeque<Result<(), RegistryError>>>,
     open_calls: AtomicUsize,
+    connection_requests: Mutex<Vec<kaleidoscope_contract::registry::ConnectionRequest>>,
+    connection_replies: Mutex<BTreeMap<String, kaleidoscope_contract::registry::ConnectionReply>>,
+    connection_pause: Mutex<Option<mpsc::Receiver<()>>>,
 }
 
 impl RegistryClient for FakeRegistryClient {
+    fn connection_request(
+        &self,
+        _server_url: &str,
+        _token: &str,
+        _name: &str,
+        request: &kaleidoscope_contract::registry::ConnectionRequest,
+    ) -> Result<kaleidoscope_contract::registry::ConnectionReply, RegistryError> {
+        self.connection_requests
+            .lock()
+            .unwrap()
+            .push(request.clone());
+        if request.path == "/old" {
+            let pause = self.connection_pause.lock().unwrap().take();
+            if let Some(pause) = pause {
+                let _ = pause.recv_timeout(Duration::from_secs(5));
+            }
+        }
+        self.connection_replies
+            .lock()
+            .unwrap()
+            .get(&request.path)
+            .cloned()
+            .ok_or_else(|| RegistryError::Failure("unexpected connection request".into()))
+    }
     fn pair_start(
         &self,
         _server_url: &str,
@@ -2012,3 +2039,5 @@ fn layout_report_sends_sanitized_initial_state_and_debounces_changes() {
     assert_eq!(client.layouts.lock().unwrap().len(), 2);
     core.handle(CoreRequest::LinkUnlink {}).unwrap();
 }
+
+mod data_tests;

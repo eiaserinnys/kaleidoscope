@@ -429,7 +429,7 @@ pub(crate) fn set_link_locked(state: &mut crate::CoreState, status: LinkStatus) 
     true
 }
 
-fn emit_state(inner: &Inner) {
+fn emit_state(inner: &Arc<Inner>) {
     let event = {
         let state = inner.state.lock().unwrap();
         CoreEvent::StateChanged {

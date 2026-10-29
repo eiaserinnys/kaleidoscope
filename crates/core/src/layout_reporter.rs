@@ -43,7 +43,10 @@ fn report_layouts(inner: Arc<Inner>, generation: u64, epoch: u64) {
         let signal_sequence = inner.layout_signal.sequence();
         let layout = {
             let state = inner.state.lock().unwrap();
-            device_layout(&state)
+            let mut layout = device_layout(&state);
+            drop(state);
+            layout.data_errors = crate::data_runtime::layout_errors(&inner);
+            layout
         };
         if last_sent.as_ref() != Some(&layout) {
             match inner
