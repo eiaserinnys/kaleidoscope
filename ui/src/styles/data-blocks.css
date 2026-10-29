@@ -25,6 +25,9 @@
 .ks-data-section-child > .ks-data-stack { height: auto; }
 .ks-data-section-header { display: flex; width: 100%; align-items: center; gap: var(--ks-space-2); }
 .ks-data-section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+/* 머리 폭 전체를 차지하는 단추라 바깥 외곽선이 이웃 요소에 가려진다. 파일 트리의 접힌 단추처럼 안쪽에 그린다. */
+.ks-data-section-toggle { padding-block: var(--ks-space-1); border-radius: var(--ks-radius-small); }
+.ks-data-section-toggle:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
 .ks-data-section-title { font-size: var(--ks-type-title); font-weight: 600; }
 .ks-data-section-meta { font-size: var(--ks-type-meta); color: var(--ks-color-muted); }
 .ks-data-text { white-space: pre-wrap; user-select: text; overflow: auto; }
