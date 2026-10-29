@@ -134,6 +134,9 @@ pub const LAYOUT_RETRY_SECS: u64 = 10;
 /// 소울스트림이 PAS를 만들며 노드 등록까지 기다려 수십 초 걸릴 수 있다.
 /// 코어는 만들기 요청만 이만큼 기다린다. 서버는 쉘이 먼저 끊겨도 만들기를 끝까지 마치고 `created`를 보낸다.
 pub const AGENT_CREATE_TIMEOUT_SECS: u64 = 120;
+/// 소울스트림 개입은 PAS가 턴을 마무리하거나 다시 깨어나는 동안 기다려 15초를 넘길 수 있다.
+/// 코어는 보내기 요청만 이만큼 기다린다. 서버는 쉘이 먼저 끊겨도 보내기를 끝까지 마친다.
+pub const AGENT_SEND_TIMEOUT_SECS: u64 = 120;
 /// `GET .../agent`가 주는 대화 기록의 최대 개수.
 pub const AGENT_HISTORY_LIMIT: usize = 200;
 /// 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위).
