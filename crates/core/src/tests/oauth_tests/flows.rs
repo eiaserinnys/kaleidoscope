@@ -396,3 +396,44 @@ fn simultaneous_expired_token_reads_refresh_once_and_keep_rotated_token() {
     );
     assert_eq!(fixture.state.lock().unwrap().refreshes, 1);
 }
+
+#[test]
+fn invalidation_waits_for_refresh_and_preserves_rotated_credentials() {
+    let fixture = OAuthFixture::start();
+    fixture.state.lock().unwrap().refresh_response_delay = Duration::from_millis(500);
+    let temp = TempDir::new().unwrap();
+    let (core, _) = make_core(
+        Arc::new(NoCallbackHost),
+        &temp,
+        &fixture,
+        ConnectionKind::Oauth,
+    );
+    core.inner
+        .login_store
+        .store(
+            "example",
+            LoginEntry {
+                issuer: fixture.base.clone(),
+                client_id: Some("client".into()),
+                redirect_port: Some(40000),
+                access_token: Some("expired".into()),
+                refresh_token: Some("rotating-refresh".into()),
+                expires_at: Some(1),
+            },
+        )
+        .unwrap();
+
+    let refresh_store = core.inner.login_store.clone();
+    let refresh_thread = thread::spawn(move || refresh_store.refresh("example", "expired"));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while fixture.state.lock().unwrap().refreshes == 0 && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(fixture.state.lock().unwrap().refreshes, 1);
+
+    core.inner.login_store.invalidate("example", "expired");
+    assert_eq!(refresh_thread.join().unwrap().as_deref(), Some("refreshed"));
+    let stored = core.inner.login_store.entry("example").unwrap();
+    assert_eq!(stored.access_token.as_deref(), Some("refreshed"));
+    assert_eq!(stored.refresh_token.as_deref(), Some("rotated-1"));
+}

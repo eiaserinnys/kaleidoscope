@@ -89,6 +89,14 @@ impl Logins {
         let _ = self.store(connection, entry);
     }
 
+    fn refresh_lock(&self, connection: &str) -> Arc<Mutex<()>> {
+        let mut locks = self.refresh_locks.lock().unwrap();
+        locks
+            .entry(connection.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    }
+
     fn clear_tokens_if(&self, connection: &str, matches: impl FnOnce(&LoginEntry) -> bool) {
         let mut entries = self.entries.lock().unwrap();
         let Some(entry) = entries.get_mut(connection) else {
@@ -104,13 +112,7 @@ impl Logins {
     }
 
     fn refresh(&self, connection: &str, rejected_token: &str) -> Option<String> {
-        let refresh_lock = {
-            let mut locks = self.refresh_locks.lock().unwrap();
-            locks
-                .entry(connection.to_string())
-                .or_insert_with(|| Arc::new(Mutex::new(())))
-                .clone()
-        };
+        let refresh_lock = self.refresh_lock(connection);
         let _refresh_guard = refresh_lock.lock().unwrap();
         let entry = self.entry(connection)?;
         if entry
@@ -179,6 +181,8 @@ impl LoginStore for Logins {
     }
 
     fn invalidate(&self, connection: &str, access_token: &str) {
+        let refresh_lock = self.refresh_lock(connection);
+        let _refresh_guard = refresh_lock.lock().unwrap();
         self.clear_tokens_if(connection, |entry| {
             entry.access_token.as_deref() == Some(access_token)
         });
