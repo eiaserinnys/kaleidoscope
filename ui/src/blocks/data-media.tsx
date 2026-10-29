@@ -1,0 +1,66 @@
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import type { Block, MediaRef } from "../contract/contract";
+import { useBinding, useWindowData } from "../data/window-data";
+import { DataState } from "../components/data-state";
+import { DataIcon } from "../components/data-icons";
+import { IconButton, Notice } from "../components/primitives";
+import { toCoreError } from "../core/core-transport";
+
+type Data = Extract<Block, { type: "media" }>;
+function isMedia(value: unknown): value is MediaRef { return typeof value === "object" && value !== null && "permission" in value && typeof value.permission === "string" && "path" in value && typeof value.path === "string"; }
+export function formatMediaTime(value: number): string {
+  const seconds = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+export function MediaBlock({ block, pointer }: { block: Data; pointer: string }) {
+  const binding = useBinding(`${pointer}/src`, block.src);
+  if (binding.status !== "ready") return <DataState value={binding} />;
+  return <MediaPlayer src={isMedia(binding.value) ? binding.value : null} kind={block.kind} autoplay={!!block.autoplay} />;
+}
+function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "audio" | "video"; autoplay: boolean }) {
+  const data = useWindowData();
+  const key = src ? JSON.stringify(src) : "";
+  const [loaded, setLoaded] = useState<{ key: string; url: string; mime: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [time, setTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
+  const element = useRef<HTMLMediaElement | null>(null);
+  useEffect(() => {
+    let active = true;
+    let url: string | null = null;
+    setLoaded(null); setError(null); setPlaying(false); setTime(0); setDuration(0);
+    if (src) void data.store.call({ op: "data.media", window_id: data.windowId, media: src }).then((reply) => {
+      if (!active) return;
+      const bytes = Uint8Array.from(atob(reply.media.data_base64), (char) => char.charCodeAt(0));
+      url = URL.createObjectURL(new Blob([bytes], { type: reply.media.mime }));
+      setLoaded({ key, url, mime: reply.media.mime });
+    }).catch((reason: unknown) => { if (active) setError(toCoreError(reason).message); });
+    return () => { active = false; if (url) URL.revokeObjectURL(url); };
+  }, [data, key]);
+  const current = loaded?.key === key ? loaded : null;
+  const video = (kind ?? (current?.mime.startsWith("video/") ? "video" : "audio")) === "video";
+  useEffect(() => { if (current && autoplay) void element.current?.play().catch(() => undefined); }, [current, autoplay]);
+  const toggle = () => { const el = element.current; if (!el) return; if (el.paused) void el.play().catch(() => undefined); else el.pause(); };
+  const seek = (next: number) => { if (element.current) element.current.currentTime = Math.max(0, Math.min(duration, next)); };
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === " " || event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault();
+      if (event.key === " ") toggle(); else seek(time + (event.key === "ArrowLeft" ? -5 : 5));
+    }
+  };
+  const props = { src: current?.url, onPlay: () => setPlaying(true), onPause: () => setPlaying(false), onTimeUpdate: (e: React.SyntheticEvent<HTMLMediaElement>) => setTime(e.currentTarget.currentTime), onDurationChange: (e: React.SyntheticEvent<HTMLMediaElement>) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0), onVolumeChange: (e: React.SyntheticEvent<HTMLMediaElement>) => { setVolume(e.currentTarget.volume); setMuted(e.currentTarget.muted); } };
+  return <div className={`ks-media-player${video ? " is-video" : ""}`}>
+    {video ? <video ref={(el) => { element.current = el; }} {...props} /> : <audio ref={(el) => { element.current = el; }} {...props} />}
+    {error ? <Notice role="alert">{error}</Notice> : null}
+    <div className="ks-media-controls" onKeyDown={onKeyDown}>
+      <IconButton aria-label={playing ? "일시 정지" : "재생"} disabled={!current} onClick={toggle}><DataIcon name={playing ? "pause" : "play"} /></IconButton>
+      <input aria-label="재생 위치" className="ks-media-range ks-media-seek" type="range" min="0" max={duration || 0} step="any" value={Math.min(time, duration)} disabled={!current || !duration} onChange={(e) => seek(Number(e.target.value))} style={{ "--ks-range-progress": `${duration ? time / duration * 100 : 0}%` } as React.CSSProperties} />
+      <span className="ks-media-time">{formatMediaTime(time)} / {formatMediaTime(duration)}</span>
+      <IconButton aria-label={muted ? "소리 켜기" : "소리 끄기"} disabled={!current} onClick={() => { if (element.current) element.current.muted = !element.current.muted; }}><DataIcon name={muted ? "volume-x" : "volume-2"} /></IconButton>
+      <input aria-label="소리 크기" className="ks-media-range ks-media-volume" type="range" min="0" max="1" step="0.01" value={muted ? 0 : volume} disabled={!current} onChange={(e) => { if (element.current) { element.current.volume = Number(e.target.value); element.current.muted = false; } }} style={{ "--ks-range-progress": `${muted ? 0 : volume * 100}%` } as React.CSSProperties} />
+    </div>
+  </div>;
+}
