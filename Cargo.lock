@@ -1873,6 +1873,7 @@ dependencies = [
  "http-body-util",
  "kaleidoscope-contract",
  "rand",
+ "reqwest 0.12.28",
  "rmcp",
  "rusqlite",
  "schemars 1.2.3",

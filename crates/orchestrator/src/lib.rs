@@ -46,6 +46,9 @@ struct Inner {
     pairings: AsyncMutex<HashMap<String, Pairing>>,
     mcp_token: String,
     db_path: Option<PathBuf>,
+    soulstream: Option<agent::Soulstream>,
+    activity: Mutex<HashMap<String, (bool, Option<String>)>>,
+    create_lock: AsyncMutex<()>,
 }
 
 #[derive(Clone)]
@@ -117,6 +120,9 @@ impl AppState {
             pairings: AsyncMutex::new(HashMap::new()),
             mcp_token,
             db_path,
+            soulstream: None,
+            activity: Mutex::new(HashMap::new()),
+            create_lock: AsyncMutex::new(()),
         })))
     }
 
@@ -136,6 +142,7 @@ impl AppState {
         definition_json: &str,
         created_by: &str,
         open: bool,
+        workspace_id: Option<String>,
     ) -> Result<(RegistryApp, bool), CoreError> {
         let definition = parse_app_definition(definition_json)?;
         let now = timestamp();
@@ -201,12 +208,12 @@ impl AppState {
             let _ = self.0.events.send(DeviceEvent::AppPublished {
                 app: result.0.clone(),
                 open,
-                workspace_id: None,
+                workspace_id: workspace_id.clone(),
             });
         } else if open {
             let _ = self.0.events.send(DeviceEvent::AppOpen {
                 app_id: result.0.app.id.clone(),
-                workspace_id: None,
+                workspace_id,
             });
         }
         Ok(result)
@@ -468,10 +475,13 @@ pub fn router(state: AppState) -> Router {
     http::router(state)
 }
 
+mod agent;
 mod backup;
 mod http;
+mod layouts;
 mod mcp;
 mod pairing;
+mod relay;
 mod storage;
 
 pub use backup::{backup_loop, backup_once};

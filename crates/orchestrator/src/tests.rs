@@ -7,15 +7,15 @@ const EDITOR: &str = include_str!("../../../examples/md-editor.json");
 #[test]
 fn app_upload_versions_and_deduplicates_identical_definitions() {
     let state = AppState::in_memory("secret");
-    let (first, unchanged) = state.publish_app(EDITOR, "agent", false).unwrap();
+    let (first, unchanged) = state.publish_app(EDITOR, "agent", false, None).unwrap();
     assert_eq!(first.version.version, 1);
     assert!(!unchanged);
-    let (same, unchanged) = state.publish_app(EDITOR, "agent", false).unwrap();
+    let (same, unchanged) = state.publish_app(EDITOR, "agent", false, None).unwrap();
     assert_eq!(same.version.version, 1);
     assert!(unchanged);
     let modified = EDITOR.replace("마크다운 편집기", "편집기 변경");
     assert_ne!(modified, EDITOR);
-    let (second, unchanged) = state.publish_app(&modified, "agent", false).unwrap();
+    let (second, unchanged) = state.publish_app(&modified, "agent", false, None).unwrap();
     assert_eq!(second.version.version, 2);
     assert!(!unchanged);
 }
@@ -24,14 +24,18 @@ fn app_upload_versions_and_deduplicates_identical_definitions() {
 fn invalid_definitions_and_outside_paths_are_rejected_without_saving() {
     let state = AppState::in_memory("secret");
     let malformed = r#"{"id":"bad","name":"Bad"}"#;
-    let err = state.publish_app(malformed, "agent", false).unwrap_err();
+    let err = state
+        .publish_app(malformed, "agent", false, None)
+        .unwrap_err();
     assert!(!err.details.is_empty());
     let outside = EDITOR.replace(
         r#""path": { "state": "current_file" }"#,
         r#""path": "../secret.md""#,
     );
     assert_ne!(outside, EDITOR);
-    let err = state.publish_app(&outside, "agent", false).unwrap_err();
+    let err = state
+        .publish_app(&outside, "agent", false, None)
+        .unwrap_err();
     assert!(err
         .details
         .iter()
@@ -154,7 +158,7 @@ async fn event_stream_starts_with_snapshot_then_published_app() {
     let mut body_stream = body.into_data_stream();
     let first = String::from_utf8(body_stream.next().await.unwrap().unwrap().to_vec()).unwrap();
     assert!(first.contains("apps.snapshot"), "{first}");
-    state.publish_app(EDITOR, "agent", true).unwrap();
+    state.publish_app(EDITOR, "agent", true, None).unwrap();
     let second = String::from_utf8(body_stream.next().await.unwrap().unwrap().to_vec()).unwrap();
     assert!(second.contains("app.published"), "{second}");
     assert!(second.contains("\"open\":true"), "{second}");
@@ -181,4 +185,114 @@ fn make_device(state: &AppState) -> (String, String) {
         )
         .unwrap();
     (id, token)
+}
+
+#[test]
+fn migration_upgrades_v1_without_losing_devices() {
+    let db = Connection::open_in_memory().unwrap();
+    db.execute_batch("CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT); INSERT INTO devices(id,name,token_sha256,created_at) VALUES('d','PC','hash','now'); PRAGMA user_version=1;").unwrap();
+    migrate(&db).unwrap();
+    let version: i64 = db
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 2);
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM agents", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+}
+
+#[tokio::test]
+async fn layout_and_agent_endpoints_validate_and_keep_working_without_soulstream() {
+    use http_body_util::BodyExt;
+    let state = AppState::in_memory("secret");
+    let (_, token) = make_device(&state);
+    let app = router(state);
+    let call = |method, path, body: &'static str| {
+        Request::builder()
+            .method(method)
+            .uri(path)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .unwrap()
+    };
+    let layout = r#"{"workspaces":[],"desktops":[],"windows":[],"folders":[],"active_workspace_id":null,"active_desktop_ids":{}}"#;
+    assert_eq!(
+        app.clone()
+            .oneshot(call("PUT", "/api/device/layout", layout))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let invalid = app
+        .clone()
+        .oneshot(call("PUT", "/api/device/layout", r#"{"unknown":true}"#))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    let response = app
+        .clone()
+        .oneshot(call("GET", "/api/device/workspaces/w/agent", ""))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(body["agent"], Value::Null);
+    assert_eq!(body["models"].as_array().unwrap().len(), 3);
+    let missing = app
+        .clone()
+        .oneshot(call(
+            "POST",
+            "/api/device/workspaces/w/agent/messages",
+            r#"{"text":"안녕"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    let unavailable = app
+        .oneshot(call(
+            "POST",
+            "/api/device/workspaces/w/agent",
+            r#"{"workspace_name":"작업","model_preset":"claude-opus"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(unavailable.status(), StatusCode::BAD_GATEWAY);
+}
+
+#[tokio::test]
+async fn workspace_layout_is_reported_with_ordered_windows_and_folders() {
+    let state = AppState::in_memory("secret");
+    let (device_id, token) = make_device(&state);
+    let layout = json!({"workspaces":[{"id":"w","name":"작업","created_at":"t","updated_at":"t"}],"desktops":[{"id":"d","workspace_id":"w","name":"화면","position":0,"created_at":"t","updated_at":"t"}],"windows":[{"id":"one","desktop_id":"d","app_id":"missing","app_version":1,"rect":{"x":0,"y":0,"width":10,"height":10},"z":1,"state":{},"created_at":"t","updated_at":"t"},{"id":"two","desktop_id":"d","app_id":"missing","app_version":1,"rect":{"x":0,"y":0,"width":10,"height":10},"z":2,"state":{"file":"a.md"},"created_at":"t","updated_at":"t"}],"folders":[{"window_id":"two","permission":"docs","root_name":"문서"}],"active_workspace_id":"w","active_desktop_ids":{"w":"d"}});
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/api/device/layout")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(layout.to_string()))
+        .unwrap();
+    assert_eq!(
+        router(state.clone()).oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+    let workspace = state.get_workspace("w").unwrap().unwrap();
+    assert_eq!(workspace["device"]["id"], device_id);
+    assert_eq!(workspace["active"], true);
+    assert_eq!(workspace["desktops"][0]["windows"][0]["window_id"], "two");
+    assert_eq!(
+        workspace["desktops"][0]["windows"][0]["folders"]["docs"],
+        "문서"
+    );
+    let list = state.list_workspaces().unwrap();
+    assert_eq!(list[0]["window_count"], 2);
 }

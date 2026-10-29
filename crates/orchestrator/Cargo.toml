@@ -12,6 +12,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
 kaleidoscope-contract = { path = "../contract" }
 rand = "0.10"
+reqwest = { version = "0.12.4", default-features = false, features = ["json", "rustls-tls"] }
 rmcp = { version = "3.8", features = ["server", "macros", "transport-streamable-http-server"] }
 rusqlite = { version = "0.41", features = ["bundled"] }
 schemars = "1"

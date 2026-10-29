@@ -20,6 +20,15 @@ pub fn router(state: AppState) -> Router {
     let device = Router::new()
         .route("/apps", post(device_upload))
         .route("/events", get(device_events))
+        .route("/layout", axum::routing::put(super::layouts::put_layout))
+        .route(
+            "/workspaces/{workspace_id}/agent",
+            get(super::agent::get_agent).post(super::agent::create_agent),
+        )
+        .route(
+            "/workspaces/{workspace_id}/agent/messages",
+            post(super::agent::send_message),
+        )
         .route_layer(middleware::from_fn_with_state(state.clone(), device_auth))
         .with_state(state.clone());
     let api = Router::new()
@@ -44,11 +53,11 @@ async fn mcp_auth(State(state): State<AppState>, request: Request, next: Next) -
     }
 }
 
-async fn device_auth(State(state): State<AppState>, request: Request, next: Next) -> Response {
-    if bearer(request.headers())
+async fn device_auth(State(state): State<AppState>, mut request: Request, next: Next) -> Response {
+    if let Some(device) = bearer(request.headers())
         .and_then(|provided| state.authenticate_device(provided).ok().flatten())
-        .is_some()
     {
+        request.extensions_mut().insert(device);
         next.run(request).await
     } else {
         error_response(StatusCode::UNAUTHORIZED, device_auth_error())
@@ -67,7 +76,7 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     let hb = Sha256::digest(b);
     bool::from(ha.ct_eq(&hb))
 }
-fn error_response(status: StatusCode, error: CoreError) -> Response {
+pub(super) fn error_response(status: StatusCode, error: CoreError) -> Response {
     (status, Json(error)).into_response()
 }
 
@@ -109,6 +118,7 @@ async fn device_upload(
         &request.definition_json,
         &format!("device:{}", device.0),
         false,
+        None,
     ) {
         Ok((registry_app, _)) => (StatusCode::OK, Json(registry_app)).into_response(),
         Err(error) => error_response(StatusCode::BAD_REQUEST, error),
