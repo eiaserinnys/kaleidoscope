@@ -430,10 +430,9 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         CoreRequest::LinkStart {} | CoreRequest::LinkCancel {} | CoreRequest::LinkUnlink {} => {
             Err(error::make(ErrorCode::Server))
         }
-        // 워크스페이스 PAS는 다음 PR(코어의 PAS 연결)에서 구현한다. 그 전까지는 서버 오류로 거부한다.
-        CoreRequest::AgentGet { .. } | CoreRequest::AgentCreate { .. } | CoreRequest::AgentSend { .. } => {
-            Err(error::make(ErrorCode::Server))
-        }
+        CoreRequest::AgentGet { .. }
+        | CoreRequest::AgentCreate { .. }
+        | CoreRequest::AgentSend { .. } => Err(error::make(ErrorCode::InvalidRequest)),
         CoreRequest::StateGet {}
         | CoreRequest::FilesPickFolder { .. }
         | CoreRequest::FilesList { .. }

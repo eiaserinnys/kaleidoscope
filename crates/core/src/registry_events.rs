@@ -1,0 +1,164 @@
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+
+use kaleidoscope_contract::registry::DeviceEvent;
+use kaleidoscope_contract::{CoreError, CoreEvent, LinkStatus};
+
+use crate::app_commands;
+use crate::link;
+use crate::storage;
+use crate::{snapshot, Inner};
+
+pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEvent) -> bool {
+    if !link::is_current(inner, generation) {
+        return false;
+    }
+    match event {
+        DeviceEvent::AppsSnapshot { apps } => {
+            let link_file = inner.link_file.lock().unwrap().clone();
+            let result = apply_registry_change(inner, |state| {
+                if inner.generation.load(Ordering::SeqCst) != generation {
+                    return None;
+                }
+                for app in apps {
+                    app_commands::import_registry(state, app);
+                }
+                let status = LinkStatus::Connected {
+                    server_url: link_file
+                        .as_ref()
+                        .map(|link| link.server_url.clone())
+                        .unwrap_or_default(),
+                    device_name: link_file
+                        .as_ref()
+                        .map(|link| link.device_name.clone())
+                        .unwrap_or_default(),
+                };
+                link::set_link_locked(state, status);
+                Some(())
+            });
+            let (applied, state_event) = match result {
+                Ok(result) => result,
+                Err(error) => {
+                    link::set_offline(inner, generation, &link::load_link(inner), error.message);
+                    return true;
+                }
+            };
+            if applied.is_none() {
+                return false;
+            }
+            if let Some(event) = state_event {
+                inner.emit(&event);
+            }
+            let epoch = inner.layout_connection_epoch.fetch_add(1, Ordering::SeqCst) + 1;
+            crate::layout_reporter::start(Arc::clone(inner), generation, epoch);
+        }
+        DeviceEvent::AppPublished {
+            app,
+            open,
+            workspace_id,
+        } => {
+            let result = apply_registry_change(inner, |state| {
+                if inner.generation.load(Ordering::SeqCst) != generation {
+                    return None;
+                }
+                app_commands::import_registry(state, app.clone());
+                Some(())
+            });
+            let (applied, state_event) = match result {
+                Ok(result) => result,
+                Err(error) => {
+                    link::set_offline(inner, generation, &link::load_link(inner), error.message);
+                    return true;
+                }
+            };
+            if applied.is_none() {
+                return false;
+            }
+            if let Some(event) = state_event {
+                inner.emit(&event);
+            }
+            if open && has_workspace(inner, workspace_id.as_deref()) {
+                inner.emit(&CoreEvent::AppOpenRequested {
+                    app_id: app.app.id,
+                    workspace_id,
+                });
+            }
+        }
+        DeviceEvent::AppOpen {
+            app_id,
+            workspace_id,
+        } => {
+            let app_exists = inner
+                .state
+                .lock()
+                .unwrap()
+                .shared
+                .apps
+                .iter()
+                .any(|app| app.id == app_id);
+            if app_exists && has_workspace(inner, workspace_id.as_deref()) {
+                inner.emit(&CoreEvent::AppOpenRequested {
+                    app_id,
+                    workspace_id,
+                });
+            }
+        }
+        DeviceEvent::AgentUpdate {
+            workspace_id,
+            update,
+        } => {
+            if has_workspace(inner, Some(&workspace_id)) {
+                inner.emit(&CoreEvent::AgentUpdate {
+                    workspace_id,
+                    update,
+                });
+            }
+        }
+    }
+    link::is_current(inner, generation)
+}
+
+fn has_workspace(inner: &Inner, workspace_id: Option<&str>) -> bool {
+    let Some(workspace_id) = workspace_id else {
+        return true;
+    };
+    inner
+        .state
+        .lock()
+        .unwrap()
+        .shared
+        .workspaces
+        .iter()
+        .any(|workspace| workspace.id == workspace_id)
+}
+
+pub(crate) fn apply_registry_change<T>(
+    inner: &Inner,
+    update: impl FnOnce(&mut crate::CoreState) -> T,
+) -> Result<(T, Option<CoreEvent>), CoreError> {
+    let mut state = inner.state.lock().unwrap();
+    let before = state.clone();
+    let result = update(&mut state);
+    let shared_changed = before.shared != state.shared;
+    let device_changed = before.device != state.device;
+    let link_changed = before.link != state.link;
+
+    if shared_changed || device_changed {
+        if let Err(error) = storage::save_changed_state(
+            &inner.data_dir,
+            &state.shared,
+            &state.device,
+            shared_changed,
+            device_changed,
+        ) {
+            *state = before;
+            return Err(error);
+        }
+    }
+
+    let event =
+        (shared_changed || device_changed || link_changed).then(|| CoreEvent::StateChanged {
+            snapshot: snapshot(&state),
+        });
+    Ok((result, event))
+}
