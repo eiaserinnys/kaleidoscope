@@ -2,6 +2,52 @@
 import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
+ * 워크스페이스 PAS 하나.
+ */
+export type AgentInfo = { workspace_id: string, 
+/**
+ * 만들 때 쓴 모델 preset(예: `gemini-4-argon`). 한도로 대체 모델이 도는 중이어도 이 값은 그대로다.
+ */
+model_preset: string, 
+/**
+ * 화면에 보일 모델 이름(예: `Argon`).
+ */
+model_label: string, 
+/**
+ * 지금 답을 만드는 중인가.
+ */
+busy: boolean, 
+/**
+ * 지금 쓰는 도구 이름. 없으면 null.
+ */
+tool: string | null, created_at: string, };
+
+/**
+ * 대화 기록 하나. 한 번 기록되면 바뀌지 않는다.
+ */
+export type AgentItem = { 
+/**
+ * 워크스페이스 안에서 늘어나는 순번(문자열). 같은 id가 두 번 오면 화면은 하나만 둔다.
+ */
+id: string, kind: AgentItemKind, 
+/**
+ * 사용자 글이나 PAS의 답(마크다운), 오류나 알림 한 줄.
+ */
+text: string, at: string, };
+
+export type AgentItemKind = "user" | "assistant" | "error" | "notice";
+
+/**
+ * 만들 때 고를 수 있는 모델 하나.
+ */
+export type AgentModel = { preset: string, label: string, };
+
+/**
+ * 워크스페이스 PAS에 일어난 일. `kind`로 가른다.
+ */
+export type AgentUpdate = { "kind": "created", agent: AgentInfo, } | { "kind": "item", item: AgentItem, } | { "kind": "delta", text: string, } | { "kind": "activity", busy: boolean, tool: string | null, };
+
+/**
  * 레지스트리의 앱 항목. 버전이 쌓이고 `current_version`이 지금 쓰는 버전을 가리킨다.
  */
 export type App = { 
@@ -34,6 +80,7 @@ current_version: number, created_at: string, updated_at: string, };
  *    - 정의에 직접 적은 경로(문자열 `path`)는 [`FileRef`]의 경로 규칙을 지킨다. 어기면 고른 폴더 밖을
  *      요구하는 정의로 보고 거부한다.
  *    - `split`의 `children`은 둘 이상이고, `sizes`가 있으면 개수가 같고 모두 0보다 크다.
+ *    - `agent_chat`을 쓰면 `requires.modules`에 `agent`가 있다.
  */
 export type AppDefinition = { 
 /**
@@ -80,7 +127,7 @@ z: number,
 state: { [key in string]: JsonValue }, created_at: string, updated_at: string, };
 
 /**
- * 블록. 블록 세트 1판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
+ * 블록. 블록 세트 2판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
  */
 export type Block = { "type": "split", direction: SplitDirection, 
 /**
@@ -94,7 +141,7 @@ extensions: Array<string>,
 /**
  * 선택 표시에 쓸 상태 키.
  */
-selected: StateRef, on_select: SetState, } | { "type": "markdown_editor", file: FileRef, } | { "type": "markdown_view", file: FileRef, };
+selected: StateRef, on_select: SetState, } | { "type": "markdown_editor", file: FileRef, } | { "type": "markdown_view", file: FileRef, } | { "type": "agent_chat", };
 
 /**
  * 명령의 실패.
@@ -112,17 +159,29 @@ details: Array<string>, };
 /**
  * 코어가 화면에 보내는 이벤트. `event`로 가른다.
  */
-export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "app.open_requested", app_id: string, };
+export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "agent.update", workspace_id: string, update: AgentUpdate, };
 
 /**
  * 코어의 응답. `op`는 명령과 같다.
  */
-export type CoreReply = { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "link.start", user_code: string, expires_at: string, } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, };
+export type CoreReply = { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "link.start", user_code: string, expires_at: string, } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, } | { "op": "agent.get", 
+/**
+ * 그 워크스페이스의 PAS. 없으면 null이고, 대화 블록은 시작하는 판을 보인다.
+ */
+agent: AgentInfo | null, 
+/**
+ * 대화 기록. 오래된 것부터.
+ */
+items: Array<AgentItem>, 
+/**
+ * 만들 때 고를 수 있는 모델. 순서가 대체 순서다(앞의 모델이 막히면 다음).
+ */
+models: Array<AgentModel>, } | { "op": "agent.create", agent: AgentInfo, } | { "op": "agent.send", };
 
 /**
  * 화면이 코어에 보내는 명령. `op`로 가른다. 응답은 같은 `op`의 [`CoreReply`]다.
  */
-export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, };
+export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "agent.get", workspace_id: string, } | { "op": "agent.create", workspace_id: string, model_preset: string, } | { "op": "agent.send", workspace_id: string, text: string, };
 
 /**
  * 화면 한 장. 앱 창 배치를 가진다.

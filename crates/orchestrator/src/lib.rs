@@ -201,10 +201,12 @@ impl AppState {
             let _ = self.0.events.send(DeviceEvent::AppPublished {
                 app: result.0.clone(),
                 open,
+                workspace_id: None,
             });
         } else if open {
             let _ = self.0.events.send(DeviceEvent::AppOpen {
                 app_id: result.0.app.id.clone(),
+                workspace_id: None,
             });
         }
         Ok(result)

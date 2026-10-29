@@ -118,6 +118,7 @@ impl McpServer {
             Ok(Some(_)) => {
                 let _ = self.state.0.events.send(DeviceEvent::AppOpen {
                     app_id: args.app_id,
+                    workspace_id: None,
                 });
                 Ok(json_result(
                     json!({"open_sent_to":self.state.connected_count()}),
