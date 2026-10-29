@@ -34,7 +34,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir app build
-      - run: cargo build -p kaleidoscope-app --release
+      - run: cargo build -p kaleidoscope-app --release --features tauri/custom-protocol
       - name: 실제 웹뷰 시나리오
         shell: pwsh
         run: |
