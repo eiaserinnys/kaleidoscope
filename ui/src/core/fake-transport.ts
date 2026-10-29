@@ -7,6 +7,7 @@ import type {
   CoreRequest,
   FileEntry,
   Grant,
+  LinkStatus,
   ShellSnapshot,
 } from "../contract/contract";
 import { toCoreError, type CoreTransport } from "./core-transport";
@@ -20,6 +21,9 @@ export interface FakeTransportSeed {
 export interface FakeTransport extends CoreTransport {
   getFiles(): Record<string, string>;
   subscribeFiles(listener: () => void): () => void;
+  /** Test and harness controls; the real core does not expose these methods. */
+  setLink(status: LinkStatus): void;
+  emit(event: CoreEvent): void;
 }
 
 interface FakeFile {
@@ -58,6 +62,11 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     for (const listener of eventListeners) listener(event);
   };
 
+  const emit = (event: CoreEvent) => {
+    if (event.event === "state.changed") snapshot = clone(event.snapshot);
+    for (const listener of eventListeners) listener(clone(event));
+  };
+
   const findWindow = (windowId: string): AppWindow => {
     const window = snapshot.shared.windows.find((item) => item.id === windowId);
     if (!window) return fail("not_found", "앱 창을 찾을 수 없습니다");
@@ -89,6 +98,27 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     switch (request.op) {
       case "state.get":
         return { op: "state.get", snapshot: clone(snapshot) };
+      case "link.start": {
+        const userCode = "K7PQ-4XMR";
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+        snapshot = {
+          ...snapshot,
+          link: { state: "pairing", server_url: "https://kaleidoscope.example", user_code: userCode, expires_at: expiresAt },
+        };
+        emitState();
+        return { op: "link.start", user_code: userCode, expires_at: expiresAt };
+      }
+      case "link.cancel": {
+        if (snapshot.link.state === "pairing") {
+          snapshot = { ...snapshot, link: { state: "unlinked" } };
+          emitState();
+        }
+        return { op: "link.cancel" };
+      }
+      case "link.unlink":
+        snapshot = { ...snapshot, link: { state: "unlinked" } };
+        emitState();
+        return { op: "link.unlink" };
       case "window.set_state": {
         const window = findWindow(request.window_id);
         const definition = definitionFor(window);
@@ -207,5 +237,10 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       fileListeners.add(listener);
       return () => fileListeners.delete(listener);
     },
+    setLink(status) {
+      snapshot = { ...snapshot, link: clone(status) };
+      emitState();
+    },
+    emit,
   };
 }

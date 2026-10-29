@@ -7,6 +7,7 @@ export interface ShellStore {
   getSnapshot(): ShellSnapshot | null;
   getError(): CoreError | null;
   subscribe(listener: () => void): () => void;
+  subscribeEvents(listener: (event: CoreEvent) => void): () => void;
   ready: Promise<void>;
   dispose(): void;
 }
@@ -15,6 +16,7 @@ export function createShellStore(transport: CoreTransport): ShellStore {
   let snapshot: ShellSnapshot | null = null;
   let error: CoreError | null = null;
   const listeners = new Set<() => void>();
+  const eventListeners = new Set<(event: CoreEvent) => void>();
   const notify = () => {
     for (const listener of listeners) listener();
   };
@@ -23,6 +25,8 @@ export function createShellStore(transport: CoreTransport): ShellStore {
       snapshot = event.snapshot;
       error = null;
       notify();
+    } else {
+      for (const listener of eventListeners) listener(event);
     }
   });
 
@@ -43,6 +47,10 @@ export function createShellStore(transport: CoreTransport): ShellStore {
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    subscribeEvents(listener) {
+      eventListeners.add(listener);
+      return () => eventListeners.delete(listener);
     },
     ready,
     dispose: unsubscribe,
