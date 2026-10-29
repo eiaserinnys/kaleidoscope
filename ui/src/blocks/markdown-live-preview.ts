@@ -1,6 +1,6 @@
 import { syntaxTree } from "@codemirror/language";
 import { StateEffect, StateField, type EditorState, type Extension, type Range } from "@codemirror/state";
-import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet } from "@codemirror/view";
+import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>["resolve"]>;
 
 const focusEffect = StateEffect.define<boolean>();
@@ -28,23 +28,36 @@ function labelBounds(node: SyntaxNode): [number, number] | null {
   return marks.length >= 2 ? [marks[0].to, marks[1].from] : null;
 }
 
+function normalizeReference(label: string): string {
+  return label.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function resolvedLink(node: SyntaxNode, state: EditorState, references: Set<string>): boolean {
+  const bounds = labelBounds(node);
+  if (!bounds) return false;
+  if (state.sliceDoc(bounds[1] + 1, bounds[1] + 2) === "(") return true;
+  const label = node.getChild("LinkLabel");
+  const reference = label ? state.sliceDoc(label.from + 1, label.to - 1) : state.sliceDoc(bounds[0], bounds[1]);
+  return references.has(normalizeReference(reference || state.sliceDoc(bounds[0], bounds[1])));
+}
+
 // 표 안에서도 구문 트리의 텍스트만 DOM에 넣는다. HTML은 해석하지 않는다.
-function appendInline(parent: HTMLElement, node: SyntaxNode, state: EditorState, from = node.from, to = node.to) {
+function appendInline(parent: HTMLElement, node: SyntaxNode, state: EditorState, references: Set<string>, from = node.from, to = node.to) {
   let cursor = from;
   for (const child of children(node)) {
     if (child.from < from || child.to > to) continue;
     if (child.from > cursor) parent.append(document.createTextNode(state.sliceDoc(cursor, child.from)));
     const tags: Record<string, string> = { StrongEmphasis: "strong", Emphasis: "em", Strikethrough: "s", InlineCode: "code", Link: "span", Image: "span" };
-    const tag = tags[child.name];
+    const tag = child.name === "Link" && !resolvedLink(child, state, references) ? undefined : tags[child.name];
     if (tag) {
       const el = document.createElement(tag);
       if (child.name === "Link") el.className = "ks-live-link";
       if (child.name === "Image") el.className = "ks-live-image";
       const label = child.name === "Link" || child.name === "Image" ? labelBounds(child) : null;
-      if (label) appendInline(el, child, state, label[0], label[1]);
+      if (label) appendInline(el, child, state, references, label[0], label[1]);
       else {
         const marks = children(child).filter((item) => /Mark$/.test(item.name));
-        if (marks.length >= 2) appendInline(el, child, state, marks[0].to, marks[marks.length - 1].from);
+        if (marks.length >= 2) appendInline(el, child, state, references, marks[0].to, marks[marks.length - 1].from);
         else el.textContent = state.sliceDoc(child.from, child.to);
       }
       parent.append(el);
@@ -88,7 +101,7 @@ class TableWidget extends WidgetType {
       for (const [index, cell] of cells.entries()) {
         const td = document.createElement(row.name === "TableHeader" ? "th" : "td");
         td.style.textAlign = alignment[index] ?? "left";
-        if (cell.node) appendInline(td, cell.node, this.state);
+        if (cell.node) appendInline(td, cell.node, this.state, view.state.field(previewField).references);
         td.addEventListener("mousedown", (event) => {
           event.preventDefault();
           view.focus();
@@ -114,14 +127,20 @@ function selectionTouches(state: EditorState, focused: boolean, from: number, to
   return focused && state.selection.ranges.some((range) => range.from <= to && range.to >= from);
 }
 
-function findTables(state: EditorState): SyntaxNode[] {
+function findDocumentBlocks(state: EditorState): { tables: SyntaxNode[]; references: Set<string> } {
   const tables: SyntaxNode[] = [];
+  const references = new Set<string>();
   const containers = new Set(["Document", "Blockquote", "BulletList", "OrderedList", "ListItem"]);
   syntaxTree(state).iterate({ enter(ref) {
     if (ref.name === "Table") { tables.push(ref.node); return false; }
+    if (ref.name === "LinkReference") {
+      const label = ref.node.getChild("LinkLabel");
+      if (label) references.add(normalizeReference(state.sliceDoc(label.from + 1, label.to - 1)));
+      return false;
+    }
     return containers.has(ref.name);
   } });
-  return tables;
+  return { tables, references };
 }
 
 function tableSelection(state: EditorState, focused: boolean, tables: SyntaxNode[]): string {
@@ -142,7 +161,9 @@ function makeInlineDecorations(view: EditorView): DecorationSet {
     return active(line.from, line.to);
   };
   const replace = (from: number, to: number, widget?: WidgetType) => {
-    if (from < to) ranges.push(Decoration.replace({ widget }).range(from, to));
+    if (from < to && !lineActive(from) && state.doc.lineAt(from).number === state.doc.lineAt(to).number) {
+      ranges.push(Decoration.replace({ widget }).range(from, to));
+    }
   };
   const mark = (from: number, to: number, className: string) => {
     if (from < to) ranges.push(Decoration.mark({ class: className }).range(from, to));
@@ -160,7 +181,7 @@ function makeInlineDecorations(view: EditorView): DecorationSet {
       if (seen.has(key)) return;
       seen.add(key);
       if (name === "FencedCode" || name === "CodeBlock") {
-        if (name === "FencedCode" && active(node.from, node.to)) return false;
+        const rawFence = name === "FencedCode" && active(node.from, node.to);
         const done = new Set<number>();
         const fenceLines = new Set(children(node).filter((child) => child.name === "CodeMark").map((child) => state.doc.lineAt(child.from).number));
         for (const visiblePart of view.visibleRanges) {
@@ -168,9 +189,17 @@ function makeInlineDecorations(view: EditorView): DecorationSet {
           let current = state.doc.lineAt(Math.max(node.from, visiblePart.from));
           const end = state.doc.lineAt(Math.min(node.to, visiblePart.to)).number;
           while (current.number <= end) {
-            if (!done.has(current.number) && !lineActive(current.from)) {
-              line(current.from, "ks-live-code-block");
-              if (name === "FencedCode" && fenceLines.has(current.number)) replace(current.from, current.to);
+            if (!done.has(current.number)) {
+              const first = state.doc.lineAt(node.from).number;
+              const last = state.doc.lineAt(node.to).number;
+              line(current.from, `ks-live-code-block${current.number === first ? " ks-live-code-start" : ""}${current.number === last ? " ks-live-code-end" : ""}`);
+              if (name === "FencedCode" && fenceLines.has(current.number)) {
+                if (rawFence) mark(current.from, current.to, "ks-live-muted");
+                else replace(current.from, current.to);
+              } else if (name === "CodeBlock") {
+                const indent = current.text.match(/^ {1,4}/)?.[0].length ?? 0;
+                if (indent) mark(current.from, current.from + indent, "ks-live-code-indent");
+              }
               done.add(current.number);
             }
             if (current.number === end) break;
@@ -180,29 +209,41 @@ function makeInlineDecorations(view: EditorView): DecorationSet {
         return false;
       }
       if (name === "HTMLBlock" || name === "HTMLTag") return false;
-      if (lineActive(node.from)) return;
       if (/^ATXHeading[1-6]$/.test(name)) {
         line(node.from, `ks-live-heading-${name.slice(-1)}`);
         const marker = node.getChild("HeaderMark");
-        if (marker) replace(marker.from, Math.min(marker.to + 1, state.doc.lineAt(marker.to).to));
+        if (marker) {
+          if (lineActive(marker.from)) mark(marker.from, marker.to, "ks-live-muted");
+          else replace(marker.from, Math.min(marker.to + 1, state.doc.lineAt(marker.to).to));
+        }
       } else if (/^SetextHeading[12]$/.test(name)) {
         line(node.from, `ks-live-heading-${name.slice(-1)}`);
         const marker = node.getChild("HeaderMark");
-        if (marker && !lineActive(marker.from)) line(marker.from, "ks-live-muted");
+        if (marker) {
+          if (lineActive(marker.from)) mark(marker.from, marker.to, "ks-live-muted");
+          else replace(marker.from, marker.to);
+        }
       } else if (name === "HorizontalRule") {
         replace(node.from, node.to, new TextWidget("", "ks-live-rule"));
       } else if (name === "QuoteMark") {
         line(node.from, "ks-live-quote");
-        replace(node.from, Math.min(node.to + 1, state.doc.lineAt(node.to).to));
+        if (lineActive(node.from)) mark(node.from, node.to, "ks-live-quote-marker");
+        else replace(node.from, Math.min(node.to + 1, state.doc.lineAt(node.to).to));
       } else if (name === "ListMark" && /^[*+-]$/.test(state.sliceDoc(node.from, node.to))) {
         replace(node.from, node.to, new TextWidget("•", "ks-live-bullet"));
       } else if (name === "TaskMarker") {
-        replace(node.from, node.to, new TextWidget(/x/i.test(state.sliceDoc(node.from, node.to)) ? "☑" : "☐", "ks-live-task"));
+        replace(node.from, node.to, new TextWidget("", `ks-live-task${/x/i.test(state.sliceDoc(node.from, node.to)) ? " is-checked" : ""}`));
       } else if (name === "Image") {
+        if (state.doc.lineAt(node.from).number !== state.doc.lineAt(node.to).number || lineActive(node.from)) return false;
         const bounds = labelBounds(node);
         if (bounds) replace(node.from, node.to, new TextWidget(state.sliceDoc(bounds[0], bounds[1]), "ks-live-image"));
         return false;
       } else if (name === "Link") {
+        if (!resolvedLink(node, state, state.field(previewField).references)) {
+          mark(node.from, node.to, "ks-live-unresolved");
+          return false;
+        }
+        if (state.doc.lineAt(node.from).number !== state.doc.lineAt(node.to).number) return false;
         const bounds = labelBounds(node);
         if (bounds) {
           replace(node.from, bounds[0]);
@@ -217,18 +258,21 @@ function makeInlineDecorations(view: EditorView): DecorationSet {
           mark(marks[0].to, marks[marks.length - 1].from, `ks-live-${name.toLowerCase()}`);
         }
       } else if (name === "Autolink" || name === "URL") {
-        if (node.parent?.name !== "Link" && node.parent?.name !== "Image") mark(node.from, node.to, "ks-live-link");
+        if (node.parent?.name !== "Link" && node.parent?.name !== "Image") {
+          mark(node.from, node.to, "ks-live-link");
+          if (name === "Autolink") for (const marker of children(node).filter((child) => child.name === "LinkMark")) replace(marker.from, marker.to);
+        }
       }
     },
   });
   return Decoration.set(ranges, true);
 }
 
-interface PreviewState { focused: boolean; tables: SyntaxNode[]; selected: string; decorations: DecorationSet }
+interface PreviewState { focused: boolean; tables: SyntaxNode[]; references: Set<string>; selected: string; decorations: DecorationSet }
 const previewField = StateField.define<PreviewState>({
   create(state) {
-    const tables = findTables(state);
-    return { focused: false, tables, selected: "", decorations: makeTableDecorations(state, false, tables) };
+    const { tables, references } = findDocumentBlocks(state);
+    return { focused: false, tables, references, selected: "", decorations: makeTableDecorations(state, false, tables) };
   },
   update(value, transaction) {
     let focused = value.focused;
@@ -237,11 +281,11 @@ const previewField = StateField.define<PreviewState>({
       if (effect.is(focusEffect)) focused = effect.value;
       if (effect.is(refreshEffect)) refresh = true;
     }
-    const tables = refresh ? findTables(transaction.state) : value.tables;
+    const { tables, references } = refresh ? findDocumentBlocks(transaction.state) : value;
     const selected = tableSelection(transaction.state, focused, tables);
     const decorations = refresh || selected !== value.selected
       ? makeTableDecorations(transaction.state, focused, tables) : value.decorations;
-    return { focused, tables, selected, decorations };
+    return { focused, tables, references, selected, decorations };
   },
   provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
 });
@@ -250,8 +294,9 @@ const inlinePreview = ViewPlugin.fromClass(class {
   decorations: DecorationSet;
   private timer: ReturnType<typeof setTimeout> | undefined;
   constructor(view: EditorView) { this.decorations = makeInlineDecorations(view); }
-  update(update: { startState: EditorState; state: EditorState; view: EditorView; docChanged: boolean; selectionSet: boolean; viewportChanged: boolean; focusChanged: boolean }) {
-    if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+  update(update: ViewUpdate) {
+    const refreshed = update.transactions.some((transaction) => transaction.effects.some((effect) => effect.is(refreshEffect)));
+    if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged || refreshed || syntaxTree(update.startState) !== syntaxTree(update.state)) {
       this.decorations = makeInlineDecorations(update.view);
     }
     if (syntaxTree(update.startState) !== syntaxTree(update.state)) {
@@ -262,9 +307,27 @@ const inlinePreview = ViewPlugin.fromClass(class {
   destroy() { clearTimeout(this.timer); }
 }, { decorations: (plugin) => plugin.decorations });
 
+function enterTable(view: EditorView, forward: boolean): boolean {
+  const selection = view.state.selection.main;
+  if (!selection.empty) return false;
+  const next = view.moveVertically(selection, forward).head;
+  const tables = view.state.field(previewField).tables;
+  const ordered = forward ? tables : [...tables].reverse();
+  const table = ordered.find((item) => forward
+    ? selection.head < item.from && next >= item.to
+    : selection.head > item.to && next <= item.from);
+  if (!table) return false;
+  view.dispatch({ selection: { anchor: forward ? table.from : table.to }, scrollIntoView: true });
+  return true;
+}
+
 export const markdownLivePreview: Extension = [
   previewField,
   inlinePreview,
+  keymap.of([
+    { key: "ArrowDown", run: (view) => enterTable(view, true) },
+    { key: "ArrowUp", run: (view) => enterTable(view, false) },
+  ]),
   EditorView.domEventHandlers({
     focus: (_event, view) => { view.dispatch({ effects: focusEffect.of(true) }); },
     blur: (_event, view) => { view.dispatch({ effects: focusEffect.of(false) }); },

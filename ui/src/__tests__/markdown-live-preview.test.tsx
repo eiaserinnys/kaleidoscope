@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { EditorView } from "@codemirror/view";
+import { EditorSelection } from "@codemirror/state";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeTransport } from "../core/fake-transport";
@@ -31,6 +32,45 @@ async function openEditor() {
 }
 
 describe("마크다운 실시간 보기", () => {
+  it("정의 없는 대괄호는 그대로 두고 체크 표식은 같은 요소로 그린다", async () => {
+    const text = "> [!NOTE]\n\n[검수] [link](https://example.com) [참조][id]\n\n[id]: https://example.com\n\n- [x] 완료\n- [ ] 할 일";
+    const transport = createFakeTransport(makeTestSeed({ editorPath: "README.md", grants: [grantFor("editor-window", "docs")], files: { "README.md": text } }));
+    render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
+    const editor = await screen.findByRole("textbox", { name: "마크다운 편집기" });
+    const view = EditorView.findFromDOM(editor)!;
+    expect(ensureSyntaxTree(view.state, view.state.doc.length, 5000)).not.toBeNull();
+    act(() => view.dispatch({ selection: { anchor: 0 } }));
+    expect(editor.textContent).toContain("[!NOTE]");
+    expect(editor.textContent).toContain("[검수]");
+    const links = [...editor.querySelectorAll(".ks-live-link")].map((element) => element.textContent);
+    expect(links).toContain("link");
+    expect(links).toContain("참조");
+    const boxes = editor.querySelectorAll(".ks-live-task");
+    expect(boxes).toHaveLength(2);
+    expect(boxes[0].tagName).toBe(boxes[1].tagName);
+    expect(boxes[0].textContent).toBe("");
+    expect(boxes[1].textContent).toBe("");
+  });
+
+  it("위아래 이동이 표를 건너뛸 때 표의 원문으로 들어간다", async () => {
+    const text = "before\n\n| A | B |\n| --- | --- |\n| one | two |\n\nafter";
+    const transport = createFakeTransport(makeTestSeed({ editorPath: "README.md", grants: [grantFor("editor-window", "docs")], files: { "README.md": text } }));
+    render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
+    const editor = await screen.findByRole("textbox", { name: "마크다운 편집기" });
+    const view = EditorView.findFromDOM(editor)!;
+    expect(ensureSyntaxTree(view.state, view.state.doc.length, 5000)).not.toBeNull();
+    act(() => { view.focus(); view.dispatch({ selection: { anchor: 0 } }); });
+    const tableStart = view.state.doc.line(3).from;
+    const tableEnd = view.state.doc.line(5).to;
+    const move = vi.spyOn(view, "moveVertically").mockReturnValue(EditorSelection.cursor(view.state.doc.line(7).from));
+    act(() => { fireEvent.keyDown(editor, { key: "ArrowDown" }); });
+    expect(view.state.selection.main.head).toBe(tableStart);
+    expect(editor.querySelector("table")).toBeNull();
+    act(() => { view.dispatch({ selection: { anchor: view.state.doc.line(7).from } }); });
+    move.mockReturnValue(EditorSelection.cursor(0));
+    act(() => { fireEvent.keyDown(editor, { key: "ArrowUp" }); });
+    expect(view.state.selection.main.head).toBe(tableEnd);
+  });
   it("코드 블록 밖에서는 펜스를 감추고 블록 안에서는 원문 전체를 보인다", async () => {
     const text = "# Title\n\n```ts\nconst value = 1;\n```\n\nEnd";
     const transport = createFakeTransport(makeTestSeed({ editorPath: "README.md", grants: [grantFor("editor-window", "docs")], files: { "README.md": text } }));
