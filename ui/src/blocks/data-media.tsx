@@ -43,9 +43,15 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
   const current = loaded?.key === key ? loaded : null;
   const video = (kind ?? (current?.mime.startsWith("video/") ? "video" : "audio")) === "video";
   const playbackError = () => { setError("재생할 수 없는 파일입니다"); setPlaying(false); setTime(0); setDuration(0); };
+  // 늦게 온 재생 실패는 그 재생을 시작한 원본(Blob URL)이 아직 지금 원본일 때만 알린다. 같은 <audio>를 다시 쓰므로
+  // 요소 비교만으로는 앞 원본의 실패가 새 원본을 덮는다.
+  const currentUrl = useRef<string | null>(null);
+  currentUrl.current = current?.url ?? null;
   const play = (el: HTMLMediaElement) => {
+    const started = currentUrl.current;
     void el.play().catch((reason: unknown) => {
-      if (element.current === el && !(reason && typeof reason === "object" && "name" in reason && reason.name === "NotAllowedError")) playbackError();
+      if (element.current !== el || currentUrl.current !== started) return;
+      if (!(reason && typeof reason === "object" && "name" in reason && reason.name === "NotAllowedError")) playbackError();
     });
   };
   useEffect(() => { if (current && autoplay && element.current) play(element.current); }, [current, autoplay]);

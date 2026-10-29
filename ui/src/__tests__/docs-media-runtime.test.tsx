@@ -144,3 +144,24 @@ it("자동 재생 정책 거부는 오류로 보이지 않고 다른 재생 실�
   fireEvent.click(screen.getByRole("button", { name: "재생" }));
   expect(await screen.findByText("재생할 수 없는 파일입니다")).toBeTruthy();
 });
+
+it("앞 원본의 늦은 재생 실패는 새 원본에 오류를 보이지 않는다", async () => {
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn().mockReturnValueOnce("blob:first").mockReturnValueOnce("blob:second"), revokeObjectURL: vi.fn() }));
+  let rejectFirst: (reason: unknown) => void = () => {};
+  const first = new Promise<void>((_, reject) => { rejectFirst = reject; });
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockReturnValueOnce(first).mockResolvedValue(undefined);
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "media", autoplay: true, src: { expr: "$state.track" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media" ? Promise.resolve({ op: "data.media", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } }) as never : original(request as never));
+  render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  const send = (path: string) => act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/src": { status: "ready", value: { permission: "media", path } } } } }));
+  await screen.findByRole("button", { name: "재생" });
+  send("one.wav");
+  await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1));
+  send("two.wav");
+  await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2));
+  await act(async () => { rejectFirst(new DOMException("bad", "NotSupportedError")); await first.catch(() => undefined); });
+  expect(screen.queryByText("재생할 수 없는 파일입니다")).toBeNull();
+  expect((screen.getByRole("button", { name: /재생|일시 정지/ }) as HTMLButtonElement).disabled).toBe(false);
+});
