@@ -35,6 +35,10 @@ body {
   gap: var(--ks-space-4);
 }
 
+.ks-harness-apps.is-preview { grid-template-columns: minmax(0, 1fr); }
+.ks-harness-apps.is-preview > :last-child { display: none; }
+.ks-harness-apps.is-preview .ks-harness-window { height: 100%; }
+
 .ks-harness-window {
   display: grid;
   height: 72vh;

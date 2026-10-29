@@ -34,12 +34,15 @@
 
 .ks-file-tree-root-name {
   min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   font-size: var(--ks-type-title);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.ks-file-tree-header [aria-label="목록 접기"] svg { transform: rotate(180deg); }
 
 .ks-file-tree-list {
   min-width: 0;
@@ -133,15 +136,6 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-}
-
-.ks-editor-content:focus-within::after {
-  position: absolute;
-  z-index: 1;
-  border: var(--ks-focus-width) solid var(--ks-color-focus);
-  content: "";
-  inset: 0;
-  pointer-events: none;
 }
 
 .ks-editor-save-indicator {
@@ -291,3 +285,34 @@
   color: var(--ks-color-muted);
   font-style: italic;
 }
+
+.ks-editor-view .ks-live-heading-1 { font-size: 1.333em; font-weight: 700; }
+.ks-editor-view .ks-live-heading-2 { font-size: 1.067em; font-weight: 700; }
+.ks-editor-view .ks-live-heading-3,
+.ks-editor-view .ks-live-heading-4,
+.ks-editor-view .ks-live-heading-5,
+.ks-editor-view .ks-live-heading-6 { font-weight: 700; }
+.ks-editor-view .ks-live-strongemphasis { font-weight: 700; }
+.ks-editor-view .ks-live-emphasis { font-style: italic; }
+.ks-editor-view .ks-live-strikethrough { text-decoration: line-through; }
+.ks-editor-view .ks-live-inlinecode,
+.ks-live-table code {
+  border-radius: var(--ks-radius-small);
+  background: var(--ks-color-code);
+  font-family: var(--ks-font-code);
+}
+.ks-editor-view .ks-live-link { color: var(--ks-color-accent); text-decoration: underline; }
+.ks-editor-view .ks-live-image,
+.ks-editor-view .ks-live-muted { color: var(--ks-color-muted); }
+.ks-editor-view .ks-live-quote {
+  border-inline-start: var(--ks-space-1) solid var(--ks-color-border);
+  color: var(--ks-color-muted);
+  padding-inline-start: var(--ks-space-3);
+}
+.ks-editor-view .ks-live-code-block { background: var(--ks-color-code); font-family: var(--ks-font-code); }
+.ks-editor-view .ks-live-rule { display: block; border-block-start: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-live-table-wrap { overflow-x: auto; padding-inline: var(--ks-space-4); }
+.ks-live-table { width: 100%; border-collapse: collapse; }
+.ks-live-table th,
+.ks-live-table td { border: var(--ks-line-width) solid var(--ks-color-border); padding: var(--ks-space-2); }
+.ks-live-table th { background: var(--ks-color-surface-raised); }

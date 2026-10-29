@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Block, FileEntry } from "../contract/contract";
 import { toCoreError } from "../core/core-transport";
 import { Button, IconButton, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
+import { SplitPaneContext } from "./split-pane-context";
 
 type FileTreeBlockData = Extract<Block, { type: "file_tree" }>;
 
@@ -12,6 +13,7 @@ function extensionOf(name: string): string {
 }
 
 export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; context: BlockContext }) {
+  const pane = useContext(SplitPaneContext);
   const { snapshot, store, window, definition } = context;
   const permission = block.root.permission;
   const grant = snapshot.device.grants.find((item) => item.window_id === window.id && item.permission === permission) ?? null;
@@ -157,7 +159,9 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
 
   return (
     <div className="ks-file-tree">
-      {!grant ? (
+      {pane?.collapsed ? (
+        <IconButton aria-label="목록 펼치기" onClick={pane.toggle}><Chevron expanded={false} /></IconButton>
+      ) : !grant ? (
         <div className="ks-file-tree-ungranted">
           <Button onClick={pickFolder}>{permissionLabel} 고르기</Button>
           {actionError ? <span className="ks-inline-error" role="alert">{actionError}</span> : null}
@@ -166,6 +170,7 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
         <>
           <div className="ks-file-tree-header">
             <span className="ks-file-tree-root-name" title={grant.root_name}>{grant.root_name}</span>
+            {pane ? <IconButton aria-label="목록 접기" onClick={pane.toggle}><Chevron expanded={false} /></IconButton> : null}
             <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}>
               <FolderChangeIcon />
             </IconButton>
