@@ -175,6 +175,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       }
       case "agent.create": {
         const session = agentFor(request.workspace_id);
+        if (session.agent) return { op: "agent.create", agent: clone(session.agent) };
         const model = session.models.find((item) => item.preset === request.model_preset);
         if (!model) return fail("invalid_request", "고를 수 없는 모델입니다");
         const agent: AgentInfo = {

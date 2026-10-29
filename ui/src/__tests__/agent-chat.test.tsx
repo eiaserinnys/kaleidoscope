@@ -47,6 +47,7 @@ function setup(options: {
   models?: AgentModel[];
   rejectSend?: boolean;
   sendGate?: Promise<void>;
+  createGate?: Promise<void>;
 } = {}) {
   const snapshot = makeTestSnapshot({ definitions: [definition] });
   snapshot.link = options.link ?? { state: "connected", server_url: "https://example.test", device_name: "Test PC" };
@@ -56,6 +57,7 @@ function setup(options: {
       return { op: "agent.get", agent: options.agent ?? null, items: options.items ?? [], models: options.models ?? models };
     }
     if (request.op === "agent.create") {
+      await options.createGate;
       return { op: "agent.create", agent: makeAgent(request.workspace_id) };
     }
     if (request.op === "agent.send") {
@@ -97,7 +99,9 @@ describe("agent_chat block", () => {
   });
 
   it("loads the model choices, keeps their order, and creates the workspace agent with the selected preset", async () => {
-    const state = setup();
+    let finishCreate!: () => void;
+    const createGate = new Promise<void>((resolve) => { finishCreate = resolve; });
+    const state = setup({ createGate });
     render(<AgentChatBlock block={{ type: "agent_chat" }} context={state.context} />);
 
     const argonButton = await screen.findByRole("button", { name: "Argon" });
@@ -115,6 +119,8 @@ describe("agent_chat block", () => {
       model_preset: "codex-6.1-sol",
     }));
     expect(screen.getByRole("status").textContent).toContain("시작하는 중");
+    finishCreate();
+    expect(await screen.findByRole("textbox", { name: "메시지" })).toBeTruthy();
   });
 
   it("sends Enter, preserves Shift+Enter, and does not send a composing Enter", async () => {
@@ -214,6 +220,9 @@ describe("agent_chat block", () => {
 
     const history = await store.call({ op: "agent.get", workspace_id: "workspace-1" });
     expect(history).toMatchObject({ op: "agent.get", agent: { model_preset: "gemini-4-argon" }, items: [{ text: "기존 기록" }] });
+    const existing = await store.call({ op: "agent.create", workspace_id: "workspace-1", model_preset: "codex-6.1-sol" });
+    expect(existing).toEqual({ op: "agent.create", agent: makeAgent() });
+    expect(events.filter((event) => event.event === "agent.update" && event.workspace_id === "workspace-1")).toHaveLength(0);
     const created = await store.call({ op: "agent.create", workspace_id: "workspace-2", model_preset: "codex-6.1-sol" });
     expect(created).toMatchObject({ op: "agent.create", agent: { workspace_id: "workspace-2", model_preset: "codex-6.1-sol" } });
     await waitFor(() => expect(events.some((event) => event.event === "agent.update" && event.workspace_id === "workspace-2" && event.update.kind === "item")).toBe(true));

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import type { AgentInfo, AgentItem, AgentModel, Block } from "../contract/contract";
+import type { AgentInfo, AgentItem, AgentModel, AgentUpdate, Block } from "../contract/contract";
 import { Button, EmptyState, IconButton, Notice, StatusText } from "../components/primitives";
 import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
@@ -28,33 +28,10 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const historyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const followTail = useRef(true);
+  const loadGeneration = useRef(0);
+  const pendingUpdates = useRef<AgentUpdate[] | null>(null);
 
-  const load = useCallback(async () => {
-    if (!connected || !workspaceId) return;
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const reply = await context.store.call({ op: "agent.get", workspace_id: workspaceId });
-      if (reply.op !== "agent.get") return;
-      setAgent(reply.agent);
-      setItems(uniqueItems(reply.items));
-      setModels(reply.models);
-      setSelectedPreset(reply.models[0]?.preset ?? "");
-      setBusy(reply.agent?.busy ?? false);
-      setTool(reply.agent?.tool ?? null);
-      setDelta("");
-    } catch (reason) {
-      setLoadError(toCoreError(reason).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [connected, context.store, workspaceId]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  useEffect(() => context.store.subscribeEvents((event) => {
-    if (event.event !== "agent.update" || event.workspace_id !== workspaceId) return;
-    const update = event.update;
+  const applyUpdate = useCallback((update: AgentUpdate) => {
     if (update.kind === "created") {
       setAgent(update.agent);
       setBusy(update.agent.busy);
@@ -71,7 +48,52 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       setTool(update.tool);
       if (!update.busy) setDelta("");
     }
-  }), [context.store, workspaceId]);
+  }, []);
+
+  const load = useCallback(async () => {
+    if (!connected || !workspaceId) return;
+    const generation = ++loadGeneration.current;
+    const updates: AgentUpdate[] = [];
+    pendingUpdates.current = updates;
+    setCreating(false);
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const reply = await context.store.call({ op: "agent.get", workspace_id: workspaceId });
+      if (generation !== loadGeneration.current) return;
+      if (reply.op !== "agent.get") return;
+      setAgent(reply.agent);
+      setItems(uniqueItems(reply.items));
+      setModels(reply.models);
+      setSelectedPreset(reply.models[0]?.preset ?? "");
+      setBusy(reply.agent?.busy ?? false);
+      setTool(reply.agent?.tool ?? null);
+      setDelta("");
+      pendingUpdates.current = null;
+      updates.forEach(applyUpdate);
+    } catch (reason) {
+      if (generation === loadGeneration.current) setLoadError(toCoreError(reason).message);
+    } finally {
+      if (generation === loadGeneration.current) {
+        pendingUpdates.current = null;
+        setLoading(false);
+      }
+    }
+  }, [applyUpdate, connected, context.store, workspaceId]);
+
+  useEffect(() => {
+    void load();
+    return () => {
+      loadGeneration.current += 1;
+      pendingUpdates.current = null;
+    };
+  }, [load]);
+
+  useEffect(() => context.store.subscribeEvents((event) => {
+    if (event.event !== "agent.update" || event.workspace_id !== workspaceId) return;
+    if (pendingUpdates.current) pendingUpdates.current.push(event.update);
+    else applyUpdate(event.update);
+  }), [applyUpdate, context.store, workspaceId]);
 
   useLayoutEffect(() => {
     const history = historyRef.current;
@@ -101,13 +123,28 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
 
   const start = async () => {
     if (!selectedPreset || creating) return;
+    const updates: AgentUpdate[] = [];
+    pendingUpdates.current = updates;
     setCreating(true);
     setCreateError(null);
     try {
-      await context.store.call({ op: "agent.create", workspace_id: workspaceId, model_preset: selectedPreset });
+      const reply = await context.store.call({ op: "agent.create", workspace_id: workspaceId, model_preset: selectedPreset });
+      if (pendingUpdates.current !== updates) return;
+      if (reply.op === "agent.create") {
+        setAgent(reply.agent);
+        setBusy(reply.agent.busy);
+        setTool(reply.agent.tool);
+      }
+      setCreating(false);
     } catch (reason) {
+      if (pendingUpdates.current !== updates) return;
       setCreateError(toCoreError(reason).message);
       setCreating(false);
+    } finally {
+      if (pendingUpdates.current === updates) {
+        pendingUpdates.current = null;
+        updates.forEach(applyUpdate);
+      }
     }
   };
 
