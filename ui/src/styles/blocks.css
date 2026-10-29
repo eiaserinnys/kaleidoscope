@@ -335,7 +335,6 @@
 }
 .ks-editor-view .ks-live-code-start { border-start-start-radius: var(--ks-radius-small); border-start-end-radius: var(--ks-radius-small); }
 .ks-editor-view .ks-live-code-end { border-end-start-radius: var(--ks-radius-small); border-end-end-radius: var(--ks-radius-small); }
-.ks-editor-view .ks-live-code-indent { display: inline-block; width: 0; overflow: hidden; }
 .ks-editor-view .ks-live-rule { display: block; border-block-start: var(--ks-line-width) solid var(--ks-color-border); }
 .ks-live-table-wrap { overflow-x: auto; }
 .ks-live-task {
