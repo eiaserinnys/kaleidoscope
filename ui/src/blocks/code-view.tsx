@@ -66,7 +66,7 @@ function ReadOnlyCode({ text, language, follow, wrap }: { text: string; language
     const scroller = editor.scrollDOM;
     const top = scroller.scrollTop;
     const left = scroller.scrollLeft;
-    const atEnd = scroller.scrollHeight - scroller.clientHeight - top <= 2;
+    const atEnd = Math.ceil(top + scroller.clientHeight) >= scroller.scrollHeight;
     editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text } });
     requestAnimationFrame(() => {
       if (view.current !== editor) return;
