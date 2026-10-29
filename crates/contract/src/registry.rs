@@ -1,10 +1,13 @@
-//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 3판, 261030)
+//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 4판, 261030)
 //!
 //! 2판에서 더한 것(카드 #779): 배치 보고(`PUT /api/device/layout`), 워크스페이스 PAS 경로 셋,
 //! 이벤트 `agent.update`, `app.published`와 `app.open`의 `workspace_id`. 아래 「워크스페이스 PAS」 절.
 //!
 //! 3판에서 더한 것(카드 #807): 보내기의 첨부([`AgentSendRequest::attachments`]), 기록의 첨부
 //! ([`crate::AgentItem::attachments`]), 첨부 읽기 경로. 아래 「첨부」 절.
+//!
+//! 4판에서 더한 것(카드 #806): 코어가 이벤트 스트림을 열 때 지원 범위를 알리고([`SUPPORTED_HEADER`]),
+//! 서버는 그 기기가 그릴 수 있는 앱만 보낸다. 아래 「기기마다 그릴 수 있는 앱만」 절.
 //!
 //! 오케스트레이터는 앱 레지스트리의 정본이다. 쉘의 코어는 기기 토큰으로 붙어 앱을 받고, 에이전트는 같은
 //! 서버의 MCP(`/mcp`, MCP 토큰)로 앱을 올린다. MCP 도구의 모양은 오케스트레이터 코드에 있고 이 파일에는 없다.
@@ -17,7 +20,7 @@
 //! |---|---|---|---|---|
 //! | `POST /api/pair/start` | 없음 | [`PairStartRequest`] | 200 [`PairStartReply`] | 429 승인 대기 중인 연결이 너무 많음 |
 //! | `POST /api/pair/poll` | 없음(`device_code`가 비밀) | [`PairPollRequest`] | 200 [`PairPollReply`] | 404 없거나 만료됨 |
-//! | `GET /api/device/events` | `Authorization: Bearer <기기 토큰>` | 없음 | 200 `text/event-stream` | 401 토큰 거부 |
+//! | `GET /api/device/events` | `Authorization: Bearer <기기 토큰>`, [`SUPPORTED_HEADER`] | 없음 | 200 `text/event-stream` | 401 토큰 거부 |
 //! | `POST /api/device/apps` | 같음 | [`DeviceUploadRequest`] | 200 [`RegistryApp`] | 400 검사 실패, 401 |
 //! | `PUT /api/device/layout` | 같음 | [`DeviceLayout`] | 200 `{}` | 400 형식, 401 |
 //! | `GET /api/device/workspaces/{workspace_id}/agent` | 같음 | 없음 | 200 [`DeviceAgentReply`] | 401 |
@@ -62,6 +65,21 @@
 //!   워크스페이스면 띄우기 요청을 넘긴다(앱 캐시 반영은 그대로 한다). 서버는 `workspace_id`가 있는 띄우기와
 //!   `agent.update`를 그 워크스페이스를 마지막 배치 보고에 담은 기기에만 보내고, 다른 기기에는 `app.published`를
 //!   `open: false`, `workspace_id` 없이 보내 캐시만 맞춘다. 배치 보고를 모르는 옛 쉘에 엉뚱한 창이 뜨지 않게 하려는 것이다.
+//!
+//! # 기기마다 그릴 수 있는 앱만
+//! 옛 쉘은 이벤트 줄 하나를 통째로 타입에 맞춰 읽으므로, 모르는 블록을 쓴 앱이 하나라도 `apps.snapshot`에
+//! 있으면 그 줄 전체를 버려 연결이 맞춰지지 않는다. 그래서 서버가 기기마다 거른다.
+//! - 코어는 `GET /api/device/events`에 [`SUPPORTED_HEADER`] 헤더로 자기 [`crate::Supported`]를 JSON 한 줄로
+//!   보낸다(예: `{"blocks":3,"modules":{"agent":2,"files":1,"web":1}}`).
+//! - 서버는 그 연결에 보내는 `apps.snapshot`에서 그 기기가 그릴 수 없는 앱을 빼고, 그런 앱의 `app.published`와
+//!   `app.open`은 그 연결에 보내지 않는다. 그릴 수 있는지는 헤더가 있으면 [`crate::Supported::renders`]다.
+//!   헤더가 없거나 읽을 수 없으면 옛 쉘로 보고 `requires.blocks`가 [`crate::LEGACY_BLOCK_SET_VERSION`] 이하인지만
+//!   본다. 옛 쉘이 줄 전체를 버리는 것은 모르는 블록과 필드 때문이고, 모르는 모듈이나 더 높은 모듈 판은 옛 쉘도
+//!   스스로 그 앱만 넘기기 때문이다.
+//! - 서버는 기기마다 마지막으로 알린 지원 범위를 기억해 두고, MCP의 앱 올리기와 띄우기 결과에 「이 앱을 그릴
+//!   수 없는 쉘이라 받지 못한 연결된 기기」를 적는다. 에이전트가 디렉터에게 쉘을 새로 깔라고 말할 수 있게.
+//! - 코어도 스트림 줄을 읽을 때 앱 정의를 앱마다 따로 읽고 검사해, 그릴 수 없는 앱 하나 때문에 이벤트 전체를
+//!   버리지 않는다(그 앱만 넘긴다). 서버가 거르지 못한 경우를 위한 것이다.
 //!
 //! # 배치 보고
 //! 에이전트가 「지금 펼친 데스크톱에 어떤 창이 무엇을 보고 있는지」를 MCP로 읽을 수 있게, 연결한 코어는
@@ -131,6 +149,8 @@ pub const PAIR_POLL_PATH: &str = "/api/pair/poll";
 pub const DEVICE_EVENTS_PATH: &str = "/api/device/events";
 pub const DEVICE_APPS_PATH: &str = "/api/device/apps";
 pub const HEALTH_PATH: &str = "/api/health";
+/// 코어가 이벤트 스트림을 열 때 지원 범위([`crate::Supported`] JSON)를 싣는 헤더.
+pub const SUPPORTED_HEADER: &str = "x-kaleidoscope-supported";
 
 /// 서버가 보내는 주석 줄 간격.
 pub const PING_INTERVAL_SECS: u64 = 15;

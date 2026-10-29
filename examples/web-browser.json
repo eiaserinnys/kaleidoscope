@@ -1,0 +1,13 @@
+{
+  "id": "web-browser",
+  "name": "웹 브라우저",
+  "description": "주소를 열어 웹 페이지를 본다",
+  "requires": { "blocks": 3, "modules": { "web": 1 } },
+  "state": { "url": "https://www.google.com/" },
+  "ui": {
+    "type": "web_view",
+    "url": { "state": "url" },
+    "on_navigate": { "set_state": "url" },
+    "address_bar": true
+  }
+}
