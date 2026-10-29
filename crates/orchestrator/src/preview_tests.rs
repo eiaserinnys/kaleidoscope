@@ -107,6 +107,38 @@ async fn preview_accepts_device_source_samples_and_marks_unsampled_sources_idle(
 }
 
 #[tokio::test]
+async fn preview_notes_missing_connection_even_when_request_source_uses_sample_data() {
+    let server = McpServer::new(AppState::in_memory("secret"));
+    let mut preview_args = args(definition());
+    preview_args.data = Some([("cards".into(), json!([{"status":"done"}]))].into());
+
+    let value = result_value(server.preview_app_result(preview_args).await.unwrap());
+
+    assert!(value["notes"].as_array().unwrap().iter().any(|note| {
+        note.as_str().unwrap().contains("서버에 없는 연결: board")
+    }));
+}
+
+#[tokio::test]
+async fn preview_notes_missing_connection_used_only_by_action() {
+    let server = McpServer::new(AppState::in_memory("secret"));
+    let mut definition = definition();
+    definition["permissions"][0]["access"] = json!("readwrite");
+    definition["sources"] = json!({});
+    definition["ui"] = json!({
+        "type": "button",
+        "label": "호출",
+        "on_click": [{"call": {"permission": "relay", "method": "POST", "path": "/items"}}]
+    });
+
+    let value = result_value(server.preview_app_result(args(definition)).await.unwrap());
+
+    assert!(value["notes"].as_array().unwrap().iter().any(|note| {
+        note.as_str().unwrap().contains("서버에 없는 연결: board")
+    }));
+}
+
+#[tokio::test]
 async fn preview_uses_the_reported_window_state() {
     let (url, server_task) = fake_origin(
         200,

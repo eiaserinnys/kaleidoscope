@@ -12,7 +12,7 @@ use rmcp::{model::CallToolResult, ErrorData};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(super) struct PreviewArgs {
@@ -84,11 +84,14 @@ impl McpServer {
 
         let samples = samples.unwrap_or_default();
         let compiled = CompiledApp::compile(&definition);
+        let missing_connections = match self.state.missing_app_connections(&definition) {
+            Ok(connections) => connections,
+            Err(error) => return Ok(json_error(error)),
+        };
         let mut data = BTreeMap::new();
         let mut statuses = BTreeMap::new();
         let mut source_results = BTreeMap::new();
         let mut notes = Vec::new();
-        let mut missing_connections = BTreeSet::new();
         let mut requests: Vec<(String, String, FileAccess, SourceFormat, ConnectionRequest)> =
             Vec::new();
 
@@ -156,7 +159,6 @@ impl McpServer {
                     let connection_record = match self.state.connection(connection) {
                         Ok(Some(record)) => record,
                         Ok(None) => {
-                            missing_connections.insert(connection.clone());
                             let message = format!("서버에 등록되지 않은 연결: {connection}");
                             statuses.insert(
                                 name.clone(),
