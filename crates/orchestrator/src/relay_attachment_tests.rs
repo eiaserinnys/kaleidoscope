@@ -45,9 +45,23 @@ async fn user_event_records_attachments_and_removes_local_path_lines() {
         &mut projection,
     )
     .unwrap();
+    let no_extension_path = "/x/2026-10-29T16-35-31.519Z-.env-86f9263434e44472a4e39c890085f270";
+    process(
+        &state,
+        "w",
+        "처음 지시",
+        "user_message",
+        &json!({
+            "text": "",
+            "attachments": [no_extension_path],
+            "caller_info": {"source":"browser"}
+        }),
+        &mut projection,
+    )
+    .unwrap();
 
     let history = state.history("w").unwrap();
-    assert_eq!(history.len(), 3);
+    assert_eq!(history.len(), 4);
     assert_eq!(history[0].text, "사진을 봐 줘");
     assert_eq!(history[0].attachments[0].name, "회의 사진.png");
     assert_eq!(history[0].attachments[0].mime, "image/png");
@@ -56,6 +70,7 @@ async fn user_event_records_attachments_and_removes_local_path_lines() {
     assert_eq!(history[1].attachments[0].mime, "text/plain");
     assert_eq!(history[2].attachments[0].name, "사진.jpg");
     assert_eq!(history[2].attachments[0].mime, "image/jpeg");
+    assert_eq!(history[3].attachments[0].name, ".env");
 
     let response = crate::agent::get_agent(State(state), axum::extract::Path("w".into())).await;
     let body = axum::body::to_bytes(response.into_body(), 1024 * 1024)

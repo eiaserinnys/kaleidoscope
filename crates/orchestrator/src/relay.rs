@@ -235,24 +235,34 @@ fn attachment_name(path: &str) -> String {
     }
     let rest = &filename[25..];
     let (stem, extension) = match rest.rsplit_once('.') {
-        Some((stem, extension)) if !extension.is_empty() => (stem, Some(extension)),
+        Some((stem, extension)) if !extension.is_empty() && has_attachment_hash(stem) => {
+            (stem, Some(extension))
+        }
         _ => (rest, None),
     };
     let Some((name, hash)) = stem.rsplit_once('-') else {
         return filename.to_string();
     };
-    if name.is_empty()
-        || hash.len() != 32
-        || !hash
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
+    if name.is_empty() || !is_attachment_hash(hash) {
         return filename.to_string();
     }
     match extension {
         Some(extension) => format!("{name}.{extension}"),
         None => name.to_string(),
     }
+}
+
+fn has_attachment_hash(value: &str) -> bool {
+    value
+        .rsplit_once('-')
+        .is_some_and(|(_, hash)| is_attachment_hash(hash))
+}
+
+fn is_attachment_hash(value: &str) -> bool {
+    value.len() == 32
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 #[cfg(test)]
