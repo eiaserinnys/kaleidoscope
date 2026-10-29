@@ -13,7 +13,9 @@ import type {
   FileEntry,
   Grant,
   LinkStatus,
+  Rect,
   ShellSnapshot,
+  WebPage,
 } from "../contract/contract";
 import { toCoreError, type CoreTransport } from "./core-transport";
 import { createFakeData, type FakeDataSeed } from "./fake-data";
@@ -29,6 +31,7 @@ export interface FakeTransportSeed {
   agentSendError?: string;
   agentSendDelayMs?: number;
   data?: FakeDataSeed;
+  webUnavailable?: boolean;
 }
 
 export interface FakeAgentSeed {
@@ -40,15 +43,32 @@ export interface FakeAgentSeed {
 export interface FakeTransport extends CoreTransport {
   getFiles(): Record<string, string>;
   subscribeFiles(listener: () => void): () => void;
+  getWebViews(): FakeWebViewSnapshot[];
+  subscribeWebViews(listener: () => void): () => void;
+  getWebPlaces(): Array<{ window_id: string; bounds: Rect | null }>;
+  getWebAttachCount(windowId: string): number;
   /** Test and harness controls; the real core does not expose these methods. */
   setLink(status: LinkStatus): void;
   emit(event: CoreEvent): void;
   getOpenedAttachments(): Array<{ workspace_id: string; item_id: string; index: number }>;
 }
 
+export interface FakeWebViewSnapshot {
+  windowId: string;
+  page: WebPage;
+  bounds: Rect | null;
+}
+
 interface FakeFile {
   text: string;
   revision: string;
+}
+
+interface FakeWebView {
+  page: WebPage;
+  history: string[];
+  historyIndex: number;
+  bounds: Rect | null;
 }
 
 function clone<T>(value: T): T {
@@ -66,12 +86,27 @@ function validRelativePath(path: string, allowEmpty = false): boolean {
     && path.split("/").every((part) => part !== "" && part !== "." && part !== ".." && !/[\\:\0]/.test(part));
 }
 
+function isFakeHttpAddress(value: string): boolean {
+  if (!/^https?:\/\//i.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   let snapshot = clone(seed.snapshot);
   const files = new Map<string, FakeFile>();
   const eventListeners = new Set<(event: CoreEvent) => void>();
   const fileListeners = new Set<() => void>();
+  const webListeners = new Set<() => void>();
+  const webViews = new Map<string, FakeWebView>();
+  const webAttachCounts = new Map<string, number>();
+  const webPlaces: Array<{ window_id: string; bounds: Rect | null }> = [];
   let revisionNumber = 1;
+  let windowNumber = 1;
   const models = clone(seed.agentModels ?? [
     { preset: "gemini-4-argon", label: "Argon" },
     { preset: "claude-opus-5.5", label: "Opus" },
@@ -170,6 +205,68 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   const directoryExists = (directory: string): boolean => directory === ""
     || [...files.keys()].some((path) => path.startsWith(`${directory}/`));
 
+  const emitWebViews = () => {
+    for (const listener of webListeners) listener();
+  };
+
+  const updateWindowState = (windowId: string, state: AppWindow["state"]) => {
+    const window = findWindow(windowId);
+    const updated = { ...window, state: clone(state), updated_at: new Date().toISOString() };
+    snapshot = {
+      ...snapshot,
+      shared: {
+        ...snapshot.shared,
+        windows: snapshot.shared.windows.map((item) => item.id === windowId ? updated : item),
+      },
+    };
+    emitState();
+    return updated;
+  };
+
+  const appCurrentDefinition = (appId: string): AppDefinition | null => {
+    const app = snapshot.shared.apps.find((item) => item.id === appId);
+    return app
+      ? snapshot.shared.app_versions.find((version) => version.app_id === appId && version.version === app.current_version)?.definition ?? null
+      : null;
+  };
+
+  const emitWebPage = (windowId: string) => {
+    const view = webViews.get(windowId);
+    if (!view) return;
+    emit({ event: "web.update", window_id: windowId, page: clone(view.page) });
+    const window = snapshot.shared.windows.find((item) => item.id === windowId);
+    const definition = window ? definitionFor(window) : null;
+    const block = definition?.ui.type === "web_view" ? definition.ui : null;
+    if (!window || !block?.on_navigate) return;
+    const state = { ...window.state, [block.on_navigate.set_state]: view.page.url };
+    updateWindowState(windowId, state);
+  };
+
+  const makeWebPage = (url: string, historyIndex: number, history: string[]): WebPage => ({
+    url,
+    title: "가짜 페이지",
+    loading: false,
+    can_go_back: historyIndex > 0,
+    can_go_forward: historyIndex < history.length - 1,
+  });
+
+  const raiseWindow = (windowId: string): AppWindow => {
+    const window = findWindow(windowId);
+    const topZ = Math.max(0, ...snapshot.shared.windows
+      .filter((item) => item.desktop_id === window.desktop_id)
+      .map((item) => item.z));
+    const updated = { ...window, z: topZ + 1, updated_at: new Date().toISOString() };
+    snapshot = {
+      ...snapshot,
+      shared: {
+        ...snapshot.shared,
+        windows: snapshot.shared.windows.map((item) => item.id === windowId ? updated : item),
+      },
+    };
+    emitState();
+    return updated;
+  };
+
   async function callRequest(request: CoreRequest): Promise<CoreReply> {
     switch (request.op) {
       case "state.get":
@@ -254,6 +351,39 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         snapshot = { ...snapshot, link: { state: "unlinked" } };
         emitState();
         return { op: "link.unlink" };
+      case "desktop.activate": {
+        const desktop = snapshot.shared.desktops.find((item) => item.id === request.desktop_id);
+        if (!desktop) return fail("not_found", "데스크톱을 찾을 수 없습니다");
+        snapshot = {
+          ...snapshot,
+          device: {
+            ...snapshot.device,
+            active_workspace_id: desktop.workspace_id,
+            active_desktop_ids: { ...snapshot.device.active_desktop_ids, [desktop.workspace_id]: desktop.id },
+          },
+        };
+        emitState();
+        return { op: "desktop.activate" };
+      }
+      case "window.raise":
+        return { op: "window.raise", window: clone(raiseWindow(request.window_id)) };
+      case "window.set_rect": {
+        const window = findWindow(request.window_id);
+        const updated: AppWindow = {
+          ...window,
+          rect: clone(request.rect),
+          updated_at: new Date().toISOString(),
+        };
+        snapshot = {
+          ...snapshot,
+          shared: {
+            ...snapshot.shared,
+            windows: snapshot.shared.windows.map((item) => item.id === updated.id ? updated : item),
+          },
+        };
+        emitState();
+        return { op: "window.set_rect", window: clone(updated) };
+      }
       case "window.set_state": {
         const window = findWindow(request.window_id);
         const definition = definitionFor(window);
@@ -274,6 +404,151 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         await data.stateChanged(updated);
         return { op: "window.set_state", window: clone(updated) };
       }
+      case "files.open": {
+        const { window: explorerWindow } = permissionFor(request.window_id, request.permission);
+        const sourceDefinition = definitionFor(explorerWindow);
+        if (sourceDefinition?.ui.type !== "explorer") return fail("invalid_request", "탐색기 창에서만 파일을 열 수 있습니다");
+        const sourceGrant = requireGrant(request.window_id, request.permission);
+        if (!validRelativePath(request.path)) return fail("invalid_request", "파일 경로가 올바르지 않습니다");
+        if (directoryExists(request.path) && !files.has(request.path)) return fail("invalid_request", "폴더는 앱으로 열 수 없습니다");
+        if (!files.has(request.path)) return fail("not_found", "파일을 찾을 수 없습니다");
+
+        const targetDefinition = appCurrentDefinition(request.app_id);
+        const opens = targetDefinition?.opens;
+        if (!opens) return fail("invalid_request", "파일을 여는 앱이 아닙니다");
+        const extensionStart = request.path.slice(request.path.lastIndexOf("/") + 1).lastIndexOf(".");
+        const fileName = request.path.slice(request.path.lastIndexOf("/") + 1);
+        const extension = extensionStart > 0 ? fileName.slice(extensionStart + 1).toLowerCase() : "";
+        if (!opens.extensions.some((candidate) => candidate.toLowerCase() === extension)) {
+          return fail("invalid_request", "이 앱은 파일 확장자를 열지 않습니다");
+        }
+        if (!targetDefinition.permissions.some((item) => item.module === "files" && item.id === opens.permission)) {
+          return fail("invalid_request", "앱의 파일 권한을 찾을 수 없습니다");
+        }
+        const candidates = snapshot.shared.windows
+          .filter((item) => item.desktop_id === explorerWindow.desktop_id && item.app_id === request.app_id)
+          .filter((item) => snapshot.device.grants.some((grant) =>
+            grant.window_id === item.id && grant.permission === opens.permission && grant.root_path === sourceGrant.root_path))
+          .sort((left, right) => right.z - left.z);
+        const existing = candidates[0];
+        let opened: AppWindow;
+        if (existing) {
+          const state = { ...existing.state, [opens.state]: request.path };
+          const topZ = Math.max(0, ...snapshot.shared.windows
+            .filter((item) => item.desktop_id === explorerWindow.desktop_id)
+            .map((item) => item.z));
+          opened = {
+            ...existing,
+            state,
+            z: topZ + 1,
+            updated_at: new Date().toISOString(),
+          };
+          snapshot = {
+            ...snapshot,
+            shared: {
+              ...snapshot.shared,
+              windows: snapshot.shared.windows.map((item) => item.id === opened.id ? opened : item),
+            },
+          };
+        } else {
+          const app = snapshot.shared.apps.find((item) => item.id === request.app_id);
+          if (!app) return fail("not_found", "앱을 찾을 수 없습니다");
+          const id = `fake-window-${windowNumber++}`;
+          const topZ = Math.max(0, ...snapshot.shared.windows
+            .filter((item) => item.desktop_id === explorerWindow.desktop_id)
+            .map((item) => item.z));
+          const at = new Date().toISOString();
+          opened = {
+            id,
+            desktop_id: explorerWindow.desktop_id,
+            app_id: app.id,
+            app_version: app.current_version,
+            rect: clone(request.rect ?? { x: 48, y: 48, width: 720, height: 520 }),
+            z: topZ + 1,
+            state: { ...clone(targetDefinition.state), [opens.state]: request.path },
+            created_at: at,
+            updated_at: at,
+          };
+          const copiedGrant: Grant = {
+            window_id: id,
+            permission: opens.permission,
+            root_path: sourceGrant.root_path,
+            root_name: sourceGrant.root_name,
+            granted_at: at,
+          };
+          snapshot = {
+            ...snapshot,
+            shared: {
+              ...snapshot.shared,
+              windows: [...snapshot.shared.windows, opened],
+            },
+            device: { ...snapshot.device, grants: [...snapshot.device.grants, copiedGrant] },
+          };
+        }
+        emitState();
+        return { op: "files.open", window: clone(opened) };
+      }
+      case "web.attach": {
+        const window = findWindow(request.window_id);
+        if (definitionFor(window)?.ui.type !== "web_view") return fail("invalid_request", "웹 화면이 없는 앱입니다");
+        if (!isFakeHttpAddress(request.url)) return fail("invalid_request", "웹 주소는 http 또는 https여야 합니다");
+        if (seed.webUnavailable) return fail("unavailable", "가짜 쉘에서 웹 화면을 사용할 수 없습니다");
+        const current = webViews.get(request.window_id);
+        if (current) return { op: "web.attach", page: clone(current.page) };
+        const history = [request.url];
+        const view: FakeWebView = {
+          history,
+          historyIndex: 0,
+          page: makeWebPage(request.url, 0, history),
+          bounds: null,
+        };
+        webViews.set(request.window_id, view);
+        webAttachCounts.set(request.window_id, (webAttachCounts.get(request.window_id) ?? 0) + 1);
+        emitWebViews();
+        return { op: "web.attach", page: clone(view.page) };
+      }
+      case "web.navigate": {
+        const view = webViews.get(request.window_id);
+        if (!view) return fail("not_found", "웹 화면이 연결되지 않았습니다");
+        if (!isFakeHttpAddress(request.url)) return fail("invalid_request", "웹 주소는 http 또는 https여야 합니다");
+        view.history = [...view.history.slice(0, view.historyIndex + 1), request.url];
+        view.historyIndex = view.history.length - 1;
+        view.page = makeWebPage(request.url, view.historyIndex, view.history);
+        emitWebPage(request.window_id);
+        emitWebViews();
+        return { op: "web.navigate" };
+      }
+      case "web.history": {
+        const view = webViews.get(request.window_id);
+        if (!view) return fail("not_found", "웹 화면이 연결되지 않았습니다");
+        if (request.action === "back") {
+          if (view.historyIndex === 0) return { op: "web.history" };
+          view.historyIndex -= 1;
+        } else if (request.action === "forward") {
+          if (view.historyIndex >= view.history.length - 1) return { op: "web.history" };
+          view.historyIndex += 1;
+        }
+        view.page = makeWebPage(view.history[view.historyIndex], view.historyIndex, view.history);
+        emitWebPage(request.window_id);
+        emitWebViews();
+        return { op: "web.history" };
+      }
+      case "web.place": {
+        const view = webViews.get(request.window_id);
+        if (!view) return fail("not_found", "웹 화면이 연결되지 않았습니다");
+        view.bounds = clone(request.bounds);
+        webPlaces.push({ window_id: request.window_id, bounds: clone(request.bounds) });
+        emitWebViews();
+        return { op: "web.place" };
+      }
+      case "web.capture": {
+        if (!webViews.has(request.window_id)) return fail("not_found", "웹 화면이 연결되지 않았습니다");
+        return { op: "web.capture", image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n7sAAAAASUVORK5CYII=" };
+      }
+      case "web.detach":
+        webViews.delete(request.window_id);
+        emitWebViews();
+        return { op: "web.detach" };
       case "files.pick_folder": {
         permissionFor(request.window_id, request.permission);
         if (!seed.folder) return { op: "files.pick_folder", grant: null };
@@ -368,6 +643,23 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     },
     getFiles() {
       return Object.fromEntries([...files.entries()].map(([path, file]) => [path, file.text]));
+    },
+    getWebViews() {
+      return [...webViews.entries()].map(([windowId, view]) => ({
+        windowId,
+        page: clone(view.page),
+        bounds: clone(view.bounds),
+      }));
+    },
+    subscribeWebViews(listener) {
+      webListeners.add(listener);
+      return () => webListeners.delete(listener);
+    },
+    getWebPlaces() {
+      return clone(webPlaces);
+    },
+    getWebAttachCount(windowId) {
+      return webAttachCounts.get(windowId) ?? 0;
     },
     subscribeFiles(listener) {
       fileListeners.add(listener);

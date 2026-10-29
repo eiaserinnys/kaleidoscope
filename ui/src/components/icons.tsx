@@ -1,5 +1,7 @@
 import {
   ArrowUp as ArrowUpIcon,
+  ArrowLeft as ArrowLeftIcon,
+  ArrowRight as ArrowRightIcon,
   ChevronDown as ChevronDownIcon,
   ChevronRight as ChevronRightIcon,
   Cloud as CloudIcon,
@@ -7,7 +9,10 @@ import {
   File as FileIcon,
   FilePlus as FilePlusIcon,
   FileText as FileTextIcon,
+  FileCode as FileCodeIcon,
+  FileImage as FileImageIcon,
   FolderOpen as FolderOpenIcon,
+  Globe as GlobeIcon,
   Import as ImportIcon,
   LayoutGrid as LayoutGridIcon,
   MessageSquare as MessageSquareIcon,
@@ -15,6 +20,7 @@ import {
   PanelLeftOpen as PanelLeftOpenIcon,
   Paperclip as PaperclipIcon,
   Plus as PlusIcon,
+  RotateCw as RotateCwIcon,
   X as XIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -55,10 +61,16 @@ export const PanelLeftClose = (props: IconProps) => renderIcon(PanelLeftCloseIco
 export const FileText = (props: IconProps) => renderIcon(FileTextIcon, props);
 export const File = (props: IconProps) => renderIcon(FileIcon, props);
 export const Paperclip = (props: IconProps) => renderIcon(PaperclipIcon, props);
+export const FileCode = (props: IconProps) => renderIcon(FileCodeIcon, props);
+export const FileImage = (props: IconProps) => renderIcon(FileImageIcon, props);
 export const FilePlus = (props: IconProps) => renderIcon(FilePlusIcon, props);
 export const FolderOpen = (props: IconProps) => renderIcon(FolderOpenIcon, props);
 export const MessageSquare = (props: IconProps) => renderIcon(MessageSquareIcon, props);
 export const ArrowUp = (props: IconProps) => renderIcon(ArrowUpIcon, props);
+export const ArrowLeft = (props: IconProps) => renderIcon(ArrowLeftIcon, props);
+export const ArrowRight = (props: IconProps) => renderIcon(ArrowRightIcon, props);
+export const RotateCw = (props: IconProps) => renderIcon(RotateCwIcon, props);
+export const Globe = (props: IconProps) => renderIcon(GlobeIcon, props);
 export const Plus = (props: IconProps) => renderIcon(PlusIcon, props);
 export const LayoutGrid = (props: IconProps) => renderIcon(LayoutGridIcon, props);
 export const Import = (props: IconProps) => renderIcon(ImportIcon, props);

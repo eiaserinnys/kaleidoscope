@@ -6,6 +6,19 @@ import { TextInput } from "../components/text-input";
 afterEach(cleanup);
 
 describe("TextInput", () => {
+  it("keeps the default size and applies compact only when requested", () => {
+    render(
+      <>
+        <TextInput aria-label="기본" value="기본" onCommit={vi.fn()} onCancel={vi.fn()} />
+        <TextInput aria-label="간결" size="compact" value="주소" onCommit={vi.fn()} onCancel={vi.fn()} />
+      </>,
+    );
+
+    expect((screen.getByRole("textbox", { name: "기본" }) as HTMLInputElement).className).toBe("ks-text-input");
+    expect((screen.getByRole("textbox", { name: "간결" }) as HTMLInputElement).className)
+      .toBe("ks-text-input ks-text-input-compact");
+  });
+
   it("selects the current name when rename input opens", () => {
     render(<TextInput aria-label="이름" value="작업 1" onCommit={vi.fn()} onCancel={vi.fn()} />);
 

@@ -359,6 +359,7 @@ describe("agent_chat attachments", () => {
     thumbnail.focus();
     fireEvent.click(thumbnail);
     const dialog = screen.getByRole("dialog");
+    expect(dialog.hasAttribute("data-ks-overlay")).toBe(true);
     expect(background.hasAttribute("inert")).toBe(true);
     const user = userEvent.setup();
     await user.tab();

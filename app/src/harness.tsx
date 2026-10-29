@@ -1,19 +1,35 @@
-import { StrictMode, useEffect } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createFakeTransport,
   createShellStore,
+  type FakeTransport,
+  type FakeWebViewSnapshot,
 } from "@kaleidoscope/ui";
 import { Shell } from "./shell/shell";
 import type { App, AppDefinition, AppVersion, AppWindow, LinkStatus, ShellSnapshot } from "../../ui/src/contract/contract";
 import "@kaleidoscope/ui/styles.css";
 import "./index.css";
 import "./shell.css";
+import "./harness.css";
 import mdEditorJson from "../../examples/md-editor.json";
 import mdViewerJson from "../../examples/md-viewer.json";
+import webBrowserJson from "../../examples/web-browser.json";
+import explorerJson from "../../examples/explorer.json";
 
-const timestamp = "2026-10-28T00:00:00Z";
-const definitions = [mdEditorJson, mdViewerJson] as AppDefinition[];
+declare global {
+  interface Window {
+    __kaleidoscopeHarness?: {
+      getSnapshot: () => ShellSnapshot | null;
+      getWebPlaces: () => Array<{ window_id: string; bounds: import("../../ui/src/contract/contract").Rect | null }>;
+      getWebAttachCount: (windowId: string) => number;
+    };
+  }
+}
+
+const timestamp = "2026-10-30T00:00:00Z";
+const bottomMenuScenario = new URLSearchParams(window.location.search).has("bottom-menu");
+const definitions = [mdEditorJson, mdViewerJson, webBrowserJson, explorerJson] as AppDefinition[];
 const apps: App[] = definitions.map((definition) => ({
   id: definition.id,
   name: definition.name,
@@ -27,17 +43,34 @@ const appVersions: AppVersion[] = definitions.map((definition) => ({
   definition,
   created_at: timestamp,
 }));
-const windows: AppWindow[] = definitions.map((definition, index) => ({
-  id: `${definition.id}-window`,
-  desktop_id: "desktop-1",
-  app_id: definition.id,
-  app_version: 1,
-  rect: { x: 48 + index * 32, y: 48 + index * 32, width: 720, height: 520 },
-  z: index + 1,
-  state: { current_file: null },
-  created_at: timestamp,
-  updated_at: timestamp,
-}));
+const windows: AppWindow[] = bottomMenuScenario
+  ? [{
+    id: "explorer-window",
+    desktop_id: "desktop-1",
+    app_id: "explorer",
+    app_version: 1,
+    rect: { x: 0, y: 0, width: 720, height: 520 },
+    z: 1,
+    state: {},
+    created_at: timestamp,
+    updated_at: timestamp,
+  }]
+  : ["web-browser", "explorer"].map((appId) => {
+    const state: AppWindow["state"] = appId === "web-browser" ? { url: "https://www.google.com/" } : {};
+    return {
+      id: `${appId}-window`,
+      desktop_id: "desktop-1",
+      app_id: appId,
+      app_version: 1,
+      rect: appId === "web-browser"
+        ? { x: 48, y: 48, width: 720, height: 520 }
+        : { x: 480, y: 170, width: 720, height: 520 },
+      z: appId === "web-browser" ? 2 : 1,
+      state,
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+  });
 
 function linkStatus(state: string | null): LinkStatus {
   switch (state) {
@@ -68,26 +101,81 @@ const snapshot: ShellSnapshot = {
     apps,
     app_versions: appVersions,
     workspaces: [{ id: "workspace-1", name: "kaleidoscope", created_at: timestamp, updated_at: timestamp }],
-    desktops: [{ id: "desktop-1", workspace_id: "workspace-1", name: "작업", position: 0, created_at: timestamp, updated_at: timestamp }],
+    desktops: [
+      { id: "desktop-1", workspace_id: "workspace-1", name: "작업", position: 0, created_at: timestamp, updated_at: timestamp },
+      { id: "desktop-2", workspace_id: "workspace-1", name: "두 번째 화면", position: 1, created_at: timestamp, updated_at: timestamp },
+    ],
     windows,
   },
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [] },
-  supported: { blocks: 1, modules: { files: 1 } },
+  supported: { blocks: 4, modules: { files: 1, web: 1 } },
   link: linkStatus(new URLSearchParams(window.location.search).get("link")),
 };
 
-const store = createShellStore(createFakeTransport({
+const files = bottomMenuScenario
+  ? Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`z${String(index).padStart(2, "0")}.md`, `# File ${index}`]))
+  : {
+    "README.md": "# kaleidoscope\n\n쉘 화면 캡처용 문서입니다.\n",
+    "notes/a.md": "# 첫 번째 노트\n",
+    "notes/b.md": "# 두 번째 노트\n",
+    "notes/todo.txt": "확인할 항목\n",
+    "images/cover.png": "가짜 이미지 파일",
+  };
+
+const transport: FakeTransport = createFakeTransport({
   snapshot,
   folder: { root_path: "/fake/docs", root_name: "문서" },
-  files: { "README.md": "# kaleidoscope\n\n쉘 화면 캡처용 문서입니다.\n" },
-}));
+  webUnavailable: new URLSearchParams(window.location.search).get("web") === "unavailable",
+  files,
+});
+const store = createShellStore(transport);
+window.__kaleidoscopeHarness = {
+  getSnapshot: store.getSnapshot,
+  getWebPlaces: transport.getWebPlaces,
+  getWebAttachCount: transport.getWebAttachCount,
+};
+
+function FakeWebViewLayer({ fakeTransport }: { fakeTransport: FakeTransport }) {
+  const [views, setViews] = useState<FakeWebViewSnapshot[]>(() => fakeTransport.getWebViews());
+
+  useEffect(() => {
+    const update = () => setViews(fakeTransport.getWebViews());
+    update();
+    return fakeTransport.subscribeWebViews(update);
+  }, [fakeTransport]);
+
+  return (
+    <div className="ks-harness-webview-layer" aria-label="가짜 웹 화면">
+      {views.map((view) => view.bounds ? (
+        <section
+          className="ks-harness-webview"
+          data-testid={`fake-webview-${view.windowId}`}
+          key={view.windowId}
+          style={{
+            left: view.bounds.x,
+            top: view.bounds.y,
+            width: view.bounds.width,
+            height: view.bounds.height,
+          }}
+        >
+          <header className="ks-harness-webview-toolbar">
+            <span>{view.page.title}</span>
+            <span>{view.page.url}</span>
+          </header>
+          <div className="ks-harness-webview-page">{view.page.title}</div>
+        </section>
+      ) : null)}
+    </div>
+  );
+}
 
 function Harness() {
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("menu") !== "open") return;
-    void store.ready.then(() => document.querySelector<HTMLButtonElement>(".ks-shell-actions button:last-of-type")?.click());
-  }, []);
-  return <Shell store={store} />;
+  return (
+    <>
+      <Shell store={store} />
+      <FakeWebViewLayer fakeTransport={transport} />
+    </>
+  );
 }
 
 createRoot(document.getElementById("root")!).render(<StrictMode><Harness /></StrictMode>);

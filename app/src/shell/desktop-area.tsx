@@ -9,6 +9,7 @@ import {
   type CoreRequest,
   type ShellSnapshot,
   type ShellStore,
+  type Rect,
 } from "@kaleidoscope/ui";
 import { WindowFrame } from "./window-frame";
 
@@ -18,6 +19,7 @@ export interface DesktopAreaProps {
   onAreaChange: (area: { width: number; height: number }) => void;
   onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
   onOpenApps: (anchor: HTMLElement) => void;
+  getNewWindowRect?: (desktopId: string, snapshot: ShellSnapshot) => Rect | undefined;
   snapshot: ShellSnapshot;
   store: ShellStore;
 }
@@ -28,6 +30,7 @@ export function DesktopArea({
   onAreaChange,
   onCall,
   onOpenApps,
+  getNewWindowRect,
   snapshot,
   store,
 }: DesktopAreaProps) {
@@ -78,6 +81,7 @@ export function DesktopArea({
                 onCall={onCall}
                 snapshot={snapshot}
                 store={store}
+                getNewWindowRect={getNewWindowRect}
               />
             ))}
           </section>
@@ -94,6 +98,7 @@ function DesktopWindow({
   onCall,
   snapshot,
   store,
+  getNewWindowRect,
 }: {
   appWindow: AppWindow;
   area: { width: number; height: number };
@@ -101,6 +106,7 @@ function DesktopWindow({
   onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
   snapshot: ShellSnapshot;
   store: ShellStore;
+  getNewWindowRect?: (desktopId: string, snapshot: ShellSnapshot) => Rect | undefined;
 }) {
   const app = snapshot.shared.apps.find((candidate) => candidate.id === appWindow.app_id);
   const version = snapshot.shared.app_versions.find((candidate) =>
@@ -116,7 +122,11 @@ function DesktopWindow({
       onCall={onCall}
       window={appWindow}
     >
-      <AppWindowContent store={store} windowId={appWindow.id} />
+      <AppWindowContent
+        newWindowRect={() => getNewWindowRect?.(appWindow.desktop_id, snapshot)}
+        store={store}
+        windowId={appWindow.id}
+      />
     </WindowFrame>
   );
 }

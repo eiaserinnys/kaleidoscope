@@ -37,9 +37,19 @@ export function Menu({ anchor, items, onClose }: MenuProps) {
       ? Number.parseFloat(getComputedStyle(menu).getPropertyValue("--ks-space-3")) || 0
       : 0;
     const maxLeft = Math.max(window.innerWidth - menuWidth - viewportInset, viewportInset);
+    const menuHeight = menu?.getBoundingClientRect().height ?? 0;
+    const belowTop = rect.bottom;
+    const aboveTop = rect.top - menuHeight;
+    const fitsBelow = belowTop >= viewportInset
+      && belowTop + menuHeight <= window.innerHeight - viewportInset;
+    const fitsAbove = aboveTop >= viewportInset && rect.top <= window.innerHeight - viewportInset;
     setPosition({
       left: Math.min(Math.max(rect.left, viewportInset), maxLeft),
-      top: rect.bottom,
+      top: fitsBelow
+        ? belowTop
+        : fitsAbove
+          ? aboveTop
+          : Math.max(viewportInset, window.innerHeight - viewportInset - menuHeight),
     });
     itemRefs.current.find((item) => item && !item.disabled)?.focus();
 
@@ -82,6 +92,7 @@ export function Menu({ anchor, items, onClose }: MenuProps) {
     <div
       aria-orientation="vertical"
       className="ks-menu"
+      data-ks-overlay
       ref={menuRef}
       role="menu"
       style={{ left: position.left, top: position.top }}

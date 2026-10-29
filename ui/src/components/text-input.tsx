@@ -2,14 +2,15 @@ import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
 
 export interface TextInputProps extends Omit<
   InputHTMLAttributes<HTMLInputElement>,
-  "className" | "onBlur" | "onChange" | "onKeyDown" | "value"
+  "className" | "onBlur" | "onChange" | "onKeyDown" | "size" | "value"
 > {
+  size?: "compact";
   value: string;
   onCommit: (value: string) => void;
   onCancel: () => void;
 }
 
-export function TextInput({ value, onCommit, onCancel, ...props }: TextInputProps) {
+export function TextInput({ size, value, onCommit, onCancel, ...props }: TextInputProps) {
   const [draft, setDraft] = useState(value);
   const finished = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -35,7 +36,7 @@ export function TextInput({ value, onCommit, onCancel, ...props }: TextInputProp
     <input
       {...props}
       autoFocus
-      className="ks-text-input"
+      className={`ks-text-input${size === "compact" ? " ks-text-input-compact" : ""}`}
       ref={inputRef}
       onBlur={finish}
       onChange={(event) => setDraft(event.currentTarget.value)}

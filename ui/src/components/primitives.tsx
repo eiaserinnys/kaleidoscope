@@ -75,13 +75,15 @@ export function Notice({
   children,
   actions,
   role = "status",
+  "data-ks-overlay": overlay,
 }: {
   children: ReactNode;
   actions?: [ReactNode] | [ReactNode, ReactNode];
   role?: "alert" | "status";
+  "data-ks-overlay"?: boolean;
 }) {
   return (
-    <div className="ks-notice" role={role}>
+    <div className="ks-notice" data-ks-overlay={overlay || undefined} role={role}>
       <span className="ks-notice-message">{children}</span>
       {actions ? <span className="ks-notice-actions">{actions}</span> : null}
     </div>
