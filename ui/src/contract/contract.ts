@@ -2,6 +2,20 @@
 import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
+ * 기록에 붙은 첨부 하나(모듈 `agent` 2판). 내용은 `agent.attachment`로 읽는다.
+ */
+export type AgentAttachment = { 
+/**
+ * 화면에 보일 파일 이름.
+ */
+name: string, 
+/**
+ * 서버가 확장자로 정한 MIME 형식(모르면 `application/octet-stream`). `image/`로 시작하면 대화
+ * 블록이 이미지로 그린다.
+ */
+mime: string, };
+
+/**
  * 워크스페이스 PAS 하나.
  */
 export type AgentInfo = { workspace_id: string, 
@@ -31,9 +45,15 @@ export type AgentItem = {
  */
 id: string, kind: AgentItemKind, 
 /**
- * 사용자 글이나 PAS의 답(마크다운), 오류나 알림 한 줄.
+ * 사용자 글이나 PAS의 답(마크다운), 오류나 알림 한 줄. 첨부만 보낸 사용자 말이면 빈 문자열이다.
  */
-text: string, at: string, };
+text: string, at: string, 
+/**
+ * (모듈 `agent` 2판) 사용자 말에 붙은 첨부. 보낸 순서 그대로다. 다른 종류의 기록과 첨부 없는 말은
+ * 빈 배열이다. 1판 서버의 기록처럼 필드가 없으면 빈 배열로 읽는다. 코어는 늘 채워 보내지만, 첨부 전의
+ * 화면 코드와 시험 자료가 그대로 맞도록 TS에서는 빠질 수 있게 두었다(없으면 빈 배열로 본다).
+ */
+attachments?: Array<AgentAttachment>, };
 
 export type AgentItemKind = "user" | "assistant" | "error" | "notice";
 
@@ -46,6 +66,23 @@ export type AgentModel = { preset: string, label: string, };
  * 워크스페이스 PAS에 일어난 일. `kind`로 가른다.
  */
 export type AgentUpdate = { "kind": "created", agent: AgentInfo, } | { "kind": "item", item: AgentItem, } | { "kind": "delta", text: string, } | { "kind": "activity", busy: boolean, tool: string | null, };
+
+/**
+ * 보낼 첨부 하나(모듈 `agent` 2판).
+ */
+export type AgentUpload = { 
+/**
+ * 파일 이름(확장자 포함). 붙여 넣은 이미지처럼 이름이 없으면 화면이 정한다(`붙여넣은 이미지.png`).
+ */
+name: string, 
+/**
+ * MIME 형식. 모르면 빈 문자열이고, 서버가 `application/octet-stream`으로 올린다.
+ */
+mime: string, 
+/**
+ * 파일 내용. 표준 base64(채움 문자 있음).
+ */
+data_base64: string, };
 
 /**
  * 레지스트리의 앱 항목. 버전이 쌓이고 `current_version`이 지금 쓰는 버전을 가리킨다.
@@ -176,12 +213,20 @@ items: Array<AgentItem>,
 /**
  * 만들 때 고를 수 있는 모델. 순서가 대체 순서다(앞의 모델이 막히면 다음).
  */
-models: Array<AgentModel>, } | { "op": "agent.create", agent: AgentInfo, } | { "op": "agent.send", };
+models: Array<AgentModel>, } | { "op": "agent.create", agent: AgentInfo, } | { "op": "agent.send", } | { "op": "agent.attachment", name: string, mime: string, 
+/**
+ * 파일 내용. 표준 base64.
+ */
+data_base64: string, } | { "op": "agent.attachment_open", };
 
 /**
  * 화면이 코어에 보내는 명령. `op`로 가른다. 응답은 같은 `op`의 [`CoreReply`]다.
  */
-export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "agent.get", workspace_id: string, } | { "op": "agent.create", workspace_id: string, model_preset: string, } | { "op": "agent.send", workspace_id: string, text: string, };
+export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "agent.get", workspace_id: string, } | { "op": "agent.create", workspace_id: string, model_preset: string, } | { "op": "agent.send", workspace_id: string, text: string, 
+/**
+ * 빼면 빈 배열이다(모듈 `agent` 1판의 명령 모양).
+ */
+attachments?: Array<AgentUpload>, } | { "op": "agent.attachment", workspace_id: string, item_id: string, index: number, } | { "op": "agent.attachment_open", workspace_id: string, item_id: string, index: number, };
 
 /**
  * 화면 한 장. 앱 창 배치를 가진다.

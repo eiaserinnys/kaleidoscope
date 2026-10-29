@@ -1,7 +1,8 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 3판, 261029)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 4판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
+//! 화면이 지키는 한도 상수는 같은 테스트가 `ui/src/contract/limits.ts`로 생성한다.
 //! 생성된 TS는 손으로 고치지 않는다. 계약을 바꾸려면 이 파일을 고치고 다시 생성한다.
 //!
 //! 같은 크레이트에 둘이 더 있다.
@@ -17,6 +18,11 @@
 //! 워크스페이스 PAS는 워크스페이스마다 하나인 소울스트림 퍼시스턴트 세션이고, 오케스트레이터가 만들고
 //! 대화를 중계한다. 소울스트림 토큰은 오케스트레이터에만 있다. 서버 쪽 약속은 [`registry`]의
 //! 「워크스페이스 PAS」 절에 있다.
+//!
+//! 4판에서 바뀐 것(PAS 첨부, 카드 #807): 모듈 `agent` 2판. `agent.send`의 `attachments`, 기록의
+//! [`AgentItem::attachments`], 첨부를 읽는 `agent.attachment`와 기기의 기본 앱으로 여는
+//! `agent.attachment_open`. 블록 세트는 2판 그대로다(`agent_chat`의 정의는 같고, 이 쉘의 대화 블록에
+//! 첨부 단추와 붙여넣기가 붙는다). 한도는 [`AGENT_ATTACHMENTS_MAX`] 등 세 상수다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -76,12 +82,21 @@ pub const BLOCK_SET_VERSION: u32 = 2;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기.
 /// - `agent` 1판: 창이 있는 워크스페이스의 PAS와 대화(`agent.*` 명령).
-pub const MODULE_VERSIONS: &[(&str, u32)] = &[("files", 1), ("agent", 1)];
+/// - `agent` 2판: 1판 + 첨부(보내기, 기록에서 보기와 열기). 모듈의 새 판도 더하기만 하므로
+///   `agent: 1`을 요구하는 정의는 2판 쉘에서 그대로 돌고 첨부도 쓴다.
+pub const MODULE_VERSIONS: &[(&str, u32)] = &[("files", 1), ("agent", 2)];
 
 /// 창 상태 하나를 JSON으로 직렬화했을 때의 최대 바이트 수.
 pub const WINDOW_STATE_MAX_BYTES: usize = 64 * 1024;
 /// `files.read`가 읽는 파일의 최대 바이트 수.
 pub const FILE_READ_MAX_BYTES: u64 = 5 * 1024 * 1024;
+
+/// 말 하나에 붙일 수 있는 첨부의 최대 개수.
+pub const AGENT_ATTACHMENTS_MAX: usize = 10;
+/// 첨부 파일 하나의 최대 바이트 수(base64로 바꾸기 전). `agent.attachment`로 읽을 수 있는 크기도 같다.
+pub const AGENT_ATTACHMENT_MAX_BYTES: u64 = 20 * 1024 * 1024;
+/// 말 하나에 붙인 첨부의 합의 최대 바이트 수(base64로 바꾸기 전).
+pub const AGENT_ATTACHMENTS_TOTAL_MAX_BYTES: u64 = 30 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // 엔티티 (2단계 오케스트레이터 레지스트리와 같은 모양)
@@ -386,6 +401,9 @@ pub enum Block {
     /// - PAS가 있으면 대화 기록과 진행 중인 답을 보이고, 아래 입력창으로 보낸다(`agent.send`).
     ///   Enter는 보내기, Shift+Enter는 줄바꿈이다. 한글 조합 중의 Enter는 보내지 않는다.
     /// - 답은 마크다운으로 렌더한다. HTML은 그리지 않고 링크를 눌러도 쉘이 다른 곳으로 가지 않는다.
+    /// - (모듈 `agent` 2판) 입력 줄의 첨부 단추로 파일을 고르거나 입력창에 클립보드 이미지를 붙여 넣으면
+    ///   보낼 첨부로 쌓인다. 첨부가 있으면 글 없이도 보낸다. 기록의 사용자 말에 첨부가 보이고, 이미지는
+    ///   눌러 크게 보고 다른 파일은 눌러 기기의 기본 앱으로 연다.
     AgentChat {},
 }
 
@@ -586,10 +604,68 @@ pub enum CoreRequest {
         model_preset: String,
     },
     /// 워크스페이스 PAS에 말을 보낸다. 보낸 말은 서버가 PAS의 기록에서 확인한 뒤 `agent.update`의
-    /// `item`(user)으로 돌아온다. 앞뒤 공백을 뺀 글이 비었거나 [`registry::AGENT_MESSAGE_MAX_CHARS`]자를
-    /// 넘으면 `invalid_request`, PAS가 없으면 `not_found`, `connected`가 아니면 `server`.
+    /// `item`(user)으로 돌아온다. 첨부와 함께 보내면 그 기록의 `attachments`에 같은 순서로 보인다.
+    /// - `invalid_request`: 앞뒤 공백을 뺀 글이 비었는데 첨부도 없음, 글이
+    ///   [`registry::AGENT_MESSAGE_MAX_CHARS`]자를 넘음, 첨부가 [`AGENT_ATTACHMENTS_MAX`]개를 넘음,
+    ///   파일 하나가 [`AGENT_ATTACHMENT_MAX_BYTES`]나 합이 [`AGENT_ATTACHMENTS_TOTAL_MAX_BYTES`]를 넘음,
+    ///   이름이 비었거나 `data_base64`가 base64가 아님. 화면은 첨부를 쌓을 때 개수와 크기를 먼저 막는다.
+    /// - PAS가 없으면 `not_found`, `connected`가 아니면 `server`.
+    /// - 첨부를 올리다 하나라도 실패하면 말은 보내지 않고 `server`다(일부만 간 말을 만들지 않는다).
     #[serde(rename = "agent.send")]
-    AgentSend { workspace_id: String, text: String },
+    AgentSend {
+        workspace_id: String,
+        text: String,
+        /// 빼면 빈 배열이다(모듈 `agent` 1판의 명령 모양).
+        #[serde(default)]
+        #[ts(as = "Option<Vec<AgentUpload>>", optional)]
+        attachments: Vec<AgentUpload>,
+    },
+    /// (모듈 `agent` 2판) 기록에 있는 첨부 하나의 내용을 읽는다. 대화 블록이 이미지 첨부를 그릴 때 부른다.
+    /// `index`는 그 기록의 `attachments` 안 순서(0부터)다. 같은 첨부는 바뀌지 않으므로 화면은 받은 것을
+    /// 창이 살아 있는 동안 다시 쓴다. 기록이나 첨부가 없거나 원천에서 지워졌으면 `not_found`,
+    /// [`AGENT_ATTACHMENT_MAX_BYTES`]보다 크면 `invalid_request`, `connected`가 아니면 `server`.
+    #[serde(rename = "agent.attachment")]
+    AgentAttachment {
+        workspace_id: String,
+        item_id: String,
+        index: u32,
+    },
+    /// (모듈 `agent` 2판) 기록에 있는 첨부 하나를 이 기기의 기본 앱으로 연다. 대화 블록이 이미지가 아닌
+    /// 첨부를 눌렀을 때 부른다. 코어가 `agent.attachment`와 같은 길로 받아 앱 데이터 폴더의
+    /// `attachments/<item_id>-<index>/<이름>`에 쓰고(있으면 덮어씀) 연다. 이름의 경로 구분자와 Windows가
+    /// 파일 이름에 받지 않는 글자는 `_`로 바꾼다. 실행 파일과 스크립트(`exe`, `msi`, `bat`, `cmd`, `com`,
+    /// `scr`, `ps1`, `vbs`, `js`, `jse`, `wsf`, `hta`, `cpl`, `lnk`, `reg`)는 열지 않고 탐색기에서 그 파일을
+    /// 가리킨다. 쓰거나 열다 실패하면 `io`, 나머지 실패는 `agent.attachment`와 같다.
+    #[serde(rename = "agent.attachment_open")]
+    AgentAttachmentOpen {
+        workspace_id: String,
+        item_id: String,
+        index: u32,
+    },
+}
+
+/// 보낼 첨부 하나(모듈 `agent` 2판).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AgentUpload {
+    /// 파일 이름(확장자 포함). 붙여 넣은 이미지처럼 이름이 없으면 화면이 정한다(`붙여넣은 이미지.png`).
+    pub name: String,
+    /// MIME 형식. 모르면 빈 문자열이고, 서버가 `application/octet-stream`으로 올린다.
+    pub mime: String,
+    /// 파일 내용. 표준 base64(채움 문자 있음).
+    pub data_base64: String,
+}
+
+/// 기록에 붙은 첨부 하나(모듈 `agent` 2판). 내용은 `agent.attachment`로 읽는다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AgentAttachment {
+    /// 화면에 보일 파일 이름.
+    pub name: String,
+    /// 서버가 확장자로 정한 MIME 형식(모르면 `application/octet-stream`). `image/`로 시작하면 대화
+    /// 블록이 이미지로 그린다.
+    pub mime: String,
 }
 
 /// 코어의 응답. `op`는 명령과 같다.
@@ -668,6 +744,15 @@ pub enum CoreReply {
     AgentCreate { agent: AgentInfo },
     #[serde(rename = "agent.send")]
     AgentSend {},
+    #[serde(rename = "agent.attachment")]
+    AgentAttachment {
+        name: String,
+        mime: String,
+        /// 파일 내용. 표준 base64.
+        data_base64: String,
+    },
+    #[serde(rename = "agent.attachment_open")]
+    AgentAttachmentOpen {},
 }
 
 /// 워크스페이스 PAS 하나.
@@ -701,9 +786,15 @@ pub struct AgentItem {
     /// 워크스페이스 안에서 늘어나는 순번(문자열). 같은 id가 두 번 오면 화면은 하나만 둔다.
     pub id: String,
     pub kind: AgentItemKind,
-    /// 사용자 글이나 PAS의 답(마크다운), 오류나 알림 한 줄.
+    /// 사용자 글이나 PAS의 답(마크다운), 오류나 알림 한 줄. 첨부만 보낸 사용자 말이면 빈 문자열이다.
     pub text: String,
     pub at: String,
+    /// (모듈 `agent` 2판) 사용자 말에 붙은 첨부. 보낸 순서 그대로다. 다른 종류의 기록과 첨부 없는 말은
+    /// 빈 배열이다. 1판 서버의 기록처럼 필드가 없으면 빈 배열로 읽는다. 코어는 늘 채워 보내지만, 첨부 전의
+    /// 화면 코드와 시험 자료가 그대로 맞도록 TS에서는 빠질 수 있게 두었다(없으면 빈 배열로 본다).
+    #[serde(default)]
+    #[ts(as = "Option<Vec<AgentAttachment>>", optional)]
+    pub attachments: Vec<AgentAttachment>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -937,8 +1028,88 @@ mod tests {
             kind: AgentItemKind::Notice,
             text: "알림".into(),
             at: "2026-10-29T00:00:00Z".into(),
+            attachments: vec![],
         };
         assert_eq!(serde_json::to_value(&item).unwrap()["kind"], "notice");
+    }
+
+    #[test]
+    fn agent_attachments_are_optional_on_input_and_round_trip() {
+        // 1판 모양의 보내기는 첨부 없이 읽힌다.
+        let old: CoreRequest =
+            serde_json::from_str(r#"{"op":"agent.send","workspace_id":"w","text":"안녕"}"#).unwrap();
+        assert_eq!(
+            old,
+            CoreRequest::AgentSend {
+                workspace_id: "w".into(),
+                text: "안녕".into(),
+                attachments: vec![]
+            }
+        );
+        let with: CoreRequest = serde_json::from_str(
+            r#"{"op":"agent.send","workspace_id":"w","text":"","attachments":[{"name":"붙여넣은 이미지.png","mime":"image/png","data_base64":"iVBORw=="}]}"#,
+        )
+        .unwrap();
+        let CoreRequest::AgentSend { attachments, .. } = &with else {
+            panic!("{with:?}")
+        };
+        assert_eq!(attachments[0].name, "붙여넣은 이미지.png");
+        assert!(serde_json::from_str::<CoreRequest>(
+            r#"{"op":"agent.send","workspace_id":"w","text":"","attachments":[{"name":"a","mime":"","data_base64":"","size":1}]}"#
+        )
+        .is_err(), "첨부의 모르는 필드는 거부한다");
+
+        // 1판 서버의 기록은 첨부 없이 읽힌다.
+        let item: AgentItem = serde_json::from_str(
+            r#"{"id":"1","kind":"user","text":"안녕","at":"2026-10-29T00:00:00Z"}"#,
+        )
+        .unwrap();
+        assert!(item.attachments.is_empty());
+
+        let read: CoreRequest = serde_json::from_str(
+            r#"{"op":"agent.attachment","workspace_id":"w","item_id":"7","index":0}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            read,
+            CoreRequest::AgentAttachment {
+                workspace_id: "w".into(),
+                item_id: "7".into(),
+                index: 0
+            }
+        );
+        let reply = CoreReply::AgentAttachmentOpen {};
+        assert_eq!(
+            serde_json::to_string(&reply).unwrap(),
+            r#"{"op":"agent.attachment_open"}"#
+        );
+    }
+
+    /// 화면이 지키는 한도를 `ui/src/contract/limits.ts`로 내보낸다. ts-rs처럼 `cargo test`가 다시 쓰고,
+    /// CI는 생성된 폴더가 바뀌지 않았는지 본다.
+    #[test]
+    fn export_limits_ts() {
+        let body = format!(
+            "// 이 파일은 crates/contract/src/lib.rs의 export_limits_ts 테스트가 만든다. 손으로 고치지 않는다.\n\
+             \n\
+             /** 말 하나에 붙일 수 있는 첨부의 최대 개수. */\n\
+             export const AGENT_ATTACHMENTS_MAX = {};\n\
+             /** 첨부 파일 하나의 최대 바이트 수. */\n\
+             export const AGENT_ATTACHMENT_MAX_BYTES = {};\n\
+             /** 말 하나에 붙인 첨부의 합의 최대 바이트 수. */\n\
+             export const AGENT_ATTACHMENTS_TOTAL_MAX_BYTES = {};\n\
+             /** 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위). */\n\
+             export const AGENT_MESSAGE_MAX_CHARS = {};\n",
+            AGENT_ATTACHMENTS_MAX,
+            AGENT_ATTACHMENT_MAX_BYTES,
+            AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
+            registry::AGENT_MESSAGE_MAX_CHARS,
+        );
+        let dir = std::env::var("TS_RS_EXPORT_DIR").expect("TS_RS_EXPORT_DIR는 .cargo/config.toml에 있다");
+        let path = std::path::Path::new(&dir).join("limits.ts");
+        if std::fs::read_to_string(&path).ok().as_deref() != Some(body.as_str()) {
+            std::fs::write(&path, &body).unwrap();
+        }
     }
 
     #[test]

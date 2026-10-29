@@ -156,6 +156,7 @@ impl AppState {
                         kind,
                         text: r.get(2)?,
                         at: r.get(3)?,
+                        attachments: Vec::new(),
                     })
                 },
             )
@@ -186,6 +187,7 @@ impl AppState {
             kind,
             text: text.into(),
             at,
+            attachments: Vec::new(),
         })
     }
     pub(super) fn emit(&self, workspace_id: &str, update: AgentUpdate) {

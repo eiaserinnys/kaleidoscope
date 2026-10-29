@@ -1,7 +1,10 @@
-//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 2판, 261029)
+//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 3판, 261030)
 //!
 //! 2판에서 더한 것(카드 #779): 배치 보고(`PUT /api/device/layout`), 워크스페이스 PAS 경로 셋,
 //! 이벤트 `agent.update`, `app.published`와 `app.open`의 `workspace_id`. 아래 「워크스페이스 PAS」 절.
+//!
+//! 3판에서 더한 것(카드 #807): 보내기의 첨부([`AgentSendRequest::attachments`]), 기록의 첨부
+//! ([`crate::AgentItem::attachments`]), 첨부 읽기 경로. 아래 「첨부」 절.
 //!
 //! 오케스트레이터는 앱 레지스트리의 정본이다. 쉘의 코어는 기기 토큰으로 붙어 앱을 받고, 에이전트는 같은
 //! 서버의 MCP(`/mcp`, MCP 토큰)로 앱을 올린다. MCP 도구의 모양은 오케스트레이터 코드에 있고 이 파일에는 없다.
@@ -19,7 +22,8 @@
 //! | `PUT /api/device/layout` | 같음 | [`DeviceLayout`] | 200 `{}` | 400 형식, 401 |
 //! | `GET /api/device/workspaces/{workspace_id}/agent` | 같음 | 없음 | 200 [`DeviceAgentReply`] | 401 |
 //! | `POST /api/device/workspaces/{workspace_id}/agent` | 같음 | [`AgentCreateRequest`] | 200 [`crate::AgentInfo`] | 400 모르는 모델, 401, 502 소울스트림 실패 |
-//! | `POST /api/device/workspaces/{workspace_id}/agent/messages` | 같음 | [`AgentSendRequest`] | 200 `{}` | 400 빈 글이나 너무 김, 401, 404 PAS 없음, 502 |
+//! | `POST /api/device/workspaces/{workspace_id}/agent/messages` | 같음 | [`AgentSendRequest`] | 200 `{}` | 400 빈 말, 너무 김, 첨부 한도나 형식, 401, 404 PAS 없음, 502 |
+//! | `GET /api/device/workspaces/{workspace_id}/agent/items/{item_id}/attachments/{index}` | 같음 | 없음 | 200 [`AgentAttachmentReply`] | 400 너무 큼, 401, 404 기록이나 첨부 없음, 502 |
 //! | `GET /api/health` | 없음 | 없음 | 200 `{"ok":true}` | |
 //!
 //! 실패 본문은 모두 [`CoreError`] JSON이다. 검사 실패(400)는 [`crate::validate::parse_app_definition`]의 오류
@@ -91,12 +95,36 @@
 //!   - 턴 끝: `activity`(busy 거짓).
 //!   - 턴 실패: `error` 기록과 `activity`(busy 거짓).
 //! - 기록은 서버에 남고, `GET .../agent`는 최근 [`AGENT_HISTORY_LIMIT`]개를 오래된 것부터 준다.
+//!
+//! # 첨부
+//! 첨부는 소울스트림의 세션 첨부로 올려 PAS에 넘긴다. 파일은 소울스트림에 남고, 서버는 기록마다 첨부의
+//! 소울스트림 경로만 둔다(기기에는 이름과 MIME만 보낸다).
+//! - 보내기: 서버는 먼저 한도와 형식을 검사한다([`crate::CoreRequest::AgentSend`]의 `invalid_request`
+//!   조건과 같고, 걸리면 400 `invalid_request`). 첨부가 있으면 PAS의 노드(소울스트림
+//!   `GET /api/persistent-sessions/{session_id}`의 `session.node_id`)를 읽고, 첨부를 순서대로 소울스트림
+//!   `POST /api/attachments/sessions?nodeId=<노드>`(multipart: `session_id`, `file`. 파일 이름은 첨부 이름,
+//!   형식은 MIME, 비었으면 `application/octet-stream`)에 올린다. 모두 올라가면 받은 `path`들을 개입의
+//!   `attachment_paths`로 한 번에 보낸다. 하나라도 실패하면 개입을 보내지 않고 502다. 글이 비었으면 빈 글
+//!   그대로 보낸다. 쉘이 먼저 끊겨도 서버는 본문을 다 받았으면 끝까지 마친다(만들기와 같다).
+//! - 중계: 소울스트림 `user_message`와 `intervention_sent`의 `attachments`(워커 경로 배열)를 그 `user` 기록의
+//!   첨부로 저장한다. 쉘에서 보낸 것과 소울스트림 화면에서 보낸 것이 같은 길이다. 첨부가 있으면 글이 비어도
+//!   기록한다. 글에서 `[첨부 파일 로컬 경로: `로 시작하는 줄은 지운다(소울스트림이 붙이는 경로 안내).
+//!   - 이름: 경로의 파일 이름에서 소울스트림이 붙인 앞머리(`2026-10-29T16-35-31.519Z-` 꼴의 시각과 `-`)와
+//!     확장자 앞의 꼬리(`-`와 16진수 32자)를 뗀 것. 그 꼴이 아니면 파일 이름 그대로다.
+//!   - MIME: 확장자로 정한다. 모르면 `application/octet-stream`.
+//! - 읽기(`GET .../agent/items/{item_id}/attachments/{index}`): 그 워크스페이스의 기록에 있는 첨부만 준다.
+//!   PAS의 노드를 읽고 소울스트림 `GET /api/attachments/files?nodeId=<노드>&path=<경로>`로 받아 base64로
+//!   돌려준다. [`crate::AGENT_ATTACHMENT_MAX_BYTES`]보다 크면 400 `invalid_request`, 소울스트림이 404면 404
+//!   `not_found`, 그 밖의 실패는 502.
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{AgentInfo, AgentItem, AgentModel, AgentUpdate, App, AppVersion, AppWindow, Desktop, Workspace};
+use crate::{
+    AgentInfo, AgentItem, AgentModel, AgentUpdate, AgentUpload, App, AppVersion, AppWindow, Desktop,
+    Workspace,
+};
 
 pub const PAIR_START_PATH: &str = "/api/pair/start";
 pub const PAIR_POLL_PATH: &str = "/api/pair/poll";
@@ -127,6 +155,11 @@ pub fn device_agent_messages_path(workspace_id: &str) -> String {
     format!("/api/device/workspaces/{workspace_id}/agent/messages")
 }
 
+/// 기록에 붙은 첨부 하나를 읽는 경로. `index`는 그 기록의 첨부 안 순서(0부터)다.
+pub fn device_agent_attachment_path(workspace_id: &str, item_id: &str, index: u32) -> String {
+    format!("/api/device/workspaces/{workspace_id}/agent/items/{item_id}/attachments/{index}")
+}
+
 /// 배치가 바뀐 뒤 이만큼 더 바뀌지 않으면 보고한다.
 pub const LAYOUT_DEBOUNCE_MS: u64 = 1000;
 /// 배치 보고가 실패하면 이만큼 뒤에 다시 보낸다.
@@ -141,6 +174,9 @@ pub const AGENT_SEND_TIMEOUT_SECS: u64 = 120;
 pub const AGENT_HISTORY_LIMIT: usize = 200;
 /// 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위).
 pub const AGENT_MESSAGE_MAX_CHARS: usize = 20_000;
+/// 보내기 요청 본문의 최대 바이트 수. 첨부 합의 한도를 base64로 바꾼 크기(4/3)에 글과 JSON의 여유를 더했다.
+/// 서버는 보내기 경로에만 이 한도를 건다.
+pub const AGENT_SEND_BODY_MAX_BYTES: usize = 48 * 1024 * 1024;
 
 /// 워크스페이스 PAS를 만들 때 고를 수 있는 모델(소울스트림 preset id, 화면 이름). 순서가 대체 순서다.
 /// 추론 등급은 정하지 않고 preset의 기본값을 쓴다. 쉘이 처음 고르는 값은 맨 앞이다.
@@ -250,6 +286,17 @@ pub struct AgentCreateRequest {
 #[serde(deny_unknown_fields)]
 pub struct AgentSendRequest {
     pub text: String,
+    /// 3판. 빼면 빈 배열이다.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<AgentUpload>,
+}
+
+/// 첨부 읽기 응답. 화면의 `agent.attachment` 응답과 같은 것을 담는다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentAttachmentReply {
+    pub name: String,
+    pub mime: String,
+    pub data_base64: String,
 }
 
 /// 이벤트 스트림의 이벤트. `event`로 가른다.
@@ -333,6 +380,14 @@ mod tests {
             device_agent_messages_path("w1"),
             "/api/device/workspaces/w1/agent/messages"
         );
+        assert_eq!(
+            device_agent_attachment_path("w1", "42", 0),
+            "/api/device/workspaces/w1/agent/items/42/attachments/0"
+        );
+        // 2판 코어의 보내기 본문은 3판 서버에서도 읽히고, 첨부 없는 3판 본문은 2판 모양 그대로다.
+        let old: AgentSendRequest = serde_json::from_str(r#"{"text":"안녕"}"#).unwrap();
+        assert!(old.attachments.is_empty());
+        assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"text":"안녕"}"#);
         let models = agent_models();
         assert_eq!(models.first().map(|m| m.preset.as_str()), Some("gemini-4-argon"));
         assert_eq!(models.len(), AGENT_MODELS.len());

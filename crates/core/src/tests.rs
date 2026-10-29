@@ -1357,6 +1357,7 @@ fn agent_commands_require_connection_and_a_local_workspace() {
         core.handle(CoreRequest::AgentSend {
             workspace_id: "missing".into(),
             text: "hello".into(),
+            attachments: vec![],
         }),
         ErrorCode::Server,
     );
@@ -1378,6 +1379,7 @@ fn agent_commands_require_connection_and_a_local_workspace() {
         core.handle(CoreRequest::AgentSend {
             workspace_id: "missing".into(),
             text: "hello".into(),
+            attachments: vec![],
         }),
         ErrorCode::NotFound,
     );
@@ -1455,6 +1457,7 @@ fn agent_send_trims_text_counts_characters_and_rejects_invalid_input_before_netw
             core.handle(CoreRequest::AgentSend {
                 workspace_id: workspace_id.clone(),
                 text,
+                attachments: vec![],
             }),
             ErrorCode::InvalidRequest,
         );
@@ -1464,6 +1467,7 @@ fn agent_send_trims_text_counts_characters_and_rejects_invalid_input_before_netw
     core.handle(CoreRequest::AgentSend {
         workspace_id: workspace_id.clone(),
         text: "  안녕\n ".into(),
+        attachments: vec![],
     })
     .unwrap();
     assert_eq!(
@@ -1471,7 +1475,8 @@ fn agent_send_trims_text_counts_characters_and_rejects_invalid_input_before_netw
         &[(
             workspace_id,
             AgentSendRequest {
-                text: "안녕".into()
+                text: "안녕".into(),
+                attachments: vec![],
             }
         )]
     );
