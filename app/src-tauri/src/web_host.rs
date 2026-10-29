@@ -6,7 +6,7 @@ use kaleidoscope_core::kaleidoscope_contract::{
     CoreError, ErrorCode, Rect, WebHistoryAction, WebPage,
 };
 use kaleidoscope_core::{Core, WebHost};
-use tauri::webview::NewWindowResponse;
+use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{
     AppHandle, LogicalPosition, LogicalSize, Manager, Webview, WebviewBuilder, WebviewUrl,
 };
@@ -65,6 +65,7 @@ impl TauriWebHost {
 // WebView2 이벤트는 UI 스레드에서 오며 코어의 상태와 이벤트에 반영한다.
 fn update(app: &AppHandle, id: &str, state: &Page, view: &ICoreWebView2, loading: Option<bool>) {
     let mut page = state.lock().unwrap();
+    let previous = page.clone();
     unsafe {
         let mut url = PWSTR::null();
         if view.Source(&mut url).is_ok() {
@@ -95,8 +96,10 @@ fn update(app: &AppHandle, id: &str, state: &Page, view: &ICoreWebView2, loading
     }
     let next = page.clone();
     drop(page);
-    if let Some(core) = app.try_state::<Arc<Core>>() {
-        core.web_update(id, next);
+    if next != previous {
+        if let Some(core) = app.try_state::<Arc<Core>>() {
+            core.web_update(id, next);
+        }
     }
 }
 
@@ -164,8 +167,22 @@ impl WebHost for TauriWebHost {
         let label = format!("web-{id}");
         let new_app = self.app.clone();
         let new_label = label.clone();
+        let load_app = self.app.clone();
+        let load_id = id.to_string();
+        let load_page = page.clone();
         let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
             .on_navigation(allowed)
+            .on_page_load(move |view, payload| {
+                let loading = matches!(payload.event(), PageLoadEvent::Started);
+                let app = load_app.clone();
+                let id = load_id.clone();
+                let page = load_page.clone();
+                let _ = view.with_webview(move |native| {
+                    if let Ok(native) = unsafe { native.controller().CoreWebView2() } {
+                        update(&app, &id, &page, &native, Some(loading));
+                    }
+                });
+            })
             .on_new_window(move |url, _| {
                 if allowed(&url) {
                     if let Some(view) = new_app.get_webview(&new_label) {

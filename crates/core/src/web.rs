@@ -34,9 +34,12 @@ fn window_web(state: &CoreState, id: &str) -> Result<Option<String>, CoreError> 
 
 pub(crate) fn handle(inner: &Inner, request: CoreRequest) -> Result<CoreReply, CoreError> {
     if let CoreRequest::WebDetach { window_id } = request {
-        if inner.web_attached.lock().unwrap().remove(&window_id) {
+        let attached = inner.web_attached.lock().unwrap().remove(&window_id);
+        if attached {
             if let Some(web) = inner.host.web() {
-                web.detach(&window_id)?;
+                if let Err(e) = web.detach(&window_id) {
+                    eprintln!("웹 화면 닫기 실패: {}", e.message);
+                }
             }
         }
         return Ok(CoreReply::WebDetach {});
