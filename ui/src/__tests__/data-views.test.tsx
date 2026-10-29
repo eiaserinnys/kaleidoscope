@@ -71,6 +71,18 @@ it("preserves feed text selection without selecting an entry", async () => {
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a" })));
 });
 
+it("does not select a feed entry with Enter while its text is selected", async () => {
+  const { calls } = setup({ type: "feed", entries: [{ key: "a", name: "이름", body: "첫 줄" }], on_select: { set_state: "choice" } }, { choice: null });
+  const text = await screen.findByText("첫 줄");
+  const entry = text.closest("article")!;
+  entry.focus();
+  vi.spyOn(window, "getSelection").mockReturnValue({ toString: () => "첫" } as Selection);
+  fireEvent.keyDown(entry, { key: "Enter" });
+  expect(calls.mock.calls.some(([request]) => request.op === "data.act")).toBe(false);
+  vi.mocked(window.getSelection).mockReturnValue(null);
+  fireEvent.keyDown(entry, { key: "Enter" });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a" })));
+});
 it("moves through grouped selectable feed entries with Tab and selects with Enter", async () => {
   const user = userEvent.setup();
   const { calls } = setup({ type: "feed", grouped: true, entries: [

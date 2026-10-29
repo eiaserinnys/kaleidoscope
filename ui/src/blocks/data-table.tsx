@@ -16,8 +16,8 @@ function width(column: Column, rows: Row[]) {
     const badge = row[column.field];
     return isBadge(badge) ? Array.from(typeof badge === "string" ? badge : badge.text).length : 0;
   })) : 0;
-  // 기본 루트 크기에서 0.875rem은 본문 글자 토큰 크기다.
-  const minimum = length ? `max(${base}, calc(${length * 0.875}rem + 4 * var(--ks-space-2)))` : base;
+  // 배지 글자 수 × 본문 글자 크기. 머리와 줄이 이 값 하나를 함께 쓴다(em은 칸마다 글자 크기가 달라 어긋난다).
+  const minimum = length ? `max(${base}, calc(${length} * var(--ks-type-body) + 4 * var(--ks-space-2)))` : base;
   return column.width === undefined || column.width === "fill" ? `minmax(${minimum}, 1fr)` : minimum;
 }
 function cellValue(value: JsonValue | undefined, column: Column): string {
