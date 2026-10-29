@@ -585,17 +585,22 @@ button.ks-agent-attachment-chip-preview,
   inset: 0;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--ks-color-background) 70%, transparent);
+  background: color-mix(in srgb, var(--ks-color-background) 94%, transparent);
 }
 
 .ks-agent-image-overlay > img {
   max-width: 90vw;
   max-height: 90vh;
   object-fit: contain;
+  border: var(--ks-line-width) solid var(--ks-color-border);
+  border-radius: var(--ks-radius-small);
+  box-shadow: var(--ks-shadow-window);
 }
 
 .ks-agent-image-close {
   position: absolute;
   top: var(--ks-space-3);
   right: var(--ks-space-3);
+  border-radius: var(--ks-radius-small);
+  background: var(--ks-color-surface-raised);
 }
