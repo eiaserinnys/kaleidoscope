@@ -337,6 +337,41 @@ describe("agent_chat attachments", () => {
     expect(screen.queryByRole("button", { name: "note.txt 빼기" })).toBeNull();
   });
 
+  it("removes an image without leaving its preview on the following file chip", async () => {
+    const { picker } = await ready();
+    fireEvent.change(picker, { target: { files: [new File(["image"], "사진.png", { type: "image/png" }), new File(["memo"], "메모.txt", { type: "text/plain" })] } });
+    await screen.findByRole("button", { name: /^사진\.png$/ });
+    fireEvent.click(screen.getByRole("button", { name: "사진.png 빼기" }));
+    const chip = screen.getByRole("button", { name: "메모.txt 빼기" }).closest(".ks-agent-attachment-chip")!;
+    expect(chip.querySelector("img")).toBeNull();
+    expect(chip.querySelector(".lucide-file")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^메모\.txt$/ })).toBeNull();
+  });
+
+  it("keeps Tab focus inside the image dialog and restores the background inert state", async () => {
+    const { picker, input } = await ready();
+    const background = Array.from(document.body.children).find((element) => element.contains(input))!;
+    const originallyInert = document.createElement("div");
+    originallyInert.setAttribute("inert", "");
+    document.body.appendChild(originallyInert);
+    fireEvent.change(picker, { target: { files: [new File(["image"], "사진.png", { type: "image/png" })] } });
+    const thumbnail = await screen.findByRole("button", { name: /^사진\.png$/ });
+    thumbnail.focus();
+    fireEvent.click(thumbnail);
+    const dialog = screen.getByRole("dialog");
+    expect(background.hasAttribute("inert")).toBe(true);
+    const user = userEvent.setup();
+    await user.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await user.tab({ shift: true });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(background.hasAttribute("inert")).toBe(false);
+    expect(originallyInert.hasAttribute("inert")).toBe(true);
+    expect(document.activeElement).toBe(thumbnail);
+    originallyInert.remove();
+  });
+
   it("adds pasted images, prevents image-only paste and preserves text paste", async () => {
     const { input } = await ready();
     const image = new File(["image"], "image.png", { type: "image/png" });

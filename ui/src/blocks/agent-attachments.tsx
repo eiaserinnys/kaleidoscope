@@ -6,8 +6,13 @@ import { IconButton } from "../components/primitives";
 import type { ShellStore } from "../core/shell-store";
 import { toCoreError } from "../core/core-transport";
 
-export type DraftAttachment = { file: File; name: string };
+export type DraftAttachment = { id: number; file: File; name: string };
 export type Preview = { src: string; name: string; trigger: HTMLElement };
+
+let nextDraftId = 0;
+export function makeDraftAttachment(file: File, name: string): DraftAttachment {
+  return { id: nextDraftId++, file, name };
+}
 
 export function readUpload({ file, name }: DraftAttachment): Promise<AgentUpload> {
   return new Promise((resolve, reject) => {
@@ -26,7 +31,7 @@ function useFileUrl(file: File): string | null {
     setUrl(next);
     return () => URL.revokeObjectURL(next);
   }, [file]);
-  return url;
+  return file.type.startsWith("image/") ? url : null;
 }
 
 type OpenPreview = (preview: Preview) => void;
@@ -87,13 +92,30 @@ export function HistoryAttachment({ attachment, workspaceId, itemId, index, stor
 
 export function ImagePreview({ preview, onClose }: { preview: Preview; onClose: () => void }) {
   const closeRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    const dialog = dialogRef.current!;
+    const changed = Array.from(document.body.children).filter((child) => child !== dialog && !child.hasAttribute("inert"));
+    changed.forEach((child) => child.setAttribute("inert", ""));
     closeRef.current?.querySelector("button")?.focus();
-    const onKey = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (event.key !== "Tab") return;
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'));
+      const index = controls.indexOf(document.activeElement as HTMLElement);
+      if (index === -1 || (event.shiftKey ? index === 0 : index === controls.length - 1)) {
+        event.preventDefault();
+        (event.shiftKey ? controls[controls.length - 1] : controls[0])?.focus();
+      }
+    };
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); preview.trigger.focus(); };
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      changed.forEach((child) => child.removeAttribute("inert"));
+      preview.trigger.focus();
+    };
   }, [onClose, preview.trigger]);
-  return createPortal(<div className="ks-agent-image-overlay" role="dialog" aria-modal="true" aria-label={preview.name} onClick={onClose}>
+  return createPortal(<div className="ks-agent-image-overlay" role="dialog" aria-modal="true" aria-label={preview.name} onClick={onClose} ref={dialogRef}>
     <img src={preview.src} alt={preview.name} onClick={(event) => event.stopPropagation()} />
     <div className="ks-agent-image-close" ref={closeRef}><IconButton aria-label="닫기" onClick={onClose}><X /></IconButton></div>
   </div>, document.body);

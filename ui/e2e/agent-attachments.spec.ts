@@ -48,13 +48,19 @@ for (const { width, theme } of [{ width: 360, theme: "dark" }, { width: 720, the
     await historyImage.click();
     await expect(page.getByRole("dialog")).toBeVisible();
     if (evidence) await page.screenshot({ path: `${evidence}/${width}-${theme}-preview.png` });
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    expect(await page.getByRole("dialog").evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
+    if (evidence) await page.screenshot({ path: `${evidence}/${width}-${theme}-tab.png` });
     await page.keyboard.press("Escape");
     await expect(historyImage).toBeFocused();
 
-    await picker.setInputFiles([{ name: "메모.txt", mimeType: "text/plain", buffer: Buffer.from("memo") }, { name: "사진.png", mimeType: "image/png", buffer: png }]);
+    await picker.setInputFiles([{ name: "사진.png", mimeType: "image/png", buffer: png }, { name: "메모.txt", mimeType: "text/plain", buffer: Buffer.from("memo") }]);
     await expect(chat.getByRole("button", { name: "메모.txt 빼기" })).toBeVisible();
     await expect(chat.getByRole("button", { name: "사진.png 빼기" })).toBeVisible();
     await chat.getByRole("button", { name: "사진.png 빼기" }).click();
+    await expect(chat.locator(".ks-agent-attachment-list").locator("img")).toHaveCount(0);
+    if (evidence) await page.screenshot({ path: `${evidence}/${width}-${theme}-removed.png` });
     await input.press("Enter");
     await expect(chat.locator(".ks-agent-chat-user:not(.is-pending)").getByRole("button", { name: "메모.txt" })).toBeVisible();
     if (evidence) await page.screenshot({ path: `${evidence}/${width}-${theme}-history.png` });

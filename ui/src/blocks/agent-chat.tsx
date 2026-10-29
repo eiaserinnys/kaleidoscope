@@ -7,7 +7,7 @@ import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
 import { MarkdownText } from "./markdown-text";
 import { ThinkingOrb } from "thinking-orbs";
-import { DraftChip, HistoryAttachment, ImagePreview, PendingAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
+import { DraftChip, HistoryAttachment, ImagePreview, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
 
 type AgentChatBlockData = Extract<Block, { type: "agent_chat" }>;
 
@@ -205,7 +205,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     if (!pasted.length) return;
     if (!Array.from(data.types).includes("text/plain")) event.preventDefault();
     const extensions: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };
-    addAttachments(pasted.map((file) => ({ file, name: extensions[file.type] ? `붙여넣은 이미지.${extensions[file.type]}` : file.name || "붙여넣은 파일" })));
+    addAttachments(pasted.map((file) => makeDraftAttachment(file, extensions[file.type] ? `붙여넣은 이미지.${extensions[file.type]}` : file.name || "붙여넣은 파일")));
   };
 
   const onInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -262,7 +262,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         role="log"
       >
         {items.map((item) => <HistoryItem key={item.id} item={item} workspaceId={workspaceId} store={context.store} onPreview={setPreview} onError={setSendError} />)}
-        {pending !== null ? <div className="ks-agent-chat-user is-pending">{pending.text}{pending.attachments.length ? <div className={`ks-agent-attachment-history${pending.text ? " has-text" : ""}`}>{pending.attachments.map((attachment, index) => <PendingAttachment key={index} attachment={attachment} onPreview={setPreview} />)}</div> : null}</div> : null}
+        {pending !== null ? <div className="ks-agent-chat-user is-pending">{pending.text}{pending.attachments.length ? <div className={`ks-agent-attachment-history${pending.text ? " has-text" : ""}`}>{pending.attachments.map((attachment) => <PendingAttachment key={attachment.id} attachment={attachment} onPreview={setPreview} />)}</div> : null}</div> : null}
         {delta ? <div className="ks-agent-chat-assistant"><div className="ks-agent-chat-assistant-content"><MarkdownText>{delta}</MarkdownText></div></div> : null}
         {(busy || pending !== null) && !delta ? (
           <div className="ks-agent-chat-working">
@@ -273,10 +273,10 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       </div>
       <div className="ks-agent-chat-input-area">
         {sendError ? <Notice role="alert">{sendError}</Notice> : null}
-        {attachments.length ? <div className="ks-agent-attachment-list">{attachments.map((attachment, index) => <DraftChip key={index} attachment={attachment} onPreview={setPreview} onRemove={() => setAttachments((current) => current.filter((_, i) => i !== index))} />)}</div> : null}
+        {attachments.length ? <div className="ks-agent-attachment-list">{attachments.map((attachment) => <DraftChip key={attachment.id} attachment={attachment} onPreview={setPreview} onRemove={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))} />)}</div> : null}
         <div className="ks-agent-chat-input-row">
           <input type="file" multiple hidden ref={fileRef} onChange={(event) => {
-            addAttachments(Array.from(event.currentTarget.files ?? []).map((file) => ({ file, name: file.name })));
+            addAttachments(Array.from(event.currentTarget.files ?? []).map((file) => makeDraftAttachment(file, file.name)));
             event.currentTarget.value = "";
           }} />
           <IconButton aria-label="파일 첨부" onClick={() => fileRef.current?.click()}><Paperclip /></IconButton>
