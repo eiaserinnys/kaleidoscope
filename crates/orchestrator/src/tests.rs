@@ -5,6 +5,7 @@ use tower::ServiceExt;
 const EDITOR: &str = include_str!("../../../examples/md-editor.json");
 const BROWSER: &str = include_str!("../../../examples/web-browser.json");
 const LEGACY_APP: &str = include_str!("../../../examples/workspace-pas.json");
+const CARD_BOARD: &str = include_str!("../../../examples/card-board.json");
 
 #[test]
 fn app_upload_versions_and_deduplicates_identical_definitions() {
@@ -169,7 +170,7 @@ async fn event_stream_starts_with_snapshot_then_published_app() {
 
 #[tokio::test]
 async fn event_stream_snapshot_filters_apps_by_supported_header() {
-    use kaleidoscope_contract::{Supported, registry::SUPPORTED_HEADER};
+    use kaleidoscope_contract::{registry::SUPPORTED_HEADER, Supported};
 
     let state = AppState::in_memory("secret");
     state.publish_app(LEGACY_APP, "agent", false, None).unwrap();
@@ -298,7 +299,7 @@ fn migration_upgrades_v1_without_losing_devices() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
     assert_eq!(
         db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -308,6 +309,15 @@ fn migration_upgrades_v1_without_losing_devices() {
         db.query_row("SELECT count(*) FROM agents", [], |r| r.get::<_, i64>(0))
             .unwrap(),
         0
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='connections'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        1
     );
 }
 
@@ -326,7 +336,7 @@ fn migration_upgrades_v2_agent_history_with_empty_attachments() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
     assert_eq!(
         db.query_row(
             "SELECT text || ':' || attachments FROM agent_items WHERE workspace_id='w'",
@@ -403,7 +413,7 @@ async fn layout_and_agent_endpoints_validate_and_keep_working_without_soulstream
 async fn workspace_layout_is_reported_with_ordered_windows_and_folders() {
     let state = AppState::in_memory("secret");
     let (device_id, token) = make_device(&state);
-    let layout = json!({"workspaces":[{"id":"w","name":"작업","created_at":"t","updated_at":"t"}],"desktops":[{"id":"d","workspace_id":"w","name":"화면","position":0,"created_at":"t","updated_at":"t"}],"windows":[{"id":"one","desktop_id":"d","app_id":"missing","app_version":1,"rect":{"x":0,"y":0,"width":10,"height":10},"z":1,"state":{},"created_at":"t","updated_at":"t"},{"id":"two","desktop_id":"d","app_id":"missing","app_version":1,"rect":{"x":0,"y":0,"width":10,"height":10},"z":2,"state":{"file":"a.md"},"created_at":"t","updated_at":"t"}],"folders":[{"window_id":"two","permission":"docs","root_name":"문서"}],"active_workspace_id":"w","active_desktop_ids":{"w":"d"}});
+    let layout = json!({"workspaces":[{"id":"w","name":"작업","created_at":"t","updated_at":"t"}],"desktops":[{"id":"d","workspace_id":"w","name":"화면","position":0,"created_at":"t","updated_at":"t"}],"windows":[{"id":"one","desktop_id":"d","app_id":"missing","app_version":1,"rect":{"x":0,"y":0,"width":10,"height":10},"z":1,"state":{},"created_at":"t","updated_at":"t"},{"id":"two","desktop_id":"d","app_id":"missing","app_version":1,"rect":{"x":0,"y":0,"width":10,"height":10},"z":2,"state":{"file":"a.md"},"created_at":"t","updated_at":"t"}],"folders":[{"window_id":"two","permission":"docs","root_name":"문서"}],"active_workspace_id":"w","active_desktop_ids":{"w":"d"},"data_errors":[{"window_id":"two","pointer":"/sources/cards","message":"원천 실패"}]});
     let req = Request::builder()
         .method("PUT")
         .uri("/api/device/layout")
@@ -423,8 +433,284 @@ async fn workspace_layout_is_reported_with_ordered_windows_and_folders() {
         workspace["desktops"][0]["windows"][0]["folders"]["docs"],
         "문서"
     );
+    assert_eq!(
+        workspace["desktops"][0]["windows"][0]["data_errors"][0]["pointer"],
+        "/sources/cards"
+    );
+    assert_eq!(
+        workspace["desktops"][0]["windows"][0]["data_errors"][0]["message"],
+        "원천 실패"
+    );
     let list = state.list_workspaces().unwrap();
     assert_eq!(list[0]["window_count"], 2);
+}
+
+#[tokio::test]
+async fn relay_endpoint_checks_permission_path_write_and_returns_origin_status_without_redirecting()
+{
+    use axum::{
+        body::to_bytes,
+        extract::{Request as AxumRequest, State as AxumState},
+        http::Uri,
+        response::IntoResponse,
+        routing::any,
+    };
+    use http_body_util::BodyExt;
+    use std::sync::{Arc, Mutex as StdMutex};
+
+    #[derive(Clone, Default)]
+    struct OriginRecord(Arc<StdMutex<Vec<(String, String, String, String, String)>>>);
+    async fn origin(
+        AxumState(record): AxumState<OriginRecord>,
+        request: AxumRequest,
+    ) -> axum::response::Response {
+        let (parts, body) = request.into_parts();
+        let method = parts.method.to_string();
+        let uri: Uri = parts.uri.clone();
+        let authorization = parts
+            .headers
+            .get(header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        let content_type = parts
+            .headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        let body = String::from_utf8(to_bytes(body, 1024 * 1024).await.unwrap().to_vec()).unwrap();
+        record
+            .0
+            .lock()
+            .unwrap()
+            .push((method, uri.to_string(), authorization, content_type, body));
+        if uri.path().ends_with("/large") {
+            let body = "x".repeat(kaleidoscope_contract::data::SOURCE_MAX_BYTES as usize + 1);
+            return (StatusCode::OK, [(header::CONTENT_TYPE, "text/plain")], body).into_response();
+        }
+        if uri.path().ends_with("/redirect") {
+            return (
+                StatusCode::FOUND,
+                [(header::LOCATION, "http://127.0.0.1:1/final")],
+                "redirect",
+            )
+                .into_response();
+        }
+        (
+            StatusCode::NOT_FOUND,
+            [(header::CONTENT_TYPE, "application/json")],
+            r#"{"missing":true}"#,
+        )
+            .into_response()
+    }
+
+    let record = OriginRecord::default();
+    let fake = Router::new()
+        .fallback(any(origin))
+        .with_state(record.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, fake).await.unwrap() });
+
+    std::env::set_var("KALEIDOSCOPE_TEST_CONNECTION_TOKEN", "secret-from-env");
+    let state = AppState::in_memory("secret");
+    state.publish_app(BROWSER, "agent", false, None).unwrap();
+    state.publish_app(LEGACY_APP, "agent", false, None).unwrap();
+    state.publish_app(CARD_BOARD, "agent", false, None).unwrap();
+    {
+        let db = state.lock_db().unwrap();
+        db.execute(
+            "INSERT INTO connections(name,kind,base_url,writable,paths,headers,description,updated_at) VALUES('board','relay',?1,1,'[\"/v1\"]','{\"Authorization\":\"Bearer ${env:KALEIDOSCOPE_TEST_CONNECTION_TOKEN}\"}','','now')",
+            [format!("http://{address}")],
+        ).unwrap();
+    }
+    let app = router(state.clone());
+    let request_body = |app_id: &str, path: &str, method: &str| {
+        json!({
+            "app_id": app_id,
+            "method": method,
+            "path": path,
+            "query": {"z": "a b", "a": "1"},
+            "body": {"status": "done"},
+            "accept": "json"
+        })
+    };
+    let token = make_device(&state).1;
+    let call = |path: &str, method: &str, app_id: &str| {
+        Request::builder()
+            .method("POST")
+            .uri("/api/device/connections/board/request")
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(request_body(app_id, path, method).to_string()))
+            .unwrap()
+    };
+
+    let response = app
+        .clone()
+        .oneshot(call("/v1/items", "POST", "card-board"))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let reply: Value =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(reply["status"], 404);
+    assert_eq!(reply["json"]["missing"], true);
+    assert_eq!(
+        record.0.lock().unwrap().last().unwrap(),
+        &(
+            "POST".into(),
+            "/v1/items?a=1&z=a+b".into(),
+            "Bearer secret-from-env".into(),
+            "application/json".into(),
+            "{\"status\":\"done\"}".into()
+        )
+    );
+
+    let denied_app = app
+        .clone()
+        .oneshot(call("/v1/items", "GET", "web-browser"))
+        .await
+        .unwrap();
+    assert_eq!(denied_app.status(), StatusCode::FORBIDDEN);
+    let invalid_path = app
+        .clone()
+        .oneshot(call("/v1/../private", "GET", "card-board"))
+        .await
+        .unwrap();
+    assert_eq!(invalid_path.status(), StatusCode::BAD_REQUEST);
+    state
+        .lock_db()
+        .unwrap()
+        .execute("UPDATE connections SET paths='[]' WHERE name='board'", [])
+        .unwrap();
+    let encoded_dot_path = app
+        .clone()
+        .oneshot(call("/safe/%2e./secret", "GET", "card-board"))
+        .await
+        .unwrap();
+    assert_eq!(encoded_dot_path.status(), StatusCode::BAD_REQUEST);
+    state
+        .lock_db()
+        .unwrap()
+        .execute("UPDATE connections SET writable=0 WHERE name='board'", [])
+        .unwrap();
+    let denied_write = app
+        .clone()
+        .oneshot(call("/v1/items", "POST", "card-board"))
+        .await
+        .unwrap();
+    assert_eq!(denied_write.status(), StatusCode::FORBIDDEN);
+    let redirect = app
+        .clone()
+        .oneshot(call("/v1/redirect", "GET", "card-board"))
+        .await
+        .unwrap();
+    assert_eq!(redirect.status(), StatusCode::OK);
+    let redirect_reply: Value =
+        serde_json::from_slice(&redirect.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(redirect_reply["status"], 302);
+    assert_eq!(
+        record.0.lock().unwrap().last().unwrap().1,
+        "/v1/redirect?a=1&z=a+b"
+    );
+
+    let too_large = app
+        .clone()
+        .oneshot(call("/v1/large", "GET", "card-board"))
+        .await
+        .unwrap();
+    assert_eq!(too_large.status(), StatusCode::PAYLOAD_TOO_LARGE);
+
+    state
+        .lock_db()
+        .unwrap()
+        .execute("UPDATE connections SET kind='oauth' WHERE name='board'", [])
+        .unwrap();
+    let oauth = app
+        .oneshot(call("/v1/items", "GET", "card-board"))
+        .await
+        .unwrap();
+    assert_eq!(oauth.status(), StatusCode::BAD_REQUEST);
+    server.abort();
+}
+
+#[tokio::test]
+async fn connection_snapshots_follow_apps_and_only_reach_supported_devices() {
+    use kaleidoscope_contract::{registry::SUPPORTED_HEADER, Supported};
+
+    let state = AppState::in_memory("secret");
+    let (_, token) = make_device(&state);
+    let supported_request = Request::builder()
+        .method("GET")
+        .uri("/api/device/events")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(
+            SUPPORTED_HEADER,
+            serde_json::to_string(&Supported::current()).unwrap(),
+        )
+        .body(Body::empty())
+        .unwrap();
+    let response = router(state.clone())
+        .oneshot(supported_request)
+        .await
+        .unwrap();
+    let mut stream = response.into_body().into_data_stream();
+    assert_eq!(
+        next_device_event(&mut stream).await["event"],
+        "apps.snapshot"
+    );
+    assert_eq!(
+        next_device_event(&mut stream).await["event"],
+        "connections.snapshot"
+    );
+
+    state
+        .set_connection(super::connections::ConnectionRegistration {
+            name: "board".into(),
+            kind: kaleidoscope_contract::registry::ConnectionKind::Relay,
+            base_url: "https://example.com".into(),
+            description: None,
+            writable: None,
+            paths: None,
+            headers: Some(std::collections::BTreeMap::from([(
+                "Authorization".into(),
+                "private".into(),
+            )])),
+            issuer: None,
+            scopes: None,
+            resource: None,
+        })
+        .unwrap();
+    let event = next_device_event(&mut stream).await;
+    assert_eq!(event["event"], "connections.snapshot");
+    assert_eq!(event["connections"][0]["name"], "board");
+    assert!(!event.to_string().contains("private"));
+
+    let (_, legacy_token) = make_device(&state);
+    let legacy = router(state.clone())
+        .oneshot(request(
+            "GET",
+            "/api/device/events",
+            Some(&legacy_token),
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    let mut legacy_stream = legacy.into_body().into_data_stream();
+    assert_eq!(
+        next_device_event(&mut legacy_stream).await["event"],
+        "apps.snapshot"
+    );
+    assert!(state
+        .event_for_device(
+            "legacy",
+            DeviceEvent::ConnectionsSnapshot {
+                connections: vec![]
+            }
+        )
+        .is_none());
 }
 
 async fn next_device_event(stream: &mut axum::body::BodyDataStream) -> Value {
@@ -500,8 +786,16 @@ async fn targeted_events_follow_each_devices_last_report_and_survive_restart() {
         "apps.snapshot"
     );
     assert_eq!(
+        next_device_event(&mut stream_a).await["event"],
+        "connections.snapshot"
+    );
+    assert_eq!(
         next_device_event(&mut stream_b).await["event"],
         "apps.snapshot"
+    );
+    assert_eq!(
+        next_device_event(&mut stream_b).await["event"],
+        "connections.snapshot"
     );
     assert_eq!(state.connected_count_for(Some("w")), 1);
     state

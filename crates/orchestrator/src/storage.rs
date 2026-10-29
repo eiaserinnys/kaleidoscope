@@ -12,7 +12,7 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
             PRAGMA user_version=1;
             COMMIT;")?;
-    } else if version > 3 {
+    } else if version > 4 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 2 {
@@ -29,6 +29,14 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             "BEGIN IMMEDIATE;
             ALTER TABLE agent_items ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]';
             PRAGMA user_version=3;
+            COMMIT;",
+        )?;
+    }
+    if version < 4 {
+        db.execute_batch(
+            "BEGIN IMMEDIATE;
+            CREATE TABLE connections (name TEXT PRIMARY KEY,kind TEXT NOT NULL,base_url TEXT NOT NULL,writable INTEGER NOT NULL,paths TEXT NOT NULL DEFAULT '[]',headers TEXT NOT NULL DEFAULT '{}',issuer TEXT,scopes TEXT,resource TEXT,description TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL);
+            PRAGMA user_version=4;
             COMMIT;",
         )?;
     }

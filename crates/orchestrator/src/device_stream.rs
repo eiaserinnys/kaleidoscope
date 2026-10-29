@@ -29,20 +29,31 @@ impl AppState {
         let snapshot = DeviceEvent::AppsSnapshot {
             apps: apps
                 .into_iter()
-                .filter(|app| {
-                    renders_on(supported.as_ref(), &app.version.definition.requires)
-                })
+                .filter(|app| renders_on(supported.as_ref(), &app.version.definition.requires))
                 .collect(),
         };
+        let mut initial_events = vec![snapshot];
+        if supported.as_ref().is_some_and(|supported| {
+            supported
+                .modules
+                .get("connection")
+                .is_some_and(|version| *version >= 1)
+        }) {
+            initial_events.push(DeviceEvent::ConnectionsSnapshot {
+                connections: self.connection_snapshot()?,
+            });
+        }
         let state = self.clone();
         let interval = tokio::time::interval(Duration::from_secs(registry::PING_INTERVAL_SECS));
         let guard = ConnectionGuard {
             state: state.clone(),
             device_id: device_id.clone(),
         };
-        let first = stream::once(async move {
-            Ok(Event::default().data(serde_json::to_string(&snapshot).unwrap()))
-        });
+        let first = stream::iter(
+            initial_events
+                .into_iter()
+                .map(|event| Ok(Event::default().data(serde_json::to_string(&event).unwrap()))),
+        );
         let rest = stream::unfold(
             (rx, interval, state, device_id, Some(guard)),
             |(mut rx, mut interval, state, device_id, guard)| async move {

@@ -24,8 +24,8 @@ use kaleidoscope_contract::{
         PairStartRequest, RegistryApp,
     },
     validate::parse_app_definition,
-    App, AppDefinition, AppVersion, CoreError, ErrorCode, LEGACY_BLOCK_SET_VERSION, Requires,
-    Supported,
+    App, AppDefinition, AppVersion, CoreError, ErrorCode, Requires, Supported,
+    LEGACY_BLOCK_SET_VERSION,
 };
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use schemars::{Schema, SchemaGenerator};
@@ -485,6 +485,8 @@ pub fn router(state: AppState) -> Router {
 
 mod agent;
 mod backup;
+mod connection_relay;
+mod connections;
 mod device_stream;
 mod http;
 mod layouts;

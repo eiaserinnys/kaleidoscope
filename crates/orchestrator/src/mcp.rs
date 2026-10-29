@@ -48,6 +48,40 @@ struct RevokeArgs {
     /// `list_devices`에서 확인한 기기 id.
     device_id: String,
 }
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum ConnectionKindArg {
+    Relay,
+    Oauth,
+}
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct SetConnectionArgs {
+    /// 연결 이름. 소문자, 숫자, 하이픈 1~64자.
+    name: String,
+    /// relay는 서버 중계, oauth는 기기 직접 로그인입니다.
+    kind: ConnectionKindArg,
+    /// https 주소. 로컬 시험은 http://127.0.0.1 또는 http://localhost만 허용합니다.
+    base_url: String,
+    /// 연결을 구분할 설명.
+    description: Option<String>,
+    /// GET 이외의 요청을 허용합니다. 기본값은 false.
+    writable: Option<bool>,
+    /// 요청을 보낼 수 있는 경로 접두어 목록.
+    paths: Option<Vec<String>>,
+    /// relay 요청에 붙일 헤더 이름과 값. 값의 ${env:NAME}은 서버 환경변수로 치환합니다.
+    headers: Option<std::collections::BTreeMap<String, String>>,
+    /// oauth 발급자 주소.
+    issuer: Option<String>,
+    /// oauth scope 문자열.
+    scopes: Option<String>,
+    /// oauth RFC 8707 resource.
+    resource: Option<String>,
+}
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct DeleteConnectionArgs {
+    /// 지울 연결 이름.
+    name: String,
+}
 
 #[derive(Clone)]
 pub(super) struct McpServer {
@@ -76,6 +110,10 @@ impl McpServer {
     ) -> Result<CallToolResult, ErrorData> {
         let definition = serde_json::to_string(&args.definition)
             .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+        let missing_connections = match self.state.missing_app_connections_from_json(&definition) {
+            Ok(missing) => missing,
+            Err(error) => return Ok(json_error(error)),
+        };
         match self
             .state
             .publish_app(&definition, "agent", args.open, args.workspace_id.clone())
@@ -105,6 +143,12 @@ impl McpServer {
                     self.state
                         .unsupported_connected_devices(&row.version.definition.requires),
                 );
+                if !missing_connections.is_empty() {
+                    value["warnings"] = json!([format!(
+                        "서버에 없는 연결: {}. set_connection으로 등록하세요",
+                        missing_connections.join(", ")
+                    )]);
+                }
                 Ok(json_result(value))
             }
             Err(error) => Ok(json_error(error)),
@@ -224,6 +268,73 @@ impl McpServer {
             Ok(true) => json_result(json!({"revoked":true})),
             Ok(false) => json_error(server_error("기기를 찾을 수 없습니다.")),
             Err(e) => json_error(e),
+        })
+    }
+
+    #[tool(
+        description = "이름 붙인 연결을 등록하거나 기존 설정을 바꿉니다. 헤더 값은 조회할 수 없습니다."
+    )]
+    async fn set_connection(
+        &self,
+        Parameters(args): Parameters<SetConnectionArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let kind = match args.kind {
+            ConnectionKindArg::Relay => kaleidoscope_contract::registry::ConnectionKind::Relay,
+            ConnectionKindArg::Oauth => kaleidoscope_contract::registry::ConnectionKind::Oauth,
+        };
+        match self
+            .state
+            .set_connection(super::connections::ConnectionRegistration {
+                name: args.name,
+                kind,
+                base_url: args.base_url,
+                description: args.description,
+                writable: args.writable,
+                paths: args.paths,
+                headers: args.headers,
+                issuer: args.issuer,
+                scopes: args.scopes,
+                resource: args.resource,
+            }) {
+            Ok((info, headers)) => {
+                let mut value = serde_json::to_value(info).unwrap_or_else(|_| json!({}));
+                value["header_names"] = json!(headers);
+                Ok(json_result(value))
+            }
+            Err(error) => Ok(json_error(error)),
+        }
+    }
+
+    #[tool(
+        description = "등록된 연결 목록을 읽습니다. relay 헤더는 이름만 보이고 값은 반환하지 않습니다."
+    )]
+    async fn list_connections(&self) -> Result<CallToolResult, ErrorData> {
+        Ok(match self.state.list_connections() {
+            Ok(items) => {
+                let values: Vec<_> = items
+                    .into_iter()
+                    .map(|(info, names, description)| {
+                        let mut value = serde_json::to_value(info).unwrap_or_else(|_| json!({}));
+                        value["header_names"] = json!(names);
+                        value["description"] = json!(description);
+                        value
+                    })
+                    .collect();
+                json_result(json!(values))
+            }
+            Err(error) => json_error(error),
+        })
+    }
+
+    #[tool(description = "이름 붙인 연결을 삭제합니다.")]
+    async fn delete_connection(
+        &self,
+        Parameters(args): Parameters<DeleteConnectionArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Ok(match self.state.delete_connection(&args.name) {
+            Ok(true) => json_result(json!({"deleted":true})),
+            Ok(false) => json_error(server_error("연결을 찾을 수 없습니다.")),
+            Err(error) => json_error(error),
         })
     }
 }
@@ -435,12 +546,88 @@ mod tests {
             serde_json::from_str(json["content"][0]["text"].as_str().unwrap()).unwrap();
 
         assert_eq!(value["open_sent_to"], 0);
-        assert!(
-            value["note"]
-                .as_str()
-                .unwrap()
-                .contains("그릴 수 없는 옛 쉘")
-        );
+        assert!(value["note"]
+            .as_str()
+            .unwrap()
+            .contains("그릴 수 없는 옛 쉘"));
         assert!(!value["note"].as_str().unwrap().contains("연결된 쉘이 없어"));
+    }
+
+    #[tokio::test]
+    async fn connection_tools_hide_header_values_and_keep_them_on_omitted_update() {
+        let state = AppState::in_memory("secret");
+        let server = McpServer::new(state);
+        let headers = std::collections::BTreeMap::from([(
+            "Authorization".to_string(),
+            "Bearer private-value".to_string(),
+        )]);
+        let value = |result: CallToolResult| {
+            let json = serde_json::to_value(result).unwrap();
+            serde_json::from_str::<Value>(json["content"][0]["text"].as_str().unwrap()).unwrap()
+        };
+        let set = value(
+            server
+                .set_connection(Parameters(SetConnectionArgs {
+                    name: "board".into(),
+                    kind: ConnectionKindArg::Relay,
+                    base_url: "https://example.com/".into(),
+                    description: None,
+                    writable: None,
+                    paths: None,
+                    headers: Some(headers),
+                    issuer: None,
+                    scopes: None,
+                    resource: None,
+                }))
+                .await
+                .unwrap(),
+        );
+        assert_eq!(set["name"], "board");
+
+        let listed = value(server.list_connections().await.unwrap());
+        assert_eq!(listed[0]["header_names"], json!(["Authorization"]));
+        assert!(!listed.to_string().contains("private-value"));
+
+        server
+            .set_connection(Parameters(SetConnectionArgs {
+                name: "board".into(),
+                kind: ConnectionKindArg::Relay,
+                base_url: "https://example.com".into(),
+                description: None,
+                writable: None,
+                paths: None,
+                headers: None,
+                issuer: None,
+                scopes: None,
+                resource: None,
+            }))
+            .await
+            .unwrap();
+        let listed = value(server.list_connections().await.unwrap());
+        assert_eq!(listed[0]["header_names"], json!(["Authorization"]));
+        assert!(!listed.to_string().contains("private-value"));
+    }
+
+    #[tokio::test]
+    async fn upload_warns_about_connection_names_missing_from_the_server() {
+        let state = AppState::in_memory("secret");
+        let server = McpServer::new(state);
+        let definition =
+            serde_json::from_str(include_str!("../../../examples/card-board.json")).unwrap();
+        let result = server
+            .upload_app(Parameters(UploadArgs {
+                definition,
+                open: false,
+                workspace_id: None,
+            }))
+            .await
+            .unwrap();
+        let json = serde_json::to_value(result).unwrap();
+        let value: Value =
+            serde_json::from_str(json["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            value["warnings"][0],
+            "서버에 없는 연결: board. set_connection으로 등록하세요"
+        );
     }
 }
