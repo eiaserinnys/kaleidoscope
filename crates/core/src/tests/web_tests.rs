@@ -126,6 +126,9 @@ struct FakeWebHost {
 }
 impl crate::WebHost for FakeWebHost {
     fn attach(&self, id: &str, url: &str) -> Result<kaleidoscope_contract::WebPage, CoreError> {
+        if url == "http://tauri.localhost/" {
+            return Err(CoreError::new(ErrorCode::InvalidRequest));
+        }
         self.calls
             .lock()
             .unwrap()
@@ -219,6 +222,13 @@ fn web_commands_validate_and_delegate_and_emit_updates() {
         }),
         Ok(CoreReply::WebAttach { .. })
     ));
+    expect_error(
+        core.handle(CoreRequest::WebAttach {
+            window_id: window.clone(),
+            url: "http://tauri.localhost/".into(),
+        }),
+        ErrorCode::InvalidRequest,
+    );
     core.handle(CoreRequest::WebPlace {
         window_id: window.clone(),
         bounds: Some(Rect {

@@ -64,11 +64,13 @@ pub(crate) fn handle(inner: &Inner, request: CoreRequest) -> Result<CoreReply, C
         .ok_or_else(|| error::make(ErrorCode::Unavailable))?;
     match request {
         CoreRequest::WebAttach { window_id, url } => {
-            inner.web_attached.lock().unwrap().insert(window_id.clone());
+            let inserted = inner.web_attached.lock().unwrap().insert(window_id.clone());
             match web.attach(&window_id, &url) {
                 Ok(page) => Ok(CoreReply::WebAttach { page }),
                 Err(e) => {
-                    inner.web_attached.lock().unwrap().remove(&window_id);
+                    if inserted {
+                        inner.web_attached.lock().unwrap().remove(&window_id);
+                    }
                     Err(e)
                 }
             }
