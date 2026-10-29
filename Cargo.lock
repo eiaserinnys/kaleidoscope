@@ -2174,6 +2174,7 @@ dependencies = [
  "futures",
  "http-body-util",
  "kaleidoscope-contract",
+ "kaleidoscope-data",
  "mime_guess",
  "rand",
  "reqwest 0.12.28",

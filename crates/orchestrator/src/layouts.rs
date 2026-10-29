@@ -37,6 +37,22 @@ pub(super) async fn put_layout(
 }
 
 impl AppState {
+    pub(super) fn reported_window_state(
+        &self,
+        window_id: &str,
+    ) -> Result<Option<std::collections::BTreeMap<String, serde_json::Value>>, CoreError> {
+        for (_, _, _, layout) in self.layouts()? {
+            if let Some(window) = layout
+                .windows
+                .into_iter()
+                .find(|window| window.id == window_id)
+            {
+                return Ok(Some(window.state));
+            }
+        }
+        Ok(None)
+    }
+
     pub(super) fn save_layout(
         &self,
         device_id: &str,

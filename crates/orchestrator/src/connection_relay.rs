@@ -1,3 +1,4 @@
+use super::connections::ConnectionRecord;
 use super::*;
 use axum::extract::{rejection::JsonRejection, Extension, Path, State};
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -17,21 +18,7 @@ impl AppState {
         name: &str,
         request: ConnectionRequest,
     ) -> Result<ConnectionReply, (StatusCode, CoreError)> {
-        let connection = self
-            .connection(name)
-            .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?
-            .ok_or_else(|| {
-                (
-                    StatusCode::NOT_FOUND,
-                    server_error("연결을 찾을 수 없습니다."),
-                )
-            })?;
-        if connection.info.kind != ConnectionKind::Relay {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                CoreError::new(ErrorCode::InvalidRequest),
-            ));
-        }
+        let connection = self.relay_connection(name)?;
         let app = self
             .app(&request.app_id, None)
             .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?;
@@ -53,6 +40,46 @@ impl AppState {
                 CoreError::new(ErrorCode::PermissionDenied),
             ));
         };
+        self.request_with_access(connection, request, access)
+            .await
+            .map(|(reply, _)| reply)
+    }
+
+    pub(super) async fn relay_preview_request(
+        &self,
+        name: &str,
+        request: ConnectionRequest,
+        access: FileAccess,
+    ) -> Result<(ConnectionReply, usize), (StatusCode, CoreError)> {
+        let connection = self.relay_connection(name)?;
+        self.request_with_access(connection, request, access).await
+    }
+
+    fn relay_connection(&self, name: &str) -> Result<ConnectionRecord, (StatusCode, CoreError)> {
+        let connection = self
+            .connection(name)
+            .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    server_error("연결을 찾을 수 없습니다."),
+                )
+            })?;
+        if connection.info.kind != ConnectionKind::Relay {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                CoreError::new(ErrorCode::InvalidRequest),
+            ));
+        }
+        Ok(connection)
+    }
+
+    async fn request_with_access(
+        &self,
+        connection: ConnectionRecord,
+        request: ConnectionRequest,
+        access: FileAccess,
+    ) -> Result<(ConnectionReply, usize), (StatusCode, CoreError)> {
         if request.method != HttpMethod::Get
             && (access != FileAccess::Readwrite || !connection.info.writable)
         {
@@ -170,6 +197,7 @@ impl AppState {
                 }
                 bytes.extend_from_slice(&chunk);
             }
+            let byte_count = bytes.len();
             let (json, text, data_base64) = match accept {
                 ConnectionAccept::Json => match serde_json::from_slice(&bytes) {
                     Ok(value) => (Some(value), None, None),
@@ -186,13 +214,16 @@ impl AppState {
                 ),
                 ConnectionAccept::Bytes => (None, None, Some(STANDARD.encode(bytes))),
             };
-            Ok(ConnectionReply {
-                status,
-                mime,
-                json,
-                text,
-                data_base64,
-            })
+            Ok((
+                ConnectionReply {
+                    status,
+                    mime,
+                    json,
+                    text,
+                    data_base64,
+                },
+                byte_count,
+            ))
         };
         match tokio::time::timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS), future).await {
             Ok(result) => result,

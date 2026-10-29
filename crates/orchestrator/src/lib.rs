@@ -492,6 +492,7 @@ mod http;
 mod layouts;
 mod mcp;
 mod pairing;
+mod preview;
 mod relay;
 mod storage;
 
