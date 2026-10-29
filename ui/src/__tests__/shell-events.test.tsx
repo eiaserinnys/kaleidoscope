@@ -88,6 +88,54 @@ describe("shell core events", () => {
     expect(spy).not.toHaveBeenCalled();
     store.dispose();
   });
+
+  it("opens a workspace-targeted app on that workspace desktop without changing the visible workspace", async () => {
+    const snapshot = makeTestSnapshot();
+    snapshot.shared.workspaces.push({
+      id: "workspace-2", name: "다른 작업", created_at: "2026-10-29T00:00:00Z", updated_at: "2026-10-29T00:00:00Z",
+    });
+    snapshot.shared.desktops.push({
+      id: "desktop-2", workspace_id: "workspace-2", name: "작업 화면", position: 0,
+      created_at: "2026-10-29T00:00:00Z", updated_at: "2026-10-29T00:00:00Z",
+    });
+    snapshot.shared.desktops.push({
+      id: "desktop-3", workspace_id: "workspace-2", name: "마지막 화면", position: 1,
+      created_at: "2026-10-29T00:00:00Z", updated_at: "2026-10-29T00:00:00Z",
+    });
+    snapshot.device.active_desktop_ids["workspace-2"] = "desktop-3";
+    snapshot.shared.windows = snapshot.shared.windows.filter((window) => window.app_id !== "md-viewer");
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const spy = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+
+    transport.emit({ event: "app.open_requested", app_id: "md-viewer", workspace_id: "workspace-2" });
+
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({
+      op: "window.open",
+      desktop_id: "desktop-3",
+      app_id: "md-viewer",
+      rect: { x: 48, y: 48, width: 880, height: 492 },
+    }));
+    expect(store.getSnapshot()?.device.active_workspace_id).toBe("workspace-1");
+    expect(store.getSnapshot()?.device.active_desktop_ids["workspace-2"]).toBe("desktop-3");
+    store.dispose();
+  });
+
+  it("ignores a workspace-targeted request for a workspace absent from the latest snapshot", async () => {
+    const transport = createFakeTransport(makeTestSeed());
+    const spy = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    spy.mockClear();
+
+    transport.emit({ event: "app.open_requested", app_id: "md-viewer", workspace_id: "missing-workspace" });
+
+    expect(spy).not.toHaveBeenCalled();
+    store.dispose();
+  });
 });
 
 describe("shell server link control", () => {

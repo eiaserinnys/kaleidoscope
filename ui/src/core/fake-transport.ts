@@ -1,6 +1,10 @@
 import type {
   AppDefinition,
   AppWindow,
+  AgentInfo,
+  AgentItem,
+  AgentModel,
+  AgentUpdate,
   CoreError,
   CoreEvent,
   CoreReply,
@@ -16,6 +20,14 @@ export interface FakeTransportSeed {
   snapshot: ShellSnapshot;
   folder: { root_path: string; root_name: string } | null;
   files: Record<string, string>;
+  agents?: Record<string, FakeAgentSeed>;
+  agentModels?: AgentModel[];
+}
+
+export interface FakeAgentSeed {
+  agent: AgentInfo | null;
+  items: AgentItem[];
+  models: AgentModel[];
 }
 
 export interface FakeTransport extends CoreTransport {
@@ -52,6 +64,15 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   const eventListeners = new Set<(event: CoreEvent) => void>();
   const fileListeners = new Set<() => void>();
   let revisionNumber = 1;
+  const models = clone(seed.agentModels ?? [
+    { preset: "gemini-4-argon", label: "Argon" },
+    { preset: "claude-opus-5.5", label: "Opus" },
+    { preset: "codex-6.1-sol", label: "Sol 6.1" },
+  ]);
+  const agents = new Map<string, FakeAgentSeed>(
+    Object.entries(seed.agents ?? {}).map(([workspaceId, session]) => [workspaceId, clone(session)]),
+  );
+  const nextAgentIds = new Map<string, number>();
 
   for (const [path, text] of Object.entries(seed.files)) {
     files.set(path, { text, revision: `fake-revision-${revisionNumber++}` });
@@ -65,6 +86,46 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   const emit = (event: CoreEvent) => {
     if (event.event === "state.changed") snapshot = clone(event.snapshot);
     for (const listener of eventListeners) listener(clone(event));
+  };
+
+  const agentFor = (workspaceId: string): FakeAgentSeed => {
+    let session = agents.get(workspaceId);
+    if (!session) {
+      session = { agent: null, items: [], models: clone(models) };
+      agents.set(workspaceId, session);
+    }
+    return session;
+  };
+
+  const emitAgent = (workspaceId: string, update: AgentUpdate) => {
+    emit({ event: "agent.update", workspace_id: workspaceId, update });
+  };
+
+  const addAgentItem = (workspaceId: string, kind: AgentItem["kind"], text: string) => {
+    const session = agentFor(workspaceId);
+    const id = (nextAgentIds.get(workspaceId) ?? session.items.length) + 1;
+    nextAgentIds.set(workspaceId, id);
+    const item: AgentItem = { id: String(id), kind, text, at: new Date().toISOString() };
+    session.items.push(item);
+    emitAgent(workspaceId, { kind: "item", item });
+  };
+
+  const setAgentActivity = (workspaceId: string, busy: boolean, tool: string | null) => {
+    const session = agentFor(workspaceId);
+    if (session.agent) session.agent = { ...session.agent, busy, tool };
+    emitAgent(workspaceId, { kind: "activity", busy, tool });
+  };
+
+  const delay = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+
+  const streamReply = async (workspaceId: string, text: string, tool: string | null) => {
+    setAgentActivity(workspaceId, true, tool);
+    for (const part of text.match(/[\s\S]{1,18}/g) ?? [text]) {
+      await delay(45);
+      emitAgent(workspaceId, { kind: "delta", text: part });
+    }
+    addAgentItem(workspaceId, "assistant", text);
+    setAgentActivity(workspaceId, false, null);
   };
 
   const findWindow = (windowId: string): AppWindow => {
@@ -98,6 +159,39 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     switch (request.op) {
       case "state.get":
         return { op: "state.get", snapshot: clone(snapshot) };
+      case "agent.get": {
+        const session = agentFor(request.workspace_id);
+        return {
+          op: "agent.get",
+          agent: clone(session.agent),
+          items: clone(session.items),
+          models: clone(session.models),
+        };
+      }
+      case "agent.create": {
+        const session = agentFor(request.workspace_id);
+        const model = session.models.find((item) => item.preset === request.model_preset);
+        if (!model) return fail("invalid_request", "고를 수 없는 모델입니다");
+        const agent: AgentInfo = {
+          workspace_id: request.workspace_id,
+          model_preset: model.preset,
+          model_label: model.label,
+          busy: false,
+          tool: null,
+          created_at: new Date().toISOString(),
+        };
+        session.agent = agent;
+        emitAgent(request.workspace_id, { kind: "created", agent: clone(agent) });
+        void streamReply(request.workspace_id, "안녕하십니까. 이 작업을 맡겠습니다.", null);
+        return { op: "agent.create", agent: clone(agent) };
+      }
+      case "agent.send": {
+        const session = agentFor(request.workspace_id);
+        if (!session.agent) return fail("not_found", "이 작업의 PAS가 없습니다");
+        addAgentItem(request.workspace_id, "user", request.text);
+        void streamReply(request.workspace_id, "## 살펴볼 내용\n\n- 요청한 내용을 정리했습니다.\n- 다음 동작을 이어가겠습니다.", "문서 읽기");
+        return { op: "agent.send" };
+      }
       case "link.start": {
         const userCode = "K7PQ-4XMR";
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();

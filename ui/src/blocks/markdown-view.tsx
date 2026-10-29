@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { Block } from "../contract/contract";
 import { Notice, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
 import { toCoreError } from "../core/core-transport";
+import { MarkdownText } from "./markdown-text";
 
 type MarkdownViewBlockData = Extract<Block, { type: "markdown_view" }>;
 
@@ -67,17 +66,7 @@ export function MarkdownViewBlock({ block, context }: { block: MarkdownViewBlock
 
   return (
     <article className="ks-markdown-view">
-      <ReactMarkdown
-        components={{
-          a: ({ href, children }) => (
-            <a href={href} onClick={(event) => event.preventDefault()}>{children}</a>
-          ),
-          img: ({ alt }) => <span className="ks-markdown-image-alt">{alt ?? ""}</span>,
-        }}
-        remarkPlugins={[remarkGfm]}
-      >
-        {text}
-      </ReactMarkdown>
+      <MarkdownText>{text}</MarkdownText>
     </article>
   );
 }

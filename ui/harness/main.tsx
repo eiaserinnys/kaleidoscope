@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { App, AppDefinition, AppVersion, AppWindow, ShellSnapshot } from "../src/contract/contract";
+import type { AgentInfo, AgentItem, AgentModel, App, AppDefinition, AppVersion, AppWindow, ShellSnapshot } from "../src/contract/contract";
 import {
   AppWindowContent,
   createFakeTransport,
@@ -13,11 +13,13 @@ import "@kaleidoscope/ui/styles.css";
 import "./harness.css";
 import mdEditorJson from "../../examples/md-editor.json";
 import mdViewerJson from "../../examples/md-viewer.json";
+import workspacePasJson from "../../examples/workspace-pas.json";
 import pluginsDocument from "./create-plugins.txt?raw";
 
 const mdEditor = mdEditorJson as AppDefinition;
 const mdViewer = mdViewerJson as AppDefinition;
-const definitions = [mdEditor, mdViewer];
+const workspacePas = workspacePasJson as unknown as AppDefinition;
+const definitions = [mdEditor, mdViewer, workspacePas];
 const timestamp = "2026-10-28T00:00:00Z";
 
 function makeWindow(definition: AppDefinition, id: string, z: number): AppWindow {
@@ -54,7 +56,7 @@ const initialSnapshot: ShellSnapshot = {
     app_versions: appVersions,
     workspaces: [{ id: "workspace-1", name: "kaleidoscope", created_at: timestamp, updated_at: timestamp }],
     desktops: [{ id: "desktop-1", workspace_id: "workspace-1", name: "작업", position: 0, created_at: timestamp, updated_at: timestamp }],
-    windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(mdViewer, "viewer-window", 2)],
+  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(mdViewer, "viewer-window", 2), makeWindow(workspacePas, "pas-window", 3)],
   },
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [] },
   supported: { blocks: 1, modules: { files: 1 } },
@@ -129,9 +131,44 @@ const reclickDocument = `# 다시 누르기 시험
 | **굵은 글자** | \`코드 낱말\` |
 `;
 
+const params = new URLSearchParams(window.location.search);
+const pasMode = params.get("pas");
+const previewAppId = params.get("preview") || "md-editor";
+const previewOnly = params.has("preview");
+const agentModels: AgentModel[] = [
+  { preset: "gemini-4-argon", label: "Argon" },
+  { preset: "claude-opus-5.5", label: "Opus" },
+  { preset: "codex-6.1-sol", label: "Sol 6.1" },
+];
+const connectedSnapshot: ShellSnapshot = {
+  ...initialSnapshot,
+  link: { state: "connected", server_url: "https://kaleidoscope.example", device_name: "개발 PC" },
+};
+const demoSnapshot: ShellSnapshot = pasMode === "ready" || pasMode === "empty"
+  ? connectedSnapshot
+  : pasMode === "offline"
+    ? { ...initialSnapshot, link: { state: "offline", server_url: "https://kaleidoscope.example", device_name: "개발 PC", reason: "서버에 닿지 않습니다" } }
+    : initialSnapshot;
+const greetingAgent: AgentInfo = {
+  workspace_id: "workspace-1",
+  model_preset: "gemini-4-argon",
+  model_label: "Argon",
+  busy: false,
+  tool: null,
+  created_at: timestamp,
+};
+const greetingItems: AgentItem[] = [
+  { id: "1", kind: "user", text: "이 작업의 범위를 정리해 주세요.", at: timestamp },
+  { id: "2", kind: "assistant", text: "## 작업 범위\n\n- 목표와 현재 상태를 확인합니다.\n- 필요한 다음 단계를 정리합니다.", at: timestamp },
+];
+
 const fakeTransport = createFakeTransport({
-  snapshot: initialSnapshot,
+  snapshot: demoSnapshot,
   folder: { root_path: "/fake/docs", root_name: "문서" },
+  agentModels,
+  agents: pasMode === "ready"
+    ? { "workspace-1": { agent: greetingAgent, items: greetingItems, models: agentModels } }
+    : {},
   files: {
     "README.md": "# 첫 문서\n\n편집과 자동 저장을 확인합니다.\n",
     "Kaleidoscope.md": sampleDocument,
@@ -147,7 +184,6 @@ const fakeTransport = createFakeTransport({
 });
 
 const coreUrl = new URLSearchParams(window.location.search).get("core");
-const previewOnly = new URLSearchParams(window.location.search).has("preview");
 const transport = coreUrl ? createHttpTransport(coreUrl) : fakeTransport;
 const store = createShellStore(transport);
 
@@ -155,6 +191,7 @@ function Harness() {
   const snapshot = useShellSnapshot(store);
   const editorWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-editor");
   const viewerWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-viewer");
+  const pasWindow = snapshot?.shared.windows.find((item) => item.app_id === "workspace-pas");
 
   return (
     <main className="ks-harness">
@@ -163,7 +200,7 @@ function Harness() {
         <span>블록 검수 창</span>
       </header>
       <div className={`ks-harness-apps${previewOnly ? " is-preview" : ""}`}>
-        <section aria-label="md-editor" className="ks-harness-window" data-testid="app-window-md-editor">
+        <section aria-label="md-editor" className={`ks-harness-window${previewOnly && previewAppId !== "md-editor" ? " is-hidden" : ""}`} data-app-id="md-editor" data-testid="app-window-md-editor">
           <header className="ks-harness-window-header">md-editor</header>
           <div className="ks-harness-window-content">
             {editorWindow
@@ -171,11 +208,19 @@ function Harness() {
               : <div className="ks-harness-loading">불러오는 중</div>}
           </div>
         </section>
-        <section aria-label="md-viewer" className="ks-harness-window" data-testid="app-window-md-viewer">
+        <section aria-label="md-viewer" className={`ks-harness-window${previewOnly && previewAppId !== "md-viewer" ? " is-hidden" : ""}`} data-app-id="md-viewer" data-testid="app-window-md-viewer">
           <header className="ks-harness-window-header">md-viewer</header>
           <div className="ks-harness-window-content">
             {viewerWindow
               ? <AppWindowContent store={store} windowId={viewerWindow.id} />
+              : <div className="ks-harness-loading">불러오는 중</div>}
+          </div>
+        </section>
+        <section aria-label="workspace-pas" className={`ks-harness-window${previewOnly && previewAppId !== "workspace-pas" ? " is-hidden" : ""}`} data-app-id="workspace-pas" data-testid="app-window-workspace-pas">
+          <header className="ks-harness-window-header">workspace-pas</header>
+          <div className="ks-harness-window-content">
+            {pasWindow
+              ? <AppWindowContent store={store} windowId={pasWindow.id} />
               : <div className="ks-harness-loading">불러오는 중</div>}
           </div>
         </section>

@@ -17,6 +17,7 @@ const errorCodes = new Set<CoreError["code"]>([
   "not_granted",
   "path_outside_root",
   "conflict",
+  "server",
   "io",
 ]);
 
