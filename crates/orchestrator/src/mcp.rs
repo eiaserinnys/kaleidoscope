@@ -16,11 +16,15 @@ struct UploadArgs {
     #[serde(default = "default_open")]
     #[schemars(default = "default_open")]
     open: bool,
+    /// 띄울 작업(워크스페이스) id. 작업 PAS라면 지시에 적힌 값을 넣는다. 없으면 디렉터가 지금 보는 데스크톱에 띄운다.
+    workspace_id: Option<String>,
 }
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct AppIdArgs {
     /// 조회할 앱 id. `list_apps`에서 확인합니다.
     app_id: String,
+    /// 띄울 작업(워크스페이스) id. 작업 PAS라면 지시에 적힌 값을 넣는다. 없으면 디렉터가 지금 보는 데스크톱에 띄운다.
+    workspace_id: Option<String>,
 }
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct VersionArgs {
@@ -33,6 +37,11 @@ struct VersionArgs {
 struct ApproveArgs {
     /// 쉘에 보이는 XXXX-XXXX 연결 코드.
     code: String,
+}
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct WorkspaceArgs {
+    /// 조회할 작업의 워크스페이스 id.
+    workspace_id: String,
 }
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct RevokeArgs {
@@ -67,7 +76,10 @@ impl McpServer {
     ) -> Result<CallToolResult, ErrorData> {
         let definition = serde_json::to_string(&args.definition)
             .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
-        match self.state.publish_app(&definition, "agent", args.open) {
+        match self
+            .state
+            .publish_app(&definition, "agent", args.open, args.workspace_id)
+        {
             Ok((row, unchanged)) => {
                 let sent = if args.open {
                     self.state.connected_count()
@@ -118,7 +130,7 @@ impl McpServer {
             Ok(Some(_)) => {
                 let _ = self.state.0.events.send(DeviceEvent::AppOpen {
                     app_id: args.app_id,
-                    workspace_id: None,
+                    workspace_id: args.workspace_id,
                 });
                 Ok(json_result(
                     json!({"open_sent_to":self.state.connected_count()}),
@@ -127,6 +139,26 @@ impl McpServer {
             Ok(None) => Ok(json_error(server_error("앱을 찾을 수 없습니다."))),
             Err(e) => Ok(json_error(e)),
         }
+    }
+    #[tool(description = "작업의 데스크톱과 창, 현재 상태를 읽습니다.")]
+    async fn get_workspace(
+        &self,
+        Parameters(args): Parameters<WorkspaceArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Ok(match self.state.get_workspace(&args.workspace_id) {
+            Ok(Some(value)) => json_result(value),
+            Ok(None) => json_error(server_error(
+                "그 작업의 배치 보고가 없습니다. 쉘이 서버에 연결돼 있는지 확인하세요.",
+            )),
+            Err(error) => json_error(error),
+        })
+    }
+    #[tool(description = "기기가 보고한 작업과 창 개수를 나열합니다.")]
+    async fn list_workspaces(&self) -> Result<CallToolResult, ErrorData> {
+        Ok(match self.state.list_workspaces() {
+            Ok(value) => json_result(value),
+            Err(error) => json_error(error),
+        })
     }
     #[tool(
         description = "쉘에 표시된 연결 코드를 승인해 해당 기기에 토큰을 발급합니다. 디렉터가 코드를 전달한 뒤 사용합니다."
@@ -169,7 +201,7 @@ impl McpServer {
 #[tool_handler]
 impl ServerHandler for McpServer {
     fn get_info(&self) -> ServerConfig {
-        let instructions=format!("kaleidoscope는 디렉터의 데스크톱 쉘입니다. 앱 정의 JSON을 올리면 연결된 디렉터 PC의 쉘에 창으로 뜹니다.\n앱 정의는 쉘의 블록과 모듈만 씁니다. 형식은 upload_app 입력 스키마가 정본입니다.\n파일 경로는 기기마다 디렉터가 고른 폴더 기준 상대 경로이며 폴더 밖은 거부됩니다.\n고칠 때는 list_apps → get_app → 수정 후 upload_app 순서로 합니다. 같은 id면 새 버전이 되고 열린 창은 새 버전으로 바뀝니다.\n디렉터가 쉘의 연결 코드를 주면 approve_device로 승인합니다.\nmd-editor 예제: {}\nmd-viewer 예제: {}", include_str!("../../../examples/md-editor.json"),include_str!("../../../examples/md-viewer.json"));
+        let instructions=format!("kaleidoscope는 디렉터의 데스크톱 쉘입니다. 앱 정의 JSON을 올리면 연결된 디렉터 PC의 쉘에 창으로 뜹니다.\n앱 정의는 쉘의 블록과 모듈만 씁니다. 형식은 upload_app 입력 스키마가 정본입니다.\n파일 경로는 기기마다 디렉터가 고른 폴더 기준 상대 경로이며 폴더 밖은 거부됩니다.\n고칠 때는 list_apps → get_app → 수정 후 upload_app 순서로 합니다. 같은 id면 새 버전이 되고 열린 창은 새 버전으로 바뀝니다.\n디렉터가 쉘의 연결 코드를 주면 approve_device로 승인합니다.\n작업 PAS는 지시에 적힌 workspace_id를 upload_app과 open_app에 넣어 그 작업에 띄운다.\nget_workspace로 작업의 데스크톱과 창(앱, 버전, 연 파일)을 읽는다.\nmd-editor 예제: {}\nmd-viewer 예제: {}", include_str!("../../../examples/md-editor.json"),include_str!("../../../examples/md-viewer.json"));
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("kaleidoscope", "0.1.0"))
             .with_instructions(instructions)
