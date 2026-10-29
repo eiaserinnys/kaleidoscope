@@ -20,7 +20,9 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
         let workspace_id = match &request {
             CoreRequest::AgentGet { workspace_id }
             | CoreRequest::AgentCreate { workspace_id, .. }
-            | CoreRequest::AgentSend { workspace_id, .. } => workspace_id,
+            | CoreRequest::AgentSend { workspace_id, .. }
+            | CoreRequest::AgentAttachment { workspace_id, .. }
+            | CoreRequest::AgentAttachmentOpen { workspace_id, .. } => workspace_id,
             _ => return Err(error::make(ErrorCode::InvalidRequest)),
         };
         let workspace = state
@@ -70,6 +72,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                     &workspace_id,
                     &AgentSendRequest {
                         text: text.to_string(),
+                        attachments: Vec::new(),
                     },
                 )
                 .map(|()| CoreReply::AgentSend {})

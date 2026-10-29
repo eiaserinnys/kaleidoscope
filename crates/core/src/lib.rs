@@ -184,7 +184,9 @@ impl Core {
             }
             request @ (CoreRequest::AgentGet { .. }
             | CoreRequest::AgentCreate { .. }
-            | CoreRequest::AgentSend { .. }) => link::handle_agent(&self.inner, request),
+            | CoreRequest::AgentSend { .. }
+            | CoreRequest::AgentAttachment { .. }
+            | CoreRequest::AgentAttachmentOpen { .. }) => link::handle_agent(&self.inner, request),
             CoreRequest::FilesList {
                 window_id,
                 permission,

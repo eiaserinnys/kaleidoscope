@@ -432,7 +432,9 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         }
         CoreRequest::AgentGet { .. }
         | CoreRequest::AgentCreate { .. }
-        | CoreRequest::AgentSend { .. } => Err(error::make(ErrorCode::InvalidRequest)),
+        | CoreRequest::AgentSend { .. }
+        | CoreRequest::AgentAttachment { .. }
+        | CoreRequest::AgentAttachmentOpen { .. } => Err(error::make(ErrorCode::InvalidRequest)),
         CoreRequest::StateGet {}
         | CoreRequest::FilesPickFolder { .. }
         | CoreRequest::FilesList { .. }
