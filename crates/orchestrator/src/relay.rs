@@ -167,7 +167,7 @@ fn process(
             data["tool_name"].as_str().map(str::to_string),
         ),
         "tool_result" => state.activity(workspace, true, None),
-        "complete" | "session_ended" => {
+        "complete" => {
             *projection = Projection::default();
             state.activity(workspace, false, None);
         }
@@ -209,6 +209,67 @@ mod tests {
         let history = state.history("w").unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].text, "브라우저에서 보낸 말");
+    }
+
+    #[test]
+    fn session_ended_during_resume_keeps_the_turn_busy_until_complete() {
+        let state = AppState::in_memory("secret");
+        let mut events = state.0.events.subscribe();
+        let mut projection = Projection::default();
+        let emit = |event: &str, data: Value, projection: &mut Projection| {
+            process(&state, "w", "처음 지시", event, &data, projection).unwrap()
+        };
+        emit(
+            "user_message",
+            json!({"text":"안녕","caller_info":{"source":"kaleidoscope"}}),
+            &mut projection,
+        );
+        assert!(
+            matches!(events.try_recv().unwrap(), DeviceEvent::AgentUpdate { update: AgentUpdate::Item { item }, .. } if item.kind == AgentItemKind::User)
+        );
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            DeviceEvent::AgentUpdate {
+                update: AgentUpdate::Activity {
+                    busy: true,
+                    tool: None
+                },
+                ..
+            }
+        ));
+        emit(
+            "session_ended",
+            json!({"status":"completed_ok"}),
+            &mut projection,
+        );
+        assert_eq!(
+            state.0.activity.lock().unwrap().get("w"),
+            Some(&(true, None))
+        );
+        assert!(events.try_recv().is_err());
+        emit(
+            "assistant_message",
+            json!({"content":"답변"}),
+            &mut projection,
+        );
+        assert!(
+            matches!(events.try_recv().unwrap(), DeviceEvent::AgentUpdate { update: AgentUpdate::Item { item }, .. } if item.kind == AgentItemKind::Assistant)
+        );
+        emit("complete", json!({}), &mut projection);
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            DeviceEvent::AgentUpdate {
+                update: AgentUpdate::Activity {
+                    busy: false,
+                    tool: None
+                },
+                ..
+            }
+        ));
+        assert_eq!(
+            state.0.activity.lock().unwrap().get("w"),
+            Some(&(false, None))
+        );
     }
 
     #[test]
