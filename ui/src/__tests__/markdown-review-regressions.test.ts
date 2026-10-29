@@ -22,6 +22,12 @@ it('여러 줄 강조의 선택 줄에서는 닫는 원문 기호가 보인다',
  view.focus(); view.dispatch({selection:{anchor:view.state.doc.line(2).from+2}});
  expect(view.contentDOM.textContent).toContain('second**');
 });
+it('닫는 괄호가 없는 링크는 원문으로 남는다', () => {
+ const text='본문에 [안내 링크](X의 글자들이 있다.';
+ const view=open(text); ensureSyntaxTree(view.state,view.state.doc.length,5000); view.dispatch({});
+ expect(view.contentDOM.querySelector('.ks-live-link')).toBeNull();
+ expect(view.contentDOM.textContent).toContain(text);
+});
 it('큰 문서 뒤쪽 참조 정의를 스크롤 없이 반영한다', async () => {
  const text='[Text][id]\n\n'+'paragraph contents.\n\n'.repeat(18000)+'[id]: https://example.com\n';
  const view=open(text);

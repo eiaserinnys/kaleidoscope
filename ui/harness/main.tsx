@@ -110,6 +110,24 @@ claude --plugin-dir ./my-plugin
 \`\`\`
 `;
 
+const reclickDocument = `# 다시 누르기 시험
+
+## 제목 줄 글자
+
+> 인용 줄 안의 글자들
+
+본문에 [안내 링크](https://example.com/a/very/long/path) 뒤의 글자들이 있다.
+
+    첫째 코드 줄
+    둘째 코드 줄
+
+끝.
+
+| 항목 | 상태 |
+| --- | --- |
+| 하나 | 둘 |
+`;
+
 const fakeTransport = createFakeTransport({
   snapshot: initialSnapshot,
   folder: { root_path: "/fake/docs", root_name: "문서" },
@@ -123,6 +141,7 @@ const fakeTransport = createFakeTransport({
     "notes/line-endings.md": "첫 줄\r\n둘째 줄\r\n",
     "notes/READ-ME.MD": "# 대문자 확장자\n",
     "notes/skip.txt": "트리에서 숨길 파일입니다",
+    "reclick.md": reclickDocument,
   },
 });
 

@@ -1,11 +1,12 @@
 import { syntaxTree } from "@codemirror/language";
-import { StateEffect, StateField, type EditorState, type Extension, type Range } from "@codemirror/state";
+import { StateEffect, StateField, type EditorSelection, type EditorState, type Extension, type Range } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { MarkdownReferenceIndex } from "./markdown-reference-index";
 type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>["resolve"]>;
 
 const focusEffect = StateEffect.define<boolean>();
 const refreshEffect = StateEffect.define<null>();
+const pointerEffect = StateEffect.define<{ focused: boolean; selection: EditorSelection } | null>();
 
 class TextWidget extends WidgetType {
   constructor(readonly text: string, readonly className: string) { super(); }
@@ -32,7 +33,9 @@ function labelBounds(node: SyntaxNode): [number, number] | null {
 function resolvedLink(node: SyntaxNode, state: EditorState, references: MarkdownReferenceIndex): boolean {
   const bounds = labelBounds(node);
   if (!bounds) return false;
-  if (state.sliceDoc(bounds[1] + 1, bounds[1] + 2) === "(") return true;
+  if (state.sliceDoc(bounds[1] + 1, bounds[1] + 2) === "(") {
+    return children(node).some((child) => child.name === "LinkMark" && child.to === node.to && state.sliceDoc(child.from, child.to) === ")");
+  }
   const label = node.getChild("LinkLabel");
   const reference = label ? state.sliceDoc(label.from + 1, label.to - 1) : state.sliceDoc(bounds[0], bounds[1]);
   return references.has(reference || state.sliceDoc(bounds[0], bounds[1]), state);
@@ -99,7 +102,8 @@ class TableWidget extends WidgetType {
         const td = document.createElement(row.name === "TableHeader" ? "th" : "td");
         td.style.textAlign = alignment[index] ?? "left";
         if (cell.node) appendInline(td, cell.node, this.state, view.plugin(referencePreview)!.index);
-        td.addEventListener("mousedown", (event) => {
+        td.addEventListener("mousedown", (event) => { event.preventDefault(); });
+        td.addEventListener("click", (event) => {
           event.preventDefault();
           view.focus();
           view.dispatch({ selection: { anchor: cell.node?.from ?? cell.from }, scrollIntoView: true });
@@ -112,6 +116,10 @@ class TableWidget extends WidgetType {
     wrap.addEventListener("mousedown", (event) => {
       if (event.target !== wrap && event.target !== table) return;
       event.preventDefault();
+    });
+    wrap.addEventListener("click", (event) => {
+      if (event.target !== wrap && event.target !== table) return;
+      event.preventDefault();
       view.focus();
       view.dispatch({ selection: { anchor: this.node.from }, scrollIntoView: true });
     });
@@ -120,8 +128,8 @@ class TableWidget extends WidgetType {
   ignoreEvent() { return false; }
 }
 
-function selectionTouches(state: EditorState, focused: boolean, from: number, to: number): boolean {
-  return focused && state.selection.ranges.some((range) => range.from <= to && range.to >= from);
+function selectionTouches(selection: EditorSelection, focused: boolean, from: number, to: number): boolean {
+  return focused && selection.ranges.some((range) => range.from <= to && range.to >= from);
 }
 
 function findDocumentBlocks(state: EditorState): SyntaxNode[] {
@@ -140,12 +148,12 @@ const referencePreview = ViewPlugin.fromClass(class {
   update(update: ViewUpdate) { for (const transaction of update.transactions) this.index.update(transaction); }
 });
 
-function tableSelection(state: EditorState, focused: boolean, tables: SyntaxNode[]): string {
-  return tables.filter((table) => selectionTouches(state, focused, table.from, table.to)).map((table) => table.from).join(",");
+function tableSelection(selection: EditorSelection, focused: boolean, tables: SyntaxNode[]): string {
+  return tables.filter((table) => selectionTouches(selection, focused, table.from, table.to)).map((table) => table.from).join(",");
 }
 
-function makeTableDecorations(state: EditorState, focused: boolean, tables: SyntaxNode[]): DecorationSet {
-  return Decoration.set(tables.filter((table) => !selectionTouches(state, focused, table.from, table.to)).map((table) =>
+function makeTableDecorations(state: EditorState, selection: EditorSelection, focused: boolean, tables: SyntaxNode[]): DecorationSet {
+  return Decoration.set(tables.filter((table) => !selectionTouches(selection, focused, table.from, table.to)).map((table) =>
     Decoration.replace({ widget: new TableWidget(table, state), block: true }).range(table.from, table.to)), true);
 }
 
@@ -153,7 +161,8 @@ function makeInlineDecorations(view: EditorView): { decorations: DecorationSet; 
   const { state } = view;
   const ranges: Range<Decoration>[] = [];
   const atomic: Range<Decoration>[] = [];
-  const active = (from: number, to: number) => selectionTouches(state, view.hasFocus, from, to);
+  const pointer = state.field(previewField).pointer;
+  const active = (from: number, to: number) => selectionTouches(pointer?.selection ?? state.selection, pointer?.focused ?? view.hasFocus, from, to);
   const lineActive = (position: number) => {
     const line = state.doc.lineAt(position);
     return active(line.from, line.to);
@@ -279,24 +288,35 @@ function makeInlineDecorations(view: EditorView): { decorations: DecorationSet; 
   return { decorations: Decoration.set(ranges, true), atomic: Decoration.set(atomic, true) };
 }
 
-interface PreviewState { focused: boolean; tables: SyntaxNode[]; selected: string; decorations: DecorationSet }
+interface PreviewState {
+  focused: boolean;
+  pointer: { focused: boolean; selection: EditorSelection } | null;
+  tables: SyntaxNode[];
+  selected: string;
+  decorations: DecorationSet;
+}
 const previewField = StateField.define<PreviewState>({
   create(state) {
     const tables = findDocumentBlocks(state);
-    return { focused: false, tables, selected: "", decorations: makeTableDecorations(state, false, tables) };
+    return { focused: false, pointer: null, tables, selected: "", decorations: makeTableDecorations(state, state.selection, false, tables) };
   },
   update(value, transaction) {
     let focused = value.focused;
+    let pointer = value.pointer;
+    if (pointer && transaction.docChanged) pointer = { ...pointer, selection: pointer.selection.map(transaction.changes) };
     let refresh = transaction.docChanged;
     for (const effect of transaction.effects) {
       if (effect.is(focusEffect)) focused = effect.value;
       if (effect.is(refreshEffect)) refresh = true;
+      if (effect.is(pointerEffect)) pointer = effect.value;
     }
     const tables = refresh ? findDocumentBlocks(transaction.state) : value.tables;
-    const selected = tableSelection(transaction.state, focused, tables);
+    const renderSelection = pointer?.selection ?? transaction.state.selection;
+    const renderFocused = pointer?.focused ?? focused;
+    const selected = tableSelection(renderSelection, renderFocused, tables);
     const decorations = refresh || selected !== value.selected
-      ? makeTableDecorations(transaction.state, focused, tables) : value.decorations;
-    return { focused, tables, selected, decorations };
+      ? makeTableDecorations(transaction.state, renderSelection, renderFocused, tables) : value.decorations;
+    return { focused, pointer, tables, selected, decorations };
   },
   provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
 });
@@ -307,7 +327,7 @@ const inlinePreview = ViewPlugin.fromClass(class {
   private timer: ReturnType<typeof setTimeout> | undefined;
   constructor(view: EditorView) { ({ decorations: this.decorations, atomic: this.atomic } = makeInlineDecorations(view)); }
   update(update: ViewUpdate) {
-    const refreshed = update.transactions.some((transaction) => transaction.effects.some((effect) => effect.is(refreshEffect)));
+    const refreshed = update.transactions.some((transaction) => transaction.effects.some((effect) => effect.is(refreshEffect) || effect.is(pointerEffect)));
     if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged || refreshed || syntaxTree(update.startState) !== syntaxTree(update.state)) {
       ({ decorations: this.decorations, atomic: this.atomic } = makeInlineDecorations(update.view));
     }
@@ -318,6 +338,35 @@ const inlinePreview = ViewPlugin.fromClass(class {
   }
   destroy() { clearTimeout(this.timer); }
 }, { decorations: (plugin) => plugin.decorations });
+
+const pointerPreview = ViewPlugin.fromClass(class {
+  private listening = false;
+  private destroyed = false;
+  constructor(private readonly view: EditorView) {
+    // 위젯이 CodeMirror 이벤트를 무시해도 누름 시작을 먼저 잡는다.
+    view.contentDOM.addEventListener("mousedown", this.start, true);
+  }
+  private readonly release = (event: MouseEvent) => {
+    if (event.button !== 0) return;
+    this.view.dom.ownerDocument.removeEventListener("mouseup", this.release);
+    this.listening = false;
+    // CodeMirror가 문서 mouseup으로 선택을 마친 뒤 렌더 범위를 반영한다.
+    queueMicrotask(() => {
+      if (!this.destroyed && !this.listening) this.view.dispatch({ effects: pointerEffect.of(null) });
+    });
+  };
+  private readonly start = (event: MouseEvent) => {
+    if (event.button !== 0 || this.listening) return;
+    this.listening = true;
+    this.view.dispatch({ effects: pointerEffect.of({ focused: this.view.hasFocus, selection: this.view.state.selection }) });
+    this.view.dom.ownerDocument.addEventListener("mouseup", this.release);
+  };
+  destroy() {
+    this.destroyed = true;
+    this.view.contentDOM.removeEventListener("mousedown", this.start, true);
+    this.view.dom.ownerDocument.removeEventListener("mouseup", this.release);
+  }
+});
 
 function enterTable(view: EditorView, forward: boolean): boolean {
   const selection = view.state.selection.main;
@@ -337,6 +386,7 @@ export const markdownLivePreview: Extension = [
   previewField,
   referencePreview,
   inlinePreview,
+  pointerPreview,
   EditorView.atomicRanges.of((view) => view.plugin(inlinePreview)?.atomic ?? Decoration.none),
   keymap.of([
     { key: "ArrowDown", run: (view) => enterTable(view, true) },
