@@ -25,6 +25,7 @@ export interface FakeTransportSeed {
   agentGetDelayMs?: number;
   agentGetError?: string;
   agentSendError?: string;
+  agentSendDelayMs?: number;
 }
 
 export interface FakeAgentSeed {
@@ -192,6 +193,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         return { op: "agent.create", agent: clone(agent) };
       }
       case "agent.send": {
+        if (seed.agentSendDelayMs) await delay(seed.agentSendDelayMs);
         if (seed.agentSendError) return fail("server", seed.agentSendError);
         const session = agentFor(request.workspace_id);
         if (!session.agent) return fail("not_found", "이 작업의 PAS가 없습니다");

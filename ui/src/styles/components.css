@@ -32,6 +32,11 @@
 .ks-button:disabled,
 .ks-icon-button:disabled {
   cursor: default;
+}
+
+.ks-button:disabled,
+.ks-icon-button:disabled,
+.ks-agent-chat-user.is-pending {
   opacity: 0.56;
 }
 
@@ -49,11 +54,6 @@
   padding: 0;
 }
 
-.ks-icon-button svg {
-  width: var(--ks-space-5);
-  height: var(--ks-space-5);
-}
-
 .ks-empty-state {
   display: flex;
   width: 100%;
@@ -68,8 +68,7 @@
   text-align: center;
 }
 
-.ks-empty-state-icon,
-.ks-empty-state-icon svg {
+.ks-empty-state-icon {
   display: block;
   width: var(--ks-space-6);
   height: var(--ks-space-6);

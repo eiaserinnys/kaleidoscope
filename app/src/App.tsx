@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { createShellStore, EmptyState, type CoreTransport, type ShellStore } from "@kaleidoscope/ui";
+import { createShellStore, EmptyState, LayoutGrid, type CoreTransport, type ShellStore } from "@kaleidoscope/ui";
 import { createCoreTransport } from "./core/transport";
 import { Shell } from "./shell/shell";
-import { AppsIcon } from "./shell/icons";
 
 interface Runtime {
   store: ShellStore | null;
@@ -25,7 +24,7 @@ export default function App() {
 
   if (!runtime) return <main className="app-root" />;
   if (!runtime.store) {
-    return <main className="app-root"><EmptyState icon={<AppsIcon />} text="코어에 연결할 수 없습니다" /></main>;
+    return <main className="app-root"><EmptyState icon={<LayoutGrid size="empty" />} text="코어에 연결할 수 없습니다" /></main>;
   }
   return <Shell store={runtime.store} />;
 }

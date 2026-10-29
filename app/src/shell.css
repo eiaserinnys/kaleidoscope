@@ -48,12 +48,6 @@
   max-width: var(--ks-workspace-label-max-width);
 }
 
-.ks-shell-chevron {
-  width: var(--ks-space-4);
-  height: var(--ks-space-4);
-  flex: 0 0 var(--ks-space-4);
-}
-
 .ks-desktop-tabs {
   display: flex;
   min-width: 0;

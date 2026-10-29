@@ -2,10 +2,19 @@ import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, 
 import type { Block, FileEntry } from "../contract/contract";
 import { toCoreError } from "../core/core-transport";
 import { Button, IconButton, StatusText } from "../components/primitives";
+import { ChevronRight, FilePlus, FileText, FolderOpen, PanelLeftClose, PanelLeftOpen } from "../components/icons";
+import { TextInput } from "../components/text-input";
 import type { BlockContext } from "./block-context";
 import { SplitPaneContext } from "./split-pane-context";
 
 type FileTreeBlockData = Extract<Block, { type: "file_tree" }>;
+
+interface CreatingFile {
+  directory: string;
+  initialName: string;
+  error: string | null;
+  attempt: number;
+}
 
 function extensionOf(name: string): string {
   const dot = name.lastIndexOf(".");
@@ -37,7 +46,9 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
   const [loadingDirectories, setLoadingDirectories] = useState<Set<string>>(() => new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState<string | null>(null);
+  const [creating, setCreating] = useState<CreatingFile | null>(null);
   const currentRoot = useRef<string | null>(grant?.root_path ?? null);
+  const canCreate = definition.permissions.some((item) => item.module === "files" && item.id === permission && item.access === "readwrite");
 
   const loadDirectory = useCallback(async (directory: string) => {
     if (rootPath === null) return;
@@ -78,6 +89,7 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
     setErrors({});
     setLoadingDirectories(new Set());
     setActionError(null);
+    setCreating(null);
     if (grant) {
       setExpanded(new Set([""]));
       void loadDirectory("");
@@ -114,6 +126,53 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
     }
   };
 
+  const beginCreate = async () => {
+    const separator = selectedPath?.lastIndexOf("/") ?? -1;
+    const directory = separator > 0 ? selectedPath!.slice(0, separator) : "";
+    setExpanded((current) => {
+      const next = new Set(current);
+      next.add("");
+      if (directory) {
+        const parts = directory.split("/");
+        for (let index = 0; index < parts.length; index += 1) {
+          next.add(parts.slice(0, index + 1).join("/"));
+        }
+      }
+      return next;
+    });
+    if (!Object.hasOwn(entriesByDirectory, directory)) await loadDirectory(directory);
+    setCreating({ directory, initialName: "", error: null, attempt: 0 });
+  };
+
+  const commitCreate = async (name: string) => {
+    if (!creating) return;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setCreating(null);
+      return;
+    }
+    const fileName = block.extensions.length > 0
+      && !block.extensions.some((extension) => extensionOf(trimmed) === extension.toLowerCase())
+      ? `${trimmed}.${block.extensions[0]}`
+      : trimmed;
+    const path = creating.directory ? `${creating.directory}/${fileName}` : fileName;
+    const destination = creating.directory;
+    try {
+      await store.call({ op: "files.write", window_id: window.id, permission, path, text: "" });
+      setCreating(null);
+      await loadDirectory(destination);
+      await selectFile(path);
+    } catch (error) {
+      const coreError = toCoreError(error);
+      setCreating((current) => current ? {
+        ...current,
+        initialName: name,
+        error: coreError.code === "conflict" ? "같은 이름의 파일이 있습니다" : coreError.message,
+        attempt: current.attempt + 1,
+      } : current);
+    }
+  };
+
   const toggleDirectory = (path: string) => {
     const isOpen = expanded.has(path);
     setExpanded((current) => {
@@ -131,6 +190,21 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
 
   const renderDirectory = (directory: string): ReactNode => (
     <>
+      {creating?.directory === directory ? (
+        <div className="ks-file-tree-entry" role="treeitem">
+          <div className="ks-file-tree-row ks-file-tree-create-row">
+            <span aria-hidden="true" className="ks-file-tree-icon"><FileText size="inline" /></span>
+            <TextInput
+              key={`${directory}:${creating.attempt}`}
+              aria-label="새 파일 이름"
+              onCancel={() => setCreating(null)}
+              onCommit={(name) => void commitCreate(name)}
+              value={creating.initialName}
+            />
+          </div>
+          {creating.error ? <span className="ks-inline-error" role="alert">{creating.error}</span> : null}
+        </div>
+      ) : null}
       {(entriesByDirectory[directory] ?? []).filter(visible).map((entry) => {
         const isDirectory = entry.kind === "dir";
         const isExpanded = expanded.has(entry.path);
@@ -149,7 +223,9 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
               type="button"
             >
               <span aria-hidden="true" className={`ks-file-tree-icon${isDirectory ? " is-directory" : ""}`}>
-                {isDirectory ? <Chevron expanded={isExpanded} /> : <FileIcon />}
+                {isDirectory
+                  ? <ChevronRight className={`ks-chevron${isExpanded ? " is-expanded" : ""}`} size="inline" />
+                  : <FileText size="inline" />}
               </span>
               <span className="ks-file-tree-name">{entry.name}</span>
             </button>
@@ -171,7 +247,7 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
   return (
     <div className={`ks-file-tree${pane?.collapsed ? " is-collapsed" : ""}`} ref={treeRef}>
       {pane?.collapsed ? (
-        <span className="ks-file-tree-expand"><IconButton aria-label="목록 펼치기" onClick={togglePane}><Chevron expanded={false} /></IconButton></span>
+        <span className="ks-file-tree-expand"><IconButton aria-label="목록 펼치기" onClick={togglePane}><PanelLeftOpen /></IconButton></span>
       ) : !grant ? (
         <div className="ks-file-tree-ungranted">
           <Button onClick={pickFolder}>{permissionLabel} 고르기</Button>
@@ -181,10 +257,11 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
         <>
           <div className="ks-file-tree-header">
             <span className="ks-file-tree-root-name" title={grant.root_name}>{grant.root_name}</span>
-            {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><Chevron expanded={false} direction="left" /></IconButton></span> : null}
+            {canCreate ? <IconButton aria-label="새 파일" onClick={() => void beginCreate()}><FilePlus /></IconButton> : null}
             <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}>
-              <FolderChangeIcon />
+              <FolderOpen />
             </IconButton>
+            {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
           </div>
           <div aria-label="파일 목록" className="ks-file-tree-list" role="tree">
             {loadingDirectories.has("") && !entriesByDirectory[""] ? <StatusText>불러오는 중</StatusText> : null}
@@ -195,31 +272,5 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
         </>
       )}
     </div>
-  );
-}
-
-function Chevron({ expanded, direction = "right" }: { expanded: boolean; direction?: "left" | "right" }) {
-  return (
-    <svg aria-hidden="true" className={`ks-chevron${expanded ? " is-expanded" : ""}${direction === "left" ? " is-left" : ""}`} viewBox="0 0 16 16">
-      <path d="m5.5 3.5 4.5 4.5-4.5 4.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
-    </svg>
-  );
-}
-
-function FileIcon() {
-  return (
-    <svg aria-hidden="true" className="ks-file-icon" viewBox="0 0 16 16">
-      <path d="M4 1.75h5l3 3v9.5H4z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.2" />
-      <path d="M9 1.75v3h3" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.2" />
-    </svg>
-  );
-}
-
-function FolderChangeIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16">
-      <path d="M1.75 4.25h4l1.5 1.5h7v7.5h-12.5z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.2" />
-      <path d="M5 9.1a2.6 2.6 0 0 1 4.6-1.5l.8.8M10 6.9v1.9H8.1M11 10.9a2.6 2.6 0 0 1-4.6 1.5l-.8-.8M6 13.1v-1.9h1.9" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
-    </svg>
   );
 }

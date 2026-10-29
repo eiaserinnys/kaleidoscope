@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { IconButton, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
-import { CloseIcon } from "./icons";
+import { IconButton, X, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
 
 export interface WindowFrameProps {
@@ -153,7 +152,7 @@ export function WindowFrame({ area, appName, isTop, onCall, window: appWindow, c
             onClick={() => void onCall({ op: "window.close", window_id: appWindow.id })}
             title="창 닫기"
           >
-            <CloseIcon />
+            <X />
           </IconButton>
         </header>
         <div className="ks-window-content">{children}</div>

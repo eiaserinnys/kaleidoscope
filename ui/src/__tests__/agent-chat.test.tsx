@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentInfo, AgentItem, AgentModel, AppDefinition, CoreEvent, CoreReply, CoreRequest, ShellSnapshot } from "../contract/contract";
 import type { BlockContext } from "../blocks/block-context";
 import type { ShellStore } from "../core/shell-store";
@@ -9,7 +9,14 @@ import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { makeTestSnapshot } from "./fixtures";
 
-afterEach(() => cleanup());
+beforeEach(() => {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null as unknown as CanvasRenderingContext2D);
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const definition: AppDefinition = {
   id: "workspace-pas",
@@ -172,6 +179,57 @@ describe("agent_chat block", () => {
     expect((input as HTMLTextAreaElement).value).toBe("다음 초안");
   });
 
+  it("clears the input immediately and keeps a pending user bubble until the user item arrives", async () => {
+    let releaseSend!: () => void;
+    const sendGate = new Promise<void>((resolve) => { releaseSend = resolve; });
+    const state = setup({ agent: makeAgent(), sendGate });
+    render(<AgentChatBlock block={{ type: "agent_chat" }} context={state.context} />);
+    const input = await screen.findByRole("textbox", { name: "메시지" });
+
+    fireEvent.change(input, { target: { value: "요청 글" } });
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    expect((input as HTMLTextAreaElement).value).toBe("");
+    expect(document.querySelector(".ks-agent-chat-user.is-pending")?.textContent).toBe("요청 글");
+    expect(screen.getByText("생각 중입니다…")).toBeTruthy();
+    releaseSend();
+    await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "agent.send", workspace_id: "workspace-1", text: "요청 글" }));
+    expect(document.querySelector(".ks-agent-chat-user.is-pending")).toBeTruthy();
+
+    state.emit({ event: "agent.update", workspace_id: "workspace-1", update: { kind: "item", item: makeItem("user-1", "user", "요청 글") } });
+    await waitFor(() => expect(document.querySelector(".ks-agent-chat-user.is-pending")).toBeNull());
+    expect(screen.getAllByText("요청 글")).toHaveLength(1);
+  });
+
+  it("restores the original sent draft before text typed during a failed send", async () => {
+    let releaseSend!: () => void;
+    const sendGate = new Promise<void>((resolve) => { releaseSend = resolve; });
+    const state = setup({ agent: makeAgent(), sendGate, rejectSend: true });
+    render(<AgentChatBlock block={{ type: "agent_chat" }} context={state.context} />);
+    const input = await screen.findByRole("textbox", { name: "메시지" });
+
+    fireEvent.change(input, { target: { value: "  보낸 글  " } });
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    expect((input as HTMLTextAreaElement).value).toBe("");
+    fireEvent.change(input, { target: { value: "그사이 친 글" } });
+    releaseSend();
+
+    await screen.findByRole("alert");
+    expect((input as HTMLTextAreaElement).value).toBe("  보낸 글  \n그사이 친 글");
+    expect(document.querySelector(".ks-agent-chat-user.is-pending")).toBeNull();
+  });
+
+  it("shows thinking while busy or pending and hides it while a delta streams", async () => {
+    const state = setup({ agent: makeAgent("workspace-1", true) });
+    render(<AgentChatBlock block={{ type: "agent_chat" }} context={state.context} />);
+    await screen.findByRole("textbox", { name: "메시지" });
+
+    expect(screen.getByText("생각 중입니다…")).toBeTruthy();
+    state.emit({ event: "agent.update", workspace_id: "workspace-1", update: { kind: "delta", text: "답변 조각" } });
+    await waitFor(() => expect(screen.queryByText("생각 중입니다…")).toBeNull());
+    expect(screen.getByText("답변 조각")).toBeTruthy();
+  });
+
   it("appends deltas, clears them on the final assistant item, and ignores other workspaces", async () => {
     const state = setup({ agent: makeAgent() });
     render(<AgentChatBlock block={{ type: "agent_chat" }} context={state.context} />);
@@ -232,6 +290,28 @@ describe("agent_chat block", () => {
     expect(events.some((event) => event.event === "agent.update" && event.workspace_id === "workspace-2" && event.update.kind === "delta")).toBe(true);
 
     unsubscribe();
+    store.dispose();
+  });
+
+  it("delays a fake send before emitting its user item", async () => {
+    const snapshot = makeTestSnapshot({ definitions: [definition] });
+    snapshot.link = { state: "connected", server_url: "https://example.test", device_name: "Test PC" };
+    const transport = createFakeTransport({
+      snapshot,
+      folder: null,
+      files: {},
+      agentSendDelayMs: 30,
+      agents: { "workspace-1": { agent: makeAgent(), items: [], models } },
+    });
+    const store = createShellStore(transport);
+    await store.ready;
+    const updates: CoreEvent[] = [];
+    store.subscribeEvents((event) => updates.push(event));
+
+    const sending = store.call({ op: "agent.send", workspace_id: "workspace-1", text: "지연 요청" });
+    expect(updates.some((event) => event.event === "agent.update" && event.update.kind === "item" && event.update.item.kind === "user")).toBe(false);
+    await sending;
+    expect(updates.some((event) => event.event === "agent.update" && event.update.kind === "item" && event.update.item.kind === "user")).toBe(true);
     store.dispose();
   });
 });

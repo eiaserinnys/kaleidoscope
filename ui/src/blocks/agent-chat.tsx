@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { AgentInfo, AgentItem, AgentModel, AgentUpdate, Block } from "../contract/contract";
 import { Button, EmptyState, IconButton, Notice, StatusText } from "../components/primitives";
+import { ArrowUp, MessageSquare } from "../components/icons";
 import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
 import { MarkdownText } from "./markdown-text";
+import { ThinkingOrb } from "thinking-orbs";
 
 type AgentChatBlockData = Extract<Block, { type: "agent_chat" }>;
 
@@ -20,6 +22,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState("");
+  const [pending, setPending] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,6 +43,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       setCreating(false);
     } else if (update.kind === "item") {
       setItems((current) => uniqueItems([...current, update.item]));
+      if (update.item.kind === "user") setPending(null);
       if (update.item.kind === "assistant") setDelta("");
     } else if (update.kind === "delta") {
       setDelta((current) => current + update.text);
@@ -64,6 +68,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       if (reply.op !== "agent.get") return;
       setAgent(reply.agent);
       setItems(uniqueItems(reply.items));
+      setPending(null);
       setModels(reply.models);
       setSelectedPreset(reply.models[0]?.preset ?? "");
       setBusy(reply.agent?.busy ?? false);
@@ -148,17 +153,21 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     }
   };
 
-  const send = async () => {
+  const send = async (returnFocus = false) => {
     const submittedDraft = draft;
     const text = submittedDraft.trim();
     if (!text || sending) return;
+    setPending(text);
+    setDraft("");
     setSending(true);
     setSendError(null);
+    if (returnFocus) inputRef.current?.focus();
     try {
       await context.store.call({ op: "agent.send", workspace_id: workspaceId, text });
-      setDraft((current) => current === submittedDraft ? "" : current);
     } catch (reason) {
+      setPending(null);
       setSendError(toCoreError(reason).message);
+      setDraft((current) => current ? `${submittedDraft}\n${current}` : submittedDraft);
     } finally {
       setSending(false);
     }
@@ -171,7 +180,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   };
 
   if (!connected) {
-    return <div className="ks-agent-chat-state"><EmptyState icon={<ChatIcon />} text="서버에 연결하면 대화할 수 있습니다" /></div>;
+    return <div className="ks-agent-chat-state"><EmptyState icon={<MessageSquare size="empty" />} text="서버에 연결하면 대화할 수 있습니다" /></div>;
   }
   if (!workspaceId) return null;
   if (loading) return <div className="ks-agent-chat-state"><StatusText>불러오는 중</StatusText></div>;
@@ -218,8 +227,14 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         role="log"
       >
         {items.map((item) => <HistoryItem key={item.id} item={item} />)}
+        {pending !== null ? <div className="ks-agent-chat-user is-pending">{pending}</div> : null}
         {delta ? <div className="ks-agent-chat-assistant"><div className="ks-agent-chat-assistant-content"><MarkdownText>{delta}</MarkdownText></div></div> : null}
-        {busy ? <div className="ks-agent-chat-working">작업 중{tool ? ` · ${tool}` : ""}</div> : null}
+        {(busy || pending !== null) && !delta ? (
+          <div className="ks-agent-chat-working">
+            <ThinkingOrb aria-label="생각 중입니다" size={20} state="working" theme="auto" />
+            <span>생각 중입니다…{tool ? ` · ${tool}` : ""}</span>
+          </div>
+        ) : null}
       </div>
       <div className="ks-agent-chat-input-area">
         {sendError ? <Notice role="alert">{sendError}</Notice> : null}
@@ -233,8 +248,8 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
             rows={1}
             value={draft}
           />
-          <IconButton aria-label="보내기" disabled={!draft.trim() || sending} onClick={() => void send()}>
-            <SendIcon />
+          <IconButton aria-label="보내기" disabled={!draft.trim() || sending} onClick={() => void send(true)}>
+            <ArrowUp />
           </IconButton>
         </div>
       </div>
@@ -258,21 +273,4 @@ function uniqueItems(items: AgentItem[]): AgentItem[] {
     seen.add(item.id);
     return true;
   });
-}
-
-function ChatIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
-      <path d="M5 5.75h14v10.5H10l-5 3v-13.5Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.5" />
-      <path d="M8 9.5h8M8 12.5h5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-function SendIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
-      <path d="M12 19V5m0 0L6.5 10.5M12 5l5.5 5.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-    </svg>
-  );
 }

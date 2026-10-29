@@ -1,11 +1,17 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AgentChatBlock } from "../blocks/agent-chat";
 import { makeTestSnapshot } from "./fixtures";
 import type { BlockContext } from "../blocks/block-context";
 import type { AgentInfo, AppDefinition, CoreEvent, CoreReply, CoreRequest } from "../contract/contract";
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null as unknown as CanvasRenderingContext2D);
+});
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 const agent: AgentInfo = { workspace_id: "workspace-1", model_preset: "gemini-4-argon", model_label: "Argon", busy: false, tool: null, created_at: "2026-10-29T00:00:00Z" };
 const models = [{ preset: "gemini-4-argon", label: "Argon" }];
 function setup(call: (request: CoreRequest) => Promise<CoreReply>) {
@@ -75,7 +81,7 @@ it("replays updates received during a load after its snapshot without duplicate 
   await act(async () => { finishLoad({ op: "agent.get", agent: null, items: [item], models }); });
   expect(screen.getAllByText("조회 중 받은 기록")).toHaveLength(1);
   expect(screen.getByText("진행 중인 답")).toBeTruthy();
-  expect(screen.getByText("작업 중 · 문서 읽기")).toBeTruthy();
+  expect(screen.queryByText("생각 중입니다… · 문서 읽기")).toBeNull();
   expect(screen.getByRole("textbox", { name: "메시지" })).toBeTruthy();
 });
 
@@ -94,7 +100,7 @@ it("keeps activity received before the create response", async () => {
     emit({ event: "agent.update", workspace_id: "workspace-1", update: { kind: "activity", busy: true, tool: "문서 읽기" } });
   });
   await act(async () => { finishCreate({ op: "agent.create", agent }); });
-  expect(screen.getByText("작업 중 · 문서 읽기")).toBeTruthy();
+  expect(screen.getByText("생각 중입니다… · 문서 읽기")).toBeTruthy();
 });
 
 it("clears an invalidated create when reconnecting reloads an empty workspace", async () => {
