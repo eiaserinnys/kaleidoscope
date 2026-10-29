@@ -13,16 +13,18 @@
 .ks-data-tab-list, .ks-data-tab-panel { padding-inline: var(--ks-space-3); }
 .ks-data-tab-list .ks-button { font-size: var(--ks-type-meta); }
 .ks-data-tab-panel { flex: 1 1 auto; min-height: 0; overflow: auto; }
-.ks-data-toolbar { display: flex; min-width: 0; min-height: calc(var(--ks-control-height) + 2 * var(--ks-space-2)); align-items: center; gap: var(--ks-space-2); padding: var(--ks-space-2) var(--ks-space-3); border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-data-toolbar { display: flex; flex-wrap: wrap; min-width: 0; min-height: calc(var(--ks-control-height) + 2 * var(--ks-space-2)); align-items: center; gap: var(--ks-space-2); padding: var(--ks-space-2) var(--ks-space-3); border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
 .ks-data-toolbar-group { display: flex; align-items: center; min-width: 0; gap: var(--ks-space-2); }
-.ks-data-toolbar-group.is-start { flex: 1 1 auto; }
+.ks-data-toolbar-group.is-start { flex: 1 1 0; min-width: min-content; }
 .ks-data-toolbar-group.is-end { flex: 0 0 auto; }
 .ks-data-toolbar-item { min-width: 0; }
-.ks-data-toolbar-item.is-input { flex: 1 1 auto; }
+.ks-data-toolbar-item:not(.is-input) { flex: 0 0 auto; }
+.ks-data-toolbar-item.is-input { flex: 1 1 auto; min-width: calc(var(--ks-space-6) * 3); }
+.ks-data-toolbar .ks-button, .ks-data-toolbar .ks-data-segmented, .ks-data-toolbar .ks-data-toggle { flex-shrink: 0; white-space: nowrap; }
 .ks-data-section { min-width: 0; min-height: 0; }
 .ks-data-section-child > .ks-data-stack { height: auto; }
-.ks-data-section-header { display: flex; width: 100%; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; }
-button.ks-data-section-header { cursor: pointer; }
+.ks-data-section-header { display: flex; width: 100%; align-items: center; gap: var(--ks-space-2); }
+.ks-data-section-toggle { display: inline-flex; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .ks-data-section-title { font-size: var(--ks-type-title); font-weight: 600; }
 .ks-data-section-meta { font-size: var(--ks-type-meta); color: var(--ks-color-muted); }
 .ks-data-text { white-space: pre-wrap; user-select: text; overflow: auto; }

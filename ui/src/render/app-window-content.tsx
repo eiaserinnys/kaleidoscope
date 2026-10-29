@@ -28,7 +28,7 @@ export function AppWindowContent({ store, windowId }: { store: ShellStore; windo
   return <WindowDataProvider store={store} appWindow={window} definition={version.definition}>
     <div className="ks-app-window-content ks-data-window">
       <div className="ks-data-window-body">{renderBlock(version.definition.ui, context)}</div>
-      <WindowNotice />
+      <div className="ks-data-window-notice"><WindowNotice /></div>
     </div>
   </WindowDataProvider>;
 }

@@ -87,13 +87,22 @@ export function ButtonBlock({ block, pointer }: Props<"button">) {
   const body = useBinding(`${pointer}/confirm/body`, block.confirm?.body ?? null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const opener = useRef<HTMLSpanElement>(null);
+  const restoreAfterAction = useRef(false);
   const close = useCallback(() => setConfirm(false), []);
-  const run = async () => { setConfirm(false); setBusy(true); await data.act(`${pointer}/on_click`, null); setBusy(false); };
+  const run = async (restore: boolean) => { restoreAfterAction.current = restore; setConfirm(false); setBusy(true); await data.act(`${pointer}/on_click`, null); setBusy(false); };
   const unavailable = disabled.status !== "ready" || Boolean(disabled.value);
+  useLayoutEffect(() => {
+    if (!busy && !unavailable && restoreAfterAction.current) {
+      restoreAfterAction.current = false;
+      opener.current?.querySelector<HTMLButtonElement>(":scope > button")?.focus();
+    }
+  });
   const contents = <>{block.icon ? <DataIcon name={block.icon} /> : null}{!block.icon_only ? block.label : null}</>;
-  return <span className={`ks-data-button is-${block.variant ?? "default"}`}>{block.icon_only
-    ? <IconButton aria-label={block.label} disabled={busy || unavailable} onClick={() => block.confirm ? setConfirm(true) : void run()}>{contents}</IconButton>
-    : <Button variant={block.variant === "primary" ? "emphasis" : "default"} disabled={busy || unavailable} onClick={() => block.confirm ? setConfirm(true) : void run()}>{contents}</Button>}
-    {confirm && block.confirm ? <Dialog title={block.confirm.title} ok={block.confirm.ok ?? block.label} danger={block.variant === "danger"} onCancel={close} onConfirm={() => void run()} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} /> : null}
+  const host = opener.current?.closest<HTMLElement>(".ks-data-window");
+  return <span ref={opener} className={`ks-data-button is-${block.variant ?? "default"}`}>{block.icon_only
+    ? <IconButton aria-label={block.label} disabled={busy || unavailable} onClick={() => block.confirm ? setConfirm(true) : void run(false)}>{contents}</IconButton>
+    : <Button variant={block.variant === "primary" ? "emphasis" : "default"} disabled={busy || unavailable} onClick={() => block.confirm ? setConfirm(true) : void run(false)}>{contents}</Button>}
+    {confirm && block.confirm && host ? <Dialog host={host} title={block.confirm.title} ok={block.confirm.ok ?? block.label} danger={block.variant === "danger"} onCancel={close} onConfirm={() => void run(true)} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} /> : null}
   </span>;
 }

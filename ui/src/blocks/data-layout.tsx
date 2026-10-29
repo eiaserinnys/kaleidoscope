@@ -46,8 +46,19 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
   const title = useBinding(`${pointer}/title`, block.title);
   const meta = useBinding(`${pointer}/meta`, block.meta ?? null);
   const [collapsed, setCollapsed] = useState(Boolean(block.collapsed));
-  const content = <>{block.collapsible ? (collapsed ? <ChevronRight size="inline" /> : <ChevronDown size="inline" />) : null}<span className="ks-data-section-title">{title.status === "ready" ? display(title.value) : <DataState value={title} compact />}</span>{block.meta !== undefined ? <span className="ks-data-section-meta">{meta.status === "ready" ? display(meta.value) : <DataState value={meta} compact />}</span> : null}</>;
-  return <section className="ks-data-section">{block.collapsible ? <button className="ks-data-section-header" aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)} type="button">{content}</button> : <div className="ks-data-section-header">{content}</div>}{!collapsed ? <div className="ks-data-section-child">{renderBlock(block.child, context, `${pointer}/child`)}</div> : null}</section>;
+  return <section className="ks-data-section">
+    <div className="ks-data-section-header">
+      {block.collapsible
+        ? <button className="ks-data-section-toggle" aria-expanded={!collapsed} aria-label={title.status === "ready" ? undefined : collapsed ? "펼치기" : "접기"} onClick={() => setCollapsed(!collapsed)} type="button">
+          {collapsed ? <ChevronRight size="inline" /> : <ChevronDown size="inline" />}
+          {title.status === "ready" ? <span className="ks-data-section-title">{display(title.value)}</span> : null}
+        </button>
+        : title.status === "ready" ? <span className="ks-data-section-title">{display(title.value)}</span> : null}
+      {title.status !== "ready" ? <DataState value={title} compact /> : null}
+      {block.meta !== undefined ? <div className="ks-data-section-meta">{meta.status === "ready" ? display(meta.value) : <DataState value={meta} compact />}</div> : null}
+    </div>
+    {!collapsed ? <div className="ks-data-section-child">{renderBlock(block.child, context, `${pointer}/child`)}</div> : null}
+  </section>;
 }
 
 export function display(value: unknown): string { return typeof value === "string" ? value : JSON.stringify(value, null, 2) ?? "null"; }

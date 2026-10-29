@@ -251,7 +251,7 @@ function Harness() {
           <div className="ks-harness-window-content">{dataWindow ? <AppWindowContent store={store} windowId={dataWindow.id} /> : null}</div>
         </section>
       </div>
-      {!coreUrl ? <FakeFilePanel transport={fakeTransport} /> : null}
+      {!coreUrl && !(previewOnly && previewAppId === "data-controls") ? <FakeFilePanel transport={fakeTransport} /> : null}
     </main>
   );
 }

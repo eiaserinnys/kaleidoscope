@@ -134,3 +134,58 @@ it("keeps a button and its open confirmation visible when its disabled binding i
   expect(button.isConnected).toBe(true);
   expect(screen.getByRole("dialog")).toBeTruthy();
 });
+
+it("traps tab within the dialog and makes the window body and notice inert", async () => {
+  const { transport } = setup();
+  const opener = await screen.findByRole("button", { name: "확인" });
+  act(() => transport.emit({ event: "data.update", window_id: "editor-window", view: { sources: { file: { state: "failed", message: "오류", has_value: true } }, values: {} } }));
+  await userEvent.click(opener);
+  const dialog = screen.getByRole("dialog");
+  const buttons = dialog.querySelectorAll("button");
+  expect(document.querySelector(".ks-data-window-body")?.hasAttribute("inert")).toBe(true);
+  expect(document.querySelector(".ks-data-window-notice")?.hasAttribute("inert")).toBe(true);
+  expect(document.activeElement).toBe(buttons[1]);
+  fireEvent.keyDown(document, { key: "Tab" });
+  expect(document.activeElement).toBe(buttons[0]);
+  fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+  expect(document.activeElement).toBe(buttons[1]);
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(document.activeElement).toBe(opener);
+  expect(document.querySelector(".ks-data-window-body")?.hasAttribute("inert")).toBe(false);
+});
+
+it("restores focus to the opener after the confirmed action finishes", async () => {
+  const { spy, originalCall } = setup();
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => { release = resolve; });
+  spy.mockImplementation(async (request) => {
+    if (request.op === "data.act" && request.pointer.endsWith("/on_click")) await waiting;
+    return originalCall(request);
+  });
+  const opener = await screen.findByRole("button", { name: "확인" }) as HTMLButtonElement;
+  await userEvent.click(opener);
+  await userEvent.click(screen.getByRole("dialog").querySelectorAll("button")[1]);
+  expect(opener.disabled).toBe(true);
+  await act(async () => { release(); await waiting; });
+  await waitFor(() => expect(document.activeElement).toBe(opener));
+  expect(opener.disabled).toBe(false);
+});
+
+it("retries a section heading failure without collapsing the section", async () => {
+  const definition: AppDefinition = {
+    ...mdEditorDefinition, requires: { blocks: 4, modules: {} }, state: {},
+    sources: { broken: { kind: "request", permission: "remote", path: "/" } },
+    ui: { type: "section", title: { expr: "$data.broken.title" }, collapsible: true, child: { type: "text", value: "내용" } },
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = {};
+  const transport = createFakeTransport({ ...seed, data: { sources: { broken: { error: "받기 실패" } } } });
+  render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
+  const retry = await screen.findByRole("button", { name: "다시 받기" });
+  const toggle = document.querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(toggle.contains(retry)).toBe(false);
+  await userEvent.click(retry);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByText("내용")).toBeTruthy();
+});
