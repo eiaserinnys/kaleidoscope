@@ -6,7 +6,7 @@
 
 - 설계 결정, 아키텍처 초안, 진행 기록의 정본은 atom `project > kaleidoscope`입니다. 이 리포에 같은 내용을 복사해 두지 않습니다.
 - 작업 시작 전에 atom의 `아키텍처 초안`을 읽고, 결정의 근거는 `설계 결정` 아래 카드에서 봅니다.
-- 코어와 화면 사이 계약의 정본은 `crates/contract/src/lib.rs` 하나입니다. TS 타입(`ui/src/contract/`)은 거기서 생성합니다.
+- 코어와 화면 사이 계약의 정본은 `crates/contract/src/lib.rs`와 같은 크레이트의 `data.rs`(앱 데이터: 원천, 식 바인딩, 동작, 블록이 받는 데이터 모양), `registry.rs`(코어와 서버 사이 HTTP), `validate.rs`(앱 정의 검사)입니다. TS 타입(`ui/src/contract/`)은 거기서 생성합니다.
 
 ## 리포 구성
 
@@ -18,7 +18,7 @@
 | `crates/orchestrator` | 앱 레지스트리, 기기 연결과 에이전트용 MCP 서버 |
 | `ui/` | 블록 렌더러와 블록(pnpm 패키지 `@kaleidoscope/ui`). `ui/src/contract/`는 생성물이라 손대지 않는다 |
 | `app/` | Tauri 앱. `app/src-tauri`는 코어를 얇게 감싸고, `app/src`는 쉘 화면이다 |
-| `examples/` | 예제 앱 정의(md-editor, md-viewer, workspace-pas, web-browser, explorer). 계약 테스트가 이 파일을 읽어 확인한다 |
+| `examples/` | 예제 앱 정의(md-editor, md-viewer, workspace-pas, web-browser, explorer, block-gallery, card-board). 계약 테스트가 이 파일을 읽어 확인한다 |
 
 ## 자주 쓰는 명령
 

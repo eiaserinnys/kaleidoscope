@@ -2,6 +2,17 @@
 import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
+ * 동작 하나.
+ */
+export type Action = SetStateAction | RefreshAction | CallAction;
+
+/**
+ * 블록 이벤트에 거는 동작. 상태 키 하나에 이벤트 값을 쓰는 짧은 꼴(`{ "set_state": "키" }`)이나 동작 목록이다.
+ * 목록은 코어가 순서대로 실행하고, 하나가 실패하면 거기서 멈춘다(앞에서 쓴 상태는 그대로 둔다).
+ */
+export type Actions = SetState | Array<Action>;
+
+/**
  * 기록에 붙은 첨부 하나(모듈 `agent` 2판). 내용은 `agent.attachment`로 읽는다.
  */
 export type AgentAttachment = { 
@@ -123,6 +134,19 @@ current_version: number, created_at: string, updated_at: string, };
  *    - `web_view`는 정의에 하나까지이고, 쓰면 `requires.modules`에 `web`이 있다. 정의에 직접 적은 주소는
  *      `http://`나 `https://`로 시작하고 공백이 없다.
  *    - `opens`의 확장자는 하나 이상이고 각각 소문자와 숫자 1~16자이며, 권한과 상태 키는 선언되어 있다.
+ *    - (4판) `sources`를 쓰면 `requires.blocks`가 4 이상이다. 원천 이름은 [`data::valid_source_name`]을 지킨다.
+ *      `request` 원천의 권한은 `connection` 모듈, `file`과 `folder`의 권한은 `files` 모듈이다.
+ *      `refresh_secs`는 [`data::SOURCE_REFRESH_MIN_SECS`] 이상이다. 원천의 값 자리 식은 `$data`, `$event`, `$item`을
+ *      쓰지 않는다. 정의에 직접 적은 `request` 경로는 `/`로 시작하고, `file` 경로는 [`FileRef`]의 경로 규칙을 지킨다.
+ *    - (4판) 모든 식(`expr`)은 JSONata로 읽혀야 하고, 식이 `$data.이름`으로 읽는 원천은 `sources`에 있다.
+ *      `state`나 `expr` 하나만 가진 객체를 리터럴 바인딩으로 쓰지 않는다(모양이 틀린 바인딩).
+ *    - (4판) 동작의 상태 키는 선언되어 있고, `refresh`의 원천은 있다. `call`의 권한은 `connection` 모듈이고,
+ *      GET이 아니면 `readwrite`다.
+ *    - (4판) `connection` 권한을 쓰면 `requires.modules`에 `connection`이 있다. 연결 이름은 소문자, 숫자, `-` 1~64자다.
+ *    - (4판) `toolbar`의 자식은 `input`, `select`, `toggle`, `button`, `text`뿐이다. `stack`의 `fill`은 자식 안의
+ *      순서다. `tabs`와 `stack`에는 자식이 하나 이상 있다. `table`의 열은 하나 이상이고 `field`가 겹치지 않는다.
+ *      `button`의 `icon`은 [`data::ICON_NAMES`]에 있다. `code_editor`의 권한은 `readwrite`다.
+ *      `code_view`는 `value`와 `file` 가운데 꼭 하나를 쓴다.
  */
 export type AppDefinition = { 
 /**
@@ -142,6 +166,10 @@ state: { [key in string]: JsonValue },
  * 뜬다. 규칙은 `files.open`에 있다.
  */
 opens?: OpensDecl, 
+/**
+ * (블록 세트 4판) 이름 붙인 원천. 식에서 `$data.이름`으로 읽는다. 규칙은 [`data`] 모듈 머리글에 있다.
+ */
+sources?: { [key in string]: SourceDecl }, 
 /**
  * 창 안을 채우는 블록 트리의 뿌리.
  */
@@ -174,7 +202,32 @@ z: number,
 state: { [key in string]: JsonValue }, created_at: string, updated_at: string, };
 
 /**
- * 블록. 블록 세트 3판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
+ * 배지. 글만 쓰거나(`"진행 중"`) 색을 붙인다(`{ "text": "진행 중", "color": "#315da8" }`).
+ * 색은 `#rgb`나 `#rrggbb`이고, 쉘이 글자 대비를 맞춘다.
+ */
+export type Badge = string | { text: string, color?: string, };
+
+/**
+ * 4판 블록의 값 자리. 리터럴, 창 상태, 식 가운데 하나다.
+ *
+ * - `{ "state": "키" }`: 창 상태 하나. 화면이 스스로 푼다.
+ * - `{ "expr": "JSONata 식" }`: 코어가 계산한 값. 규칙은 이 모듈 머리글에 있다.
+ * - 그 밖의 JSON: 그대로의 값. `state`나 `expr` 하나만 가진 객체는 리터럴로 쓸 수 없다(검사가 거부한다).
+ */
+export type Binding = StateRef | ExprRef | JsonValue;
+
+/**
+ * 식 바인딩 하나의 값. `status`로 가른다. 규칙은 이 모듈 머리글의 「원천의 상태와 값의 상태」에 있다.
+ */
+export type BindingValue = { "status": "ready", value: JsonValue, } | { "status": "loading", } | { "status": "failed", message: string, retry: Array<string>, } | { "status": "login_required", permission: string, };
+
+/**
+ * 블록. 블록 세트 4판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
+ *
+ * 4판 블록의 값 자리는 [`Binding`](리터럴, 창 상태, 식)이고, 이벤트 자리는 [`Actions`]다. 블록이 받는 데이터
+ * 모양은 [`data`] 모듈의 [`data::ListItem`] 등에 있다. 식의 값이 아직 없으면(원천을 받는 중, 실패, 로그인 필요)
+ * 데이터 블록은 그 상태를 그 자리에 보인다. 4판 블록은 쉘의 토큰과 공통 부품만으로 그리고, 앱이 색이나 크기를
+ * 정하지 않는다(항목의 `color`와 배지 색만 예외).
  */
 export type Block = { "type": "split", direction: SplitDirection, 
 /**
@@ -200,7 +253,54 @@ on_navigate?: SetState,
 /**
  * 주소창을 보일지. 거짓이면 그 자리에 페이지 제목만 보인다(정해진 사이트를 띄우는 앱).
  */
-address_bar: boolean, } | { "type": "explorer", root: FolderRef, };
+address_bar: boolean, } | { "type": "explorer", root: FolderRef, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, selected?: StateRef, on_change?: SetState, } | { "type": "toolbar", start: Array<Block>, end?: Array<Block>, } | { "type": "section", title: Binding, 
+/**
+ * 제목 옆에 작게 보일 부가 정보(개수 등).
+ */
+meta?: Binding, collapsible?: boolean, collapsed?: boolean, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: StateRef, on_select?: Actions, } | { "type": "properties", fields: Array<PropertyField>, } | { "type": "tree", items: Binding, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", value: Binding, format?: TextFormat, style?: TextStyle, } | { "type": "input", value: StateRef, on_change: Actions, kind?: InputKind, multiline?: boolean, placeholder?: string, on_submit?: Actions, } | { "type": "select", value: StateRef, on_change: Actions, options: Binding, style?: SelectStyle, placeholder?: string, } | { "type": "toggle", value: StateRef, on_change: Actions, label: string, } | { "type": "button", label: string, icon?: string, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code_editor", file: FileRef, language?: CodeLanguage, } | { "type": "code_view", value?: Binding, file?: FileRef, language?: CodeLanguage, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, };
+
+export type ButtonVariant = "default" | "primary" | "danger" | "ghost";
+
+/**
+ * 연결을 부른다. 응답이 2xx가 아니면 실패다. 응답 본문은 쓰지 않는다(바뀐 것은 `refresh`로 다시 받는다).
+ */
+export type CallAction = { call: CallSpec, };
+
+/**
+ * 연결 부르기. `permission`은 `connection` 권한이고, GET이 아니면 그 권한이 `readwrite`여야 한다
+ * (서버의 연결도 쓰기를 허락해야 한다). `body`는 JSON으로 보낸다.
+ */
+export type CallSpec = { permission: string, method: HttpMethod, path: Binding, query?: { [key in string]: Binding }, body?: Binding, };
+
+/**
+ * 칸 값을 보이는 방법. `number`와 `date`는 끝에 맞추고, 나머지는 앞에 맞춘다.
+ */
+export type CellFormat = "text" | "number" | "date" | "badge";
+
+/**
+ * 코드 편집기와 보기의 언어(색 입히기). 확장자로 정할 때: json, yaml/yml, toml, js/mjs/cjs/jsx, ts/tsx, py,
+ * rs, css, html/htm, sql, sh/bash/zsh/ps1, xml/svg, md/markdown, 그 밖은 plain.
+ */
+export type CodeLanguage = "plain" | "json" | "yaml" | "toml" | "javascript" | "typescript" | "python" | "rust" | "css" | "html" | "sql" | "shell" | "xml" | "markdown";
+
+/**
+ * 표의 열.
+ */
+export type Column = { 
+/**
+ * 행 객체의 키.
+ */
+field: string, label: string, width?: ColumnWidth, format?: CellFormat, };
+
+/**
+ * 열 너비. 남은 폭은 `fill` 열들이 나눈다.
+ */
+export type ColumnWidth = "narrow" | "medium" | "wide" | "fill";
+
+/**
+ * 단추를 누른 뒤 묻는 확인 대화상자. `ok`가 없으면 단추의 `label`을 쓴다.
+ */
+export type Confirm = { title: string, body?: Binding, ok?: string, };
 
 /**
  * 명령의 실패.
@@ -218,7 +318,7 @@ details: Array<string>, };
 /**
  * 코어가 화면에 보내는 이벤트. `event`로 가른다.
  */
-export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "agent.update", workspace_id: string, update: AgentUpdate, } | { "event": "web.update", window_id: string, page: WebPage, };
+export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "agent.update", workspace_id: string, update: AgentUpdate, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, };
 
 /**
  * 코어의 응답. `op`는 명령과 같다.
@@ -243,7 +343,7 @@ models: Array<AgentModel>, } | { "op": "agent.create", agent: AgentInfo, } | { "
 /**
  * 파일 내용. 표준 base64.
  */
-data_base64: string, } | { "op": "agent.attachment_open", };
+data_base64: string, } | { "op": "agent.attachment_open", } | { "op": "data.attach", view: DataView, } | { "op": "data.detach", } | { "op": "data.act", } | { "op": "data.refresh", } | { "op": "data.media", media: MediaData, } | { "op": "connection.login", };
 
 /**
  * 화면이 코어에 보내는 명령. `op`로 가른다. 응답은 같은 `op`의 [`CoreReply`]다.
@@ -252,7 +352,25 @@ export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", n
 /**
  * 빼면 빈 배열이다(모듈 `agent` 1판의 명령 모양).
  */
-attachments?: Array<AgentUpload>, } | { "op": "agent.attachment", workspace_id: string, item_id: string, index: number, } | { "op": "agent.attachment_open", workspace_id: string, item_id: string, index: number, };
+attachments?: Array<AgentUpload>, } | { "op": "agent.attachment", workspace_id: string, item_id: string, index: number, } | { "op": "agent.attachment_open", workspace_id: string, item_id: string, index: number, } | { "op": "data.attach", window_id: string, } | { "op": "data.detach", window_id: string, } | { "op": "data.act", window_id: string, pointer: string, event?: JsonValue, item?: JsonValue, } | { "op": "data.refresh", window_id: string, sources?: Array<string>, } | { "op": "data.media", window_id: string, media: MediaRef, max_px?: number, } | { "op": "connection.login", window_id: string, permission: string, };
+
+/**
+ * 이미지에서 보일 부분. 원본 가로와 세로에 대한 비율(0~1)이고 `x`, `y`는 왼쪽 위다.
+ */
+export type Crop = { x: number, y: number, w: number, h: number, };
+
+/**
+ * 창 하나의 데이터 모습. `data.attach` 응답 전체이고, `data.update`는 바뀐 것만 같은 모양으로 보낸다.
+ */
+export type DataView = { 
+/**
+ * 원천 이름 → 상태.
+ */
+sources: { [key in string]: SourceStatus }, 
+/**
+ * 식 바인딩 자리(JSON Pointer) → 값. 리터럴과 상태 바인딩은 담지 않는다(화면이 스스로 푼다).
+ */
+values: { [key in string]: BindingValue }, };
 
 /**
  * 화면 한 장. 앱 창 배치를 가진다.
@@ -273,6 +391,35 @@ export type DeviceState = { active_workspace_id: string | null,
 active_desktop_ids: { [key in string]: string }, grants: Array<Grant>, };
 
 export type ErrorCode = "invalid_request" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "io" | "server" | "unavailable";
+
+/**
+ * 식 바인딩. 예: `{ "expr": "$data.cards.cards[status = 'running']" }`.
+ */
+export type ExprRef = { expr: string, };
+
+export type FeedBody = string | Array<string>;
+
+/**
+ * `feed` 항목. 이름(색과 초상)과 본문 줄들. 본문은 줄바꿈을 지키고 글을 고르고 복사할 수 있다.
+ */
+export type FeedEntry = { key: string, name?: string, 
+/**
+ * 이름의 색(`#rrggbb`).
+ */
+color?: string, 
+/**
+ * 이름 옆의 작은 원형 초상.
+ */
+image?: MediaRef, meta?: string, 
+/**
+ * 본문. 문자열 하나나 문자열 배열(문단마다 하나, 예: 한국어와 영어).
+ */
+body: FeedBody, tone?: Tone, };
+
+/**
+ * 속성 값을 보이는 방법.
+ */
+export type FieldFormat = "text" | "markdown" | "badge" | "date" | "code";
 
 export type FileAccess = "read" | "readwrite";
 
@@ -300,9 +447,35 @@ export type FileKind = "file" | "dir";
 export type FileRef = { permission: string, path: PathValue, };
 
 /**
+ * `folder` 원천의 항목.
+ */
+export type FolderEntry = { name: string, 
+/**
+ * 고른 폴더 기준 상대 경로.
+ */
+path: string, kind: FileKind, 
+/**
+ * 확장자(점 없이, 소문자). 없으면 빈 문자열.
+ */
+ext: string, 
+/**
+ * 파일 크기(바이트). 폴더는 0.
+ */
+size: bigint, 
+/**
+ * 마지막으로 바뀐 시각(RFC 3339 UTC).
+ */
+modified: string, };
+
+/**
  * 권한 하나가 가리키는 폴더(고른 폴더 자체).
  */
 export type FolderRef = { permission: string, };
+
+/**
+ * `stack`의 자식 사이 간격. 쉘의 간격 토큰 가운데 하나다.
+ */
+export type Gap = "none" | "small" | "medium" | "large";
 
 /**
  * 이 기기에서 앱 창의 권한 하나에 고른 폴더. 기기 밖으로 나가지 않는다.
@@ -322,6 +495,17 @@ root_path: string,
 root_name: string, granted_at: string, };
 
 /**
+ * 묶음 하나(`grouped`인 `list`와 `feed`). 머리에 제목과 부가 정보(개수 등)를 보인다.
+ */
+export type Group<T> = { title: string, meta?: string, items: Array<T>, };
+
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+export type ImageFit = "contain" | "cover";
+
+export type InputKind = "text" | "search" | "number";
+
+/**
  * 이 기기와 오케스트레이터의 연결 상태. `state`로 가른다.
  *
  * 흐름: `unlinked` → (`link.start`) `pairing` → (에이전트가 코드를 승인) `connected` ⇄ `offline`.
@@ -337,6 +521,51 @@ user_code: string, expires_at: string, } | { "state": "connected", server_url: s
  * 마지막으로 실패한 까닭. 사람이 읽는 한국어 한 줄.
  */
 reason: string, } | { "state": "revoked", server_url: string, };
+
+/**
+ * `list` 항목.
+ */
+export type ListItem = { 
+/**
+ * 고르기와 비교에 쓰는 열쇠. 목록 안에서 겹치지 않는다. 고르면 `$event`가 이 값이다.
+ */
+key: string, title: string, subtitle?: string, 
+/**
+ * 오른쪽에 작게 보이는 부가 정보(시각, 개수).
+ */
+meta?: string, 
+/**
+ * 항목의 표시 색(`#rrggbb`). 앞의 점이나 막대로 보인다.
+ */
+color?: string, badges?: Array<Badge>, 
+/**
+ * 줄 보기에서는 앞의 작은 그림, 격자 보기에서는 칸의 그림.
+ */
+image?: MediaRef, };
+
+export type ListLayout = "rows" | "grid";
+
+/**
+ * `data.media` 응답의 내용.
+ */
+export type MediaData = { mime: string, 
+/**
+ * 표준 base64.
+ */
+data_base64: string, 
+/**
+ * 이미지면 보내는 그림의 가로와 세로(px). 소리와 영상은 null.
+ */
+width: number | null, height: number | null, };
+
+export type MediaKind = "audio" | "video";
+
+/**
+ * 이미지와 소리 원본 하나. 식이 이 모양의 객체를 내면 블록이 `data.media`로 받아 그린다.
+ * `permission`의 모듈이 `connection`이면 `path`는 연결의 주소 아래 경로(`/`로 시작)이고 `query`를 붙인다.
+ * `files`면 `path`는 고른 폴더 기준 상대 경로다. `crop`은 그리는 방법이라 원본을 가르지 않는다.
+ */
+export type MediaRef = { permission: string, path: string, query?: { [key in string]: string }, crop?: Crop, };
 
 /**
  * 앱이 여는 파일의 선언. 예: `{ "extensions": ["md"], "permission": "docs", "state": "current_file" }`.
@@ -368,9 +597,27 @@ export type PermissionDecl = { "module": "files", id: string, access: FileAccess
 /**
  * 폴더를 고르라고 할 때 보일 이름(예: "문서 폴더").
  */
+label: string, } | { "module": "connection", id: string, 
+/**
+ * 서버에 등록한 연결 이름(소문자, 숫자, `-` 1~64자).
+ */
+connection: string, access: FileAccess, 
+/**
+ * 로그인을 구할 때와 오류에 보일 이름(예: "카드 보드").
+ */
 label: string, };
 
+/**
+ * 속성 한 줄.
+ */
+export type PropertyField = { label: string, value: Binding, format?: FieldFormat, };
+
 export type Rect = { x: number, y: number, width: number, height: number, };
+
+/**
+ * 원천을 다시 받는다. 빈 배열이면 모든 원천이다. 받기를 마칠 때까지 기다린다(실패해도 동작은 이어 간다).
+ */
+export type RefreshAction = { refresh: Array<string>, };
 
 /**
  * 앱이 필요로 하는 블록 세트와 모듈의 버전.
@@ -378,9 +625,22 @@ export type Rect = { x: number, y: number, width: number, height: number, };
 export type Requires = { blocks: number, modules: { [key in string]: number }, };
 
 /**
+ * `select`의 선택지. 문자열만 쓰면 값과 이름이 같다.
+ */
+export type SelectOption = string | { value: JsonValue, label: string, };
+
+export type SelectStyle = "dropdown" | "segmented";
+
+/**
  * 블록 이벤트의 값을 창 상태 키 하나에 쓴다. 예: `{ "set_state": "current_file" }`.
  */
 export type SetState = { set_state: string, };
+
+/**
+ * 창 상태 키 하나에 값을 쓴다. `value`가 없으면 `$event`를 쓴다.
+ * 예: `{ "set_state": "file", "value": { "expr": "$item.file" } }`.
+ */
+export type SetStateAction = { set_state: string, value?: Binding, };
 
 /**
  * 기기 사이에 맞출 상태. 2단계 동기화의 단위다.
@@ -391,6 +651,24 @@ export type SharedState = { apps: Array<App>, app_versions: Array<AppVersion>, w
  * 화면이 보는 상태 전체.
  */
 export type ShellSnapshot = { shared: SharedState, device: DeviceState, supported: Supported, link: LinkStatus, };
+
+export type SortSpec = { field: string, desc?: boolean, };
+
+/**
+ * 원천 하나. `kind`로 가른다. 이름은 소문자로 시작하고 소문자, 숫자, `_`로 1~32자다(식에서 `$data.이름`으로 읽는다).
+ * 값 자리([`Binding`])의 식은 `$state`만 본다. 값이 null이면 그 원천을 부르지 않는다(`idle`).
+ */
+export type SourceDecl = { "kind": "request", permission: string, path: Binding, query?: { [key in string]: Binding }, format?: SourceFormat, refresh_secs?: number, } | { "kind": "file", permission: string, path: Binding, format?: SourceFormat, refresh_secs?: number, } | { "kind": "folder", permission: string, dir?: Binding, recursive?: boolean, extensions?: Array<string>, refresh_secs?: number, };
+
+/**
+ * 원천이 받은 것을 읽는 방법.
+ */
+export type SourceFormat = "json" | "text";
+
+/**
+ * 원천 하나의 상태. `state`로 가른다.
+ */
+export type SourceStatus = { "state": "idle", } | { "state": "loading", has_value: boolean, } | { "state": "ready", updated_at: string, } | { "state": "failed", message: string, has_value: boolean, } | { "state": "login_required", permission: string, };
 
 export type SplitDirection = "row" | "column";
 
@@ -403,6 +681,34 @@ export type StateRef = { state: string, };
  * 이 쉘이 지원하는 블록 세트와 모듈의 버전.
  */
 export type Supported = { blocks: number, modules: { [key in string]: number }, };
+
+/**
+ * 탭 하나.
+ */
+export type Tab = { label: string, child: Block, };
+
+export type TextFormat = "plain" | "markdown";
+
+/**
+ * 글의 크기와 결. 쉘의 글자 토큰 가운데 하나다.
+ */
+export type TextStyle = "body" | "title" | "meta";
+
+/**
+ * 글의 결. `muted`는 눈에 덜 띄게, `error`는 오류 색으로.
+ */
+export type Tone = "default" | "muted" | "error";
+
+export type TreeBy = "children" | "path";
+
+/**
+ * `tree` 항목. `by: children`이면 `children`으로 내려가고, `by: path`면 `path`를 `/`로 나눠 폴더를 만든다.
+ */
+export type TreeItem = { key: string, 
+/**
+ * 없으면 `path`의 마지막 이름이다.
+ */
+title?: string, path?: string, meta?: string, badges?: Array<Badge>, children?: Array<TreeItem>, };
 
 /**
  * 주소 값. 창 상태에서 읽거나(`{ "state": "url" }`) 정의에 직접 적는다(`"https://example.com"`).

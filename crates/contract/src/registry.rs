@@ -1,4 +1,4 @@
-//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 4판, 261030)
+//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 5판, 261030)
 //!
 //! 2판에서 더한 것(카드 #779): 배치 보고(`PUT /api/device/layout`), 워크스페이스 PAS 경로 셋,
 //! 이벤트 `agent.update`, `app.published`와 `app.open`의 `workspace_id`. 아래 「워크스페이스 PAS」 절.
@@ -8,6 +8,10 @@
 //!
 //! 4판에서 더한 것(카드 #806): 코어가 이벤트 스트림을 열 때 지원 범위를 알리고([`SUPPORTED_HEADER`]),
 //! 서버는 그 기기가 그릴 수 있는 앱만 보낸다. 아래 「기기마다 그릴 수 있는 앱만」 절.
+//!
+//! 5판에서 더한 것(카드 #809): 이름 붙인 연결(모듈 `connection` 1판). 연결 목록 이벤트 `connections.snapshot`,
+//! 서버가 대신 부르는 `relay` 연결의 중계 경로, 기기 로그인 `oauth` 연결의 코어 쪽 절차, 배치 보고의 식 오류.
+//! 아래 「연결」 절.
 //!
 //! 오케스트레이터는 앱 레지스트리의 정본이다. 쉘의 코어는 기기 토큰으로 붙어 앱을 받고, 에이전트는 같은
 //! 서버의 MCP(`/mcp`, MCP 토큰)로 앱을 올린다. MCP 도구의 모양은 오케스트레이터 코드에 있고 이 파일에는 없다.
@@ -27,12 +31,13 @@
 //! | `POST /api/device/workspaces/{workspace_id}/agent` | 같음 | [`AgentCreateRequest`] | 200 [`crate::AgentInfo`] | 400 모르는 모델, 401, 502 소울스트림 실패 |
 //! | `POST /api/device/workspaces/{workspace_id}/agent/messages` | 같음 | [`AgentSendRequest`] | 200 `{}` | 400 빈 말, 너무 김, 첨부 한도나 형식, 401, 404 PAS 없음, 502 |
 //! | `GET /api/device/workspaces/{workspace_id}/agent/items/{item_id}/attachments/{index}` | 같음 | 없음 | 200 [`AgentAttachmentReply`] | 400 너무 큼, 401, 404 기록이나 첨부 없음, 502 |
+//! | `POST /api/device/connections/{name}/request` | 같음 | [`ConnectionRequest`] | 200 [`ConnectionReply`] | 400 경로나 메서드, 401, 403 앱이 선언하지 않음이나 쓰기 불가, 404 없는 연결, 413 너무 큼, 502 원천에 닿지 못함, 504 시간 초과 |
 //! | `GET /api/health` | 없음 | 없음 | 200 `{"ok":true}` | |
 //!
 //! 실패 본문은 모두 [`CoreError`] JSON이다. 검사 실패(400)는 [`crate::validate::parse_app_definition`]의 오류
 //! 그대로이고(`invalid_app_definition`, `unsupported_app`), 401, 404, 429와 서버 오류는 code `server`에 한국어 설명이다.
 //! 예외: 워크스페이스 PAS 경로의 400은 code `invalid_request`, 404는 `not_found`다. 코어는 이 둘을 그대로
-//! 화면에 돌려주고, 그 밖의 실패는 `server`로 바꾼다.
+//! 화면에 돌려주고, 그 밖의 실패는 `server`로 바꾼다. 연결 중계 경로의 403은 code `permission_denied`다.
 //!
 //! # 기기 연결 (장치 코드 방식)
 //! 1. 코어가 `pair/start`로 `device_code`(비밀, 코어만 안다)와 `user_code`(사람이 읽는 코드)를 받는다.
@@ -134,14 +139,64 @@
 //!   PAS의 노드를 읽고 소울스트림 `GET /api/attachments/files?nodeId=<노드>&path=<경로>`로 받아 base64로
 //!   돌려준다. [`crate::AGENT_ATTACHMENT_MAX_BYTES`]보다 크면 400 `invalid_request`, 소울스트림이 404면 404
 //!   `not_found`, 그 밖의 실패는 502.
+//!
+//! # 연결 (5판, 모듈 `connection` 1판)
+//! 앱이 외부 서비스의 데이터를 받는 길이다. 연결 정의(이름, 종류, 주소, 인증)는 서버에 있고 에이전트가 MCP로 등록한다
+//! (`set_connection`, `list_connections`, `delete_connection`). 쉘과 서버의 코드에는 서비스 이름이 나오지 않는다.
+//! 앱 정의는 `connection` 권한으로 연결 이름만 가리킨다.
+//!
+//! 연결 정의(서버가 지키는 것):
+//! - `name`: 소문자, 숫자, `-` 1~64자. `kind`: `relay`나 `oauth`. `base_url`: `https://`(로컬 시험은 `http://`)
+//!   주소이고 끝의 `/`는 뗀다. 요청 주소는 `base_url` 뒤에 경로를 붙인 것이다.
+//! - `writable`: 거짓이면 GET만 보낸다(기본 거짓). `paths`: 비어 있지 않으면 경로가 그 가운데 하나로 시작해야 한다.
+//! - `relay`의 `headers`: 서버가 요청마다 붙이는 헤더. 값에 `${env:이름}`이 있으면 서버 환경변수로 바꾼다. 값은
+//!   쓰기만 하고 MCP 조회에는 헤더 이름만 보인다.
+//! - `oauth`의 `issuer`(없으면 `base_url`의 origin), `scopes`(공백으로 나눈 목록, 선택), `resource`(RFC 8707, 선택).
+//!   비밀은 없다.
+//!
+//! 연결 목록:
+//! - 서버는 이벤트 스트림의 `apps.snapshot` 바로 뒤에 [`DeviceEvent::ConnectionsSnapshot`]을 보내고, 연결이 바뀔 때마다
+//!   다시 보낸다. 지원 범위에 `connection` 모듈이 없는 기기(옛 쉘)에는 보내지 않는다.
+//! - [`ConnectionInfo`]에는 비밀이 없다. 코어는 마지막 목록을 들고 있고(파일에 두지 않는다), 목록에 없는 연결을
+//!   가리키는 원천은 실패(「서버에 없는 연결입니다」)다.
+//!
+//! 경로 규칙(코어와 서버 모두): [`crate::validate::valid_request_path`]를 지키고, 연결의 `paths`가 있으면 그 가운데
+//! 하나로 시작한다. 쿼리는 키 순서대로 붙이고 값은 퍼센트 인코딩한다.
+//!
+//! `relay`(서버가 대신 부른다):
+//! - 코어는 `POST /api/device/connections/{name}/request`에 [`ConnectionRequest`]를 보낸다.
+//! - 서버가 보는 것: 연결이 있고 `relay`다(아니면 404, `oauth`면 400). 요청한 `app_id`의 지금 버전이 그 연결을 가리키는
+//!   `connection` 권한을 선언했다(아니면 403). GET이 아니면 그 권한이 `readwrite`이고 연결이 `writable`이다(아니면 403).
+//!   경로 규칙(아니면 400).
+//! - 서버는 연결의 헤더를 붙여 보낸다. 리다이렉트는 따라가지 않는다. 응답 본문이 `accept`의 한도(`json`과 `text`는
+//!   [`crate::data::SOURCE_MAX_BYTES`], `bytes`는 [`crate::data::MEDIA_MAX_BYTES`])를 넘으면 413이고,
+//!   [`crate::data::CONNECTION_TIMEOUT_SECS`] 안에 끝나지 않으면 504다. 서버는 응답을 저장하지 않는다.
+//! - 원천의 응답 상태가 무엇이든 받았으면 200 [`ConnectionReply`]로 돌려준다(2xx인지는 코어가 본다).
+//!
+//! `oauth`(이 기기가 로그인해 원천에 직접 부른다. 회사 데이터가 서버를 지나지 않는다):
+//! - 로그인 정보(client_id, 등록한 루프백 포트, 액세스 토큰, 리프레시 토큰, 만료 시각)는 연결마다 이 기기의
+//!   `logins.json`에만 둔다. 서버와 화면에 보내지 않는다.
+//! - 로그인(`connection.login`): `issuer`의 RFC 8414 메타데이터(`/.well-known/oauth-authorization-server`)를 읽는다.
+//!   client_id가 없거나, 등록한 포트를 지금 열 수 없거나, 그 client_id가 거부되면(만료 포함) 127.0.0.1의 빈 포트를
+//!   열고 RFC 7591 동적 등록(`redirect_uris: ["http://127.0.0.1:<포트>/callback"]`, `token_endpoint_auth_method: none`,
+//!   `grant_types: ["authorization_code", "refresh_token"]`, `client_name: "kaleidoscope (<기기 이름>)"`)으로 다시 받는다.
+//!   있으면 등록한 포트를 다시 연다. PKCE(S256)와 `state`를 붙여 기본 브라우저로 인가 쪽을 열고(RFC 8252), 루프백으로
+//!   돌아온 code를 토큰으로 바꾼다. 루프백 쪽은 「로그인했습니다. 이 창을 닫아도 됩니다.」 한 줄을 보인다.
+//! - 요청: `Authorization: Bearer <액세스 토큰>`을 붙여 `base_url` 뒤 경로로 직접 보낸다. 리다이렉트는 따라가지 않는다.
+//!   토큰이 만료됐거나 원천이 401이면 리프레시 토큰이 있을 때 한 번 바꿔 보고, 안 되면 로그인 정보의 토큰을 지우고
+//!   그 원천을 `login_required`로 둔다.
+//!
+//! 식 오류 보고: 코어는 배치 보고([`DeviceLayout::data_errors`])에 이은 창의 식과 원천 오류를 창마다 앞에서부터
+//! [`LAYOUT_DATA_ERRORS_MAX`]개까지 싣는다. 에이전트가 MCP의 작업 조회로 보고 고친다.
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::data::HttpMethod;
 use crate::{
     AgentInfo, AgentItem, AgentModel, AgentUpdate, AgentUpload, App, AppVersion, AppWindow, Desktop,
-    Workspace,
+    JsonValue, Workspace,
 };
 
 pub const PAIR_START_PATH: &str = "/api/pair/start";
@@ -179,6 +234,14 @@ pub fn device_agent_messages_path(workspace_id: &str) -> String {
 pub fn device_agent_attachment_path(workspace_id: &str, item_id: &str, index: u32) -> String {
     format!("/api/device/workspaces/{workspace_id}/agent/items/{item_id}/attachments/{index}")
 }
+
+/// 연결 중계 경로. `{name}` 자리에 연결 이름을 넣는다.
+pub fn device_connection_request_path(name: &str) -> String {
+    format!("/api/device/connections/{name}/request")
+}
+
+/// 배치 보고에 창마다 싣는 식과 원천 오류의 최대 수.
+pub const LAYOUT_DATA_ERRORS_MAX: usize = 10;
 
 /// 배치가 바뀐 뒤 이만큼 더 바뀌지 않으면 보고한다.
 pub const LAYOUT_DEBOUNCE_MS: u64 = 1000;
@@ -275,6 +338,18 @@ pub struct DeviceLayout {
     pub active_workspace_id: Option<String>,
     /// 워크스페이스 id → 그 워크스페이스에서 마지막으로 본 데스크톱 id.
     pub active_desktop_ids: BTreeMap<String, String>,
+    /// (5판) 이은 창의 식과 원천 오류. 없으면 빼고 보낸다(4판 서버도 읽게).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data_errors: Vec<LayoutDataError>,
+}
+
+/// 창 하나의 식이나 원천 오류. `pointer`는 바인딩 자리나 `/sources/이름`이다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LayoutDataError {
+    pub window_id: String,
+    pub pointer: String,
+    pub message: String,
 }
 
 /// 창의 권한 하나에 고른 폴더의 이름. 절대 경로는 담지 않는다.
@@ -319,6 +394,78 @@ pub struct AgentAttachmentReply {
     pub data_base64: String,
 }
 
+/// 연결 하나(비밀 없이). 「연결」 절.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConnectionInfo {
+    pub name: String,
+    pub kind: ConnectionKind,
+    pub base_url: String,
+    pub writable: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paths: Vec<String>,
+    /// `oauth`만. 없으면 `base_url`의 origin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issuer: Option<String>,
+    /// `oauth`만. 공백으로 나눈 목록.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scopes: Option<String>,
+    /// `oauth`만. RFC 8707 resource.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectionKind {
+    /// 서버가 헤더를 쥐고 대신 부른다.
+    Relay,
+    /// 기기가 로그인해 원천에 직접 부른다.
+    Oauth,
+}
+
+/// `relay` 연결 중계 요청.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectionRequest {
+    /// 부르는 창의 앱. 서버가 그 앱의 지금 버전이 이 연결을 선언했는지 본다.
+    pub app_id: String,
+    pub method: HttpMethod,
+    /// 연결 주소 아래 경로.
+    pub path: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub query: BTreeMap<String, String>,
+    /// JSON 본문. 있으면 `content-type: application/json`으로 보낸다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<JsonValue>,
+    pub accept: ConnectionAccept,
+}
+
+/// 응답 본문을 돌려받는 꼴.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectionAccept {
+    /// JSON으로 읽어 `json`에. 읽지 못하면 `text`에 글로 담는다.
+    Json,
+    /// UTF-8 글로 `text`에.
+    Text,
+    /// 그대로 base64로 `data_base64`에(이미지, 소리).
+    Bytes,
+}
+
+/// `relay` 연결 중계 응답. 원천의 응답 상태와 본문.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConnectionReply {
+    pub status: u16,
+    /// 원천의 `content-type`(없으면 빈 문자열).
+    pub mime: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub json: Option<JsonValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_base64: Option<String>,
+}
+
 /// 이벤트 스트림의 이벤트. `event`로 가른다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "event")]
@@ -349,6 +496,9 @@ pub enum DeviceEvent {
         workspace_id: String,
         update: AgentUpdate,
     },
+    /// (5판) 서버의 연결 목록 전체. 연결 직후(`apps.snapshot` 뒤)와 연결이 바뀔 때마다. 「연결」 절.
+    #[serde(rename = "connections.snapshot")]
+    ConnectionsSnapshot { connections: Vec<ConnectionInfo> },
 }
 
 #[cfg(test)]
@@ -411,6 +561,43 @@ mod tests {
         let models = agent_models();
         assert_eq!(models.first().map(|m| m.preset.as_str()), Some("gemini-4-argon"));
         assert_eq!(models.len(), AGENT_MODELS.len());
+    }
+
+    #[test]
+    fn connection_messages_round_trip() {
+        assert_eq!(
+            device_connection_request_path("board"),
+            "/api/device/connections/board/request"
+        );
+        let request: ConnectionRequest = serde_json::from_str(
+            r#"{"app_id":"cards","method":"GET","path":"/api/cards","query":{"folderId":"f"},"accept":"json"}"#,
+        )
+        .unwrap();
+        assert_eq!(request.method, HttpMethod::Get);
+        assert_eq!(request.accept, ConnectionAccept::Json);
+        assert!(serde_json::from_str::<ConnectionRequest>(
+            r#"{"app_id":"a","method":"GET","path":"/","accept":"json","headers":{}}"#
+        )
+        .is_err(), "기기는 헤더를 보낼 수 없다");
+        let event = DeviceEvent::ConnectionsSnapshot {
+            connections: vec![ConnectionInfo {
+                name: "board".into(),
+                kind: ConnectionKind::Relay,
+                base_url: "https://example.com".into(),
+                writable: false,
+                paths: vec![],
+                issuer: None,
+                scopes: None,
+                resource: None,
+            }],
+        };
+        assert_eq!(
+            serde_json::to_string(&event).unwrap(),
+            r#"{"event":"connections.snapshot","connections":[{"name":"board","kind":"relay","base_url":"https://example.com","writable":false}]}"#
+        );
+        // 식 오류가 없는 배치 보고는 4판 모양 그대로다.
+        let layout = DeviceLayout::default();
+        assert!(!serde_json::to_string(&layout).unwrap().contains("data_errors"));
     }
 
     #[test]

@@ -5,9 +5,10 @@ use std::collections::{BTreeMap, HashSet};
 
 use serde_json::Value;
 
+use crate::data::{self, Action, Actions, Binding, SourceDecl};
 use crate::{
-    AppDefinition, Block, CoreError, ErrorCode, FileAccess, PathValue, PermissionDecl, UrlValue,
-    BLOCK_SET_VERSION, MODULE_VERSIONS,
+    AppDefinition, Block, CoreError, ErrorCode, FileAccess, FileRef, PathValue, PermissionDecl,
+    UrlValue, BLOCK_SET_VERSION, MODULE_VERSIONS,
 };
 
 /// 앱 정의 JSON 원문을 읽고 검사한다. 통과하면 정의를, 걸리면 `unsupported_app`이나
@@ -47,8 +48,15 @@ pub fn permission_modules(definition: &AppDefinition) -> BTreeMap<String, String
     definition
         .permissions
         .iter()
-        .map(|permission| (permission.id().to_string(), "files".to_string()))
+        .map(|permission| (permission.id().to_string(), permission.module().to_string()))
         .collect()
+}
+
+/// JSONata 식 하나를 읽어 본다. 읽지 못하면 사람이 읽는 까닭을 돌려준다.
+pub fn parse_expr(expr: &str) -> Result<(), String> {
+    jsonata_core::parser::parse(expr)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
 }
 
 fn requires_unsupported(value: &Value) -> bool {
@@ -93,11 +101,20 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
         if !permission_ids.insert(permission.id()) {
             details.push(format!("권한 id가 겹칩니다: {}", permission.id()));
         }
-        if !definition.requires.modules.contains_key("files") {
+        let module = permission.module();
+        if !definition.requires.modules.contains_key(module) {
             details.push(format!(
-                "권한 {}가 사용하는 files 모듈을 requires.modules에 선언해야 합니다",
+                "권한 {}가 사용하는 {module} 모듈을 requires.modules에 선언해야 합니다",
                 permission.id()
             ));
+        }
+        if let PermissionDecl::Connection { connection, .. } = permission {
+            if !valid_id(connection) {
+                details.push(format!(
+                    "권한 {}의 연결 이름은 소문자, 숫자, - 1~64자여야 합니다: {connection}",
+                    permission.id()
+                ));
+            }
         }
     }
 
@@ -119,24 +136,236 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
         validate_state_key(&opens.state, definition, &mut details, "opens");
     }
 
-    validate_block(&definition.ui, definition, &mut details, "ui");
-    let web_views = count_blocks(&definition.ui, &|block| matches!(block, Block::WebView { .. }));
+    validate_sources(definition, &mut details);
+
+    let mut web_views = 0;
+    data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
+        if matches!(block, Block::WebView { .. }) {
+            web_views += 1;
+        }
+        validate_block(block, definition, &mut details, pointer);
+    });
     if web_views > 1 {
         details.push(format!("web_view는 정의에 하나까지 둘 수 있습니다(지금 {web_views}개)"));
     }
+
+    for (pointer, actions) in data::ui_actions(definition) {
+        validate_actions(actions, definition, &mut details, &pointer);
+    }
+    for (pointer, binding) in data::ui_bindings(definition) {
+        validate_binding_shape(binding, definition, &mut details, &pointer);
+    }
+    validate_exprs(definition, &mut details);
     details
 }
 
-fn count_blocks(block: &Block, matches: &dyn Fn(&Block) -> bool) -> usize {
-    let own = usize::from(matches(block));
-    match block {
-        Block::Split { children, .. } => {
-            own + children
-                .iter()
-                .map(|child| count_blocks(child, matches))
-                .sum::<usize>()
+fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
+    if definition.sources.is_empty() {
+        return;
+    }
+    if definition.requires.blocks < 4 {
+        details.push("sources는 블록 세트 4판이라 requires.blocks가 4 이상이어야 합니다".into());
+    }
+    for (name, source) in &definition.sources {
+        let at = format!("/sources/{}", data::escape_pointer(name));
+        if !data::valid_source_name(name) {
+            details.push(format!(
+                "{at}: 원천 이름은 소문자로 시작하고 소문자, 숫자, _ 1~32자여야 합니다: {name}"
+            ));
         }
-        _ => own,
+        let module = match source {
+            SourceDecl::Request { .. } => "connection",
+            SourceDecl::File { .. } | SourceDecl::Folder { .. } => "files",
+        };
+        validate_permission_module(source.permission(), module, definition, details, &at);
+        if source
+            .refresh_secs()
+            .is_some_and(|secs| secs < data::SOURCE_REFRESH_MIN_SECS)
+        {
+            details.push(format!(
+                "{at}: refresh_secs는 {} 이상이어야 합니다",
+                data::SOURCE_REFRESH_MIN_SECS
+            ));
+        }
+        match source {
+            SourceDecl::Request { path, query, .. } => {
+                validate_binding_shape(path, definition, details, &format!("{at}/path"));
+                if let Binding::Literal(Value::String(path)) = path {
+                    if !valid_request_path(path) {
+                        details.push(format!(
+                            "{at}/path: 연결 경로는 /로 시작하고 .. 이나 \\ 없이 연결 주소 아래를 가리켜야 합니다: {path}"
+                        ));
+                    }
+                }
+                for (key, value) in query {
+                    validate_binding_shape(
+                        value,
+                        definition,
+                        details,
+                        &format!("{at}/query/{}", data::escape_pointer(key)),
+                    );
+                }
+            }
+            SourceDecl::File { path, .. } => {
+                validate_binding_shape(path, definition, details, &format!("{at}/path"));
+                if let Binding::Literal(Value::String(path)) = path {
+                    if !valid_relative_path(path, false) {
+                        details.push(format!("{at}/path: 고른 폴더 밖 경로를 요구합니다: {path}"));
+                    }
+                }
+            }
+            SourceDecl::Folder {
+                dir, extensions, ..
+            } => {
+                if let Some(dir) = dir {
+                    validate_binding_shape(dir, definition, details, &format!("{at}/dir"));
+                    if let Binding::Literal(Value::String(dir)) = dir {
+                        if !valid_relative_path(dir, true) {
+                            details.push(format!("{at}/dir: 고른 폴더 밖 경로를 요구합니다: {dir}"));
+                        }
+                    }
+                }
+                for extension in extensions {
+                    if !valid_extension(extension) {
+                        details.push(format!(
+                            "{at}: extensions의 확장자는 점 없이 소문자와 숫자 1~16자여야 합니다: {extension}"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 모든 식을 읽어 보고, 원천 참조와 원천 값 자리의 변수 규칙을 본다.
+fn validate_exprs(definition: &AppDefinition, details: &mut Vec<String>) {
+    let mut has_expr = false;
+    for (pointer, expr) in data::all_exprs(definition) {
+        has_expr = true;
+        if let Err(error) = parse_expr(expr) {
+            details.push(format!("{pointer}: 식을 읽을 수 없습니다: {error}"));
+            continue;
+        }
+        for name in data::data_refs(expr) {
+            if !definition.sources.contains_key(&name) {
+                details.push(format!("{pointer}: 식이 없는 원천을 읽습니다: $data.{name}"));
+            }
+        }
+        if pointer.starts_with("/sources/")
+            && ["$data", "$event", "$item"].iter().any(|var| uses_var(expr, var))
+        {
+            details.push(format!(
+                "{pointer}: 원천의 값 자리 식은 $state만 볼 수 있습니다($data, $event, $item 불가)"
+            ));
+        }
+    }
+    if has_expr && definition.requires.blocks < 4 {
+        details.push("식(expr)은 블록 세트 4판이라 requires.blocks가 4 이상이어야 합니다".into());
+    }
+}
+
+/// 식에 변수가 이름 그대로 나오는가(`$data`가 `$database`에 걸리지 않게 뒤 글자를 본다).
+fn uses_var(expr: &str, var: &str) -> bool {
+    expr.match_indices(var).any(|(index, _)| {
+        expr[index + var.len()..]
+            .chars()
+            .next()
+            .is_none_or(|next| !(next.is_alphanumeric() || next == '_'))
+    })
+}
+
+/// 리터럴 바인딩이 바인딩 꼴을 잘못 쓴 것(`{"state": 1}`, `{"expr": 1}`, `{"state": "a", "x": 1}`)이 아닌지.
+/// 상태 바인딩의 키는 선언되어 있는지.
+fn validate_binding_shape(
+    binding: &Binding,
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+    at: &str,
+) {
+    match binding {
+        Binding::State(reference) => validate_state_key(&reference.state, definition, details, at),
+        Binding::Expr(_) => {}
+        Binding::Literal(Value::Object(object))
+            if object.contains_key("state") || object.contains_key("expr") =>
+        {
+            details.push(format!(
+                "{at}: 바인딩 모양이 틀렸습니다. 상태는 {{\"state\": \"키\"}}, 식은 {{\"expr\": \"식\"}} 하나만 씁니다"
+            ));
+        }
+        Binding::Literal(_) => {}
+    }
+}
+
+fn validate_actions(
+    actions: &Actions,
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+    at: &str,
+) {
+    match actions {
+        Actions::One(set) => validate_state_key(&set.set_state, definition, details, at),
+        Actions::Many(list) => {
+            if list.is_empty() {
+                details.push(format!("{at}: 동작 목록이 비어 있습니다"));
+            }
+            for (index, action) in list.iter().enumerate() {
+                let at = format!("{at}/{index}");
+                match action {
+                    Action::SetState(set) => {
+                        validate_state_key(&set.set_state, definition, details, &at);
+                        if let Some(value) = &set.value {
+                            validate_binding_shape(value, definition, details, &format!("{at}/value"));
+                        }
+                    }
+                    Action::Refresh(refresh) => {
+                        for name in &refresh.refresh {
+                            if !definition.sources.contains_key(name) {
+                                details.push(format!("{at}: 없는 원천을 다시 받으려 합니다: {name}"));
+                            }
+                        }
+                    }
+                    Action::Call(call) => {
+                        let call = &call.call;
+                        validate_permission_module(
+                            &call.permission,
+                            "connection",
+                            definition,
+                            details,
+                            &at,
+                        );
+                        if call.method != data::HttpMethod::Get
+                            && find_permission(definition, &call.permission)
+                                .is_some_and(|permission| permission.access() != FileAccess::Readwrite)
+                        {
+                            details.push(format!(
+                                "{at}: {} 부르기는 권한 {}가 readwrite여야 합니다",
+                                call.method.as_str(),
+                                call.permission
+                            ));
+                        }
+                        validate_binding_shape(&call.path, definition, details, &format!("{at}/call/path"));
+                        if let Binding::Literal(Value::String(path)) = &call.path {
+                            if !valid_request_path(path) {
+                                details.push(format!(
+                                    "{at}/call/path: 연결 경로는 /로 시작하고 .. 이나 \\ 없이 연결 주소 아래를 가리켜야 합니다: {path}"
+                                ));
+                            }
+                        }
+                        for (key, value) in &call.query {
+                            validate_binding_shape(
+                                value,
+                                definition,
+                                details,
+                                &format!("{at}/call/query/{}", data::escape_pointer(key)),
+                            );
+                        }
+                        if let Some(body) = &call.body {
+                            validate_binding_shape(body, definition, details, &format!("{at}/call/body"));
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -155,6 +384,26 @@ pub fn valid_web_url(url: &str) -> bool {
     rest.is_some_and(|rest| !rest.is_empty() && !url.chars().any(char::is_whitespace))
 }
 
+/// 연결 경로의 규칙(정의에 적은 것, 식이 낸 것, 코어와 서버가 실행 때 보는 것 모두).
+/// `/`로 시작하고, `?`와 `#`를 담지 않으며(쿼리는 `query`로), 조각마다 `.`, `..`가 아니고 `\`와 공백이 없다.
+/// `//`로 시작하지 않는다(다른 호스트로 읽힐 수 있어서). 빈 조각(`/a//b`)은 허락하지 않는다. `/`만은 허락한다.
+pub fn valid_request_path(path: &str) -> bool {
+    if path == "/" {
+        return true;
+    }
+    let Some(rest) = path.strip_prefix('/') else {
+        return false;
+    };
+    if path.contains(['?', '#', '\\']) || path.chars().any(char::is_whitespace) {
+        return false;
+    }
+    let rest = rest.strip_suffix('/').unwrap_or(rest);
+    !rest.is_empty()
+        && rest
+            .split('/')
+            .all(|part| !part.is_empty() && part != "." && part != ".." && !part.eq_ignore_ascii_case("%2e%2e"))
+}
+
 fn valid_id(value: &str) -> bool {
     let bytes = value.as_bytes();
     (1..=64).contains(&bytes.len())
@@ -167,7 +416,8 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
     let introduced_in = block.introduced_in();
     if definition.requires.blocks < introduced_in {
         details.push(format!(
-            "{at}: 이 블록은 블록 세트 {introduced_in}판이라 requires.blocks가 {introduced_in} 이상이어야 합니다"
+            "{at}: {} 블록은 블록 세트 {introduced_in}판이라 requires.blocks가 {introduced_in} 이상이어야 합니다",
+            block.type_name()
         ));
     }
     match block {
@@ -185,14 +435,6 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                     details.push(format!("{at}: split sizes는 모두 0보다 커야 합니다"));
                 }
             }
-            for (index, child) in children.iter().enumerate() {
-                validate_block(
-                    child,
-                    definition,
-                    details,
-                    &format!("{at}.children[{index}]"),
-                );
-            }
         }
         Block::FileTree {
             root,
@@ -200,31 +442,23 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             on_select,
             ..
         } => {
-            validate_permission(&root.permission, definition, details, at);
+            validate_permission_module(&root.permission, "files", definition, details, at);
             validate_state_key(&selected.state, definition, details, at);
             validate_state_key(&on_select.set_state, definition, details, at);
         }
-        Block::MarkdownEditor { file } => {
-            validate_permission(&file.permission, definition, details, at);
-            let access = definition
-                .permissions
-                .iter()
-                .find(|permission| permission.id() == file.permission)
-                .map(|permission| match permission {
-                    PermissionDecl::Files { access, .. } => *access,
-                });
-            if access.is_some_and(|access| access != FileAccess::Readwrite) {
+        Block::MarkdownEditor { file } | Block::CodeEditor { file, .. } => {
+            validate_file_ref(file, definition, details, at);
+            if find_permission(definition, &file.permission)
+                .is_some_and(|permission| permission.access() != FileAccess::Readwrite)
+            {
                 details.push(format!(
-                    "{at}: markdown_editor 권한 {}는 readwrite여야 합니다",
+                    "{at}: {} 권한 {}는 readwrite여야 합니다",
+                    block.type_name(),
                     file.permission
                 ));
             }
-            validate_file_path(&file.path, definition, details, at);
         }
-        Block::MarkdownView { file } => {
-            validate_permission(&file.permission, definition, details, at);
-            validate_file_path(&file.path, definition, details, at);
-        }
+        Block::MarkdownView { file } => validate_file_ref(file, definition, details, at),
         Block::AgentChat {} => {
             if !definition.requires.modules.contains_key("agent") {
                 details.push(format!(
@@ -257,9 +491,117 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             }
         }
         Block::Explorer { root } => {
-            validate_permission(&root.permission, definition, details, at);
+            validate_permission_module(&root.permission, "files", definition, details, at);
         }
+        Block::Stack { fill, children, .. } => {
+            if children.is_empty() {
+                details.push(format!("{at}: stack에는 자식 블록이 하나 이상 필요합니다"));
+            }
+            if fill.is_some_and(|fill| fill as usize >= children.len()) {
+                details.push(format!("{at}: stack의 fill이 자식 수를 넘습니다"));
+            }
+        }
+        Block::Tabs {
+            tabs,
+            selected,
+            on_change,
+        } => {
+            if tabs.is_empty() {
+                details.push(format!("{at}: tabs에는 탭이 하나 이상 필요합니다"));
+            }
+            for tab in tabs {
+                if tab.label.trim().is_empty() {
+                    details.push(format!("{at}: 탭 이름이 비어 있습니다"));
+                }
+            }
+            if let Some(selected) = selected {
+                validate_state_key(&selected.state, definition, details, at);
+            }
+            if let Some(on_change) = on_change {
+                validate_state_key(&on_change.set_state, definition, details, at);
+            }
+        }
+        Block::Toolbar { start, end } => {
+            for child in start.iter().chain(end) {
+                if !matches!(
+                    child,
+                    Block::Input { .. }
+                        | Block::Select { .. }
+                        | Block::Toggle { .. }
+                        | Block::Button { .. }
+                        | Block::Text { .. }
+                ) {
+                    details.push(format!(
+                        "{at}: toolbar에는 input, select, toggle, button, text만 둡니다({})",
+                        child.type_name()
+                    ));
+                }
+            }
+        }
+        Block::List { selected, .. } | Block::Tree { selected, .. } | Block::Feed { selected, .. } => {
+            if let Some(selected) = selected {
+                validate_state_key(&selected.state, definition, details, at);
+            }
+        }
+        Block::Table {
+            columns,
+            sort,
+            selected,
+            ..
+        } => {
+            if columns.is_empty() {
+                details.push(format!("{at}: table에는 열이 하나 이상 필요합니다"));
+            }
+            let mut fields = HashSet::new();
+            for column in columns {
+                if !fields.insert(column.field.as_str()) {
+                    details.push(format!("{at}: table 열의 field가 겹칩니다: {}", column.field));
+                }
+            }
+            if let Some(sort) = sort {
+                if !fields.contains(sort.field.as_str()) {
+                    details.push(format!("{at}: sort의 field가 열에 없습니다: {}", sort.field));
+                }
+            }
+            if let Some(selected) = selected {
+                validate_state_key(&selected.state, definition, details, at);
+            }
+        }
+        Block::Properties { fields } => {
+            if fields.is_empty() {
+                details.push(format!("{at}: properties에는 줄이 하나 이상 필요합니다"));
+            }
+        }
+        Block::Input { value, .. } | Block::Select { value, .. } | Block::Toggle { value, .. } => {
+            validate_state_key(&value.state, definition, details, at);
+        }
+        Block::Button { label, icon, .. } => {
+            if label.trim().is_empty() {
+                details.push(format!("{at}: button의 label이 비어 있습니다"));
+            }
+            if let Some(icon) = icon {
+                if !data::ICON_NAMES.contains(&icon.as_str()) {
+                    details.push(format!("{at}: 쉘에 없는 아이콘입니다: {icon}"));
+                }
+            }
+        }
+        Block::CodeView { value, file, .. } => match (value, file) {
+            (Some(_), None) => {}
+            (None, Some(file)) => validate_file_ref(file, definition, details, at),
+            _ => details.push(format!("{at}: code_view는 value와 file 가운데 꼭 하나를 씁니다")),
+        },
+        Block::Section { .. }
+        | Block::Text { .. }
+        | Block::Image { .. }
+        | Block::Media { .. } => {}
     }
+}
+
+fn find_permission<'a>(definition: &'a AppDefinition, id: &str) -> Option<&'a PermissionDecl> {
+    definition
+        .permissions
+        .iter()
+        .find(|permission| permission.id() == id)
 }
 
 fn validate_permission(
@@ -268,14 +610,30 @@ fn validate_permission(
     details: &mut Vec<String>,
     at: &str,
 ) {
-    if !definition
-        .permissions
-        .iter()
-        .any(|permission| permission.id() == permission_id)
-    {
+    if find_permission(definition, permission_id).is_none() {
         details.push(format!(
             "{at}: 선언되지 않은 권한을 가리킵니다: {permission_id}"
         ));
+    }
+}
+
+/// 권한이 선언되어 있고 그 모듈이 `module`인지.
+fn validate_permission_module(
+    permission_id: &str,
+    module: &str,
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+    at: &str,
+) {
+    match find_permission(definition, permission_id) {
+        None => details.push(format!(
+            "{at}: 선언되지 않은 권한을 가리킵니다: {permission_id}"
+        )),
+        Some(permission) if permission.module() != module => details.push(format!(
+            "{at}: 권한 {permission_id}는 {module} 권한이어야 합니다(지금 {})",
+            permission.module()
+        )),
+        Some(_) => {}
     }
 }
 
@@ -283,6 +641,11 @@ fn validate_state_key(key: &str, definition: &AppDefinition, details: &mut Vec<S
     if !definition.state.contains_key(key) {
         details.push(format!("{at}: 선언되지 않은 상태 키를 가리킵니다: {key}"));
     }
+}
+
+fn validate_file_ref(file: &FileRef, definition: &AppDefinition, details: &mut Vec<String>, at: &str) {
+    validate_permission_module(&file.permission, "files", definition, details, at);
+    validate_file_path(&file.path, definition, details, at);
 }
 
 fn validate_file_path(
