@@ -4,6 +4,7 @@ import {
   ChevronRight as ChevronRightIcon,
   Cloud as CloudIcon,
   CloudOff as CloudOffIcon,
+  File as FileIcon,
   FilePlus as FilePlusIcon,
   FileText as FileTextIcon,
   FolderOpen as FolderOpenIcon,
@@ -12,6 +13,7 @@ import {
   MessageSquare as MessageSquareIcon,
   PanelLeftClose as PanelLeftCloseIcon,
   PanelLeftOpen as PanelLeftOpenIcon,
+  Paperclip as PaperclipIcon,
   Plus as PlusIcon,
   X as XIcon,
   type LucideIcon,
@@ -51,6 +53,8 @@ export const ChevronDown = (props: IconProps) => renderIcon(ChevronDownIcon, pro
 export const PanelLeftOpen = (props: IconProps) => renderIcon(PanelLeftOpenIcon, props);
 export const PanelLeftClose = (props: IconProps) => renderIcon(PanelLeftCloseIcon, props);
 export const FileText = (props: IconProps) => renderIcon(FileTextIcon, props);
+export const File = (props: IconProps) => renderIcon(FileIcon, props);
+export const Paperclip = (props: IconProps) => renderIcon(PaperclipIcon, props);
 export const FilePlus = (props: IconProps) => renderIcon(FilePlusIcon, props);
 export const FolderOpen = (props: IconProps) => renderIcon(FolderOpenIcon, props);
 export const MessageSquare = (props: IconProps) => renderIcon(MessageSquareIcon, props);
