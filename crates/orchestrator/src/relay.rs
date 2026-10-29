@@ -234,28 +234,25 @@ fn attachment_name(path: &str) -> String {
         return filename.to_string();
     }
     let rest = &filename[25..];
-    let (stem, extension) = match rest.rsplit_once('.') {
-        Some((stem, extension)) if !extension.is_empty() && has_attachment_hash(stem) => {
-            (stem, Some(extension))
-        }
-        _ => (rest, None),
-    };
-    let Some((name, hash)) = stem.rsplit_once('-') else {
+    let parsed = rest
+        .rsplit_once('-')
+        .filter(|(_, hash)| is_attachment_hash(hash))
+        .map(|(name, _)| (name, None))
+        .or_else(|| {
+            let (stem, extension) = rest.rsplit_once('.')?;
+            if extension.is_empty() {
+                return None;
+            }
+            let (name, hash) = stem.rsplit_once('-')?;
+            is_attachment_hash(hash).then_some((name, Some(extension)))
+        });
+    let Some((name, extension)) = parsed.filter(|(name, _)| !name.is_empty()) else {
         return filename.to_string();
     };
-    if name.is_empty() || !is_attachment_hash(hash) {
-        return filename.to_string();
-    }
     match extension {
         Some(extension) => format!("{name}.{extension}"),
         None => name.to_string(),
     }
-}
-
-fn has_attachment_hash(value: &str) -> bool {
-    value
-        .rsplit_once('-')
-        .is_some_and(|(_, hash)| is_attachment_hash(hash))
 }
 
 fn is_attachment_hash(value: &str) -> bool {

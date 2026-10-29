@@ -71,6 +71,22 @@ async fn user_event_records_attachments_and_removes_local_path_lines() {
     assert_eq!(history[2].attachments[0].name, "사진.jpg");
     assert_eq!(history[2].attachments[0].mime, "image/jpeg");
     assert_eq!(history[3].attachments[0].name, ".env");
+    assert_eq!(
+        attachment_name("/x/2026-10-29T16-35-31.519Z-보고서.v1-86f9263434e44472a4e39c890085f270"),
+        "보고서.v1"
+    );
+    assert_eq!(
+        attachment_name(
+            "/x/2026-10-29T16-35-31.519Z-보고서.v1-86f9263434e44472a4e39c890085f270.txt"
+        ),
+        "보고서.v1.txt"
+    );
+    assert_eq!(
+        attachment_name(
+            "/x/2026-10-29T16-35-31.519Z-보고서-11111111111111111111111111111111.v1-86f9263434e44472a4e39c890085f270"
+        ),
+        "보고서-11111111111111111111111111111111.v1"
+    );
 
     let response = crate::agent::get_agent(State(state), axum::extract::Path("w".into())).await;
     let body = axum::body::to_bytes(response.into_body(), 1024 * 1024)
