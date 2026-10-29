@@ -1,0 +1,92 @@
+name: Windows WebView E2E
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 시험할 브랜치 또는 커밋
+        required: false
+        type: string
+  pull_request:
+    paths:
+      - '.github/workflows/e2e-windows.yml'
+      - 'app/e2e-windows/**'
+      - 'app/src-tauri/**'
+      - 'crates/core/**'
+      - 'crates/contract/**'
+      - 'Cargo.lock'
+
+jobs:
+  windows-e2e:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.ref }}
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir app build
+      - name: 실행 파일 캐시 복원
+        id: executable-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: target/release/kaleidoscope-app.exe
+          key: windows-webview-e2e-exe-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/*.rs', 'crates/**/Cargo.toml', 'app/src-tauri/**', 'app/src/**', 'app/index.html', 'app/package.json', 'ui/src/**', 'ui/package.json', 'pnpm-lock.yaml', 'examples/**') }}
+      - if: steps.executable-cache.outputs.cache-hit != 'true'
+        run: cargo build -p kaleidoscope-app --release --features tauri/custom-protocol,e2e
+      - name: 실행 파일 캐시 저장
+        if: steps.executable-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: target/release/kaleidoscope-app.exe
+          key: ${{ steps.executable-cache.outputs.cache-primary-key }}
+      - name: 실제 웹뷰 시나리오
+        shell: pwsh
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-e2e-appdata'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-e2e-localappdata'
+          $env:KALEIDOSCOPE_E2E_OUT = Join-Path $env:GITHUB_WORKSPACE 'windows-e2e'
+          $env:KALEIDOSCOPE_E2E_PICK_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-e2e-docs'
+          New-Item -ItemType Directory -Force $env:APPDATA, $env:LOCALAPPDATA, $env:KALEIDOSCOPE_E2E_OUT, $env:KALEIDOSCOPE_E2E_PICK_FOLDER | Out-Null
+          $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-e2e-webview'
+          $app = Start-Process -FilePath (Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe') -PassThru
+          try {
+            $captured = @{}
+            $deadline = (Get-Date).AddMinutes(4)
+            while ((Get-Date) -lt $deadline) {
+              foreach ($name in @('01-example-com', '03-hidden')) {
+                $request = Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.request"
+                if ((Test-Path $request) -and -not $captured.ContainsKey($name)) {
+                  $destination = Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.png"
+                  $capture = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $env:GITHUB_WORKSPACE 'app/e2e-windows/capture.ps1'), $destination) -WindowStyle Hidden -Wait -PassThru
+                  if ($capture.ExitCode -ne 0) { throw "화면 캡처 실패: $name" }
+                  New-Item -ItemType File (Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.done") | Out-Null
+                  $captured[$name] = $true
+                }
+              }
+              $app.Refresh()
+              if ($app.HasExited) { break }
+              Start-Sleep -Milliseconds 200
+            }
+            $app.Refresh()
+            if (-not $app.HasExited) { throw 'E2E 시나리오 시간 초과' }
+            if ($app.ExitCode -ne 0) { throw "E2E 실패: $($app.ExitCode)" }
+            if ($captured.Count -ne 2) { throw '화면 캡처 요청이 누락됨' }
+            $events = Get-Content (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl') | ForEach-Object { $_ | ConvertFrom-Json }
+            if (-not ($events | Where-Object { $_.step -eq 'complete' })) { throw 'E2E 완료 로그가 없음' }
+          } finally { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
+      - name: 캡처와 로그 보존
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-webview-e2e
+          path: windows-e2e/
+          if-no-files-found: warn

@@ -312,6 +312,11 @@ impl RegistryClient for HttpRegistryClient {
         let response = self
             .events()?
             .get(format!("{server_url}{DEVICE_EVENTS_PATH}"))
+            .header(
+                kaleidoscope_contract::registry::SUPPORTED_HEADER,
+                serde_json::to_string(&kaleidoscope_contract::Supported::current())
+                    .expect("supported 직렬화"),
+            )
             .bearer_auth(token)
             .send()
             .map_err(|error| RegistryError::Failure(error.to_string()))?;
@@ -369,7 +374,29 @@ fn check_status(status: reqwest::StatusCode, body: &[u8]) -> Result<(), Registry
 
 pub(crate) fn parse_event_line(line: &str) -> Option<DeviceEvent> {
     let json = line.strip_prefix("data: ")?;
-    serde_json::from_str(json).ok()
+    let mut value: serde_json::Value = serde_json::from_str(json).ok()?;
+    match value.get("event").and_then(|event| event.as_str()) {
+        Some("apps.snapshot") => {
+            let apps = value.get_mut("apps")?.as_array_mut()?;
+            apps.retain(
+                |app| match serde_json::from_value::<RegistryApp>(app.clone()) {
+                    Ok(_) => true,
+                    Err(error) => {
+                        eprintln!("레지스트리 앱을 읽지 못해 건너뜁니다: {error}");
+                        false
+                    }
+                },
+            );
+        }
+        Some("app.published") => {
+            if let Err(error) = serde_json::from_value::<RegistryApp>(value.get("app")?.clone()) {
+                eprintln!("레지스트리 앱을 읽지 못해 건너뜁니다: {error}");
+                return None;
+            }
+        }
+        _ => {}
+    }
+    serde_json::from_value(value).ok()
 }
 
 #[cfg(test)]
@@ -414,4 +441,53 @@ fn check_agent_status(status: reqwest::StatusCode, body: &[u8]) -> Result<(), Re
         };
     }
     check_status(status, body)
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    #[test]
+    fn events_send_supported_header() {
+        let server = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = server.local_addr().unwrap();
+        let worker = std::thread::spawn(move || {
+            let (mut conn, _) = server.accept().unwrap();
+            let mut bytes = [0; 8192];
+            let size = conn.read(&mut bytes).unwrap();
+            conn.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+                .unwrap();
+            String::from_utf8(bytes[..size].to_vec()).unwrap()
+        });
+        HttpRegistryClient::new()
+            .open_events(&format!("http://{addr}"), "token")
+            .unwrap();
+        let request = worker.join().unwrap().to_lowercase();
+        let value = serde_json::to_string(&kaleidoscope_contract::Supported::current())
+            .unwrap()
+            .to_lowercase();
+        assert!(request.contains(&format!(
+            "{}: {}",
+            kaleidoscope_contract::registry::SUPPORTED_HEADER.to_lowercase(),
+            value
+        )));
+    }
+
+    #[test]
+    fn snapshot_keeps_readable_apps_when_another_definition_is_unknown() {
+        let definition: serde_json::Value =
+            serde_json::from_str(include_str!("../../../examples/md-editor.json")).unwrap();
+        let app = serde_json::json!({"app":{"id":"md-editor","name":"editor","current_version":1,"created_at":"now","updated_at":"now"},"version":{"app_id":"md-editor","version":1,"definition":definition,"created_at":"now"}});
+        let mut bad = app.clone();
+        bad["version"]["definition"]["ui"] = serde_json::json!({"type":"future_block"});
+        let line = format!(
+            "data: {}",
+            serde_json::json!({"event":"apps.snapshot","apps":[bad, app]})
+        );
+        assert!(
+            matches!(parse_event_line(&line), Some(DeviceEvent::AppsSnapshot { apps }) if apps.len() == 1)
+        );
+    }
 }

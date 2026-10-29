@@ -264,3 +264,108 @@ fn kind_order(kind: FileKind) -> u8 {
         FileKind::File => 1,
     }
 }
+
+pub(crate) fn open(
+    state: &mut CoreState,
+    window_id: &str,
+    permission_id: &str,
+    path: &str,
+    app_id: &str,
+    rect: Option<kaleidoscope_contract::Rect>,
+) -> Result<CoreReply, CoreError> {
+    let root = granted_root(state, window_id, permission_id, false)?;
+    let resolved = resolve_path(&root, path, false, false)?;
+    if !resolved.is_file() {
+        return Err(error::make(ErrorCode::InvalidRequest));
+    }
+    let source = state
+        .shared
+        .windows
+        .iter()
+        .find(|w| w.id == window_id)
+        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+    let desktop_id = source.desktop_id.clone();
+    let grant = state
+        .device
+        .grants
+        .iter()
+        .find(|g| g.window_id == window_id && g.permission == permission_id)
+        .cloned()
+        .ok_or_else(|| error::make(ErrorCode::NotGranted))?;
+    let app = state
+        .shared
+        .apps
+        .iter()
+        .find(|a| a.id == app_id)
+        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+    let definition =
+        crate::app_commands::definition_for(&state.shared, app_id, app.current_version)
+            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+    let opens = definition
+        .opens
+        .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+    let extension = Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    if !opens.extensions.contains(&extension) {
+        return Err(error::make(ErrorCode::InvalidRequest));
+    }
+    let reuse = state
+        .shared
+        .windows
+        .iter()
+        .filter(|w| w.desktop_id == desktop_id && w.app_id == app_id)
+        .filter(|w| {
+            state.device.grants.iter().any(|g| {
+                g.window_id == w.id
+                    && g.permission == opens.permission
+                    && g.root_path == grant.root_path
+            })
+        })
+        .max_by_key(|w| w.z)
+        .map(|w| w.id.clone());
+    let target_id = if let Some(id) = reuse {
+        crate::state_commands::handle(
+            state,
+            kaleidoscope_contract::CoreRequest::WindowRaise {
+                window_id: id.clone(),
+            },
+        )?;
+        id
+    } else {
+        let reply = crate::state_commands::handle(
+            state,
+            kaleidoscope_contract::CoreRequest::WindowOpen {
+                desktop_id,
+                app_id: app_id.into(),
+                rect,
+            },
+        )?;
+        let CoreReply::WindowOpen { window } = reply else {
+            unreachable!()
+        };
+        state.device.grants.push(kaleidoscope_contract::Grant {
+            window_id: window.id.clone(),
+            permission: opens.permission,
+            root_path: grant.root_path,
+            root_name: grant.root_name,
+            granted_at: crate::state_commands::timestamp(),
+        });
+        window.id
+    };
+    let window = state
+        .shared
+        .windows
+        .iter_mut()
+        .find(|w| w.id == target_id)
+        .unwrap();
+    window
+        .state
+        .insert(opens.state, serde_json::Value::String(path.into()));
+    window.updated_at = crate::state_commands::timestamp();
+    Ok(CoreReply::FilesOpen {
+        window: window.clone(),
+    })
+}
