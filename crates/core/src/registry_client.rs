@@ -4,10 +4,11 @@ use std::time::Duration;
 
 use kaleidoscope_contract::registry::{
     device_agent_attachment_path, device_agent_messages_path, device_agent_path,
-    AgentAttachmentReply, AgentCreateRequest, AgentSendRequest, DeviceAgentReply, DeviceEvent,
-    DeviceLayout, DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply,
-    PairStartRequest, RegistryApp, DEVICE_APPS_PATH, DEVICE_EVENTS_PATH, DEVICE_LAYOUT_PATH,
-    PAIR_POLL_PATH, PAIR_START_PATH,
+    device_connection_request_path, AgentAttachmentReply, AgentCreateRequest, AgentSendRequest,
+    ConnectionReply, ConnectionRequest, DeviceAgentReply, DeviceEvent, DeviceLayout,
+    DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply, PairStartRequest,
+    RegistryApp, DEVICE_APPS_PATH, DEVICE_EVENTS_PATH, DEVICE_LAYOUT_PATH, PAIR_POLL_PATH,
+    PAIR_START_PATH,
 };
 use kaleidoscope_contract::CoreError;
 
@@ -20,6 +21,13 @@ pub(crate) enum RegistryError {
 }
 
 pub(crate) trait RegistryClient: Send + Sync + 'static {
+    fn connection_request(
+        &self,
+        server_url: &str,
+        token: &str,
+        name: &str,
+        request: &ConnectionRequest,
+    ) -> Result<ConnectionReply, RegistryError>;
     fn pair_start(
         &self,
         server_url: &str,
@@ -128,6 +136,28 @@ impl HttpRegistryClient {
 }
 
 impl RegistryClient for HttpRegistryClient {
+    fn connection_request(
+        &self,
+        server_url: &str,
+        token: &str,
+        name: &str,
+        request: &ConnectionRequest,
+    ) -> Result<ConnectionReply, RegistryError> {
+        let response = self
+            .requests()?
+            .post(format!(
+                "{server_url}{}",
+                device_connection_request_path(name)
+            ))
+            .bearer_auth(token)
+            .timeout(Duration::from_secs(
+                kaleidoscope_contract::data::CONNECTION_TIMEOUT_SECS,
+            ))
+            .json(request)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        success_json(response)
+    }
     fn pair_start(
         &self,
         server_url: &str,

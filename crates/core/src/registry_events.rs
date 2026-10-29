@@ -114,8 +114,27 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 });
             }
         }
-        // 연결 목록은 코어 데이터 런타임 PR에서 받는다.
-        DeviceEvent::ConnectionsSnapshot { .. } => {}
+        DeviceEvent::ConnectionsSnapshot { connections } => {
+            let changed = {
+                let mut current = inner.connections.lock().unwrap();
+                let mut changed: Vec<String> = current
+                    .iter()
+                    .chain(&connections)
+                    .filter(|info| {
+                        current.iter().find(|old| old.name == info.name)
+                            != connections.iter().find(|new| new.name == info.name)
+                    })
+                    .map(|info| info.name.clone())
+                    .collect();
+                changed.sort();
+                changed.dedup();
+                *current = connections;
+                changed
+            };
+            if !changed.is_empty() {
+                crate::data_runtime::connections_changed(inner, &changed);
+            }
+        }
     }
     link::is_current(inner, generation)
 }

@@ -1,9 +1,13 @@
 mod agent_commands;
 mod app_commands;
+mod connections;
+mod data_runtime;
+mod data_sources;
 mod error;
 mod files;
 mod layout_reporter;
 mod link;
+mod media;
 mod registry_client;
 mod registry_events;
 mod state_commands;
@@ -76,6 +80,10 @@ pub(crate) struct Inner {
     pub(crate) layout_connection_epoch: AtomicU64,
     pub(crate) layout_reported_epoch: Mutex<Option<u64>>,
     pub(crate) layout_signal: LayoutSignal,
+    pub(crate) data_runtimes: data_runtime::DataRuntimes,
+    pub(crate) connections: Mutex<Vec<kaleidoscope_contract::registry::ConnectionInfo>>,
+    pub(crate) login_store: Arc<dyn connections::LoginStore>,
+    pub(crate) media_cache: media::MediaCache,
 }
 
 pub(crate) struct LayoutSignal {
@@ -178,6 +186,10 @@ impl Core {
                 sequence: Mutex::new(0),
                 changed: Condvar::new(),
             },
+            data_runtimes: data_runtime::DataRuntimes::default(),
+            connections: Mutex::new(Vec::new()),
+            login_store: Arc::new(connections::EmptyLoginStore),
+            media_cache: media::MediaCache::default(),
         });
         {
             let state = inner.state.lock().unwrap();
@@ -185,6 +197,7 @@ impl Core {
         }
 
         let core = Core { inner };
+        data_runtime::start_timer(Arc::downgrade(&core.inner));
         if core.inner.state.lock().unwrap().shared.apps.is_empty() {
             for definition_json in config.seed_definitions {
                 core.handle(CoreRequest::AppImport { definition_json })?;
@@ -263,13 +276,26 @@ impl Core {
             | CoreRequest::WebDetach { .. } => {
                 Err(error::make(kaleidoscope_contract::ErrorCode::Unavailable))
             }
-            // 계약 6판의 앱 데이터(원천, 식, 동작, 미디어)와 기기 로그인은 다음 PR(코어 데이터 런타임)에서 채운다.
-            CoreRequest::DataAttach { .. }
-            | CoreRequest::DataDetach { .. }
-            | CoreRequest::DataAct { .. }
-            | CoreRequest::DataRefresh { .. }
-            | CoreRequest::DataMedia { .. }
-            | CoreRequest::ConnectionLogin { .. } => {
+            CoreRequest::DataAttach { window_id } => data_runtime::attach(&self.inner, &window_id),
+            CoreRequest::DataDetach { window_id } => data_runtime::detach(&self.inner, &window_id),
+            CoreRequest::DataAct {
+                window_id,
+                pointer,
+                event,
+                item,
+            } => data_runtime::act(&self.inner, &window_id, &pointer, event, item),
+            CoreRequest::DataRefresh { window_id, sources } => {
+                data_runtime::refresh(&self.inner, &window_id, &sources, false)?;
+                Ok(CoreReply::DataRefresh {})
+            }
+            CoreRequest::DataMedia {
+                window_id,
+                media,
+                max_px,
+            } => Ok(CoreReply::DataMedia {
+                media: media::get(&self.inner, &window_id, &media, max_px)?,
+            }),
+            CoreRequest::ConnectionLogin { .. } => {
                 Err(error::make(kaleidoscope_contract::ErrorCode::Unavailable))
             }
             request => self.handle_state_change(request),
@@ -285,9 +311,42 @@ impl Core {
     }
 
     fn handle_state_change(&self, request: CoreRequest) -> Result<CoreReply, CoreError> {
+        self.apply_state_change(|state| state_commands::handle(state, request))
+    }
+
+    fn set_state_key(
+        &self,
+        window_id: &str,
+        key: String,
+        value: serde_json::Value,
+    ) -> Result<CoreReply, CoreError> {
+        self.apply_state_change(|state| {
+            let mut next = state
+                .shared
+                .windows
+                .iter()
+                .find(|window| window.id == window_id)
+                .ok_or_else(|| error::make(kaleidoscope_contract::ErrorCode::NotFound))?
+                .state
+                .clone();
+            next.insert(key, value);
+            state_commands::handle(
+                state,
+                CoreRequest::WindowSetState {
+                    window_id: window_id.into(),
+                    state: next,
+                },
+            )
+        })
+    }
+
+    fn apply_state_change(
+        &self,
+        change: impl FnOnce(&mut CoreState) -> Result<CoreReply, CoreError>,
+    ) -> Result<CoreReply, CoreError> {
         let mut state = self.inner.state.lock().unwrap();
         let before = state.clone();
-        let reply = state_commands::handle(&mut state, request)?;
+        let reply = change(&mut state)?;
         let shared_changed = before.shared != state.shared;
         let device_changed = before.device != state.device;
 
@@ -361,19 +420,23 @@ impl Core {
         };
         drop(state);
         self.inner.emit(&event);
+        data_runtime::grant_changed(&self.inner, window_id, permission);
 
         Ok(CoreReply::FilesPickFolder { grant: Some(grant) })
     }
 }
 
 impl Inner {
-    pub(crate) fn emit(&self, event: &CoreEvent) {
+    pub(crate) fn emit(self: &Arc<Self>, event: &CoreEvent) {
         if matches!(event, CoreEvent::StateChanged { .. }) {
             self.layout_signal.notify();
         }
         let listeners = self.listeners.lock().unwrap().clone();
         for listener in listeners {
             listener(event);
+        }
+        if matches!(event, CoreEvent::StateChanged { .. }) {
+            data_runtime::state_changed(self);
         }
     }
 }
