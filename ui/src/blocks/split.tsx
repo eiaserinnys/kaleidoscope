@@ -25,7 +25,7 @@ function readSplitSizes(element: HTMLElement) {
   };
 }
 
-export function SplitBlock({ block, context }: { block: SplitBlockData; context: BlockContext }) {
+export function SplitBlock({ block, context, pointer = "/ui" }: { block: SplitBlockData; context: BlockContext; pointer?: string }) {
   const [weights, setWeights] = useState(() => initialWeights(block));
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const containerRef = useRef<HTMLDivElement>(null);
@@ -130,7 +130,7 @@ export function SplitBlock({ block, context }: { block: SplitBlockData; context:
               return next;
             }),
           }}>
-            {renderBlock(child, context)}
+            {renderBlock(child, context, `${pointer}/children/${index}`)}
           </SplitPaneContext.Provider>
         </div>
       )).flatMap((child, index) => index === 0
