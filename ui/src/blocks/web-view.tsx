@@ -191,7 +191,7 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
         )}
       </div>
       <div className="ks-web-surface" data-ks-web-surface ref={surfaceRef}>
-        {error ? <div className="ks-web-error"><Notice role="alert">{error}</Notice></div> : null}
+        {error ? <div className="ks-web-error" data-ks-overlay><Notice role="alert">{error}</Notice></div> : null}
         {!webReady && unavailable ? (
           <EmptyState icon={<Globe size="empty" />} text="이 쉘에서는 웹 화면을 열 수 없습니다" />
         ) : !page ? (

@@ -232,7 +232,19 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   await page.keyboard.press("Escape");
 
   await explorer.getByRole("button", { name: "a.md" }).click({ button: "right" });
+  const appOpenMenu = page.getByRole("menu");
+  await expect(appOpenMenu).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "마크다운 편집기" })).toBeVisible();
+  const appOpenPlacement = await page.evaluate(() => {
+    const anchor = document.querySelector<HTMLElement>('[data-file-path="notes/a.md"] button');
+    const menu = document.querySelector<HTMLElement>("[role=menu]");
+    if (!anchor || !menu) throw new Error("앱 열기 메뉴의 위치를 읽지 못했습니다");
+    const anchorBounds = anchor.getBoundingClientRect();
+    const menuBounds = menu.getBoundingClientRect();
+    return { anchorBottom: anchorBounds.bottom, menuTop: menuBounds.top, menuLeft: menuBounds.left };
+  });
+  expect(Math.abs(appOpenPlacement.menuTop - appOpenPlacement.anchorBottom)).toBeLessThanOrEqual(1);
+  await screenshot(page, "app-open-menu-wide-after-1440x900.png");
   await page.keyboard.press("Escape");
   await expect(editor.getByRole("button", { name: "새 파일" })).toBeVisible();
 
@@ -283,4 +295,62 @@ test("shows the unavailable state when the shell cannot attach a web view", asyn
   const browser = page.getByTestId("app-window-web-browser");
   await expect(browser.getByText("이 쉘에서는 웹 화면을 열 수 없습니다")).toBeVisible();
   await expect(page.getByTestId("fake-webview-web-browser-window")).toHaveCount(0);
+});
+
+test("keeps the last file open menu inside a 720x600 viewport", async ({ page }) => {
+  await mkdir(artifactDir, { recursive: true });
+  await page.setViewportSize({ width: 720, height: 600 });
+  await page.goto("/harness.html?bottom-menu");
+
+  const explorer = page.getByTestId("app-window-explorer");
+  await expect(explorer).toBeVisible();
+  await explorer.getByRole("button", { name: "볼 폴더 고르기" }).click();
+  const files = explorer.locator("[data-file-path]");
+  await expect(files).toHaveCount(30);
+  const list = explorer.locator(".ks-file-tree-list");
+  await list.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  const lastFile = explorer.getByRole("button", { name: "z29.md" });
+  await lastFile.scrollIntoViewIfNeeded();
+  await expect(lastFile).toBeVisible();
+  await expect.poll(() => list.evaluate((element) => element.scrollTop + element.clientHeight >= element.scrollHeight - 1)).toBe(true);
+
+  await lastFile.click({ button: "right" });
+  const menu = page.getByRole("menu");
+  await expect(page.getByRole("menuitem", { name: "마크다운 편집기" })).toBeVisible();
+  const placement = await page.evaluate(() => {
+    const anchor = document.querySelector<HTMLElement>('[data-file-path="z29.md"] button');
+    const menu = document.querySelector<HTMLElement>("[role=menu]");
+    if (!anchor || !menu) throw new Error("마지막 파일 메뉴의 위치를 읽지 못했습니다");
+    const anchorBounds = anchor.getBoundingClientRect();
+    const menuBounds = menu.getBoundingClientRect();
+    const inset = Number.parseFloat(getComputedStyle(menu).getPropertyValue("--ks-space-3")) || 0;
+    return {
+      anchorTop: anchorBounds.top,
+      anchorBottom: anchorBounds.bottom,
+      menuTop: menuBounds.top,
+      menuBottom: menuBounds.bottom,
+      menuLeft: menuBounds.left,
+      menuRight: menuBounds.right,
+      inset,
+      height: innerHeight,
+      width: innerWidth,
+      itemBounds: Array.from(menu.querySelectorAll("[role=menuitem]")).map((item) => {
+        const bounds = item.getBoundingClientRect();
+        return { top: bounds.top, bottom: bounds.bottom };
+      }),
+    };
+  });
+  expect(placement.anchorBottom + (placement.menuBottom - placement.menuTop)).toBeGreaterThan(placement.height - placement.inset);
+  expect(placement.menuTop).toBeLessThan(placement.anchorTop);
+  expect(placement.menuTop).toBeGreaterThanOrEqual(placement.inset);
+  expect(placement.menuBottom).toBeLessThanOrEqual(placement.height - placement.inset);
+  expect(placement.menuLeft).toBeGreaterThanOrEqual(placement.inset);
+  expect(placement.menuRight).toBeLessThanOrEqual(placement.width - placement.inset);
+  for (const item of placement.itemBounds) {
+    expect(item.top).toBeGreaterThanOrEqual(placement.inset);
+    expect(item.bottom).toBeLessThanOrEqual(placement.height - placement.inset);
+  }
+  await writeFile(path.join(artifactDir, "bottom-menu-720x600.json"), JSON.stringify(placement, null, 2));
+  await screenshot(page, "bottom-menu-720x600.png");
+  await expect(menu).toBeVisible();
 });
