@@ -51,6 +51,8 @@ impl Host for DialogHost {
 
 #[tauri::command]
 async fn core(request: CoreRequest, core: State<'_, Arc<Core>>) -> Result<CoreReply, CoreError> {
+    #[cfg(feature = "e2e")]
+    e2e::observe_ui(&request);
     let core = Arc::clone(core.inner());
 
     tauri::async_runtime::spawn_blocking(move || core.handle(request))
