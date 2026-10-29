@@ -3,14 +3,17 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use kaleidoscope_core::kaleidoscope_contract::{
-    CoreError, CoreEvent, CoreReply, CoreRequest, ErrorCode, TAURI_EVENT,
+    CoreError, CoreReply, CoreRequest, ErrorCode, TAURI_EVENT,
 };
 use kaleidoscope_core::{Core, CoreConfig, Host};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
-const SERVER_URL: &str =
-    option_env!("KALEIDOSCOPE_SERVER_URL").unwrap_or("https://eiaserinnys.me/kaleidoscope");
+// const 문맥에서는 Option::unwrap_or를 부를 수 없어(E0658) match로 고른다.
+const SERVER_URL: &str = match option_env!("KALEIDOSCOPE_SERVER_URL") {
+    Some(url) => url,
+    None => "https://eiaserinnys.me/kaleidoscope",
+};
 
 struct DialogHost {
     app: AppHandle,
