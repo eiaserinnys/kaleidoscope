@@ -34,7 +34,7 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   const dpr = globalThis.devicePixelRatio || 1;
   const bucket = imageRequestSize(size.width, size.height, dpr, scale);
   // useMedia는 전달 크기에 기기의 픽셀 비율을 곱한다.
-  const url = useMedia(size.width && size.height ? media : null, bucket / dpr);
+  const result = useMedia(size.width && size.height ? media : null, bucket / dpr);
   const adjust = (next: number, x = 0, y = 0) => {
     const target = Math.max(1, Math.min(8, next));
     if (target === 1) setOffset({ x: 0, y: 0 });
@@ -64,8 +64,11 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   const sourceWidth = natural.width * cropWidth, sourceHeight = natural.height * cropHeight;
   const factor = sourceWidth && sourceHeight ? (fit === "cover" ? Math.max(size.width / sourceWidth, size.height / sourceHeight) : Math.min(size.width / sourceWidth, size.height / sourceHeight)) : 0;
   return <div className={`ks-image-view${zoomable ? " is-zoomable" : ""}`} ref={host} tabIndex={zoomable && media ? 0 : undefined} onKeyDown={onKeyDown} onPointerDown={down} onPointerMove={move} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }} onDoubleClick={() => { if (zoomable) adjust(1); }}>
-    {media && url ? <div className="ks-image-frame" style={{ width: sourceWidth * factor, height: sourceHeight * factor, transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})` }}><img alt="" src={url} style={cropStyle(crop)} onLoad={(event) => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} draggable={false} /></div> : <EmptyState icon={<DataIcon name="image" size="empty" />} />}
-    {zoomable && media ? <div className="ks-image-controls" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
+    {!media ? <EmptyState icon={<DataIcon name="image" size="empty" />} />
+      : result.status === "loading" ? <DataState value={{ status: "loading" }} />
+      : result.status === "failed" ? <DataState value={{ status: "failed", message: "이미지를 불러오지 못했습니다", retry: [] }} onRetry={result.retry} />
+      : <div className="ks-image-frame" style={{ width: sourceWidth * factor, height: sourceHeight * factor, transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})` }}><img alt="" src={result.url} style={cropStyle(crop)} onLoad={(event) => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} draggable={false} /></div>}
+    {zoomable && media && result.status === "ready" ? <div className="ks-image-controls" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
       <IconButton aria-label="축소" onClick={() => adjust(scale * 0.8)} disabled={scale <= 1}><DataIcon name="zoom-out" /></IconButton>
       <IconButton aria-label="확대" onClick={() => adjust(scale * 1.25)} disabled={scale >= 8}><DataIcon name="zoom-in" /></IconButton>
       <IconButton aria-label="맞춤" onClick={() => adjust(1)} disabled={scale === 1}><DataIcon name="maximize-2" /></IconButton>

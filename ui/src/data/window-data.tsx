@@ -18,7 +18,7 @@ function enqueue(store: ShellStore, id: string, task: () => Promise<void>) {
 }
 
 export class WindowData {
-  readonly mediaCache = new Map<string, Promise<string | null>>();
+  readonly mediaCache = new Map<string, Promise<string>>();
   private values: DataView["values"] = {};
   private sources: DataView["sources"] = emptySources;
   private listeners = new Map<string, Set<() => void>>();

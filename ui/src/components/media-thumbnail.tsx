@@ -21,7 +21,7 @@ export function MediaThumbnail({ media, size, className = "" }: { media: MediaRe
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  const url = useMedia(measured ? media : null, measured || size);
+  const result = useMedia(measured ? media : null, measured || size);
   const style = cropStyle(media?.crop);
-  return <span ref={ref} className={`ks-media-thumbnail ${className}`}>{url ? <img alt="" src={url} style={style} /> : <DataIcon name="image" size="empty" />}</span>;
+  return <span ref={ref} className={`ks-media-thumbnail ${className}`}>{result.status === "ready" ? <img alt="" src={result.url} style={style} /> : <DataIcon name="image" size="empty" />}</span>;
 }

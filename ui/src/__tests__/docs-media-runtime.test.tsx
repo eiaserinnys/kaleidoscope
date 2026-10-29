@@ -15,7 +15,7 @@ function setup(block: Block) {
   const result = render(<AppWindowContent store={store} windowId="viewer-window" />);
   return { ...result, transport };
 }
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it("코드 편집은 CRLF를 지켜 자동 저장하고 외부 변경 충돌을 알린다", async () => {
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "readwrite", label: "문서" }], state: {}, ui: { type: "code_editor", file: { permission: "docs", path: "settings.json" } } };
@@ -93,4 +93,54 @@ it("영상 MIME을 받으면 영상으로 자동 재생한다", async () => {
   await waitFor(() => expect(rendered.container.querySelector("video")?.getAttribute("src")).toBe("blob:video"));
   await waitFor(() => expect(play).toHaveBeenCalled());
   vi.unstubAllGlobals();
+});
+
+it("이미지 요청 실패를 알리고 다시 받으면 성공한다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 500, height: 400 } as DOMRect);
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "image", src: { permission: "media", path: "image.png" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  let calls = 0;
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media"
+    ? (++calls === 1 ? Promise.reject(new Error("받지 못했습니다")) : Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "YQ==", width: 1, height: 1 } })) as never
+    : original(request as never));
+  const result = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  expect(await screen.findByText("이미지를 불러오지 못했습니다")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "다시 받기" }));
+  await waitFor(() => expect(result.container.querySelector(".ks-image-frame img")).toBeTruthy());
+  expect(calls).toBe(2);
+});
+
+it("재생 실패를 알리고 원천 변경 뒤 조작부를 복구한다", async () => {
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:media"), revokeObjectURL: vi.fn() }));
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "media", src: { expr: "$state.track" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media" ? Promise.resolve({ op: "data.media", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } }) as never : original(request as never));
+  const result = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  const send = (path: string) => act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/src": { status: "ready", value: { permission: "media", path } } } } }));
+  await screen.findByRole("button", { name: "재생" });
+  send("bad.wav");
+  await waitFor(() => expect((screen.getByRole("button", { name: "재생" }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.error(result.container.querySelector("audio")!);
+  expect(await screen.findByText("재생할 수 없는 파일입니다")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "재생" }) as HTMLButtonElement).disabled).toBe(true);
+  send("good.wav");
+  await waitFor(() => expect((screen.getByRole("button", { name: "재생" }) as HTMLButtonElement).disabled).toBe(false));
+  expect(screen.queryByText("재생할 수 없는 파일입니다")).toBeNull();
+});
+
+it("자동 재생 정책 거부는 오류로 보이지 않고 다른 재생 실패는 알린다", async () => {
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:media"), revokeObjectURL: vi.fn() }));
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValueOnce(new DOMException("blocked", "NotAllowedError")).mockRejectedValueOnce(new DOMException("bad", "NotSupportedError"));
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "media", autoplay: true, src: { permission: "media", path: "file.wav" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media" ? Promise.resolve({ op: "data.media", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } }) as never : original(request as never));
+  render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1));
+  expect(screen.queryByText("재생할 수 없는 파일입니다")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "재생" }));
+  expect(await screen.findByText("재생할 수 없는 파일입니다")).toBeTruthy();
 });

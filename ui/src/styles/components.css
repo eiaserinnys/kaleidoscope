@@ -88,6 +88,7 @@
 
 .ks-notice {
   display: flex;
+  flex-wrap: wrap;
   min-width: 0;
   align-items: center;
   justify-content: space-between;
@@ -105,13 +106,15 @@
 }
 
 .ks-notice-message {
-  min-width: 0;
+  min-width: min(100%, calc(var(--ks-space-6) * 3));
+  flex: 1 1 calc(var(--ks-space-6) * 3);
   font-size: var(--ks-type-body);
 }
 
 .ks-notice-actions {
   display: inline-flex;
   flex: 0 0 auto;
+  white-space: nowrap;
   align-items: center;
   gap: var(--ks-space-2);
 }
