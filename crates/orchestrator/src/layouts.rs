@@ -2,6 +2,23 @@ use super::*;
 use axum::{extract::rejection::JsonRejection, extract::Extension};
 use kaleidoscope_contract::registry::DeviceLayout;
 
+pub(super) fn load_device_workspaces(
+    db: &Connection,
+) -> rusqlite::Result<HashMap<String, HashSet<String>>> {
+    let mut stmt = db.prepare("SELECT device_id,layout FROM device_layouts")?;
+    let rows = stmt.query_map([], |row| {
+        let raw: String = row.get(1)?;
+        let layout: DeviceLayout = serde_json::from_str(&raw).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(1, rusqlite::types::Type::Text, Box::new(e))
+        })?;
+        Ok((
+            row.get(0)?,
+            layout.workspaces.into_iter().map(|w| w.id).collect(),
+        ))
+    })?;
+    rows.collect()
+}
+
 pub(super) async fn put_layout(
     State(state): State<AppState>,
     Extension(device): Extension<(String, String)>,
@@ -20,14 +37,73 @@ pub(super) async fn put_layout(
 }
 
 impl AppState {
-    fn save_layout(&self, device_id: &str, layout: &DeviceLayout) -> Result<(), CoreError> {
+    pub(super) fn save_layout(
+        &self,
+        device_id: &str,
+        layout: &DeviceLayout,
+    ) -> Result<(), CoreError> {
+        let workspaces = layout.workspaces.iter().map(|w| w.id.clone()).collect();
         let layout = serde_json::to_string(layout)
             .map_err(|_| server_error("배치를 저장할 수 없습니다."))?;
-        self.lock_db()?.execute(
+        let db = self.lock_db()?;
+        db.execute(
             "INSERT INTO device_layouts(device_id,layout,reported_at) VALUES(?1,?2,?3) ON CONFLICT(device_id) DO UPDATE SET layout=excluded.layout,reported_at=excluded.reported_at",
             params![device_id, layout, timestamp()],
         ).map_err(db_error)?;
+        self.0
+            .device_workspaces
+            .lock()
+            .unwrap()
+            .insert(device_id.into(), workspaces);
         Ok(())
+    }
+
+    pub(super) fn connected_count_for(&self, workspace_id: Option<&str>) -> usize {
+        let Some(workspace_id) = workspace_id else {
+            return self.connected_count();
+        };
+        let connected = self.0.connections.lock().unwrap();
+        let workspaces = self.0.device_workspaces.lock().unwrap();
+        connected
+            .keys()
+            .filter(|device| {
+                workspaces
+                    .get(*device)
+                    .is_some_and(|ids| ids.contains(workspace_id))
+            })
+            .count()
+    }
+
+    pub(super) fn event_for_device(
+        &self,
+        device_id: &str,
+        event: DeviceEvent,
+    ) -> Option<DeviceEvent> {
+        let workspaces = self.0.device_workspaces.lock().unwrap();
+        let has = |id: &str| {
+            workspaces
+                .get(device_id)
+                .is_some_and(|ids| ids.contains(id))
+        };
+        match event {
+            DeviceEvent::AppPublished {
+                app,
+                open: true,
+                workspace_id: Some(id),
+            } if !has(&id) => Some(DeviceEvent::AppPublished {
+                app,
+                open: false,
+                workspace_id: None,
+            }),
+            DeviceEvent::AppOpen {
+                workspace_id: Some(ref id),
+                ..
+            } if !has(id) => None,
+            DeviceEvent::AgentUpdate {
+                ref workspace_id, ..
+            } if !has(workspace_id) => None,
+            other => Some(other),
+        }
     }
 
     fn layouts(&self) -> Result<Vec<(String, String, String, DeviceLayout)>, CoreError> {

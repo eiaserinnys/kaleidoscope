@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::Duration,
@@ -43,6 +43,7 @@ struct Inner {
     db: Mutex<Connection>,
     events: broadcast::Sender<DeviceEvent>,
     connections: Mutex<HashMap<String, usize>>,
+    device_workspaces: Mutex<HashMap<String, HashSet<String>>>,
     pairings: AsyncMutex<HashMap<String, Pairing>>,
     mcp_token: String,
     db_path: Option<PathBuf>,
@@ -112,11 +113,14 @@ impl AppState {
             .pragma_update(None, "foreign_keys", "ON")
             .map_err(|e| format!("SQLite foreign_keys를 설정할 수 없습니다: {e}"))?;
         migrate(&connection).map_err(|e| format!("데이터베이스를 준비할 수 없습니다: {e}"))?;
+        let device_workspaces = layouts::load_device_workspaces(&connection)
+            .map_err(|e| format!("기기 배치를 읽을 수 없습니다: {e}"))?;
         let (events, _) = broadcast::channel(EVENT_BUFFER);
         Ok(Self(Arc::new(Inner {
             db: Mutex::new(connection),
             events,
             connections: Mutex::new(HashMap::new()),
+            device_workspaces: Mutex::new(device_workspaces),
             pairings: AsyncMutex::new(HashMap::new()),
             mcp_token,
             db_path,
@@ -406,69 +410,6 @@ impl AppState {
             .map_err(db_error)?;
         Ok(changed > 0)
     }
-
-    fn stream(
-        &self,
-        device_id: String,
-    ) -> Result<
-        impl Stream<Item = Result<Event, std::convert::Infallible>> + Send + 'static,
-        CoreError,
-    > {
-        let rx = self.0.events.subscribe();
-        let snapshot = DeviceEvent::AppsSnapshot {
-            apps: self.current_apps()?,
-        };
-        self.touch_device(&device_id)?;
-        *self
-            .0
-            .connections
-            .lock()
-            .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
-            .entry(device_id.clone())
-            .or_default() += 1;
-        let state = self.clone();
-        let interval = tokio::time::interval(Duration::from_secs(registry::PING_INTERVAL_SECS));
-        let guard = ConnectionGuard {
-            state: state.clone(),
-            device_id: device_id.clone(),
-        };
-        let first = stream::once(async move {
-            Ok(Event::default().data(serde_json::to_string(&snapshot).unwrap()))
-        });
-        let rest = stream::unfold(
-            (rx, interval, state, device_id, Some(guard)),
-            |(mut rx, mut interval, state, device_id, guard)| async move {
-                tokio::select! {
-                    received=rx.recv()=>match received {
-                        Ok(event)=>Some((Ok(Event::default().data(serde_json::to_string(&event).unwrap())),(rx,interval,state,device_id,guard))),
-                        Err(broadcast::error::RecvError::Closed)|Err(broadcast::error::RecvError::Lagged(_))=>{drop(guard);None}
-                    },
-                    _=interval.tick()=>{
-                        if state.is_revoked(&device_id){drop(guard);None}
-                        else {Some((Ok(Event::default().comment("ping")),(rx,interval,state,device_id,guard)))}
-                    }
-                }
-            },
-        );
-        Ok(first.chain(rest))
-    }
-}
-
-struct ConnectionGuard {
-    state: AppState,
-    device_id: String,
-}
-impl Drop for ConnectionGuard {
-    fn drop(&mut self) {
-        if let Ok(mut map) = self.state.0.connections.lock() {
-            if let Some(count) = map.get_mut(&self.device_id) {
-                *count = count.saturating_sub(1);
-                if *count == 0 {
-                    map.remove(&self.device_id);
-                }
-            }
-        }
-    }
 }
 
 pub fn router(state: AppState) -> Router {
@@ -477,6 +418,7 @@ pub fn router(state: AppState) -> Router {
 
 mod agent;
 mod backup;
+mod device_stream;
 mod http;
 mod layouts;
 mod mcp;

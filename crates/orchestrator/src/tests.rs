@@ -296,3 +296,112 @@ async fn workspace_layout_is_reported_with_ordered_windows_and_folders() {
     let list = state.list_workspaces().unwrap();
     assert_eq!(list[0]["window_count"], 2);
 }
+
+async fn next_device_event(stream: &mut axum::body::BodyDataStream) -> Value {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let bytes = stream.next().await.unwrap().unwrap();
+            let text = std::str::from_utf8(&bytes).unwrap();
+            if let Some(data) = text.strip_prefix("data: ") {
+                return serde_json::from_str(data.trim()).unwrap();
+            }
+        }
+    })
+    .await
+    .expect("기기 이벤트를 받지 못했습니다")
+}
+
+#[tokio::test]
+async fn targeted_events_follow_each_devices_last_report_and_survive_restart() {
+    use kaleidoscope_contract::{registry::DeviceLayout, AgentUpdate, Workspace};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("registry.db");
+    let state = AppState::open(&path, "secret".into()).unwrap();
+    let (a, token_a) = make_device(&state);
+    let (_, token_b) = make_device(&state);
+    let layout = DeviceLayout {
+        workspaces: vec![Workspace {
+            id: "w".into(),
+            name: "작업".into(),
+            created_at: "t".into(),
+            updated_at: "t".into(),
+        }],
+        ..Default::default()
+    };
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/api/device/layout")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, format!("Bearer {token_a}"))
+        .body(Body::from(serde_json::to_string(&layout).unwrap()))
+        .unwrap();
+    assert_eq!(
+        router(state.clone()).oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+    drop(state);
+    let state = AppState::open(&path, "secret".into()).unwrap();
+    let app = router(state.clone());
+    let mut stream_a = app
+        .clone()
+        .oneshot(request(
+            "GET",
+            "/api/device/events",
+            Some(&token_a),
+            Body::empty(),
+        ))
+        .await
+        .unwrap()
+        .into_body()
+        .into_data_stream();
+    let mut stream_b = app
+        .oneshot(request(
+            "GET",
+            "/api/device/events",
+            Some(&token_b),
+            Body::empty(),
+        ))
+        .await
+        .unwrap()
+        .into_body()
+        .into_data_stream();
+    assert_eq!(
+        next_device_event(&mut stream_a).await["event"],
+        "apps.snapshot"
+    );
+    assert_eq!(
+        next_device_event(&mut stream_b).await["event"],
+        "apps.snapshot"
+    );
+    assert_eq!(state.connected_count_for(Some("w")), 1);
+    state
+        .publish_app(EDITOR, "agent", true, Some("w".into()))
+        .unwrap();
+    let event_a = next_device_event(&mut stream_a).await;
+    let event_b = next_device_event(&mut stream_b).await;
+    assert_eq!(event_a["open"], true);
+    assert_eq!(event_a["workspace_id"], "w");
+    assert_eq!(event_b["open"], false);
+    assert!(event_b.get("workspace_id").is_none());
+    let _ = state.0.events.send(DeviceEvent::AgentUpdate {
+        workspace_id: "w".into(),
+        update: AgentUpdate::Delta { text: "답".into() },
+    });
+    let _ = state.0.events.send(DeviceEvent::AppOpen {
+        app_id: "target".into(),
+        workspace_id: Some("w".into()),
+    });
+    let _ = state.0.events.send(DeviceEvent::AppOpen {
+        app_id: "marker".into(),
+        workspace_id: None,
+    });
+    assert_eq!(
+        next_device_event(&mut stream_a).await["event"],
+        "agent.update"
+    );
+    assert_eq!(next_device_event(&mut stream_a).await["app_id"], "target");
+    assert_eq!(next_device_event(&mut stream_b).await["app_id"], "marker");
+    assert_eq!(next_device_event(&mut stream_a).await["app_id"], "marker");
+    state.save_layout(&a, &DeviceLayout::default()).unwrap();
+    assert_eq!(state.connected_count_for(Some("w")), 0);
+}
