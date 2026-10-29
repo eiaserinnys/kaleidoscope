@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppDefinition, Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -68,6 +69,54 @@ it("preserves feed text selection without selecting an entry", async () => {
   vi.mocked(window.getSelection).mockReturnValue(null);
   fireEvent.click(text);
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a" })));
+});
+
+it("moves through grouped selectable feed entries with Tab and selects with Enter", async () => {
+  const user = userEvent.setup();
+  const { calls } = setup({ type: "feed", grouped: true, entries: [
+    { title: "첫 묶음", items: [{ key: "a", body: "첫 내용" }] },
+    { title: "다음 묶음", items: [{ key: "b", body: "둘째 내용" }] },
+  ], selected: { state: "choice" }, on_select: { set_state: "choice" } }, { choice: "a" });
+  const first = (await screen.findByText("첫 내용")).closest("article")!;
+  const second = screen.getByText("둘째 내용").closest("article")!;
+  const feed = first.closest(".ks-feed")!;
+  expect(feed.getAttribute("role")).toBe("feed");
+  expect(first.getAttribute("aria-current")).toBe("true");
+  expect(feed.querySelectorAll('[tabindex="0"]')).toHaveLength(1);
+  await user.tab();
+  expect(document.activeElement).toBe(first);
+  await user.keyboard("{ArrowDown}");
+  expect(document.activeElement).toBe(second);
+  await user.keyboard("{ArrowUp}");
+  expect(document.activeElement).toBe(first);
+  await user.keyboard("{ArrowDown}{Enter}");
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", pointer: "/ui/on_select", event: "b", item: { key: "b", body: "둘째 내용" } })));
+  const count = calls.mock.calls.filter(([request]) => request.op === "data.act").length;
+  expect(fireEvent.keyDown(second, { key: " " })).toBe(true);
+  expect(calls.mock.calls.filter(([request]) => request.op === "data.act")).toHaveLength(count);
+});
+
+it("keeps one feed keyboard entry point after a focused entry disappears", async () => {
+  const entries = [{ key: "a", body: "첫 내용" }, { key: "b", body: "둘째 내용" }, { key: "c", body: "셋째 내용" }];
+  const { transport } = setup({ type: "feed", entries: { expr: "$state.entries" }, selected: { state: "choice" }, on_select: { set_state: "choice" } }, { entries, choice: "c" });
+  const second = (await screen.findByText("둘째 내용")).closest("article")!;
+  const feed = second.closest(".ks-feed")!;
+  second.focus();
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/entries": { status: "ready", value: [entries[2], entries[0], entries[1]] } } } }));
+  expect(feed.querySelectorAll('[tabindex="0"]')).toHaveLength(1);
+  expect(feed.querySelector('[tabindex="0"]')?.textContent).toContain("둘째 내용");
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/entries": { status: "ready", value: [entries[0], entries[2]] } } } }));
+  expect(feed.querySelectorAll('[tabindex="0"]')).toHaveLength(1);
+  expect(feed.querySelector('[tabindex="0"]')?.textContent).toContain("셋째 내용");
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/entries": { status: "ready", value: [entries[0]] } } } }));
+  expect(feed.querySelectorAll('[tabindex="0"]')).toHaveLength(1);
+  expect(feed.querySelector('[tabindex="0"]')?.textContent).toContain("첫 내용");
+});
+
+it("does not add tab stops to a feed without selection", async () => {
+  setup({ type: "feed", entries: [{ key: "a", body: "읽기 전용" }] });
+  const entry = (await screen.findByText("읽기 전용")).closest("article")!;
+  expect(entry.hasAttribute("tabindex")).toBe(false);
 });
 
 it("shows each property binding status and its recovery action", async () => {

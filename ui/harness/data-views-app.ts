@@ -23,5 +23,9 @@ export const dataViewsApp: AppDefinition = {
       { type: "toolbar", start: [{ type: "button", label: "추가", on_click: [{ set_state: "feed", value: { expr: "$append($state.feed, [{\"key\": $string($count($state.feed)), \"name\": \"기록\", \"body\": \"새 내용\"}])" } }] }] },
       { type: "feed", follow: true, entries: { state: "feed" } },
     ] } },
+    { label: "선택 흐름 시험", child: { type: "feed", grouped: true, entries: [
+      { title: "첫 묶음", items: [{ key: "one", name: "기록", body: "첫 번째 내용" }] },
+      { title: "다음 묶음", items: [{ key: "two", name: "기록", body: "두 번째 내용" }] },
+    ], selected: { state: "choice" }, on_select: { set_state: "choice" } } },
   ] },
 };

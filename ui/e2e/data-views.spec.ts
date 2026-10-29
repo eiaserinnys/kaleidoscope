@@ -64,7 +64,7 @@ test("표 머리 고정과 가로 스크롤, 흐름 따라가기", async ({ page
   await expect.poll(async () => (await header.boundingBox())!.y).toBeCloseTo(top, 0);
   expect(await table.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
   await capture(page, "table-narrow");
-  await app.getByRole("tab", { name: "흐름 시험" }).click();
+  await app.getByRole("tab", { name: "흐름 시험", exact: true }).click();
   const feed = app.locator(".ks-feed");
   await expect(feed.getByText("내용 35")).toBeVisible();
   await app.getByRole("button", { name: "추가" }).click();
@@ -72,6 +72,60 @@ test("표 머리 고정과 가로 스크롤, 흐름 따라가기", async ({ page
   await feed.evaluate((element) => { element.scrollTop = 0; });
   await app.getByRole("button", { name: "추가" }).click();
   await expect.poll(() => feed.evaluate((element) => element.scrollTop)).toBe(0);
+});
+
+test("400px 표에서 긴 배지 열을 포함한 머리와 본문이 맞는다", async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 700 });
+  await page.goto("/?preview=data-views-test");
+  const app = page.getByTestId("app-window-data-views-test");
+  await app.getByRole("tab", { name: "표 시험" }).click();
+  const table = app.getByRole("table");
+  await expect(table.locator(".ks-table-row").first()).toBeVisible();
+  const firstColumnWidth = (await table.getByRole("columnheader").first().boundingBox())!.width;
+  await table.evaluate((element, width) => { element.scrollLeft = width; }, firstColumnWidth);
+  const headers = await table.getByRole("columnheader").evaluateAll((cells) => cells.map((cell) => {
+    const rect = cell.getBoundingClientRect();
+    return { left: rect.left, width: rect.width };
+  }));
+  const cells = await table.locator(".ks-table-row").first().getByRole("cell").evaluateAll((elements) => elements.map((cell) => {
+    const rect = cell.getBoundingClientRect();
+    return { left: rect.left, width: rect.width };
+  }));
+  expect(cells).toHaveLength(headers.length);
+  for (let index = 0; index < headers.length; index++) {
+    expect(Math.abs(cells[index].left - headers[index].left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(cells[index].width - headers[index].width)).toBeLessThanOrEqual(1);
+  }
+  await capture(page, "table-columns-400");
+  if (output) writeFileSync(join(output, "table-columns-400.json"), JSON.stringify({ headers, cells }, null, 2));
+});
+
+test("400px 선택 흐름에 Tab으로 들어가고 화살표와 Enter로 고른다", async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 700 });
+  await page.goto("/?preview=data-views-test");
+  const app = page.getByTestId("app-window-data-views-test");
+  const tab = app.getByRole("tab", { name: "선택 흐름 시험" });
+  await tab.click();
+  await tab.focus();
+  const feed = app.getByRole("feed");
+  const first = feed.getByRole("article").filter({ hasText: "첫 번째 내용" });
+  const second = feed.getByRole("article").filter({ hasText: "두 번째 내용" });
+  await expect(first).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(first).toBeFocused();
+  await expect(feed.locator('article[tabindex="0"]')).toHaveCount(1);
+  await page.keyboard.press("ArrowDown");
+  await expect(second).toBeFocused();
+  const focus = await second.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { width: style.outlineWidth, style: style.outlineStyle, offset: style.outlineOffset };
+  });
+  expect(focus.style).toBe("solid");
+  expect(parseFloat(focus.width)).toBeGreaterThan(0);
+  expect(parseFloat(focus.offset)).toBeLessThan(0);
+  await capture(page, "feed-focus-400");
+  await page.keyboard.press("Enter");
+  await expect(second).toHaveAttribute("aria-current", "true");
 });
 
 test("견본의 다섯 보기와 다크 배지 캡처", async ({ page }) => {
