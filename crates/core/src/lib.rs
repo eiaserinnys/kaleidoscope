@@ -253,6 +253,16 @@ impl Core {
                 window_id,
                 permission,
             } => self.pick_folder(&window_id, &permission),
+            // 계약 5판의 탐색기 열기와 웹 화면은 다음 PR(코어 구현)에서 채운다. 그 전까지는 쓸 수 없다고 답한다.
+            CoreRequest::FilesOpen { .. }
+            | CoreRequest::WebAttach { .. }
+            | CoreRequest::WebPlace { .. }
+            | CoreRequest::WebNavigate { .. }
+            | CoreRequest::WebHistory { .. }
+            | CoreRequest::WebCapture { .. }
+            | CoreRequest::WebDetach { .. } => {
+                Err(error::make(kaleidoscope_contract::ErrorCode::Unavailable))
+            }
             request => self.handle_state_change(request),
         }
     }

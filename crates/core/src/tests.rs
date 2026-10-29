@@ -681,6 +681,8 @@ fn import_seeds_versions_migrates_window_state_and_rejects_newer_requirements() 
 
     let mut definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
     definition["name"] = json!("마크다운 편집기 새 버전");
+    // 상태 키를 바꾸므로 예제의 opens(current_file을 가리킴)는 뺀다.
+    definition.as_object_mut().unwrap().remove("opens");
     definition["state"] = json!({"new_key": "default"});
     definition["ui"] = json!({
         "type": "markdown_view",
@@ -1034,6 +1036,7 @@ fn registry_events_update_cache_dedupe_versions_and_order_open_requests() {
 
     let mut next_definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
     next_definition["name"] = json!("레지스트리 편집기");
+    next_definition.as_object_mut().unwrap().remove("opens");
     next_definition["state"] = json!({"new_key": "기본값"});
     next_definition["ui"] = json!({
         "type": "markdown_view",
@@ -1231,6 +1234,7 @@ fn regression_unlinked_import_persists_removed_folder_grants() {
     ]);
     next_definition["ui"]["children"][0]["root"]["permission"] = json!("manuals");
     next_definition["ui"]["children"][1]["file"]["permission"] = json!("manuals");
+    next_definition["opens"]["permission"] = json!("manuals");
     import(&core, &next_definition.to_string());
     assert!(snapshot(&core).device.grants.is_empty());
     drop(core);
@@ -1265,6 +1269,7 @@ fn connected_import_persists_removed_folder_grants() {
     ]);
     next_definition["ui"]["children"][0]["root"]["permission"] = json!("manuals");
     next_definition["ui"]["children"][1]["file"]["permission"] = json!("manuals");
+    next_definition["opens"]["permission"] = json!("manuals");
     let definition_json = next_definition.to_string();
     client
         .uploads
