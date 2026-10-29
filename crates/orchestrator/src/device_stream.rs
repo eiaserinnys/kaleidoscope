@@ -29,9 +29,8 @@ impl AppState {
         let snapshot = DeviceEvent::AppsSnapshot {
             apps: apps
                 .into_iter()
-                .filter(|app| match &supported {
-                    Some(supported) => supported.renders(&app.version.definition.requires),
-                    None => app.version.definition.requires.blocks <= LEGACY_BLOCK_SET_VERSION,
+                .filter(|app| {
+                    renders_on(supported.as_ref(), &app.version.definition.requires)
                 })
                 .collect(),
         };

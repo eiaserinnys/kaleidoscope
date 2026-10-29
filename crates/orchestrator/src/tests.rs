@@ -38,11 +38,10 @@ fn invalid_definitions_and_outside_paths_are_rejected_without_saving() {
     let err = state
         .publish_app(&outside, "agent", false, None)
         .unwrap_err();
-    assert!(
-        err.details
-            .iter()
-            .any(|detail| detail.contains("고른 폴더 밖"))
-    );
+    assert!(err
+        .details
+        .iter()
+        .any(|detail| detail.contains("고른 폴더 밖")));
     let count: i64 = state
         .lock_db()
         .unwrap()
@@ -417,7 +416,7 @@ async fn next_device_event(stream: &mut axum::body::BodyDataStream) -> Value {
 
 #[tokio::test]
 async fn targeted_events_follow_each_devices_last_report_and_survive_restart() {
-    use kaleidoscope_contract::{AgentUpdate, Workspace, registry::DeviceLayout};
+    use kaleidoscope_contract::{registry::DeviceLayout, AgentUpdate, Workspace};
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("registry.db");
     let state = AppState::open(&path, "secret".into()).unwrap();

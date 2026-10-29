@@ -5,8 +5,8 @@ use subtle::ConstantTimeEq;
 
 pub fn router(state: AppState) -> Router {
     use rmcp::transport::{
+        streamable_http_server::{session::local::LocalSessionManager, StreamableHttpService},
         StreamableHttpServerConfig,
-        streamable_http_server::{StreamableHttpService, session::local::LocalSessionManager},
     };
     let mcp_state = state.clone();
     let service = StreamableHttpService::new(

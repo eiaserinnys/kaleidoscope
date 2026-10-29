@@ -6,36 +6,43 @@ use std::{
 };
 
 use axum::{
-    Json, Router,
     extract::{Request, State},
-    http::{HeaderMap, StatusCode, header},
+    http::{header, HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{
-        IntoResponse, Response,
         sse::{Event, Sse},
+        IntoResponse, Response,
     },
     routing::{get, post},
+    Json, Router,
 };
 use chrono::{SecondsFormat, Utc};
-use futures::{Stream, StreamExt, stream};
+use futures::{stream, Stream, StreamExt};
 use kaleidoscope_contract::{
-    App, AppDefinition, AppVersion, CoreError, ErrorCode, LEGACY_BLOCK_SET_VERSION, Requires,
-    Supported,
     registry::{
         self, DeviceEvent, DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply,
         PairStartRequest, RegistryApp,
     },
     validate::parse_app_definition,
+    App, AppDefinition, AppVersion, CoreError, ErrorCode, LEGACY_BLOCK_SET_VERSION, Requires,
+    Supported,
 };
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use schemars::{Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
-use tokio::sync::{Mutex as AsyncMutex, broadcast};
+use serde_json::{json, Value};
+use tokio::sync::{broadcast, Mutex as AsyncMutex};
 use uuid::Uuid;
 
 const USER_CODE_ALPHABET: &[u8] = b"23456789ABCDEFGHJKMNPQRSTVWXYZ";
 const EVENT_BUFFER: usize = 64;
+
+pub(crate) fn renders_on(supported: Option<&Supported>, requires: &Requires) -> bool {
+    match supported {
+        Some(supported) => supported.renders(requires),
+        None => requires.blocks <= LEGACY_BLOCK_SET_VERSION,
+    }
+}
 
 #[derive(Clone)]
 pub struct AppState(Arc<Inner>);
@@ -250,10 +257,7 @@ impl AppState {
             .ok()
             .and_then(|devices| devices.get(device_id).cloned())
             .flatten();
-        match support {
-            Some(supported) => supported.renders(requires),
-            None => requires.blocks <= LEGACY_BLOCK_SET_VERSION,
-        }
+        renders_on(support.as_ref(), requires)
     }
 
     fn unsupported_connected_devices(&self, requires: &Requires) -> Vec<String> {
@@ -266,10 +270,7 @@ impl AppState {
         let mut devices: Vec<_> = connections
             .iter()
             .filter(|(_, count)| **count > 0)
-            .filter(|(id, _)| match support.get(*id).cloned().flatten() {
-                Some(supported) => !supported.renders(requires),
-                None => requires.blocks > LEGACY_BLOCK_SET_VERSION,
-            })
+            .filter(|(id, _)| !renders_on(support.get(*id).and_then(Option::as_ref), requires))
             .map(|(id, _)| id.clone())
             .collect();
         devices.sort();
@@ -296,10 +297,7 @@ impl AppState {
                         .is_some_and(|ids| ids.contains(workspace))
                 })
             })
-            .filter(|(id, _)| match support.get(*id).cloned().flatten() {
-                Some(supported) => supported.renders(requires),
-                None => requires.blocks <= LEGACY_BLOCK_SET_VERSION,
-            })
+            .filter(|(id, _)| renders_on(support.get(*id).and_then(Option::as_ref), requires))
             .collect();
         if workspace_id.is_some() {
             connected.len()
@@ -312,7 +310,7 @@ impl AppState {
         self.0
             .connections
             .lock()
-            .map(|connections| connections.values().sum())
+            .map(|m| m.values().sum())
             .unwrap_or(0)
     }
 

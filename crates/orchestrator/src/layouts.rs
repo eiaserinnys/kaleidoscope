@@ -1,5 +1,5 @@
 use super::*;
-use axum::{extract::Extension, extract::rejection::JsonRejection};
+use axum::{extract::rejection::JsonRejection, extract::Extension};
 use kaleidoscope_contract::registry::DeviceLayout;
 
 pub(super) fn load_device_workspaces(
