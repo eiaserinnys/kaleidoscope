@@ -2465,6 +2465,19 @@ mod tests {
         let data::Actions::Many(list) = actions else { panic!() };
         assert_eq!(list.len(), 3);
         assert!(matches!(list[2], data::Action::Call(_)));
+
+        // value를 빼면 $event, null을 적으면 null을 쓴다.
+        let clear: data::Actions =
+            serde_json::from_str(r#"[{"set_state":"a"},{"set_state":"b","value":null}]"#).unwrap();
+        let data::Actions::Many(list) = clear else { panic!() };
+        let data::Action::SetState(first) = &list[0] else { panic!() };
+        let data::Action::SetState(second) = &list[1] else { panic!() };
+        assert_eq!(first.value, None);
+        assert_eq!(second.value, Some(data::Binding::Literal(JsonValue::Null)));
+        assert_eq!(
+            serde_json::to_string(&list[1]).unwrap(),
+            r#"{"set_state":"b","value":null}"#
+        );
     }
 
     #[test]

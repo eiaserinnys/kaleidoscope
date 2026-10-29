@@ -273,16 +273,29 @@ pub enum Action {
     Call(CallAction),
 }
 
-/// 창 상태 키 하나에 값을 쓴다. `value`가 없으면 `$event`를 쓴다.
-/// 예: `{ "set_state": "file", "value": { "expr": "$item.file" } }`.
+/// 창 상태 키 하나에 값을 쓴다. `value`를 빼면 `$event`를 쓴다. `"value": null`은 null을 쓴다(상태 비우기).
+/// 예: `{ "set_state": "file", "value": { "expr": "$item.file" } }`, `{ "set_state": "conversation", "value": null }`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct SetStateAction {
     pub set_state: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// 빠졌으면 None, 적혀 있으면 null이어도 `Some(Binding::Literal(null))`이다.
+    #[serde(
+        default,
+        deserialize_with = "present_binding",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[ts(optional)]
     pub value: Option<Binding>,
+}
+
+/// 필드가 있으면 null도 값으로 읽는다(`Option`의 기본 읽기는 null을 None으로 본다).
+fn present_binding<'de, D>(deserializer: D) -> Result<Option<Binding>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Binding::deserialize(deserializer).map(Some)
 }
 
 /// 원천을 다시 받는다. 빈 배열이면 모든 원천이다. 받기를 마칠 때까지 기다린다(실패해도 동작은 이어 간다).
