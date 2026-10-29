@@ -1,4 +1,5 @@
 param([string]$Destination)
+$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
 $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen

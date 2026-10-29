@@ -2107,6 +2107,7 @@ dependencies = [
 name = "kaleidoscope-app"
 version = "0.3.2"
 dependencies = [
+ "base64 0.22.1",
  "kaleidoscope-core",
  "serde_json",
  "tauri",

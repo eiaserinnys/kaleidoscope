@@ -1,3 +1,5 @@
+#[cfg(feature = "e2e")]
+mod e2e;
 #[cfg(windows)]
 mod web_host;
 
@@ -103,7 +105,9 @@ pub fn run() {
             core.subscribe(Box::new(move |event| {
                 let _ = event_app.emit(TAURI_EVENT, event);
             }));
-            app.manage(core);
+            app.manage(Arc::clone(&core));
+            #[cfg(feature = "e2e")]
+            e2e::start(app.handle().clone(), core);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![core])
