@@ -29,6 +29,7 @@ export class WindowData {
   private active = false;
   private pending: DataView[] = [];
   private initialized = false;
+  private mounts = 0;
   private ready: Promise<void> = Promise.resolve();
 
   constructor(readonly store: ShellStore, readonly windowId: string, readonly definition: AppDefinition) {}
@@ -59,16 +60,22 @@ export class WindowData {
   }
 
   mount() {
+    // 같은 창 데이터가 다시 붙을 수 있다(React 개발 모드의 두 번 마운트 등). 붙이기 응답은 코어가 요청을 받은 때의
+    // 모습이라, 응답을 기다리는 동안 온 이벤트가 더 새롭다. 붙이기마다 이벤트를 모아 두었다가 응답 뒤에 반영하고,
+    // 이미 지나간 마운트의 붙이기는 부르지 않는다.
+    const mount = ++this.mounts;
     this.active = true;
+    this.initialized = false;
+    this.pending = [];
     this.unsubscribe = this.store.subscribeEvents((event) => {
       if (event.event !== "data.update" || event.window_id !== this.windowId) return;
       if (!this.initialized) this.pending.push(event.view); else this.merge(event.view);
     });
     this.ready = enqueue(this.store, this.windowId, async () => {
-      if (!this.active) return;
+      if (!this.active || mount !== this.mounts) return;
       try {
         const reply = await this.store.call({ op: "data.attach", window_id: this.windowId });
-        if (!this.active) return;
+        if (!this.active || mount !== this.mounts) return;
         this.merge(reply.view);
         this.initialized = true;
         this.pending.forEach((view) => this.merge(view));
