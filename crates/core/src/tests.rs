@@ -1733,6 +1733,8 @@ fn agent_attachment_open_saves_sanitized_names_and_selects_open_or_reveal() {
         ("회의 사진.png", "image/png", "cG5nLWJ5dGVz"),
         ("a:b?.txt", "text/plain", "dGV4dC1ieXRlcw=="),
         ("setup.exe", "application/octet-stream", "ZXhlLWJ5dGVz"),
+        (".exe", "application/octet-stream", "ZG90LWV4ZS1ieXRlcw=="),
+        (".LNK", "application/octet-stream", "ZG90LWxuay1ieXRlcw=="),
     ] {
         client
             .agent_attachment_replies
@@ -1745,7 +1747,7 @@ fn agent_attachment_open_saves_sanitized_names_and_selects_open_or_reveal() {
             }));
     }
 
-    for index in 0..3 {
+    for index in 0..5 {
         assert_eq!(
             core.handle(CoreRequest::AgentAttachmentOpen {
                 workspace_id: workspace_id.clone(),
@@ -1770,6 +1772,14 @@ fn agent_attachment_open_saves_sanitized_names_and_selects_open_or_reveal() {
         b"exe-bytes"
     );
     assert_eq!(
+        fs::read(data_dir.join("attachments/7-3/.exe")).unwrap(),
+        b"dot-exe-bytes"
+    );
+    assert_eq!(
+        fs::read(data_dir.join("attachments/7-4/.LNK")).unwrap(),
+        b"dot-lnk-bytes"
+    );
+    assert_eq!(
         attachment_opener.opened.lock().unwrap().as_slice(),
         &[
             data_dir.join("attachments/7-0/회의 사진.png"),
@@ -1778,7 +1788,11 @@ fn agent_attachment_open_saves_sanitized_names_and_selects_open_or_reveal() {
     );
     assert_eq!(
         attachment_opener.revealed.lock().unwrap().as_slice(),
-        &[data_dir.join("attachments/7-2/setup.exe")]
+        &[
+            data_dir.join("attachments/7-2/setup.exe"),
+            data_dir.join("attachments/7-3/.exe"),
+            data_dir.join("attachments/7-4/.LNK"),
+        ]
     );
 
     let requests_before = client.agent_attachments.lock().unwrap().len();

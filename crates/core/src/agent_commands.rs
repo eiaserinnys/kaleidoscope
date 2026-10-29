@@ -133,8 +133,9 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             let bytes = STANDARD.decode(&attachment.data_base64).map_err(|error| {
                 error::io_error(&io::Error::new(io::ErrorKind::InvalidData, error))
             })?;
-            let path = save_attachment(&inner.data_dir, &item_id, index, &attachment.name, &bytes)?;
-            if should_reveal(&path) {
+            let name = safe_attachment_name(&attachment.name);
+            let path = save_attachment(&inner.data_dir, &item_id, index, &name, &bytes)?;
+            if should_reveal(&name) {
                 inner
                     .attachment_opener
                     .reveal(&path)
@@ -197,7 +198,7 @@ fn save_attachment(
         .join("attachments")
         .join(format!("{item_id}-{index}"));
     fs::create_dir_all(&directory).map_err(|error| error::io_error(&error))?;
-    let path = directory.join(safe_attachment_name(name));
+    let path = directory.join(name);
     fs::write(&path, bytes).map_err(|error| error::io_error(&error))?;
     Ok(path)
 }
@@ -221,13 +222,16 @@ fn safe_attachment_name(name: &str) -> String {
     }
 }
 
-fn should_reveal(path: &Path) -> bool {
+fn should_reveal(name: &str) -> bool {
     const REVEAL_EXTENSIONS: &[&str] = &[
         "exe", "msi", "bat", "cmd", "com", "scr", "ps1", "vbs", "js", "jse", "wsf", "hta", "cpl",
         "lnk", "reg",
     ];
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .map(|extension| REVEAL_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str()))
-        .unwrap_or(false)
+    let Some((_, extension)) = name.rsplit_once('.') else {
+        return false;
+    };
+    !extension.is_empty()
+        && REVEAL_EXTENSIONS
+            .iter()
+            .any(|allowed| extension.eq_ignore_ascii_case(allowed))
 }
