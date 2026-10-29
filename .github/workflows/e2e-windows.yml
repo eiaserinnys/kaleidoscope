@@ -54,13 +54,17 @@ jobs:
           $env:APPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-e2e-appdata'
           $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-e2e-localappdata'
           New-Item -ItemType Directory -Force $env:APPDATA, $env:LOCALAPPDATA | Out-Null
+          $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-e2e-webview'
           $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222 --remote-allow-origins=*'
           $app = Start-Process -FilePath (Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe') -PassThru
           try {
             New-Item -ItemType Directory -Force (Join-Path $env:GITHUB_WORKSPACE 'windows-e2e') | Out-Null
             Start-Sleep -Seconds 8
             $app.Refresh()
-            $info = @{ pid = $app.Id; exited = $app.HasExited; webview_processes = @(Get-Process -Name msedgewebview2 -ErrorAction SilentlyContinue | Select-Object Id, ProcessName) }
+            $webviews = @(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | ForEach-Object {
+              @{ id = $_.ProcessId; has_debug_port = ($_.CommandLine -match '--remote-debugging-port=9222'); has_test_data = ($_.CommandLine -like '*kaleidoscope-e2e-webview*') }
+            })
+            $info = @{ pid = $app.Id; exited = $app.HasExited; webview_processes = $webviews }
             try { $info.debug_endpoint = (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:9222/json/version' -TimeoutSec 3).Content } catch { $info.debug_error = $_.Exception.Message }
             $info | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 (Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/startup.json')
             $capture = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $env:GITHUB_WORKSPACE 'app/e2e-windows/capture.ps1'), (Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/00-startup.png')) -WindowStyle Hidden -Wait -PassThru
