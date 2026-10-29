@@ -118,6 +118,11 @@ current_version: number, created_at: string, updated_at: string, };
  *      요구하는 정의로 보고 거부한다.
  *    - `split`의 `children`은 둘 이상이고, `sizes`가 있으면 개수가 같고 모두 0보다 크다.
  *    - `agent_chat`을 쓰면 `requires.modules`에 `agent`가 있다.
+ *    - 쓴 블록마다 처음 생긴 판([`Block::introduced_in`]) 이상을 `requires.blocks`에 적는다.
+ *      `opens`를 쓰면 `requires.blocks`가 3 이상이다.
+ *    - `web_view`는 정의에 하나까지이고, 쓰면 `requires.modules`에 `web`이 있다. 정의에 직접 적은 주소는
+ *      `http://`나 `https://`로 시작하고 공백이 없다.
+ *    - `opens`의 확장자는 하나 이상이고 각각 소문자와 숫자 1~16자이며, 권한과 상태 키는 선언되어 있다.
  */
 export type AppDefinition = { 
 /**
@@ -132,6 +137,11 @@ name: string, description?: string, requires: Requires, permissions: Array<Permi
  * 창 상태의 키와 기본값. 창을 열 때 이 값으로 시작한다.
  */
 state: { [key in string]: JsonValue }, 
+/**
+ * (블록 세트 3판) 이 앱이 여는 파일. 탐색기(`explorer` 블록)에서 이 확장자의 파일을 열면 이 앱의 창이
+ * 뜬다. 규칙은 `files.open`에 있다.
+ */
+opens?: OpensDecl, 
 /**
  * 창 안을 채우는 블록 트리의 뿌리.
  */
@@ -164,7 +174,7 @@ z: number,
 state: { [key in string]: JsonValue }, created_at: string, updated_at: string, };
 
 /**
- * 블록. 블록 세트 2판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
+ * 블록. 블록 세트 3판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
  */
 export type Block = { "type": "split", direction: SplitDirection, 
 /**
@@ -178,7 +188,19 @@ extensions: Array<string>,
 /**
  * 선택 표시에 쓸 상태 키.
  */
-selected: StateRef, on_select: SetState, } | { "type": "markdown_editor", file: FileRef, } | { "type": "markdown_view", file: FileRef, } | { "type": "agent_chat", };
+selected: StateRef, on_select: SetState, } | { "type": "markdown_editor", file: FileRef, } | { "type": "markdown_view", file: FileRef, } | { "type": "agent_chat", } | { "type": "web_view", 
+/**
+ * 열 주소. 상태에서 읽거나(`{ "state": "url" }`) 정의에 적는다(`"https://example.com"`).
+ */
+url: UrlValue, 
+/**
+ * 페이지가 다른 주소로 가면 그 주소를 쓸 상태 키.
+ */
+on_navigate?: SetState, 
+/**
+ * 주소창을 보일지. 거짓이면 그 자리에 페이지 제목만 보인다(정해진 사이트를 띄우는 앱).
+ */
+address_bar: boolean, } | { "type": "explorer", root: FolderRef, };
 
 /**
  * 명령의 실패.
@@ -196,12 +218,16 @@ details: Array<string>, };
 /**
  * 코어가 화면에 보내는 이벤트. `event`로 가른다.
  */
-export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "agent.update", workspace_id: string, update: AgentUpdate, };
+export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "agent.update", workspace_id: string, update: AgentUpdate, } | { "event": "web.update", window_id: string, page: WebPage, };
 
 /**
  * 코어의 응답. `op`는 명령과 같다.
  */
-export type CoreReply = { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "link.start", user_code: string, expires_at: string, } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, } | { "op": "agent.get", 
+export type CoreReply = { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "link.start", user_code: string, expires_at: string, } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, } | { "op": "files.open", window: AppWindow, } | { "op": "web.attach", page: WebPage, } | { "op": "web.place", } | { "op": "web.navigate", } | { "op": "web.history", } | { "op": "web.capture", 
+/**
+ * `data:image/png;base64,...`. 찍지 못하면 null.
+ */
+image: string | null, } | { "op": "web.detach", } | { "op": "agent.get", 
 /**
  * 그 워크스페이스의 PAS. 없으면 null이고, 대화 블록은 시작하는 판을 보인다.
  */
@@ -222,7 +248,7 @@ data_base64: string, } | { "op": "agent.attachment_open", };
 /**
  * 화면이 코어에 보내는 명령. `op`로 가른다. 응답은 같은 `op`의 [`CoreReply`]다.
  */
-export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "agent.get", workspace_id: string, } | { "op": "agent.create", workspace_id: string, model_preset: string, } | { "op": "agent.send", workspace_id: string, text: string, 
+export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "files.open", window_id: string, permission: string, path: string, app_id: string, rect?: Rect, } | { "op": "web.attach", window_id: string, url: string, } | { "op": "web.place", window_id: string, bounds: Rect | null, } | { "op": "web.navigate", window_id: string, url: string, } | { "op": "web.history", window_id: string, action: WebHistoryAction, } | { "op": "web.capture", window_id: string, } | { "op": "web.detach", window_id: string, } | { "op": "agent.get", workspace_id: string, } | { "op": "agent.create", workspace_id: string, model_preset: string, } | { "op": "agent.send", workspace_id: string, text: string, 
 /**
  * 빼면 빈 배열이다(모듈 `agent` 1판의 명령 모양).
  */
@@ -246,7 +272,7 @@ export type DeviceState = { active_workspace_id: string | null,
  */
 active_desktop_ids: { [key in string]: string }, grants: Array<Grant>, };
 
-export type ErrorCode = "invalid_request" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "io" | "server";
+export type ErrorCode = "invalid_request" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "io" | "server" | "unavailable";
 
 export type FileAccess = "read" | "readwrite";
 
@@ -313,6 +339,23 @@ user_code: string, expires_at: string, } | { "state": "connected", server_url: s
 reason: string, } | { "state": "revoked", server_url: string, };
 
 /**
+ * 앱이 여는 파일의 선언. 예: `{ "extensions": ["md"], "permission": "docs", "state": "current_file" }`.
+ */
+export type OpensDecl = { 
+/**
+ * 여는 파일 확장자(점 없이, 소문자). 하나 이상.
+ */
+extensions: Array<string>, 
+/**
+ * 탐색기의 폴더를 이어 받을 `files` 권한 id. 파일을 열면 이 권한에 탐색기와 같은 폴더를 고른 것이 된다.
+ */
+permission: string, 
+/**
+ * 연 파일의 경로(그 폴더 기준 상대 경로)를 쓸 상태 키. 블록은 이 키로 그 파일을 연다.
+ */
+state: string, };
+
+/**
  * 경로 값. 창 상태에서 읽거나(`{ "state": "current_file" }`) 정의에 직접 적는다(`"notes/todo.md"`).
  * 상태 값이 null이거나 문자열이 아니면 열 파일이 없는 것이다.
  */
@@ -360,6 +403,31 @@ export type StateRef = { state: string, };
  * 이 쉘이 지원하는 블록 세트와 모듈의 버전.
  */
 export type Supported = { blocks: number, modules: { [key in string]: number }, };
+
+/**
+ * 주소 값. 창 상태에서 읽거나(`{ "state": "url" }`) 정의에 직접 적는다(`"https://example.com"`).
+ * 상태 값이 null이거나 문자열이 아니면 열 주소가 없는 것이다.
+ */
+export type UrlValue = StateRef | string;
+
+export type WebHistoryAction = "back" | "forward" | "reload" | "stop";
+
+/**
+ * 웹 화면의 지금 페이지.
+ */
+export type WebPage = { 
+/**
+ * 지금 주소. 페이지 안에서만 바뀐 주소(history.pushState)도 포함한다.
+ */
+url: string, 
+/**
+ * 문서 제목. 없으면 빈 문자열이고, 화면은 그때 주소의 호스트를 보인다.
+ */
+title: string, 
+/**
+ * 페이지를 읽는 중인가.
+ */
+loading: boolean, can_go_back: boolean, can_go_forward: boolean, };
 
 /**
  * 작업 주제 하나. 데스크톱 여러 장을 가진다.
