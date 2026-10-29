@@ -1,12 +1,26 @@
 use std::collections::BTreeMap;
+use std::collections::VecDeque;
 use std::fs;
+use std::io::{BufRead, Cursor};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
 
-use kaleidoscope_contract::{CoreEvent, ErrorCode, JsonValue, Rect, ShellSnapshot};
+use kaleidoscope_contract::registry::{
+    DeviceEvent, DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply,
+    PairStartRequest, RegistryApp,
+};
+use kaleidoscope_contract::{
+    App, AppVersion, CoreEvent, ErrorCode, JsonValue, LinkStatus, Rect, ShellSnapshot,
+};
 use serde_json::{json, Value};
 use tempfile::TempDir;
 
+use crate::registry_client::{RegistryClient, RegistryError};
+use crate::storage::LinkFile;
 use crate::{Core, CoreConfig, CoreError, CoreReply, CoreRequest, Host};
 
 const MD_EDITOR: &str = include_str!("../../../examples/md-editor.json");
@@ -34,6 +48,8 @@ fn open_core(data_dir: &Path, definitions: Vec<String>, host: &Arc<FakeHost>) ->
         CoreConfig {
             data_dir: data_dir.to_path_buf(),
             seed_definitions: definitions,
+            server_url: "http://127.0.0.1:4219".into(),
+            device_name: "test-device".into(),
         },
         host.clone(),
     )
@@ -91,6 +107,150 @@ fn expect_error(result: Result<CoreReply, CoreError>, code: ErrorCode) -> CoreEr
     let error = result.expect_err("command unexpectedly succeeded");
     assert_eq!(error.code, code, "{error:?}");
     error
+}
+
+#[derive(Default)]
+struct FakeRegistryClient {
+    pair_start: Mutex<Option<Result<PairStartReply, RegistryError>>>,
+    pair_polls: Mutex<VecDeque<Result<PairPollReply, RegistryError>>>,
+    uploads: Mutex<VecDeque<Result<RegistryApp, RegistryError>>>,
+    streams: Mutex<VecDeque<Result<Vec<DeviceEvent>, RegistryError>>>,
+    upload_requests: Mutex<Vec<DeviceUploadRequest>>,
+    open_calls: AtomicUsize,
+}
+
+impl RegistryClient for FakeRegistryClient {
+    fn pair_start(
+        &self,
+        _server_url: &str,
+        _request: &PairStartRequest,
+    ) -> Result<PairStartReply, RegistryError> {
+        self.pair_start
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or_else(|| Err(RegistryError::Failure("unexpected pair/start".into())))
+    }
+
+    fn pair_poll(
+        &self,
+        _server_url: &str,
+        _request: &PairPollRequest,
+    ) -> Result<PairPollReply, RegistryError> {
+        self.pair_polls
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or(Ok(PairPollReply::Pending {}))
+    }
+
+    fn upload(
+        &self,
+        _server_url: &str,
+        _token: &str,
+        request: &DeviceUploadRequest,
+    ) -> Result<RegistryApp, RegistryError> {
+        self.upload_requests.lock().unwrap().push(request.clone());
+        self.uploads
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or_else(|| Err(RegistryError::Failure("unexpected upload".into())))
+    }
+
+    fn open_events(
+        &self,
+        _server_url: &str,
+        _token: &str,
+    ) -> Result<Box<dyn BufRead + Send>, RegistryError> {
+        self.open_calls.fetch_add(1, Ordering::SeqCst);
+        match self.streams.lock().unwrap().pop_front() {
+            Some(Ok(events)) => {
+                let mut body = Vec::new();
+                for event in events {
+                    body.extend_from_slice(
+                        format!("data: {}\n\n", serde_json::to_string(&event).unwrap()).as_bytes(),
+                    );
+                }
+                Ok(Box::new(Cursor::new(body)))
+            }
+            Some(Err(error)) => Err(error),
+            None => Err(RegistryError::Failure("no stream configured".into())),
+        }
+    }
+}
+
+fn registry_client() -> Arc<FakeRegistryClient> {
+    Arc::new(FakeRegistryClient::default())
+}
+
+fn open_core_with_client(
+    data_dir: &Path,
+    definitions: Vec<String>,
+    host: &Arc<FakeHost>,
+    client: Arc<FakeRegistryClient>,
+) -> Core {
+    Core::open_with_client(
+        CoreConfig {
+            data_dir: data_dir.to_path_buf(),
+            seed_definitions: definitions,
+            server_url: "https://registry.test".into(),
+            device_name: "test-device".into(),
+        },
+        host.clone(),
+        client,
+    )
+    .unwrap()
+}
+
+fn connected_link_file() -> LinkFile {
+    LinkFile {
+        format: 1,
+        server_url: "https://registry.test".into(),
+        device_id: "device-id".into(),
+        device_name: "test-device".into(),
+        token: "secret-device-token".into(),
+    }
+}
+
+fn mark_connected(core: &Core) {
+    let file = connected_link_file();
+    *core.inner.link_file.lock().unwrap() = Some(file.clone());
+    core.inner.state.lock().unwrap().link = LinkStatus::Connected {
+        server_url: file.server_url,
+        device_name: file.device_name,
+    };
+}
+
+fn registry_app(version: u32, definition_json: &str) -> RegistryApp {
+    let definition = serde_json::from_str(definition_json).unwrap();
+    let parsed: kaleidoscope_contract::AppDefinition = definition;
+    RegistryApp {
+        app: App {
+            id: parsed.id.clone(),
+            name: parsed.name.clone(),
+            current_version: version,
+            created_at: "2026-10-29T00:00:00Z".into(),
+            updated_at: "2026-10-29T00:00:00Z".into(),
+        },
+        version: AppVersion {
+            app_id: parsed.id.clone(),
+            version,
+            definition: parsed,
+            created_at: "2026-10-29T00:00:00Z".into(),
+        },
+    }
+}
+
+fn wait_until(mut condition: impl FnMut() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < deadline {
+        if condition() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert!(condition(), "condition did not become true");
 }
 
 #[test]
@@ -624,4 +784,342 @@ fn invalid_state_and_last_workspace_or_desktop_deletions_are_rejected() {
         }),
         ErrorCode::InvalidRequest,
     );
+}
+
+#[test]
+fn link_start_pairs_saves_token_privately_and_connects_after_snapshot() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    *client.pair_start.lock().unwrap() = Some(Ok(PairStartReply {
+        device_code: "private-device-code".into(),
+        user_code: "K7PQ-4XMR".into(),
+        expires_at: "2999-12-31T00:00:00Z".into(),
+        interval_secs: 1,
+    }));
+    client
+        .pair_polls
+        .lock()
+        .unwrap()
+        .push_back(Ok(PairPollReply::Approved {
+            device_id: "device-1".into(),
+            token: "secret-device-token".into(),
+        }));
+    client
+        .streams
+        .lock()
+        .unwrap()
+        .push_back(Ok(vec![DeviceEvent::AppsSnapshot { apps: vec![] }]));
+    let core = open_core_with_client(&temp.path().join("data"), vec![], &host, client);
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        let _ = tx.send(event.clone());
+    }));
+
+    let reply = core.handle(CoreRequest::LinkStart {}).unwrap();
+    assert!(matches!(reply, CoreReply::LinkStart { user_code, .. } if user_code == "K7PQ-4XMR"));
+    let mut observed = Vec::new();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < deadline {
+        if let Ok(event) = rx.recv_timeout(Duration::from_millis(50)) {
+            let connected = matches!(
+                event,
+                CoreEvent::StateChanged {
+                    snapshot: ShellSnapshot {
+                        link: LinkStatus::Connected { .. },
+                        ..
+                    }
+                }
+            );
+            observed.push(event);
+            if connected {
+                break;
+            }
+        }
+    }
+    assert!(observed.iter().any(|event| matches!(
+        event,
+        CoreEvent::StateChanged { snapshot: ShellSnapshot { link: LinkStatus::Pairing { user_code, .. }, .. } }
+            if user_code == "K7PQ-4XMR"
+    )));
+    assert!(observed.iter().any(|event| matches!(
+        event,
+        CoreEvent::StateChanged {
+            snapshot: ShellSnapshot {
+                link: LinkStatus::Connected { .. },
+                ..
+            }
+        }
+    )));
+    assert!(observed.iter().all(|event| {
+        !serde_json::to_string(event)
+            .unwrap()
+            .contains("secret-device-token")
+    }));
+    let link_json = fs::read_to_string(temp.path().join("data/link.json")).unwrap();
+    assert!(link_json.contains("secret-device-token"));
+    core.handle(CoreRequest::LinkUnlink {}).unwrap();
+}
+
+#[test]
+fn registry_events_update_cache_dedupe_versions_and_order_open_requests() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let docs = temp.path().join("docs");
+    fs::create_dir_all(&docs).unwrap();
+    host.choose(Some(docs));
+    let client = registry_client();
+    let core = open_core_with_client(
+        &temp.path().join("data"),
+        vec![MD_EDITOR.into()],
+        &host,
+        Arc::clone(&client),
+    );
+    mark_connected(&core);
+    let (_, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let mut old_state = BTreeMap::new();
+    old_state.insert("current_file".into(), json!("notes/old.md"));
+    core.handle(CoreRequest::WindowSetState {
+        window_id: window_id.clone(),
+        state: old_state,
+    })
+    .unwrap();
+    pick_folder(&core, &window_id);
+
+    let mut next_definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    next_definition["name"] = json!("레지스트리 편집기");
+    next_definition["state"] = json!({"new_key": "기본값"});
+    next_definition["ui"] = json!({
+        "type": "markdown_view",
+        "file": { "permission": "docs", "path": "readme.md" }
+    });
+    let next_json = next_definition.to_string();
+    let version7 = registry_app(7, &next_json);
+    let mut unsupported: Value = serde_json::from_str(&next_json).unwrap();
+    unsupported["requires"]["blocks"] = json!(99);
+    client.streams.lock().unwrap().push_back(Ok(vec![
+        DeviceEvent::AppsSnapshot {
+            apps: vec![version7.clone()],
+        },
+        DeviceEvent::AppPublished {
+            app: version7,
+            open: false,
+        },
+        DeviceEvent::AppPublished {
+            app: registry_app(8, &unsupported.to_string()),
+            open: false,
+        },
+        DeviceEvent::AppOpen {
+            app_id: "missing-app".into(),
+        },
+        DeviceEvent::AppOpen {
+            app_id: "md-editor".into(),
+        },
+        DeviceEvent::AppPublished {
+            app: registry_app(8, &next_json),
+            open: true,
+        },
+    ]));
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        let _ = tx.send(event.clone());
+    }));
+    crate::link::start_stream(Arc::clone(&core.inner), 0, connected_link_file());
+
+    let mut events = Vec::new();
+    let mut open_requests = 0;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < deadline && open_requests < 2 {
+        if let Ok(event) = rx.recv_timeout(Duration::from_millis(50)) {
+            if matches!(event, CoreEvent::AppOpenRequested { .. }) {
+                open_requests += 1;
+            }
+            events.push(event);
+        }
+    }
+    assert_eq!(open_requests, 2);
+    let snapshot = snapshot(&core);
+    let app = snapshot
+        .shared
+        .apps
+        .iter()
+        .find(|app| app.id == "md-editor")
+        .unwrap();
+    assert_eq!(app.current_version, 8);
+    assert_eq!(
+        snapshot
+            .shared
+            .app_versions
+            .iter()
+            .filter(|version| version.app_id == "md-editor")
+            .count(),
+        1
+    );
+    let window = snapshot
+        .shared
+        .windows
+        .iter()
+        .find(|window| window.id == window_id)
+        .unwrap();
+    assert_eq!(window.app_version, 8);
+    assert_eq!(
+        window.state,
+        BTreeMap::from([("new_key".into(), json!("기본값"))])
+    );
+    assert_eq!(snapshot.device.grants.len(), 1);
+
+    let state_changed_indices = events
+        .iter()
+        .enumerate()
+        .filter_map(|(index, event)| {
+            matches!(event, CoreEvent::StateChanged { .. }).then_some(index)
+        })
+        .collect::<Vec<_>>();
+    let open_indices = events
+        .iter()
+        .enumerate()
+        .filter_map(|(index, event)| {
+            matches!(event, CoreEvent::AppOpenRequested { .. }).then_some(index)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(state_changed_indices.len(), 2);
+    assert!(state_changed_indices[1] < open_indices[1]);
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event, CoreEvent::AppOpenRequested { app_id } if app_id == "missing-app"))
+            .count(),
+        0
+    );
+    core.handle(CoreRequest::LinkUnlink {}).unwrap();
+}
+
+#[test]
+fn connected_import_uploads_and_preserves_server_validation_error() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(
+        &temp.path().join("data"),
+        vec![],
+        &host,
+        Arc::clone(&client),
+    );
+    mark_connected(&core);
+    client
+        .uploads
+        .lock()
+        .unwrap()
+        .push_back(Ok(registry_app(42, MD_EDITOR)));
+    let reply = core
+        .handle(CoreRequest::AppImport {
+            definition_json: MD_EDITOR.into(),
+        })
+        .unwrap();
+    assert!(
+        matches!(reply, CoreReply::AppImport { app, version } if app.current_version == 42 && version.version == 42)
+    );
+    assert_eq!(
+        client.upload_requests.lock().unwrap()[0].definition_json,
+        MD_EDITOR
+    );
+    assert_eq!(snapshot(&core).shared.apps[0].current_version, 42);
+
+    let expected = CoreError {
+        code: ErrorCode::UnsupportedApp,
+        message: "서버 검사 실패 원문".into(),
+        details: vec!["requires.blocks=99".into()],
+    };
+    client
+        .uploads
+        .lock()
+        .unwrap()
+        .push_back(Err(RegistryError::Validation(expected.clone())));
+    let actual = expect_error(
+        core.handle(CoreRequest::AppImport {
+            definition_json: MD_EDITOR.into(),
+        }),
+        ErrorCode::UnsupportedApp,
+    );
+    assert_eq!(actual, expected);
+
+    core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        server_url: "https://registry.test".into(),
+        device_name: "test-device".into(),
+        reason: "offline".into(),
+    };
+    let error = expect_error(
+        core.handle(CoreRequest::AppImport {
+            definition_json: MD_EDITOR.into(),
+        }),
+        ErrorCode::Server,
+    );
+    assert_eq!(
+        error.message,
+        "kaleidoscope 서버에 연결되어 있지 않아 앱을 가져올 수 없습니다."
+    );
+}
+
+#[test]
+fn saved_link_reconnects_and_unauthorized_stream_revokes_it() {
+    let temp = TempDir::new().unwrap();
+    let data_dir = temp.path().join("data");
+    fs::create_dir_all(&data_dir).unwrap();
+    let file = connected_link_file();
+    fs::write(
+        data_dir.join("link.json"),
+        serde_json::to_vec(&file).unwrap(),
+    )
+    .unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    client
+        .streams
+        .lock()
+        .unwrap()
+        .push_back(Err(RegistryError::Unauthorized));
+    let core = open_core_with_client(&data_dir, vec![], &host, Arc::clone(&client));
+    wait_until(|| matches!(snapshot(&core).link, LinkStatus::Revoked { .. }));
+    assert_eq!(client.open_calls.load(Ordering::SeqCst), 1);
+    assert!(!data_dir.join("link.json").exists());
+    assert!(!serde_json::to_string(&snapshot(&core))
+        .unwrap()
+        .contains("secret-device-token"));
+}
+
+#[test]
+fn cancel_and_unlink_clear_only_connection_state() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    *client.pair_start.lock().unwrap() = Some(Ok(PairStartReply {
+        device_code: "private-device-code".into(),
+        user_code: "K7PQ-4XMR".into(),
+        expires_at: "2999-12-31T00:00:00Z".into(),
+        interval_secs: 1,
+    }));
+    client
+        .pair_polls
+        .lock()
+        .unwrap()
+        .push_back(Ok(PairPollReply::Pending {}));
+    let data_dir = temp.path().join("data");
+    let core = open_core_with_client(&data_dir, vec![MD_EDITOR.into()], &host, client);
+    let before = snapshot(&core).shared;
+    core.handle(CoreRequest::LinkStart {}).unwrap();
+    core.handle(CoreRequest::LinkCancel {}).unwrap();
+    assert!(matches!(snapshot(&core).link, LinkStatus::Unlinked {}));
+
+    let file = connected_link_file();
+    crate::storage::save_link(&data_dir, &file).unwrap();
+    *core.inner.link_file.lock().unwrap() = Some(file.clone());
+    core.inner.state.lock().unwrap().link = LinkStatus::Connected {
+        server_url: file.server_url,
+        device_name: file.device_name,
+    };
+    core.handle(CoreRequest::LinkUnlink {}).unwrap();
+    assert!(matches!(snapshot(&core).link, LinkStatus::Unlinked {}));
+    assert!(!data_dir.join("link.json").exists());
+    assert_eq!(snapshot(&core).shared, before);
 }

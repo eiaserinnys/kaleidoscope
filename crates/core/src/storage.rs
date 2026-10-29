@@ -11,6 +11,15 @@ use crate::error;
 
 const FORMAT: u32 = 1;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct LinkFile {
+    pub(crate) format: u32,
+    pub(crate) server_url: String,
+    pub(crate) device_id: String,
+    pub(crate) device_name: String,
+    pub(crate) token: String,
+}
+
 #[derive(Default, Serialize, Deserialize)]
 struct SharedFile {
     format: u32,
@@ -44,6 +53,35 @@ pub(crate) fn load_device(data_dir: &Path) -> Result<DeviceState, CoreError> {
     } else {
         move_broken_if_present(&path, "device.json")?;
         Ok(DeviceState::default())
+    }
+}
+
+pub(crate) fn load_link(data_dir: &Path) -> Result<Option<LinkFile>, CoreError> {
+    let path = data_dir.join("link.json");
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error::io_error(&error)),
+    };
+
+    match serde_json::from_slice::<LinkFile>(&bytes) {
+        Ok(file) if file.format == FORMAT => Ok(Some(file)),
+        _ => {
+            move_broken_if_present(&path, "link.json")?;
+            Ok(None)
+        }
+    }
+}
+
+pub(crate) fn save_link(data_dir: &Path, link: &LinkFile) -> Result<(), CoreError> {
+    save_atomic(&data_dir.join("link.json"), link)
+}
+
+pub(crate) fn remove_link(data_dir: &Path) -> Result<(), CoreError> {
+    match fs::remove_file(data_dir.join("link.json")) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error::io_error(&error)),
     }
 }
 

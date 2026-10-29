@@ -1,6 +1,8 @@
 mod app_commands;
 mod error;
 mod files;
+mod link;
+mod registry_client;
 mod state_commands;
 mod storage;
 
@@ -9,11 +11,14 @@ mod tests;
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
 use kaleidoscope_contract::{
-    CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, Grant, SharedState, ShellSnapshot,
+    CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, Grant, LinkStatus, SharedState,
+    ShellSnapshot,
 };
+use registry_client::{HttpRegistryClient, RegistryClient};
 
 pub use kaleidoscope_contract;
 
@@ -25,28 +30,60 @@ pub trait Host: Send + Sync + 'static {
 pub struct CoreConfig {
     pub data_dir: PathBuf,
     pub seed_definitions: Vec<String>,
+    pub server_url: String,
+    pub device_name: String,
 }
 
 #[derive(Clone, PartialEq)]
 pub(crate) struct CoreState {
     pub(crate) shared: SharedState,
     pub(crate) device: DeviceState,
+    pub(crate) link: LinkStatus,
+}
+
+pub(crate) struct Inner {
+    pub(crate) data_dir: PathBuf,
+    pub(crate) state: Mutex<CoreState>,
+    pub(crate) host: Arc<dyn Host>,
+    pub(crate) listeners: Mutex<Vec<Arc<dyn Fn(&CoreEvent) + Send + Sync>>>,
+    pub(crate) server_url: String,
+    pub(crate) device_name: String,
+    pub(crate) registry: Arc<dyn RegistryClient>,
+    pub(crate) link_file: Mutex<Option<storage::LinkFile>>,
+    pub(crate) generation: AtomicU64,
 }
 
 pub struct Core {
-    data_dir: PathBuf,
-    state: Mutex<CoreState>,
-    host: Arc<dyn Host>,
-    listeners: Mutex<Vec<Arc<dyn Fn(&CoreEvent) + Send + Sync>>>,
+    inner: Arc<Inner>,
 }
 
 impl Core {
     pub fn open(config: CoreConfig, host: Arc<dyn Host>) -> Result<Core, CoreError> {
+        let registry = Arc::new(HttpRegistryClient::new().map_err(|error| {
+            link::registry_error_to_core(error, "kaleidoscope 서버에 닿지 않습니다")
+        })?);
+        Self::open_with_client(config, host, registry)
+    }
+
+    fn open_with_client(
+        config: CoreConfig,
+        host: Arc<dyn Host>,
+        registry: Arc<dyn RegistryClient>,
+    ) -> Result<Core, CoreError> {
         fs::create_dir_all(&config.data_dir).map_err(|error| error::io_error(&error))?;
 
+        let link_file = storage::load_link(&config.data_dir)?;
+        let link = link_file
+            .as_ref()
+            .map_or(LinkStatus::Unlinked {}, |file| LinkStatus::Offline {
+                server_url: file.server_url.clone(),
+                device_name: file.device_name.clone(),
+                reason: "연결하는 중".into(),
+            });
         let mut state = CoreState {
             shared: storage::load_shared(&config.data_dir)?,
             device: storage::load_device(&config.data_dir)?,
+            link,
         };
 
         if state.shared.workspaces.is_empty() {
@@ -63,21 +100,30 @@ impl Core {
             state.shared.desktops.push(desktop);
         }
 
-        let core = Core {
+        let inner = Arc::new(Inner {
             data_dir: config.data_dir,
             state: Mutex::new(state),
             host,
             listeners: Mutex::new(Vec::new()),
-        };
+            server_url: config.server_url,
+            device_name: config.device_name,
+            registry,
+            link_file: Mutex::new(link_file.clone()),
+            generation: AtomicU64::new(0),
+        });
         {
-            let state = core.state.lock().unwrap();
-            storage::save_state(&core.data_dir, &state.shared, &state.device)?;
+            let state = inner.state.lock().unwrap();
+            storage::save_state(&inner.data_dir, &state.shared, &state.device)?;
         }
 
-        if core.state.lock().unwrap().shared.apps.is_empty() {
+        let core = Core { inner };
+        if core.inner.state.lock().unwrap().shared.apps.is_empty() {
             for definition_json in config.seed_definitions {
                 core.handle(CoreRequest::AppImport { definition_json })?;
             }
+        }
+        if let Some(file) = link_file {
+            link::start_stream(Arc::clone(&core.inner), 0, file);
         }
 
         Ok(core)
@@ -86,17 +132,23 @@ impl Core {
     pub fn handle(&self, request: CoreRequest) -> Result<CoreReply, CoreError> {
         match request {
             CoreRequest::StateGet {} => {
-                let state = self.state.lock().unwrap();
+                let state = self.inner.state.lock().unwrap();
                 Ok(CoreReply::StateGet {
                     snapshot: snapshot(&state),
                 })
+            }
+            CoreRequest::LinkStart {} => link::start(&self.inner),
+            CoreRequest::LinkCancel {} => link::cancel(&self.inner),
+            CoreRequest::LinkUnlink {} => link::unlink(&self.inner),
+            CoreRequest::AppImport { definition_json } => {
+                link::import_app(&self.inner, definition_json)
             }
             CoreRequest::FilesList {
                 window_id,
                 permission,
                 dir,
             } => {
-                let state = self.state.lock().unwrap();
+                let state = self.inner.state.lock().unwrap();
                 files::list(&state, &window_id, &permission, &dir)
             }
             CoreRequest::FilesRead {
@@ -104,7 +156,7 @@ impl Core {
                 permission,
                 path,
             } => {
-                let state = self.state.lock().unwrap();
+                let state = self.inner.state.lock().unwrap();
                 files::read(&state, &window_id, &permission, &path)
             }
             CoreRequest::FilesWrite {
@@ -114,7 +166,7 @@ impl Core {
                 text,
                 expected_revision,
             } => {
-                let state = self.state.lock().unwrap();
+                let state = self.inner.state.lock().unwrap();
                 files::write(
                     &state,
                     &window_id,
@@ -133,11 +185,15 @@ impl Core {
     }
 
     pub fn subscribe(&self, listener: Box<dyn Fn(&CoreEvent) + Send + Sync>) {
-        self.listeners.lock().unwrap().push(Arc::from(listener));
+        self.inner
+            .listeners
+            .lock()
+            .unwrap()
+            .push(Arc::from(listener));
     }
 
     fn handle_state_change(&self, request: CoreRequest) -> Result<CoreReply, CoreError> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.inner.state.lock().unwrap();
         let before = state.clone();
         let reply = state_commands::handle(&mut state, request)?;
         let shared_changed = before.shared != state.shared;
@@ -145,7 +201,7 @@ impl Core {
 
         if shared_changed || device_changed {
             if let Err(error) = storage::save_changed_state(
-                &self.data_dir,
+                &self.inner.data_dir,
                 &state.shared,
                 &state.device,
                 shared_changed,
@@ -160,18 +216,18 @@ impl Core {
             snapshot: snapshot(&state),
         };
         drop(state);
-        self.emit(&event);
+        self.inner.emit(&event);
 
         Ok(reply)
     }
 
     fn pick_folder(&self, window_id: &str, permission: &str) -> Result<CoreReply, CoreError> {
         {
-            let state = self.state.lock().unwrap();
+            let state = self.inner.state.lock().unwrap();
             files::permission(&state, window_id, permission, false)?;
         }
 
-        let Some(selected_path) = self.host.pick_folder() else {
+        let Some(selected_path) = self.inner.host.pick_folder() else {
             return Ok(CoreReply::FilesPickFolder { grant: None });
         };
         let root_path = fs::canonicalize(selected_path).map_err(|error| error::io_error(&error))?;
@@ -183,7 +239,7 @@ impl Core {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| root_path.display().to_string());
 
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.inner.state.lock().unwrap();
         files::permission(&state, window_id, permission, false)?;
         let before = state.clone();
         let grant = Grant {
@@ -198,9 +254,13 @@ impl Core {
         });
         state.device.grants.push(grant.clone());
 
-        if let Err(error) =
-            storage::save_changed_state(&self.data_dir, &state.shared, &state.device, false, true)
-        {
+        if let Err(error) = storage::save_changed_state(
+            &self.inner.data_dir,
+            &state.shared,
+            &state.device,
+            false,
+            true,
+        ) {
             *state = before;
             return Err(error);
         }
@@ -208,12 +268,14 @@ impl Core {
             snapshot: snapshot(&state),
         };
         drop(state);
-        self.emit(&event);
+        self.inner.emit(&event);
 
         Ok(CoreReply::FilesPickFolder { grant: Some(grant) })
     }
+}
 
-    fn emit(&self, event: &CoreEvent) {
+impl Inner {
+    pub(crate) fn emit(&self, event: &CoreEvent) {
         let listeners = self.listeners.lock().unwrap().clone();
         for listener in listeners {
             listener(event);
@@ -221,12 +283,11 @@ impl Core {
     }
 }
 
-fn snapshot(state: &CoreState) -> ShellSnapshot {
+pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
     ShellSnapshot {
         shared: state.shared.clone(),
         device: state.device.clone(),
         supported: kaleidoscope_contract::Supported::current(),
-        // 오케스트레이터 연결은 다음 PR(코어 연결 작업)에서 구현한다.
-        link: kaleidoscope_contract::LinkStatus::Unlinked {},
+        link: state.link.clone(),
     }
 }
