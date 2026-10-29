@@ -4,7 +4,8 @@ body {
 
 .ks-harness {
   display: grid;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
   grid-template-rows: auto minmax(0, 1fr);
   gap: var(--ks-space-4);
 }

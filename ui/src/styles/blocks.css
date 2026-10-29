@@ -117,7 +117,7 @@
   min-width: 0;
 }
 
-.ks-file-tree-row {
+.ks-row {
   display: flex;
   width: 100%;
   min-width: 0;
@@ -135,11 +135,11 @@
   text-align: start;
 }
 
-.ks-file-tree-row.is-selected {
+.ks-row.is-selected {
   background: var(--ks-color-selection);
 }
 
-.ks-file-tree-row:hover {
+.ks-row:hover {
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
 

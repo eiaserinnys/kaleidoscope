@@ -42,6 +42,8 @@
   --ks-color-surface-raised: #fafbfd;
   --ks-color-border: #d9dee7;
   --ks-color-text: #222935;
+  --ks-color-on-color-dark: #222935;
+  --ks-color-on-color-light: #ffffff;
   --ks-color-muted: #626b78;
   --ks-color-hover: rgb(34 41 53 / 7%);
   --ks-color-accent: #315da8;

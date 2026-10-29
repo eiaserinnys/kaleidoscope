@@ -32,6 +32,7 @@ export interface FakeTransportSeed {
   agentSendDelayMs?: number;
   data?: FakeDataSeed;
   webUnavailable?: boolean;
+  media?: Record<string, string>;
 }
 
 export interface FakeAgentSeed {
@@ -282,6 +283,15 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       case "data.act":
         await data.act(request.window_id, request.pointer, request.event ?? null, request.item);
         return { op: "data.act" };
+      case "data.media": {
+        const url = seed.media?.[request.media.path];
+        if (!url) return fail("not_found", "미디어를 찾을 수 없습니다");
+        const response = await fetch(url);
+        if (!response.ok) return fail("not_found", "미디어를 찾을 수 없습니다");
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const encoded = btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+        return { op: "data.media", media: { mime: response.headers.get("content-type")?.split(";")[0] || "image/png", data_base64: encoded, width: null, height: null } };
+      }
       case "connection.login":
         return fail("unavailable", "로그인을 사용할 수 없습니다");
       case "agent.get": {
