@@ -26,7 +26,8 @@ import { exposeDocsHarness, galleryForDocs } from "./docs-media-test";
 const mdEditor = mdEditorJson as AppDefinition;
 const mdViewer = mdViewerJson as AppDefinition;
 const workspacePas = workspacePasJson as unknown as AppDefinition;
-const gallery = galleryForDocs(galleryJson as AppDefinition, new URLSearchParams(window.location.search).has("long-log"), new URLSearchParams(window.location.search).has("crop-image"));
+const galleryParams = new URLSearchParams(window.location.search);
+const gallery = galleryForDocs(galleryJson as AppDefinition, galleryParams.has("long-log"), galleryParams.has("crop-image"), galleryParams.has("video-controls"));
 const definitions = [mdEditor, mdViewer, workspacePas, dataLayoutApp, gallery, dataViewsApp];
 const timestamp = "2026-10-28T00:00:00Z";
 

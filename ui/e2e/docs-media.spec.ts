@@ -81,6 +81,61 @@ test("이미지의 자르기 비율을 표시한다", async ({ page }) => {
   await expect.poll(() => image.evaluate((el) => el.getBoundingClientRect().width / el.parentElement!.getBoundingClientRect().width)).toBeCloseTo(2);
 });
 
+test("좁은 재생기는 두 줄로 위치와 음량을 조절하고 넓으면 한 줄이다", async ({ browser }, info) => {
+  for (const width of [400, 1440]) {
+    const context = await browser.newContext({ viewport: { width, height: 800 } });
+    const page = await context.newPage();
+    await openGallery(page);
+    await page.getByRole("tab", { name: "미디어" }).click();
+    await page.getByRole("tab", { name: "소리" }).click();
+    await page.getByText("tone.wav").click();
+    const audio = page.locator("audio");
+    await expect.poll(() => audio.evaluate((el: HTMLAudioElement) => el.readyState)).toBeGreaterThan(0);
+    await audio.evaluate((el: HTMLAudioElement) => el.pause());
+    const seek = page.getByRole("slider", { name: "재생 위치" });
+    const volume = page.getByRole("slider", { name: "소리 크기" });
+    const button = page.getByRole("button", { name: "재생" });
+    const time = page.locator(".ks-media-time");
+    const seekBox = await seek.boundingBox();
+    const volumeBox = await volume.boundingBox();
+    const buttonBox = await button.boundingBox();
+    const timeBox = await time.boundingBox();
+    if (!seekBox || !volumeBox || !buttonBox || !timeBox) throw new Error("재생 조작부가 없습니다");
+    expect(seekBox.width).toBeGreaterThan(0);
+    expect(volumeBox.width).toBeGreaterThan(0);
+    expect(Math.abs((seekBox.y + seekBox.height / 2) - (buttonBox.y + buttonBox.height / 2))).toBeLessThanOrEqual(1);
+    if (width === 400) {
+      expect(timeBox.y).toBeGreaterThan(seekBox.y + seekBox.height);
+      expect(Math.abs((timeBox.y + timeBox.height / 2) - (volumeBox.y + volumeBox.height / 2))).toBeLessThanOrEqual(1);
+      await page.mouse.move(seekBox.x + seekBox.width * 0.2, seekBox.y + seekBox.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(seekBox.x + seekBox.width * 0.8, seekBox.y + seekBox.height / 2, { steps: 5 });
+      await page.mouse.up();
+      await expect.poll(() => audio.evaluate((el: HTMLAudioElement) => el.currentTime)).toBeGreaterThan(2);
+    } else {
+      expect(Math.abs((timeBox.y + timeBox.height / 2) - (seekBox.y + seekBox.height / 2))).toBeLessThanOrEqual(1);
+      expect(Math.abs((timeBox.y + timeBox.height / 2) - (volumeBox.y + volumeBox.height / 2))).toBeLessThanOrEqual(1);
+    }
+    console.log(`controls-${width}: ${JSON.stringify({ seekBox, volumeBox, buttonBox, timeBox })}`);
+    await page.screenshot({ path: info.outputPath(`controls-${width}.png`) });
+    await context.close();
+  }
+});
+
+test("359px에서 영상 칸이 두 줄 높이만큼 줄고 360px에서는 한 줄이다", async ({ page }) => {
+  await page.goto("/?preview=block-gallery&video-controls");
+  await page.getByRole("tab", { name: "미디어" }).click();
+  const player = page.locator(".ks-media-player");
+  const video = player.locator("video");
+  await expect(video).toBeVisible();
+  await player.evaluate((element) => { element.style.width = "360px"; });
+  const large = await video.boundingBox();
+  expect(large).not.toBeNull();
+  expect(await video.evaluate((element) => getComputedStyle(element).objectFit)).toBe("contain");
+  await player.evaluate((element) => { element.style.width = "359px"; });
+  await expect.poll(async () => (await video.boundingBox())!.height).toBeCloseTo(large!.height - 36, 0);
+});
+
 test("코드와 미디어를 넓은 폭과 400px에서 캡처한다", async ({ browser }, info) => {
   for (const width of [1440, 400]) {
     const context = await browser.newContext({ viewport: { width, height: 800 } });

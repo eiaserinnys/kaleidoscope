@@ -55,12 +55,18 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
   return <div className={`ks-media-player${video ? " is-video" : ""}`}>
     {video ? <video ref={(el) => { element.current = el; }} {...props} /> : <audio ref={(el) => { element.current = el; }} {...props} />}
     {error ? <Notice role="alert">{error}</Notice> : null}
-    <div className="ks-media-controls" onKeyDown={onKeyDown}>
-      <IconButton aria-label={playing ? "일시 정지" : "재생"} disabled={!current} onClick={toggle}><DataIcon name={playing ? "pause" : "play"} /></IconButton>
-      <input aria-label="재생 위치" className="ks-media-range ks-media-seek" type="range" min="0" max={duration || 0} step="any" value={Math.min(time, duration)} disabled={!current || !duration} onChange={(e) => seek(Number(e.target.value))} style={{ "--ks-range-progress": `${duration ? time / duration * 100 : 0}%` } as React.CSSProperties} />
-      <span className="ks-media-time">{formatMediaTime(time)} / {formatMediaTime(duration)}</span>
-      <IconButton aria-label={muted ? "소리 켜기" : "소리 끄기"} disabled={!current} onClick={() => { if (element.current) element.current.muted = !element.current.muted; }}><DataIcon name={muted ? "volume-x" : "volume-2"} /></IconButton>
-      <input aria-label="소리 크기" className="ks-media-range ks-media-volume" type="range" min="0" max="1" step="0.01" value={muted ? 0 : volume} disabled={!current} onChange={(e) => { if (element.current) { element.current.volume = Number(e.target.value); element.current.muted = false; } }} style={{ "--ks-range-progress": `${muted ? 0 : volume * 100}%` } as React.CSSProperties} />
+    <div className="ks-media-controls-container">
+      <div className="ks-media-controls" onKeyDown={onKeyDown}>
+        <div className="ks-media-main">
+          <IconButton aria-label={playing ? "일시 정지" : "재생"} disabled={!current} onClick={toggle}><DataIcon name={playing ? "pause" : "play"} /></IconButton>
+          <input aria-label="재생 위치" className="ks-media-range ks-media-seek" type="range" min="0" max={duration || 0} step="any" value={Math.min(time, duration)} disabled={!current || !duration} onChange={(e) => seek(Number(e.target.value))} style={{ "--ks-range-progress": `${duration ? time / duration * 100 : 0}%` } as React.CSSProperties} />
+        </div>
+        <div className="ks-media-secondary">
+          <span className="ks-media-time">{formatMediaTime(time)} / {formatMediaTime(duration)}</span>
+          <IconButton aria-label={muted ? "소리 켜기" : "소리 끄기"} disabled={!current} onClick={() => { if (element.current) element.current.muted = !element.current.muted; }}><DataIcon name={muted ? "volume-x" : "volume-2"} /></IconButton>
+          <input aria-label="소리 크기" className="ks-media-range ks-media-volume" type="range" min="0" max="1" step="0.01" value={muted ? 0 : volume} disabled={!current} onChange={(e) => { if (element.current) { element.current.volume = Number(e.target.value); element.current.muted = false; } }} style={{ "--ks-range-progress": `${muted ? 0 : volume * 100}%` } as React.CSSProperties} />
+        </div>
+      </div>
     </div>
   </div>;
 }
