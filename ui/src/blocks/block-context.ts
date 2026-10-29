@@ -1,4 +1,4 @@
-import type { AppDefinition, AppWindow, ShellSnapshot } from "../contract/contract";
+import type { AppDefinition, AppWindow, Rect, ShellSnapshot } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 
 export interface BlockContext {
@@ -6,4 +6,5 @@ export interface BlockContext {
   snapshot: ShellSnapshot;
   window: AppWindow;
   definition: AppDefinition;
+  newWindowRect?: () => Rect | undefined;
 }

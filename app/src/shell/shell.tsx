@@ -374,6 +374,7 @@ export function Shell({ store }: { store: ShellStore }) {
         onAreaChange={reportArea}
         onCall={runCommand}
         onOpenApps={openAppMenu}
+        getNewWindowRect={newWindowRect}
         snapshot={snapshot}
         store={store}
       />
@@ -392,6 +393,7 @@ export function Shell({ store }: { store: ShellStore }) {
             actions={[
               <Button key="close" onClick={() => setNotice(null)}>닫기</Button>,
             ]}
+          data-ks-overlay
             role="alert"
           >
             {notice.message}

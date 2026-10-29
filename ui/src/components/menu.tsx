@@ -82,6 +82,7 @@ export function Menu({ anchor, items, onClose }: MenuProps) {
     <div
       aria-orientation="vertical"
       className="ks-menu"
+      data-ks-overlay
       ref={menuRef}
       role="menu"
       style={{ left: position.left, top: position.top }}

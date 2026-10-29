@@ -1,0 +1,42 @@
+.ks-harness-webview-layer {
+  position: fixed;
+  z-index: 2147483647;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ks-harness-webview {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: var(--ks-line-width) solid var(--ks-color-border);
+  border-radius: var(--ks-radius-small);
+  background: var(--ks-color-surface);
+  color: var(--ks-color-text);
+  box-shadow: var(--ks-shadow-window);
+  font-size: var(--ks-type-body);
+  pointer-events: auto;
+}
+
+.ks-harness-webview-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ks-space-2);
+  border-block-end: var(--ks-line-width) solid var(--ks-color-border);
+  background: var(--ks-color-surface-raised);
+  padding: var(--ks-space-2) var(--ks-space-3);
+}
+
+.ks-harness-webview-toolbar span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ks-harness-webview-page {
+  padding: var(--ks-space-4);
+}

@@ -8,6 +8,8 @@ import { SplitBlock } from "../blocks/split";
 import { StackBlock, TabsBlock, ToolbarBlock, SectionBlock, TextBlock } from "../blocks/data-layout";
 import { InputBlock, SelectBlock, ToggleBlock, ButtonBlock } from "../blocks/data-input";
 import { AgentChatBlock } from "../blocks/agent-chat";
+import { WebViewBlock } from "../blocks/web-view";
+import { ExplorerBlock } from "../blocks/explorer";
 
 export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"): ReactNode {
   switch (block.type) {
@@ -30,6 +32,10 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
     case "select": return <SelectBlock block={block} context={context} pointer={pointer} />;
     case "toggle": return <ToggleBlock block={block} context={context} pointer={pointer} />;
     case "button": return <ButtonBlock block={block} context={context} pointer={pointer} />;
+    case "web_view":
+      return <WebViewBlock block={block} context={context} />;
+    case "explorer":
+      return <ExplorerBlock block={block} context={context} />;
     default: {
       const unknown = block as unknown as { type?: unknown };
       return <div className="ks-unknown-block" role="alert">지원하지 않는 블록: {String(unknown.type)}</div>;

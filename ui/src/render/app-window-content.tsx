@@ -3,10 +3,19 @@ import { WindowNotice } from "../data/window-notice";
 import type { BlockContext } from "../blocks/block-context";
 import { Notice, StatusText } from "../components/primitives";
 import type { ShellStore } from "../core/shell-store";
+import type { Rect } from "../contract/contract";
 import { useShellSnapshot } from "../core/shell-store";
 import { renderBlock } from "./render-block";
 
-export function AppWindowContent({ store, windowId }: { store: ShellStore; windowId: string }) {
+export function AppWindowContent({
+  store,
+  windowId,
+  newWindowRect,
+}: {
+  store: ShellStore;
+  windowId: string;
+  newWindowRect?: () => Rect | undefined;
+}) {
   const snapshot = useShellSnapshot(store);
   if (!snapshot) {
     const error = store.getError();
@@ -23,7 +32,7 @@ export function AppWindowContent({ store, windowId }: { store: ShellStore; windo
   );
   if (!version) return <div className="ks-app-content-error"><Notice role="alert">앱 정의를 찾을 수 없습니다</Notice></div>;
 
-  const context: BlockContext = { store, snapshot, window, definition: version.definition };
+  const context: BlockContext = { store, snapshot, window, definition: version.definition, newWindowRect };
   if (version.definition.requires.blocks < 4) return <div className="ks-app-window-content">{renderBlock(version.definition.ui, context)}</div>;
   return <WindowDataProvider store={store} appWindow={window} definition={version.definition}>
     <div className="ks-app-window-content ks-data-window">

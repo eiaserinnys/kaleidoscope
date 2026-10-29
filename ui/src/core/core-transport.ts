@@ -20,6 +20,7 @@ const errorCodes = new Set<CoreError["code"]>([
   "server",
   "unavailable",
   "io",
+  "unavailable",
 ]);
 
 export function isCoreError(value: unknown): value is CoreError {

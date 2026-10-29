@@ -2,13 +2,19 @@ export { AppWindowContent } from "./render/app-window-content";
 export { Button, EmptyState, IconButton, Notice, StatusText } from "./components/primitives";
 export {
   ArrowUp,
+  ArrowLeft,
+  ArrowRight,
   ChevronDown,
   ChevronRight,
   Cloud,
   CloudOff,
   FilePlus,
+  File,
+  FileCode,
+  FileImage,
   FileText,
   FolderOpen,
+  Globe,
   ICON_SIZE,
   Import,
   LayoutGrid,
@@ -18,12 +24,18 @@ export {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  RotateCw,
   X,
 } from "./components/icons";
 export { Menu, type MenuEntry, type MenuItem, type MenuProps, type MenuSeparator } from "./components/menu";
 export { TextInput, type TextInputProps } from "./components/text-input";
 export { createHttpTransport } from "./core/http-transport";
-export { createFakeTransport, type FakeTransport, type FakeTransportSeed } from "./core/fake-transport";
+export {
+  createFakeTransport,
+  type FakeTransport,
+  type FakeTransportSeed,
+  type FakeWebViewSnapshot,
+} from "./core/fake-transport";
 export { createShellStore, useShellSnapshot, type ShellStore } from "./core/shell-store";
 export { toCoreError } from "./core/core-transport";
 export type { CoreTransport, ReplyFor, RequestFor } from "./core/core-transport";
