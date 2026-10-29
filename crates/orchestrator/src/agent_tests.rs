@@ -237,3 +237,67 @@ async fn creation_finishes_and_broadcasts_after_client_disconnects() {
     );
     server.abort();
 }
+
+#[tokio::test]
+async fn intervention_finishes_after_client_disconnects() {
+    #[derive(Clone)]
+    struct Gate {
+        started: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+        finished: Arc<tokio::sync::Notify>,
+        body: Arc<Mutex<Option<Value>>>,
+    }
+    async fn delayed_intervene(
+        MockState(gate): MockState<Gate>,
+        Json(body): Json<Value>,
+    ) -> Json<Value> {
+        *gate.body.lock().unwrap() = Some(body);
+        gate.started.notify_one();
+        gate.release.notified().await;
+        gate.finished.notify_one();
+        Json(json!({"status":"ok"}))
+    }
+    let gate = Gate {
+        started: Arc::new(tokio::sync::Notify::new()),
+        release: Arc::new(tokio::sync::Notify::new()),
+        finished: Arc::new(tokio::sync::Notify::new()),
+        body: Arc::new(Mutex::new(None)),
+    };
+    let app = Router::new()
+        .route("/api/sessions/{id}/intervene", post(delayed_intervene))
+        .with_state(gate.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let mut state = AppState::in_memory("secret");
+    state.configure_soulstream(
+        Some(format!("http://{address}")),
+        Some("token".into()),
+        "seosoyoung".into(),
+        None,
+    );
+    state.lock_db().unwrap().execute("INSERT INTO agents(workspace_id,device_id,session_id,model_preset,workspace_name,created_at) VALUES('w','d','pas','codex-6.1-sol','작업','now')", []).unwrap();
+    let handler = tokio::spawn(async move {
+        send_message(
+            State(state),
+            Path("w".into()),
+            Ok(Json(AgentSendRequest {
+                text: "  다시 봐 줘  ".into(),
+            })),
+        )
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(5), gate.started.notified())
+        .await
+        .unwrap();
+    handler.abort();
+    assert!(handler.await.unwrap_err().is_cancelled());
+    gate.release.notify_one();
+    tokio::time::timeout(Duration::from_secs(5), gate.finished.notified())
+        .await
+        .unwrap();
+    let body = gate.body.lock().unwrap().clone().unwrap();
+    assert_eq!(body["text"], "다시 봐 줘");
+    assert_eq!(body["caller_info"]["source"], "kaleidoscope");
+    server.abort();
+}

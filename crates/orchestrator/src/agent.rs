@@ -379,16 +379,44 @@ pub(super) async fn send_message(
     let Ok(Json(request)) = body else {
         return response::<Value>(Err(bad()));
     };
-    let result = async {
-        let text = request.text.trim();
-        if text.is_empty() || text.chars().count() > registry::AGENT_MESSAGE_MAX_CHARS { return Err(bad()); }
-        let row = state.agent_row(&id).map_err(db_fail)?.ok_or_else(|| failure(StatusCode::NOT_FOUND, ErrorCode::NotFound, "작업 PAS를 찾을 수 없습니다."))?;
-        let soul = state.0.soulstream.as_ref().ok_or_else(|| server("소울스트림 연결 설정이 없습니다."))?;
-        let result = soul.client.post(format!("{}/api/sessions/{}/intervene",soul.url,row.session_id)).bearer_auth(&soul.token).json(&json!({"text":text,"caller_info":{"source":"kaleidoscope","display_name":"디렉터"}})).send().await.map_err(|_| server("소울스트림에 말을 보내지 못했습니다."))?;
-        if !result.status().is_success() { return Err(server("소울스트림에 말을 보내지 못했습니다.")); }
-        Ok(json!({}))
-    }.await;
-    response(result)
+    match tokio::spawn(async move { send(&state, &id, request).await }).await {
+        Ok(result) => response(result),
+        Err(_) => response::<Value>(Err(server("PAS 메시지 보내기 작업이 실패했습니다."))),
+    }
+}
+
+async fn send(state: &AppState, id: &str, request: AgentSendRequest) -> ApiResult<Value> {
+    let text = request.text.trim();
+    if text.is_empty() || text.chars().count() > registry::AGENT_MESSAGE_MAX_CHARS {
+        return Err(bad());
+    }
+    let row = state.agent_row(id).map_err(db_fail)?.ok_or_else(|| {
+        failure(
+            StatusCode::NOT_FOUND,
+            ErrorCode::NotFound,
+            "작업 PAS를 찾을 수 없습니다.",
+        )
+    })?;
+    let soul = state
+        .0
+        .soulstream
+        .as_ref()
+        .ok_or_else(|| server("소울스트림 연결 설정이 없습니다."))?;
+    let result = soul
+        .client
+        .post(format!(
+            "{}/api/sessions/{}/intervene",
+            soul.url, row.session_id
+        ))
+        .bearer_auth(&soul.token)
+        .json(&json!({"text":text,"caller_info":{"source":"kaleidoscope","display_name":"디렉터"}}))
+        .send()
+        .await
+        .map_err(|_| server("소울스트림에 말을 보내지 못했습니다."))?;
+    if !result.status().is_success() {
+        return Err(server("소울스트림에 말을 보내지 못했습니다."));
+    }
+    Ok(json!({}))
 }
 
 pub(super) fn initial_instruction(name: &str, id: &str) -> String {
