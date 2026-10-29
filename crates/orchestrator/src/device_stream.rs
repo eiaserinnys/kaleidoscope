@@ -4,22 +4,36 @@ impl AppState {
     pub(super) fn stream(
         &self,
         device_id: String,
+        supported: Option<kaleidoscope_contract::Supported>,
     ) -> Result<
         impl Stream<Item = Result<Event, std::convert::Infallible>> + Send + 'static,
         CoreError,
     > {
         let rx = self.0.events.subscribe();
-        let snapshot = DeviceEvent::AppsSnapshot {
-            apps: self.current_apps()?,
-        };
+        let apps = self.current_apps()?;
         self.touch_device(&device_id)?;
-        *self
-            .0
-            .connections
-            .lock()
-            .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
-            .entry(device_id.clone())
-            .or_default() += 1;
+        {
+            *self
+                .0
+                .connections
+                .lock()
+                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+                .entry(device_id.clone())
+                .or_default() += 1;
+            self.0
+                .device_support
+                .lock()
+                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+                .insert(device_id.clone(), supported.clone());
+        }
+        let snapshot = DeviceEvent::AppsSnapshot {
+            apps: apps
+                .into_iter()
+                .filter(|app| {
+                    renders_on(supported.as_ref(), &app.version.definition.requires)
+                })
+                .collect(),
+        };
         let state = self.clone();
         let interval = tokio::time::interval(Duration::from_secs(registry::PING_INTERVAL_SECS));
         let guard = ConnectionGuard {
@@ -61,6 +75,9 @@ impl Drop for ConnectionGuard {
                 *count = count.saturating_sub(1);
                 if *count == 0 {
                     map.remove(&self.device_id);
+                    if let Ok(mut support) = self.state.0.device_support.lock() {
+                        support.remove(&self.device_id);
+                    }
                 }
             }
         }

@@ -24,7 +24,8 @@ use kaleidoscope_contract::{
         PairStartRequest, RegistryApp,
     },
     validate::parse_app_definition,
-    App, AppDefinition, AppVersion, CoreError, ErrorCode,
+    App, AppDefinition, AppVersion, CoreError, ErrorCode, LEGACY_BLOCK_SET_VERSION, Requires,
+    Supported,
 };
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use schemars::{Schema, SchemaGenerator};
@@ -36,6 +37,13 @@ use uuid::Uuid;
 const USER_CODE_ALPHABET: &[u8] = b"23456789ABCDEFGHJKMNPQRSTVWXYZ";
 const EVENT_BUFFER: usize = 64;
 
+pub(crate) fn renders_on(supported: Option<&Supported>, requires: &Requires) -> bool {
+    match supported {
+        Some(supported) => supported.renders(requires),
+        None => requires.blocks <= LEGACY_BLOCK_SET_VERSION,
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState(Arc<Inner>);
 
@@ -43,6 +51,7 @@ struct Inner {
     db: Mutex<Connection>,
     events: broadcast::Sender<DeviceEvent>,
     connections: Mutex<HashMap<String, usize>>,
+    device_support: Mutex<HashMap<String, Option<Supported>>>,
     device_workspaces: Mutex<HashMap<String, HashSet<String>>>,
     pairings: AsyncMutex<HashMap<String, Pairing>>,
     mcp_token: String,
@@ -120,6 +129,7 @@ impl AppState {
             db: Mutex::new(connection),
             events,
             connections: Mutex::new(HashMap::new()),
+            device_support: Mutex::new(HashMap::new()),
             device_workspaces: Mutex::new(device_workspaces),
             pairings: AsyncMutex::new(HashMap::new()),
             mcp_token,
@@ -239,6 +249,63 @@ impl AppState {
             )
             .map_err(db_error)
     }
+    fn device_can_render(&self, device_id: &str, requires: &Requires) -> bool {
+        let support = self
+            .0
+            .device_support
+            .lock()
+            .ok()
+            .and_then(|devices| devices.get(device_id).cloned())
+            .flatten();
+        renders_on(support.as_ref(), requires)
+    }
+
+    fn unsupported_connected_devices(&self, requires: &Requires) -> Vec<String> {
+        let Ok(connections) = self.0.connections.lock() else {
+            return Vec::new();
+        };
+        let Ok(support) = self.0.device_support.lock() else {
+            return Vec::new();
+        };
+        let mut devices: Vec<_> = connections
+            .iter()
+            .filter(|(_, count)| **count > 0)
+            .filter(|(id, _)| !renders_on(support.get(*id).and_then(Option::as_ref), requires))
+            .map(|(id, _)| id.clone())
+            .collect();
+        devices.sort();
+        devices
+    }
+
+    fn connected_count_for_app(&self, workspace_id: Option<&str>, requires: &Requires) -> usize {
+        let Ok(connections) = self.0.connections.lock() else {
+            return 0;
+        };
+        let Ok(support) = self.0.device_support.lock() else {
+            return 0;
+        };
+        let Ok(workspaces) = self.0.device_workspaces.lock() else {
+            return 0;
+        };
+        let connected: Vec<_> = connections
+            .iter()
+            .filter(|(_, count)| **count > 0)
+            .filter(|(id, _)| {
+                workspace_id.is_none_or(|workspace| {
+                    workspaces
+                        .get(*id)
+                        .is_some_and(|ids| ids.contains(workspace))
+                })
+            })
+            .filter(|(id, _)| renders_on(support.get(*id).and_then(Option::as_ref), requires))
+            .collect();
+        if workspace_id.is_some() {
+            connected.len()
+        } else {
+            connected.iter().map(|(_, count)| **count).sum()
+        }
+    }
+
     fn connected_count(&self) -> usize {
         self.0
             .connections

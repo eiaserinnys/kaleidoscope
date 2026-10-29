@@ -79,6 +79,18 @@ impl AppState {
         device_id: &str,
         event: DeviceEvent,
     ) -> Option<DeviceEvent> {
+        if let DeviceEvent::AppPublished { app, .. } = &event {
+            if !self.device_can_render(device_id, &app.version.definition.requires) {
+                return None;
+            }
+        }
+        if let DeviceEvent::AppOpen { app_id, .. } = &event {
+            if let Ok(Some(app)) = self.app(app_id, None) {
+                if !self.device_can_render(device_id, &app.version.definition.requires) {
+                    return None;
+                }
+            }
+        }
         let workspaces = self.0.device_workspaces.lock().unwrap();
         let has = |id: &str| {
             workspaces
