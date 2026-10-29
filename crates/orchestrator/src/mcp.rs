@@ -78,17 +78,21 @@ impl McpServer {
             .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
         match self
             .state
-            .publish_app(&definition, "agent", args.open, args.workspace_id)
+            .publish_app(&definition, "agent", args.open, args.workspace_id.clone())
         {
             Ok((row, unchanged)) => {
                 let sent = if args.open {
-                    self.state.connected_count()
+                    self.state.connected_count_for(args.workspace_id.as_deref())
                 } else {
                     0
                 };
                 let mut value = json!({"app_id":row.app.id,"name":row.app.name,"version":row.version.version,"unchanged":unchanged,"open_sent_to":sent});
                 if args.open && sent == 0 {
-                    value["note"] = json!("연결된 쉘이 없어 창은 열리지 않았습니다");
+                    value["note"] = if args.workspace_id.is_some() {
+                        json!("그 작업을 가진 쉘이 연결돼 있지 않아 창은 열리지 않았습니다")
+                    } else {
+                        json!("연결된 쉘이 없어 창은 열리지 않았습니다")
+                    };
                 }
                 Ok(json_result(value))
             }
@@ -130,11 +134,15 @@ impl McpServer {
             Ok(Some(_)) => {
                 let _ = self.state.0.events.send(DeviceEvent::AppOpen {
                     app_id: args.app_id,
-                    workspace_id: args.workspace_id,
+                    workspace_id: args.workspace_id.clone(),
                 });
-                Ok(json_result(
-                    json!({"open_sent_to":self.state.connected_count()}),
-                ))
+                let sent = self.state.connected_count_for(args.workspace_id.as_deref());
+                let mut value = json!({"open_sent_to":sent});
+                if sent == 0 && args.workspace_id.is_some() {
+                    value["note"] =
+                        json!("그 작업을 가진 쉘이 연결돼 있지 않아 창은 열리지 않았습니다");
+                }
+                Ok(json_result(value))
             }
             Ok(None) => Ok(json_error(server_error("앱을 찾을 수 없습니다."))),
             Err(e) => Ok(json_error(e)),
@@ -215,4 +223,73 @@ fn json_error(error: CoreError) -> CallToolResult {
     CallToolResult::error(vec![ContentBlock::text(
         serde_json::to_string(&error).unwrap(),
     )])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kaleidoscope_contract::registry::DeviceLayout;
+
+    #[tokio::test]
+    async fn open_counts_connected_devices_with_the_requested_workspace() {
+        let state = AppState::in_memory("secret");
+        for id in ["a", "b"] {
+            state
+                .lock_db()
+                .unwrap()
+                .execute(
+                    "INSERT INTO devices(id,name,token_sha256,created_at) VALUES(?1,?1,?1,'now')",
+                    [id],
+                )
+                .unwrap();
+        }
+        let layout: DeviceLayout = serde_json::from_value(json!({"workspaces":[{"id":"w","name":"작업","created_at":"t","updated_at":"t"}],"desktops":[],"windows":[],"folders":[],"active_workspace_id":null,"active_desktop_ids":{}})).unwrap();
+        state.save_layout("a", &layout).unwrap();
+        let _a = state.stream("a".into()).unwrap();
+        let _a_second = state.stream("a".into()).unwrap();
+        let _b = state.stream("b".into()).unwrap();
+        let server = McpServer::new(state);
+        let app: Value =
+            serde_json::from_str(include_str!("../../../examples/md-editor.json")).unwrap();
+        let value = |result: CallToolResult| {
+            let json = serde_json::to_value(result).unwrap();
+            serde_json::from_str::<Value>(json["content"][0]["text"].as_str().unwrap()).unwrap()
+        };
+        let uploaded = value(
+            server
+                .upload_app(Parameters(UploadArgs {
+                    definition: app,
+                    open: true,
+                    workspace_id: Some("w".into()),
+                }))
+                .await
+                .unwrap(),
+        );
+        assert_eq!(uploaded["open_sent_to"], 1);
+        let app_id = uploaded["app_id"].as_str().unwrap().to_string();
+        let missing = value(
+            server
+                .open_app(Parameters(AppIdArgs {
+                    app_id: app_id.clone(),
+                    workspace_id: Some("없음".into()),
+                }))
+                .await
+                .unwrap(),
+        );
+        assert_eq!(missing["open_sent_to"], 0);
+        assert_eq!(
+            missing["note"],
+            "그 작업을 가진 쉘이 연결돼 있지 않아 창은 열리지 않았습니다"
+        );
+        let targeted = value(
+            server
+                .open_app(Parameters(AppIdArgs {
+                    app_id,
+                    workspace_id: Some("w".into()),
+                }))
+                .await
+                .unwrap(),
+        );
+        assert_eq!(targeted["open_sent_to"], 1);
+    }
 }
