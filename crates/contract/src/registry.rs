@@ -1,4 +1,7 @@
-//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 1판, 261029)
+//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 2판, 261029)
+//!
+//! 2판에서 더한 것(카드 #779): 배치 보고(`PUT /api/device/layout`), 워크스페이스 PAS 경로 셋,
+//! 이벤트 `agent.update`, `app.published`와 `app.open`의 `workspace_id`. 아래 「워크스페이스 PAS」 절.
 //!
 //! 오케스트레이터는 앱 레지스트리의 정본이다. 쉘의 코어는 기기 토큰으로 붙어 앱을 받고, 에이전트는 같은
 //! 서버의 MCP(`/mcp`, MCP 토큰)로 앱을 올린다. MCP 도구의 모양은 오케스트레이터 코드에 있고 이 파일에는 없다.
@@ -13,10 +16,16 @@
 //! | `POST /api/pair/poll` | 없음(`device_code`가 비밀) | [`PairPollRequest`] | 200 [`PairPollReply`] | 404 없거나 만료됨 |
 //! | `GET /api/device/events` | `Authorization: Bearer <기기 토큰>` | 없음 | 200 `text/event-stream` | 401 토큰 거부 |
 //! | `POST /api/device/apps` | 같음 | [`DeviceUploadRequest`] | 200 [`RegistryApp`] | 400 검사 실패, 401 |
+//! | `PUT /api/device/layout` | 같음 | [`DeviceLayout`] | 200 `{}` | 400 형식, 401 |
+//! | `GET /api/device/workspaces/{workspace_id}/agent` | 같음 | 없음 | 200 [`DeviceAgentReply`] | 401 |
+//! | `POST /api/device/workspaces/{workspace_id}/agent` | 같음 | [`AgentCreateRequest`] | 200 [`crate::AgentInfo`] | 400 모르는 모델, 401, 502 소울스트림 실패 |
+//! | `POST /api/device/workspaces/{workspace_id}/agent/messages` | 같음 | [`AgentSendRequest`] | 200 `{}` | 400 빈 글이나 너무 김, 401, 404 PAS 없음, 502 |
 //! | `GET /api/health` | 없음 | 없음 | 200 `{"ok":true}` | |
 //!
 //! 실패 본문은 모두 [`CoreError`] JSON이다. 검사 실패(400)는 [`crate::validate::parse_app_definition`]의 오류
 //! 그대로이고(`invalid_app_definition`, `unsupported_app`), 401, 404, 429와 서버 오류는 code `server`에 한국어 설명이다.
+//! 예외: 워크스페이스 PAS 경로의 400은 code `invalid_request`, 404는 `not_found`다. 코어는 이 둘을 그대로
+//! 화면에 돌려주고, 그 밖의 실패는 `server`로 바꾼다.
 //!
 //! # 기기 연결 (장치 코드 방식)
 //! 1. 코어가 `pair/start`로 `device_code`(비밀, 코어만 안다)와 `user_code`(사람이 읽는 코드)를 받는다.
@@ -45,10 +54,48 @@
 //!   (`unsupported_app` 등)는 캐시에 넣지 않고 넘긴다(더 새 쉘이 필요한 앱).
 //! - `app.published`의 `open`이 참이거나 `app.open`을 받으면, 반영한 `state.changed` 뒤에 화면에
 //!   `app.open_requested`를 보낸다. 캐시에 없는 앱의 `app.open`은 넘긴다.
+//! - 이벤트에 `workspace_id`가 있으면 그 값을 `app.open_requested`에 그대로 싣는다. 이 기기에 없는
+//!   워크스페이스면 띄우기 요청을 넘긴다(앱 캐시 반영은 그대로 한다). 워크스페이스 id는 기기마다 코어가
+//!   만든 UUID라, 서버가 모든 기기에 보내도 그 워크스페이스를 가진 기기만 띄운다.
+//!
+//! # 배치 보고
+//! 에이전트가 「지금 펼친 데스크톱에 어떤 창이 무엇을 보고 있는지」를 MCP로 읽을 수 있게, 연결한 코어는
+//! 자기 워크스페이스, 데스크톱, 창 배치를 서버에 알린다(기기 사이 동기화 전까지 정본은 여전히 코어다).
+//! - 코어는 `connected`가 될 때마다 한 번, 그 뒤로는 [`DeviceLayout`]에 담길 값이 바뀔 때마다 보낸다.
+//!   바뀐 뒤 [`LAYOUT_DEBOUNCE_MS`] 동안 더 바뀌지 않으면 보내고, 마지막으로 보낸 것과 같으면 보내지 않는다.
+//!   실패하면 연결이 이어져 있는 동안 [`LAYOUT_RETRY_SECS`] 뒤에 다시 보낸다.
+//! - 서버는 기기마다 마지막 보고 하나를 통째로 바꿔 둔다.
+//! - 고른 폴더의 절대 경로는 보내지 않는다. 폴더 이름만 보낸다(`root_name`).
+//!
+//! # 워크스페이스 PAS
+//! 워크스페이스마다 소울스트림 퍼시스턴트 세션 하나를 서버가 만들어 묶는다. 소울스트림 서비스 토큰은
+//! 서버의 설정에만 있고 코어와 화면은 소울스트림을 모른다.
+//!
+//! 서버가 지키는 것:
+//! - 묶음은 `workspace_id` 하나에 PAS 하나다. 만든 기기를 함께 적어 둔다.
+//! - 만들기(`POST .../agent`): 이미 있으면 그대로 돌려준다. 없으면 [`AGENT_MODELS`]에서 고른 모델부터,
+//!   그다음 나머지를 [`AGENT_MODELS`] 순서로 시도한다. 소울스트림이 모델을 지금 쓸 수 없다고 거부하면
+//!   (422 `INVALID_MODEL_PRESET`) 다음 모델로 가고, 고른 것과 다른 모델로 만들었으면 `notice` 기록을 남긴다.
+//!   대체 순서(소울스트림 `fallback_models`)는 만든 모델을 뺀 나머지를 [`AGENT_MODELS`] 순서로 둔다.
+//!   만든 직후 PAS가 첫 인사 턴을 돌므로 `busy`는 참으로 시작한다. 모든 기기에 `created`를 보낸다.
+//! - 보내기(`POST .../agent/messages`): 소울스트림 세션에 개입으로 보낸다. 사용자 기록은 여기서 만들지 않고
+//!   PAS의 이벤트에서 확인한 뒤 만든다(소울스트림 화면에서 보낸 말도 같은 길로 들어온다).
+//! - 중계: 서버는 묶은 PAS마다 소울스트림 세션 이벤트 스트림을 이어 두고(마지막으로 처리한 이벤트 번호부터),
+//!   아래처럼 바꿔 기록하고 모든 기기에 `agent.update`로 보낸다. 나머지 이벤트는 버린다.
+//!   - 사용자 말: 사람(쉘, 소울스트림 웹과 앱, 슬랙)이 보낸 것만 `user` 기록이 되고 `busy`가 참이 된다.
+//!     처음 지시와 캐시 유지 호출처럼 시스템이 넣은 말은 기록하지 않는다.
+//!   - 답의 조각: `delta`로 보낸다. 캐시 유지 호출의 답(`[SILENT]`)과 그 앞부분은 보내지 않는다.
+//!   - 답 한 덩이: `assistant` 기록. `[SILENT]`이면 기록하지 않는다.
+//!   - 도구 시작과 끝: `activity`(busy 참, 도구 이름이나 null).
+//!   - 턴 끝: `activity`(busy 거짓).
+//!   - 턴 실패: `error` 기록과 `activity`(busy 거짓).
+//! - 기록은 서버에 남고, `GET .../agent`는 최근 [`AGENT_HISTORY_LIMIT`]개를 오래된 것부터 준다.
+
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{App, AppVersion};
+use crate::{AgentInfo, AgentItem, AgentModel, AgentUpdate, App, AppVersion, AppWindow, Desktop, Workspace};
 
 pub const PAIR_START_PATH: &str = "/api/pair/start";
 pub const PAIR_POLL_PATH: &str = "/api/pair/poll";
@@ -66,6 +113,46 @@ pub const PAIRING_TTL_SECS: u64 = 600;
 pub const PAIRING_POLL_INTERVAL_SECS: u32 = 3;
 /// 서버가 동시에 들고 있는 승인 대기 연결의 최대 수. 넘으면 429.
 pub const PAIRING_MAX_PENDING: usize = 20;
+
+pub const DEVICE_LAYOUT_PATH: &str = "/api/device/layout";
+
+/// 워크스페이스 PAS 경로. `{workspace_id}` 자리에 워크스페이스 id를 넣는다.
+pub fn device_agent_path(workspace_id: &str) -> String {
+    format!("/api/device/workspaces/{workspace_id}/agent")
+}
+
+/// 워크스페이스 PAS에 말을 보내는 경로.
+pub fn device_agent_messages_path(workspace_id: &str) -> String {
+    format!("/api/device/workspaces/{workspace_id}/agent/messages")
+}
+
+/// 배치가 바뀐 뒤 이만큼 더 바뀌지 않으면 보고한다.
+pub const LAYOUT_DEBOUNCE_MS: u64 = 1000;
+/// 배치 보고가 실패하면 이만큼 뒤에 다시 보낸다.
+pub const LAYOUT_RETRY_SECS: u64 = 10;
+/// `GET .../agent`가 주는 대화 기록의 최대 개수.
+pub const AGENT_HISTORY_LIMIT: usize = 200;
+/// 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위).
+pub const AGENT_MESSAGE_MAX_CHARS: usize = 20_000;
+
+/// 워크스페이스 PAS를 만들 때 고를 수 있는 모델(소울스트림 preset id, 화면 이름). 순서가 대체 순서다.
+/// 추론 등급은 정하지 않고 preset의 기본값을 쓴다. 쉘이 처음 고르는 값은 맨 앞이다.
+pub const AGENT_MODELS: &[(&str, &str)] = &[
+    ("gemini-4-argon", "Argon"),
+    ("claude-opus", "Opus"),
+    ("codex-6.1-sol", "Sol"),
+];
+
+/// [`AGENT_MODELS`]를 화면에 줄 모양으로.
+pub fn agent_models() -> Vec<AgentModel> {
+    AGENT_MODELS
+        .iter()
+        .map(|(preset, label)| AgentModel {
+            preset: (*preset).to_string(),
+            label: (*label).to_string(),
+        })
+        .collect()
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -113,6 +200,51 @@ pub struct RegistryApp {
     pub version: AppVersion,
 }
 
+/// 코어가 알리는 이 기기의 배치. 「배치 보고」 절.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeviceLayout {
+    pub workspaces: Vec<Workspace>,
+    pub desktops: Vec<Desktop>,
+    pub windows: Vec<AppWindow>,
+    /// 창마다 고른 폴더의 이름.
+    pub folders: Vec<LayoutFolder>,
+    pub active_workspace_id: Option<String>,
+    /// 워크스페이스 id → 그 워크스페이스에서 마지막으로 본 데스크톱 id.
+    pub active_desktop_ids: BTreeMap<String, String>,
+}
+
+/// 창의 권한 하나에 고른 폴더의 이름. 절대 경로는 담지 않는다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LayoutFolder {
+    pub window_id: String,
+    pub permission: String,
+    pub root_name: String,
+}
+
+/// 워크스페이스 PAS의 지금 모습과 기록. 화면의 `agent.get` 응답과 같은 것을 담는다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeviceAgentReply {
+    pub agent: Option<AgentInfo>,
+    pub items: Vec<AgentItem>,
+    pub models: Vec<AgentModel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentCreateRequest {
+    /// 소울스트림 세션 이름과 PAS에게 주는 지시에 쓴다.
+    pub workspace_name: String,
+    pub model_preset: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentSendRequest {
+    pub text: String,
+}
+
 /// 이벤트 스트림의 이벤트. `event`로 가른다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "event")]
@@ -122,11 +254,27 @@ pub enum DeviceEvent {
     AppsSnapshot { apps: Vec<RegistryApp> },
     /// 앱의 새 버전이 올라왔다. `open`이면 에이전트가 띄워 달라고 한 것이다.
     /// 기기가 손으로 올린 앱은 `open`이 거짓이다(그 쉘이 직접 창을 연다).
+    /// `workspace_id`는 에이전트가 띄울 워크스페이스를 정했을 때만 있다.
     #[serde(rename = "app.published")]
-    AppPublished { app: RegistryApp, open: bool },
+    AppPublished {
+        app: RegistryApp,
+        open: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace_id: Option<String>,
+    },
     /// 에이전트가 이미 있는 앱을 띄워 달라고 했다.
     #[serde(rename = "app.open")]
-    AppOpen { app_id: String },
+    AppOpen {
+        app_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace_id: Option<String>,
+    },
+    /// 워크스페이스 PAS에 일어난 일. 「워크스페이스 PAS」 절.
+    #[serde(rename = "agent.update")]
+    AgentUpdate {
+        workspace_id: String,
+        update: AgentUpdate,
+    },
 }
 
 #[cfg(test)]
@@ -137,6 +285,7 @@ mod tests {
     fn device_event_uses_event_tag() {
         let event = DeviceEvent::AppOpen {
             app_id: "md-editor".into(),
+            workspace_id: None,
         };
         assert_eq!(
             serde_json::to_string(&event).unwrap(),
@@ -145,6 +294,41 @@ mod tests {
         let parsed: DeviceEvent =
             serde_json::from_str(r#"{"event":"apps.snapshot","apps":[]}"#).unwrap();
         assert_eq!(parsed, DeviceEvent::AppsSnapshot { apps: vec![] });
+        let targeted: DeviceEvent =
+            serde_json::from_str(r#"{"event":"app.open","app_id":"a","workspace_id":"w"}"#).unwrap();
+        assert_eq!(
+            targeted,
+            DeviceEvent::AppOpen {
+                app_id: "a".into(),
+                workspace_id: Some("w".into())
+            }
+        );
+    }
+
+    #[test]
+    fn agent_update_event_round_trips() {
+        let event = DeviceEvent::AgentUpdate {
+            workspace_id: "w".into(),
+            update: AgentUpdate::Delta { text: "안".into() },
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert_eq!(
+            json,
+            r#"{"event":"agent.update","workspace_id":"w","update":{"kind":"delta","text":"안"}}"#
+        );
+        assert_eq!(serde_json::from_str::<DeviceEvent>(&json).unwrap(), event);
+    }
+
+    #[test]
+    fn agent_paths_and_models() {
+        assert_eq!(device_agent_path("w1"), "/api/device/workspaces/w1/agent");
+        assert_eq!(
+            device_agent_messages_path("w1"),
+            "/api/device/workspaces/w1/agent/messages"
+        );
+        let models = agent_models();
+        assert_eq!(models.first().map(|m| m.preset.as_str()), Some("gemini-4-argon"));
+        assert_eq!(models.len(), AGENT_MODELS.len());
     }
 
     #[test]

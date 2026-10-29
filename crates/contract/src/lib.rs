@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 2판, 261029)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 3판, 261029)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -11,6 +11,12 @@
 //! 2판에서 바뀐 것: 오케스트레이터 연결 상태 [`LinkStatus`]와 `link.*` 명령, 연결했을 때 `app.import`가
 //! 오케스트레이터를 거치는 것, 에이전트가 앱을 띄워 달라고 할 때의 `app.open_requested` 이벤트,
 //! 오류 코드 `server`.
+//!
+//! 3판에서 바뀐 것(워크스페이스 PAS, 카드 #779): 블록 세트 2판(`agent_chat` 블록)과 모듈 `agent` 1판,
+//! `agent.*` 명령과 `agent.update` 이벤트, `app.open_requested`의 `workspace_id`.
+//! 워크스페이스 PAS는 워크스페이스마다 하나인 소울스트림 퍼시스턴트 세션이고, 오케스트레이터가 만들고
+//! 대화를 중계한다. 소울스트림 토큰은 오케스트레이터에만 있다. 서버 쪽 약속은 [`registry`]의
+//! 「워크스페이스 PAS」 절에 있다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -61,9 +67,16 @@ pub const TAURI_COMMAND: &str = "core";
 pub const TAURI_EVENT: &str = "core-event";
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
-pub const BLOCK_SET_VERSION: u32 = 1;
+///
+/// 호환 규칙: 블록 세트의 새 판은 블록을 더하기만 한다. 있던 블록의 필드와 동작은 바꾸지 않으므로
+/// `requires.blocks`가 이 값 이하인 정의는 모두 그대로 그린다. 있던 블록을 바꿔야 하면 그때 다시 정한다.
+/// - 1판: `split`, `file_tree`, `markdown_editor`, `markdown_view`.
+/// - 2판: 1판 + `agent_chat`.
+pub const BLOCK_SET_VERSION: u32 = 2;
 /// 이 쉘이 제공하는 모듈과 버전.
-pub const MODULE_VERSIONS: &[(&str, u32)] = &[("files", 1)];
+/// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기.
+/// - `agent` 1판: 창이 있는 워크스페이스의 PAS와 대화(`agent.*` 명령).
+pub const MODULE_VERSIONS: &[(&str, u32)] = &[("files", 1), ("agent", 1)];
 
 /// 창 상태 하나를 JSON으로 직렬화했을 때의 최대 바이트 수.
 pub const WINDOW_STATE_MAX_BYTES: usize = 64 * 1024;
@@ -250,7 +263,7 @@ pub enum LinkStatus {
 }
 
 // ---------------------------------------------------------------------------
-// 앱 정의 (블록 세트 1판)
+// 앱 정의 (블록 세트 2판)
 // ---------------------------------------------------------------------------
 
 /// 앱 정의. 에이전트가 쓰는 JSON 문서이고, 가져오면 앱 버전 하나가 된다.
@@ -268,6 +281,7 @@ pub enum LinkStatus {
 ///    - 정의에 직접 적은 경로(문자열 `path`)는 [`FileRef`]의 경로 규칙을 지킨다. 어기면 고른 폴더 밖을
 ///      요구하는 정의로 보고 거부한다.
 ///    - `split`의 `children`은 둘 이상이고, `sizes`가 있으면 개수가 같고 모두 0보다 크다.
+///    - `agent_chat`을 쓰면 `requires.modules`에 `agent`가 있다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
@@ -331,7 +345,7 @@ pub enum FileAccess {
     Readwrite,
 }
 
-/// 블록. 블록 세트 1판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
+/// 블록. 블록 세트 2판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
@@ -365,6 +379,14 @@ pub enum Block {
     /// 마크다운을 렌더해서 읽기만 한다. 원문의 HTML은 그리지 않는다.
     /// 쉘 창이 포커스를 다시 얻으면 파일을 다시 읽는다. 경로가 null이면 빈 상태를 보인다.
     MarkdownView { file: FileRef },
+    /// (블록 세트 2판) 이 창이 있는 워크스페이스의 PAS와 나누는 대화. `requires.modules`에 `agent`가
+    /// 있어야 한다. 창마다 설정할 것이 없다. 같은 워크스페이스의 대화 창은 모두 같은 PAS를 본다.
+    /// - 서버에 연결하지 않았으면 연결하라는 빈 상태를 보인다.
+    /// - 그 워크스페이스에 PAS가 없으면 모델을 고르고 시작하는 판을 보인다(`agent.create`).
+    /// - PAS가 있으면 대화 기록과 진행 중인 답을 보이고, 아래 입력창으로 보낸다(`agent.send`).
+    ///   Enter는 보내기, Shift+Enter는 줄바꿈이다. 한글 조합 중의 Enter는 보내지 않는다.
+    /// - 답은 마크다운으로 렌더한다. HTML은 그리지 않고 링크를 눌러도 쉘이 다른 곳으로 가지 않는다.
+    AgentChat {},
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
@@ -548,6 +570,26 @@ pub enum CoreRequest {
         #[ts(optional)]
         expected_revision: Option<String>,
     },
+
+    /// 워크스페이스 PAS의 지금 모습과 대화 기록(최근 [`registry::AGENT_HISTORY_LIMIT`]개)을 읽는다.
+    /// 대화 블록이 켜질 때와 연결이 다시 이어졌을 때 부른다. `connected`가 아니면 `server`,
+    /// 이 기기에 없는 워크스페이스면 `not_found`.
+    #[serde(rename = "agent.get")]
+    AgentGet { workspace_id: String },
+    /// 워크스페이스 PAS를 만든다. `model_preset`은 `agent.get`의 `models` 가운데 하나다.
+    /// 고른 모델이 지금 한도에 걸려 있으면 서버가 `models` 순서로 다음 모델을 써서 만들고, 그 사실을
+    /// `notice` 기록으로 남긴다. 이미 PAS가 있으면 새로 만들지 않고 있는 것을 돌려준다.
+    /// 코어는 워크스페이스 이름을 붙여 서버에 보낸다. `connected`가 아니면 `server`.
+    #[serde(rename = "agent.create")]
+    AgentCreate {
+        workspace_id: String,
+        model_preset: String,
+    },
+    /// 워크스페이스 PAS에 말을 보낸다. 보낸 말은 서버가 PAS의 기록에서 확인한 뒤 `agent.update`의
+    /// `item`(user)으로 돌아온다. 앞뒤 공백을 뺀 글이 비었거나 [`registry::AGENT_MESSAGE_MAX_CHARS`]자를
+    /// 넘으면 `invalid_request`, PAS가 없으면 `not_found`, `connected`가 아니면 `server`.
+    #[serde(rename = "agent.send")]
+    AgentSend { workspace_id: String, text: String },
 }
 
 /// 코어의 응답. `op`는 명령과 같다.
@@ -612,6 +654,85 @@ pub enum CoreReply {
     },
     #[serde(rename = "files.write")]
     FilesWrite { path: String, revision: String },
+
+    #[serde(rename = "agent.get")]
+    AgentGet {
+        /// 그 워크스페이스의 PAS. 없으면 null이고, 대화 블록은 시작하는 판을 보인다.
+        agent: Option<AgentInfo>,
+        /// 대화 기록. 오래된 것부터.
+        items: Vec<AgentItem>,
+        /// 만들 때 고를 수 있는 모델. 순서가 대체 순서다(앞의 모델이 막히면 다음).
+        models: Vec<AgentModel>,
+    },
+    #[serde(rename = "agent.create")]
+    AgentCreate { agent: AgentInfo },
+    #[serde(rename = "agent.send")]
+    AgentSend {},
+}
+
+/// 워크스페이스 PAS 하나.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AgentInfo {
+    pub workspace_id: String,
+    /// 만들 때 쓴 모델 preset(예: `gemini-4-argon`). 한도로 대체 모델이 도는 중이어도 이 값은 그대로다.
+    pub model_preset: String,
+    /// 화면에 보일 모델 이름(예: `Argon`).
+    pub model_label: String,
+    /// 지금 답을 만드는 중인가.
+    pub busy: bool,
+    /// 지금 쓰는 도구 이름. 없으면 null.
+    pub tool: Option<String>,
+    pub created_at: String,
+}
+
+/// 만들 때 고를 수 있는 모델 하나.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AgentModel {
+    pub preset: String,
+    pub label: String,
+}
+
+/// 대화 기록 하나. 한 번 기록되면 바뀌지 않는다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AgentItem {
+    /// 워크스페이스 안에서 늘어나는 순번(문자열). 같은 id가 두 번 오면 화면은 하나만 둔다.
+    pub id: String,
+    pub kind: AgentItemKind,
+    /// 사용자 글이나 PAS의 답(마크다운), 오류나 알림 한 줄.
+    pub text: String,
+    pub at: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum AgentItemKind {
+    /// 디렉터가 보낸 말(쉘이나 소울스트림 화면에서).
+    User,
+    /// PAS의 답 한 덩이. 한 턴에 여럿일 수 있다(도구를 쓰는 사이사이).
+    Assistant,
+    /// 턴이 실패했다.
+    Error,
+    /// 쉘이 남기는 알림(대체 모델로 시작함 등). 눈에 덜 띄게 그린다.
+    Notice,
+}
+
+/// 워크스페이스 PAS에 일어난 일. `kind`로 가른다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum AgentUpdate {
+    /// PAS가 만들어졌다(다른 창이나 기기에서 만든 것 포함).
+    Created { agent: AgentInfo },
+    /// 기록이 하나 늘었다. `assistant`가 오면 화면은 진행 중인 답을 비운다(그 답의 최종본이다).
+    Item { item: AgentItem },
+    /// 진행 중인 답의 다음 조각. 화면은 진행 중인 답 끝에 이어 붙인다.
+    Delta { text: String },
+    /// 바쁜 상태나 쓰는 도구가 바뀌었다. `busy`가 거짓이 되면 화면은 진행 중인 답을 비운다.
+    Activity { busy: bool, tool: Option<String> },
 }
 
 /// 폴더 안 항목 하나.
@@ -642,10 +763,26 @@ pub enum CoreEvent {
     StateChanged { snapshot: ShellSnapshot },
     /// 에이전트가 앱을 띄워 달라고 했다(앱을 올리며 띄우기를 요청했거나 앱 열기를 요청함).
     /// 코어는 그 앱을 캐시에 반영한 `state.changed`를 먼저 보내고 이 이벤트를 보낸다.
-    /// 화면은 지금 보는 데스크톱에 그 앱의 창이 없으면 새 창 자리 규칙대로 `window.open`을 부르고,
+    /// 띄울 데스크톱: `workspace_id`가 없으면 지금 보는 데스크톱, 있으면 그 워크스페이스에서 마지막으로 본
+    /// 데스크톱이다(지금 보는 워크스페이스가 아니어도 보는 화면을 바꾸지 않는다). 코어는 이 기기에 없는
+    /// 워크스페이스의 요청을 화면에 보내지 않는다.
+    /// 화면은 그 데스크톱에 그 앱의 창이 없으면 새 창 자리 규칙대로 `window.open`을 부르고,
     /// 있으면 그 창을 `window.raise`로 올린다. 화면이 여럿이면(개발용 다리) 각자 처리한다.
     #[serde(rename = "app.open_requested")]
-    AppOpenRequested { app_id: String },
+    AppOpenRequested {
+        app_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        workspace_id: Option<String>,
+    },
+    /// 워크스페이스 PAS에 일어난 일. 코어는 이 기기에 있는 워크스페이스의 것만 보낸다.
+    /// 대화 블록은 자기 워크스페이스의 것만 반영한다. 끊긴 동안의 것은 다시 오지 않으므로, 연결이 다시
+    /// 이어지면(`link`가 `connected`로 바뀌면) 대화 블록이 `agent.get`으로 다시 읽는다.
+    #[serde(rename = "agent.update")]
+    AgentUpdate {
+        workspace_id: String,
+        update: AgentUpdate,
+    },
 }
 
 /// 명령의 실패.
@@ -743,11 +880,65 @@ mod tests {
 
     #[test]
     fn examples_parse_as_app_definitions() {
-        for name in ["md-editor.json", "md-viewer.json"] {
+        for name in ["md-editor.json", "md-viewer.json", "workspace-pas.json"] {
             let def: AppDefinition =
                 serde_json::from_str(&example(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
-            assert_eq!(def.requires.blocks, BLOCK_SET_VERSION, "{name}");
+            assert!(def.requires.blocks <= BLOCK_SET_VERSION, "{name}");
         }
+    }
+
+    #[test]
+    fn agent_chat_needs_agent_module() {
+        validate::parse_app_definition(&example("workspace-pas.json")).expect("작업 PAS 예제");
+        let without_module = example("workspace-pas.json").replace(r#""agent": 1"#, r#""files": 1"#);
+        assert_ne!(without_module, example("workspace-pas.json"));
+        let error = validate::parse_app_definition(&without_module).unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidAppDefinition);
+        assert!(error.details.iter().any(|d| d.contains("agent 모듈")), "{error:?}");
+
+        let block: Block = serde_json::from_str(r#"{"type":"agent_chat"}"#).unwrap();
+        assert_eq!(block, Block::AgentChat {});
+        assert!(serde_json::from_str::<Block>(r#"{"type":"agent_chat","x":1}"#).is_err());
+    }
+
+    #[test]
+    fn block_set_one_definitions_stay_valid() {
+        let old = example("md-viewer.json");
+        assert!(old.contains(r#""blocks": 1"#), "md 예제는 1판으로 남겨 호환을 보인다");
+        validate::parse_app_definition(&old).expect("1판 정의는 2판 쉘에서도 유효");
+    }
+
+    #[test]
+    fn agent_requests_and_events_round_trip() {
+        let req: CoreRequest = serde_json::from_str(
+            r#"{"op":"agent.create","workspace_id":"w","model_preset":"gemini-4-argon"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            req,
+            CoreRequest::AgentCreate {
+                workspace_id: "w".into(),
+                model_preset: "gemini-4-argon".into()
+            }
+        );
+        let event = CoreEvent::AgentUpdate {
+            workspace_id: "w".into(),
+            update: AgentUpdate::Activity {
+                busy: true,
+                tool: Some("upload_app".into()),
+            },
+        };
+        assert_eq!(
+            serde_json::to_string(&event).unwrap(),
+            r#"{"event":"agent.update","workspace_id":"w","update":{"kind":"activity","busy":true,"tool":"upload_app"}}"#
+        );
+        let item = AgentItem {
+            id: "3".into(),
+            kind: AgentItemKind::Notice,
+            text: "알림".into(),
+            at: "2026-10-29T00:00:00Z".into(),
+        };
+        assert_eq!(serde_json::to_value(&item).unwrap()["kind"], "notice");
     }
 
     #[test]
@@ -818,7 +1009,7 @@ mod tests {
     #[test]
     fn app_definition_schema_lists_block_types() {
         let schema = app_definition_schema().to_string();
-        for block in ["split", "file_tree", "markdown_editor", "markdown_view"] {
+        for block in ["split", "file_tree", "markdown_editor", "markdown_view", "agent_chat"] {
             assert!(schema.contains(&format!("\"{block}\"")), "스키마에 {block}이 없다");
         }
     }
@@ -831,6 +1022,7 @@ mod tests {
         );
         let event = CoreEvent::AppOpenRequested {
             app_id: "md-viewer".into(),
+            workspace_id: None,
         };
         assert_eq!(
             serde_json::to_string(&event).unwrap(),

@@ -567,7 +567,7 @@ fn import_seeds_versions_migrates_window_state_and_rejects_newer_requirements() 
         .any(|grant| { grant.window_id == window_id && grant.permission == "docs" }));
 
     let mut unsupported: Value = serde_json::from_str(MD_EDITOR).unwrap();
-    unsupported["requires"]["blocks"] = json!(2);
+    unsupported["requires"]["blocks"] = json!(99);
     expect_error(
         core.handle(CoreRequest::AppImport {
             definition_json: unsupported.to_string(),
@@ -905,20 +905,25 @@ fn registry_events_update_cache_dedupe_versions_and_order_open_requests() {
         DeviceEvent::AppPublished {
             app: version7,
             open: false,
+            workspace_id: None,
         },
         DeviceEvent::AppPublished {
             app: registry_app(8, &unsupported.to_string()),
             open: false,
+            workspace_id: None,
         },
         DeviceEvent::AppOpen {
             app_id: "missing-app".into(),
+            workspace_id: None,
         },
         DeviceEvent::AppOpen {
             app_id: "md-editor".into(),
+            workspace_id: None,
         },
         DeviceEvent::AppPublished {
             app: registry_app(8, &next_json),
             open: true,
+            workspace_id: None,
         },
     ]));
     let (tx, rx) = mpsc::channel();
@@ -988,7 +993,7 @@ fn registry_events_update_cache_dedupe_versions_and_order_open_requests() {
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, CoreEvent::AppOpenRequested { app_id } if app_id == "missing-app"))
+            .filter(|event| matches!(event, CoreEvent::AppOpenRequested { app_id, .. } if app_id == "missing-app"))
             .count(),
         0
     );

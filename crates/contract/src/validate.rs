@@ -169,6 +169,13 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             validate_permission(&file.permission, definition, details, at);
             validate_file_path(&file.path, definition, details, at);
         }
+        Block::AgentChat {} => {
+            if !definition.requires.modules.contains_key("agent") {
+                details.push(format!(
+                    "{at}: agent_chat이 사용하는 agent 모듈을 requires.modules에 선언해야 합니다"
+                ));
+            }
+        }
     }
 }
 

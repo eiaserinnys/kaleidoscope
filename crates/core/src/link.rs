@@ -390,7 +390,7 @@ fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEvent) -> bool 
                 inner.emit(&event);
             }
         }
-        DeviceEvent::AppPublished { app, open } => {
+        DeviceEvent::AppPublished { app, open, .. } => {
             let result = apply_registry_change(inner, |state| {
                 if inner.generation.load(Ordering::SeqCst) != generation {
                     return None;
@@ -412,10 +412,13 @@ fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEvent) -> bool 
                 inner.emit(&event);
             }
             if open {
-                inner.emit(&CoreEvent::AppOpenRequested { app_id: app.app.id });
+                inner.emit(&CoreEvent::AppOpenRequested {
+                    app_id: app.app.id,
+                    workspace_id: None,
+                });
             }
         }
-        DeviceEvent::AppOpen { app_id } => {
+        DeviceEvent::AppOpen { app_id, .. } => {
             let exists = inner
                 .state
                 .lock()
@@ -425,9 +428,14 @@ fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEvent) -> bool 
                 .iter()
                 .any(|app| app.id == app_id);
             if exists {
-                inner.emit(&CoreEvent::AppOpenRequested { app_id });
+                inner.emit(&CoreEvent::AppOpenRequested {
+                    app_id,
+                    workspace_id: None,
+                });
             }
         }
+        // 워크스페이스 PAS 중계와 workspace_id로 겨눈 띄우기는 다음 PR(코어의 PAS 연결)에서 구현한다.
+        DeviceEvent::AgentUpdate { .. } => {}
     }
     is_current(inner, generation)
 }

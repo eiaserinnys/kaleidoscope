@@ -1,0 +1,7 @@
+{
+  "id": "workspace-pas",
+  "name": "작업 PAS",
+  "description": "이 작업(워크스페이스)을 맡은 PAS와 대화한다",
+  "requires": { "blocks": 2, "modules": { "agent": 1 } },
+  "ui": { "type": "agent_chat" }
+}
