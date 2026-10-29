@@ -34,9 +34,12 @@ test("코드 편집의 저장과 충돌, 큰 로그의 스크롤을 확인한다
   await expect(page.getByRole("textbox", { name: "코드 보기" })).toBeVisible();
   await scroll.evaluate((node) => { node.scrollTop = node.scrollHeight; });
   await page.evaluate(() => (window as any).__ksSetLog(`${Array.from({ length: 20000 }, (_, i) => `줄 ${i}`).join("\n")}\n마지막`));
+  await expect(page.getByRole("textbox", { name: "코드 보기" })).toContainText("마지막");
   await expect.poll(() => scroll.evaluate((node) => node.scrollHeight - node.clientHeight - node.scrollTop)).toBeLessThan(3);
   await scroll.evaluate((node) => { node.scrollTop = 100; });
+  const oldHeight = await scroll.evaluate((node) => node.scrollHeight);
   await page.evaluate(() => (window as any).__ksSetLog(`${Array.from({ length: 20000 }, (_, i) => `줄 ${i}`).join("\n")}\n마지막\n추가`));
+  await expect.poll(() => scroll.evaluate((node) => node.scrollHeight)).toBeGreaterThan(oldHeight);
   await expect.poll(() => scroll.evaluate((node) => node.scrollTop)).toBe(100);
 });
 

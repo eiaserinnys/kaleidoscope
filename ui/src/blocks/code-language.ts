@@ -19,7 +19,9 @@ const extensions: Record<string, CodeLanguage> = {
   json: "json", yaml: "yaml", yml: "yaml", toml: "toml", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript", ts: "typescript", tsx: "typescript", py: "python", rs: "rust", css: "css", html: "html", htm: "html", sql: "sql", sh: "shell", bash: "shell", zsh: "shell", ps1: "shell", xml: "xml", svg: "xml", md: "markdown", markdown: "markdown",
 };
 export function codeLanguageForPath(path: string | null, language?: CodeLanguage): CodeLanguage {
-  return language ?? extensions[path?.split(".").pop()?.toLowerCase() ?? ""] ?? "plain";
+  const name = path?.split(/[\\/]/).pop() ?? "";
+  const dot = name.lastIndexOf(".");
+  return language ?? (dot > 0 ? extensions[name.slice(dot + 1).toLowerCase()] : undefined) ?? "plain";
 }
 export function codeViewText(value: JsonValue): string {
   return typeof value === "string" ? value : JSON.stringify(value, null, 2);

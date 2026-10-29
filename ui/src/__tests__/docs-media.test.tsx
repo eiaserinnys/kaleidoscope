@@ -8,6 +8,7 @@ describe("문서와 미디어 계약", () => {
     const cases: Record<string, string> = { json: "json", yaml: "yaml", yml: "yaml", toml: "toml", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript", ts: "typescript", tsx: "typescript", py: "python", rs: "rust", css: "css", html: "html", htm: "html", sql: "sql", sh: "shell", bash: "shell", zsh: "shell", ps1: "shell", xml: "xml", svg: "xml", md: "markdown", markdown: "markdown", txt: "plain" };
     for (const [ext, expected] of Object.entries(cases)) expect(codeLanguageForPath(`a.${ext.toUpperCase()}`)).toBe(expected);
     expect(codeLanguageForPath("a.json", "plain")).toBe("plain");
+    expect(codeLanguageForPath("json")).toBe("plain");
   });
   it("보기 값은 문자열이나 읽기 좋은 JSON으로 만든다", () => {
     expect(codeViewText("abc")).toBe("abc");
