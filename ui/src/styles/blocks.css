@@ -273,6 +273,8 @@
   line-height: var(--ks-line-document);
   overflow-wrap: anywhere;
   word-break: keep-all;
+  /* 글 블록, 흐름 본문, 속성 값은 pre-wrap이다. 렌더된 요소 사이 줄바꿈이 빈 줄로 보이지 않게 끊는다. */
+  white-space: normal;
 }
 
 .ks-markdown-text > :first-child {
