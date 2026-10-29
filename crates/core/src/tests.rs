@@ -1634,28 +1634,37 @@ fn layout_report_sends_sanitized_initial_state_and_debounces_changes() {
     host.choose(Some(root.clone()));
     pick_folder(&core, &window_id);
 
-    crate::layout_reporter::start(Arc::clone(&core.inner), 0, 0);
+    assert!(crate::registry_events::apply_event(
+        &Arc::clone(&core.inner),
+        0,
+        DeviceEvent::AppsSnapshot { apps: vec![] },
+    ));
     wait_until(|| client.layouts.lock().unwrap().len() == 1);
     let first = client.layouts.lock().unwrap()[0].clone();
     assert_eq!(first.workspaces[0].id, workspace_id);
+    assert!(first.windows.iter().any(|window| window.id == window_id));
     assert_eq!(first.folders[0].window_id, window_id);
     assert_eq!(first.folders[0].root_name, "private-folder");
     assert!(!serde_json::to_string(&first)
         .unwrap()
         .contains(&root.to_string_lossy().to_string()));
 
-    core.handle(CoreRequest::WorkspaceCreate {
-        name: "두 번째".into(),
-    })
-    .unwrap();
-    core.handle(CoreRequest::WorkspaceCreate {
-        name: "세 번째".into(),
-    })
-    .unwrap();
+    for x in [42, 64] {
+        core.handle(CoreRequest::WindowSetRect {
+            window_id: window_id.clone(),
+            rect: Rect {
+                x,
+                y: 20,
+                width: 300,
+                height: 250,
+            },
+        })
+        .unwrap();
+    }
     wait_until(|| client.layouts.lock().unwrap().len() == 2);
     thread::sleep(Duration::from_millis(1200));
     assert_eq!(client.layouts.lock().unwrap().len(), 2);
-    assert_eq!(client.layouts.lock().unwrap()[1].workspaces.len(), 3);
+    assert_eq!(client.layouts.lock().unwrap()[1].windows[0].rect.x, 64);
 
     core.inner.emit(&CoreEvent::StateChanged {
         snapshot: snapshot(&core),
