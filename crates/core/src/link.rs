@@ -146,25 +146,10 @@ pub(crate) fn import_app(
     };
     match status {
         LinkStatus::Unlinked {} => {
-            let mut state = inner.state.lock().unwrap();
-            let before = state.clone();
-            let reply = app_commands::import(&mut state, definition_json)?;
-            let shared_changed = before.shared != state.shared;
-            if shared_changed {
-                if let Err(error) = storage::save_changed_state(
-                    &inner.data_dir,
-                    &state.shared,
-                    &state.device,
-                    true,
-                    false,
-                ) {
-                    *state = before;
-                    return Err(error);
-                }
-                let event = CoreEvent::StateChanged {
-                    snapshot: snapshot(&state),
-                };
-                drop(state);
+            let (reply, event) =
+                apply_registry_change(inner, |state| app_commands::import(state, definition_json))?;
+            let reply = reply?;
+            if let Some(event) = event {
                 inner.emit(&event);
             }
             Ok(reply)

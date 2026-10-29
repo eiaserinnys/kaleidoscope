@@ -1062,6 +1062,34 @@ fn connected_import_uploads_and_preserves_server_validation_error() {
 }
 
 #[test]
+fn regression_unlinked_import_persists_removed_folder_grants() {
+    let temp = TempDir::new().unwrap();
+    let data_dir = temp.path().join("data");
+    let host = Arc::new(FakeHost::default());
+    let docs = temp.path().join("docs");
+    fs::create_dir_all(&docs).unwrap();
+    host.choose(Some(docs));
+    let core = seeded_core(&data_dir, &host);
+    let (_, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "md-editor");
+    pick_folder(&core, &window_id);
+    assert_eq!(snapshot(&core).device.grants.len(), 1);
+
+    let mut next_definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    next_definition["permissions"] = json!([
+        { "module": "files", "id": "manuals", "access": "readwrite", "label": "문서 폴더" }
+    ]);
+    next_definition["ui"]["children"][0]["root"]["permission"] = json!("manuals");
+    next_definition["ui"]["children"][1]["file"]["permission"] = json!("manuals");
+    import(&core, &next_definition.to_string());
+    assert!(snapshot(&core).device.grants.is_empty());
+    drop(core);
+
+    let reopened = open_core(&data_dir, vec![], &host);
+    assert!(snapshot(&reopened).device.grants.is_empty());
+}
+
+#[test]
 fn connected_import_persists_removed_folder_grants() {
     let temp = TempDir::new().unwrap();
     let data_dir = temp.path().join("data");

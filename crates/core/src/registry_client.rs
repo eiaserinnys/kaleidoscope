@@ -143,6 +143,9 @@ fn success_json<T: serde::de::DeserializeOwned>(
 }
 
 fn check_status(status: reqwest::StatusCode, body: &[u8]) -> Result<(), RegistryError> {
+    if status.is_success() {
+        return Ok(());
+    }
     match status.as_u16() {
         401 => Err(RegistryError::Unauthorized),
         404 => Err(RegistryError::NotFound),
@@ -159,4 +162,14 @@ fn check_status(status: reqwest::StatusCode, body: &[u8]) -> Result<(), Registry
 pub(crate) fn parse_event_line(line: &str) -> Option<DeviceEvent> {
     let json = line.strip_prefix("data: ")?;
     serde_json::from_str(json).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn regression_successful_event_stream_status_is_accepted() {
+        assert!(check_status(reqwest::StatusCode::OK, &[]).is_ok());
+    }
 }
