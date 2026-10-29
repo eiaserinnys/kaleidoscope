@@ -73,7 +73,9 @@ export function Shell({ store }: { store: ShellStore }) {
     if (event.event !== "app.open_requested") return;
     const latest = store.getSnapshot();
     if (!latest?.shared.apps.some((app) => app.id === event.app_id)) return;
-    const workspace = selectWorkspace(latest);
+    const workspace = event.workspace_id
+      ? latest.shared.workspaces.find((item) => item.id === event.workspace_id)
+      : selectWorkspace(latest);
     const desktop = workspace ? selectDesktop(latest, workspace) : undefined;
     if (!desktop) return;
 

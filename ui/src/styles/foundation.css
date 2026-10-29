@@ -145,7 +145,8 @@ button {
 .ks-editor-loading,
 .ks-editor-error,
 .ks-markdown-loading,
-.ks-markdown-error {
+.ks-markdown-error,
+.ks-agent-chat-state {
   display: grid;
   place-items: center;
   padding: var(--ks-space-4);

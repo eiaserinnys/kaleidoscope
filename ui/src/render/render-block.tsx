@@ -5,6 +5,7 @@ import { FileTreeBlock } from "../blocks/file-tree";
 import { MarkdownEditorBlock } from "../blocks/markdown-editor";
 import { MarkdownViewBlock } from "../blocks/markdown-view";
 import { SplitBlock } from "../blocks/split";
+import { AgentChatBlock } from "../blocks/agent-chat";
 
 export function renderBlock(block: Block, context: BlockContext): ReactNode {
   switch (block.type) {
@@ -16,6 +17,8 @@ export function renderBlock(block: Block, context: BlockContext): ReactNode {
       return <MarkdownEditorBlock block={block} context={context} />;
     case "markdown_view":
       return <MarkdownViewBlock block={block} context={context} />;
+    case "agent_chat":
+      return <AgentChatBlock block={block} context={context} />;
     default: {
       const unknown = block as unknown as { type?: unknown };
       return <div className="ks-unknown-block" role="alert">지원하지 않는 블록: {String(unknown.type)}</div>;

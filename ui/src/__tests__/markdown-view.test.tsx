@@ -18,6 +18,7 @@ describe("markdown_view block", () => {
     const { container } = render(<AppWindowContent store={store} windowId="viewer-window" />);
 
     expect(await screen.findByRole("heading", { name: "Hello" })).toBeTruthy();
+    expect(container.querySelector(".ks-markdown-view > .ks-markdown-text h1")).toBeTruthy();
     expect(container.querySelector("script")).toBeNull();
     expect(container.querySelector("img")).toBeNull();
     expect(await screen.findByText("Diagram")).toBeTruthy();
