@@ -20,6 +20,7 @@ test("긴 목록과 격자에서 가상 스크롤과 키보드 선택", async ({
   await list.evaluate((element) => { element.scrollTop = element.scrollHeight; });
   const last = list.getByRole("option", { name: "항목 1000", exact: true });
   await expect(last).toBeVisible();
+  await expect(list.locator('[role="option"][tabindex="0"]')).toHaveCount(1);
   await last.click();
   await expect(last).toHaveAttribute("aria-selected", "true");
   await app.getByRole("tab", { name: "격자 시험" }).click();

@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppDefinition, Block } from "../contract/contract";
+import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
@@ -112,4 +113,52 @@ it("accepts singleton groups, rows, children, feed entries and badges", async ()
   expect(screen.getByText("흐름 본문")).toBeTruthy();
   fireEvent.click(screen.getByRole("treeitem", { name: "상위" }));
   expect(screen.getByRole("treeitem", { name: "하위" })).toBeTruthy();
+});
+
+it.each(["list", "table", "tree"] as const)("keeps one keyboard entry point after a focused %s item disappears", async (type) => {
+  const items = [{ key: "a", title: "첫째" }, { key: "b", title: "둘째" }, { key: "c", title: "셋째" }];
+  const block: Block = type === "table"
+    ? { type, rows: { expr: "$state.items" }, columns: [{ field: "title", label: "이름" }], selected: { state: "choice" } }
+    : { type, items: { expr: "$state.items" }, selected: { state: "choice" } };
+  const { transport } = setup(block, { items, choice: "c" });
+  const role = type === "list" ? "option" : type === "table" ? "row" : "treeitem";
+  const second = await screen.findByRole(role, { name: "둘째" });
+  second.focus();
+  const pointer = type === "table" ? "/ui/rows" : "/ui/items";
+  const container = type === "tree" ? screen.getByRole("tree") : type === "table" ? screen.getByRole("table") : screen.getByRole("listbox");
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { [pointer]: { status: "ready", value: [items[2], items[0], items[1]] } } } }));
+  expect(container.querySelectorAll('[tabindex="0"]')).toHaveLength(1);
+  expect(container.querySelector('[tabindex="0"]')?.textContent).toContain("둘째");
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { [pointer]: { status: "ready", value: [items[0], items[2]] } } } }));
+  const tabbable = container.querySelectorAll('[tabindex="0"]');
+  expect(tabbable).toHaveLength(1);
+  expect(tabbable[0].textContent).toContain("셋째");
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { [pointer]: { status: "ready", value: [items[0]] } } } }));
+  const fallback = container.querySelectorAll('[tabindex="0"]');
+  expect(fallback).toHaveLength(1);
+  expect(fallback[0].textContent).toContain("첫째");
+});
+
+it.each(["path", "children"] as const)("skips malformed tree items in %s mode", async (by) => {
+  const entries: JsonValue[] = [
+    { key: "good", title: "정상", path: "정상" },
+    { key: "bad-path", path: 123 },
+    { key: "bad-title", path: "가짜", title: {} },
+    { key: "bad-meta", path: "숨김", title: "잘못된 메타", meta: {} },
+    { key: "bad-children", path: "숨김2", title: "잘못된 자식", children: 42 },
+    { key: "bad-badge", path: "숨김3", title: "잘못된 배지", badges: { text: "표식", color: 12 } },
+  ];
+  setup({ type: "tree", by, items: entries });
+  expect(await screen.findByRole("treeitem", { name: "정상" })).toBeTruthy();
+  expect(screen.getAllByRole("treeitem")).toHaveLength(1);
+});
+
+it("uses a selected child as the tree entry point when items arrive later", async () => {
+  const { transport } = setup({ type: "tree", items: { expr: "$state.items" }, selected: { state: "choice" } }, { items: [], choice: "child" });
+  await screen.findByText("없음");
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: {
+    "/ui/items": { status: "ready", value: [{ key: "parent", title: "상위", children: [{ key: "child", title: "선택한 하위" }] }] },
+  } } }));
+  const selected = await screen.findByRole("treeitem", { name: "선택한 하위" });
+  expect(selected.tabIndex).toBe(0);
 });

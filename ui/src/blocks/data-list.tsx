@@ -6,7 +6,7 @@ import { validColor } from "../components/badge";
 import { isMedia, MediaThumbnail } from "../components/media-thumbnail";
 import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
-import { Badges, GroupHeading, NoItems, VirtualSurface, groups, isObject, useRoving, useVirtualRows } from "./data-view-common";
+import { Badges, GroupHeading, NoItems, VirtualSurface, groups, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
 
 const validItem = (v: unknown): v is ListItem => isObject(v) && typeof v.key === "string" && typeof v.title === "string";
 type Row = { kind: "heading"; title: string; meta?: string } | { kind: "items"; items: ListItem[]; start: number };
@@ -47,6 +47,7 @@ function ListReady({ block, context, pointer, value }: { block: Extract<Block, {
   const rowOf = (index: number) => Math.max(0, rows.findIndex((row) => row.kind === "items" && index >= row.start && index < row.start + row.items.length));
   const selected = block.selected ? context.window.state[block.selected.state] : null;
   const roving = useRoving(items, selected, scroll, virtual, rowOf);
+  keepRovingRow(virtual, rowOf(roving.focus));
   if (!items.length) return <NoItems />;
   const choose = (item: ListItem) => { if (block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue); };
   const virtualRows = virtual.getVirtualItems();

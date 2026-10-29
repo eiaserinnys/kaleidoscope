@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
+import { defaultRangeExtractor, useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import type { Badge as BadgeValue, Group } from "../contract/contract";
 import { Badge, isBadge } from "../components/badge";
 import { DataIcon } from "../components/data-icons";
@@ -32,8 +32,11 @@ export function useVirtualRows(count: number, estimate: number, supplied?: RefOb
   return { scroll, virtual };
 }
 export function useRoving<T extends { key: string }>(items: T[], selected: unknown, scroll: RefObject<HTMLDivElement | null>, virtual?: Virtualizer<HTMLDivElement, Element>, rowOf?: (index: number) => number) {
-  const [focus, setFocus] = useState(() => Math.max(0, items.findIndex((item) => item.key === selected)));
-  const pending = useRef<number | null>(null);
+  const [focusKey, setFocusKey] = useState<string | null>(() => items.find((item) => item.key === selected)?.key ?? items[0]?.key ?? null);
+  const entryKey = items.some((item) => item.key === focusKey) ? focusKey : items.find((item) => item.key === selected)?.key ?? items[0]?.key ?? null;
+  const entryIndex = Math.max(0, items.findIndex((item) => item.key === entryKey));
+  const setFocus = (index: number) => setFocusKey(items[index]?.key ?? null);
+  const pending = useRef<string | null>(null);
   const initial = useRef(false);
   useEffect(() => {
     if (!initial.current && items.length) {
@@ -42,15 +45,18 @@ export function useRoving<T extends { key: string }>(items: T[], selected: unkno
       if (index >= 0) { setFocus(index); virtual?.scrollToIndex(rowOf ? rowOf(index) : index, { align: "auto" }); }
     }
   }, [items, selected, virtual, rowOf]);
+  useEffect(() => { if (focusKey !== entryKey) setFocusKey(entryKey); }, [focusKey, entryKey]);
   useEffect(() => {
     if (pending.current === null) return;
-    const target = scroll.current?.querySelector<HTMLElement>(`[data-focus-index="${pending.current}"]`);
+    const index = items.findIndex((item) => item.key === pending.current);
+    if (index < 0) { pending.current = null; return; }
+    const target = scroll.current?.querySelector<HTMLElement>(`[data-focus-index="${index}"]`);
     if (target) { target.focus(); pending.current = null; }
   });
   const move = (next: number) => {
     next = Math.max(0, Math.min(items.length - 1, next));
     if (next < 0) return;
-    setFocus(next); pending.current = next;
+    setFocus(next); pending.current = items[next].key;
     virtual?.scrollToIndex(rowOf ? rowOf(next) : next, { align: "auto" });
     const target = scroll.current?.querySelector<HTMLElement>(`[data-focus-index="${next}"]`);
     if (target) { target.focus(); pending.current = null; }
@@ -67,7 +73,14 @@ export function useRoving<T extends { key: string }>(items: T[], selected: unkno
     else return;
     event.preventDefault(); move(next);
   };
-  return { focus, setFocus, keyDown };
+  return { focus: entryIndex, setFocus, keyDown };
+}
+export function keepRovingRow(virtual: Virtualizer<HTMLDivElement, Element>, index: number) {
+  virtual.setOptions({ ...virtual.options, rangeExtractor: (range) => {
+    const visible = defaultRangeExtractor(range);
+    if (!visible.includes(index) && index >= 0 && index < range.count) visible.push(index);
+    return visible.sort((a, b) => a - b);
+  } });
 }
 export function VirtualSurface({ virtual, children }: { virtual: Virtualizer<HTMLDivElement, Element>; children: ReactNode }) {
   return <div style={{ height: virtual.getTotalSize(), position: "relative", width: "100%" }}>{children}</div>;

@@ -6,7 +6,7 @@ import { DataIcon } from "../components/data-icons";
 import { DataState } from "../components/data-state";
 import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
-import { NoItems, VirtualSurface, asArray, dateText, isObject, useRoving, useVirtualRows } from "./data-view-common";
+import { NoItems, VirtualSurface, asArray, dateText, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
 
 type Row = Record<string, JsonValue> & { key: string };
 const validRow = (item: unknown): item is Row => isObject(item) && typeof item.key === "string";
@@ -45,6 +45,7 @@ function TableReady({ block, context, pointer, value }: { block: Extract<Block, 
   const { scroll, virtual } = useVirtualRows(rows.length, 32);
   const selected = block.selected ? context.window.state[block.selected.state] : null;
   const roving = useRoving(rows, selected, scroll, virtual);
+  keepRovingRow(virtual, roving.focus);
   const columns = block.columns.map((column) => width(column, rows)).join(" ");
   const choose = (row: Row) => { if (block.on_select) void data.act(`${pointer}/on_select`, row.key, row); };
   const toggleSort = (field: string) => setSort((old) => old?.field !== field ? { field, desc: false } : !old.desc ? { field, desc: true } : null);
