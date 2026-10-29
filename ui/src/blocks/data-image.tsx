@@ -25,7 +25,7 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const key = media ? JSON.stringify(media) : "";
-  useEffect(() => { setScale(1); setOffset({ x: 0, y: 0 }); setNatural({ width: 0, height: 0 }); }, [key]);
+  useEffect(() => { setScale(1); setOffset({ x: 0, y: 0 }); }, [key]);
   useEffect(() => {
     const element = host.current; if (!element) return;
     const measure = () => { const rect = element.getBoundingClientRect(); setSize({ width: rect.width, height: rect.height }); };

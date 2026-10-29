@@ -18,11 +18,13 @@
 .ks-media-controls { display: flex; min-width: 0; min-height: var(--ks-control-height); align-items: center; gap: var(--ks-space-2); padding-inline: var(--ks-space-3); }
 .ks-media-controls .ks-icon-button { flex: none; }
 .ks-media-time { flex: none; color: var(--ks-color-muted); font-size: var(--ks-type-meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ks-media-range { appearance: none; min-width: 0; height: var(--ks-space-1); border-radius: var(--ks-radius-small); background: linear-gradient(to right, var(--ks-color-accent) var(--ks-range-progress), var(--ks-color-border) var(--ks-range-progress)); cursor: pointer; }
+.ks-media-range { appearance: none; min-width: 0; height: var(--ks-icon-button-size); background: transparent; cursor: pointer; }
 .ks-media-range:disabled { cursor: default; }
 .ks-media-seek { flex: 1 1 auto; }
 .ks-media-volume { width: calc(var(--ks-space-6) * 2); flex: 0 1 calc(var(--ks-space-6) * 2); }
-.ks-media-range::-webkit-slider-thumb { appearance: none; width: var(--ks-space-3); height: var(--ks-space-3); border-radius: 50%; background: var(--ks-color-accent); opacity: 0; }
+.ks-media-range::-webkit-slider-runnable-track { height: var(--ks-space-1); border-radius: var(--ks-radius-small); background: linear-gradient(to right, var(--ks-color-accent) var(--ks-range-progress), var(--ks-color-border) var(--ks-range-progress)); }
+.ks-media-range::-moz-range-track { height: var(--ks-space-1); border-radius: var(--ks-radius-small); background: linear-gradient(to right, var(--ks-color-accent) var(--ks-range-progress), var(--ks-color-border) var(--ks-range-progress)); }
+.ks-media-range::-webkit-slider-thumb { appearance: none; width: var(--ks-space-3); height: var(--ks-space-3); margin-top: calc((var(--ks-space-1) - var(--ks-space-3)) / 2); border-radius: 50%; background: var(--ks-color-accent); opacity: 0; }
 .ks-media-range:hover::-webkit-slider-thumb, .ks-media-range:active::-webkit-slider-thumb, .ks-media-range:focus-visible::-webkit-slider-thumb { opacity: 1; }
 .ks-media-range::-moz-range-thumb { width: var(--ks-space-3); height: var(--ks-space-3); border: 0; border-radius: 50%; background: var(--ks-color-accent); opacity: 0; }
 .ks-media-range:hover::-moz-range-thumb, .ks-media-range:active::-moz-range-thumb, .ks-media-range:focus-visible::-moz-range-thumb { opacity: 1; }

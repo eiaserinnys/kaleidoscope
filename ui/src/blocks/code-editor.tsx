@@ -61,7 +61,8 @@ function EditableCode({ path, language, text, session }: { path: string; languag
     const editor = view.current;
     if (!editor || editor.state.sliceDoc() === text) return;
     const head = editor.state.selection.main.head;
-    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text }, selection: { anchor: Math.min(head, text.length) } });
+    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text } });
+    editor.dispatch({ selection: { anchor: Math.min(head, editor.state.doc.length) } });
   }, [text]);
   return <div className="ks-code-view" ref={host} />;
 }

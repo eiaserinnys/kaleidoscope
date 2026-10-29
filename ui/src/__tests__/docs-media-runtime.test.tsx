@@ -81,3 +81,16 @@ it("재생기는 원본 Blob URL을 만들고 바뀌면 해제하며 키보드�
   expect(revoke).toHaveBeenCalledWith("blob:second");
   vi.unstubAllGlobals();
 });
+
+it("영상 MIME을 받으면 영상으로 자동 재생한다", async () => {
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:video"), revokeObjectURL: vi.fn() }));
+  const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "media", autoplay: true, src: { permission: "media", path: "movie.webm" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media" ? Promise.resolve({ op: "data.media", media: { mime: "video/webm", data_base64: "YQ==", width: null, height: null } }) as never : original(request as never));
+  const rendered = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await waitFor(() => expect(rendered.container.querySelector("video")?.getAttribute("src")).toBe("blob:video"));
+  await waitFor(() => expect(play).toHaveBeenCalled());
+  vi.unstubAllGlobals();
+});
