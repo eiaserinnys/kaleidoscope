@@ -25,6 +25,10 @@
 //!   계산은 되지만 상태가 붙지 않는다.
 //! - 식 하나의 계산은 [`EXPR_TIMEOUT_MS`] 안에 끝나야 하고, 넘으면 그 값은 실패다.
 //! - 결과가 undefined면 null로 보낸다. 결과 JSON이 [`DATA_VALUE_MAX_BYTES`]를 넘으면 실패다.
+//! - JSONata는 결과가 하나뿐이면 배열을 벗겨 그 값 하나를 낸다(거르기에 한 줄만 걸릴 때 등). 그래서 화면은 배열을
+//!   받는 자리(`list`의 `items`와 묶음의 `items`, `table`의 `rows`, `tree`의 `items`와 `children`, `feed`의
+//!   `entries`, `badges`, `select`의 `options`)에 배열이 아닌 값이 오면 그 하나를 담은 배열로 보고, null이면 빈
+//!   배열로 본다. 코어는 결과를 바꾸지 않고 그대로 보낸다.
 //!
 //! # 바인딩 자리 (JSON Pointer)
 //! 식의 값은 앱 정의 JSON 안에서 그 바인딩 자리의 JSON Pointer(RFC 6901)를 열쇠로 오간다. 예: `ui` 뿌리가 `stack`이고
