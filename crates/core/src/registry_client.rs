@@ -188,6 +188,9 @@ impl RegistryClient for HttpRegistryClient {
             .requests()?
             .post(format!("{server_url}{}", device_agent_path(workspace_id)))
             .bearer_auth(token)
+            .timeout(Duration::from_secs(
+                kaleidoscope_contract::registry::AGENT_CREATE_TIMEOUT_SECS,
+            ))
             .json(request)
             .send()
             .map_err(|error| RegistryError::Failure(error.to_string()))?;

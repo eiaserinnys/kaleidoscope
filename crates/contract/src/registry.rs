@@ -131,6 +131,9 @@ pub fn device_agent_messages_path(workspace_id: &str) -> String {
 pub const LAYOUT_DEBOUNCE_MS: u64 = 1000;
 /// 배치 보고가 실패하면 이만큼 뒤에 다시 보낸다.
 pub const LAYOUT_RETRY_SECS: u64 = 10;
+/// 소울스트림이 PAS를 만들며 노드 등록까지 기다려 수십 초 걸릴 수 있다.
+/// 코어는 만들기 요청만 이만큼 기다린다. 서버는 쉘이 먼저 끊겨도 만들기를 끝까지 마치고 `created`를 보낸다.
+pub const AGENT_CREATE_TIMEOUT_SECS: u64 = 120;
 /// `GET .../agent`가 주는 대화 기록의 최대 개수.
 pub const AGENT_HISTORY_LIMIT: usize = 200;
 /// 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위).
