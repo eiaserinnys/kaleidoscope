@@ -164,13 +164,60 @@ describe("shell server link control", () => {
     store.dispose();
   });
 
+  it("updates an open pairing menu when the server approves the link", async () => {
+    const transport = createFakeTransport(makeTestSeed());
+    transport.setLink({
+      state: "pairing",
+      server_url: "https://kaleidoscope.example",
+      user_code: "K7PQ-4XMR",
+      expires_at: "2026-10-29T00:10:00Z",
+    });
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+
+    fireEvent.click(screen.getByRole("button", { name: "연결 코드 K7PQ-4XMR" }));
+    expect(screen.getByRole("menuitem", { name: "연결 취소" })).toBeTruthy();
+    transport.setLink({ state: "connected", server_url: "https://kaleidoscope.example", device_name: "Office PC" });
+
+    await waitFor(() => {
+      expect(screen.getByRole("menuitem", { name: "kaleidoscope.example 연결됨" })).toBeTruthy();
+      expect(screen.getByRole("menuitem", { name: "연결 끊기" })).toBeTruthy();
+      expect(screen.queryByRole("menuitem", { name: "연결 취소" })).toBeNull();
+    });
+    store.dispose();
+  });
+
+  it("updates an open connected menu when the link goes offline", async () => {
+    const transport = createFakeTransport(makeTestSeed());
+    transport.setLink({ state: "connected", server_url: "https://kaleidoscope.example", device_name: "Office PC" });
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+
+    fireEvent.click(screen.getByTitle("연결됨 · Office PC"));
+    transport.setLink({
+      state: "offline",
+      server_url: "https://kaleidoscope.example",
+      device_name: "Office PC",
+      reason: "서버 응답 없음",
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("menuitem", { name: "다시 연결하는 중" })).toBeTruthy();
+      expect(screen.getByRole("menuitem", { name: "연결 끊기" })).toBeTruthy();
+      expect(screen.queryByRole("menuitem", { name: "kaleidoscope.example 연결됨" })).toBeNull();
+    });
+    store.dispose();
+  });
+
   it.each([
-    [{ state: "unlinked" } as const, "서버에 연결", ""],
-    [{ state: "pairing", server_url: "https://kaleidoscope.example", user_code: "K7PQ-4XMR", expires_at: "2026-10-29T00:10:00Z" } as const, "연결 코드 K7PQ-4XMR", "ks-link-icon-accent"],
-    [{ state: "connected", server_url: "https://kaleidoscope.example", device_name: "Office PC" } as const, "연결됨", ""],
-    [{ state: "offline", server_url: "https://kaleidoscope.example", device_name: "Office PC", reason: "서버 응답 없음" } as const, "다시 연결하는 중", "ks-link-icon-muted"],
-    [{ state: "revoked", server_url: "https://kaleidoscope.example" } as const, "연결이 끊겼습니다", ""],
-  ])("renders %s as one shell IconButton", async (link, label, iconClass) => {
+    ["unlinked", { state: "unlinked" } as const, "서버에 연결"],
+    ["pairing", { state: "pairing", server_url: "https://kaleidoscope.example", user_code: "K7PQ-4XMR", expires_at: "2026-10-29T00:10:00Z" } as const, "연결 코드 K7PQ-4XMR"],
+    ["connected", { state: "connected", server_url: "https://kaleidoscope.example", device_name: "Office PC" } as const, "연결됨"],
+    ["offline", { state: "offline", server_url: "https://kaleidoscope.example", device_name: "Office PC", reason: "서버 응답 없음" } as const, "다시 연결하는 중"],
+    ["revoked", { state: "revoked", server_url: "https://kaleidoscope.example" } as const, "연결이 끊겼습니다"],
+  ])("renders %s as one shell IconButton with its status shape", async (state, link, label) => {
     const transport = createFakeTransport({ ...makeTestSeed(), snapshot: { ...makeTestSeed().snapshot, link } });
     const store = createShellStore(transport);
     render(<Shell store={store} />);
@@ -180,7 +227,22 @@ describe("shell server link control", () => {
     const controls = [...document.querySelectorAll(".ks-shell-actions > button")];
     expect(controls).toHaveLength(3);
     expect(controls.every((button) => button.classList.contains("ks-icon-button"))).toBe(true);
-    if (iconClass) expect(controls.at(-1)?.querySelector("svg")?.classList.contains(iconClass)).toBe(true);
+    const icon = controls.at(-1)?.querySelector("svg");
+    expect(icon).toBeTruthy();
+    if (state === "pairing") {
+      expect(icon?.classList.contains("ks-link-icon-accent")).toBe(true);
+      expect(icon?.querySelectorAll("circle")).toHaveLength(3);
+    } else if (state === "offline") {
+      expect(icon?.classList.contains("ks-link-icon-muted")).toBe(false);
+      expect(icon?.querySelectorAll("path")).toHaveLength(1);
+      expect(icon?.querySelector("path")?.getAttribute("stroke-dasharray")).toBe("2 1.5");
+    } else if (state === "connected") {
+      expect(icon?.querySelectorAll("path")).toHaveLength(1);
+      expect(icon?.querySelector("path")?.hasAttribute("stroke-dasharray")).toBe(false);
+    } else {
+      expect(icon?.querySelectorAll("path")).toHaveLength(2);
+      expect(icon?.querySelectorAll("circle")).toHaveLength(0);
+    }
     store.dispose();
   });
 });

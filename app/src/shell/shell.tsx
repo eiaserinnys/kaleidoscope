@@ -17,15 +17,23 @@ import {
   type ShellStore,
   type Workspace,
 } from "@kaleidoscope/ui";
-import { AppsIcon, ChevronDownIcon, ImportIcon, LinkedCloudIcon, PlusIcon, UnlinkedCloudIcon } from "./icons";
+import {
+  AppsIcon,
+  ChevronDownIcon,
+  ImportIcon,
+  LinkedCloudIcon,
+  OfflineCloudIcon,
+  PairingCloudIcon,
+  PlusIcon,
+  UnlinkedCloudIcon,
+} from "./icons";
 import { DesktopArea } from "./desktop-area";
 import { importAppDefinition } from "./import-definition";
 import { makeNewWindowRect } from "./window-geometry";
 
-interface OpenMenu {
-  anchor: HTMLElement;
-  entries: MenuEntry[];
-}
+type OpenMenu =
+  | { kind: "items"; anchor: HTMLElement; entries: MenuEntry[] }
+  | { kind: "link"; anchor: HTMLElement };
 
 export function Shell({ store }: { store: ShellStore }) {
   const snapshot = useShellSnapshot(store);
@@ -113,7 +121,7 @@ export function Shell({ store }: { store: ShellStore }) {
         }),
       }))
       : [{ id: "no-apps", label: "앱 없음", disabled: true }];
-    setMenu({ anchor, entries });
+    setMenu({ kind: "items", anchor, entries });
   };
 
   const openWorkspaceMenu = (anchor: HTMLElement) => {
@@ -146,12 +154,13 @@ export function Shell({ store }: { store: ShellStore }) {
         onSelect: () => void runCommand({ op: "workspace.delete", workspace_id: activeWorkspace.id }),
       },
     ];
-    setMenu({ anchor, entries });
+    setMenu({ kind: "items", anchor, entries });
   };
 
   const openDesktopMenu = (anchor: HTMLElement, desktop: Desktop) => {
     const count = desktops.length;
     setMenu({
+      kind: "items",
       anchor,
       entries: [
         {
@@ -172,9 +181,13 @@ export function Shell({ store }: { store: ShellStore }) {
   };
 
   const openLinkMenu = (anchor: HTMLElement) => {
+    setMenu({ kind: "link", anchor });
+  };
+
+  const linkMenuEntries = (anchor: HTMLElement): MenuEntry[] => {
     const status = snapshot.link;
     const command = (op: "link.start" | "link.cancel" | "link.unlink") => () => void runCommand({ op });
-    const entries: MenuEntry[] = status.state === "unlinked"
+    return status.state === "unlinked"
       ? [{ id: "link-start", label: "서버에 연결", onSelect: () => void startLink(anchor) }]
       : status.state === "pairing"
         ? pairingMenuEntries(status.user_code)
@@ -191,7 +204,6 @@ export function Shell({ store }: { store: ShellStore }) {
               { id: "link-unlink", label: "연결 끊기", danger: true, onSelect: command("link.unlink") },
             ]
             : [{ id: "link-restart", label: "다시 연결", onSelect: () => void startLink(anchor) }];
-    setMenu({ anchor, entries });
   };
 
   const pairingMenuEntries = (userCode: string): MenuEntry[] => [
@@ -208,7 +220,7 @@ export function Shell({ store }: { store: ShellStore }) {
 
   const startLink = async (anchor: HTMLElement) => {
     const reply = await runCommand({ op: "link.start" });
-    if (reply?.op === "link.start") setMenu({ anchor, entries: pairingMenuEntries(reply.user_code) });
+    if (reply?.op === "link.start") setMenu({ kind: "link", anchor });
   };
 
   const createDesktop = () => {
@@ -232,6 +244,10 @@ export function Shell({ store }: { store: ShellStore }) {
       setNotice(toCoreError(reason));
     }
   };
+
+  const menuItems = menu?.kind === "link" ? linkMenuEntries(menu.anchor) : menu?.entries ?? [];
+  // 연결 상태에 따라 메뉴 폭이 바뀌므로 기준 위치를 다시 계산한다.
+  const linkMenuKey = menuItems.map((entry) => entry.type === "separator" ? entry.id : `${entry.id}:${entry.label}`).join("|");
 
   return (
     <main className="app-root">
@@ -318,7 +334,7 @@ export function Shell({ store }: { store: ShellStore }) {
               onClick={(event) => openLinkMenu(event.currentTarget)}
               title={`연결 코드 ${snapshot.link.user_code}`}
             >
-              <LinkedCloudIcon className="ks-link-icon-accent" />
+              <PairingCloudIcon className="ks-link-icon-accent" />
             </IconButton>
           ) : snapshot.link.state === "offline" ? (
             <IconButton
@@ -326,7 +342,7 @@ export function Shell({ store }: { store: ShellStore }) {
               onClick={(event) => openLinkMenu(event.currentTarget)}
               title={`다시 연결하는 중 · ${snapshot.link.reason}`}
             >
-              <UnlinkedCloudIcon className="ks-link-icon-muted" />
+              <OfflineCloudIcon />
             </IconButton>
           ) : snapshot.link.state === "revoked" ? (
             <IconButton
@@ -362,7 +378,14 @@ export function Shell({ store }: { store: ShellStore }) {
         store={store}
       />
 
-      {menu ? <Menu anchor={menu.anchor} items={menu.entries} onClose={closeMenu} /> : null}
+      {menu ? (
+        <Menu
+          key={menu.kind === "link" ? linkMenuKey : "items"}
+          anchor={menu.anchor}
+          items={menuItems}
+          onClose={closeMenu}
+        />
+      ) : null}
       {notice ? (
         <div className="ks-shell-notice-layer">
           <Notice

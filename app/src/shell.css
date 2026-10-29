@@ -135,10 +135,6 @@
   color: var(--ks-color-accent);
 }
 
-.ks-link-icon-muted {
-  color: var(--ks-color-muted);
-}
-
 .ks-file-input {
   display: none;
 }
