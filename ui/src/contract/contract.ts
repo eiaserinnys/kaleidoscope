@@ -637,10 +637,14 @@ export type SelectStyle = "dropdown" | "segmented";
 export type SetState = { set_state: string, };
 
 /**
- * 창 상태 키 하나에 값을 쓴다. `value`가 없으면 `$event`를 쓴다.
- * 예: `{ "set_state": "file", "value": { "expr": "$item.file" } }`.
+ * 창 상태 키 하나에 값을 쓴다. `value`를 빼면 `$event`를 쓴다. `"value": null`은 null을 쓴다(상태 비우기).
+ * 예: `{ "set_state": "file", "value": { "expr": "$item.file" } }`, `{ "set_state": "conversation", "value": null }`.
  */
-export type SetStateAction = { set_state: string, value?: Binding, };
+export type SetStateAction = { set_state: string, 
+/**
+ * 빠졌으면 None, 적혀 있으면 null이어도 `Some(Binding::Literal(null))`이다.
+ */
+value?: Binding, };
 
 /**
  * 기기 사이에 맞출 상태. 2단계 동기화의 단위다.
