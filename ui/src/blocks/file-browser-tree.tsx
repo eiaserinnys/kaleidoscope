@@ -261,7 +261,13 @@ export function FileBrowserTree({
             <button
               aria-current={isSelected ? "page" : undefined}
               className={`ks-file-tree-row${isSelected ? " is-selected" : ""}`}
-              onClick={() => isDirectory ? toggleDirectory(entry.path) : void selectFile(entry.path)}
+              onClick={(event) => {
+                if (isDirectory) {
+                  if (event.detail !== 2) toggleDirectory(entry.path);
+                } else {
+                  void selectFile(entry.path);
+                }
+              }}
               onContextMenu={isDirectory || !onFileContextMenu ? undefined : (event) => {
                 event.preventDefault();
                 void selectFile(entry.path);

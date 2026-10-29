@@ -52,7 +52,7 @@
   flex: 1 1 auto;
 }
 
-.ks-web-page-title {
+.ks-web-toolbar > .ks-web-page-title {
   font-size: var(--ks-type-body);
   font-weight: 400;
 }

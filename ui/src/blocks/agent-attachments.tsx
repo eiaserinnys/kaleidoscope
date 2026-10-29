@@ -115,7 +115,7 @@ export function ImagePreview({ preview, onClose }: { preview: Preview; onClose: 
       preview.trigger.focus();
     };
   }, [onClose, preview.trigger]);
-  return createPortal(<div className="ks-agent-image-overlay" role="dialog" aria-modal="true" aria-label={preview.name} onClick={onClose} ref={dialogRef}>
+  return createPortal(<div className="ks-agent-image-overlay" data-ks-overlay role="dialog" aria-modal="true" aria-label={preview.name} onClick={onClose} ref={dialogRef}>
     <img src={preview.src} alt={preview.name} onClick={(event) => event.stopPropagation()} />
     <div className="ks-agent-image-close" ref={closeRef}><IconButton aria-label="닫기" onClick={onClose}><X /></IconButton></div>
   </div>, document.body);

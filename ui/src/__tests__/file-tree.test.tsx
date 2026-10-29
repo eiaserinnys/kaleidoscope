@@ -59,6 +59,22 @@ describe("file_tree block", () => {
     await waitFor(() => expect(store.getSnapshot()?.shared.windows[0]?.state.current_file).toBe("README.md"));
   });
 
+  it("keeps a folder expanded after a double click", async () => {
+    const transport = createFakeTransport(makeTestSeed({
+      grants: [grantFor("editor-window", "docs")],
+      files: { "notes/README.md": "# Hello" },
+    }));
+    const store = createShellStore(transport);
+    render(<AppWindowContent store={store} windowId="editor-window" />);
+
+    const folder = await screen.findByRole("button", { name: "notes" });
+    fireEvent.click(folder, { detail: 1 });
+    fireEvent.click(folder, { detail: 2 });
+
+    expect(folder.closest('[role="treeitem"]')?.getAttribute("aria-expanded")).toBe("true");
+    expect(await screen.findByRole("button", { name: "README.md" })).toBeTruthy();
+  });
+
   it("creates an md file only for readwrite access and selects it", async () => {
     const transport = createFakeTransport(makeTestSeed({
       grants: [grantFor("editor-window", "docs"), grantFor("viewer-window", "docs")],
