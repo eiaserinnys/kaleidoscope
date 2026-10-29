@@ -1,4 +1,4 @@
-import { highlightingFor, syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, highlightingFor } from "@codemirror/language";
 import { tags, type Tag } from "@lezer/highlight";
 import { describe, expect, it } from "vitest";
 import { createMarkdownEditorState } from "../blocks/markdown-editor-state";
@@ -32,10 +32,12 @@ describe("markdown editor syntax highlighting", () => {
     expect(highlightingForTag(tags.url)).toBeTruthy();
     expect(highlightingForTag(tags.quote)).toBeTruthy();
     expect(highlightingForTag(tags.processingInstruction)).toBeTruthy();
-    const tree = syntaxTree(state).toString();
-    expect(tree).toContain("TableDelimiter");
-    expect(tree).toContain("CodeBlock");
-    expect(tree).toContain("CodeText");
-    expect(tree).toContain("ListMark");
+    const tree = ensureSyntaxTree(state, state.doc.length, 5000);
+    if (!tree) throw new Error("Markdown syntax tree was not parsed to the end of the document");
+    const treeText = tree.toString();
+    expect(treeText).toContain("TableDelimiter");
+    expect(treeText).toContain("CodeBlock");
+    expect(treeText).toContain("CodeText");
+    expect(treeText).toContain("ListMark");
   });
 });
