@@ -4,10 +4,10 @@ import { useBinding } from "../data/window-data";
 import { useMedia } from "../data/use-media";
 import { DataState } from "../components/data-state";
 import { DataIcon } from "../components/data-icons";
+import { cropStyle, isMedia } from "../components/media-thumbnail";
 import { EmptyState, IconButton } from "../components/primitives";
 
 type Data = Extract<Block, { type: "image" }>;
-function isMedia(value: unknown): value is MediaRef { return typeof value === "object" && value !== null && "permission" in value && typeof value.permission === "string" && "path" in value && typeof value.path === "string"; }
 export function imageRequestSize(width: number, height: number, ratio: number, zoom: number): number {
   const wanted = Math.max(width, height) * ratio * zoom;
   return [512, 1024, 2048, 4096].find((size) => size >= wanted) ?? 4096;
@@ -63,9 +63,8 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   const cropHeight = crop && crop.w > 0 && crop.h > 0 ? crop.h : 1;
   const sourceWidth = natural.width * cropWidth, sourceHeight = natural.height * cropHeight;
   const factor = sourceWidth && sourceHeight ? (fit === "cover" ? Math.max(size.width / sourceWidth, size.height / sourceHeight) : Math.min(size.width / sourceWidth, size.height / sourceHeight)) : 0;
-  const cropStyle = crop && crop.w > 0 && crop.h > 0 ? { width: `${100 / crop.w}%`, height: `${100 / crop.h}%`, left: `${-100 * crop.x / crop.w}%`, top: `${-100 * crop.y / crop.h}%` } : undefined;
   return <div className={`ks-image-view${zoomable ? " is-zoomable" : ""}`} ref={host} tabIndex={zoomable && media ? 0 : undefined} onKeyDown={onKeyDown} onPointerDown={down} onPointerMove={move} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }} onDoubleClick={() => { if (zoomable) adjust(1); }}>
-    {media && url ? <div className="ks-image-frame" style={{ width: sourceWidth * factor, height: sourceHeight * factor, transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})` }}><img alt="" src={url} style={cropStyle} onLoad={(event) => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} draggable={false} /></div> : <EmptyState icon={<DataIcon name="image" size="empty" />} />}
+    {media && url ? <div className="ks-image-frame" style={{ width: sourceWidth * factor, height: sourceHeight * factor, transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})` }}><img alt="" src={url} style={cropStyle(crop)} onLoad={(event) => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} draggable={false} /></div> : <EmptyState icon={<DataIcon name="image" size="empty" />} />}
     {zoomable && media ? <div className="ks-image-controls" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
       <IconButton aria-label="축소" onClick={() => adjust(scale * 0.8)} disabled={scale <= 1}><DataIcon name="zoom-out" /></IconButton>
       <IconButton aria-label="확대" onClick={() => adjust(scale * 1.25)} disabled={scale >= 8}><DataIcon name="zoom-in" /></IconButton>

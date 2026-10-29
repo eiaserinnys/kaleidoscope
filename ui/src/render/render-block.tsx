@@ -17,6 +17,7 @@ import { WebViewBlock } from "../blocks/web-view";
 import { ExplorerBlock } from "../blocks/explorer";
 import { CodeEditorBlock } from "../blocks/code-editor";
 import { CodeViewBlock } from "../blocks/code-view";
+import { ImageBlock } from "../blocks/data-image";
 import { MediaBlock } from "../blocks/data-media";
 
 export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"): ReactNode {
@@ -47,6 +48,7 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
     case "button": return <ButtonBlock block={block} context={context} pointer={pointer} />;
     case "code_editor": return <CodeEditorBlock block={block} context={context} />;
     case "code_view": return <CodeViewBlock block={block} context={context} pointer={pointer} />;
+    case "image": return <ImageBlock block={block} pointer={pointer} />;
     case "media": return <MediaBlock block={block} pointer={pointer} />;
     case "web_view":
       return <WebViewBlock block={block} context={context} />;

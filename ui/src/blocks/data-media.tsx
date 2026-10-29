@@ -3,11 +3,11 @@ import type { Block, MediaRef } from "../contract/contract";
 import { useBinding, useWindowData } from "../data/window-data";
 import { DataState } from "../components/data-state";
 import { DataIcon } from "../components/data-icons";
+import { isMedia } from "../components/media-thumbnail";
 import { IconButton, Notice } from "../components/primitives";
 import { toCoreError } from "../core/core-transport";
 
 type Data = Extract<Block, { type: "media" }>;
-function isMedia(value: unknown): value is MediaRef { return typeof value === "object" && value !== null && "permission" in value && typeof value.permission === "string" && "path" in value && typeof value.path === "string"; }
 export function formatMediaTime(value: number): string {
   const seconds = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;

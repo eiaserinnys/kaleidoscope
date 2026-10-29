@@ -90,11 +90,31 @@ test("코드와 미디어를 넓은 폭과 400px에서 캡처한다", async ({ b
     await page.getByRole("button", { name: "설정 파일 폴더 고르기" }).click();
     await page.getByRole("button", { name: "settings.json" }).click();
     await expect(page.getByRole("textbox", { name: "코드 편집기" })).toBeVisible();
+    const codeBounds = await page.locator(".ks-code-view").evaluateAll((views) => views.map((view) => {
+      const rect = view.getBoundingClientRect(); return { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom };
+    }));
+    console.log(`code-${width}: ${JSON.stringify(codeBounds)}`);
     await page.screenshot({ path: info.outputPath(`code-${width}.png`) });
     await page.getByRole("tab", { name: "미디어" }).click();
     await page.getByText("landscape.png").click();
     await expect(page.locator(".ks-image-frame img")).toBeVisible();
     await page.screenshot({ path: info.outputPath(`media-${width}.png`) });
+    await page.getByRole("tab", { name: "소리" }).click();
+    await page.getByText("tone.wav").click();
+    await expect.poll(() => page.locator("audio").evaluate((el: HTMLAudioElement) => el.readyState)).toBeGreaterThan(0);
+    const measurements = await page.locator(".ks-media-controls").evaluate((controls) => Object.fromEntries(
+      [".ks-media-controls", ".ks-media-seek", ".ks-media-time", ".ks-media-volume"].map((selector) => {
+        const element = selector === ".ks-media-controls" ? controls : controls.querySelector(selector)!;
+        const rect = element.getBoundingClientRect(); return [selector, { x: rect.x, y: rect.y, width: rect.width, height: rect.height }];
+      }),
+    ));
+    console.log(`media-${width}: ${JSON.stringify(measurements)}`);
+    await page.screenshot({ path: info.outputPath(`media-audio-${width}.png`) });
+    await page.goto("/?preview=md-editor");
+    await page.getByRole("button", { name: "문서 폴더 고르기" }).click();
+    await page.getByRole("button", { name: "Kaleidoscope.md" }).click();
+    await expect(page.getByRole("textbox", { name: "마크다운 편집기" })).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`markdown-${width}.png`) });
     await context.close();
   }
 });

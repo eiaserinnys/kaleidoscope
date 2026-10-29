@@ -14,17 +14,19 @@ import "./harness.css";
 import galleryJson from "../../examples/block-gallery.json";
 import sampleOne from "./assets/landscape.png";
 import sampleTwo from "./assets/shapes.png";
+import sampleTone from "./assets/tone.wav";
 import mdEditorJson from "../../examples/md-editor.json";
 import mdViewerJson from "../../examples/md-viewer.json";
 import workspacePasJson from "../../examples/workspace-pas.json";
 import { dataViewsApp } from "./data-views-app";
 import { dataLayoutApp } from "./data-layout-app";
 import pluginsDocument from "./create-plugins.txt?raw";
+import { exposeDocsHarness, galleryForDocs } from "./docs-media-test";
 
 const mdEditor = mdEditorJson as AppDefinition;
 const mdViewer = mdViewerJson as AppDefinition;
 const workspacePas = workspacePasJson as unknown as AppDefinition;
-const gallery = galleryJson as AppDefinition;
+const gallery = galleryForDocs(galleryJson as AppDefinition, new URLSearchParams(window.location.search).has("long-log"), new URLSearchParams(window.location.search).has("crop-image"));
 const definitions = [mdEditor, mdViewer, workspacePas, dataLayoutApp, gallery, dataViewsApp];
 const timestamp = "2026-10-28T00:00:00Z";
 
@@ -185,8 +187,8 @@ const greetingItems: AgentItem[] = [
 
 const fakeTransport = createFakeTransport({
   snapshot: demoSnapshot,
-  data: { sources: { pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
-  media: { "landscape.png": sampleOne, "shapes.png": sampleTwo },
+  data: { sources: { pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [{ kind: "file", name: "tone.wav", path: "tone.wav", ext: "wav", size: 128044, modified: timestamp }] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
+  media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone },
   folder: { root_path: "/fake/docs", root_name: "문서" },
   agentModels,
   agentGetDelayMs: pasMode === "loading" ? 5000 : undefined,
@@ -197,6 +199,7 @@ const fakeTransport = createFakeTransport({
     ? { "workspace-1": { agent: greetingAgent, items: greetingItems, models: agentModels } }
     : {},
   files: {
+    "settings.json": "{\r\n  \"theme\": \"system\"\r\n}\r\n",
     "README.md": "# 첫 문서\n\n편집과 자동 저장을 확인합니다.\n",
     "Kaleidoscope.md": sampleDocument,
     "Create-plugins.md": pluginsDocument,
@@ -213,6 +216,7 @@ const fakeTransport = createFakeTransport({
 const coreUrl = new URLSearchParams(window.location.search).get("core");
 const transport = coreUrl ? createHttpTransport(coreUrl) : fakeTransport;
 const store = createShellStore(transport);
+if (!coreUrl) exposeDocsHarness(fakeTransport, store);
 
 function Harness() {
   const snapshot = useShellSnapshot(store);
