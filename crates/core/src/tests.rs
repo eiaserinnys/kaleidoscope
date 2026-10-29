@@ -1687,13 +1687,11 @@ fn agent_attachment_returns_server_reply_and_preserves_attachment_errors() {
         .agent_attachment_replies
         .lock()
         .unwrap()
-        .push_back(Err(RegistryError::Validation(CoreError::new(
-            ErrorCode::NotFound,
-        ))));
+        .push_back(Err(RegistryError::NotFound));
     expect_error(
         core.handle(CoreRequest::AgentAttachment {
             workspace_id: workspace_id.clone(),
-            item_id: "missing".into(),
+            item_id: "8".into(),
             index: 0,
         }),
         ErrorCode::NotFound,
@@ -1781,6 +1779,21 @@ fn agent_attachment_open_saves_sanitized_names_and_selects_open_or_reveal() {
     assert_eq!(
         attachment_opener.revealed.lock().unwrap().as_slice(),
         &[data_dir.join("attachments/7-2/setup.exe")]
+    );
+
+    let requests_before = client.agent_attachments.lock().unwrap().len();
+    expect_error(
+        core.handle(CoreRequest::AgentAttachmentOpen {
+            workspace_id,
+            item_id: "7/attachments/0#/../../../../../../escape".into(),
+            index: 0,
+        }),
+        ErrorCode::InvalidRequest,
+    );
+    assert_eq!(
+        client.agent_attachments.lock().unwrap().len(),
+        requests_before,
+        "잘못된 item id는 네트워크 요청과 파일 쓰기 전에 거부한다"
     );
 }
 

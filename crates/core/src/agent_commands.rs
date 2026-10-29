@@ -92,22 +92,32 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 .map(|()| CoreReply::AgentSend {})
                 .map_err(|registry_error| agent_error_to_core(inner, &link_file, registry_error))
         }
-        CoreRequest::AgentAttachment { item_id, index, .. } => inner
-            .registry
-            .agent_attachment(
-                &link_file.server_url,
-                &link_file.token,
-                &workspace_id,
-                &item_id,
-                index,
-            )
-            .map(|attachment| CoreReply::AgentAttachment {
-                name: attachment.name,
-                mime: attachment.mime,
-                data_base64: attachment.data_base64,
-            })
-            .map_err(|registry_error| attachment_error_to_core(inner, &link_file, registry_error)),
+        CoreRequest::AgentAttachment { item_id, index, .. } => {
+            if !is_item_id(&item_id) {
+                return Err(error::make(ErrorCode::InvalidRequest));
+            }
+            inner
+                .registry
+                .agent_attachment(
+                    &link_file.server_url,
+                    &link_file.token,
+                    &workspace_id,
+                    &item_id,
+                    index,
+                )
+                .map(|attachment| CoreReply::AgentAttachment {
+                    name: attachment.name,
+                    mime: attachment.mime,
+                    data_base64: attachment.data_base64,
+                })
+                .map_err(|registry_error| {
+                    attachment_error_to_core(inner, &link_file, registry_error)
+                })
+        }
         CoreRequest::AgentAttachmentOpen { item_id, index, .. } => {
+            if !is_item_id(&item_id) {
+                return Err(error::make(ErrorCode::InvalidRequest));
+            }
             let attachment = inner
                 .registry
                 .agent_attachment(
@@ -139,6 +149,10 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
         }
         _ => return Err(error::make(ErrorCode::InvalidRequest)),
     }
+}
+
+fn is_item_id(item_id: &str) -> bool {
+    !item_id.is_empty() && item_id.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 fn agent_error_to_core(
