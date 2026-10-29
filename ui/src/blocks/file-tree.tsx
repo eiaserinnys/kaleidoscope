@@ -140,7 +140,16 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
       }
       return next;
     });
-    if (!Object.hasOwn(entriesByDirectory, directory)) await loadDirectory(directory);
+    const directories = [""];
+    if (directory) {
+      const parts = directory.split("/");
+      for (let index = 0; index < parts.length; index += 1) {
+        directories.push(parts.slice(0, index + 1).join("/"));
+      }
+    }
+    await Promise.all(directories
+      .filter((item) => !Object.hasOwn(entriesByDirectory, item))
+      .map((item) => loadDirectory(item)));
     setCreating({ directory, initialName: "", error: null, attempt: 0 });
   };
 

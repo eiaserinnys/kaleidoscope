@@ -85,6 +85,35 @@ describe("file_tree block", () => {
     expect(transport.getFiles()["회의 메모.md"]).toBe("");
   });
 
+  it("loads the selected nested directory chain before showing the new-file row", async () => {
+    const transport = createFakeTransport(makeTestSeed({
+      editorPath: "notes/sub/기존.md",
+      grants: [grantFor("editor-window", "docs")],
+      files: { "notes/sub/기존.md": "# Existing" },
+    }));
+    const call = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<AppWindowContent store={store} windowId="editor-window" />);
+
+    await screen.findByRole("button", { name: "notes" });
+    await waitFor(() => expect(call.mock.calls
+      .filter(([request]) => request.op === "files.list")
+      .map(([request]) => request.op === "files.list" ? request.dir : null)).toEqual([""]));
+    fireEvent.click(screen.getByRole("button", { name: "새 파일" }));
+
+    const input = await screen.findByRole("textbox", { name: "새 파일 이름" });
+    await waitFor(() => {
+      const directories = call.mock.calls
+        .filter(([request]) => request.op === "files.list")
+        .map(([request]) => request.op === "files.list" ? request.dir : null);
+      expect(directories).toContain("notes");
+      expect(directories).toContain("notes/sub");
+    });
+    const nestedChildren = input.closest(".ks-file-tree-children");
+    expect(nestedChildren?.querySelector('[role="treeitem"] input[aria-label="새 파일 이름"]')).toBe(input);
+    expect(await screen.findByRole("button", { name: "기존.md" })).toBeTruthy();
+  });
+
   it("keeps the entered name and reports a conflict in the inline row", async () => {
     const transport = createFakeTransport(makeTestSeed({
       grants: [grantFor("editor-window", "docs")],

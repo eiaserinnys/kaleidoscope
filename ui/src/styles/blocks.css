@@ -84,6 +84,11 @@
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
 
+.ks-file-tree-create-row {
+  padding-block: 0;
+  border-block-width: 0;
+}
+
 .ks-file-tree-icon {
   display: inline-grid;
   width: var(--ks-space-4);
@@ -355,6 +360,10 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: keep-all;
+}
+
+.ks-agent-chat-user.is-pending {
+  color: var(--ks-color-muted);
 }
 
 .ks-agent-chat-assistant {

@@ -35,8 +35,7 @@
 }
 
 .ks-button:disabled,
-.ks-icon-button:disabled,
-.ks-agent-chat-user.is-pending {
+.ks-icon-button:disabled {
   opacity: 0.56;
 }
 

@@ -103,7 +103,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   useLayoutEffect(() => {
     const history = historyRef.current;
     if (history && followTail.current) history.scrollTop = history.scrollHeight;
-  }, [items, delta, busy, tool]);
+  }, [items, pending, delta, busy, tool]);
 
   useLayoutEffect(() => {
     const input = inputRef.current;
@@ -157,6 +157,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     const submittedDraft = draft;
     const text = submittedDraft.trim();
     if (!text || sending) return;
+    followTail.current = true;
     setPending(text);
     setDraft("");
     setSending(true);
