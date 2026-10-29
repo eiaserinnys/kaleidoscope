@@ -339,7 +339,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
       const style = getComputedStyle(element);
       return { fontSize: style.fontSize, lineHeight: style.lineHeight };
     }),
-    viewerWindow.locator(".ks-markdown-view").evaluate((element) => {
+    viewerWindow.locator(".ks-markdown-text").evaluate((element) => {
       const style = getComputedStyle(element);
       const heading = element.querySelector("h1");
       return {

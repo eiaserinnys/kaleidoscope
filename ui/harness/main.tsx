@@ -184,6 +184,7 @@ const fakeTransport = createFakeTransport({
   agentGetDelayMs: pasMode === "loading" ? 5000 : undefined,
   agentGetError: pasMode === "load-error" ? "작업 PAS를 불러오지 못했습니다" : undefined,
   agentSendError: pasMode === "send-error" ? "메시지를 보내지 못했습니다" : undefined,
+  agentSendDelayMs: Number(params.get("send-delay")) || undefined,
   agents: pasMode === "ready" || pasMode === "send-error"
     ? { "workspace-1": { agent: greetingAgent, items: greetingItems, models: agentModels } }
     : {},

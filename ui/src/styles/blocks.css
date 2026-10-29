@@ -42,7 +42,6 @@
   white-space: nowrap;
 }
 
-.ks-chevron.is-left { transform: rotate(180deg); }
 .ks-file-tree.is-collapsed .ks-icon-button:focus-visible {
   outline-offset: calc(-1 * var(--ks-focus-width));
 }
@@ -85,6 +84,11 @@
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
 
+.ks-file-tree-create-row {
+  padding-block: 0;
+  border-block-width: 0;
+}
+
 .ks-file-tree-icon {
   display: inline-grid;
   width: var(--ks-space-4);
@@ -92,12 +96,6 @@
   flex: 0 0 var(--ks-space-4);
   place-items: center;
   color: var(--ks-color-muted);
-}
-
-.ks-file-tree-icon svg {
-  display: block;
-  width: var(--ks-space-4);
-  height: var(--ks-space-4);
 }
 
 .ks-chevron {
@@ -119,6 +117,11 @@
 .ks-file-tree-children {
   min-width: 0;
   margin-inline-start: var(--ks-space-4);
+}
+
+.ks-file-tree-create-row .ks-text-input {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .ks-markdown-editor {
@@ -359,6 +362,10 @@
   word-break: keep-all;
 }
 
+.ks-agent-chat-user.is-pending {
+  color: var(--ks-color-muted);
+}
+
 .ks-agent-chat-assistant {
   align-self: flex-start;
   max-width: 100%;
@@ -372,6 +379,12 @@
   color: var(--ks-color-muted);
   font-size: var(--ks-type-meta);
   line-height: var(--ks-line-body);
+}
+
+.ks-agent-chat-working {
+  display: flex;
+  align-items: center;
+  gap: var(--ks-space-2);
 }
 
 .ks-agent-chat-input-area {

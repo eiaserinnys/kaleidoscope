@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
 
 async function open(page: Page) {
-  await page.goto("/?preview=1");
+  await page.goto("/?preview=md-editor");
   const app = page.getByTestId("app-window-md-editor");
   await app.getByRole("button", { name: "문서 폴더 고르기" }).click();
   await app.getByRole("button", { name: "reclick.md" }).click();

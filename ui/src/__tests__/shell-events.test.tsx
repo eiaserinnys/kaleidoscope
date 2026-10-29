@@ -281,14 +281,14 @@ describe("shell server link control", () => {
       expect(icon?.classList.contains("ks-link-icon-accent")).toBe(true);
       expect(icon?.querySelectorAll("circle")).toHaveLength(3);
     } else if (state === "offline") {
-      expect(icon?.classList.contains("ks-link-icon-muted")).toBe(false);
-      expect(icon?.querySelectorAll("path")).toHaveLength(1);
-      expect(icon?.querySelector("path")?.getAttribute("stroke-dasharray")).toBe("2 1.5");
+      expect(icon?.classList.contains("lucide-cloud")).toBe(true);
+      expect(icon?.getAttribute("stroke-dasharray")).toBe("3 2");
     } else if (state === "connected") {
+      expect(icon?.classList.contains("lucide-cloud")).toBe(true);
       expect(icon?.querySelectorAll("path")).toHaveLength(1);
       expect(icon?.querySelector("path")?.hasAttribute("stroke-dasharray")).toBe(false);
     } else {
-      expect(icon?.querySelectorAll("path")).toHaveLength(2);
+      expect(icon?.classList.contains("lucide-cloud-off")).toBe(true);
       expect(icon?.querySelectorAll("circle")).toHaveLength(0);
     }
     store.dispose();

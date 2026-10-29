@@ -3,13 +3,13 @@ import {
   AppWindowContent,
   Button,
   EmptyState,
+  LayoutGrid,
   type AppWindow,
   type CoreReply,
   type CoreRequest,
   type ShellSnapshot,
   type ShellStore,
 } from "@kaleidoscope/ui";
-import { AppsIcon } from "./icons";
 import { WindowFrame } from "./window-frame";
 
 export interface DesktopAreaProps {
@@ -67,7 +67,7 @@ export function DesktopArea({
                     앱 열기
                   </Button>
                 )}
-                icon={<AppsIcon />}
+                icon={<LayoutGrid size="empty" />}
               />
             ) : windows.map((appWindow) => (
               <DesktopWindow

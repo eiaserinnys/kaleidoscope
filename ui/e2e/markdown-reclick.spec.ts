@@ -35,7 +35,7 @@ async function glyph(editor: Locator, needle: string, offset: number): Promise<{
 }
 
 async function open(page: Page) {
-  await page.goto("/?preview=1");
+  await page.goto("/?preview=md-editor");
   const app = page.getByTestId("app-window-md-editor");
   await app.getByRole("button", { name: "문서 폴더 고르기" }).click();
   await app.getByRole("button", { name: "reclick.md" }).click();
@@ -179,7 +179,7 @@ test("표는 누르고 있는 동안 렌더 상태를 유지하고 뗀 뒤 원�
 });
 
 test("이미지 대체 글을 다시 누르는 동안 해당 줄을 렌더 상태로 유지한다", async ({ page }) => {
-  await page.goto("/?preview=1");
+  await page.goto("/?preview=md-editor");
   const app = page.getByTestId("app-window-md-editor");
   await app.getByRole("button", { name: "문서 폴더 고르기" }).click();
   await app.getByRole("button", { name: "Kaleidoscope.md" }).click();

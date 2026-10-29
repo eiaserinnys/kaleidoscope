@@ -1,5 +1,25 @@
 export { AppWindowContent } from "./render/app-window-content";
 export { Button, EmptyState, IconButton, Notice, StatusText } from "./components/primitives";
+export {
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  Cloud,
+  CloudOff,
+  FilePlus,
+  FileText,
+  FolderOpen,
+  ICON_SIZE,
+  Import,
+  LayoutGrid,
+  MessageSquare,
+  OfflineCloud,
+  PairingCloud,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  X,
+} from "./components/icons";
 export { Menu, type MenuEntry, type MenuItem, type MenuProps, type MenuSeparator } from "./components/menu";
 export { TextInput, type TextInputProps } from "./components/text-input";
 export { createHttpTransport } from "./core/http-transport";

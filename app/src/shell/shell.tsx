@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   Button,
+  ChevronDown,
+  Cloud,
+  CloudOff,
   EmptyState,
+  Import,
   IconButton,
+  LayoutGrid,
   Menu,
+  OfflineCloud,
   Notice,
+  PairingCloud,
+  Plus,
   TextInput,
   toCoreError,
   useShellSnapshot,
@@ -17,16 +25,6 @@ import {
   type ShellStore,
   type Workspace,
 } from "@kaleidoscope/ui";
-import {
-  AppsIcon,
-  ChevronDownIcon,
-  ImportIcon,
-  LinkedCloudIcon,
-  OfflineCloudIcon,
-  PairingCloudIcon,
-  PlusIcon,
-  UnlinkedCloudIcon,
-} from "./icons";
 import { DesktopArea } from "./desktop-area";
 import { importAppDefinition } from "./import-definition";
 import { makeNewWindowRect } from "./window-geometry";
@@ -98,11 +96,11 @@ export function Shell({ store }: { store: ShellStore }) {
   }), [newWindowRect, runCommand, store]);
 
   if (!snapshot) {
-    return <main className="app-root"><EmptyState icon={<AppsIcon />} text="코어에 연결할 수 없습니다" /></main>;
+    return <main className="app-root"><EmptyState icon={<LayoutGrid size="empty" />} text="코어에 연결할 수 없습니다" /></main>;
   }
 
   if (!activeWorkspace || !activeDesktop) {
-    return <main className="app-root"><EmptyState icon={<AppsIcon />} text="코어에 연결할 수 없습니다" /></main>;
+    return <main className="app-root"><EmptyState icon={<LayoutGrid size="empty" />} text="코어에 연결할 수 없습니다" /></main>;
   }
 
   const workspaces = snapshot.shared.workspaces;
@@ -268,7 +266,7 @@ export function Shell({ store }: { store: ShellStore }) {
           ) : (
             <Button onClick={(event) => openWorkspaceMenu(event.currentTarget)}>
               <span className="ks-workspace-name" title={activeWorkspace.name}>{activeWorkspace.name}</span>
-              <ChevronDownIcon className="ks-shell-chevron" />
+              <ChevronDown className="ks-shell-chevron" size="inline" />
             </Button>
           )}
         </div>
@@ -311,16 +309,16 @@ export function Shell({ store }: { store: ShellStore }) {
             ))}
           </div>
           <IconButton aria-label="데스크톱 추가" onClick={createDesktop} title="데스크톱 추가">
-            <PlusIcon />
+            <Plus />
           </IconButton>
         </nav>
 
         <div className="ks-shell-actions">
           <IconButton aria-label="앱 열기" onClick={(event) => openAppMenu(event.currentTarget)} title="앱 열기">
-            <AppsIcon />
+            <LayoutGrid />
           </IconButton>
           <IconButton aria-label="앱 정의 가져오기" onClick={() => fileInput.current?.click()} title="앱 정의 가져오기">
-            <ImportIcon />
+            <Import />
           </IconButton>
           {snapshot.link.state === "connected" ? (
             <IconButton
@@ -328,7 +326,7 @@ export function Shell({ store }: { store: ShellStore }) {
               onClick={(event) => openLinkMenu(event.currentTarget)}
               title={`연결됨 · ${snapshot.link.device_name}`}
             >
-              <LinkedCloudIcon />
+              <Cloud />
             </IconButton>
           ) : snapshot.link.state === "pairing" ? (
             <IconButton
@@ -336,7 +334,7 @@ export function Shell({ store }: { store: ShellStore }) {
               onClick={(event) => openLinkMenu(event.currentTarget)}
               title={`연결 코드 ${snapshot.link.user_code}`}
             >
-              <PairingCloudIcon className="ks-link-icon-accent" />
+              <PairingCloud className="ks-link-icon-accent" />
             </IconButton>
           ) : snapshot.link.state === "offline" ? (
             <IconButton
@@ -344,7 +342,7 @@ export function Shell({ store }: { store: ShellStore }) {
               onClick={(event) => openLinkMenu(event.currentTarget)}
               title={`다시 연결하는 중 · ${snapshot.link.reason}`}
             >
-              <OfflineCloudIcon />
+              <OfflineCloud />
             </IconButton>
           ) : snapshot.link.state === "revoked" ? (
             <IconButton
@@ -352,11 +350,11 @@ export function Shell({ store }: { store: ShellStore }) {
               onClick={(event) => openLinkMenu(event.currentTarget)}
               title="연결이 끊겼습니다"
             >
-              <UnlinkedCloudIcon />
+              <CloudOff />
             </IconButton>
           ) : (
             <IconButton aria-label="서버에 연결" onClick={(event) => openLinkMenu(event.currentTarget)} title="서버에 연결">
-              <UnlinkedCloudIcon />
+              <CloudOff />
             </IconButton>
           )}
           <input
