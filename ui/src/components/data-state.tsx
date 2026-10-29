@@ -4,7 +4,7 @@ import { useWindowData } from "../data/window-data";
 import { DataIcon } from "./data-icons";
 import { Button, EmptyState } from "./primitives";
 
-export function DataState({ value, compact = false }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean }) {
+export function DataState({ value, compact = false, onRetry }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; onRetry?: () => void }) {
   const data = useWindowData();
   const [error, setError] = useState<string | null>(null);
   if (value.status === "loading") return <div className="ks-data-skeleton" role="status" aria-label="불러오는 중"><i /><i /><i /></div>;
@@ -14,6 +14,6 @@ export function DataState({ value, compact = false }: { value: Exclude<BindingVa
       text={error ?? (isLogin ? "로그인이 필요합니다" : value.message)}
       action={isLogin
         ? <Button onClick={() => { void data.store.call({ op: "connection.login", window_id: data.windowId, permission: value.permission }).catch((reason: unknown) => setError(typeof reason === "object" && reason !== null && "message" in reason ? String(reason.message) : String(reason))); }}>로그인</Button>
-        : value.retry.length ? <Button onClick={() => { void data.refresh(value.retry); }}>다시 받기</Button> : undefined} />
+        : onRetry ? <Button onClick={onRetry}>다시 받기</Button> : value.retry.length ? <Button onClick={() => { void data.refresh(value.retry); }}>다시 받기</Button> : undefined} />
   </div>;
 }

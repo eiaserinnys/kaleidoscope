@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { EditorView } from "@codemirror/view";
 import type { Block } from "../contract/contract";
-import { Notice, Button, StatusText } from "../components/primitives";
+import { Notice, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
 import { FileEditorSession } from "./file-editor-session";
+import { EditorConflict } from "./editor-conflict";
 import { createMarkdownEditorState } from "./markdown-editor-state";
 
 type MarkdownEditorBlockData = Extract<Block, { type: "markdown_editor" }>;
@@ -53,17 +54,7 @@ export function MarkdownEditorBlock({ block, context }: { block: MarkdownEditorB
   return (
     <div className="ks-markdown-editor">
       {state.error ? <Notice role="alert">{state.error}</Notice> : null}
-      {state.conflict ? (
-        <Notice
-          actions={[
-            <Button key="reload" onClick={() => void session.reload()}>다시 불러오기</Button>,
-            <Button key="overwrite" onClick={() => void session.overwrite()} variant="emphasis">덮어쓰기</Button>,
-          ]}
-          role="alert"
-        >
-          디스크에서 바뀌었습니다
-        </Notice>
-      ) : null}
+      {state.conflict ? <EditorConflict session={session} /> : null}
       <div className="ks-editor-content">
         <CodeEditor
           key={`${path}:${state.lineSeparator}`}
