@@ -17,7 +17,7 @@ import {
   type ShellStore,
   type Workspace,
 } from "@kaleidoscope/ui";
-import { AppsIcon, ChevronDownIcon, ImportIcon, PlusIcon } from "./icons";
+import { AppsIcon, ChevronDownIcon, ImportIcon, LinkedCloudIcon, PlusIcon, UnlinkedCloudIcon } from "./icons";
 import { DesktopArea } from "./desktop-area";
 import { importAppDefinition } from "./import-definition";
 import { makeNewWindowRect } from "./window-geometry";
@@ -34,10 +34,16 @@ export function Shell({ store }: { store: ShellStore }) {
   const [notice, setNotice] = useState<CoreError | null>(null);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
   const [renamingDesktopId, setRenamingDesktopId] = useState<string | null>(null);
-  const [desktopArea, setDesktopArea] = useState({ width: 0, height: 0 });
+  const desktopAreaRef = useRef({ width: 0, height: 0 });
   const activeDesktopTabRef = useRef<HTMLDivElement>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
-  const reportArea = useCallback((area: { width: number; height: number }) => setDesktopArea(area), []);
+  const reportArea = useCallback((area: { width: number; height: number }) => {
+    desktopAreaRef.current = area;
+  }, []);
+  const newWindowRect = useCallback((desktopId: string, current: ShellSnapshot) => {
+    const count = current.shared.windows.filter((window) => window.desktop_id === desktopId).length;
+    return makeNewWindowRect(desktopAreaRef.current, count);
+  }, []);
 
   const activeWorkspace = snapshot ? selectWorkspace(snapshot) : undefined;
   const activeDesktop = snapshot && activeWorkspace ? selectDesktop(snapshot, activeWorkspace) : undefined;
@@ -55,6 +61,32 @@ export function Shell({ store }: { store: ShellStore }) {
     }
   }, [store]);
 
+  useEffect(() => store.subscribeEvents((event) => {
+    if (event.event !== "app.open_requested") return;
+    const latest = store.getSnapshot();
+    if (!latest?.shared.apps.some((app) => app.id === event.app_id)) return;
+    const workspace = selectWorkspace(latest);
+    const desktop = workspace ? selectDesktop(latest, workspace) : undefined;
+    if (!desktop) return;
+
+    const existing = latest.shared.windows
+      .filter((window) => window.desktop_id === desktop.id && window.app_id === event.app_id)
+      .reduce<typeof latest.shared.windows[number] | undefined>(
+        (top, window) => !top || window.z > top.z ? window : top,
+        undefined,
+      );
+    if (existing) {
+      void runCommand({ op: "window.raise", window_id: existing.id });
+    } else {
+      void runCommand({
+        op: "window.open",
+        desktop_id: desktop.id,
+        app_id: event.app_id,
+        rect: newWindowRect(desktop.id, latest),
+      });
+    }
+  }), [newWindowRect, runCommand, store]);
+
   if (!snapshot) {
     return <main className="app-root"><EmptyState icon={<AppsIcon />} text="코어에 연결할 수 없습니다" /></main>;
   }
@@ -67,11 +99,6 @@ export function Shell({ store }: { store: ShellStore }) {
   const desktops = snapshot.shared.desktops
     .filter((desktop) => desktop.workspace_id === activeWorkspace.id)
     .sort((a, b) => a.position - b.position);
-
-  const newWindowRect = (desktopId: string, current: ShellSnapshot) => {
-    const count = current.shared.windows.filter((window) => window.desktop_id === desktopId).length;
-    return makeNewWindowRect(desktopArea, count);
-  };
 
   const openAppMenu = (anchor: HTMLElement) => {
     const entries: MenuEntry[] = snapshot.shared.apps.length > 0
@@ -142,6 +169,46 @@ export function Shell({ store }: { store: ShellStore }) {
         },
       ],
     });
+  };
+
+  const openLinkMenu = (anchor: HTMLElement) => {
+    const status = snapshot.link;
+    const command = (op: "link.start" | "link.cancel" | "link.unlink") => () => void runCommand({ op });
+    const entries: MenuEntry[] = status.state === "unlinked"
+      ? [{ id: "link-start", label: "서버에 연결", onSelect: () => void startLink(anchor) }]
+      : status.state === "pairing"
+        ? pairingMenuEntries(status.user_code)
+        : status.state === "connected"
+          ? [
+            { id: "link-connected", label: `${new URL(status.server_url).host} 연결됨`, disabled: true },
+            { id: "link-separator", type: "separator" },
+            { id: "link-unlink", label: "연결 끊기", danger: true, onSelect: command("link.unlink") },
+          ]
+          : status.state === "offline"
+            ? [
+              { id: "link-offline", label: "다시 연결하는 중", disabled: true },
+              { id: "link-separator", type: "separator" },
+              { id: "link-unlink", label: "연결 끊기", danger: true, onSelect: command("link.unlink") },
+            ]
+            : [{ id: "link-restart", label: "다시 연결", onSelect: () => void startLink(anchor) }];
+    setMenu({ anchor, entries });
+  };
+
+  const pairingMenuEntries = (userCode: string): MenuEntry[] => [
+    {
+      id: "link-copy-code",
+      label: `${userCode} 복사`,
+      onSelect: () => {
+        void navigator.clipboard.writeText(userCode).catch((reason: unknown) => setNotice(toCoreError(reason)));
+      },
+    },
+    { id: "link-separator", type: "separator" },
+    { id: "link-cancel", label: "연결 취소", onSelect: () => void runCommand({ op: "link.cancel" }) },
+  ];
+
+  const startLink = async (anchor: HTMLElement) => {
+    const reply = await runCommand({ op: "link.start" });
+    if (reply?.op === "link.start") setMenu({ anchor, entries: pairingMenuEntries(reply.user_code) });
   };
 
   const createDesktop = () => {
@@ -237,6 +304,43 @@ export function Shell({ store }: { store: ShellStore }) {
           <IconButton aria-label="앱 정의 가져오기" onClick={() => fileInput.current?.click()} title="앱 정의 가져오기">
             <ImportIcon />
           </IconButton>
+          {snapshot.link.state === "connected" ? (
+            <IconButton
+              aria-label="연결됨"
+              onClick={(event) => openLinkMenu(event.currentTarget)}
+              title={`연결됨 · ${snapshot.link.device_name}`}
+            >
+              <LinkedCloudIcon />
+            </IconButton>
+          ) : snapshot.link.state === "pairing" ? (
+            <IconButton
+              aria-label={`연결 코드 ${snapshot.link.user_code}`}
+              onClick={(event) => openLinkMenu(event.currentTarget)}
+              title={`연결 코드 ${snapshot.link.user_code}`}
+            >
+              <LinkedCloudIcon className="ks-link-icon-accent" />
+            </IconButton>
+          ) : snapshot.link.state === "offline" ? (
+            <IconButton
+              aria-label="다시 연결하는 중"
+              onClick={(event) => openLinkMenu(event.currentTarget)}
+              title={`다시 연결하는 중 · ${snapshot.link.reason}`}
+            >
+              <UnlinkedCloudIcon className="ks-link-icon-muted" />
+            </IconButton>
+          ) : snapshot.link.state === "revoked" ? (
+            <IconButton
+              aria-label="연결이 끊겼습니다"
+              onClick={(event) => openLinkMenu(event.currentTarget)}
+              title="연결이 끊겼습니다"
+            >
+              <UnlinkedCloudIcon />
+            </IconButton>
+          ) : (
+            <IconButton aria-label="서버에 연결" onClick={(event) => openLinkMenu(event.currentTarget)} title="서버에 연결">
+              <UnlinkedCloudIcon />
+            </IconButton>
+          )}
           <input
             accept=".json,application/json"
             aria-label="앱 정의 파일"

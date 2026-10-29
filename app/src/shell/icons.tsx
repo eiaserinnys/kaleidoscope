@@ -25,6 +25,19 @@ export function ImportIcon(props: IconProps) {
   </svg>;
 }
 
+export function LinkedCloudIcon(props: IconProps) {
+  return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24" {...props}>
+    <path d="M7.5 18.25h9.75a4.25 4.25 0 0 0 .1-8.5 5.5 5.5 0 0 0-10.7-.95A4.8 4.8 0 0 0 7.5 18.25Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+  </svg>;
+}
+
+export function UnlinkedCloudIcon(props: IconProps) {
+  return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24" {...props}>
+    <path d="M7.5 18.25h9.75a4.25 4.25 0 0 0 .1-8.5 5.5 5.5 0 0 0-10.7-.95A4.8 4.8 0 0 0 7.5 18.25Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+    <path d="m5 5 14 14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+  </svg>;
+}
+
 export function CloseIcon(props: IconProps) {
   return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24" {...props}><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" /></svg>;
 }
