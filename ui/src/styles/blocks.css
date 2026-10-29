@@ -179,6 +179,7 @@
 }
 
 .ks-editor-view .cm-content {
+  caret-color: var(--ks-color-text);
   min-height: 100%;
   padding: var(--ks-space-4);
   white-space: pre-wrap;
