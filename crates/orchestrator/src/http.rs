@@ -23,6 +23,12 @@ pub fn router(state: AppState) -> Router {
         .route("/events", get(device_events))
         .route("/layout", axum::routing::put(super::layouts::put_layout))
         .route(
+            "/connections/{name}/request",
+            post(super::connection_relay::device_request).layer(DefaultBodyLimit::max(
+                super::connection_relay::connection_request_body_limit(),
+            )),
+        )
+        .route(
             "/workspaces/{workspace_id}/agent",
             get(super::agent::get_agent).post(super::agent::create_agent),
         )

@@ -79,6 +79,24 @@ impl AppState {
         device_id: &str,
         event: DeviceEvent,
     ) -> Option<DeviceEvent> {
+        if matches!(event, DeviceEvent::ConnectionsSnapshot { .. }) {
+            let supports_connections = self
+                .0
+                .device_support
+                .lock()
+                .ok()
+                .and_then(|devices| devices.get(device_id).cloned())
+                .flatten()
+                .is_some_and(|supported| {
+                    supported
+                        .modules
+                        .get("connection")
+                        .is_some_and(|version| *version >= 1)
+                });
+            if !supports_connections {
+                return None;
+            }
+        }
         if let DeviceEvent::AppPublished { app, .. } = &event {
             if !self.device_can_render(device_id, &app.version.definition.requires) {
                 return None;
@@ -156,7 +174,12 @@ impl AppState {
                 let windows: Vec<Value> = windows.into_iter().map(|window| {
                     let name = apps.iter().find(|a| a.app.id == window.app_id).map(|a| a.app.name.as_str()).unwrap_or(&window.app_id);
                     let folders: std::collections::BTreeMap<_, _> = layout.folders.iter().filter(|f| f.window_id == window.id).map(|f| (f.permission.clone(), f.root_name.clone())).collect();
-                    json!({"window_id":window.id,"app_id":window.app_id,"app_name":name,"app_version":window.app_version,"rect":window.rect,"z":window.z,"state":window.state,"folders":folders})
+                    let data_errors: Vec<_> = layout.data_errors.iter().filter(|error| error.window_id == window.id).map(|error| json!({"pointer":error.pointer,"message":error.message})).collect();
+                    let mut value = json!({"window_id":window.id,"app_id":window.app_id,"app_name":name,"app_version":window.app_version,"rect":window.rect,"z":window.z,"state":window.state,"folders":folders});
+                    if !data_errors.is_empty() {
+                        value["data_errors"] = json!(data_errors);
+                    }
+                    value
                 }).collect();
                 json!({"desktop_id":desktop.id,"name":desktop.name,"position":desktop.position,"active":active_desktop == Some(&desktop.id),"windows":windows})
             }).collect();
