@@ -112,6 +112,8 @@ struct ServerState {
     authorization_exchanges: usize,
     refreshes: usize,
     resource_requests: usize,
+    refresh_response_delay: Duration,
+    used_refresh_tokens: std::collections::BTreeSet<String>,
     invalid_client_first_exchange: bool,
     resource_requires_refreshed_token: bool,
     last_authorization: Option<String>,
@@ -257,11 +259,21 @@ fn respond(request: &HttpRequest, base: &str, state: &Arc<Mutex<ServerState>>) -
             let mut state = state.lock().unwrap();
             if params.get("grant_type").map(String::as_str) == Some("refresh_token") {
                 state.refreshes += 1;
-                (
-                    200,
-                    json!({"access_token":"refreshed","refresh_token":"rotated","expires_in":3600})
-                        .to_string(),
-                )
+                let refresh_number = state.refreshes;
+                let refresh_token = params.get("refresh_token").cloned().unwrap_or_default();
+                let duplicate = !state.used_refresh_tokens.insert(refresh_token);
+                let response_delay = state.refresh_response_delay;
+                drop(state);
+                thread::sleep(response_delay);
+                if duplicate {
+                    (400, json!({"error":"invalid_grant"}).to_string())
+                } else {
+                    (
+                        200,
+                        json!({"access_token":"refreshed","refresh_token":format!("rotated-{refresh_number}"),"expires_in":3600})
+                            .to_string(),
+                    )
+                }
             } else {
                 state.authorization_exchanges += 1;
                 if state.invalid_client_first_exchange && state.authorization_exchanges == 1 {

@@ -18,7 +18,7 @@ use crate::{app_commands, error, Inner};
 pub(crate) trait LoginStore: Send + Sync {
     fn token(&self, connection: &str) -> Option<String>;
     fn refresh(&self, connection: &str, rejected_token: &str) -> Option<String>;
-    fn invalidate(&self, connection: &str);
+    fn invalidate(&self, connection: &str, access_token: &str);
 }
 #[derive(Debug)]
 pub(crate) enum RequestError {
@@ -86,7 +86,7 @@ pub(crate) fn request(
             };
             let reply = oauth_request(&info, &refreshed, &req)?;
             if reply.status == 401 {
-                inner.login_store.invalidate(&connection);
+                inner.login_store.invalidate(&connection, &refreshed);
                 return Err(RequestError::Login(permission.into()));
             }
             Ok(reply)

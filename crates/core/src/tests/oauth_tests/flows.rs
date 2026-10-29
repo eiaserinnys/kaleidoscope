@@ -1,4 +1,5 @@
 use super::*;
+use crate::connections::LoginStore;
 
 #[test]
 fn login_registers_persists_and_oauth_source_uses_bearer_token() {
@@ -308,4 +309,90 @@ fn wrong_state_without_valid_callback_times_out() {
         crate::oauth::wait_for_callback(&callback_listener, "right", Duration::from_millis(60));
     callback_thread.join().unwrap();
     assert!(matches!(result, Err(crate::oauth::FlowError::Timeout)));
+}
+
+#[test]
+fn stalled_loopback_request_does_not_extend_login_deadline() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let callback_listener = listener.try_clone().unwrap();
+    let stalled_client = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    let (release, wait_for_release) = mpsc::channel();
+    let client_thread = thread::spawn(move || {
+        let _ = wait_for_release.recv_timeout(Duration::from_millis(600));
+        drop(stalled_client);
+    });
+
+    let started = Instant::now();
+    let result =
+        crate::oauth::wait_for_callback(&callback_listener, "right", Duration::from_millis(100));
+    let elapsed = started.elapsed();
+    let _ = release.send(());
+    client_thread.join().unwrap();
+
+    assert!(matches!(result, Err(crate::oauth::FlowError::Timeout)));
+    assert!(elapsed < Duration::from_millis(400), "elapsed: {elapsed:?}");
+}
+
+#[test]
+fn simultaneous_expired_token_reads_refresh_once_and_keep_rotated_token() {
+    let fixture = OAuthFixture::start();
+    fixture.state.lock().unwrap().refresh_response_delay = Duration::from_millis(300);
+    let temp = TempDir::new().unwrap();
+    let (core, _) = make_core(
+        Arc::new(NoCallbackHost),
+        &temp,
+        &fixture,
+        ConnectionKind::Oauth,
+    );
+    core.inner
+        .login_store
+        .store(
+            "example",
+            LoginEntry {
+                issuer: fixture.base.clone(),
+                client_id: Some("client".into()),
+                redirect_port: Some(40000),
+                access_token: Some("expired".into()),
+                refresh_token: Some("rotating-refresh".into()),
+                expires_at: Some(1),
+            },
+        )
+        .unwrap();
+
+    let barrier = Arc::new(std::sync::Barrier::new(3));
+    let workers: Vec<_> = (0..2)
+        .map(|_| {
+            let login_store = core.inner.login_store.clone();
+            let barrier = barrier.clone();
+            thread::spawn(move || {
+                barrier.wait();
+                login_store.token("example")
+            })
+        })
+        .collect();
+    barrier.wait();
+    let tokens: Vec<_> = workers
+        .into_iter()
+        .map(|worker| worker.join().unwrap())
+        .collect();
+
+    assert_eq!(
+        tokens,
+        vec![Some("refreshed".into()), Some("refreshed".into())]
+    );
+    let stored = core.inner.login_store.entry("example").unwrap();
+    assert_eq!(stored.access_token.as_deref(), Some("refreshed"));
+    assert_eq!(stored.refresh_token.as_deref(), Some("rotated-1"));
+    core.inner.login_store.invalidate("example", "expired");
+    let after_stale_invalidation = core.inner.login_store.entry("example").unwrap();
+    assert_eq!(
+        after_stale_invalidation.access_token.as_deref(),
+        Some("refreshed")
+    );
+    assert_eq!(
+        after_stale_invalidation.refresh_token.as_deref(),
+        Some("rotated-1")
+    );
+    assert_eq!(fixture.state.lock().unwrap().refreshes, 1);
 }

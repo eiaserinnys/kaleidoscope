@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -27,6 +27,7 @@ pub(crate) struct LoginEntry {
 pub(crate) struct Logins {
     path: PathBuf,
     entries: Mutex<BTreeMap<String, LoginEntry>>,
+    refresh_locks: Mutex<BTreeMap<String, Arc<Mutex<()>>>>,
 }
 
 impl Logins {
@@ -36,6 +37,7 @@ impl Logins {
         Ok(Self {
             path,
             entries: Mutex::new(entries),
+            refresh_locks: Mutex::new(BTreeMap::new()),
         })
     }
 
@@ -87,44 +89,75 @@ impl Logins {
         let _ = self.store(connection, entry);
     }
 
-    fn clear_tokens(&self, connection: &str) {
-        if let Some(mut entry) = self.entry(connection) {
-            entry.access_token = None;
-            entry.refresh_token = None;
-            entry.expires_at = None;
-            let _ = self.store(connection, entry);
+    fn clear_tokens_if(&self, connection: &str, matches: impl FnOnce(&LoginEntry) -> bool) {
+        let mut entries = self.entries.lock().unwrap();
+        let Some(entry) = entries.get_mut(connection) else {
+            return;
+        };
+        if !matches(entry) {
+            return;
         }
+        entry.access_token = None;
+        entry.refresh_token = None;
+        entry.expires_at = None;
+        let _ = crate::storage::save_atomic(&self.path, &*entries);
     }
 
     fn refresh(&self, connection: &str, rejected_token: &str) -> Option<String> {
+        let refresh_lock = {
+            let mut locks = self.refresh_locks.lock().unwrap();
+            locks
+                .entry(connection.to_string())
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone()
+        };
+        let _refresh_guard = refresh_lock.lock().unwrap();
         let entry = self.entry(connection)?;
         if entry
             .access_token
             .as_deref()
             .is_some_and(|token| token != rejected_token)
+            && !token_is_expired(entry.expires_at)
         {
             return entry.access_token;
         }
-        if entry.refresh_token.is_none() {
-            self.clear_tokens(connection);
+        let Some(refresh_token) = entry.refresh_token.clone() else {
+            self.clear_tokens_if(connection, |current| {
+                current.access_token.as_deref() == Some(rejected_token)
+            });
             return None;
-        }
+        };
         match oauth::refresh_access_token(&entry) {
             Some(tokens) => {
-                let updated = LoginEntry {
-                    issuer: entry.issuer,
-                    client_id: entry.client_id,
-                    redirect_port: entry.redirect_port,
-                    access_token: Some(tokens.access_token.clone()),
-                    refresh_token: tokens.refresh_token.or(entry.refresh_token),
-                    expires_at: tokens.expires_at,
-                };
-                self.store(connection, updated).ok()?;
-                Some(tokens.access_token)
+                let mut entries = self.entries.lock().unwrap();
+                let current = entries.get_mut(connection)?;
+                if current != &entry {
+                    let expired = token_is_expired(current.expires_at);
+                    return current.access_token.clone().filter(|_| !expired);
+                }
+                let access_token = tokens.access_token;
+                current.access_token = Some(access_token.clone());
+                current.refresh_token = tokens.refresh_token.or(Some(refresh_token));
+                current.expires_at = tokens.expires_at;
+                crate::storage::save_atomic(&self.path, &*entries).ok()?;
+                Some(access_token)
             }
             None => {
-                self.clear_tokens(connection);
-                None
+                let mut entries = self.entries.lock().unwrap();
+                let current = entries.get_mut(connection)?;
+                if current.refresh_token.as_deref() == Some(refresh_token.as_str()) {
+                    current.access_token = None;
+                    current.refresh_token = None;
+                    current.expires_at = None;
+                    let _ = crate::storage::save_atomic(&self.path, &*entries);
+                    None
+                } else {
+                    let expired = token_is_expired(current.expires_at);
+                    current
+                        .access_token
+                        .clone()
+                        .filter(|token| token != rejected_token && !expired)
+                }
             }
         }
     }
@@ -134,13 +167,7 @@ impl LoginStore for Logins {
     fn token(&self, connection: &str) -> Option<String> {
         let entry = self.entry(connection)?;
         let token = entry.access_token?;
-        let expired = entry.expires_at.is_some_and(|expires| {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|now| expires <= now.as_secs() as i64)
-                .unwrap_or(false)
-        });
-        if expired {
+        if token_is_expired(entry.expires_at) {
             self.refresh(connection, &token)
         } else {
             Some(token)
@@ -151,7 +178,18 @@ impl LoginStore for Logins {
         Logins::refresh(self, connection, rejected_token)
     }
 
-    fn invalidate(&self, connection: &str) {
-        self.clear_tokens(connection);
+    fn invalidate(&self, connection: &str, access_token: &str) {
+        self.clear_tokens_if(connection, |entry| {
+            entry.access_token.as_deref() == Some(access_token)
+        });
     }
+}
+
+fn token_is_expired(expires_at: Option<i64>) -> bool {
+    expires_at.is_some_and(|expires| {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|now| expires <= now.as_secs() as i64)
+            .unwrap_or(false)
+    })
 }

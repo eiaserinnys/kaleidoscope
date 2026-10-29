@@ -12,6 +12,8 @@ use sha2::{Digest, Sha256};
 use url::Url;
 use uuid::Uuid;
 
+const CALLBACK_REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
+
 use crate::{
     error,
     logins::{LoginEntry, Logins},
@@ -376,12 +378,25 @@ pub(crate) fn wait_for_callback(
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
         match listener.accept() {
-            Ok((mut stream, _)) => match read_callback(&mut stream, expected_state) {
-                Ok(Some(callback)) => return Ok(callback),
-                Ok(None) => {}
-                Err(FlowError::InvalidClient) => return Err(FlowError::InvalidClient),
-                Err(FlowError::Timeout | FlowError::Server) => {}
-            },
+            Ok((mut stream, _)) => {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Err(FlowError::Timeout);
+                }
+                let socket_timeout = remaining.min(CALLBACK_REQUEST_TIMEOUT);
+                stream
+                    .set_read_timeout(Some(socket_timeout))
+                    .map_err(|_| FlowError::Server)?;
+                stream
+                    .set_write_timeout(Some(socket_timeout))
+                    .map_err(|_| FlowError::Server)?;
+                match read_callback(&mut stream, expected_state) {
+                    Ok(Some(callback)) => return Ok(callback),
+                    Ok(None) => {}
+                    Err(FlowError::InvalidClient) => return Err(FlowError::InvalidClient),
+                    Err(FlowError::Timeout | FlowError::Server) => {}
+                }
+            }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 thread::sleep(Duration::from_millis(10));
             }
