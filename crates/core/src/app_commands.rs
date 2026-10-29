@@ -68,7 +68,7 @@ pub(crate) fn import_registry(state: &mut CoreState, received: RegistryApp) -> b
         .shared
         .apps
         .iter()
-        .any(|app| app.id == received.app.id)
+        .any(|app| app.id == received.app.id && app.current_version == received.app.current_version)
         && state.shared.app_versions.iter().any(|version| {
             version.app_id == received.app.id
                 && version.version == received.app.current_version

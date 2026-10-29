@@ -196,29 +196,11 @@ pub(crate) fn import_app(
                 app: received.app.clone(),
                 version: received.version.clone(),
             };
-            let (changed, event) = {
-                let mut state = inner.state.lock().unwrap();
-                let before = state.clone();
-                let changed = app_commands::import_registry(&mut state, received);
-                if changed {
-                    if let Err(error) = storage::save_changed_state(
-                        &inner.data_dir,
-                        &state.shared,
-                        &state.device,
-                        true,
-                        false,
-                    ) {
-                        *state = before;
-                        return Err(error);
-                    }
-                }
-                let event = changed.then(|| CoreEvent::StateChanged {
-                    snapshot: snapshot(&state),
-                });
-                (changed, event)
-            };
-            if changed {
-                inner.emit(event.as_ref().unwrap());
+            let (_, event) = apply_registry_change(inner, |state| {
+                app_commands::import_registry(state, received)
+            })?;
+            if let Some(event) = event {
+                inner.emit(&event);
             }
             Ok(reply)
         }
@@ -389,15 +371,12 @@ fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEvent) -> bool 
     match event {
         DeviceEvent::AppsSnapshot { apps } => {
             let link = inner.link_file.lock().unwrap().clone();
-            let outcome = {
-                let mut state = inner.state.lock().unwrap();
+            let result = apply_registry_change(inner, |state| {
                 if inner.generation.load(Ordering::SeqCst) != generation {
-                    return false;
+                    return None;
                 }
-                let before = state.clone();
-                let mut shared_changed = false;
                 for app in apps {
-                    shared_changed |= app_commands::import_registry(&mut state, app);
+                    app_commands::import_registry(state, app);
                 }
                 let status = LinkStatus::Connected {
                     server_url: link
@@ -409,60 +388,43 @@ fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEvent) -> bool 
                         .map(|link| link.device_name.clone())
                         .unwrap_or_default(),
                 };
-                let status_changed = set_link_locked(&mut state, status);
-                if shared_changed {
-                    if let Err(error) = storage::save_changed_state(
-                        &inner.data_dir,
-                        &state.shared,
-                        &state.device,
-                        true,
-                        false,
-                    ) {
-                        *state = before;
-                        drop(state);
-                        set_offline(inner, generation, &load_link(inner), error.message);
-                        return true;
-                    }
+                set_link_locked(state, status);
+                Some(())
+            });
+            let (applied, event) = match result {
+                Ok(result) => result,
+                Err(error) => {
+                    set_offline(inner, generation, &load_link(inner), error.message);
+                    return true;
                 }
-                let changed = shared_changed || status_changed;
-                let event = changed.then(|| CoreEvent::StateChanged {
-                    snapshot: snapshot(&state),
-                });
-                event
             };
-            if let Some(event) = outcome {
+            if applied.is_none() {
+                return false;
+            }
+            if let Some(event) = event {
                 inner.emit(&event);
             }
         }
         DeviceEvent::AppPublished { app, open } => {
-            let (changed, core_event) = {
-                let mut state = inner.state.lock().unwrap();
+            let result = apply_registry_change(inner, |state| {
                 if inner.generation.load(Ordering::SeqCst) != generation {
-                    return false;
+                    return None;
                 }
-                let before = state.clone();
-                let changed = app_commands::import_registry(&mut state, app.clone());
-                if changed {
-                    if let Err(error) = storage::save_changed_state(
-                        &inner.data_dir,
-                        &state.shared,
-                        &state.device,
-                        true,
-                        false,
-                    ) {
-                        *state = before;
-                        drop(state);
-                        set_offline(inner, generation, &load_link(inner), error.message);
-                        return true;
-                    }
+                app_commands::import_registry(state, app.clone());
+                Some(())
+            });
+            let (applied, event) = match result {
+                Ok(result) => result,
+                Err(error) => {
+                    set_offline(inner, generation, &load_link(inner), error.message);
+                    return true;
                 }
-                let state_event = changed.then(|| CoreEvent::StateChanged {
-                    snapshot: snapshot(&state),
-                });
-                (changed, state_event)
             };
-            if changed {
-                inner.emit(core_event.as_ref().unwrap());
+            if applied.is_none() {
+                return false;
+            }
+            if let Some(event) = event {
+                inner.emit(&event);
             }
             if open {
                 inner.emit(&CoreEvent::AppOpenRequested { app_id: app.app.id });
@@ -487,6 +449,37 @@ fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEvent) -> bool 
 
 fn load_link(inner: &Inner) -> LinkFile {
     inner.link_file.lock().unwrap().as_ref().unwrap().clone()
+}
+
+fn apply_registry_change<T>(
+    inner: &Inner,
+    update: impl FnOnce(&mut crate::CoreState) -> T,
+) -> Result<(T, Option<CoreEvent>), CoreError> {
+    let mut state = inner.state.lock().unwrap();
+    let before = state.clone();
+    let result = update(&mut state);
+    let shared_changed = before.shared != state.shared;
+    let device_changed = before.device != state.device;
+    let link_changed = before.link != state.link;
+
+    if shared_changed || device_changed {
+        if let Err(error) = storage::save_changed_state(
+            &inner.data_dir,
+            &state.shared,
+            &state.device,
+            shared_changed,
+            device_changed,
+        ) {
+            *state = before;
+            return Err(error);
+        }
+    }
+
+    let event =
+        (shared_changed || device_changed || link_changed).then(|| CoreEvent::StateChanged {
+            snapshot: snapshot(&state),
+        });
+    Ok((result, event))
 }
 
 fn set_offline(inner: &Arc<Inner>, generation: u64, file: &LinkFile, reason: String) {

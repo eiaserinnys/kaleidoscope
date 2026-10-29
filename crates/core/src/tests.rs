@@ -1062,6 +1062,89 @@ fn connected_import_uploads_and_preserves_server_validation_error() {
 }
 
 #[test]
+fn connected_import_persists_removed_folder_grants() {
+    let temp = TempDir::new().unwrap();
+    let data_dir = temp.path().join("data");
+    let host = Arc::new(FakeHost::default());
+    let docs = temp.path().join("docs");
+    fs::create_dir_all(&docs).unwrap();
+    host.choose(Some(docs));
+    let client = registry_client();
+    let core = open_core_with_client(
+        &data_dir,
+        vec![MD_EDITOR.into()],
+        &host,
+        Arc::clone(&client),
+    );
+    let (_, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "md-editor");
+    pick_folder(&core, &window_id);
+    assert_eq!(snapshot(&core).device.grants.len(), 1);
+
+    let mut next_definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    next_definition["permissions"] = json!([
+        { "module": "files", "id": "manuals", "access": "readwrite", "label": "문서 폴더" }
+    ]);
+    next_definition["ui"]["children"][0]["root"]["permission"] = json!("manuals");
+    next_definition["ui"]["children"][1]["file"]["permission"] = json!("manuals");
+    let definition_json = next_definition.to_string();
+    client
+        .uploads
+        .lock()
+        .unwrap()
+        .push_back(Ok(registry_app(2, &definition_json)));
+    mark_connected(&core);
+    core.handle(CoreRequest::AppImport { definition_json })
+        .unwrap();
+
+    assert!(snapshot(&core).device.grants.is_empty());
+    drop(core);
+
+    let reopened = open_core_with_client(&data_dir, vec![], &host, registry_client());
+    assert!(snapshot(&reopened).device.grants.is_empty());
+}
+
+#[test]
+fn registry_snapshot_applies_server_version_when_only_old_cached_version_matches() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(
+        &temp.path().join("data"),
+        vec![MD_EDITOR.into()],
+        &host,
+        Arc::clone(&client),
+    );
+    let mut local_v2: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    local_v2["name"] = json!("로컬 편집기 v2");
+    import(&core, &local_v2.to_string());
+    assert_eq!(snapshot(&core).shared.apps[0].current_version, 2);
+
+    mark_connected(&core);
+    client
+        .streams
+        .lock()
+        .unwrap()
+        .push_back(Ok(vec![DeviceEvent::AppsSnapshot {
+            apps: vec![registry_app(1, MD_EDITOR)],
+        }]));
+    crate::link::start_stream(Arc::clone(&core.inner), 0, connected_link_file());
+
+    wait_until(|| {
+        snapshot(&core)
+            .shared
+            .apps
+            .iter()
+            .any(|app| app.id == "md-editor" && app.current_version == 1)
+    });
+    let state = snapshot(&core).shared;
+    assert_eq!(state.apps[0].name, "마크다운 편집기");
+    assert_eq!(state.app_versions.len(), 1);
+    assert_eq!(state.app_versions[0].version, 1);
+    core.handle(CoreRequest::LinkUnlink {}).unwrap();
+}
+
+#[test]
 fn saved_link_reconnects_and_unauthorized_stream_revokes_it() {
     let temp = TempDir::new().unwrap();
     let data_dir = temp.path().join("data");
