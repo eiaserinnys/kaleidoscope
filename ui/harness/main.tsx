@@ -126,6 +126,7 @@ const reclickDocument = `# 다시 누르기 시험
 | 항목 | 상태 |
 | --- | --- |
 | 하나 | 둘 |
+| **굵은 글자** | \`코드 낱말\` |
 `;
 
 const fakeTransport = createFakeTransport({

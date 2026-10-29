@@ -7,6 +7,9 @@ type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>["resolve"]>;
 const focusEffect = StateEffect.define<boolean>();
 const refreshEffect = StateEffect.define<null>();
 const pointerEffect = StateEffect.define<{ focused: boolean; selection: EditorSelection } | null>();
+type TableCell = { table: number; from: number; to: number };
+const tableCells = new WeakMap<Element, TableCell>();
+const tableTextPositions = new WeakMap<Node, number>();
 
 class TextWidget extends WidgetType {
   constructor(readonly text: string, readonly className: string) { super(); }
@@ -41,12 +44,18 @@ function resolvedLink(node: SyntaxNode, state: EditorState, references: Markdown
   return references.has(reference || state.sliceDoc(bounds[0], bounds[1]), state);
 }
 
+function appendSourceText(parent: HTMLElement, state: EditorState, from: number, to: number) {
+  const text = document.createTextNode(state.sliceDoc(from, to));
+  tableTextPositions.set(text, from);
+  parent.append(text);
+}
+
 // 표 안에서도 구문 트리의 텍스트만 DOM에 넣는다. HTML은 해석하지 않는다.
 function appendInline(parent: HTMLElement, node: SyntaxNode, state: EditorState, references: MarkdownReferenceIndex, from = node.from, to = node.to) {
   let cursor = from;
   for (const child of children(node)) {
     if (child.from < from || child.to > to) continue;
-    if (child.from > cursor) parent.append(document.createTextNode(state.sliceDoc(cursor, child.from)));
+    if (child.from > cursor) appendSourceText(parent, state, cursor, child.from);
     const tags: Record<string, string> = { StrongEmphasis: "strong", Emphasis: "em", Strikethrough: "s", InlineCode: "code", Link: "span", Image: "span" };
     const tag = child.name === "Link" && !resolvedLink(child, state, references) ? undefined : tags[child.name];
     if (tag) {
@@ -58,15 +67,15 @@ function appendInline(parent: HTMLElement, node: SyntaxNode, state: EditorState,
       else {
         const marks = children(child).filter((item) => /Mark$/.test(item.name));
         if (marks.length >= 2) appendInline(el, child, state, references, marks[0].to, marks[marks.length - 1].from);
-        else el.textContent = state.sliceDoc(child.from, child.to);
+        else appendSourceText(el, state, child.from, child.to);
       }
       parent.append(el);
     } else {
-      parent.append(document.createTextNode(state.sliceDoc(child.from, child.to)));
+      appendSourceText(parent, state, child.from, child.to);
     }
     cursor = child.to;
   }
-  if (cursor < to) parent.append(document.createTextNode(state.sliceDoc(cursor, to)));
+  if (cursor < to) appendSourceText(parent, state, cursor, to);
 }
 
 class TableWidget extends WidgetType {
@@ -101,11 +110,15 @@ class TableWidget extends WidgetType {
       for (const [index, cell] of cells.entries()) {
         const td = document.createElement(row.name === "TableHeader" ? "th" : "td");
         td.style.textAlign = alignment[index] ?? "left";
+        const raw = this.state.sliceDoc(cell.from, cell.to);
+        const from = cell.from + raw.length - raw.trimStart().length;
+        const bounds = { table: this.node.from, from, to: Math.max(from, cell.from + raw.trimEnd().length) };
+        tableCells.set(td, bounds);
         if (cell.node) appendInline(td, cell.node, this.state, view.plugin(referencePreview)!.index);
         td.addEventListener("mousedown", (event) => {
           if (event.button !== 0) return;
           event.preventDefault();
-          view.plugin(pointerPreview)?.selectTableOnRelease(cell.node?.from ?? cell.from);
+          view.plugin(pointerPreview)?.selectTableOnRelease(cell.node?.from ?? cell.from, bounds);
         });
         tr.append(td);
       }
@@ -336,7 +349,8 @@ const inlinePreview = ViewPlugin.fromClass(class {
 const pointerPreview = ViewPlugin.fromClass(class {
   private listening = false;
   private clickStart: { focused: boolean; selection: EditorSelection } | null = null;
-  private tablePosition: number | null = null;
+  private tableSelection: { anchor: number; head: number } | null = null;
+  private tableStart: TableCell | null = null;
   private readonly window: Window;
   constructor(private readonly view: EditorView) {
     this.window = view.dom.ownerDocument.defaultView!;
@@ -354,16 +368,16 @@ const pointerPreview = ViewPlugin.fromClass(class {
     if (!this.listening) return;
     this.window.removeEventListener("mouseup", this.release);
     this.listening = false;
-    const position = this.tablePosition;
-    this.tablePosition = null;
-    if (openTable && position !== null) {
+    const selection = this.tableSelection;
+    this.tableSelection = null;
+    if (openTable && selection) {
       this.view.focus();
-      this.view.dispatch({ selection: { anchor: position }, effects: pointerEffect.of(null), scrollIntoView: true });
+      this.view.dispatch({ selection, effects: pointerEffect.of(null), scrollIntoView: true });
     } else {
       this.view.dispatch({ effects: pointerEffect.of(null) });
     }
   }
-  private readonly cancel = () => { this.clickStart = null; this.finish(false); };
+  private readonly cancel = () => { this.clickStart = null; this.tableStart = null; this.finish(false); };
   private readonly move = (event: PointerEvent) => {
     if (this.listening && event.buttons === 0) this.cancel();
   };
@@ -371,7 +385,7 @@ const pointerPreview = ViewPlugin.fromClass(class {
     if (event.button !== 0) return;
     if (this.listening) this.cancel();
     const current = { focused: this.view.hasFocus, selection: this.view.state.selection };
-    if (event.detail < 2 || !this.clickStart) this.clickStart = current;
+    if (event.detail < 2 || !this.clickStart) { this.clickStart = current; this.tableStart = null; }
     this.listening = true;
     this.view.dispatch({ effects: pointerEffect.of(current) });
     // CodeMirror는 document 버블에서 mouseup을 처리하므로 window 버블은 그 뒤다.
@@ -381,11 +395,27 @@ const pointerPreview = ViewPlugin.fromClass(class {
     // 대상 판정 뒤, CodeMirror가 클릭 좌표를 읽기 전에 첫 누름의 배치를 복원한다.
     if (event.detail >= 2 && this.listening && this.clickStart) {
       this.view.dispatch({ effects: pointerEffect.of(this.clickStart) });
+      if (this.tableStart) {
+        const doc = this.view.dom.ownerDocument;
+        const element = doc.elementFromPoint(event.clientX, event.clientY)?.closest("td, th");
+        const hit = element && tableCells.get(element);
+        const cell = hit?.table === this.tableStart.table ? hit : this.tableStart;
+        const caret = doc.caretPositionFromPoint(event.clientX, event.clientY);
+        const textFrom = caret && element?.contains(caret.offsetNode) ? tableTextPositions.get(caret.offsetNode) : undefined;
+        const word = event.detail === 2 && caret && textFrom !== undefined ? this.view.state.wordAt(textFrom + caret.offset) : null;
+        this.tableSelection = word && word.from >= cell.from && word.to <= cell.to
+          ? { anchor: word.from, head: word.to } : { anchor: cell.from, head: cell.to };
+        event.preventDefault();
+        return true;
+      }
     }
     return false;
   }
-  selectTableOnRelease(position: number) { this.tablePosition = position; }
-  update(update: ViewUpdate) { if (update.docChanged) this.clickStart = null; }
+  selectTableOnRelease(position: number, cell?: TableCell) {
+    this.tableSelection = { anchor: position, head: position };
+    if (cell) this.tableStart = cell;
+  }
+  update(update: ViewUpdate) { if (update.docChanged) { this.clickStart = null; this.tableStart = null; } }
   destroy() {
     this.view.contentDOM.removeEventListener("mousedown", this.start, true);
     this.window.removeEventListener("mouseup", this.release);

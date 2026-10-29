@@ -167,6 +167,60 @@ for (const movement of ["누르기", "칸 사이 끌기"] as const) {
   });
 }
 
+for (const mode of ["포커스 없음", "다른 줄 포커스"] as const) {
+  for (const target of [
+    { name: "머리 칸", selector: "th", text: "항목", word: "항목", source: "항목" },
+    { name: "본문 칸", selector: "td", text: "하나", word: "하나", source: "하나" },
+    { name: "굵은 글자 칸", selector: "td", text: "굵은 글자", word: "글자", source: "**굵은 글자**" },
+    { name: "인라인 코드 칸", selector: "td", text: "코드 낱말", word: "낱말", source: "`코드 낱말`" },
+  ]) {
+    for (const clicks of [2, 3]) {
+      test(`${mode} · 표 ${target.name} ${clicks}회 누르기와 저장`, async ({ page }) => {
+        const { editor } = await open(page);
+        if (mode === "다른 줄 포커스") {
+          await editor.evaluate((element) => {
+            const view = (element as any).cmTile.root.view;
+            view.focus();
+            view.dispatch({ selection: { anchor: view.state.sliceDoc().indexOf("끝.") + 1 } });
+          });
+        }
+        const initial = await snapshot(editor);
+        const cell = editor.locator(`table ${target.selector}`).filter({ hasText: target.text });
+        const point = await cell.evaluate((element, word) => {
+          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+          while (walker.nextNode()) {
+            const text = walker.currentNode as Text;
+            const offset = text.data.indexOf(word);
+            if (offset < 0) continue;
+            const range = document.createRange();
+            const index = offset + Math.floor(word.length / 2);
+            range.setStart(text, index); range.setEnd(text, index + 1);
+            const rect = range.getBoundingClientRect();
+            return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+          }
+          throw new Error(`칸의 글자를 찾지 못했습니다: ${word}`);
+        }, target.word);
+        await page.mouse.move(point.x, point.y);
+        for (let count = 1; count <= clicks; count++) {
+          await page.mouse.down({ clickCount: count });
+          await page.mouse.up({ clickCount: count });
+        }
+        const selected = await snapshot(editor);
+        const from = Math.min(selected.anchor, selected.head), to = Math.max(selected.anchor, selected.head);
+        const cellFrom = initial.text.indexOf(target.source), cellTo = cellFrom + target.source.length;
+        expect(selected.selected).toBe(clicks === 2 ? target.word : target.source);
+        expect(from).toBeGreaterThanOrEqual(cellFrom);
+        expect(to).toBeLessThanOrEqual(cellTo);
+        await expect(editor.locator("table")).toHaveCount(0);
+        const expected = initial.text.slice(0, from) + "X" + initial.text.slice(to);
+        await page.keyboard.type("X");
+        await expect.poll(async () => (await snapshot(editor)).text).toBe(expected);
+        await expectSaved(page, expected);
+      });
+    }
+  }
+}
+
 test("렌더 줄에서 편집기 밖으로 끌고 놓아도 선택과 키보드 이동이 이어진다", async ({ page }) => {
   const { app, editor } = await open(page);
   const point = await glyph(editor, "글자들이");
