@@ -14,6 +14,12 @@ use kaleidoscope_core::Core;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
+mod ui;
+
+pub(crate) fn observe_ui(request: &CoreRequest) {
+    ui::observe(request);
+}
+
 const IPC_TEST: &str = r#"
 (async () => {
   try {
@@ -324,6 +330,11 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
         "files.pick_folder",
         json!({"window_id": editor_id, "permission": "docs", "granted": true}),
     )?;
+    if let Err(error) = ui::run(app, core, out, log) {
+        let _ = record(log, "ui.error", json!({"message": error}));
+        let _ = screen(out, log, "99-ui-failure");
+        return Err(error);
+    }
     record(log, "complete", json!({"ok": true}))
 }
 
