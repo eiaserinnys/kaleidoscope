@@ -10,7 +10,7 @@ fn explorer_opens_and_reuses_editor_with_folder_grant() {
         data.path(),
         vec![
             MD_EDITOR.into(),
-            include_str!("../../../examples/explorer.json").into(),
+            include_str!("../../../../examples/explorer.json").into(),
         ],
         &host,
     );
@@ -79,7 +79,7 @@ fn explorer_open_reports_missing_grant_file_and_extension() {
         data.path(),
         vec![
             MD_EDITOR.into(),
-            include_str!("../../../examples/explorer.json").into(),
+            include_str!("../../../../examples/explorer.json").into(),
         ],
         &host,
     );
@@ -172,7 +172,7 @@ fn web_commands_validate_and_delegate_and_emit_updates() {
         CoreConfig {
             data_dir: data.path().into(),
             seed_definitions: vec![
-                include_str!("../../../examples/web-browser.json").into(),
+                include_str!("../../../../examples/web-browser.json").into(),
                 MD_EDITOR.into(),
             ],
             server_url: "http://localhost".into(),
@@ -287,7 +287,7 @@ fn explorer_opens_new_window_for_a_different_folder() {
         data.path(),
         vec![
             MD_EDITOR.into(),
-            include_str!("../../../examples/explorer.json").into(),
+            include_str!("../../../../examples/explorer.json").into(),
         ],
         &host,
     );
@@ -334,7 +334,7 @@ fn web_without_host_is_unavailable_and_detach_is_idempotent() {
     let host = Arc::new(FakeHost::default());
     let core = open_core(
         data.path(),
-        vec![include_str!("../../../examples/web-browser.json").into()],
+        vec![include_str!("../../../../examples/web-browser.json").into()],
         &host,
     );
     let (_, desktop) = active_ids(&core);
@@ -358,7 +358,7 @@ fn web_detaches_when_definition_loses_web_block() {
     let core = Core::open(
         CoreConfig {
             data_dir: data.path().into(),
-            seed_definitions: vec![include_str!("../../../examples/web-browser.json").into()],
+            seed_definitions: vec![include_str!("../../../../examples/web-browser.json").into()],
             server_url: "http://localhost".into(),
             device_name: "test".into(),
         },
@@ -390,7 +390,7 @@ fn removing_desktop_detaches_only_its_web_windows() {
     let core = Core::open(
         CoreConfig {
             data_dir: data.path().into(),
-            seed_definitions: vec![include_str!("../../../examples/web-browser.json").into()],
+            seed_definitions: vec![include_str!("../../../../examples/web-browser.json").into()],
             server_url: "http://localhost".into(),
             device_name: "test".into(),
         },
