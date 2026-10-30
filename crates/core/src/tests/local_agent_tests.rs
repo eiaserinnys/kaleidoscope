@@ -295,11 +295,13 @@ fn legacy_model_and_config_controls_restore() {
         .controls
         .iter()
         .any(|c| c.id == "toggle" && matches!(c.kind, AgentControlKind::Boolean)));
-    assert!(worker
-        .snapshot()
-        .controls
-        .iter()
-        .any(|c| c.id == "mode" && matches!(c.kind, AgentControlKind::Select { .. })));
+    let controls = worker.snapshot().controls;
+    let mode = controls.iter().find(|c| c.id == "mode").unwrap();
+    let AgentControlKind::Select { options } = &mode.kind else {
+        panic!("선택형 모드가 아닙니다")
+    };
+    assert_eq!(options[0].name.as_deref(), Some("묶음"));
+    assert_eq!(options[0].options.len(), 2);
     worker.shutdown();
     let dir = tempfile::tempdir().unwrap();
     let worker = WorkerHandle::start(config(dir.path(), "model_config"), Arc::new(|_| {}));
