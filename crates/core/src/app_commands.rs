@@ -12,6 +12,11 @@ pub(crate) fn import(
     definition_json: String,
 ) -> Result<CoreReply, CoreError> {
     let definition = app_definition::parse_app_definition(&definition_json)?;
+    if !crate::supported().renders(&definition.requires) {
+        return Err(CoreError::new(
+            kaleidoscope_contract::ErrorCode::UnsupportedApp,
+        ));
+    }
     Ok(import_definition(state, definition))
 }
 
@@ -64,6 +69,9 @@ fn import_definition(state: &mut CoreState, definition: AppDefinition) -> CoreRe
 }
 
 pub(crate) fn import_registry(state: &mut CoreState, received: RegistryApp) -> bool {
+    if !crate::supported().renders(&received.version.definition.requires) {
+        return false;
+    }
     if state
         .shared
         .apps

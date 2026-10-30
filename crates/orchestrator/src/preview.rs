@@ -1,3 +1,4 @@
+// 미리 보기의 저장소 문맥은 이번 위임 범위인 이 파일에 둔다.
 use super::mcp::{json_error, json_result, McpServer};
 use super::*;
 use futures::future::join_all;
@@ -9,6 +10,7 @@ use kaleidoscope_contract::{
 };
 use kaleidoscope_data::{CompiledApp, SourcePlan};
 use rmcp::{model::CallToolResult, ErrorData};
+use rusqlite::OptionalExtension;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -24,6 +26,8 @@ pub(super) struct PreviewArgs {
     state: Option<BTreeMap<String, Value>>,
     /// 최근 배치 보고에서 창 상태를 가져옵니다.
     window_id: Option<String>,
+    /// 작업 전용 저장 항목에 사용할 작업. window_id가 있으면 그 창의 작업과 같아야 합니다.
+    workspace_id: Option<String>,
     /// 기기 원천이나 relay 원천에 대신 넣을 표본 값.
     data: Option<BTreeMap<String, Value>>,
     /// 결과 값 하나를 표시할 최대 글자 수(기본 4000, 최대 20000).
@@ -41,6 +45,7 @@ impl McpServer {
             definition: definition_input,
             state: explicit_state,
             window_id,
+            workspace_id,
             data: samples,
             max_chars,
         } = args;
@@ -70,10 +75,19 @@ impl McpServer {
         if !(1..=20_000).contains(&max_chars) {
             return Ok(preview_error("max_chars는 1~20000 사이여야 합니다."));
         }
+        let (storage, storage_meta) = match preview_storage(
+            &self.state,
+            &definition,
+            workspace_id.as_deref(),
+            window_id.as_deref(),
+        ) {
+            Ok(result) => result,
+            Err(error) => return Ok(json_error(error)),
+        };
         let state = match explicit_state {
             Some(state) => state,
-            None => match window_id {
-                Some(window_id) => match self.state.reported_window_state(&window_id) {
+            None => match window_id.as_deref() {
+                Some(window_id) => match preview_window_state(&self.state, window_id) {
                     Ok(Some(state)) => state,
                     Ok(None) => return Ok(preview_error("보고된 창이 없습니다.")),
                     Err(error) => return Ok(json_error(error)),
@@ -109,7 +123,7 @@ impl McpServer {
                 continue;
             }
 
-            match compiled.plan_source(name, &state) {
+            match compiled.plan_source_with_storage(name, &state, &storage, &storage_meta) {
                 SourcePlan::Idle => {
                     statuses.insert(name.clone(), SourceStatus::Idle {});
                     source_results.insert(name.clone(), json!({"state":"idle"}));
@@ -298,7 +312,8 @@ impl McpServer {
             notes.push(format!("서버에 없는 연결: {connection}"));
         }
 
-        let evaluated = compiled.evaluate(&state, &data, &statuses);
+        let evaluated =
+            compiled.evaluate_with_storage(&state, &data, &storage, &storage_meta, &statuses);
         let mut blocks = Vec::new();
         kaleidoscope_contract::data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
             let block_type = serde_json::to_value(block)
@@ -350,6 +365,126 @@ impl McpServer {
             "notes": notes,
         })))
     }
+}
+
+fn preview_window_state(
+    state: &AppState,
+    window_id: &str,
+) -> Result<Option<BTreeMap<String, Value>>, CoreError> {
+    if let Some(reported) = state.reported_window_state(window_id)? {
+        return Ok(Some(reported));
+    }
+    let account = state.mcp_account_id()?;
+    let db = state.lock_db()?;
+    let raw: Option<String> = db.query_row(
+        "SELECT v.data FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.id=?1 AND w.account_id=?2",
+        params![window_id, account], |row| row.get(0)
+    ).optional().map_err(db_error)?;
+    raw.map(|raw| {
+        serde_json::from_str::<kaleidoscope_contract::AppWindow>(&raw)
+            .map(|window| window.state)
+            .map_err(|e| server_error(&e.to_string()))
+    })
+    .transpose()
+}
+
+fn preview_storage(
+    state: &AppState,
+    definition: &kaleidoscope_contract::AppDefinition,
+    workspace: Option<&str>,
+    window: Option<&str>,
+) -> Result<(BTreeMap<String, Value>, BTreeMap<String, Value>), CoreError> {
+    let Some(storage) = &definition.storage else {
+        return Ok((BTreeMap::new(), BTreeMap::new()));
+    };
+    let account = state.mcp_account_id()?;
+    let window_workspace = if let Some(window) = window {
+        let db = state.lock_db()?;
+        let canonical: Option<(String, String)> = db.query_row(
+            "SELECT d.workspace_id,v.app_id FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.id=?1 AND w.account_id=?2",
+            params![window, account], |row| Ok((row.get(0)?,row.get(1)?))
+        ).optional().map_err(db_error)?;
+        drop(db);
+        let found = if canonical.is_some() {
+            canonical
+        } else {
+            let mut found = None;
+            for (_, _, _, layout) in state.layouts(&account)? {
+                if let Some(item) = layout.windows.iter().find(|item| item.id == window) {
+                    if let Some(desktop) = layout
+                        .desktops
+                        .iter()
+                        .find(|desktop| desktop.id == item.desktop_id)
+                    {
+                        found = Some((desktop.workspace_id.clone(), item.app_id.clone()));
+                        break;
+                    }
+                }
+            }
+            found
+        };
+        let (id, app) = found.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        if app != definition.id {
+            return Err(CoreError::new(ErrorCode::InvalidRequest));
+        }
+        Some(id)
+    } else {
+        None
+    };
+    if workspace
+        .zip(window_workspace.as_deref())
+        .is_some_and(|(a, b)| a != b)
+    {
+        return Err(CoreError::new(ErrorCode::InvalidRequest));
+    }
+    let workspace = workspace.or(window_workspace.as_deref());
+    let db = state.lock_db()?;
+    if let Some(workspace) = workspace {
+        let owns: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?1 AND account_id=?2) OR EXISTS(SELECT 1 FROM legacy_workspace_owners o WHERE o.workspace_id=?1 AND o.account_id=?2 AND NOT EXISTS(SELECT 1 FROM workspaces w WHERE w.id=o.workspace_id))", params![workspace, account], |row| row.get(0)).map_err(db_error)?;
+        if !owns {
+            return Err(CoreError::new(ErrorCode::NotFound));
+        }
+    }
+    let bucket = sha256_hex(format!("{account}\0{}", definition.id).as_bytes());
+    let mut values = BTreeMap::new();
+    for entry in &storage.entries {
+        if entry.key.contains("{workspace_id}") && workspace.is_none() {
+            let used = kaleidoscope_contract::data::all_exprs(definition)
+                .iter()
+                .any(|(_, expr)| {
+                    kaleidoscope_contract::data::storage_refs(expr).contains(&entry.id)
+                });
+            if used {
+                return Err(CoreError { code: ErrorCode::InvalidRequest, message: "작업 전용 저장 항목을 미리 보려면 workspace_id 또는 window_id가 필요합니다.".into(), details: vec![entry.id.clone()] });
+            }
+            continue;
+        }
+        let key = super::app_storage::resolve_key(entry, workspace)?;
+        let item: Option<(String, String)> = db
+            .query_row(
+                "SELECT kind,content FROM app_storage_items WHERE bucket_id=?1 AND key=?2",
+                params![bucket, key],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(db_error)?;
+        let value = if let Some((kind, raw)) = item {
+            let expected_kind =
+                serde_json::to_value(entry.kind).map_err(|e| server_error(&e.to_string()))?;
+            if expected_kind.as_str() != Some(&kind) {
+                return Err(server_error("저장 항목 kind가 선언과 다릅니다."));
+            }
+            let value: Value =
+                serde_json::from_str(&raw).map_err(|e| server_error(&e.to_string()))?;
+            kaleidoscope_contract::app_storage::validate_storage_content(entry, &value)
+                .map_err(|e| server_error(&e))?;
+            value
+        } else {
+            entry.default.clone()
+        };
+        values.insert(entry.id.clone(), value);
+    }
+    Ok((values, [("bucket_id".into(), Value::String(bucket))].into()))
 }
 
 fn preview_error(message: &str) -> CallToolResult {

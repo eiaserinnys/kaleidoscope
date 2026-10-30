@@ -1,5 +1,5 @@
 //! 앱 정의의 원천 계획, 식 계산과 동작 단계. 입출력은 호출자가 맡는다.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use jsonata_core::{
     ast::AstNode,
@@ -229,9 +229,23 @@ impl CompiledApp {
         storage_meta: &BTreeMap<String, Value>,
         statuses: &BTreeMap<String, SourceStatus>,
     ) -> BTreeMap<String, BindingValue> {
+        self.evaluate_selected_with_storage(state, data, storage, storage_meta, statuses, None)
+    }
+
+    /// 지정한 바인딩만 다시 계산한다. None이면 모두 계산한다.
+    pub fn evaluate_selected_with_storage(
+        &self,
+        state: &BTreeMap<String, Value>,
+        data: &BTreeMap<String, Value>,
+        storage: &BTreeMap<String, Value>,
+        storage_meta: &BTreeMap<String, Value>,
+        statuses: &BTreeMap<String, SourceStatus>,
+        selected: Option<&BTreeSet<String>>,
+    ) -> BTreeMap<String, BindingValue> {
         let vars = Variables::new(state, data, storage, storage_meta, None, None);
         self.bindings
             .iter()
+            .filter(|binding| selected.is_none_or(|selected| selected.contains(&binding.pointer)))
             .map(|binding| {
                 let missing: Vec<_> = binding
                     .data

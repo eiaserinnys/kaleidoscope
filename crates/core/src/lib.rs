@@ -1,5 +1,6 @@
 mod agent_commands;
 mod app_commands;
+mod app_storage;
 mod connections;
 mod data_runtime;
 mod data_sources;
@@ -284,12 +285,12 @@ impl Core {
             | CoreRequest::ConversationCreate { .. }
             | CoreRequest::ConversationSend { .. }
             | CoreRequest::ConversationAttachment { .. }
-            | CoreRequest::ConversationAttachmentOpen { .. }
-            | CoreRequest::StorageGet { .. }
-            | CoreRequest::StorageWrite { .. }
-            | CoreRequest::StorageReset { .. } => {
+            | CoreRequest::ConversationAttachmentOpen { .. } => {
                 Err(error::make(kaleidoscope_contract::ErrorCode::Unavailable))
             }
+            request @ (CoreRequest::StorageGet { .. }
+            | CoreRequest::StorageWrite { .. }
+            | CoreRequest::StorageReset { .. }) => app_storage::handle(&self.inner, request),
             CoreRequest::FilesList {
                 window_id,
                 permission,
@@ -523,11 +524,17 @@ impl Inner {
     }
 }
 
+pub(crate) fn supported() -> kaleidoscope_contract::Supported {
+    let mut supported = kaleidoscope_contract::Supported::current();
+    supported.modules.insert("agent".into(), 2);
+    supported
+}
+
 pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
     ShellSnapshot {
         shared: state.shared.clone(),
         device: state.device.clone(),
-        supported: kaleidoscope_contract::Supported::current(),
+        supported: supported(),
         link: state.link.clone(),
         sharing: state
             .share

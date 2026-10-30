@@ -54,6 +54,7 @@ fn args(definition: Value) -> PreviewArgs {
         definition: Some(definition),
         state: None,
         window_id: None,
+        workspace_id: None,
         data: None,
         max_chars: None,
     }
@@ -247,6 +248,7 @@ async fn preview_uses_the_current_registry_definition_by_app_id() {
         definition: None,
         state: None,
         window_id: None,
+        workspace_id: None,
         data: Some(
             [(
                 "cards".into(),
@@ -285,4 +287,80 @@ async fn preview_does_not_fetch_oauth_sources_on_the_server() {
             .unwrap()
             .contains("기기에서만 받는 원천: cards")
     }));
+}
+
+#[tokio::test]
+async fn preview_reads_saved_storage_values_and_bucket_id() {
+    let state = AppState::in_memory("secret");
+    let mut definition = definition();
+    definition["requires"]["blocks"] = json!(6);
+    definition["requires"]["modules"]["storage"] = json!(1);
+    definition["storage"] = json!({"entries":[{"id":"title","key":"settings/title","kind":"json","schema":{"type":"string"},"default":"default","label":"제목","presentation":"hidden"}]});
+    definition["sources"] = json!({});
+    definition["ui"] = json!({"type":"stack","direction":"column","children":[{"type":"text","value":{"expr":"$storage.title"}},{"type":"text","value":{"expr":"$storage_meta.bucket_id"}}]});
+    state
+        .publish_app(&definition.to_string(), "agent", false, None)
+        .unwrap();
+    let account = state.mcp_account_id().unwrap();
+    state
+        .write_app_storage(
+            &account,
+            "preview-test",
+            "title",
+            None,
+            json!("저장됨"),
+            None,
+        )
+        .unwrap();
+    let bucket = state
+        .list_app_storage(&account, "preview-test", None)
+        .unwrap()
+        .bucket_id;
+    let server = McpServer::new(state);
+    let mut input = args(definition);
+    input.definition = None;
+    input.app_id = Some("preview-test".into());
+    let value = result_value(server.preview_app_result(input).await.unwrap());
+    assert_eq!(value["values"][0]["value"], "\"저장됨\"");
+    assert_eq!(value["values"][1]["value"], format!("\"{bucket}\""));
+}
+
+#[tokio::test]
+async fn preview_uses_window_or_explicit_workspace_storage() {
+    let state = AppState::in_memory("secret");
+    let mut definition = definition();
+    definition["requires"]["blocks"] = json!(6);
+    definition["requires"]["modules"]["storage"] = json!(1);
+    definition["storage"] = json!({"entries":[{"id":"selection","key":"workspaces/{workspace_id}/selection","kind":"json","schema":{"type":"string"},"default":"기본","label":"선택","presentation":"hidden"}]});
+    definition["sources"] = json!({});
+    definition["ui"] = json!({"type":"text","value":{"expr":"$storage.selection"}});
+    state
+        .publish_app(&definition.to_string(), "agent", false, None)
+        .unwrap();
+    let layout: kaleidoscope_contract::registry::LayoutChanges = serde_json::from_value(json!({
+        "workspaces":[{"id":"w1","name":"작업","created_at":"now","updated_at":"now"}],
+        "desktops":[{"id":"d1","workspace_id":"w1","name":"Desktop","position":0,"created_at":"now","updated_at":"now"}],
+        "windows":[{"id":"win1","desktop_id":"d1","app_id":"preview-test","app_version":1,"rect":{"x":0,"y":0,"width":800,"height":600},"z":0,"state":{},"created_at":"now","updated_at":"now"}]
+    })).unwrap();
+    state.apply_layout_changes(None, &layout).unwrap();
+    let account = state.mcp_account_id().unwrap();
+    state
+        .write_app_storage(
+            &account,
+            "preview-test",
+            "selection",
+            Some("w1"),
+            json!("저장값"),
+            None,
+        )
+        .unwrap();
+    let server = McpServer::new(state);
+    let mut input = args(definition.clone());
+    input.workspace_id = Some("w1".into());
+    let value = result_value(server.preview_app_result(input).await.unwrap());
+    assert_eq!(value["values"][0]["value"], "\"저장값\"");
+    let mut input = args(definition);
+    input.window_id = Some("win1".into());
+    let value = result_value(server.preview_app_result(input).await.unwrap());
+    assert_eq!(value["values"][0]["value"], "\"저장값\"");
 }

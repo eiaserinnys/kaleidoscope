@@ -3,6 +3,36 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 
 #[test]
+fn old_registry_without_storage_route_reports_unavailable() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let worker = std::thread::spawn(move || {
+        let (mut conn, _) = listener.accept().unwrap();
+        let mut bytes = [0; 4096];
+        let n = conn.read(&mut bytes).unwrap();
+        conn.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")
+            .unwrap();
+        String::from_utf8(bytes[..n].to_vec()).unwrap()
+    });
+    let error = HttpRegistryClient::new()
+        .storage_get(
+            &format!("http://{addr}"),
+            "token",
+            "app",
+            "entry",
+            "workspace",
+        )
+        .unwrap_err();
+    assert!(
+        matches!(error, RegistryError::Validation(error) if error.code == ErrorCode::Unavailable)
+    );
+    assert!(worker
+        .join()
+        .unwrap()
+        .starts_with("GET /api/device/app-storage/app/items/entry?workspace_id=workspace "));
+}
+
+#[test]
 fn events_send_supported_header() {
     let server = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = server.local_addr().unwrap();
@@ -18,14 +48,15 @@ fn events_send_supported_header() {
         .open_events(&format!("http://{addr}"), "token")
         .unwrap();
     let request = worker.join().unwrap().to_lowercase();
-    let value = serde_json::to_string(&kaleidoscope_contract::Supported::current())
-        .unwrap()
-        .to_lowercase();
-    assert!(request.contains(&format!(
-        "{}: {}",
-        kaleidoscope_contract::registry::SUPPORTED_HEADER.to_lowercase(),
-        value
-    )));
+    let header = request
+        .lines()
+        .find(|line| line.starts_with("x-kaleidoscope-supported: "))
+        .unwrap();
+    let supported: kaleidoscope_contract::Supported =
+        serde_json::from_str(header.split_once(": ").unwrap().1).unwrap();
+    assert_eq!(supported.blocks, 6);
+    assert_eq!(supported.modules.get("storage"), Some(&1));
+    assert_eq!(supported.modules.get("agent"), Some(&2));
     assert!(request.contains(&format!("{REGISTRY_HEADER}: {REGISTRY_VERSION}")));
 }
 

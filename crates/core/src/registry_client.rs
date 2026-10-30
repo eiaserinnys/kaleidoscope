@@ -1,7 +1,12 @@
+// 기존 레지스트리 HTTP 계약과 오류 처리를 한곳에서 유지한다. 후속 작업에서 요청별로 분리한다.
 use std::io::{BufRead, BufReader};
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use kaleidoscope_contract::app_storage::{
+    StorageConflict, StorageListReply, StorageReadReply, StorageResetReply, StorageResetRequest,
+    StorageWriteReply, StorageWriteRequest,
+};
 use kaleidoscope_contract::registry::{
     device_agent_attachment_path, device_agent_messages_path, device_agent_path,
     device_connection_request_path, AgentAttachmentReply, AgentCreateRequest, AgentSendRequest,
@@ -11,7 +16,7 @@ use kaleidoscope_contract::registry::{
     DEVICE_LAYOUT_CHANGES_PATH, DEVICE_LAYOUT_PATH, DEVICE_SHARES_PATH, PAIR_POLL_PATH,
     PAIR_START_PATH, REGISTRY_HEADER, REGISTRY_VERSION,
 };
-use kaleidoscope_contract::CoreError;
+use kaleidoscope_contract::{CoreError, ErrorCode};
 
 #[derive(Debug, Clone)]
 pub(crate) enum RegistryError {
@@ -22,6 +27,47 @@ pub(crate) enum RegistryError {
 }
 
 pub(crate) trait RegistryClient: Send + Sync + 'static {
+    fn storage_list(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _workspace: &str,
+    ) -> Result<StorageListReply, RegistryError> {
+        Err(RegistryError::Failure("storage unavailable".into()))
+    }
+    fn storage_get(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _entry: &str,
+        _workspace: &str,
+    ) -> Result<StorageReadReply, RegistryError> {
+        Err(RegistryError::Failure("storage unavailable".into()))
+    }
+    fn storage_write(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _entry: &str,
+        _workspace: &str,
+        _request: &StorageWriteRequest,
+    ) -> Result<StorageWriteReply, RegistryError> {
+        Err(RegistryError::Failure("storage unavailable".into()))
+    }
+    fn storage_reset(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _entry: &str,
+        _workspace: &str,
+        _request: &StorageResetRequest,
+    ) -> Result<StorageResetReply, RegistryError> {
+        Err(RegistryError::Failure("storage unavailable".into()))
+    }
     fn connection_request(
         &self,
         server_url: &str,
@@ -159,6 +205,81 @@ impl HttpRegistryClient {
 }
 
 impl RegistryClient for HttpRegistryClient {
+    fn storage_list(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        workspace: &str,
+    ) -> Result<StorageListReply, RegistryError> {
+        let path = kaleidoscope_contract::registry::device_app_storage_items_path(app);
+        let response = self
+            .requests()?
+            .get(format!("{url}{path}"))
+            .bearer_auth(token)
+            .query(&[("workspace_id", workspace)])
+            .send()
+            .map_err(|e| RegistryError::Failure(e.to_string()))?;
+        storage_success_json(response)
+    }
+    fn storage_get(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        entry: &str,
+        workspace: &str,
+    ) -> Result<StorageReadReply, RegistryError> {
+        let path = kaleidoscope_contract::registry::device_app_storage_item_path(app, entry);
+        let response = self
+            .requests()?
+            .get(format!("{url}{path}"))
+            .bearer_auth(token)
+            .query(&[("workspace_id", workspace)])
+            .send()
+            .map_err(|e| RegistryError::Failure(e.to_string()))?;
+        storage_success_json(response)
+    }
+    fn storage_write(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        entry: &str,
+        workspace: &str,
+        request: &StorageWriteRequest,
+    ) -> Result<StorageWriteReply, RegistryError> {
+        let path = kaleidoscope_contract::registry::device_app_storage_item_path(app, entry);
+        let response = self
+            .requests()?
+            .put(format!("{url}{path}"))
+            .bearer_auth(token)
+            .query(&[("workspace_id", workspace)])
+            .json(request)
+            .send()
+            .map_err(|e| RegistryError::Failure(e.to_string()))?;
+        storage_success_json(response)
+    }
+    fn storage_reset(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        entry: &str,
+        workspace: &str,
+        request: &StorageResetRequest,
+    ) -> Result<StorageResetReply, RegistryError> {
+        let path = kaleidoscope_contract::registry::device_app_storage_item_path(app, entry);
+        let response = self
+            .requests()?
+            .delete(format!("{url}{path}"))
+            .bearer_auth(token)
+            .query(&[("workspace_id", workspace)])
+            .json(request)
+            .send()
+            .map_err(|e| RegistryError::Failure(e.to_string()))?;
+        storage_success_json(response)
+    }
     fn push_layout_changes(
         &self,
         server_url: &str,
@@ -389,8 +510,7 @@ impl RegistryClient for HttpRegistryClient {
             .header(REGISTRY_HEADER, REGISTRY_VERSION.to_string())
             .header(
                 kaleidoscope_contract::registry::SUPPORTED_HEADER,
-                serde_json::to_string(&kaleidoscope_contract::Supported::current())
-                    .expect("supported 직렬화"),
+                serde_json::to_string(&crate::supported()).expect("supported 직렬화"),
             )
             .bearer_auth(token)
             .send()
@@ -411,6 +531,38 @@ fn success_json<T: serde::de::DeserializeOwned>(
     }
 
     let body = response.bytes().unwrap_or_default();
+    check_status(status, &body)?;
+    Err(RegistryError::Failure(format!("HTTP {status}")))
+}
+
+fn storage_success_json<T: serde::de::DeserializeOwned>(
+    response: reqwest::blocking::Response,
+) -> Result<T, RegistryError> {
+    let status = response.status();
+    if status.is_success() {
+        return response
+            .json()
+            .map_err(|e| RegistryError::Failure(e.to_string()));
+    }
+    let body = response.bytes().unwrap_or_default();
+    if status.as_u16() == 409 {
+        let conflict: StorageConflict =
+            serde_json::from_slice(&body).map_err(|e| RegistryError::Failure(e.to_string()))?;
+        return Err(RegistryError::Validation(CoreError {
+            code: ErrorCode::Conflict,
+            message: "저장 항목이 읽은 뒤 바뀌었습니다.".into(),
+            details: vec![format!(
+                "current_revision={}",
+                conflict.current_revision.as_deref().unwrap_or("null")
+            )],
+        }));
+    }
+    if status.as_u16() == 404 {
+        return Err(match serde_json::from_slice::<CoreError>(&body) {
+            Ok(error) => RegistryError::Validation(error),
+            Err(_) => RegistryError::Validation(CoreError::new(ErrorCode::Unavailable)),
+        });
+    }
     check_status(status, &body)?;
     Err(RegistryError::Failure(format!("HTTP {status}")))
 }

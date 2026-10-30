@@ -235,11 +235,47 @@ fn emit_storage_update(
             .shared
             .windows
             .iter()
-            .filter(|window| window.app_id == app_id)
+            .filter(|window| {
+                if window.app_id != app_id {
+                    return false;
+                }
+                let kaleidoscope_contract::app_storage::StorageUpdate::Changed { changed } =
+                    &update
+                else {
+                    return true;
+                };
+                let Some(desktop) = state
+                    .shared
+                    .desktops
+                    .iter()
+                    .find(|desktop| desktop.id == window.desktop_id)
+                else {
+                    return false;
+                };
+                let Some(definition) =
+                    app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
+                else {
+                    return false;
+                };
+                definition
+                    .storage
+                    .as_ref()
+                    .and_then(|storage| {
+                        storage
+                            .entries
+                            .iter()
+                            .find(|entry| entry.id == changed.item.entry_id)
+                    })
+                    .is_some_and(|entry| {
+                        entry.key.replace("{workspace_id}", &desktop.workspace_id)
+                            == changed.item.key
+                    })
+            })
             .map(|window| window.id.clone())
             .collect::<Vec<_>>()
     };
     for window_id in window_ids {
+        crate::data_runtime::storage_changed(inner, &window_id, &update);
         inner.emit(&CoreEvent::StorageUpdate {
             window_id,
             update: update.clone(),
