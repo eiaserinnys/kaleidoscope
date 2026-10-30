@@ -359,7 +359,7 @@ models: Array<AgentModel>, } | { "op": "agent.create", agent: AgentInfo, } | { "
 /**
  * 파일 내용. 표준 base64.
  */
-data_base64: string, } | { "op": "agent.attachment_open", } | { "op": "data.attach", view: DataView, } | { "op": "data.detach", } | { "op": "data.act", } | { "op": "data.refresh", } | { "op": "data.media", media: MediaData, } | { "op": "connection.login", };
+data_base64: string, } | { "op": "agent.attachment_open", } | { "op": "data.attach", view: DataView, } | { "op": "data.detach", } | { "op": "data.act", } | { "op": "data.refresh", } | { "op": "data.media", media: MediaData, } | { "op": "connection.login", } | { "op": "share.set", } | { "op": "share.view", };
 
 /**
  * 화면이 코어에 보내는 명령. `op`로 가른다. 응답은 같은 `op`의 [`CoreReply`]다.
@@ -368,7 +368,7 @@ export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", n
 /**
  * 빼면 빈 배열이다(모듈 `agent` 1판의 명령 모양).
  */
-attachments?: Array<AgentUpload>, } | { "op": "agent.attachment", workspace_id: string, item_id: string, index: number, } | { "op": "agent.attachment_open", workspace_id: string, item_id: string, index: number, } | { "op": "data.attach", window_id: string, } | { "op": "data.detach", window_id: string, } | { "op": "data.act", window_id: string, pointer: string, event?: JsonValue, item?: JsonValue, } | { "op": "data.refresh", window_id: string, sources?: Array<string>, } | { "op": "data.media", window_id: string, media: MediaRef, max_px?: number, } | { "op": "connection.login", window_id: string, permission: string, };
+attachments?: Array<AgentUpload>, } | { "op": "agent.attachment", workspace_id: string, item_id: string, index: number, } | { "op": "agent.attachment_open", workspace_id: string, item_id: string, index: number, } | { "op": "data.attach", window_id: string, } | { "op": "data.detach", window_id: string, } | { "op": "data.act", window_id: string, pointer: string, event?: JsonValue, item?: JsonValue, } | { "op": "data.refresh", window_id: string, sources?: Array<string>, } | { "op": "data.media", window_id: string, media: MediaRef, max_px?: number, } | { "op": "connection.login", window_id: string, permission: string, } | { "op": "share.set", window_id: string, on: boolean, } | { "op": "share.view", window_id: string, view: VisibleView, };
 
 /**
  * 이미지에서 보일 부분. 원본 가로와 세로에 대한 비율(0~1)이고 `x`, `y`는 왼쪽 위다.
@@ -683,7 +683,11 @@ export type SharedState = { apps: Array<App>, app_versions: Array<AppVersion>, w
 /**
  * 화면이 보는 상태 전체.
  */
-export type ShellSnapshot = { shared: SharedState, device: DeviceState, supported: Supported, link: LinkStatus, };
+export type ShellSnapshot = { shared: SharedState, device: DeviceState, supported: Supported, link: LinkStatus, 
+/**
+ * (9판) 이 기기에서 같이 보기를 켠 창의 id. 켠 순서다. 코어의 메모리에만 있어 쉘을 다시 켜면 빈 목록이다.
+ */
+sharing: Array<string>, };
 
 export type SortSpec = { field: string, desc?: boolean, };
 
@@ -748,6 +752,30 @@ title?: string, path?: string, meta?: string, badges?: Array<Badge>, children?: 
  * 상태 값이 null이거나 문자열이 아니면 열 주소가 없는 것이다.
  */
 export type UrlValue = StateRef | string;
+
+/**
+ * (9판) 같이 보기 창에 지금 보이는 것을 화면이 옮긴 것.
+ */
+export type VisibleView = { 
+/**
+ * 창의 내용 영역에 보이는 글. 사람과 PAS가 읽는 글이고, 서버는 줄 단위로 앞의 것과 비교한다.
+ * 화면이 지키는 모양:
+ * - 위에서 아래, 왼쪽에서 오른쪽 순서로 한 줄에 한 덩이를 둔다. 빈 줄은 이어서 두지 않는다.
+ * - 블록마다 그 블록을 알리는 머리 줄을 대괄호로 둔다. 예: `[파일 notes/plan.md, 40~78줄 / 전체 210줄]`(편집기와
+ *   코드 보기는 그 아래에 보이는 줄마다 `40│ 원문`), `[목록, 전체 120개 중 11~30번째]`, `[표, 전체 52줄 중
+ *   1~18번째]`(칸은 ` | `로 잇는다), `[웹 화면: 페이지 제목, https://...]`, `[이미지: 설명]`.
+ * - 고른 항목은 줄 앞에 `› `, 체크 상자는 `[x] `나 `[ ] `, 입력칸은 `이름: 값`이다.
+ * - [`SHARE_TEXT_MAX_BYTES`]를 넘지 않는다.
+ */
+text: string, 
+/**
+ * 이미지, 동영상, 그림판, 웹 화면처럼 글로 옮길 수 없는 것이 보이는가. 참이면 `agent.send` 때 모습을 찍는다.
+ */
+visual: boolean, 
+/**
+ * 창의 내용 영역(제목 줄 아래)이 쉘 화면(메인 웹뷰) 왼쪽 위 기준 어디에 있는가(CSS px). 모습을 찍을 때 쓴다.
+ */
+bounds: Rect, };
 
 export type WebHistoryAction = "back" | "forward" | "reload" | "stop";
 

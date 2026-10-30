@@ -458,7 +458,9 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::DataAct { .. }
         | CoreRequest::DataRefresh { .. }
         | CoreRequest::DataMedia { .. }
-        | CoreRequest::ConnectionLogin { .. } => Err(error::make(ErrorCode::InvalidRequest)),
+        | CoreRequest::ConnectionLogin { .. }
+        | CoreRequest::ShareSet { .. }
+        | CoreRequest::ShareView { .. } => Err(error::make(ErrorCode::InvalidRequest)),
     }
 }
 

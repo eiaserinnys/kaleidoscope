@@ -1,4 +1,4 @@
-//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 6판, 261030)
+//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 7판, 261030)
 //!
 //! 2판에서 더한 것(카드 #779): 배치 보고(`PUT /api/device/layout`), 워크스페이스 PAS 경로 셋,
 //! 이벤트 `agent.update`, `app.published`와 `app.open`의 `workspace_id`. 아래 「워크스페이스 PAS」 절.
@@ -17,6 +17,10 @@
 //! 코어가 [`REGISTRY_HEADER`]로 레지스트리 판을 알리고, 바뀐 것 올리기(`POST /api/device/layout/changes`), 이벤트
 //! `layout.snapshot`과 `layout.changed`, 에이전트의 띄우기를 기기 하나에만 보내는 규칙, 작업과 PAS의 이름과 수명 맞추기.
 //! 아래 「작업과 배치 동기화」 절.
+//!
+//! 7판에서 더한 것(카드 #814): 창 같이 보기. 코어가 같이 보기 창에 보이는 글을 올리고 지우는 경로
+//! (`PUT`/`DELETE /api/device/shares/{window_id}`), 서버가 PAS에 가는 말 뒤에 달라진 것만 붙이는 규칙과 그 모양,
+//! 중계에서 그 부분을 떼는 규칙, MCP `get_shared_view`. 아래 「같이 보기」 절.
 //!
 //! 오케스트레이터는 앱 레지스트리의 정본이다. 쉘의 코어는 기기 토큰으로 붙어 앱을 받고, 에이전트는 같은
 //! 서버의 MCP(`/mcp`, MCP 토큰)로 앱을 올린다. MCP 도구의 모양은 오케스트레이터 코드에 있고 이 파일에는 없다.
@@ -37,6 +41,8 @@
 //! | `POST /api/device/workspaces/{workspace_id}/agent` | 같음 | [`AgentCreateRequest`] | 200 [`crate::AgentInfo`] | 400 모르는 모델, 401, 502 소울스트림 실패 |
 //! | `POST /api/device/workspaces/{workspace_id}/agent/messages` | 같음 | [`AgentSendRequest`] | 200 `{}` | 400 빈 말, 너무 김, 첨부 한도나 형식, 401, 404 PAS 없음, 502 |
 //! | `GET /api/device/workspaces/{workspace_id}/agent/items/{item_id}/attachments/{index}` | 같음 | 없음 | 200 [`AgentAttachmentReply`] | 400 너무 큼, 401, 404 기록이나 첨부 없음, 502 |
+//! | `PUT /api/device/shares/{window_id}` | 같음 | [`ShareUpload`] | 200 `{}` | 400 글이 너무 김이나 형식, 401 |
+//! | `DELETE /api/device/shares/{window_id}` | 같음 | 없음 | 200 `{}`(없어도) | 401 |
 //! | `POST /api/device/connections/{name}/request` | 같음 | [`ConnectionRequest`] | 200 [`ConnectionReply`] | 400 경로나 메서드, 401, 403 앱이 선언하지 않음이나 쓰기 불가, 404 없는 연결, 413 너무 큼, 502 원천에 닿지 못함, 504 시간 초과 |
 //! | `GET /api/health` | 없음 | 없음 | 200 `{"ok":true}` | |
 //!
@@ -221,6 +227,55 @@
 //!   돌려준다. [`crate::AGENT_ATTACHMENT_MAX_BYTES`]보다 크면 400 `invalid_request`, 소울스트림이 404면 404
 //!   `not_found`, 그 밖의 실패는 502.
 //!
+//! # 같이 보기 (7판)
+//! 디렉터가 창의 「같이 보기」를 켜 두면 그 창에 보이는 글이 작업 PAS에 가는 말과 함께 간다(계약 9판 「같이 보기」 절).
+//! 서버는 보이는 글을 메모리에만 둔다(저장소 판을 바꾸지 않는다). 서버가 다시 켜지면 잊고, 코어가 다시 이을 때 올린다.
+//!
+//! 코어가 지키는 것:
+//! - `share.view`로 받은 글이나 `visual`이 그 창에 대해 서버에 마지막으로 올린 것과 다르면 `PUT .../shares/{window_id}`로
+//!   올린다. 창의 워크스페이스와 앱 이름을 함께 싣는다.
+//! - `share.set` 끄기, 창이 없어짐, `link.unlink`이면 `DELETE .../shares/{window_id}`를 보낸다(연결되어 있을 때).
+//! - 이벤트 스트림이 이어질 때마다(`connected`가 될 때마다) 같이 보기 중인 모든 창의 마지막 글을 다시 올린다.
+//!   끊긴 동안 끈 창은 이때 지운다. 서버가 끊긴 기기의 보기를 지웠을 수 있으므로 같은 글이어도 다시 올린다.
+//!
+//! 서버가 지키는 것:
+//! - 보기는 (기기, 창)마다 하나다. `PUT`은 통째로 바꾸고 받은 시각을 적는다. `DELETE`는 없어도 200이다.
+//!   [`crate::SHARE_TEXT_MAX_BYTES`]를 넘는 글은 400 `invalid_request`다.
+//! - 기기의 이벤트 스트림이 하나도 남지 않으면 그 기기의 보기를 모두 지운다(쉘을 끄면 같이 보기도 끝난다).
+//! - 같은 창을 여러 기기가 같이 보면(창이 동기화되므로 있을 수 있다) 그 창은 가장 늦게 받은 보기 하나로 본다.
+//! - 워크스페이스마다 「PAS에 보낸 것」을 창 id별 글로 메모리에 둔다.
+//! - 보내기(`POST .../agent/messages`): 글과 첨부 검사는 사용자 글로 한다. 그다음 그 워크스페이스의 보기와 「PAS에 보낸
+//!   것」을 견주어 아래 블록을 만들고, 블록이 있으면 사용자 글 뒤에 빈 줄 하나를 두고 붙여(사용자 글이 비었으면 블록만)
+//!   개입으로 보낸다. 개입이 성공하면 「PAS에 보낸 것」을 지금 보기로 바꾸고 끝난 창은 지운다. 실패하면 바꾸지 않는다.
+//! - 블록은 그 워크스페이스에 지금 보기가 있는 창과, 「PAS에 보낸 것」에는 있는데 지금 보기가 없는 창(끝남)이 하나라도
+//!   있을 때만 만든다. 모양(창은 앱 이름, 창 id 순서):
+//!
+//! ```text
+//! <kaleidoscope-share>
+//! 디렉터가 kaleidoscope 쉘에서 「같이 보기」로 켠 창에 지금 보이는 내용입니다. 쉘이 디렉터의 말 뒤에 붙였고 디렉터가 쓴 글이 아닙니다. 지난번 말 뒤로 달라진 것만 담았습니다. 지금 모습 전체는 MCP get_shared_view로 읽을 수 있습니다. 이미지나 웹 화면이 보이는 창은 모습이 바뀌었을 때 「같이 보기 - 앱 이름.png」 첨부로 함께 옵니다.
+//!
+//! ## 마크다운 편집기 (창 3f2a91c0): 새로 같이 봄
+//! (지금 글 전체)
+//!
+//! ## 섀이 대사 보기 (창 8b1e0c77): 바뀜
+//! (지난번 글과 지금 글의 줄 단위 비교. 앞뒤 1줄을 두는 unified diff의 `@@` 줄부터. `---`, `+++` 머리 줄은 없음)
+//!
+//! ## 웹 브라우저 (창 0d4c2a19): 바뀜(전체)
+//! (비교가 지금 글보다 길면 지금 글 전체)
+//!
+//! ## 탐색기 (창 5e6f7a8b): 그대로
+//!
+//! ## 소울스트림 카드 (창 9a8b7c6d): 같이 보기 끝
+//! </kaleidoscope-share>
+//! ```
+//!   - 창 id는 앞 8자다. 「새로 같이 봄」은 「PAS에 보낸 것」에 그 창이 없을 때(서버가 다시 켜진 뒤 포함)다.
+//!   - 「그대로」와 「같이 보기 끝」은 머리 줄만 둔다. 앱 이름은 [`ShareUpload::app_name`]이고, 끝난 창은 보낸 때의 이름이다.
+//! - 중계: `user_message`와 `intervention_sent`의 글에서 [`SHARE_BLOCK_START`] 줄부터 [`SHARE_BLOCK_END`] 줄까지를
+//!   떼고 끝의 공백을 지운 뒤 기록한다(디렉터의 말풍선에는 디렉터가 쓴 글만 보이게). 떼고 나서 글이 비었고 첨부도
+//!   없으면 기록하지 않는다.
+//! - MCP `get_shared_view`(입력 `workspace_id`): 그 워크스페이스의 지금 보기를 창마다(창 id, 앱 이름, 기기 이름, 받은 시각,
+//!   `visual`, 글 전체) 돌려준다. 「PAS에 보낸 것」은 바꾸지 않는다. 없으면 같이 보는 창이 없다고 알린다.
+//!
 //! # 연결 (5판, 모듈 `connection` 1판)
 //! 앱이 외부 서비스의 데이터를 받는 길이다. 연결 정의(이름, 종류, 주소, 인증)는 서버에 있고 에이전트가 MCP로 등록한다
 //! (`set_connection`, `list_connections`, `delete_connection`). 쉘과 서버의 코드에는 서비스 이름이 나오지 않는다.
@@ -290,7 +345,7 @@ pub const SUPPORTED_HEADER: &str = "x-kaleidoscope-supported";
 /// 코어가 이벤트 스트림을 열 때 자기가 아는 레지스트리 판(정수)을 싣는 헤더. 6 이상이면 배치를 동기화한다.
 pub const REGISTRY_HEADER: &str = "x-kaleidoscope-registry";
 /// 이 빌드가 아는 레지스트리 판.
-pub const REGISTRY_VERSION: u32 = 6;
+pub const REGISTRY_VERSION: u32 = 7;
 /// 배치를 동기화하는 레지스트리 판. 서버는 [`REGISTRY_HEADER`]가 이 값 이상인 연결과 배치를 맞춘다.
 pub const LAYOUT_SYNC_REGISTRY_VERSION: u32 = 6;
 
@@ -308,6 +363,11 @@ pub const PAIRING_MAX_PENDING: usize = 20;
 pub const DEVICE_LAYOUT_PATH: &str = "/api/device/layout";
 /// 바뀐 워크스페이스, 데스크톱, 창을 올리는 경로.
 pub const DEVICE_LAYOUT_CHANGES_PATH: &str = "/api/device/layout/changes";
+/// (7판) 같이 보기 창의 보이는 글. 뒤에 `/{window_id}`를 붙인다.
+pub const DEVICE_SHARES_PATH: &str = "/api/device/shares";
+/// (7판) PAS에 가는 말 뒤에 서버가 붙이는 같이 보기 블록의 첫 줄과 마지막 줄.
+pub const SHARE_BLOCK_START: &str = "<kaleidoscope-share>";
+pub const SHARE_BLOCK_END: &str = "</kaleidoscope-share>";
 /// 바뀐 것 올리기 본문의 최대 바이트 수. 처음 맞추기에서 창 상태가 큰 창 여럿을 한 번에 올릴 수 있게 넉넉히 둔다.
 pub const LAYOUT_CHANGES_BODY_MAX_BYTES: usize = 16 * 1024 * 1024;
 
@@ -496,6 +556,20 @@ pub struct AgentCreateRequest {
     /// 소울스트림 세션 이름과 PAS에게 주는 지시에 쓴다.
     pub workspace_name: String,
     pub model_preset: String,
+}
+
+/// (7판) `PUT /api/device/shares/{window_id}` 본문. 같이 보기 창 하나에 지금 보이는 것.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShareUpload {
+    /// 그 창의 워크스페이스. 서버는 이 값으로 그 작업의 PAS에 붙인다.
+    pub workspace_id: String,
+    /// 블록 머리에 보일 앱 이름(그 창 앱의 지금 버전의 `name`).
+    pub app_name: String,
+    /// [`crate::VisibleView::text`].
+    pub text: String,
+    /// [`crate::VisibleView::visual`].
+    pub visual: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 8판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 9판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -46,6 +46,11 @@
 //! 생겼다. 있던 블록에 필드를 더한 첫 판이다(규칙은 [`BLOCK_SET_VERSION`]). `files.list`의 [`FileEntry`]에 크기와
 //! 바뀐 시각이 붙었다.
 //!
+//! 9판에서 바뀐 것(창 같이 보기, 카드 #814): 창마다 켜는 「같이 보기」. `share.set`과 `share.view` 명령,
+//! [`ShellSnapshot::sharing`], 화면이 옮긴 보이는 글 [`VisibleView`], `agent.send`가 같이 보는 창의 모습을 첨부로
+//! 붙이는 규칙. 블록 세트와 모듈 판은 그대로다(앱 정의가 쓰는 것이 아니라 쉘의 기능이다). 아래 「같이 보기」 절과
+//! [`registry`]의 「같이 보기」 절.
+//!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
 //! - 코어는 이벤트 채널 하나로 [`CoreEvent`]를 보낸다.
@@ -80,6 +85,21 @@
 //!   다른 기기에서 워크스페이스나 데스크톱, 창이 지워지면 코어가 이 기기의 고른 것과 고른 폴더를 맞춘다.
 //! - 오케스트레이터 연결 정보(서버 주소, 기기 id, 기기 토큰)는 그 기기의 `link.json`에만 두고 화면에
 //!   보내지 않는다. 화면은 [`LinkStatus`]만 본다.
+//! - 같이 보기를 켠 창([`ShellSnapshot::sharing`])과 그 창의 보이는 글은 코어의 메모리에만 둔다.
+//!
+//! # 같이 보기 (9판)
+//! 디렉터가 창의 「같이 보기」를 켜 두면, 그 창에 지금 보이는 글을 작업 PAS가 디렉터의 다음 말과 함께 받는다.
+//! - 켜고 끄는 것은 그 기기의 그 창 하나에만 걸린다. 저장하지 않으므로 쉘을 다시 켜면 모두 꺼진 채로 시작한다.
+//!   창이 없어지면(창 닫기, 데스크톱과 워크스페이스 지우기, 다른 기기에서 지운 것을 받은 때) 코어가 끈다.
+//! - 화면은 켜진 창에 보이는 부분을 글로 옮겨([`VisibleView`]) 바뀔 때마다 `share.view`로 코어에 준다. 앱마다
+//!   요약하지 않고, 쉘이 블록 종류와 접근성 정보(ARIA 역할과 이름)로 옮긴다. 스크롤 밖이나 다른 데스크톱처럼
+//!   보이지 않는 부분은 옮기지 않는다.
+//! - 코어는 연결되어 있으면 그 글을 서버에 올린다. 서버는 창마다 지금 글을 들고 있다가, 그 작업의 PAS에 말이 갈
+//!   때 지난번에 보낸 것과 달라진 것만 말 뒤에 붙인다([`registry`]의 「같이 보기」 절). 글이 바뀔 때마다 PAS를
+//!   깨우지 않는다(말 하나가 PAS의 턴 하나이므로).
+//! - 이미지나 웹 화면처럼 글로 옮길 수 없는 것이 보이는 창(`visual`)은, `agent.send` 때 코어가 그 창의 모습을
+//!   찍어 첨부로 붙인다. 지난번에 붙인 모습과 같으면 붙이지 않는다.
+//! - 같이 보기를 켠 창만, 켠 동안만 이 기기 밖(서버와 소울스트림)으로 나간다.
 
 use std::collections::BTreeMap;
 
@@ -144,6 +164,20 @@ pub const AGENT_ATTACHMENTS_MAX: usize = 10;
 pub const AGENT_ATTACHMENT_MAX_BYTES: u64 = 20 * 1024 * 1024;
 /// 말 하나에 붙인 첨부의 합의 최대 바이트 수(base64로 바꾸기 전).
 pub const AGENT_ATTACHMENTS_TOTAL_MAX_BYTES: u64 = 30 * 1024 * 1024;
+
+/// (9판) 같이 보기 글([`VisibleView::text`]) 하나의 최대 바이트 수(UTF-8). 화면은 넘으면 줄 경계에서 뒤를 자르고
+/// 마지막 줄에 [`SHARE_TEXT_CUT_MARK`]를 둔다(그 줄까지 합쳐 이 값 이하). 코어와 서버는 넘는 글을 거부한다.
+pub const SHARE_TEXT_MAX_BYTES: usize = 16 * 1024;
+/// (9판) 잘린 같이 보기 글의 마지막 줄.
+pub const SHARE_TEXT_CUT_MARK: &str = "…(아래는 길어서 뺐습니다)";
+/// (9판) 같이 보기 창에 보이는 것이 바뀐 뒤 화면이 글을 다시 옮기기까지 기다리는 시간. 그 사이 또 바뀌면
+/// 다시 기다린다.
+pub const SHARE_DEBOUNCE_MS: u64 = 800;
+/// (9판) 같이 보기 모습 캡처의 긴 변 최대 픽셀. 크면 코어가 비율을 지켜 줄인다.
+pub const SHARE_CAPTURE_MAX_EDGE: u32 = 1600;
+/// (9판) 같이 보기 모습 캡처 첨부의 이름 앞부분. 뒤에 앱 이름과 `.png`가 붙는다(예: `같이 보기 - 웹 브라우저.png`).
+/// 앱 이름의 경로 구분자와 Windows가 파일 이름에 받지 않는 글자는 `_`로 바꾼다.
+pub const SHARE_CAPTURE_NAME_PREFIX: &str = "같이 보기 - ";
 
 // ---------------------------------------------------------------------------
 // 엔티티 (2단계 오케스트레이터 레지스트리와 같은 모양)
@@ -317,6 +351,8 @@ pub struct ShellSnapshot {
     pub device: DeviceState,
     pub supported: Supported,
     pub link: LinkStatus,
+    /// (9판) 이 기기에서 같이 보기를 켠 창의 id. 켠 순서다. 코어의 메모리에만 있어 쉘을 다시 켜면 빈 목록이다.
+    pub sharing: Vec<String>,
 }
 
 /// 이 기기와 오케스트레이터의 연결 상태. `state`로 가른다.
@@ -1448,6 +1484,13 @@ pub enum CoreRequest {
     ///   이름이 비었거나 `data_base64`가 base64가 아님. 화면은 첨부를 쌓을 때 개수와 크기를 먼저 막는다.
     /// - PAS가 없으면 `not_found`, `connected`가 아니면 `server`.
     /// - 첨부를 올리다 하나라도 실패하면 말은 보내지 않고 `server`다(일부만 간 말을 만들지 않는다).
+    /// - (9판) 위 검사를 마친 뒤, 이 워크스페이스에서 같이 보기를 켠 창 가운데 마지막 [`VisibleView::visual`]이
+    ///   참이고 이 기기에서 지금 보는 데스크톱에 있는 창마다 코어가 모습을 찍어 화면이 준 첨부 뒤에 붙인다.
+    ///   `web_view`가 있는 창은 웹 화면(`web.capture`와 같은 것)을, 아니면 쉘 화면에서 그 창의 `bounds` 자리를
+    ///   찍는다. 긴 변을 [`SHARE_CAPTURE_MAX_EDGE`] 이하로 줄인 PNG이고, 이름은 [`SHARE_CAPTURE_NAME_PREFIX`]와
+    ///   앱 이름, `.png`다. 그 창에 지난번 말에 붙여 보낸 모습과 픽셀이 같으면 붙이지 않는다. 찍지 못했거나
+    ///   붙이면 첨부 한도를 넘는 모습은 빼고 보낸다(화면이 준 첨부가 먼저다). 붙인 모습은 화면이 준 첨부와 같은
+    ///   길로 올라가 기록의 `attachments`에도 보인다. 말을 보내지 못하면 「지난번에 보낸 모습」을 바꾸지 않는다.
     #[serde(rename = "agent.send")]
     AgentSend {
         workspace_id: String,
@@ -1536,6 +1579,25 @@ pub enum CoreRequest {
         window_id: String,
         permission: String,
     },
+
+    /// (9판) 창의 같이 보기를 켜거나 끈다. 코어의 메모리에만 두고, [`ShellSnapshot::sharing`]이 바뀌므로
+    /// `state.changed`가 따라온다. 이미 그 상태면 아무것도 하지 않는다(이벤트 없음). 없는 창이면 `not_found`.
+    /// 연결 상태와 무관하게 성공한다.
+    /// - 켜면 화면이 곧 `share.view`로 보이는 것을 준다. 코어는 그 전까지 서버에 올릴 것이 없다.
+    /// - 끄면 코어가 그 창의 보이는 글과 「지난번에 보낸 모습」을 버리고, 연결되어 있으면 서버의 그 창 보기를
+    ///   지운다([`registry`]의 「같이 보기」 절). 지우다 실패하면 다시 이을 때 지운다.
+    #[serde(rename = "share.set")]
+    ShareSet { window_id: String, on: bool },
+    /// (9판) 같이 보기 창에 지금 보이는 것을 코어에 준다. 화면은 켠 직후 한 번, 그 뒤로는 창에 보이는 것이나 창의
+    /// 자리가 바뀌고 [`SHARE_DEBOUNCE_MS`] 동안 더 바뀌지 않을 때 부른다. 대화 블록은 `agent.send` 전에 기다리던
+    /// 옮기기를 바로 해서 이 명령을 마친다(보낸 말이 방금 본 것과 함께 가도록).
+    /// - 같이 보기가 꺼진 창이면 아무것도 하지 않고 성공한다(끈 직후 늦게 온 것). 없는 창이면 `not_found`.
+    /// - `text`가 [`SHARE_TEXT_MAX_BYTES`]를 넘으면 `invalid_request`.
+    /// - 코어는 마지막 것을 창마다 하나 들고 있는다. 연결되어 있고 글이나 `visual`이 서버에 마지막으로 올린 것과
+    ///   다르면 서버에 올린 뒤 응답한다. 올리다 실패해도 성공으로 응답하고, 다음 `share.view`나 다시 이을 때 올린다.
+    ///   상태를 바꾸지 않으므로 이벤트가 없다.
+    #[serde(rename = "share.view")]
+    ShareView { window_id: String, view: VisibleView },
 }
 
 /// 보낼 첨부 하나(모듈 `agent` 2판).
@@ -1549,6 +1611,26 @@ pub struct AgentUpload {
     pub mime: String,
     /// 파일 내용. 표준 base64(채움 문자 있음).
     pub data_base64: String,
+}
+
+/// (9판) 같이 보기 창에 지금 보이는 것을 화면이 옮긴 것.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct VisibleView {
+    /// 창의 내용 영역에 보이는 글. 사람과 PAS가 읽는 글이고, 서버는 줄 단위로 앞의 것과 비교한다.
+    /// 화면이 지키는 모양:
+    /// - 위에서 아래, 왼쪽에서 오른쪽 순서로 한 줄에 한 덩이를 둔다. 빈 줄은 이어서 두지 않는다.
+    /// - 블록마다 그 블록을 알리는 머리 줄을 대괄호로 둔다. 예: `[파일 notes/plan.md, 40~78줄 / 전체 210줄]`(편집기와
+    ///   코드 보기는 그 아래에 보이는 줄마다 `40│ 원문`), `[목록, 전체 120개 중 11~30번째]`, `[표, 전체 52줄 중
+    ///   1~18번째]`(칸은 ` | `로 잇는다), `[웹 화면: 페이지 제목, https://...]`, `[이미지: 설명]`.
+    /// - 고른 항목은 줄 앞에 `› `, 체크 상자는 `[x] `나 `[ ] `, 입력칸은 `이름: 값`이다.
+    /// - [`SHARE_TEXT_MAX_BYTES`]를 넘지 않는다.
+    pub text: String,
+    /// 이미지, 동영상, 그림판, 웹 화면처럼 글로 옮길 수 없는 것이 보이는가. 참이면 `agent.send` 때 모습을 찍는다.
+    pub visual: bool,
+    /// 창의 내용 영역(제목 줄 아래)이 쉘 화면(메인 웹뷰) 왼쪽 위 기준 어디에 있는가(CSS px). 모습을 찍을 때 쓴다.
+    pub bounds: Rect,
 }
 
 /// 기록에 붙은 첨부 하나(모듈 `agent` 2판). 내용은 `agent.attachment`로 읽는다.
@@ -1678,6 +1760,10 @@ pub enum CoreReply {
     DataMedia { media: data::MediaData },
     #[serde(rename = "connection.login")]
     ConnectionLogin {},
+    #[serde(rename = "share.set")]
+    ShareSet {},
+    #[serde(rename = "share.view")]
+    ShareView {},
 }
 
 /// 워크스페이스 PAS 하나.
@@ -2078,6 +2164,36 @@ mod tests {
         );
     }
 
+    #[test]
+    fn share_requests_round_trip() {
+        let set: CoreRequest =
+            serde_json::from_str(r#"{"op":"share.set","window_id":"w1","on":true}"#).unwrap();
+        assert_eq!(
+            set,
+            CoreRequest::ShareSet {
+                window_id: "w1".into(),
+                on: true
+            }
+        );
+        let view: CoreRequest = serde_json::from_str(
+            r#"{"op":"share.view","window_id":"w1","view":{"text":"[목록, 전체 3개 중 1~3번째]\n› 첫째","visual":false,"bounds":{"x":10,"y":40,"width":600,"height":400}}}"#,
+        )
+        .unwrap();
+        let CoreRequest::ShareView { view, .. } = &view else {
+            panic!("share.view");
+        };
+        assert!(view.text.ends_with("› 첫째"));
+        assert!(serde_json::from_str::<CoreRequest>(
+            r#"{"op":"share.view","window_id":"w1","view":{"text":"","visual":false,"bounds":{"x":0,"y":0,"width":1,"height":1},"image":""}}"#
+        )
+        .is_err());
+        assert_eq!(
+            serde_json::to_string(&CoreReply::ShareSet {}).unwrap(),
+            r#"{"op":"share.set"}"#
+        );
+        assert!(SHARE_TEXT_CUT_MARK.len() < SHARE_TEXT_MAX_BYTES);
+    }
+
     /// 화면이 지키는 한도를 `ui/src/contract/limits.ts`로 내보낸다. ts-rs처럼 `cargo test`가 다시 쓰고,
     /// CI는 생성된 폴더가 바뀌지 않았는지 본다.
     #[test]
@@ -2093,6 +2209,12 @@ mod tests {
              export const AGENT_ATTACHMENTS_TOTAL_MAX_BYTES = {};\n\
              /** 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위). */\n\
              export const AGENT_MESSAGE_MAX_CHARS = {};\n\
+             /** (9판) 같이 보기 글 하나의 최대 바이트 수(UTF-8). */\n\
+             export const SHARE_TEXT_MAX_BYTES = {};\n\
+             /** (9판) 잘린 같이 보기 글의 마지막 줄. */\n\
+             export const SHARE_TEXT_CUT_MARK = {:?};\n\
+             /** (9판) 같이 보기 창이 바뀐 뒤 글을 다시 옮기기까지 기다리는 시간(ms). */\n\
+             export const SHARE_DEBOUNCE_MS = {};\n\
              /** 단추 아이콘으로 쓸 수 있는 Lucide 아이콘 이름(블록 세트 4판). */\n\
              export const ICON_NAMES = [{}] as const;\n\
              export type IconName = (typeof ICON_NAMES)[number];\n",
@@ -2100,6 +2222,9 @@ mod tests {
             AGENT_ATTACHMENT_MAX_BYTES,
             AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
             registry::AGENT_MESSAGE_MAX_CHARS,
+            SHARE_TEXT_MAX_BYTES,
+            SHARE_TEXT_CUT_MARK,
+            SHARE_DEBOUNCE_MS,
             data::ICON_NAMES
                 .iter()
                 .map(|name| format!("\"{name}\""))
