@@ -1,5 +1,9 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ChatComposer } from "../blocks/chat-composer";
+import { ChatHistory } from "../blocks/chat-history";
+import { HistoryAttachmentView } from "../blocks/agent-attachments";
 import { AgentChatBlock } from "../blocks/agent-chat";
 import { WindowDataProvider } from "../data/window-data";
 import type { AppDefinition, CoreEvent, CoreReply, CoreRequest, ConversationItem, ConversationThread } from "../contract/contract";
@@ -155,4 +159,52 @@ describe("대화 제공자 화면", () => {
     expect(screen.queryByRole("button", { name: "시작" })).toBeNull();
   });
 
+});
+
+describe("공용 대화 부품", () => {
+  it("기록, 진행 줄, footer를 기존 순서로 그린다", () => {
+    const historyRef = createRef<HTMLDivElement>();
+    render(<ChatHistory
+      items={[item("one", "기록")]} pending={null} delta="" busy tool="문서 읽기"
+      historyRef={historyRef} onScroll={() => {}}
+      renderAttachment={() => null} renderPendingAttachment={() => null}
+      footer={<button type="button">도구 승인</button>}
+    />);
+    const history = screen.getByRole("log", { name: "대화 기록" });
+    expect(within(history).getByText("기록")).toBeTruthy();
+    expect(within(history).getByText("생각 중입니다… · 문서 읽기")).toBeTruthy();
+    expect(history.lastElementChild?.textContent).toBe("도구 승인");
+  });
+
+  it("입력은 Enter만 보내고 Shift+Enter와 IME Enter는 보존한다", () => {
+    const onSend = vi.fn();
+    render(<ChatComposer
+      draft="" onDraft={() => {}} inputRef={createRef<HTMLTextAreaElement>()} attachments={[]} onAttachmentsChange={() => {}}
+      onSend={onSend} disabled={false} busy={false} sharedWindows={[]}
+      onRemoveShared={() => {}} onPreview={() => {}} error={null} onError={() => {}}
+    />);
+    const input = screen.getByRole("textbox", { name: "메시지" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229, isComposing: true });
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith();
+  });
+
+  it("히스토리 첨부 캐시는 운송 범위가 다르면 분리한다", async () => {
+    const attachment = { id: "0", name: "사진.png", mime: "image/png" };
+    const loadConversation = vi.fn(async () => ({ mime: "image/png", data_base64: "YQ==" }));
+    const loadLocalAgent = vi.fn(async () => ({ mime: "image/png", data_base64: "Yg==" }));
+    render(<>
+      <HistoryAttachmentView attachment={attachment} cacheKey={["conversation", "window", "item", "0"]} load={loadConversation} open={async () => {}} onPreview={() => {}} onError={() => {}} />
+      <HistoryAttachmentView attachment={attachment} cacheKey={["local_agent", "window", "item", "0"]} load={loadLocalAgent} open={async () => {}} onPreview={() => {}} onError={() => {}} />
+    </>);
+    const buttons = await screen.findAllByRole("button", { name: "사진.png" });
+    expect(buttons).toHaveLength(2);
+    expect(buttons.map((button) => button.querySelector("img")?.getAttribute("src"))).toEqual([
+      "data:image/png;base64,YQ==", "data:image/png;base64,Yg==",
+    ]);
+    expect(loadConversation).toHaveBeenCalledTimes(1);
+    expect(loadLocalAgent).toHaveBeenCalledTimes(1);
+  });
 });
