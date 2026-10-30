@@ -16,6 +16,7 @@ use std::path::PathBuf;
 pub(super) struct Fingerprint {
     pub spec_hash: String,
     pub cwd: PathBuf,
+    pub block_scope: (String, String, String),
     pub mcp: Option<(String, bool, String)>,
 }
 
@@ -26,6 +27,9 @@ pub(super) struct Context {
     pub app_id: String,
     pub permission: String,
     pub workspace: String,
+    pub cwd: Option<PathBuf>,
+    // 블록 위치, 실행 권한, 폴더 권한은 명세를 못 읽어도 비교할 수 있다.
+    pub block_scope: (String, String, String),
 }
 
 pub(super) fn record_dir(inner: &Inner, window: &str) -> PathBuf {
@@ -94,6 +98,8 @@ pub(super) fn resolve(
     };
     let app_id = window.app_id.clone();
     let workspace = desktop.workspace_id.clone();
+    let current_cwd = cwd.clone();
+    let block_scope = (pointer.clone(), permission.clone(), root);
     let access = state.device.local_agent_access.clone();
     drop(state);
     let mut snapshot = LocalAgentSnapshot {
@@ -134,6 +140,8 @@ pub(super) fn resolve(
                     app_id,
                     permission,
                     workspace,
+                    cwd: current_cwd,
+                    block_scope,
                 }));
             }
         },
@@ -145,6 +153,8 @@ pub(super) fn resolve(
                 app_id,
                 permission,
                 workspace,
+                cwd: current_cwd,
+                block_scope,
             }))
         }
     };
@@ -166,6 +176,8 @@ pub(super) fn resolve(
             app_id,
             permission,
             workspace,
+            cwd: current_cwd,
+            block_scope,
         }));
     };
     let Some(cwd) = cwd else {
@@ -177,6 +189,8 @@ pub(super) fn resolve(
             app_id,
             permission,
             workspace,
+            cwd: current_cwd,
+            block_scope,
         }));
     };
     let hash = agent_spec_hash(&spec);
@@ -199,6 +213,8 @@ pub(super) fn resolve(
             app_id,
             permission,
             workspace,
+            cwd: current_cwd,
+            block_scope,
         }));
     }
     let link = inner.link_file.lock().unwrap().clone();
@@ -215,6 +231,7 @@ pub(super) fn resolve(
     let fingerprint = Fingerprint {
         spec_hash: hash.clone(),
         cwd: cwd.clone(),
+        block_scope: block_scope.clone(),
         mcp: link.as_ref().map(|file| {
             (
                 file.server_url.clone(),
@@ -239,5 +256,7 @@ pub(super) fn resolve(
         app_id,
         permission,
         workspace,
+        cwd: current_cwd,
+        block_scope,
     }))
 }

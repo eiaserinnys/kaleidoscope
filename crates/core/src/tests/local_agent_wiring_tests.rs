@@ -394,7 +394,7 @@ fn changed_storage_requires_new_execution_consent() {
 }
 
 #[test]
-fn changing_folder_while_storage_loads_waits_for_the_spec() {
+fn changing_folder_while_storage_loads_stops_the_old_worker() {
     use kaleidoscope_contract::app_storage::{StorageSnapshot, StorageUpdate};
     let temp = TempDir::new().unwrap();
     let first = TempDir::new().unwrap();
@@ -455,7 +455,7 @@ fn changing_folder_while_storage_loads_waits_for_the_spec() {
         permission: "work".into(),
     })
     .unwrap();
-    assert_eq!(attach(&core, &window).generation, current.generation);
+    assert_ne!(attach(&core, &window).generation, current.generation);
     release.send(()).unwrap();
     wait_for(|| {
         let next = attach(&core, &window);

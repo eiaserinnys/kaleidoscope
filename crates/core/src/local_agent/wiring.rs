@@ -171,7 +171,7 @@ fn reconcile(inner: &Arc<Inner>, window: &str) {
         }
         Err(_) => return,
     };
-    // An unavailable binding does not establish that the execution spec changed.
+    // 명세를 못 읽어도 선택·폴더·블록·권한이 달라졌으면 이전 실행을 끝낸다.
     let binding_pending = data_runtime::binding_value(inner, window, &agent_pointer(inner, window))
         .is_none_or(|v| {
             matches!(
@@ -185,10 +185,24 @@ fn reconcile(inner: &Arc<Inner>, window: &str) {
         return;
     };
     if binding_pending && c.worker.is_some() {
-        return;
+        let same_selection = c
+            .snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.selected.as_deref())
+            == ctx.snapshot.selected.as_deref();
+        let same_scope = c.fingerprint.as_ref().is_some_and(|old| {
+            Some(&old.cwd) == ctx.cwd.as_ref() && old.block_scope == ctx.block_scope
+        });
+        if same_selection && same_scope {
+            return;
+        }
     }
     let change = match (&c.fingerprint, &ctx.fingerprint) {
-        (Some(old), Some(new)) if old.spec_hash == new.spec_hash && old.cwd == new.cwd => {
+        (Some(old), Some(new))
+            if old.spec_hash == new.spec_hash
+                && old.cwd == new.cwd
+                && old.block_scope == new.block_scope =>
+        {
             if old.mcp != new.mcp {
                 let ready = c
                     .worker

@@ -128,3 +128,57 @@ fn offline_transition_preserves_responding_turn_until_it_finishes() {
 fn offline_transition_reconnects_ready_worker_after_storage_recovers() {
     reconnect_while(false);
 }
+
+#[test]
+fn clearing_selection_while_storage_fails_stops_the_old_worker() {
+    let temp = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(folder.path().into()));
+    let definition = fake_definition(temp.path());
+    let core = open_core(temp.path(), vec![definition.to_string()], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "test-agent");
+    attach(&core, &window);
+    select(&core, &window, "one");
+    until(&core, &window, LocalAgentPhase::ChoosingFolder);
+    core.handle(CoreRequest::FilesPickFolder {
+        window_id: window.clone(),
+        permission: "work".into(),
+    })
+    .unwrap();
+    let original = allow_and_start(&core, &window);
+    let file = connected_link_file();
+    *core.inner.link_file.lock().unwrap() = Some(file.clone());
+    core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        server_url: file.server_url,
+        device_name: file.device_name,
+        reason: "연결하는 중".into(),
+    };
+    emit_state(&core);
+    wait_for(|| {
+        matches!(
+            crate::data_runtime::binding_value(&core.inner, &window, "/ui/agents"),
+            Some(BindingValue::Failed { .. })
+        )
+    });
+    assert_eq!(attach(&core, &window).generation, original.generation);
+    core.handle(CoreRequest::WindowSetState {
+        window_id: window.clone(),
+        state: BTreeMap::from([("agent_id".into(), Value::Null)]),
+    })
+    .unwrap();
+    let cleared = attach(&core, &window);
+    assert_ne!(cleared.generation, original.generation);
+    assert_eq!(cleared.phase, LocalAgentPhase::ChoosingAgent);
+    assert_eq!(cleared.selected, None);
+    assert_eq!(
+        core.handle(CoreRequest::LocalAgentCancel {
+            window_id: window,
+            generation: original.generation,
+        })
+        .unwrap_err()
+        .code,
+        ErrorCode::InvalidRequest
+    );
+}
