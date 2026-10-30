@@ -27,7 +27,7 @@ pub(super) struct PreviewArgs {
     /// 최근 배치 보고에서 창 상태를 가져옵니다.
     window_id: Option<String>,
     /// 작업 전용 저장 항목에 사용할 작업. window_id가 있으면 그 창의 작업과 같아야 합니다.
-    workspace_id: Option<String>,
+    pub(super) workspace_id: Option<String>,
     /// 기기 원천이나 relay 원천에 대신 넣을 표본 값.
     data: Option<BTreeMap<String, Value>>,
     /// 결과 값 하나를 표시할 최대 글자 수(기본 4000, 최대 20000).

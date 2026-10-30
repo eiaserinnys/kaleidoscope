@@ -13,7 +13,7 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
             PRAGMA user_version=1;
             COMMIT;")?;
-    } else if version > 9 {
+    } else if version > 10 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 2 {
@@ -197,6 +197,40 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
     }
     if version < 9 {
         db.execute_batch("BEGIN IMMEDIATE; ALTER TABLE apps ADD COLUMN deleted_at TEXT; PRAGMA user_version=9; COMMIT;")?;
+    }
+    if version < 10 {
+        db.pragma_update(None, "foreign_keys", false)?;
+        let migration = (|| {
+            db.execute_batch("BEGIN IMMEDIATE;")?;
+            let migration = (|| {
+                db.execute_batch(
+                    "CREATE TABLE app_storage_buckets_v10 (
+                    id TEXT PRIMARY KEY,
+                    account_id TEXT NOT NULL REFERENCES accounts(id),
+                    app_id TEXT NOT NULL,
+                    UNIQUE(account_id,app_id)
+                );
+                INSERT INTO app_storage_buckets_v10(id,account_id,app_id)
+                    SELECT id,account_id,app_id FROM app_storage_buckets;
+                DROP TABLE app_storage_buckets;
+                ALTER TABLE app_storage_buckets_v10 RENAME TO app_storage_buckets;",
+                )?;
+                let mut check = db.prepare("PRAGMA foreign_key_check")?;
+                if check.query([])?.next()?.is_some() {
+                    return Err(rusqlite::Error::InvalidQuery);
+                }
+                drop(check);
+                db.pragma_update(None, "user_version", 10)?;
+                db.execute_batch("COMMIT;")
+            })();
+            if migration.is_err() {
+                let _ = db.execute_batch("ROLLBACK;");
+            }
+            migration
+        })();
+        let foreign_keys = db.pragma_update(None, "foreign_keys", true);
+        migration?;
+        foreign_keys?;
     }
     Ok(())
 }

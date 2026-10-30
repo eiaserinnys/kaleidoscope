@@ -62,17 +62,58 @@ pub fn router(state: AppState) -> Router {
     mcp.merge(api)
 }
 
-async fn mcp_auth(State(state): State<AppState>, request: Request, next: Next) -> Response {
-    if bearer(request.headers())
-        .is_some_and(|provided| constant_time_eq(provided.as_bytes(), state.0.mcp_token.as_bytes()))
-    {
-        next.run(request).await
-    } else {
-        error_response(
+async fn mcp_auth(State(state): State<AppState>, mut request: Request, next: Next) -> Response {
+    let Some(provided) = bearer(request.headers()) else {
+        return error_response(
             StatusCode::UNAUTHORIZED,
             server_error("MCP 인증이 필요합니다."),
-        )
+        );
+    };
+    let mut principal = if constant_time_eq(provided.as_bytes(), state.0.mcp_token.as_bytes()) {
+        McpPrincipal::default()
+    } else {
+        let device_id = match state.authenticate_device(provided) {
+            Ok(Some((id, _))) => id,
+            Ok(None) => {
+                return error_response(
+                    StatusCode::UNAUTHORIZED,
+                    server_error("MCP 인증이 필요합니다."),
+                );
+            }
+            Err(error) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
+        };
+        let account = match state.device_account_id(&device_id) {
+            Ok(account) => account,
+            Err(error) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
+        };
+        let principal_account = match state.mcp_account_id() {
+            Ok(account) => account,
+            Err(error) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
+        };
+        if account != principal_account {
+            return error_response(StatusCode::FORBIDDEN, CoreError::new(ErrorCode::NotFound));
+        }
+        McpPrincipal {
+            device_id: Some(device_id),
+            workspace_id: None,
+        }
+    };
+
+    if let Some(value) = request.headers().get(registry::WORKSPACE_HEADER) {
+        let Ok(workspace_id) = value.to_str() else {
+            return error_response(StatusCode::FORBIDDEN, CoreError::new(ErrorCode::NotFound));
+        };
+        match state.mcp_owns_workspace(workspace_id) {
+            Ok(true) => principal.workspace_id = Some(workspace_id.to_string()),
+            Ok(false) => {
+                return error_response(StatusCode::FORBIDDEN, CoreError::new(ErrorCode::NotFound));
+            }
+            Err(error) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
+        }
     }
+
+    request.extensions_mut().insert(principal);
+    next.run(request).await
 }
 
 async fn device_auth(State(state): State<AppState>, mut request: Request, next: Next) -> Response {

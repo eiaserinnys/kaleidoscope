@@ -16,14 +16,14 @@ struct UploadArgs {
     #[serde(default = "default_open")]
     #[schemars(default = "default_open")]
     open: bool,
-    /// 띄울 작업(워크스페이스) id. 작업 PAS라면 지시에 적힌 값을 넣는다. 없으면 디렉터가 지금 보는 데스크톱에 띄운다.
+    /// 띄울 작업 id. 생략하면 이 MCP 연결의 작업을 사용합니다.
     workspace_id: Option<String>,
 }
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct AppIdArgs {
     /// 조회할 앱 id. `list_apps`에서 확인합니다.
     app_id: String,
-    /// 띄울 작업(워크스페이스) id. 작업 PAS라면 지시에 적힌 값을 넣는다. 없으면 디렉터가 지금 보는 데스크톱에 띄운다.
+    /// 띄울 작업 id. 생략하면 이 MCP 연결의 작업을 사용합니다.
     workspace_id: Option<String>,
 }
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -45,8 +45,13 @@ struct ApproveArgs {
 }
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub(super) struct WorkspaceArgs {
-    /// 조회할 작업의 워크스페이스 id.
-    pub(super) workspace_id: String,
+    /// 조회할 작업 id. 생략하면 이 MCP 연결의 작업을 사용합니다.
+    pub(super) workspace_id: Option<String>,
+}
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct DeleteWorkspaceArgs {
+    /// 지울 작업 id. 생략할 수 없습니다.
+    workspace_id: String,
 }
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct RevokeArgs {
@@ -102,8 +107,22 @@ use rmcp::{
     handler::server::router::tool::ToolRouter,
     handler::server::wrapper::Parameters,
     model::{CallToolResult, ContentBlock},
+    service::{RequestContext, RoleServer},
     tool, tool_router, ErrorData,
 };
+
+fn request_principal(context: &RequestContext<RoleServer>) -> McpPrincipal {
+    context
+        .extensions
+        .get::<axum::http::request::Parts>()
+        .and_then(|parts| parts.extensions.get::<McpPrincipal>())
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn effective_workspace_id(explicit: Option<String>, principal: &McpPrincipal) -> Option<String> {
+    explicit.or_else(|| principal.workspace_id.clone())
+}
 
 #[path = "mcp_app_storage_tools.rs"]
 pub(super) mod app_storage_tools;
@@ -112,38 +131,73 @@ mod server_handler;
 
 #[tool_router(router = base_tool_router, vis = "pub(super)")]
 impl McpServer {
-    #[tool(
-        description = "앱 정의를 검사해 레지스트리에 새 버전으로 올립니다. 에이전트가 앱을 만들거나 고친 뒤 사용합니다."
-    )]
+    #[cfg(test)]
     async fn upload_app(
         &self,
         Parameters(args): Parameters<UploadArgs>,
     ) -> Result<CallToolResult, ErrorData> {
+        self.upload_app_for_principal(args, McpPrincipal::default())
+            .await
+    }
+
+    #[tool(
+        name = "upload_app",
+        description = "앱 정의를 검사해 레지스트리에 새 버전으로 올립니다. workspace_id를 빼면 이 MCP 연결의 작업을 사용합니다. 에이전트가 앱을 만들거나 고친 뒤 list_apps와 get_app으로 확인하고 사용합니다."
+    )]
+    async fn tool_upload_app(
+        &self,
+        Parameters(args): Parameters<UploadArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.upload_app_for_principal(args, request_principal(&context))
+            .await
+    }
+
+    async fn upload_app_for_principal(
+        &self,
+        mut args: UploadArgs,
+        principal: McpPrincipal,
+    ) -> Result<CallToolResult, ErrorData> {
+        args.workspace_id = effective_workspace_id(args.workspace_id, &principal);
         let definition = serde_json::to_string(&args.definition)
             .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
         let missing_connections = match self.state.missing_app_connections_from_json(&definition) {
             Ok(missing) => missing,
             Err(error) => return Ok(json_error(error)),
         };
-        match self.state.publish_app_with_target(
+        match self.state.publish_app_for_device(
             &definition,
             "agent",
             args.open,
             args.workspace_id.clone(),
+            principal.device_id.as_deref(),
         ) {
             Ok((row, unchanged, target)) => {
-                let sent = if args.open {
-                    self.state.open_sent_to(
-                        target.as_ref(),
-                        args.workspace_id.as_deref(),
-                        &row.version.definition.requires,
-                    )
+                let sent = if args.open && (principal.device_id.is_none() || target.is_some()) {
+                    if principal.device_id.is_some() {
+                        self.state.open_sent_to_strict_target(
+                            target.as_ref(),
+                            args.workspace_id.as_deref(),
+                            &row.version.definition.requires,
+                        )
+                    } else {
+                        self.state.open_sent_to(
+                            target.as_ref(),
+                            args.workspace_id.as_deref(),
+                            &row.version.definition.requires,
+                        )
+                    }
                 } else {
                     0
                 };
                 let mut value = json!({"app_id":row.app.id,"name":row.app.name,"version":row.version.version,"unchanged":unchanged,"open_sent_to":sent,"open_target":target.as_ref().map(|target| target.name.clone())});
+                if args.open && principal.device_id.is_some() && target.is_none() {
+                    value["open_reason"] = json!("origin_device_unavailable");
+                    value["note"] = json!("이 MCP 연결의 기기에서 창을 열 수 없습니다");
+                }
                 if args.open
                     && sent == 0
+                    && principal.device_id.is_none()
                     && self.state.connected_count_for(args.workspace_id.as_deref()) == 0
                 {
                     value["note"] = if args.workspace_id.is_some() {
@@ -256,21 +310,55 @@ impl McpServer {
         })
     }
     #[tool(
-        description = "앱 정의의 식이 무엇을 내는지 디렉터 화면 없이 봅니다. relay 원천은 서버가 받고, 기기 원천(폴더, 파일, oauth)은 data로 표본을 줍니다. window_id를 주면 그 창의 지금 상태로 계산합니다."
+        name = "preview_app",
+        description = "앱 정의의 식이 무엇을 내는지 디렉터 화면 없이 봅니다. workspace_id를 빼면 이 MCP 연결의 작업을 사용합니다. relay 원천은 서버가 받고, 기기 원천(폴더, 파일, oauth)은 data로 표본을 줍니다. window_id를 주면 그 창의 지금 상태로 계산합니다."
     )]
-    async fn preview_app(
+    async fn tool_preview_app(
         &self,
         Parameters(args): Parameters<super::preview::PreviewArgs>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
+        self.preview_app_for_principal(args, request_principal(&context))
+            .await
+    }
+
+    async fn preview_app_for_principal(
+        &self,
+        mut args: super::preview::PreviewArgs,
+        principal: McpPrincipal,
+    ) -> Result<CallToolResult, ErrorData> {
+        args.workspace_id = effective_workspace_id(args.workspace_id, &principal);
         self.preview_app_result(args).await
     }
-    #[tool(
-        description = "현재 버전의 앱을 연결된 쉘에서 엽니다. 앱을 이미 올렸고 창만 다시 띄울 때 사용합니다."
-    )]
+
+    #[cfg(test)]
     async fn open_app(
         &self,
         Parameters(args): Parameters<AppIdArgs>,
     ) -> Result<CallToolResult, ErrorData> {
+        self.open_app_for_principal(args, McpPrincipal::default())
+            .await
+    }
+
+    #[tool(
+        name = "open_app",
+        description = "현재 버전의 앱을 엽니다. workspace_id를 빼면 이 MCP 연결의 작업을 사용합니다. 이 MCP 연결이 기기에서 왔다면 그 기기에 창을 엽니다."
+    )]
+    async fn tool_open_app(
+        &self,
+        Parameters(args): Parameters<AppIdArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.open_app_for_principal(args, request_principal(&context))
+            .await
+    }
+
+    async fn open_app_for_principal(
+        &self,
+        mut args: AppIdArgs,
+        principal: McpPrincipal,
+    ) -> Result<CallToolResult, ErrorData> {
+        args.workspace_id = effective_workspace_id(args.workspace_id, &principal);
         match self.state.app(&args.app_id, None) {
             Ok(Some(app)) => {
                 let workspace_accessible = match args.workspace_id.as_deref() {
@@ -280,30 +368,55 @@ impl McpServer {
                     },
                     None => true,
                 };
-                let target = match self.state.choose_open_target(args.workspace_id.as_deref()) {
+                let target = match self.state.choose_open_target(
+                    args.workspace_id.as_deref(),
+                    principal.device_id.as_deref(),
+                    &app.version.definition.requires,
+                ) {
                     Ok(target) => target,
                     Err(error) => return Ok(json_error(error)),
                 };
-                if workspace_accessible {
+                if workspace_accessible && (principal.device_id.is_none() || target.is_some()) {
                     let account_id = match self.state.mcp_account_id() {
                         Ok(account_id) => account_id,
                         Err(error) => return Ok(json_error(error)),
                     };
-                    self.state.send_event_with_target_for_account(
-                        DeviceEvent::AppOpen {
-                            app_id: args.app_id.clone(),
-                            workspace_id: args.workspace_id.clone(),
-                        },
-                        target.as_ref().map(|target| target.id.clone()),
-                        &account_id,
-                    );
+                    let event = DeviceEvent::AppOpen {
+                        app_id: args.app_id.clone(),
+                        workspace_id: args.workspace_id.clone(),
+                    };
+                    let target = target.as_ref().map(|target| target.id.clone());
+                    if principal.device_id.is_some() {
+                        self.state.send_event_with_strict_open_target_for_account(
+                            event,
+                            target,
+                            &account_id,
+                        );
+                    } else {
+                        self.state
+                            .send_event_with_target_for_account(event, target, &account_id);
+                    }
                 }
-                let sent = self.state.open_sent_to(
-                    target.as_ref(),
-                    args.workspace_id.as_deref(),
-                    &app.version.definition.requires,
-                );
+                let sent = if principal.device_id.is_some() && target.is_none() {
+                    0
+                } else if principal.device_id.is_some() {
+                    self.state.open_sent_to_strict_target(
+                        target.as_ref(),
+                        args.workspace_id.as_deref(),
+                        &app.version.definition.requires,
+                    )
+                } else {
+                    self.state.open_sent_to(
+                        target.as_ref(),
+                        args.workspace_id.as_deref(),
+                        &app.version.definition.requires,
+                    )
+                };
                 let mut value = json!({"open_sent_to":sent,"open_target":target.as_ref().map(|target| target.name.clone())});
+                if principal.device_id.is_some() && target.is_none() {
+                    value["open_reason"] = json!("origin_device_unavailable");
+                    value["note"] = json!("이 MCP 연결의 기기에서 창을 열 수 없습니다");
+                }
                 if sent == 0
                     && args.workspace_id.is_some()
                     && self.state.connected_count_for(args.workspace_id.as_deref()) == 0
@@ -322,14 +435,41 @@ impl McpServer {
             Err(e) => Ok(json_error(e)),
         }
     }
-    #[tool(description = "작업의 데스크톱과 창, 현재 상태를 읽습니다.")]
+    #[cfg(test)]
     pub(super) async fn get_workspace(
         &self,
         Parameters(args): Parameters<WorkspaceArgs>,
     ) -> Result<CallToolResult, ErrorData> {
-        Ok(match self.state.get_workspace(&args.workspace_id) {
+        self.get_workspace_for_principal(args, McpPrincipal::default())
+            .await
+    }
+
+    #[tool(
+        name = "get_workspace",
+        description = "작업의 데스크톱과 창, 현재 상태를 읽습니다. workspace_id를 빼면 이 MCP 연결의 작업을 사용합니다."
+    )]
+    async fn tool_get_workspace(
+        &self,
+        Parameters(args): Parameters<WorkspaceArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.get_workspace_for_principal(args, request_principal(&context))
+            .await
+    }
+
+    async fn get_workspace_for_principal(
+        &self,
+        args: WorkspaceArgs,
+        principal: McpPrincipal,
+    ) -> Result<CallToolResult, ErrorData> {
+        let Some(workspace_id) = effective_workspace_id(args.workspace_id, &principal) else {
+            return Ok(json_error(server_error(
+                "작업 id가 필요합니다. list_workspaces에서 현재 작업을 확인하세요.",
+            )));
+        };
+        Ok(match self.state.get_workspace(&workspace_id) {
             Ok(Some(mut value)) => {
-                match self.state.storage_app_data(&args.workspace_id) {
+                match self.state.storage_app_data(&workspace_id) {
                     Ok(app_data) => value["app_data"] = json!(app_data),
                     Err(error) => return Ok(json_error(error)),
                 }
@@ -341,14 +481,37 @@ impl McpServer {
             Err(error) => json_error(error),
         })
     }
-    #[tool(
-        description = "디렉터가 kaleidoscope 쉘에서 같이 보기로 켠 창에 지금 보이는 글 전체를 읽는다. 디렉터의 말 뒤에 붙어 오는 같이 보기 블록은 달라진 부분뿐이라, 지금 모습 전체가 필요할 때 쓴다."
-    )]
+    #[cfg(test)]
     async fn get_shared_view(
         &self,
         Parameters(args): Parameters<WorkspaceArgs>,
     ) -> Result<CallToolResult, ErrorData> {
-        Ok(match self.state.shared_views(&args.workspace_id) {
+        self.get_shared_view_for_principal(args, McpPrincipal::default())
+            .await
+    }
+
+    #[tool(
+        name = "get_shared_view",
+        description = "같이 보기로 켠 창에 지금 보이는 글 전체를 읽습니다. workspace_id를 빼면 이 MCP 연결의 작업을 사용합니다."
+    )]
+    async fn tool_get_shared_view(
+        &self,
+        Parameters(args): Parameters<WorkspaceArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.get_shared_view_for_principal(args, request_principal(&context))
+            .await
+    }
+
+    async fn get_shared_view_for_principal(
+        &self,
+        args: WorkspaceArgs,
+        principal: McpPrincipal,
+    ) -> Result<CallToolResult, ErrorData> {
+        let Some(workspace_id) = effective_workspace_id(args.workspace_id, &principal) else {
+            return Ok(json_error(server_error("작업 id가 필요합니다.")));
+        };
+        Ok(match self.state.shared_views(&workspace_id) {
             Ok(views) => {
                 let mut result = json!({"views": views});
                 if result["views"].as_array().is_some_and(Vec::is_empty) {
@@ -367,11 +530,11 @@ impl McpServer {
         })
     }
     #[tool(
-        description = "작업을 지웁니다. 제공자에 로그인한 기기가 정합화할 때 대화를 보관합니다. 마지막 작업은 지울 수 없습니다."
+        description = "작업을 지웁니다. 제공자에 로그인한 기기가 정합화할 때 대화를 보관합니다. 마지막 작업은 지울 수 없습니다. workspace_id가 필요하며 MCP 연결의 작업을 자동 사용하지 않습니다."
     )]
     async fn delete_workspace(
         &self,
-        Parameters(args): Parameters<WorkspaceArgs>,
+        Parameters(args): Parameters<DeleteWorkspaceArgs>,
     ) -> Result<CallToolResult, ErrorData> {
         match self.state.apply_layout_changes(
             None,

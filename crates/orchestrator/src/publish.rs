@@ -26,6 +26,17 @@ impl AppState {
         open: bool,
         workspace_id: Option<String>,
     ) -> Result<(RegistryApp, bool, Option<OpenTarget>), CoreError> {
+        self.publish_app_for_device(definition_json, created_by, open, workspace_id, None)
+    }
+
+    pub(crate) fn publish_app_for_device(
+        &self,
+        definition_json: &str,
+        created_by: &str,
+        open: bool,
+        workspace_id: Option<String>,
+        preferred_device: Option<&str>,
+    ) -> Result<(RegistryApp, bool, Option<OpenTarget>), CoreError> {
         let definition = parse_app_definition(definition_json)?;
         if kaleidoscope_contract::builtin::is_builtin(&definition.id) {
             return Err(CoreError::with_details(
@@ -39,13 +50,18 @@ impl AppState {
             None => true,
         };
         let event_workspace_id = workspace_accessible.then(|| workspace_id.clone()).flatten();
-        let open_requested = open && workspace_accessible;
         let account_id = self.mcp_account_id()?;
-        let open_target = if open_requested {
-            self.choose_open_target(workspace_id.as_deref())?
+        let open_target = if open && workspace_accessible {
+            self.choose_open_target(
+                workspace_id.as_deref(),
+                preferred_device,
+                &definition.requires,
+            )?
         } else {
             None
         };
+        let open_requested =
+            open && workspace_accessible && (preferred_device.is_none() || open_target.is_some());
         let result = {
             let mut db = self.lock_db()?;
             let tx = db.transaction().map_err(db_error)?;
@@ -145,7 +161,11 @@ impl AppState {
                 open_target.as_ref().map(|target| target.id.clone())
             };
             if open_requested {
-                self.send_event_with_target_for_account(event, target, &account_id);
+                if preferred_device.is_some() && !defer_open {
+                    self.send_event_with_strict_open_target_for_account(event, target, &account_id);
+                } else {
+                    self.send_event_with_target_for_account(event, target, &account_id);
+                }
             } else {
                 self.send_event_with_target(event, target);
             }
@@ -175,24 +195,28 @@ impl AppState {
                 }
             }
             if defer_open {
-                self.send_event_with_target_for_account(
-                    DeviceEvent::AppOpen {
-                        app_id: result.0.app.id.clone(),
-                        workspace_id: event_workspace_id,
-                    },
-                    open_target.as_ref().map(|target| target.id.clone()),
-                    &account_id,
-                );
-            }
-        } else if open_requested {
-            self.send_event_with_target_for_account(
-                DeviceEvent::AppOpen {
+                let event = DeviceEvent::AppOpen {
                     app_id: result.0.app.id.clone(),
                     workspace_id: event_workspace_id,
-                },
-                open_target.as_ref().map(|target| target.id.clone()),
-                &account_id,
-            );
+                };
+                let target = open_target.as_ref().map(|target| target.id.clone());
+                if preferred_device.is_some() {
+                    self.send_event_with_strict_open_target_for_account(event, target, &account_id);
+                } else {
+                    self.send_event_with_target_for_account(event, target, &account_id);
+                }
+            }
+        } else if open_requested {
+            let event = DeviceEvent::AppOpen {
+                app_id: result.0.app.id.clone(),
+                workspace_id: event_workspace_id,
+            };
+            let target = open_target.as_ref().map(|target| target.id.clone());
+            if preferred_device.is_some() {
+                self.send_event_with_strict_open_target_for_account(event, target, &account_id);
+            } else {
+                self.send_event_with_target_for_account(event, target, &account_id);
+            }
         }
         Ok((result.0, result.1, open_target))
     }
@@ -205,6 +229,7 @@ impl AppState {
         let _ = self.0.events.send(Broadcast {
             event,
             open_target,
+            strict_open_target: false,
             account_id: None,
         });
     }
@@ -218,6 +243,21 @@ impl AppState {
         let _ = self.0.events.send(Broadcast {
             event,
             open_target,
+            strict_open_target: false,
+            account_id: Some(account_id.to_string()),
+        });
+    }
+
+    pub(crate) fn send_event_with_strict_open_target_for_account(
+        &self,
+        event: DeviceEvent,
+        open_target: Option<String>,
+        account_id: &str,
+    ) {
+        let _ = self.0.events.send(Broadcast {
+            event,
+            open_target,
+            strict_open_target: true,
             account_id: Some(account_id.to_string()),
         });
     }
@@ -226,6 +266,7 @@ impl AppState {
         let _ = self.0.events.send(Broadcast {
             event,
             open_target: None,
+            strict_open_target: false,
             account_id: Some(account_id.to_string()),
         });
     }
@@ -233,6 +274,8 @@ impl AppState {
     pub(crate) fn choose_open_target(
         &self,
         workspace_id: Option<&str>,
+        preferred_device: Option<&str>,
+        requires: &kaleidoscope_contract::Requires,
     ) -> Result<Option<OpenTarget>, CoreError> {
         let account_id = self.mcp_account_id()?;
         let mut db = self.lock_db()?;
@@ -261,11 +304,24 @@ impl AppState {
                 .layout_sync_devices
                 .lock()
                 .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?;
+            let support = self
+                .0
+                .device_support
+                .lock()
+                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?;
             let mut values = Vec::new();
             for id in syncing
                 .iter()
                 .filter(|id| connected.get(*id).copied().unwrap_or(0) > 0)
             {
+                if preferred_device.is_some_and(|preferred| preferred != id.as_str()) {
+                    continue;
+                }
+                if preferred_device.is_some()
+                    && !renders_on(support.get(id).and_then(Option::as_ref), requires)
+                {
+                    continue;
+                }
                 let row: Option<(String, Option<String>)> = tx.query_row("SELECT name,last_active_at FROM devices WHERE id=?1 AND account_id=?2 AND revoked_at IS NULL", params![id, account_id], |r| Ok((r.get(0)?,r.get(1)?))).optional().map_err(db_error)?;
                 if let Some((name, active)) = row {
                     values.push((id.clone(), name, active.unwrap_or_default()));
@@ -305,6 +361,25 @@ impl AppState {
         workspace_id: Option<&str>,
         requires: &Requires,
     ) -> usize {
+        self.count_open_targets(target, workspace_id, requires, false)
+    }
+
+    pub(crate) fn open_sent_to_strict_target(
+        &self,
+        target: Option<&OpenTarget>,
+        workspace_id: Option<&str>,
+        requires: &Requires,
+    ) -> usize {
+        self.count_open_targets(target, workspace_id, requires, true)
+    }
+
+    fn count_open_targets(
+        &self,
+        target: Option<&OpenTarget>,
+        workspace_id: Option<&str>,
+        requires: &Requires,
+        strict_target: bool,
+    ) -> usize {
         let Ok(account_id) = self.mcp_account_id() else {
             return 0;
         };
@@ -343,6 +418,10 @@ impl AppState {
                 }
                 if !renders_on(support.get(*id).and_then(Option::as_ref), requires) {
                     return false;
+                }
+                if strict_target {
+                    return syncing.contains(*id)
+                        && target.is_some_and(|target| target.id.as_str() == id.as_str());
                 }
                 if syncing.contains(*id) {
                     return target.is_some_and(|target| target.id.as_str() == id.as_str());

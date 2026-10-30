@@ -1,6 +1,6 @@
 //! 쉘에 실리는 기본 앱. 정의를 바꾸면 같은 PR에서 판을 올리고 날짜를 고친다.
 //! 새 앱은 apps/에 정의 파일을 넣고 표에 한 줄을 더한다.
-//! 기본 앱의 storage 선언은 아직 서버가 받지 않는다.
+//! 기본 앱 정의와 저장소 선언은 계약 검사 규칙을 따른다.
 
 use crate::{registry::RegistryApp, validate::parse_app_definition, App, AppVersion};
 
@@ -83,7 +83,6 @@ mod tests {
             let definition = parse_app_definition(app.definition_json).unwrap();
             assert_eq!(definition.id, app.id);
             assert!(crate::Supported::current().renders(&definition.requires));
-            assert!(definition.storage.is_none());
         }
     }
 }

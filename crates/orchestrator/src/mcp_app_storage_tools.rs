@@ -49,13 +49,34 @@ pub(crate) struct AppStorageResetArgs {
 
 #[tool_router(router = app_storage_tool_router, vis = "pub(super)")]
 impl super::McpServer {
-    #[tool(
-        description = "앱이 선언한 계정별 저장 항목과 현재 revision을 나열합니다. 작업 전용 항목에는 workspace_id를 지정합니다."
-    )]
+    #[cfg(test)]
     pub(crate) async fn list_app_storage(
         &self,
         Parameters(args): Parameters<AppStorageArgs>,
     ) -> Result<CallToolResult, ErrorData> {
+        self.list_app_storage_for_principal(args, McpPrincipal::default())
+            .await
+    }
+
+    #[tool(
+        name = "list_app_storage",
+        description = "앱이 선언한 계정별 저장 항목과 현재 revision을 나열합니다. workspace_id를 빼면 이 MCP 연결의 작업을 사용합니다."
+    )]
+    async fn tool_list_app_storage(
+        &self,
+        Parameters(args): Parameters<AppStorageArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.list_app_storage_for_principal(args, request_principal(&context))
+            .await
+    }
+
+    async fn list_app_storage_for_principal(
+        &self,
+        mut args: AppStorageArgs,
+        principal: McpPrincipal,
+    ) -> Result<CallToolResult, ErrorData> {
+        args.workspace_id = effective_workspace_id(args.workspace_id, &principal);
         let account_id = match self.state.mcp_account_id() {
             Ok(value) => value,
             Err(error) => return Ok(json_error(error)),
@@ -75,13 +96,34 @@ impl super::McpServer {
         }
     }
 
-    #[tool(
-        description = "앱이 선언한 저장 항목의 값과 revision을 읽습니다. 저장값이 없으면 선언 기본값을 돌려줍니다."
-    )]
+    #[cfg(test)]
     pub(crate) async fn read_app_storage(
         &self,
         Parameters(args): Parameters<AppStorageEntryArgs>,
     ) -> Result<CallToolResult, ErrorData> {
+        self.read_app_storage_for_principal(args, McpPrincipal::default())
+            .await
+    }
+
+    #[tool(
+        name = "read_app_storage",
+        description = "앱이 선언한 저장 항목의 값과 revision을 읽습니다. workspace_id를 빼면 이 MCP 연결의 작업을 사용합니다. 저장값이 없으면 선언 기본값을 돌려줍니다."
+    )]
+    async fn tool_read_app_storage(
+        &self,
+        Parameters(args): Parameters<AppStorageEntryArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.read_app_storage_for_principal(args, request_principal(&context))
+            .await
+    }
+
+    async fn read_app_storage_for_principal(
+        &self,
+        mut args: AppStorageEntryArgs,
+        principal: McpPrincipal,
+    ) -> Result<CallToolResult, ErrorData> {
+        args.workspace_id = effective_workspace_id(args.workspace_id, &principal);
         let account_id = match self.state.mcp_account_id() {
             Ok(value) => value,
             Err(error) => return Ok(json_error(error)),
@@ -99,11 +141,34 @@ impl super::McpServer {
         )
     }
 
-    #[tool(description = "선언된 앱 저장 항목을 expected_revision compare-and-set으로 기록합니다.")]
+    #[cfg(test)]
     pub(crate) async fn write_app_storage(
         &self,
         Parameters(args): Parameters<AppStorageWriteArgs>,
     ) -> Result<CallToolResult, ErrorData> {
+        self.write_app_storage_for_principal(args, McpPrincipal::default())
+            .await
+    }
+
+    #[tool(
+        name = "write_app_storage",
+        description = "선언된 앱 저장 항목을 expected_revision compare-and-set으로 기록합니다. workspace_id를 빼면 이 MCP 연결의 작업을 사용합니다."
+    )]
+    async fn tool_write_app_storage(
+        &self,
+        Parameters(args): Parameters<AppStorageWriteArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.write_app_storage_for_principal(args, request_principal(&context))
+            .await
+    }
+
+    async fn write_app_storage_for_principal(
+        &self,
+        mut args: AppStorageWriteArgs,
+        principal: McpPrincipal,
+    ) -> Result<CallToolResult, ErrorData> {
+        args.workspace_id = effective_workspace_id(args.workspace_id, &principal);
         let account_id = match self.state.mcp_account_id() {
             Ok(value) => value,
             Err(error) => return Ok(json_error(error)),
@@ -129,13 +194,34 @@ impl super::McpServer {
         }
     }
 
-    #[tool(
-        description = "저장 항목의 override를 expected_revision으로 비교한 뒤 지우고 앱 선언 기본값으로 되돌립니다."
-    )]
+    #[cfg(test)]
     pub(crate) async fn reset_app_storage(
         &self,
         Parameters(args): Parameters<AppStorageResetArgs>,
     ) -> Result<CallToolResult, ErrorData> {
+        self.reset_app_storage_for_principal(args, McpPrincipal::default())
+            .await
+    }
+
+    #[tool(
+        name = "reset_app_storage",
+        description = "저장 항목의 override를 expected_revision으로 비교한 뒤 지우고 앱 선언 기본값으로 되돌립니다. workspace_id를 빼면 이 MCP 연결의 작업을 사용합니다."
+    )]
+    async fn tool_reset_app_storage(
+        &self,
+        Parameters(args): Parameters<AppStorageResetArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.reset_app_storage_for_principal(args, request_principal(&context))
+            .await
+    }
+
+    async fn reset_app_storage_for_principal(
+        &self,
+        mut args: AppStorageResetArgs,
+        principal: McpPrincipal,
+    ) -> Result<CallToolResult, ErrorData> {
+        args.workspace_id = effective_workspace_id(args.workspace_id, &principal);
         let account_id = match self.state.mcp_account_id() {
             Ok(value) => value,
             Err(error) => return Ok(json_error(error)),
