@@ -43,7 +43,7 @@ export function AppWindowContent({
 
   const context: BlockContext = { store, snapshot, window, definition: version.definition, newWindowRect };
   const hasSettings = version.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false;
-  if (version.definition.requires.blocks < 4 && !hasSettings) return <div className="ks-app-window-content">{renderBlock(version.definition.ui, context)}</div>;
+  if (version.definition.requires.blocks < 4 && !hasSettings && !version.definition.agent) return <div className="ks-app-window-content">{renderBlock(version.definition.ui, context)}</div>;
   return <WindowDataProvider store={store} appWindow={window} definition={version.definition}>
     <div className="ks-app-window-content ks-data-window">
       <div className="ks-data-window-body" hidden={settingsOpen} inert={settingsOpen || undefined}>{renderBlock(version.definition.ui, context)}</div>

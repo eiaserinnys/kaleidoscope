@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
-import type { AgentInfo, AgentItem, AgentModel, AgentUpdate, Block } from "../contract/contract";
+import type { AgentInfo, AgentItem, AgentModel, AgentUpdate, Block, ConversationEvent, ConversationItem, CoreEvent, CoreError, ConversationUpload } from "../contract/contract";
+import { useConversationHistory } from "./conversation-history";
+import { DataState } from "../components/data-state";
 import { Button, EmptyState, IconButton, Notice, StatusText } from "../components/primitives";
 import { ArrowUp, MessageSquare, Paperclip, ScreenShare } from "../components/icons";
 import { AGENT_ATTACHMENTS_MAX, AGENT_ATTACHMENT_MAX_BYTES, AGENT_ATTACHMENTS_TOTAL_MAX_BYTES } from "../contract/limits";
@@ -14,6 +16,11 @@ import { AttachmentChip, DraftChip, HistoryAttachment, ImagePreview, PendingAtta
 type AgentChatBlockData = Extract<Block, { type: "agent_chat" }>;
 
 export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlockData; context: BlockContext }) {
+  const provider = context.definition.agent;
+  const windowId = context.window.id;
+  const hasProvider = Boolean(provider);
+  const providerEntry = provider?.thread_entry;
+  const appVersion = context.window.app_version;
   const desktop = context.snapshot.shared.desktops.find((item) => item.id === context.window.desktop_id);
   const workspaceId = desktop?.workspace_id ?? "";
   const connected = context.snapshot.link.state === "connected";
@@ -24,15 +31,18 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     return [{ id, name }];
   });
   const [agent, setAgent] = useState<AgentInfo | null>(null);
-  const [items, setItems] = useState<AgentItem[]>([]);
-  const [models, setModels] = useState<AgentModel[]>([]);
+  const [items, setItems] = useState<(AgentItem | ConversationItem)[]>([]);
+  const [models, setModels] = useState<(AgentModel & { available?: boolean; reason?: string })[]>([]);
   const [selectedPreset, setSelectedPreset] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loginRequired, setLoginRequired] = useState(false);
+  const [bindingConflict, setBindingConflict] = useState(false);
+  const [nextBefore, setNextBefore] = useState<string | undefined>();
   const [loadError, setLoadError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState("");
-  const [pending, setPending] = useState<{ text: string; attachments: DraftAttachment[] } | null>(null);
+  const [pending, setPending] = useState<PendingMessage | null>(null);
   const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [sending, setSending] = useState(false);
@@ -45,10 +55,22 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const historyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const startRef = useRef<HTMLDivElement>(null);
+  const focusAfterLogin = useRef(false);
   const followTail = useRef(true);
   const loadGeneration = useRef(0);
+  const threadId = useRef<string | null>(null);
+  const streamId = useRef<string | null>(null);
+  const conversationQueue = useRef<CoreEvent[] | null>(null);
+  const creatingConversation = useRef(false);
+  const retryDraft = useRef<{ id: string; text: string; attachments: DraftAttachment[]; failed: boolean } | null>(null);
+  const restored = useRef(new Set<string>());
   const pendingUpdates = useRef<AgentUpdate[] | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
+
+  const acknowledge = useCallback((incoming: (AgentItem | ConversationItem)[]) => {
+    setPending((current) => current && incoming.some((item) => matchesPending(item, current)) ? null : current);
+  }, []);
 
   const applyUpdate = useCallback((update: AgentUpdate) => {
     if (update.kind === "created") {
@@ -59,7 +81,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       setCreating(false);
     } else if (update.kind === "item") {
       setItems((current) => uniqueItems([...current, update.item]));
-      if (update.item.kind === "user") setPending(null);
+      acknowledge([update.item]);
       if (update.item.kind === "assistant") setDelta("");
     } else if (update.kind === "delta") {
       setDelta((current) => current + update.text);
@@ -68,17 +90,85 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       setTool(update.tool);
       if (!update.busy) setDelta("");
     }
+  }, [acknowledge]);
+
+  const handleError = useCallback((error: CoreError) => {
+    if (error.code === "login_required") { setLoginRequired(true); return true; }
+    if (error.code === "binding_conflict") { setBindingConflict(true); return true; }
+    return false;
   }, []);
 
-  const load = useCallback(async () => {
+  const applyConversation = useCallback((update: ConversationEvent) => {
+    if (update.kind === "snapshot") {
+      setItems((current) => uniqueItems([...current, ...update.snapshot.items]));
+      acknowledge(update.snapshot.items);
+      setBusy(update.snapshot.busy);
+      setTool(update.snapshot.tool);
+      streamId.current = update.snapshot.stream_id;
+      setDelta(update.snapshot.text ?? "");
+    } else if (update.kind === "item") {
+      setItems((current) => uniqueItems([...current, update.item]));
+      acknowledge([update.item]);
+      if (update.item.kind === "assistant") { streamId.current = null; setDelta(""); }
+    } else if (update.kind === "text") {
+      streamId.current = update.stream_id;
+      setDelta(update.text);
+    } else {
+      setBusy(update.busy);
+      setTool(update.tool);
+      if (!update.busy) { streamId.current = null; setDelta(""); }
+    }
+  }, [acknowledge]);
+
+  const restoreDraft = useCallback((id: string, text: string, uploads: ConversationUpload[], failed: boolean) => {
+    if (retryDraft.current?.id === id) {
+      retryDraft.current.failed = failed;
+      restored.current.add(id);
+      return;
+    }
+    if (restored.current.has(id)) return;
+    restored.current.add(id);
+    const files = uploads.map((upload) => {
+      const bytes = Uint8Array.from(atob(upload.data_base64), (char) => char.charCodeAt(0));
+      return makeDraftAttachment(new File([bytes], upload.name, { type: upload.mime }), upload.name);
+    });
+    retryDraft.current = { id, text, attachments: files, failed };
+    setDraft((current) => current ? `${text}\n${current}` : text);
+    setAttachments((current) => [...files, ...current]);
+  }, []);
+
+  const load = useCallback(async (initialEvents: CoreEvent[] = []) => {
     if (!connected || !workspaceId) return;
     const generation = ++loadGeneration.current;
     const updates: AgentUpdate[] = [];
     pendingUpdates.current = updates;
+    const events = initialEvents;
+    conversationQueue.current = events;
     setCreating(false);
     setLoading(true);
     setLoadError(null);
+    setLoginRequired(false);
+    setBindingConflict(false);
     try {
+      if (hasProvider) {
+        const reply = await context.store.call({ op: "conversation.get", window_id: windowId });
+        if (generation !== loadGeneration.current) return;
+        const sameThread = threadId.current !== null && threadId.current === reply.thread?.id;
+        threadId.current = reply.thread?.id ?? null;
+        setAgent(reply.thread ? { workspace_id: workspaceId, model_preset: reply.thread.model.id, model_label: reply.thread.model.label, busy: false, tool: null, created_at: reply.thread.created_at } : null);
+        setItems(uniqueItems(reply.items));
+        acknowledge(reply.items);
+        setNextBefore(reply.next_before);
+        setModels(reply.models.map((model) => ({ preset: model.id, label: model.label, available: model.available, reason: model.reason })));
+        setSelectedPreset(reply.models.find((model) => model.available)?.id ?? "");
+        if (!sameThread) { setBusy(false); setTool(null); setDelta(""); }
+        conversationQueue.current = null;
+        events.forEach((event) => {
+          if (event.event === "conversation.update" && event.thread_id === threadId.current) applyConversation(event.update);
+          if (event.event === "conversation.error" && event.thread_id === threadId.current && !handleError({ code: event.code, message: "대화 연결이 끊겼습니다", details: [] })) setLoadError("대화 연결이 끊겼습니다");
+        });
+        return;
+      }
       const reply = await context.store.call({ op: "agent.get", workspace_id: workspaceId });
       if (generation !== loadGeneration.current) return;
       if (reply.op !== "agent.get") return;
@@ -93,33 +183,60 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       pendingUpdates.current = null;
       updates.forEach(applyUpdate);
     } catch (reason) {
-      if (generation === loadGeneration.current) setLoadError(toCoreError(reason).message);
+      if (generation === loadGeneration.current) { const error = toCoreError(reason); if (!handleError(error)) setLoadError(error.message); }
     } finally {
       if (generation === loadGeneration.current) {
         pendingUpdates.current = null;
+        conversationQueue.current = null;
         setLoading(false);
       }
     }
-  }, [applyUpdate, connected, context.store, workspaceId]);
+  }, [acknowledge, applyUpdate, applyConversation, connected, context.store, workspaceId, hasProvider, windowId, appVersion, handleError]);
 
   useEffect(() => {
     void load();
     return () => {
       loadGeneration.current += 1;
       pendingUpdates.current = null;
+      conversationQueue.current = null;
     };
   }, [load]);
 
   useEffect(() => context.store.subscribeEvents((event) => {
+    if (hasProvider) {
+      if (event.event === "conversation.draft" && event.window_id === windowId) restoreDraft(event.request_id, event.text, event.attachments, event.failed);
+      else if (event.event === "storage.update" && event.window_id === windowId && !threadId.current && !creatingConversation.current && event.update.kind === "changed" && event.update.changed.item.entry_id === providerEntry) void load();
+      else if (event.event === "conversation.update" || event.event === "conversation.error") {
+        if (conversationQueue.current) conversationQueue.current.push(event);
+        else if (event.thread_id === threadId.current) {
+          if (event.event === "conversation.update") applyConversation(event.update);
+          else if (!handleError({ code: event.code, message: "대화 연결이 끊겼습니다", details: [] })) setLoadError("대화 연결이 끊겼습니다");
+        }
+      }
+      return;
+    }
     if (event.event !== "agent.update" || event.workspace_id !== workspaceId) return;
     if (pendingUpdates.current) pendingUpdates.current.push(event.update);
     else applyUpdate(event.update);
-  }), [applyUpdate, context.store, workspaceId]);
+  }), [applyUpdate, applyConversation, context.store, workspaceId, hasProvider, providerEntry, windowId, restoreDraft, handleError, load]);
 
   useLayoutEffect(() => {
     const history = historyRef.current;
     if (history && followTail.current) history.scrollTop = history.scrollHeight;
   }, [items, pending, delta, busy, tool]);
+
+  useLayoutEffect(() => {
+    if (!focusAfterLogin.current || loading || loginRequired || loadError || bindingConflict) return;
+    const target = agent ? inputRef.current : startRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");
+    if (target) { target.focus(); focusAfterLogin.current = false; }
+  }, [agent, loading, loginRequired, loadError, bindingConflict, models]);
+
+  const loadOlder = useConversationHistory({
+    historyRef, nextBefore, enabled: hasProvider && Boolean(agent) && !loading && !loginRequired && !loadError && !bindingConflict,
+    store: context.store, windowId, onItems: (older, before) => { setItems((current) => uniqueItems([...older, ...current])); setNextBefore(before); },
+    onError: (reason) => { const error = toCoreError(reason); if (!handleError(error)) setSendError(error.message); },
+    items,
+  });
 
   useLayoutEffect(() => {
     const input = inputRef.current;
@@ -148,7 +265,14 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     pendingUpdates.current = updates;
     setCreating(true);
     setCreateError(null);
+    const events: CoreEvent[] = [];
+    if (provider) { conversationQueue.current = events; creatingConversation.current = true; }
     try {
+      if (provider) {
+        await context.store.call({ op: "conversation.create", window_id: windowId, model: selectedPreset });
+        if (pendingUpdates.current === updates) await load(events);
+        return;
+      }
       const reply = await context.store.call({ op: "agent.create", workspace_id: workspaceId, model_preset: selectedPreset });
       if (pendingUpdates.current !== updates) return;
       if (reply.op === "agent.create") {
@@ -159,9 +283,12 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       setCreating(false);
     } catch (reason) {
       if (pendingUpdates.current !== updates) return;
-      setCreateError(toCoreError(reason).message);
+      const error = toCoreError(reason);
+      if (!handleError(error)) setCreateError(error.message);
       setCreating(false);
     } finally {
+      creatingConversation.current = false;
+      if (conversationQueue.current === events) conversationQueue.current = null;
       if (pendingUpdates.current === updates) {
         pendingUpdates.current = null;
         updates.forEach(applyUpdate);
@@ -174,8 +301,10 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     const text = submittedDraft.trim();
     const submittedAttachments = attachments;
     if ((!text && submittedAttachments.length === 0) || sending) return;
+    const retry = retryDraft.current;
+    const requestId = provider ? (retry && !retry.failed && retry.text === text && retry.attachments.length === submittedAttachments.length && retry.attachments.every((item, index) => item.id === submittedAttachments[index].id) ? retry.id : crypto.randomUUID()) : "";
     followTail.current = true;
-    setPending({ text, attachments: submittedAttachments });
+    setPending({ text, attachments: submittedAttachments, knownIds: new Set(items.map((item) => item.id)) });
     setDraft("");
     setAttachments([]);
     setSending(true);
@@ -184,12 +313,18 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     try {
       const uploads = await Promise.all(submittedAttachments.map(readUpload));
       await flushShareViews();
-      await context.store.call({ op: "agent.send", workspace_id: workspaceId, text, ...(uploads.length ? { attachments: uploads } : {}) });
+      if (provider) {
+        await context.store.call({ op: "conversation.send", window_id: windowId, request_id: requestId, text, attachments: uploads });
+        retryDraft.current = null;
+      } else await context.store.call({ op: "agent.send", workspace_id: workspaceId, text, ...(uploads.length ? { attachments: uploads } : {}) });
     } catch (reason) {
       setPending(null);
-      setSendError(toCoreError(reason).message);
+      const error = toCoreError(reason);
+      if (!handleError(error)) setSendError(error.message);
+      if (provider) retryDraft.current = { id: requestId, text, attachments: submittedAttachments, failed: false };
       setDraft((current) => current ? `${submittedDraft}\n${current}` : submittedDraft);
       setAttachments((current) => [...submittedAttachments, ...current]);
+      if (provider && error.code !== "login_required" && error.code !== "binding_conflict") void load();
     } finally {
       setSending(false);
     }
@@ -230,6 +365,8 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   }
   if (!workspaceId) return null;
   if (loading) return <div className="ks-agent-chat-state"><StatusText>불러오는 중</StatusText></div>;
+  if (loginRequired && provider) return <DataState value={{ status: "login_required", permission: provider.permission }} onLogin={() => { focusAfterLogin.current = true; void load(); }} />;
+  if (bindingConflict) return <div className="ks-agent-chat-state"><Notice role="alert">저장된 대화와 제공자의 대화가 다릅니다.</Notice></div>;
   if (loadError) {
     return (
       <div className="ks-agent-chat-state">
@@ -239,16 +376,16 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   }
   if (!agent) {
     return (
-      <div className="ks-agent-chat-start">
+      <div className="ks-agent-chat-start" ref={startRef}>
         <div className="ks-agent-chat-models">
           {models.map((model) => (
             <Button
               key={model.preset}
               aria-pressed={selectedPreset === model.preset}
-              disabled={creating}
+              disabled={creating || model.available === false}
               onClick={() => setSelectedPreset(model.preset)}
             >
-              {model.label}
+              {model.label}{model.reason ? ` · ${model.reason}` : ""}
             </Button>
           ))}
         </div>
@@ -268,11 +405,12 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
           const history = event.currentTarget;
           const threshold = Number.parseFloat(getComputedStyle(history).getPropertyValue("--ks-space-6")) || 0;
           followTail.current = history.scrollHeight - history.clientHeight - history.scrollTop <= threshold;
+          if (hasProvider && nextBefore && history.scrollTop <= threshold) loadOlder();
         }}
         ref={historyRef}
         role="log"
       >
-        {items.map((item) => <HistoryItem key={item.id} item={item} workspaceId={workspaceId} store={context.store} onPreview={setPreview} onError={setSendError} />)}
+        {items.map((item) => <HistoryItem key={item.id} item={item} workspaceId={workspaceId} windowId={provider ? windowId : undefined} store={context.store} onPreview={setPreview} onError={setSendError} />)}
         {pending !== null ? <div className="ks-agent-chat-user is-pending">{pending.text}{pending.attachments.length ? <div className={`ks-agent-attachment-history${pending.text ? " has-text" : ""}`}>{pending.attachments.map((attachment) => <PendingAttachment key={attachment.id} attachment={attachment} onPreview={setPreview} />)}</div> : null}</div> : null}
         {delta ? <div className="ks-agent-chat-assistant"><div className="ks-agent-chat-assistant-content"><MarkdownText>{delta}</MarkdownText></div></div> : null}
         {(busy || pending !== null) && !delta ? (
@@ -312,8 +450,8 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   );
 }
 
-function HistoryItem({ item, workspaceId, store, onPreview, onError }: { item: AgentItem; workspaceId: string; store: BlockContext["store"]; onPreview: (preview: Preview) => void; onError: (message: string) => void }) {
-  if (item.kind === "user") return <div className="ks-agent-chat-user">{item.text}{item.attachments?.length ? <div className={`ks-agent-attachment-history${item.text ? " has-text" : ""}`}>{item.attachments.map((attachment, index) => <HistoryAttachment key={index} attachment={attachment} workspaceId={workspaceId} itemId={item.id} index={index} store={store} onPreview={onPreview} onError={onError} />)}</div> : null}</div>;
+function HistoryItem({ item, workspaceId, windowId, store, onPreview, onError }: { item: AgentItem | ConversationItem; workspaceId: string; windowId?: string; store: BlockContext["store"]; onPreview: (preview: Preview) => void; onError: (message: string) => void }) {
+  if (item.kind === "user") return <div className="ks-agent-chat-user">{item.text}{item.attachments?.length ? <div className={`ks-agent-attachment-history${item.text ? " has-text" : ""}`}>{item.attachments.map((attachment, index) => <HistoryAttachment key={index} attachment={attachment} workspaceId={workspaceId} windowId={windowId} itemId={item.id} index={index} store={store} onPreview={onPreview} onError={onError} />)}</div> : null}</div>;
   if (item.kind === "assistant") {
     return <div className="ks-agent-chat-assistant"><div className="ks-agent-chat-assistant-content"><MarkdownText>{item.text}</MarkdownText></div></div>;
   }
@@ -321,11 +459,21 @@ function HistoryItem({ item, workspaceId, store, onPreview, onError }: { item: A
   return <div className="ks-agent-chat-notice">{item.text}</div>;
 }
 
-function uniqueItems(items: AgentItem[]): AgentItem[] {
+function uniqueItems(items: (AgentItem | ConversationItem)[]): (AgentItem | ConversationItem)[] {
   const seen = new Set<string>();
   return items.filter((item) => {
     if (seen.has(item.id)) return false;
     seen.add(item.id);
     return true;
   });
+}
+
+
+type PendingMessage = { text: string; attachments: DraftAttachment[]; knownIds: Set<string> };
+
+function matchesPending(item: AgentItem | ConversationItem, pending: PendingMessage): boolean {
+  if (item.kind !== "user" || pending.knownIds.has(item.id) || item.text !== pending.text) return false;
+  const attachments = item.attachments ?? [];
+  return attachments.length >= pending.attachments.length && pending.attachments.every((draft, index) =>
+    attachments[index].name === draft.name && (!draft.file.type || attachments[index].mime === draft.file.type));
 }

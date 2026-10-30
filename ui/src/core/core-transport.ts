@@ -15,6 +15,8 @@ const errorCodes = new Set<CoreError["code"]>([
   "unsupported_app",
   "permission_denied",
   "not_granted",
+  "login_required",
+  "binding_conflict",
   "path_outside_root",
   "conflict",
   "server",
