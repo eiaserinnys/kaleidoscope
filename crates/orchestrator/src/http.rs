@@ -79,6 +79,25 @@ async fn device_auth(State(state): State<AppState>, mut request: Request, next: 
     if let Some(device) = bearer(request.headers())
         .and_then(|provided| state.authenticate_device(provided).ok().flatten())
     {
+        let request_path = request
+            .extensions()
+            .get::<axum::extract::OriginalUri>()
+            .map(|original| original.0.path())
+            .unwrap_or_else(|| request.uri().path())
+            .to_string();
+        if let Some(workspace_id) = request_path
+            .strip_prefix("/api/device/workspaces/")
+            .or_else(|| request_path.strip_prefix("/workspaces/"))
+            .and_then(|tail| tail.split('/').next())
+            .filter(|id| !id.is_empty())
+        {
+            if !state
+                .device_owns_workspace(&device.0, workspace_id)
+                .unwrap_or(false)
+            {
+                return error_response(StatusCode::NOT_FOUND, CoreError::new(ErrorCode::NotFound));
+            }
+        }
         request.extensions_mut().insert(device);
         next.run(request).await
     } else {

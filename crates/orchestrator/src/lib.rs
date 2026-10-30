@@ -68,6 +68,7 @@ struct Inner {
 struct Broadcast {
     event: DeviceEvent,
     open_target: Option<String>,
+    account_id: Option<String>,
 }
 
 #[derive(Clone)]
@@ -163,6 +164,70 @@ impl AppState {
             .map_err(|_| server_error("데이터베이스 잠금을 얻을 수 없습니다."))
     }
 
+    fn mcp_account_id(&self) -> Result<String, CoreError> {
+        self.lock_db()?
+            .query_row(
+                "SELECT account_id FROM mcp_principal WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(db_error)
+    }
+
+    fn mcp_device_ids(&self) -> HashSet<String> {
+        let Ok(account_id) = self.mcp_account_id() else {
+            return HashSet::new();
+        };
+        let Ok(db) = self.lock_db() else {
+            return HashSet::new();
+        };
+        let Ok(mut statement) = db.prepare("SELECT id FROM devices WHERE account_id=?1") else {
+            return HashSet::new();
+        };
+        statement
+            .query_map([account_id], |row| row.get(0))
+            .ok()
+            .and_then(|rows| rows.collect::<rusqlite::Result<HashSet<_>>>().ok())
+            .unwrap_or_default()
+    }
+
+    fn device_account_id(&self, device_id: &str) -> Result<String, CoreError> {
+        self.lock_db()?
+            .query_row(
+                "SELECT account_id FROM devices WHERE id=?1",
+                [device_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(db_error)?
+            .ok_or_else(|| server_error("기기를 찾을 수 없습니다."))
+    }
+
+    fn device_owns_workspace(
+        &self,
+        device_id: &str,
+        workspace_id: &str,
+    ) -> Result<bool, CoreError> {
+        let db = self.lock_db()?;
+        let owned: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM workspaces w JOIN devices d ON d.account_id=w.account_id WHERE d.id=?1 AND w.id=?2)",
+                params![device_id, workspace_id],
+                |row| row.get(0),
+            )
+            .map_err(db_error)?;
+        Ok(owned)
+    }
+
+    fn mcp_owns_workspace(&self, workspace_id: &str) -> Result<bool, CoreError> {
+        let db = self.lock_db()?;
+        db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM workspaces w JOIN mcp_principal p ON p.account_id=w.account_id WHERE p.id=1 AND w.id=?1)",
+            [workspace_id],
+            |row| row.get(0),
+        ).map_err(db_error)
+    }
+
     fn device_can_render(&self, device_id: &str, requires: &Requires) -> bool {
         let support = self
             .0
@@ -175,6 +240,7 @@ impl AppState {
     }
 
     fn unsupported_connected_devices(&self, requires: &Requires) -> Vec<String> {
+        let owned_devices = self.mcp_device_ids();
         let Ok(connections) = self.0.connections.lock() else {
             return Vec::new();
         };
@@ -184,19 +250,12 @@ impl AppState {
         let mut devices: Vec<_> = connections
             .iter()
             .filter(|(_, count)| **count > 0)
+            .filter(|(id, _)| owned_devices.contains(*id))
             .filter(|(id, _)| !renders_on(support.get(*id).and_then(Option::as_ref), requires))
             .map(|(id, _)| id.clone())
             .collect();
         devices.sort();
         devices
-    }
-
-    fn connected_count(&self) -> usize {
-        self.0
-            .connections
-            .lock()
-            .map(|m| m.values().sum())
-            .unwrap_or(0)
     }
 
     fn current_apps(&self) -> Result<Vec<RegistryApp>, CoreError> {
@@ -329,14 +388,21 @@ impl AppState {
 
     fn device_summaries(&self) -> Result<Vec<DeviceSummary>, CoreError> {
         let db = self.lock_db()?;
-        let mut stmt = db.prepare("SELECT id,name,created_at,last_seen_at,revoked_at FROM devices ORDER BY created_at,id").map_err(db_error)?;
+        let account_id: String = db
+            .query_row(
+                "SELECT account_id FROM mcp_principal WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(db_error)?;
+        let mut stmt = db.prepare("SELECT id,name,created_at,last_seen_at,revoked_at FROM devices WHERE account_id=?1 ORDER BY created_at,id").map_err(db_error)?;
         let connected = self
             .0
             .connections
             .lock()
             .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?;
         let rows = stmt
-            .query_map([], |r| {
+            .query_map([account_id], |r| {
                 let id: String = r.get(0)?;
                 let revoked: Option<String> = r.get(4)?;
                 Ok(DeviceSummary {
@@ -355,15 +421,22 @@ impl AppState {
     fn revoke_device(&self, id: &str) -> Result<bool, CoreError> {
         let changed = {
             let db = self.lock_db()?;
+            let account_id: String = db
+                .query_row(
+                    "SELECT account_id FROM mcp_principal WHERE id=1",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(db_error)?;
             let changed = db
                 .execute(
-                    "UPDATE devices SET revoked_at=COALESCE(revoked_at,?2) WHERE id=?1",
-                    params![id, timestamp()],
+                    "UPDATE devices SET revoked_at=COALESCE(revoked_at,?3) WHERE id=?1 AND account_id=?2",
+                    params![id, account_id, timestamp()],
                 )
                 .map_err(db_error)?;
             // 지운 기기의 배치 보고는 지운다(저장소 판 올림과 같은 규칙). 남겨 두면 작업 조회가 그 기기를
             // 「가장 최근에 그 작업을 본 기기」로 골라 에이전트가 끊긴 시험 쉘의 화면을 읽는다.
-            db.execute("DELETE FROM device_layouts WHERE device_id=?1", [id])
+            db.execute("DELETE FROM device_layouts WHERE device_id=?1 AND EXISTS(SELECT 1 FROM devices WHERE id=?1 AND account_id=?2)", params![id, account_id])
                 .map_err(db_error)?;
             changed
         };
@@ -396,6 +469,8 @@ mod workspace_queries;
 pub use backup::{backup_loop, backup_once};
 use storage::*;
 
+#[cfg(test)]
+mod account_tests;
 #[cfg(test)]
 #[path = "layout_store_tests.rs"]
 mod layout_store_tests;

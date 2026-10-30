@@ -56,7 +56,7 @@ fn insert_device(state: &AppState, id: &str, name: &str) -> String {
         .lock_db()
         .unwrap()
         .execute(
-            "INSERT INTO devices(id,name,token_sha256,created_at) VALUES(?1,?2,?3,?4)",
+            "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,?2,(SELECT account_id FROM mcp_principal WHERE id=1),?3,?4)",
             params![id, name, sha256_hex(token.as_bytes()), timestamp()],
         )
         .unwrap();
@@ -303,27 +303,50 @@ fn revoking_device_drops_its_layout_report_from_workspace_queries() {
     state.save_layout("pc", &report("w")).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(1100));
     state.save_layout("probe", &report("w")).unwrap();
-    assert_eq!(state.get_workspace("w").unwrap().unwrap()["device"]["name"], "Probe");
+    assert_eq!(
+        state.get_workspace("w").unwrap().unwrap()["device"]["name"],
+        "Probe"
+    );
 
     assert!(state.revoke_device("probe").unwrap());
     let rows: i64 = state
         .lock_db()
         .unwrap()
-        .query_row("SELECT count(*) FROM device_layouts WHERE device_id='probe'", [], |row| row.get(0))
+        .query_row(
+            "SELECT count(*) FROM device_layouts WHERE device_id='probe'",
+            [],
+            |row| row.get(0),
+        )
         .unwrap();
     assert_eq!(rows, 0);
-    assert_eq!(state.get_workspace("w").unwrap().unwrap()["device"]["name"], "PC");
+    assert_eq!(
+        state.get_workspace("w").unwrap().unwrap()["device"]["name"],
+        "PC"
+    );
 }
 
 #[test]
 fn layout_report_counts_as_activity_only_when_device_choices_change() {
     let state = AppState::in_memory("secret");
     insert_device(&state, "pc", "PC");
+    state
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                workspaces: vec![workspace("w", "작업"), workspace("v", "다른 작업")],
+                ..Default::default()
+            },
+        )
+        .unwrap();
     let last_active = |state: &AppState| -> Option<String> {
         state
             .lock_db()
             .unwrap()
-            .query_row("SELECT last_active_at FROM devices WHERE id='pc'", [], |row| row.get(0))
+            .query_row(
+                "SELECT last_active_at FROM devices WHERE id='pc'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap()
     };
     let mut layout = DeviceLayout {
@@ -339,7 +362,10 @@ fn layout_report_counts_as_activity_only_when_device_choices_change() {
         state
             .lock_db()
             .unwrap()
-            .execute("UPDATE devices SET last_active_at=?1 WHERE id='pc'", [&marker])
+            .execute(
+                "UPDATE devices SET last_active_at=?1 WHERE id='pc'",
+                [&marker],
+            )
             .unwrap();
     };
     reset(&state);

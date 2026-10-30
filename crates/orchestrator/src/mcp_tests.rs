@@ -10,11 +10,25 @@ async fn open_counts_connected_devices_with_the_requested_workspace() {
             .lock_db()
             .unwrap()
             .execute(
-                "INSERT INTO devices(id,name,token_sha256,created_at) VALUES(?1,?1,?1,'now')",
+                "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,?1,(SELECT account_id FROM mcp_principal WHERE id=1),?1,'now')",
                 [id],
             )
             .unwrap();
     }
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: vec![kaleidoscope_contract::Workspace {
+                    id: "w".into(),
+                    name: "작업".into(),
+                    created_at: "t".into(),
+                    updated_at: "t".into(),
+                }],
+                ..Default::default()
+            },
+        )
+        .unwrap();
     let layout: DeviceLayout = serde_json::from_value(json!({"workspaces":[{"id":"w","name":"작업","created_at":"t","updated_at":"t"}],"desktops":[],"windows":[],"folders":[],"active_workspace_id":null,"active_desktop_ids":{}})).unwrap();
     state.save_layout("a", &layout).unwrap();
     let _a = state
@@ -75,6 +89,14 @@ async fn open_counts_connected_devices_with_the_requested_workspace() {
 async fn get_shared_view_returns_latest_window_and_empty_note() {
     use kaleidoscope_contract::registry::ShareUpload;
     let state = AppState::in_memory("secret");
+    {
+        let db = state.lock_db().unwrap();
+        db.execute_batch("INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES('device-a','PC A',(SELECT account_id FROM mcp_principal WHERE id=1),'a','now'),('device-b','PC B',(SELECT account_id FROM mcp_principal WHERE id=1),'b','now');").unwrap();
+        db.execute(
+            "INSERT INTO workspaces(id,account_id,data,created_at) VALUES('w',(SELECT account_id FROM mcp_principal WHERE id=1),'{\"id\":\"w\",\"name\":\"작업\",\"created_at\":\"t\",\"updated_at\":\"t\"}','t')",
+            [],
+        ).unwrap();
+    }
     state
         .put_shared_view(
             "device-a",
@@ -136,6 +158,20 @@ async fn upload_and_open_report_connected_shells_that_cannot_render_the_app() {
     use kaleidoscope_contract::Supported;
 
     let state = AppState::in_memory("secret");
+    for id in ["AD02028236", "current"] {
+        state.lock_db().unwrap().execute(
+            "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,?1,(SELECT account_id FROM mcp_principal WHERE id=1),?1,'now')",
+            [id],
+        ).unwrap();
+    }
+    state
+        .lock_db()
+        .unwrap()
+        .execute(
+            "UPDATE devices SET last_active_at='2026-01-02' WHERE id='current'",
+            [],
+        )
+        .unwrap();
     let _old = state.stream("AD02028236".into(), None).unwrap();
     let _current = state
         .stream("current".into(), Some(Supported::current()))
@@ -181,6 +217,10 @@ async fn compatible_upload_result_has_no_unsupported_shell_note() {
     use kaleidoscope_contract::Supported;
 
     let state = AppState::in_memory("secret");
+    state.lock_db().unwrap().execute(
+        "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES('current','current',(SELECT account_id FROM mcp_principal WHERE id=1),'current','now')",
+        [],
+    ).unwrap();
     let _current = state
         .stream("current".into(), Some(Supported::current()))
         .unwrap();
@@ -203,6 +243,10 @@ async fn compatible_upload_result_has_no_unsupported_shell_note() {
 #[tokio::test]
 async fn upload_with_only_an_old_shell_does_not_claim_no_shell_is_connected() {
     let state = AppState::in_memory("secret");
+    state.lock_db().unwrap().execute(
+        "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES('AD02028236','AD02028236',(SELECT account_id FROM mcp_principal WHERE id=1),'old','now')",
+        [],
+    ).unwrap();
     let _old = state.stream("AD02028236".into(), None).unwrap();
     let server = McpServer::new(state);
     let definition: Value =

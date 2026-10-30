@@ -13,7 +13,7 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
             PRAGMA user_version=1;
             COMMIT;")?;
-    } else if version > 5 {
+    } else if version > 6 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 2 {
@@ -97,6 +97,74 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
         )?;
         tx.execute("DELETE FROM device_layouts WHERE device_id IN (SELECT id FROM devices WHERE revoked_at IS NOT NULL)", [])?;
         tx.pragma_update(None, "user_version", 5)?;
+        tx.commit()?;
+    }
+    if version < 6 {
+        let tx = db.unchecked_transaction()?;
+        let account_id = Uuid::new_v4().to_string();
+        let now = timestamp();
+        tx.execute_batch(
+            "CREATE TABLE accounts (id TEXT PRIMARY KEY,display_name TEXT NOT NULL,created_at TEXT NOT NULL);
+             CREATE TABLE mcp_principal (id INTEGER PRIMARY KEY CHECK(id=1),account_id TEXT NOT NULL REFERENCES accounts(id));",
+        )?;
+        tx.execute(
+            "INSERT INTO accounts(id,display_name,created_at) VALUES(?1,'디렉터',?2)",
+            params![account_id, now],
+        )?;
+        tx.execute(
+            "INSERT INTO mcp_principal(id,account_id) VALUES(1,?1)",
+            [&account_id],
+        )?;
+        tx.execute_batch(
+            "CREATE TABLE devices_new (
+                 id TEXT PRIMARY KEY,name TEXT NOT NULL,account_id TEXT NOT NULL REFERENCES accounts(id),
+                 token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,
+                 revoked_at TEXT,last_active_at TEXT
+             );
+             CREATE TABLE device_layouts_new (
+                 device_id TEXT PRIMARY KEY REFERENCES devices_new(id),layout TEXT NOT NULL,reported_at TEXT NOT NULL
+             );
+             CREATE TABLE workspaces_new (
+                 id TEXT PRIMARY KEY,account_id TEXT NOT NULL REFERENCES accounts(id),data TEXT NOT NULL,created_at TEXT NOT NULL
+             );
+             CREATE TABLE connections_new (
+                 account_id TEXT NOT NULL REFERENCES accounts(id),name TEXT NOT NULL,kind TEXT NOT NULL,
+                 base_url TEXT NOT NULL,writable INTEGER NOT NULL,paths TEXT NOT NULL DEFAULT '[]',
+                 headers TEXT NOT NULL DEFAULT '{}',issuer TEXT,scopes TEXT,resource TEXT,
+                 description TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,PRIMARY KEY(account_id,name)
+             );",
+        )?;
+        tx.execute(
+            "INSERT INTO devices_new(id,name,account_id,token_sha256,created_at,last_seen_at,revoked_at,last_active_at)
+             SELECT id,name,?1,token_sha256,created_at,last_seen_at,revoked_at,last_active_at FROM devices",
+            [&account_id],
+        )?;
+        tx.execute(
+            "INSERT INTO device_layouts_new(device_id,layout,reported_at)
+             SELECT device_id,layout,reported_at FROM device_layouts",
+            [],
+        )?;
+        tx.execute(
+            "INSERT INTO workspaces_new(id,account_id,data,created_at)
+             SELECT id,?1,data,created_at FROM workspaces",
+            [&account_id],
+        )?;
+        tx.execute(
+            "INSERT INTO connections_new(account_id,name,kind,base_url,writable,paths,headers,issuer,scopes,resource,description,updated_at)
+             SELECT ?1,name,kind,base_url,writable,paths,headers,issuer,scopes,resource,description,updated_at FROM connections",
+            [&account_id],
+        )?;
+        tx.execute_batch(
+            "DROP TABLE device_layouts;
+             DROP TABLE devices;
+             ALTER TABLE devices_new RENAME TO devices;
+             ALTER TABLE device_layouts_new RENAME TO device_layouts;
+             DROP TABLE workspaces;
+             ALTER TABLE workspaces_new RENAME TO workspaces;
+             DROP TABLE connections;
+             ALTER TABLE connections_new RENAME TO connections;",
+        )?;
+        tx.pragma_update(None, "user_version", 6)?;
         tx.commit()?;
     }
     Ok(())

@@ -1,14 +1,21 @@
 use super::*;
-use crate::layouts::load_entities;
 use kaleidoscope_contract::registry::DeviceLayout;
 use kaleidoscope_contract::{AppWindow, Desktop, Workspace};
 
 impl AppState {
-    pub(super) fn layout_snapshot(&self) -> Result<DeviceEvent, CoreError> {
+    pub(super) fn layout_snapshot(&self, device_id: &str) -> Result<DeviceEvent, CoreError> {
         let db = self.lock_db()?;
-        let workspaces = load_entities::<Workspace>(&db, "workspaces")?;
-        let desktops = load_entities::<Desktop>(&db, "desktops")?;
-        let windows = load_entities::<AppWindow>(&db, "windows")?;
+        let account_id: String = db
+            .query_row(
+                "SELECT account_id FROM devices WHERE id=?1",
+                [device_id],
+                |row| row.get(0),
+            )
+            .map_err(db_error)?;
+        let workspaces =
+            AppState::load_account_entities::<Workspace>(&db, "workspaces", &account_id)?;
+        let desktops = AppState::load_account_entities::<Desktop>(&db, "desktops", &account_id)?;
+        let windows = AppState::load_account_entities::<AppWindow>(&db, "windows", &account_id)?;
         Ok(DeviceEvent::LayoutSnapshot {
             workspaces,
             desktops,
@@ -16,11 +23,14 @@ impl AppState {
         })
     }
 
-    pub(super) fn layouts(&self) -> Result<Vec<(String, String, String, DeviceLayout)>, CoreError> {
+    pub(super) fn layouts(
+        &self,
+        account_id: &str,
+    ) -> Result<Vec<(String, String, String, DeviceLayout)>, CoreError> {
         let db = self.lock_db()?;
-        let mut stmt = db.prepare("SELECT d.id,d.name,l.reported_at,l.layout FROM device_layouts l JOIN devices d ON d.id=l.device_id WHERE d.revoked_at IS NULL ORDER BY l.reported_at DESC,d.id").map_err(db_error)?;
+        let mut stmt = db.prepare("SELECT d.id,d.name,l.reported_at,l.layout FROM device_layouts l JOIN devices d ON d.id=l.device_id WHERE d.account_id=?1 AND d.revoked_at IS NULL ORDER BY l.reported_at DESC,d.id").map_err(db_error)?;
         let rows = stmt
-            .query_map([], |row| {
+            .query_map([account_id], |row| {
                 let raw: String = row.get(3)?;
                 let layout = serde_json::from_str(&raw).map_err(|e| {
                     rusqlite::Error::FromSqlConversionFailure(
@@ -36,19 +46,20 @@ impl AppState {
     }
 
     pub(super) fn get_workspace(&self, id: &str) -> Result<Option<Value>, CoreError> {
+        let account_id = self.mcp_account_id()?;
         let (workspaces, mut desktops, windows) = {
             let db = self.lock_db()?;
             (
-                load_entities::<Workspace>(&db, "workspaces")?,
-                load_entities::<Desktop>(&db, "desktops")?,
-                load_entities::<AppWindow>(&db, "windows")?,
+                Self::load_account_entities::<Workspace>(&db, "workspaces", &account_id)?,
+                Self::load_account_entities::<Desktop>(&db, "desktops", &account_id)?,
+                Self::load_account_entities::<AppWindow>(&db, "windows", &account_id)?,
             )
         };
         let Some(workspace) = workspaces.into_iter().find(|workspace| workspace.id == id) else {
             return Ok(None);
         };
         let report = self
-            .layouts()?
+            .layouts(&account_id)?
             .into_iter()
             .find(|(_, _, _, layout)| layout.workspaces.iter().any(|item| item.id == id));
         let apps = self.current_apps()?;
@@ -108,12 +119,13 @@ impl AppState {
     }
 
     pub(super) fn list_workspaces(&self) -> Result<Value, CoreError> {
+        let account_id = self.mcp_account_id()?;
         let (workspaces, desktops, windows) = {
             let db = self.lock_db()?;
             (
-                load_entities::<Workspace>(&db, "workspaces")?,
-                load_entities::<Desktop>(&db, "desktops")?,
-                load_entities::<AppWindow>(&db, "windows")?,
+                Self::load_account_entities::<Workspace>(&db, "workspaces", &account_id)?,
+                Self::load_account_entities::<Desktop>(&db, "desktops", &account_id)?,
+                Self::load_account_entities::<AppWindow>(&db, "windows", &account_id)?,
             )
         };
         let mut result = Vec::with_capacity(workspaces.len());

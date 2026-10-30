@@ -76,7 +76,7 @@ async fn relay_endpoint_checks_permission_path_write_and_returns_origin_status_w
     {
         let db = state.lock_db().unwrap();
         db.execute(
-            "INSERT INTO connections(name,kind,base_url,writable,paths,headers,description,updated_at) VALUES('board','relay',?1,1,'[\"/v1\"]','{\"Authorization\":\"Bearer ${env:KALEIDOSCOPE_TEST_CONNECTION_TOKEN}\"}','','now')",
+            "INSERT INTO connections(account_id,name,kind,base_url,writable,paths,headers,description,updated_at) VALUES((SELECT account_id FROM mcp_principal WHERE id=1),'board','relay',?1,1,'[\"/v1\"]','{\"Authorization\":\"Bearer ${env:KALEIDOSCOPE_TEST_CONNECTION_TOKEN}\"}','','now')",
             [format!("http://{address}")],
         ).unwrap();
     }

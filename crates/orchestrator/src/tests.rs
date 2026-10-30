@@ -284,7 +284,7 @@ pub(super) fn make_device(state: &AppState) -> (String, String) {
         .lock_db()
         .unwrap()
         .execute(
-            "INSERT INTO devices(id,name,token_sha256,created_at) VALUES(?1,'test',?2,?3)",
+            "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,'test',(SELECT account_id FROM mcp_principal WHERE id=1),?2,?3)",
             params![id, sha256_hex(token.as_bytes()), timestamp()],
         )
         .unwrap();
@@ -313,7 +313,7 @@ fn migration_upgrades_v1_without_losing_devices() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 5);
+    assert_eq!(version, 6);
     assert_eq!(
         db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -350,7 +350,7 @@ fn migration_upgrades_v2_agent_history_with_empty_attachments() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 5);
+    assert_eq!(version, 6);
     assert_eq!(
         db.query_row(
             "SELECT text || ':' || attachments FROM agent_items WHERE workspace_id='w'",
@@ -367,6 +367,20 @@ async fn layout_and_agent_endpoints_validate_and_keep_working_without_soulstream
     use http_body_util::BodyExt;
     let state = AppState::in_memory("secret");
     let (_, token) = make_device(&state);
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: vec![kaleidoscope_contract::Workspace {
+                    id: "w".into(),
+                    name: "작업".into(),
+                    created_at: "t".into(),
+                    updated_at: "t".into(),
+                }],
+                ..Default::default()
+            },
+        )
+        .unwrap();
     let app = router(state);
     let call = |method, path, body: &'static str| {
         Request::builder()

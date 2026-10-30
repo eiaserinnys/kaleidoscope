@@ -15,10 +15,14 @@ const REQUEST_BODY_MAX_BYTES: usize = 1024 * 1024;
 impl AppState {
     pub(super) async fn relay_request(
         &self,
+        device_id: &str,
         name: &str,
         request: ConnectionRequest,
     ) -> Result<ConnectionReply, (StatusCode, CoreError)> {
-        let connection = self.relay_connection(name)?;
+        let account_id = self
+            .device_account_id(device_id)
+            .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?;
+        let connection = self.relay_connection(&account_id, name)?;
         let app = self
             .app(&request.app_id, None)
             .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?;
@@ -51,13 +55,20 @@ impl AppState {
         request: ConnectionRequest,
         access: FileAccess,
     ) -> Result<(ConnectionReply, usize), (StatusCode, CoreError)> {
-        let connection = self.relay_connection(name)?;
+        let account_id = self
+            .mcp_account_id()
+            .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?;
+        let connection = self.relay_connection(&account_id, name)?;
         self.request_with_access(connection, request, access).await
     }
 
-    fn relay_connection(&self, name: &str) -> Result<ConnectionRecord, (StatusCode, CoreError)> {
+    fn relay_connection(
+        &self,
+        account_id: &str,
+        name: &str,
+    ) -> Result<ConnectionRecord, (StatusCode, CoreError)> {
         let connection = self
-            .connection(name)
+            .connection_for_account(account_id, name)
             .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?
             .ok_or_else(|| {
                 (
@@ -259,7 +270,7 @@ fn expand_environment(value: &str) -> Result<String, String> {
 
 pub(super) async fn device_request(
     State(state): State<AppState>,
-    Extension(_device): Extension<(String, String)>,
+    Extension(device): Extension<(String, String)>,
     Path(name): Path<String>,
     body: Result<axum::Json<ConnectionRequest>, JsonRejection>,
 ) -> Response {
@@ -274,7 +285,7 @@ pub(super) async fn device_request(
             return http::error_response(status, CoreError::new(ErrorCode::InvalidRequest));
         }
     };
-    match state.relay_request(&name, request).await {
+    match state.relay_request(&device.0, &name, request).await {
         Ok(reply) => (StatusCode::OK, Json(reply)).into_response(),
         Err((status, error)) => http::error_response(status, error),
     }

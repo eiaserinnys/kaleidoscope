@@ -92,6 +92,9 @@ impl AppState {
         window_id: &str,
         upload: ShareUpload,
     ) -> Result<(), CoreError> {
+        if !self.device_owns_workspace(device_id, &upload.workspace_id)? {
+            return Err(CoreError::new(ErrorCode::NotFound));
+        }
         self.0
             .shares
             .lock()
@@ -113,6 +116,9 @@ impl AppState {
     }
 
     pub(super) fn shared_views(&self, workspace_id: &str) -> Result<Vec<SharedView>, CoreError> {
+        if !self.mcp_owns_workspace(workspace_id)? {
+            return Ok(Vec::new());
+        }
         Ok(self
             .0
             .shares
@@ -393,10 +399,14 @@ mod tests {
             .lock_db()
             .unwrap()
             .execute(
-                "INSERT INTO devices(id,name,token_sha256,created_at) VALUES(?1,'test-pc',?2,?3)",
+                "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,'test-pc',(SELECT account_id FROM mcp_principal WHERE id=1),?2,?3)",
                 params![id, sha256_hex(token.as_bytes()), timestamp()],
             )
             .unwrap();
+        state.lock_db().unwrap().execute(
+            "INSERT INTO workspaces(id,account_id,data,created_at) VALUES('w',(SELECT account_id FROM devices WHERE id=?1),'{\"id\":\"w\",\"name\":\"작업\",\"created_at\":\"now\",\"updated_at\":\"now\"}','now')",
+            [&id],
+        ).unwrap();
         (id, token)
     }
 

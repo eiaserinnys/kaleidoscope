@@ -99,10 +99,11 @@ impl AppState {
         let id = Uuid::new_v4().to_string();
         let token = random_token();
         let now = timestamp();
+        let account_id = self.mcp_account_id()?;
         self.lock_db()?
             .execute(
-                "INSERT INTO devices(id,name,token_sha256,created_at) VALUES(?1,?2,?3,?4)",
-                params![id, pairing.device_name, sha256_hex(token.as_bytes()), now],
+                "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,?2,?3,?4,?5)",
+                params![id, pairing.device_name, account_id, sha256_hex(token.as_bytes()), now],
             )
             .map_err(db_error)?;
         if let Some(entry) = pairings.get_mut(&device_code) {
