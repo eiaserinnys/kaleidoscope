@@ -18,6 +18,7 @@ fn definition() -> String {
     value["storage"] = json!({"entries":[
         {"id":"title","key":"settings/title","kind":"json","schema":{"type":"string","minLength":1},"default":"default","label":"Title","presentation":"settings","agent_context":true},
         {"id":"note","key":"notes/role","kind":"md","default":"# default","label":"Note","presentation":"settings"},
+        {"id":"fixed_workspace_note","key":"workspaces/workspace-a/note","kind":"md","default":"# fixed","label":"Fixed workspace note","presentation":"hidden"},
         {"id":"workspace_value","key":"workspaces/{workspace_id}/value","kind":"json","schema":{"type":"string","minLength":1},"default":"unset","label":"Workspace value","presentation":"hidden"}
     ]});
     serde_json::to_string(&value).unwrap()
@@ -140,112 +141,8 @@ async fn device_storage_http_reads_defaults_cas_writes_and_resets() {
     assert_eq!(after_reset["content"], "default");
 }
 
-#[tokio::test]
-async fn storage_isolated_by_account_and_workspace_owner() {
-    let state = AppState::in_memory("secret");
-    let account_a = state.mcp_account_id().unwrap();
-    let account_b = Uuid::new_v4().to_string();
-    {
-        let db = state.lock_db().unwrap();
-        db.execute(
-            "INSERT INTO accounts(id,display_name,created_at) VALUES(?1,'Other','now')",
-            [&account_b],
-        )
-        .unwrap();
-    }
-    add_device(&state, "device-a", &account_a, "token-a");
-    add_device(&state, "device-b", &account_b, "token-b");
-    state
-        .publish_app(&definition(), "test", false, None)
-        .unwrap();
-
-    assert_eq!(
-        request(
-            &state,
-            "token-a",
-            "PUT",
-            "/api/device/app-storage/storage-test/items/title",
-            json!({"content":"account-a","expected_revision":null})
-        )
-        .await
-        .0,
-        StatusCode::OK
-    );
-    let (status, other) = request(
-        &state,
-        "token-b",
-        "GET",
-        "/api/device/app-storage/storage-test/items/title",
-        json!({}),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(other["content"], "default");
-    assert_eq!(other["exists"], false);
-
-    let workspace = Workspace {
-        id: "workspace-a".into(),
-        name: "A".into(),
-        created_at: "now".into(),
-        updated_at: "now".into(),
-    };
-    state
-        .apply_layout_changes(
-            None,
-            &registry::LayoutChanges {
-                workspaces: vec![
-                    workspace,
-                    Workspace {
-                        id: "workspace-b".into(),
-                        name: "B".into(),
-                        created_at: "now".into(),
-                        updated_at: "now".into(),
-                    },
-                ],
-                ..Default::default()
-            },
-        )
-        .unwrap();
-    let path =
-        "/api/device/app-storage/storage-test/items/workspace_value?workspace_id=workspace-a";
-    assert_eq!(
-        request(
-            &state,
-            "token-a",
-            "PUT",
-            path,
-            json!({"content":"owned","expected_revision":null})
-        )
-        .await
-        .0,
-        StatusCode::OK
-    );
-    assert_eq!(
-        request(&state, "token-b", "GET", path, json!({})).await.0,
-        StatusCode::NOT_FOUND
-    );
-    state
-        .apply_layout_changes(
-            None,
-            &registry::LayoutChanges {
-                deleted_workspaces: vec!["workspace-a".into()],
-                ..Default::default()
-            },
-        )
-        .unwrap();
-    assert_eq!(
-        state
-            .lock_db()
-            .unwrap()
-            .query_row(
-                "SELECT count(*) FROM app_storage_items WHERE key LIKE 'workspaces/workspace-a/%'",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap(),
-        0
-    );
-}
+#[path = "app_storage_regression_tests.rs"]
+mod regression_tests;
 
 #[tokio::test]
 async fn publish_rejects_incompatible_saved_value_but_accepts_same_definition() {
@@ -411,7 +308,7 @@ async fn mcp_storage_tools_and_workspace_context_use_declared_account_data() {
             .await
             .unwrap(),
     );
-    assert_eq!(listed["items"].as_array().unwrap().len(), 2);
+    assert_eq!(listed["items"].as_array().unwrap().len(), 3);
     let read = decode(
         server
             .read_app_storage(Parameters(

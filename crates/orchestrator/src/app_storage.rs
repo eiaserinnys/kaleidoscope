@@ -415,18 +415,17 @@ impl AppState {
 
     pub(super) fn delete_workspace_storage(
         tx: &Transaction<'_>,
+        account_id: &str,
         workspace_id: &str,
     ) -> Result<Vec<(String, contract::StorageChanged)>, CoreError> {
-        let prefix = format!("workspaces/{workspace_id}/");
-        let mut statement = tx.prepare("SELECT b.app_id,b.id,i.key,i.kind,i.revision FROM app_storage_items i JOIN app_storage_buckets b ON b.id=i.bucket_id WHERE substr(i.key,1,length(?1))=?1") .map_err(db_error)?;
+        let mut statement = tx.prepare("SELECT b.app_id,b.id,i.key,v.definition FROM app_storage_items i JOIN app_storage_buckets b ON b.id=i.bucket_id JOIN apps a ON a.id=b.app_id JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE b.account_id=?1") .map_err(db_error)?;
         let rows = statement
-            .query_map([&prefix], |row| {
+            .query_map([account_id], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
-                    row.get::<_, String>(4)?,
                 ))
             })
             .map_err(db_error)?;
@@ -435,26 +434,31 @@ impl AppState {
             .map_err(db_error)?;
         drop(statement);
         let mut deleted = Vec::new();
-        for (app_id, id, key, kind, _revision) in found {
+        for (app_id, id, key, raw_definition) in found {
+            let definition: AppDefinition = serde_json::from_str(&raw_definition)
+                .map_err(|error| server_error(&format!("앱 정의를 읽을 수 없습니다: {error}")))?;
+            let Some(entry) = definition.storage.as_ref().and_then(|storage| {
+                storage.entries.iter().find(|entry| {
+                    entry.key.contains("{workspace_id}")
+                        && contract::storage_key_matches(&entry.key, &key)
+                        && entry.key.replace("{workspace_id}", workspace_id) == key
+                })
+            }) else {
+                continue;
+            };
             tx.execute(
-                "DELETE FROM app_storage_items WHERE bucket_id=?1 AND key=?2",
-                params![id, key],
+                "DELETE FROM app_storage_items WHERE bucket_id=?1 AND key=?2 AND EXISTS(SELECT 1 FROM app_storage_buckets b WHERE b.id=?1 AND b.account_id=?3)",
+                params![id, key, account_id],
             )
             .map_err(db_error)?;
-            let entry_id = tx.query_row("SELECT json_extract(e.value,'$.id') FROM app_versions v JOIN apps a ON a.id=v.app_id AND a.current_version=v.version, json_each(v.definition,'$.storage.entries') e WHERE a.id=?1 AND json_extract(e.value,'$.key') LIKE '%{workspace_id}%' AND replace(json_extract(e.value,'$.key'),'{workspace_id}',?2)=?3 LIMIT 1", params![app_id,workspace_id,key], |row| row.get::<_,String>(0)).optional().map_err(db_error)?.unwrap_or_default();
-            let kind = if kind == "md" {
-                contract::StorageKind::Md
-            } else {
-                contract::StorageKind::Json
-            };
             deleted.push((
                 app_id,
                 contract::StorageChanged {
                     bucket_id: id,
                     item: StorageItemMeta {
-                        entry_id,
+                        entry_id: entry.id.clone(),
                         key,
-                        kind,
+                        kind: entry.kind,
                         revision: None,
                         exists: false,
                     },

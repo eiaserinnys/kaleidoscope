@@ -200,7 +200,7 @@ impl AppState {
             if !workspace_exists(&tx, id, &account_id)? {
                 continue;
             }
-            deleted_storage.extend(Self::delete_workspace_storage(&tx, id)?);
+            deleted_storage.extend(Self::delete_workspace_storage(&tx, &account_id, id)?);
             let children = child_ids(&tx, "desktops", "workspace_id", id, &account_id)?;
             for child in &children {
                 for window in child_ids(&tx, "windows", "desktop_id", child, &account_id)? {
@@ -226,6 +226,11 @@ impl AppState {
             }
             tx.execute(
                 "DELETE FROM workspaces WHERE id=?1 AND account_id=?2",
+                params![id, account_id],
+            )
+            .map_err(db_error)?;
+            tx.execute(
+                "DELETE FROM legacy_workspace_owners WHERE workspace_id=?1 AND account_id=?2",
                 params![id, account_id],
             )
             .map_err(db_error)?;
