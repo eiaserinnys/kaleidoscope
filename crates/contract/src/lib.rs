@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 9판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 10판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -51,6 +51,10 @@
 //! 붙이는 규칙. 블록 세트와 모듈 판은 그대로다(앱 정의가 쓰는 것이 아니라 쉘의 기능이다). 아래 「같이 보기」 절과
 //! [`registry`]의 「같이 보기」 절.
 //!
+//! 10판에서 바뀐 것(쉘 자동 업데이트, 카드 #819): [`ShellSnapshot::update`]와 `update.restart` 명령. 설치본 쉘이 새 판을
+//! 스스로 받아 두고, 디렉터가 고를 때 다시 시작하며 깐다. 블록 세트와 모듈 판, 레지스트리는 그대로다(앱 정의가 쓰는 것이
+//! 아니라 쉘 자신의 기능이고, 업데이트 서버는 오케스트레이터가 아니다). 아래 「쉘 업데이트」 절.
+//!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
 //! - 코어는 이벤트 채널 하나로 [`CoreEvent`]를 보낸다.
@@ -100,6 +104,21 @@
 //! - 이미지나 웹 화면처럼 글로 옮길 수 없는 것이 보이는 창(`visual`)은, `agent.send` 때 코어가 그 창의 모습을
 //!   찍어 첨부로 붙인다. 지난번에 붙인 모습과 같으면 붙이지 않는다.
 //! - 같이 보기를 켠 창만, 켠 동안만 이 기기 밖(서버와 소울스트림)으로 나간다.
+//!
+//! # 쉘 업데이트 (10판)
+//! 설치본 쉘(Windows NSIS)이 새 판을 스스로 받아 깐다. 디렉터는 업데이터가 든 첫 판만 손으로 깐다.
+//! - 묻고 받는 것은 앱 크레이트(Tauri 업데이터)가 한다. 쉘을 켜고 [`UPDATE_FIRST_CHECK_DELAY_SECS`] 뒤 한 번, 그 뒤로
+//!   [`UPDATE_CHECK_INTERVAL_SECS`]마다 업데이트 서버(`https://eiaserinnys.me/tauri-update/update/kaleidoscope`,
+//!   서비스 `tauri-app-updater`)에 묻는다. 새 판이 있으면 바로 받아 서명을 확인하고 [`UpdateStatus::Ready`]로 알린다.
+//!   받은 설치본은 메모리에만 있어 다시 시작하지 않고 쉘을 끄면 다음에 켤 때 다시 받는다. `ready`인 동안에는 묻지 않는다.
+//! - 쉘은 혼자 다시 시작하지 않는다. 디렉터가 화면에서 고르면 화면이 편집기의 저장 대기분을 먼저 저장하고(저장이
+//!   실패하거나 충돌이면 다시 시작하지 않는다) `update.restart`를 부른다. 코어는 디스크에 쓸 것을 쓰고 설치를 시작한다.
+//!   Windows에서는 설치 프로그램이 조용한 모드(진행 막대만)로 뜨고 쉘이 바로 끝나며, 설치가 끝나면 새 판 쉘이 다시 뜬다.
+//!   워크스페이스, 데스크톱, 창과 창 상태는 저장된 그대로 이어진다(연결한 쉘은 서버 정본). 같이 보기처럼 메모리에만
+//!   두는 것은 꺼진 채로 시작한다.
+//! - 서명은 쉘에 들어 있는 공개 키로 받은 직후와 깔기 직전에 확인한다. 맞지 않으면 깔지 않고 [`UpdateStatus::Failed`]다.
+//!   서명 비밀 키는 리포의 GitHub secrets에만 있고 릴리스 워크플로가 서명한다.
+//! - 개발용 HTTP 다리, 브라우저 하니스, 업데이터 설정이 없는 빌드는 늘 [`UpdateStatus::Unavailable`]이다.
 
 use std::collections::BTreeMap;
 
@@ -178,6 +197,11 @@ pub const SHARE_CAPTURE_MAX_EDGE: u32 = 1600;
 /// (9판) 같이 보기 모습 캡처 첨부의 이름 앞부분. 뒤에 앱 이름과 `.png`가 붙는다(예: `같이 보기 - 웹 브라우저.png`).
 /// 앱 이름의 경로 구분자와 Windows가 파일 이름에 받지 않는 글자는 `_`로 바꾼다.
 pub const SHARE_CAPTURE_NAME_PREFIX: &str = "같이 보기 - ";
+
+/// (10판) 쉘을 켠 뒤 처음 새 판을 묻기까지 기다리는 시간. 시작 직후의 연결과 화면 그리기를 먼저 하려는 것이다.
+pub const UPDATE_FIRST_CHECK_DELAY_SECS: u64 = 10;
+/// (10판) 새 판을 다시 묻는 간격. 업데이트 서버는 GitHub 릴리스 목록을 5분 캐시한다.
+pub const UPDATE_CHECK_INTERVAL_SECS: u64 = 60 * 60;
 
 // ---------------------------------------------------------------------------
 // 엔티티 (2단계 오케스트레이터 레지스트리와 같은 모양)
@@ -353,6 +377,33 @@ pub struct ShellSnapshot {
     pub link: LinkStatus,
     /// (9판) 이 기기에서 같이 보기를 켠 창의 id. 켠 순서다. 코어의 메모리에만 있어 쉘을 다시 켜면 빈 목록이다.
     pub sharing: Vec<String>,
+    /// (10판) 이 쉘 자신의 새 판 받기 상태. 코어의 메모리에만 있다.
+    pub update: UpdateStatus,
+}
+
+/// (10판) 이 쉘 자신의 새 판 받기 상태. `state`로 가른다. 위 「쉘 업데이트」 절.
+///
+/// 흐름: `idle` → (새 판이 있음) `downloading` → (받고 서명 확인) `ready` → (`update.restart`) 쉘이 끝나고 새 판이 뜬다.
+/// 묻기, 받기, 서명 확인, 설치 시작 가운데 하나가 실패하면 `failed`이고, 다음 확인 때 처음부터 다시 한다.
+/// 화면은 `ready`일 때만 디렉터에게 알린다. 나머지 상태는 보이지 않는다(검증과 진단용).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "state", rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum UpdateStatus {
+    /// 이 쉘은 스스로 업데이트하지 않는다(개발용 다리, 업데이터 설정이 없는 빌드).
+    Unavailable {},
+    /// 지금 판이 최신이거나 아직 묻지 않았다. `current_version`은 이 쉘의 판(예: `0.5.0`).
+    Idle { current_version: String },
+    /// 새 판 `version`을 받는 중이다.
+    Downloading { current_version: String, version: String },
+    /// 새 판 `version`을 받아 서명까지 확인했다. `update.restart`로 다시 시작하면 깔린다.
+    Ready { current_version: String, version: String },
+    /// 실패했다. `version`은 받으려던 새 판(묻기에서 실패했으면 null), `reason`은 사람이 읽는 한국어 한 줄.
+    Failed {
+        current_version: String,
+        version: Option<String>,
+        reason: String,
+    },
 }
 
 /// 이 기기와 오케스트레이터의 연결 상태. `state`로 가른다.
@@ -1598,6 +1649,14 @@ pub enum CoreRequest {
     ///   상태를 바꾸지 않으므로 이벤트가 없다.
     #[serde(rename = "share.view")]
     ShareView { window_id: String, view: VisibleView },
+
+    /// (10판) 받아 둔 새 판으로 다시 시작한다. 위 「쉘 업데이트」 절.
+    /// - 업데이터가 없는 쉘([`UpdateStatus::Unavailable`])이면 `unavailable`, 그 밖에 `ready`가 아니면 `invalid_request`.
+    /// - 코어는 디스크에 아직 쓰지 않은 상태를 쓰고 설치를 시작한다. Windows에서는 설치를 시작하면 응답 전에 쉘이
+    ///   끝난다. 화면은 부른 뒤 「다시 시작하는 중」으로 두고 응답을 기다리지 않아도 된다.
+    /// - 설치를 시작하지 못하면(서명이 맞지 않음 포함) `io`와 까닭이고, 상태는 [`UpdateStatus::Failed`]가 된다.
+    #[serde(rename = "update.restart")]
+    UpdateRestart {},
 }
 
 /// 보낼 첨부 하나(모듈 `agent` 2판).
@@ -1764,6 +1823,9 @@ pub enum CoreReply {
     ShareSet {},
     #[serde(rename = "share.view")]
     ShareView {},
+    /// 설치를 시작했지만 쉘이 스스로 끝나지 않는 플랫폼에서만 온다(Windows는 응답 전에 끝난다).
+    #[serde(rename = "update.restart")]
+    UpdateRestart {},
 }
 
 /// 워크스페이스 PAS 하나.
@@ -2192,6 +2254,37 @@ mod tests {
             r#"{"op":"share.set"}"#
         );
         assert!(SHARE_TEXT_CUT_MARK.len() < SHARE_TEXT_MAX_BYTES);
+    }
+
+    #[test]
+    fn update_status_and_restart_round_trip() {
+        let restart: CoreRequest = serde_json::from_str(r#"{"op":"update.restart"}"#).unwrap();
+        assert_eq!(restart, CoreRequest::UpdateRestart {});
+        assert_eq!(
+            serde_json::to_string(&CoreReply::UpdateRestart {}).unwrap(),
+            r#"{"op":"update.restart"}"#
+        );
+        assert_eq!(
+            serde_json::to_value(UpdateStatus::Unavailable {}).unwrap(),
+            serde_json::json!({ "state": "unavailable" })
+        );
+        assert_eq!(
+            serde_json::to_value(UpdateStatus::Ready {
+                current_version: "0.5.0".into(),
+                version: "0.5.1".into(),
+            })
+            .unwrap(),
+            serde_json::json!({ "state": "ready", "current_version": "0.5.0", "version": "0.5.1" })
+        );
+        assert_eq!(
+            serde_json::to_value(UpdateStatus::Failed {
+                current_version: "0.5.0".into(),
+                version: None,
+                reason: "업데이트 서버에 닿지 않습니다".into(),
+            })
+            .unwrap()["version"],
+            serde_json::Value::Null
+        );
     }
 
     /// 화면이 지키는 한도를 `ui/src/contract/limits.ts`로 내보낸다. ts-rs처럼 `cargo test`가 다시 쓰고,

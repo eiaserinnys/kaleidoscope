@@ -71,6 +71,7 @@ const initialSnapshot: ShellSnapshot = {
   supported: { blocks: 1, modules: { files: 1 } },
   link: { state: "unlinked" },
   sharing: [],
+  update: { state: "unavailable" },
 };
 
 const sampleDocument = `# kaleidoscope 작업 메모

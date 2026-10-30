@@ -81,6 +81,7 @@ export function makeTestSnapshot(options: {
     supported: { blocks: 1, modules: { files: 1 } },
     link: { state: "unlinked" },
     sharing: [],
+    update: { state: "unavailable" },
   };
 }
 

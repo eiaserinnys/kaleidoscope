@@ -359,7 +359,7 @@ models: Array<AgentModel>, } | { "op": "agent.create", agent: AgentInfo, } | { "
 /**
  * 파일 내용. 표준 base64.
  */
-data_base64: string, } | { "op": "agent.attachment_open", } | { "op": "data.attach", view: DataView, } | { "op": "data.detach", } | { "op": "data.act", } | { "op": "data.refresh", } | { "op": "data.media", media: MediaData, } | { "op": "connection.login", } | { "op": "share.set", } | { "op": "share.view", };
+data_base64: string, } | { "op": "agent.attachment_open", } | { "op": "data.attach", view: DataView, } | { "op": "data.detach", } | { "op": "data.act", } | { "op": "data.refresh", } | { "op": "data.media", media: MediaData, } | { "op": "connection.login", } | { "op": "share.set", } | { "op": "share.view", } | { "op": "update.restart", };
 
 /**
  * 화면이 코어에 보내는 명령. `op`로 가른다. 응답은 같은 `op`의 [`CoreReply`]다.
@@ -368,7 +368,7 @@ export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", n
 /**
  * 빼면 빈 배열이다(모듈 `agent` 1판의 명령 모양).
  */
-attachments?: Array<AgentUpload>, } | { "op": "agent.attachment", workspace_id: string, item_id: string, index: number, } | { "op": "agent.attachment_open", workspace_id: string, item_id: string, index: number, } | { "op": "data.attach", window_id: string, } | { "op": "data.detach", window_id: string, } | { "op": "data.act", window_id: string, pointer: string, event?: JsonValue, item?: JsonValue, } | { "op": "data.refresh", window_id: string, sources?: Array<string>, } | { "op": "data.media", window_id: string, media: MediaRef, max_px?: number, } | { "op": "connection.login", window_id: string, permission: string, } | { "op": "share.set", window_id: string, on: boolean, } | { "op": "share.view", window_id: string, view: VisibleView, };
+attachments?: Array<AgentUpload>, } | { "op": "agent.attachment", workspace_id: string, item_id: string, index: number, } | { "op": "agent.attachment_open", workspace_id: string, item_id: string, index: number, } | { "op": "data.attach", window_id: string, } | { "op": "data.detach", window_id: string, } | { "op": "data.act", window_id: string, pointer: string, event?: JsonValue, item?: JsonValue, } | { "op": "data.refresh", window_id: string, sources?: Array<string>, } | { "op": "data.media", window_id: string, media: MediaRef, max_px?: number, } | { "op": "connection.login", window_id: string, permission: string, } | { "op": "share.set", window_id: string, on: boolean, } | { "op": "share.view", window_id: string, view: VisibleView, } | { "op": "update.restart", };
 
 /**
  * 이미지에서 보일 부분. 원본 가로와 세로에 대한 비율(0~1)이고 `x`, `y`는 왼쪽 위다.
@@ -687,7 +687,11 @@ export type ShellSnapshot = { shared: SharedState, device: DeviceState, supporte
 /**
  * (9판) 이 기기에서 같이 보기를 켠 창의 id. 켠 순서다. 코어의 메모리에만 있어 쉘을 다시 켜면 빈 목록이다.
  */
-sharing: Array<string>, };
+sharing: Array<string>, 
+/**
+ * (10판) 이 쉘 자신의 새 판 받기 상태. 코어의 메모리에만 있다.
+ */
+update: UpdateStatus, };
 
 export type SortSpec = { field: string, desc?: boolean, };
 
@@ -746,6 +750,15 @@ export type TreeItem = { key: string,
  * 없으면 `path`의 마지막 이름이다.
  */
 title?: string, path?: string, meta?: string, badges?: Array<Badge>, children?: Array<TreeItem>, };
+
+/**
+ * (10판) 이 쉘 자신의 새 판 받기 상태. `state`로 가른다. 위 「쉘 업데이트」 절.
+ *
+ * 흐름: `idle` → (새 판이 있음) `downloading` → (받고 서명 확인) `ready` → (`update.restart`) 쉘이 끝나고 새 판이 뜬다.
+ * 묻기, 받기, 서명 확인, 설치 시작 가운데 하나가 실패하면 `failed`이고, 다음 확인 때 처음부터 다시 한다.
+ * 화면은 `ready`일 때만 디렉터에게 알린다. 나머지 상태는 보이지 않는다(검증과 진단용).
+ */
+export type UpdateStatus = { "state": "unavailable", } | { "state": "idle", current_version: string, } | { "state": "downloading", current_version: string, version: string, } | { "state": "ready", current_version: string, version: string, } | { "state": "failed", current_version: string, version: string | null, reason: string, };
 
 /**
  * 주소 값. 창 상태에서 읽거나(`{ "state": "url" }`) 정의에 직접 적는다(`"https://example.com"`).

@@ -111,6 +111,7 @@ const snapshot: ShellSnapshot = {
   supported: { blocks: 4, modules: { files: 1, web: 1 } },
   link: linkStatus(new URLSearchParams(window.location.search).get("link")),
   sharing: [],
+  update: { state: "unavailable" },
 };
 
 const files = bottomMenuScenario
