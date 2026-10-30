@@ -222,6 +222,45 @@ fn share_set_updates_snapshot_once_and_share_view_validates_size() {
 }
 
 #[test]
+fn shared_view_delivery_baselines_are_separate_for_each_app() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = seeded_core(temp.path(), &host);
+    let (workspace, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "md-editor");
+    core.handle(CoreRequest::ShareSet {
+        window_id: window.clone(),
+        on: true,
+    })
+    .unwrap();
+    core.handle(CoreRequest::ShareView {
+        window_id: window,
+        view: kaleidoscope_contract::VisibleView {
+            text: "보이는 내용".into(),
+            visual: false,
+            bounds: Rect {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+            },
+        },
+    })
+    .unwrap();
+    let first = crate::share::prepare_text(&core.inner, &workspace, "app-a").unwrap();
+    assert!(first.0.contains("새로 같이 봄"));
+    crate::share::mark_sent_text(&core.inner, "app-a", first.1);
+    assert!(crate::share::prepare_text(&core.inner, &workspace, "app-a")
+        .unwrap()
+        .0
+        .contains("그대로"));
+    assert!(crate::share::prepare_text(&core.inner, &workspace, "app-b")
+        .unwrap()
+        .0
+        .contains("새로 같이 봄"));
+}
+
+#[test]
 fn share_view_uploads_once_and_unlink_clears_server_but_keeps_local_toggle() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
@@ -2122,7 +2161,7 @@ fn cancel_and_unlink_clear_only_connection_state() {
 }
 
 #[test]
-fn conversation_commands_are_unavailable_until_provider_is_implemented() {
+fn conversation_commands_resolve_the_window_and_advertise_agent_three() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
     let core = seeded_core(temp.path(), &host);
@@ -2135,8 +2174,9 @@ fn conversation_commands_are_unavailable_until_provider_is_implemented() {
         serde_json::json!({"op":"conversation.attachment_open","window_id":"w","item_id":"i","attachment_id":"a"}),
     ] {
         let request = serde_json::from_value(request).unwrap();
-        expect_error(core.handle(request), ErrorCode::Unavailable);
+        expect_error(core.handle(request), ErrorCode::NotFound);
     }
+    assert_eq!(snapshot(&core).supported.modules.get("agent"), Some(&3));
 }
 
 #[test]

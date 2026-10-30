@@ -7,13 +7,17 @@ use kaleidoscope_contract::{CoreError, CoreReply, CoreRequest, ErrorCode, LinkSt
 use serde_json::Value;
 use std::sync::Arc;
 
-struct Context {
-    app: String,
-    workspace: String,
-    link: LinkFile,
+pub(crate) struct Context {
+    pub(crate) app: String,
+    pub(crate) workspace: String,
+    pub(crate) link: LinkFile,
 }
 
-fn context(inner: &Inner, window_id: &str, entry: Option<&str>) -> Result<Context, CoreError> {
+pub(crate) fn context(
+    inner: &Inner,
+    window_id: &str,
+    entry: Option<&str>,
+) -> Result<Context, CoreError> {
     let state = inner.state.lock().unwrap();
     let window = state
         .shared
@@ -53,7 +57,7 @@ fn context(inner: &Inner, window_id: &str, entry: Option<&str>) -> Result<Contex
     })
 }
 
-fn map_error(inner: &Arc<Inner>, file: &LinkFile, err: RegistryError) -> CoreError {
+pub(crate) fn map_error(inner: &Arc<Inner>, file: &LinkFile, err: RegistryError) -> CoreError {
     if matches!(err, RegistryError::Unauthorized) {
         link::token_rejected(inner, file.clone());
     }

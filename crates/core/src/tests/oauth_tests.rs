@@ -118,6 +118,9 @@ struct ServerState {
     resource_requires_refreshed_token: bool,
     last_authorization: Option<String>,
     redirect_uris: Vec<String>,
+    stream_status: u16,
+    stream_requests: usize,
+    stream_item: bool,
 }
 
 struct OAuthFixture {
@@ -229,6 +232,20 @@ fn read_request(stream: &mut TcpStream) -> Option<HttpRequest> {
 
 fn respond(request: &HttpRequest, base: &str, state: &Arc<Mutex<ServerState>>) -> (u16, String) {
     match (request.method.as_str(), request.path.as_str()) {
+        ("GET", "/v1/threads/thread-1/events") => {
+            let mut state = state.lock().unwrap();
+            state.stream_requests += 1;
+            if state.stream_status == 401 || state.stream_status == 403 {
+                return (state.stream_status, "{}".into());
+            }
+            let items = if state.stream_item {
+                json!([{"id":"item-2","kind":"assistant","text":"새 메시지","at":"now","attachments":[]}])
+            } else {
+                json!([])
+            };
+            let snapshot = json!({"kind":"snapshot","snapshot":{"cursor":"1","busy":false,"tool":null,"stream_id":null,"text":null,"items":items}});
+            (200, format!("id: 1\r\ndata: {snapshot}\r\n\r\n"))
+        }
         ("GET", "/.well-known/oauth-authorization-server") => (
             200,
             json!({

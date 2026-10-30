@@ -966,16 +966,15 @@ fn storage_actions_and_remote_change_replan_file_source() {
 }
 
 #[test]
-fn agent_three_definitions_are_not_imported_by_this_core() {
+fn agent_three_definitions_are_imported_by_this_core() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
     let core = open_core(temp.path(), vec![], &host);
-    let mut definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
-    definition["requires"]["modules"]["agent"] = json!(3);
-    let error = core
+    let definition = include_str!("../../../../examples/workspace-pas-v2.json");
+    let reply = core
         .handle(CoreRequest::AppImport {
             definition_json: definition.to_string(),
         })
-        .unwrap_err();
-    assert_eq!(error.code, ErrorCode::UnsupportedApp);
+        .unwrap();
+    assert!(matches!(reply, CoreReply::AppImport { app, .. } if app.id == "workspace-pas-v2"));
 }

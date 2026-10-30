@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 14판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 15판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -80,6 +80,14 @@
 //! 빈 경로는 내 PC 자체이고 `files.list`는 뿌리들을 낸다. 이 범위는 기기마다 앱마다 처음 한 번 허용받는다
 //! (`files.allow_pc`, [`PcAccess`]). 지금은 `explorer` 블록만 이 범위의 권한을 쓸 수 있다. 탐색기가 파일을 열면
 //! 여는 앱에는 그 파일이 든 폴더만 준다. 이 필드를 쓴 앱 정의는 `requires.modules.files` 2판 이상을 요구한다.
+//!
+//! # 계약 15판: 대화 제공자 코어 오류와 adoption
+//! `login_required`면 화면은 앱 정의의 `agent.permission`으로 `connection.login`을 부른다.
+//! `binding_conflict`는 저장소와 제공자의 대화 참조가 다른 경우다. 생성 notice는 기록의 notice item으로 받는다.
+//! 기존 대화 연결의 adoption 요청 DTO를 더했다. 블록 세트와 모듈 판은 그대로다.
+//! 스트림의 최종 인증 실패는 `conversation.error`로 알리고, 로그인 성공 시 코어가 다시 연결한다.
+//! 접수 전에 중단된 초안은 `conversation.get` 때 `conversation.draft`로 창에 알린다.
+//! 실패한 영수증의 초안은 `failed: true`이며 새 request_id로 다시 보낸다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -1780,7 +1788,7 @@ pub enum CoreRequest {
         index: u32,
     },
 
-    /// (모듈 `agent` 3판) 창의 제공자 대화와 최근 기록을 읽는다. 아직 구현되지 않아 `unavailable`이다.
+    /// (모듈 `agent` 3판) 창의 제공자 대화와 최근 기록을 읽는다.
     #[serde(rename = "conversation.get")]
     ConversationGet { window_id: String },
     /// 이전 기록을 읽는다.
@@ -2304,6 +2312,18 @@ pub enum CoreEvent {
         thread_id: String,
         update: conversation::ConversationEvent,
     },
+    /// 대화 스트림의 최종 로그인 필요 또는 권한 거부. 제공자 wire 이벤트와는 별개다.
+    #[serde(rename = "conversation.error")]
+    ConversationError { thread_id: String, code: ErrorCode },
+    /// 미접수 초안은 같은 request_id로, 실패한 초안은 새 request_id로 다시 보낸다.
+    #[serde(rename = "conversation.draft")]
+    ConversationDraft {
+        window_id: String,
+        request_id: String,
+        text: String,
+        attachments: Vec<conversation::ConversationUpload>,
+        failed: bool,
+    },
     /// 창의 웹 화면 페이지가 바뀌었다(주소, 제목, 읽는 중, 뒤로와 앞으로 갈 수 있는지 가운데 하나라도).
     /// 페이지 전체를 보낸다. 웹 화면을 이은(`web.attach`) 창의 것만 온다.
     #[serde(rename = "web.update")]
@@ -2356,6 +2376,10 @@ pub enum ErrorCode {
     PathOutsideRoot,
     /// 파일이 읽은 뒤에 바뀌었거나, 새로 만들려는 파일이 이미 있다.
     Conflict,
+    /// 이 창의 대화 제공자 연결에 기기 로그인이 필요하다.
+    LoginRequired,
+    /// 저장소와 제공자가 가리키는 대화가 다르다.
+    BindingConflict,
     /// 파일을 읽고 쓰다 실패했다(텍스트가 아님, 너무 큼 포함).
     Io,
     /// 오케스트레이터에 닿지 않거나, 연결이 필요한데 연결되어 있지 않거나, 서버가 요청을 처리하지 못했다.
@@ -2378,6 +2402,8 @@ impl ErrorCode {
             ErrorCode::NotGranted => "이 기기에서 폴더를 선택해야 합니다.",
             ErrorCode::PathOutsideRoot => "고른 폴더 밖의 경로입니다.",
             ErrorCode::Conflict => "파일이 읽은 뒤 바뀌었거나 이미 존재합니다.",
+            ErrorCode::LoginRequired => "대화 제공자에 로그인이 필요합니다.",
+            ErrorCode::BindingConflict => "저장된 대화 참조와 제공자의 대화가 다릅니다.",
             ErrorCode::Io => "파일을 읽거나 쓸 수 없습니다.",
             ErrorCode::Server => {
                 "kaleidoscope 서버에 연결되어 있지 않거나 서버가 요청을 처리하지 못했습니다."

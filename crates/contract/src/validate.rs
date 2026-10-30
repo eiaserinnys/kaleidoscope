@@ -441,7 +441,8 @@ fn static_binding_value<'a>(
     }
 }
 
-fn validate_workspace_template(template: &str) -> Result<(), &'static str> {
+/// 작업 제목과 지시 템플릿은 지원하는 작업 자리표시자만 쓴다.
+pub fn validate_workspace_template(template: &str) -> Result<(), &'static str> {
     let mut rest = template;
     while let Some(open) = rest.find('{') {
         let after_open = &rest[open + 1..];

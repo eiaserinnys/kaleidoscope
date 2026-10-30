@@ -207,7 +207,7 @@ fn save_attachment(
     Ok(path)
 }
 
-fn safe_attachment_name(name: &str) -> String {
+pub(crate) fn safe_attachment_name(name: &str) -> String {
     let name: String = name
         .chars()
         .map(|character| {
@@ -226,7 +226,7 @@ fn safe_attachment_name(name: &str) -> String {
     }
 }
 
-fn should_reveal(name: &str) -> bool {
+pub(crate) fn should_reveal(name: &str) -> bool {
     const REVEAL_EXTENSIONS: &[&str] = &[
         "exe", "msi", "bat", "cmd", "com", "scr", "ps1", "vbs", "js", "jse", "wsf", "hta", "cpl",
         "lnk", "reg",
