@@ -9,8 +9,11 @@ fn bucket_id(account_id: &str, app_id: &str) -> String {
 }
 
 fn current_definition(db: &Connection, app_id: &str) -> Result<Option<AppDefinition>, CoreError> {
+    if kaleidoscope_contract::builtin::is_builtin(app_id) {
+        return Ok(None);
+    }
     let raw: Option<String> = db.query_row(
-        "SELECT v.definition FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.id=?1",
+        "SELECT v.definition FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.id=?1 AND a.deleted_at IS NULL",
         [app_id], |row| row.get(0),
     ).optional().map_err(db_error)?;
     raw.map(|raw| {

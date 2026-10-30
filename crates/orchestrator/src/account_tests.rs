@@ -24,7 +24,7 @@ fn legacy_v5_state() -> AppState {
     )
     .unwrap();
     let definition: AppDefinition =
-        serde_json::from_str(include_str!("../../../examples/md-editor.json")).unwrap();
+        serde_json::from_str(include_str!("../../../apps/md-editor.json")).unwrap();
     db.execute(
         "INSERT INTO apps(id,name,current_version,created_at,updated_at) VALUES(?1,?2,1,'created','updated')",
         params![definition.id, definition.name],
@@ -50,7 +50,7 @@ async fn v5_migration_attaches_existing_rows_and_preserves_existing_credentials_
     let version: i64 = db
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 8);
+    assert_eq!(version, 9);
 
     let (
         account_id,

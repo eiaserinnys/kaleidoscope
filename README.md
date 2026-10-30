@@ -95,9 +95,9 @@ In a shell configured for your server, open the server connection menu and start
 
 ### 4. Ask for an app
 
-Ask the agent to upload an app with `upload_app`, using `open: true`. Start with an [example definition](examples/): a Markdown editor, file explorer, or block gallery. File-based apps ask for a folder when needed. Apps using service connections or agent chat also need the corresponding connection or conversation provider; the orchestrator does not run an AI model itself.
+The shell includes a file explorer, Markdown editor and viewer, and web browser. Their definitions live in [apps/](apps/) and change with shell releases. Ask the agent to create a personal app with `upload_app`, using `open: true`; [examples](examples/) include a block gallery. File-based apps ask for a folder when needed. Apps using service connections or agent chat also need the corresponding connection or conversation provider; the orchestrator does not run an AI model itself.
 
-Useful MCP tools include `list_apps`, `get_app`, `upload_app`, `open_app`, `preview_app`, `list_workspaces`, `get_workspace`, `get_shared_view`, `list_devices`, and `approve_device`. The server's tool schemas describe their inputs.
+Useful MCP tools include `list_apps`, `get_app`, `upload_app`, `delete_app`, `open_app`, `preview_app`, `list_workspaces`, `get_workspace`, `get_shared_view`, `list_devices`, and `approve_device`. The server's tool schemas describe their inputs.
 
 ## An app is a JSON definition
 
@@ -120,7 +120,7 @@ This minimal editor opens Markdown files from a folder the user selects:
 }
 ```
 
-An explorer can open `.md` files in this app through its `opens` declaration. For an editor with its own file tree, see [md-editor.json](examples/md-editor.json).
+An explorer can open `.md` files in this app through its `opens` declaration. For an editor with its own file tree, see [md-editor.json](apps/md-editor.json).
 
 More elaborate apps add `sources` for data, JSONata bindings to transform it, and actions to update state or call a connection. Shared validation checks definitions and capability versions before accepting them. The authoritative types and documentation live in [the contract crate](crates/contract/src/lib.rs), with [data bindings and actions](crates/contract/src/data.rs), [app storage](crates/contract/src/app_storage.rs), and [the conversation protocol](crates/contract/src/conversation.rs).
 
@@ -171,6 +171,7 @@ Use `tauri build` instead of `tauri dev` for an installer. A redistributed build
 | `crates/devbridge` | Local HTTP bridge for testing the core in a browser |
 | `ui/` | Reusable blocks and rendering |
 | `app/` | React desktop shell and thin Tauri host |
+| `apps/` | Built-in app definitions shipped with the shell |
 | `examples/` | App definitions used by examples and contract tests |
 
 ## License

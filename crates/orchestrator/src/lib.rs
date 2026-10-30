@@ -34,6 +34,17 @@ use serde_json::{json, Value};
 use tokio::sync::{broadcast, Mutex as AsyncMutex};
 use uuid::Uuid;
 
+#[cfg(test)]
+fn test_definition(raw: &str) -> String {
+    let definition: Value = serde_json::from_str(raw).unwrap();
+    let id = definition["id"].as_str().unwrap();
+    raw.replacen(
+        &format!("\"id\": \"{id}\""),
+        &format!("\"id\": \"test-{id}\""),
+        1,
+    )
+}
+
 const USER_CODE_ALPHABET: &[u8] = b"23456789ABCDEFGHJKMNPQRSTVWXYZ";
 const EVENT_BUFFER: usize = 64;
 
@@ -83,6 +94,7 @@ struct AppSummary {
     description: Option<String>,
     current_version: u32,
     updated_at: String,
+    builtin: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -261,9 +273,15 @@ impl AppState {
 
     fn current_apps(&self) -> Result<Vec<RegistryApp>, CoreError> {
         let db = self.lock_db()?;
-        let mut stmt = db.prepare("SELECT a.id,a.name,a.current_version,a.created_at,a.updated_at,v.definition,v.created_at FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version ORDER BY a.id").map_err(db_error)?;
+        let builtin_ids: Vec<&str> = kaleidoscope_contract::builtin::BUILTIN_APPS
+            .iter()
+            .map(|app| app.id)
+            .collect();
+        let placeholders = vec!["?"; builtin_ids.len()].join(",");
+        let query = format!("SELECT a.id,a.name,a.current_version,a.created_at,a.updated_at,v.definition,v.created_at FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.deleted_at IS NULL AND a.id NOT IN ({placeholders}) ORDER BY a.id");
+        let mut stmt = db.prepare(&query).map_err(db_error)?;
         let rows = stmt
-            .query_map([], |r| {
+            .query_map(rusqlite::params_from_iter(builtin_ids), |r| {
                 let definition: String = r.get(5)?;
                 let definition = serde_json::from_str(&definition).map_err(|e| {
                     rusqlite::Error::FromSqlConversionFailure(
@@ -289,14 +307,26 @@ impl AppState {
                 })
             })
             .map_err(db_error)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
+        let mut apps = rows.collect::<Result<Vec<_>, _>>().map_err(db_error)?;
+        apps.extend(kaleidoscope_contract::builtin::builtin_apps());
+        apps.sort_by(|a, b| a.app.id.cmp(&b.app.id));
+        Ok(apps)
     }
 
     fn app(&self, app_id: &str, version: Option<u32>) -> Result<Option<RegistryApp>, CoreError> {
+        if let Some(app) = kaleidoscope_contract::builtin::builtin_app(app_id) {
+            return Ok(
+                if version.is_none_or(|version| version == app.version.version) {
+                    Some(app)
+                } else {
+                    None
+                },
+            );
+        }
         let db = self.lock_db()?;
         let current: Option<(String, String, u32, String, String)> = db
             .query_row(
-                "SELECT id,name,current_version,created_at,updated_at FROM apps WHERE id=?1",
+                "SELECT id,name,current_version,created_at,updated_at FROM apps WHERE id=?1 AND deleted_at IS NULL",
                 [app_id],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
             )
@@ -336,10 +366,28 @@ impl AppState {
         }))
     }
 
+    fn deleted_app_ids(&self) -> Result<Vec<String>, CoreError> {
+        let db = self.lock_db()?;
+        let mut stmt = db
+            .prepare("SELECT id FROM apps WHERE deleted_at IS NOT NULL ORDER BY id")
+            .map_err(db_error)?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(db_error)?;
+        let ids = rows
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(db_error)?;
+        Ok(ids
+            .into_iter()
+            .filter(|id| !kaleidoscope_contract::builtin::is_builtin(id))
+            .collect())
+    }
+
     fn list_apps(&self) -> Result<Vec<AppSummary>, CoreError> {
         self.current_apps().map(|apps| {
             apps.into_iter()
                 .map(|row| AppSummary {
+                    builtin: kaleidoscope_contract::builtin::is_builtin(&row.app.id),
                     id: row.app.id,
                     name: row.app.name,
                     description: row.version.definition.description,

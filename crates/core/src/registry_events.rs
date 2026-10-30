@@ -14,7 +14,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
         return false;
     }
     match event {
-        DeviceEvent::AppsSnapshot { apps } => {
+        DeviceEvent::AppsSnapshot { apps, deleted } => {
             let link_file = inner.link_file.lock().unwrap().clone();
             let result = apply_registry_change(inner, |state| {
                 if inner.generation.load(Ordering::SeqCst) != generation {
@@ -22,6 +22,9 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 }
                 for app in apps {
                     app_commands::import_registry(state, app);
+                }
+                for app_id in deleted {
+                    app_commands::remove_registry_app(state, &app_id);
                 }
                 let epoch = inner.layout_connection_epoch.fetch_add(1, Ordering::SeqCst) + 1;
                 let status = LinkStatus::Connected {
@@ -52,6 +55,26 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             }
             crate::share::on_connected(inner);
             crate::layout_reporter::start(Arc::clone(inner), generation, epoch);
+        }
+        DeviceEvent::AppDeleted { app_id } => {
+            let result = apply_registry_change(inner, |state| {
+                if inner.generation.load(Ordering::SeqCst) != generation {
+                    return false;
+                }
+                app_commands::remove_registry_app(state, &app_id);
+                true
+            });
+            match result {
+                Ok((true, event)) => {
+                    if let Some(event) = event {
+                        inner.emit(&event);
+                    }
+                }
+                Ok((false, _)) => return false,
+                Err(error) => {
+                    link::set_offline(inner, generation, &link::load_link(inner), error.message)
+                }
+            }
         }
         DeviceEvent::AppPublished {
             app,

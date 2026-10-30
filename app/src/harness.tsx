@@ -14,10 +14,10 @@ import "@kaleidoscope/ui/styles.css";
 import "./index.css";
 import "./shell.css";
 import "./harness.css";
-import mdEditorJson from "../../examples/md-editor.json";
-import mdViewerJson from "../../examples/md-viewer.json";
-import webBrowserJson from "../../examples/web-browser.json";
-import explorerJson from "../../examples/explorer.json";
+import mdEditorJson from "../../apps/md-editor.json";
+import mdViewerJson from "../../apps/md-viewer.json";
+import webBrowserJson from "../../apps/web-browser.json";
+import explorerJson from "../../apps/explorer.json";
 import pasJson from "../../examples/workspace-pas.json";
 
 declare global {

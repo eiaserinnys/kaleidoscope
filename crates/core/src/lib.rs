@@ -238,6 +238,7 @@ impl Core {
             share: share::ShareState::default(),
             update: UpdateStatus::Unavailable {},
         };
+        app_commands::ensure_builtin(&mut state);
         let login_store = Arc::new(logins::Logins::open(&config.data_dir)?);
 
         if state.shared.workspaces.is_empty() {
@@ -293,8 +294,22 @@ impl Core {
 
         let core = Core { inner };
         data_runtime::start_timer(Arc::downgrade(&core.inner));
-        if core.inner.state.lock().unwrap().shared.apps.is_empty() {
+        if core
+            .inner
+            .state
+            .lock()
+            .unwrap()
+            .shared
+            .apps
+            .iter()
+            .all(|app| kaleidoscope_contract::builtin::is_builtin(&app.id))
+        {
             for definition_json in config.seed_definitions {
+                let definition =
+                    kaleidoscope_contract::validate::parse_app_definition(&definition_json)?;
+                if kaleidoscope_contract::builtin::is_builtin(&definition.id) {
+                    continue;
+                }
                 core.handle(CoreRequest::AppImport { definition_json })?;
             }
         }

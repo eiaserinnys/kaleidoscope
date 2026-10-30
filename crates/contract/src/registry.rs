@@ -1,4 +1,4 @@
-//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 8판, 261030)
+//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 9판, 261030)
 //!
 //! 4판에서 더한 것(카드 #806): 코어가 이벤트 스트림을 열 때 지원 범위를 알리고([`SUPPORTED_HEADER`]),
 //! 서버는 그 기기가 그릴 수 있는 앱만 보낸다. 아래 「기기마다 그릴 수 있는 앱만」 절.
@@ -18,6 +18,9 @@
 //! 8판에서 더한 것(카드 #818): 계정 × 앱 저장소의 기기 경로와 `storage.snapshot`/`storage.changed` 이벤트.
 //! 계정은 서버가 기기 토큰이나 MCP principal에서 찾으며 기기 요청 본문은 account id를 받지 않는다.
 //! 연결 등록도 계정마다 이뤄진다. 아래 「앱 저장소」 절.
+//!
+//! 9판: 기본 앱은 쉘과 함께 제공한다. 레지스트리 앱을 지우면 `app.deleted`를 보내고,
+//! 재연결 스냅샷의 `deleted`에 지운 앱 id를 담는다. 기본 앱은 올리거나 지울 수 없다.
 //!
 //! 오케스트레이터는 앱 레지스트리의 정본이다. 쉘의 코어는 기기 토큰으로 붙어 앱을 받고, 에이전트는 같은
 //! 서버의 MCP(`/mcp`, MCP 토큰)로 앱을 올린다. MCP 도구의 모양은 오케스트레이터 코드에 있고 이 파일에는 없다.
@@ -67,7 +70,8 @@
 //! - [`RegistryApp`] 하나를 받으면, 캐시에 같은 id의 앱이 있고 지금 버전 번호와 정의가 모두 같으면 넘긴다.
 //!   아니면 `app.import`의 창 옮기기 규칙(상태 키, 고른 폴더)대로 반영하되, 버전 번호는 서버의 것을 쓰고
 //!   그 앱의 캐시 버전 목록은 받은 버전 하나로 바꾼다.
-//! - 스냅샷에 없는 캐시 앱(연결 전에 로컬로 가져온 앱)은 그대로 둔다. 레지스트리에서 앱을 지우는 기능은 아직 없다.
+//! - 스냅샷에 없는 캐시 앱은 그대로 둔다. `deleted`와 `app.deleted`의 앱은 캐시에서 지운다.
+//!   쉘에 실린 기본 앱은 서버가 보낸 같은 id의 정의와 삭제를 무시한다.
 //! - 받은 정의도 [`crate::validate::parse_cached_app_definition`]로 다시 검사한다. 이 쉘이 그릴 수 없는 정의
 //!   (`unsupported_app` 등)는 캐시에 넣지 않고 넘긴다(더 새 쉘이 필요한 앱).
 //! - `app.published`의 `open`이 참이거나 `app.open`을 받으면, 반영한 `state.changed` 뒤에 화면에
@@ -282,9 +286,11 @@ pub const SUPPORTED_HEADER: &str = "x-kaleidoscope-supported";
 /// 코어가 이벤트 스트림을 열 때 자기가 아는 레지스트리 판(정수)을 싣는 헤더. 6 이상이면 배치를 동기화한다.
 pub const REGISTRY_HEADER: &str = "x-kaleidoscope-registry";
 /// 이 빌드가 아는 레지스트리 판.
-pub const REGISTRY_VERSION: u32 = 8;
+pub const REGISTRY_VERSION: u32 = 9;
 /// 배치를 동기화하는 레지스트리 판. 서버는 [`REGISTRY_HEADER`]가 이 값 이상인 연결과 배치를 맞춘다.
 pub const LAYOUT_SYNC_REGISTRY_VERSION: u32 = 6;
+/// 앱 저장소 동기화를 받을 수 있는 최소 레지스트리 판.
+pub const STORAGE_REGISTRY_VERSION: u32 = 8;
 
 /// 서버가 보내는 주석 줄 간격.
 pub const PING_INTERVAL_SECS: u64 = 15;
@@ -533,7 +539,14 @@ pub struct ConnectionReply {
 pub enum DeviceEvent {
     /// 연결 직후 한 번. 레지스트리의 모든 앱의 지금 버전.
     #[serde(rename = "apps.snapshot")]
-    AppsSnapshot { apps: Vec<RegistryApp> },
+    AppsSnapshot {
+        apps: Vec<RegistryApp>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        deleted: Vec<String>,
+    },
+    /// 레지스트리에서 앱을 지웠다.
+    #[serde(rename = "app.deleted")]
+    AppDeleted { app_id: String },
     /// 앱의 새 버전이 올라왔다. `open`이면 에이전트가 띄워 달라고 한 것이다.
     /// 기기가 손으로 올린 앱은 `open`이 거짓이다(그 쉘이 직접 창을 연다).
     /// `workspace_id`는 에이전트가 띄울 워크스페이스를 정했을 때만 있다.
@@ -582,6 +595,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn legacy_event_parser_ignores_snapshot_deleted_and_skips_new_event() {
+        #[derive(Deserialize)]
+        #[serde(tag = "event")]
+        enum LegacyEvent {
+            #[serde(rename = "apps.snapshot")]
+            AppsSnapshot { apps: Vec<RegistryApp> },
+        }
+        let snapshot: LegacyEvent =
+            serde_json::from_str(r#"{"event":"apps.snapshot","apps":[],"deleted":["personal"]}"#)
+                .unwrap();
+        assert!(matches!(snapshot, LegacyEvent::AppsSnapshot { apps } if apps.is_empty()));
+        assert!(serde_json::from_str::<LegacyEvent>(
+            r#"{"event":"app.deleted","app_id":"personal"}"#
+        )
+        .is_err());
+    }
+
+    #[test]
     fn device_event_uses_event_tag() {
         let event = DeviceEvent::AppOpen {
             app_id: "md-editor".into(),
@@ -593,7 +624,13 @@ mod tests {
         );
         let parsed: DeviceEvent =
             serde_json::from_str(r#"{"event":"apps.snapshot","apps":[]}"#).unwrap();
-        assert_eq!(parsed, DeviceEvent::AppsSnapshot { apps: vec![] });
+        assert_eq!(
+            parsed,
+            DeviceEvent::AppsSnapshot {
+                apps: vec![],
+                deleted: vec![]
+            }
+        );
         let targeted: DeviceEvent =
             serde_json::from_str(r#"{"event":"app.open","app_id":"a","workspace_id":"w"}"#)
                 .unwrap();

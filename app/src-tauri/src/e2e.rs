@@ -156,12 +156,6 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
     record(log, "start", json!({}))?;
     // 메인 웹뷰가 초기 상태를 읽어 창을 그릴 시간을 준다.
     thread::sleep(Duration::from_secs(3));
-    call(
-        core,
-        CoreRequest::AppImport {
-            definition_json: include_str!("../../../examples/web-browser.json").into(),
-        },
-    )?;
     let snapshot = match call(core, CoreRequest::StateGet {})? {
         CoreReply::StateGet { snapshot } => snapshot,
         reply => return Err(format!("unexpected state response: {reply:?}")),

@@ -184,16 +184,28 @@ async fn storage_snapshot_is_limited_to_registry_eight_devices() {
         .stream_with_registry(
             "device-a".into(),
             Some(supported.clone()),
-            registry::REGISTRY_VERSION,
+            registry::STORAGE_REGISTRY_VERSION,
         )
         .unwrap();
     assert!(state.0.storage_devices.lock().unwrap().contains("device-a"));
-    drop(stream);
+    use futures::StreamExt;
+    let response = axum::response::Sse::new(stream).into_response();
+    let mut body = response.into_body().into_data_stream();
+    let mut saw_storage_snapshot = false;
+    for _ in 0..4 {
+        let data = body.next().await.unwrap().unwrap();
+        let text = std::str::from_utf8(&data).unwrap();
+        if text.contains("storage.snapshot") {
+            saw_storage_snapshot = true;
+        }
+    }
+    assert!(saw_storage_snapshot);
+    drop(body);
     let old = state
         .stream_with_registry(
             "device-a".into(),
             Some(supported),
-            registry::REGISTRY_VERSION - 1,
+            registry::STORAGE_REGISTRY_VERSION - 1,
         )
         .unwrap();
     assert!(!state.0.storage_devices.lock().unwrap().contains("device-a"));
@@ -221,21 +233,21 @@ async fn storage_changed_is_account_and_registry_scoped_without_content() {
         .stream_with_registry(
             "device-a".into(),
             Some(supported.clone()),
-            registry::REGISTRY_VERSION,
+            registry::STORAGE_REGISTRY_VERSION,
         )
         .unwrap();
     let _current_b = state
         .stream_with_registry(
             "device-b".into(),
             Some(supported.clone()),
-            registry::REGISTRY_VERSION,
+            registry::STORAGE_REGISTRY_VERSION,
         )
         .unwrap();
     let _old = state
         .stream_with_registry(
             "device-old".into(),
             Some(supported),
-            registry::REGISTRY_VERSION - 1,
+            registry::STORAGE_REGISTRY_VERSION - 1,
         )
         .unwrap();
     let event = DeviceEvent::StorageChanged {

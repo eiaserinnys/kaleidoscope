@@ -57,8 +57,9 @@ impl AppState {
                 .into_iter()
                 .filter(|app| renders_on(supported.as_ref(), &app.version.definition.requires))
                 .collect(),
+            deleted: self.deleted_app_ids()?,
         };
-        let supports_storage = registry_version >= registry::REGISTRY_VERSION
+        let supports_storage = registry_version >= registry::STORAGE_REGISTRY_VERSION
             && supported.as_ref().is_some_and(|supported| {
                 supported
                     .modules

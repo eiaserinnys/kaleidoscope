@@ -27,9 +27,9 @@ use crate::{Core, CoreConfig, CoreError, Host};
 mod layout_sync_tests;
 mod pc_tests;
 
-const MD_EDITOR: &str = include_str!("../../../examples/md-editor.json");
-const MD_VIEWER: &str = include_str!("../../../examples/md-viewer.json");
-const WEB_BROWSER: &str = include_str!("../../../examples/web-browser.json");
+const MD_EDITOR: &str = include_str!("../../../apps/md-editor.json");
+const MD_VIEWER: &str = include_str!("../../../apps/md-viewer.json");
+const WEB_BROWSER: &str = include_str!("../../../apps/web-browser.json");
 
 struct CaptureTestHost {
     png: Mutex<Vec<u8>>,
@@ -125,8 +125,18 @@ fn open_core(data_dir: &Path, definitions: Vec<String>, host: &Arc<FakeHost>) ->
     .unwrap()
 }
 
+fn test_definition(raw: &str) -> String {
+    let definition: Value = serde_json::from_str(raw).unwrap();
+    let id = definition["id"].as_str().unwrap();
+    raw.replacen(
+        &format!("\"id\": \"{id}\""),
+        &format!("\"id\": \"test-{id}\""),
+        1,
+    )
+}
+
 fn seeded_core(data_dir: &Path, host: &Arc<FakeHost>) -> Core {
-    open_core(data_dir, vec![MD_EDITOR.to_string()], host)
+    open_core(data_dir, vec![test_definition(MD_EDITOR)], host)
 }
 
 fn snapshot(core: &Core) -> ShellSnapshot {
@@ -134,6 +144,118 @@ fn snapshot(core: &Core) -> ShellSnapshot {
         CoreReply::StateGet { snapshot } => snapshot,
         reply => panic!("unexpected reply: {reply:?}"),
     }
+}
+
+#[test]
+fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
+    let apps = snapshot(&core).shared.apps;
+    for (id, version) in [
+        ("explorer", 3),
+        ("md-editor", 2),
+        ("md-viewer", 1),
+        ("web-browser", 1),
+    ] {
+        assert!(apps
+            .iter()
+            .any(|app| app.id == id && app.current_version == version));
+    }
+    assert_eq!(apps.len(), 4);
+    let error = core
+        .handle(CoreRequest::AppImport {
+            definition_json: MD_EDITOR.into(),
+        })
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidAppDefinition);
+}
+
+#[test]
+fn builtin_window_state_survives_restart_at_the_same_version() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(temp.path(), vec![], &host);
+    let (_, desktop) = active_ids(&core);
+    let window_id = open_window(&core, &desktop, "explorer");
+    core.handle(CoreRequest::WindowSetState {
+        window_id: window_id.clone(),
+        state: BTreeMap::from([
+            ("folder".into(), json!("x")),
+            ("view".into(), json!("details")),
+        ]),
+    })
+    .unwrap();
+    let before = snapshot(&core)
+        .shared
+        .windows
+        .into_iter()
+        .find(|w| w.id == window_id)
+        .unwrap();
+    assert_eq!(before.app_version, 3);
+    drop(core);
+    let reopened = open_core(temp.path(), vec![], &host);
+    let after = snapshot(&reopened)
+        .shared
+        .windows
+        .into_iter()
+        .find(|w| w.id == window_id)
+        .unwrap();
+    assert_eq!(before, after);
+    assert_eq!(snapshot(&reopened).shared.apps.len(), 4);
+}
+
+#[test]
+fn registry_events_remove_personal_apps_but_preserve_builtins() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
+    let mut personal: Value = serde_json::from_str(MD_VIEWER).unwrap();
+    personal["id"] = json!("personal-viewer");
+    let mut forged: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    forged["name"] = json!("바뀐 이름");
+    {
+        let mut state = core.inner.state.lock().unwrap();
+        assert!(crate::app_commands::import_registry(
+            &mut state,
+            registry_app(1, &personal.to_string())
+        ));
+        assert!(!crate::app_commands::import_registry(
+            &mut state,
+            registry_app(9, &forged.to_string())
+        ));
+    }
+    assert!(crate::registry_events::apply_event(
+        &core.inner,
+        0,
+        DeviceEvent::AppDeleted {
+            app_id: "personal-viewer".into()
+        }
+    ));
+    assert!(!snapshot(&core)
+        .shared
+        .apps
+        .iter()
+        .any(|app| app.id == "personal-viewer"));
+    {
+        let mut state = core.inner.state.lock().unwrap();
+        assert!(crate::app_commands::import_registry(
+            &mut state,
+            registry_app(1, &personal.to_string())
+        ));
+    }
+    assert!(crate::registry_events::apply_event(
+        &core.inner,
+        0,
+        DeviceEvent::AppsSnapshot {
+            apps: vec![registry_app(9, &forged.to_string())],
+            deleted: vec!["personal-viewer".into(), "md-editor".into()]
+        }
+    ));
+    let state = snapshot(&core).shared;
+    assert!(!state.apps.iter().any(|app| app.id == "personal-viewer"));
+    assert!(state
+        .apps
+        .iter()
+        .any(|app| app.id == "md-editor" && app.current_version == 2 && app.name != "바뀐 이름"));
 }
 
 #[test]
@@ -186,9 +308,13 @@ fn 대화_삭제는_현재_snapshot과_미전송_없는_작업_정본에서만_�
 fn share_set_updates_snapshot_once_and_share_view_validates_size() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
-    let core = open_core(&temp.path().join("data"), vec![MD_EDITOR.into()], &host);
+    let core = open_core(
+        &temp.path().join("data"),
+        vec![test_definition(MD_EDITOR)],
+        &host,
+    );
     let (_, desktop_id) = active_ids(&core);
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     let (tx, rx) = mpsc::channel();
     core.subscribe(Box::new(move |event| {
         let _ = tx.send(event.clone());
@@ -259,7 +385,7 @@ fn shared_view_delivery_baselines_are_separate_for_each_app() {
     let host = Arc::new(FakeHost::default());
     let core = seeded_core(temp.path(), &host);
     let (workspace, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "md-editor");
+    let window = open_window(&core, &desktop, "test-md-editor");
     core.handle(CoreRequest::ShareSet {
         window_id: window.clone(),
         on: true,
@@ -340,13 +466,13 @@ fn share_view_uploads_once_and_unlink_clears_server_but_keeps_local_toggle() {
     let client = registry_client();
     let core = open_core_with_client(
         &temp.path().join("data"),
-        vec![MD_EDITOR.into()],
+        vec![test_definition(MD_EDITOR)],
         &host,
         client.clone(),
     );
     mark_connected(&core);
     let (_, desktop_id) = active_ids(&core);
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     core.handle(CoreRequest::ShareSet {
         window_id: window_id.clone(),
         on: true,
@@ -393,12 +519,12 @@ fn share_offline_delete_replays_on_reconnect_and_closed_window_is_removed() {
     let client = registry_client();
     let core = open_core_with_client(
         &temp.path().join("data"),
-        vec![MD_EDITOR.into()],
+        vec![test_definition(MD_EDITOR)],
         &host,
         Arc::clone(&client),
     );
     let (_, desktop_id) = active_ids(&core);
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     core.handle(CoreRequest::ShareSet {
         window_id: window_id.clone(),
         on: true,
@@ -452,7 +578,7 @@ fn share_offline_delete_replays_on_reconnect_and_closed_window_is_removed() {
         CoreReply::DesktopCreate { desktop } => desktop,
         reply => panic!("unexpected reply: {reply:?}"),
     };
-    let desktop_window = open_window(&core, &desktop.id, "md-editor");
+    let desktop_window = open_window(&core, &desktop.id, "test-md-editor");
     core.handle(CoreRequest::ShareSet {
         window_id: desktop_window.clone(),
         on: true,
@@ -497,7 +623,7 @@ fn conversation_capture_respects_visual_baseline() {
     let core = Core::open_with_client(
         CoreConfig {
             data_dir: temp.path().join("data"),
-            seed_definitions: vec![MD_EDITOR.into(), WEB_BROWSER.into()],
+            seed_definitions: vec![test_definition(MD_EDITOR), test_definition(WEB_BROWSER)],
             server_url: "http://127.0.0.1:4219".into(),
             device_name: "test-device".into(),
         },
@@ -507,8 +633,8 @@ fn conversation_capture_respects_visual_baseline() {
     .unwrap();
     mark_connected(&core);
     let (workspace_id, desktop_id) = active_ids(&core);
-    let editor = open_window(&core, &desktop_id, "md-editor");
-    let browser = open_window(&core, &desktop_id, "web-browser");
+    let editor = open_window(&core, &desktop_id, "test-md-editor");
+    let browser = open_window(&core, &desktop_id, "test-web-browser");
     for id in [&editor, &browser] {
         core.handle(CoreRequest::ShareSet {
             window_id: id.clone(),
@@ -544,7 +670,7 @@ fn conversation_capture_respects_visual_baseline() {
         desktop_id: desktop_id.clone(),
     })
     .unwrap();
-    let extra_window = open_window(&core, &extra_desktop.id, "md-editor");
+    let extra_window = open_window(&core, &extra_desktop.id, "test-md-editor");
     core.handle(CoreRequest::DesktopActivate {
         desktop_id: desktop_id.clone(),
     })
@@ -953,7 +1079,7 @@ fn app_import_rejects_a_definition_path_outside_the_picked_folder() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
     let core = open_core(&temp.path().join("data"), vec![], &host);
-    let mut definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    let mut definition: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
     definition["ui"]["children"][1]["file"]["path"] = json!("../secret.md");
 
     let error = expect_error(
@@ -979,7 +1105,7 @@ fn file_paths_reject_traversal_absolute_windows_and_outside_symlinks() {
     host.choose(Some(root.clone()));
     let core = seeded_core(&data_dir, &host);
     let (_, desktop_id) = active_ids(&core);
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     pick_folder(&core, &window_id);
 
     for path in [
@@ -1056,7 +1182,7 @@ fn files_list_reports_size_and_modified_time() {
     host.choose(Some(root));
     let core = seeded_core(&temp.path().join("data"), &host);
     let (_, desktop_id) = active_ids(&core);
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     pick_folder(&core, &window_id);
     let entries = match core
         .handle(CoreRequest::FilesList {
@@ -1094,10 +1220,10 @@ fn file_commands_enforce_declared_access_and_folder_grants() {
     host.choose(Some(root));
     let core = seeded_core(&temp.path().join("data"), &host);
     let (_, desktop_id) = active_ids(&core);
-    let editor_id = open_window(&core, &desktop_id, "md-editor");
-    let viewer = import(&core, MD_VIEWER);
+    let editor_id = open_window(&core, &desktop_id, "test-md-editor");
+    let viewer = import(&core, &test_definition(MD_VIEWER));
     assert!(matches!(viewer, CoreReply::AppImport { .. }));
-    let viewer_id = open_window(&core, &desktop_id, "md-viewer");
+    let viewer_id = open_window(&core, &desktop_id, "test-md-viewer");
 
     expect_error(
         core.handle(CoreRequest::FilesWrite {
@@ -1137,7 +1263,7 @@ fn file_write_checks_revisions_and_preserves_crlf_bytes() {
     host.choose(Some(root.clone()));
     let core = seeded_core(&temp.path().join("data"), &host);
     let (_, desktop_id) = active_ids(&core);
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     pick_folder(&core, &window_id);
 
     let revision = match core
@@ -1215,7 +1341,7 @@ fn state_reopens_with_workspace_desktop_window_state_rect_and_grant() {
         CoreReply::DesktopCreate { desktop } => desktop.id,
         reply => panic!("unexpected reply: {reply:?}"),
     };
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     core.handle(CoreRequest::WindowSetRect {
         window_id: window_id.clone(),
         rect: Rect {
@@ -1258,7 +1384,7 @@ fn import_seeds_versions_migrates_window_state_and_rejects_newer_requirements() 
     host.choose(Some(root));
     let core = seeded_core(&temp.path().join("data"), &host);
     let (_, desktop_id) = active_ids(&core);
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     pick_folder(&core, &window_id);
     let mut old_state = BTreeMap::new();
     old_state.insert("current_file".into(), json!("old.md"));
@@ -1268,7 +1394,7 @@ fn import_seeds_versions_migrates_window_state_and_rejects_newer_requirements() 
     })
     .unwrap();
 
-    let mut definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    let mut definition: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
     definition["name"] = json!("마크다운 편집기 새 버전");
     // 상태 키를 바꾸므로 예제의 opens(current_file을 가리킴)는 뺀다.
     definition.as_object_mut().unwrap().remove("opens");
@@ -1284,7 +1410,7 @@ fn import_seeds_versions_migrates_window_state_and_rejects_newer_requirements() 
         .shared
         .apps
         .iter()
-        .find(|app| app.id == "md-editor")
+        .find(|app| app.id == "test-md-editor")
         .unwrap();
     assert_eq!(app.current_version, 2);
     let window = snapshot
@@ -1302,7 +1428,7 @@ fn import_seeds_versions_migrates_window_state_and_rejects_newer_requirements() 
         .iter()
         .any(|grant| { grant.window_id == window_id && grant.permission == "docs" }));
 
-    let mut unsupported: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    let mut unsupported: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
     unsupported["requires"]["blocks"] = json!(99);
     expect_error(
         core.handle(CoreRequest::AppImport {
@@ -1402,11 +1528,11 @@ fn state_changes_emit_one_snapshot_event_and_file_reads_failures_emit_none() {
     .unwrap();
     check_one(&events);
 
-    let mut next_definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    let mut next_definition: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
     next_definition["name"] = json!("편집기 v2");
     import(&core, &next_definition.to_string());
     check_one(&events);
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     check_one(&events);
     core.handle(CoreRequest::WindowSetRect {
         window_id: window_id.clone(),
@@ -1482,7 +1608,7 @@ fn unreadable_state_json_is_renamed_and_core_starts_with_empty_state() {
     let core = open_core(&data_dir, vec![], &host);
     let snapshot = snapshot(&core);
     assert_eq!(snapshot.shared.workspaces.len(), 1);
-    assert!(snapshot.shared.apps.is_empty());
+    assert_eq!(snapshot.shared.apps.len(), 4);
     assert!(fs::read_dir(&data_dir).unwrap().any(|entry| {
         entry
             .unwrap()
@@ -1510,7 +1636,7 @@ fn invalid_state_and_last_workspace_or_desktop_deletions_are_rejected() {
         }),
         ErrorCode::InvalidRequest,
     );
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     let mut invalid_state = BTreeMap::new();
     invalid_state.insert("not_declared".into(), JsonValue::Null);
     expect_error(
@@ -1545,7 +1671,10 @@ fn link_start_pairs_saves_token_privately_and_connects_after_snapshot() {
         .streams
         .lock()
         .unwrap()
-        .push_back(Ok(vec![DeviceEvent::AppsSnapshot { apps: vec![] }]));
+        .push_back(Ok(vec![DeviceEvent::AppsSnapshot {
+            apps: vec![],
+            deleted: vec![],
+        }]));
     let core = open_core_with_client(&temp.path().join("data"), vec![], &host, client);
     let (tx, rx) = mpsc::channel();
     core.subscribe(Box::new(move |event| {
@@ -1607,13 +1736,13 @@ fn registry_events_update_cache_dedupe_versions_and_order_open_requests() {
     let client = registry_client();
     let core = open_core_with_client(
         &temp.path().join("data"),
-        vec![MD_EDITOR.into()],
+        vec![test_definition(MD_EDITOR)],
         &host,
         Arc::clone(&client),
     );
     mark_connected(&core);
     let (_, desktop_id) = active_ids(&core);
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     let mut old_state = BTreeMap::new();
     old_state.insert("current_file".into(), json!("notes/old.md"));
     core.handle(CoreRequest::WindowSetState {
@@ -1623,7 +1752,7 @@ fn registry_events_update_cache_dedupe_versions_and_order_open_requests() {
     .unwrap();
     pick_folder(&core, &window_id);
 
-    let mut next_definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    let mut next_definition: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
     next_definition["name"] = json!("레지스트리 편집기");
     next_definition.as_object_mut().unwrap().remove("opens");
     next_definition["state"] = json!({"new_key": "기본값"});
@@ -1638,6 +1767,7 @@ fn registry_events_update_cache_dedupe_versions_and_order_open_requests() {
     client.streams.lock().unwrap().push_back(Ok(vec![
         DeviceEvent::AppsSnapshot {
             apps: vec![version7.clone()],
+            deleted: vec![],
         },
         DeviceEvent::AppPublished {
             app: version7,
@@ -1654,7 +1784,7 @@ fn registry_events_update_cache_dedupe_versions_and_order_open_requests() {
             workspace_id: None,
         },
         DeviceEvent::AppOpen {
-            app_id: "md-editor".into(),
+            app_id: "test-md-editor".into(),
             workspace_id: None,
         },
         DeviceEvent::AppPublished {
@@ -1686,7 +1816,7 @@ fn registry_events_update_cache_dedupe_versions_and_order_open_requests() {
         .shared
         .apps
         .iter()
-        .find(|app| app.id == "md-editor")
+        .find(|app| app.id == "test-md-editor")
         .unwrap();
     assert_eq!(app.current_version, 8);
     assert_eq!(
@@ -1694,7 +1824,7 @@ fn registry_events_update_cache_dedupe_versions_and_order_open_requests() {
             .shared
             .app_versions
             .iter()
-            .filter(|version| version.app_id == "md-editor")
+            .filter(|version| version.app_id == "test-md-editor")
             .count(),
         1
     );
@@ -1753,10 +1883,10 @@ fn connected_import_uploads_and_preserves_server_validation_error() {
         .uploads
         .lock()
         .unwrap()
-        .push_back(Ok(registry_app(42, MD_EDITOR)));
+        .push_back(Ok(registry_app(42, &test_definition(MD_EDITOR))));
     let reply = core
         .handle(CoreRequest::AppImport {
-            definition_json: MD_EDITOR.into(),
+            definition_json: test_definition(MD_EDITOR),
         })
         .unwrap();
     assert!(
@@ -1764,9 +1894,18 @@ fn connected_import_uploads_and_preserves_server_validation_error() {
     );
     assert_eq!(
         client.upload_requests.lock().unwrap()[0].definition_json,
-        MD_EDITOR
+        test_definition(MD_EDITOR)
     );
-    assert_eq!(snapshot(&core).shared.apps[0].current_version, 42);
+    assert_eq!(
+        snapshot(&core)
+            .shared
+            .apps
+            .iter()
+            .find(|app| app.id == "test-md-editor")
+            .unwrap()
+            .current_version,
+        42
+    );
 
     let expected = CoreError {
         code: ErrorCode::UnsupportedApp,
@@ -1780,7 +1919,7 @@ fn connected_import_uploads_and_preserves_server_validation_error() {
         .push_back(Err(RegistryError::Validation(expected.clone())));
     let actual = expect_error(
         core.handle(CoreRequest::AppImport {
-            definition_json: MD_EDITOR.into(),
+            definition_json: test_definition(MD_EDITOR),
         }),
         ErrorCode::UnsupportedApp,
     );
@@ -1793,7 +1932,7 @@ fn connected_import_uploads_and_preserves_server_validation_error() {
     };
     let error = expect_error(
         core.handle(CoreRequest::AppImport {
-            definition_json: MD_EDITOR.into(),
+            definition_json: test_definition(MD_EDITOR),
         }),
         ErrorCode::Server,
     );
@@ -1813,11 +1952,11 @@ fn regression_unlinked_import_persists_removed_folder_grants() {
     host.choose(Some(docs));
     let core = seeded_core(&data_dir, &host);
     let (_, desktop_id) = active_ids(&core);
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     pick_folder(&core, &window_id);
     assert_eq!(snapshot(&core).device.grants.len(), 1);
 
-    let mut next_definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    let mut next_definition: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
     next_definition["permissions"] = json!([
         { "module": "files", "id": "manuals", "access": "readwrite", "label": "문서 폴더" }
     ]);
@@ -1843,16 +1982,16 @@ fn connected_import_persists_removed_folder_grants() {
     let client = registry_client();
     let core = open_core_with_client(
         &data_dir,
-        vec![MD_EDITOR.into()],
+        vec![test_definition(MD_EDITOR)],
         &host,
         Arc::clone(&client),
     );
     let (_, desktop_id) = active_ids(&core);
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     pick_folder(&core, &window_id);
     assert_eq!(snapshot(&core).device.grants.len(), 1);
 
-    let mut next_definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    let mut next_definition: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
     next_definition["permissions"] = json!([
         { "module": "files", "id": "manuals", "access": "readwrite", "label": "문서 폴더" }
     ]);
@@ -1883,14 +2022,23 @@ fn registry_snapshot_applies_server_version_when_only_old_cached_version_matches
     let client = registry_client();
     let core = open_core_with_client(
         &temp.path().join("data"),
-        vec![MD_EDITOR.into()],
+        vec![test_definition(MD_EDITOR)],
         &host,
         Arc::clone(&client),
     );
-    let mut local_v2: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    let mut local_v2: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
     local_v2["name"] = json!("로컬 편집기 v2");
     import(&core, &local_v2.to_string());
-    assert_eq!(snapshot(&core).shared.apps[0].current_version, 2);
+    assert_eq!(
+        snapshot(&core)
+            .shared
+            .apps
+            .iter()
+            .find(|app| app.id == "test-md-editor")
+            .unwrap()
+            .current_version,
+        2
+    );
 
     mark_connected(&core);
     client
@@ -1898,7 +2046,8 @@ fn registry_snapshot_applies_server_version_when_only_old_cached_version_matches
         .lock()
         .unwrap()
         .push_back(Ok(vec![DeviceEvent::AppsSnapshot {
-            apps: vec![registry_app(1, MD_EDITOR)],
+            apps: vec![registry_app(1, &test_definition(MD_EDITOR))],
+            deleted: vec![],
         }]));
     crate::link::start_stream(Arc::clone(&core.inner), 0, connected_link_file());
 
@@ -1907,12 +2056,25 @@ fn registry_snapshot_applies_server_version_when_only_old_cached_version_matches
             .shared
             .apps
             .iter()
-            .any(|app| app.id == "md-editor" && app.current_version == 1)
+            .any(|app| app.id == "test-md-editor" && app.current_version == 1)
     });
     let state = snapshot(&core).shared;
-    assert_eq!(state.apps[0].name, "마크다운 편집기");
-    assert_eq!(state.app_versions.len(), 1);
-    assert_eq!(state.app_versions[0].version, 1);
+    assert_eq!(
+        state
+            .apps
+            .iter()
+            .find(|app| app.id == "test-md-editor")
+            .unwrap()
+            .name,
+        "마크다운 편집기"
+    );
+    let versions: Vec<_> = state
+        .app_versions
+        .iter()
+        .filter(|version| version.app_id == "test-md-editor")
+        .collect();
+    assert_eq!(versions.len(), 1);
+    assert_eq!(versions[0].version, 1);
     core.handle(CoreRequest::LinkUnlink {}).unwrap();
 }
 
@@ -1960,7 +2122,7 @@ fn cancel_and_unlink_clear_only_connection_state() {
         .unwrap()
         .push_back(Ok(PairPollReply::Pending {}));
     let data_dir = temp.path().join("data");
-    let core = open_core_with_client(&data_dir, vec![MD_EDITOR.into()], &host, client);
+    let core = open_core_with_client(&data_dir, vec![test_definition(MD_EDITOR)], &host, client);
     let before = snapshot(&core).shared;
     core.handle(CoreRequest::LinkStart {}).unwrap();
     core.handle(CoreRequest::LinkCancel {}).unwrap();
@@ -2005,13 +2167,13 @@ fn layout_report_sends_sanitized_initial_state_and_debounces_changes() {
     let client = registry_client();
     let core = open_core_with_client(
         &temp.path().join("data"),
-        vec![MD_EDITOR.into()],
+        vec![test_definition(MD_EDITOR)],
         &host,
         Arc::clone(&client),
     );
     mark_connected(&core);
     let (workspace_id, desktop_id) = active_ids(&core);
-    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
     let root = temp.path().join("private-folder");
     fs::create_dir_all(&root).unwrap();
     host.choose(Some(root.clone()));
@@ -2020,7 +2182,10 @@ fn layout_report_sends_sanitized_initial_state_and_debounces_changes() {
     assert!(crate::registry_events::apply_event(
         &Arc::clone(&core.inner),
         0,
-        DeviceEvent::AppsSnapshot { apps: vec![] },
+        DeviceEvent::AppsSnapshot {
+            apps: vec![],
+            deleted: vec![]
+        },
     ));
     wait_until(|| client.layouts.lock().unwrap().len() == 1);
     let first = client.layouts.lock().unwrap()[0].clone();

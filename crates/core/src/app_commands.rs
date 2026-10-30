@@ -12,6 +12,12 @@ pub(crate) fn import(
     definition_json: String,
 ) -> Result<CoreReply, CoreError> {
     let definition = app_definition::parse_app_definition(&definition_json)?;
+    if kaleidoscope_contract::builtin::is_builtin(&definition.id) {
+        return Err(CoreError::with_details(
+            kaleidoscope_contract::ErrorCode::InvalidAppDefinition,
+            vec!["기본 앱은 kaleidoscope 리포의 apps/에서 고치고 쉘 새 판으로 냅니다".into()],
+        ));
+    }
     if !crate::supported().renders(&definition.requires) {
         return Err(CoreError::new(
             kaleidoscope_contract::ErrorCode::UnsupportedApp,
@@ -69,6 +75,9 @@ fn import_definition(state: &mut CoreState, definition: AppDefinition) -> CoreRe
 }
 
 pub(crate) fn import_registry(state: &mut CoreState, received: RegistryApp) -> bool {
+    if kaleidoscope_contract::builtin::is_builtin(&received.app.id) {
+        return false;
+    }
     if !crate::supported().renders(&received.version.definition.requires) {
         return false;
     }
@@ -105,6 +114,39 @@ pub(crate) fn import_registry(state: &mut CoreState, received: RegistryApp) -> b
 
     apply_version(state, received.app, received.version, true);
     true
+}
+
+pub(crate) fn ensure_builtin(state: &mut CoreState) {
+    for row in kaleidoscope_contract::builtin::builtin_apps() {
+        let same = state
+            .shared
+            .apps
+            .iter()
+            .any(|app| app.id == row.app.id && app.current_version == row.app.current_version)
+            && state.shared.app_versions.iter().any(|version| {
+                version.app_id == row.app.id
+                    && version.version == row.version.version
+                    && version.definition == row.version.definition
+            });
+        if !same {
+            apply_version(state, row.app, row.version, true);
+        }
+    }
+}
+
+pub(crate) fn remove_registry_app(state: &mut CoreState, app_id: &str) {
+    if kaleidoscope_contract::builtin::is_builtin(app_id) {
+        return;
+    }
+    state.shared.apps.retain(|app| app.id != app_id);
+    state
+        .shared
+        .app_versions
+        .retain(|version| version.app_id != app_id);
+    state
+        .device
+        .pc_access
+        .retain(|access| access.app_id != app_id);
 }
 
 fn version_app(state: &CoreState, version: &AppVersion) -> App {

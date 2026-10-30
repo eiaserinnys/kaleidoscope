@@ -18,7 +18,14 @@ fn offline_changes_wait_for_snapshot_and_changed_during_send_stays_pending() {
         name: "끊김 중".into(),
     })
     .unwrap();
-    crate::registry_events::apply_event(&core.inner, 0, DeviceEvent::AppsSnapshot { apps: vec![] });
+    crate::registry_events::apply_event(
+        &core.inner,
+        0,
+        DeviceEvent::AppsSnapshot {
+            apps: vec![],
+            deleted: vec![],
+        },
+    );
     thread::sleep(Duration::from_millis(100));
     assert!(client.layout_changes.lock().unwrap().is_empty());
     let (sender, receiver) = mpsc::channel();

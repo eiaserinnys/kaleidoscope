@@ -6,8 +6,8 @@ import type {
   Grant,
   ShellSnapshot,
 } from "../contract/contract";
-import mdEditorJson from "../../../examples/md-editor.json";
-import mdViewerJson from "../../../examples/md-viewer.json";
+import mdEditorJson from "../../../apps/md-editor.json";
+import mdViewerJson from "../../../apps/md-viewer.json";
 
 export const mdEditorDefinition = mdEditorJson as AppDefinition;
 export const mdViewerDefinition = mdViewerJson as AppDefinition;

@@ -2,10 +2,10 @@ use super::*;
 
 mod nested;
 
-/// 고른 폴더 범위의 탐색기(계약 8판 모양). examples/explorer.json은 내 PC 범위로 바뀌었고,
+/// 고른 폴더 범위의 탐색기(계약 8판 모양). apps/explorer.json은 내 PC 범위로 바뀌었고,
 /// 이 시험들은 폴더 범위의 열기 규칙을 본다.
 const FOLDER_EXPLORER: &str = r#"{
-  "id": "explorer",
+  "id": "test-explorer",
   "name": "탐색기",
   "requires": { "blocks": 5, "modules": { "files": 1 } },
   "permissions": [
@@ -30,11 +30,11 @@ fn explorer_opens_and_reuses_editor_with_folder_grant() {
     let host = Arc::new(FakeHost::default());
     let core = open_core(
         data.path(),
-        vec![MD_EDITOR.into(), FOLDER_EXPLORER.into()],
+        vec![test_definition(MD_EDITOR), FOLDER_EXPLORER.into()],
         &host,
     );
     let (_, desktop) = active_ids(&core);
-    let explorer = open_window(&core, &desktop, "explorer");
+    let explorer = open_window(&core, &desktop, "test-explorer");
     host.choose(Some(docs.path().into()));
     core.handle(CoreRequest::FilesPickFolder {
         window_id: explorer.clone(),
@@ -51,7 +51,7 @@ fn explorer_opens_and_reuses_editor_with_folder_grant() {
             window_id: explorer.clone(),
             permission: "folder".into(),
             path: "a.MD".into(),
-            app_id: "md-editor".into(),
+            app_id: "test-md-editor".into(),
             rect: None,
         })
     };
@@ -110,17 +110,17 @@ fn explorer_open_reports_missing_grant_file_and_extension() {
     let host = Arc::new(FakeHost::default());
     let core = open_core(
         data.path(),
-        vec![MD_EDITOR.into(), FOLDER_EXPLORER.into()],
+        vec![test_definition(MD_EDITOR), FOLDER_EXPLORER.into()],
         &host,
     );
     let (_, desktop) = active_ids(&core);
-    let explorer = open_window(&core, &desktop, "explorer");
+    let explorer = open_window(&core, &desktop, "test-explorer");
     let open = |path: &str| {
         core.handle(CoreRequest::FilesOpen {
             window_id: explorer.clone(),
             permission: "folder".into(),
             path: path.into(),
-            app_id: "md-editor".into(),
+            app_id: "test-md-editor".into(),
             rect: None,
         })
     };
@@ -205,8 +205,8 @@ fn web_commands_validate_and_delegate_and_emit_updates() {
         CoreConfig {
             data_dir: data.path().into(),
             seed_definitions: vec![
-                include_str!("../../../../examples/web-browser.json").into(),
-                MD_EDITOR.into(),
+                test_definition(include_str!("../../../../apps/web-browser.json")),
+                test_definition(MD_EDITOR),
             ],
             server_url: "http://localhost".into(),
             device_name: "test".into(),
@@ -215,8 +215,8 @@ fn web_commands_validate_and_delegate_and_emit_updates() {
     )
     .unwrap();
     let (_, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "web-browser");
-    let editor = open_window(&core, &desktop, "md-editor");
+    let window = open_window(&core, &desktop, "test-web-browser");
+    let editor = open_window(&core, &desktop, "test-md-editor");
     expect_error(
         core.handle(CoreRequest::WebAttach {
             window_id: editor,
@@ -331,11 +331,11 @@ fn explorer_opens_new_window_for_a_different_folder() {
     let host = Arc::new(FakeHost::default());
     let core = open_core(
         data.path(),
-        vec![MD_EDITOR.into(), FOLDER_EXPLORER.into()],
+        vec![test_definition(MD_EDITOR), FOLDER_EXPLORER.into()],
         &host,
     );
     let (_, desktop) = active_ids(&core);
-    let explorer = open_window(&core, &desktop, "explorer");
+    let explorer = open_window(&core, &desktop, "test-explorer");
     let run = |folder: &Path| {
         host.choose(Some(folder.into()));
         core.handle(CoreRequest::FilesPickFolder {
@@ -348,7 +348,7 @@ fn explorer_opens_new_window_for_a_different_folder() {
                 window_id: explorer.clone(),
                 permission: "folder".into(),
                 path: "a.md".into(),
-                app_id: "md-editor".into(),
+                app_id: "test-md-editor".into(),
                 rect: None,
             })
             .unwrap()
@@ -377,11 +377,13 @@ fn web_without_host_is_unavailable_and_detach_is_idempotent() {
     let host = Arc::new(FakeHost::default());
     let core = open_core(
         data.path(),
-        vec![include_str!("../../../../examples/web-browser.json").into()],
+        vec![test_definition(include_str!(
+            "../../../../apps/web-browser.json"
+        ))],
         &host,
     );
     let (_, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "web-browser");
+    let window = open_window(&core, &desktop, "test-web-browser");
     expect_error(
         core.handle(CoreRequest::WebAttach {
             window_id: window.clone(),
@@ -401,7 +403,9 @@ fn web_detaches_when_definition_loses_web_block() {
     let core = Core::open(
         CoreConfig {
             data_dir: data.path().into(),
-            seed_definitions: vec![include_str!("../../../../examples/web-browser.json").into()],
+            seed_definitions: vec![test_definition(include_str!(
+                "../../../../apps/web-browser.json"
+            ))],
             server_url: "http://localhost".into(),
             device_name: "test".into(),
         },
@@ -409,14 +413,14 @@ fn web_detaches_when_definition_loses_web_block() {
     )
     .unwrap();
     let (_, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "web-browser");
+    let window = open_window(&core, &desktop, "test-web-browser");
     core.handle(CoreRequest::WebAttach {
         window_id: window.clone(),
         url: "https://example.com".into(),
     })
     .unwrap();
-    let mut definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
-    definition["id"] = json!("web-browser");
+    let mut definition: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
+    definition["id"] = json!("test-web-browser");
     import(&core, &definition.to_string());
     assert!(host
         .web
@@ -433,7 +437,9 @@ fn removing_desktop_detaches_only_its_web_windows() {
     let core = Core::open(
         CoreConfig {
             data_dir: data.path().into(),
-            seed_definitions: vec![include_str!("../../../../examples/web-browser.json").into()],
+            seed_definitions: vec![test_definition(include_str!(
+                "../../../../apps/web-browser.json"
+            ))],
             server_url: "http://localhost".into(),
             device_name: "test".into(),
         },
@@ -451,8 +457,8 @@ fn removing_desktop_detaches_only_its_web_windows() {
         CoreReply::DesktopCreate { desktop } => desktop.id,
         _ => unreachable!(),
     };
-    let a = open_window(&core, &first, "web-browser");
-    let b = open_window(&core, &second, "web-browser");
+    let a = open_window(&core, &first, "test-web-browser");
+    let b = open_window(&core, &second, "test-web-browser");
     for window_id in [&a, &b] {
         core.handle(CoreRequest::WebAttach {
             window_id: window_id.clone(),

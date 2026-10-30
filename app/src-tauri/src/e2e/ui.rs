@@ -66,22 +66,6 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
         "previous windows closed",
     )?;
 
-    let mut browser: Value =
-        serde_json::from_str(include_str!("../../../../examples/web-browser.json"))
-            .map_err(|error| error.to_string())?;
-    browser["state"]["url"] = json!("https://example.com/");
-    for definition in [
-        browser.to_string(),
-        include_str!("../../../../examples/explorer.json").into(),
-        include_str!("../../../../examples/md-editor.json").into(),
-    ] {
-        call(
-            core,
-            CoreRequest::AppImport {
-                definition_json: definition,
-            },
-        )?;
-    }
     let events: WebEvents = Arc::new(Mutex::new(Vec::new()));
     let events_listener = events.clone();
     core.subscribe(Box::new(move |event| {
@@ -105,9 +89,16 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
             height: 600,
         },
     )?;
+    call(
+        core,
+        CoreRequest::WindowSetState {
+            window_id: browser_id.clone(),
+            state: [("url".to_string(), json!("https://example.com/"))].into(),
+        },
+    )?;
     require_request(log, start, "browser UI attach", |request| {
         matches!(request,
-            CoreRequest::WebAttach { window_id, url } if window_id == &browser_id && url.starts_with("https://example.com/")
+            CoreRequest::WebAttach { window_id, url } | CoreRequest::WebNavigate { window_id, url } if window_id == &browser_id && url.starts_with("https://example.com/")
         )
     })?;
     let page = wait_web(&events, &browser_id, "https://example.com/")?;

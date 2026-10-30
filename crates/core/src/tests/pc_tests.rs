@@ -2,7 +2,8 @@ use super::*;
 
 fn pc_explorer() -> String {
     let mut definition: Value =
-        serde_json::from_str(include_str!("../../../../examples/explorer.json")).unwrap();
+        serde_json::from_str(include_str!("../../../../apps/explorer.json")).unwrap();
+    definition["id"] = json!("test-explorer");
     definition["requires"]["modules"]["files"] = json!(2);
     definition["permissions"][0]["id"] = json!("folder");
     definition["ui"]["root"]["permission"] = json!("folder");
@@ -17,7 +18,7 @@ fn pc_access_allows_root_listing() {
     let host = Arc::new(FakeHost::default());
     let core = open_core(temp.path(), vec![pc_explorer()], &host);
     let (_, desktop) = active_ids(&core);
-    let window_id = open_window(&core, &desktop, "explorer");
+    let window_id = open_window(&core, &desktop, "test-explorer");
     expect_error(
         core.handle(CoreRequest::FilesAllowPc {
             window_id: "missing".into(),
@@ -74,7 +75,7 @@ fn pc_lists_virtual_roots_and_guards_data_and_links() {
     ];
     let core = open_core(&data, vec![pc_explorer()], &host);
     let (_, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "explorer");
+    let window = open_window(&core, &desktop, "test-explorer");
     let list = |dir: &str| {
         core.handle(CoreRequest::FilesList {
             window_id: window.clone(),
@@ -99,7 +100,7 @@ fn pc_lists_virtual_roots_and_guards_data_and_links() {
     ));
     assert_eq!(first, allow().unwrap());
     assert!(rx.try_recv().is_err());
-    let second = open_window(&core, &desktop, "explorer");
+    let second = open_window(&core, &desktop, "test-explorer");
     assert!(matches!(
         core.handle(CoreRequest::FilesList {
             window_id: second,
@@ -150,7 +151,7 @@ fn pc_lists_virtual_roots_and_guards_data_and_links() {
             window_id: window.clone(),
             permission: "folder".into(),
             path: "C/private-data/device.json".into(),
-            app_id: "md-editor".into(),
+            app_id: "test-md-editor".into(),
             rect: None,
         }),
         ErrorCode::PermissionDenied,
@@ -212,12 +213,12 @@ fn pc_open_grants_parent_and_reuses_editor_then_revokes_on_version_change() {
     });
     let core = open_core(
         &temp.path().join("data"),
-        vec![pc_explorer(), MD_EDITOR.into()],
+        vec![pc_explorer(), test_definition(MD_EDITOR)],
         &host,
     );
     let (_, desktop) = active_ids(&core);
-    let explorer = open_window(&core, &desktop, "explorer");
-    let editor = open_window(&core, &desktop, "md-editor");
+    let explorer = open_window(&core, &desktop, "test-explorer");
+    let editor = open_window(&core, &desktop, "test-md-editor");
     expect_error(
         core.handle(CoreRequest::FilesAllowPc {
             window_id: editor,
@@ -230,7 +231,7 @@ fn pc_open_grants_parent_and_reuses_editor_then_revokes_on_version_change() {
             window_id: explorer.clone(),
             permission: "folder".into(),
             path: path.into(),
-            app_id: "md-editor".into(),
+            app_id: "test-md-editor".into(),
             rect: None,
         })
     };
@@ -302,11 +303,11 @@ fn windows_hidden_and_system_entries_are_omitted() {
     });
     let core = open_core(
         &temp.path().join("data"),
-        vec![pc_explorer(), MD_EDITOR.into()],
+        vec![pc_explorer(), test_definition(MD_EDITOR)],
         &host,
     );
     let (_, desktop) = active_ids(&core);
-    let pc = open_window(&core, &desktop, "explorer");
+    let pc = open_window(&core, &desktop, "test-explorer");
     core.handle(CoreRequest::FilesAllowPc {
         window_id: pc.clone(),
         permission: "folder".into(),
@@ -323,7 +324,7 @@ fn windows_hidden_and_system_entries_are_omitted() {
         panic!()
     };
     assert!(entries.is_empty());
-    let folder = open_window(&core, &desktop, "md-editor");
+    let folder = open_window(&core, &desktop, "test-md-editor");
     host.choose(Some(root));
     pick_folder(&core, &folder);
     let CoreReply::FilesList { entries } = core
@@ -391,7 +392,7 @@ fn assert_grant_protect_data_dir(core: &Core, window: &str) {
             window_id: window.into(),
             permission: "docs".into(),
             path: "private-data/link.json".into(),
-            app_id: "md-editor".into(),
+            app_id: "test-md-editor".into(),
             rect: None,
         }),
         ErrorCode::PermissionDenied,
@@ -427,12 +428,12 @@ fn pc_opened_parent_grant_must_protect_data_dir() {
     });
     let core = open_core(
         &root.join("private-data"),
-        vec![pc_explorer(), MD_EDITOR.into()],
+        vec![pc_explorer(), test_definition(MD_EDITOR)],
         &host,
     );
     fs::write(root.join("private-data/link.json"), "secret").unwrap();
     let (_, desktop) = active_ids(&core);
-    let explorer = open_window(&core, &desktop, "explorer");
+    let explorer = open_window(&core, &desktop, "test-explorer");
     core.handle(CoreRequest::FilesAllowPc {
         window_id: explorer.clone(),
         permission: "folder".into(),
@@ -443,7 +444,7 @@ fn pc_opened_parent_grant_must_protect_data_dir() {
             window_id: explorer,
             permission: "folder".into(),
             path: "C/readme.md".into(),
-            app_id: "md-editor".into(),
+            app_id: "test-md-editor".into(),
             rect: None,
         })
         .unwrap()
@@ -461,10 +462,14 @@ fn selected_parent_grant_must_protect_data_dir() {
     fs::write(root.join("readme.md"), "readme").unwrap();
     let host = Arc::new(FakeHost::default());
     host.choose(Some(root.clone()));
-    let core = open_core(&root.join("private-data"), vec![MD_EDITOR.into()], &host);
+    let core = open_core(
+        &root.join("private-data"),
+        vec![test_definition(MD_EDITOR)],
+        &host,
+    );
     fs::write(root.join("private-data/link.json"), "secret").unwrap();
     let (_, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "md-editor");
+    let window = open_window(&core, &desktop, "test-md-editor");
     pick_folder(&core, &window);
     assert_grant_protect_data_dir(&core, &window);
 }

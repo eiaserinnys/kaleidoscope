@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import explorerJson from "../../../examples/explorer.json";
+import explorerJson from "../../../apps/explorer.json";
 import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";

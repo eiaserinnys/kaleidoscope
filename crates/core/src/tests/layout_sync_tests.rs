@@ -76,9 +76,14 @@ fn first_snapshot_replaces_empty_local_workspace_and_selects_server_workspace() 
 fn server_deletion_cleans_selected_workspace_and_grants() {
     let dir = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
-    let core = open_core_with_client(dir.path(), vec![MD_EDITOR.into()], &host, registry_client());
+    let core = open_core_with_client(
+        dir.path(),
+        vec![test_definition(MD_EDITOR)],
+        &host,
+        registry_client(),
+    );
     let (old_workspace, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "md-editor");
+    let window = open_window(&core, &desktop, "test-md-editor");
     host.choose(Some(dir.path().to_path_buf()));
     pick_folder(&core, &window);
     let other = match core
@@ -123,7 +128,12 @@ fn local_commands_track_changed_entities_including_deletions() {
     use crate::sync_state::EntityKind::{Desktop, Window, Workspace};
     let dir = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
-    let core = open_core_with_client(dir.path(), vec![MD_EDITOR.into()], &host, registry_client());
+    let core = open_core_with_client(
+        dir.path(),
+        vec![test_definition(MD_EDITOR)],
+        &host,
+        registry_client(),
+    );
     mark_connected(&core);
     let (initial, desktop) = active_ids(&core);
     let (created, child) = match core
@@ -158,7 +168,7 @@ fn local_commands_track_changed_entities_including_deletions() {
     })
     .unwrap();
     assert!(is_pending(&core, Desktop, &extra));
-    let window = open_window(&core, &desktop, "md-editor");
+    let window = open_window(&core, &desktop, "test-md-editor");
     core.handle(CoreRequest::WindowSetRect {
         window_id: window.clone(),
         rect: Rect {
@@ -199,9 +209,14 @@ fn local_commands_track_changed_entities_including_deletions() {
 fn first_sync_keeps_populated_local_work_and_pending_wins_in_both_events() {
     let dir = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
-    let core = open_core_with_client(dir.path(), vec![MD_EDITOR.into()], &host, registry_client());
+    let core = open_core_with_client(
+        dir.path(),
+        vec![test_definition(MD_EDITOR)],
+        &host,
+        registry_client(),
+    );
     let (_, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "md-editor");
+    let window = open_window(&core, &desktop, "test-md-editor");
     let local = snapshot(&core).shared;
     mark_connected(&core);
     let mut remote = local.workspaces[0].clone();
@@ -252,9 +267,14 @@ fn first_sync_keeps_populated_local_work_and_pending_wins_in_both_events() {
 fn snapshot_from_empty_server_uploads_all_local_entities_and_migrates_remote_window() {
     let dir = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
-    let core = open_core_with_client(dir.path(), vec![MD_EDITOR.into()], &host, registry_client());
+    let core = open_core_with_client(
+        dir.path(),
+        vec![test_definition(MD_EDITOR)],
+        &host,
+        registry_client(),
+    );
     let (workspace, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "md-editor");
+    let window = open_window(&core, &desktop, "test-md-editor");
     mark_connected(&core);
     crate::registry_events::apply_event(
         &core.inner,
@@ -289,7 +309,13 @@ fn snapshot_from_empty_server_uploads_all_local_entities_and_migrates_remote_win
     let after = snapshot(&core);
     assert_eq!(
         after.shared.windows[0].app_version,
-        after.shared.apps[0].current_version
+        after
+            .shared
+            .apps
+            .iter()
+            .find(|app| app.id == "test-md-editor")
+            .unwrap()
+            .current_version
     );
     assert!(!after.shared.windows[0].state.contains_key("obsolete"));
     assert!(!is_pending(

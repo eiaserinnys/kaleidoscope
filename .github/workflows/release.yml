@@ -95,8 +95,3 @@ jobs:
           name: windows-smoke-${{ github.ref_name }}
           path: smoke.png
           if-no-files-found: error
-
-      - name: Upload example app definitions
-        run: gh release upload "${{ github.ref_name }}" examples/md-editor.json examples/md-viewer.json --clobber
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -8,7 +8,7 @@ use kaleidoscope_contract::{
 use std::collections::BTreeMap;
 use tower::ServiceExt;
 
-const EDITOR: &str = include_str!("../../../examples/md-editor.json");
+const EDITOR: &str = include_str!("../../../apps/md-editor.json");
 const LEGACY_APP: &str = include_str!("fixtures/simple-app.json");
 
 fn workspace(id: &str, name: &str) -> Workspace {
@@ -370,7 +370,7 @@ fn layout_report_counts_as_activity_only_when_device_choices_change() {
     };
     reset(&state);
     // 다른 기기의 변경을 반영해 다시 보고한 것(공유 배치만 바뀜)은 활동이 아니다.
-    layout.windows = vec![window("x", "d", "md-editor")];
+    layout.windows = vec![window("x", "d", "test-md-editor")];
     state.save_layout("pc", &layout).unwrap();
     assert_eq!(last_active(&state), Some(marker.clone()));
 
@@ -391,9 +391,11 @@ async fn app_version_moves_saved_windows_before_sending_open() {
             registry::LAYOUT_SYNC_REGISTRY_VERSION,
         )
         .unwrap();
-    let (first, unchanged) = state.publish_app(EDITOR, "agent", false, None).unwrap();
+    let (first, unchanged) = state
+        .publish_app(&test_definition(EDITOR), "agent", false, None)
+        .unwrap();
     assert!(!unchanged);
-    let mut saved = window("win", "d", "md-editor");
+    let mut saved = window("win", "d", "test-md-editor");
     saved.app_version = first.version.version;
     saved.state = BTreeMap::from([
         ("current_file".into(), json!("notes/a.md")),
@@ -410,7 +412,7 @@ async fn app_version_moves_saved_windows_before_sending_open() {
             },
         )
         .unwrap();
-    let mut definition: Value = serde_json::from_str(EDITOR).unwrap();
+    let mut definition: Value = serde_json::from_str(&test_definition(EDITOR)).unwrap();
     definition["name"] = json!("편집기 새 버전");
     definition["state"] = json!({"current_file":null,"added":7});
     let mut events = state.0.events.subscribe();
@@ -448,7 +450,7 @@ async fn app_version_moves_saved_windows_before_sending_open() {
         matches!(events.try_recv().unwrap().event, DeviceEvent::LayoutChanged { changes } if changes.windows == vec![stored.clone()])
     );
     assert!(
-        matches!(events.try_recv().unwrap().event, DeviceEvent::AppOpen { app_id, workspace_id: Some(id) } if app_id == "md-editor" && id == "w")
+        matches!(events.try_recv().unwrap().event, DeviceEvent::AppOpen { app_id, workspace_id: Some(id) } if app_id == "test-md-editor" && id == "w")
     );
 }
 
