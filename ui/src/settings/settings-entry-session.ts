@@ -16,20 +16,26 @@ export interface SettingsEntrySnapshot {
   error: CoreError | null;
 }
 
+type Operation = { kind: "write"; value: JsonValue } | { kind: "reset"; editVersion: number };
 const equal = (a: JsonValue, b: JsonValue) => JSON.stringify(a) === JSON.stringify(b);
 
 export class SettingsEntrySession {
   private state: SettingsEntrySnapshot;
   private listeners = new Set<() => void>();
   private running: Promise<void> | null = null;
-  private retryOperation: "read" | "write" | "reset" = "read";
+  private queue: Operation[] = [];
+  private failed: Operation | null = null;
+  private retryRead = true;
   private readVersion = 0;
+  private editVersion = 0;
   private refreshPending = false;
   private savedTimer?: ReturnType<typeof setTimeout>;
   private committedValue: JsonValue;
+  private confirmedValue: JsonValue;
 
   constructor(private store: ShellStore, private windowId: string, readonly entry: StorageEntryDecl) {
     this.committedValue = entry.default;
+    this.confirmedValue = entry.default;
     this.state = { loaded: false, value: entry.default, revision: null, exists: false, dirty: false, editing: false, saving: false, saved: false, conflict: false, error: null };
   }
   getSnapshot = () => this.state;
@@ -37,11 +43,14 @@ export class SettingsEntrySession {
   private update(patch: Partial<SettingsEntrySnapshot>) { this.state = { ...this.state, ...patch }; this.listeners.forEach((listener) => listener()); }
   private accept(result: StorageReadReply) {
     this.committedValue = result.content;
+    this.confirmedValue = result.content;
+    this.failed = null;
+    this.queue = [];
     this.update({ loaded: true, value: result.content, revision: result.revision, exists: result.exists, dirty: false, editing: false, conflict: false, error: null, saved: false });
   }
   async load(force = false) {
     const version = ++this.readVersion;
-    this.retryOperation = "read";
+    this.retryRead = true;
     try {
       const { result } = await this.store.call({ op: "storage.get", window_id: this.windowId, entry: this.entry.id });
       if (version !== this.readVersion || (!force && (this.state.dirty || this.state.editing || this.state.saving || this.state.conflict))) return;
@@ -54,64 +63,92 @@ export class SettingsEntrySession {
     return this.load();
   }
   beginEdit() { this.update({ editing: true }); }
-  edit(value: JsonValue) { this.update({ value, dirty: !equal(value, this.committedValue), saved: false, error: null }); }
+  edit(value: JsonValue) {
+    if (!equal(value, this.state.value)) this.editVersion++;
+    this.update({ value, dirty: !equal(value, this.committedValue), saved: false, error: null });
+  }
   cancel() {
-    this.update({ value: this.committedValue, dirty: false, editing: false, error: null });
+    this.editVersion++;
+    this.update({ value: this.confirmedValue, dirty: !equal(this.confirmedValue, this.committedValue), editing: false, error: null });
     if (this.refreshPending) void this.refresh();
   }
   finishEdit() {
     this.update({ editing: false });
-    if (!this.state.dirty && this.refreshPending) return this.refresh();
+    if (!this.state.dirty && !this.running && this.refreshPending) return this.refresh();
     return this.save();
   }
-  async save() {
-    if (!this.state.loaded || this.state.conflict) return;
+  save() {
+    if (!this.state.loaded || this.state.conflict) return Promise.resolve();
+    if (!this.running && !this.state.dirty) return Promise.resolve();
+    const operation: Operation = { kind: "write", value: this.state.value };
+    this.confirmedValue = operation.value;
+    // 아직 시작하지 않은 연속 쓰기는 마지막으로 확정한 값만 필요하다.
+    if (this.queue.at(-1)?.kind === "write") this.queue[this.queue.length - 1] = operation;
+    else this.queue.push(operation);
+    return this.start();
+  }
+  reset() {
+    if (!this.state.loaded || this.state.conflict || (!this.state.exists && !this.running)) return Promise.resolve();
+    this.queue.push({ kind: "reset", editVersion: this.editVersion });
+    return this.start();
+  }
+  private start(): Promise<void> {
     if (this.running) return this.running;
-    this.retryOperation = "write";
-    this.running = this.saveLoop();
-    try { await this.running; } finally { this.running = null; }
+    this.retryRead = false;
+    this.running = this.drain();
+    return this.running;
   }
-  private async saveLoop() {
-    while (this.state.dirty && !this.state.conflict) {
-      const value = this.state.value;
-      const revision = this.state.revision;
-      this.update({ saving: true, error: null, saved: false });
-      try {
-        const result = await this.store.call({ op: "storage.write", window_id: this.windowId, entry: this.entry.id, content: value, expected_revision: revision });
-        this.committedValue = value;
-        this.update({ revision: result.revision, exists: true, dirty: !equal(this.state.value, value), saving: false, saved: true });
-        clearTimeout(this.savedTimer);
-        this.savedTimer = setTimeout(() => this.update({ saved: false }), 2000);
-      } catch (error) {
-        const reason = toCoreError(error);
-        this.update({ saving: false, conflict: reason.code === "conflict", error: reason.code === "conflict" ? null : reason });
-        return;
-      }
-    }
-  }
-  async reset() {
-    if (!this.state.loaded || !this.state.exists || this.running) return;
-    this.retryOperation = "reset";
-    this.update({ saving: true, error: null, saved: false });
+  private async drain() {
     try {
-      await this.store.call({ op: "storage.reset", window_id: this.windowId, entry: this.entry.id, expected_revision: this.state.revision });
-      this.committedValue = this.entry.default;
-      this.update({ value: this.entry.default, revision: null, exists: false, dirty: false, editing: false, saving: false, conflict: false });
-    } catch (error) {
-      const reason = toCoreError(error);
-      this.update({ saving: false, conflict: reason.code === "conflict", error: reason.code === "conflict" ? null : reason });
+      while (this.queue.length && !this.state.conflict) {
+        const operation = this.queue.shift()!;
+        const revision = this.state.revision;
+        this.update({ saving: true, error: null, saved: false });
+        try {
+          if (operation.kind === "write") {
+            const result = await this.store.call({ op: "storage.write", window_id: this.windowId, entry: this.entry.id, content: operation.value, expected_revision: revision });
+            this.committedValue = operation.value;
+            const dirty = !equal(this.state.value, operation.value);
+            this.update({ revision: result.revision, exists: true, dirty, saved: !dirty && !this.queue.length });
+          } else {
+            await this.store.call({ op: "storage.reset", window_id: this.windowId, entry: this.entry.id, expected_revision: revision });
+            this.committedValue = this.entry.default;
+            if (!this.queue.some((item) => item.kind === "write")) this.confirmedValue = this.entry.default;
+            const value = this.editVersion === operation.editVersion ? this.entry.default : this.state.value;
+            this.update({ value, revision: null, exists: false, dirty: !equal(value, this.entry.default), conflict: false });
+          }
+          this.failed = null;
+          if (this.state.saved) {
+            clearTimeout(this.savedTimer);
+            this.savedTimer = setTimeout(() => this.update({ saved: false }), 2000);
+          }
+        } catch (error) {
+          const reason = toCoreError(error);
+          this.failed = operation;
+          this.update({ conflict: reason.code === "conflict", error: reason.code === "conflict" ? null : reason });
+          break;
+        }
+      }
+    } finally {
+      this.running = null;
+      this.update({ saving: false });
     }
   }
   async reload() { await this.load(true); }
   async overwrite() {
     try {
       const { result } = await this.store.call({ op: "storage.get", window_id: this.windowId, entry: this.entry.id });
-      if (this.retryOperation === "reset" && !result.exists) { this.accept(result); return; }
       this.update({ revision: result.revision, exists: result.exists, conflict: false, error: null });
-      if (this.retryOperation === "reset") await this.reset();
-      else { this.update({ dirty: true }); await this.save(); }
+      if (this.failed?.kind === "reset") { this.queue.unshift(this.failed); await this.start(); }
+      else { this.queue = []; this.update({ dirty: true }); await this.save(); }
     } catch (error) { this.update({ error: toCoreError(error) }); }
   }
-  retry() { return this.retryOperation === "read" ? this.load(true) : this.retryOperation === "reset" ? this.reset() : this.save(); }
+  retry() {
+    if (this.state.conflict) return this.overwrite();
+    if (this.retryRead || !this.failed) return this.load(true);
+    const operation = this.failed;
+    this.queue.unshift(operation);
+    return this.start();
+  }
   dispose() { clearTimeout(this.savedTimer); }
 }

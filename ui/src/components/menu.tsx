@@ -93,6 +93,13 @@ export function Menu({ anchor, items, onClose }: MenuProps) {
       aria-orientation="vertical"
       className="ks-menu"
       data-ks-overlay
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+        anchor.focus();
+      }}
       ref={menuRef}
       role="menu"
       style={{ left: position.left, top: position.top }}

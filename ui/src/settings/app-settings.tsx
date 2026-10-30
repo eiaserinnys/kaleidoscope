@@ -25,7 +25,7 @@ export function AppSettings({ context, open, onClose, onProblem }: { context: Bl
   const groups = [false, true].map((workspace) => entries.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry.presentation === "settings" && entry.key.includes("{workspace_id}") === workspace));
   const close = () => { if (document.activeElement instanceof HTMLElement && root.current?.contains(document.activeElement)) document.activeElement.blur(); onClose(); };
   return <div className="ks-app-settings" data-ks-overlay data-ks-share-skip hidden={!open} ref={root} onKeyDown={(event) => {
-    if (event.key === "Escape" && !event.defaultPrevented && !(event.target instanceof Element && event.target.closest(".cm-editor"))) { event.preventDefault(); event.stopPropagation(); close(); }
+    if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); close(); }
   }}>
     <header className="ks-data-toolbar"><IconButton aria-label="앱으로 돌아가기" onClick={close}><ArrowLeft /></IconButton><h2 ref={title} tabIndex={-1}>앱 설정</h2></header>
     <div className="ks-app-settings-scroll">{groups.map((items, group) => items.length ? <section className="ks-settings-group" key={group}>

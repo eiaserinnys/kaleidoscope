@@ -21,6 +21,7 @@ describe("설정 항목", () => {
     session.edit("첫 값");
     const first = session.save();
     session.edit("마지막 값");
+    void session.save();
     await first;
     expect((await transport.call({ op: "storage.get", window_id: "editor-window", entry: "title" })).result.content).toBe("마지막 값");
     await session.reset();

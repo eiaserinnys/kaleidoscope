@@ -170,3 +170,37 @@ test("앱 본문과 설정의 같은 문서는 초안과 세션을 공유한다"
   await expect(body).toContainText("이어 쓰기");
   expect(await page.evaluate(() => window.__kaleidoscopeHarness!.getCalls().filter((request) => request.op === "data.detach").length)).toBe(detached);
 });
+
+for (const viewport of [{ width: 1440, height: 1080, name: "wide" }, { width: 384, height: 900, name: "narrow" }]) {
+  test(`모델 순서 시작선과 메뉴 Escape (${viewport.name})`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    const rows = page.locator(".ks-settings-list-row .ks-settings-list-input .ks-button");
+    await expect(rows).toHaveCount(3);
+    const positions = await rows.evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().left));
+    expect(Math.max(...positions) - Math.min(...positions)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: `${captures}/review-models-${viewport.name}.png` });
+    const opener = page.getByRole("button", { name: "1 argon" });
+    await opener.click();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "앱 설정" })).toBeVisible();
+    await expect(opener).toBeFocused();
+    await page.screenshot({ path: `${captures}/review-menu-escape-${viewport.name}.png` });
+  });
+
+  test(`Markdown의 소비되지 않은 Escape가 설정을 닫는다 (${viewport.name})`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.getByRole("button", { name: "처음 지시", exact: false }).click();
+    const editor = page.locator(".ks-settings-document .cm-content").first();
+    await expect(editor).toBeFocused();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("heading", { name: "앱 설정" })).toBeVisible();
+    await expect(editor).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.getByText("앱 본문")).toBeVisible();
+    await expect(page.getByRole("button", { name: "앱 설정", exact: true })).toBeFocused();
+    await page.screenshot({ path: `${captures}/review-md-escape-${viewport.name}.png` });
+  });
+}

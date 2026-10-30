@@ -21,3 +21,4 @@
 .ks-settings-list-add { margin-top: var(--ks-space-1); }
 .ks-settings-list-input { flex: 1 1 auto; min-width: 0; }
 .ks-settings-list-input .ks-text-input { width: 100%; }
+.ks-settings-index { flex: 0 0 var(--ks-space-4); text-align: right; font-variant-numeric: tabular-nums; }
