@@ -2,21 +2,77 @@ use super::*;
 use axum::body::Body;
 use tower::ServiceExt;
 
-const EDITOR: &str = include_str!("../../../examples/md-editor.json");
-const BROWSER: &str = include_str!("../../../examples/web-browser.json");
+const EDITOR: &str = include_str!("../../../apps/md-editor.json");
+const BROWSER: &str = include_str!("../../../apps/web-browser.json");
 const LEGACY_APP: &str = include_str!("fixtures/simple-app.json");
+
+#[test]
+fn builtin_apps_are_listed_and_upload_is_rejected() {
+    let state = AppState::in_memory("secret");
+    let apps = state.list_apps().unwrap();
+    for id in ["explorer", "md-editor", "md-viewer", "web-browser"] {
+        assert!(apps.iter().any(|app| app.id == id && app.builtin));
+    }
+    assert_eq!(apps.len(), 4);
+    assert!(state.publish_app(EDITOR, "agent", false, None).is_err());
+}
+
+#[tokio::test]
+async fn device_upload_rejects_builtin_id() {
+    let state = AppState::in_memory("secret");
+    let (_, token) = make_device(&state);
+    let body = serde_json::to_string(&registry::DeviceUploadRequest {
+        definition_json: EDITOR.into(),
+    })
+    .unwrap();
+    let mut request = request("POST", "/api/device/apps", Some(&token), Body::from(body));
+    request
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
+    let response = router(state).oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[test]
+fn migration_v8_adds_soft_delete_without_changing_existing_rows() {
+    let state = AppState::in_memory("secret");
+    let (app, _) = state
+        .publish_app(&test_definition(EDITOR), "agent", false, None)
+        .unwrap();
+    let db = state.lock_db().unwrap();
+    db.execute_batch("ALTER TABLE apps DROP COLUMN deleted_at; PRAGMA user_version=8;")
+        .unwrap();
+    migrate(&db).unwrap();
+    let row: (String, u32, Option<String>) = db
+        .query_row(
+            "SELECT id,current_version,deleted_at FROM apps WHERE id=?1",
+            [&app.app.id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(row, (app.app.id, 1, None));
+    assert_eq!(
+        db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        9
+    );
+}
 
 #[test]
 fn app_upload_versions_and_deduplicates_identical_definitions() {
     let state = AppState::in_memory("secret");
-    let (first, unchanged) = state.publish_app(EDITOR, "agent", false, None).unwrap();
+    let (first, unchanged) = state
+        .publish_app(&test_definition(EDITOR), "agent", false, None)
+        .unwrap();
     assert_eq!(first.version.version, 1);
     assert!(!unchanged);
-    let (same, unchanged) = state.publish_app(EDITOR, "agent", false, None).unwrap();
+    let (same, unchanged) = state
+        .publish_app(&test_definition(EDITOR), "agent", false, None)
+        .unwrap();
     assert_eq!(same.version.version, 1);
     assert!(unchanged);
-    let modified = EDITOR.replace("마크다운 편집기", "편집기 변경");
-    assert_ne!(modified, EDITOR);
+    let modified = test_definition(EDITOR).replace("마크다운 편집기", "편집기 변경");
+    assert_ne!(modified, test_definition(EDITOR));
     let (second, unchanged) = state.publish_app(&modified, "agent", false, None).unwrap();
     assert_eq!(second.version.version, 2);
     assert!(!unchanged);
@@ -30,11 +86,11 @@ fn invalid_definitions_and_outside_paths_are_rejected_without_saving() {
         .publish_app(malformed, "agent", false, None)
         .unwrap_err();
     assert!(!err.details.is_empty());
-    let outside = EDITOR.replace(
+    let outside = test_definition(EDITOR).replace(
         r#""path": { "state": "current_file" }"#,
         r#""path": "../secret.md""#,
     );
-    assert_ne!(outside, EDITOR);
+    assert_ne!(outside, test_definition(EDITOR));
     let err = state
         .publish_app(&outside, "agent", false, None)
         .unwrap_err();
@@ -173,7 +229,9 @@ async fn event_stream_snapshot_filters_apps_by_supported_header() {
 
     let state = AppState::in_memory("secret");
     state.publish_app(LEGACY_APP, "agent", false, None).unwrap();
-    state.publish_app(BROWSER, "agent", false, None).unwrap();
+    state
+        .publish_app(&test_definition(BROWSER), "agent", false, None)
+        .unwrap();
     let mut settings_definition: Value =
         serde_json::from_str(include_str!("../../../examples/workspace-pas-v2.json")).unwrap();
     settings_definition["id"] = json!("workspace-pas-settings");
@@ -204,7 +262,7 @@ async fn event_stream_snapshot_filters_apps_by_supported_header() {
         .into_iter()
         .map(|app| app.app.id)
         .collect();
-    assert_eq!(old_ids, ["workspace-pas"]);
+    assert_eq!(old_ids, ["md-viewer", "workspace-pas"]);
 
     let mut storage_one = Supported::current();
     storage_one.modules.insert("storage".into(), 1);
@@ -272,7 +330,9 @@ async fn legacy_stream_does_not_receive_unrenderable_publish_or_open_events() {
     let mut stream = response.into_body().into_data_stream();
     let _ = next_device_event(&mut stream).await;
 
-    let (browser, _) = state.publish_app(BROWSER, "agent", false, None).unwrap();
+    let (browser, _) = state
+        .publish_app(&test_definition(BROWSER), "agent", false, None)
+        .unwrap();
     let published = state.event_for_device(
         &device_id,
         DeviceEvent::AppPublished {
@@ -344,12 +404,12 @@ async fn next_device_event(stream: &mut axum::body::BodyDataStream) -> Value {
 #[test]
 fn migration_upgrades_v1_without_losing_devices() {
     let db = Connection::open_in_memory().unwrap();
-    db.execute_batch("CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT); INSERT INTO devices(id,name,token_sha256,created_at) VALUES('d','PC','hash','now'); PRAGMA user_version=1;").unwrap();
+    db.execute_batch("CREATE TABLE apps (id TEXT PRIMARY KEY,name TEXT NOT NULL,current_version INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL); CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT); INSERT INTO devices(id,name,token_sha256,created_at) VALUES('d','PC','hash','now'); PRAGMA user_version=1;").unwrap();
     migrate(&db).unwrap();
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 8);
+    assert_eq!(version, 9);
     assert_eq!(
         db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -378,10 +438,12 @@ fn migration_upgrades_v1_without_losing_devices() {
 #[test]
 fn migration_v7_removes_legacy_tables_and_preserves_other_data() {
     let state = AppState::in_memory("secret");
-    state.publish_app(EDITOR, "agent", false, None).unwrap();
+    state
+        .publish_app(&test_definition(EDITOR), "agent", false, None)
+        .unwrap();
     let db = state.lock_db().unwrap();
     db.execute_batch(
-        "CREATE TABLE agents(workspace_id TEXT PRIMARY KEY);
+        "ALTER TABLE apps DROP COLUMN deleted_at; CREATE TABLE agents(workspace_id TEXT PRIMARY KEY);
         CREATE TABLE agent_items(id INTEGER PRIMARY KEY, text TEXT);
         INSERT INTO agents VALUES('w'); INSERT INTO agent_items VALUES(1,'기록');
         PRAGMA user_version=7;",
@@ -391,12 +453,12 @@ fn migration_v7_removes_legacy_tables_and_preserves_other_data() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 8);
+    assert_eq!(version, 9);
     let old_tables: i64 = db.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('agents','agent_items')", [], |row| row.get(0)).unwrap();
     assert_eq!(old_tables, 0);
     let apps: i64 = db
         .query_row(
-            "SELECT count(*) FROM apps WHERE id='md-editor'",
+            "SELECT count(*) FROM apps WHERE id='test-md-editor'",
             [],
             |row| row.get(0),
         )

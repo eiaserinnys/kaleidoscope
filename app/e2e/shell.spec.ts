@@ -324,9 +324,11 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await expect(editorWindow).toHaveCSS("left", `${Math.round(movedBox.x)}px`);
   await expect(editor).toContainText("E2E saved");
 
-  const viewerPath = path.join(root, "examples/md-viewer.json");
-  await page.locator('input[type="file"]').setInputFiles(viewerPath);
-  const viewerWindow = page.getByTestId("app-window-md-viewer");
+  const viewerPath = path.join(root, "apps/md-viewer.json");
+  const viewerDefinition = JSON.parse(await readFile(viewerPath, "utf8"));
+  viewerDefinition.id = "test-md-viewer";
+  await page.locator('input[type="file"]').setInputFiles({ name: "viewer.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(viewerDefinition)) });
+  const viewerWindow = page.getByTestId("app-window-test-md-viewer");
   await expect(viewerWindow).toBeVisible();
   await expect(viewerWindow.locator(".ks-markdown-view")).toHaveCount(0);
   await captureThemePair("viewer-empty-path");

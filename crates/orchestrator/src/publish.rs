@@ -27,6 +27,12 @@ impl AppState {
         workspace_id: Option<String>,
     ) -> Result<(RegistryApp, bool, Option<OpenTarget>), CoreError> {
         let definition = parse_app_definition(definition_json)?;
+        if kaleidoscope_contract::builtin::is_builtin(&definition.id) {
+            return Err(CoreError::with_details(
+                ErrorCode::InvalidAppDefinition,
+                vec!["기본 앱은 kaleidoscope 리포의 apps/에서 고치고 쉘 새 판으로 냅니다".into()],
+            ));
+        }
         let now = timestamp();
         let workspace_accessible = match workspace_id.as_deref() {
             Some(id) => self.mcp_owns_workspace(id)?,
@@ -43,15 +49,19 @@ impl AppState {
         let result = {
             let mut db = self.lock_db()?;
             let tx = db.transaction().map_err(db_error)?;
-            let current: Option<(u32, String, String)> = tx.query_row(
-                "SELECT a.current_version, v.definition, a.created_at FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.id=?1",
-                [&definition.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            let current: Option<(u32, String, String, Option<String>)> = tx.query_row(
+                "SELECT a.current_version, v.definition, a.created_at, a.deleted_at FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.id=?1",
+                [&definition.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             ).optional().map_err(db_error)?;
+            let revived = current
+                .as_ref()
+                .is_some_and(|(_, _, _, deleted)| deleted.is_some());
             let mut migrated_windows = Vec::new();
             let (version_num, created_at, unchanged) = if let Some((
                 current_version,
                 stored,
                 created_at,
+                _,
             )) = current
             {
                 let previous: AppDefinition = serde_json::from_str(&stored).map_err(|e| {
@@ -81,6 +91,13 @@ impl AppState {
                 save_version(&tx, &definition, 1, &now, created_by).map_err(db_error)?;
                 (1, now.clone(), false)
             };
+            if revived {
+                tx.execute(
+                    "UPDATE apps SET deleted_at=NULL WHERE id=?1",
+                    [&definition.id],
+                )
+                .map_err(db_error)?;
+            }
             tx.commit().map_err(db_error)?;
             drop(db);
             let app = App {
@@ -104,9 +121,14 @@ impl AppState {
                     now
                 },
             };
-            (RegistryApp { app, version }, unchanged, migrated_windows)
+            (
+                RegistryApp { app, version },
+                unchanged,
+                migrated_windows,
+                revived,
+            )
         };
-        if !result.1 {
+        if !result.1 || result.3 {
             let defer_open = open_requested && !result.2.is_empty();
             let event = DeviceEvent::AppPublished {
                 app: result.0.clone(),

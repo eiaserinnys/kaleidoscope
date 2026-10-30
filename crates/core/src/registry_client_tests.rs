@@ -3,6 +3,16 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 
 #[test]
+fn parses_deleted_snapshot_and_event() {
+    assert!(
+        matches!(parse_event_line(r#"data: {"event":"apps.snapshot","apps":[],"deleted":["personal"]}"#), Some(DeviceEvent::AppsSnapshot { deleted, .. }) if deleted == ["personal"])
+    );
+    assert!(
+        matches!(parse_event_line(r#"data: {"event":"app.deleted","app_id":"personal"}"#), Some(DeviceEvent::AppDeleted { app_id }) if app_id == "personal")
+    );
+}
+
+#[test]
 fn old_registry_without_storage_route_reports_unavailable() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -130,7 +140,7 @@ fn layout_changes_posts_and_classifies_responses() {
 #[test]
 fn snapshot_keeps_readable_apps_when_another_definition_is_unknown() {
     let definition: serde_json::Value =
-        serde_json::from_str(include_str!("../../../examples/md-editor.json")).unwrap();
+        serde_json::from_str(include_str!("../../../apps/md-editor.json")).unwrap();
     let app = serde_json::json!({"app":{"id":"md-editor","name":"editor","current_version":1,"created_at":"now","updated_at":"now"},"version":{"app_id":"md-editor","version":1,"definition":definition,"created_at":"now"}});
     let mut bad = app.clone();
     bad["version"]["definition"]["ui"] = serde_json::json!({"type":"future_block"});
@@ -139,6 +149,6 @@ fn snapshot_keeps_readable_apps_when_another_definition_is_unknown() {
         serde_json::json!({"event":"apps.snapshot","apps":[bad, app]})
     );
     assert!(
-        matches!(parse_event_line(&line), Some(DeviceEvent::AppsSnapshot { apps }) if apps.len() == 1)
+        matches!(parse_event_line(&line), Some(DeviceEvent::AppsSnapshot { apps, .. }) if apps.len() == 1)
     );
 }

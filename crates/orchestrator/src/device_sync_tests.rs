@@ -158,7 +158,7 @@ async fn targeted_events_follow_each_devices_last_report_and_survive_restart() {
     );
     assert_eq!(state.connected_count_for(Some("w")), 1);
     state
-        .publish_app(EDITOR, "agent", true, Some("w".into()))
+        .publish_app(&test_definition(EDITOR), "agent", true, Some("w".into()))
         .unwrap();
     let event_a = next_device_event(&mut stream_a).await;
     let event_b = next_device_event(&mut stream_b).await;

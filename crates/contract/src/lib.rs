@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 18판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 19판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -95,6 +95,10 @@
 //! 대화는 앱 정의의 제공자와 기기 로그인으로만 이뤄진다. 제공자가 없는 기존 대화 블록은 빈 상태를 보인다.
 //! 새 정의에는 제공자가 필요하다. 블록과 모듈 판은 그대로다.
 //!
+//! # 계약 19판: 기본 앱
+//! 기본 앱은 리포의 apps/와 [`builtin`] 표가 정본이고 쉘과 함께 나간다.
+//! 개인 앱 삭제와 동기화는 레지스트리 9판에서 처리한다.
+//!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
 //! - 코어는 이벤트 채널 하나로 [`CoreEvent`]를 보낸다.
@@ -166,6 +170,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 pub mod app_storage;
+pub mod builtin;
 pub mod conversation;
 pub mod data;
 pub mod registry;
@@ -2330,7 +2335,24 @@ mod tests {
     use super::*;
 
     fn example(name: &str) -> String {
-        let path = format!("{}/../../examples/{}", env!("CARGO_MANIFEST_DIR"), name);
+        let directory = if [
+            "explorer.json",
+            "md-editor.json",
+            "md-viewer.json",
+            "web-browser.json",
+        ]
+        .contains(&name)
+        {
+            "apps"
+        } else {
+            "examples"
+        };
+        let path = format!(
+            "{}/../../{}/{}",
+            env!("CARGO_MANIFEST_DIR"),
+            directory,
+            name
+        );
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"))
     }
 
@@ -2815,7 +2837,7 @@ mod tests {
         assert!(current.renders(&pc.requires));
     }
 
-    /// 내 PC 범위의 탐색기(계약 14판). 구현이 들어오면 examples/explorer.json이 이 모양이 된다.
+    /// 내 PC 범위의 탐색기(계약 14판). 구현이 들어오면 apps/explorer.json이 이 모양이 된다.
     const PC_EXPLORER: &str = r#"{
   "id": "explorer",
   "name": "탐색기",

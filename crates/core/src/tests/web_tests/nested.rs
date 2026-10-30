@@ -1,7 +1,10 @@
 use super::*;
 
 fn browser_definition() -> Value {
-    serde_json::from_str(include_str!("../../../../../examples/web-browser.json")).unwrap()
+    serde_json::from_str(&test_definition(include_str!(
+        "../../../../../apps/web-browser.json"
+    )))
+    .unwrap()
 }
 
 fn nested_browser() -> Value {
@@ -67,7 +70,7 @@ fn web_view_nested_in_stack_and_section_attaches_and_saves_navigation() {
     let host = Arc::new(HostWithWeb::default());
     let core = web_core(data.path(), nested_browser(), &host);
     let (_, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "web-browser");
+    let window = open_window(&core, &desktop, "test-web-browser");
     attach(&core, &window);
     assert_navigation_state(&core, &window);
 }
@@ -78,7 +81,7 @@ fn moving_attached_web_view_into_containers_keeps_it_attached() {
     let host = Arc::new(HostWithWeb::default());
     let core = web_core(data.path(), browser_definition(), &host);
     let (_, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "web-browser");
+    let window = open_window(&core, &desktop, "test-web-browser");
     attach(&core, &window);
     import(&core, &nested_browser().to_string());
     assert!(!host

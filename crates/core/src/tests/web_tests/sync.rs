@@ -9,7 +9,9 @@ fn web_navigation_syncs_and_server_follow_redirect_does_not_echo() {
     let core = Core::open_with_client(
         CoreConfig {
             data_dir: data.path().into(),
-            seed_definitions: vec![include_str!("../../../../../examples/web-browser.json").into()],
+            seed_definitions: vec![test_definition(include_str!(
+                "../../../../../apps/web-browser.json"
+            ))],
             server_url: "https://registry.test".into(),
             device_name: "test".into(),
         },
@@ -18,7 +20,7 @@ fn web_navigation_syncs_and_server_follow_redirect_does_not_echo() {
     )
     .unwrap();
     let (_, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "web-browser");
+    let window = open_window(&core, &desktop, "test-web-browser");
     core.handle(CoreRequest::WebAttach {
         window_id: window.clone(),
         url: "https://example.com".into(),

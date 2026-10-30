@@ -4,6 +4,81 @@ use kaleidoscope_contract::registry::DeviceLayout;
 const LEGACY_APP: &str = include_str!("fixtures/simple-app.json");
 
 #[tokio::test]
+async fn delete_app_closes_windows_and_resurrection_republishes() {
+    let state = AppState::in_memory("secret");
+    let (app, _) = state.publish_app(LEGACY_APP, "test", false, None).unwrap();
+    let app_id = app.app.id.clone();
+    let changes: registry::LayoutChanges = serde_json::from_value(json!({
+        "workspaces":[{"id":"w","name":"작업","created_at":"t","updated_at":"t"}],
+        "desktops":[{"id":"d","workspace_id":"w","name":"화면","position":0,"created_at":"t","updated_at":"t"}],
+        "windows":[{"id":"win","desktop_id":"d","app_id":app_id,"app_version":1,"rect":{"x":0,"y":0,"width":100,"height":100},"z":1,"state":{},"created_at":"t","updated_at":"t"}]
+    })).unwrap();
+    state.apply_layout_changes(None, &changes).unwrap();
+    let mut events = state.0.events.subscribe();
+    let server = McpServer::new(state.clone());
+    let result = server
+        .delete_app(Parameters(DeleteAppArgs {
+            app_id: app_id.clone(),
+        }))
+        .await
+        .unwrap();
+    let result = serde_json::to_value(result).unwrap();
+    let value: Value =
+        serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(value["closed_windows"], 1);
+    assert!(
+        matches!(events.try_recv().unwrap().event, DeviceEvent::LayoutChanged { changes } if changes.deleted_windows == ["win"])
+    );
+    assert!(
+        matches!(events.try_recv().unwrap().event, DeviceEvent::AppDeleted { app_id: id } if id == app_id)
+    );
+    assert!(state.app(&app_id, None).unwrap().is_none());
+    assert!(state.deleted_app_ids().unwrap().contains(&app_id));
+    assert!(!state
+        .current_apps()
+        .unwrap()
+        .iter()
+        .any(|row| row.app.id == app_id));
+    state.lock_db().unwrap().execute("INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES('offline','PC',(SELECT account_id FROM mcp_principal WHERE id=1),'token','now')", []).unwrap();
+    use futures::StreamExt;
+    let stream = state
+        .stream_with_registry(
+            "offline".into(),
+            Some(Supported::current()),
+            registry::REGISTRY_VERSION,
+        )
+        .unwrap();
+    let response = axum::response::Sse::new(stream).into_response();
+    let mut body = response.into_body().into_data_stream();
+    let chunk = body.next().await.unwrap().unwrap();
+    let line = std::str::from_utf8(&chunk)
+        .unwrap()
+        .trim()
+        .strip_prefix("data: ")
+        .unwrap();
+    let event: DeviceEvent = serde_json::from_str(line).unwrap();
+    assert!(
+        matches!(event, DeviceEvent::AppsSnapshot { apps, deleted } if deleted.contains(&app_id) && !apps.iter().any(|app| app.app.id == app_id))
+    );
+    let (revived, unchanged) = state.publish_app(LEGACY_APP, "test", false, None).unwrap();
+    assert!(unchanged);
+    assert_eq!(revived.version.version, 1);
+    assert!(
+        matches!(events.try_recv().unwrap().event, DeviceEvent::AppPublished { app, .. } if app.app.id == app_id)
+    );
+    assert!(!state.deleted_app_ids().unwrap().contains(&app_id));
+    let denied = server
+        .delete_app(Parameters(DeleteAppArgs {
+            app_id: "md-editor".into(),
+        }))
+        .await
+        .unwrap();
+    assert!(serde_json::to_value(denied).unwrap()["isError"]
+        .as_bool()
+        .unwrap_or(false));
+}
+
+#[tokio::test]
 async fn open_counts_connected_devices_with_the_requested_workspace() {
     use kaleidoscope_contract::Supported;
     let state = AppState::in_memory("secret");
@@ -43,8 +118,10 @@ async fn open_counts_connected_devices_with_the_requested_workspace() {
         .stream("b".into(), Some(Supported::current()))
         .unwrap();
     let server = McpServer::new(state);
-    let app: Value =
-        serde_json::from_str(include_str!("../../../examples/md-editor.json")).unwrap();
+    let app: Value = serde_json::from_str(&test_definition(include_str!(
+        "../../../apps/md-editor.json"
+    )))
+    .unwrap();
     let value = |result: CallToolResult| {
         let json = serde_json::to_value(result).unwrap();
         serde_json::from_str::<Value>(json["content"][0]["text"].as_str().unwrap()).unwrap()
@@ -240,8 +317,10 @@ async fn upload_and_open_report_connected_shells_that_cannot_render_the_app() {
         .stream("current".into(), Some(Supported::current()))
         .unwrap();
     let server = McpServer::new(state);
-    let browser: Value =
-        serde_json::from_str(include_str!("../../../examples/web-browser.json")).unwrap();
+    let browser: Value = serde_json::from_str(&test_definition(include_str!(
+        "../../../apps/web-browser.json"
+    )))
+    .unwrap();
     let value = |result: CallToolResult| {
         let json = serde_json::to_value(result).unwrap();
         serde_json::from_str::<Value>(json["content"][0]["text"].as_str().unwrap()).unwrap()
@@ -265,7 +344,7 @@ async fn upload_and_open_report_connected_shells_that_cannot_render_the_app() {
     let opened = value(
         server
             .open_app(Parameters(AppIdArgs {
-                app_id: "web-browser".into(),
+                app_id: "test-web-browser".into(),
                 workspace_id: None,
             }))
             .await
@@ -288,8 +367,10 @@ async fn compatible_upload_result_has_no_unsupported_shell_note() {
         .stream("current".into(), Some(Supported::current()))
         .unwrap();
     let server = McpServer::new(state);
-    let definition: Value =
-        serde_json::from_str(include_str!("../../../examples/web-browser.json")).unwrap();
+    let definition: Value = serde_json::from_str(&test_definition(include_str!(
+        "../../../apps/web-browser.json"
+    )))
+    .unwrap();
     let result = server
         .upload_app(Parameters(UploadArgs {
             definition,
@@ -312,8 +393,10 @@ async fn upload_with_only_an_old_shell_does_not_claim_no_shell_is_connected() {
     ).unwrap();
     let _old = state.stream("AD02028236".into(), None).unwrap();
     let server = McpServer::new(state);
-    let definition: Value =
-        serde_json::from_str(include_str!("../../../examples/web-browser.json")).unwrap();
+    let definition: Value = serde_json::from_str(&test_definition(include_str!(
+        "../../../apps/web-browser.json"
+    )))
+    .unwrap();
     let result = server
         .upload_app(Parameters(UploadArgs {
             definition,

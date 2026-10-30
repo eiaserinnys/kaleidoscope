@@ -153,7 +153,7 @@ pub fn run() {
             let core = match Core::open(
                 CoreConfig {
                     data_dir,
-                    seed_definitions: vec![include_str!("../../../examples/md-editor.json").into()],
+                    seed_definitions: vec![],
                     server_url: SERVER_URL.into(),
                     device_name: env::var("COMPUTERNAME")
                         .or_else(|_| env::var("HOSTNAME"))
