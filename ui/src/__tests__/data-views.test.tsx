@@ -71,6 +71,45 @@ it("preserves feed text selection without selecting an entry", async () => {
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a" })));
 });
 
+it("enables feed columns only when requested", async () => {
+  setup({ type: "feed", columns: true, entries: [{ key: "a", body: ["첫째", "둘째"] }] } as unknown as Block);
+  const body = (await screen.findByText("첫째")).closest(".ks-feed-body")!;
+  expect(body.classList.contains("is-columns")).toBe(true);
+
+  cleanup();
+  setup({ type: "feed", entries: [{ key: "a", body: ["셋째", "넷째"] }] });
+  const plainBody = (await screen.findByText("셋째")).closest(".ks-feed-body")!;
+  expect(plainBody.classList.contains("is-columns")).toBe(false);
+});
+
+it("copies feed metadata and each original body paragraph without selecting the entry", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  const { calls } = setup({
+    type: "feed",
+    copy: true,
+    entries: [{ key: "a", meta: "id-1", body: ["첫 줄\n둘째 줄", "다른 문단"] }],
+    on_select: { set_state: "choice" },
+  } as unknown as Block, { choice: null });
+  try {
+    const buttons = await screen.findAllByRole("button", { name: "복사" });
+    expect(buttons).toHaveLength(3);
+    fireEvent.click(buttons[0]);
+    fireEvent.click(buttons[1]);
+    await waitFor(() => expect(writeText.mock.calls).toEqual([["id-1"], ["첫 줄\n둘째 줄"]]));
+    expect(calls.mock.calls.some(([request]) => request.op === "data.act")).toBe(false);
+  } finally {
+    Reflect.deleteProperty(navigator, "clipboard");
+  }
+});
+
+it("does not add feed copy controls when copy is off", async () => {
+  setup({ type: "feed", entries: [{ key: "a", meta: "id-1", body: "본문" }] });
+  await screen.findByText("본문");
+  expect(screen.queryByRole("button", { name: "복사" })).toBeNull();
+  expect(document.querySelector(".ks-feed-copy-cell")).toBeNull();
+});
+
 it("does not select a feed entry with Enter while its text is selected", async () => {
   const { calls } = setup({ type: "feed", entries: [{ key: "a", name: "이름", body: "첫 줄" }], on_select: { set_state: "choice" } }, { choice: null });
   const text = await screen.findByText("첫 줄");

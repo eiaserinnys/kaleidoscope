@@ -128,6 +128,32 @@ test("400px 선택 흐름에 Tab으로 들어가고 화살표와 Enter로 고른
   await expect(second).toHaveAttribute("aria-current", "true");
 });
 
+test("흐름 본문을 넓은 화면에서 나란히, 좁은 화면에서 쌓고 원문을 복사한다", async ({ page }) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.setViewportSize({ width: 1280, height: 700 });
+  await page.goto("/?preview=data-views-test");
+  const app = page.getByTestId("app-window-data-views-test");
+  await app.getByRole("tab", { name: "병기 시험" }).click();
+  const firstEntry = app.locator(".ks-feed-entry").first();
+  const cells = firstEntry.locator(".ks-feed-body.is-columns > .ks-feed-copy-cell");
+  await expect(cells).toHaveCount(2);
+  const wide = await cells.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
+  expect(Math.abs(wide[0].y - wide[1].y)).toBeLessThanOrEqual(1);
+  await capture(page, "feed-columns-wide-1280");
+
+  await firstEntry.hover();
+  const copyButton = cells.first().getByRole("button", { name: "복사" });
+  await expect(copyButton).toBeVisible();
+  await capture(page, "feed-copy-hover-1280");
+  await copyButton.click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("문을 열어라.\n지금 바로.");
+
+  await page.setViewportSize({ width: 400, height: 700 });
+  const narrow = await cells.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
+  expect(narrow[1].y).toBeGreaterThan(narrow[0].y);
+  await capture(page, "feed-columns-narrow-400");
+});
+
 test("견본의 다섯 보기와 다크 배지 캡처", async ({ page }) => {
   const coordinates = [];
   for (const width of [1440, 400]) {

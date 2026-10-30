@@ -8,7 +8,7 @@ const rows = Array.from({ length: 70 }, (_, index) => ({ key: String(index), nam
 export const dataViewsApp: AppDefinition = {
   id: "data-views-test",
   name: "보기 시험",
-  requires: { blocks: 4, modules: { files: 1 } },
+  requires: { blocks: 7, modules: { files: 1 } },
   permissions: [{ id: "media", module: "files", access: "read", label: "그림" }],
   state: { tab: 0, choice: null, feed: entries },
   ui: { type: "tabs", selected: { state: "tab" }, on_change: { set_state: "tab" }, tabs: [
@@ -27,5 +27,15 @@ export const dataViewsApp: AppDefinition = {
       { title: "첫 묶음", items: [{ key: "one", name: "기록", body: "첫 번째 내용" }] },
       { title: "다음 묶음", items: [{ key: "two", name: "기록", body: "두 번째 내용" }] },
     ], selected: { state: "choice" }, on_select: { set_state: "choice" } } },
+    { label: "병기 시험", child: { type: "feed", grouped: true, columns: true, copy: true, entries: [
+      { title: "첫 묶음", items: [
+        { key: "dialogue-1", name: "화자 하나", color: "#6d4c9a", meta: "id-001", body: ["문을 열어라.\n지금 바로.", "Open the door.\nRight now."] },
+        { key: "dialogue-2", name: "화자 둘", color: "#327b72", meta: "id-002", body: ["기다리고 있었어요.", "I have been waiting."] },
+      ] },
+      { title: "다음 묶음", items: [
+        { key: "dialogue-3", name: "화자 하나", color: "#6d4c9a", meta: "id-003", body: ["그 열쇠를 찾았어.", "I found the key."] },
+        { key: "dialogue-4", name: "화자 셋", color: "#a05245", meta: "id-004", body: ["짧은 글", "한쪽 칸에서만 여러 줄로 이어지는 긴 시험 문장입니다. 좁은 화면에서는 이 문단이 길어져도 반대쪽 문단의 내용이 깨지거나 옆으로 밀리지 않고 위아래로 쌓여야 합니다."] },
+      ] },
+    ] } },
   ] },
 };
