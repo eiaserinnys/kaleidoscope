@@ -19,11 +19,14 @@ export interface EditorTarget {
   read(path: string): Promise<{ text: string; revision: string | null }>;
   write(path: string, text: string, revision: string | null): Promise<string>;
   readonly allowsMissingRevision: boolean;
+  /** 읽은 뒤 다른 쪽이 바꿔 저장이 충돌했을 때 안내 글. */
+  readonly conflictMessage: string;
 }
 
 export function createFileEditorTarget(transport: Pick<CoreTransport, "call">, windowId: string, permission: string): EditorTarget {
   return {
     allowsMissingRevision: false,
+    conflictMessage: "디스크에서 바뀌었습니다",
     async read(path) {
       const reply = await transport.call({ op: "files.read", window_id: windowId, permission, path });
       return { text: reply.text, revision: reply.revision };
@@ -39,6 +42,7 @@ export function createFileEditorTarget(transport: Pick<CoreTransport, "call">, w
 export function createDocumentEditorTarget(transport: Pick<CoreTransport, "call">, windowId: string, entry: string): EditorTarget {
   return {
     allowsMissingRevision: true,
+    conflictMessage: "다른 곳에서 바뀌었습니다",
     async read() {
       const { result } = await transport.call({ op: "storage.get", window_id: windowId, entry });
       if (result.kind !== "md" || typeof result.content !== "string") throw new Error("마크다운 문서가 아닙니다");
@@ -83,6 +87,10 @@ export class FileEditorSession {
   constructor(targetOrTransport: EditorTarget | Pick<CoreTransport, "call">, windowId?: string, permission?: string) {
     this.target = "read" in targetOrTransport ? targetOrTransport : createFileEditorTarget(targetOrTransport, windowId!, permission!);
     activeSessions.add(this);
+  }
+
+  get conflictMessage(): string {
+    return this.target.conflictMessage;
   }
 
   getSnapshot = (): FileEditorSnapshot => this.snapshot;

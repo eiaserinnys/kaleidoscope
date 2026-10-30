@@ -21,6 +21,7 @@ test("기본 문서 생성, 원격 갱신과 충돌 선택", async ({ page }) =>
   await page.getByRole("button", { name: "다른 기기에서 수정" }).click();
   await expect(editor).toContainText("내 초안");
   await expect(app.getByRole("button", { name: "다시 불러오기" })).toBeVisible({ timeout: 5000 });
+  await expect(app.getByRole("alert").filter({ hasText: "다른 곳에서 바뀌었습니다" })).toBeVisible();
   await app.getByRole("button", { name: "다시 불러오기" }).click();
   await expect(editor).not.toContainText("내 초안");
 
