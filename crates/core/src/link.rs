@@ -124,6 +124,7 @@ pub(crate) fn cancel(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
 }
 
 pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
+    crate::share::clear_server_before_unlink(inner);
     let changed = {
         let mut state = inner.state.lock().unwrap();
         inner.generation.fetch_add(1, Ordering::SeqCst);

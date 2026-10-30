@@ -267,48 +267,21 @@ impl WebHost for TauriWebHost {
             .map_err(fail)
     }
     fn capture(&self, id: &str) -> Result<Option<Vec<u8>>, CoreError> {
-        let (tx, rx) = mpsc::channel();
-        self.view(id)?
-            .with_webview(move |native| {
-                let started = (|| unsafe {
-                    let view = native.controller().CoreWebView2()?;
-                    let stream = CreateStreamOnHGlobal(HGLOBAL::default(), true)?;
-                    let captured = stream.clone();
-                    let callback =
-                        CapturePreviewCompletedHandler::create(Box::new(move |result| {
-                            let bytes = (|| {
-                                result?;
-                                let mut stat = STATSTG::default();
-                                captured.Stat(&mut stat, STATFLAG_NONAME)?;
-                                captured.Seek(0, STREAM_SEEK_SET, None)?;
-                                let mut bytes = vec![0; stat.cbSize as usize];
-                                let mut read = 0;
-                                captured
-                                    .Read(
-                                        bytes.as_mut_ptr().cast(),
-                                        bytes.len() as u32,
-                                        Some(&mut read),
-                                    )
-                                    .ok()?;
-                                bytes.truncate(read as usize);
-                                windows::core::Result::Ok(bytes)
-                            })()
-                            .ok();
-                            let _ = tx.send(bytes);
-                            Ok(())
-                        }));
-                    view.CapturePreview(
-                        COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG,
-                        &stream,
-                        &callback,
-                    )
-                })();
-                if let Err(error) = started {
-                    eprintln!("웹 화면 캡처 실패: {error}");
-                }
-            })
+        capture_view(self.view(id)?)
+    }
+
+    fn capture_shell(&self) -> Result<Option<(Vec<u8>, f64)>, CoreError> {
+        let view = self
+            .app
+            .get_webview("main")
+            .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let scale = self
+            .app
+            .get_window("main")
+            .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?
+            .scale_factor()
             .map_err(fail)?;
-        Ok(rx.recv_timeout(Duration::from_secs(2)).ok().flatten())
+        Ok(capture_view(view)?.map(|bytes| (bytes, scale)))
     }
     fn detach(&self, id: &str) -> Result<(), CoreError> {
         self.pages.lock().unwrap().remove(id);
@@ -317,4 +290,47 @@ impl WebHost for TauriWebHost {
         }
         Ok(())
     }
+}
+
+fn capture_view(view: Webview) -> Result<Option<Vec<u8>>, CoreError> {
+    let (tx, rx) = mpsc::channel();
+    view.with_webview(move |native| {
+        let started = (|| unsafe {
+            let view = native.controller().CoreWebView2()?;
+            let stream = CreateStreamOnHGlobal(HGLOBAL::default(), true)?;
+            let captured = stream.clone();
+            let callback = CapturePreviewCompletedHandler::create(Box::new(move |result| {
+                let bytes = (|| {
+                    result?;
+                    let mut stat = STATSTG::default();
+                    captured.Stat(&mut stat, STATFLAG_NONAME)?;
+                    captured.Seek(0, STREAM_SEEK_SET, None)?;
+                    let mut bytes = vec![0; stat.cbSize as usize];
+                    let mut read = 0;
+                    captured
+                        .Read(
+                            bytes.as_mut_ptr().cast(),
+                            bytes.len() as u32,
+                            Some(&mut read),
+                        )
+                        .ok()?;
+                    bytes.truncate(read as usize);
+                    windows::core::Result::Ok(bytes)
+                })()
+                .ok();
+                let _ = tx.send(bytes);
+                Ok(())
+            }));
+            view.CapturePreview(
+                COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG,
+                &stream,
+                &callback,
+            )
+        })();
+        if let Err(error) = started {
+            eprintln!("웹뷰 캡처 실패: {error}");
+        }
+    })
+    .map_err(fail)?;
+    Ok(rx.recv_timeout(Duration::from_secs(2)).ok().flatten())
 }
