@@ -18,23 +18,31 @@ use crate::registry_client::RegistryError;
 use crate::Inner;
 
 pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreReply, CoreError> {
-    if uses_provider_window(&request) {
-        return Err(error::make(ErrorCode::Unavailable));
-    }
-    let workspace_id = legacy_workspace_id(&request)?;
     let (workspace_id, link_file, workspace_name) = {
         let state = inner.state.lock().unwrap();
         let link_file = inner.link_file.lock().unwrap().clone();
         if !matches!(state.link, LinkStatus::Connected { .. }) || link_file.is_none() {
             return Err(link::server_error(NOT_CONNECTED_MESSAGE, Vec::new()));
         }
+        let workspace_id = match &request {
+            CoreRequest::AgentGet { workspace_id }
+            | CoreRequest::AgentCreate { workspace_id, .. }
+            | CoreRequest::AgentSend { workspace_id, .. }
+            | CoreRequest::AgentAttachment { workspace_id, .. }
+            | CoreRequest::AgentAttachmentOpen { workspace_id, .. } => workspace_id,
+            _ => return Err(error::make(ErrorCode::InvalidRequest)),
+        };
         let workspace = state
             .shared
             .workspaces
             .iter()
-            .find(|workspace| workspace.id == workspace_id)
+            .find(|workspace| workspace.id == *workspace_id)
             .ok_or_else(|| error::make(ErrorCode::NotFound))?;
-        (workspace_id, link_file.unwrap(), workspace.name.clone())
+        (
+            workspace.id.clone(),
+            link_file.unwrap(),
+            workspace.name.clone(),
+        )
     };
 
     match request {
@@ -47,11 +55,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 models: reply.models,
             })
             .map_err(|registry_error| agent_error_to_core(inner, &link_file, registry_error)),
-        CoreRequest::AgentCreate {
-            model_preset: Some(model_preset),
-            selected_model: None,
-            ..
-        } => inner
+        CoreRequest::AgentCreate { model_preset, .. } => inner
             .registry
             .agent_create(
                 &link_file.server_url,
@@ -92,13 +96,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 Err(registry_error) => Err(agent_error_to_core(inner, &link_file, registry_error)),
             }
         }
-        CoreRequest::AgentAttachment {
-            item_id: Some(item_id),
-            index: Some(index),
-            thread_id: None,
-            attachment_id: None,
-            ..
-        } => {
+        CoreRequest::AgentAttachment { item_id, index, .. } => {
             if !is_item_id(&item_id) {
                 return Err(error::make(ErrorCode::InvalidRequest));
             }
@@ -120,13 +118,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                     attachment_error_to_core(inner, &link_file, registry_error)
                 })
         }
-        CoreRequest::AgentAttachmentOpen {
-            item_id: Some(item_id),
-            index: Some(index),
-            thread_id: None,
-            attachment_id: None,
-            ..
-        } => {
+        CoreRequest::AgentAttachmentOpen { item_id, index, .. } => {
             if !is_item_id(&item_id) {
                 return Err(error::make(ErrorCode::InvalidRequest));
             }
@@ -162,53 +154,6 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
         }
         _ => return Err(error::make(ErrorCode::InvalidRequest)),
     }
-}
-
-fn uses_provider_window(request: &CoreRequest) -> bool {
-    match request {
-        CoreRequest::AgentGet { window_id, .. }
-        | CoreRequest::AgentCreate { window_id, .. }
-        | CoreRequest::AgentSend { window_id, .. }
-        | CoreRequest::AgentAttachment { window_id, .. }
-        | CoreRequest::AgentAttachmentOpen { window_id, .. } => window_id.is_some(),
-        _ => false,
-    }
-}
-
-fn legacy_workspace_id(request: &CoreRequest) -> Result<String, CoreError> {
-    let (workspace_id, window_id) = match request {
-        CoreRequest::AgentGet {
-            workspace_id,
-            window_id,
-        }
-        | CoreRequest::AgentCreate {
-            workspace_id,
-            window_id,
-            ..
-        }
-        | CoreRequest::AgentSend {
-            workspace_id,
-            window_id,
-            ..
-        }
-        | CoreRequest::AgentAttachment {
-            workspace_id,
-            window_id,
-            ..
-        }
-        | CoreRequest::AgentAttachmentOpen {
-            workspace_id,
-            window_id,
-            ..
-        } => (workspace_id, window_id),
-        _ => return Err(error::make(ErrorCode::InvalidRequest)),
-    };
-    if window_id.is_some() {
-        return Err(error::make(ErrorCode::Unavailable));
-    }
-    workspace_id
-        .clone()
-        .ok_or_else(|| error::make(ErrorCode::InvalidRequest))
 }
 
 fn is_item_id(item_id: &str) -> bool {

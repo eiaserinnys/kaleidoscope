@@ -122,8 +122,8 @@ pub enum StoragePresentation {
     Hidden,
 }
 
-/// `expected_revision` 필드는 필수이며 null은 아직 저장 행이 없을 때만 쓰라는 뜻이다.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+/// `expected_revision`이 빠지거나 null이면 저장 행이 없을 때만 만든다는 뜻이다.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(transparent)]
 #[ts(type = "string | null")]
 pub struct ExpectedRevision(pub Option<String>);
@@ -161,6 +161,8 @@ pub struct StorageReadReply {
 #[ts(export, export_to = "contract.ts")]
 pub struct StorageWriteRequest {
     pub content: JsonValue,
+    #[serde(default)]
+    #[ts(optional, as = "Option<ExpectedRevision>")]
     pub expected_revision: ExpectedRevision,
 }
 
@@ -168,6 +170,8 @@ pub struct StorageWriteRequest {
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct StorageResetRequest {
+    #[serde(default)]
+    #[ts(optional, as = "Option<ExpectedRevision>")]
     pub expected_revision: ExpectedRevision,
 }
 
@@ -325,7 +329,7 @@ pub fn storage_revision(kind: StorageKind, content: &Value) -> Result<String, St
     Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-/// 저장값이 있는 항목에 대해 새 앱 판이 기존 값과 호환되는지 검사한다.
+/// 기존 선언과 저장 행이 새 앱 판과 호환되는지 각각 검사한다.
 pub fn validate_storage_upgrade(
     previous: &StorageDecl,
     next: &StorageDecl,
@@ -342,11 +346,33 @@ pub fn validate_storage_upgrade(
         .map(|entry| (entry.id.as_str(), entry))
         .collect();
     let mut errors = Vec::new();
-    for stored in stored_values {
-        let Some(old) = old_by_id.get(stored.entry_id.as_str()) else {
-            errors.push(format!("저장값 {}에 이전 선언이 없습니다", stored.entry_id));
+
+    // 선언끼리 비교하고 실제 작업별 키와는 따로 검사한다.
+    for (entry_id, old) in &old_by_id {
+        let Some(new) = new_by_id.get(entry_id) else {
             continue;
         };
+        if old.key != new.key {
+            errors.push(format!("저장 항목의 key 틀을 바꿀 수 없습니다: {entry_id}"));
+        }
+        if old.kind != new.kind {
+            errors.push(format!("저장 항목의 kind를 바꿀 수 없습니다: {entry_id}"));
+        }
+        let old_type = old.schema.as_ref().map(|schema| &schema.value_type);
+        let new_type = new.schema.as_ref().map(|schema| &schema.value_type);
+        if old_type != new_type {
+            errors.push(format!(
+                "저장 항목의 JSON type을 바꿀 수 없습니다: {entry_id}"
+            ));
+        }
+    }
+
+    // 작업 자리표시는 한 세그먼트로 푼 실제 저장 키를 새 선언과 비교한다.
+    for stored in stored_values {
+        if !old_by_id.contains_key(stored.entry_id.as_str()) {
+            errors.push(format!("저장값 {}에 이전 선언이 없습니다", stored.entry_id));
+            continue;
+        }
         let Some(new) = new_by_id.get(stored.entry_id.as_str()) else {
             errors.push(format!(
                 "저장값이 있는 항목을 제거할 수 없습니다: {}",
@@ -354,15 +380,15 @@ pub fn validate_storage_upgrade(
             ));
             continue;
         };
-        if old.key != new.key || old.key != stored.key {
+        if !storage_key_matches(&new.key, &stored.key) {
             errors.push(format!(
-                "저장값이 있는 항목의 key를 바꿀 수 없습니다: {}",
+                "저장값의 key가 새 선언과 맞지 않습니다: {}",
                 stored.entry_id
             ));
         }
-        if old.kind != new.kind || old.kind != stored.kind {
+        if stored.kind != new.kind {
             errors.push(format!(
-                "저장값이 있는 항목의 kind를 바꿀 수 없습니다: {}",
+                "저장값의 kind가 새 선언과 맞지 않습니다: {}",
                 stored.entry_id
             ));
             continue;
@@ -402,6 +428,39 @@ pub fn valid_storage_key(key: &str) -> bool {
         }
     }
     workspace_placeholders <= 1
+}
+
+/// 선언의 키 틀이 실제 저장 키와 맞는지 검사한다. `{workspace_id}`는 정확히 한 경로 세그먼트다.
+/// 서버와 코어가 같은 규칙으로 저장 행을 확인할 때 쓴다.
+pub fn storage_key_matches(template: &str, concrete: &str) -> bool {
+    if !valid_storage_key(template) || !valid_concrete_storage_key(concrete) {
+        return false;
+    }
+    let template_segments: Vec<_> = template.split('/').collect();
+    let concrete_segments: Vec<_> = concrete.split('/').collect();
+    template_segments.len() == concrete_segments.len()
+        && template_segments.iter().zip(concrete_segments).all(
+            |(template_segment, concrete_segment)| {
+                if *template_segment == "{workspace_id}" {
+                    valid_storage_segment(concrete_segment)
+                } else {
+                    *template_segment == concrete_segment
+                }
+            },
+        )
+}
+
+fn valid_concrete_storage_key(key: &str) -> bool {
+    !key.is_empty() && key.len() <= 512 && key.split('/').all(valid_storage_segment)
+}
+
+fn valid_storage_segment(segment: &str) -> bool {
+    !segment.is_empty()
+        && segment != ".."
+        && segment.len() <= 64
+        && segment.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_' || byte == b'-'
+        })
 }
 
 fn validate_json_schema(schema: &StorageValueSchema, at: &str) -> Result<(), String> {

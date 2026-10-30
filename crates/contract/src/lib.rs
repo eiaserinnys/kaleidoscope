@@ -1597,38 +1597,21 @@ pub enum CoreRequest {
     #[serde(rename = "web.detach")]
     WebDetach { window_id: String },
 
-    /// `workspace_id`는 구정의의 워크스페이스 PAS 읽기다. 새 provider 정의에서는 `window_id`로 창의 앱과 제공자를 찾는다.
-    /// 둘을 함께 보내거나 둘 다 빼면 `invalid_request`. 새 provider 실행은 아직 `unavailable`이다.
+    /// 워크스페이스 PAS의 지금 모습과 대화 기록(최근 [`registry::AGENT_HISTORY_LIMIT`]개)을 읽는다.
+    /// 대화 블록이 켜질 때와 연결이 다시 이어졌을 때 부른다. `connected`가 아니면 `server`,
+    /// 이 기기에 없는 워크스페이스면 `not_found`.
     #[serde(rename = "agent.get")]
-    AgentGet {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        workspace_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        window_id: Option<String>,
-    },
-    /// 구정의의 워크스페이스 PAS를 만든다. `model_preset`은 `agent.get`의 `models` 가운데 하나다.
+    AgentGet { workspace_id: String },
+    /// 워크스페이스 PAS를 만든다. `model_preset`은 `agent.get`의 `models` 가운데 하나다.
     /// 고른 모델이 지금 한도에 걸려 있으면 서버가 `models` 순서로 다음 모델을 써서 만들고, 그 사실을
     /// `notice` 기록으로 남긴다. 이미 PAS가 있으면 새로 만들지 않고 있는 것을 돌려준다.
-    /// 새 provider 정의는 `window_id`와 `selected_model`을 사용한다. 코어는 창의 선언 provider를 찾는다.
-    /// 코어는 워크스페이스 이름을 붙여 구정의 서버에 보낸다. `connected`가 아니면 `server`.
+    /// 코어는 워크스페이스 이름을 붙여 서버에 보낸다. `connected`가 아니면 `server`.
     #[serde(rename = "agent.create")]
     AgentCreate {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        workspace_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        window_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        model_preset: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        selected_model: Option<String>,
+        workspace_id: String,
+        model_preset: String,
     },
-    /// 구정의의 워크스페이스 PAS에 말을 보낸다. 보낸 말은 서버가 PAS의 기록에서 확인한 뒤 `agent.update`의
+    /// 워크스페이스 PAS에 말을 보낸다. 보낸 말은 서버가 PAS의 기록에서 확인한 뒤 `agent.update`의
     /// `item`(user)으로 돌아온다. 첨부와 함께 보내면 그 기록의 `attachments`에 같은 순서로 보인다.
     /// - `invalid_request`: 앞뒤 공백을 뺀 글이 비었는데 첨부도 없음, 글이
     ///   [`registry::AGENT_MESSAGE_MAX_CHARS`]자를 넘음, 첨부가 [`AGENT_ATTACHMENTS_MAX`]개를 넘음,
@@ -1645,46 +1628,24 @@ pub enum CoreRequest {
     ///   길로 올라가 기록의 `attachments`에도 보인다. 말을 보내지 못하면 「지난번에 보낸 모습」을 바꾸지 않는다.
     #[serde(rename = "agent.send")]
     AgentSend {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        workspace_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        window_id: Option<String>,
+        workspace_id: String,
         text: String,
         /// 빼면 빈 배열이다(모듈 `agent` 1판의 명령 모양).
         #[serde(default)]
         #[ts(as = "Option<Vec<AgentUpload>>", optional)]
         attachments: Vec<AgentUpload>,
     },
-    /// (모듈 `agent` 2판) 구정의 기록 첨부 하나를 읽는다. 새 provider 정의는 `window_id`, `thread_id`,
-    /// `attachment_id`를 사용한다. 대화 블록이 이미지 첨부를 그릴 때 부른다.
+    /// (모듈 `agent` 2판) 기록에 있는 첨부 하나의 내용을 읽는다. 대화 블록이 이미지 첨부를 그릴 때 부른다.
     /// `index`는 그 기록의 `attachments` 안 순서(0부터)다. 같은 첨부는 바뀌지 않으므로 화면은 받은 것을
     /// 창이 살아 있는 동안 다시 쓴다. 기록이나 첨부가 없거나 원천에서 지워졌으면 `not_found`,
     /// [`AGENT_ATTACHMENT_MAX_BYTES`]보다 크면 `invalid_request`, `connected`가 아니면 `server`.
     #[serde(rename = "agent.attachment")]
     AgentAttachment {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        workspace_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        window_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        item_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        index: Option<u32>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        thread_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        attachment_id: Option<String>,
+        workspace_id: String,
+        item_id: String,
+        index: u32,
     },
-    /// (모듈 `agent` 2판) 구정의 기록 첨부 하나를 이 기기의 기본 앱으로 연다. 새 provider 정의는 `window_id`,
-    /// `thread_id`, `attachment_id`를 사용한다. 대화 블록이 이미지가 아닌
+    /// (모듈 `agent` 2판) 기록에 있는 첨부 하나를 이 기기의 기본 앱으로 연다. 대화 블록이 이미지가 아닌
     /// 첨부를 눌렀을 때 부른다. 코어가 `agent.attachment`와 같은 길로 받아 앱 데이터 폴더의
     /// `attachments/<item_id>-<index>/<이름>`에 쓰고(있으면 덮어씀) 연다. 이름의 경로 구분자와 Windows가
     /// 파일 이름에 받지 않는 글자는 `_`로 바꾼다. 실행 파일과 스크립트(`exe`, `msi`, `bat`, `cmd`, `com`,
@@ -1692,35 +1653,54 @@ pub enum CoreRequest {
     /// 가리킨다. 쓰거나 열다 실패하면 `io`, 나머지 실패는 `agent.attachment`와 같다.
     #[serde(rename = "agent.attachment_open")]
     AgentAttachmentOpen {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        workspace_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        window_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        item_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        index: Option<u32>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        thread_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        attachment_id: Option<String>,
+        workspace_id: String,
+        item_id: String,
+        index: u32,
+    },
+
+    /// (모듈 `agent` 3판) 창의 제공자 대화와 최근 기록을 읽는다. 아직 구현되지 않아 `unavailable`이다.
+    #[serde(rename = "conversation.get")]
+    ConversationGet { window_id: String },
+    /// 이전 기록을 읽는다.
+    #[serde(rename = "conversation.history")]
+    ConversationHistory { window_id: String, before: String },
+    /// 고른 모델로 대화를 만든다.
+    #[serde(rename = "conversation.create")]
+    ConversationCreate { window_id: String, model: String },
+    /// 요청 식별자와 글, 첨부를 제공자에 보낸다.
+    #[serde(rename = "conversation.send")]
+    ConversationSend {
+        window_id: String,
+        request_id: String,
+        text: String,
+        attachments: Vec<conversation::ConversationUpload>,
+    },
+    /// 제공자 기록의 첨부를 읽는다.
+    #[serde(rename = "conversation.attachment")]
+    ConversationAttachment {
+        window_id: String,
+        item_id: String,
+        attachment_id: String,
+    },
+    /// 제공자 기록의 첨부를 기기에서 연다.
+    #[serde(rename = "conversation.attachment_open")]
+    ConversationAttachmentOpen {
+        window_id: String,
+        item_id: String,
+        attachment_id: String,
     },
 
     /// (모듈 `storage` 1판) 창의 앱 선언 항목을 읽는다. 새 저장소 명령은 현재 unavailable이다.
     #[serde(rename = "storage.get")]
     StorageGet { window_id: String, entry: String },
-    /// (모듈 `storage` 1판) expected_revision CAS로 선언 항목을 쓴다. null이면 저장값이 없을 때만 만든다.
+    /// (모듈 `storage` 1판) expected_revision CAS로 선언 항목을 쓴다. 빠지거나 null이면 저장값이 없을 때만 만든다.
     #[serde(rename = "storage.write")]
     StorageWrite {
         window_id: String,
         entry: String,
         content: JsonValue,
+        #[serde(default)]
+        #[ts(optional, as = "Option<app_storage::ExpectedRevision>")]
         expected_revision: app_storage::ExpectedRevision,
     },
     /// (모듈 `storage` 1판) expected_revision CAS로 저장 override를 지우고 선언 기본값으로 돌아간다.
@@ -1728,6 +1708,8 @@ pub enum CoreRequest {
     StorageReset {
         window_id: String,
         entry: String,
+        #[serde(default)]
+        #[ts(optional, as = "Option<app_storage::ExpectedRevision>")]
         expected_revision: app_storage::ExpectedRevision,
     },
 
@@ -1972,6 +1954,38 @@ pub enum CoreReply {
     #[serde(rename = "agent.attachment_open")]
     AgentAttachmentOpen {},
 
+    #[serde(rename = "conversation.get")]
+    ConversationGet {
+        thread: Option<conversation::ConversationThread>,
+        items: Vec<conversation::ConversationItem>,
+        cursor: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        next_before: Option<String>,
+        models: Vec<conversation::ConversationModel>,
+    },
+    #[serde(rename = "conversation.history")]
+    ConversationHistory {
+        items: Vec<conversation::ConversationItem>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        next_before: Option<String>,
+    },
+    #[serde(rename = "conversation.create")]
+    ConversationCreate {
+        thread: conversation::ConversationThread,
+    },
+    #[serde(rename = "conversation.send")]
+    ConversationSend {},
+    #[serde(rename = "conversation.attachment")]
+    ConversationAttachment {
+        name: String,
+        mime: String,
+        data_base64: String,
+    },
+    #[serde(rename = "conversation.attachment_open")]
+    ConversationAttachmentOpen {},
+
     #[serde(rename = "storage.get")]
     StorageGet {
         result: app_storage::StorageReadReply,
@@ -2016,14 +2030,6 @@ pub struct AgentInfo {
     /// 지금 쓰는 도구 이름. 없으면 null.
     pub tool: Option<String>,
     pub created_at: String,
-    /// (모듈 `agent` 3판) provider 대화의 불투명 thread id. 구정의 응답에서는 생략한다.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub thread_id: Option<String>,
-    /// (모듈 `agent` 3판) provider가 고른 불투명 모델 id. 구정의 응답에서는 생략한다.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub model_id: Option<String>,
 }
 
 /// 만들 때 고를 수 있는 모델 하나.
@@ -2159,9 +2165,9 @@ pub enum CoreEvent {
         update: AgentUpdate,
     },
     /// (모듈 `agent` 3판) 제공자 대화 이벤트. 기존 `agent.update`(바깥 workspace_id, 안쪽 기존 AgentUpdate)는 이행 중 그대로 둔다.
-    /// 블록은 `agent.get`(window_id) 응답의 `AgentInfo.thread_id`를 얻고 `conversation.update`를 thread_id로 거른다.
+    /// 블록은 `conversation.get` 응답의 `thread.id`를 얻고 `conversation.update`를 thread_id로 거른다.
     /// 같은 PC에서 같은 thread를 연 창이 여럿이면 모두 같은 이벤트를 받는다.
-    /// 아직 thread가 없는 시작 판은 `agent.create` 응답이나 thread 저장 항목의 `storage.update` 뒤 `agent.get`을 다시 불러 id를 얻는다.
+    /// 아직 thread가 없는 시작 판은 `conversation.create` 응답이나 thread 저장 항목의 `storage.update` 뒤 `conversation.get`을 다시 불러 id를 얻는다.
     /// envelope는 `{ thread_id, update }`이며 `update`는 `conversation.rs`의 `ConversationEvent` 그대로다.
     /// envelope에는 window_id와 workspace_id를 넣지 않는다.
     #[serde(rename = "conversation.update")]
@@ -2360,10 +2366,8 @@ mod tests {
         assert_eq!(
             req,
             CoreRequest::AgentCreate {
-                workspace_id: Some("w".into()),
-                window_id: None,
-                model_preset: Some("gemini-4-argon".into()),
-                selected_model: None,
+                workspace_id: "w".into(),
+                model_preset: "gemini-4-argon".into(),
             }
         );
         let event = CoreEvent::AgentUpdate {
@@ -2413,8 +2417,7 @@ mod tests {
         assert_eq!(
             old,
             CoreRequest::AgentSend {
-                workspace_id: Some("w".into()),
-                window_id: None,
+                workspace_id: "w".into(),
                 text: "안녕".into(),
                 attachments: vec![]
             }
@@ -2446,12 +2449,9 @@ mod tests {
         assert_eq!(
             read,
             CoreRequest::AgentAttachment {
-                workspace_id: Some("w".into()),
-                window_id: None,
-                item_id: Some("7".into()),
-                index: Some(0),
-                thread_id: None,
-                attachment_id: None,
+                workspace_id: "w".into(),
+                item_id: "7".into(),
+                index: 0,
             }
         );
         let reply = CoreReply::AgentAttachmentOpen {};

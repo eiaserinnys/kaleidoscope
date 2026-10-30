@@ -458,10 +458,9 @@ fn agent_send_captures_web_and_shell_views_then_suppresses_identical_images() {
     })
     .unwrap();
     let send = || CoreRequest::AgentSend {
-        workspace_id: Some(workspace_id.clone()),
+        workspace_id: workspace_id.clone(),
         text: "look".into(),
         attachments: vec![],
-        window_id: None,
     };
     core.handle(send()).unwrap();
     let first = client.agent_sends.lock().unwrap().last().unwrap().1.clone();
@@ -502,8 +501,7 @@ fn agent_send_captures_web_and_shell_views_then_suppresses_identical_images() {
         host.shell_captures.load(Ordering::SeqCst),
     );
     let capped = CoreRequest::AgentSend {
-        workspace_id: Some(workspace_id.clone()),
-        window_id: None,
+        workspace_id: workspace_id.clone(),
         text: "with files".into(),
         attachments: (0..kaleidoscope_contract::AGENT_ATTACHMENTS_MAX)
             .map(|_| AgentUpload {
@@ -629,10 +627,9 @@ fn share_capture_uses_web_view_without_navigation_binding() {
     })
     .unwrap();
     core.handle(CoreRequest::AgentSend {
-        workspace_id: Some(workspace_id),
+        workspace_id,
         text: "look".into(),
         attachments: vec![],
-        window_id: None,
     })
     .unwrap();
 
@@ -869,8 +866,6 @@ impl RegistryClient for FakeRegistryClient {
                     busy: true,
                     tool: None,
                     created_at: "2026-10-29T00:00:00Z".into(),
-                    thread_id: None,
-                    model_id: None,
                 })
             })
     }
@@ -2081,6 +2076,24 @@ fn cancel_and_unlink_clear_only_connection_state() {
 }
 
 #[test]
+fn conversation_commands_are_unavailable_until_provider_is_implemented() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = seeded_core(temp.path(), &host);
+    for request in [
+        serde_json::json!({"op":"conversation.get","window_id":"w"}),
+        serde_json::json!({"op":"conversation.history","window_id":"w","before":"c"}),
+        serde_json::json!({"op":"conversation.create","window_id":"w","model":"m"}),
+        serde_json::json!({"op":"conversation.send","window_id":"w","request_id":"r","text":"안녕","attachments":[]}),
+        serde_json::json!({"op":"conversation.attachment","window_id":"w","item_id":"i","attachment_id":"a"}),
+        serde_json::json!({"op":"conversation.attachment_open","window_id":"w","item_id":"i","attachment_id":"a"}),
+    ] {
+        let request = serde_json::from_value(request).unwrap();
+        expect_error(core.handle(request), ErrorCode::Unavailable);
+    }
+}
+
+#[test]
 fn agent_commands_require_connection_and_a_local_workspace() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
@@ -2094,85 +2107,68 @@ fn agent_commands_require_connection_and_a_local_workspace() {
 
     expect_error(
         core.handle(CoreRequest::AgentGet {
-            workspace_id: Some("missing".into()),
-            window_id: None,
+            workspace_id: "missing".into(),
         }),
         ErrorCode::Server,
     );
     expect_error(
         core.handle(CoreRequest::AgentCreate {
-            workspace_id: Some("missing".into()),
-            model_preset: Some("gemini-4-argon".into()),
-            window_id: None,
-            selected_model: None,
+            workspace_id: "missing".into(),
+            model_preset: "gemini-4-argon".into(),
         }),
         ErrorCode::Server,
     );
     expect_error(
         core.handle(CoreRequest::AgentSend {
-            workspace_id: Some("missing".into()),
+            workspace_id: "missing".into(),
             text: "hello".into(),
             attachments: vec![],
-            window_id: None,
         }),
         ErrorCode::Server,
     );
     expect_error(
         core.handle(CoreRequest::AgentAttachment {
-            workspace_id: Some("missing".into()),
-            item_id: Some("7".into()),
-            index: Some(0),
-            window_id: None,
-            thread_id: None,
-            attachment_id: None,
+            workspace_id: "missing".into(),
+            item_id: "7".into(),
+            index: 0,
         }),
         ErrorCode::Server,
     );
     expect_error(
         core.handle(CoreRequest::AgentAttachmentOpen {
-            workspace_id: Some("missing".into()),
-            item_id: Some("7".into()),
-            index: Some(0),
-            window_id: None,
-            thread_id: None,
-            attachment_id: None,
+            workspace_id: "missing".into(),
+            item_id: "7".into(),
+            index: 0,
         }),
         ErrorCode::Server,
     );
     mark_connected(&core);
     expect_error(
         core.handle(CoreRequest::AgentGet {
-            workspace_id: Some("missing".into()),
-            window_id: None,
+            workspace_id: "missing".into(),
         }),
         ErrorCode::NotFound,
     );
     expect_error(
         core.handle(CoreRequest::AgentCreate {
-            workspace_id: Some("missing".into()),
-            model_preset: Some("gemini-4-argon".into()),
-            window_id: None,
-            selected_model: None,
+            workspace_id: "missing".into(),
+            model_preset: "gemini-4-argon".into(),
         }),
         ErrorCode::NotFound,
     );
     expect_error(
         core.handle(CoreRequest::AgentSend {
-            workspace_id: Some("missing".into()),
+            workspace_id: "missing".into(),
             text: "hello".into(),
             attachments: vec![],
-            window_id: None,
         }),
         ErrorCode::NotFound,
     );
     expect_error(
         core.handle(CoreRequest::AgentAttachment {
-            workspace_id: Some("missing".into()),
-            item_id: Some("7".into()),
-            index: Some(0),
-            window_id: None,
-            thread_id: None,
-            attachment_id: None,
+            workspace_id: "missing".into(),
+            item_id: "7".into(),
+            index: 0,
         }),
         ErrorCode::NotFound,
     );
@@ -2180,10 +2176,7 @@ fn agent_commands_require_connection_and_a_local_workspace() {
 
     let workspace_id = snapshot(&core).shared.workspaces[0].id.clone();
     assert!(matches!(
-        core.handle(CoreRequest::AgentGet {
-            workspace_id: Some(workspace_id),
-            window_id: None,
-        }),
+        core.handle(CoreRequest::AgentGet { workspace_id }),
         Ok(CoreReply::AgentGet { .. })
     ));
     assert_eq!(client.agent_gets.lock().unwrap().len(), 1);
@@ -2213,10 +2206,8 @@ fn agent_create_sends_workspace_name_and_agent_commands_do_not_emit_state() {
 
     assert!(matches!(
         core.handle(CoreRequest::AgentCreate {
-            workspace_id: Some(workspace_id.clone()),
-            model_preset: Some("gemini-4-argon".into()),
-            window_id: None,
-            selected_model: None,
+            workspace_id: workspace_id.clone(),
+            model_preset: "gemini-4-argon".into(),
         }),
         Ok(CoreReply::AgentCreate { .. })
     ));
@@ -2253,10 +2244,9 @@ fn agent_send_trims_text_counts_characters_and_rejects_invalid_input_before_netw
     ] {
         expect_error(
             core.handle(CoreRequest::AgentSend {
-                workspace_id: Some(workspace_id.clone()),
+                workspace_id: workspace_id.clone(),
                 text,
                 attachments: vec![],
-                window_id: None,
             }),
             ErrorCode::InvalidRequest,
         );
@@ -2264,10 +2254,9 @@ fn agent_send_trims_text_counts_characters_and_rejects_invalid_input_before_netw
     assert!(client.agent_sends.lock().unwrap().is_empty());
 
     core.handle(CoreRequest::AgentSend {
-        workspace_id: Some(workspace_id.clone()),
+        workspace_id: workspace_id.clone(),
         text: "  안녕\n ".into(),
         attachments: vec![],
-        window_id: None,
     })
     .unwrap();
     assert_eq!(
@@ -2309,17 +2298,15 @@ fn agent_send_forwards_attachments_in_order_and_allows_attachment_only_messages(
     ];
 
     core.handle(CoreRequest::AgentSend {
-        workspace_id: Some(workspace_id.clone()),
+        workspace_id: workspace_id.clone(),
         text: "  함께 보냄  ".into(),
         attachments: attachments.clone(),
-        window_id: None,
     })
     .unwrap();
     core.handle(CoreRequest::AgentSend {
-        workspace_id: Some(workspace_id.clone()),
+        workspace_id: workspace_id.clone(),
         text: " \n ".into(),
         attachments: vec![attachments[0].clone()],
-        window_id: None,
     })
     .unwrap();
 
@@ -2345,19 +2332,17 @@ fn agent_send_forwards_attachments_in_order_and_allows_attachment_only_messages(
 
     expect_error(
         core.handle(CoreRequest::AgentSend {
-            workspace_id: Some(workspace_id.clone()),
+            workspace_id: workspace_id.clone(),
             text: " \t ".into(),
             attachments: vec![],
-            window_id: None,
         }),
         ErrorCode::InvalidRequest,
     );
     expect_error(
         core.handle(CoreRequest::AgentSend {
-            workspace_id: Some(workspace_id),
+            workspace_id,
             text: "".into(),
             attachments: vec![attachments[0].clone(); 11],
-            window_id: None,
         }),
         ErrorCode::InvalidRequest,
     );
@@ -2390,12 +2375,9 @@ fn agent_attachment_returns_server_reply_and_preserves_attachment_errors() {
 
     assert_eq!(
         core.handle(CoreRequest::AgentAttachment {
-            workspace_id: Some(workspace_id.clone()),
-            item_id: Some("7".into()),
-            index: Some(0),
-            window_id: None,
-            thread_id: None,
-            attachment_id: None,
+            workspace_id: workspace_id.clone(),
+            item_id: "7".into(),
+            index: 0,
         })
         .unwrap(),
         CoreReply::AgentAttachment {
@@ -2416,12 +2398,9 @@ fn agent_attachment_returns_server_reply_and_preserves_attachment_errors() {
         .push_back(Err(RegistryError::NotFound));
     expect_error(
         core.handle(CoreRequest::AgentAttachment {
-            workspace_id: Some(workspace_id.clone()),
-            item_id: Some("8".into()),
-            index: Some(0),
-            window_id: None,
-            thread_id: None,
-            attachment_id: None,
+            workspace_id: workspace_id.clone(),
+            item_id: "8".into(),
+            index: 0,
         }),
         ErrorCode::NotFound,
     );
@@ -2434,12 +2413,9 @@ fn agent_attachment_returns_server_reply_and_preserves_attachment_errors() {
         ))));
     expect_error(
         core.handle(CoreRequest::AgentAttachment {
-            workspace_id: Some(workspace_id),
-            item_id: Some("7".into()),
-            index: Some(0),
-            window_id: None,
-            thread_id: None,
-            attachment_id: None,
+            workspace_id,
+            item_id: "7".into(),
+            index: 0,
         }),
         ErrorCode::InvalidRequest,
     );
@@ -2482,12 +2458,9 @@ fn agent_attachment_open_saves_sanitized_names_and_selects_open_or_reveal() {
     for index in 0..5 {
         assert_eq!(
             core.handle(CoreRequest::AgentAttachmentOpen {
-                workspace_id: Some(workspace_id.clone()),
-                item_id: Some("7".into()),
-                index: Some(index),
-                window_id: None,
-                thread_id: None,
-                attachment_id: None,
+                workspace_id: workspace_id.clone(),
+                item_id: "7".into(),
+                index,
             })
             .unwrap(),
             CoreReply::AgentAttachmentOpen {}
@@ -2533,12 +2506,9 @@ fn agent_attachment_open_saves_sanitized_names_and_selects_open_or_reveal() {
     let requests_before = client.agent_attachments.lock().unwrap().len();
     expect_error(
         core.handle(CoreRequest::AgentAttachmentOpen {
-            workspace_id: Some(workspace_id),
-            window_id: None,
-            item_id: Some("7/attachments/0#/../../../../../../escape".into()),
-            index: Some(0),
-            thread_id: None,
-            attachment_id: None,
+            workspace_id,
+            item_id: "7/attachments/0#/../../../../../../escape".into(),
+            index: 0,
         }),
         ErrorCode::InvalidRequest,
     );
@@ -2574,11 +2544,8 @@ fn agent_http_core_errors_are_returned_unchanged() {
         .push_back(Err(RegistryError::Validation(expected.clone())));
 
     assert_eq!(
-        core.handle(CoreRequest::AgentGet {
-            workspace_id: Some(workspace_id),
-            window_id: None,
-        })
-        .unwrap_err(),
+        core.handle(CoreRequest::AgentGet { workspace_id })
+            .unwrap_err(),
         expected
     );
 }

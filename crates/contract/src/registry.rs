@@ -343,7 +343,7 @@
 //! - 읽기: `GET {DEVICE_APP_STORAGE_PATH}/{app_id}/items/{entry_id}?workspace_id={id}`. 없으면 선언 기본값과
 //!   `exists: false`, `revision: null`을 돌려준다.
 //! - 쓰기: 같은 항목 경로의 `PUT`. [`crate::app_storage::StorageWriteRequest`]에 본문과
-//!   `expected_revision`을 함께 보내는 compare-and-set이다. `null`은 아직 행이 없을 때만 맞고, 성공하면 새 revision을 준다.
+//!   `expected_revision`을 쓰는 compare-and-set이다. 빠지거나 `null`이면 아직 행이 없을 때만 맞고, 성공하면 새 revision을 준다.
 //!   충돌은 409와 [`crate::app_storage::StorageConflict::current_revision`]이다.
 //! - 기본값으로 되돌리기: 같은 항목 경로의 `DELETE`, 본문은 [`crate::app_storage::StorageResetRequest`].
 //!   revision 비교를 통과하면 저장 행을 지우고 기본값으로 돌아가며, 응답은 [`crate::app_storage::StorageResetReply`]다.

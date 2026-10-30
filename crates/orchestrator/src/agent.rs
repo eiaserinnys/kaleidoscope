@@ -166,8 +166,6 @@ impl AppState {
             busy,
             tool,
             created_at: row.created_at.clone(),
-            thread_id: None,
-            model_id: None,
         }
     }
     pub(super) fn history(&self, workspace_id: &str) -> Result<Vec<AgentItem>, CoreError> {
