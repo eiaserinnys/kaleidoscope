@@ -15,6 +15,13 @@ export interface FileEditorSnapshot {
   lineSeparator: "\n" | "\r\n";
 }
 
+const activeSessions = new Set<FileEditorSession>();
+
+export async function flushEditors(): Promise<boolean> {
+  const results = await Promise.all([...activeSessions].map((session) => session.saveNow()));
+  return results.every(Boolean);
+}
+
 export class FileEditorSession {
   private snapshot: FileEditorSnapshot = {
     path: null,
@@ -37,7 +44,9 @@ export class FileEditorSession {
     private readonly transport: Pick<CoreTransport, "call">,
     private readonly windowId: string,
     private readonly permission: string,
-  ) {}
+  ) {
+    activeSessions.add(this);
+  }
 
   getSnapshot = (): FileEditorSnapshot => this.snapshot;
 
@@ -65,6 +74,8 @@ export class FileEditorSession {
   }
 
   async open(path: string | null): Promise<void> {
+    // Editor effects are replayed by React StrictMode after their cleanup.
+    activeSessions.add(this);
     if (path === this.snapshot.path && this.snapshot.loaded && !this.snapshot.error) return;
     if (this.snapshot.path !== null && this.snapshot.dirty) {
       this.pendingPath = path;
@@ -299,6 +310,7 @@ export class FileEditorSession {
   }
 
   dispose() {
+    activeSessions.delete(this);
     this.clearTimer();
     if (this.snapshot.dirty) void this.saveNow();
   }

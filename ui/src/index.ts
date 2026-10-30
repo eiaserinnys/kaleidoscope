@@ -6,6 +6,7 @@ export {
   ArrowRight,
   ChevronDown,
   ChevronRight,
+  UpdateReady,
   Cloud,
   CloudOff,
   FilePlus,
@@ -38,6 +39,7 @@ export {
   type FakeWebViewSnapshot,
 } from "./core/fake-transport";
 export { createShellStore, useShellSnapshot, type ShellStore } from "./core/shell-store";
+export { flushEditors } from "./blocks/file-editor-session";
 export { toCoreError } from "./core/core-transport";
 export type { CoreTransport, ReplyFor, RequestFor } from "./core/core-transport";
 export type {

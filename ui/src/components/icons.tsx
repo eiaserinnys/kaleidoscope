@@ -4,6 +4,7 @@ import {
   ArrowRight as ArrowRightIcon,
   ChevronDown as ChevronDownIcon,
   ChevronRight as ChevronRightIcon,
+  CircleArrowUp as CircleArrowUpIcon,
   Cloud as CloudIcon,
   CloudOff as CloudOffIcon,
   File as FileIcon,
@@ -56,6 +57,7 @@ function renderIcon(
 }
 
 export const ChevronRight = (props: IconProps) => renderIcon(ChevronRightIcon, props);
+export const UpdateReady = (props: IconProps) => renderIcon(CircleArrowUpIcon, props);
 export const ChevronDown = (props: IconProps) => renderIcon(ChevronDownIcon, props);
 export const PanelLeftOpen = (props: IconProps) => renderIcon(PanelLeftOpenIcon, props);
 export const PanelLeftClose = (props: IconProps) => renderIcon(PanelLeftCloseIcon, props);

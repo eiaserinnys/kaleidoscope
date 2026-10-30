@@ -35,6 +35,7 @@ declare global {
 
 const timestamp = "2026-10-30T00:00:00Z";
 const bottomMenuScenario = new URLSearchParams(window.location.search).has("bottom-menu");
+const harnessParams = new URLSearchParams(window.location.search);
 const shareScenario = new URLSearchParams(window.location.search).get("share");
 const entries = Array.from({ length: 80 }, (_, i) => ({ key: String(i + 1), title: `항목 ${i + 1}`, value: `값 ${i + 1}` }));
 const shareDefinition: AppDefinition = {
@@ -131,7 +132,11 @@ const snapshot: ShellSnapshot = {
   supported: { blocks: 4, modules: { files: 1, web: 1 } },
   link: linkStatus(shareScenario ? "connected" : new URLSearchParams(window.location.search).get("link")),
   sharing: [],
-  update: { state: "unavailable" },
+  update: harnessParams.get("update") === "ready"
+    ? { state: "ready", current_version: "0.4.1", version: "0.5.0" }
+    : harnessParams.get("update") === "idle"
+      ? { state: "idle", current_version: "0.5.0" }
+      : { state: "unavailable" },
 };
 
 const files = shareScenario === "editor" ? { "README.md": Array.from({ length: 120 }, (_, i) => `줄 ${i + 1}`).join("\n") } : bottomMenuScenario
@@ -149,6 +154,7 @@ const transport: FakeTransport = createFakeTransport({
   agents: shareScenario ? { "workspace-1": { agent: { workspace_id: "workspace-1", model_preset: "test", model_label: "Test", busy: false, tool: null, created_at: timestamp }, items: [], models: [] } } : undefined,
   folder: { root_path: "/fake/docs", root_name: "문서" },
   webUnavailable: new URLSearchParams(window.location.search).get("web") === "unavailable",
+  updateRestartError: harnessParams.get("update-restart") === "error" ? "설치를 시작할 수 없습니다" : undefined,
   files,
 });
 const store = createShellStore(transport);
