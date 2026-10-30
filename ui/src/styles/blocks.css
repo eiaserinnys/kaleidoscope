@@ -207,6 +207,11 @@
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
+  height: 100%;
+}
+
+.ks-explorer-empty:not(.has-error) .ks-empty-state {
+  transform: translateY(calc(-1 * var(--ks-space-3)));
 }
 
 .ks-explorer-toolbar {

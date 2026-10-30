@@ -167,7 +167,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
     selectedPath={rootPath === null ? null : folder}
   />;
 
-  if (scope === "pc" && rootPath === null) return <div className="ks-explorer-empty">
+  if (scope === "pc" && rootPath === null) return <div className={`ks-explorer-empty${actionError ? " has-error" : ""}`}>
     <EmptyState icon={<Monitor size="empty" />} action={<>
       <Button onClick={() => void allowPc()}>이 PC의 파일 읽기 허용</Button>
       {actionError ? <span className="ks-inline-error" role="alert">{actionError}</span> : null}

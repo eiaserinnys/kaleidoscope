@@ -37,6 +37,7 @@ const timestamp = "2026-10-30T00:00:00Z";
 const bottomMenuScenario = new URLSearchParams(window.location.search).has("bottom-menu");
 const harnessParams = new URLSearchParams(window.location.search);
 const longFolderScenario = harnessParams.has("long-folder");
+const pcAllowErrorScenario = harnessParams.has("pc-allow-error");
 const settingsPreview = harnessParams.get("preview") === "app-settings";
 const settingsSample = harnessParams.get("app") === "sample" || harnessParams.get("app") === "empty-group";
 const shareScenario = new URLSearchParams(window.location.search).get("share");
@@ -193,9 +194,12 @@ const transport: FakeTransport = createFakeTransport({
   ]) : undefined,
   files,
 });
-if (harnessParams.has("reset-review")) {
+if (harnessParams.has("reset-review") || pcAllowErrorScenario) {
   const call = transport.call.bind(transport);
   transport.call = (async (request: CoreRequest) => {
+    if (pcAllowErrorScenario && request.op === "files.allow_pc") {
+      return Promise.reject({ code: "permission_denied", message: "허용할 수 없습니다", details: [] });
+    }
     if (request.op === "storage.reset") await new Promise((resolve) => setTimeout(resolve, 1200));
     return call(request);
   }) as typeof transport.call;

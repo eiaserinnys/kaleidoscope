@@ -155,6 +155,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   const shareCalls: Array<{ window_id: string; view: VisibleView }> = [];
   const calls: CoreRequest[] = [];
   const webPlaces: Array<{ window_id: string; bounds: Rect | null }> = [];
+  const pcOpenedFileGrants = new Set<string>();
   let revisionNumber = 1;
   let storageFailure: string | null = null;
   let windowNumber = 1;
@@ -293,9 +294,12 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     return grant;
   };
 
-  const filePathForGrant = (grant: Grant, path: string): string => {
-    const rooted = grant.root_path ? `${grant.root_path}/${path}` : path;
-    return files.has(rooted) ? rooted : path;
+  const grantKey = (windowId: string, permission: string) => JSON.stringify([windowId, permission]);
+
+  const filePathForGrant = (grant: Grant, path: string, pcOpened = false): string => {
+    let rooted = path;
+    if (grant.root_path) rooted = path ? `${grant.root_path}/${path}` : grant.root_path;
+    return pcOpened || files.has(rooted) ? rooted : path;
   };
 
   const directoryExists = (directory: string): boolean => directory === ""
@@ -640,6 +644,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
               windows: snapshot.shared.windows.map((item) => item.id === opened.id ? opened : item),
             },
           };
+          if (pcOpen) pcOpenedFileGrants.add(grantKey(existing.id, opens.permission));
         } else {
           const app = snapshot.shared.apps.find((item) => item.id === request.app_id);
           if (!app) return fail("not_found", "앱을 찾을 수 없습니다");
@@ -674,6 +679,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
             },
             device: { ...snapshot.device, grants: [...snapshot.device.grants, copiedGrant] },
           };
+          if (pcOpen) pcOpenedFileGrants.add(grantKey(id, opens.permission));
         }
         emitState();
         return { op: "files.open", window: clone(opened) };
@@ -781,29 +787,35 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       }
       case "files.list": {
         const { declaration } = permissionFor(request.window_id, request.permission);
-        requireGrant(request.window_id, request.permission);
+        const grant = requireGrant(request.window_id, request.permission);
         if (!validRelativePath(request.dir, true)) {
           return fail("not_found", "폴더를 찾을 수 없습니다");
         }
         if (declaration.scope === "pc" && request.dir === "") {
           return { op: "files.list", entries: clone(FAKE_PC_ROOTS) };
         }
+        const pcOpened = pcOpenedFileGrants.has(grantKey(request.window_id, request.permission));
+        const backingDirectory = pcOpened
+          ? filePathForGrant(grant, request.dir, true)
+          : request.dir;
         const exists = (declaration.scope === "pc" && FAKE_PC_ROOTS.some((entry) => entry.path === request.dir))
-          || directoryExists(request.dir);
+          || directoryExists(backingDirectory);
         if (!exists) return fail("not_found", "폴더를 찾을 수 없습니다");
-        const prefix = request.dir === "" ? "" : `${request.dir}/`;
+        const prefix = backingDirectory === "" ? "" : `${backingDirectory}/`;
+        const relativePrefix = request.dir === "" ? "" : `${request.dir}/`;
         const entries = new Map<string, FileEntry>();
         for (const path of files.keys()) {
           if (!path.startsWith(prefix)) continue;
           const rest = path.slice(prefix.length);
           const [name, ...tail] = rest.split("/");
           if (!name || name.startsWith(".")) continue;
+          const relativePath = `${relativePrefix}${name}`;
           if (tail.length > 0) {
-            const directoryPath = `${prefix}${name}`;
+            const directoryPath = relativePath;
             entries.set(directoryPath, { name, path: directoryPath, kind: "dir", size: 0, modified: FAKE_MODIFIED });
           } else {
             const size = new TextEncoder().encode(files.get(path)?.text ?? "").length;
-            entries.set(path, { name, path, kind: "file", size, modified: FAKE_MODIFIED });
+            entries.set(relativePath, { name, path: relativePath, kind: "file", size, modified: FAKE_MODIFIED });
           }
         }
         const ordered = [...entries.values()].sort((left, right) => {
@@ -815,10 +827,12 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         return { op: "files.list", entries: ordered };
       }
       case "files.read": {
-        permissionFor(request.window_id, request.permission);
+        const { declaration } = permissionFor(request.window_id, request.permission);
+        if (declaration.scope === "pc") return fail("not_granted", "내 PC 권한으로 파일을 직접 읽을 수 없습니다");
         const grant = requireGrant(request.window_id, request.permission);
         if (!validRelativePath(request.path)) return fail("invalid_request", "파일 경로가 올바르지 않습니다");
-        const file = files.get(filePathForGrant(grant, request.path));
+        const pcOpened = pcOpenedFileGrants.has(grantKey(request.window_id, request.permission));
+        const file = files.get(filePathForGrant(grant, request.path, pcOpened));
         if (!file) return fail("not_found", "파일을 찾을 수 없습니다");
         return { op: "files.read", path: request.path, text: file.text, revision: file.revision };
       }
@@ -857,7 +871,8 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         const grant = requireGrant(request.window_id, request.permission);
         if (declaration.access !== "readwrite") return fail("permission_denied", "읽기 전용 폴더입니다");
         if (!validRelativePath(request.path)) return fail("invalid_request", "파일 경로가 올바르지 않습니다");
-        const path = filePathForGrant(grant, request.path);
+        const pcOpened = pcOpenedFileGrants.has(grantKey(request.window_id, request.permission));
+        const path = filePathForGrant(grant, request.path, pcOpened);
         const current = files.get(path);
         if (request.expected_revision === undefined ? current !== undefined : !current || current.revision !== request.expected_revision) {
           return fail("conflict", "파일이 읽은 뒤에 바뀌었습니다");

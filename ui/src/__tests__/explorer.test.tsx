@@ -157,6 +157,18 @@ describe("explorer block", () => {
     const editor = state.snapshot.shared.windows.find((window) => window.id === openedGrant?.window_id);
     expect(editor?.app_id).toBe("md-editor");
     expect(editor?.state.current_file).toBe("a.md");
+
+    const editorFiles = await transport.call({ op: "files.list", window_id: editor!.id, permission: "docs", dir: "" });
+    expect(editorFiles.op).toBe("files.list");
+    if (editorFiles.op === "files.list") {
+      expect(editorFiles.entries.map((entry) => entry.path)).toEqual(["a.md", "b.md"]);
+    }
+    await expect(transport.call({ op: "files.read", window_id: editor!.id, permission: "docs", path: "a.md" }))
+      .resolves.toMatchObject({ text: "a" });
+    await expect(transport.call({ op: "files.read", window_id: "viewer-window", permission: "pc", path: "documents/notes/a.md" }))
+      .rejects.toMatchObject({ code: "not_granted" });
+    await transport.call({ op: "files.write", window_id: editor!.id, permission: "docs", path: "new.md", text: "new" });
+    expect(transport.getFiles()["documents/notes/new.md"]).toBe("new");
   });
 
   it("shows folder navigation beside the current folder contents", async () => {

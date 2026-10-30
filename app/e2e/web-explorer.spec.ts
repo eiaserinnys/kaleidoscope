@@ -20,6 +20,20 @@ async function screenshot(page: Page, name: string) {
   await page.screenshot({ path: path.join(artifactDir, name), animations: "disabled" });
 }
 
+async function permissionCenterMetrics(page: Page) {
+  return page.evaluate(() => {
+    const explorer = document.querySelector<HTMLElement>('[data-testid="app-window-explorer"]');
+    const body = explorer?.querySelector<HTMLElement>(".ks-data-window-body");
+    const button = explorer?.querySelector<HTMLElement>(".ks-explorer-empty button");
+    if (!body || !button) throw new Error("탐색기 허용 화면의 본문이나 단추를 찾지 못했습니다");
+    const bodyBounds = body.getBoundingClientRect();
+    const buttonBounds = button.getBoundingClientRect();
+    const bodyCenter = bodyBounds.top + bodyBounds.height / 2;
+    const buttonCenter = buttonBounds.top + buttonBounds.height / 2;
+    return { bodyCenter, buttonCenter, delta: buttonCenter - bodyCenter };
+  });
+}
+
 async function controls(page: Page) {
   return page.evaluate(() => {
     const harness = (window as HarnessWindow).__kaleidoscopeHarness;
@@ -69,6 +83,46 @@ async function explorerHeaderMetrics(page: Page) {
     };
   });
 }
+
+test("centers the PC permission action in wide and narrow windows, including failure", async ({ page }) => {
+  await mkdir(artifactDir, { recursive: true });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/harness.html?long-folder&pc-allow-error");
+  const explorer = page.getByTestId("app-window-explorer");
+  const allow = explorer.getByRole("button", { name: "이 PC의 파일 읽기 허용" });
+  await expect(allow).toBeVisible();
+  const wideInitial = await permissionCenterMetrics(page);
+  expect(Math.abs(wideInitial.delta)).toBeLessThanOrEqual(8);
+  await screenshot(page, "permission-wide-1440x900.png");
+
+  await allow.click();
+  const alert = explorer.getByRole("alert");
+  await expect(alert).toHaveText("허용할 수 없습니다");
+  const wideFailed = await permissionCenterMetrics(page);
+  expect(Math.abs(wideFailed.delta)).toBeLessThanOrEqual(8);
+  const failurePlacement = await page.evaluate(() => {
+    const root = document.querySelector<HTMLElement>('[data-testid="app-window-explorer"]')!;
+    const button = root.querySelector<HTMLElement>(".ks-explorer-empty button")!.getBoundingClientRect();
+    const error = root.querySelector<HTMLElement>("[role=alert]")!.getBoundingClientRect();
+    return { buttonBottom: button.bottom, errorTop: error.top };
+  });
+  expect(failurePlacement.errorTop).toBeGreaterThanOrEqual(failurePlacement.buttonBottom);
+  await screenshot(page, "permission-failed-wide-1440x900.png");
+
+  await page.setViewportSize({ width: 720, height: 600 });
+  const narrowFailed = await permissionCenterMetrics(page);
+  expect(Math.abs(narrowFailed.delta)).toBeLessThanOrEqual(8);
+  await screenshot(page, "permission-failed-narrow-720x600.png");
+
+  await page.goto("/harness.html?long-folder");
+  await expect(explorer.getByRole("button", { name: "이 PC의 파일 읽기 허용" })).toBeVisible();
+  const narrowInitial = await permissionCenterMetrics(page);
+  expect(Math.abs(narrowInitial.delta)).toBeLessThanOrEqual(8);
+  await screenshot(page, "permission-narrow-720x600.png");
+  await writeFile(path.join(artifactDir, "permission-center-measurements.json"), JSON.stringify({
+    wideInitial, wideFailed, narrowFailed, narrowInitial,
+  }, null, 2));
+});
 
 test("web view overlap and explorer open behavior in the shell harness", async ({ page }) => {
   test.setTimeout(120_000);
@@ -284,6 +338,10 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   const editor = page.getByTestId("app-window-md-editor");
   await expect(editor).toBeVisible();
   await expect(editor.getByText("첫 번째 노트")).toBeVisible();
+  const editorFileTree = editor.locator(".ks-file-tree");
+  await expect(editorFileTree.locator('[data-file-path="a.md"]')).toBeVisible();
+  await expect(editorFileTree.locator('[data-file-path="b.md"]')).toBeVisible();
+  await expect(editorFileTree.locator('[data-folder-path="documents"]')).toHaveCount(0);
   const openedA = (await controls(page)).snapshot?.shared.windows.find((item) => item.app_id === "md-editor");
   expect(openedA?.state.current_file).toBe("a.md");
 
@@ -299,7 +357,6 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   expect(afterB[0].id).toBe(openedA?.id);
   expect(afterB[0].state.current_file).toBe("b.md");
   await editor.locator(".ks-window-titlebar").click();
-  const editorFileTree = editor.locator(".ks-file-tree");
   const invariantBefore = await editorFileTree.screenshot({ path: path.join(artifactDir, "md-editor-file-tree-before.png") });
 
   await raiseExplorer(page, explorer);
