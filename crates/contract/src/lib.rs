@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 15판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 16판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -88,6 +88,14 @@
 //! 스트림의 최종 인증 실패는 `conversation.error`로 알리고, 로그인 성공 시 코어가 다시 연결한다.
 //! 접수 전에 중단된 초안은 `conversation.get` 때 `conversation.draft`로 창에 알린다.
 //! 실패한 영수증의 초안은 `failed: true`이며 새 request_id로 다시 보낸다.
+//!
+//! # 계약 16판: 대화 설정 적용 상태
+//! `conversation.apply_status`와 같은 이름의 이벤트는 앱 설정의 제공자 적용 상태를 나타낸다.
+//! 저장 성공과 적용 성공은 별개이며, `unapplied`일 때 `conversation.apply_retry`로 다시 시도한다.
+//! `agent`의 바인딩은 리터럴과 `$storage`, `$storage_meta`만 사용한다. 창 상태 바인딩이나
+//! `$state`, `$data`, `$event`, `$item` 참조는 거부한다. 생성과 재적용은 계정 × 앱과 작업의 저장값을
+//! 같은 방식으로 계산하며 작업 키는 대상 작업으로 푼다. 창은 작업을 식별하는 데만 쓴다.
+//! 앱 정의, 블록과 모듈 판, 제공자 wire는 바꾸지 않는다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -599,7 +607,17 @@ pub struct OpensDecl {
     pub state: String,
 }
 
-/// 앱의 대화 제공자. 프로필과 대화 설정 값은 저장소 항목에서 읽고, 특정 서비스를 코드에 넣지 않는다.
+/// TypeScript에서 대화 설정 바인딩의 창 상태 형태를 제외한다. 실행 시 공통 검사기가 식도 검사한다.
+#[derive(TS)]
+#[ts(
+    export,
+    export_to = "contract.ts",
+    type = "ExprRef | string | number | boolean | null | Array<JsonValue> | ({ [key: string]: JsonValue } & { state?: never; expr?: never })"
+)]
+pub struct AgentBinding;
+
+/// 앱의 대화 제공자. 바인딩은 리터럴 또는 `$storage`, `$storage_meta`만 읽는다.
+/// 창 상태 바인딩과 `$state`, `$data`, `$event`, `$item`은 사용할 수 없다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
@@ -608,16 +626,42 @@ pub struct AgentProvider {
     pub permission: String,
     /// 연결 base URL 아래의 안전한 상대 경로.
     pub base_path: String,
+    #[schemars(schema_with = "agent_binding_schema")]
+    #[ts(as = "AgentBinding")]
     pub namespace: Binding,
+    #[schemars(schema_with = "agent_binding_schema")]
+    #[ts(as = "AgentBinding")]
     pub profile: Binding,
+    #[schemars(schema_with = "agent_binding_schema")]
+    #[ts(as = "AgentBinding")]
     pub collection: Binding,
+    #[schemars(schema_with = "agent_binding_schema")]
+    #[ts(as = "AgentBinding")]
     pub model_order: Binding,
+    #[schemars(schema_with = "agent_binding_schema")]
+    #[ts(as = "AgentBinding")]
     pub selected_model: Binding,
+    #[schemars(schema_with = "agent_binding_schema")]
+    #[ts(as = "AgentBinding")]
     pub title_template: Binding,
+    #[schemars(schema_with = "agent_binding_schema")]
+    #[ts(as = "AgentBinding")]
     pub initial_instruction_template: Binding,
+    #[schemars(schema_with = "agent_binding_schema")]
+    #[ts(as = "AgentBinding")]
     pub instructions_template: Binding,
     /// 현재 작업에 thread id를 저장하는 JSON 항목 id.
     pub thread_entry: String,
+}
+
+fn agent_binding_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    let mut schema = generator.subschema_for::<Binding>();
+    schema.insert(
+        "not".into(),
+        serde_json::json!({"type":"object", "required":["state"]}),
+    );
+    schema.insert("description".into(), serde_json::json!("리터럴 또는 $storage와 $storage_meta를 읽는 식. $state, $data, $event, $item은 사용할 수 없다."));
+    schema
 }
 
 /// 문서를 저장소 md 항목에 연결한다.
@@ -1550,6 +1594,12 @@ pub enum CoreRequest {
     #[serde(rename = "state.get")]
     StateGet {},
 
+    /// 앱 설정이 대화 제공자에 적용됐는지 읽거나 다시 적용한다.
+    #[serde(rename = "conversation.apply_status")]
+    ConversationApplyStatus { window_id: String },
+    #[serde(rename = "conversation.apply_retry")]
+    ConversationApplyRetry { window_id: String },
+
     /// 워크스페이스를 만든다. 첫 데스크톱 하나를 함께 만들고, 둘 다 지금 보는 것으로 바꾼다.
     #[serde(rename = "workspace.create")]
     WorkspaceCreate { name: String },
@@ -1977,6 +2027,16 @@ pub struct AgentAttachment {
     pub mime: String,
 }
 
+/// 기기에 저장된 앱 설정의 제공자 적용 상태.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ConversationApplyStatus {
+    Applying,
+    Applied,
+    Unapplied,
+}
+
 /// 코어의 응답. `op`는 명령과 같다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "op")]
@@ -1984,6 +2044,11 @@ pub struct AgentAttachment {
 pub enum CoreReply {
     #[serde(rename = "state.get")]
     StateGet { snapshot: ShellSnapshot },
+
+    #[serde(rename = "conversation.apply_status")]
+    ConversationApplyStatus { status: ConversationApplyStatus },
+    #[serde(rename = "conversation.apply_retry")]
+    ConversationApplyRetry {},
 
     #[serde(rename = "workspace.create")]
     WorkspaceCreate {
@@ -2279,6 +2344,12 @@ pub enum CoreEvent {
     /// 공유 상태나 기기 상태, 연결 상태가 바뀌었다. 화면은 저장소를 이 snapshot으로 바꾼다.
     #[serde(rename = "state.changed")]
     StateChanged { snapshot: ShellSnapshot },
+    /// 같은 앱의 설정 화면에서 적용 결과를 갱신한다.
+    #[serde(rename = "conversation.apply_status")]
+    ConversationApplyStatus {
+        app_id: String,
+        status: ConversationApplyStatus,
+    },
     /// 에이전트가 앱을 띄워 달라고 했다(앱을 올리며 띄우기를 요청했거나 앱 열기를 요청함).
     /// 코어는 그 앱을 캐시에 반영한 `state.changed`를 먼저 보내고 이 이벤트를 보낸다.
     /// 띄울 데스크톱: `workspace_id`가 없으면 지금 보는 데스크톱, 있으면 그 워크스페이스에서 마지막으로 본
@@ -3109,7 +3180,8 @@ mod tests {
     #[test]
     fn files_allow_pc_round_trips() {
         let request: CoreRequest =
-            serde_json::from_str(r#"{"op":"files.allow_pc","window_id":"w","permission":"pc"}"#).unwrap();
+            serde_json::from_str(r#"{"op":"files.allow_pc","window_id":"w","permission":"pc"}"#)
+                .unwrap();
         assert!(matches!(request, CoreRequest::FilesAllowPc { .. }));
         let entry = FileEntry {
             name: "문서".into(),

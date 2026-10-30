@@ -8,8 +8,8 @@ use serde_json::Value;
 use crate::app_storage::{self, StorageKind};
 use crate::data::{self, Action, Actions, Binding, SourceDecl};
 use crate::{
-    AgentProvider, AppDefinition, Block, CoreError, ErrorCode, FileAccess, FileRef, FilesScope, PathValue,
-    PermissionDecl, UrlValue, BLOCK_SET_VERSION, MODULE_VERSIONS,
+    AgentProvider, AppDefinition, Block, CoreError, ErrorCode, FileAccess, FileRef, FilesScope,
+    PathValue, PermissionDecl, UrlValue, BLOCK_SET_VERSION, MODULE_VERSIONS,
 };
 
 /// 앱 정의 JSON 원문을 읽고 검사한다. 통과하면 정의를, 걸리면 `unsupported_app`이나
@@ -115,7 +115,14 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
             ..
         } = permission
         {
-            if definition.requires.modules.get("files").copied().unwrap_or(0) < 2 {
+            if definition
+                .requires
+                .modules
+                .get("files")
+                .copied()
+                .unwrap_or(0)
+                < 2
+            {
                 details.push(format!(
                     "권한 {}의 scope는 files 모듈 2판이라 requires.modules.files가 2 이상이어야 합니다",
                     permission.id()
@@ -361,6 +368,16 @@ fn validate_agent_provider(
     for (field, binding) in fields {
         let pointer = format!("{at}/{field}");
         validate_binding_shape(binding, definition, details, &pointer);
+        let window_dependent = match binding {
+            Binding::State(_) => true,
+            Binding::Expr(expr) => agent_expr_uses_runtime_variable(&expr.expr),
+            Binding::Literal(_) => false,
+        };
+        if window_dependent {
+            details.push(format!(
+                "{pointer}: 대화 설정은 창마다 다를 수 없으니 저장소 항목으로 선언하라"
+            ));
+        }
         if let Some(value) = static_binding_value(binding, definition) {
             if matches!(
                 field,
@@ -393,6 +410,22 @@ fn validate_agent_provider(
                     }
                 }
             }
+        }
+    }
+}
+
+fn agent_expr_uses_runtime_variable(expr: &str) -> bool {
+    use jsonata_core::parser::{Lexer, Token};
+    let mut lexer = Lexer::new(expr.to_owned());
+    loop {
+        match lexer.next_token() {
+            Ok(Token::Variable(name))
+                if matches!(name.as_str(), "state" | "data" | "event" | "item") =>
+            {
+                return true
+            }
+            Ok(Token::Eof) | Err(_) => return false,
+            _ => {}
         }
     }
 }

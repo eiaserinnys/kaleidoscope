@@ -151,6 +151,52 @@ fn snapshot(core: &Core) -> ShellSnapshot {
 }
 
 #[test]
+fn 대화_삭제는_현재_snapshot과_미전송_없는_작업_정본에서만_판정한다() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
+    let inner = &core.inner;
+    {
+        let mut state = inner.state.lock().unwrap();
+        state.link = LinkStatus::Connected {
+            server_url: "test".into(),
+            device_name: "test".into(),
+        };
+    }
+    inner.layout_connection_epoch.store(1, Ordering::SeqCst);
+    assert!(!crate::conversation_reconcile::safe_to_archive(
+        inner, 1, "deleted"
+    ));
+    inner.conversation_snapshot_epoch.store(1, Ordering::SeqCst);
+    assert!(crate::conversation_reconcile::safe_to_archive(
+        inner, 1, "deleted"
+    ));
+    {
+        let mut state = inner.state.lock().unwrap();
+        let live = state.shared.workspaces[0].id.clone();
+        assert!(!state.shared.workspaces.is_empty());
+        state
+            .sync
+            .mark(crate::sync_state::EntityKind::Workspace, &live);
+    }
+    assert!(!crate::conversation_reconcile::safe_to_archive(
+        inner, 1, "deleted"
+    ));
+    {
+        let mut state = inner.state.lock().unwrap();
+        state.sync.pending.clear();
+        let live = state.shared.workspaces[0].id.clone();
+        drop(state);
+        assert!(!crate::conversation_reconcile::safe_to_archive(
+            inner, 1, &live
+        ));
+    }
+    inner.state.lock().unwrap().shared.workspaces.clear();
+    assert!(!crate::conversation_reconcile::safe_to_archive(
+        inner, 1, "deleted"
+    ));
+}
+
+#[test]
 fn share_set_updates_snapshot_once_and_share_view_validates_size() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());

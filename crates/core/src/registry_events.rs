@@ -78,6 +78,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             if let Some(event) = state_event {
                 inner.emit(&event);
             }
+            crate::conversation_reconcile::schedule(inner);
             if open && has_workspace(inner, workspace_id.as_deref()) {
                 inner.emit(&CoreEvent::AppOpenRequested {
                     app_id: app.app.id,
@@ -121,13 +122,16 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 &app_id,
                 kaleidoscope_contract::app_storage::StorageUpdate::Snapshot { snapshot },
             );
+            crate::conversation_reconcile::storage_changed(inner, &app_id, None);
         }
         DeviceEvent::StorageChanged { app_id, changed } => {
+            let entry = changed.item.entry_id.clone();
             emit_storage_update(
                 inner,
                 &app_id,
                 kaleidoscope_contract::app_storage::StorageUpdate::Changed { changed },
             );
+            crate::conversation_reconcile::storage_changed(inner, &app_id, Some(&entry));
         }
         DeviceEvent::LayoutSnapshot {
             workspaces,
@@ -160,7 +164,11 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                         inner.emit(&event);
                     }
                     let epoch = inner.layout_connection_epoch.load(Ordering::SeqCst);
+                    inner
+                        .conversation_snapshot_epoch
+                        .store(epoch, Ordering::SeqCst);
                     crate::layout_sync::start(Arc::clone(inner), generation, epoch);
+                    crate::conversation_reconcile::schedule(inner);
                 }
                 Ok((false, _)) => return false,
                 Err(error) => {
@@ -181,6 +189,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                     if let Some(event) = event {
                         inner.emit(&event);
                     }
+                    crate::conversation_reconcile::schedule(inner);
                 }
                 Ok((false, _)) => return false,
                 Err(error) => {
@@ -209,6 +218,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 crate::data_runtime::connections_changed(inner, &changed);
             }
             crate::conversation_send::recover(inner);
+            crate::conversation_reconcile::schedule(inner);
         }
     }
     link::is_current(inner, generation)

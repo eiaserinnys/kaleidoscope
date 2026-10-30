@@ -443,6 +443,8 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::AgentAttachment { .. }
         | CoreRequest::AgentAttachmentOpen { .. } => Err(error::make(ErrorCode::InvalidRequest)),
         CoreRequest::StateGet {}
+        | CoreRequest::ConversationApplyStatus { .. }
+        | CoreRequest::ConversationApplyRetry { .. }
         | CoreRequest::ConversationGet { .. }
         | CoreRequest::ConversationHistory { .. }
         | CoreRequest::ConversationCreate { .. }

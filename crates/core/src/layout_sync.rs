@@ -101,6 +101,9 @@ fn run(inner: Arc<Inner>, generation: u64, epoch: u64) {
             }
             result => {
                 let valid = result.is_ok();
+                if !valid {
+                    inner.conversation_snapshot_epoch.store(0, Ordering::SeqCst);
+                }
                 if let Err(RegistryError::Validation(error)) = &result {
                     eprintln!("배치 동기화 요청이 거부되었습니다: {}", error.message);
                 }
@@ -124,6 +127,9 @@ fn run(inner: Arc<Inner>, generation: u64, epoch: u64) {
                     Ok(((), event)) => {
                         if let Some(event) = event {
                             inner.emit(&event);
+                        }
+                        if valid {
+                            crate::conversation_reconcile::schedule(&inner);
                         }
                     }
                     Err(error) => {

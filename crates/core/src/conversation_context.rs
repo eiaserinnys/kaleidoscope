@@ -21,7 +21,6 @@ pub(crate) struct Context {
     pub provider: AgentProvider,
     pub workspace: Workspace,
     pub definition: AppDefinition,
-    pub state: BTreeMap<String, Value>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -29,17 +28,57 @@ pub(crate) struct ContextSnapshot {
     pub app: String,
     pub workspace: Workspace,
     pub definition: AppDefinition,
-    pub state: BTreeMap<String, Value>,
     pub connection: String,
 }
 
 impl Context {
+    /// 開いた窓がなくても、登録済みアプリと作業から設定を解決する。
+    pub fn for_workspace(
+        inner: &Arc<Inner>,
+        definition: AppDefinition,
+        workspace: Workspace,
+    ) -> Result<Self, CoreError> {
+        let provider = definition
+            .agent
+            .clone()
+            .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+        let connection = definition
+            .permissions
+            .iter()
+            .find_map(|permission| match permission {
+                kaleidoscope_contract::PermissionDecl::Connection {
+                    id,
+                    connection,
+                    access: kaleidoscope_contract::FileAccess::Readwrite,
+                    ..
+                } if id == &provider.permission => Some(connection.clone()),
+                _ => None,
+            })
+            .ok_or_else(|| error::make(ErrorCode::PermissionDenied))?;
+        let link = inner
+            .link_file
+            .lock()
+            .unwrap()
+            .clone()
+            .ok_or_else(|| error::make(ErrorCode::Unavailable))?;
+        let client = Client::restore(inner, &connection, &provider.base_path)?;
+        Ok(Self {
+            client,
+            storage: app_storage::Context {
+                app: definition.id.clone(),
+                workspace: workspace.id.clone(),
+                link,
+            },
+            provider,
+            workspace,
+            definition,
+        })
+    }
     pub fn snapshot(&self) -> ContextSnapshot {
         ContextSnapshot {
             app: self.storage.app.clone(),
             workspace: self.workspace.clone(),
             definition: self.definition.clone(),
-            state: self.state.clone(),
             connection: self.client.info.name.clone(),
         }
     }
@@ -67,11 +106,10 @@ impl Context {
             provider,
             workspace: saved.workspace.clone(),
             definition: saved.definition.clone(),
-            state: saved.state.clone(),
         })
     }
     pub fn open(inner: &Arc<Inner>, window_id: &str) -> Result<Self, CoreError> {
-        let (definition, workspace, state) = {
+        let (definition, workspace) = {
             let state = inner.state.lock().unwrap();
             let window = state
                 .shared
@@ -95,7 +133,7 @@ impl Context {
             let definition =
                 app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
                     .ok_or_else(|| error::make(ErrorCode::NotFound))?;
-            (definition, workspace, window.state.clone())
+            (definition, workspace)
         };
         let provider = definition
             .agent
@@ -109,7 +147,6 @@ impl Context {
             provider,
             workspace,
             definition,
-            state,
         })
     }
 
@@ -131,6 +168,15 @@ impl Context {
         inner: &Arc<Inner>,
         bindings: &[(&str, &Binding)],
     ) -> Result<BTreeMap<String, Value>, CoreError> {
+        self.values_with_revisions(inner, bindings)
+            .map(|(values, _)| values)
+    }
+
+    pub fn values_with_revisions(
+        &self,
+        inner: &Arc<Inner>,
+        bindings: &[(&str, &Binding)],
+    ) -> Result<(BTreeMap<String, Value>, BTreeMap<String, Option<String>>), CoreError> {
         let mut refs = BTreeSet::new();
         for (_, binding) in bindings {
             if let Binding::Expr(expr) = binding {
@@ -138,8 +184,11 @@ impl Context {
             }
         }
         let mut storage = BTreeMap::new();
+        let mut revisions = BTreeMap::new();
         for entry in refs {
-            storage.insert(entry.clone(), self.read(inner, &entry)?.content);
+            let item = self.read(inner, &entry)?;
+            revisions.insert(entry.clone(), item.revision);
+            storage.insert(entry, item.content);
         }
         let list = inner
             .registry
@@ -152,9 +201,10 @@ impl Context {
             .map_err(|e| app_storage::map_error(inner, &self.storage.link, e))?;
         let meta = BTreeMap::from([("bucket_id".into(), json!(list.bucket_id))]);
         let data = BTreeMap::new();
+        let state = BTreeMap::new();
         let null = Value::Null;
         let env = Env {
-            state: &self.state,
+            state: &state,
             data: &data,
             storage: &storage,
             storage_meta: &meta,
@@ -169,7 +219,7 @@ impl Context {
                 .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))?;
             values.insert((*field).into(), value);
         }
-        Ok(values)
+        Ok((values, revisions))
     }
 
     pub fn namespace(&self, inner: &Arc<Inner>) -> Result<String, CoreError> {
