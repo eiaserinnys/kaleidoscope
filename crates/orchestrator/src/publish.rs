@@ -60,6 +60,12 @@ impl AppState {
                 if previous == definition {
                     (current_version, created_at, true)
                 } else {
+                    super::app_storage::validate_storage_publish(
+                        &tx,
+                        &definition.id,
+                        &previous,
+                        &definition,
+                    )?;
                     let version = current_version + 1;
                     save_version(&tx, &definition, version, &now, created_by).map_err(db_error)?;
                     tx.execute(

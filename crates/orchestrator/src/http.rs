@@ -20,6 +20,19 @@ pub fn router(state: AppState) -> Router {
         .route_layer(middleware::from_fn_with_state(state.clone(), mcp_auth));
     let device = Router::new()
         .route("/apps", post(device_upload))
+        .route(
+            "/app-storage/{app_id}/items",
+            get(super::app_storage_http::device_list),
+        )
+        .route(
+            "/app-storage/{app_id}/items/{entry_id}",
+            get(super::app_storage_http::device_read)
+                .put(super::app_storage_http::device_write)
+                .delete(super::app_storage_http::device_reset)
+                .layer(DefaultBodyLimit::max(
+                    kaleidoscope_contract::app_storage::STORAGE_COMMAND_BODY_MAX_BYTES,
+                )),
+        )
         .route("/events", get(device_events))
         .route("/layout", axum::routing::put(super::layouts::put_layout))
         .route(

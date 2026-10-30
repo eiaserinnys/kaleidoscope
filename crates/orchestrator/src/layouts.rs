@@ -334,6 +334,9 @@ impl AppState {
         {
             return None;
         }
+        if !self.should_deliver_storage_event(device_id, &event) {
+            return None;
+        }
         if matches!(event, DeviceEvent::ConnectionsSnapshot { .. }) {
             let supports_connections = self
                 .0

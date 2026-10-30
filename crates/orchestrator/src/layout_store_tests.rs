@@ -41,7 +41,7 @@ fn migration_v5_builds_canonical_layout_from_live_reports_in_report_order() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 6);
+    assert_eq!(version, 7);
     let workspace: String = db
         .query_row("SELECT data FROM workspaces WHERE id='w'", [], |r| r.get(0))
         .unwrap();

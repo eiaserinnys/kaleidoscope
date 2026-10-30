@@ -30,6 +30,7 @@ impl AppState {
         let mut changed = LayoutChanges::default();
         let mut renamed_workspaces = Vec::new();
         let mut retired_workspaces = Vec::new();
+        let mut deleted_storage = Vec::new();
         let deleted_workspace_ids: HashSet<_> =
             changes.deleted_workspaces.iter().cloned().collect();
         let deleted_desktop_ids: HashSet<_> = changes.deleted_desktops.iter().cloned().collect();
@@ -199,6 +200,7 @@ impl AppState {
             if !workspace_exists(&tx, id, &account_id)? {
                 continue;
             }
+            deleted_storage.extend(Self::delete_workspace_storage(&tx, &account_id, id)?);
             let children = child_ids(&tx, "desktops", "workspace_id", id, &account_id)?;
             for child in &children {
                 for window in child_ids(&tx, "windows", "desktop_id", child, &account_id)? {
@@ -224,6 +226,11 @@ impl AppState {
             }
             tx.execute(
                 "DELETE FROM workspaces WHERE id=?1 AND account_id=?2",
+                params![id, account_id],
+            )
+            .map_err(db_error)?;
+            tx.execute(
+                "DELETE FROM legacy_workspace_owners WHERE workspace_id=?1 AND account_id=?2",
                 params![id, account_id],
             )
             .map_err(db_error)?;
@@ -264,6 +271,12 @@ impl AppState {
         sort_changes(&mut changed);
         tx.commit().map_err(db_error)?;
         drop(db);
+        for (app_id, changed) in deleted_storage {
+            self.send_event_for_account(
+                DeviceEvent::StorageChanged { app_id, changed },
+                &account_id,
+            );
+        }
         self.refresh_device_workspaces()?;
         for (id, name) in renamed_workspaces {
             self.rename_agent(&id, &name);
