@@ -124,11 +124,13 @@ pub(crate) fn cancel(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
 }
 
 pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
-    inner.generation.fetch_add(1, Ordering::SeqCst);
-    storage::remove_link(&inner.data_dir)?;
-    *inner.link_file.lock().unwrap() = None;
     let changed = {
         let mut state = inner.state.lock().unwrap();
+        inner.generation.fetch_add(1, Ordering::SeqCst);
+        storage::remove_link(&inner.data_dir)?;
+        crate::sync_state::remove(&inner.data_dir)?;
+        *inner.link_file.lock().unwrap() = None;
+        state.sync = Default::default();
         set_link_locked(&mut state, LinkStatus::Unlinked {})
     };
     if changed {
@@ -394,6 +396,10 @@ pub(crate) fn token_rejected(inner: &Arc<Inner>, file: LinkFile) {
         if let Err(error) = storage::remove_link(&inner.data_dir) {
             eprintln!("연결 파일을 지울 수 없습니다: {}", error.message);
         }
+        if let Err(error) = crate::sync_state::remove(&inner.data_dir) {
+            eprintln!("동기화 파일을 지울 수 없습니다: {}", error.message);
+        }
+        state.sync = Default::default();
         *inner.link_file.lock().unwrap() = None;
         set_link_locked(
             &mut state,

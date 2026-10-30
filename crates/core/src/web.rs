@@ -3,6 +3,9 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use kaleidoscope_contract::{
     Block, CoreError, CoreEvent, CoreReply, CoreRequest, ErrorCode, WebPage,
 };
+use std::time::{Duration, Instant};
+
+pub(crate) const WEB_FOLLOW_SECS: u64 = 10;
 
 fn web_block(block: &Block) -> Option<Option<String>> {
     let mut result = None;
@@ -16,7 +19,7 @@ fn web_block(block: &Block) -> Option<Option<String>> {
     result
 }
 
-fn window_web(state: &CoreState, id: &str) -> Result<Option<String>, CoreError> {
+pub(crate) fn window_web(state: &CoreState, id: &str) -> Result<Option<String>, CoreError> {
     let window = state
         .shared
         .windows
@@ -120,13 +123,31 @@ impl Core {
             if window.state.get(&key) != Some(&value) {
                 window.state.insert(key, value);
                 window.updated_at = crate::state_commands::timestamp();
-                if let Err(e) = storage::save_changed_state(
+                let following = self
+                    .inner
+                    .web_follow
+                    .lock()
+                    .unwrap()
+                    .get(window_id)
+                    .is_some_and(|time| time.elapsed() < Duration::from_secs(WEB_FOLLOW_SECS));
+                if !following {
+                    crate::sync_state::mark_local_changes(&self.inner, &before.shared, &mut state);
+                }
+                let saved = storage::save_changed_state(
                     &self.inner.data_dir,
                     &state.shared,
                     &state.device,
                     true,
                     false,
-                ) {
+                )
+                .and_then(|()| {
+                    if state.sync != before.sync {
+                        crate::sync_state::save(&self.inner.data_dir, &state.sync)
+                    } else {
+                        Ok(())
+                    }
+                });
+                if let Err(e) = saved {
                     *state = before;
                     eprintln!("웹 주소 저장 실패: {}", e.message);
                 } else {
@@ -144,6 +165,25 @@ impl Core {
         });
         if let Some(event) = state_event {
             self.inner.emit(&event);
+        }
+    }
+}
+
+pub(crate) fn record_server_navigation(inner: &Inner, before: &CoreState, after: &CoreState) {
+    let mut following = inner.web_follow.lock().unwrap();
+    following.retain(|id, _| after.shared.windows.iter().any(|window| window.id == *id));
+    for window in &after.shared.windows {
+        let Ok(Some(key)) = window_web(after, &window.id) else {
+            continue;
+        };
+        let old_value = before
+            .shared
+            .windows
+            .iter()
+            .find(|old| old.id == window.id)
+            .and_then(|old| old.state.get(&key));
+        if old_value != window.state.get(&key) {
+            following.insert(window.id.clone(), Instant::now());
         }
     }
 }

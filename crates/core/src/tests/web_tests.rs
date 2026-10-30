@@ -455,3 +455,5 @@ fn removing_desktop_detaches_only_its_web_windows() {
     assert!(calls.contains(&format!("detach {b}")));
     assert!(!calls.contains(&format!("detach {a}")));
 }
+
+mod sync;

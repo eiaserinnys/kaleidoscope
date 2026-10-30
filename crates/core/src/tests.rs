@@ -25,6 +25,8 @@ use crate::registry_client::{RegistryClient, RegistryError};
 use crate::storage::LinkFile;
 use crate::{Core, CoreConfig, CoreError, Host};
 
+mod layout_sync_tests;
+
 const MD_EDITOR: &str = include_str!("../../../examples/md-editor.json");
 const MD_VIEWER: &str = include_str!("../../../examples/md-viewer.json");
 
@@ -146,6 +148,10 @@ struct FakeRegistryClient {
     agent_attachment_replies: Mutex<VecDeque<Result<AgentAttachmentReply, RegistryError>>>,
     layouts: Mutex<Vec<DeviceLayout>>,
     layout_replies: Mutex<VecDeque<Result<(), RegistryError>>>,
+    layout_changes: Mutex<Vec<kaleidoscope_contract::registry::LayoutChanges>>,
+    layout_change_replies:
+        Mutex<VecDeque<Result<kaleidoscope_contract::registry::LayoutChanges, RegistryError>>>,
+    layout_change_pause: Mutex<Option<mpsc::Receiver<()>>>,
     open_calls: AtomicUsize,
     connection_requests: Mutex<Vec<kaleidoscope_contract::registry::ConnectionRequest>>,
     connection_replies: Mutex<BTreeMap<String, kaleidoscope_contract::registry::ConnectionReply>>,
@@ -153,6 +159,23 @@ struct FakeRegistryClient {
 }
 
 impl RegistryClient for FakeRegistryClient {
+    fn push_layout_changes(
+        &self,
+        _server_url: &str,
+        _token: &str,
+        changes: &kaleidoscope_contract::registry::LayoutChanges,
+    ) -> Result<kaleidoscope_contract::registry::LayoutChanges, RegistryError> {
+        self.layout_changes.lock().unwrap().push(changes.clone());
+        let pause = self.layout_change_pause.lock().unwrap().take();
+        if let Some(pause) = pause {
+            let _ = pause.recv_timeout(Duration::from_secs(5));
+        }
+        self.layout_change_replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or_else(|| Err(RegistryError::Failure("unexpected layout change".into())))
+    }
     fn connection_request(
         &self,
         _server_url: &str,

@@ -462,7 +462,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
     }
 }
 
-fn active_desktop(state: &CoreState, workspace_id: &str) -> Option<String> {
+pub(crate) fn active_desktop(state: &CoreState, workspace_id: &str) -> Option<String> {
     state
         .device
         .active_desktop_ids

@@ -5,7 +5,9 @@ mod data_runtime;
 mod data_sources;
 mod error;
 mod files;
+mod layout_apply;
 mod layout_reporter;
+mod layout_sync;
 mod link;
 mod logins;
 mod media;
@@ -14,6 +16,7 @@ mod registry_client;
 mod registry_events;
 mod state_commands;
 mod storage;
+mod sync_state;
 mod web;
 
 #[cfg(test)]
@@ -22,7 +25,7 @@ mod logins_tests;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -88,6 +91,7 @@ pub(crate) struct CoreState {
     pub(crate) shared: SharedState,
     pub(crate) device: DeviceState,
     pub(crate) link: LinkStatus,
+    pub(crate) sync: sync_state::SyncState,
 }
 
 pub(crate) struct Inner {
@@ -103,6 +107,7 @@ pub(crate) struct Inner {
     pub(crate) generation: AtomicU64,
     pub(crate) layout_connection_epoch: AtomicU64,
     pub(crate) layout_reported_epoch: Mutex<Option<u64>>,
+    pub(crate) layout_synced_epoch: Mutex<Option<u64>>,
     pub(crate) layout_signal: LayoutSignal,
     pub(crate) data_runtimes: data_runtime::DataRuntimes,
     pub(crate) connections: Mutex<Vec<kaleidoscope_contract::registry::ConnectionInfo>>,
@@ -110,6 +115,7 @@ pub(crate) struct Inner {
     pub(crate) login_in_progress: Mutex<HashSet<String>>,
     pub(crate) media_cache: media::MediaCache,
     pub(crate) web_attached: Mutex<std::collections::HashSet<String>>,
+    pub(crate) web_follow: Mutex<HashMap<String, std::time::Instant>>,
 }
 
 pub(crate) struct LayoutSignal {
@@ -178,6 +184,7 @@ impl Core {
         let mut state = CoreState {
             shared: storage::load_shared(&config.data_dir)?,
             device: storage::load_device(&config.data_dir)?,
+            sync: sync_state::load(&config.data_dir, link_file.as_ref())?,
             link,
         };
         let login_store = Arc::new(logins::Logins::open(&config.data_dir)?);
@@ -209,7 +216,9 @@ impl Core {
             generation: AtomicU64::new(0),
             layout_connection_epoch: AtomicU64::new(0),
             layout_reported_epoch: Mutex::new(None),
+            layout_synced_epoch: Mutex::new(None),
             web_attached: Mutex::new(std::collections::HashSet::new()),
+            web_follow: Mutex::new(HashMap::new()),
             layout_signal: LayoutSignal {
                 sequence: Mutex::new(0),
                 changed: Condvar::new(),
@@ -373,10 +382,12 @@ impl Core {
         let mut state = self.inner.state.lock().unwrap();
         let before = state.clone();
         let reply = change(&mut state)?;
+        sync_state::mark_local_changes(&self.inner, &before.shared, &mut state);
         let shared_changed = before.shared != state.shared;
         let device_changed = before.device != state.device;
+        let sync_changed = before.sync != state.sync;
 
-        if shared_changed || device_changed {
+        if shared_changed || device_changed || sync_changed {
             if let Err(error) = storage::save_changed_state(
                 &self.inner.data_dir,
                 &state.shared,
@@ -386,6 +397,12 @@ impl Core {
             ) {
                 *state = before;
                 return Err(error);
+            }
+            if sync_changed {
+                if let Err(error) = sync_state::save(&self.inner.data_dir, &state.sync) {
+                    *state = before;
+                    return Err(error);
+                }
             }
         }
 

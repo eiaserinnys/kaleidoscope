@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use kaleidoscope_contract::registry::DeviceEvent;
+use kaleidoscope_contract::registry::{DeviceEvent, LayoutChanges};
 use kaleidoscope_contract::{CoreError, CoreEvent, LinkStatus};
 
 use crate::app_commands;
@@ -23,6 +23,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 for app in apps {
                     app_commands::import_registry(state, app);
                 }
+                let epoch = inner.layout_connection_epoch.fetch_add(1, Ordering::SeqCst) + 1;
                 let status = LinkStatus::Connected {
                     server_url: link_file
                         .as_ref()
@@ -34,7 +35,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                         .unwrap_or_default(),
                 };
                 link::set_link_locked(state, status);
-                Some(())
+                Some(epoch)
             });
             let (applied, state_event) = match result {
                 Ok(result) => result,
@@ -43,13 +44,12 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                     return true;
                 }
             };
-            if applied.is_none() {
+            let Some(epoch) = applied else {
                 return false;
-            }
+            };
             if let Some(event) = state_event {
                 inner.emit(&event);
             }
-            let epoch = inner.layout_connection_epoch.fetch_add(1, Ordering::SeqCst) + 1;
             crate::layout_reporter::start(Arc::clone(inner), generation, epoch);
         }
         DeviceEvent::AppPublished {
@@ -114,9 +114,65 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 });
             }
         }
-        // 배치 동기화(레지스트리 6판)는 코어 동기화 작업에서 반영한다. 서버는 REGISTRY_HEADER를 보내지 않은
-        // 연결에 이 이벤트를 보내지 않는다.
-        DeviceEvent::LayoutSnapshot { .. } | DeviceEvent::LayoutChanged { .. } => {}
+        DeviceEvent::LayoutSnapshot {
+            workspaces,
+            desktops,
+            windows,
+        } => {
+            let device_id = match inner.link_file.lock().unwrap().as_ref() {
+                Some(file) => file.device_id.clone(),
+                None => return false,
+            };
+            let result = apply_layout_change(inner, |state| {
+                if inner.generation.load(Ordering::SeqCst) != generation {
+                    return false;
+                }
+                crate::layout_apply::apply_snapshot(
+                    state,
+                    &device_id,
+                    LayoutChanges {
+                        workspaces,
+                        desktops,
+                        windows,
+                        ..Default::default()
+                    },
+                );
+                true
+            });
+            match result {
+                Ok((true, event)) => {
+                    if let Some(event) = event {
+                        inner.emit(&event);
+                    }
+                    let epoch = inner.layout_connection_epoch.load(Ordering::SeqCst);
+                    crate::layout_sync::start(Arc::clone(inner), generation, epoch);
+                }
+                Ok((false, _)) => return false,
+                Err(error) => {
+                    link::set_offline(inner, generation, &link::load_link(inner), error.message);
+                }
+            }
+        }
+        DeviceEvent::LayoutChanged { changes } => {
+            let result = apply_layout_change(inner, |state| {
+                if inner.generation.load(Ordering::SeqCst) != generation {
+                    return false;
+                }
+                crate::layout_apply::apply_changes(state, changes);
+                true
+            });
+            match result {
+                Ok((true, event)) => {
+                    if let Some(event) = event {
+                        inner.emit(&event);
+                    }
+                }
+                Ok((false, _)) => return false,
+                Err(error) => {
+                    link::set_offline(inner, generation, &link::load_link(inner), error.message)
+                }
+            }
+        }
         DeviceEvent::ConnectionsSnapshot { connections } => {
             let changed = {
                 let mut current = inner.connections.lock().unwrap();
@@ -160,14 +216,30 @@ pub(crate) fn apply_registry_change<T>(
     inner: &Inner,
     update: impl FnOnce(&mut crate::CoreState) -> T,
 ) -> Result<(T, Option<CoreEvent>), CoreError> {
+    apply_change(inner, update, false)
+}
+
+pub(crate) fn apply_layout_change<T>(
+    inner: &Inner,
+    update: impl FnOnce(&mut crate::CoreState) -> T,
+) -> Result<(T, Option<CoreEvent>), CoreError> {
+    apply_change(inner, update, true)
+}
+
+fn apply_change<T>(
+    inner: &Inner,
+    update: impl FnOnce(&mut crate::CoreState) -> T,
+    server_layout: bool,
+) -> Result<(T, Option<CoreEvent>), CoreError> {
     let mut state = inner.state.lock().unwrap();
     let before = state.clone();
     let result = update(&mut state);
     let shared_changed = before.shared != state.shared;
     let device_changed = before.device != state.device;
     let link_changed = before.link != state.link;
+    let sync_changed = before.sync != state.sync;
 
-    if shared_changed || device_changed {
+    if shared_changed || device_changed || sync_changed {
         if let Err(error) = storage::save_changed_state(
             &inner.data_dir,
             &state.shared,
@@ -178,6 +250,16 @@ pub(crate) fn apply_registry_change<T>(
             *state = before;
             return Err(error);
         }
+        if sync_changed {
+            if let Err(error) = crate::sync_state::save(&inner.data_dir, &state.sync) {
+                *state = before;
+                return Err(error);
+            }
+        }
+    }
+
+    if server_layout && shared_changed {
+        crate::web::record_server_navigation(inner, &before, &state);
     }
 
     let event =

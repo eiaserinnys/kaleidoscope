@@ -6,9 +6,10 @@ use kaleidoscope_contract::registry::{
     device_agent_attachment_path, device_agent_messages_path, device_agent_path,
     device_connection_request_path, AgentAttachmentReply, AgentCreateRequest, AgentSendRequest,
     ConnectionReply, ConnectionRequest, DeviceAgentReply, DeviceEvent, DeviceLayout,
-    DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply, PairStartRequest,
-    RegistryApp, DEVICE_APPS_PATH, DEVICE_EVENTS_PATH, DEVICE_LAYOUT_PATH, PAIR_POLL_PATH,
-    PAIR_START_PATH,
+    DeviceUploadRequest, LayoutChanges, PairPollReply, PairPollRequest, PairStartReply,
+    PairStartRequest, RegistryApp, DEVICE_APPS_PATH, DEVICE_EVENTS_PATH,
+    DEVICE_LAYOUT_CHANGES_PATH, DEVICE_LAYOUT_PATH, PAIR_POLL_PATH, PAIR_START_PATH,
+    REGISTRY_HEADER, REGISTRY_VERSION,
 };
 use kaleidoscope_contract::CoreError;
 
@@ -86,6 +87,13 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         layout: &DeviceLayout,
     ) -> Result<(), RegistryError>;
 
+    fn push_layout_changes(
+        &self,
+        server_url: &str,
+        token: &str,
+        changes: &LayoutChanges,
+    ) -> Result<LayoutChanges, RegistryError>;
+
     fn open_events(
         &self,
         server_url: &str,
@@ -136,6 +144,25 @@ impl HttpRegistryClient {
 }
 
 impl RegistryClient for HttpRegistryClient {
+    fn push_layout_changes(
+        &self,
+        server_url: &str,
+        token: &str,
+        changes: &LayoutChanges,
+    ) -> Result<LayoutChanges, RegistryError> {
+        let response = self
+            .requests()?
+            .post(format!("{server_url}{DEVICE_LAYOUT_CHANGES_PATH}"))
+            .bearer_auth(token)
+            .json(changes)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        let status = response.status();
+        if status.as_u16() == 404 {
+            return Err(RegistryError::Failure(format!("HTTP {status}")));
+        }
+        success_json(response)
+    }
     fn connection_request(
         &self,
         server_url: &str,
@@ -312,6 +339,7 @@ impl RegistryClient for HttpRegistryClient {
         let response = self
             .events()?
             .get(format!("{server_url}{DEVICE_EVENTS_PATH}"))
+            .header(REGISTRY_HEADER, REGISTRY_VERSION.to_string())
             .header(
                 kaleidoscope_contract::registry::SUPPORTED_HEADER,
                 serde_json::to_string(&kaleidoscope_contract::Supported::current())
@@ -444,50 +472,5 @@ fn check_agent_status(status: reqwest::StatusCode, body: &[u8]) -> Result<(), Re
 }
 
 #[cfg(test)]
-mod version_tests {
-    use super::*;
-    use std::io::{Read, Write};
-    use std::net::TcpListener;
-
-    #[test]
-    fn events_send_supported_header() {
-        let server = TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = server.local_addr().unwrap();
-        let worker = std::thread::spawn(move || {
-            let (mut conn, _) = server.accept().unwrap();
-            let mut bytes = [0; 8192];
-            let size = conn.read(&mut bytes).unwrap();
-            conn.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
-                .unwrap();
-            String::from_utf8(bytes[..size].to_vec()).unwrap()
-        });
-        HttpRegistryClient::new()
-            .open_events(&format!("http://{addr}"), "token")
-            .unwrap();
-        let request = worker.join().unwrap().to_lowercase();
-        let value = serde_json::to_string(&kaleidoscope_contract::Supported::current())
-            .unwrap()
-            .to_lowercase();
-        assert!(request.contains(&format!(
-            "{}: {}",
-            kaleidoscope_contract::registry::SUPPORTED_HEADER.to_lowercase(),
-            value
-        )));
-    }
-
-    #[test]
-    fn snapshot_keeps_readable_apps_when_another_definition_is_unknown() {
-        let definition: serde_json::Value =
-            serde_json::from_str(include_str!("../../../examples/md-editor.json")).unwrap();
-        let app = serde_json::json!({"app":{"id":"md-editor","name":"editor","current_version":1,"created_at":"now","updated_at":"now"},"version":{"app_id":"md-editor","version":1,"definition":definition,"created_at":"now"}});
-        let mut bad = app.clone();
-        bad["version"]["definition"]["ui"] = serde_json::json!({"type":"future_block"});
-        let line = format!(
-            "data: {}",
-            serde_json::json!({"event":"apps.snapshot","apps":[bad, app]})
-        );
-        assert!(
-            matches!(parse_event_line(&line), Some(DeviceEvent::AppsSnapshot { apps }) if apps.len() == 1)
-        );
-    }
-}
+#[path = "registry_client_tests.rs"]
+mod version_tests;
