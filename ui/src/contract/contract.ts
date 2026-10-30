@@ -398,7 +398,7 @@ active_desktop_ids: { [key in string]: string }, grants: Array<Grant>,
  */
 pc_access: Array<PcAccess>, 
 /**
- * (계약 19판) 이 기기에서 앱 권한과 실행 명세별로 허용한 로컬 에이전트.
+ * (계약 20판) 이 기기에서 앱 권한과 실행 명세별로 허용한 로컬 에이전트.
  */
 local_agent_access: Array<LocalAgentAccess>, };
 
