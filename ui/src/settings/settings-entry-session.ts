@@ -16,7 +16,7 @@ export interface SettingsEntrySnapshot {
   error: CoreError | null;
 }
 
-type Operation = { kind: "write"; value: JsonValue } | { kind: "reset"; editVersion: number };
+type Operation = { kind: "write"; value: JsonValue } | { kind: "reset"; editVersion: number; confirmationVersion: number };
 const equal = (a: JsonValue, b: JsonValue) => JSON.stringify(a) === JSON.stringify(b);
 
 export class SettingsEntrySession {
@@ -28,6 +28,7 @@ export class SettingsEntrySession {
   private retryRead = true;
   private readVersion = 0;
   private editVersion = 0;
+  private confirmationVersion = 0;
   private refreshPending = false;
   private savedTimer?: ReturnType<typeof setTimeout>;
   private committedValue: JsonValue;
@@ -79,6 +80,7 @@ export class SettingsEntrySession {
   }
   save() {
     if (!this.state.loaded || this.state.conflict) return Promise.resolve();
+    this.confirmationVersion++;
     if (!this.running && !this.state.dirty) return Promise.resolve();
     const operation: Operation = { kind: "write", value: this.state.value };
     this.confirmedValue = operation.value;
@@ -89,7 +91,7 @@ export class SettingsEntrySession {
   }
   reset() {
     if (!this.state.loaded || this.state.conflict || (!this.state.exists && !this.running)) return Promise.resolve();
-    this.queue.push({ kind: "reset", editVersion: this.editVersion });
+    this.queue.push({ kind: "reset", editVersion: this.editVersion, confirmationVersion: ++this.confirmationVersion });
     return this.start();
   }
   private start(): Promise<void> {
@@ -114,7 +116,7 @@ export class SettingsEntrySession {
             await this.store.call({ op: "storage.reset", window_id: this.windowId, entry: this.entry.id, expected_revision: revision });
             this.committedValue = this.entry.default;
             if (!this.queue.some((item) => item.kind === "write")) this.confirmedValue = this.entry.default;
-            const value = this.editVersion === operation.editVersion ? this.entry.default : this.state.value;
+            const value = this.editVersion === operation.editVersion && this.confirmationVersion === operation.confirmationVersion ? this.entry.default : this.state.value;
             this.update({ value, revision: null, exists: false, dirty: !equal(value, this.entry.default), conflict: false });
           }
           this.failed = null;

@@ -180,7 +180,10 @@ const transport: FakeTransport = createFakeTransport({
   updateRestartError: harnessParams.get("update-restart") === "error" ? "설치를 시작할 수 없습니다" : undefined,
   data: settingsPreview ? { sources: { models: { value: [{ value: "argon", label: "Argon" }, { value: "opus", label: "Opus" }, { value: "sol", label: "Sol" }] } } } : undefined,
   storageWriteDelayMs: settingsPreview ? 1200 : undefined,
-  storage: settingsPreview ? (settingsSample ? [{ window_id: "settings-window", entry: "notifications", content: true }] : [
+  storage: settingsPreview ? (settingsSample ? [
+    { window_id: "settings-window", entry: "notifications", content: true },
+    ...(harnessParams.has("reset-review") ? [{ window_id: "settings-window", entry: "view", content: "격자" }] : []),
+  ] : [
     { window_id: "settings-window", entry: "agent", content: "seosoyoung" },
     { window_id: "settings-window", entry: "folder", content: "kaleidoscope" },
     { window_id: "settings-window", entry: "models", content: ["argon", "opus", "sol"] },
@@ -188,6 +191,13 @@ const transport: FakeTransport = createFakeTransport({
   ]) : undefined,
   files,
 });
+if (harnessParams.has("reset-review")) {
+  const call = transport.call.bind(transport);
+  transport.call = (async (request: CoreRequest) => {
+    if (request.op === "storage.reset") await new Promise((resolve) => setTimeout(resolve, 1200));
+    return call(request);
+  }) as typeof transport.call;
+}
 const store = createShellStore(transport);
 window.__kaleidoscopeHarness = {
   getSnapshot: store.getSnapshot,

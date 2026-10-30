@@ -171,6 +171,22 @@ test("앱 본문과 설정의 같은 문서는 초안과 세션을 공유한다"
   expect(await page.evaluate(() => window.__kaleidoscopeHarness!.getCalls().filter((request) => request.op === "data.detach").length)).toBe(detached);
 });
 
+test("reset 중 같은 선택을 다시 확정하면 화면과 마지막 저장이 일치한다", async ({ page }) => {
+  await page.goto("/harness.html?preview=app-settings&app=sample&reset-review=1");
+  await page.getByRole("button", { name: "앱 설정", exact: true }).click();
+  const select = page.getByRole("button", { name: "보기", exact: true });
+  await expect(select).toContainText("격자");
+  await page.getByRole("button", { name: "보기 기본값으로 되돌리기" }).click();
+  await expect(page.getByText("저장 중")).toBeVisible();
+  await select.click();
+  await page.getByRole("menuitem", { name: "격자" }).click();
+  await expect.poll(() => page.evaluate(() => window.__kaleidoscopeHarness!.getCalls().filter((request) => request.op === "storage.write" && request.entry === "view").length)).toBe(1);
+  await expect(page.getByText("저장됨")).toBeVisible();
+  await expect(select).toContainText("격자");
+  const writes = await page.evaluate(() => window.__kaleidoscopeHarness!.getCalls().filter((request) => request.op === "storage.write" && request.entry === "view"));
+  expect(writes[0]).toMatchObject({ op: "storage.write", content: "격자", expected_revision: null });
+});
+
 for (const viewport of [{ width: 1440, height: 1080, name: "wide" }, { width: 384, height: 900, name: "narrow" }]) {
   test(`모델 순서 시작선과 메뉴 Escape (${viewport.name})`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
