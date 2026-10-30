@@ -93,14 +93,13 @@ def run():
             until("데스크톱 삭제 원격 반영", lambda: not any(d["id"] == extra for d in call(urls[1], "state.get")["snapshot"]["shared"]["desktops"]))
             time.sleep(1.5)
             with provider.lock: assert provider.pages == before_moves, f"데스크톱 변경에 제공자 목록 {provider.pages - before_moves}회 조회"
-            provider.reject_patch = True
+            with provider.lock: patch_count_before_selected_model = len(provider.patches)
             call(urls[1], "storage.write", window_id=window2, entry="selected_model", content="model-sol", expected_revision=None)
-            until("제공자 실패", lambda: provider.failed_patches > 0)
-            until("실패한 설정 미적용", lambda: call(urls[0], "conversation.apply_status", window_id=window)["status"] == "unapplied")
-            provider.reject_patch = False
-            call(urls[0], "conversation.apply_retry", window_id=window)
-            until("작업별 모델 적용", lambda: any(i == thread2 and b.get("model") == "model-sol" for i, b in provider.patches))
-            until("재시도 적용 완료", lambda: call(urls[0], "conversation.apply_status", window_id=window)["status"] == "applied")
+            time.sleep(1.5)
+            with provider.lock:
+                assert len(provider.patches) == patch_count_before_selected_model, provider.patches
+                assert all("model" not in body for _, body in provider.patches), provider.patches
+            assert call(urls[0], "conversation.apply_status", window_id=window)["status"] == "applied"
             call(urls[1], "workspace.rename", workspace_id=workspace2, name="바뀐 작업")
             until("다른 기기 이름 반영", lambda: any(i == thread2 and b.get("title") == "작업 PAS · 바뀐 작업" for i, b in provider.patches))
             assert any(offset > 0 for offset in provider.cursors), "제공자 목록의 다음 페이지를 읽지 않았다"

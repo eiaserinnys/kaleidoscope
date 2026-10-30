@@ -337,7 +337,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         if (conversation.getError) return fail("server", conversation.getError);
         if (conversation.draft) emit({ event: "conversation.draft", window_id: request.window_id, ...conversation.draft });
         watchConversation();
-        return { op: "conversation.get", thread: clone(conversation.thread), items: clone(conversation.items), cursor: "1", next_before: conversationOlderPages.length ? "older-0" : undefined, models: clone(conversation.models) };
+        return { op: "conversation.get", thread: clone(conversation.thread), items: clone(conversation.items), cursor: "1", next_before: conversationOlderPages.length ? "older-0" : undefined, models: clone(conversation.models), profiles: [], start: { profile: "", model: null } };
       }
       case "conversation.history": {
         if (!conversation) return fail("unavailable", "대화를 사용할 수 없습니다");

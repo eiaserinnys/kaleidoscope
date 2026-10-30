@@ -1,10 +1,10 @@
 //! 창의 앱, 작업, 저장소와 제공자 연결을 하나의 대화 문맥으로 묶는다.
 use crate::{app_commands, app_storage, conversation_http::Client, error, Inner};
 use kaleidoscope_contract::{
-    app_storage::{ExpectedRevision, StorageReadReply, StorageWriteRequest},
+    app_storage::StorageReadReply,
     conversation::{
-        AdoptThreadRequest, ConversationThread, EnsureThreadReply, EnsureThreadRequest,
-        ModelsReply, ThreadByKeyReply,
+        AdoptThreadRequest, ConversationThread, EnsureThreadReply, ModelsReply, ProfilesReply,
+        ThreadByKeyReply,
     },
     data::{self, Binding},
     AgentProvider, AppDefinition, CoreError, ErrorCode, Workspace,
@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+
+mod selection;
 
 pub(crate) struct Context {
     pub client: Client,
@@ -234,11 +236,26 @@ impl Context {
         ])
     }
 
-    pub fn models(&self) -> Result<ModelsReply, CoreError> {
+    pub fn models(&self, profile: Option<&str>) -> Result<ModelsReply, CoreError> {
+        let mut query = BTreeMap::new();
+        if let Some(profile) = profile {
+            query.insert("profile".into(), profile.into());
+        }
         self.client
             .json(
                 reqwest::Method::GET,
                 &self.client.path(&["models"])?,
+                &query,
+                None::<&Value>,
+            )?
+            .ok_or_else(|| error::make(ErrorCode::NotFound))
+    }
+
+    pub fn profiles(&self) -> Result<ProfilesReply, CoreError> {
+        self.client
+            .json(
+                reqwest::Method::GET,
+                &self.client.path(&["profiles"])?,
                 &BTreeMap::new(),
                 None::<&Value>,
             )?
@@ -296,94 +313,6 @@ impl Context {
         }
         Ok(Some(thread))
     }
-
-    pub fn create(
-        &self,
-        inner: &Arc<Inner>,
-        namespace: &str,
-        model: &str,
-    ) -> Result<ConversationThread, CoreError> {
-        if let Some(thread) = self.thread(inner, namespace)? {
-            return Ok(thread);
-        }
-        let p = &self.provider;
-        let bindings = [
-            ("profile", &p.profile),
-            ("collection", &p.collection),
-            ("model_order", &p.model_order),
-            ("title_template", &p.title_template),
-            (
-                "initial_instruction_template",
-                &p.initial_instruction_template,
-            ),
-            ("instructions_template", &p.instructions_template),
-        ];
-        let v = self.values(inner, &bindings)?;
-        let models: Vec<String> =
-            serde_json::from_value(v.get("model_order").cloned().unwrap_or_default())
-                .map_err(|_| error::make(ErrorCode::InvalidRequest))?;
-        if model.is_empty()
-            || models.is_empty()
-            || models.iter().any(String::is_empty)
-            || models.iter().collect::<BTreeSet<_>>().len() != models.len()
-        {
-            return Err(error::make(ErrorCode::InvalidRequest));
-        }
-        let template = |name| -> Result<String, CoreError> {
-            let template = required_string_allow_empty(&v, name)?;
-            kaleidoscope_contract::validate::validate_workspace_template(&template)
-                .map_err(|message| error::with_message(ErrorCode::InvalidRequest, message))?;
-            Ok(template
-                .replace("{workspace.id}", &self.workspace.id)
-                .replace("{workspace.name}", &self.workspace.name))
-        };
-        let request = EnsureThreadRequest {
-            title: template("title_template")?,
-            selected_model: model.into(),
-            model_order: models,
-            profile: required_string(&v, "profile")?,
-            collection: required_string(&v, "collection")?,
-            initial_instruction: template("initial_instruction_template")?,
-            instructions: template("instructions_template")?,
-        };
-        let reply: EnsureThreadReply = self
-            .client
-            .json(
-                reqwest::Method::PUT,
-                &self.client.path(&["threads", "by-key"])?,
-                &self.query(namespace),
-                Some(&request),
-            )?
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
-        let thread = reply.thread;
-        let content = json!({"connection":self.client.info.name,"namespace":namespace,"external_key":self.workspace.id,"thread_id":thread.id,"created_at":thread.created_at});
-        let write = StorageWriteRequest {
-            content,
-            expected_revision: ExpectedRevision(None),
-        };
-        let result = inner.registry.storage_write(
-            &self.storage.link.server_url,
-            &self.storage.link.token,
-            &self.storage.app,
-            &self.provider.thread_entry,
-            &self.storage.workspace,
-            &write,
-        );
-        match result {
-            Ok(_) => Ok(thread),
-            Err(crate::registry_client::RegistryError::Validation(e))
-                if e.code == ErrorCode::Conflict =>
-            {
-                let existing = self.read(inner, &self.provider.thread_entry)?;
-                if existing.content.get("thread_id").and_then(Value::as_str) == Some(&thread.id) {
-                    Ok(thread)
-                } else {
-                    Err(error::make(ErrorCode::BindingConflict))
-                }
-            }
-            Err(e) => Err(app_storage::map_error(inner, &self.storage.link, e)),
-        }
-    }
 }
 
 fn required_string_allow_empty(
@@ -401,5 +330,23 @@ fn required_string(v: &BTreeMap<String, Value>, key: &str) -> Result<String, Cor
         Err(error::make(ErrorCode::InvalidRequest))
     } else {
         Ok(value)
+    }
+}
+
+fn same_model_group(target: Option<&str>, current: Option<&str>) -> bool {
+    target.is_some() && target == current
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::same_model_group;
+
+    #[test]
+    fn model_patch_requires_the_same_known_group() {
+        assert!(same_model_group(Some("node-a"), Some("node-a")));
+        assert!(!same_model_group(Some("node-a"), Some("node-b")));
+        assert!(!same_model_group(Some("node-a"), None));
+        assert!(!same_model_group(None, Some("node-a")));
+        assert!(!same_model_group(None, None));
     }
 }
