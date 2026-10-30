@@ -196,12 +196,7 @@ fn open_and_run(
         return Err(format!("unexpected test folder grant: {grant:?}"));
     }
     let consent = snapshot(core, &window_id)?;
-    if consent.phase != LocalAgentPhase::AwaitingPermission {
-        return Err(format!(
-            "expected execution consent, got {:?}",
-            consent.phase
-        ));
-    }
+    let phase = consent.phase.clone();
     let execution = consent
         .execution
         .as_ref()
@@ -209,13 +204,31 @@ fn open_and_run(
     if execution.command != COMMAND || execution.args != ["tree"] {
         return Err(format!("unexpected command in consent: {execution:?}"));
     }
-    call(
-        core,
-        CoreRequest::LocalAgentAllow {
-            window_id: window_id.clone(),
-            spec_hash: execution.spec_hash.clone(),
-        },
-    )?;
+    match &phase {
+        LocalAgentPhase::AwaitingPermission => {
+            call(
+                core,
+                CoreRequest::LocalAgentAllow {
+                    window_id: window_id.clone(),
+                    spec_hash: execution.spec_hash.clone(),
+                },
+            )?;
+        }
+        LocalAgentPhase::Starting | LocalAgentPhase::Ready => {
+            if label == "app-exit" {
+                record(
+                    log,
+                    "local-agent.permission-reused",
+                    json!({ "label": label, "phase": format!("{phase:?}"), "passed": true }),
+                )?;
+            }
+        }
+        other => {
+            return Err(format!(
+                "expected execution consent or an already-started agent, got {other:?}"
+            ));
+        }
+    }
     let ready = wait_snapshot(core, &window_id, "agent ready", |value| {
         value.phase == LocalAgentPhase::Ready
     })?;
