@@ -126,6 +126,9 @@ pub(crate) fn get(
                 None,
             )
         }
+        PermissionDecl::LocalAgent { .. } => {
+            return Err(error::make(ErrorCode::PermissionDenied));
+        }
     };
     let variant = format!("{key}|{:?}", max_px);
     if let Some(entry) = inner.media_cache.get(&variant) {

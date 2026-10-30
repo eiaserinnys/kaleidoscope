@@ -25,6 +25,8 @@
 //! 오케스트레이터는 앱 레지스트리의 정본이다. 쉘의 코어는 기기 토큰으로 붙어 앱을 받고, 에이전트는 같은
 //! 서버의 MCP(`/mcp`, MCP 토큰)로 앱을 올린다. MCP 도구의 모양은 오케스트레이터 코드에 있고 이 파일에는 없다.
 //! 이 파일의 타입은 화면에 가지 않으므로 TS로 만들지 않는다.
+//! `/mcp`는 MCP 전역 토큰 또는 기기 토큰을 받는다. 기기 토큰 요청에 `workspace_id`가 빠지면 서버는
+//! [`WORKSPACE_HEADER`]의 작업 id를 기본값으로 사용한다.
 //!
 //! # 주소와 인증
 //! 코어의 `server_url`(끝에 `/` 없음, 예: `https://eiaserinnys.me/kaleidoscope`) 뒤에 아래 경로를 붙인다.
@@ -285,6 +287,8 @@ pub const HEALTH_PATH: &str = "/api/health";
 pub const SUPPORTED_HEADER: &str = "x-kaleidoscope-supported";
 /// 코어가 이벤트 스트림을 열 때 자기가 아는 레지스트리 판(정수)을 싣는 헤더. 6 이상이면 배치를 동기화한다.
 pub const REGISTRY_HEADER: &str = "x-kaleidoscope-registry";
+/// 기기 토큰을 쓴 MCP 호출의 작업 기본값.
+pub const WORKSPACE_HEADER: &str = "x-kaleidoscope-workspace";
 /// 이 빌드가 아는 레지스트리 판.
 pub const REGISTRY_VERSION: u32 = 9;
 /// 배치를 동기화하는 레지스트리 판. 서버는 [`REGISTRY_HEADER`]가 이 값 이상인 연결과 배치를 맞춘다.

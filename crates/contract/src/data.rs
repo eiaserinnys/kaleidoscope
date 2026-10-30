@@ -799,6 +799,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
         }
         Block::Image { src, .. } | Block::Media { src, .. } => bind!("src", src),
+        Block::AgentSession { agents, .. } => bind!("agents", agents),
         Block::Split { .. }
         | Block::FileTree { .. }
         | Block::MarkdownEditor { .. }

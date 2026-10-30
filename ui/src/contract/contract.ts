@@ -15,10 +15,22 @@ export type Actions = SetState | Array<Action>;
 
 export type AdoptThreadRequest = { session_id: string, first_input_is_initial_instruction: boolean, };
 
+export type AgentActivity = { busy: boolean, tool: string | null, };
+
 /**
  * TypeScript에서 대화 설정 바인딩의 창 상태 형태를 제외한다. 실행 시 공통 검사기가 식도 검사한다.
  */
 export type AgentBinding = ExprRef | string | number | boolean | null | Array<JsonValue> | ({ [key: string]: JsonValue } & { state?: never; expr?: never });
+
+export type AgentChoice = { id: string, name: string, };
+
+export type AgentControl = { id: string, label: string, category: string | null, value: AgentControlValue, kind: AgentControlKind, };
+
+export type AgentControlKind = { "kind": "select", options: Array<ControlChoiceGroup>, } | { "kind": "boolean" };
+
+export type AgentControlValue = string | boolean;
+
+export type AgentFailure = { code: ErrorCode, message: string, command: string | null, };
 
 /**
  * 앱의 대화 제공자. 바인딩은 리터럴 또는 `$storage`, `$storage_meta`만 읽는다.
@@ -33,6 +45,8 @@ base_path: string, namespace: AgentBinding, profile: AgentBinding, collection: A
  * 현재 작업에 thread id를 저장하는 JSON 항목 id.
  */
 thread_entry: string, };
+
+export type AgentSpec = { id: string, name: string, command: string, args: Array<string>, env: { [key in string]: string }, auth_methods?: Array<string>, };
 
 /**
  * 레지스트리의 앱 항목. 버전이 쌓이고 `current_version`이 지금 쓰는 버전을 가리킨다.
@@ -148,6 +162,8 @@ z: number,
  */
 state: { [key in string]: JsonValue }, created_at: string, updated_at: string, };
 
+export type AuthChoice = { id: string, name: string, description: string, };
+
 /**
  * 배지. 글만 쓰거나(`"진행 중"`) 색을 붙인다(`{ "text": "진행 중", "color": "#315da8" }`).
  * 색은 `#rgb`나 `#rrggbb`이고, 쉘이 글자 대비를 맞춘다.
@@ -188,7 +204,7 @@ extensions: Array<string>,
 /**
  * 선택 표시에 쓸 상태 키.
  */
-selected: StateRef, on_select: SetState, } | { "type": "markdown_editor", file?: FileRef, document?: DocumentRef, } | { "type": "markdown_view", file?: FileRef, document?: DocumentRef, } | { "type": "agent_chat", } | { "type": "web_view", 
+selected: StateRef, on_select: SetState, } | { "type": "markdown_editor", file?: FileRef, document?: DocumentRef, } | { "type": "markdown_view", file?: FileRef, document?: DocumentRef, } | { "type": "agent_chat", } | { "type": "agent_session", permission: string, root: FolderRef, agents: Binding, selected: StateRef, on_select: SetState, } | { "type": "web_view", 
 /**
  * 열 주소. 상태에서 읽거나(`{ "state": "url" }`) 정의에 적는다(`"https://example.com"`).
  */
@@ -275,6 +291,10 @@ export type ColumnWidth = "narrow" | "medium" | "wide" | "fill";
  */
 export type Confirm = { title: string, body?: Binding, ok?: string, };
 
+export type ControlChoice = { id: string, name: string, };
+
+export type ControlChoiceGroup = { name: string | null, options: Array<ControlChoice>, };
+
 /**
  * 기기에 저장된 앱 설정의 제공자 적용 상태.
  */
@@ -321,7 +341,7 @@ details: Array<string>, };
 /**
  * 코어가 화면에 보내는 이벤트. `event`로 가른다.
  */
-export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "conversation.apply_status", app_id: string, status: ConversationApplyStatus, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, code: ErrorCode, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, failed: boolean, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, };
+export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "conversation.apply_status", app_id: string, status: ConversationApplyStatus, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, code: ErrorCode, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, failed: boolean, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, } | { "event": "local_agent.update", window_id: string, generation: string, update: LocalAgentUpdate, };
 
 /**
  * 코어의 응답. `op`는 명령과 같다.
@@ -330,12 +350,12 @@ export type CoreReply = { "op": "state.get", snapshot: ShellSnapshot, } | { "op"
 /**
  * `data:image/png;base64,...`. 찍지 못하면 null.
  */
-image: string | null, } | { "op": "web.detach", } | { "op": "conversation.get", thread: ConversationThread | null, items: Array<ConversationItem>, cursor: string, next_before?: string, models: Array<ConversationModel>, } | { "op": "conversation.history", items: Array<ConversationItem>, next_before?: string, } | { "op": "conversation.create", thread: ConversationThread, } | { "op": "conversation.send", } | { "op": "conversation.attachment", name: string, mime: string, data_base64: string, } | { "op": "conversation.attachment_open", } | { "op": "storage.get", result: StorageReadReply, } | { "op": "storage.write", revision: string, } | { "op": "storage.reset", revision: string | null, } | { "op": "data.attach", view: DataView, } | { "op": "data.detach", } | { "op": "data.act", } | { "op": "data.refresh", } | { "op": "data.media", media: MediaData, } | { "op": "connection.login", } | { "op": "share.set", } | { "op": "share.view", } | { "op": "update.restart", };
+image: string | null, } | { "op": "web.detach", } | { "op": "conversation.get", thread: ConversationThread | null, items: Array<ConversationItem>, cursor: string, next_before?: string, models: Array<ConversationModel>, } | { "op": "conversation.history", items: Array<ConversationItem>, next_before?: string, } | { "op": "conversation.create", thread: ConversationThread, } | { "op": "conversation.send", } | { "op": "conversation.attachment", name: string, mime: string, data_base64: string, } | { "op": "conversation.attachment_open", } | { "op": "local_agent.attach", snapshot: LocalAgentSnapshot, } | { "op": "local_agent.detach", } | { "op": "local_agent.allow", } | { "op": "local_agent.retry", } | { "op": "local_agent.authenticate", } | { "op": "local_agent.configure", } | { "op": "local_agent.send", request_id: string, queued: boolean, } | { "op": "local_agent.cancel", } | { "op": "local_agent.permission", } | { "op": "local_agent.attachment", mime: string, data_base64: string, } | { "op": "local_agent.attachment_open", } | { "op": "storage.get", result: StorageReadReply, } | { "op": "storage.write", revision: string, } | { "op": "storage.reset", revision: string | null, } | { "op": "data.attach", view: DataView, } | { "op": "data.detach", } | { "op": "data.act", } | { "op": "data.refresh", } | { "op": "data.media", media: MediaData, } | { "op": "connection.login", } | { "op": "share.set", } | { "op": "share.view", } | { "op": "update.restart", };
 
 /**
  * 화면이 코어에 보내는 명령. `op`로 가른다. 응답은 같은 `op`의 [`CoreReply`]다.
  */
-export type CoreRequest = { "op": "state.get", } | { "op": "conversation.apply_status", window_id: string, } | { "op": "conversation.apply_retry", window_id: string, } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.allow_pc", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "files.open", window_id: string, permission: string, path: string, app_id: string, rect?: Rect, } | { "op": "web.attach", window_id: string, url: string, } | { "op": "web.place", window_id: string, bounds: Rect | null, } | { "op": "web.navigate", window_id: string, url: string, } | { "op": "web.history", window_id: string, action: WebHistoryAction, } | { "op": "web.capture", window_id: string, } | { "op": "web.detach", window_id: string, } | { "op": "conversation.get", window_id: string, } | { "op": "conversation.history", window_id: string, before: string, } | { "op": "conversation.create", window_id: string, model: string, } | { "op": "conversation.send", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "op": "conversation.attachment", window_id: string, item_id: string, attachment_id: string, } | { "op": "conversation.attachment_open", window_id: string, item_id: string, attachment_id: string, } | { "op": "storage.get", window_id: string, entry: string, } | { "op": "storage.write", window_id: string, entry: string, content: JsonValue, expected_revision?: ExpectedRevision, } | { "op": "storage.reset", window_id: string, entry: string, expected_revision?: ExpectedRevision, } | { "op": "data.attach", window_id: string, } | { "op": "data.detach", window_id: string, } | { "op": "data.act", window_id: string, pointer: string, event?: JsonValue, item?: JsonValue, } | { "op": "data.refresh", window_id: string, sources?: Array<string>, } | { "op": "data.media", window_id: string, media: MediaRef, max_px?: number, } | { "op": "connection.login", window_id: string, permission: string, } | { "op": "share.set", window_id: string, on: boolean, } | { "op": "share.view", window_id: string, view: VisibleView, } | { "op": "update.restart", };
+export type CoreRequest = { "op": "state.get", } | { "op": "conversation.apply_status", window_id: string, } | { "op": "conversation.apply_retry", window_id: string, } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.allow_pc", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "files.open", window_id: string, permission: string, path: string, app_id: string, rect?: Rect, } | { "op": "web.attach", window_id: string, url: string, } | { "op": "web.place", window_id: string, bounds: Rect | null, } | { "op": "web.navigate", window_id: string, url: string, } | { "op": "web.history", window_id: string, action: WebHistoryAction, } | { "op": "web.capture", window_id: string, } | { "op": "web.detach", window_id: string, } | { "op": "conversation.get", window_id: string, } | { "op": "conversation.history", window_id: string, before: string, } | { "op": "conversation.create", window_id: string, model: string, } | { "op": "conversation.send", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "op": "conversation.attachment", window_id: string, item_id: string, attachment_id: string, } | { "op": "conversation.attachment_open", window_id: string, item_id: string, attachment_id: string, } | { "op": "storage.get", window_id: string, entry: string, } | { "op": "storage.write", window_id: string, entry: string, content: JsonValue, expected_revision?: ExpectedRevision, } | { "op": "storage.reset", window_id: string, entry: string, expected_revision?: ExpectedRevision, } | { "op": "data.attach", window_id: string, } | { "op": "data.detach", window_id: string, } | { "op": "data.act", window_id: string, pointer: string, event?: JsonValue, item?: JsonValue, } | { "op": "data.refresh", window_id: string, sources?: Array<string>, } | { "op": "data.media", window_id: string, media: MediaRef, max_px?: number, } | { "op": "connection.login", window_id: string, permission: string, } | { "op": "share.set", window_id: string, on: boolean, } | { "op": "share.view", window_id: string, view: VisibleView, } | { "op": "local_agent.attach", window_id: string, } | { "op": "local_agent.detach", window_id: string, } | { "op": "local_agent.allow", window_id: string, spec_hash: string, } | { "op": "local_agent.retry", window_id: string, generation: string, } | { "op": "local_agent.authenticate", window_id: string, generation: string, method_id: string, } | { "op": "local_agent.configure", window_id: string, generation: string, control_id: string, value: AgentControlValue, } | { "op": "local_agent.send", window_id: string, generation: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "op": "local_agent.cancel", window_id: string, generation: string, } | { "op": "local_agent.permission", window_id: string, generation: string, request_id: string, option_id: string, } | { "op": "local_agent.attachment", window_id: string, item_id: string, attachment_id: string, } | { "op": "local_agent.attachment_open", window_id: string, item_id: string, attachment_id: string, } | { "op": "update.restart", };
 
 /**
  * 이미지에서 보일 부분. 원본 가로와 세로에 대한 비율(0~1)이고 `x`, `y`는 왼쪽 위다.
@@ -376,7 +396,11 @@ active_desktop_ids: { [key in string]: string }, grants: Array<Grant>,
  * (계약 14판) 이 기기에서 `scope: pc` 권한을 허용한 앱과 권한. 앱마다 한 번이고 그 앱의 모든 창이 쓴다.
  * 앱의 새 버전에서도 같은 `id`의 `pc` 권한이 있으면 이어 쓴다.
  */
-pc_access: Array<PcAccess>, };
+pc_access: Array<PcAccess>, 
+/**
+ * (계약 20판) 이 기기에서 앱 권한과 실행 명세별로 허용한 로컬 에이전트.
+ */
+local_agent_access: Array<LocalAgentAccess>, };
 
 /**
  * 문서를 저장소 md 항목에 연결한다.
@@ -387,7 +411,9 @@ export type EnsureThreadReply = { thread: ConversationThread, created: boolean, 
 
 export type EnsureThreadRequest = { title: string, selected_model: string, model_order: Array<string>, profile: string, collection: string, initial_instruction: string, instructions: string, };
 
-export type ErrorCode = "invalid_request" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "login_required" | "binding_conflict" | "io" | "server" | "unavailable";
+export type ErrorCode = "invalid_request" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "login_required" | "binding_conflict" | "io" | "server" | "unavailable" | "local_agent_failed";
+
+export type ExecutionConsent = { spec_hash: string, name: string, command: string, args: Array<string>, env: { [key in string]: string }, };
 
 /**
  * (블록 세트 5판) 탐색기 오른쪽 칸의 보기 방식. 창 상태에는 이 문자열로 둔다.
@@ -584,6 +610,14 @@ image?: MediaRef, };
 
 export type ListLayout = "rows" | "grid";
 
+export type LocalAgentAccess = { app_id: string, permission: string, spec_hash: string, granted_at: string, };
+
+export type LocalAgentPhase = "choosing_agent" | "choosing_folder" | "awaiting_permission" | "starting" | "login_required" | "ready" | "responding" | "failed" | "ended";
+
+export type LocalAgentSnapshot = { generation: string, phase: LocalAgentPhase, agents: Array<AgentChoice>, selected: string | null, folder_name: string | null, execution: ExecutionConsent | null, auth_methods: Array<AuthChoice>, controls: Array<AgentControl>, history: Array<ConversationItem>, stream_id: string | null, text: string, activity: AgentActivity, permissions: Array<PermissionPrompt>, queued: Array<QueuedMessage>, failure: AgentFailure | null, };
+
+export type LocalAgentUpdate = { "type": "snapshot", snapshot: LocalAgentSnapshot, } | { "type": "conversation", update: ConversationEvent, } | { "type": "state", phase: LocalAgentPhase, controls: Array<AgentControl>, auth_methods: Array<AuthChoice>, execution: ExecutionConsent | null, failure: AgentFailure | null, } | { "type": "permissions", permissions: Array<PermissionPrompt>, } | { "type": "queue", queued: Array<QueuedMessage>, };
+
 /**
  * `data.media` 응답의 내용.
  */
@@ -653,6 +687,8 @@ permission: string, granted_at: string, };
  */
 export type PcRootKind = "known" | "volume";
 
+export type PermissionChoice = { id: string, label: string, kind: string, };
+
 /**
  * 앱이 쓰겠다고 선언하는 권한. 실제로 허락하는 것은 기기마다 사용자다.
  */
@@ -672,12 +708,16 @@ connection: string, access: FileAccess,
 /**
  * 로그인을 구할 때와 오류에 보일 이름(예: "카드 보드").
  */
-label: string, };
+label: string, } | { "module": "local_agent", id: string, label: string, };
+
+export type PermissionPrompt = { id: string, title: string, options: Array<PermissionChoice>, };
 
 /**
  * 속성 한 줄.
  */
 export type PropertyField = { label: string, value: Binding, format?: FieldFormat, };
+
+export type QueuedMessage = { id: string, text: string, attachments: Array<ConversationAttachment>, };
 
 export type ReceiptStatus = "accepted" | "failed" | "pending";
 

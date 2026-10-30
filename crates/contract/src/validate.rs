@@ -8,8 +8,8 @@ use serde_json::Value;
 use crate::app_storage::{self, StorageKind};
 use crate::data::{self, Action, Actions, Binding, SourceDecl};
 use crate::{
-    AgentProvider, AppDefinition, Block, CoreError, ErrorCode, FileAccess, FileRef, FilesScope,
-    PathValue, PermissionDecl, UrlValue, BLOCK_SET_VERSION, MODULE_VERSIONS,
+    local_agent, AgentProvider, AppDefinition, Block, CoreError, ErrorCode, FileAccess, FileRef,
+    FilesScope, PathValue, PermissionDecl, UrlValue, BLOCK_SET_VERSION, MODULE_VERSIONS,
 };
 
 /// 앱 정의 JSON 원문을 읽고 검사한다. 통과하면 정의를, 걸리면 `unsupported_app`이나
@@ -218,15 +218,24 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
     validate_sources(definition, &mut details);
 
     let mut web_views = 0;
+    let mut local_agent_blocks = 0;
     data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
         if matches!(block, Block::WebView { .. }) {
             web_views += 1;
+        }
+        if matches!(block, Block::AgentSession { .. }) {
+            local_agent_blocks += 1;
         }
         validate_block(block, definition, &mut details, pointer);
     });
     if web_views > 1 {
         details.push(format!(
             "web_view는 정의에 하나까지 둘 수 있습니다(지금 {web_views}개)"
+        ));
+    }
+    if local_agent_blocks > 1 {
+        details.push(format!(
+            "agent_session은 앱 정의에 하나까지 둘 수 있습니다(지금 {local_agent_blocks}개)"
         ));
     }
 
@@ -819,6 +828,43 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 details.push(format!(
                     "{at}: agent_chat이 사용하는 agent 모듈을 requires.modules에 선언해야 합니다"
                 ));
+            }
+        }
+        Block::AgentSession {
+            permission,
+            root,
+            agents,
+            selected,
+            on_select,
+        } => {
+            validate_module_version("local_agent", 1, definition, details, at);
+            validate_permission_module(permission, "local_agent", definition, details, at);
+            validate_permission_module(&root.permission, "files", definition, details, at);
+            match find_permission(definition, &root.permission) {
+                Some(PermissionDecl::Files {
+                    access: FileAccess::Readwrite,
+                    scope: FilesScope::Folder,
+                    ..
+                }) => {}
+                Some(PermissionDecl::Files { .. }) => details.push(format!(
+                    "{at}: agent_session의 root 권한은 folder 범위의 readwrite여야 합니다"
+                )),
+                Some(_) => details.push(format!(
+                    "{at}: agent_session의 root는 files 권한이어야 합니다"
+                )),
+                None => {}
+            }
+            if selected.state != on_select.set_state {
+                details.push(format!(
+                    "{at}: agent_session의 selected와 on_select는 같은 상태 키를 써야 합니다"
+                ));
+            }
+            validate_state_key(&selected.state, definition, details, at);
+            validate_state_key(&on_select.set_state, definition, details, at);
+            if let crate::data::Binding::Literal(value) = agents {
+                if let Err(error) = local_agent::validate_agent_specs(value) {
+                    details.push(format!("{at}/agents: {error}"));
+                }
             }
         }
         Block::WebView {
