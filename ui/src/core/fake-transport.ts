@@ -10,6 +10,7 @@ import type {
   FileEntry,
   Grant,
   LinkStatus,
+  LocalAgentSnapshot,
   PcAccess,
   Rect,
   ShellSnapshot,
@@ -27,6 +28,7 @@ export interface FakeTransportSeed {
   folder: { root_path: string; root_name: string } | null;
   files: Record<string, string>;
   conversation?: FakeConversationSeed;
+  localAgent?: LocalAgentSnapshot;
   updateRestartError?: string;
   data?: FakeDataSeed;
   storage?: Array<{ window_id: string; entry: string; content: JsonValue }>;
@@ -76,6 +78,26 @@ export interface FakeWebViewSnapshot {
 interface FakeFile {
   text: string;
   revision: string;
+}
+
+function makeFakeLocalAgentSnapshot(): LocalAgentSnapshot {
+  return {
+    generation: "fake-local-agent-generation",
+    phase: "choosing_agent",
+    agents: [{ id: "claude", name: "Claude Code" }, { id: "codex", name: "Codex" }],
+    selected: null,
+    folder_name: null,
+    execution: { spec_hash: "fake-spec-hash", name: "Codex", command: "npx", args: ["-y", "@agentclientprotocol/codex-acp"], env: {} },
+    auth_methods: [],
+    controls: [],
+    history: [],
+    stream_id: null,
+    text: "",
+    activity: { busy: false, tool: null },
+    permissions: [],
+    queued: [],
+    failure: null,
+  };
 }
 
 /** 가짜 코어의 파일 목록이 모든 항목에 주는 바뀐 시각. */
@@ -139,6 +161,8 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   let conversationLoggedIn = !conversation?.loginRequired;
   let conversationWatching = false;
   const conversationAttachments = new Map<string, ConversationUpload>();
+  const localAgentSnapshots = new Map<string, LocalAgentSnapshot>();
+  const localAgentAttachments = new Map<string, ConversationUpload>();
   for (const [path, text] of Object.entries(seed.files)) {
     files.set(path, { text, revision: `fake-revision-${revisionNumber++}` });
   }
@@ -170,6 +194,42 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   const definitionFor = (window: AppWindow): AppDefinition | null => snapshot.shared.app_versions
     .find((version) => version.app_id === window.app_id && version.version === window.app_version)
     ?.definition ?? null;
+
+  const localAgentFor = (windowId: string): LocalAgentSnapshot => {
+    const current = localAgentSnapshots.get(windowId);
+    if (current) return current;
+    const created = clone(seed.localAgent ?? makeFakeLocalAgentSnapshot());
+    localAgentSnapshots.set(windowId, created);
+    return created;
+  };
+
+  const emitLocalAgent = (windowId: string, update: Extract<CoreEvent, { event: "local_agent.update" }>['update']) => {
+    const current = localAgentFor(windowId);
+    emit({ event: "local_agent.update", window_id: windowId, generation: current.generation, update: clone(update) });
+  };
+
+  const emitLocalAgentSnapshot = (windowId: string) => {
+    const current = localAgentFor(windowId);
+    emitLocalAgent(windowId, { type: "snapshot", snapshot: clone(current) });
+  };
+
+  const updateLocalAgentSelection = (window: AppWindow) => {
+    const block = definitionFor(window)?.ui;
+    if (block?.type !== "agent_session") return;
+    const current = localAgentFor(window.id);
+    const selected = window.state[block.selected.state];
+    if (current.selected === selected) return;
+    current.selected = typeof selected === "string" ? selected : null;
+    if (current.selected) {
+      const grant = snapshot.device.grants.find((item) => item.window_id === window.id && item.permission === block.root.permission);
+      current.phase = grant ? "awaiting_permission" : "choosing_folder";
+      current.folder_name = grant?.root_name ?? null;
+    } else {
+      current.phase = "choosing_agent";
+      current.folder_name = null;
+    }
+    emitLocalAgentSnapshot(window.id);
+  };
 
   const storageEntry = (windowId: string, entry: string) => {
     const window = findWindow(windowId);
@@ -244,6 +304,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       },
     };
     emitState();
+    updateLocalAgentSelection(updated);
     return updated;
   };
 
@@ -405,6 +466,107 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         return { op: "conversation.attachment", ...attachment };
       }
       case "conversation.attachment_open": return { op: "conversation.attachment_open" };
+      case "local_agent.attach": {
+        const window = findWindow(request.window_id);
+        if (definitionFor(window)?.ui.type !== "agent_session") return fail("invalid_request", "에이전트 창이 아닙니다");
+        const current = localAgentFor(request.window_id);
+        const block = definitionFor(window)?.ui;
+        if (block?.type === "agent_session") {
+          const selected = window.state[block.selected.state];
+          if (typeof selected === "string") current.selected = selected;
+        }
+        return { op: "local_agent.attach", snapshot: clone(current) };
+      }
+      case "local_agent.detach":
+        findWindow(request.window_id);
+        return { op: "local_agent.detach" };
+      case "local_agent.allow": {
+        const current = localAgentFor(request.window_id);
+        if (current.execution?.spec_hash !== request.spec_hash) return fail("invalid_request", "실행 명세가 바뀌었습니다");
+        current.phase = "ready";
+        current.execution = null;
+        emitLocalAgent(request.window_id, { type: "state", phase: current.phase, controls: clone(current.controls), auth_methods: clone(current.auth_methods), execution: null, failure: current.failure });
+        return { op: "local_agent.allow" };
+      }
+      case "local_agent.retry": {
+        const current = localAgentFor(request.window_id);
+        if (current.generation !== request.generation) return fail("invalid_request", "에이전트 상태가 바뀌었습니다");
+        current.phase = "starting";
+        current.failure = null;
+        emitLocalAgent(request.window_id, { type: "state", phase: current.phase, controls: clone(current.controls), auth_methods: clone(current.auth_methods), execution: current.execution, failure: null });
+        return { op: "local_agent.retry" };
+      }
+      case "local_agent.authenticate": {
+        const current = localAgentFor(request.window_id);
+        if (current.generation !== request.generation) return fail("invalid_request", "에이전트 상태가 바뀌었습니다");
+        if (!current.auth_methods.some((method) => method.id === request.method_id)) return fail("invalid_request", "인증 방법을 찾을 수 없습니다");
+        current.phase = "starting";
+        emitLocalAgent(request.window_id, { type: "state", phase: current.phase, controls: clone(current.controls), auth_methods: clone(current.auth_methods), execution: current.execution, failure: null });
+        return { op: "local_agent.authenticate" };
+      }
+      case "local_agent.configure": {
+        const current = localAgentFor(request.window_id);
+        if (current.generation !== request.generation) return fail("invalid_request", "에이전트 상태가 바뀌었습니다");
+        const control = current.controls.find((item) => item.id === request.control_id);
+        if (!control) return fail("not_found", "에이전트 설정을 찾을 수 없습니다");
+        control.value = clone(request.value);
+        emitLocalAgent(request.window_id, { type: "state", phase: current.phase, controls: clone(current.controls), auth_methods: clone(current.auth_methods), execution: current.execution, failure: current.failure });
+        return { op: "local_agent.configure" };
+      }
+      case "local_agent.send": {
+        const current = localAgentFor(request.window_id);
+        if (current.generation !== request.generation) return fail("invalid_request", "에이전트 상태가 바뀌었습니다");
+        request.attachments.forEach((upload, index) => localAgentAttachments.set(`${request.request_id}:${index}`, clone(upload)));
+        const attachments = request.attachments.map((upload, index) => ({ id: String(index), name: upload.name, mime: upload.mime }));
+        if (current.phase === "responding") {
+          current.queued.push({ id: request.request_id, text: request.text, attachments });
+          emitLocalAgent(request.window_id, { type: "queue", queued: clone(current.queued) });
+          return { op: "local_agent.send", request_id: request.request_id, queued: true };
+        }
+        if (current.phase !== "ready") return fail("invalid_request", "에이전트가 입력을 받을 수 없습니다");
+        const item: ConversationItem = { id: request.request_id, kind: "user", text: request.text, at: new Date().toISOString(), attachments };
+        current.history.push(item);
+        current.phase = "responding";
+        current.activity = { busy: true, tool: null };
+        emitLocalAgent(request.window_id, { type: "conversation", update: { kind: "item", item: clone(item) } });
+        emitLocalAgent(request.window_id, { type: "conversation", update: { kind: "activity", busy: true, tool: null } });
+        emitLocalAgent(request.window_id, { type: "state", phase: current.phase, controls: clone(current.controls), auth_methods: clone(current.auth_methods), execution: current.execution, failure: current.failure });
+        return { op: "local_agent.send", request_id: request.request_id, queued: false };
+      }
+      case "local_agent.cancel": {
+        const current = localAgentFor(request.window_id);
+        if (current.generation !== request.generation) return fail("invalid_request", "에이전트 상태가 바뀌었습니다");
+        current.phase = "ready";
+        current.text = "";
+        current.stream_id = null;
+        current.activity = { busy: false, tool: null };
+        current.permissions = [];
+        current.queued = [];
+        emitLocalAgent(request.window_id, { type: "conversation", update: { kind: "activity", busy: false, tool: null } });
+        emitLocalAgent(request.window_id, { type: "permissions", permissions: [] });
+        emitLocalAgent(request.window_id, { type: "queue", queued: [] });
+        emitLocalAgent(request.window_id, { type: "state", phase: current.phase, controls: clone(current.controls), auth_methods: clone(current.auth_methods), execution: current.execution, failure: current.failure });
+        return { op: "local_agent.cancel" };
+      }
+      case "local_agent.permission": {
+        const current = localAgentFor(request.window_id);
+        if (current.generation !== request.generation) return fail("invalid_request", "에이전트 상태가 바뀌었습니다");
+        const permission = current.permissions.find((item) => item.id === request.request_id);
+        const option = permission?.options.find((item) => item.id === request.option_id);
+        if (!permission || !option) return fail("not_found", "승인 선택지를 찾을 수 없습니다");
+        current.permissions = current.permissions.filter((item) => item.id !== request.request_id);
+        const item: ConversationItem = { id: `permission-${request.request_id}`, kind: "notice", text: `${permission.title} · ${option.label}`, at: new Date().toISOString(), attachments: [] };
+        current.history.push(item);
+        emitLocalAgent(request.window_id, { type: "conversation", update: { kind: "item", item: clone(item) } });
+        emitLocalAgent(request.window_id, { type: "permissions", permissions: clone(current.permissions) });
+        return { op: "local_agent.permission" };
+      }
+      case "local_agent.attachment": {
+        const attachment = localAgentAttachments.get(`${request.item_id}:${request.attachment_id}`);
+        if (!attachment) return fail("not_found", "첨부를 찾을 수 없습니다");
+        return { op: "local_agent.attachment", mime: attachment.mime, data_base64: attachment.data_base64 };
+      }
+      case "local_agent.attachment_open": return { op: "local_agent.attachment_open" };
       case "link.start": {
         const userCode = "K7PQ-4XMR";
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
@@ -479,6 +641,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
           },
         };
         emitState();
+        updateLocalAgentSelection(updated);
         await data.stateChanged(updated);
         return { op: "window.set_state", window: clone(updated) };
       }
@@ -655,6 +818,13 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
           },
         };
         emitState();
+        const window = findWindow(request.window_id);
+        if (definitionFor(window)?.ui.type === "agent_session") {
+          const current = localAgentFor(request.window_id);
+          current.folder_name = grant.root_name;
+          if (current.selected) current.phase = "awaiting_permission";
+          emitLocalAgentSnapshot(request.window_id);
+        }
         return { op: "files.pick_folder", grant: clone(grant) };
       }
       case "files.allow_pc": {

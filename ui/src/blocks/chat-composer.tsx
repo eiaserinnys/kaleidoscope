@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
 import { AGENT_ATTACHMENTS_MAX, AGENT_ATTACHMENT_MAX_BYTES, AGENT_ATTACHMENTS_TOTAL_MAX_BYTES } from "../contract/limits";
-import { ArrowUp, Paperclip, ScreenShare } from "../components/icons";
+import { Square as SquareIcon } from "lucide-react";
+import { ArrowUp, ICON_SIZE, Paperclip, ScreenShare } from "../components/icons";
 import { IconButton, Notice } from "../components/primitives";
 import { AttachmentChip, DraftChip, makeDraftAttachment, type DraftAttachment, type Preview } from "./agent-attachments";
 
-export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachmentsChange, onSend, disabled, busy, sharedWindows, onRemoveShared, onPreview, error, onError }: {
+export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachmentsChange, onSend, disabled, busy, onCancel, sharedWindows, onRemoveShared, onPreview, error, onError }: {
   draft: string;
   onDraft: (value: string) => void;
   inputRef: RefObject<HTMLTextAreaElement | null>;
@@ -13,6 +14,7 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
   onSend: (returnFocus?: boolean) => void;
   disabled: boolean;
   busy: boolean;
+  onCancel?: () => void;
   sharedWindows: Array<{ id: string; name: string }>;
   onRemoveShared: (id: string) => void;
   onPreview: (preview: Preview) => void;
@@ -93,7 +95,9 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
         rows={1}
         value={draft}
       />
-      <IconButton aria-label="보내기" disabled={disabled || (!draft.trim() && !attachments.length) || busy} onClick={() => onSend(true)}><ArrowUp /></IconButton>
+      {busy && onCancel
+        ? <IconButton aria-label="멈춤" onClick={onCancel}><SquareIcon absoluteStrokeWidth aria-hidden="true" size={ICON_SIZE.control} strokeWidth={1.5} /></IconButton>
+        : <IconButton aria-label="보내기" disabled={disabled || (!draft.trim() && !attachments.length) || busy} onClick={() => onSend(true)}><ArrowUp /></IconButton>}
     </div>
   </div>;
 }
