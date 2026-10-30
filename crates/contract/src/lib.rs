@@ -142,7 +142,7 @@
 //! # 쉘 업데이트 (10판)
 //! 설치본 쉘(Windows NSIS)이 새 판을 스스로 받아 깐다. 디렉터는 업데이터가 든 첫 판만 손으로 깐다.
 //! - 묻고 받는 것은 앱 크레이트(Tauri 업데이터)가 한다. 쉘을 켜고 [`UPDATE_FIRST_CHECK_DELAY_SECS`] 뒤 한 번, 그 뒤로
-//!   [`UPDATE_CHECK_INTERVAL_SECS`]마다 업데이트 서버(`https://eiaserinnys.me/tauri-update/update/kaleidoscope`,
+//!   [`UPDATE_CHECK_INTERVAL_SECS`](5분)마다 업데이트 서버(`https://eiaserinnys.me/tauri-update/update/kaleidoscope`,
 //!   서비스 `tauri-app-updater`)에 묻는다. 새 판이 있으면 바로 받아 서명을 확인하고 [`UpdateStatus::Ready`]로 알린다.
 //!   받은 설치본은 메모리에만 있어 다시 시작하지 않고 쉘을 끄면 다음에 켤 때 다시 받는다. `ready`인 동안에는 묻지 않는다.
 //! - 쉘은 혼자 다시 시작하지 않는다. 디렉터가 화면에서 고르면 화면이 편집기의 저장 대기분을 먼저 저장하고(저장이
@@ -250,8 +250,8 @@ pub const SHARE_CAPTURE_NAME_PREFIX: &str = "같이 보기 - ";
 
 /// (10판) 쉘을 켠 뒤 처음 새 판을 묻기까지 기다리는 시간. 시작 직후의 연결과 화면 그리기를 먼저 하려는 것이다.
 pub const UPDATE_FIRST_CHECK_DELAY_SECS: u64 = 10;
-/// (10판) 새 판을 다시 묻는 간격. 업데이트 서버는 GitHub 릴리스 목록을 5분 캐시한다.
-pub const UPDATE_CHECK_INTERVAL_SECS: u64 = 60 * 60;
+/// (10판) 새 판을 다시 묻는 간격. 서버가 GitHub 릴리스 목록을 5분 캐시하므로 기기마다 5분 간격으로 물어도 부담이 없다.
+pub const UPDATE_CHECK_INTERVAL_SECS: u64 = 300;
 
 // ---------------------------------------------------------------------------
 // 엔티티 (2단계 오케스트레이터 레지스트리와 같은 모양)
