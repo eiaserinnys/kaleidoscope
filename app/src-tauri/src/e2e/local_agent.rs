@@ -168,6 +168,12 @@ fn open_and_run(
         CoreReply::WindowOpen { window } => window.id,
         reply => return Err(format!("unexpected local agent window response: {reply:?}")),
     };
+    call(
+        core,
+        CoreRequest::DataAttach {
+            window_id: window_id.clone(),
+        },
+    )?;
     let state = BTreeMap::from([("agent_id".into(), json!(AGENT_ID))]);
     call(
         core,
