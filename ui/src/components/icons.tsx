@@ -14,13 +14,18 @@ import {
   FileText as FileTextIcon,
   FileCode as FileCodeIcon,
   FileImage as FileImageIcon,
+  HardDrive as HardDriveIcon,
   Folder as FolderIcon,
   FolderOpen as FolderOpenIcon,
   Globe as GlobeIcon,
+  Image as ImageIcon,
   Import as ImportIcon,
   LayoutGrid as LayoutGridIcon,
   List as ListIcon,
   MessageSquare as MessageSquareIcon,
+  Monitor as MonitorIcon,
+  Music as MusicIcon,
+  Download as DownloadIcon,
   PanelLeftClose as PanelLeftCloseIcon,
   PanelLeftOpen as PanelLeftOpenIcon,
   Paperclip as PaperclipIcon,
@@ -29,6 +34,7 @@ import {
   RotateCcw as RotateCcwIcon,
   ScreenShare as ScreenShareIcon,
   X as XIcon,
+  Video as VideoIcon,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -71,6 +77,7 @@ export const File = (props: IconProps) => renderIcon(FileIcon, props);
 export const Paperclip = (props: IconProps) => renderIcon(PaperclipIcon, props);
 export const FileCode = (props: IconProps) => renderIcon(FileCodeIcon, props);
 export const FileImage = (props: IconProps) => renderIcon(FileImageIcon, props);
+export const HardDrive = (props: IconProps) => renderIcon(HardDriveIcon, props);
 export const FilePlus = (props: IconProps) => renderIcon(FilePlusIcon, props);
 export const FolderOpen = (props: IconProps) => renderIcon(FolderOpenIcon, props);
 export const Folder = (props: IconProps) => renderIcon(FolderIcon, props);
@@ -83,6 +90,11 @@ export const ArrowRight = (props: IconProps) => renderIcon(ArrowRightIcon, props
 export const RotateCw = (props: IconProps) => renderIcon(RotateCwIcon, props);
 export const RotateCcw = (props: IconProps) => renderIcon(RotateCcwIcon, props);
 export const Globe = (props: IconProps) => renderIcon(GlobeIcon, props);
+export const Image = (props: IconProps) => renderIcon(ImageIcon, props);
+export const Monitor = (props: IconProps) => renderIcon(MonitorIcon, props);
+export const Music = (props: IconProps) => renderIcon(MusicIcon, props);
+export const Download = (props: IconProps) => renderIcon(DownloadIcon, props);
+export const Video = (props: IconProps) => renderIcon(VideoIcon, props);
 export const Plus = (props: IconProps) => renderIcon(PlusIcon, props);
 export const LayoutGrid = (props: IconProps) => renderIcon(LayoutGridIcon, props);
 export const List = (props: IconProps) => renderIcon(ListIcon, props);

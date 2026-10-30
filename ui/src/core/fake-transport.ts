@@ -14,6 +14,7 @@ import type {
   FileEntry,
   Grant,
   LinkStatus,
+  PcAccess,
   Rect,
   ShellSnapshot,
   WebPage,
@@ -91,6 +92,11 @@ interface FakeFile {
 
 /** 가짜 코어의 파일 목록이 모든 항목에 주는 바뀐 시각. */
 const FAKE_MODIFIED = "2026-10-30T01:00:00Z";
+const FAKE_PC_ROOTS: FileEntry[] = [
+  { name: "문서", path: "documents", kind: "dir", size: 0, modified: "", root_kind: "known" },
+  { name: "다운로드", path: "downloads", kind: "dir", size: 0, modified: "", root_kind: "known" },
+  { name: "로컬 디스크 (C:)", path: "C", kind: "dir", size: 0, modified: "", root_kind: "volume" },
+];
 
 interface FakeWebView {
   page: WebPage;
@@ -271,14 +277,25 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     const window = findWindow(windowId);
     const definition = definitionFor(window);
     const declaration = definition?.permissions.find((item) => item.id === permission && item.module === "files");
-    if (!declaration) return fail("permission_denied", "앱이 선언하지 않은 파일 권한입니다");
+    if (!declaration || declaration.module !== "files") return fail("permission_denied", "앱이 선언하지 않은 파일 권한입니다");
     return { window, declaration };
   };
 
   const requireGrant = (windowId: string, permission: string): Grant => {
+    const { window, declaration } = permissionFor(windowId, permission);
+    if (declaration.scope === "pc") {
+      const access = snapshot.device.pc_access.find((item) => item.app_id === window.app_id && item.permission === permission);
+      if (!access) return fail("not_granted", "이 PC의 파일 읽기를 먼저 허용해야 합니다");
+      return { window_id: windowId, permission, root_path: "", root_name: declaration.label, granted_at: access.granted_at };
+    }
     const grant = snapshot.device.grants.find((item) => item.window_id === windowId && item.permission === permission);
     if (!grant) return fail("not_granted", "이 기기에서 폴더를 먼저 골라야 합니다");
     return grant;
+  };
+
+  const filePathForGrant = (grant: Grant, path: string): string => {
+    const rooted = grant.root_path ? `${grant.root_path}/${path}` : path;
+    return files.has(rooted) ? rooted : path;
   };
 
   const directoryExists = (directory: string): boolean => directory === ""
@@ -573,7 +590,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         return { op: "window.set_state", window: clone(updated) };
       }
       case "files.open": {
-        const { window: explorerWindow } = permissionFor(request.window_id, request.permission);
+        const { window: explorerWindow, declaration: sourcePermission } = permissionFor(request.window_id, request.permission);
         const sourceDefinition = definitionFor(explorerWindow);
         if (sourceDefinition?.ui.type !== "explorer") return fail("invalid_request", "탐색기 창에서만 파일을 열 수 있습니다");
         const sourceGrant = requireGrant(request.window_id, request.permission);
@@ -593,15 +610,20 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         if (!targetDefinition.permissions.some((item) => item.module === "files" && item.id === opens.permission)) {
           return fail("invalid_request", "앱의 파일 권한을 찾을 수 없습니다");
         }
+        const pcOpen = sourcePermission.scope === "pc";
+        const parentSeparator = request.path.lastIndexOf("/");
+        const openRootPath = pcOpen ? parentSeparator < 0 ? "" : request.path.slice(0, parentSeparator) : sourceGrant.root_path;
+        const openRootName = pcOpen ? openRootPath.slice(openRootPath.lastIndexOf("/") + 1) : sourceGrant.root_name;
+        const currentFile = pcOpen ? fileName : request.path;
         const candidates = snapshot.shared.windows
           .filter((item) => item.desktop_id === explorerWindow.desktop_id && item.app_id === request.app_id)
           .filter((item) => snapshot.device.grants.some((grant) =>
-            grant.window_id === item.id && grant.permission === opens.permission && grant.root_path === sourceGrant.root_path))
+            grant.window_id === item.id && grant.permission === opens.permission && grant.root_path === openRootPath))
           .sort((left, right) => right.z - left.z);
         const existing = candidates[0];
         let opened: AppWindow;
         if (existing) {
-          const state = { ...existing.state, [opens.state]: request.path };
+          const state = { ...existing.state, [opens.state]: currentFile };
           const topZ = Math.max(0, ...snapshot.shared.windows
             .filter((item) => item.desktop_id === explorerWindow.desktop_id)
             .map((item) => item.z));
@@ -633,15 +655,15 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
             app_version: app.current_version,
             rect: clone(request.rect ?? { x: 48, y: 48, width: 720, height: 520 }),
             z: topZ + 1,
-            state: { ...clone(targetDefinition.state), [opens.state]: request.path },
+            state: { ...clone(targetDefinition.state), [opens.state]: currentFile },
             created_at: at,
             updated_at: at,
           };
           const copiedGrant: Grant = {
             window_id: id,
             permission: opens.permission,
-            root_path: sourceGrant.root_path,
-            root_name: sourceGrant.root_name,
+            root_path: openRootPath,
+            root_name: openRootName,
             granted_at: at,
           };
           snapshot = {
@@ -740,12 +762,35 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         emitState();
         return { op: "files.pick_folder", grant: clone(grant) };
       }
+      case "files.allow_pc": {
+        const { window, declaration } = permissionFor(request.window_id, request.permission);
+        if (declaration.scope !== "pc") return fail("invalid_request", "내 PC 범위가 아닌 권한입니다");
+        const existing = snapshot.device.pc_access.find((item) => item.app_id === window.app_id && item.permission === request.permission);
+        if (existing) return { op: "files.allow_pc", access: clone(existing) };
+        const access: PcAccess = {
+          app_id: window.app_id,
+          permission: request.permission,
+          granted_at: new Date().toISOString(),
+        };
+        snapshot = {
+          ...snapshot,
+          device: { ...snapshot.device, pc_access: [...snapshot.device.pc_access, access] },
+        };
+        emitState();
+        return { op: "files.allow_pc", access: clone(access) };
+      }
       case "files.list": {
-        permissionFor(request.window_id, request.permission);
+        const { declaration } = permissionFor(request.window_id, request.permission);
         requireGrant(request.window_id, request.permission);
-        if (!validRelativePath(request.dir, true) || !directoryExists(request.dir)) {
+        if (!validRelativePath(request.dir, true)) {
           return fail("not_found", "폴더를 찾을 수 없습니다");
         }
+        if (declaration.scope === "pc" && request.dir === "") {
+          return { op: "files.list", entries: clone(FAKE_PC_ROOTS) };
+        }
+        const exists = (declaration.scope === "pc" && FAKE_PC_ROOTS.some((entry) => entry.path === request.dir))
+          || directoryExists(request.dir);
+        if (!exists) return fail("not_found", "폴더를 찾을 수 없습니다");
         const prefix = request.dir === "" ? "" : `${request.dir}/`;
         const entries = new Map<string, FileEntry>();
         for (const path of files.keys()) {
@@ -771,9 +816,9 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       }
       case "files.read": {
         permissionFor(request.window_id, request.permission);
-        requireGrant(request.window_id, request.permission);
+        const grant = requireGrant(request.window_id, request.permission);
         if (!validRelativePath(request.path)) return fail("invalid_request", "파일 경로가 올바르지 않습니다");
-        const file = files.get(request.path);
+        const file = files.get(filePathForGrant(grant, request.path));
         if (!file) return fail("not_found", "파일을 찾을 수 없습니다");
         return { op: "files.read", path: request.path, text: file.text, revision: file.revision };
       }
@@ -809,15 +854,16 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       }
       case "files.write": {
         const { declaration } = permissionFor(request.window_id, request.permission);
-        requireGrant(request.window_id, request.permission);
+        const grant = requireGrant(request.window_id, request.permission);
         if (declaration.access !== "readwrite") return fail("permission_denied", "읽기 전용 폴더입니다");
         if (!validRelativePath(request.path)) return fail("invalid_request", "파일 경로가 올바르지 않습니다");
-        const current = files.get(request.path);
+        const path = filePathForGrant(grant, request.path);
+        const current = files.get(path);
         if (request.expected_revision === undefined ? current !== undefined : !current || current.revision !== request.expected_revision) {
           return fail("conflict", "파일이 읽은 뒤에 바뀌었습니다");
         }
         const revision = `fake-revision-${revisionNumber++}`;
-        files.set(request.path, { text: request.text, revision });
+        files.set(path, { text: request.text, revision });
         for (const listener of fileListeners) listener();
         return { op: "files.write", path: request.path, revision };
       }

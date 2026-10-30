@@ -23,6 +23,7 @@ export interface FileBrowserTreeProps {
   onSelect: (path: string) => void | Promise<unknown>;
   canCreate: boolean;
   mode?: "files" | "folders";
+  scope?: "folder" | "pc";
   fileIcon?: (entry: FileEntry) => ReactNode;
   onFileDoubleClick?: (anchor: HTMLElement, path: string) => void;
   onFileEnter?: (anchor: HTMLElement, path: string) => void;
@@ -45,6 +46,7 @@ export function FileBrowserTree({
   onSelect,
   canCreate,
   mode = "files",
+  scope = "folder",
   fileIcon = () => <FileText size="inline" />,
   onFileDoubleClick,
   onFileEnter,
@@ -57,7 +59,12 @@ export function FileBrowserTree({
   const restoreToggleFocus = useRef(false);
   const { snapshot, store, window } = context;
   const grant = snapshot.device.grants.find((item) => item.window_id === window.id && item.permission === permission) ?? null;
-  const rootPath = grant?.root_path ?? null;
+  const pcAccess = scope === "pc" && snapshot.device.pc_access.some(
+    (item) => item.app_id === window.app_id && item.permission === permission,
+  );
+  const hasRoot = scope === "pc" ? pcAccess : grant !== null;
+  const rootPath = scope === "pc" ? pcAccess ? "" : null : grant?.root_path ?? null;
+  const rootName = scope === "pc" ? permissionLabel : grant?.root_name ?? "";
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [entriesByDirectory, setEntriesByDirectory] = useState<Record<string, FileEntry[]>>({});
   const entriesByDirectoryRef = useRef(entriesByDirectory);
@@ -66,7 +73,7 @@ export function FileBrowserTree({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [localActionError, setLocalActionError] = useState<string | null>(null);
   const [creating, setCreating] = useState<CreatingFile | null>(null);
-  const currentRoot = useRef<string | null>(grant?.root_path ?? null);
+  const currentRoot = useRef<string | null>(rootPath);
   const actionError = externalActionError ?? localActionError;
 
   const reportActionError = (error: string | null) => {
@@ -114,13 +121,13 @@ export function FileBrowserTree({
   }, [permission, rootPath, store, window.id]);
 
   useEffect(() => {
-    currentRoot.current = grant?.root_path ?? null;
+    currentRoot.current = rootPath;
     setEntriesByDirectory({});
     setErrors({});
     setLoadingDirectories(new Set());
     reportActionError(null);
     setCreating(null);
-    if (grant) {
+    if (rootPath !== null) {
       setExpanded(new Set([""]));
       void loadDirectory("");
     } else {
@@ -138,7 +145,7 @@ export function FileBrowserTree({
   }, [expanded, loadDirectory, rootPath]);
 
   useEffect(() => {
-    if (mode !== "folders" || !rootPath || !selectedPath) return;
+    if (mode !== "folders" || !hasRoot || (scope === "folder" && !rootPath) || !selectedPath) return;
     const parts = selectedPath.split("/");
     const ancestors = [""];
     for (let index = 0; index < parts.length - 1; index += 1) ancestors.push(parts.slice(0, index + 1).join("/"));
@@ -153,7 +160,7 @@ export function FileBrowserTree({
         selected?.scrollIntoView?.({ block: "nearest" });
       });
     })();
-  }, [loadDirectory, mode, rootPath, selectedPath]);
+  }, [hasRoot, loadDirectory, mode, rootPath, scope, selectedPath]);
 
   const pickFolder = async () => {
     reportActionError(null);
@@ -353,7 +360,7 @@ export function FileBrowserTree({
     <div className={`ks-file-tree${pane?.collapsed ? " is-collapsed" : ""}`} ref={treeRef}>
       {pane?.collapsed ? (
         <span className="ks-file-tree-expand"><IconButton aria-label="목록 펼치기" onClick={togglePane}><PanelLeftOpen /></IconButton></span>
-      ) : !grant ? (
+      ) : !hasRoot ? (
         <div className="ks-file-tree-ungranted">
           <Button onClick={pickFolder}>{permissionLabel} 고르기</Button>
           {actionError ? <span className="ks-inline-error" role="alert">{actionError}</span> : null}
@@ -361,9 +368,9 @@ export function FileBrowserTree({
       ) : (
         <>
           <div className="ks-file-tree-header">
-            <span className="ks-file-tree-root-name" title={grant.root_name}>{grant.root_name}</span>
+            <span className="ks-file-tree-root-name" title={rootName}>{rootName}</span>
             {canCreate ? <IconButton aria-label="새 파일" onClick={() => void beginCreate()}><FilePlus /></IconButton> : null}
-            <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}><FolderOpen /></IconButton>
+            {scope === "folder" ? <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}><FolderOpen /></IconButton> : null}
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
           </div>
           <div aria-label={mode === "folders" ? "폴더 목록" : "파일 목록"} className="ks-file-tree-list" onKeyDown={handleTreeKeyDown} role="tree">

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Column, ExplorerView, FileEntry, SortSpec } from "../contract/contract";
 import { EmptyState, IconButton, StatusText } from "../components/primitives";
-import { ArrowUp, ChevronRight, File, FileCode, FileImage, FileText, Folder, FolderOpen, LayoutGrid, List } from "../components/icons";
+import { ArrowUp, ChevronRight, Download, File, FileCode, FileImage, FileText, Folder, FolderOpen, HardDrive, Image, LayoutGrid, List, Monitor, Music, Video } from "../components/icons";
 import { toCoreError } from "../core/core-transport";
 import { TableView, type Row } from "./data-table";
 import { useRoving } from "./data-view-common";
@@ -30,9 +30,25 @@ function fileIcon(entry: FileEntry, size: "inline" | "tile" = "inline") {
 }
 
 function typeLabel(entry: FileEntry) {
+  if (entry.root_kind === "known") return "폴더";
+  if (entry.root_kind === "volume") return "드라이브";
   if (entry.kind === "dir") return "폴더";
   const extension = extensionOf(entry.path);
   return extension ? `${extension.toUpperCase()} 파일` : "파일";
+}
+
+function directoryIcon(entry: FileEntry, size: "inline" | "tile" = "inline") {
+  if (entry.root_kind === "volume") return <HardDrive size={size} />;
+  if (entry.root_kind !== "known") return <Folder size={size} />;
+  switch (entry.path) {
+    case "desktop": return <Monitor size={size} />;
+    case "documents": return <FileText size={size} />;
+    case "downloads": return <Download size={size} />;
+    case "pictures": return <Image size={size} />;
+    case "music": return <Music size={size} />;
+    case "videos": return <Video size={size} />;
+    default: return <Folder size={size} />;
+  }
 }
 
 function formatSize(size: number) {
@@ -71,8 +87,10 @@ function compareRows(a: Row, b: Row, sort: SortSpec) {
 export function ExplorerContent({
   context,
   permission,
+  permissionLabel,
   rootName,
   rootPath,
+  scope,
   folder,
   view,
   actionError,
@@ -83,8 +101,10 @@ export function ExplorerContent({
 }: {
   context: BlockContext;
   permission: string;
+  permissionLabel: string;
   rootName: string;
   rootPath: string;
+  scope: "folder" | "pc";
   folder: string;
   view: ExplorerView;
   actionError: string | null;
@@ -95,10 +115,13 @@ export function ExplorerContent({
 }) {
   const { store, window } = context;
   const [entries, setEntries] = useState<FileEntry[] | null>(null);
+  const [pcRoots, setPcRoots] = useState<FileEntry[]>([]);
+  const [pcRootsError, setPcRootsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const requestId = useRef(0);
+  const pcRootsLoaded = useRef(false);
   const folderRef = useRef(folder);
   folderRef.current = folder;
   const rootPathRef = useRef(rootPath);
@@ -121,6 +144,11 @@ export function ExplorerContent({
       const reply = await store.call({ op: "files.list", window_id: window.id, permission, dir: directory });
       if (reply.op === "files.list" && request === requestId.current && folderRef.current === directory && rootPathRef.current === requestedRoot) {
         setEntries(reply.entries);
+        if (scope === "pc" && directory === "") {
+          pcRootsLoaded.current = true;
+          setPcRoots(reply.entries);
+          setPcRootsError(null);
+        }
       }
     } catch (cause) {
       if (request !== requestId.current || folderRef.current !== directory || rootPathRef.current !== requestedRoot) return;
@@ -136,6 +164,20 @@ export function ExplorerContent({
   };
   const readFolderRef = useRef(readFolder);
   readFolderRef.current = readFolder;
+
+  useEffect(() => {
+    if (scope !== "pc" || !folderRef.current || pcRootsLoaded.current) return;
+    const requestedRoot = rootPath;
+    void store.call({ op: "files.list", window_id: window.id, permission, dir: "" }).then((reply) => {
+      if (reply.op === "files.list" && rootPathRef.current === requestedRoot) {
+        pcRootsLoaded.current = true;
+        setPcRoots(reply.entries);
+        setPcRootsError(null);
+      }
+    }).catch((cause) => {
+      if (rootPathRef.current === requestedRoot) setPcRootsError(toCoreError(cause).message);
+    });
+  }, [folder, permission, rootPath, scope, store, window.id]);
 
   useEffect(() => {
     setSelected(null);
@@ -170,8 +212,8 @@ export function ExplorerContent({
   }, [view, entries]);
 
   const segments = folder ? folder.split("/") : [];
-  const breadcrumb = [{ name: rootName, path: "" }, ...segments.map((name, index) => ({
-    name,
+  const breadcrumb = [{ name: scope === "pc" ? permissionLabel : rootName, path: "" }, ...segments.map((name, index) => ({
+    name: scope === "pc" && index === 0 ? pcRoots.find((entry) => entry.path === name)?.name ?? name : name,
     path: segments.slice(0, index + 1).join("/"),
   }))];
   useLayoutEffect(() => {
@@ -198,7 +240,7 @@ export function ExplorerContent({
       observer.observe(crumb.querySelector("button")!);
     });
     return () => observer.disconnect();
-  }, [folder, rootName]);
+  }, [folder, permissionLabel, rootName, scope]);
   const parent = folder.includes("/") ? folder.slice(0, folder.lastIndexOf("/")) : "";
   const sortedEntries = entries ?? [];
   const onChoose = (entry: FileEntry) => setSelected(entry.path);
@@ -229,6 +271,7 @@ export function ExplorerContent({
       </div>
     </div>
     {actionError ? <div className="ks-inline-error" role="alert">{actionError}</div> : null}
+    {pcRootsError ? <div className="ks-inline-error" role="alert">{pcRootsError}</div> : null}
     {error ? <div className="ks-inline-error" role="alert">{error}</div>
       : !visible && loading ? <StatusText>불러오는 중</StatusText>
       : visible && sortedEntries.length === 0 ? <div className="ks-explorer-empty"><EmptyState icon={<FolderOpen size="empty" />} text="빈 폴더" /></div>
@@ -238,7 +281,7 @@ export function ExplorerContent({
               return <button aria-label={entry.name} aria-posinset={index + 1} aria-selected={active} aria-setsize={sortedEntries.length} className={`ks-explorer-icon${active ? " is-selected" : ""}`} data-file-path={entry.kind === "file" ? entry.path : undefined} data-folder-path={entry.kind === "dir" ? entry.path : undefined} data-focus-index={index} key={entry.path} onClick={() => onChoose(entry)} onContextMenu={(event) => {
                 if (entry.kind === "file") { event.preventDefault(); setSelected(entry.path); onContextFile(event.currentTarget, entry.path); }
               }} onDoubleClick={(event) => activate(event.currentTarget, entry)} onFocus={() => roving.setFocus(index)} onKeyDown={(event) => roving.keyDown(event, index, () => activate(event.currentTarget, entry), gridColumns)} role="option" tabIndex={roving.focus === index ? 0 : -1} title={entry.name} type="button">
-                {entry.kind === "dir" ? <Folder size="tile" /> : fileIcon(entry, "tile")}
+                {entry.kind === "dir" ? directoryIcon(entry, "tile") : fileIcon(entry, "tile")}
                 <span className="ks-explorer-icon-name">{entry.name}</span>
               </button>;
             })}
@@ -255,7 +298,7 @@ export function ExplorerContent({
           }} renderCell={(row, column) => {
             const entry = sortedEntries.find((item) => item.path === row.key);
             if (!entry) return undefined;
-            if (column.field === "name") return <span className="ks-explorer-detail-name">{entry.kind === "dir" ? <Folder size="inline" /> : fileIcon(entry)}<span>{entry.name}</span></span>;
+            if (column.field === "name") return <span className="ks-explorer-detail-name">{entry.kind === "dir" ? directoryIcon(entry) : fileIcon(entry)}<span>{entry.name}</span></span>;
             if (column.field === "size") return entry.kind === "dir" ? "" : formatSize(entry.size);
             return undefined;
           }} rowProps={(row): Record<string, string> => row.kind === "dir" ? { "data-folder-path": row.key } : { "data-file-path": row.key }} rows={rows} selected={selected} />}
