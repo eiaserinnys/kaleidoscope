@@ -212,11 +212,6 @@ fn build_share_block(
                     .unified_diff()
                     .context_radius(1)
                     .to_string();
-                let diff = diff
-                    .lines()
-                    .filter(|line| !line.starts_with("--- ") && !line.starts_with("+++ "))
-                    .collect::<Vec<_>>()
-                    .join("\n");
                 if diff.len() > view.text.len() {
                     ("바뀜(전체)", Some(view.text.clone()))
                 } else {
@@ -359,6 +354,24 @@ mod tests {
         )];
         assert!(block(&current, &old).contains("바뀜(전체)\nnew"));
         assert!(build_share_block(&[], &BTreeMap::new()).is_none());
+    }
+
+    #[test]
+    fn diff_keeps_changed_content_that_looks_like_a_file_header() {
+        let old = BTreeMap::from([(
+            "12345678-a".into(),
+            SentView {
+                app_name: "편집기".into(),
+                text: "line 1\n-- option\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10".into(),
+            },
+        )]);
+        let current = [view(
+            "12345678-a",
+            "편집기",
+            "line 1\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10",
+            "2026-01-02T00:00:00.000Z",
+        )];
+        assert!(block(&current, &old).contains("\n--- option\n"));
     }
 
     #[test]
