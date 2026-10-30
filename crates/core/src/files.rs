@@ -96,6 +96,7 @@ pub(crate) fn list(
             kind,
             size,
             modified,
+            root_kind: None,
         });
     }
     entries.sort_by(|left, right| {

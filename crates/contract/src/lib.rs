@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 13판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 14판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -73,6 +73,13 @@
 //! 기본값으로 덮지 않는다. 이 필드가 있는 앱 정의는 `requires.modules.storage` 2판 이상을 요구한다.
 //! 13판에서 바뀐 것(흐름 블록 본문 나란히와 복사 단추, 카드 #808): 블록 세트 7판. `feed`의 `columns`(본문 문단 나란히)와
 //! `copy`(`meta`와 문단마다 복사 단추). 모듈과 레지스트리 판은 그대로다.
+//!
+//! # 계약 14판: 모듈 `files` 2판, 내 PC 범위 (카드 #815)
+//! `files` 권한에 선택 필드 `scope`가 생겼다([`FilesScope`]). `pc`면 폴더를 고르지 않고 이 PC 전체를 읽는다.
+//! 경로의 첫 마디가 「내 PC」의 뿌리([`PcRootKind`]: 알려진 폴더나 볼륨)이고, 그 아래는 고른 폴더와 같은 경로 규칙이다.
+//! 빈 경로는 내 PC 자체이고 `files.list`는 뿌리들을 낸다. 이 범위는 기기마다 앱마다 처음 한 번 허용받는다
+//! (`files.allow_pc`, [`PcAccess`]). 지금은 `explorer` 블록만 이 범위의 권한을 쓸 수 있다. 탐색기가 파일을 열면
+//! 여는 앱에는 그 파일이 든 폴더만 준다. 이 필드를 쓴 앱 정의는 `requires.modules.files` 2판 이상을 요구한다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -182,6 +189,8 @@ pub const BLOCK_SET_VERSION: u32 = 7;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
+/// - `files` 2판: 1판 + 권한의 `scope: pc`(이 PC 전체 읽기, 내 PC의 알려진 폴더와 볼륨, 기기와 앱마다 처음 한 번
+///   허용, `files.allow_pc`). 계약 14판.
 /// - `agent` 1판: 창이 있는 워크스페이스의 PAS와 대화(`agent.*` 명령).
 /// - `agent` 2판: 1판 + 첨부(보내기, 기록에서 보기와 열기). 모듈의 새 판도 더하기만 하므로
 ///   `agent: 1`을 요구하는 정의는 2판 쉘에서 그대로 돌고 첨부도 쓴다.
@@ -194,7 +203,7 @@ pub const BLOCK_SET_VERSION: u32 = 7;
 ///   `oauth` 두 가지다([`registry`]의 「연결」 절).
 /// - `connection` 2판: 계정마다 연결 이름을 등록한다.
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
-    ("files", 1),
+    ("files", 2),
     ("agent", 3),
     ("web", 1),
     ("connection", 2),
@@ -366,6 +375,20 @@ pub struct DeviceState {
     /// 워크스페이스 id → 그 워크스페이스에서 마지막으로 본 데스크톱 id.
     pub active_desktop_ids: BTreeMap<String, String>,
     pub grants: Vec<Grant>,
+    /// (계약 14판) 이 기기에서 `scope: pc` 권한을 허용한 앱과 권한. 앱마다 한 번이고 그 앱의 모든 창이 쓴다.
+    /// 앱의 새 버전에서도 같은 `id`의 `pc` 권한이 있으면 이어 쓴다.
+    #[serde(default)]
+    pub pc_access: Vec<PcAccess>,
+}
+
+/// (계약 14판) 이 기기에서 앱 하나의 `scope: pc` 권한 하나를 허용한 기록. 기기 밖으로 나가지 않는다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct PcAccess {
+    pub app_id: String,
+    /// 앱 정의의 권한 `id`.
+    pub permission: String,
+    pub granted_at: String,
 }
 
 /// 이 쉘이 지원하는 블록 세트와 모듈의 버전.
@@ -613,11 +636,16 @@ pub struct Requires {
 #[ts(export, export_to = "contract.ts")]
 pub enum PermissionDecl {
     /// 기기마다 사용자가 고르는 폴더 하나. 파일 경로는 그 폴더 안으로만 풀린다.
+    /// (모듈 `files` 2판) `scope`가 `pc`면 폴더를 고르지 않고 이 PC 전체를 읽는다([`FilesScope`]).
     Files {
         id: String,
         access: FileAccess,
-        /// 폴더를 고르라고 할 때 보일 이름(예: "문서 폴더").
+        /// 폴더를 고르라고 할 때 보일 이름(예: "문서 폴더"). `scope: pc`면 탐색기 경로의 맨 앞 마디 이름(예: "내 PC").
         label: String,
+        /// (모듈 `files` 2판) 없으면 `folder`다.
+        #[serde(default, skip_serializing_if = "FilesScope::is_folder")]
+        #[ts(optional, as = "Option<FilesScope>")]
+        scope: FilesScope,
     },
     /// (모듈 `connection` 1판) 서버에 등록한 연결 하나. 주소와 인증은 서버의 연결 설정에 있고 앱 정의에는 이름만 둔다.
     /// `read`는 GET만, `readwrite`는 동작의 연결 부르기에서 다른 메서드도 쓴다(서버의 연결도 쓰기를 허락해야 한다).
@@ -631,6 +659,62 @@ pub enum PermissionDecl {
         label: String,
     },
 }
+
+/// (모듈 `files` 2판) `files` 권한이 가리키는 범위.
+///
+/// `pc`의 규칙:
+/// - 읽기 전용이다(`access: read`). 지금은 `explorer` 블록의 `root`만 이 권한을 가리킬 수 있다(검사기가 거부).
+/// - 이 기기에서 이 앱에 처음 쓸 때 허용을 받는다(`files.allow_pc`). 허용 전의 `files.*`는 `not_granted`다.
+/// - 경로의 첫 마디는 뿌리의 id([`PcRootKind`])이고 그 아래는 [`FileRef`]의 경로 규칙을 따른다. 빈 경로는 내 PC 자체이고
+///   `files.list`는 뿌리들을 낸다(알려진 폴더 먼저, 그다음 볼륨, 각각 이 기기가 준 순서). 뿌리에 없는 첫 마디는
+///   `not_found`다. 창 상태에 이 경로를 두므로 다른 PC에서도 같은 알려진 폴더 아래를 연다(없으면 `not_found`).
+/// - 코어는 이 쉘 자신의 데이터 폴더(기기 토큰, 로그인 정보) 안을 가리키는 경로를 `permission_denied`로 거부하고,
+///   목록에서도 뺀다.
+/// - Windows에서는 숨김이나 시스템 속성이 있는 항목을 목록에서 뺀다(`$Recycle.Bin`, `System Volume Information`,
+///   `pagefile.sys`, 문서 폴더의 `My Music` 같은 연결점). 이 규칙은 `folder` 범위의 목록에도 같다.
+/// - 탐색기가 이 범위의 파일을 열면(`files.open`) 여는 앱의 창에는 그 파일이 든 폴더를 고른 것으로 두고, 경로는
+///   파일 이름이다. 여는 앱은 PC 전체를 받지 않는다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum FilesScope {
+    /// 기기마다 고르는 폴더 하나(1판부터의 뜻).
+    #[default]
+    Folder,
+    /// 이 PC 전체(읽기만).
+    Pc,
+}
+
+impl FilesScope {
+    pub fn is_folder(&self) -> bool {
+        matches!(self, FilesScope::Folder)
+    }
+}
+
+/// (계약 14판) 내 PC 뿌리의 종류. 뿌리 하나는 id(경로의 첫 마디), 종류, 화면 이름, 이 기기의 절대 경로이고,
+/// 코어의 호스트가 이 기기에서 찾아 준다(절대 경로는 화면과 서버에 보내지 않는다).
+/// - 알려진 폴더: id는 [`PC_KNOWN_FOLDERS`]의 id, 이름은 그 표의 이름.
+/// - 볼륨: Windows는 id가 드라이브 글자 하나(대문자, 예: `C`)이고 이름은 「볼륨 이름 (C:)」, 볼륨 이름이 없으면
+///   「로컬 디스크 (C:)」다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum PcRootKind {
+    /// 사용자의 알려진 폴더(바탕 화면, 문서 등).
+    Known,
+    /// 드라이브나 볼륨.
+    Volume,
+}
+
+/// (계약 14판) 내 PC에 보일 알려진 폴더의 id와 이 쉘이 쓰는 이름, 이 순서로 보인다. 이 기기에 없는 것은 뺀다.
+pub const PC_KNOWN_FOLDERS: &[(&str, &str)] = &[
+    ("desktop", "바탕 화면"),
+    ("documents", "문서"),
+    ("downloads", "다운로드"),
+    ("pictures", "사진"),
+    ("music", "음악"),
+    ("videos", "동영상"),
+];
 
 impl PermissionDecl {
     pub fn id(&self) -> &str {
@@ -1539,7 +1623,16 @@ pub enum CoreRequest {
         window_id: String,
         permission: String,
     },
+    /// (계약 14판) 창의 앱에 `scope: pc` 권한 하나를 이 기기에서 허용한다([`PcAccess`]). 그 앱의 모든 창이 쓴다.
+    /// 권한이 `pc` 범위가 아니면 `invalid_request`. 이미 허용했으면 그대로 둔다. 응답은 허용 기록이고
+    /// `state.changed`가 따라온다(이미 있었으면 없다).
+    #[serde(rename = "files.allow_pc")]
+    FilesAllowPc {
+        window_id: String,
+        permission: String,
+    },
     /// 폴더 안 바로 아래 항목. 이름이 `.`로 시작하는 항목은 뺀다. 폴더 먼저, 그다음 이름순(대소문자 무시).
+    /// `scope: pc` 권한의 빈 `dir`은 내 PC의 뿌리들이다([`FilesScope`]).
     #[serde(rename = "files.list")]
     FilesList {
         window_id: String,
@@ -1580,6 +1673,9 @@ pub enum CoreRequest {
     ///   (탐색기가 read여도 편집기는 readwrite로 연다). 사용자가 그 파일을 그 앱으로 열겠다고 고른 것이기 때문이다.
     /// - 탐색기 창에 폴더를 아직 안 골랐으면 `not_granted`, 없는 파일이면 `not_found`, 폴더면 `invalid_request`,
     ///   폴더 밖이면 `path_outside_root`.
+    /// - (계약 14판) 탐색기의 권한이 `scope: pc`면 위의 「탐색기와 같은 폴더」는 그 파일이 든 폴더(절대 경로)이고,
+    ///   여는 앱의 `opens.state`에 쓰는 경로는 파일 이름이다. 허용 전이면 `not_granted`, 내 PC 자체나 뿌리에 없는
+    ///   첫 마디면 `not_found`다.
     /// 응답은 연 창(또는 올린 창)이다. `state.changed`가 따라온다.
     #[serde(rename = "files.open")]
     FilesOpen {
@@ -1928,6 +2024,8 @@ pub enum CoreReply {
 
     #[serde(rename = "files.pick_folder")]
     FilesPickFolder { grant: Option<Grant> },
+    #[serde(rename = "files.allow_pc")]
+    FilesAllowPc { access: PcAccess },
     #[serde(rename = "files.list")]
     FilesList { entries: Vec<FileEntry> },
     #[serde(rename = "files.read")]
@@ -2150,6 +2248,11 @@ pub struct FileEntry {
     pub size: u64,
     /// (8판) 마지막으로 바뀐 시각(RFC 3339 UTC, 초까지, 예: `2026-10-30T01:02:03Z`). 읽지 못하면 빈 문자열.
     pub modified: String,
+    /// (계약 14판) `scope: pc`의 내 PC 목록(빈 경로)에서만 붙는 뿌리의 종류. 그때 `path`는 뿌리의 id이고
+    /// `name`은 뿌리의 화면 이름, `kind`는 `dir`, `size`는 0, `modified`는 빈 문자열이다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub root_kind: Option<PcRootKind>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -2247,7 +2350,7 @@ pub enum ErrorCode {
     UnsupportedApp,
     /// 창의 앱이 선언하지 않은 권한이거나 접근 수준이 모자라다(read 권한으로 쓰기).
     PermissionDenied,
-    /// 선언한 권한이지만 이 기기에서 아직 폴더를 고르지 않았다.
+    /// 선언한 권한이지만 이 기기에서 아직 폴더를 고르지 않았다(`scope: pc`면 아직 허용하지 않았다).
     NotGranted,
     /// 경로가 고른 폴더 밖을 가리킨다.
     PathOutsideRoot,
@@ -2889,7 +2992,7 @@ mod tests {
         assert!(!current.renders(&unknown_module));
         assert_eq!(
             serde_json::to_string(&current).unwrap(),
-            r#"{"blocks":7,"modules":{"agent":3,"connection":2,"files":1,"storage":2,"web":1}}"#
+            r#"{"blocks":7,"modules":{"agent":3,"connection":2,"files":2,"storage":2,"web":1}}"#
         );
         // 4판 쉘(v0.4.x)은 5판 필드를 쓴 탐색기를 받지 않는다.
         let explorer = validate::parse_app_definition(&example("explorer.json")).unwrap();
@@ -2899,6 +3002,106 @@ mod tests {
         };
         assert!(!four.renders(&explorer.requires));
         assert!(current.renders(&explorer.requires));
+        // files 1판 쉘(v0.5.0 이하)은 내 PC 범위의 탐색기를 받지 않는다.
+        let pc = validate::parse_app_definition(PC_EXPLORER).unwrap();
+        let mut files_one = Supported::current();
+        files_one.modules.insert("files".into(), 1);
+        assert!(!files_one.renders(&pc.requires));
+        assert!(current.renders(&pc.requires));
+    }
+
+    /// 내 PC 범위의 탐색기(계약 14판). 구현이 들어오면 examples/explorer.json이 이 모양이 된다.
+    const PC_EXPLORER: &str = r#"{
+  "id": "explorer",
+  "name": "탐색기",
+  "requires": { "blocks": 5, "modules": { "files": 2 } },
+  "permissions": [
+    { "module": "files", "id": "pc", "access": "read", "label": "내 PC", "scope": "pc" }
+  ],
+  "state": { "folder": "", "view": "icons" },
+  "ui": {
+    "type": "explorer",
+    "root": { "permission": "pc" },
+    "folder": { "state": "folder" },
+    "on_folder": { "set_state": "folder" },
+    "view": { "state": "view" },
+    "on_view": { "set_state": "view" }
+  }
+}"#;
+
+    #[test]
+    fn files_pc_scope_rules() {
+        let explorer = PC_EXPLORER.to_string();
+        let definition = validate::parse_app_definition(&explorer).expect("내 PC 탐색기");
+        assert!(matches!(
+            &definition.permissions[0],
+            PermissionDecl::Files {
+                scope: FilesScope::Pc,
+                access: FileAccess::Read,
+                ..
+            }
+        ));
+        // scope는 files 2판이 필요하다.
+        rejected(
+            &explorer.replace(r#""files": 2"#, r#""files": 1"#),
+            "files 모듈 2판",
+        );
+        // pc 범위는 읽기만.
+        rejected(
+            &explorer.replace(r#""access": "read""#, r#""access": "readwrite""#),
+            "access가 read",
+        );
+        // explorer의 root 말고는 pc 범위를 가리킬 수 없다.
+        let tree = r#"{
+            "id": "tree", "name": "트리",
+            "requires": { "blocks": 1, "modules": { "files": 2 } },
+            "permissions": [{ "module": "files", "id": "pc", "access": "read", "label": "내 PC", "scope": "pc" }],
+            "state": { "file": null },
+            "ui": { "type": "file_tree", "root": { "permission": "pc" }, "selected": { "state": "file" }, "on_select": { "set_state": "file" } }
+        }"#;
+        rejected(tree, "explorer의 root에만");
+        let opens = explorer.replace(
+            r#""state": { "folder": "", "view": "icons" },"#,
+            r#""state": { "folder": "", "view": "icons", "file": null },
+  "opens": { "extensions": ["md"], "permission": "pc", "state": "file" },"#,
+        );
+        rejected(&opens, "opens에 쓸 수 없습니다");
+        // scope가 없으면 folder이고, 직렬화에도 나오지 않는다(1판 정의 그대로).
+        let three = r#"{"module":"files","id":"folder","access":"read","label":"볼 폴더"}"#;
+        let permission: PermissionDecl = serde_json::from_str(three).unwrap();
+        assert!(matches!(
+            permission,
+            PermissionDecl::Files {
+                scope: FilesScope::Folder,
+                ..
+            }
+        ));
+        assert_eq!(serde_json::to_string(&permission).unwrap(), three);
+        assert_eq!(PC_KNOWN_FOLDERS[1], ("documents", "문서"));
+    }
+
+    #[test]
+    fn files_allow_pc_round_trips() {
+        let request: CoreRequest =
+            serde_json::from_str(r#"{"op":"files.allow_pc","window_id":"w","permission":"pc"}"#).unwrap();
+        assert!(matches!(request, CoreRequest::FilesAllowPc { .. }));
+        let entry = FileEntry {
+            name: "문서".into(),
+            path: "documents".into(),
+            kind: FileKind::Dir,
+            size: 0,
+            modified: String::new(),
+            root_kind: Some(PcRootKind::Known),
+        };
+        assert_eq!(
+            serde_json::to_value(&entry).unwrap()["root_kind"],
+            serde_json::json!("known")
+        );
+        let device: DeviceState = serde_json::from_str(
+            r#"{"active_workspace_id":null,"active_desktop_ids":{},"grants":[]}"#,
+        )
+        .unwrap();
+        assert!(device.pc_access.is_empty());
     }
 
     #[test]
