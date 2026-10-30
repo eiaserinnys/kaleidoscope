@@ -78,19 +78,23 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             {
                 return Err(error::make(ErrorCode::InvalidRequest));
             }
-            inner
-                .registry
-                .agent_send(
-                    &link_file.server_url,
-                    &link_file.token,
-                    &workspace_id,
-                    &AgentSendRequest {
-                        text: text.to_string(),
-                        attachments,
-                    },
-                )
-                .map(|()| CoreReply::AgentSend {})
-                .map_err(|registry_error| agent_error_to_core(inner, &link_file, registry_error))
+            let (attachments, sent_visuals) =
+                crate::share::capture_for_agent_send(inner, &workspace_id, &attachments);
+            match inner.registry.agent_send(
+                &link_file.server_url,
+                &link_file.token,
+                &workspace_id,
+                &AgentSendRequest {
+                    text: text.to_string(),
+                    attachments,
+                },
+            ) {
+                Ok(()) => {
+                    crate::share::mark_sent_visuals(inner, sent_visuals);
+                    Ok(CoreReply::AgentSend {})
+                }
+                Err(registry_error) => Err(agent_error_to_core(inner, &link_file, registry_error)),
+            }
         }
         CoreRequest::AgentAttachment { item_id, index, .. } => {
             if !is_item_id(&item_id) {

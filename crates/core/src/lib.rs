@@ -14,6 +14,7 @@ mod media;
 mod oauth;
 mod registry_client;
 mod registry_events;
+mod share;
 mod state_commands;
 mod storage;
 mod sync_state;
@@ -40,6 +41,11 @@ use registry_client::{HttpRegistryClient, RegistryClient};
 
 pub use kaleidoscope_contract;
 
+/// 쉘 PNG에서 창이 보이는 자리를 잘라 같이 보기 첨부용 PNG로 만든다.
+pub fn crop_share_capture_png(bytes: &[u8], bounds: Rect, scale_factor: f64) -> Option<Vec<u8>> {
+    share::prepare_png(bytes, Some((bounds, scale_factor))).map(|(png, _)| png)
+}
+
 pub trait Host: Send + Sync + 'static {
     /// 폴더 고르기 창을 띄우고 고른 폴더의 절대 경로를 돌려준다. 취소하면 None이다.
     fn pick_folder(&self) -> Option<PathBuf>;
@@ -59,6 +65,10 @@ pub trait WebHost: Send + Sync + 'static {
     fn navigate(&self, window_id: &str, url: &str) -> Result<(), CoreError>;
     fn history(&self, window_id: &str, action: WebHistoryAction) -> Result<(), CoreError>;
     fn capture(&self, window_id: &str) -> Result<Option<Vec<u8>>, CoreError>;
+    /// 쉘 메인 웹뷰의 PNG와 CSS px당 픽셀 배율. 개발용 호스트는 캡처를 생략할 수 있다.
+    fn capture_shell(&self) -> Result<Option<(Vec<u8>, f64)>, CoreError> {
+        Ok(None)
+    }
     fn detach(&self, window_id: &str) -> Result<(), CoreError>;
 }
 
@@ -92,6 +102,7 @@ pub(crate) struct CoreState {
     pub(crate) device: DeviceState,
     pub(crate) link: LinkStatus,
     pub(crate) sync: sync_state::SyncState,
+    pub(crate) share: share::ShareState,
 }
 
 pub(crate) struct Inner {
@@ -186,6 +197,7 @@ impl Core {
             device: storage::load_device(&config.data_dir)?,
             sync: sync_state::load(&config.data_dir, link_file.as_ref())?,
             link,
+            share: share::ShareState::default(),
         };
         let login_store = Arc::new(logins::Logins::open(&config.data_dir)?);
 
@@ -310,14 +322,14 @@ impl Core {
             | CoreRequest::WebHistory { .. }
             | CoreRequest::WebCapture { .. }
             | CoreRequest::WebDetach { .. }) => web::handle(&self.inner, request),
-            CoreRequest::ShareSet { .. } | CoreRequest::ShareView { .. } => Err(error::with_message(
-                kaleidoscope_contract::ErrorCode::Unavailable,
-                "같이 보기는 아직 이 코어에 없습니다",
-            )),
             CoreRequest::UpdateRestart {} => Err(error::with_message(
                 kaleidoscope_contract::ErrorCode::Unavailable,
                 "쉘 업데이트는 아직 이 코어에 없습니다",
             )),
+            CoreRequest::ShareSet { window_id, on } => share::set(&self.inner, &window_id, on),
+            CoreRequest::ShareView { window_id, view } => {
+                share::view(&self.inner, &window_id, view)
+            }
             CoreRequest::DataAttach { window_id } => data_runtime::attach(&self.inner, &window_id),
             CoreRequest::DataDetach { window_id } => data_runtime::detach(&self.inner, &window_id),
             CoreRequest::DataAct {
@@ -480,12 +492,19 @@ impl Core {
 
 impl Inner {
     pub(crate) fn emit(self: &Arc<Self>, event: &CoreEvent) {
-        if matches!(event, CoreEvent::StateChanged { .. }) {
+        let event = if matches!(event, CoreEvent::StateChanged { .. }) {
+            share::state_changed(self);
             self.layout_signal.notify();
-        }
+            let state = self.state.lock().unwrap();
+            CoreEvent::StateChanged {
+                snapshot: snapshot(&state),
+            }
+        } else {
+            event.clone()
+        };
         let listeners = self.listeners.lock().unwrap().clone();
         for listener in listeners {
-            listener(event);
+            listener(&event);
         }
         if matches!(event, CoreEvent::StateChanged { .. }) {
             data_runtime::state_changed(self);
@@ -499,8 +518,13 @@ pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
         device: state.device.clone(),
         supported: kaleidoscope_contract::Supported::current(),
         link: state.link.clone(),
-        // 같이 보기는 코어 구현(카드 #814)이 채운다.
-        sharing: Vec::new(),
+        sharing: state
+            .share
+            .sharing
+            .iter()
+            .filter(|id| state.shared.windows.iter().any(|window| &window.id == *id))
+            .cloned()
+            .collect(),
         // 쉘 업데이트는 앱 크레이트의 업데이터 구현(카드 #819)이 채운다.
         update: kaleidoscope_contract::UpdateStatus::Unavailable {},
     }

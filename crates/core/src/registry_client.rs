@@ -7,9 +7,9 @@ use kaleidoscope_contract::registry::{
     device_connection_request_path, AgentAttachmentReply, AgentCreateRequest, AgentSendRequest,
     ConnectionReply, ConnectionRequest, DeviceAgentReply, DeviceEvent, DeviceLayout,
     DeviceUploadRequest, LayoutChanges, PairPollReply, PairPollRequest, PairStartReply,
-    PairStartRequest, RegistryApp, DEVICE_APPS_PATH, DEVICE_EVENTS_PATH,
-    DEVICE_LAYOUT_CHANGES_PATH, DEVICE_LAYOUT_PATH, PAIR_POLL_PATH, PAIR_START_PATH,
-    REGISTRY_HEADER, REGISTRY_VERSION,
+    PairStartRequest, RegistryApp, ShareUpload, DEVICE_APPS_PATH, DEVICE_EVENTS_PATH,
+    DEVICE_LAYOUT_CHANGES_PATH, DEVICE_LAYOUT_PATH, DEVICE_SHARES_PATH, PAIR_POLL_PATH,
+    PAIR_START_PATH, REGISTRY_HEADER, REGISTRY_VERSION,
 };
 use kaleidoscope_contract::CoreError;
 
@@ -85,6 +85,21 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         server_url: &str,
         token: &str,
         layout: &DeviceLayout,
+    ) -> Result<(), RegistryError>;
+
+    fn put_share(
+        &self,
+        server_url: &str,
+        token: &str,
+        window_id: &str,
+        share: &ShareUpload,
+    ) -> Result<(), RegistryError>;
+
+    fn delete_share(
+        &self,
+        server_url: &str,
+        token: &str,
+        window_id: &str,
     ) -> Result<(), RegistryError>;
 
     fn push_layout_changes(
@@ -329,6 +344,38 @@ impl RegistryClient for HttpRegistryClient {
             check_status(status, &body)?;
         }
         Ok(())
+    }
+
+    fn put_share(
+        &self,
+        server_url: &str,
+        token: &str,
+        window_id: &str,
+        share: &ShareUpload,
+    ) -> Result<(), RegistryError> {
+        let response = self
+            .requests()?
+            .put(format!("{server_url}{DEVICE_SHARES_PATH}/{window_id}"))
+            .bearer_auth(token)
+            .json(share)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        check_status(response.status(), &response.bytes().unwrap_or_default())
+    }
+
+    fn delete_share(
+        &self,
+        server_url: &str,
+        token: &str,
+        window_id: &str,
+    ) -> Result<(), RegistryError> {
+        let response = self
+            .requests()?
+            .delete(format!("{server_url}{DEVICE_SHARES_PATH}/{window_id}"))
+            .bearer_auth(token)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        check_status(response.status(), &response.bytes().unwrap_or_default())
     }
 
     fn open_events(

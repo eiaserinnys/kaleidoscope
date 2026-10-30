@@ -45,6 +45,16 @@ fn png_bytes(image: Option<&str>) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+fn png_dimensions(bytes: &[u8]) -> Result<(u32, u32), String> {
+    if bytes.len() < 24 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err("invalid PNG".into());
+    }
+    Ok((
+        u32::from_be_bytes(bytes[16..20].try_into().unwrap()),
+        u32::from_be_bytes(bytes[20..24].try_into().unwrap()),
+    ))
+}
+
 fn ipc_denied(url: &str) -> Result<(), String> {
     if url.ends_with("#ipc-denied") {
         Ok(())
@@ -279,18 +289,51 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
     })?;
     record(log, "child.ipc", json!({"url": page.url}))?;
     ipc_denied(&page.url)?;
-
-    let editor_id = match call(
+    let (editor_id, editor_bounds) = match call(
         core,
         CoreRequest::WindowOpen {
             desktop_id,
             app_id: "md-editor".into(),
-            rect: None,
+            rect: Some(Rect {
+                x: 48,
+                y: 48,
+                width: 500,
+                height: 300,
+            }),
         },
     )? {
-        CoreReply::WindowOpen { window } => window.id,
+        CoreReply::WindowOpen { window } => (window.id, window.rect),
         reply => return Err(format!("unexpected editor response: {reply:?}")),
     };
+    thread::sleep(Duration::from_millis(800));
+    #[cfg(windows)]
+    {
+        use kaleidoscope_core::WebHost;
+        let host = super::web_host::TauriWebHost::new(app.clone());
+        let (shell, scale) = host
+            .capture_shell()
+            .map_err(|error| error.message)?
+            .ok_or("capture_shell returned no image")?;
+        let cropped = kaleidoscope_core::crop_share_capture_png(&shell, editor_bounds, scale)
+            .ok_or("could not crop share capture")?;
+        let (width, height) = png_dimensions(&cropped)?;
+        let expected_width = (editor_bounds.width as f64 * scale).round() as i64;
+        let expected_height = (editor_bounds.height as f64 * scale).round() as i64;
+        if (width as i64 - expected_width).abs() > 2 || (height as i64 - expected_height).abs() > 2
+        {
+            return Err(format!(
+                "share capture size {width}x{height} differs from window bounds"
+            ));
+        }
+        fs::write(out.join("share-capture.png"), &cropped).map_err(|error| error.to_string())?;
+        record(
+            log,
+            "share.capture_shell",
+            json!({
+                "file": "share-capture.png", "width": width, "height": height, "scale": scale
+            }),
+        )?;
+    }
     app.get_webview(&format!("web-{window_id}"))
         .ok_or("child webview disappeared before folder selection")?;
     record(
@@ -329,6 +372,12 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
         log,
         "files.pick_folder",
         json!({"window_id": editor_id, "permission": "docs", "granted": true}),
+    )?;
+    call(
+        core,
+        CoreRequest::WindowClose {
+            window_id: window_id.clone(),
+        },
     )?;
     if let Err(error) = ui::run(app, core, out, log) {
         let _ = record(log, "ui.error", json!({"message": error}));

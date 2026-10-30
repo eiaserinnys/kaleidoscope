@@ -50,6 +50,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             if let Some(event) = state_event {
                 inner.emit(&event);
             }
+            crate::share::on_connected(inner);
             crate::layout_reporter::start(Arc::clone(inner), generation, epoch);
         }
         DeviceEvent::AppPublished {

@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use kaleidoscope_contract::registry::{
     AgentAttachmentReply, AgentCreateRequest, AgentSendRequest, DeviceAgentReply, DeviceEvent,
     DeviceLayout, DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply,
-    PairStartRequest, RegistryApp,
+    PairStartRequest, RegistryApp, ShareUpload,
 };
 use kaleidoscope_contract::{
     AgentInfo, AgentUpload, App, AppVersion, CoreEvent, CoreReply, CoreRequest, ErrorCode,
@@ -29,6 +29,67 @@ mod layout_sync_tests;
 
 const MD_EDITOR: &str = include_str!("../../../examples/md-editor.json");
 const MD_VIEWER: &str = include_str!("../../../examples/md-viewer.json");
+const WEB_BROWSER: &str = include_str!("../../../examples/web-browser.json");
+
+struct CaptureTestHost {
+    png: Mutex<Vec<u8>>,
+    web_captures: AtomicUsize,
+    shell_captures: AtomicUsize,
+}
+
+impl Host for CaptureTestHost {
+    fn pick_folder(&self) -> Option<PathBuf> {
+        None
+    }
+    fn web(&self) -> Option<&dyn crate::WebHost> {
+        Some(self)
+    }
+}
+
+impl crate::WebHost for CaptureTestHost {
+    fn attach(&self, _: &str, _: &str) -> Result<kaleidoscope_contract::WebPage, CoreError> {
+        unreachable!()
+    }
+    fn place(&self, _: &str, _: Option<Rect>) -> Result<(), CoreError> {
+        Ok(())
+    }
+    fn navigate(&self, _: &str, _: &str) -> Result<(), CoreError> {
+        Ok(())
+    }
+    fn history(
+        &self,
+        _: &str,
+        _: kaleidoscope_contract::WebHistoryAction,
+    ) -> Result<(), CoreError> {
+        Ok(())
+    }
+    fn capture(&self, _: &str) -> Result<Option<Vec<u8>>, CoreError> {
+        self.web_captures.fetch_add(1, Ordering::SeqCst);
+        Ok(Some(self.png.lock().unwrap().clone()))
+    }
+    fn capture_shell(&self) -> Result<Option<(Vec<u8>, f64)>, CoreError> {
+        self.shell_captures.fetch_add(1, Ordering::SeqCst);
+        Ok(Some((self.png.lock().unwrap().clone(), 1.0)))
+    }
+    fn detach(&self, _: &str) -> Result<(), CoreError> {
+        Ok(())
+    }
+}
+
+fn test_png(width: u32, height: u32) -> Vec<u8> {
+    test_png_with_blue(width, height, 80)
+}
+
+fn test_png_with_blue(width: u32, height: u32, blue: u8) -> Vec<u8> {
+    let image = image::RgbaImage::from_fn(width, height, |x, y| {
+        image::Rgba([x as u8, y as u8, blue, 255])
+    });
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut bytes, image::ImageFormat::Png)
+        .unwrap();
+    bytes.into_inner()
+}
 
 #[derive(Default)]
 struct FakeHost {
@@ -87,6 +148,505 @@ fn snapshot(core: &Core) -> ShellSnapshot {
         CoreReply::StateGet { snapshot } => snapshot,
         reply => panic!("unexpected reply: {reply:?}"),
     }
+}
+
+#[test]
+fn share_set_updates_snapshot_once_and_share_view_validates_size() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(&temp.path().join("data"), vec![MD_EDITOR.into()], &host);
+    let (_, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        let _ = tx.send(event.clone());
+    }));
+
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    assert_eq!(snapshot(&core).sharing, vec![window_id.clone()]);
+    assert!(matches!(
+        rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+        CoreEvent::StateChanged { .. }
+    ));
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    assert!(rx.try_recv().is_err());
+
+    let oversized_view = || kaleidoscope_contract::VisibleView {
+        text: "x".repeat(kaleidoscope_contract::SHARE_TEXT_MAX_BYTES + 1),
+        visual: false,
+        bounds: Rect {
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+        },
+    };
+    expect_error(
+        core.handle(CoreRequest::ShareView {
+            window_id: "missing-window".into(),
+            view: oversized_view(),
+        }),
+        ErrorCode::NotFound,
+    );
+    expect_error(
+        core.handle(CoreRequest::ShareView {
+            window_id: window_id.clone(),
+            view: oversized_view(),
+        }),
+        ErrorCode::InvalidRequest,
+    );
+
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: false,
+    })
+    .unwrap();
+    assert!(snapshot(&core).sharing.is_empty());
+    assert!(matches!(
+        rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+        CoreEvent::StateChanged { .. }
+    ));
+    core.handle(CoreRequest::ShareView {
+        window_id,
+        view: oversized_view(),
+    })
+    .unwrap();
+}
+
+#[test]
+fn share_view_uploads_once_and_unlink_clears_server_but_keeps_local_toggle() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(
+        &temp.path().join("data"),
+        vec![MD_EDITOR.into()],
+        &host,
+        client.clone(),
+    );
+    mark_connected(&core);
+    let (_, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "md-editor");
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    let view = kaleidoscope_contract::VisibleView {
+        text: "visible text".into(),
+        visual: false,
+        bounds: Rect {
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 100,
+        },
+    };
+    core.handle(CoreRequest::ShareView {
+        window_id: window_id.clone(),
+        view: view.clone(),
+    })
+    .unwrap();
+    core.handle(CoreRequest::ShareView {
+        window_id: window_id.clone(),
+        view,
+    })
+    .unwrap();
+    assert_eq!(client.share_puts.lock().unwrap().len(), 1);
+    assert_eq!(
+        client.share_puts.lock().unwrap()[0].1.workspace_id,
+        active_ids(&core).0
+    );
+
+    core.handle(CoreRequest::LinkUnlink {}).unwrap();
+    assert_eq!(
+        *client.share_deletes.lock().unwrap(),
+        vec![window_id.clone()]
+    );
+    assert_eq!(snapshot(&core).sharing, vec![window_id]);
+}
+
+#[test]
+fn share_offline_delete_replays_on_reconnect_and_closed_window_is_removed() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(
+        &temp.path().join("data"),
+        vec![MD_EDITOR.into()],
+        &host,
+        Arc::clone(&client),
+    );
+    let (_, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "md-editor");
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: false,
+    })
+    .unwrap();
+    assert!(client.share_deletes.lock().unwrap().is_empty());
+    mark_connected(&core);
+    crate::share::on_connected(&core.inner);
+    assert_eq!(
+        *client.share_deletes.lock().unwrap(),
+        vec![window_id.clone()]
+    );
+
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    let view = kaleidoscope_contract::VisibleView {
+        text: "latest".into(),
+        visual: false,
+        bounds: Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 80,
+        },
+    };
+    core.handle(CoreRequest::ShareView {
+        window_id: window_id.clone(),
+        view,
+    })
+    .unwrap();
+    assert_eq!(client.share_puts.lock().unwrap().len(), 1);
+    crate::share::on_connected(&core.inner);
+    assert_eq!(client.share_puts.lock().unwrap().len(), 2);
+
+    let workspace_id = active_ids(&core).0;
+    let desktop = match core
+        .handle(CoreRequest::DesktopCreate {
+            workspace_id,
+            name: "삭제 대상".into(),
+        })
+        .unwrap()
+    {
+        CoreReply::DesktopCreate { desktop } => desktop,
+        reply => panic!("unexpected reply: {reply:?}"),
+    };
+    let desktop_window = open_window(&core, &desktop.id, "md-editor");
+    core.handle(CoreRequest::ShareSet {
+        window_id: desktop_window.clone(),
+        on: true,
+    })
+    .unwrap();
+    core.handle(CoreRequest::DesktopDelete {
+        desktop_id: desktop.id,
+    })
+    .unwrap();
+    assert!(!snapshot(&core).sharing.contains(&desktop_window));
+    assert!(client
+        .share_deletes
+        .lock()
+        .unwrap()
+        .contains(&desktop_window));
+
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    core.handle(CoreRequest::WindowClose {
+        window_id: window_id.clone(),
+    })
+    .unwrap();
+    assert!(snapshot(&core).sharing.is_empty());
+    assert_eq!(
+        client.share_deletes.lock().unwrap().last(),
+        Some(&window_id)
+    );
+}
+
+#[test]
+fn agent_send_captures_web_and_shell_views_then_suppresses_identical_images() {
+    use base64::Engine as _;
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(CaptureTestHost {
+        png: Mutex::new(test_png(8, 8)),
+        web_captures: AtomicUsize::new(0),
+        shell_captures: AtomicUsize::new(0),
+    });
+    let client = registry_client();
+    let core = Core::open_with_client(
+        CoreConfig {
+            data_dir: temp.path().join("data"),
+            seed_definitions: vec![MD_EDITOR.into(), WEB_BROWSER.into()],
+            server_url: "http://127.0.0.1:4219".into(),
+            device_name: "test-device".into(),
+        },
+        host.clone(),
+        client.clone(),
+    )
+    .unwrap();
+    mark_connected(&core);
+    let (workspace_id, desktop_id) = active_ids(&core);
+    let editor = open_window(&core, &desktop_id, "md-editor");
+    let browser = open_window(&core, &desktop_id, "web-browser");
+    for id in [&editor, &browser] {
+        core.handle(CoreRequest::ShareSet {
+            window_id: id.clone(),
+            on: true,
+        })
+        .unwrap();
+        core.handle(CoreRequest::ShareView {
+            window_id: id.clone(),
+            view: kaleidoscope_contract::VisibleView {
+                text: "[이미지: 화면]".into(),
+                visual: true,
+                bounds: Rect {
+                    x: 1,
+                    y: 1,
+                    width: 4,
+                    height: 4,
+                },
+            },
+        })
+        .unwrap();
+    }
+    let extra_desktop = match core
+        .handle(CoreRequest::DesktopCreate {
+            workspace_id: workspace_id.clone(),
+            name: "비활성 데스크톱".into(),
+        })
+        .unwrap()
+    {
+        CoreReply::DesktopCreate { desktop } => desktop,
+        reply => panic!("unexpected reply: {reply:?}"),
+    };
+    core.handle(CoreRequest::DesktopActivate {
+        desktop_id: desktop_id.clone(),
+    })
+    .unwrap();
+    let extra_window = open_window(&core, &extra_desktop.id, "md-editor");
+    core.handle(CoreRequest::DesktopActivate {
+        desktop_id: desktop_id.clone(),
+    })
+    .unwrap();
+    core.handle(CoreRequest::ShareSet {
+        window_id: extra_window.clone(),
+        on: true,
+    })
+    .unwrap();
+    core.handle(CoreRequest::ShareView {
+        window_id: extra_window,
+        view: kaleidoscope_contract::VisibleView {
+            text: "[이미지: 다른 데스크톱]".into(),
+            visual: true,
+            bounds: Rect {
+                x: 1,
+                y: 1,
+                width: 4,
+                height: 4,
+            },
+        },
+    })
+    .unwrap();
+    let send = || CoreRequest::AgentSend {
+        workspace_id: workspace_id.clone(),
+        text: "look".into(),
+        attachments: vec![],
+    };
+    core.handle(send()).unwrap();
+    let first = client.agent_sends.lock().unwrap().last().unwrap().1.clone();
+    assert_eq!(first.attachments.len(), 2);
+    assert!(first.attachments.iter().all(|attachment| attachment
+        .name
+        .starts_with(kaleidoscope_contract::SHARE_CAPTURE_NAME_PREFIX)));
+    let shell = first
+        .attachments
+        .iter()
+        .find(|attachment| attachment.name.contains("마크다운 편집기"))
+        .unwrap();
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(&shell.data_base64)
+        .unwrap();
+    assert_eq!(
+        (
+            u32::from_be_bytes(decoded[16..20].try_into().unwrap()),
+            u32::from_be_bytes(decoded[20..24].try_into().unwrap())
+        ),
+        (4, 4)
+    );
+    assert_eq!(host.shell_captures.load(Ordering::SeqCst), 1);
+    assert_eq!(host.web_captures.load(Ordering::SeqCst), 1);
+
+    core.handle(send()).unwrap();
+    assert!(client
+        .agent_sends
+        .lock()
+        .unwrap()
+        .last()
+        .unwrap()
+        .1
+        .attachments
+        .is_empty());
+    let captures_before = (
+        host.web_captures.load(Ordering::SeqCst),
+        host.shell_captures.load(Ordering::SeqCst),
+    );
+    let capped = CoreRequest::AgentSend {
+        workspace_id: workspace_id.clone(),
+        text: "with files".into(),
+        attachments: (0..kaleidoscope_contract::AGENT_ATTACHMENTS_MAX)
+            .map(|_| AgentUpload {
+                name: "file.txt".into(),
+                mime: "text/plain".into(),
+                data_base64: "AQ==".into(),
+            })
+            .collect(),
+    };
+    core.handle(capped).unwrap();
+    assert_eq!(
+        client
+            .agent_sends
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .1
+            .attachments
+            .len(),
+        kaleidoscope_contract::AGENT_ATTACHMENTS_MAX
+    );
+    assert_eq!(
+        captures_before,
+        (
+            host.web_captures.load(Ordering::SeqCst),
+            host.shell_captures.load(Ordering::SeqCst)
+        )
+    );
+
+    *host.png.lock().unwrap() = test_png_with_blue(8, 8, 81);
+    client
+        .agent_send_replies
+        .lock()
+        .unwrap()
+        .push_back(Err(RegistryError::Failure("temporary send failure".into())));
+    assert!(core.handle(send()).is_err());
+    assert_eq!(
+        client
+            .agent_sends
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .1
+            .attachments
+            .len(),
+        2
+    );
+    core.handle(send()).unwrap();
+    assert_eq!(
+        client
+            .agent_sends
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .1
+            .attachments
+            .len(),
+        2
+    );
+    core.handle(send()).unwrap();
+    assert!(client
+        .agent_sends
+        .lock()
+        .unwrap()
+        .last()
+        .unwrap()
+        .1
+        .attachments
+        .is_empty());
+}
+
+#[test]
+fn share_capture_uses_web_view_without_navigation_binding() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(CaptureTestHost {
+        png: Mutex::new(test_png(8, 8)),
+        web_captures: AtomicUsize::new(0),
+        shell_captures: AtomicUsize::new(0),
+    });
+    let client = registry_client();
+    let mut definition: Value = serde_json::from_str(WEB_BROWSER).unwrap();
+    definition["id"] = json!("web-no-navigation");
+    definition["name"] = json!("웹 화면 바인딩 없음");
+    definition["ui"]
+        .as_object_mut()
+        .unwrap()
+        .remove("on_navigate");
+    let definition = serde_json::to_string(&definition).unwrap();
+    let core = Core::open_with_client(
+        CoreConfig {
+            data_dir: temp.path().join("data"),
+            seed_definitions: vec![definition],
+            server_url: "http://127.0.0.1:4219".into(),
+            device_name: "test-device".into(),
+        },
+        host.clone(),
+        client.clone(),
+    )
+    .unwrap();
+    mark_connected(&core);
+    let (workspace_id, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "web-no-navigation");
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    core.handle(CoreRequest::ShareView {
+        window_id,
+        view: kaleidoscope_contract::VisibleView {
+            text: "페이지 모습".into(),
+            visual: true,
+            bounds: Rect {
+                x: 1,
+                y: 1,
+                width: 4,
+                height: 4,
+            },
+        },
+    })
+    .unwrap();
+    core.handle(CoreRequest::AgentSend {
+        workspace_id,
+        text: "look".into(),
+        attachments: vec![],
+    })
+    .unwrap();
+
+    assert_eq!(host.web_captures.load(Ordering::SeqCst), 1);
+    assert_eq!(host.shell_captures.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        client
+            .agent_sends
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .1
+            .attachments
+            .len(),
+        1
+    );
 }
 
 fn active_ids(core: &Core) -> (String, String) {
@@ -151,6 +711,10 @@ struct FakeRegistryClient {
     layout_changes: Mutex<Vec<kaleidoscope_contract::registry::LayoutChanges>>,
     layout_change_replies:
         Mutex<VecDeque<Result<kaleidoscope_contract::registry::LayoutChanges, RegistryError>>>,
+    share_puts: Mutex<Vec<(String, ShareUpload)>>,
+    share_deletes: Mutex<Vec<String>>,
+    share_put_replies: Mutex<VecDeque<Result<(), RegistryError>>>,
+    share_delete_replies: Mutex<VecDeque<Result<(), RegistryError>>>,
     layout_change_pause: Mutex<Option<mpsc::Receiver<()>>>,
     open_calls: AtomicUsize,
     connection_requests: Mutex<Vec<kaleidoscope_contract::registry::ConnectionRequest>>,
@@ -351,6 +915,38 @@ impl RegistryClient for FakeRegistryClient {
     ) -> Result<(), RegistryError> {
         self.layouts.lock().unwrap().push(layout.clone());
         self.layout_replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or(Ok(()))
+    }
+
+    fn put_share(
+        &self,
+        _server_url: &str,
+        _token: &str,
+        window_id: &str,
+        share: &ShareUpload,
+    ) -> Result<(), RegistryError> {
+        self.share_puts
+            .lock()
+            .unwrap()
+            .push((window_id.into(), share.clone()));
+        self.share_put_replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or(Ok(()))
+    }
+
+    fn delete_share(
+        &self,
+        _server_url: &str,
+        _token: &str,
+        window_id: &str,
+    ) -> Result<(), RegistryError> {
+        self.share_deletes.lock().unwrap().push(window_id.into());
+        self.share_delete_replies
             .lock()
             .unwrap()
             .pop_front()
@@ -569,7 +1165,10 @@ fn files_list_reports_size_and_modified_time() {
         CoreReply::FilesList { entries } => entries,
         reply => panic!("unexpected reply: {reply:?}"),
     };
-    let names = entries.iter().map(|entry| entry.name.as_str()).collect::<Vec<_>>();
+    let names = entries
+        .iter()
+        .map(|entry| entry.name.as_str())
+        .collect::<Vec<_>>();
     assert_eq!(names, vec!["notes", "a.md"]);
     assert_eq!(entries[0].size, 0);
     assert_eq!(entries[1].size, 5);
