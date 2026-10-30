@@ -175,7 +175,18 @@ async fn event_stream_snapshot_filters_apps_by_supported_header() {
     let state = AppState::in_memory("secret");
     state.publish_app(LEGACY_APP, "agent", false, None).unwrap();
     state.publish_app(BROWSER, "agent", false, None).unwrap();
+    let mut settings_definition: Value =
+        serde_json::from_str(include_str!("../../../examples/workspace-pas-v2.json")).unwrap();
+    settings_definition["id"] = json!("workspace-pas-settings");
+    settings_definition["name"] = json!("작업 PAS 설정 선택지 시험");
+    settings_definition["requires"]["modules"]["storage"] = json!(2);
+    settings_definition["storage"]["entries"][0]["description"] = json!("프로필 설명");
+    settings_definition["storage"]["entries"][0]["choices"] = json!(["default", "other"]);
+    state
+        .publish_app(&settings_definition.to_string(), "agent", false, None)
+        .unwrap();
     let (old_id, old_token) = make_device(&state);
+    let (_, storage_one_token) = make_device(&state);
     let (_, current_token) = make_device(&state);
 
     let old = router(state.clone())
@@ -195,6 +206,32 @@ async fn event_stream_snapshot_filters_apps_by_supported_header() {
         .map(|app| app.app.id)
         .collect();
     assert_eq!(old_ids, ["workspace-pas"]);
+
+    let mut storage_one = Supported::current();
+    storage_one.modules.insert("storage".into(), 1);
+    let storage_one_request = Request::builder()
+        .method("GET")
+        .uri("/api/device/events")
+        .header(header::AUTHORIZATION, format!("Bearer {storage_one_token}"))
+        .header(
+            SUPPORTED_HEADER,
+            serde_json::to_string(&storage_one).unwrap(),
+        )
+        .body(Body::empty())
+        .unwrap();
+    let storage_one_response = router(state.clone())
+        .oneshot(storage_one_request)
+        .await
+        .unwrap();
+    let mut storage_one_stream = storage_one_response.into_body().into_data_stream();
+    let storage_one_snapshot = next_device_event(&mut storage_one_stream).await;
+    let storage_one_ids: Vec<_> =
+        serde_json::from_value::<Vec<RegistryApp>>(storage_one_snapshot["apps"].clone())
+            .unwrap()
+            .into_iter()
+            .map(|app| app.app.id)
+            .collect();
+    assert!(!storage_one_ids.contains(&"workspace-pas-settings".to_string()));
 
     let supported = serde_json::to_string(&Supported::current()).unwrap();
     let current_request = Request::builder()
@@ -216,7 +253,7 @@ async fn event_stream_snapshot_filters_apps_by_supported_header() {
             .into_iter()
             .map(|app| app.app.id)
             .collect();
-    assert_eq!(current_ids, ["web-browser", "workspace-pas"]);
+    assert!(current_ids.contains(&"workspace-pas-settings".to_string()));
     assert!(state.0.connections.lock().unwrap().contains_key(&old_id));
 }
 

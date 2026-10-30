@@ -629,7 +629,7 @@ pub struct MediaData {
 // 바인딩 자리와 동작 자리
 // ---------------------------------------------------------------------------
 
-/// 앱 정의의 `ui` 안의 모든 바인딩 자리(JSON Pointer)와 바인딩. 트리 순서(앞에서부터, 깊이 우선)다.
+/// 앱 정의의 화면 바인딩 자리(JSON Pointer)와 바인딩. UI 트리 순서 뒤에 저장 설정 선택지를 선언 순서로 둔다.
 /// 1~3판 블록의 상태 참조(`StateRef`)는 바인딩이 아니라 담지 않는다.
 pub fn ui_bindings(definition: &AppDefinition) -> Vec<(String, &Binding)> {
     let mut out = Vec::new();
@@ -638,6 +638,13 @@ pub fn ui_bindings(definition: &AppDefinition) -> Vec<(String, &Binding)> {
             out.push((pointer, binding));
         }
     });
+    if let Some(storage) = &definition.storage {
+        for (index, entry) in storage.entries.iter().enumerate() {
+            if let Some(choices) = &entry.choices {
+                out.push((format!("/storage/entries/{index}/choices"), choices));
+            }
+        }
+    }
     out
 }
 

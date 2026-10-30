@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 11판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 12판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -59,6 +59,18 @@
 //! 모듈 `storage` 1판, `agent` 3판, `connection` 2판, registry 8판. 계정은 서버가 인증 문맥에서 해석하고 기기 계약은
 //! account id를 받지 않는다. 구 `agent.update`와 `workspace_id` 요청 모양은 이행 중 유지한다.
 //! 대화 provider 이벤트는 `conversation.update`로 전달하고 저장소 알림은 metadata만 보낸다.
+//!
+//! # 계약 12판: 모듈 `storage` 2판
+//! 저장 항목은 설정 화면의 보조 글 `description`과 선택지 바인딩 `choices`를 선언할 수 있다.
+//! `description`은 한 줄 120자 이하이며, `choices`는 JSON 설정의 string, nullable string 또는 string 배열에서만 쓴다.
+//! 설정 화면은 앱 창 제목 줄의 「앱 설정」에서 연다. 지금 쓰는 앱 버전에 `presentation: settings`인 항목이 하나 이상 있을 때
+//! 보이며, 선언 순서대로 그린다. 키에 `{workspace_id}`가 없는 항목은 모든 작업 구역에, 있는 항목은 지금 작업 구역에 둔다.
+//! 화면 모양은 쉘이 정한다. Markdown 항목은 저장소 문서 편집기, boolean은 toggle, enum 또는 `choices`가 있는 항목은
+//! select, string과 number, integer는 입력, string 배열은 순서 있는 목록 편집으로 그린다. `[T, "null"]` 값은 비우면 null이다.
+//! 선택과 toggle은 바로 저장하고 입력은 편집을 끝낼 때 저장한다. 코어는 읽은 revision으로 `storage.write`를 보내며,
+//! 충돌 안내는 편집기와 같은 다시 불러오기/덮어쓰기 흐름을 쓴다. 저장값이 있을 때만 「기본값으로」를 보여 `storage.reset`한다.
+//! 손대지 않은 항목은 `storage.update`를 받으면 다시 읽는다. 선택지에 없는 현재 값은 그대로 보이고, 선택지 목록이 아직 없을 때
+//! 기본값으로 덮지 않는다. 이 필드가 있는 앱 정의는 `requires.modules.storage` 2판 이상을 요구한다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -173,6 +185,7 @@ pub const BLOCK_SET_VERSION: u32 = 6;
 /// - `web` 1판: 창 안에 웹 페이지를 띄우는 웹 화면(`web.*` 명령). 쉘이 그린 화면 위에 따로 뜬다.
 /// - `agent` 3판: `conversation-v1` 제공자 설정과 `window_id` 기반 대화 명령. 옛 `workspace_id` 명령은 이행 중 유지한다.
 /// - `storage` 1판: 계정 × 앱 저장소의 선언과 읽기, CAS 쓰기, 초기화.
+/// - `storage` 2판: 1판 + 저장 항목의 설정 화면 보조 글과 선택지 바인딩.
 /// - `connection` 1판: 서버에 등록한 이름 붙인 연결(`connection` 권한). 원천 받기, 동작의 연결 부르기,
 ///   이미지와 소리 받기. 연결은 서버가 헤더를 쥐고 대신 부르는 `relay`와 이 기기가 로그인해 직접 부르는
 ///   `oauth` 두 가지다([`registry`]의 「연결」 절).
@@ -182,7 +195,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("agent", 3),
     ("web", 1),
     ("connection", 2),
-    ("storage", 1),
+    ("storage", 2),
 ];
 
 /// 지원 범위를 알리지 않는 옛 쉘(블록 세트 3판 전)이 그릴 수 있는 블록 세트 판. 서버가 그런 기기에 보낼 앱을
@@ -2651,7 +2664,19 @@ mod tests {
 
     #[test]
     fn app_definition_schema_lists_block_types() {
-        let schema = app_definition_schema().to_string();
+        let schema = app_definition_schema();
+        let definitions = schema
+            .get("$defs")
+            .or_else(|| schema.get("definitions"))
+            .expect("앱 정의 스키마의 정의 목록");
+        let storage_entry = &definitions["StorageEntryDecl"]["properties"];
+        for field in ["description", "choices"] {
+            assert!(
+                storage_entry.get(field).is_some(),
+                "저장 항목 JSON Schema에 {field}가 없다"
+            );
+        }
+        let schema = schema.to_string();
         for block in [
             "split",
             "file_tree",
@@ -2851,7 +2876,7 @@ mod tests {
         assert!(!current.renders(&unknown_module));
         assert_eq!(
             serde_json::to_string(&current).unwrap(),
-            r#"{"blocks":6,"modules":{"agent":3,"connection":2,"files":1,"storage":1,"web":1}}"#
+            r#"{"blocks":6,"modules":{"agent":3,"connection":2,"files":1,"storage":2,"web":1}}"#
         );
         // 4판 쉘(v0.4.x)은 5판 필드를 쓴 탐색기를 받지 않는다.
         let explorer = validate::parse_app_definition(&example("explorer.json")).unwrap();

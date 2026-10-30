@@ -143,7 +143,22 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
                 "storage 선언은 블록 세트 6판이라 requires.blocks가 6 이상이어야 합니다".into(),
             );
         }
-        validate_module_version("storage", 1, definition, &mut details, "/storage");
+        let minimum_storage_version = if storage
+            .entries
+            .iter()
+            .any(|entry| entry.description.is_some() || entry.choices.is_some())
+        {
+            2
+        } else {
+            1
+        };
+        validate_module_version(
+            "storage",
+            minimum_storage_version,
+            definition,
+            &mut details,
+            "/storage",
+        );
         details.extend(app_storage::validate_storage_decl(storage));
     }
     if let Some(agent) = &definition.agent {

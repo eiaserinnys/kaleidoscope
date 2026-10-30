@@ -40,10 +40,52 @@ pub struct StorageEntryDecl {
     /// JSON 값 또는 UTF-8 Markdown 문자열.
     pub default: JsonValue,
     pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub description: Option<String>,
     pub presentation: StoragePresentation,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_choices_binding",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[ts(optional)]
+    pub choices: Option<data::Binding>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub agent_context: Option<bool>,
+}
+
+/// 설정 선택지 하나. 문자열은 값과 라벨을 겸하고 객체는 별도 라벨을 제공한다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum StorageChoice {
+    Value(String),
+    Labeled(StorageChoiceObject),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct StorageChoiceObject {
+    pub value: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub label: Option<String>,
+}
+
+fn deserialize_choices_binding<'de, D>(deserializer: D) -> Result<Option<data::Binding>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Value::deserialize(deserializer)?;
+    let binding = if value.is_array() {
+        data::Binding::Literal(value)
+    } else {
+        serde_json::from_value(value).map_err(serde::de::Error::custom)?
+    };
+    Ok(Some(binding))
 }
 
 /// storage 값 검사가 지원하는 JSON Schema 부분집합. 알 수 없는 키는 serde가 거부한다.
@@ -250,6 +292,17 @@ pub fn validate_storage_decl(storage: &StorageDecl) -> Vec<String> {
         if entry.label.trim().is_empty() {
             errors.push(format!("{at}/label이 비어 있습니다"));
         }
+        if let Some(description) = &entry.description {
+            if description.trim().is_empty()
+                || description.contains('\n')
+                || description.contains('\r')
+                || description.chars().count() > 120
+            {
+                errors.push(format!(
+                    "{at}/description은 공백이 아닌 한 줄 120자 이하여야 합니다"
+                ));
+            }
+        }
         match entry.kind {
             StorageKind::Json => match &entry.schema {
                 Some(schema) => {
@@ -275,8 +328,107 @@ pub fn validate_storage_decl(storage: &StorageDecl) -> Vec<String> {
                 "{at}/agent_context는 json 항목에서만 쓸 수 있습니다"
             ));
         }
+        if entry.kind == StorageKind::Json && entry.presentation == StoragePresentation::Settings {
+            if entry
+                .schema
+                .as_ref()
+                .is_some_and(|schema| !settings_schema_supported(schema))
+            {
+                errors.push(format!(
+                    "{at}/schema는 설정 화면에서 지원하지 않는 모양입니다. 이 항목은 presentation을 hidden으로 선언해야 합니다"
+                ));
+            }
+        }
+        if let Some(choices) = &entry.choices {
+            let choices_allowed = entry.kind == StorageKind::Json
+                && entry.presentation == StoragePresentation::Settings
+                && entry
+                    .schema
+                    .as_ref()
+                    .is_some_and(settings_choices_schema_supported);
+            if !choices_allowed {
+                errors.push(format!(
+                    "{at}/choices는 설정 JSON의 string, nullable string, 또는 string 배열 항목에서만 쓸 수 있습니다"
+                ));
+            }
+            if let data::Binding::Literal(value) = choices {
+                if !valid_literal_choices(value) {
+                    errors.push(format!(
+                        "{at}/choices 리터럴은 문자열 또는 value/label 객체로 된 선택지여야 합니다"
+                    ));
+                }
+            }
+        }
     }
     errors
+}
+
+fn settings_schema_supported(schema: &StorageValueSchema) -> bool {
+    match &schema.value_type {
+        StorageSchemaType::One(
+            JsonValueType::Boolean
+            | JsonValueType::String
+            | JsonValueType::Number
+            | JsonValueType::Integer,
+        ) => true,
+        StorageSchemaType::Many(types) => {
+            types.len() == 2
+                && types.iter().any(|kind| *kind == JsonValueType::Null)
+                && types
+                    .iter()
+                    .filter(|kind| **kind != JsonValueType::Null)
+                    .count()
+                    == 1
+                && types.iter().any(|kind| {
+                    matches!(
+                        kind,
+                        JsonValueType::Boolean
+                            | JsonValueType::String
+                            | JsonValueType::Number
+                            | JsonValueType::Integer
+                    )
+                })
+        }
+        StorageSchemaType::One(JsonValueType::Array) => {
+            schema.items.as_deref().is_some_and(|items| {
+                matches!(
+                    items.value_type,
+                    StorageSchemaType::One(JsonValueType::String)
+                )
+            })
+        }
+        StorageSchemaType::One(_) => false,
+    }
+}
+
+fn settings_choices_schema_supported(schema: &StorageValueSchema) -> bool {
+    match &schema.value_type {
+        StorageSchemaType::One(JsonValueType::String) => true,
+        StorageSchemaType::Many(types) => {
+            types.len() == 2
+                && types.contains(&JsonValueType::String)
+                && types.contains(&JsonValueType::Null)
+        }
+        StorageSchemaType::One(JsonValueType::Array) => {
+            schema.items.as_deref().is_some_and(|items| {
+                matches!(
+                    items.value_type,
+                    StorageSchemaType::One(JsonValueType::String)
+                )
+            })
+        }
+        StorageSchemaType::One(_) => false,
+    }
+}
+
+fn valid_literal_choices(value: &Value) -> bool {
+    let valid_choice =
+        |value: &Value| serde_json::from_value::<StorageChoice>(value.clone()).is_ok();
+    match value {
+        Value::Null => true,
+        Value::Array(choices) => choices.iter().all(valid_choice),
+        choice => valid_choice(choice),
+    }
 }
 
 /// 저장 요청의 값을 선언된 kind/schema에 맞춰 검사한다.
