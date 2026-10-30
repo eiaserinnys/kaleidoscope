@@ -40,3 +40,4 @@
 .ks-harness-webview-page {
   padding: var(--ks-space-4);
 }
+.ks-harness-settings-controls { position: fixed; right: 0; bottom: 0; z-index: 9999; display: flex; gap: var(--ks-space-1); }

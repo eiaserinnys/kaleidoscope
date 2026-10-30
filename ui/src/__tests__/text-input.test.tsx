@@ -71,3 +71,18 @@ describe("TextInput", () => {
     expect(onCommit).not.toHaveBeenCalled();
   });
 });
+
+describe("지속 입력", () => {
+  it("자동 포커스 없이 여러 번 확정하고 빈 값도 전달한다", async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(<TextInput aria-label="설정" value="기본" persistent onCommit={onCommit} onCancel={vi.fn()} />);
+    const input = screen.getByRole("textbox", { name: "설정" });
+    expect(document.activeElement).not.toBe(input);
+    await user.click(input);
+    await user.clear(input);
+    await user.keyboard("{Enter}");
+    await user.type(input, "새 값{Enter}");
+    expect(onCommit.mock.calls.map(([value]) => value)).toEqual(["", "새 값"]);
+  });
+});

@@ -59,7 +59,7 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
   };
   const recalculate = async (context: Context) => {
     const changed: DataView["values"] = {};
-    for (const [pointer, binding] of expressionSlots(context.definition.ui)) {
+    for (const [pointer, binding] of [...expressionSlots(context.definition.ui), ...(context.definition.storage?.entries.flatMap((entry, index): Array<[string, Binding]> => entry.choices === undefined ? [] : [[`/storage/entries/${index}/choices`, entry.choices]]) ?? [])]) {
       const expr = expression(binding);
       if (expr === undefined) continue;
       const names = [...expr.matchAll(/\$data\.([a-z][a-z0-9_]*)/g)].map((match) => match[1]);

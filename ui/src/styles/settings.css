@@ -1,0 +1,23 @@
+.ks-app-settings { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; background: var(--ks-color-surface); }
+.ks-app-settings[hidden], .ks-settings-document[hidden], .ks-data-window-body[hidden] { display: none; }
+.ks-app-settings h2, .ks-app-settings h3 { margin: 0; }
+.ks-app-settings h2 { font-size: var(--ks-type-title); font-weight: 600; }
+.ks-app-settings-scroll { min-height: 0; overflow: auto; padding: var(--ks-space-3); }
+.ks-settings-group + .ks-settings-group { margin-top: var(--ks-space-5); }
+.ks-settings-entry { margin-top: var(--ks-space-4); min-width: 0; }
+.ks-settings-label-row { display: flex; min-height: var(--ks-icon-button-size); align-items: center; gap: var(--ks-space-2); }
+.ks-settings-label-row > label { flex: 1 1 auto; min-width: 0; }
+.ks-settings-label-row > .ks-data-section-toggle { font-size: var(--ks-type-body); }
+.ks-settings-label-row .ks-status-text, .ks-settings-description, .ks-settings-index { font-size: var(--ks-type-meta); color: var(--ks-color-muted); }
+.ks-settings-description, .ks-settings-control, .ks-settings-entry > .ks-notice, .ks-settings-entry > [id$="-error"] { margin-top: var(--ks-space-2); }
+.ks-settings-control:has(.ks-settings-document[hidden]) { margin-top: 0; }
+.ks-settings-control > .ks-button, .ks-settings-list-input > .ks-button { width: 100%; justify-content: space-between; min-width: 0; }
+.ks-settings-document { height: calc(var(--ks-pane-min-size) + var(--ks-space-6)); }
+.ks-settings-document > .ks-markdown-editor { height: 100%; }
+.ks-settings-entry .ks-notice { flex-wrap: wrap; }
+.ks-settings-entry .ks-notice-message { flex-basis: 100%; }
+.ks-settings-list { display: flex; flex-direction: column; gap: var(--ks-space-1); }
+.ks-settings-list-row, .ks-settings-list-add { display: flex; align-items: center; gap: var(--ks-space-2); min-width: 0; }
+.ks-settings-list-add { margin-top: var(--ks-space-1); }
+.ks-settings-list-input { flex: 1 1 auto; min-width: 0; }
+.ks-settings-list-input .ks-text-input { width: 100%; }

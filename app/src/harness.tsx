@@ -36,6 +36,8 @@ declare global {
 const timestamp = "2026-10-30T00:00:00Z";
 const bottomMenuScenario = new URLSearchParams(window.location.search).has("bottom-menu");
 const harnessParams = new URLSearchParams(window.location.search);
+const settingsPreview = harnessParams.get("preview") === "app-settings";
+const settingsSample = harnessParams.get("app") === "sample" || harnessParams.get("app") === "empty-group";
 const shareScenario = new URLSearchParams(window.location.search).get("share");
 const entries = Array.from({ length: 80 }, (_, i) => ({ key: String(i + 1), title: `항목 ${i + 1}`, value: `값 ${i + 1}` }));
 const shareDefinition: AppDefinition = {
@@ -43,7 +45,28 @@ const shareDefinition: AppDefinition = {
   requires: { blocks: 4, modules: {} }, permissions: [], state: { selected: "1" },
   ui: shareScenario === "table" ? { type: "table", rows: entries, columns: [{ field: "title", label: "이름" }, { field: "value", label: "값" }], selected: { state: "selected" } } : { type: "list", items: entries, selected: { state: "selected" } },
 };
-const definitions = [mdEditorJson, mdViewerJson, webBrowserJson, explorerJson, pasJson, ...(shareScenario === "table" || shareScenario === "list" ? [shareDefinition] : [])] as AppDefinition[];
+const settingsDefinition: AppDefinition = {
+  id: "settings-preview", name: settingsSample ? "설정 견본" : "작업 PAS", requires: { blocks: 6, modules: { storage: 2, web: 1 } }, permissions: [], state: {},
+  sources: { models: { kind: "request", permission: "sample", path: "/models" } },
+  storage: { entries: settingsSample ? [
+    { id: "notifications", key: "notifications", kind: "json", schema: { type: "boolean" }, default: true, label: "알림", presentation: "settings" },
+    { id: "view", key: "view", kind: "json", schema: { type: "string", enum: ["목록", "격자"] }, default: "목록", label: "보기", presentation: "settings" },
+    { id: "count", key: "count", kind: "json", schema: { type: "integer" }, default: 20, label: "표시 개수", presentation: "settings" },
+    { id: "local_notifications", key: "notifications/{workspace_id}", kind: "json", schema: { type: ["boolean", "null"] }, default: null, label: "알림", presentation: "settings" },
+    { id: "local_count", key: "count/{workspace_id}", kind: "json", schema: { type: "integer", enum: [10, 20, 50] }, default: 20, label: "표시 개수", presentation: "settings" },
+  ] : [
+    { id: "agent", key: "agent", kind: "json", schema: { type: "string", minLength: 1 }, default: "seosoyoung", label: "에이전트", presentation: "settings" },
+    { id: "folder", key: "folder", kind: "json", schema: { type: ["string", "null"] }, default: null, label: "대화 폴더", presentation: "settings" },
+    { id: "models", key: "models", kind: "json", schema: { type: "array", items: { type: "string" }, uniqueItems: true }, default: ["argon", "opus", "sol"], label: "모델 순서", presentation: "settings", choices: { expr: "$data.models" } },
+    { id: "title", key: "title", kind: "json", schema: { type: "string" }, default: "kaleidoscope · {workspace}", label: "제목 틀", presentation: "settings" },
+    { id: "initial", key: "initial", kind: "md", default: "처음 지시", label: "처음 지시", presentation: "settings" },
+    { id: "role", key: "role", kind: "md", default: "역할 지시", label: "역할 지시", description: "현재 대화에 적용", presentation: "settings" },
+    { id: "model", key: "model/{workspace_id}", kind: "json", schema: { type: ["string", "null"] }, default: null, label: "모델", description: "현재 대화에 적용", presentation: "settings", choices: { expr: "$data.models" } },
+  ] },
+  ui: harnessParams.has("settings-web") ? { type: "web_view", url: "https://example.com", address_bar: false } : harnessParams.has("settings-document") ? { type: "markdown_editor", document: { entry: "initial" } } : { type: "text", value: "앱 본문" },
+};
+if (harnessParams.get("app") === "empty-group") settingsDefinition.storage!.entries = settingsDefinition.storage!.entries.filter((entry) => !entry.key.includes("{workspace_id}"));
+const definitions = [mdEditorJson, mdViewerJson, webBrowserJson, explorerJson, pasJson, ...(settingsPreview ? [settingsDefinition] : []), ...(shareScenario === "table" || shareScenario === "list" ? [shareDefinition] : [])] as AppDefinition[];
 const apps: App[] = definitions.map((definition) => ({
   id: definition.id,
   name: definition.name,
@@ -64,7 +87,7 @@ const shareWindows: AppWindow[] = [shareAppId, "workspace-pas"].map((appId, inde
   state: appId === "md-editor" ? { current_file: "README.md" } : appId === "web-browser" ? { url: "https://www.google.com/" } : { selected: "1" },
   created_at: timestamp, updated_at: timestamp,
 }));
-const windows: AppWindow[] = shareScenario ? shareWindows : bottomMenuScenario
+const windows: AppWindow[] = settingsPreview ? [{ id: "settings-window", desktop_id: "desktop-1", app_id: "settings-preview", app_version: 1, rect: { x: 348, y: 16, width: 720, height: 900 }, z: 1, state: {}, created_at: timestamp, updated_at: timestamp }] : shareScenario ? shareWindows : bottomMenuScenario
   ? [{
     id: "explorer-window",
     desktop_id: "desktop-1",
@@ -155,6 +178,14 @@ const transport: FakeTransport = createFakeTransport({
   folder: { root_path: "/fake/docs", root_name: "문서" },
   webUnavailable: new URLSearchParams(window.location.search).get("web") === "unavailable",
   updateRestartError: harnessParams.get("update-restart") === "error" ? "설치를 시작할 수 없습니다" : undefined,
+  data: settingsPreview ? { sources: { models: { value: [{ value: "argon", label: "Argon" }, { value: "opus", label: "Opus" }, { value: "sol", label: "Sol" }] } } } : undefined,
+  storageWriteDelayMs: settingsPreview ? 1200 : undefined,
+  storage: settingsPreview ? (settingsSample ? [{ window_id: "settings-window", entry: "notifications", content: true }] : [
+    { window_id: "settings-window", entry: "agent", content: "seosoyoung" },
+    { window_id: "settings-window", entry: "folder", content: "kaleidoscope" },
+    { window_id: "settings-window", entry: "models", content: ["argon", "opus", "sol"] },
+    { window_id: "settings-window", entry: "role", content: "# 역할\n\n사용자의 작업을 돕는 에이전트다." },
+  ]) : undefined,
   files,
 });
 const store = createShellStore(transport);
@@ -206,6 +237,10 @@ function Harness() {
     <>
       <Shell store={store} />
       <FakeWebViewLayer fakeTransport={transport} />
+      {settingsPreview ? <div className="ks-harness-settings-controls" data-ks-share-skip>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { void transport.call({ op: "storage.get", window_id: "settings-window", entry: "agent" }).then(({ result }) => transport.call({ op: "storage.write", window_id: "settings-window", entry: "agent", content: "다른 곳", expected_revision: result.revision })); }}>외부 변경</button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => transport.failNextStorageWrite("연결할 수 없습니다")}>통신 실패</button>
+      </div> : null}
     </>
   );
 }

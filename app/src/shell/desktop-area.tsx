@@ -122,15 +122,20 @@ function DesktopWindow({
       isTop={isTop}
       sharing={snapshot.sharing.includes(appWindow.id)}
       shareable={!version || !containsAgentChat(version.definition.ui)}
+      hasSettings={version?.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false}
       store={store}
       onCall={onCall}
       window={appWindow}
     >
-      <AppWindowContent
+      {(settingsOpen, closeSettings, reportProblem, visited) => <AppWindowContent
+        settingsOpen={settingsOpen}
+        settingsVisited={visited}
+        onSettingsClose={closeSettings}
+        onSettingsProblem={reportProblem}
         newWindowRect={() => getNewWindowRect?.(appWindow.desktop_id, snapshot)}
         store={store}
         windowId={appWindow.id}
-      />
+      />}
     </WindowFrame>
   );
 }
