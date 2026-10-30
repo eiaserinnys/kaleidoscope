@@ -31,6 +31,8 @@ struct Pending {
     user_text: String,
     user_uploads: Vec<ConversationUpload>,
     post_started: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    failed_reason: Option<String>,
     request: SendMessageRequest,
     sent_views: Option<BTreeMap<String, SentView>>,
     sent_visuals: Vec<(String, String)>,
@@ -99,6 +101,7 @@ pub(crate) fn send(
         user_text: text,
         user_uploads: uploads,
         post_started: false,
+        failed_reason: None,
         request: SendMessageRequest {
             request_id: id,
             text: body,
@@ -122,6 +125,7 @@ pub(crate) fn send(
             let previous = read(&path)?;
             if previous.user_text != pending.user_text
                 || previous.user_uploads != pending.user_uploads
+                || previous.failed_reason.is_some()
             {
                 return Err(error::make(ErrorCode::Conflict));
             }
@@ -167,6 +171,7 @@ pub(crate) fn recover(inner: &Arc<Inner>) {
             continue;
         };
         if !pending.post_started
+            || pending.failed_reason.is_some()
             || Client::restore(inner, &pending.connection, &pending.base_path).is_err()
         {
             continue;
@@ -187,7 +192,7 @@ pub(crate) fn emit_drafts(inner: &Arc<Inner>, ctx: &Context, window: &str) {
         let Ok(pending) = read(&entry.path()) else {
             continue;
         };
-        if !pending.post_started
+        if (!pending.post_started || pending.failed_reason.is_some())
             && pending.context.app == ctx.storage.app
             && pending.workspace == ctx.workspace.id
         {
@@ -196,6 +201,7 @@ pub(crate) fn emit_drafts(inner: &Arc<Inner>, ctx: &Context, window: &str) {
                 request_id: pending.request.request_id,
                 text: pending.user_text,
                 attachments: pending.user_uploads,
+                failed: pending.failed_reason.is_some(),
             });
         }
     }
@@ -279,6 +285,7 @@ fn spawn(
                             share::mark_sent_text(&owner, &conversation, views);
                         }
                         share::mark_sent_visuals(&owner, pending.sent_visuals.clone());
+                        remove_failed(&owner, &pending);
                         finish(&owner, &path, &mut reply, Ok(()), true);
                     }
                     return;
@@ -289,13 +296,10 @@ fn spawn(
                             .error
                             .map(|error| error.message)
                             .unwrap_or_else(|| "대화 전송에 실패했습니다.".into());
-                        finish(
-                            &owner,
-                            &path,
-                            &mut reply,
-                            Err(error::with_message(ErrorCode::Server, &message)),
-                            true,
-                        );
+                        pending.failed_reason = Some(message.clone());
+                        let result = storage::save_atomic(&path, &pending)
+                            .and_then(|_| Err(error::with_message(ErrorCode::Server, &message)));
+                        finish(&owner, &path, &mut reply, result, false);
                     }
                     return;
                 }
@@ -325,6 +329,26 @@ fn spawn(
             delay = (delay * 2).min(30);
         }
     });
+}
+
+fn remove_failed(owner: &Inner, accepted: &Pending) {
+    let Ok(entries) = std::fs::read_dir(owner.data_dir.join("conversation-pending")) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(previous) = read(&path) else { continue };
+        if previous.failed_reason.is_some()
+            && previous.context.app == accepted.context.app
+            && previous.workspace == accepted.workspace
+            && previous.connection == accepted.connection
+            && previous.thread == accepted.thread
+        {
+            if let Err(error) = std::fs::remove_file(path) {
+                eprintln!("실패한 대화 초안을 지우지 못했습니다: {error}");
+            }
+        }
+    }
 }
 
 fn post(client: &Client, pending: &Pending) -> Result<Option<MessageReceipt>, CoreError> {

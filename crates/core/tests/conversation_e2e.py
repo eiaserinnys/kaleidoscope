@@ -29,6 +29,8 @@ class Provider:
         self.break_first = True
         self.fail_ids = set()
         self.drop_before = set()
+        self.late_item = False
+        self.late_ready = False
 
     def thread(self, namespace, key, thread_id):
         return {"id": thread_id, "external": {"namespace": namespace, "key": key},
@@ -74,20 +76,25 @@ def serve(provider):
                 if len(parts) >= 3 and parts[0] == "threads":
                     thread_id = parts[1]
                     if parts[2] == "items" and len(parts) == 3:
-                        return self.respond(200, {"items": [{"id": "1", "kind": "notice", "text": "notice", "at": "now", "attachments": []}], "cursor": "1"})
+                        items = [{"id": "1", "kind": "notice", "text": "notice", "at": "now", "attachments": []}]
+                        if provider.late_item:
+                            provider.late_ready = True
+                            items.append({"id": "3", "kind": "assistant", "text": "나중 답", "at": "now", "attachments": []})
+                        return self.respond(200, {"items": items, "cursor": "3" if provider.late_item else "1"})
                     if parts[2] == "events":
                         cursor = self.headers.get("Last-Event-ID")
                         provider.events.append(cursor)
-                        snapshot = {"kind": "snapshot", "snapshot": {"cursor": "2", "busy": False, "tool": None, "stream_id": None, "text": None,
-                            "items": [{"id": "2", "kind": "assistant", "text": "답", "at": "now", "attachments": []}]}}
+                        late = provider.late_ready
+                        snapshot = {"kind": "snapshot", "snapshot": {"cursor": "3" if late else "2", "busy": False, "tool": None, "stream_id": None, "text": None,
+                            "items": [{"id": "3" if late else "2", "kind": "assistant", "text": "답", "at": "now", "attachments": []}]}}
                         encoded = json.dumps(snapshot, ensure_ascii=False)
                         split = encoded.index('"snapshot"')
                         text1 = json.dumps({"kind": "text", "stream_id": "stream-1", "text": "한"}, ensure_ascii=False)
                         text2 = json.dumps({"kind": "text", "stream_id": "stream-1", "text": "한국"}, ensure_ascii=False)
                         duplicate = json.dumps({"kind": "item", "item": snapshot["snapshot"]["items"][0]}, ensure_ascii=False)
-                        payload = ("id: 2\r\ndata: " + encoded[:split] + "\r\ndata: " + encoded[split:]
+                        payload = ("id: " + ("3" if late else "2") + "\r\ndata: " + encoded[:split] + "\r\ndata: " + encoded[split:]
                                    + "\r\n\r\ndata: " + text1 + "\r\n\r\ndata: " + text2
-                                   + "\r\n\r\nid: 2\r\ndata: " + duplicate + "\r\n\r\n").encode()
+                                   + "\r\n\r\nid: " + ("3" if late else "2") + "\r\ndata: " + duplicate + "\r\n\r\n").encode()
                         self.send_response(200)
                         self.send_header("Content-Type", "text/event-stream")
                         self.send_header("Content-Length", str(len(payload)))
@@ -204,7 +211,7 @@ def run():
             assert ready.wait(5)
             assert call(url1, "conversation.get", window_id=window)["thread"] is None
             draft_event = until("보존 초안 전달", lambda: (event if (not events.empty() and (event := events.get_nowait()).get("event") == "conversation.draft") else None))
-            assert draft_event["request_id"] == "draft-1" and draft_event["text"] == "보존할 초안"
+            assert draft_event["request_id"] == "draft-1" and draft_event["text"] == "보존할 초안" and draft_event["failed"] is False
             revision = call(url1, "storage.write", window_id=window, entry="title_template", content="작업 {unsupported}", expected_revision=None)["revision"]
             status, invalid = request(url1 + "/core", "POST", {"op": "conversation.create", "window_id": window, "model": "model-argon"})
             assert status == 400 and invalid["code"] == "invalid_request", invalid
@@ -217,6 +224,14 @@ def run():
             for task in tasks: task.join(timeout=20)
             assert len(results) == 2 and results[0] == results[1], results
             assert len(provider.bindings) == 1
+            def initial_answer():
+                while not events.empty():
+                    event = events.get_nowait()
+                    update = event.get("update", {})
+                    if update.get("kind") == "snapshot" and any(item["id"] == "2" for item in update["snapshot"]["items"]):
+                        return event
+                return None
+            assert until("생성 뒤 get 없이 첫 대화 이벤트", initial_answer, seconds=15)
             assert not provider.posts, provider.posts
             call(url1, "conversation.send", window_id=window, request_id="draft-1", text="보존할 초안", attachments=[])
             with provider.lock:
@@ -230,10 +245,23 @@ def run():
             while not events.empty(): delivered.append(events.get_nowait())
             items = [item["id"] for event in delivered if event.get("event") == "conversation.update"
                      for item in event["update"].get("snapshot", {}).get("items", [])]
-            assert items.count("2") == 1, delivered
+            assert items.count("2") == 0, delivered
             assert not any(event.get("update", {}).get("kind") == "item" and event["update"]["item"]["id"] == "2" for event in delivered)
             texts = [event["update"]["text"] for event in delivered if event.get("update", {}).get("kind") == "text"]
             assert "한국" in texts and all("한국국" not in text for text in texts), texts
+            second_window = call(url1, "window.open", desktop_id=desktop, app_id=definition["id"])["window"]["id"]
+            with provider.lock:
+                provider.late_item = True
+            second_history = call(url1, "conversation.get", window_id=second_window)
+            assert any(item["id"] == "3" for item in second_history["items"])
+            def late_delivery():
+                while not events.empty():
+                    event = events.get_nowait()
+                    update = event.get("update", {})
+                    if update.get("kind") == "snapshot" and any(item["id"] == "3" for item in update["snapshot"]["items"]):
+                        return event
+                return None
+            assert until("첫 창에 두 번째 창의 기록 이후 새 항목 전달", late_delivery, seconds=20)
             call(url1, "share.set", window_id=window, on=True)
             call(url1, "share.view", window_id=window, view={"text": "첫 줄\n둘째 줄", "visual": False,
                  "bounds": {"x": 0, "y": 0, "width": 400, "height": 300}})
@@ -252,6 +280,35 @@ def run():
             assert status == 400 and failure["code"] == "server", failure
             call(url1, "conversation.send", window_id=window, request_id="request-3", text="다시", attachments=[])
             assert "바뀜" in provider.posts[-1]["text"] and "수정된 줄" in provider.posts[-1]["text"]
+            provider.fail_ids.add("failed-persist")
+            status, failure = request(url1 + "/core", "POST", {"op": "conversation.send", "window_id": window,
+                "request_id": "failed-persist", "text": "실패한 초안", "attachments": [upload]})
+            assert status == 400 and failure["code"] == "server", failure
+            def saved_failed():
+                for path in (root / "device-a" / "conversation-pending").glob("*.json"):
+                    value = json.loads(path.read_text())
+                    if value["request"]["request_id"] == "failed-persist":
+                        return value
+                return None
+            failed = saved_failed()
+            assert failed is not None and failed["user_text"] == "실패한 초안" and failed["user_uploads"] == [upload], failed
+            assert failed["failed_reason"] == "failed", failed
+            status, duplicate = request(url1 + "/core", "POST", {"op": "conversation.send", "window_id": window,
+                "request_id": "failed-persist", "text": "실패한 초안", "attachments": [upload]})
+            assert status == 400 and duplicate["code"] == "conflict", duplicate
+            first_process.terminate()
+            first_process.wait(timeout=5)
+            first_process = bridge("device-a", p1, True)
+            until("실패 초안 복원 뒤 연결", lambda: call(url1, "state.get")["snapshot"]["link"]["state"] == "connected")
+            events = queue.Queue()
+            ready = threading.Event()
+            threading.Thread(target=read_events, args=(url1, events, ready), daemon=True).start()
+            assert ready.wait(5)
+            call(url1, "conversation.get", window_id=window)
+            restored = until("실패 초안 이벤트", lambda: (event if (not events.empty() and (event := events.get_nowait()).get("event") == "conversation.draft" and event["request_id"] == "failed-persist") else None))
+            assert restored["failed"] is True and restored["text"] == "실패한 초안" and restored["attachments"] == [upload], restored
+            call(url1, "conversation.send", window_id=window, request_id="after-failed", text="실패한 초안", attachments=[upload])
+            assert saved_failed() is None, "새 요청 접수 후 실패한 초안이 남았다"
             provider.drop_before.add("unreceived")
             status, failure = request(url1 + "/core", "POST", {"op": "conversation.send", "window_id": window,
                 "request_id": "unreceived", "text": "다시 보낼 초안", "attachments": []})
@@ -259,7 +316,7 @@ def run():
             assert "unreceived" not in provider.receipts
             call(url1, "conversation.get", window_id=window)
             recovered = until("미접수 초안", lambda: (event if (not events.empty() and (event := events.get_nowait()).get("event") == "conversation.draft" and event["request_id"] == "unreceived") else None))
-            assert recovered["text"] == "다시 보낼 초안"
+            assert recovered["text"] == "다시 보낼 초안" and recovered["failed"] is False
             call(url1, "conversation.send", window_id=window, request_id="unreceived", text="다시 보낼 초안", attachments=[])
             attachment = call(url1, "conversation.attachment", window_id=window, item_id="1", attachment_id="asset-1")
             assert attachment["name"] == "note.txt" and base64.b64decode(attachment["data_base64"]) == b"attachment", attachment
@@ -279,7 +336,7 @@ def run():
             until("재시작 뒤 같은 요청 접수", lambda: provider.receipts.get("restart-1") == "accepted", seconds=20)
             replay = [p for p in provider.posts if p["request_id"] == "restart-1"]
             assert len(replay) == 2 and replay[0] == replay[1], replay
-            assert provider.interventions == 5
+            assert provider.interventions == 6
             until("대기 파일 제거", lambda: not list((root / "device-a" / "conversation-pending").glob("*.json")))
             until("재시작한 코어 연결", lambda: call(url1, "state.get")["snapshot"]["link"]["state"] == "connected")
             first_binding = call(url1, "storage.get", window_id=window, entry="thread")["result"]["content"]
@@ -292,6 +349,19 @@ def run():
             call(url1, "storage.write", window_id=window2, entry="thread", content=old, expected_revision=None)
             assert call(url1, "conversation.get", window_id=window2)["thread"]["id"] == "existing-thread"
             assert provider.adoptions[-1] == {"session_id": "existing-thread", "first_input_is_initial_instruction": True}
+            provider.break_first = False
+            provider.fail_ids.add("other-failed")
+            status, _ = request(url1 + "/core", "POST", {"op": "conversation.send", "window_id": window2,
+                "request_id": "other-failed", "text": "다른 대화", "attachments": []})
+            assert status == 400
+            def other_failed_exists():
+                return any(json.loads(path.read_text())["request"]["request_id"] == "other-failed"
+                           for path in (root / "device-a" / "conversation-pending").glob("*.json"))
+            assert other_failed_exists()
+            call(url1, "conversation.send", window_id=window, request_id="first-accepted", text="첫 작업", attachments=[])
+            assert other_failed_exists(), "다른 대화의 실패 초안을 지웠다"
+            call(url1, "conversation.send", window_id=window2, request_id="second-accepted", text="다른 대화", attachments=[])
+            assert not other_failed_exists(), "같은 대화의 실패 초안이 남았다"
             with provider.lock:
                 provider.bindings[(old["namespace"], workspace2)] = provider.thread(old["namespace"], workspace2, "different-thread")
             status, conflict = request(url1 + "/core", "POST", {"op": "conversation.get", "window_id": window2})

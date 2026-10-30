@@ -393,7 +393,7 @@ details: Array<string>, };
 /**
  * 코어가 화면에 보내는 이벤트. `event`로 가른다.
  */
-export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "agent.update", workspace_id: string, update: AgentUpdate, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, code: ErrorCode, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, };
+export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "agent.update", workspace_id: string, update: AgentUpdate, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, code: ErrorCode, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, failed: boolean, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, };
 
 /**
  * 코어의 응답. `op`는 명령과 같다.

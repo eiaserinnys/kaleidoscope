@@ -1,9 +1,6 @@
 //! 창들이 함께 쓰는 대화별 SSE. 저장 cursor만 재접속에 쓴다.
 use crate::{connections::LoginStore, conversation_http::Client, Inner};
-use kaleidoscope_contract::{
-    conversation::{ConversationEvent, ConversationItem},
-    CoreEvent, ErrorCode,
-};
+use kaleidoscope_contract::{conversation::ConversationEvent, CoreEvent, ErrorCode};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, Weak};
 use std::thread;
@@ -27,7 +24,6 @@ pub(crate) fn watch(
     client: Client,
     thread: &str,
     cursor: &str,
-    items: &[ConversationItem],
 ) {
     let mut streams = inner.conversation_streams.0.lock().unwrap();
     let entry = streams.entry(key.clone()).or_insert_with(|| Stream {
@@ -39,7 +35,6 @@ pub(crate) fn watch(
         running: false,
     });
     entry.windows.insert(window.into());
-    entry.seen.extend(items.iter().map(|item| item.id.clone()));
     if !entry.running {
         entry.running = true;
         spawn(Arc::downgrade(inner), key);

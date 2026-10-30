@@ -80,6 +80,7 @@
 //! 기존 대화 연결의 adoption 요청 DTO를 더했다. 블록 세트와 모듈 판은 그대로다.
 //! 스트림의 최종 인증 실패는 `conversation.error`로 알리고, 로그인 성공 시 코어가 다시 연결한다.
 //! 접수 전에 중단된 초안은 `conversation.get` 때 `conversation.draft`로 창에 알린다.
+//! 실패한 영수증의 초안은 `failed: true`이며 새 request_id로 다시 보낸다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -2211,13 +2212,14 @@ pub enum CoreEvent {
     /// 대화 스트림의 최종 로그인 필요 또는 권한 거부. 제공자 wire 이벤트와는 별개다.
     #[serde(rename = "conversation.error")]
     ConversationError { thread_id: String, code: ErrorCode },
-    /// 전송 전에 보존한 초안. 화면이 같은 request_id로 다시 보낼 수 있다.
+    /// 미접수 초안은 같은 request_id로, 실패한 초안은 새 request_id로 다시 보낸다.
     #[serde(rename = "conversation.draft")]
     ConversationDraft {
         window_id: String,
         request_id: String,
         text: String,
         attachments: Vec<conversation::ConversationUpload>,
+        failed: bool,
     },
     /// 창의 웹 화면 페이지가 바뀌었다(주소, 제목, 읽는 중, 뒤로와 앞으로 갈 수 있는지 가운데 하나라도).
     /// 페이지 전체를 보낸다. 웹 화면을 이은(`web.attach`) 창의 것만 온다.

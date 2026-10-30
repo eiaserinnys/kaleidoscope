@@ -59,7 +59,6 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                     ctx.client.clone(),
                     &thread.id,
                     &items.cursor,
-                    &items.items,
                 );
             }
             crate::conversation_send::emit_drafts(inner, &ctx, &window);
@@ -81,9 +80,22 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 next_before: items.next_before,
             })
         }
-        CoreRequest::ConversationCreate { model, .. } => Ok(CoreReply::ConversationCreate {
-            thread: ctx.create(inner, &namespace, &model)?,
-        }),
+        CoreRequest::ConversationCreate { model, .. } => {
+            let thread = ctx.create(inner, &namespace, &model)?;
+            let key = format!(
+                "{}\u{0}{}\u{0}{}",
+                ctx.client.info.name, namespace, ctx.workspace.id
+            );
+            crate::conversation_stream::watch(
+                inner,
+                key,
+                &window,
+                ctx.client.clone(),
+                &thread.id,
+                "",
+            );
+            Ok(CoreReply::ConversationCreate { thread })
+        }
         CoreRequest::ConversationAttachment {
             item_id,
             attachment_id,
