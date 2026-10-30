@@ -2229,6 +2229,9 @@ dependencies = [
 [[package]]
 name = "kaleidoscope-acp-test-agent"
 version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "kaleidoscope-app"
