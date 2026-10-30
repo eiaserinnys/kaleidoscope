@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { EditorState } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { useShareDescriber } from "../share/visible";
+import { describeEditor } from "../share/editor";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { search, searchKeymap } from "@codemirror/search";
 import type { Block } from "../contract/contract";
@@ -15,6 +17,8 @@ import { FileGrant } from "./file-grant";
 type Data = Extract<Block, { type: "code_editor" }>;
 export function CodeEditorBlock({ block, context }: { block: Data; context: BlockContext }) {
   const path = resolveFilePath(block.file, context.window);
+  const emptyShareRef = useRef<HTMLDivElement>(null);
+  useShareDescriber(emptyShareRef, () => ({ text: "[코드 편집기]", visual: false }));
   const root = context.snapshot.device.grants.find((g) => g.window_id === context.window.id && g.permission === block.file.permission)?.root_path ?? null;
   const session = useMemo(() => new FileEditorSession(context.store, context.window.id, block.file.permission), [block.file.permission, context.store, context.window.id]);
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
@@ -29,7 +33,7 @@ export function CodeEditorBlock({ block, context }: { block: Data; context: Bloc
   useEffect(() => () => session.dispose(), [session]);
   useEffect(() => { const refresh = () => void session.refreshOnFocus(); window.addEventListener("focus", refresh); return () => window.removeEventListener("focus", refresh); }, [session]);
   if (!root) return <FileGrant context={context} permission={block.file.permission} />;
-  if (path === null) return null;
+  if (path === null) return <div className="ks-markdown-editor" ref={emptyShareRef} />;
   if (!state.loaded) return <div className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
   if (state.error && state.revision === null) return <div className="ks-editor-error"><Notice role="alert">{state.error}</Notice></div>;
   return <div className="ks-markdown-editor">
@@ -44,6 +48,7 @@ export function CodeEditorBlock({ block, context }: { block: Data; context: Bloc
 function EditableCode({ path, language, text, session }: { path: string; language: ReturnType<typeof codeLanguageForPath>; text: string; session: FileEditorSession }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  useShareDescriber(host, () => describeEditor(view.current, path, "코드 편집기"));
   useEffect(() => {
     if (!host.current) return;
     const state = EditorState.create({ doc: text, extensions: [

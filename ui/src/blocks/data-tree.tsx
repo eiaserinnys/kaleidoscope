@@ -85,7 +85,7 @@ function TreeReady({ block, context, pointer, value }: { block: Extract<Block, {
   const renderNodes = (items: Node[], parent: string | null): React.ReactNode => items.map((node) => {
     const folder = node.children.length > 0; const open = expanded.has(node.id); const active = !folder && node.item?.key === selected;
     return <div className="ks-file-tree-entry" key={node.id}>
-      <button className={`ks-row ks-file-tree-row${active ? " is-selected" : ""}`} role="treeitem" aria-expanded={folder ? open : undefined} aria-selected={active} data-tree-id={node.id} tabIndex={entry === node.id ? 0 : -1} onFocus={() => setFocus(node.id)} onKeyDown={(e) => keyDown(e, node, parent)} onClick={() => choose(node)} type="button">
+      <button className={`ks-row ks-file-tree-row${active ? " is-selected" : ""}`} role="treeitem" aria-setsize={visible.length} aria-posinset={visible.findIndex((item) => item.node.id === node.id) + 1} aria-expanded={folder ? open : undefined} aria-selected={active} data-tree-id={node.id} tabIndex={entry === node.id ? 0 : -1} onFocus={() => setFocus(node.id)} onKeyDown={(e) => keyDown(e, node, parent)} onClick={() => choose(node)} type="button">
         <span aria-hidden="true" className="ks-file-tree-icon">{folder ? <ChevronRight className={`ks-chevron${open ? " is-expanded" : ""}`} size="inline" /> : <FileText size="inline" />}</span>
         <span className="ks-file-tree-name ks-tree-name">{node.title}</span>{node.item?.meta && <span className="ks-view-meta">{node.item.meta}</span>}<Badges values={node.item?.badges} />
       </button>

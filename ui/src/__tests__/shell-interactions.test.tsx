@@ -15,6 +15,8 @@ if (!window.PointerEvent) {
   Object.defineProperty(window, "PointerEvent", { configurable: true, value: window.MouseEvent });
 }
 
+const frameStore = makeStore(makeTestSnapshot(), []);
+
 describe("window dragging", () => {
   it("clamps only the drawn rectangle to a small desktop", () => {
     const appWindow = makeTestSnapshot().shared.windows[0] as AppWindow;
@@ -22,7 +24,7 @@ describe("window dragging", () => {
     const savedRect = { ...appWindow.rect };
     const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window: appWindow });
     render(
-      <WindowFrame
+      <WindowFrame sharing={false} shareable store={frameStore}
         area={{ width: 960, height: 552 }}
         appName="Markdown 편집기"
         isTop
@@ -47,7 +49,7 @@ describe("window dragging", () => {
     appWindow.rect = { x: 48, y: 48, width: 1076, height: 700 };
     const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window: appWindow });
     render(
-      <WindowFrame
+      <WindowFrame sharing={false} shareable store={frameStore}
         area={{ width: 960, height: 552 }}
         appName="Markdown 편집기"
         isTop
@@ -75,7 +77,7 @@ describe("window dragging", () => {
     appWindow.rect = { x: 48, y: 0, width: 640, height: 480 };
     const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window: appWindow });
     render(
-      <WindowFrame
+      <WindowFrame sharing={false} shareable store={frameStore}
         area={{ width: 960, height: 552 }}
         appName="Markdown 편집기"
         isTop
@@ -104,7 +106,7 @@ describe("window dragging", () => {
     appWindow.rect = { x: 48, y: 0, width: 640, height: 480 };
     const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window: appWindow });
     render(
-      <WindowFrame
+      <WindowFrame sharing={false} shareable store={frameStore}
         area={{ width: 960, height: 552 }}
         appName="Markdown 편집기"
         isTop
@@ -131,7 +133,7 @@ describe("window dragging", () => {
     const window = makeTestSnapshot().shared.windows[0] as AppWindow;
     const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window });
     const view = render(
-      <WindowFrame
+      <WindowFrame sharing={false} shareable store={frameStore}
         area={{ width: 1000, height: 800 }}
         appName="Markdown 편집기"
         isTop
@@ -164,12 +166,12 @@ describe("window dragging", () => {
 
     const updated = { ...window, rect: { ...window.rect, x: 37, y: 42 } };
     view.rerender(
-      <WindowFrame area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={updated}>
+      <WindowFrame sharing={false} shareable store={frameStore} area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={updated}>
         <div>content</div>
       </WindowFrame>,
     );
     view.rerender(
-      <WindowFrame area={{ width: 600, height: 400 }} appName="Markdown 편집기" isTop onCall={onCall} window={updated}>
+      <WindowFrame sharing={false} shareable store={frameStore} area={{ width: 600, height: 400 }} appName="Markdown 편집기" isTop onCall={onCall} window={updated}>
         <div>content</div>
       </WindowFrame>,
     );
@@ -183,7 +185,7 @@ describe("window dragging", () => {
     const appWindow = makeTestSnapshot().shared.windows[0] as AppWindow;
     const onCall = vi.fn().mockResolvedValue(undefined);
     render(
-      <WindowFrame area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={appWindow}>
+      <WindowFrame sharing={false} shareable store={frameStore} area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={appWindow}>
         <div>content</div>
       </WindowFrame>,
     );
@@ -203,7 +205,7 @@ describe("window dragging", () => {
       return { op: request.op };
     });
     render(
-      <WindowFrame
+      <WindowFrame sharing={false} shareable store={frameStore}
         area={{ width: 1000, height: 800 }}
         appName="Markdown 편집기"
         isTop
@@ -234,7 +236,7 @@ describe("window dragging", () => {
     appWindow.rect = { x: 48, y: 48, width: 640, height: 480 };
     const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window: appWindow });
     render(
-      <WindowFrame area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={appWindow}>
+      <WindowFrame sharing={false} shareable store={frameStore} area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={appWindow}>
         <div>content</div>
       </WindowFrame>,
     );

@@ -665,3 +665,5 @@ button.ks-agent-attachment-chip-preview,
   border-radius: var(--ks-radius-small);
   background: var(--ks-color-surface-raised);
 }
+
+.ks-share-chip-icon { color: var(--ks-color-share); }

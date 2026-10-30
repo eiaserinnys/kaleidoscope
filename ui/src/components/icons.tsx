@@ -21,6 +21,7 @@ import {
   Paperclip as PaperclipIcon,
   Plus as PlusIcon,
   RotateCw as RotateCwIcon,
+  ScreenShare as ScreenShareIcon,
   X as XIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -74,6 +75,7 @@ export const Globe = (props: IconProps) => renderIcon(GlobeIcon, props);
 export const Plus = (props: IconProps) => renderIcon(PlusIcon, props);
 export const LayoutGrid = (props: IconProps) => renderIcon(LayoutGridIcon, props);
 export const Import = (props: IconProps) => renderIcon(ImportIcon, props);
+export const ScreenShare = (props: IconProps) => renderIcon(ScreenShareIcon, props);
 export const X = (props: IconProps) => renderIcon(XIcon, props);
 export const Cloud = (props: IconProps) => renderIcon(CloudIcon, props);
 export const CloudOff = (props: IconProps) => renderIcon(CloudOffIcon, props);

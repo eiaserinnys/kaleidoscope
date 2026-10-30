@@ -25,6 +25,7 @@ export {
   PanelLeftOpen,
   Plus,
   RotateCw,
+  ScreenShare,
   X,
 } from "./components/icons";
 export { Menu, type MenuEntry, type MenuItem, type MenuProps, type MenuSeparator } from "./components/menu";
@@ -52,3 +53,4 @@ export type {
   ShellSnapshot,
   Workspace,
 } from "./contract/contract";
+export { useShareView } from "./share/share-view";

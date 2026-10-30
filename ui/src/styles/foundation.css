@@ -37,6 +37,7 @@
   --ks-shadow-window: 0 var(--ks-space-4) var(--ks-space-6) rgb(15 20 28 / 24%);
 
   color-scheme: light;
+  --ks-color-share: #18763a;
   --ks-color-background: #f4f6f9;
   --ks-color-surface: #ffffff;
   --ks-color-surface-raised: #fafbfd;
@@ -60,6 +61,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
+    --ks-color-share: #64c982;
     --ks-color-background: #15191f;
     --ks-color-surface: #1d232b;
     --ks-color-surface-raised: #252c36;

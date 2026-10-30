@@ -36,12 +36,14 @@ export interface IconButtonProps {
   disabled?: boolean;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   title?: string;
+  pressed?: boolean;
 }
 
-export function IconButton({ "aria-label": label, children, disabled, onClick, title }: IconButtonProps) {
+export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed }: IconButtonProps) {
   return (
     <button
       aria-label={label}
+      aria-pressed={pressed}
       className="ks-icon-button"
       disabled={disabled}
       onClick={onClick}

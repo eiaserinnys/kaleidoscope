@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorState } from "@codemirror/state";
 import { defaultKeymap } from "@codemirror/commands";
+import { useShareDescriber } from "../share/visible";
+import { describeEditor } from "../share/editor";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { search, searchKeymap } from "@codemirror/search";
 import type { Block, CodeLanguage, FileRef } from "../contract/contract";
@@ -25,6 +27,8 @@ function BoundCodeView({ block, pointer }: { block: Data; pointer: string }) {
 }
 function FileCodeView({ block, file, context }: { block: Data; file: FileRef; context: BlockContext }) {
   const path = resolveFilePath(file, context.window);
+  const emptyShareRef = useRef<HTMLDivElement>(null);
+  useShareDescriber(emptyShareRef, () => ({ text: "[코드 보기]", visual: false }));
   const root = context.snapshot.device.grants.find((g) => g.window_id === context.window.id && g.permission === file.permission)?.root_path ?? null;
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
@@ -43,14 +47,15 @@ function FileCodeView({ block, file, context }: { block: Data; file: FileRef; co
   useEffect(() => { void read(true); return () => { version.current++; }; }, [read]);
   useEffect(() => { const refresh = () => void read(); window.addEventListener("focus", refresh); return () => window.removeEventListener("focus", refresh); }, [read]);
   if (!root) return <FileGrant context={context} permission={file.permission} />;
-  if (path === null) return null;
+  if (path === null) return <div className="ks-code-view" ref={emptyShareRef} />;
   if (loading) return <div className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
   if (error) return <div className="ks-editor-error"><Notice role="alert">{error}</Notice></div>;
-  return <ReadOnlyCode text={text} language={codeLanguageForPath(path, block.language)} follow={!!block.follow} wrap={!!block.wrap} />;
+  return <ReadOnlyCode path={path} text={text} language={codeLanguageForPath(path, block.language)} follow={!!block.follow} wrap={!!block.wrap} />;
 }
-function ReadOnlyCode({ text, language, follow, wrap }: { text: string; language: CodeLanguage; follow: boolean; wrap: boolean }) {
+function ReadOnlyCode({ text, language, follow, wrap, path = null }: { text: string; language: CodeLanguage; follow: boolean; wrap: boolean; path?: string | null }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  useShareDescriber(host, () => describeEditor(view.current, path, "코드 보기"));
   useEffect(() => {
     if (!host.current) return;
     const editor = new EditorView({ parent: host.current, state: EditorState.create({ doc: text, extensions: [
