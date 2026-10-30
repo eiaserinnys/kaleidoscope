@@ -1,10 +1,18 @@
 {
   "id": "explorer",
   "name": "탐색기",
-  "description": "고른 폴더의 파일을 보고, 파일을 그 확장자를 여는 앱으로 연다",
-  "requires": { "blocks": 3, "modules": { "files": 1 } },
+  "description": "고른 폴더를 왼쪽 폴더 트리와 오른쪽 내용으로 보고, 파일을 그 확장자를 여는 앱으로 연다",
+  "requires": { "blocks": 5, "modules": { "files": 1 } },
   "permissions": [
     { "module": "files", "id": "folder", "access": "read", "label": "볼 폴더" }
   ],
-  "ui": { "type": "explorer", "root": { "permission": "folder" } }
+  "state": { "folder": "", "view": "icons" },
+  "ui": {
+    "type": "explorer",
+    "root": { "permission": "folder" },
+    "folder": { "state": "folder" },
+    "on_folder": { "set_state": "folder" },
+    "view": { "state": "view" },
+    "on_view": { "set_state": "view" }
+  }
 }

@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 7판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 8판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -40,6 +40,11 @@
 //! 7판에서 바뀐 것(작업과 창 배치 동기화, 카드 #780): 화면 계약은 그대로다. 연결한 쉘에서 워크스페이스, 데스크톱,
 //! 앱 창의 정본이 오케스트레이터로 옮겨 가고, 코어가 서버와 바뀐 것을 주고받는다([`registry`]의 「작업과 배치 동기화」 절).
 //! 앱의 새 버전으로 창 상태를 옮기는 규칙은 코어와 서버가 같이 쓰도록 [`migrate_window_state`]로 뺐다.
+//!
+//! 8판에서 바뀐 것(탐색기 두 칸, 카드 #815): 블록 세트 5판. `explorer`가 왼쪽 폴더 트리와 오른쪽 내용의 두 칸이
+//! 되고, 보는 폴더와 보기 방식([`ExplorerView`])을 창 상태에 둘 선택 필드 넷(`folder`, `on_folder`, `view`, `on_view`)이
+//! 생겼다. 있던 블록에 필드를 더한 첫 판이다(규칙은 [`BLOCK_SET_VERSION`]). `files.list`의 [`FileEntry`]에 크기와
+//! 바뀐 시각이 붙었다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -98,16 +103,23 @@ pub const TAURI_EVENT: &str = "core-event";
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
-/// 호환 규칙: 블록 세트의 새 판은 블록을 더하기만 한다. 있던 블록의 필드와 동작은 바꾸지 않으므로
-/// `requires.blocks`가 이 값 이하인 정의는 모두 그대로 그린다. 있던 블록을 바꿔야 하면 그때 다시 정한다.
+/// 호환 규칙: 블록 세트의 새 판은 블록이나 있던 블록의 선택 필드를 더하기만 한다. 있던 필드의 뜻은 바꾸지
+/// 않으므로 `requires.blocks`가 이 값 이하인 정의는 모두 그대로 그린다.
+/// - 있던 블록에 더한 필드는 그 판 이상을 요구한다. 그 필드를 쓴 정의의 `requires.blocks`가 낮으면 검사기가
+///   거부하고, 서버는 그 판을 그리지 못하는 쉘에 그 앱을 보내지 않는다. 필드를 쓰지 않은 정의는 전 판 그대로다.
+/// - 블록이 그리는 모양과 조작은 쉘이 판마다 다듬을 수 있다(OS가 기본 앱을 고치듯). 정의 필드의 뜻과 앱이 기대는
+///   동작(예: 탐색기에서 파일을 열면 `opens`의 앱으로 연다)은 지킨다.
 /// - 1판: `split`, `file_tree`, `markdown_editor`, `markdown_view`.
 /// - 2판: 1판 + `agent_chat`.
 /// - 3판: 2판 + `web_view`, `explorer`, 앱 정의의 `opens`.
 /// - 4판: 3판 + `stack`, `tabs`, `toolbar`, `section`, `list`, `table`, `properties`, `tree`, `feed`, `text`,
 ///   `input`, `select`, `toggle`, `button`, `code_editor`, `code_view`, `image`, `media`, 앱 정의의 `sources`.
-pub const BLOCK_SET_VERSION: u32 = 4;
+/// - 5판: 4판 + `explorer`의 `folder`, `on_folder`, `view`, `on_view`. 5판 쉘은 탐색기를 폴더 트리와 내용의 두 칸으로
+///   그리고, 이 필드가 없는 3판 정의의 탐색기도 같은 모습으로 그린다.
+pub const BLOCK_SET_VERSION: u32 = 5;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
+///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
 /// - `agent` 1판: 창이 있는 워크스페이스의 PAS와 대화(`agent.*` 명령).
 /// - `agent` 2판: 1판 + 첨부(보내기, 기록에서 보기와 열기). 모듈의 새 판도 더하기만 하므로
 ///   `agent: 1`을 요구하는 정의는 2판 쉘에서 그대로 돌고 첨부도 쓴다.
@@ -566,14 +578,44 @@ pub enum Block {
         #[serde(default)]
         address_bar: bool,
     },
-    /// (블록 세트 3판) 고른 폴더의 파일을 모두 보이는 탐색기. 폴더를 아직 안 골랐으면 폴더 고르기를 보인다.
+    /// (블록 세트 3판, 5판에서 두 칸으로) 고른 폴더를 보는 탐색기. 폴더를 아직 안 골랐으면 폴더 고르기를 보인다.
     ///
-    /// - 폴더는 펼치고 접는다. 파일을 누르면 고르기만 한다(창 상태에 쓰지 않는다).
-    /// - 파일을 두 번 누르거나 고른 채 Enter를 누르면 그 확장자를 여는 앱(지금 버전 정의의 `opens`)으로 연다
-    ///   (`files.open`). 여는 앱이 하나면 바로 열고, 여럿이면 앱 이름순 메뉴로 고르게 하고, 없으면 그 메뉴에 열 수
-    ///   있는 앱이 없다고 보인다. 파일의 오른쪽 클릭 메뉴도 같은 앱 목록이다.
-    /// - 쉘 창이 포커스를 다시 얻으면 펼친 폴더를 다시 읽는다.
-    Explorer { root: FolderRef },
+    /// - 왼쪽 칸은 폴더 트리(폴더만), 오른쪽 칸은 지금 보는 폴더의 내용이다. 처음에는 고른 폴더 자체를 본다.
+    ///   왼쪽 칸은 `split`의 첫 칸처럼 접을 수 있고, 두 칸 사이를 끌어 폭을 바꾼다(저장하지 않음).
+    /// - 왼쪽에서 폴더를 누르면 그 폴더를 보고 그 폴더를 편다. 오른쪽에서 폴더를 두 번 누르거나 고른 채 Enter를
+    ///   누르면 그 폴더로 들어가고, 왼쪽 트리도 그 폴더까지 펴서 고른다. 오른쪽 위에는 위 폴더로 가는 단추와
+    ///   지금 경로가 있고, 경로의 마디를 누르면 그 폴더로 간다.
+    /// - 오른쪽 보기는 [`ExplorerView`]의 둘이다. 「아이콘」은 파일 종류 아이콘과 이름의 격자, 「자세히」는 이름,
+    ///   수정한 날짜, 종류, 크기의 표이고 머리를 누르면 그 열로 정렬한다(오름차순, 내림차순, 처음 순서, 저장하지
+    ///   않음). 어느 보기든 폴더가 파일보다 앞이다.
+    /// - 파일을 누르면 고르기만 한다(창 상태에 쓰지 않는다). 파일을 두 번 누르거나 고른 채 Enter를 누르면 그
+    ///   확장자를 여는 앱(지금 버전 정의의 `opens`)으로 연다(`files.open`). 여는 앱이 하나면 바로 열고, 여럿이면 앱
+    ///   이름순 메뉴로 고르게 하고, 없으면 그 메뉴에 열 수 있는 앱이 없다고 보인다. 파일의 오른쪽 클릭 메뉴도 같은
+    ///   앱 목록이다.
+    /// - 쉘 창이 포커스를 다시 얻으면 지금 보는 폴더와 왼쪽에서 편 폴더를 다시 읽는다.
+    /// - `folder`와 `on_folder`, `view`와 `on_view`(5판)를 주면 보는 폴더와 보기 방식을 창 상태에서 읽고 바뀔 때 쓴다
+    ///   (창을 다시 열거나 다른 기기에서 열어도 그 자리). 없으면 쉘이 들고 저장하지 않는다. 읽은 폴더가 경로 규칙
+    ///   ([`FileRef`])에 맞지 않거나 읽을 수 없으면 고른 폴더 자체를 보고 그것을 쓴다. 보기 값이 [`ExplorerView`]가
+    ///   아니면 「아이콘」으로 본다. 고른 폴더를 바꾸면 고른 폴더 자체로 돌아간다.
+    Explorer {
+        root: FolderRef,
+        /// (5판) 지금 보는 폴더를 읽을 상태 키. 값은 고른 폴더 기준 상대 경로이고 빈 문자열이 고른 폴더 자체다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        folder: Option<StateRef>,
+        /// (5판) 보는 폴더가 바뀌면 그 경로를 쓸 상태 키.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_folder: Option<SetState>,
+        /// (5판) 보기 방식([`ExplorerView`]의 문자열)을 읽을 상태 키.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        view: Option<StateRef>,
+        /// (5판) 보기 방식을 바꾸면 그 값을 쓸 상태 키.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_view: Option<SetState>,
+    },
 
     // ----- 블록 세트 4판: 배치 -----
     /// (4판) 자식을 한 줄로 쌓는다. 끌어서 크기를 바꾸지 않는다(그건 `split`). 자식은 제 크기만 차지하고,
@@ -1169,6 +1211,17 @@ pub struct FolderRef {
     pub permission: String,
 }
 
+/// (블록 세트 5판) 탐색기 오른쪽 칸의 보기 방식. 창 상태에는 이 문자열로 둔다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ExplorerView {
+    /// 파일 종류 아이콘과 이름의 격자. 기본값이다.
+    Icons,
+    /// 이름, 수정한 날짜, 종류, 크기의 표.
+    Details,
+}
+
 /// 권한 하나의 폴더 안 파일 하나.
 ///
 /// 경로 규칙(정의에 적은 경로와 `files.*` 명령의 경로 모두):
@@ -1730,6 +1783,11 @@ pub struct FileEntry {
     /// 고른 폴더 기준 상대 경로.
     pub path: String,
     pub kind: FileKind,
+    /// (8판) 파일 크기(바이트). 폴더는 0.
+    #[ts(type = "number")]
+    pub size: u64,
+    /// (8판) 마지막으로 바뀐 시각(RFC 3339 UTC, 초까지, 예: `2026-10-30T01:02:03Z`). 읽지 못하면 빈 문자열.
+    pub modified: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -2248,8 +2306,35 @@ mod tests {
     fn blocks_need_their_block_set() {
         let pas = example("workspace-pas.json").replace(r#""blocks": 2"#, r#""blocks": 1"#);
         rejected(&pas, "블록 세트 2판");
-        let explorer = example("explorer.json").replace(r#""blocks": 3"#, r#""blocks": 2"#);
+        let explorer = example("explorer.json").replace(r#""blocks": 5"#, r#""blocks": 2"#);
         rejected(&explorer, "블록 세트 3판");
+    }
+
+    #[test]
+    fn explorer_state_fields_need_block_set_five() {
+        // 3판 정의(필드 없음)는 그대로 통과한다.
+        let three = r#"{
+            "id": "explorer", "name": "탐색기",
+            "requires": { "blocks": 3, "modules": { "files": 1 } },
+            "permissions": [{ "module": "files", "id": "folder", "access": "read", "label": "볼 폴더" }],
+            "ui": { "type": "explorer", "root": { "permission": "folder" } }
+        }"#;
+        validate::parse_app_definition(three).expect("3판 탐색기");
+        let five = example("explorer.json");
+        let definition = validate::parse_app_definition(&five).expect("5판 탐색기");
+        assert!(matches!(
+            &definition.ui,
+            Block::Explorer { folder: Some(_), on_folder: Some(_), view: Some(_), on_view: Some(_), .. }
+        ));
+        rejected(&five.replace(r#""blocks": 5"#, r#""blocks": 4"#), "블록 세트 5판");
+        rejected(
+            &five.replace(r#""view": { "state": "view" }"#, r#""view": { "state": "mode" }"#),
+            "mode",
+        );
+        assert_eq!(
+            serde_json::to_value(ExplorerView::Details).unwrap(),
+            serde_json::json!("details")
+        );
     }
 
     #[test]
@@ -2268,8 +2353,16 @@ mod tests {
         assert!(!current.renders(&unknown_module));
         assert_eq!(
             serde_json::to_string(&current).unwrap(),
-            r#"{"blocks":4,"modules":{"agent":2,"connection":1,"files":1,"web":1}}"#
+            r#"{"blocks":5,"modules":{"agent":2,"connection":1,"files":1,"web":1}}"#
         );
+        // 4판 쉘(v0.4.x)은 5판 필드를 쓴 탐색기를 받지 않는다.
+        let explorer = validate::parse_app_definition(&example("explorer.json")).unwrap();
+        let four = Supported {
+            blocks: 4,
+            ..Supported::current()
+        };
+        assert!(!four.renders(&explorer.requires));
+        assert!(current.renders(&explorer.requires));
     }
 
     #[test]
