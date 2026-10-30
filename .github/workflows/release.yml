@@ -31,6 +31,8 @@ jobs:
       - uses: tauri-apps/tauri-action@fce9c6108b31ea247710505d3aaaa893ee6768d4 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: app
           tauriScript: pnpm tauri
@@ -38,6 +40,18 @@ jobs:
           releaseName: 'kaleidoscope ${{ github.ref_name }}'
           releaseBody: 'See the assets below to download this version.'
           prerelease: ${{ contains(github.ref_name, '-') }}
+
+      - name: 설치본과 서명 자산 확인
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = '${{ github.ref_name }}'.Substring(1)
+          $installer = "kaleidoscope_${version}_x64-setup.exe"
+          $release = gh release view '${{ github.ref_name }}' --json assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw '릴리스 자산 조회 실패' }
+          $names = @($release.assets | ForEach-Object { $_.name })
+          if ($installer -notin $names -or "$installer.sig" -notin $names) { throw '설치본 또는 서명 자산이 없습니다' }
 
       - name: Capture Windows shell smoke screen
         shell: pwsh

@@ -1,0 +1,134 @@
+name: Windows Update E2E
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/src-tauri/**'
+      - 'crates/core/src/**'
+      - '.github/workflows/e2e-update.yml'
+      - '.github/workflows/release.yml'
+
+jobs:
+  windows-update-e2e:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - run: pnpm install --frozen-lockfile
+      - name: 시험 키와 설치본 두 판
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $testDir = Join-Path $env:RUNNER_TEMP 'kaleidoscope-update-test'
+          New-Item -ItemType Directory -Force $testDir | Out-Null
+          $key = Join-Path $testDir 'test.key'
+          pnpm --dir app tauri signer generate --ci -w $key *> $null
+          if ($LASTEXITCODE -ne 0) { throw '시험 키 생성 실패' }
+          $env:TAURI_SIGNING_PRIVATE_KEY = (Get-Content -Raw $key).Trim()
+          $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
+          Write-Output "::add-mask::$env:TAURI_SIGNING_PRIVATE_KEY"
+          $pubkey = (Get-Content -Raw "$key.pub").Trim()
+          $config = @{
+            version = '0.0.1'
+            bundle = @{ createUpdaterArtifacts = $false }
+            plugins = @{ updater = @{
+              pubkey = $pubkey
+              endpoints = @('http://127.0.0.1:8719/update.json')
+              dangerousInsecureTransportProtocol = $true
+              windows = @{ installMode = 'passive' }
+            } }
+          }
+          $configPath = Join-Path $testDir 'update-config.json'
+          $config | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 $configPath
+          pnpm --dir app tauri build --features e2e --bundles nsis --config $configPath
+          if ($LASTEXITCODE -ne 0) { throw 'A 빌드 실패' }
+          $bundleDir = Join-Path $env:GITHUB_WORKSPACE 'target/release/bundle/nsis'
+          $old = Get-ChildItem $bundleDir -Filter '*0.0.1*x64-setup.exe' | Select-Object -First 1
+          if (-not $old) { throw 'A 설치본 없음' }
+          $oldPath = Join-Path $testDir 'old.exe'
+          Copy-Item $old.FullName $oldPath
+          pnpm --dir app tauri signer sign $oldPath *> $null
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$oldPath.sig")) { throw 'A 서명 실패' }
+          $config.version = '0.0.2'
+          $config.bundle.createUpdaterArtifacts = $true
+          $config | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 $configPath
+          pnpm --dir app tauri build --features e2e --bundles nsis --config $configPath
+          if ($LASTEXITCODE -ne 0) { throw 'B 빌드 실패' }
+          $new = Get-ChildItem $bundleDir -Filter '*0.0.2*x64-setup.exe' | Select-Object -First 1
+          if (-not $new -or -not (Test-Path "$($new.FullName).sig")) { throw 'B 설치본 또는 서명 없음' }
+          Copy-Item $new.FullName (Join-Path $testDir 'new.exe')
+          Copy-Item "$($new.FullName).sig" (Join-Path $testDir 'new.exe.sig')
+          Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY, Env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+      - name: 서명 거부와 설치 후 재시작
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $testDir = Join-Path $env:RUNNER_TEMP 'kaleidoscope-update-test'
+          $out = Join-Path $env:GITHUB_WORKSPACE 'windows-update-e2e'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          $manifest = @{ version = '0.0.2'; notes = 'E2E'; pub_date = '2026-01-01T00:00:00Z'; url = 'http://127.0.0.1:8719/new.exe'; signature = (Get-Content -Raw (Join-Path $testDir 'old.exe.sig')).Trim() }
+          $manifest | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $testDir 'update.json')
+          $server = Start-Process python -ArgumentList @('-m', 'http.server', '8719', '--bind', '127.0.0.1') -WorkingDirectory $testDir -PassThru -WindowStyle Hidden
+          $app = $null
+          try {
+            $installer = Start-Process (Join-Path $testDir 'old.exe') -ArgumentList '/S' -Wait -PassThru
+            if ($installer.ExitCode -ne 0) { throw "A 설치 실패: $($installer.ExitCode)" }
+            $exeName = (Get-Item (Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe')).Name
+            $exe = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "kaleidoscope/$exeName"
+            if (-not (Test-Path $exe)) { throw "설치된 실행 파일 없음: $exe" }
+            if ((Get-Item $exe).VersionInfo.ProductVersion -ne '0.0.1') { throw 'A 설치 판 불일치' }
+            $env:KALEIDOSCOPE_E2E_OUT = Join-Path $out 'reject'
+            $env:KALEIDOSCOPE_E2E_SCENARIO = 'update-reject'
+            $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $testDir 'webview'
+            $app = Start-Process $exe -PassThru
+            if (-not $app.WaitForExit(110000)) { throw '서명 거부 시험 시간 초과' }
+            if ($app.ExitCode -ne 0) { throw "서명 거부 시험 실패: $($app.ExitCode)" }
+            $rejected = Get-Content (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl') | ForEach-Object { $_ | ConvertFrom-Json }
+            if (-not ($rejected | Where-Object { $_.step -eq 'failed' -and $_.data.version -eq '0.0.2' -and $_.data.reason -eq '서명이 맞지 않아 깔지 않았습니다' })) { throw '서명 거부 기록 없음' }
+            if ((Get-Item $exe).VersionInfo.ProductVersion -ne '0.0.1') { throw '거부 후 설치 판 변경됨' }
+            $manifest.signature = (Get-Content -Raw (Join-Path $testDir 'new.exe.sig')).Trim()
+            $manifest | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $testDir 'update.json')
+            $env:KALEIDOSCOPE_E2E_OUT = Join-Path $out 'update'
+            $env:KALEIDOSCOPE_E2E_SCENARIO = 'update'
+            $app = Start-Process $exe -PassThru
+            $deadline = (Get-Date).AddMinutes(4)
+            $captured = $false
+            $complete = $false
+            while ((Get-Date) -lt $deadline) {
+              $request = Join-Path $env:KALEIDOSCOPE_E2E_OUT 'update-ready.request'
+              if ((Test-Path $request) -and -not $captured) {
+                $capture = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $env:GITHUB_WORKSPACE 'app/e2e-windows/capture.ps1'), (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'update-ready.png')) -WindowStyle Hidden -Wait -PassThru
+                if ($capture.ExitCode -ne 0) { throw '업데이트 화면 캡처 실패' }
+                New-Item -ItemType File (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'update-ready.done') | Out-Null
+                $captured = $true
+              }
+              $eventsPath = Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl'
+              if (Test-Path $eventsPath) {
+                $events = Get-Content $eventsPath | ForEach-Object { $_ | ConvertFrom-Json }
+                if ($events | Where-Object { $_.step -eq 'error' }) { throw '업데이트 시나리오 오류, events.jsonl 확인' }
+                if ($events | Where-Object { $_.step -eq 'complete' -and $_.data.version -eq '0.0.2' }) { $complete = $true; break }
+              }
+              Start-Sleep -Milliseconds 200
+            }
+            if (-not $complete -or -not $captured) { throw '업데이트 완료 또는 화면 캡처 시간 초과' }
+            if ((Get-Item $exe).VersionInfo.ProductVersion -ne '0.0.2') { throw 'B 설치 판 불일치' }
+          } finally {
+            if ($app -and -not $app.HasExited) { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
+            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+          }
+      - name: 시험 기록과 캡처 보존
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-update-e2e
+          path: windows-update-e2e/
+          if-no-files-found: warn

@@ -15,6 +15,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
 mod ui;
+mod update;
 
 pub(crate) fn observe_ui(request: &CoreRequest) {
     ui::observe(request);
@@ -393,21 +394,37 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
     };
     thread::spawn(move || {
         let out = PathBuf::from(out);
-        let status =
-            match fs::create_dir_all(&out).and_then(|_| File::create(out.join("events.jsonl"))) {
-                Ok(mut log) => match scenario(&app, &core, &out, &mut log) {
-                    Ok(()) => 0,
-                    Err(error) => {
-                        let _ = record(&mut log, "error", json!({"message": error}));
-                        eprintln!("E2E 실패: {error}");
-                        1
-                    }
-                },
+        let update_scenario = matches!(
+            env::var("KALEIDOSCOPE_E2E_SCENARIO").as_deref(),
+            Ok("update" | "update-reject")
+        );
+        let status = match fs::create_dir_all(&out).and_then(|_| {
+            if update_scenario {
+                fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(out.join("events.jsonl"))
+            } else {
+                File::create(out.join("events.jsonl"))
+            }
+        }) {
+            Ok(mut log) => match if update_scenario {
+                update::scenario(&app, &core, &out, &mut log)
+            } else {
+                scenario(&app, &core, &out, &mut log)
+            } {
+                Ok(()) => 0,
                 Err(error) => {
-                    eprintln!("E2E 로그 생성 실패: {error}");
+                    let _ = record(&mut log, "error", json!({"message": error}));
+                    eprintln!("E2E 실패: {error}");
                     1
                 }
-            };
+            },
+            Err(error) => {
+                eprintln!("E2E 로그 생성 실패: {error}");
+                1
+            }
+        };
         app.exit(status);
     });
 }
