@@ -13,6 +13,7 @@ import { PropertiesBlock } from "../blocks/data-properties";
 import { TreeBlock } from "../blocks/data-tree";
 import { FeedBlock } from "../blocks/data-feed";
 import { AgentChatBlock } from "../blocks/agent-chat";
+import { AgentSessionBlock } from "../blocks/agent-session";
 import { WebViewBlock } from "../blocks/web-view";
 import { ExplorerBlock } from "../blocks/explorer";
 import { CodeEditorBlock } from "../blocks/code-editor";
@@ -32,6 +33,8 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
       return <MarkdownViewBlock block={block} context={context} />;
     case "agent_chat":
       return <AgentChatBlock block={block} context={context} />;
+    case "agent_session":
+      return <AgentSessionBlock block={block} context={context} pointer={pointer} />;
     case "stack": return <StackBlock block={block} context={context} pointer={pointer} />;
     case "tabs": return <TabsBlock block={block} context={context} pointer={pointer} />;
     case "toolbar": return <ToolbarBlock block={block} context={context} pointer={pointer} />;
