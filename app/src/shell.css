@@ -213,11 +213,14 @@
 }
 
 .ks-window-content {
+  position: relative;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
   overflow: hidden;
 }
+
+.ks-window-settings-notice { position: absolute; inset-inline: var(--ks-space-3); bottom: var(--ks-space-3); }
 
 .ks-window-resize-east,
 .ks-window-resize-south,

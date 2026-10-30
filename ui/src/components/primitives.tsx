@@ -7,6 +7,9 @@ export interface ButtonProps {
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   type?: "button" | "submit";
   "aria-pressed"?: boolean;
+  "aria-label"?: string;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
 }
 
 export function Button({
@@ -16,12 +19,18 @@ export function Button({
   onClick,
   type = "button",
   "aria-pressed": pressed,
+  "aria-label": label,
+  "aria-invalid": invalid,
+  "aria-describedby": describedBy,
 }: ButtonProps) {
   return (
     <button
       className={`ks-button ks-button-${variant}${pressed === true ? " is-selected" : ""}`}
       disabled={disabled}
       aria-pressed={pressed}
+      aria-label={label}
+      aria-invalid={invalid}
+      aria-describedby={describedBy}
       onClick={onClick}
       type={type}
     >

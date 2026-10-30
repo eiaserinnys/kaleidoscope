@@ -2,6 +2,8 @@ export { AppWindowContent } from "./render/app-window-content";
 export { Button, EmptyState, IconButton, Notice, StatusText } from "./components/primitives";
 export {
   ArrowUp,
+  ArrowDown,
+  Settings,
   ArrowLeft,
   ArrowRight,
   ChevronDown,

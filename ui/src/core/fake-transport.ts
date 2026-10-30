@@ -36,6 +36,8 @@ export interface FakeTransportSeed {
   agentSendDelayMs?: number;
   updateRestartError?: string;
   data?: FakeDataSeed;
+  storage?: Array<{ window_id: string; entry: string; content: JsonValue }>;
+  storageWriteDelayMs?: number;
   webUnavailable?: boolean;
   media?: Record<string, string>;
 }
@@ -58,6 +60,7 @@ export interface FakeTransport extends CoreTransport {
   emit(event: CoreEvent): void;
   getShareCalls(): Array<{ window_id: string; view: VisibleView }>;
   getCalls(): CoreRequest[];
+  failNextStorageWrite(message: string): void;
   getOpenedAttachments(): Array<{ workspace_id: string; item_id: string; index: number }>;
 }
 
@@ -133,6 +136,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   const calls: CoreRequest[] = [];
   const webPlaces: Array<{ window_id: string; bounds: Rect | null }> = [];
   let revisionNumber = 1;
+  let storageFailure: string | null = null;
   let windowNumber = 1;
   const models = clone(seed.agentModels ?? [
     { preset: "gemini-4-argon", label: "Argon" },
@@ -219,6 +223,10 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     const key = declaration.key.replace("{workspace_id}", workspace ?? "");
     return { window, declaration, key, id: JSON.stringify([window.app_id, key]) };
   };
+  for (const item of seed.storage ?? []) {
+    const { id } = storageEntry(item.window_id, item.entry);
+    storage.set(id, { content: clone(item.content), revision: `fake-revision-${revisionNumber++}` });
+  }
   const emitStorage = (appId: string, key: string, declaration: StorageEntryDecl, revision: string | null) => {
     for (const window of snapshot.shared.windows) {
       if (window.app_id !== appId) continue;
@@ -698,9 +706,12 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       }
       case "storage.write": {
         const { window, declaration, key, id } = storageEntry(request.window_id, request.entry);
+        if (seed.storageWriteDelayMs) await delay(seed.storageWriteDelayMs);
+        if (storageFailure) { const message = storageFailure; storageFailure = null; return fail("server", message); }
         const current = storage.get(id);
         if ((request.expected_revision ?? null) !== (current?.revision ?? null)) return fail("conflict", "문서가 읽은 뒤에 바뀌었습니다");
         if (declaration.kind === "md" && typeof request.content !== "string") return fail("invalid_request", "마크다운 문서는 글이어야 합니다");
+        if (typeof request.content === "string" && declaration.schema?.minLength && request.content.length < declaration.schema.minLength) return fail("invalid_request", "값을 입력해 주세요");
         if (current && JSON.stringify(current.content) === JSON.stringify(request.content)) return { op: "storage.write", revision: current.revision };
         const revision = `fake-revision-${revisionNumber++}`;
         storage.set(id, { content: clone(request.content), revision });
@@ -777,6 +788,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       emitState();
     },
     emit,
+    failNextStorageWrite(message) { storageFailure = message; },
     getShareCalls() { return clone(shareCalls); },
     getCalls() { return clone(calls); },
     getOpenedAttachments() { return clone(openedAttachments); },

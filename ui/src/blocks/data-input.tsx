@@ -6,8 +6,8 @@ import { useBinding, useWindowData } from "../data/window-data";
 import { DataState } from "../components/data-state";
 import { DataIcon } from "../components/data-icons";
 import { Dialog } from "../components/dialog";
-import { ChevronDown, X } from "../components/icons";
-import { Menu } from "../components/menu";
+import { X } from "../components/icons";
+import { Select, Toggle } from "../components/select-toggle";
 import { Button, IconButton } from "../components/primitives";
 import { display } from "./data-layout";
 import { asArray } from "./data-view-common";
@@ -58,28 +58,16 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
 function validOption(value: unknown): value is SelectOption {
   return typeof value === "string" || (typeof value === "object" && value !== null && "label" in value && typeof value.label === "string" && "value" in value);
 }
-const optionValue = (option: SelectOption): JsonValue => typeof option === "string" ? option : option.value;
-const optionLabel = (option: SelectOption) => typeof option === "string" ? option : option.label;
-const equal = (a: JsonValue | undefined, b: JsonValue) => JSON.stringify(a) === JSON.stringify(b);
-
 export function SelectBlock({ block, context, pointer }: Props<"select">) {
   const data = useWindowData();
   const options = useBinding(`${pointer}/options`, block.options);
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const close = useCallback(() => setAnchor(null), []);
   if (options.status !== "ready") return <DataState value={options} compact />;
-  const items = asArray(options.value).filter(validOption);
-  const current = context.window.state[block.value.state];
-  const selected = items.find((item) => equal(current, optionValue(item)));
-  const select = (item: SelectOption) => { void data.act(`${pointer}/on_change`, optionValue(item)); };
-  if (block.style === "segmented") return <div className="ks-data-segmented">{items.map((item, index) => <Button key={index} aria-pressed={equal(current, optionValue(item))} onClick={() => select(item)}>{optionLabel(item)}</Button>)}</div>;
-  return <><Button onClick={(event) => setAnchor(event.currentTarget)}>{selected ? optionLabel(selected) : block.placeholder ?? ""}<ChevronDown size="inline" /></Button>{anchor ? <Menu anchor={anchor} onClose={close} items={items.map((item, index) => ({ id: String(index), label: optionLabel(item), checked: equal(current, optionValue(item)), onSelect: () => select(item) }))} /> : null}</>;
+  return <Select items={asArray(options.value).filter(validOption)} value={context.window.state[block.value.state]} placeholder={block.placeholder} segmented={block.style === "segmented"} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} />;
 }
 
 export function ToggleBlock({ block, context, pointer }: Props<"toggle">) {
   const data = useWindowData();
-  const checked = Boolean(context.window.state[block.value.state]);
-  return <button className="ks-data-toggle" type="button" role="switch" aria-checked={checked} onClick={() => { void data.act(`${pointer}/on_change`, !checked); }}><span className="ks-data-toggle-track"><span className="ks-data-toggle-thumb" /></span><span>{block.label}</span></button>;
+  return <Toggle checked={Boolean(context.window.state[block.value.state])} label={block.label} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} />;
 }
 
 export function ButtonBlock({ block, pointer }: Props<"button">) {

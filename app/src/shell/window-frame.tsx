@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { IconButton, ScreenShare, X, useShareView, type ShellStore, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
+import { IconButton, Notice, ScreenShare, Settings, X, useShareView, type ShellStore, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
 
 export interface WindowFrameProps {
@@ -8,10 +8,11 @@ export interface WindowFrameProps {
   isTop: boolean;
   sharing: boolean;
   shareable: boolean;
+  hasSettings?: boolean;
   store: ShellStore;
   onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
   window: AppWindow;
-  children: ReactNode;
+  children: ReactNode | ((settingsOpen: boolean, closeSettings: () => void, reportProblem: (message: string | null) => void, visited: boolean) => ReactNode);
 }
 
 type Gesture = {
@@ -26,14 +27,21 @@ type Gesture = {
 const MIN_WIDTH = "--ks-window-min-width";
 const MIN_HEIGHT = "--ks-window-min-height";
 
-export function WindowFrame({ area, appName, isTop, sharing, shareable, store, onCall, window: appWindow, children }: WindowFrameProps) {
+export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSettings, store, onCall, window: appWindow, children }: WindowFrameProps) {
   const contentRef = useRef<HTMLDivElement>(null);
-  useShareView({ windowId: appWindow.id, root: contentRef, enabled: sharing, store });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsVisited, setSettingsVisited] = useState(false);
+  const [settingsProblem, setSettingsProblem] = useState<string | null>(null);
+  const settingsButton = useRef<HTMLSpanElement>(null);
+  const closeSettings = () => { setSettingsOpen(false); requestAnimationFrame(() => settingsButton.current?.querySelector<HTMLButtonElement>("button")?.focus()); };
+  useShareView({ windowId: appWindow.id, root: contentRef, enabled: sharing && !settingsOpen, store });
   const titleRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const previewRef = useRef<Rect | null>(null);
   const [preview, setPreview] = useState<Rect | null>(null);
   const displayRect = fitWindowRect(preview ?? appWindow.rect, area);
+
+  useEffect(() => { if (!hasSettings) { setSettingsOpen(false); setSettingsProblem(null); } }, [hasSettings]);
 
   useEffect(() => {
     const pending = previewRef.current;
@@ -154,6 +162,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, store, o
           <span className="ks-window-title" title={appName}>{appName}</span>
           <div className="ks-window-title-actions">
           {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} tone="share" pressed={sharing} onClick={() => void onCall({ op: "share.set", window_id: appWindow.id, on: !sharing })}><ScreenShare /></IconButton> : null}
+          {hasSettings ? <span ref={settingsButton}><IconButton aria-label={settingsProblem ? `앱 설정: ${settingsProblem}` : "앱 설정"} pressed={settingsOpen} onClick={() => { if (settingsOpen) closeSettings(); else { setSettingsVisited(true); setSettingsOpen(true); } }}><Settings /></IconButton></span> : null}
           <IconButton
             aria-label="창 닫기"
             onClick={() => void onCall({ op: "window.close", window_id: appWindow.id })}
@@ -163,7 +172,10 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, store, o
           </IconButton>
           </div>
         </header>
-        <div className="ks-window-content" ref={contentRef}>{children}</div>
+        <div className="ks-window-content" ref={contentRef}>
+          {typeof children === "function" ? children(settingsOpen, closeSettings, setSettingsProblem, settingsVisited) : children}
+          {settingsProblem && !settingsOpen ? <div className="ks-window-settings-notice" data-ks-share-skip><Notice role="alert" data-ks-overlay>{settingsProblem}</Notice></div> : null}
+        </div>
       </div>
       <div
         aria-hidden="true"

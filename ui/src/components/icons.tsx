@@ -1,5 +1,7 @@
 import {
   ArrowUp as ArrowUpIcon,
+  ArrowDown as ArrowDownIcon,
+  Settings as SettingsIcon,
   ArrowLeft as ArrowLeftIcon,
   ArrowRight as ArrowRightIcon,
   ChevronDown as ChevronDownIcon,
@@ -24,6 +26,7 @@ import {
   Paperclip as PaperclipIcon,
   Plus as PlusIcon,
   RotateCw as RotateCwIcon,
+  RotateCcw as RotateCcwIcon,
   ScreenShare as ScreenShareIcon,
   X as XIcon,
   type LucideIcon,
@@ -72,10 +75,13 @@ export const FilePlus = (props: IconProps) => renderIcon(FilePlusIcon, props);
 export const FolderOpen = (props: IconProps) => renderIcon(FolderOpenIcon, props);
 export const Folder = (props: IconProps) => renderIcon(FolderIcon, props);
 export const MessageSquare = (props: IconProps) => renderIcon(MessageSquareIcon, props);
+export const Settings = (props: IconProps) => renderIcon(SettingsIcon, props);
+export const ArrowDown = (props: IconProps) => renderIcon(ArrowDownIcon, props);
 export const ArrowUp = (props: IconProps) => renderIcon(ArrowUpIcon, props);
 export const ArrowLeft = (props: IconProps) => renderIcon(ArrowLeftIcon, props);
 export const ArrowRight = (props: IconProps) => renderIcon(ArrowRightIcon, props);
 export const RotateCw = (props: IconProps) => renderIcon(RotateCwIcon, props);
+export const RotateCcw = (props: IconProps) => renderIcon(RotateCcwIcon, props);
 export const Globe = (props: IconProps) => renderIcon(GlobeIcon, props);
 export const Plus = (props: IconProps) => renderIcon(PlusIcon, props);
 export const LayoutGrid = (props: IconProps) => renderIcon(LayoutGridIcon, props);
