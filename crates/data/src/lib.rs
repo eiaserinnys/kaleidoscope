@@ -1,5 +1,6 @@
 //! 앱 정의의 원천 계획, 식 계산과 동작 단계. 입출력은 호출자가 맡는다.
 use std::collections::{BTreeMap, BTreeSet};
+pub mod share;
 
 use jsonata_core::{
     ast::AstNode,
@@ -210,6 +211,24 @@ impl CompiledApp {
 
     pub fn binding_dependencies(&self) -> &[BindingDependencies] {
         &self.bindings
+    }
+
+    /// 앱 정의의 제공자 바인딩을 같은 식 엔진으로 계산한다.
+    pub fn evaluate_binding(
+        &self,
+        binding: &Binding,
+        pointer: &str,
+        env: &Env<'_>,
+    ) -> Result<Value, String> {
+        let vars = Variables::new(
+            env.state,
+            env.data,
+            env.storage,
+            env.storage_meta,
+            Some(env.event),
+            Some(env.item),
+        );
+        self.binding(binding, pointer, env.state, &vars)
     }
 
     pub fn evaluate(

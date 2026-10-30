@@ -152,6 +152,8 @@ pub(crate) fn login(
         .remove(&connection_name);
     result?;
     crate::data_runtime::refresh_login_required(inner, &connection_name);
+    crate::conversation_stream::login_succeeded(inner, &connection_name);
+    crate::conversation_send::recover(inner);
     Ok(kaleidoscope_contract::CoreReply::ConnectionLogin {})
 }
 

@@ -2,6 +2,64 @@ use super::*;
 use crate::connections::LoginStore;
 
 #[test]
+fn stream_auth_failure_reports_and_successful_login_reconnects() {
+    let fixture = OAuthFixture::start();
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(BrowserHost::default());
+    let (core, window) = make_core(host, &temp, &fixture, ConnectionKind::Oauth);
+    login(&core, &window).unwrap();
+    let client = crate::conversation_http::Client::new(&core.inner, &window, "api", "/v1").unwrap();
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        let _ = tx.send(event.clone());
+    }));
+    fixture.state.lock().unwrap().stream_status = 401;
+    crate::conversation_stream::watch(
+        &core.inner,
+        "key".into(),
+        &window,
+        client,
+        "thread-1",
+        "0",
+        &[],
+    );
+    let event = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert!(matches!(
+        event,
+        CoreEvent::ConversationError {
+            code: ErrorCode::LoginRequired,
+            ..
+        }
+    ));
+    fixture.state.lock().unwrap().stream_status = 200;
+    login(&core, &window).unwrap();
+    assert!(matches!(
+        rx.recv_timeout(Duration::from_secs(10)).unwrap(),
+        CoreEvent::ConversationUpdate {
+            update: kaleidoscope_contract::conversation::ConversationEvent::Snapshot { .. },
+            ..
+        }
+    ));
+    fixture.state.lock().unwrap().stream_status = 403;
+    assert!(matches!(
+        rx.recv_timeout(Duration::from_secs(10)).unwrap(),
+        CoreEvent::ConversationError {
+            code: ErrorCode::PermissionDenied,
+            ..
+        }
+    ));
+    fixture.state.lock().unwrap().stream_status = 200;
+    login(&core, &window).unwrap();
+    assert!(matches!(
+        rx.recv_timeout(Duration::from_secs(10)).unwrap(),
+        CoreEvent::ConversationUpdate {
+            update: kaleidoscope_contract::conversation::ConversationEvent::Snapshot { .. },
+            ..
+        }
+    ));
+}
+
+#[test]
 fn login_registers_persists_and_oauth_source_uses_bearer_token() {
     let fixture = OAuthFixture::start();
     let temp = TempDir::new().unwrap();

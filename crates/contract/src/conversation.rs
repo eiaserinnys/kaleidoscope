@@ -15,6 +15,7 @@ pub enum ConversationProtocol {
 pub const MODELS_PATH: &str = "/models";
 pub const THREADS_PATH: &str = "/threads";
 pub const THREADS_BY_KEY_PATH: &str = "/threads/by-key";
+pub const THREAD_ADOPTION_PATH: &str = "/threads/by-key/adoption";
 pub const THREAD_ITEMS_PATH: &str = "/threads/{thread_id}/items";
 pub const THREAD_EVENTS_PATH: &str = "/threads/{thread_id}/events";
 pub const THREAD_MESSAGES_PATH: &str = "/threads/{thread_id}/messages";
@@ -86,6 +87,13 @@ pub struct ThreadListReply {
 #[ts(export, export_to = "contract.ts")]
 pub struct ThreadByKeyReply {
     pub thread: ConversationThread,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AdoptThreadRequest {
+    pub session_id: String,
+    pub first_input_is_initial_instruction: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

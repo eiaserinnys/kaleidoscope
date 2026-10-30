@@ -208,6 +208,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             if !changed.is_empty() {
                 crate::data_runtime::connections_changed(inner, &changed);
             }
+            crate::conversation_send::recover(inner);
         }
     }
     link::is_current(inner, generation)

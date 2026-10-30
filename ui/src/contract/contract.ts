@@ -13,6 +13,8 @@ export type Action = SetStateAction | RefreshAction | CallAction | SetStorageAct
  */
 export type Actions = SetState | Array<Action>;
 
+export type AdoptThreadRequest = { session_id: string, first_input_is_initial_instruction: boolean, };
+
 /**
  * 기록에 붙은 첨부 하나(모듈 `agent` 2판). 내용은 `agent.attachment`로 읽는다.
  */
@@ -391,7 +393,7 @@ details: Array<string>, };
 /**
  * 코어가 화면에 보내는 이벤트. `event`로 가른다.
  */
-export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "agent.update", workspace_id: string, update: AgentUpdate, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, };
+export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "agent.update", workspace_id: string, update: AgentUpdate, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, code: ErrorCode, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, };
 
 /**
  * 코어의 응답. `op`는 명령과 같다.
@@ -472,7 +474,7 @@ export type EnsureThreadReply = { thread: ConversationThread, created: boolean, 
 
 export type EnsureThreadRequest = { title: string, selected_model: string, model_order: Array<string>, profile: string, collection: string, initial_instruction: string, instructions: string, };
 
-export type ErrorCode = "invalid_request" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "io" | "server" | "unavailable";
+export type ErrorCode = "invalid_request" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "login_required" | "binding_conflict" | "io" | "server" | "unavailable";
 
 /**
  * (블록 세트 5판) 탐색기 오른쪽 칸의 보기 방식. 창 상태에는 이 문자열로 둔다.

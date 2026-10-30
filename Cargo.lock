@@ -2193,11 +2193,13 @@ dependencies = [
  "kaleidoscope-contract",
  "kaleidoscope-data",
  "opener",
+ "percent-encoding",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
+ "tokio",
  "url",
  "uuid",
 ]
@@ -2208,7 +2210,9 @@ version = "0.1.0"
 dependencies = [
  "jsonata-core",
  "kaleidoscope-contract",
+ "serde",
  "serde_json",
+ "similar",
 ]
 
 [[package]]

@@ -1,10 +1,8 @@
 use super::*;
 use axum::extract::{rejection::JsonRejection, Extension, Path};
 use kaleidoscope_contract::registry::{ShareUpload, SHARE_BLOCK_END, SHARE_BLOCK_START};
-use similar::TextDiff;
+use kaleidoscope_data::share::{SentView, View};
 use std::collections::BTreeMap;
-
-const SHARE_INTRO: &str = "디렉터가 kaleidoscope 쉘에서 「같이 보기」로 켠 창에 지금 보이는 내용입니다. 쉘이 디렉터의 말 뒤에 붙였고 디렉터가 쓴 글이 아닙니다. 지난번 말 뒤로 달라진 것만 담았습니다. 지금 모습 전체는 MCP get_shared_view로 읽을 수 있습니다. 이미지나 웹 화면이 보이는 창은 모습이 바뀌었을 때 「같이 보기 - 앱 이름.png」 첨부로 함께 옵니다.";
 
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct SharedView {
@@ -15,12 +13,6 @@ pub(super) struct SharedView {
     pub updated_at: String,
     pub visual: bool,
     pub text: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct SentView {
-    app_name: String,
-    text: String,
 }
 
 #[derive(Default)]
@@ -195,76 +187,15 @@ fn build_share_block(
     views: &[SharedView],
     sent: &BTreeMap<String, SentView>,
 ) -> Option<(String, BTreeMap<String, SentView>)> {
-    if views.is_empty() && sent.is_empty() {
-        return None;
-    }
-
-    let mut next = BTreeMap::new();
-    let mut entries = Vec::new();
-    for view in views {
-        next.insert(
-            view.window_id.clone(),
-            SentView {
-                app_name: view.app_name.clone(),
-                text: view.text.clone(),
-            },
-        );
-        let previous = sent.get(&view.window_id);
-        let (status, content) = match previous {
-            None => ("새로 같이 봄", Some(view.text.clone())),
-            Some(previous) if previous.text == view.text => ("그대로", None),
-            Some(previous) => {
-                let diff = TextDiff::from_lines(&previous.text, &view.text)
-                    .unified_diff()
-                    .context_radius(1)
-                    .to_string();
-                if diff.len() > view.text.len() {
-                    ("바뀜(전체)", Some(view.text.clone()))
-                } else {
-                    ("바뀜", Some(diff))
-                }
-            }
-        };
-        entries.push((
-            view.app_name.clone(),
-            view.window_id.clone(),
-            format!(
-                "## {} (창 {}): {}{}",
-                view.app_name,
-                short_window_id(&view.window_id),
-                status,
-                content.map(|text| format!("\n{text}")).unwrap_or_default()
-            ),
-        ));
-    }
-
-    for (window_id, previous) in sent {
-        if !next.contains_key(window_id) {
-            entries.push((
-                previous.app_name.clone(),
-                window_id.clone(),
-                format!(
-                    "## {} (창 {}): 같이 보기 끝",
-                    previous.app_name,
-                    short_window_id(window_id)
-                ),
-            ));
-        }
-    }
-    entries.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
-    let block = format!(
-        "{SHARE_BLOCK_START}\n{SHARE_INTRO}\n\n{}\n{SHARE_BLOCK_END}",
-        entries
-            .into_iter()
-            .map(|(_, _, entry)| entry)
-            .collect::<Vec<_>>()
-            .join("\n\n")
-    );
-    Some((block, next))
-}
-
-fn short_window_id(window_id: &str) -> &str {
-    window_id.get(..8).unwrap_or(window_id)
+    let views: Vec<_> = views
+        .iter()
+        .map(|view| View {
+            window_id: view.window_id.clone(),
+            app_name: view.app_name.clone(),
+            text: view.text.clone(),
+        })
+        .collect();
+    kaleidoscope_data::share::build_share_block(&views, sent)
 }
 
 pub(super) fn strip_share_block(text: &str) -> String {

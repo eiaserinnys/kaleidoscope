@@ -3,6 +3,11 @@ mod agent_commands;
 mod app_commands;
 mod app_storage;
 mod connections;
+mod conversation;
+mod conversation_context;
+mod conversation_http;
+mod conversation_send;
+mod conversation_stream;
 mod data_runtime;
 mod data_sources;
 mod error;
@@ -135,6 +140,8 @@ pub(crate) struct Inner {
     pub(crate) layout_synced_epoch: Mutex<Option<u64>>,
     pub(crate) layout_signal: LayoutSignal,
     pub(crate) data_runtimes: data_runtime::DataRuntimes,
+    pub(crate) conversation_streams: conversation_stream::Streams,
+    pub(crate) conversation_sends: Mutex<HashSet<String>>,
     pub(crate) connections: Mutex<Vec<kaleidoscope_contract::registry::ConnectionInfo>>,
     pub(crate) login_store: Arc<logins::Logins>,
     pub(crate) login_in_progress: Mutex<HashSet<String>>,
@@ -251,6 +258,8 @@ impl Core {
                 changed: Condvar::new(),
             },
             data_runtimes: data_runtime::DataRuntimes::default(),
+            conversation_streams: conversation_stream::Streams::default(),
+            conversation_sends: Mutex::new(HashSet::new()),
             connections: Mutex::new(Vec::new()),
             login_store,
             login_in_progress: Mutex::new(HashSet::new()),
@@ -294,13 +303,13 @@ impl Core {
             | CoreRequest::AgentSend { .. }
             | CoreRequest::AgentAttachment { .. }
             | CoreRequest::AgentAttachmentOpen { .. }) => link::handle_agent(&self.inner, request),
-            CoreRequest::ConversationGet { .. }
+            request @ (CoreRequest::ConversationGet { .. }
             | CoreRequest::ConversationHistory { .. }
             | CoreRequest::ConversationCreate { .. }
             | CoreRequest::ConversationSend { .. }
             | CoreRequest::ConversationAttachment { .. }
-            | CoreRequest::ConversationAttachmentOpen { .. } => {
-                Err(error::make(kaleidoscope_contract::ErrorCode::Unavailable))
+            | CoreRequest::ConversationAttachmentOpen { .. }) => {
+                conversation::handle(&self.inner, request)
             }
             request @ (CoreRequest::StorageGet { .. }
             | CoreRequest::StorageWrite { .. }
@@ -571,14 +580,13 @@ impl Inner {
         }
         if matches!(event, CoreEvent::StateChanged { .. }) {
             data_runtime::state_changed(self);
+            conversation_stream::state_changed(self);
         }
     }
 }
 
 pub(crate) fn supported() -> kaleidoscope_contract::Supported {
-    let mut supported = kaleidoscope_contract::Supported::current();
-    supported.modules.insert("agent".into(), 2);
-    supported
+    kaleidoscope_contract::Supported::current()
 }
 
 pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {

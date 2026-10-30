@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Cursor;
 
 use base64::engine::general_purpose::STANDARD;
@@ -23,6 +23,51 @@ pub(crate) struct ShareState {
     uploaded: HashMap<String, ShareUpload>,
     pending_deletes: HashSet<String>,
     visual_hashes: HashMap<String, String>,
+    sent: HashMap<String, BTreeMap<String, kaleidoscope_data::share::SentView>>,
+}
+
+pub(crate) fn prepare_text(
+    inner: &Inner,
+    workspace: &str,
+    conversation: &str,
+) -> Option<(String, BTreeMap<String, kaleidoscope_data::share::SentView>)> {
+    let state = inner.state.lock().unwrap();
+    let views: Vec<_> = state
+        .share
+        .sharing
+        .iter()
+        .filter_map(|id| {
+            let upload = share_upload(&state, id, state.share.views.get(id)?)?;
+            (upload.workspace_id == workspace).then(|| kaleidoscope_data::share::View {
+                window_id: id.clone(),
+                app_name: upload.app_name,
+                text: upload.text,
+            })
+        })
+        .collect();
+    kaleidoscope_data::share::build_share_block(
+        &views,
+        &state
+            .share
+            .sent
+            .get(conversation)
+            .cloned()
+            .unwrap_or_default(),
+    )
+}
+
+pub(crate) fn mark_sent_text(
+    inner: &Inner,
+    conversation: &str,
+    sent: BTreeMap<String, kaleidoscope_data::share::SentView>,
+) {
+    inner
+        .state
+        .lock()
+        .unwrap()
+        .share
+        .sent
+        .insert(conversation.to_string(), sent);
 }
 
 pub(crate) fn set(
