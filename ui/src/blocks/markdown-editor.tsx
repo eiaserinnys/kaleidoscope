@@ -6,7 +6,8 @@ import type { Block, FileRef } from "../contract/contract";
 import { Notice, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
-import { FileEditorSession } from "./file-editor-session";
+import { FileEditorSession, type FileEditorSnapshot } from "./file-editor-session";
+import { documentEditorSession } from "./document-editor-session";
 import { EditorConflict } from "./editor-conflict";
 import { createMarkdownEditorState } from "./markdown-editor-state";
 
@@ -14,6 +15,7 @@ type MarkdownEditorBlockData = Extract<Block, { type: "markdown_editor" }>;
 type FileMarkdownEditorBlockData = MarkdownEditorBlockData & { file: FileRef };
 
 export function MarkdownEditorBlock({ block, context }: { block: MarkdownEditorBlockData; context: BlockContext }) {
+  if (block.document) return <DocumentMarkdownEditorBlock entry={block.document.entry} context={context} />;
   if (!block.file) return null;
   return <FileMarkdownEditorBlock block={{ ...block, file: block.file }} context={context} />;
 }
@@ -55,10 +57,24 @@ function FileMarkdownEditorBlock({ block, context }: { block: FileMarkdownEditor
 
   if (!hasGrant) return null;
   if (path === null) return <div className="ks-markdown-editor" ref={emptyShareRef} />;
+  return <EditorContent path={path} session={session} state={state} />;
+}
+
+function DocumentMarkdownEditorBlock({ entry, context }: { entry: string; context: BlockContext }) {
+  const session = useMemo(
+    () => documentEditorSession(context.store, context.window.id, entry),
+    [context.store, context.window.id, entry],
+  );
+  const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
+  useEffect(() => { void session.open(entry); }, [entry, session]);
+  return <EditorContent path={entry} session={session} state={state} />;
+}
+
+function EditorContent({ path, session, state }: { path: string; session: FileEditorSession; state: FileEditorSnapshot }) {
   if (!state.loaded) {
     return <div className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
   }
-  if (state.error && state.revision === null) {
+  if (state.error && state.revision === null && !state.dirty) {
     return <div className="ks-editor-error"><Notice role="alert">{state.error}</Notice></div>;
   }
 

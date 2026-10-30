@@ -15,6 +15,42 @@ export interface FileEditorSnapshot {
   lineSeparator: "\n" | "\r\n";
 }
 
+export interface EditorTarget {
+  read(path: string): Promise<{ text: string; revision: string | null }>;
+  write(path: string, text: string, revision: string | null): Promise<string>;
+  readonly allowsMissingRevision: boolean;
+}
+
+export function createFileEditorTarget(transport: Pick<CoreTransport, "call">, windowId: string, permission: string): EditorTarget {
+  return {
+    allowsMissingRevision: false,
+    async read(path) {
+      const reply = await transport.call({ op: "files.read", window_id: windowId, permission, path });
+      return { text: reply.text, revision: reply.revision };
+    },
+    async write(path, text, revision) {
+      if (revision === null) throw new Error("파일 revision이 없습니다");
+      const reply = await transport.call({ op: "files.write", window_id: windowId, permission, path, text, expected_revision: revision });
+      return reply.revision;
+    },
+  };
+}
+
+export function createDocumentEditorTarget(transport: Pick<CoreTransport, "call">, windowId: string, entry: string): EditorTarget {
+  return {
+    allowsMissingRevision: true,
+    async read() {
+      const { result } = await transport.call({ op: "storage.get", window_id: windowId, entry });
+      if (result.kind !== "md" || typeof result.content !== "string") throw new Error("마크다운 문서가 아닙니다");
+      return { text: result.content, revision: result.revision };
+    },
+    async write(_path, text, revision) {
+      const reply = await transport.call({ op: "storage.write", window_id: windowId, entry, content: text, expected_revision: revision });
+      return reply.revision;
+    },
+  };
+}
+
 const activeSessions = new Set<FileEditorSession>();
 
 export async function flushEditors(): Promise<boolean> {
@@ -39,12 +75,13 @@ export class FileEditorSession {
   private savePromise: Promise<boolean> | null = null;
   private pendingPath: string | null | undefined;
   private readVersion = 0;
+  private opened = false;
+  private readonly target: EditorTarget;
 
-  constructor(
-    private readonly transport: Pick<CoreTransport, "call">,
-    private readonly windowId: string,
-    private readonly permission: string,
-  ) {
+  constructor(target: EditorTarget);
+  constructor(transport: Pick<CoreTransport, "call">, windowId: string, permission: string);
+  constructor(targetOrTransport: EditorTarget | Pick<CoreTransport, "call">, windowId?: string, permission?: string) {
+    this.target = "read" in targetOrTransport ? targetOrTransport : createFileEditorTarget(targetOrTransport, windowId!, permission!);
     activeSessions.add(this);
   }
 
@@ -88,6 +125,7 @@ export class FileEditorSession {
   private async load(path: string | null): Promise<boolean> {
     this.clearTimer();
     const version = ++this.readVersion;
+    this.opened = false;
     if (path === null) {
       this.pendingPath = undefined;
       this.update({
@@ -117,13 +155,9 @@ export class FileEditorSession {
     });
 
     try {
-      const reply = await this.transport.call({
-        op: "files.read",
-        window_id: this.windowId,
-        permission: this.permission,
-        path,
-      });
-      if (reply.op !== "files.read" || version !== this.readVersion) return false;
+      const reply = await this.target.read(path);
+      if (version !== this.readVersion) return false;
+      this.opened = true;
       this.update({
         text: reply.text,
         revision: reply.revision,
@@ -144,7 +178,7 @@ export class FileEditorSession {
   }
 
   setText(text: string) {
-    if (!this.snapshot.loaded || this.snapshot.path === null) return;
+    if (!this.opened || !this.snapshot.loaded || this.snapshot.path === null) return;
     const normalized = text.replace(/\r\n?/g, "\n");
     const storedText = this.snapshot.lineSeparator === "\r\n"
       ? normalized.replace(/\n/g, "\r\n")
@@ -157,7 +191,7 @@ export class FileEditorSession {
   async saveNow(): Promise<boolean> {
     this.clearTimer();
     if (!this.snapshot.dirty) return true;
-    if (this.snapshot.path === null || this.snapshot.revision === null) return false;
+    if (!this.opened || this.snapshot.path === null || (this.snapshot.revision === null && !this.target.allowsMissingRevision)) return false;
     if (this.savePromise) return this.savePromise;
 
     const path = this.snapshot.path;
@@ -172,33 +206,20 @@ export class FileEditorSession {
     }
   }
 
-  private async write(path: string, text: string, expectedRevision: string): Promise<boolean> {
+  private async write(path: string, text: string, expectedRevision: string | null): Promise<boolean> {
     try {
-      const reply = await this.transport.call({
-        op: "files.write",
-        window_id: this.windowId,
-        permission: this.permission,
-        path,
-        text,
-        expected_revision: expectedRevision,
-      });
-      if (reply.op !== "files.write") return false;
-      const unchanged = this.snapshot.path === path && this.snapshot.text === text;
-      this.update({
-        revision: reply.revision,
-        status: unchanged ? "saved" : "unsaved",
-        dirty: !unchanged,
-        conflict: null,
-        error: null,
-      });
-      if (unchanged) {
-        await this.followPendingPath();
-        return true;
-      }
-      this.scheduleSave();
-      return false;
+      const revision = await this.target.write(path, text, expectedRevision);
+      return await this.saved(path, text, revision);
     } catch (error) {
       const coreError = toCoreError(error);
+      if (this.target.allowsMissingRevision) {
+        try {
+          const current = await this.target.read(path);
+          if (current.revision !== null && current.text === text) return await this.saved(path, text, current.revision);
+        } catch {
+          // 읽기도 실패하면 초안과 원래 revision을 유지한다.
+        }
+      }
       if (coreError.code === "conflict") {
         this.update({ status: "unsaved", conflict: coreError, error: null });
       } else {
@@ -206,6 +227,23 @@ export class FileEditorSession {
       }
       return false;
     }
+  }
+
+  private async saved(path: string, text: string, revision: string): Promise<boolean> {
+    const unchanged = this.snapshot.path === path && this.snapshot.text === text;
+    this.update({
+      revision,
+      status: unchanged ? "saved" : "unsaved",
+      dirty: !unchanged,
+      conflict: null,
+      error: null,
+    });
+    if (unchanged) {
+      await this.followPendingPath();
+      return true;
+    }
+    this.scheduleSave();
+    return false;
   }
 
   private async followPendingPath() {
@@ -220,13 +258,8 @@ export class FileEditorSession {
     if (path === null || this.snapshot.conflict === null) return;
     this.clearTimer();
     try {
-      const reply = await this.transport.call({
-        op: "files.read",
-        window_id: this.windowId,
-        permission: this.permission,
-        path,
-      });
-      if (reply.op !== "files.read" || this.snapshot.path !== path) return;
+      const reply = await this.target.read(path);
+      if (this.snapshot.path !== path) return;
       this.update({
         text: reply.text,
         revision: reply.revision,
@@ -248,34 +281,11 @@ export class FileEditorSession {
     if (path === null || this.snapshot.conflict === null) return;
     this.clearTimer();
     try {
-      const latest = await this.transport.call({
-        op: "files.read",
-        window_id: this.windowId,
-        permission: this.permission,
-        path,
-      });
-      if (latest.op !== "files.read" || this.snapshot.path !== path) return;
+      const latest = await this.target.read(path);
+      if (this.snapshot.path !== path) return;
       this.update({ revision: latest.revision });
       const text = this.snapshot.text;
-      const saved = await this.transport.call({
-        op: "files.write",
-        window_id: this.windowId,
-        permission: this.permission,
-        path,
-        text,
-        expected_revision: latest.revision,
-      });
-      if (saved.op !== "files.write" || this.snapshot.path !== path) return;
-      const unchanged = this.snapshot.text === text;
-      this.update({
-        revision: saved.revision,
-        status: unchanged ? "saved" : "unsaved",
-        dirty: !unchanged,
-        conflict: null,
-        error: null,
-      });
-      if (unchanged) await this.followPendingPath();
-      else this.scheduleSave();
+      await this.write(path, text, latest.revision);
     } catch (error) {
       const coreError = toCoreError(error);
       if (coreError.code === "conflict") this.update({ status: "unsaved", conflict: coreError, error: null });
@@ -286,16 +296,20 @@ export class FileEditorSession {
   async refreshOnFocus(): Promise<void> {
     const path = this.snapshot.path;
     const revision = this.snapshot.revision;
-    if (path === null || revision === null || !this.snapshot.loaded || this.snapshot.dirty || this.snapshot.conflict) return;
+    if (path === null || !this.snapshot.loaded || this.snapshot.conflict) return;
+    if (!this.opened) {
+      if (this.target.allowsMissingRevision && this.snapshot.error) await this.load(path);
+      return;
+    }
+    if (this.snapshot.dirty) {
+      if (this.target.allowsMissingRevision && this.snapshot.error) await this.saveNow();
+      return;
+    }
+    const version = ++this.readVersion;
     try {
-      const reply = await this.transport.call({
-        op: "files.read",
-        window_id: this.windowId,
-        permission: this.permission,
-        path,
-      });
-      if (reply.op !== "files.read" || this.snapshot.path !== path || this.snapshot.dirty) return;
-      if (reply.revision !== revision) {
+      const reply = await this.target.read(path);
+      if (version !== this.readVersion || this.snapshot.path !== path || this.snapshot.dirty || this.snapshot.revision !== revision) return;
+      if (reply.revision !== revision || reply.text !== this.snapshot.text) {
         this.update({
           text: reply.text,
           revision: reply.revision,
@@ -303,9 +317,11 @@ export class FileEditorSession {
           error: null,
           lineSeparator: reply.text.includes("\r\n") ? "\r\n" : "\n",
         });
+      } else if (this.snapshot.error) {
+        this.update({ error: null });
       }
     } catch (error) {
-      this.update({ error: toCoreError(error).message });
+      if (version === this.readVersion && this.snapshot.path === path && !this.snapshot.dirty) this.update({ error: toCoreError(error).message });
     }
   }
 

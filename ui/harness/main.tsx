@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AgentInfo, AgentItem, AgentModel, App, AppDefinition, AppVersion, AppWindow, ShellSnapshot } from "../src/contract/contract";
 import {
@@ -26,9 +26,18 @@ import { exposeDocsHarness, galleryForDocs } from "./docs-media-test";
 const mdEditor = mdEditorJson as AppDefinition;
 const mdViewer = mdViewerJson as AppDefinition;
 const workspacePas = workspacePasJson as unknown as AppDefinition;
+const storageDocument: AppDefinition = {
+  id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
+  permissions: [], state: {},
+  storage: { entries: [{ id: "memo", key: "memo", kind: "md", default: "# 기본 문서", label: "문서", presentation: "hidden" }] },
+  ui: { type: "split", direction: "row", sizes: [50, 50], children: [
+    { type: "markdown_editor", document: { entry: "memo" } },
+    { type: "markdown_view", document: { entry: "memo" } },
+  ] },
+};
 const galleryParams = new URLSearchParams(window.location.search);
 const gallery = galleryForDocs(galleryJson as AppDefinition, galleryParams.has("long-log"), galleryParams.has("crop-image"), galleryParams.has("video-controls"));
-const definitions = [mdEditor, mdViewer, workspacePas, dataLayoutApp, gallery, dataViewsApp];
+const definitions = [mdEditor, mdViewer, workspacePas, dataLayoutApp, gallery, dataViewsApp, storageDocument];
 const timestamp = "2026-10-28T00:00:00Z";
 
 function makeWindow(definition: AppDefinition, id: string, z: number): AppWindow {
@@ -65,7 +74,7 @@ const initialSnapshot: ShellSnapshot = {
     app_versions: appVersions,
     workspaces: [{ id: "workspace-1", name: "kaleidoscope", created_at: timestamp, updated_at: timestamp }],
     desktops: [{ id: "desktop-1", workspace_id: "workspace-1", name: "작업", position: 0, created_at: timestamp, updated_at: timestamp }],
-  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(mdViewer, "viewer-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4), makeWindow(gallery, "gallery-window", 5), makeWindow(dataViewsApp, "views-window", 6)],
+  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(mdViewer, "viewer-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4), makeWindow(gallery, "gallery-window", 5), makeWindow(dataViewsApp, "views-window", 6), makeWindow(storageDocument, "storage-window", 7)],
   },
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [] },
   supported: { blocks: 1, modules: { files: 1 } },
@@ -222,6 +231,7 @@ const store = createShellStore(transport);
 if (!coreUrl) exposeDocsHarness(fakeTransport, store);
 
 function Harness() {
+  const remoteEdits = useRef(0);
   const snapshot = useShellSnapshot(store);
   const editorWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-editor");
   const viewerWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-viewer");
@@ -229,6 +239,7 @@ function Harness() {
   const viewsWindow = snapshot?.shared.windows.find((item) => item.app_id === "data-views-test");
   const galleryWindow = snapshot?.shared.windows.find((item) => item.app_id === "block-gallery");
   const pasWindow = snapshot?.shared.windows.find((item) => item.app_id === "workspace-pas");
+  const storageWindow = snapshot?.shared.windows.find((item) => item.app_id === "storage-document");
 
   return (
     <main className="ks-harness">
@@ -273,7 +284,16 @@ function Harness() {
           <header className="ks-harness-window-header">보기 시험</header>
           <div className="ks-harness-window-content">{viewsWindow ? <AppWindowContent store={store} windowId={viewsWindow.id} /> : null}</div>
         </section>
+        <section aria-label="storage-document" className={`ks-harness-window${previewAppId !== "storage-document" ? " is-hidden" : ""}`} data-app-id="storage-document" data-testid="app-window-storage-document">
+          <header className="ks-harness-window-header">저장소 문서</header>
+          <div className="ks-harness-window-content">{storageWindow && previewAppId === "storage-document" ? <AppWindowContent store={store} windowId={storageWindow.id} /> : null}</div>
+        </section>
       </div>
+      {!coreUrl && previewAppId === "storage-document" ? <button onClick={async () => {
+        const { result } = await fakeTransport.call({ op: "storage.get", window_id: "storage-window", entry: "memo" });
+        remoteEdits.current += 1;
+        await fakeTransport.call({ op: "storage.write", window_id: "storage-window", entry: "memo", content: `# 다른 기기의 문서 ${remoteEdits.current}`, expected_revision: result.revision });
+      }}>다른 기기에서 수정</button> : null}
       {!coreUrl && !(previewOnly && (previewAppId === "data-controls" || previewAppId === "block-gallery" || previewAppId === "data-views-test")) ? <FakeFilePanel transport={fakeTransport} /> : null}
     </main>
   );
