@@ -23,7 +23,7 @@ fn definition() -> Value {
             "permission": "run",
             "root": { "permission": "work" },
             "agents": [
-                { "id": "codex", "name": "Codex", "command": "codex", "args": [], "env": {} }
+                { "id": "agent-b", "name": "Agent B", "command": "agent-b", "args": [], "env": {} }
             ],
             "selected": { "state": "agent_id" },
             "on_select": { "set_state": "agent_id" }
@@ -110,28 +110,28 @@ fn agent_session_requires_block_set_eight() {
 #[test]
 fn agent_spec_parser_rejects_unknown_fields_and_invalid_values() {
     let unknown = json!([{
-        "id": "codex", "name": "Codex", "command": "codex", "args": [], "env": {}, "extra": true
+        "id": "agent-b", "name": "Agent B", "command": "agent-b", "args": [], "env": {}, "extra": true
     }]);
     assert!(validate_agent_specs(&unknown).is_err());
 
     let duplicate = json!([
-        { "id": "codex", "name": "Codex", "command": "codex", "args": [], "env": {} },
-        { "id": "codex", "name": "Other", "command": "other", "args": [], "env": {} }
+        { "id": "agent-b", "name": "Agent B", "command": "agent-b", "args": [], "env": {} },
+        { "id": "agent-b", "name": "Other", "command": "other", "args": [], "env": {} }
     ]);
     assert!(validate_agent_specs(&duplicate).is_err());
 
     let invalid_env = json!([{
-        "id": "codex", "name": "Codex", "command": "codex", "args": [], "env": { "bad-name": "x" }
+        "id": "agent-b", "name": "Agent B", "command": "agent-b", "args": [], "env": { "bad-name": "x" }
     }]);
     assert!(validate_agent_specs(&invalid_env).is_err());
 
     let empty_required_value = json!([{
-        "id": "codex", "name": "Codex", "command": " ", "args": [], "env": {}
+        "id": "agent-b", "name": "Agent B", "command": " ", "args": [], "env": {}
     }]);
     assert!(validate_agent_specs(&empty_required_value).is_err());
 
     let nul = json!([{
-        "id": "codex", "name": "Codex", "command": format!("codex{}", '\0'), "args": [], "env": {}
+        "id": "agent-b", "name": "Agent B", "command": format!("agent-b{}", '\0'), "args": [], "env": {}
     }]);
     assert!(validate_agent_specs(&nul).is_err());
 }

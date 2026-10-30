@@ -22,10 +22,10 @@ function localAgent(phase: LocalAgentSnapshot["phase"]): LocalAgentSnapshot {
   return {
     generation: "generation-1",
     phase,
-    agents: [{ id: "claude", name: "Claude Code" }, { id: "codex", name: "Codex" }],
-    selected: phase === "choosing_agent" ? null : "codex",
+    agents: [{ id: "agent-a", name: "Agent A" }, { id: "agent-b", name: "Agent B" }],
+    selected: phase === "choosing_agent" ? null : "agent-b",
     folder_name: phase === "choosing_agent" ? null : "work folder",
-    execution: phase === "awaiting_permission" ? { spec_hash: "spec-hash", name: "Codex", command: "npx", args: ["-y", "@agentclientprotocol/codex-acp"], env: { HOME: "ignored" } } : null,
+    execution: phase === "awaiting_permission" ? { spec_hash: "spec-hash", name: "Agent B", command: "npx", args: ["-y", "@agentclientprotocol/agent-b-acp"], env: { HOME: "ignored" } } : null,
     auth_methods: [{ id: "chat-gpt", name: "ChatGPT 로그인", description: "브라우저에서 로그인" }],
     controls: [
       { id: "model", label: "모델", category: null, value: "balanced", kind: { kind: "select", options: [{ name: "모델", options: [{ id: "balanced", name: "균형" }, { id: "fast", name: "빠름" }] }] } },
@@ -37,7 +37,7 @@ function localAgent(phase: LocalAgentSnapshot["phase"]): LocalAgentSnapshot {
     activity: { busy: phase === "responding", tool: phase === "responding" ? "파일 읽기" : null },
     permissions: [],
     queued: [],
-    failure: phase === "failed" ? { code: "local_agent_failed", message: "실행에 실패했습니다", command: "npx codex-acp" } : null,
+    failure: phase === "failed" ? { code: "local_agent_failed", message: "실행에 실패했습니다", command: "npx agent-b-acp" } : null,
   };
 }
 
@@ -97,8 +97,8 @@ describe("기기 로컬 에이전트 화면", () => {
     const choosing = localAgent("choosing_agent");
     const state = setup(choosing);
     fireEvent.click(await screen.findByRole("button", { name: "에이전트" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Codex" }));
-    await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "data.act", window_id: state.window.id, pointer: "/ui/on_select", event: "codex" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Agent B" }));
+    await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "data.act", window_id: state.window.id, pointer: "/ui/on_select", event: "agent-b" }));
 
     cleanup();
     const folder = setup(localAgent("choosing_folder"));
@@ -187,6 +187,16 @@ describe("기기 로컬 에이전트 화면", () => {
 
   it("가짜 코어가 선택부터 실행 허용과 도구 호출까지 새 세대로 이어간다", async () => {
     const definition = agentJson as unknown as AppDefinition;
+    const configuredAgents = (definition as unknown as {
+      storage: {
+        entries: Array<{
+          id: string;
+          default?: Array<{ id: string; name: string; command: string; args: string[]; env: Record<string, string> }>;
+        }>;
+      };
+    }).storage.entries.find((entry) => entry.id === "agents")?.default;
+    const configuredAgent = configuredAgents?.[0];
+    if (!configuredAgent) throw new Error("configured agent expected");
     const seed = makeTestSnapshot({ definitions: [definition] });
     const windowId = seed.shared.windows[0].id;
     const transport = createFakeTransport({ snapshot: seed, folder: { root_path: "/fake/work", root_name: "작업 폴더" }, files: {}, localAgent: localAgent("choosing_agent") });
@@ -197,9 +207,9 @@ describe("기기 로컬 에이전트 화면", () => {
     if (attached.op !== "local_agent.attach") throw new Error("attach reply expected");
     const firstGeneration = attached.snapshot.generation;
 
-    await transport.call({ op: "data.act", window_id: windowId, pointer: "/ui/on_select", event: "codex" });
+    await transport.call({ op: "data.act", window_id: windowId, pointer: "/ui/on_select", event: configuredAgent.id });
     const chosen = updates.filter((event) => event.update.type === "snapshot").slice(-1)[0]?.update;
-    expect(chosen?.type === "snapshot" ? chosen.snapshot : null).toMatchObject({ phase: "choosing_folder", selected: "codex" });
+    expect(chosen?.type === "snapshot" ? chosen.snapshot : null).toMatchObject({ phase: "choosing_folder", selected: configuredAgent.id });
     const chosenGeneration = chosen?.type === "snapshot" ? chosen.snapshot.generation : firstGeneration;
     expect(chosenGeneration).not.toBe(firstGeneration);
 
@@ -207,7 +217,7 @@ describe("기기 로컬 에이전트 화면", () => {
     const permissionUpdate = updates.filter((event) => event.update.type === "snapshot").slice(-1)[0]?.update;
     const execution = permissionUpdate?.type === "snapshot" ? permissionUpdate.snapshot.execution : null;
     expect(permissionUpdate?.type === "snapshot" ? permissionUpdate.snapshot : null).toMatchObject({ phase: "awaiting_permission", folder_name: "작업 폴더" });
-    expect(execution).toMatchObject({ name: "Codex", command: "npx", args: ["-y", "@agentclientprotocol/codex-acp"], env: {} });
+    expect(execution).toMatchObject({ name: configuredAgent.name, command: configuredAgent.command, args: configuredAgent.args, env: configuredAgent.env });
     const permissionGeneration = permissionUpdate?.type === "snapshot" ? permissionUpdate.snapshot.generation : chosenGeneration;
     expect(permissionGeneration).not.toBe(chosenGeneration);
     if (!execution) throw new Error("execution consent expected");

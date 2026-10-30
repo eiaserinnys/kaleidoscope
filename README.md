@@ -99,6 +99,12 @@ The shell includes a file explorer, Markdown editor and viewer, and web browser.
 
 Useful MCP tools include `list_apps`, `get_app`, `upload_app`, `delete_app`, `open_app`, `preview_app`, `list_workspaces`, `get_workspace`, `get_shared_view`, `list_devices`, and `approve_device`. The server's tool schemas describe their inputs.
 
+## Use the built-in Agent app
+
+Install Node.js for adapters launched with `npx`, and sign in once with each agent CLI you plan to use. Open **Agent** from the app menu, choose an agent and a working folder, then approve its displayed command the first time on that PC. This approval allows that command to run; the selected folder is not a sandbox. Chat with the agent and review its tool requests as they appear.
+
+When the shell is connected to an orchestrator, you can also ask an agent to create or open an app in the same workspace. The Agent app's list is stored in its `agents` app-storage entry; use MCP `write_app_storage` to add or change entries. The four defaults and their commands are in [`apps/agent.json`](apps/agent.json).
+
 ## An app is a JSON definition
 
 This minimal editor opens Markdown files from a folder the user selects:

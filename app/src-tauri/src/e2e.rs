@@ -14,8 +14,24 @@ use kaleidoscope_core::Core;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
+mod local_agent;
 mod ui;
 mod update;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScenarioKind {
+    WebView,
+    Update,
+    LocalAgent,
+}
+
+fn scenario_kind(name: Option<&str>) -> ScenarioKind {
+    match name {
+        Some("update" | "update-reject") => ScenarioKind::Update,
+        Some("local-agent") => ScenarioKind::LocalAgent,
+        _ => ScenarioKind::WebView,
+    }
+}
 
 fn resolve_setting(
     args: impl Iterator<Item = std::ffi::OsString>,
@@ -413,12 +429,12 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
     };
     thread::spawn(move || {
         let out = PathBuf::from(out);
-        let update_scenario = matches!(
+        let selected = scenario_kind(
             setting("SCENARIO")
                 .as_deref()
                 .and_then(std::ffi::OsStr::to_str),
-            Some("update" | "update-reject")
         );
+        let update_scenario = selected == ScenarioKind::Update;
         let status = match fs::create_dir_all(&out).and_then(|_| {
             if update_scenario {
                 fs::OpenOptions::new()
@@ -429,10 +445,10 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
                 File::create(out.join("events.jsonl"))
             }
         }) {
-            Ok(mut log) => match if update_scenario {
-                update::scenario(&app, &core, &out, &mut log)
-            } else {
-                scenario(&app, &core, &out, &mut log)
+            Ok(mut log) => match match selected {
+                ScenarioKind::WebView => scenario(&app, &core, &out, &mut log),
+                ScenarioKind::Update => update::scenario(&app, &core, &out, &mut log),
+                ScenarioKind::LocalAgent => local_agent::scenario(&core, &out, &mut log),
             } {
                 Ok(()) => 0,
                 Err(error) => {
@@ -453,6 +469,13 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_agent_setting_selects_process_lifetime_scenario() {
+        assert_eq!(scenario_kind(Some("local-agent")), ScenarioKind::LocalAgent);
+        assert_eq!(scenario_kind(Some("update")), ScenarioKind::Update);
+        assert_eq!(scenario_kind(None), ScenarioKind::WebView);
+    }
 
     #[test]
     fn update_arguments_override_environment_and_preserve_fallback() {

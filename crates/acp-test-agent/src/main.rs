@@ -33,7 +33,12 @@ fn main() {
             .spawn()
             .unwrap();
         if let Ok(path) = std::env::var("TEST_PID_LOG") {
-            std::fs::write(path, format!("{} {}", std::process::id(), child.id())).unwrap();
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .unwrap();
+            writeln!(file, "{} {}", std::process::id(), child.id()).unwrap();
         }
     }
     let mut authenticated = false;

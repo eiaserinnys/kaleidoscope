@@ -21,7 +21,7 @@ import mdViewerJson from "../../apps/md-viewer.json";
 import workspacePasJson from "../../examples/workspace-pas.json";
 import { dataViewsApp } from "./data-views-app";
 import { dataLayoutApp } from "./data-layout-app";
-import pluginsDocument from "./create-plugins.txt?raw";
+import pluginsDocument from "./fixtures/create-plugins.txt?raw";
 import { exposeDocsHarness, galleryForDocs } from "./docs-media-test";
 
 const mdEditor = mdEditorJson as AppDefinition;
@@ -48,16 +48,16 @@ const timestamp = "2026-10-28T00:00:00Z";
 const agentHarnessParams = new URLSearchParams(window.location.search);
 const agentPhases = ["choosing_agent", "choosing_folder", "awaiting_permission", "starting", "login_required", "ready", "responding", "failed", "ended"] as const;
 const agentPhase = agentPhases.find((phase) => phase === agentHarnessParams.get("agent-phase")) ?? "choosing_agent";
-const agentSelected = agentPhase === "choosing_agent" ? null : "codex";
+const agentSelected = agentPhase === "choosing_agent" ? null : "agent-b";
 const agentFolderName = agentHarnessParams.has("short-folder") ? "프로젝트" : "프로젝트-앱-데이터-동기화-실험-long-folder-name";
 const fakeLocalAgent: LocalAgentSnapshot = {
   generation: `harness-${agentPhase}`,
   phase: agentPhase,
-  agents: [{ id: "claude", name: "Claude Code" }, { id: "codex", name: "Codex" }, { id: "gemini", name: "Gemini CLI" }],
+  agents: [{ id: "agent-a", name: "Agent A" }, { id: "agent-b", name: "Agent B" }, { id: "agent-c", name: "Agent C" }],
   selected: agentSelected,
   folder_name: agentSelected ? agentFolderName : null,
   execution: agentPhase === "awaiting_permission" ? {
-    spec_hash: "harness-spec-hash", name: "Codex", command: "npx", args: ["-y", "@agentclientprotocol/codex-acp"], env: { OPENAI_API_KEY: "example-value-for-ellipsis" },
+    spec_hash: "harness-spec-hash", name: "Agent B", command: "npx", args: ["-y", "@agentclientprotocol/agent-b-acp"], env: { OPENAI_API_KEY: "example-value-for-ellipsis" },
   } : null,
   auth_methods: agentPhase === "login_required" ? [{ id: "chat-gpt", name: "ChatGPT 로그인", description: "" }] : [],
   controls: [
@@ -77,7 +77,7 @@ const fakeLocalAgent: LocalAgentSnapshot = {
     id: "permission-read-file", title: "파일 읽기", options: [{ id: "allow-once", label: "한 번 허용", kind: "allow_once" }, { id: "deny", label: "거부", kind: "deny" }],
   }] : [],
   queued: agentPhase === "responding" ? [{ id: "queued-harness", text: "그리고 최근 변경도 확인해 줘", attachments: [] }] : [],
-  failure: agentPhase === "failed" ? { code: "local_agent_failed", message: "에이전트를 시작하지 못했습니다", command: "npx codex-acp" } : null,
+  failure: agentPhase === "failed" ? { code: "local_agent_failed", message: "에이전트를 시작하지 못했습니다", command: "npx agent-b-acp" } : null,
 };
 
 function makeWindow(definition: AppDefinition, id: string, z: number): AppWindow {
@@ -146,31 +146,31 @@ const sampleDocument = `# kaleidoscope 작업 메모
 
 const previewDocument = `# Create plugins
 
-> Create custom plugins to extend Claude Code with skills, agents, hooks, and MCP servers.
+> Create custom plugins to extend Agent B with skills, agents, hooks, and MCP servers.
 
-Plugins let you extend Claude Code with custom functionality that can be shared across projects and teams. This guide covers creating your own plugins with skills, agents, hooks, and MCP servers.
+Plugins let you extend Agent B with custom functionality that can be shared across projects and teams. This guide covers creating your own plugins with skills, agents, hooks, and MCP servers.
 
 Looking to install existing plugins? See [Discover and install plugins](/en/discover-plugins). For complete technical specifications, see [Plugins reference](/en/plugins-reference).
 
 ## When to use plugins vs standalone configuration
 
-Claude Code supports two ways to add custom skills, agents, and hooks:
+Agent B supports two ways to add custom skills, agents, and hooks:
 
 | Approach | Skill names | Best for |
 | :--- | :--- | :--- |
-| **Standalone** (\`.claude/\` directory) | \`/hello\` | Personal workflows, project-specific customizations, quick experiments |
-| **Plugins** (directories with a \`.claude-plugin/plugin.json\`) | \`/plugin-name:hello\` | Sharing with teammates, distributing to community, versioned releases, reusable across projects |
+| **Standalone** (\`.agent/\` directory) | \`/hello\` | Personal workflows, project-specific customizations, quick experiments |
+| **Plugins** (directories with a \`.agent-plugin/plugin.json\`) | \`/plugin-name:hello\` | Sharing with teammates, distributing to community, versioned releases, reusable across projects |
 
 **Use standalone configuration when:**
 
-* You're customizing Claude Code for a single project
+* You're customizing Agent B for a single project
 * The configuration is personal and doesn't need to be shared
 * You're experimenting with skills or hooks before packaging them
 
 ### Example
 
 \`\`\`sh
-claude --plugin-dir ./my-plugin
+agent-b --plugin-dir ./my-plugin
 \`\`\`
 `;
 

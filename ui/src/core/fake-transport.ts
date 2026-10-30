@@ -85,10 +85,10 @@ function makeFakeLocalAgentSnapshot(): LocalAgentSnapshot {
   return {
     generation: "fake-local-agent-generation",
     phase: "choosing_agent",
-    agents: [{ id: "claude", name: "Claude Code" }, { id: "codex", name: "Codex" }],
+    agents: [{ id: "agent-a", name: "Agent A" }, { id: "agent-b", name: "Agent B" }],
     selected: null,
     folder_name: null,
-    execution: { spec_hash: "fake-spec-hash", name: "Codex", command: "npx", args: ["-y", "@agentclientprotocol/codex-acp"], env: {} },
+    execution: { spec_hash: "fake-spec-hash", name: "Agent B", command: "npx", args: ["-y", "@agentclientprotocol/agent-b-acp"], env: {} },
     auth_methods: [],
     controls: [],
     history: [],
