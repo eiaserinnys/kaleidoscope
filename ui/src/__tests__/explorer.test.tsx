@@ -145,16 +145,18 @@ describe("explorer block", () => {
     const tree = screen.getByRole("tree", { name: "폴더 목록" });
     fireEvent.click(within(tree).getByRole("button", { name: "문서" }));
     fireEvent.click(await within(tree).findByRole("button", { name: "notes" }));
-    const fileRow = await within(table).findByRole("row", { name: /a\.md/ });
+    const fileRow = await within(await screen.findByRole("table", { name: "폴더 내용" })).findByRole("row", { name: /a\.md/ });
     fireEvent.click(fileRow);
     fireEvent.doubleClick(fileRow);
     await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({
       op: "files.open", path: "documents/notes/a.md", app_id: "md-editor",
     })));
     const state = await transport.call({ op: "state.get" });
-    const editor = state.snapshot.shared.windows.find((window) => window.app_id === "md-editor");
+    // 시험 기본 상태에 편집기 창(editor-window)이 이미 있으므로, 열기가 넘긴 폴더 권한으로 새 창을 찾는다.
+    const openedGrant = state.snapshot.device.grants.find((grant) => grant.root_path === "documents/notes");
+    const editor = state.snapshot.shared.windows.find((window) => window.id === openedGrant?.window_id);
+    expect(editor?.app_id).toBe("md-editor");
     expect(editor?.state.current_file).toBe("a.md");
-    expect(state.snapshot.device.grants.find((grant) => grant.window_id === editor?.id)?.root_path).toBe("documents/notes");
   });
 
   it("shows folder navigation beside the current folder contents", async () => {
