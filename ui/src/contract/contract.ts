@@ -253,7 +253,23 @@ on_navigate?: SetState,
 /**
  * 주소창을 보일지. 거짓이면 그 자리에 페이지 제목만 보인다(정해진 사이트를 띄우는 앱).
  */
-address_bar: boolean, } | { "type": "explorer", root: FolderRef, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, selected?: StateRef, on_change?: SetState, } | { "type": "toolbar", start: Array<Block>, end?: Array<Block>, } | { "type": "section", title: Binding, 
+address_bar: boolean, } | { "type": "explorer", root: FolderRef, 
+/**
+ * (5판) 지금 보는 폴더를 읽을 상태 키. 값은 고른 폴더 기준 상대 경로이고 빈 문자열이 고른 폴더 자체다.
+ */
+folder?: StateRef, 
+/**
+ * (5판) 보는 폴더가 바뀌면 그 경로를 쓸 상태 키.
+ */
+on_folder?: SetState, 
+/**
+ * (5판) 보기 방식([`ExplorerView`]의 문자열)을 읽을 상태 키.
+ */
+view?: StateRef, 
+/**
+ * (5판) 보기 방식을 바꾸면 그 값을 쓸 상태 키.
+ */
+on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, selected?: StateRef, on_change?: SetState, } | { "type": "toolbar", start: Array<Block>, end?: Array<Block>, } | { "type": "section", title: Binding, 
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
@@ -393,6 +409,11 @@ active_desktop_ids: { [key in string]: string }, grants: Array<Grant>, };
 export type ErrorCode = "invalid_request" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "io" | "server" | "unavailable";
 
 /**
+ * (블록 세트 5판) 탐색기 오른쪽 칸의 보기 방식. 창 상태에는 이 문자열로 둔다.
+ */
+export type ExplorerView = "icons" | "details";
+
+/**
  * 식 바인딩. 예: `{ "expr": "$data.cards.cards[status = 'running']" }`.
  */
 export type ExprRef = { expr: string, };
@@ -430,7 +451,15 @@ export type FileEntry = { name: string,
 /**
  * 고른 폴더 기준 상대 경로.
  */
-path: string, kind: FileKind, };
+path: string, kind: FileKind, 
+/**
+ * (8판) 파일 크기(바이트). 폴더는 0.
+ */
+size: number, 
+/**
+ * (8판) 마지막으로 바뀐 시각(RFC 3339 UTC, 초까지, 예: `2026-10-30T01:02:03Z`). 읽지 못하면 빈 문자열.
+ */
+modified: string, };
 
 export type FileKind = "file" | "dir";
 

@@ -547,6 +547,42 @@ fn file_paths_reject_traversal_absolute_windows_and_outside_symlinks() {
 }
 
 #[test]
+fn files_list_reports_size_and_modified_time() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("docs");
+    fs::create_dir_all(root.join("notes")).unwrap();
+    fs::write(root.join("a.md"), "12345").unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(root));
+    let core = seeded_core(&temp.path().join("data"), &host);
+    let (_, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "md-editor");
+    pick_folder(&core, &window_id);
+    let entries = match core
+        .handle(CoreRequest::FilesList {
+            window_id,
+            permission: "docs".into(),
+            dir: String::new(),
+        })
+        .unwrap()
+    {
+        CoreReply::FilesList { entries } => entries,
+        reply => panic!("unexpected reply: {reply:?}"),
+    };
+    let names = entries.iter().map(|entry| entry.name.as_str()).collect::<Vec<_>>();
+    assert_eq!(names, vec!["notes", "a.md"]);
+    assert_eq!(entries[0].size, 0);
+    assert_eq!(entries[1].size, 5);
+    for entry in &entries {
+        assert!(
+            entry.modified.ends_with('Z') && entry.modified.len() == "2026-10-30T01:02:03Z".len(),
+            "{}",
+            entry.modified
+        );
+    }
+}
+
+#[test]
 fn file_commands_enforce_declared_access_and_folder_grants() {
     let temp = TempDir::new().unwrap();
     let root = temp.path().join("docs");

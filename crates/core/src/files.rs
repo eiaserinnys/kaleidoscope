@@ -74,12 +74,29 @@ pub(crate) fn list(
         let Ok(resolved) = resolve_path(&root, &path, false, true) else {
             continue;
         };
-        let kind = match fs::metadata(&resolved) {
-            Ok(metadata) if metadata.is_dir() => FileKind::Dir,
-            Ok(_) => FileKind::File,
-            Err(_) => continue,
+        let Ok(metadata) = fs::metadata(&resolved) else {
+            continue;
         };
-        entries.push(FileEntry { name, path, kind });
+        let kind = if metadata.is_dir() {
+            FileKind::Dir
+        } else {
+            FileKind::File
+        };
+        let size = if metadata.is_dir() { 0 } else { metadata.len() };
+        let modified = metadata
+            .modified()
+            .map(|time| {
+                chrono::DateTime::<chrono::Utc>::from(time)
+                    .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+            })
+            .unwrap_or_default();
+        entries.push(FileEntry {
+            name,
+            path,
+            kind,
+            size,
+            modified,
+        });
     }
     entries.sort_by(|left, right| {
         let kind_order = kind_order(left.kind).cmp(&kind_order(right.kind));

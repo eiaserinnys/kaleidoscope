@@ -65,6 +65,9 @@ interface FakeFile {
   revision: string;
 }
 
+/** 가짜 코어의 파일 목록이 모든 항목에 주는 바뀐 시각. */
+const FAKE_MODIFIED = "2026-10-30T01:00:00Z";
+
 interface FakeWebView {
   page: WebPage;
   history: string[];
@@ -597,9 +600,10 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
           if (!name || name.startsWith(".")) continue;
           if (tail.length > 0) {
             const directoryPath = `${prefix}${name}`;
-            entries.set(directoryPath, { name, path: directoryPath, kind: "dir" });
+            entries.set(directoryPath, { name, path: directoryPath, kind: "dir", size: 0, modified: FAKE_MODIFIED });
           } else {
-            entries.set(path, { name, path, kind: "file" });
+            const size = new TextEncoder().encode(files.get(path)?.text ?? "").length;
+            entries.set(path, { name, path, kind: "file", size, modified: FAKE_MODIFIED });
           }
         }
         const ordered = [...entries.values()].sort((left, right) => {

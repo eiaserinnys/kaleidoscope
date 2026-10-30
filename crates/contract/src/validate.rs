@@ -502,8 +502,28 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 validate_state_key(&on_navigate.set_state, definition, details, at);
             }
         }
-        Block::Explorer { root } => {
+        Block::Explorer {
+            root,
+            folder,
+            on_folder,
+            view,
+            on_view,
+        } => {
             validate_permission_module(&root.permission, "files", definition, details, at);
+            let reads = [folder, view].into_iter().flatten().map(|reference| &reference.state);
+            let writes = [on_folder, on_view]
+                .into_iter()
+                .flatten()
+                .map(|reference| &reference.set_state);
+            let keys: Vec<&String> = reads.chain(writes).collect();
+            if !keys.is_empty() && definition.requires.blocks < 5 {
+                details.push(format!(
+                    "{at}: explorer의 folder, on_folder, view, on_view는 블록 세트 5판이라 requires.blocks가 5 이상이어야 합니다"
+                ));
+            }
+            for key in keys {
+                validate_state_key(key, definition, details, at);
+            }
         }
         Block::Stack { fill, children, .. } => {
             if children.is_empty() {
