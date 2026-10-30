@@ -105,6 +105,7 @@ def run():
             call(urls[0], "window.close", window_id=window3)
             call(urls[0], "window.close", window_id=window)
             until("모든 앱 창 닫힘", lambda: not call(urls[1], "state.get")["snapshot"]["shared"]["windows"])
+            assert not provider.bindings[next(k for k in provider.bindings if k[1] == workspace3)]["archived"]
             headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream", "Authorization": "Bearer test-mcp"}
             def mcp(payload, session=None):
                 if session: headers["Mcp-Session-Id"] = session
