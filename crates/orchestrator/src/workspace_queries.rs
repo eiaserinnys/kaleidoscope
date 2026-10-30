@@ -18,7 +18,7 @@ impl AppState {
 
     pub(super) fn layouts(&self) -> Result<Vec<(String, String, String, DeviceLayout)>, CoreError> {
         let db = self.lock_db()?;
-        let mut stmt = db.prepare("SELECT d.id,d.name,l.reported_at,l.layout FROM device_layouts l JOIN devices d ON d.id=l.device_id ORDER BY l.reported_at DESC,d.id").map_err(db_error)?;
+        let mut stmt = db.prepare("SELECT d.id,d.name,l.reported_at,l.layout FROM device_layouts l JOIN devices d ON d.id=l.device_id WHERE d.revoked_at IS NULL ORDER BY l.reported_at DESC,d.id").map_err(db_error)?;
         let rows = stmt
             .query_map([], |row| {
                 let raw: String = row.get(3)?;

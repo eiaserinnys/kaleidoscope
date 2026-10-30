@@ -282,6 +282,40 @@ async fn latest_sync_device_gets_open_while_legacy_targeting_remains() {
 }
 
 #[test]
+fn revoking_device_drops_its_layout_report_from_workspace_queries() {
+    let state = AppState::in_memory("secret");
+    insert_device(&state, "pc", "PC");
+    insert_device(&state, "probe", "Probe");
+    state
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                workspaces: vec![workspace("w", "작업")],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let report = |active: &str| DeviceLayout {
+        workspaces: vec![workspace("w", "작업")],
+        active_workspace_id: Some(active.into()),
+        ..Default::default()
+    };
+    state.save_layout("pc", &report("w")).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    state.save_layout("probe", &report("w")).unwrap();
+    assert_eq!(state.get_workspace("w").unwrap().unwrap()["device"]["name"], "Probe");
+
+    assert!(state.revoke_device("probe").unwrap());
+    let rows: i64 = state
+        .lock_db()
+        .unwrap()
+        .query_row("SELECT count(*) FROM device_layouts WHERE device_id='probe'", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(rows, 0);
+    assert_eq!(state.get_workspace("w").unwrap().unwrap()["device"]["name"], "PC");
+}
+
+#[test]
 fn layout_report_counts_as_activity_only_when_device_choices_change() {
     let state = AppState::in_memory("secret");
     insert_device(&state, "pc", "PC");

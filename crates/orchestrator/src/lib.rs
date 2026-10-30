@@ -353,13 +353,21 @@ impl AppState {
     }
 
     fn revoke_device(&self, id: &str) -> Result<bool, CoreError> {
-        let changed = self
-            .lock_db()?
-            .execute(
-                "UPDATE devices SET revoked_at=COALESCE(revoked_at,?2) WHERE id=?1",
-                params![id, timestamp()],
-            )
-            .map_err(db_error)?;
+        let changed = {
+            let db = self.lock_db()?;
+            let changed = db
+                .execute(
+                    "UPDATE devices SET revoked_at=COALESCE(revoked_at,?2) WHERE id=?1",
+                    params![id, timestamp()],
+                )
+                .map_err(db_error)?;
+            // 지운 기기의 배치 보고는 지운다(저장소 판 올림과 같은 규칙). 남겨 두면 작업 조회가 그 기기를
+            // 「가장 최근에 그 작업을 본 기기」로 골라 에이전트가 끊긴 시험 쉘의 화면을 읽는다.
+            db.execute("DELETE FROM device_layouts WHERE device_id=?1", [id])
+                .map_err(db_error)?;
+            changed
+        };
+        self.refresh_device_workspaces()?;
         Ok(changed > 0)
     }
 }
