@@ -48,6 +48,9 @@ impl AppState {
                 BTreeMap::new()
             }
         });
+        if headers.values().any(|value| value.contains("${env:")) {
+            return Err(CoreError::new(ErrorCode::InvalidRequest));
+        }
         let mut header_names: Vec<_> = headers.keys().cloned().collect();
         header_names.sort();
         let header_json = serde_json::to_string(&headers)

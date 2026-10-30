@@ -10,6 +10,15 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      - name: Check external service names
+        run: |
+          set +e
+          git grep -i -n -E 'soulstream|소울스트림' -- crates app ui
+          result=$?
+          if [ "$result" -eq 1 ]; then exit 0; fi
+          if [ "$result" -eq 0 ]; then exit 1; fi
+          exit "$result"
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 

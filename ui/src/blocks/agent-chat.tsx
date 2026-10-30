@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
-import type { AgentInfo, AgentItem, AgentModel, AgentUpdate, Block, ConversationEvent, ConversationItem, CoreEvent, CoreError, ConversationUpload } from "../contract/contract";
+import type { Block, ConversationEvent, ConversationItem, CoreEvent, CoreError, ConversationUpload } from "../contract/contract";
 import { useConversationHistory } from "./conversation-history";
 import { DataState } from "../components/data-state";
 import { Button, EmptyState, IconButton, Notice, StatusText } from "../components/primitives";
@@ -30,9 +30,9 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     const name = context.snapshot.shared.app_versions.find((item) => item.app_id === shared.app_id && item.version === shared.app_version)?.definition.name ?? shared.app_id;
     return [{ id, name }];
   });
-  const [agent, setAgent] = useState<AgentInfo | null>(null);
-  const [items, setItems] = useState<(AgentItem | ConversationItem)[]>([]);
-  const [models, setModels] = useState<(AgentModel & { available?: boolean; reason?: string })[]>([]);
+  const [agent, setAgent] = useState(false);
+  const [items, setItems] = useState<ConversationItem[]>([]);
+  const [models, setModels] = useState<{ preset: string; label: string; available?: boolean; reason?: string }[]>([]);
   const [selectedPreset, setSelectedPreset] = useState("");
   const [loading, setLoading] = useState(true);
   const [loginRequired, setLoginRequired] = useState(false);
@@ -65,32 +65,11 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const creatingConversation = useRef(false);
   const retryDraft = useRef<{ id: string; text: string; attachments: DraftAttachment[]; failed: boolean } | null>(null);
   const restored = useRef(new Set<string>());
-  const pendingUpdates = useRef<AgentUpdate[] | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
 
-  const acknowledge = useCallback((incoming: (AgentItem | ConversationItem)[]) => {
+  const acknowledge = useCallback((incoming: ConversationItem[]) => {
     setPending((current) => current && incoming.some((item) => matchesPending(item, current)) ? null : current);
   }, []);
-
-  const applyUpdate = useCallback((update: AgentUpdate) => {
-    if (update.kind === "created") {
-      setAgent(update.agent);
-      setBusy(update.agent.busy);
-      setTool(update.agent.tool);
-      setCreateError(null);
-      setCreating(false);
-    } else if (update.kind === "item") {
-      setItems((current) => uniqueItems([...current, update.item]));
-      acknowledge([update.item]);
-      if (update.item.kind === "assistant") setDelta("");
-    } else if (update.kind === "delta") {
-      setDelta((current) => current + update.text);
-    } else {
-      setBusy(update.busy);
-      setTool(update.tool);
-      if (!update.busy) setDelta("");
-    }
-  }, [acknowledge]);
 
   const handleError = useCallback((error: CoreError) => {
     if (error.code === "login_required") { setLoginRequired(true); return true; }
@@ -138,10 +117,8 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   }, []);
 
   const load = useCallback(async (initialEvents: CoreEvent[] = []) => {
-    if (!connected || !workspaceId) return;
+    if (!connected || !workspaceId || !hasProvider) return;
     const generation = ++loadGeneration.current;
-    const updates: AgentUpdate[] = [];
-    pendingUpdates.current = updates;
     const events = initialEvents;
     conversationQueue.current = events;
     setCreating(false);
@@ -150,12 +127,12 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     setLoginRequired(false);
     setBindingConflict(false);
     try {
-      if (hasProvider) {
+      {
         const reply = await context.store.call({ op: "conversation.get", window_id: windowId });
         if (generation !== loadGeneration.current) return;
         const sameThread = threadId.current !== null && threadId.current === reply.thread?.id;
         threadId.current = reply.thread?.id ?? null;
-        setAgent(reply.thread ? { workspace_id: workspaceId, model_preset: reply.thread.model.id, model_label: reply.thread.model.label, busy: false, tool: null, created_at: reply.thread.created_at } : null);
+        setAgent(Boolean(reply.thread));
         setItems(uniqueItems(reply.items));
         acknowledge(reply.items);
         setNextBefore(reply.next_before);
@@ -169,35 +146,20 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         });
         return;
       }
-      const reply = await context.store.call({ op: "agent.get", workspace_id: workspaceId });
-      if (generation !== loadGeneration.current) return;
-      if (reply.op !== "agent.get") return;
-      setAgent(reply.agent);
-      setItems(uniqueItems(reply.items));
-      setPending(null);
-      setModels(reply.models);
-      setSelectedPreset(reply.models[0]?.preset ?? "");
-      setBusy(reply.agent?.busy ?? false);
-      setTool(reply.agent?.tool ?? null);
-      setDelta("");
-      pendingUpdates.current = null;
-      updates.forEach(applyUpdate);
     } catch (reason) {
       if (generation === loadGeneration.current) { const error = toCoreError(reason); if (!handleError(error)) setLoadError(error.message); }
     } finally {
       if (generation === loadGeneration.current) {
-        pendingUpdates.current = null;
         conversationQueue.current = null;
         setLoading(false);
       }
     }
-  }, [acknowledge, applyUpdate, applyConversation, connected, context.store, workspaceId, hasProvider, windowId, appVersion, handleError]);
+  }, [acknowledge, applyConversation, connected, context.store, workspaceId, hasProvider, windowId, appVersion, handleError]);
 
   useEffect(() => {
     void load();
     return () => {
       loadGeneration.current += 1;
-      pendingUpdates.current = null;
       conversationQueue.current = null;
     };
   }, [load]);
@@ -215,10 +177,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       }
       return;
     }
-    if (event.event !== "agent.update" || event.workspace_id !== workspaceId) return;
-    if (pendingUpdates.current) pendingUpdates.current.push(event.update);
-    else applyUpdate(event.update);
-  }), [applyUpdate, applyConversation, context.store, workspaceId, hasProvider, providerEntry, windowId, restoreDraft, handleError, load]);
+  }), [applyConversation, context.store, workspaceId, hasProvider, providerEntry, windowId, restoreDraft, handleError, load]);
 
   useLayoutEffect(() => {
     const history = historyRef.current;
@@ -261,38 +220,20 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
 
   const start = async () => {
     if (!selectedPreset || creating) return;
-    const updates: AgentUpdate[] = [];
-    pendingUpdates.current = updates;
     setCreating(true);
     setCreateError(null);
     const events: CoreEvent[] = [];
-    if (provider) { conversationQueue.current = events; creatingConversation.current = true; }
+    conversationQueue.current = events; creatingConversation.current = true;
     try {
-      if (provider) {
-        await context.store.call({ op: "conversation.create", window_id: windowId, model: selectedPreset });
-        if (pendingUpdates.current === updates) await load(events);
-        return;
-      }
-      const reply = await context.store.call({ op: "agent.create", workspace_id: workspaceId, model_preset: selectedPreset });
-      if (pendingUpdates.current !== updates) return;
-      if (reply.op === "agent.create") {
-        setAgent(reply.agent);
-        setBusy(reply.agent.busy);
-        setTool(reply.agent.tool);
-      }
-      setCreating(false);
+      await context.store.call({ op: "conversation.create", window_id: windowId, model: selectedPreset });
+      await load(events);
     } catch (reason) {
-      if (pendingUpdates.current !== updates) return;
       const error = toCoreError(reason);
       if (!handleError(error)) setCreateError(error.message);
       setCreating(false);
     } finally {
       creatingConversation.current = false;
       if (conversationQueue.current === events) conversationQueue.current = null;
-      if (pendingUpdates.current === updates) {
-        pendingUpdates.current = null;
-        updates.forEach(applyUpdate);
-      }
     }
   };
 
@@ -302,7 +243,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     const submittedAttachments = attachments;
     if ((!text && submittedAttachments.length === 0) || sending) return;
     const retry = retryDraft.current;
-    const requestId = provider ? (retry && !retry.failed && retry.text === text && retry.attachments.length === submittedAttachments.length && retry.attachments.every((item, index) => item.id === submittedAttachments[index].id) ? retry.id : crypto.randomUUID()) : "";
+    const requestId = retry && !retry.failed && retry.text === text && retry.attachments.length === submittedAttachments.length && retry.attachments.every((item, index) => item.id === submittedAttachments[index].id) ? retry.id : crypto.randomUUID();
     followTail.current = true;
     setPending({ text, attachments: submittedAttachments, knownIds: new Set(items.map((item) => item.id)) });
     setDraft("");
@@ -313,18 +254,16 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     try {
       const uploads = await Promise.all(submittedAttachments.map(readUpload));
       await flushShareViews();
-      if (provider) {
-        await context.store.call({ op: "conversation.send", window_id: windowId, request_id: requestId, text, attachments: uploads });
-        retryDraft.current = null;
-      } else await context.store.call({ op: "agent.send", workspace_id: workspaceId, text, ...(uploads.length ? { attachments: uploads } : {}) });
+      await context.store.call({ op: "conversation.send", window_id: windowId, request_id: requestId, text, attachments: uploads });
+      retryDraft.current = null;
     } catch (reason) {
       setPending(null);
       const error = toCoreError(reason);
       if (!handleError(error)) setSendError(error.message);
-      if (provider) retryDraft.current = { id: requestId, text, attachments: submittedAttachments, failed: false };
+      retryDraft.current = { id: requestId, text, attachments: submittedAttachments, failed: false };
       setDraft((current) => current ? `${submittedDraft}\n${current}` : submittedDraft);
       setAttachments((current) => [...submittedAttachments, ...current]);
-      if (provider && error.code !== "login_required" && error.code !== "binding_conflict") void load();
+      if (error.code !== "login_required" && error.code !== "binding_conflict") void load();
     } finally {
       setSending(false);
     }
@@ -360,6 +299,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     void send();
   };
 
+  if (!provider) return <div className="ks-agent-chat-state"><EmptyState icon={<MessageSquare size="empty" />} text="이 앱 판에는 대화 제공자가 없습니다" /></div>;
   if (!connected) {
     return <div className="ks-agent-chat-state"><EmptyState icon={<MessageSquare size="empty" />} text="서버에 연결하면 대화할 수 있습니다" /></div>;
   }
@@ -410,7 +350,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         ref={historyRef}
         role="log"
       >
-        {items.map((item) => <HistoryItem key={item.id} item={item} workspaceId={workspaceId} windowId={provider ? windowId : undefined} store={context.store} onPreview={setPreview} onError={setSendError} />)}
+        {items.map((item) => <HistoryItem key={item.id} item={item} windowId={windowId} store={context.store} onPreview={setPreview} onError={setSendError} />)}
         {pending !== null ? <div className="ks-agent-chat-user is-pending">{pending.text}{pending.attachments.length ? <div className={`ks-agent-attachment-history${pending.text ? " has-text" : ""}`}>{pending.attachments.map((attachment) => <PendingAttachment key={attachment.id} attachment={attachment} onPreview={setPreview} />)}</div> : null}</div> : null}
         {delta ? <div className="ks-agent-chat-assistant"><div className="ks-agent-chat-assistant-content"><MarkdownText>{delta}</MarkdownText></div></div> : null}
         {(busy || pending !== null) && !delta ? (
@@ -450,8 +390,8 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   );
 }
 
-function HistoryItem({ item, workspaceId, windowId, store, onPreview, onError }: { item: AgentItem | ConversationItem; workspaceId: string; windowId?: string; store: BlockContext["store"]; onPreview: (preview: Preview) => void; onError: (message: string) => void }) {
-  if (item.kind === "user") return <div className="ks-agent-chat-user">{item.text}{item.attachments?.length ? <div className={`ks-agent-attachment-history${item.text ? " has-text" : ""}`}>{item.attachments.map((attachment, index) => <HistoryAttachment key={index} attachment={attachment} workspaceId={workspaceId} windowId={windowId} itemId={item.id} index={index} store={store} onPreview={onPreview} onError={onError} />)}</div> : null}</div>;
+function HistoryItem({ item, windowId, store, onPreview, onError }: { item: ConversationItem; windowId: string; store: BlockContext["store"]; onPreview: (preview: Preview) => void; onError: (message: string) => void }) {
+  if (item.kind === "user") return <div className="ks-agent-chat-user">{item.text}{item.attachments?.length ? <div className={`ks-agent-attachment-history${item.text ? " has-text" : ""}`}>{item.attachments.map((attachment, index) => <HistoryAttachment key={index} attachment={attachment} windowId={windowId} itemId={item.id} store={store} onPreview={onPreview} onError={onError} />)}</div> : null}</div>;
   if (item.kind === "assistant") {
     return <div className="ks-agent-chat-assistant"><div className="ks-agent-chat-assistant-content"><MarkdownText>{item.text}</MarkdownText></div></div>;
   }
@@ -459,7 +399,7 @@ function HistoryItem({ item, workspaceId, windowId, store, onPreview, onError }:
   return <div className="ks-agent-chat-notice">{item.text}</div>;
 }
 
-function uniqueItems(items: (AgentItem | ConversationItem)[]): (AgentItem | ConversationItem)[] {
+function uniqueItems(items: ConversationItem[]): ConversationItem[] {
   const seen = new Set<string>();
   return items.filter((item) => {
     if (seen.has(item.id)) return false;
@@ -471,7 +411,7 @@ function uniqueItems(items: (AgentItem | ConversationItem)[]): (AgentItem | Conv
 
 type PendingMessage = { text: string; attachments: DraftAttachment[]; knownIds: Set<string> };
 
-function matchesPending(item: AgentItem | ConversationItem, pending: PendingMessage): boolean {
+function matchesPending(item: ConversationItem, pending: PendingMessage): boolean {
   if (item.kind !== "user" || pending.knownIds.has(item.id) || item.text !== pending.text) return false;
   const attachments = item.attachments ?? [];
   return attachments.length >= pending.attachments.length && pending.attachments.every((draft, index) =>

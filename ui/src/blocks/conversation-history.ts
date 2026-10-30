@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, type RefObject } from "react";
-import type { AgentItem, ConversationItem } from "../contract/contract";
+import type { ConversationItem } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 
 type HistoryOptions = {
@@ -10,7 +10,7 @@ type HistoryOptions = {
   windowId: string;
   onItems: (items: ConversationItem[], before: string | undefined) => void;
   onError: (reason: unknown) => void;
-  items: (AgentItem | ConversationItem)[];
+  items: ConversationItem[];
 };
 
 export function useConversationHistory({ historyRef, nextBefore, enabled, store, windowId, onItems, onError, items }: HistoryOptions) {

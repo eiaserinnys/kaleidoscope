@@ -1,5 +1,10 @@
 use super::*;
 use axum::{routing::any, Router};
+use kaleidoscope_contract::{
+    data::HttpMethod,
+    registry::{ConnectionAccept, ConnectionRequest},
+    FileAccess,
+};
 use serde_json::{json, Value};
 use tokio::task::JoinHandle;
 
@@ -393,4 +398,32 @@ async fn preview_uses_window_or_explicit_workspace_storage() {
     input.window_id = Some("win1".into());
     let value = result_value(server.preview_app_result(input).await.unwrap());
     assert_eq!(value["values"][0]["value"], "\"저장값\"");
+}
+
+#[tokio::test]
+async fn stored_environment_reference_is_not_sent_to_the_origin() {
+    let state = AppState::in_memory("secret");
+    add_relay(&state, "http://127.0.0.1:1");
+    state
+        .lock_db()
+        .unwrap()
+        .execute(
+            "UPDATE connections SET headers=?1 WHERE name='board'",
+            [r#"{"Authorization":"Bearer ${env:KEY}"}"#],
+        )
+        .unwrap();
+    let request = ConnectionRequest {
+        app_id: "test".into(),
+        method: HttpMethod::Get,
+        path: "/items".into(),
+        query: Default::default(),
+        body: None,
+        accept: ConnectionAccept::Json,
+    };
+    let error = state
+        .relay_preview_request("board", request, FileAccess::Read)
+        .await
+        .unwrap_err();
+    assert_eq!(error.0, StatusCode::BAD_GATEWAY);
+    assert!(error.1.message.contains("환경변수 참조"));
 }

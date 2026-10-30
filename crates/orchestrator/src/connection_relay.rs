@@ -152,16 +152,16 @@ impl AppState {
                     server_error("연결 헤더 설정을 읽을 수 없습니다."),
                 )
             })?;
+            if value.contains("${env:") {
+                return Err((
+                    StatusCode::BAD_GATEWAY,
+                    server_error("연결 헤더에 환경변수 참조를 사용할 수 없습니다."),
+                ));
+            }
             if body_present && header_name == reqwest::header::CONTENT_TYPE {
                 continue;
             }
-            let value = expand_environment(value).map_err(|name| {
-                (
-                    StatusCode::BAD_GATEWAY,
-                    server_error(&format!("서버 환경변수가 없습니다: {name}")),
-                )
-            })?;
-            let header_value = HeaderValue::from_str(&value).map_err(|_| {
+            let header_value = HeaderValue::from_str(value).map_err(|_| {
                 (
                     StatusCode::BAD_GATEWAY,
                     server_error("연결 헤더 설정을 읽을 수 없습니다."),
@@ -245,29 +245,6 @@ impl AppState {
         }
     }
 }
-fn expand_environment(value: &str) -> Result<String, String> {
-    let mut result = String::new();
-    let mut remainder = value;
-    while let Some(start) = remainder.find("${env:") {
-        result.push_str(&remainder[..start]);
-        let variable_start = start + "${env:".len();
-        let tail = &remainder[variable_start..];
-        let Some(end) = tail.find('}') else {
-            result.push_str(&remainder[start..]);
-            return Ok(result);
-        };
-        let name = &tail[..end];
-        if name.is_empty() {
-            result.push_str(&remainder[start..variable_start + end + 1]);
-        } else {
-            result.push_str(&std::env::var(name).map_err(|_| name.to_string())?);
-        }
-        remainder = &tail[end + 1..];
-    }
-    result.push_str(remainder);
-    Ok(result)
-}
-
 pub(super) async fn device_request(
     State(state): State<AppState>,
     Extension(device): Extension<(String, String)>,

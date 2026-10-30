@@ -9,8 +9,7 @@ use serde_json::Value;
 use tower::ServiceExt;
 
 fn definition() -> String {
-    let mut value: Value =
-        serde_json::from_str(include_str!("../../../examples/workspace-pas.json")).unwrap();
+    let mut value: Value = serde_json::from_str(include_str!("fixtures/simple-app.json")).unwrap();
     value["id"] = json!("storage-test");
     value["name"] = json!("Storage Test");
     value["requires"]["blocks"] = json!(6);

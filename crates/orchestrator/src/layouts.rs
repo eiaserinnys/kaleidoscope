@@ -449,25 +449,9 @@ impl AppState {
                 workspace_id: Some(ref id),
                 ..
             } if !has(id) => None,
-            DeviceEvent::AgentUpdate {
-                ref workspace_id, ..
-            } if !has(workspace_id) => None,
             other => Some(other),
         }
     }
-}
-
-pub(super) fn load_entities<T: for<'de> Deserialize<'de>>(
-    db: &Connection,
-    table: &str,
-) -> Result<Vec<T>, CoreError> {
-    let query = match table {
-        "workspaces" => "SELECT data FROM workspaces ORDER BY created_at,id",
-        "desktops" => "SELECT data FROM desktops ORDER BY created_at,id",
-        "windows" => "SELECT data FROM windows ORDER BY created_at,id",
-        _ => return Err(server_error("배치 표를 읽을 수 없습니다.")),
-    };
-    read_entities(db, query, None)
 }
 
 fn read_entities<T: for<'de> Deserialize<'de>>(

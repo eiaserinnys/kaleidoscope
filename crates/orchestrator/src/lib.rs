@@ -59,10 +59,6 @@ struct Inner {
     pairings: AsyncMutex<HashMap<String, Pairing>>,
     mcp_token: String,
     db_path: Option<PathBuf>,
-    soulstream: Option<agent::Soulstream>,
-    activity: Mutex<HashMap<String, (bool, Option<String>)>>,
-    relays: Mutex<HashMap<String, tokio::task::AbortHandle>>,
-    create_lock: AsyncMutex<()>,
 }
 
 #[derive(Clone)]
@@ -148,10 +144,6 @@ impl AppState {
             pairings: AsyncMutex::new(HashMap::new()),
             mcp_token,
             db_path,
-            soulstream: None,
-            activity: Mutex::new(HashMap::new()),
-            relays: Mutex::new(HashMap::new()),
-            create_lock: AsyncMutex::new(()),
         })))
     }
 
@@ -458,7 +450,6 @@ pub fn router(state: AppState) -> Router {
     http::router(state)
 }
 
-mod agent;
 mod app_storage;
 mod app_storage_context;
 mod app_storage_http;
@@ -473,7 +464,6 @@ mod mcp;
 mod pairing;
 mod preview;
 mod publish;
-mod relay;
 mod share;
 mod storage;
 mod workspace_queries;

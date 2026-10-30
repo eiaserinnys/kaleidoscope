@@ -79,7 +79,7 @@ async fn connection_snapshots_follow_apps_and_only_reach_supported_devices() {
 
 #[tokio::test]
 async fn targeted_events_follow_each_devices_last_report_and_survive_restart() {
-    use kaleidoscope_contract::{registry::DeviceLayout, AgentUpdate, Workspace};
+    use kaleidoscope_contract::{registry::DeviceLayout, Workspace};
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("registry.db");
     let state = AppState::open(&path, "secret".into()).unwrap();
@@ -166,10 +166,6 @@ async fn targeted_events_follow_each_devices_last_report_and_survive_restart() {
     assert_eq!(event_a["workspace_id"], "w");
     assert_eq!(event_b["open"], false);
     assert!(event_b.get("workspace_id").is_none());
-    state.send_event(DeviceEvent::AgentUpdate {
-        workspace_id: "w".into(),
-        update: AgentUpdate::Delta { text: "답".into() },
-    });
     state.send_event(DeviceEvent::AppOpen {
         app_id: "target".into(),
         workspace_id: Some("w".into()),
@@ -178,10 +174,6 @@ async fn targeted_events_follow_each_devices_last_report_and_survive_restart() {
         app_id: "marker".into(),
         workspace_id: None,
     });
-    assert_eq!(
-        next_device_event(&mut stream_a).await["event"],
-        "agent.update"
-    );
     assert_eq!(next_device_event(&mut stream_a).await["app_id"], "target");
     assert_eq!(next_device_event(&mut stream_b).await["app_id"], "marker");
     assert_eq!(next_device_event(&mut stream_a).await["app_id"], "marker");

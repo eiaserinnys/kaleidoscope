@@ -16,70 +16,9 @@ export type Actions = SetState | Array<Action>;
 export type AdoptThreadRequest = { session_id: string, first_input_is_initial_instruction: boolean, };
 
 /**
- * 기록에 붙은 첨부 하나(모듈 `agent` 2판). 내용은 `agent.attachment`로 읽는다.
- */
-export type AgentAttachment = { 
-/**
- * 화면에 보일 파일 이름.
- */
-name: string, 
-/**
- * 서버가 확장자로 정한 MIME 형식(모르면 `application/octet-stream`). `image/`로 시작하면 대화
- * 블록이 이미지로 그린다.
- */
-mime: string, };
-
-/**
  * TypeScript에서 대화 설정 바인딩의 창 상태 형태를 제외한다. 실행 시 공통 검사기가 식도 검사한다.
  */
 export type AgentBinding = ExprRef | string | number | boolean | null | Array<JsonValue> | ({ [key: string]: JsonValue } & { state?: never; expr?: never });
-
-/**
- * 워크스페이스 PAS 하나.
- */
-export type AgentInfo = { workspace_id: string, 
-/**
- * 만들 때 쓴 모델 preset(예: `gemini-4-argon`). 한도로 대체 모델이 도는 중이어도 이 값은 그대로다.
- */
-model_preset: string, 
-/**
- * 화면에 보일 모델 이름(예: `Argon`).
- */
-model_label: string, 
-/**
- * 지금 답을 만드는 중인가.
- */
-busy: boolean, 
-/**
- * 지금 쓰는 도구 이름. 없으면 null.
- */
-tool: string | null, created_at: string, };
-
-/**
- * 대화 기록 하나. 한 번 기록되면 바뀌지 않는다.
- */
-export type AgentItem = { 
-/**
- * 워크스페이스 안에서 늘어나는 순번(문자열). 같은 id가 두 번 오면 화면은 하나만 둔다.
- */
-id: string, kind: AgentItemKind, 
-/**
- * 사용자 글이나 PAS의 답(마크다운), 오류나 알림 한 줄. 첨부만 보낸 사용자 말이면 빈 문자열이다.
- */
-text: string, at: string, 
-/**
- * (모듈 `agent` 2판) 사용자 말에 붙은 첨부. 보낸 순서 그대로다. 다른 종류의 기록과 첨부 없는 말은
- * 빈 배열이다. 1판 서버의 기록처럼 필드가 없으면 빈 배열로 읽는다. 코어는 늘 채워 보내지만, 첨부 전의
- * 화면 코드와 시험 자료가 그대로 맞도록 TS에서는 빠질 수 있게 두었다(없으면 빈 배열로 본다).
- */
-attachments?: Array<AgentAttachment>, };
-
-export type AgentItemKind = "user" | "assistant" | "error" | "notice";
-
-/**
- * 만들 때 고를 수 있는 모델 하나.
- */
-export type AgentModel = { preset: string, label: string, };
 
 /**
  * 앱의 대화 제공자. 바인딩은 리터럴 또는 `$storage`, `$storage_meta`만 읽는다.
@@ -94,28 +33,6 @@ base_path: string, namespace: AgentBinding, profile: AgentBinding, collection: A
  * 현재 작업에 thread id를 저장하는 JSON 항목 id.
  */
 thread_entry: string, };
-
-/**
- * 워크스페이스 PAS에 일어난 일. `kind`로 가른다.
- */
-export type AgentUpdate = { "kind": "created", agent: AgentInfo, } | { "kind": "item", item: AgentItem, } | { "kind": "delta", text: string, } | { "kind": "activity", busy: boolean, tool: string | null, };
-
-/**
- * 보낼 첨부 하나(모듈 `agent` 2판).
- */
-export type AgentUpload = { 
-/**
- * 파일 이름(확장자 포함). 붙여 넣은 이미지처럼 이름이 없으면 화면이 정한다(`붙여넣은 이미지.png`).
- */
-name: string, 
-/**
- * MIME 형식. 모르면 빈 문자열이고, 서버가 `application/octet-stream`으로 올린다.
- */
-mime: string, 
-/**
- * 파일 내용. 표준 base64(채움 문자 있음).
- */
-data_base64: string, };
 
 /**
  * 레지스트리의 앱 항목. 버전이 쌓이고 `current_version`이 지금 쓰는 버전을 가리킨다.
@@ -404,7 +321,7 @@ details: Array<string>, };
 /**
  * 코어가 화면에 보내는 이벤트. `event`로 가른다.
  */
-export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "conversation.apply_status", app_id: string, status: ConversationApplyStatus, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "agent.update", workspace_id: string, update: AgentUpdate, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, code: ErrorCode, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, failed: boolean, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, };
+export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "conversation.apply_status", app_id: string, status: ConversationApplyStatus, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, code: ErrorCode, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, failed: boolean, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, };
 
 /**
  * 코어의 응답. `op`는 명령과 같다.
@@ -413,32 +330,12 @@ export type CoreReply = { "op": "state.get", snapshot: ShellSnapshot, } | { "op"
 /**
  * `data:image/png;base64,...`. 찍지 못하면 null.
  */
-image: string | null, } | { "op": "web.detach", } | { "op": "agent.get", 
-/**
- * 그 워크스페이스의 PAS. 없으면 null이고, 대화 블록은 시작하는 판을 보인다.
- */
-agent: AgentInfo | null, 
-/**
- * 대화 기록. 오래된 것부터.
- */
-items: Array<AgentItem>, 
-/**
- * 만들 때 고를 수 있는 모델. 순서가 대체 순서다(앞의 모델이 막히면 다음).
- */
-models: Array<AgentModel>, } | { "op": "agent.create", agent: AgentInfo, } | { "op": "agent.send", } | { "op": "agent.attachment", name: string, mime: string, 
-/**
- * 파일 내용. 표준 base64.
- */
-data_base64: string, } | { "op": "agent.attachment_open", } | { "op": "conversation.get", thread: ConversationThread | null, items: Array<ConversationItem>, cursor: string, next_before?: string, models: Array<ConversationModel>, } | { "op": "conversation.history", items: Array<ConversationItem>, next_before?: string, } | { "op": "conversation.create", thread: ConversationThread, } | { "op": "conversation.send", } | { "op": "conversation.attachment", name: string, mime: string, data_base64: string, } | { "op": "conversation.attachment_open", } | { "op": "storage.get", result: StorageReadReply, } | { "op": "storage.write", revision: string, } | { "op": "storage.reset", revision: string | null, } | { "op": "data.attach", view: DataView, } | { "op": "data.detach", } | { "op": "data.act", } | { "op": "data.refresh", } | { "op": "data.media", media: MediaData, } | { "op": "connection.login", } | { "op": "share.set", } | { "op": "share.view", } | { "op": "update.restart", };
+image: string | null, } | { "op": "web.detach", } | { "op": "conversation.get", thread: ConversationThread | null, items: Array<ConversationItem>, cursor: string, next_before?: string, models: Array<ConversationModel>, } | { "op": "conversation.history", items: Array<ConversationItem>, next_before?: string, } | { "op": "conversation.create", thread: ConversationThread, } | { "op": "conversation.send", } | { "op": "conversation.attachment", name: string, mime: string, data_base64: string, } | { "op": "conversation.attachment_open", } | { "op": "storage.get", result: StorageReadReply, } | { "op": "storage.write", revision: string, } | { "op": "storage.reset", revision: string | null, } | { "op": "data.attach", view: DataView, } | { "op": "data.detach", } | { "op": "data.act", } | { "op": "data.refresh", } | { "op": "data.media", media: MediaData, } | { "op": "connection.login", } | { "op": "share.set", } | { "op": "share.view", } | { "op": "update.restart", };
 
 /**
  * 화면이 코어에 보내는 명령. `op`로 가른다. 응답은 같은 `op`의 [`CoreReply`]다.
  */
-export type CoreRequest = { "op": "state.get", } | { "op": "conversation.apply_status", window_id: string, } | { "op": "conversation.apply_retry", window_id: string, } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.allow_pc", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "files.open", window_id: string, permission: string, path: string, app_id: string, rect?: Rect, } | { "op": "web.attach", window_id: string, url: string, } | { "op": "web.place", window_id: string, bounds: Rect | null, } | { "op": "web.navigate", window_id: string, url: string, } | { "op": "web.history", window_id: string, action: WebHistoryAction, } | { "op": "web.capture", window_id: string, } | { "op": "web.detach", window_id: string, } | { "op": "agent.get", workspace_id: string, } | { "op": "agent.create", workspace_id: string, model_preset: string, } | { "op": "agent.send", workspace_id: string, text: string, 
-/**
- * 빼면 빈 배열이다(모듈 `agent` 1판의 명령 모양).
- */
-attachments?: Array<AgentUpload>, } | { "op": "agent.attachment", workspace_id: string, item_id: string, index: number, } | { "op": "agent.attachment_open", workspace_id: string, item_id: string, index: number, } | { "op": "conversation.get", window_id: string, } | { "op": "conversation.history", window_id: string, before: string, } | { "op": "conversation.create", window_id: string, model: string, } | { "op": "conversation.send", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "op": "conversation.attachment", window_id: string, item_id: string, attachment_id: string, } | { "op": "conversation.attachment_open", window_id: string, item_id: string, attachment_id: string, } | { "op": "storage.get", window_id: string, entry: string, } | { "op": "storage.write", window_id: string, entry: string, content: JsonValue, expected_revision?: ExpectedRevision, } | { "op": "storage.reset", window_id: string, entry: string, expected_revision?: ExpectedRevision, } | { "op": "data.attach", window_id: string, } | { "op": "data.detach", window_id: string, } | { "op": "data.act", window_id: string, pointer: string, event?: JsonValue, item?: JsonValue, } | { "op": "data.refresh", window_id: string, sources?: Array<string>, } | { "op": "data.media", window_id: string, media: MediaRef, max_px?: number, } | { "op": "connection.login", window_id: string, permission: string, } | { "op": "share.set", window_id: string, on: boolean, } | { "op": "share.view", window_id: string, view: VisibleView, } | { "op": "update.restart", };
+export type CoreRequest = { "op": "state.get", } | { "op": "conversation.apply_status", window_id: string, } | { "op": "conversation.apply_retry", window_id: string, } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.allow_pc", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "files.open", window_id: string, permission: string, path: string, app_id: string, rect?: Rect, } | { "op": "web.attach", window_id: string, url: string, } | { "op": "web.place", window_id: string, bounds: Rect | null, } | { "op": "web.navigate", window_id: string, url: string, } | { "op": "web.history", window_id: string, action: WebHistoryAction, } | { "op": "web.capture", window_id: string, } | { "op": "web.detach", window_id: string, } | { "op": "conversation.get", window_id: string, } | { "op": "conversation.history", window_id: string, before: string, } | { "op": "conversation.create", window_id: string, model: string, } | { "op": "conversation.send", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "op": "conversation.attachment", window_id: string, item_id: string, attachment_id: string, } | { "op": "conversation.attachment_open", window_id: string, item_id: string, attachment_id: string, } | { "op": "storage.get", window_id: string, entry: string, } | { "op": "storage.write", window_id: string, entry: string, content: JsonValue, expected_revision?: ExpectedRevision, } | { "op": "storage.reset", window_id: string, entry: string, expected_revision?: ExpectedRevision, } | { "op": "data.attach", window_id: string, } | { "op": "data.detach", window_id: string, } | { "op": "data.act", window_id: string, pointer: string, event?: JsonValue, item?: JsonValue, } | { "op": "data.refresh", window_id: string, sources?: Array<string>, } | { "op": "data.media", window_id: string, media: MediaRef, max_px?: number, } | { "op": "connection.login", window_id: string, permission: string, } | { "op": "share.set", window_id: string, on: boolean, } | { "op": "share.view", window_id: string, view: VisibleView, } | { "op": "update.restart", };
 
 /**
  * 이미지에서 보일 부분. 원본 가로와 세로에 대한 비율(0~1)이고 `x`, `y`는 왼쪽 위다.
@@ -1028,7 +925,7 @@ export type VisibleView = {
  */
 text: string, 
 /**
- * 이미지, 동영상, 그림판, 웹 화면처럼 글로 옮길 수 없는 것이 보이는가. 참이면 `agent.send` 때 모습을 찍는다.
+ * 이미지, 동영상, 그림판, 웹 화면처럼 글로 옮길 수 없는 것이 보이는가. 참이면 `conversation.send` 때 모습을 찍는다.
  */
 visual: boolean, 
 /**

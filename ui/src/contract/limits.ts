@@ -7,7 +7,7 @@ export const AGENT_ATTACHMENT_MAX_BYTES = 20971520;
 /** 말 하나에 붙인 첨부의 합의 최대 바이트 수. */
 export const AGENT_ATTACHMENTS_TOTAL_MAX_BYTES = 31457280;
 /** 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위). */
-export const AGENT_MESSAGE_MAX_CHARS = 20000;
+export const CONVERSATION_MESSAGE_MAX_CHARS = 20000;
 /** JSON 저장 항목 하나의 최대 바이트 수. */
 export const STORAGE_JSON_MAX_BYTES = 65536;
 /** Markdown 저장 항목 하나의 최대 UTF-8 바이트 수. */

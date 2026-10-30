@@ -7,9 +7,8 @@ use crate::{
 use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::{
     conversation::{ConversationUpload, MessageReceipt, ReceiptStatus, SendMessageRequest},
-    registry::AGENT_MESSAGE_MAX_CHARS,
-    AgentUpload, CoreError, CoreEvent, CoreReply, ErrorCode, AGENT_ATTACHMENTS_MAX,
-    AGENT_ATTACHMENTS_TOTAL_MAX_BYTES, AGENT_ATTACHMENT_MAX_BYTES,
+    CoreError, CoreEvent, CoreReply, ErrorCode, AGENT_ATTACHMENTS_MAX,
+    AGENT_ATTACHMENTS_TOTAL_MAX_BYTES, AGENT_ATTACHMENT_MAX_BYTES, CONVERSATION_MESSAGE_MAX_CHARS,
 };
 use kaleidoscope_data::share::SentView;
 use serde::{Deserialize, Serialize};
@@ -47,7 +46,7 @@ pub(crate) fn send(
 ) -> Result<CoreReply, CoreError> {
     if id.is_empty()
         || (text.trim().is_empty() && uploads.is_empty())
-        || text.chars().count() > AGENT_MESSAGE_MAX_CHARS
+        || text.chars().count() > CONVERSATION_MESSAGE_MAX_CHARS
         || uploads.len() > AGENT_ATTACHMENTS_MAX
     {
         return Err(error::make(ErrorCode::InvalidRequest));
@@ -67,24 +66,8 @@ pub(crate) fn send(
             return Err(error::make(ErrorCode::InvalidRequest));
         }
     }
-    let old: Vec<_> = uploads
-        .iter()
-        .cloned()
-        .map(|a| AgentUpload {
-            name: a.name,
-            mime: a.mime,
-            data_base64: a.data_base64,
-        })
-        .collect();
-    let (attachments, visuals) = share::capture_for_agent_send(inner, &ctx.workspace.id, &old);
-    let attachments = attachments
-        .into_iter()
-        .map(|a| ConversationUpload {
-            name: a.name,
-            mime: a.mime,
-            data_base64: a.data_base64,
-        })
-        .collect();
+    let (attachments, visuals) =
+        share::capture_for_conversation_send(inner, &ctx.workspace.id, &uploads);
     let conversation = format!("{}\0{}", ctx.storage.app, ctx.workspace.id);
     let plan = share::prepare_text(inner, &ctx.workspace.id, &conversation);
     let (body, context, sent_views) = match plan {

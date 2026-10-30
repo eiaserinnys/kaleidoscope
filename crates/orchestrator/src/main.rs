@@ -21,22 +21,13 @@ async fn main() {
     let path = env::var_os("KALEIDOSCOPE_DB_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("kaleidoscope.db"));
-    let mut state = match AppState::open(path, token) {
+    let state = match AppState::open(path, token) {
         Ok(state) => state,
         Err(error) => {
             eprintln!("오케스트레이터를 시작할 수 없습니다: {error}");
             std::process::exit(1);
         }
     };
-    state.configure_soulstream(
-        env::var("SOULSTREAM_URL").ok(),
-        env::var("SOULSTREAM_TOKEN").ok(),
-        env::var("KALEIDOSCOPE_AGENT_PROFILE").unwrap_or_else(|_| "seosoyoung".into()),
-        env::var("KALEIDOSCOPE_AGENT_FOLDER_ID").ok(),
-    );
-    if let Err(error) = state.start_relays() {
-        eprintln!("PAS 중계를 시작할 수 없습니다: {error}");
-    }
     if let Err(error) = backup_once(&state) {
         eprintln!("초기 백업에 실패했습니다: {error}");
     }

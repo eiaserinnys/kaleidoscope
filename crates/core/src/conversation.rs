@@ -119,7 +119,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             ])?;
             let (name, mime, bytes) = ctx.client.bytes(&path)?;
             if is_open {
-                let name = crate::agent_commands::safe_attachment_name(&name);
+                let name = crate::attachment::safe_attachment_name(&name);
                 let key = format!(
                     "{:x}",
                     Sha256::digest(format!("{item_id}\0{attachment_id}").as_bytes())
@@ -128,7 +128,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 std::fs::create_dir_all(&dir).map_err(|e| error::io_error(&e))?;
                 let path = dir.join(&name);
                 std::fs::write(&path, bytes).map_err(|e| error::io_error(&e))?;
-                if crate::agent_commands::should_reveal(&name) {
+                if crate::attachment::should_reveal(&name) {
                     inner.attachment_opener.reveal(&path)
                 } else {
                     inner.attachment_opener.open(&path)

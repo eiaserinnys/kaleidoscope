@@ -28,8 +28,6 @@ impl AppState {
                 .map_err(db_error)?,
         };
         let mut changed = LayoutChanges::default();
-        let mut renamed_workspaces = Vec::new();
-        let mut retired_workspaces = Vec::new();
         let mut deleted_storage = Vec::new();
         let deleted_workspace_ids: HashSet<_> =
             changes.deleted_workspaces.iter().cloned().collect();
@@ -76,13 +74,6 @@ impl AppState {
                 .optional()
                 .map_err(db_error)?;
             if old.as_deref() != Some(data.as_str()) {
-                if old
-                    .as_ref()
-                    .and_then(|raw| serde_json::from_str::<Workspace>(raw).ok())
-                    .is_some_and(|previous| previous.name != workspace.name)
-                {
-                    renamed_workspaces.push((workspace.id.clone(), workspace.name.clone()));
-                }
                 let inserted = tx.execute("INSERT INTO workspaces(id,account_id,data,created_at) VALUES(?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET data=excluded.data,created_at=excluded.created_at WHERE workspaces.account_id=excluded.account_id", params![workspace.id,account_id,data,workspace.created_at]).map_err(db_error)?;
                 if inserted > 0 {
                     changed.workspaces.push(workspace.clone());
@@ -235,7 +226,6 @@ impl AppState {
             )
             .map_err(db_error)?;
             changed.deleted_workspaces.push(id.clone());
-            retired_workspaces.push(id.clone());
         }
         if let Some(device_id) = device_id {
             tx.execute(
@@ -278,12 +268,6 @@ impl AppState {
             );
         }
         self.refresh_device_workspaces()?;
-        for (id, name) in renamed_workspaces {
-            self.rename_agent(&id, &name);
-        }
-        for id in retired_workspaces {
-            self.retire_agent(&id);
-        }
         Ok((reply, changed))
     }
 }

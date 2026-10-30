@@ -110,11 +110,8 @@ impl AppState {
             } else {
                 (Value::Null, Value::Null, false, Value::Null)
             };
-        let agent = self
-            .agent_row(id)?
-            .map(|row| json!({"session_id":row.session_id,"model_preset":row.model_preset}));
         Ok(Some(
-            json!({"workspace_id":id,"name":workspace.name,"device":device,"reported_at":reported_at,"active":active,"active_desktop_id":active_desktop_id,"desktops":rendered_desktops,"agent":agent}),
+            json!({"workspace_id":id,"name":workspace.name,"device":device,"reported_at":reported_at,"active":active,"active_desktop_id":active_desktop_id,"desktops":rendered_desktops}),
         ))
     }
 
@@ -139,7 +136,7 @@ impl AppState {
                 .iter()
                 .filter(|window| ids.contains(window.desktop_id.as_str()))
                 .count();
-            result.push(json!({"workspace_id":workspace.id,"name":workspace.name,"desktop_count":ids.len(),"window_count":window_count,"has_agent":self.agent_row(&workspace.id)?.is_some(),"updated_at":workspace.updated_at}));
+            result.push(json!({"workspace_id":workspace.id,"name":workspace.name,"desktop_count":ids.len(),"window_count":window_count,"updated_at":workspace.updated_at}));
         }
         Ok(json!(result))
     }

@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 16판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 18판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -13,17 +13,6 @@
 //! 2판에서 바뀐 것: 오케스트레이터 연결 상태 [`LinkStatus`]와 `link.*` 명령, 연결했을 때 `app.import`가
 //! 오케스트레이터를 거치는 것, 에이전트가 앱을 띄워 달라고 할 때의 `app.open_requested` 이벤트,
 //! 오류 코드 `server`.
-//!
-//! 3판에서 바뀐 것(워크스페이스 PAS, 카드 #779): 블록 세트 2판(`agent_chat` 블록)과 모듈 `agent` 1판,
-//! `agent.*` 명령과 `agent.update` 이벤트, `app.open_requested`의 `workspace_id`.
-//! 워크스페이스 PAS는 워크스페이스마다 하나인 소울스트림 퍼시스턴트 세션이고, 오케스트레이터가 만들고
-//! 대화를 중계한다. 소울스트림 토큰은 오케스트레이터에만 있다. 서버 쪽 약속은 [`registry`]의
-//! 「워크스페이스 PAS」 절에 있다.
-//!
-//! 4판에서 바뀐 것(PAS 첨부, 카드 #807): 모듈 `agent` 2판. `agent.send`의 `attachments`, 기록의
-//! [`AgentItem::attachments`], 첨부를 읽는 `agent.attachment`와 기기의 기본 앱으로 여는
-//! `agent.attachment_open`. 블록 세트는 2판 그대로다(`agent_chat`의 정의는 같고, 이 쉘의 대화 블록에
-//! 첨부 단추와 붙여넣기가 붙는다). 한도는 [`AGENT_ATTACHMENTS_MAX`] 등 세 상수다.
 //!
 //! 5판에서 바뀐 것(웹 화면과 탐색기, 카드 #806): 블록 세트 3판(`web_view`, `explorer` 블록)과 모듈 `web` 1판,
 //! 앱 정의의 `opens`(이 앱이 여는 파일 확장자), `files.open`과 `web.*` 명령, `web.update` 이벤트,
@@ -47,7 +36,7 @@
 //! 바뀐 시각이 붙었다.
 //!
 //! 9판에서 바뀐 것(창 같이 보기, 카드 #814): 창마다 켜는 「같이 보기」. `share.set`과 `share.view` 명령,
-//! [`ShellSnapshot::sharing`], 화면이 옮긴 보이는 글 [`VisibleView`], `agent.send`가 같이 보는 창의 모습을 첨부로
+//! [`ShellSnapshot::sharing`], 화면이 옮긴 보이는 글 [`VisibleView`], `conversation.send`가 같이 보는 창의 모습을 첨부로
 //! 붙이는 규칙. 블록 세트와 모듈 판은 그대로다(앱 정의가 쓰는 것이 아니라 쉘의 기능이다). 아래 「같이 보기」 절과
 //! [`registry`]의 「같이 보기」 절.
 //!
@@ -57,7 +46,7 @@
 //!
 //! 11판에서 바뀐 것(P1, 카드 #818): 블록 세트 6판의 Markdown 저장소 문서 바인딩, 앱 정의 storage와 대화 provider,
 //! 모듈 `storage` 1판, `agent` 3판, `connection` 2판, registry 8판. 계정은 서버가 인증 문맥에서 해석하고 기기 계약은
-//! account id를 받지 않는다. 구 `agent.update`와 `workspace_id` 요청 모양은 이행 중 유지한다.
+//! account id를 받지 않는다.
 //! 대화 provider 이벤트는 `conversation.update`로 전달하고 저장소 알림은 metadata만 보낸다.
 //!
 //! # 계약 12판: 모듈 `storage` 2판
@@ -102,6 +91,10 @@
 //! 사람 기록의 `text`에는 `text`만 보인다. 요청 식별과 멱등 본문에는 `context`도 포함한다.
 //! 비어 있는 context는 전송하지 않는다. 제공자 요청 본문 크기는 기존 한도를 따른다.
 //!
+//! # 계약 18판: 옛 서버 대화 중계 제거
+//! 대화는 앱 정의의 제공자와 기기 로그인으로만 이뤄진다. 제공자가 없는 기존 대화 블록은 빈 상태를 보인다.
+//! 새 정의에는 제공자가 필요하다. 블록과 모듈 판은 그대로다.
+//!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
 //! - 코어는 이벤트 채널 하나로 [`CoreEvent`]를 보낸다.
@@ -145,12 +138,11 @@
 //! - 화면은 켜진 창에 보이는 부분을 글로 옮겨([`VisibleView`]) 바뀔 때마다 `share.view`로 코어에 준다. 앱마다
 //!   요약하지 않고, 쉘이 블록 종류와 접근성 정보(ARIA 역할과 이름)로 옮긴다. 스크롤 밖이나 다른 데스크톱처럼
 //!   보이지 않는 부분은 옮기지 않는다.
-//! - 코어는 연결되어 있으면 그 글을 서버에 올린다. 서버는 창마다 지금 글을 들고 있다가, 그 작업의 PAS에 말이 갈
-//!   때 지난번에 보낸 것과 달라진 것만 말 뒤에 붙인다([`registry`]의 「같이 보기」 절). 글이 바뀔 때마다 PAS를
-//!   깨우지 않는다(말 하나가 PAS의 턴 하나이므로).
-//! - 이미지나 웹 화면처럼 글로 옮길 수 없는 것이 보이는 창(`visual`)은, `agent.send` 때 코어가 그 창의 모습을
+//! - 코어는 연결되어 있으면 그 글을 서버에 올려 조회할 수 있게 한다. 대화 전송 시 코어가 지난번과 달라진
+//!   글을 제공자 요청의 context에 담는다. 글이 바뀔 때마다 대화를 깨우지 않는다.
+//! - 이미지나 웹 화면처럼 글로 옮길 수 없는 것이 보이는 창(`visual`)은, `conversation.send` 때 코어가 그 창의 모습을
 //!   찍어 첨부로 붙인다. 지난번에 붙인 모습과 같으면 붙이지 않는다.
-//! - 같이 보기를 켠 창만, 켠 동안만 이 기기 밖(서버와 소울스트림)으로 나간다.
+//! - 같이 보기를 켠 창만, 켠 동안만 이 기기 밖(서버와 외부 대화 서비스)으로 나간다.
 //!
 //! # 쉘 업데이트 (10판)
 //! 설치본 쉘(Windows NSIS)이 새 판을 스스로 받아 깐다. 디렉터는 업데이터가 든 첫 판만 손으로 깐다.
@@ -184,6 +176,11 @@ use data::{Actions, Binding, SourceDecl};
 /// 창 상태와 앱 정의의 상태 기본값에 쓰는 임의 JSON 값.
 pub type JsonValue = serde_json::Value;
 
+/// 한 번에 보낼 수 있는 대화 글의 최대 글자 수.
+pub const CONVERSATION_MESSAGE_MAX_CHARS: usize = 20_000;
+/// 첨부를 포함한 대화 요청 본문의 최대 바이트 수.
+pub const CONVERSATION_SEND_BODY_MAX_BYTES: usize = 48 * 1024 * 1024;
+
 /// Tauri 명령 이름. 화면은 `invoke("core", { request })`로 부른다.
 pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
@@ -212,9 +209,7 @@ pub const BLOCK_SET_VERSION: u32 = 7;
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
 /// - `files` 2판: 1판 + 권한의 `scope: pc`(이 PC 전체 읽기, 내 PC의 알려진 폴더와 볼륨, 기기와 앱마다 처음 한 번
 ///   허용, `files.allow_pc`). 계약 14판.
-/// - `agent` 1판: 창이 있는 워크스페이스의 PAS와 대화(`agent.*` 명령).
-/// - `agent` 2판: 1판 + 첨부(보내기, 기록에서 보기와 열기). 모듈의 새 판도 더하기만 하므로
-///   `agent: 1`을 요구하는 정의는 2판 쉘에서 그대로 돌고 첨부도 쓴다.
+/// - `agent` 1판과 2판: 옛 서버 중계용이며 18판부터 사용하지 않는다.
 /// - `web` 1판: 창 안에 웹 페이지를 띄우는 웹 화면(`web.*` 명령). 쉘이 그린 화면 위에 따로 뜬다.
 /// - `agent` 3판: `conversation-v1` 제공자 설정과 `window_id` 기반 대화 명령. 옛 `workspace_id` 명령은 이행 중 유지한다.
 /// - `storage` 1판: 계정 × 앱 저장소의 선언과 읽기, CAS 쓰기, 초기화.
@@ -242,7 +237,7 @@ pub const FILE_READ_MAX_BYTES: u64 = 5 * 1024 * 1024;
 
 /// 말 하나에 붙일 수 있는 첨부의 최대 개수.
 pub const AGENT_ATTACHMENTS_MAX: usize = 10;
-/// 첨부 파일 하나의 최대 바이트 수(base64로 바꾸기 전). `agent.attachment`로 읽을 수 있는 크기도 같다.
+/// 첨부 파일 하나의 최대 바이트 수(base64로 바꾸기 전).
 pub const AGENT_ATTACHMENT_MAX_BYTES: u64 = 20 * 1024 * 1024;
 /// 말 하나에 붙인 첨부의 합의 최대 바이트 수(base64로 바꾸기 전).
 pub const AGENT_ATTACHMENTS_TOTAL_MAX_BYTES: u64 = 30 * 1024 * 1024;
@@ -867,10 +862,10 @@ pub enum Block {
     /// (블록 세트 2판) 이 창이 있는 워크스페이스의 PAS와 나누는 대화. `requires.modules`에 `agent`가
     /// 있어야 한다. 창마다 설정할 것이 없다. 같은 워크스페이스의 대화 창은 모두 같은 PAS를 본다.
     /// 앱 정의에 `agent` provider가 있으면 `agent` 3판의 대화 제공자를 사용한다. 선언이 없는 기존
-    /// `agent_chat {}`는 아래 워크스페이스 PAS 동작을 유지한다.
+    /// `agent_chat {}`는 대화 제공자가 없다는 빈 상태를 보인다.
     /// - 서버에 연결하지 않았으면 연결하라는 빈 상태를 보인다.
-    /// - 그 워크스페이스에 PAS가 없으면 모델을 고르고 시작하는 판을 보인다(`agent.create`).
-    /// - PAS가 있으면 대화 기록과 진행 중인 답을 보이고, 아래 입력창으로 보낸다(`agent.send`).
+    /// - 대화가 없으면 모델을 고르고 시작하는 판을 보인다(`conversation.create`).
+    /// - 대화가 있으면 기록과 진행 중인 답을 보이고 입력창으로 보낸다(`conversation.send`).
     ///   Enter는 보내기, Shift+Enter는 줄바꿈이다. 한글 조합 중의 Enter는 보내지 않는다.
     /// - 답은 마크다운으로 렌더한다. HTML은 그리지 않고 링크를 눌러도 쉘이 다른 곳으로 가지 않는다.
     /// - (모듈 `agent` 2판) 입력 줄의 첨부 단추로 파일을 고르거나 입력창에 클립보드 이미지를 붙여 넣으면
@@ -1784,67 +1779,6 @@ pub enum CoreRequest {
     #[serde(rename = "web.detach")]
     WebDetach { window_id: String },
 
-    /// 워크스페이스 PAS의 지금 모습과 대화 기록(최근 [`registry::AGENT_HISTORY_LIMIT`]개)을 읽는다.
-    /// 대화 블록이 켜질 때와 연결이 다시 이어졌을 때 부른다. `connected`가 아니면 `server`,
-    /// 이 기기에 없는 워크스페이스면 `not_found`.
-    #[serde(rename = "agent.get")]
-    AgentGet { workspace_id: String },
-    /// 워크스페이스 PAS를 만든다. `model_preset`은 `agent.get`의 `models` 가운데 하나다.
-    /// 고른 모델이 지금 한도에 걸려 있으면 서버가 `models` 순서로 다음 모델을 써서 만들고, 그 사실을
-    /// `notice` 기록으로 남긴다. 이미 PAS가 있으면 새로 만들지 않고 있는 것을 돌려준다.
-    /// 코어는 워크스페이스 이름을 붙여 서버에 보낸다. `connected`가 아니면 `server`.
-    #[serde(rename = "agent.create")]
-    AgentCreate {
-        workspace_id: String,
-        model_preset: String,
-    },
-    /// 워크스페이스 PAS에 말을 보낸다. 보낸 말은 서버가 PAS의 기록에서 확인한 뒤 `agent.update`의
-    /// `item`(user)으로 돌아온다. 첨부와 함께 보내면 그 기록의 `attachments`에 같은 순서로 보인다.
-    /// - `invalid_request`: 앞뒤 공백을 뺀 글이 비었는데 첨부도 없음, 글이
-    ///   [`registry::AGENT_MESSAGE_MAX_CHARS`]자를 넘음, 첨부가 [`AGENT_ATTACHMENTS_MAX`]개를 넘음,
-    ///   파일 하나가 [`AGENT_ATTACHMENT_MAX_BYTES`]나 합이 [`AGENT_ATTACHMENTS_TOTAL_MAX_BYTES`]를 넘음,
-    ///   이름이 비었거나 `data_base64`가 base64가 아님. 화면은 첨부를 쌓을 때 개수와 크기를 먼저 막는다.
-    /// - PAS가 없으면 `not_found`, `connected`가 아니면 `server`.
-    /// - 첨부를 올리다 하나라도 실패하면 말은 보내지 않고 `server`다(일부만 간 말을 만들지 않는다).
-    /// - (9판) 위 검사를 마친 뒤, 이 워크스페이스에서 같이 보기를 켠 창 가운데 마지막 [`VisibleView::visual`]이
-    ///   참이고 이 기기에서 지금 보는 데스크톱에 있는 창마다 코어가 모습을 찍어 화면이 준 첨부 뒤에 붙인다.
-    ///   `web_view`가 있는 창은 웹 화면(`web.capture`와 같은 것)을, 아니면 쉘 화면에서 그 창의 `bounds` 자리를
-    ///   찍는다. 긴 변을 [`SHARE_CAPTURE_MAX_EDGE`] 이하로 줄인 PNG이고, 이름은 [`SHARE_CAPTURE_NAME_PREFIX`]와
-    ///   앱 이름, `.png`다. 그 창에 지난번 말에 붙여 보낸 모습과 픽셀이 같으면 붙이지 않는다. 찍지 못했거나
-    ///   붙이면 첨부 한도를 넘는 모습은 빼고 보낸다(화면이 준 첨부가 먼저다). 붙인 모습은 화면이 준 첨부와 같은
-    ///   길로 올라가 기록의 `attachments`에도 보인다. 말을 보내지 못하면 「지난번에 보낸 모습」을 바꾸지 않는다.
-    #[serde(rename = "agent.send")]
-    AgentSend {
-        workspace_id: String,
-        text: String,
-        /// 빼면 빈 배열이다(모듈 `agent` 1판의 명령 모양).
-        #[serde(default)]
-        #[ts(as = "Option<Vec<AgentUpload>>", optional)]
-        attachments: Vec<AgentUpload>,
-    },
-    /// (모듈 `agent` 2판) 기록에 있는 첨부 하나의 내용을 읽는다. 대화 블록이 이미지 첨부를 그릴 때 부른다.
-    /// `index`는 그 기록의 `attachments` 안 순서(0부터)다. 같은 첨부는 바뀌지 않으므로 화면은 받은 것을
-    /// 창이 살아 있는 동안 다시 쓴다. 기록이나 첨부가 없거나 원천에서 지워졌으면 `not_found`,
-    /// [`AGENT_ATTACHMENT_MAX_BYTES`]보다 크면 `invalid_request`, `connected`가 아니면 `server`.
-    #[serde(rename = "agent.attachment")]
-    AgentAttachment {
-        workspace_id: String,
-        item_id: String,
-        index: u32,
-    },
-    /// (모듈 `agent` 2판) 기록에 있는 첨부 하나를 이 기기의 기본 앱으로 연다. 대화 블록이 이미지가 아닌
-    /// 첨부를 눌렀을 때 부른다. 코어가 `agent.attachment`와 같은 길로 받아 앱 데이터 폴더의
-    /// `attachments/<item_id>-<index>/<이름>`에 쓰고(있으면 덮어씀) 연다. 이름의 경로 구분자와 Windows가
-    /// 파일 이름에 받지 않는 글자는 `_`로 바꾼다. 실행 파일과 스크립트(`exe`, `msi`, `bat`, `cmd`, `com`,
-    /// `scr`, `ps1`, `vbs`, `js`, `jse`, `wsf`, `hta`, `cpl`, `lnk`, `reg`)는 열지 않고 탐색기에서 그 파일을
-    /// 가리킨다. 쓰거나 열다 실패하면 `io`, 나머지 실패는 `agent.attachment`와 같다.
-    #[serde(rename = "agent.attachment_open")]
-    AgentAttachmentOpen {
-        workspace_id: String,
-        item_id: String,
-        index: u32,
-    },
-
     /// (모듈 `agent` 3판) 창의 제공자 대화와 최근 기록을 읽는다.
     #[serde(rename = "conversation.get")]
     ConversationGet { window_id: String },
@@ -1966,7 +1900,7 @@ pub enum CoreRequest {
     #[serde(rename = "share.set")]
     ShareSet { window_id: String, on: bool },
     /// (9판) 같이 보기 창에 지금 보이는 것을 코어에 준다. 화면은 켠 직후 한 번, 그 뒤로는 창에 보이는 것이나 창의
-    /// 자리가 바뀌고 [`SHARE_DEBOUNCE_MS`] 동안 더 바뀌지 않을 때 부른다. 대화 블록은 `agent.send` 전에 기다리던
+    /// 자리가 바뀌고 [`SHARE_DEBOUNCE_MS`] 동안 더 바뀌지 않을 때 부른다. 대화 블록은 `conversation.send` 전에 기다리던
     /// 옮기기를 바로 해서 이 명령을 마친다(보낸 말이 방금 본 것과 함께 가도록).
     /// - 같이 보기가 꺼진 창이면 아무것도 하지 않고 성공한다(끈 직후 늦게 온 것). 없는 창이면 `not_found`.
     /// - `text`가 [`SHARE_TEXT_MAX_BYTES`]를 넘으면 `invalid_request`.
@@ -1988,19 +1922,6 @@ pub enum CoreRequest {
     UpdateRestart {},
 }
 
-/// 보낼 첨부 하나(모듈 `agent` 2판).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
-#[serde(deny_unknown_fields)]
-#[ts(export, export_to = "contract.ts")]
-pub struct AgentUpload {
-    /// 파일 이름(확장자 포함). 붙여 넣은 이미지처럼 이름이 없으면 화면이 정한다(`붙여넣은 이미지.png`).
-    pub name: String,
-    /// MIME 형식. 모르면 빈 문자열이고, 서버가 `application/octet-stream`으로 올린다.
-    pub mime: String,
-    /// 파일 내용. 표준 base64(채움 문자 있음).
-    pub data_base64: String,
-}
-
 /// (9판) 같이 보기 창에 지금 보이는 것을 화면이 옮긴 것.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
@@ -2017,21 +1938,10 @@ pub struct VisibleView {
     /// - 고른 항목은 줄 앞에 `› `, 체크 상자는 `[x] `나 `[ ] `, 입력칸은 `이름: 값`이다.
     /// - [`SHARE_TEXT_MAX_BYTES`]를 넘지 않는다.
     pub text: String,
-    /// 이미지, 동영상, 그림판, 웹 화면처럼 글로 옮길 수 없는 것이 보이는가. 참이면 `agent.send` 때 모습을 찍는다.
+    /// 이미지, 동영상, 그림판, 웹 화면처럼 글로 옮길 수 없는 것이 보이는가. 참이면 `conversation.send` 때 모습을 찍는다.
     pub visual: bool,
     /// 창의 내용 영역(제목 줄 아래)이 쉘 화면(메인 웹뷰) 왼쪽 위 기준 어디에 있는가(CSS px). 모습을 찍을 때 쓴다.
     pub bounds: Rect,
-}
-
-/// 기록에 붙은 첨부 하나(모듈 `agent` 2판). 내용은 `agent.attachment`로 읽는다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "contract.ts")]
-pub struct AgentAttachment {
-    /// 화면에 보일 파일 이름.
-    pub name: String,
-    /// 서버가 확장자로 정한 MIME 형식(모르면 `application/octet-stream`). `image/`로 시작하면 대화
-    /// 블록이 이미지로 그린다.
-    pub mime: String,
 }
 
 /// 기기에 저장된 앱 설정의 제공자 적용 상태.
@@ -2135,29 +2045,6 @@ pub enum CoreReply {
     #[serde(rename = "web.detach")]
     WebDetach {},
 
-    #[serde(rename = "agent.get")]
-    AgentGet {
-        /// 그 워크스페이스의 PAS. 없으면 null이고, 대화 블록은 시작하는 판을 보인다.
-        agent: Option<AgentInfo>,
-        /// 대화 기록. 오래된 것부터.
-        items: Vec<AgentItem>,
-        /// 만들 때 고를 수 있는 모델. 순서가 대체 순서다(앞의 모델이 막히면 다음).
-        models: Vec<AgentModel>,
-    },
-    #[serde(rename = "agent.create")]
-    AgentCreate { agent: AgentInfo },
-    #[serde(rename = "agent.send")]
-    AgentSend {},
-    #[serde(rename = "agent.attachment")]
-    AgentAttachment {
-        name: String,
-        mime: String,
-        /// 파일 내용. 표준 base64.
-        data_base64: String,
-    },
-    #[serde(rename = "agent.attachment_open")]
-    AgentAttachmentOpen {},
-
     #[serde(rename = "conversation.get")]
     ConversationGet {
         thread: Option<conversation::ConversationThread>,
@@ -2218,77 +2105,6 @@ pub enum CoreReply {
     /// 설치를 시작했지만 쉘이 스스로 끝나지 않는 플랫폼에서만 온다(Windows는 응답 전에 끝난다).
     #[serde(rename = "update.restart")]
     UpdateRestart {},
-}
-
-/// 워크스페이스 PAS 하나.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "contract.ts")]
-pub struct AgentInfo {
-    pub workspace_id: String,
-    /// 만들 때 쓴 모델 preset(예: `gemini-4-argon`). 한도로 대체 모델이 도는 중이어도 이 값은 그대로다.
-    pub model_preset: String,
-    /// 화면에 보일 모델 이름(예: `Argon`).
-    pub model_label: String,
-    /// 지금 답을 만드는 중인가.
-    pub busy: bool,
-    /// 지금 쓰는 도구 이름. 없으면 null.
-    pub tool: Option<String>,
-    pub created_at: String,
-}
-
-/// 만들 때 고를 수 있는 모델 하나.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "contract.ts")]
-pub struct AgentModel {
-    pub preset: String,
-    pub label: String,
-}
-
-/// 대화 기록 하나. 한 번 기록되면 바뀌지 않는다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "contract.ts")]
-pub struct AgentItem {
-    /// 워크스페이스 안에서 늘어나는 순번(문자열). 같은 id가 두 번 오면 화면은 하나만 둔다.
-    pub id: String,
-    pub kind: AgentItemKind,
-    /// 사용자 글이나 PAS의 답(마크다운), 오류나 알림 한 줄. 첨부만 보낸 사용자 말이면 빈 문자열이다.
-    pub text: String,
-    pub at: String,
-    /// (모듈 `agent` 2판) 사용자 말에 붙은 첨부. 보낸 순서 그대로다. 다른 종류의 기록과 첨부 없는 말은
-    /// 빈 배열이다. 1판 서버의 기록처럼 필드가 없으면 빈 배열로 읽는다. 코어는 늘 채워 보내지만, 첨부 전의
-    /// 화면 코드와 시험 자료가 그대로 맞도록 TS에서는 빠질 수 있게 두었다(없으면 빈 배열로 본다).
-    #[serde(default)]
-    #[ts(as = "Option<Vec<AgentAttachment>>", optional)]
-    pub attachments: Vec<AgentAttachment>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "contract.ts")]
-pub enum AgentItemKind {
-    /// 디렉터가 보낸 말(쉘이나 소울스트림 화면에서).
-    User,
-    /// PAS의 답 한 덩이. 한 턴에 여럿일 수 있다(도구를 쓰는 사이사이).
-    Assistant,
-    /// 턴이 실패했다.
-    Error,
-    /// 쉘이 남기는 알림(대체 모델로 시작함 등). 눈에 덜 띄게 그린다.
-    Notice,
-}
-
-/// 워크스페이스 PAS에 일어난 일. `kind`로 가른다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-#[ts(export, export_to = "contract.ts")]
-pub enum AgentUpdate {
-    /// PAS가 만들어졌다(다른 창이나 기기에서 만든 것 포함).
-    Created { agent: AgentInfo },
-    /// 기록이 하나 늘었다. `assistant`가 오면 화면은 진행 중인 답을 비운다(그 답의 최종본이다).
-    Item { item: AgentItem },
-    /// 진행 중인 답의 다음 조각. 화면은 진행 중인 답 끝에 이어 붙인다.
-    Delta { text: String },
-    /// 바쁜 상태나 쓰는 도구가 바뀌었다. `busy`가 거짓이 되면 화면은 진행 중인 답을 비운다.
-    Activity { busy: bool, tool: Option<String> },
 }
 
 /// 웹 화면의 지금 페이지.
@@ -2371,15 +2187,7 @@ pub enum CoreEvent {
         #[ts(optional)]
         workspace_id: Option<String>,
     },
-    /// 워크스페이스 PAS에 일어난 일. 코어는 이 기기에 있는 워크스페이스의 것만 보낸다.
-    /// 대화 블록은 자기 워크스페이스의 것만 반영한다. 끊긴 동안의 것은 다시 오지 않으므로, 연결이 다시
-    /// 이어지면(`link`가 `connected`로 바뀌면) 대화 블록이 `agent.get`으로 다시 읽는다.
-    #[serde(rename = "agent.update")]
-    AgentUpdate {
-        workspace_id: String,
-        update: AgentUpdate,
-    },
-    /// (모듈 `agent` 3판) 제공자 대화 이벤트. 기존 `agent.update`(바깥 workspace_id, 안쪽 기존 AgentUpdate)는 이행 중 그대로 둔다.
+    /// (모듈 `agent` 3판) 제공자 대화 이벤트.
     /// 블록은 `conversation.get` 응답의 `thread.id`를 얻고 `conversation.update`를 thread_id로 거른다.
     /// 같은 PC에서 같은 thread를 연 창이 여럿이면 모두 같은 이벤트를 받는다.
     /// 아직 thread가 없는 시작 판은 `conversation.create` 응답이나 thread 저장 항목의 `storage.update` 뒤 `conversation.get`을 다시 불러 id를 얻는다.
@@ -2563,21 +2371,14 @@ mod tests {
     }
 
     #[test]
-    fn agent_chat_needs_agent_module() {
-        validate::parse_app_definition(&example("workspace-pas.json")).expect("작업 PAS 예제");
-        let without_module =
-            example("workspace-pas.json").replace(r#""agent": 1"#, r#""files": 1"#);
-        assert_ne!(without_module, example("workspace-pas.json"));
-        let error = validate::parse_app_definition(&without_module).unwrap_err();
-        assert_eq!(error.code, ErrorCode::InvalidAppDefinition);
-        assert!(
-            error.details.iter().any(|d| d.contains("agent 모듈")),
-            "{error:?}"
-        );
-
-        let block: Block = serde_json::from_str(r#"{"type":"agent_chat"}"#).unwrap();
-        assert_eq!(block, Block::AgentChat {});
-        assert!(serde_json::from_str::<Block>(r#"{"type":"agent_chat","x":1}"#).is_err());
+    fn legacy_chat_is_cached_but_new_upload_is_rejected() {
+        let legacy = include_str!("../tests/legacy-workspace-pas.json");
+        assert!(validate::parse_cached_app_definition(legacy).is_ok());
+        let error = validate::parse_app_definition(legacy).unwrap_err();
+        assert!(error
+            .details
+            .iter()
+            .any(|detail| detail.contains("대화 제공자")));
     }
 
     #[test]
@@ -2588,110 +2389,6 @@ mod tests {
             "md 예제는 1판으로 남겨 호환을 보인다"
         );
         validate::parse_app_definition(&old).expect("1판 정의는 2판 쉘에서도 유효");
-    }
-
-    #[test]
-    fn agent_requests_and_events_round_trip() {
-        let req: CoreRequest = serde_json::from_str(
-            r#"{"op":"agent.create","workspace_id":"w","model_preset":"gemini-4-argon"}"#,
-        )
-        .unwrap();
-        assert_eq!(
-            req,
-            CoreRequest::AgentCreate {
-                workspace_id: "w".into(),
-                model_preset: "gemini-4-argon".into(),
-            }
-        );
-        let event = CoreEvent::AgentUpdate {
-            workspace_id: "w".into(),
-            update: AgentUpdate::Activity {
-                busy: true,
-                tool: Some("upload_app".into()),
-            },
-        };
-        assert_eq!(
-            serde_json::to_string(&event).unwrap(),
-            r#"{"event":"agent.update","workspace_id":"w","update":{"kind":"activity","busy":true,"tool":"upload_app"}}"#
-        );
-        let conversation = CoreEvent::ConversationUpdate {
-            thread_id: "thread-1".into(),
-            update: conversation::ConversationEvent::Text {
-                stream_id: "stream-1".into(),
-                text: "누적된 답".into(),
-            },
-        };
-        let serialized = serde_json::to_value(&conversation).unwrap();
-        assert_eq!(serialized["event"], "conversation.update");
-        assert_eq!(serialized["thread_id"], "thread-1");
-        assert_eq!(serialized["update"]["kind"], "text");
-        assert_eq!(serialized["update"]["stream_id"], "stream-1");
-        assert_eq!(serialized["update"]["text"], "누적된 답");
-        assert_eq!(
-            serde_json::from_value::<CoreEvent>(serialized).unwrap(),
-            conversation
-        );
-        let item = AgentItem {
-            id: "3".into(),
-            kind: AgentItemKind::Notice,
-            text: "알림".into(),
-            at: "2026-10-29T00:00:00Z".into(),
-            attachments: vec![],
-        };
-        assert_eq!(serde_json::to_value(&item).unwrap()["kind"], "notice");
-    }
-
-    #[test]
-    fn agent_attachments_are_optional_on_input_and_round_trip() {
-        // 1판 모양의 보내기는 첨부 없이 읽힌다.
-        let old: CoreRequest =
-            serde_json::from_str(r#"{"op":"agent.send","workspace_id":"w","text":"안녕"}"#)
-                .unwrap();
-        assert_eq!(
-            old,
-            CoreRequest::AgentSend {
-                workspace_id: "w".into(),
-                text: "안녕".into(),
-                attachments: vec![]
-            }
-        );
-        let with: CoreRequest = serde_json::from_str(
-            r#"{"op":"agent.send","workspace_id":"w","text":"","attachments":[{"name":"붙여넣은 이미지.png","mime":"image/png","data_base64":"iVBORw=="}]}"#,
-        )
-        .unwrap();
-        let CoreRequest::AgentSend { attachments, .. } = &with else {
-            panic!("{with:?}")
-        };
-        assert_eq!(attachments[0].name, "붙여넣은 이미지.png");
-        assert!(serde_json::from_str::<CoreRequest>(
-            r#"{"op":"agent.send","workspace_id":"w","text":"","attachments":[{"name":"a","mime":"","data_base64":"","size":1}]}"#
-        )
-        .is_err(), "첨부의 모르는 필드는 거부한다");
-
-        // 1판 서버의 기록은 첨부 없이 읽힌다.
-        let item: AgentItem = serde_json::from_str(
-            r#"{"id":"1","kind":"user","text":"안녕","at":"2026-10-29T00:00:00Z"}"#,
-        )
-        .unwrap();
-        assert!(item.attachments.is_empty());
-
-        let read: CoreRequest = serde_json::from_str(
-            r#"{"op":"agent.attachment","workspace_id":"w","item_id":"7","index":0}"#,
-        )
-        .unwrap();
-        assert_eq!(
-            read,
-            CoreRequest::AgentAttachment {
-                workspace_id: "w".into(),
-                item_id: "7".into(),
-                index: 0,
-            }
-        );
-        let reply = CoreReply::AgentAttachmentOpen {};
-        assert_eq!(
-            serde_json::to_string(&reply).unwrap(),
-            r#"{"op":"agent.attachment_open"}"#
-        );
     }
 
     #[test]
@@ -2769,7 +2466,7 @@ mod tests {
              /** 말 하나에 붙인 첨부의 합의 최대 바이트 수. */\n\
              export const AGENT_ATTACHMENTS_TOTAL_MAX_BYTES = {};\n\
              /** 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위). */\n\
-             export const AGENT_MESSAGE_MAX_CHARS = {};\n\
+             export const CONVERSATION_MESSAGE_MAX_CHARS = {};\n\
              /** JSON 저장 항목 하나의 최대 바이트 수. */\n\
              export const STORAGE_JSON_MAX_BYTES = {};\n\
              /** Markdown 저장 항목 하나의 최대 UTF-8 바이트 수. */\n\
@@ -2788,7 +2485,7 @@ mod tests {
             AGENT_ATTACHMENTS_MAX,
             AGENT_ATTACHMENT_MAX_BYTES,
             AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
-            registry::AGENT_MESSAGE_MAX_CHARS,
+            CONVERSATION_MESSAGE_MAX_CHARS,
             app_storage::STORAGE_JSON_MAX_BYTES,
             app_storage::STORAGE_MD_MAX_BYTES,
             app_storage::STORAGE_COMMAND_BODY_MAX_BYTES,
@@ -3035,7 +2732,8 @@ mod tests {
 
     #[test]
     fn blocks_need_their_block_set() {
-        let pas = example("workspace-pas.json").replace(r#""blocks": 2"#, r#""blocks": 1"#);
+        let pas = include_str!("../tests/legacy-workspace-pas.json")
+            .replace(r#""blocks": 2"#, r#""blocks": 1"#);
         rejected(&pas, "블록 세트 2판");
         let explorer = example("explorer.json").replace(r#""blocks": 5"#, r#""blocks": 2"#);
         rejected(&explorer, "블록 세트 3판");
@@ -3084,7 +2782,10 @@ mod tests {
     fn supported_renders_by_block_set_and_modules() {
         let current = Supported::current();
         let browser = validate::parse_app_definition(&example("web-browser.json")).unwrap();
-        let pas = validate::parse_app_definition(&example("workspace-pas.json")).unwrap();
+        let pas = validate::parse_cached_app_definition(include_str!(
+            "../tests/legacy-workspace-pas.json"
+        ))
+        .unwrap();
         assert!(browser.requires.blocks > LEGACY_BLOCK_SET_VERSION);
         assert!(pas.requires.blocks <= LEGACY_BLOCK_SET_VERSION);
         assert!(current.renders(&browser.requires));

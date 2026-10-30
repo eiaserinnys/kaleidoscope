@@ -1,8 +1,6 @@
 use super::*;
 use axum::extract::{rejection::JsonRejection, Extension, Path};
-use kaleidoscope_contract::registry::{ShareUpload, SHARE_BLOCK_END, SHARE_BLOCK_START};
-use kaleidoscope_data::share::{SentView, View};
-use std::collections::BTreeMap;
+use kaleidoscope_contract::registry::ShareUpload;
 
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct SharedView {
@@ -18,7 +16,6 @@ pub(super) struct SharedView {
 #[derive(Default)]
 pub(super) struct ShareStore {
     views: HashMap<(String, String), SharedView>,
-    sent: HashMap<String, BTreeMap<String, SentView>>,
 }
 
 impl ShareStore {
@@ -118,34 +115,6 @@ impl AppState {
             .map_err(|_| server_error("같이 보기 상태를 읽을 수 없습니다."))?
             .workspace_views(workspace_id))
     }
-
-    pub(super) fn share_block_for_send(
-        &self,
-        workspace_id: &str,
-    ) -> Result<Option<(String, BTreeMap<String, SentView>)>, CoreError> {
-        let shares = self
-            .0
-            .shares
-            .lock()
-            .map_err(|_| server_error("같이 보기 상태를 읽을 수 없습니다."))?;
-        let views = shares.workspace_views(workspace_id);
-        let sent = shares.sent.get(workspace_id).cloned().unwrap_or_default();
-        Ok(build_share_block(&views, &sent))
-    }
-
-    pub(super) fn mark_shared_views_sent(
-        &self,
-        workspace_id: &str,
-        sent: BTreeMap<String, SentView>,
-    ) -> Result<(), CoreError> {
-        self.0
-            .shares
-            .lock()
-            .map_err(|_| server_error("같이 보기 상태를 저장할 수 없습니다."))?
-            .sent
-            .insert(workspace_id.to_string(), sent);
-        Ok(())
-    }
 }
 
 pub(super) async fn put_share(
@@ -183,145 +152,12 @@ pub(super) async fn delete_share(
     Json(json!({})).into_response()
 }
 
-fn build_share_block(
-    views: &[SharedView],
-    sent: &BTreeMap<String, SentView>,
-) -> Option<(String, BTreeMap<String, SentView>)> {
-    let views: Vec<_> = views
-        .iter()
-        .map(|view| View {
-            window_id: view.window_id.clone(),
-            app_name: view.app_name.clone(),
-            text: view.text.clone(),
-        })
-        .collect();
-    kaleidoscope_data::share::build_share_block(&views, sent)
-}
-
-pub(super) fn strip_share_block(text: &str) -> String {
-    let mut in_block = false;
-    text.lines()
-        .filter(|line| {
-            if *line == SHARE_BLOCK_START {
-                in_block = true;
-                return false;
-            }
-            if *line == SHARE_BLOCK_END {
-                in_block = false;
-                return false;
-            }
-            !in_block
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim_end()
-        .to_string()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::body::Body;
     use http_body_util::BodyExt;
     use tower::ServiceExt;
-
-    fn view(window_id: &str, app_name: &str, text: &str, updated_at: &str) -> SharedView {
-        SharedView {
-            window_id: window_id.into(),
-            workspace_id: "w".into(),
-            app_name: app_name.into(),
-            device_name: "pc".into(),
-            updated_at: updated_at.into(),
-            visual: false,
-            text: text.into(),
-        }
-    }
-
-    fn block(views: &[SharedView], sent: &BTreeMap<String, SentView>) -> String {
-        build_share_block(views, sent).unwrap().0
-    }
-
-    #[test]
-    fn new_unchanged_deleted_and_changed_views_are_described() {
-        let original =
-            "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10";
-        let current = [view(
-            "12345678-a",
-            "편집기",
-            original,
-            "2026-01-01T00:00:00.000Z",
-        )];
-        let first = block(&current, &BTreeMap::new());
-        assert!(first.contains(&format!(
-            "## 편집기 (창 12345678): 새로 같이 봄\n{original}"
-        )));
-        let sent = build_share_block(&current, &BTreeMap::new()).unwrap().1;
-        let same = block(&current, &sent);
-        assert!(same.contains("## 편집기 (창 12345678): 그대로"));
-        assert!(!same.contains("a\nb\nc"));
-        let changed_text =
-            "line 1\nline 2\nline 3\nchanged\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10";
-        let changed = [view(
-            "12345678-a",
-            "편집기",
-            changed_text,
-            "2026-01-02T00:00:00.000Z",
-        )];
-        let changed_block = block(&changed, &sent);
-        assert!(changed_block.contains("## 편집기 (창 12345678): 바뀜\n@@"));
-        assert!(changed_block.contains("-line 4\n+changed"));
-        let deleted = block(&[], &sent);
-        assert!(deleted.contains("## 편집기 (창 12345678): 같이 보기 끝"));
-    }
-
-    #[test]
-    fn large_diff_falls_back_to_full_text_and_empty_state_has_no_block() {
-        let old = BTreeMap::from([(
-            "12345678-a".into(),
-            SentView {
-                app_name: "편집기".into(),
-                text: "old\n".repeat(50),
-            },
-        )]);
-        let current = [view(
-            "12345678-a",
-            "편집기",
-            "new",
-            "2026-01-02T00:00:00.000Z",
-        )];
-        assert!(block(&current, &old).contains("바뀜(전체)\nnew"));
-        assert!(build_share_block(&[], &BTreeMap::new()).is_none());
-    }
-
-    #[test]
-    fn diff_keeps_changed_content_that_looks_like_a_file_header() {
-        let old = BTreeMap::from([(
-            "12345678-a".into(),
-            SentView {
-                app_name: "편집기".into(),
-                text: "line 1\n-- option\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10".into(),
-            },
-        )]);
-        let current = [view(
-            "12345678-a",
-            "편집기",
-            "line 1\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10",
-            "2026-01-02T00:00:00.000Z",
-        )];
-        assert!(block(&current, &old).contains("\n--- option\n"));
-    }
-
-    #[test]
-    fn strip_share_block_keeps_user_text_and_trims_end() {
-        assert_eq!(
-            strip_share_block("내 요청\n\n<kaleidoscope-share>\n화면\n</kaleidoscope-share>\n  "),
-            "내 요청"
-        );
-        assert_eq!(
-            strip_share_block("<kaleidoscope-share>\n화면\n</kaleidoscope-share>  "),
-            ""
-        );
-    }
 
     fn device(state: &AppState) -> (String, String) {
         let id = Uuid::new_v4().to_string();

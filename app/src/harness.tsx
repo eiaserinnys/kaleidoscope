@@ -177,7 +177,7 @@ const files = shareScenario === "editor" ? { "README.md": Array.from({ length: 1
 
 const transport: FakeTransport = createFakeTransport({
   snapshot,
-  agents: shareScenario ? { "workspace-1": { agent: { workspace_id: "workspace-1", model_preset: "test", model_label: "Test", busy: false, tool: null, created_at: timestamp }, items: [], models: [] } } : undefined,
+  conversation: shareScenario ? { thread: { id: "test-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "test", label: "Test" }, created_at: timestamp, archived: false }, items: [], models: [{ id: "test", label: "Test", available: true }] } : undefined,
   folder: { root_path: "/fake/docs", root_name: "문서" },
   webUnavailable: new URLSearchParams(window.location.search).get("web") === "unavailable",
   updateRestartError: harnessParams.get("update-restart") === "error" ? "설치를 시작할 수 없습니다" : undefined,

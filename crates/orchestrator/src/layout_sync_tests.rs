@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use tower::ServiceExt;
 
 const EDITOR: &str = include_str!("../../../examples/md-editor.json");
-const LEGACY_APP: &str = include_str!("../../../examples/workspace-pas.json");
+const LEGACY_APP: &str = include_str!("fixtures/simple-app.json");
 
 fn workspace(id: &str, name: &str) -> Workspace {
     Workspace {

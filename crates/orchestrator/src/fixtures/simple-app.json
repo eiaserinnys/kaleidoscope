@@ -1,0 +1,56 @@
+{
+  "id": "workspace-pas",
+  "name": "마크다운 보기",
+  "description": "고른 폴더의 md 파일을 렌더해서 읽기만 한다",
+  "requires": {
+    "blocks": 2,
+    "modules": {
+      "files": 1
+    }
+  },
+  "permissions": [
+    {
+      "module": "files",
+      "id": "docs",
+      "access": "read",
+      "label": "읽을 폴더"
+    }
+  ],
+  "state": {
+    "current_file": null
+  },
+  "ui": {
+    "type": "split",
+    "direction": "row",
+    "sizes": [
+      24,
+      76
+    ],
+    "children": [
+      {
+        "type": "file_tree",
+        "root": {
+          "permission": "docs"
+        },
+        "extensions": [
+          "md"
+        ],
+        "selected": {
+          "state": "current_file"
+        },
+        "on_select": {
+          "set_state": "current_file"
+        }
+      },
+      {
+        "type": "markdown_view",
+        "file": {
+          "permission": "docs",
+          "path": {
+            "state": "current_file"
+          }
+        }
+      }
+    ]
+  }
+}

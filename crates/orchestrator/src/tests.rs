@@ -4,8 +4,7 @@ use tower::ServiceExt;
 
 const EDITOR: &str = include_str!("../../../examples/md-editor.json");
 const BROWSER: &str = include_str!("../../../examples/web-browser.json");
-const LEGACY_APP: &str = include_str!("../../../examples/workspace-pas.json");
-const CARD_BOARD: &str = include_str!("../../../examples/card-board.json");
+const LEGACY_APP: &str = include_str!("fixtures/simple-app.json");
 
 #[test]
 fn app_upload_versions_and_deduplicates_identical_definitions() {
@@ -350,15 +349,19 @@ fn migration_upgrades_v1_without_losing_devices() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 7);
+    assert_eq!(version, 8);
     assert_eq!(
         db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
             .unwrap(),
         1
     );
     assert_eq!(
-        db.query_row("SELECT count(*) FROM agents", [], |r| r.get::<_, i64>(0))
-            .unwrap(),
+        db.query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='agents'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
         0
     );
     assert_eq!(
@@ -373,35 +376,36 @@ fn migration_upgrades_v1_without_losing_devices() {
 }
 
 #[test]
-fn migration_upgrades_v2_agent_history_with_empty_attachments() {
-    let db = Connection::open_in_memory().unwrap();
-    db.execute_batch("CREATE TABLE apps (id TEXT PRIMARY KEY,name TEXT NOT NULL,current_version INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
-        CREATE TABLE app_versions (app_id TEXT NOT NULL REFERENCES apps(id),version INTEGER NOT NULL,definition TEXT NOT NULL,created_at TEXT NOT NULL,created_by TEXT NOT NULL,PRIMARY KEY(app_id,version));
-        CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
-        CREATE TABLE device_layouts (device_id TEXT PRIMARY KEY REFERENCES devices(id), layout TEXT NOT NULL, reported_at TEXT NOT NULL);
-        CREATE TABLE agents (workspace_id TEXT PRIMARY KEY, device_id TEXT NOT NULL, session_id TEXT NOT NULL UNIQUE, model_preset TEXT NOT NULL, workspace_name TEXT NOT NULL, created_at TEXT NOT NULL, cursor INTEGER NOT NULL DEFAULT 0);
-        CREATE TABLE agent_items (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id TEXT NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, at TEXT NOT NULL);
-        INSERT INTO agent_items(workspace_id,kind,text,at) VALUES('w','user','예전 기록','now');
-        PRAGMA user_version=2;").unwrap();
+fn migration_v7_removes_legacy_tables_and_preserves_other_data() {
+    let state = AppState::in_memory("secret");
+    state.publish_app(EDITOR, "agent", false, None).unwrap();
+    let db = state.lock_db().unwrap();
+    db.execute_batch(
+        "CREATE TABLE agents(workspace_id TEXT PRIMARY KEY);
+        CREATE TABLE agent_items(id INTEGER PRIMARY KEY, text TEXT);
+        INSERT INTO agents VALUES('w'); INSERT INTO agent_items VALUES(1,'기록');
+        PRAGMA user_version=7;",
+    )
+    .unwrap();
     migrate(&db).unwrap();
     let version: i64 = db
-        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 7);
-    assert_eq!(
-        db.query_row(
-            "SELECT text || ':' || attachments FROM agent_items WHERE workspace_id='w'",
+    assert_eq!(version, 8);
+    let old_tables: i64 = db.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('agents','agent_items')", [], |row| row.get(0)).unwrap();
+    assert_eq!(old_tables, 0);
+    let apps: i64 = db
+        .query_row(
+            "SELECT count(*) FROM apps WHERE id='md-editor'",
             [],
-            |row| row.get::<_, String>(0),
+            |row| row.get(0),
         )
-        .unwrap(),
-        "예전 기록:[]"
-    );
+        .unwrap();
+    assert_eq!(apps, 1);
 }
 
 #[tokio::test]
-async fn layout_and_agent_endpoints_validate_and_keep_working_without_soulstream() {
-    use http_body_util::BodyExt;
+async fn layout_endpoint_validates_requests() {
     let state = AppState::in_memory("secret");
     let (_, token) = make_device(&state);
     state
@@ -443,35 +447,6 @@ async fn layout_and_agent_endpoints_validate_and_keep_working_without_soulstream
         .await
         .unwrap();
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
-    let response = app
-        .clone()
-        .oneshot(call("GET", "/api/device/workspaces/w/agent", ""))
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let body: Value =
-        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
-    assert_eq!(body["agent"], Value::Null);
-    assert_eq!(body["models"].as_array().unwrap().len(), 3);
-    let missing = app
-        .clone()
-        .oneshot(call(
-            "POST",
-            "/api/device/workspaces/w/agent/messages",
-            r#"{"text":"안녕"}"#,
-        ))
-        .await
-        .unwrap();
-    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
-    let unavailable = app
-        .oneshot(call(
-            "POST",
-            "/api/device/workspaces/w/agent",
-            r#"{"workspace_name":"작업","model_preset":"claude-opus"}"#,
-        ))
-        .await
-        .unwrap();
-    assert_eq!(unavailable.status(), StatusCode::BAD_GATEWAY);
 }
 
 #[tokio::test]
@@ -523,6 +498,3 @@ async fn workspace_layout_is_reported_with_ordered_windows_and_folders() {
 
 #[path = "device_sync_tests.rs"]
 mod device_sync_tests;
-
-#[path = "relay_integration_tests.rs"]
-mod relay_integration_tests;
