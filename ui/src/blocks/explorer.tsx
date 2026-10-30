@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
-import type { App, AppDefinition, Block, FileEntry } from "../contract/contract";
+import { useEffect, useRef, useState } from "react";
+import type { App, AppDefinition, Block, ExplorerView } from "../contract/contract";
 import { Menu, type MenuEntry } from "../components/menu";
-import { FileCode, FileImage, FileText, File as FileIcon } from "../components/icons";
 import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
 import { FileBrowserTree } from "./file-browser-tree";
+import { SplitPanes } from "./split";
+import { ExplorerContent } from "./explorer-content";
 
 type ExplorerBlockData = Extract<Block, { type: "explorer" }>;
 
@@ -35,14 +36,11 @@ function fileExtension(path: string): string {
   return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
 }
 
-function fileIcon(entry: FileEntry) {
-  const extension = fileExtension(entry.path);
-  if (["md", "txt"].includes(extension)) return <FileText size="inline" />;
-  if (["json", "yaml", "yml", "toml", "js", "ts", "tsx", "rs", "py", "html", "css"].includes(extension)) {
-    return <FileCode size="inline" />;
-  }
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(extension)) return <FileImage size="inline" />;
-  return <FileIcon size="inline" />;
+function validFolderPath(value: unknown): value is string {
+  return typeof value === "string" && (value === "" || (
+    !value.startsWith("/") && !value.endsWith("/") && !value.includes("\\") && !value.includes(":") && !value.includes("\0")
+    && value.split("/").every((part) => part !== "" && part !== "." && part !== "..")
+  ));
 }
 
 export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; context: BlockContext }) {
@@ -50,21 +48,69 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
   const permissionLabel = context.definition.permissions.find(
     (item) => item.module === "files" && item.id === permission,
   )?.label ?? permission;
-  const rootPath = context.snapshot.device.grants.find(
-    (grant) => grant.window_id === context.window.id && grant.permission === permission,
-  )?.root_path ?? null;
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const grant = context.snapshot.device.grants.find(
+    (item) => item.window_id === context.window.id && item.permission === permission,
+  ) ?? null;
+  const rootPath = grant?.root_path ?? null;
+  const [localFolder, setLocalFolder] = useState("");
+  const [localView, setLocalView] = useState<ExplorerView>("icons");
   const [actionError, setActionError] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ anchor: HTMLElement; entries: MenuEntry[] } | null>(null);
+  const previousRoot = useRef(rootPath);
+  const windowStateRef = useRef(context.window.state);
+  windowStateRef.current = context.window.state;
+  const folderValue = block.folder ? context.window.state[block.folder.state] : undefined;
+  const folder = block.folder
+    ? validFolderPath(folderValue) ? folderValue : ""
+    : localFolder;
+  const viewValue = block.view ? context.window.state[block.view.state] : undefined;
+  const view: ExplorerView = block.view
+    ? viewValue === "details" ? "details" : "icons"
+    : localView;
+
+  const navigate = async (path: string) => {
+    setActionError(null);
+    setLocalFolder(path);
+    setMenu(null);
+    if (!block.on_folder) return;
+    try {
+      await context.store.call({
+        op: "window.set_state",
+        window_id: context.window.id,
+        state: { ...windowStateRef.current, [block.on_folder.set_state]: path },
+      });
+    } catch (error) {
+      setActionError(toCoreError(error).message);
+    }
+  };
+
+  const changeView = async (next: ExplorerView) => {
+    setLocalView(next);
+    if (!block.on_view) return;
+    try {
+      await context.store.call({
+        op: "window.set_state",
+        window_id: context.window.id,
+        state: { ...windowStateRef.current, [block.on_view.set_state]: next },
+      });
+    } catch (error) {
+      setActionError(toCoreError(error).message);
+    }
+  };
 
   useEffect(() => {
-    setSelectedPath(null);
+    const previous = previousRoot.current;
+    previousRoot.current = rootPath;
     setActionError(null);
     setMenu(null);
+    if (previous !== null && rootPath !== null && previous !== rootPath) void navigate("");
   }, [rootPath]);
 
-  const appsFor = (path: string) => findAppsForExtension(context.snapshot, fileExtension(path));
+  useEffect(() => {
+    if (block.folder && folderValue !== undefined && folderValue !== folder) void navigate("");
+  }, [block.folder, block.on_folder, folder, folderValue]);
 
+  const appsFor = (path: string) => findAppsForExtension(context.snapshot, fileExtension(path));
   const openWith = async (path: string, app: OpenableApp) => {
     setActionError(null);
     try {
@@ -80,40 +126,53 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
       setActionError(toCoreError(error).message);
     }
   };
-
   const openMenu = (anchor: HTMLElement, path: string, apps = appsFor(path)) => {
     const entries = apps.length > 0
       ? apps.map((app) => ({ id: `open-${app.id}`, label: app.name, onSelect: () => void openWith(path, app) }))
       : [{ id: "open-none", label: "열 수 있는 앱이 없습니다", disabled: true }];
     setMenu({ anchor, entries });
   };
-
   const activateFile = (anchor: HTMLElement, path: string) => {
     const apps = appsFor(path);
     if (apps.length === 1) void openWith(path, apps[0]);
     else openMenu(anchor, path, apps);
   };
+  const contextFile = (anchor: HTMLElement, path: string) => openMenu(anchor, path);
 
-  const handleContextMenu = (anchor: HTMLElement, path: string) => openMenu(anchor, path);
+  const fileTree = <FileBrowserTree
+    canCreate={false}
+    context={context}
+    extensions={[]}
+    mode={rootPath === null ? "files" : "folders"}
+    onSelect={navigate}
+    permission={permission}
+    permissionLabel={permissionLabel}
+    selectedPath={rootPath === null ? null : folder}
+  />;
 
-  return (
-    <>
-      <FileBrowserTree
-        actionError={actionError}
-        canCreate={false}
-        context={context}
-        extensions={[]}
-        fileIcon={fileIcon}
-        onActionError={setActionError}
-        onFileContextMenu={handleContextMenu}
-        onFileDoubleClick={activateFile}
-        onFileEnter={activateFile}
-        onSelect={setSelectedPath}
-        permission={permission}
-        permissionLabel={permissionLabel}
-        selectedPath={selectedPath}
-      />
-      {menu ? <Menu anchor={menu.anchor} items={menu.entries} onClose={() => setMenu(null)} /> : null}
-    </>
-  );
+  if (rootPath === null) return fileTree;
+
+  return <>
+    <div className="ks-explorer">
+      <SplitPanes direction="row" sizes={[28, 72]}>
+        {[
+          fileTree,
+          <ExplorerContent
+            context={context}
+            folder={folder}
+            rootPath={rootPath}
+            actionError={actionError}
+            onActivateFile={activateFile}
+            onContextFile={contextFile}
+            onNavigate={navigate}
+            onViewChange={changeView}
+            permission={permission}
+            rootName={grant?.root_name ?? ""}
+            view={view}
+          />,
+        ]}
+      </SplitPanes>
+    </div>
+    {menu ? <Menu anchor={menu.anchor} items={menu.entries} onClose={() => setMenu(null)} /> : null}
+  </>;
 }

@@ -22,6 +22,7 @@ export interface FileBrowserTreeProps {
   selectedPath: string | null;
   onSelect: (path: string) => void | Promise<unknown>;
   canCreate: boolean;
+  mode?: "files" | "folders";
   fileIcon?: (entry: FileEntry) => ReactNode;
   onFileDoubleClick?: (anchor: HTMLElement, path: string) => void;
   onFileEnter?: (anchor: HTMLElement, path: string) => void;
@@ -43,6 +44,7 @@ export function FileBrowserTree({
   selectedPath,
   onSelect,
   canCreate,
+  mode = "files",
   fileIcon = () => <FileText size="inline" />,
   onFileDoubleClick,
   onFileEnter,
@@ -58,6 +60,8 @@ export function FileBrowserTree({
   const rootPath = grant?.root_path ?? null;
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [entriesByDirectory, setEntriesByDirectory] = useState<Record<string, FileEntry[]>>({});
+  const entriesByDirectoryRef = useRef(entriesByDirectory);
+  entriesByDirectoryRef.current = entriesByDirectory;
   const [loadingDirectories, setLoadingDirectories] = useState<Set<string>>(() => new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [localActionError, setLocalActionError] = useState<string | null>(null);
@@ -133,6 +137,24 @@ export function FileBrowserTree({
     return () => globalThis.window.removeEventListener("focus", refreshExpanded);
   }, [expanded, loadDirectory, rootPath]);
 
+  useEffect(() => {
+    if (mode !== "folders" || !rootPath || !selectedPath) return;
+    const parts = selectedPath.split("/");
+    const ancestors = [""];
+    for (let index = 0; index < parts.length - 1; index += 1) ancestors.push(parts.slice(0, index + 1).join("/"));
+    setExpanded((current) => new Set([...current, ...ancestors]));
+    void (async () => {
+      for (const directory of ancestors) {
+        if (!Object.hasOwn(entriesByDirectoryRef.current, directory)) await loadDirectory(directory);
+      }
+      requestAnimationFrame(() => {
+        const selected = [...(treeRef.current?.querySelectorAll<HTMLElement>("[data-folder-path]") ?? [])]
+          .find((entry) => entry.dataset.folderPath === selectedPath);
+        selected?.scrollIntoView?.({ block: "nearest" });
+      });
+    })();
+  }, [loadDirectory, mode, rootPath, selectedPath]);
+
   const pickFolder = async () => {
     reportActionError(null);
     try {
@@ -203,6 +225,15 @@ export function FileBrowserTree({
     }
   };
 
+  const selectFolder = async (path: string) => {
+    reportActionError(null);
+    try {
+      await onSelect(path);
+    } catch (error) {
+      reportActionError(toCoreError(error).message);
+    }
+  };
+
   const toggleDirectory = (path: string) => {
     const isOpen = expanded.has(path);
     setExpanded((current) => {
@@ -214,7 +245,7 @@ export function FileBrowserTree({
     if (!isOpen) void loadDirectory(path);
   };
 
-  const visible = (entry: FileEntry) => entry.kind === "dir"
+  const visible = (entry: FileEntry) => mode === "folders" ? entry.kind === "dir" : entry.kind === "dir"
     || extensions.length === 0
     || extensions.some((extension) => extensionOf(entry.name) === extension.toLowerCase());
 
@@ -258,13 +289,15 @@ export function FileBrowserTree({
       {(entriesByDirectory[directory] ?? []).filter(visible).map((entry) => {
         const isDirectory = entry.kind === "dir";
         const isExpanded = expanded.has(entry.path);
-        const isSelected = !isDirectory && selectedPath === entry.path;
+        const isSelected = mode === "folders" ? isDirectory && selectedPath === entry.path : !isDirectory && selectedPath === entry.path;
         return (
           <div
             aria-expanded={isDirectory ? isExpanded : undefined}
             aria-setsize={visiblePaths.length}
             aria-posinset={visiblePaths.indexOf(entry.path) + 1}
+            aria-selected={mode === "folders" ? isSelected : undefined}
             className="ks-file-tree-entry"
+            data-folder-path={mode === "folders" && isDirectory ? entry.path : undefined}
             data-file-path={isDirectory ? undefined : entry.path}
             key={entry.path}
             role="treeitem"
@@ -274,7 +307,14 @@ export function FileBrowserTree({
               className={`ks-row ks-file-tree-row${isSelected ? " is-selected" : ""}`}
               onClick={(event) => {
                 if (isDirectory) {
-                  if (event.detail !== 2) toggleDirectory(entry.path);
+                  if (mode === "folders") {
+                    if (selectedPath !== entry.path) {
+                      void selectFolder(entry.path);
+                      if (!isExpanded) toggleDirectory(entry.path);
+                    } else {
+                      toggleDirectory(entry.path);
+                    }
+                  } else if (event.detail !== 2) toggleDirectory(entry.path);
                 } else {
                   void selectFile(entry.path);
                 }
@@ -326,7 +366,7 @@ export function FileBrowserTree({
             <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}><FolderOpen /></IconButton>
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
           </div>
-          <div aria-label="파일 목록" className="ks-file-tree-list" onKeyDown={handleTreeKeyDown} role="tree">
+          <div aria-label={mode === "folders" ? "폴더 목록" : "파일 목록"} className="ks-file-tree-list" onKeyDown={handleTreeKeyDown} role="tree">
             {loadingDirectories.has("") && !entriesByDirectory[""] ? <StatusText>불러오는 중</StatusText> : null}
             {errors[""] ? <span className="ks-inline-error" role="alert">{errors[""]}</span> : null}
             {renderDirectory("")}

@@ -231,7 +231,8 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
         app,
         r#"
       const root=document.querySelector('[data-testid="app-window-explorer"]');
-      return !!root && [...root.querySelectorAll('button')].some(b=>b.textContent.trim()==='notes');
+      const tree=root?.querySelector('[role="tree"][aria-label="폴더 목록"]');
+      return !!tree && [...tree.querySelectorAll('button')].some(b=>b.textContent.trim()==='notes');
     "#,
         "notes directory",
     )?;
@@ -239,18 +240,19 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
         app,
         r#"
       const root=document.querySelector('[data-testid="app-window-explorer"]');
-      const button=[...root.querySelectorAll('button')].find(b=>b.textContent.trim()==='notes');
+      const tree=root.querySelector('[role="tree"][aria-label="폴더 목록"]');
+      const button=[...tree.querySelectorAll('button')].find(b=>b.textContent.trim()==='notes');
       if(!button)return false; button.click(); return true;
     "#,
         "expand notes",
     )?;
-    wait_dom(app, "return !!document.querySelector('[data-testid=\"app-window-explorer\"] [data-file-path=\"notes/a.md\"] button') && !!document.querySelector('[data-testid=\"app-window-explorer\"] [data-file-path=\"notes/b.md\"] button');", "notes files")?;
+    wait_dom(app, "return !!document.querySelector('[data-testid=\"app-window-explorer\"] [data-file-path=\"notes/a.md\"]') && !!document.querySelector('[data-testid=\"app-window-explorer\"] [data-file-path=\"notes/b.md\"]');", "notes files")?;
 
     let start = request_mark();
     action(
         app,
         r#"
-      const b=document.querySelector('[data-testid="app-window-explorer"] [data-file-path="notes/a.md"] button');
+      const b=document.querySelector('[data-testid="app-window-explorer"] [data-file-path="notes/a.md"]');
       if(!b)return false;
       b.dispatchEvent(new MouseEvent('click',{bubbles:true,detail:1}));
       b.dispatchEvent(new MouseEvent('click',{bubbles:true,detail:2}));
@@ -288,7 +290,7 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     action(
         app,
         r#"
-      const b=document.querySelector('[data-testid="app-window-explorer"] [data-file-path="notes/b.md"] button');
+      const b=document.querySelector('[data-testid="app-window-explorer"] [data-file-path="notes/b.md"]');
       if(!b)return false;
       b.dispatchEvent(new MouseEvent('click',{bubbles:true,detail:1}));
       b.dispatchEvent(new MouseEvent('click',{bubbles:true,detail:2}));

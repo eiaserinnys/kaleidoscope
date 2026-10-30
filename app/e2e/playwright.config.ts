@@ -19,4 +19,11 @@ export default defineConfig({
     trace: "retain-on-failure",
     launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] },
   },
+  webServer: {
+    command: "corepack pnpm@10.32.1 run dev",
+    url: "http://localhost:1420/harness.html",
+    reuseExistingServer: false,
+    timeout: 120_000,
+    env: { NODE_ENV: "development" },
+  },
 });

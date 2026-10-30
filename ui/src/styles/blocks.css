@@ -178,6 +178,178 @@
   margin-inline-start: var(--ks-space-4);
 }
 
+.ks-explorer {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ks-color-surface);
+}
+
+.ks-explorer-content {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ks-color-surface);
+}
+
+.ks-explorer-content > .ks-data-view {
+  flex: 1 1 0;
+}
+
+.ks-explorer-empty {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.ks-explorer-toolbar {
+  justify-content: flex-start;
+}
+
+.ks-explorer-breadcrumb {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  overflow: hidden;
+  font-size: var(--ks-type-body);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.ks-explorer-ancestors {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.ks-explorer-crumb {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--ks-space-1);
+}
+
+.ks-explorer-chevron {
+  flex: 0 0 auto;
+  margin-inline-end: var(--ks-space-1);
+  color: var(--ks-color-muted);
+}
+
+.ks-explorer-crumb-button {
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--ks-color-muted);
+  cursor: pointer;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ks-explorer-crumb-button:hover {
+  background: var(--ks-color-hover);
+}
+
+.ks-explorer-crumb-button:focus-visible {
+  outline: var(--ks-focus-width) solid var(--ks-color-accent);
+  outline-offset: calc(-1 * var(--ks-focus-width));
+}
+
+.ks-explorer-crumb-current {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ks-color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ks-explorer-view-buttons {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--ks-space-1);
+  margin-inline-start: auto;
+}
+
+.ks-explorer-icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--ks-space-6) * 3), 1fr));
+  align-content: start;
+  gap: var(--ks-space-2);
+  padding: var(--ks-space-3);
+}
+
+.ks-explorer-icon {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ks-space-1);
+  border: 0;
+  border-radius: var(--ks-radius-small);
+  background: transparent;
+  color: var(--ks-color-text);
+  cursor: pointer;
+  font: inherit;
+  padding: var(--ks-space-2);
+  text-align: center;
+  user-select: none;
+}
+
+.ks-explorer-icon:hover {
+  background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
+}
+
+.ks-explorer-icon.is-selected {
+  background: var(--ks-color-selection);
+}
+
+.ks-explorer-icon-name {
+  display: -webkit-box;
+  width: 100%;
+  overflow: hidden;
+  font-size: var(--ks-type-body);
+  line-height: var(--ks-line-body);
+  overflow-wrap: anywhere;
+  text-align: center;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ks-explorer-detail-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--ks-space-2);
+}
+
+.ks-explorer-detail-name > svg {
+  flex: 0 0 auto;
+}
+
+.ks-explorer-detail-name > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ks-file-tree-create-row .ks-text-input {
   min-width: 0;
   flex: 1 1 auto;

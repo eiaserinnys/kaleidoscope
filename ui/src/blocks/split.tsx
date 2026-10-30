@@ -1,15 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { renderBlock } from "../render/render-block";
 import { SplitPaneContext } from "./split-pane-context";
 
 type SplitBlockData = Extract<Block, { type: "split" }>;
-
-function initialWeights(block: SplitBlockData): number[] {
-  if (block.sizes) return [...block.sizes];
-  return block.children.map(() => 1);
-}
 
 function buildTemplate(weights: number[], collapsed: Set<number>): string {
   return weights.flatMap((weight, index) => index === 0
@@ -26,7 +21,13 @@ function readSplitSizes(element: HTMLElement) {
 }
 
 export function SplitBlock({ block, context, pointer = "/ui" }: { block: SplitBlockData; context: BlockContext; pointer?: string }) {
-  const [weights, setWeights] = useState(() => initialWeights(block));
+  return <SplitPanes direction={block.direction} sizes={block.sizes}>
+    {block.children.map((child, index) => renderBlock(child, context, `${pointer}/children/${index}`))}
+  </SplitPanes>;
+}
+
+export function SplitPanes({ direction, sizes, children }: { direction: SplitBlockData["direction"]; sizes?: number[]; children: ReactNode[] }) {
+  const [weights, setWeights] = useState(() => sizes ? [...sizes] : children.map(() => 1));
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
@@ -38,14 +39,14 @@ export function SplitBlock({ block, context, pointer = "/ui" }: { block: SplitBl
     minPaneSize: number;
   } | null>(null);
   const template = useMemo(() => buildTemplate(weights, collapsed), [weights, collapsed]);
-  const sizesKey = block.sizes?.join(",") ?? `equal-${block.children.length}`;
-  const style: CSSProperties = block.direction === "row"
+  const sizesKey = sizes?.join(",") ?? `equal-${children.length}`;
+  const style: CSSProperties = direction === "row"
     ? { gridTemplateColumns: template }
     : { gridTemplateRows: template };
 
   useEffect(() => {
-    setWeights(initialWeights(block));
-  }, [sizesKey, block.children.length]);
+    setWeights(sizes ? [...sizes] : children.map(() => 1));
+  }, [sizesKey, children.length]);
 
   function updatePair(index: number, leftWeight: number, rightWeight: number) {
     setWeights((current) => current.map((weight, weightIndex) => {
@@ -60,14 +61,14 @@ export function SplitBlock({ block, context, pointer = "/ui" }: { block: SplitBl
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect || !containerRef.current) return;
     const { handleSize, minPaneSize } = readSplitSizes(containerRef.current);
-    const dimension = block.direction === "row" ? rect.width : rect.height;
-    const available = dimension - (block.children.length - 1) * handleSize;
+    const dimension = direction === "row" ? rect.width : rect.height;
+    const available = dimension - (children.length - 1) * handleSize;
     const pairWeight = weights[index] + weights[index + 1];
     const pairWidth = available * pairWeight / weights.reduce((sum, weight) => sum + weight, 0);
     if (pairWidth < minPaneSize * 2) return;
     dragRef.current = {
       index,
-      coordinate: block.direction === "row" ? event.clientX : event.clientY,
+      coordinate: direction === "row" ? event.clientX : event.clientY,
       pairWidth,
       startLeft: pairWidth * weights[index] / pairWeight,
       pairWeight,
@@ -80,7 +81,7 @@ export function SplitBlock({ block, context, pointer = "/ui" }: { block: SplitBl
   function moveDrag(event: PointerEvent<HTMLDivElement>) {
     const drag = dragRef.current;
     if (!drag) return;
-    const coordinate = block.direction === "row" ? event.clientX : event.clientY;
+    const coordinate = direction === "row" ? event.clientX : event.clientY;
     const leftSize = Math.max(drag.minPaneSize, Math.min(drag.pairWidth - drag.minPaneSize, drag.startLeft + coordinate - drag.coordinate));
     const leftWeight = drag.pairWeight * leftSize / drag.pairWidth;
     updatePair(drag.index, leftWeight, drag.pairWeight - leftWeight);
@@ -92,15 +93,15 @@ export function SplitBlock({ block, context, pointer = "/ui" }: { block: SplitBl
 
   function resizeByKey(event: KeyboardEvent<HTMLDivElement>, index: number) {
     if (collapsed.has(index) || collapsed.has(index + 1)) return;
-    const decrement = block.direction === "row" ? "ArrowLeft" : "ArrowUp";
-    const increment = block.direction === "row" ? "ArrowRight" : "ArrowDown";
+    const decrement = direction === "row" ? "ArrowLeft" : "ArrowUp";
+    const increment = direction === "row" ? "ArrowRight" : "ArrowDown";
     if (event.key !== decrement && event.key !== increment) return;
     event.preventDefault();
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect || !containerRef.current) return;
     const { handleSize, minPaneSize } = readSplitSizes(containerRef.current);
-    const dimension = block.direction === "row" ? rect.width : rect.height;
-    const available = dimension - (block.children.length - 1) * handleSize;
+    const dimension = direction === "row" ? rect.width : rect.height;
+    const available = dimension - (children.length - 1) * handleSize;
     const pairWeight = weights[index] + weights[index + 1];
     const pairWidth = available * pairWeight / weights.reduce((sum, weight) => sum + weight, 0);
     if (pairWidth < minPaneSize * 2) return;
@@ -113,14 +114,14 @@ export function SplitBlock({ block, context, pointer = "/ui" }: { block: SplitBl
 
   return (
     <div
-      className={`ks-split ks-split-${block.direction}`}
+      className={`ks-split ks-split-${direction}`}
       onPointerCancel={endDrag}
       onPointerMove={moveDrag}
       onPointerUp={endDrag}
       ref={containerRef}
       style={style}
     >
-      {block.children.map((child, index) => (
+      {children.map((child, index) => (
         <div className="ks-split-pane" key={index}>
           <SplitPaneContext.Provider value={{
             collapsed: collapsed.has(index),
@@ -130,7 +131,7 @@ export function SplitBlock({ block, context, pointer = "/ui" }: { block: SplitBl
               return next;
             }),
           }}>
-            {renderBlock(child, context, `${pointer}/children/${index}`)}
+            {child}
           </SplitPaneContext.Provider>
         </div>
       )).flatMap((child, index) => index === 0
@@ -138,7 +139,7 @@ export function SplitBlock({ block, context, pointer = "/ui" }: { block: SplitBl
         : [
           <div
             aria-label="분할 크기 조절"
-            aria-orientation={block.direction === "row" ? "vertical" : "horizontal"}
+            aria-orientation={direction === "row" ? "vertical" : "horizontal"}
             className="ks-split-handle"
             key={`handle-${index - 1}`}
             onKeyDown={(event) => resizeByKey(event, index - 1)}

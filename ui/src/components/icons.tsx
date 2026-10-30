@@ -12,10 +12,12 @@ import {
   FileText as FileTextIcon,
   FileCode as FileCodeIcon,
   FileImage as FileImageIcon,
+  Folder as FolderIcon,
   FolderOpen as FolderOpenIcon,
   Globe as GlobeIcon,
   Import as ImportIcon,
   LayoutGrid as LayoutGridIcon,
+  List as ListIcon,
   MessageSquare as MessageSquareIcon,
   PanelLeftClose as PanelLeftCloseIcon,
   PanelLeftOpen as PanelLeftOpenIcon,
@@ -28,7 +30,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-export const ICON_SIZE = { control: 18, inline: 16, empty: 32 } as const;
+export const ICON_SIZE = { control: 18, inline: 16, empty: 32, tile: 32 } as const;
 export type IconSize = keyof typeof ICON_SIZE;
 
 interface IconProps {
@@ -68,6 +70,7 @@ export const FileCode = (props: IconProps) => renderIcon(FileCodeIcon, props);
 export const FileImage = (props: IconProps) => renderIcon(FileImageIcon, props);
 export const FilePlus = (props: IconProps) => renderIcon(FilePlusIcon, props);
 export const FolderOpen = (props: IconProps) => renderIcon(FolderOpenIcon, props);
+export const Folder = (props: IconProps) => renderIcon(FolderIcon, props);
 export const MessageSquare = (props: IconProps) => renderIcon(MessageSquareIcon, props);
 export const ArrowUp = (props: IconProps) => renderIcon(ArrowUpIcon, props);
 export const ArrowLeft = (props: IconProps) => renderIcon(ArrowLeftIcon, props);
@@ -76,6 +79,7 @@ export const RotateCw = (props: IconProps) => renderIcon(RotateCwIcon, props);
 export const Globe = (props: IconProps) => renderIcon(GlobeIcon, props);
 export const Plus = (props: IconProps) => renderIcon(PlusIcon, props);
 export const LayoutGrid = (props: IconProps) => renderIcon(LayoutGridIcon, props);
+export const List = (props: IconProps) => renderIcon(ListIcon, props);
 export const Import = (props: IconProps) => renderIcon(ImportIcon, props);
 export const ScreenShare = (props: IconProps) => renderIcon(ScreenShareIcon, props);
 export const X = (props: IconProps) => renderIcon(XIcon, props);
