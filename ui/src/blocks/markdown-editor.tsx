@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { useShareDescriber } from "../share/visible";
+import { describeEditor } from "../share/editor";
 import { EditorView } from "@codemirror/view";
 import type { Block } from "../contract/contract";
 import { Notice, StatusText } from "../components/primitives";
@@ -12,6 +14,8 @@ type MarkdownEditorBlockData = Extract<Block, { type: "markdown_editor" }>;
 
 export function MarkdownEditorBlock({ block, context }: { block: MarkdownEditorBlockData; context: BlockContext }) {
   const path = resolveFilePath(block.file, context.window);
+  const emptyShareRef = useRef<HTMLDivElement>(null);
+  useShareDescriber(emptyShareRef, () => ({ text: "[마크다운 편집기]", visual: false }));
   const grantRoot = context.snapshot.device.grants.find(
     (item) => item.window_id === context.window.id && item.permission === block.file.permission,
   )?.root_path ?? null;
@@ -43,7 +47,8 @@ export function MarkdownEditorBlock({ block, context }: { block: MarkdownEditorB
     return () => window.removeEventListener("focus", refresh);
   }, [session]);
 
-  if (!hasGrant || path === null) return null;
+  if (!hasGrant) return null;
+  if (path === null) return <div className="ks-markdown-editor" ref={emptyShareRef} />;
   if (!state.loaded) {
     return <div className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
   }
@@ -78,6 +83,7 @@ export function MarkdownEditorBlock({ block, context }: { block: MarkdownEditorB
 function CodeEditor({ path, session, text }: { path: string; session: FileEditorSession; text: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  useShareDescriber(hostRef, () => describeEditor(viewRef.current, path, "마크다운 편집기"));
 
   useEffect(() => {
     if (!hostRef.current) return;

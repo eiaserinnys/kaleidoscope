@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { IconButton, X, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
+import { IconButton, ScreenShare, X, useShareView, type ShellStore, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
 
 export interface WindowFrameProps {
   area: { width: number; height: number };
   appName: string;
   isTop: boolean;
+  sharing: boolean;
+  shareable: boolean;
+  store: ShellStore;
   onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
   window: AppWindow;
   children: ReactNode;
@@ -23,7 +26,9 @@ type Gesture = {
 const MIN_WIDTH = "--ks-window-min-width";
 const MIN_HEIGHT = "--ks-window-min-height";
 
-export function WindowFrame({ area, appName, isTop, onCall, window: appWindow, children }: WindowFrameProps) {
+export function WindowFrame({ area, appName, isTop, sharing, shareable, store, onCall, window: appWindow, children }: WindowFrameProps) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  useShareView({ windowId: appWindow.id, root: contentRef, enabled: sharing, store });
   const titleRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const previewRef = useRef<Rect | null>(null);
@@ -121,7 +126,7 @@ export function WindowFrame({ area, appName, isTop, onCall, window: appWindow, c
 
   return (
     <section
-      className={`ks-window${preview ? " ks-window-gesturing" : ""}`}
+      className={`ks-window${preview ? " ks-window-gesturing" : ""}${sharing ? " ks-window-sharing" : ""}`}
       data-testid={`app-window-${appWindow.app_id}`}
       onPointerDownCapture={() => {
         if (!isTop) void onCall({ op: "window.raise", window_id: appWindow.id });
@@ -147,6 +152,8 @@ export function WindowFrame({ area, appName, isTop, onCall, window: appWindow, c
           ref={titleRef}
         >
           <span className="ks-window-title" title={appName}>{appName}</span>
+          <div className="ks-window-title-actions">
+          {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} pressed={sharing} onClick={() => void onCall({ op: "share.set", window_id: appWindow.id, on: !sharing })}><ScreenShare /></IconButton> : null}
           <IconButton
             aria-label="창 닫기"
             onClick={() => void onCall({ op: "window.close", window_id: appWindow.id })}
@@ -154,8 +161,9 @@ export function WindowFrame({ area, appName, isTop, onCall, window: appWindow, c
           >
             <X />
           </IconButton>
+          </div>
         </header>
-        <div className="ks-window-content">{children}</div>
+        <div className="ks-window-content" ref={contentRef}>{children}</div>
       </div>
       <div
         aria-hidden="true"

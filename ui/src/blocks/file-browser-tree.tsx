@@ -218,6 +218,15 @@ export function FileBrowserTree({
     || extensions.length === 0
     || extensions.some((extension) => extensionOf(entry.name) === extension.toLowerCase());
 
+  const visiblePaths: string[] = [];
+  const collectVisible = (directory: string) => {
+    for (const entry of (entriesByDirectory[directory] ?? []).filter(visible)) {
+      visiblePaths.push(entry.path);
+      if (entry.kind === "dir" && expanded.has(entry.path)) collectVisible(entry.path);
+    }
+  };
+  collectVisible("");
+
   const handleTreeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" || !onFileEnter) return;
     const target = event.target;
@@ -253,6 +262,8 @@ export function FileBrowserTree({
         return (
           <div
             aria-expanded={isDirectory ? isExpanded : undefined}
+            aria-setsize={visiblePaths.length}
+            aria-posinset={visiblePaths.indexOf(entry.path) + 1}
             className="ks-file-tree-entry"
             data-file-path={isDirectory ? undefined : entry.path}
             key={entry.path}

@@ -5,6 +5,7 @@ import {
   EmptyState,
   LayoutGrid,
   type AppWindow,
+  type Block,
   type CoreReply,
   type CoreRequest,
   type ShellSnapshot,
@@ -119,6 +120,9 @@ function DesktopWindow({
       area={area}
       appName={appName}
       isTop={isTop}
+      sharing={snapshot.sharing.includes(appWindow.id)}
+      shareable={!version || !containsAgentChat(version.definition.ui)}
+      store={store}
       onCall={onCall}
       window={appWindow}
     >
@@ -129,4 +133,15 @@ function DesktopWindow({
       />
     </WindowFrame>
   );
+}
+
+function containsAgentChat(block: Block): boolean {
+  switch (block.type) {
+    case "agent_chat": return true;
+    case "split": case "stack": return block.children.some(containsAgentChat);
+    case "tabs": return block.tabs.some((tab) => containsAgentChat(tab.child));
+    case "toolbar": return [...block.start, ...(block.end ?? [])].some(containsAgentChat);
+    case "section": return containsAgentChat(block.child);
+    default: return false;
+  }
 }

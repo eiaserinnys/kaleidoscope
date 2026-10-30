@@ -50,14 +50,14 @@ function TableReady({ block, context, pointer, value }: { block: Extract<Block, 
   const columns = block.columns.map((column) => width(column, rows)).join(" ");
   const choose = (row: Row) => { if (block.on_select) void data.act(`${pointer}/on_select`, row.key, row); };
   const toggleSort = (field: string) => setSort((old) => old?.field !== field ? { field, desc: false } : !old.desc ? { field, desc: true } : null);
-  return <div className="ks-data-view ks-table-scroll" ref={scroll} role="table" aria-label="표" style={{ "--ks-table-columns": columns } as CSSProperties}>
+  return <div className="ks-data-view ks-table-scroll" ref={scroll} role="table" aria-rowcount={rows.length} aria-label="표" style={{ "--ks-table-columns": columns } as CSSProperties}>
     <div className="ks-table-inner">
       <div className="ks-table-header" role="row">
         {block.columns.map((column) => <div role="columnheader" aria-sort={sort?.field === column.field ? sort.desc ? "descending" : "ascending" : "none"} key={column.field}><button type="button" onClick={() => toggleSort(column.field)}>{column.label}{sort?.field === column.field && <DataIcon name={sort.desc ? "chevron-down" : "chevron-up"} size="inline" />}</button></div>)}
       </div>
       {!rows.length ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtual.getVirtualItems().map((v) => {
         const row = rows[v.index]; const active = row.key === selected;
-        return <div role="row" aria-selected={active} data-focus-index={v.index} data-index={v.index} tabIndex={roving.focus === v.index ? 0 : -1} ref={virtual.measureElement} key={row.key} className={`ks-row ks-table-row${active ? " is-selected" : ""}`} style={{ position: "absolute", top: 0, transform: `translateY(${v.start}px)` }} onFocus={() => roving.setFocus(v.index)} onKeyDown={(e) => roving.keyDown(e, v.index, () => choose(row))} onClick={() => choose(row)}>
+        return <div role="row" aria-rowindex={v.index + 1} aria-selected={active} data-focus-index={v.index} data-index={v.index} tabIndex={roving.focus === v.index ? 0 : -1} ref={virtual.measureElement} key={row.key} className={`ks-row ks-table-row${active ? " is-selected" : ""}`} style={{ position: "absolute", top: 0, transform: `translateY(${v.start}px)` }} onFocus={() => roving.setFocus(v.index)} onKeyDown={(e) => roving.keyDown(e, v.index, () => choose(row))} onClick={() => choose(row)}>
           {block.columns.map((column) => { const raw = row[column.field]; const text = cellValue(raw, column); return <span role="cell" key={column.field} title={text} className={`ks-table-cell${column.format === "number" || column.format === "date" ? " is-numeric" : ""}`}>{column.format === "badge" && isBadge(raw) ? <Badge value={raw} /> : text}</span>; })}
         </div>;
       })}</VirtualSurface>}

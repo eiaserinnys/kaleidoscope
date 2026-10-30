@@ -5,8 +5,10 @@ import {
   createShellStore,
   type FakeTransport,
   type FakeWebViewSnapshot,
+  type CoreRequest,
 } from "@kaleidoscope/ui";
 import { Shell } from "./shell/shell";
+import { describeVisible } from "../../ui/src/share/visible";
 import type { App, AppDefinition, AppVersion, AppWindow, LinkStatus, ShellSnapshot } from "../../ui/src/contract/contract";
 import "@kaleidoscope/ui/styles.css";
 import "./index.css";
@@ -16,6 +18,7 @@ import mdEditorJson from "../../examples/md-editor.json";
 import mdViewerJson from "../../examples/md-viewer.json";
 import webBrowserJson from "../../examples/web-browser.json";
 import explorerJson from "../../examples/explorer.json";
+import pasJson from "../../examples/workspace-pas.json";
 
 declare global {
   interface Window {
@@ -23,13 +26,23 @@ declare global {
       getSnapshot: () => ShellSnapshot | null;
       getWebPlaces: () => Array<{ window_id: string; bounds: import("../../ui/src/contract/contract").Rect | null }>;
       getWebAttachCount: (windowId: string) => number;
+      getShareCalls: () => Array<{ window_id: string; view: import("../../ui/src/contract/contract").VisibleView }>;
+      getCalls: () => CoreRequest[];
+      describeVisible: (root: HTMLElement) => { text: string; visual: boolean };
     };
   }
 }
 
 const timestamp = "2026-10-30T00:00:00Z";
 const bottomMenuScenario = new URLSearchParams(window.location.search).has("bottom-menu");
-const definitions = [mdEditorJson, mdViewerJson, webBrowserJson, explorerJson] as AppDefinition[];
+const shareScenario = new URLSearchParams(window.location.search).get("share");
+const entries = Array.from({ length: 80 }, (_, i) => ({ key: String(i + 1), title: `항목 ${i + 1}`, value: `값 ${i + 1}` }));
+const shareDefinition: AppDefinition = {
+  id: `share-${shareScenario}`, name: shareScenario === "table" ? "표" : "목록",
+  requires: { blocks: 4, modules: {} }, permissions: [], state: { selected: "1" },
+  ui: shareScenario === "table" ? { type: "table", rows: entries, columns: [{ field: "title", label: "이름" }, { field: "value", label: "값" }], selected: { state: "selected" } } : { type: "list", items: entries, selected: { state: "selected" } },
+};
+const definitions = [mdEditorJson, mdViewerJson, webBrowserJson, explorerJson, pasJson, ...(shareScenario === "table" || shareScenario === "list" ? [shareDefinition] : [])] as AppDefinition[];
 const apps: App[] = definitions.map((definition) => ({
   id: definition.id,
   name: definition.name,
@@ -43,7 +56,14 @@ const appVersions: AppVersion[] = definitions.map((definition) => ({
   definition,
   created_at: timestamp,
 }));
-const windows: AppWindow[] = bottomMenuScenario
+const shareAppId = shareScenario === "editor" ? "md-editor" : shareScenario === "web" ? "web-browser" : `share-${shareScenario}`;
+const shareWindows: AppWindow[] = [shareAppId, "workspace-pas"].map((appId, index): AppWindow => ({
+  id: `${appId}-window`, desktop_id: "desktop-1", app_id: appId, app_version: 1,
+  rect: { x: index ? 745 : 16, y: 16, width: 700, height: 510 }, z: index + 1,
+  state: appId === "md-editor" ? { current_file: "README.md" } : appId === "web-browser" ? { url: "https://www.google.com/" } : { selected: "1" },
+  created_at: timestamp, updated_at: timestamp,
+}));
+const windows: AppWindow[] = shareScenario ? shareWindows : bottomMenuScenario
   ? [{
     id: "explorer-window",
     desktop_id: "desktop-1",
@@ -107,14 +127,14 @@ const snapshot: ShellSnapshot = {
     ],
     windows,
   },
-  device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [] },
+  device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: shareScenario === "editor" ? [{ window_id: "md-editor-window", permission: "docs", root_path: "/fake/docs", root_name: "문서", granted_at: timestamp }] : [] },
   supported: { blocks: 4, modules: { files: 1, web: 1 } },
-  link: linkStatus(new URLSearchParams(window.location.search).get("link")),
+  link: linkStatus(shareScenario ? "connected" : new URLSearchParams(window.location.search).get("link")),
   sharing: [],
   update: { state: "unavailable" },
 };
 
-const files = bottomMenuScenario
+const files = shareScenario === "editor" ? { "README.md": Array.from({ length: 120 }, (_, i) => `줄 ${i + 1}`).join("\n") } : bottomMenuScenario
   ? Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`z${String(index).padStart(2, "0")}.md`, `# File ${index}`]))
   : {
     "README.md": "# kaleidoscope\n\n쉘 화면 캡처용 문서입니다.\n",
@@ -126,6 +146,7 @@ const files = bottomMenuScenario
 
 const transport: FakeTransport = createFakeTransport({
   snapshot,
+  agents: shareScenario ? { "workspace-1": { agent: { workspace_id: "workspace-1", model_preset: "test", model_label: "Test", busy: false, tool: null, created_at: timestamp }, items: [], models: [] } } : undefined,
   folder: { root_path: "/fake/docs", root_name: "문서" },
   webUnavailable: new URLSearchParams(window.location.search).get("web") === "unavailable",
   files,
@@ -135,6 +156,9 @@ window.__kaleidoscopeHarness = {
   getSnapshot: store.getSnapshot,
   getWebPlaces: transport.getWebPlaces,
   getWebAttachCount: transport.getWebAttachCount,
+  getShareCalls: transport.getShareCalls,
+  getCalls: transport.getCalls,
+  describeVisible,
 };
 
 function FakeWebViewLayer({ fakeTransport }: { fakeTransport: FakeTransport }) {

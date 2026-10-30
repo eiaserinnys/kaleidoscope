@@ -16,7 +16,9 @@ import type {
   Rect,
   ShellSnapshot,
   WebPage,
+  VisibleView,
 } from "../contract/contract";
+import { SHARE_TEXT_MAX_BYTES } from "../contract/limits";
 import { toCoreError, type CoreTransport } from "./core-transport";
 import { createFakeData, type FakeDataSeed } from "./fake-data";
 
@@ -51,6 +53,8 @@ export interface FakeTransport extends CoreTransport {
   /** Test and harness controls; the real core does not expose these methods. */
   setLink(status: LinkStatus): void;
   emit(event: CoreEvent): void;
+  getShareCalls(): Array<{ window_id: string; view: VisibleView }>;
+  getCalls(): CoreRequest[];
   getOpenedAttachments(): Array<{ workspace_id: string; item_id: string; index: number }>;
 }
 
@@ -108,6 +112,8 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   const webListeners = new Set<() => void>();
   const webViews = new Map<string, FakeWebView>();
   const webAttachCounts = new Map<string, number>();
+  const shareCalls: Array<{ window_id: string; view: VisibleView }> = [];
+  const calls: CoreRequest[] = [];
   const webPlaces: Array<{ window_id: string; bounds: Rect | null }> = [];
   let revisionNumber = 1;
   let windowNumber = 1;
@@ -272,7 +278,21 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   };
 
   async function callRequest(request: CoreRequest): Promise<CoreReply> {
+    calls.push(clone(request));
     switch (request.op) {
+      case "share.set": {
+        findWindow(request.window_id);
+        if (snapshot.sharing.includes(request.window_id) === request.on) return { op: "share.set" };
+        snapshot = { ...snapshot, sharing: request.on ? [...snapshot.sharing, request.window_id] : snapshot.sharing.filter((id) => id !== request.window_id) };
+        emitState();
+        return { op: "share.set" };
+      }
+      case "share.view":
+        findWindow(request.window_id);
+        if (!snapshot.sharing.includes(request.window_id)) return { op: "share.view" };
+        if (new TextEncoder().encode(request.view.text).length > SHARE_TEXT_MAX_BYTES) return fail("invalid_request", "같이 보기 글이 너무 깁니다");
+        shareCalls.push({ window_id: request.window_id, view: clone(request.view) });
+        return { op: "share.view" };
       case "state.get":
         return { op: "state.get", snapshot: clone(snapshot) };
       case "data.attach":
@@ -684,6 +704,8 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       emitState();
     },
     emit,
+    getShareCalls() { return clone(shareCalls); },
+    getCalls() { return clone(calls); },
     getOpenedAttachments() { return clone(openedAttachments); },
   };
 }

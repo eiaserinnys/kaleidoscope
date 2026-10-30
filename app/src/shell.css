@@ -172,6 +172,12 @@
   box-shadow: var(--ks-shadow-window);
 }
 
+.ks-window-sharing .ks-window-frame {
+  box-shadow: 0 0 0 2px var(--ks-color-share), var(--ks-shadow-window);
+}
+
+.ks-window-title-actions { display: flex; }
+
 .ks-window-gesturing,
 .ks-window-gesturing * {
   user-select: none;

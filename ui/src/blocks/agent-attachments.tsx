@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { AgentAttachment, AgentUpload } from "../contract/contract";
 import { File as FileIcon, X } from "../components/icons";
@@ -38,11 +38,11 @@ type OpenPreview = (preview: Preview) => void;
 
 export function DraftChip({ attachment, onRemove, onPreview }: { attachment: DraftAttachment; onRemove: () => void; onPreview: OpenPreview }) {
   const url = useFileUrl(attachment.file);
-  return <div className="ks-agent-attachment-chip">
-    {url ? <button type="button" className="ks-agent-attachment-chip-preview" aria-label={attachment.name} onClick={(event) => onPreview({ src: url, name: attachment.name, trigger: event.currentTarget })}><img src={url} alt="" /></button> : <span className="ks-agent-attachment-chip-preview"><FileIcon /></span>}
-    <span className="ks-agent-attachment-name" title={attachment.name}>{attachment.name}</span>
-    <IconButton aria-label={`${attachment.name} 빼기`} onClick={onRemove}><X /></IconButton>
-  </div>;
+  return <AttachmentChip name={attachment.name} removeLabel={`${attachment.name} 빼기`} onRemove={onRemove} preview={url ? <button type="button" className="ks-agent-attachment-chip-preview" aria-label={attachment.name} onClick={(event) => onPreview({ src: url, name: attachment.name, trigger: event.currentTarget })}><img src={url} alt="" /></button> : <span className="ks-agent-attachment-chip-preview"><FileIcon /></span>} />;
+}
+
+export function AttachmentChip({ name, preview, removeLabel, onRemove }: { name: string; preview: ReactNode; removeLabel: string; onRemove: () => void }) {
+  return <div className="ks-agent-attachment-chip">{preview}<span className="ks-agent-attachment-name" title={name}>{name}</span><IconButton aria-label={removeLabel} onClick={onRemove}><X /></IconButton></div>;
 }
 
 export function PendingAttachment({ attachment, onPreview }: { attachment: DraftAttachment; onPreview: OpenPreview }) {

@@ -6,6 +6,7 @@ import { TextInput } from "../components/text-input";
 import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
 import { isHttpAddress, normalizeWebAddress } from "./web-address";
+import { useShareDescriber } from "../share/visible";
 import { registerWebSurface, type WebSurfaceState } from "./web-surface-layer";
 
 type WebViewBlockData = Extract<Block, { type: "web_view" }>;
@@ -31,6 +32,7 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
   const windowId = context.window.id;
   const store = context.store;
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const shareRef = useRef<HTMLDivElement>(null);
   const attached = useRef(false);
   const attaching = useRef(false);
   const mounted = useRef(false);
@@ -40,6 +42,7 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
   const pageRef = useRef<WebPage | null>(null);
   const openAddressRef = useRef<((url: string) => Promise<void>) | null>(null);
   const [page, setPage] = useState<WebPage | null>(null);
+  useShareDescriber(shareRef, () => ({ text: `[웹 화면: ${page?.title ?? ""}, ${page?.url ?? validAddress ?? ""}]`, visual: true }));
   const [webReady, setWebReady] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,7 +161,7 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
   const frozen = surface.kind === "covered";
 
   return (
-    <div className="ks-web-view">
+    <div className="ks-web-view" ref={shareRef}>
       <div className="ks-file-tree-header ks-web-toolbar">
         <IconButton aria-label="뒤로" disabled={!page?.can_go_back} onClick={() => history("back")}><ArrowLeft /></IconButton>
         <IconButton aria-label="앞으로" disabled={!page?.can_go_forward} onClick={() => history("forward")}><ArrowRight /></IconButton>

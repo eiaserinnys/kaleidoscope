@@ -4,6 +4,7 @@ import { Notice, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
 import { toCoreError } from "../core/core-transport";
+import { useShareDescriber } from "../share/visible";
 import { MarkdownText } from "./markdown-text";
 
 type MarkdownViewBlockData = Extract<Block, { type: "markdown_view" }>;
@@ -18,6 +19,8 @@ export function MarkdownViewBlock({ block, context }: { block: MarkdownViewBlock
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const readVersion = useRef(0);
+  const shareRef = useRef<HTMLElement>(null);
+  useShareDescriber(shareRef, () => ({ text: path ? `[파일 ${path}]` : "[마크다운 보기]", visual: false, continue: true }));
 
   const readFile = useCallback(async () => {
     const version = ++readVersion.current;
@@ -60,12 +63,13 @@ export function MarkdownViewBlock({ block, context }: { block: MarkdownViewBlock
     return () => window.removeEventListener("focus", refresh);
   }, [readFile]);
 
-  if (!grant || path === null) return null;
+  if (!grant) return null;
+  if (path === null) return <article className="ks-markdown-view" ref={shareRef} />;
   if (loading) return <div className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
   if (error) return <div className="ks-markdown-error"><Notice role="alert">{error}</Notice></div>;
 
   return (
-    <article className="ks-markdown-view">
+    <article className="ks-markdown-view" ref={shareRef}>
       <MarkdownText>{text}</MarkdownText>
     </article>
   );

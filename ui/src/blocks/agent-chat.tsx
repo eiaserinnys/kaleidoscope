@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import type { AgentInfo, AgentItem, AgentModel, AgentUpdate, Block } from "../contract/contract";
 import { Button, EmptyState, IconButton, Notice, StatusText } from "../components/primitives";
-import { ArrowUp, MessageSquare, Paperclip } from "../components/icons";
+import { ArrowUp, MessageSquare, Paperclip, ScreenShare } from "../components/icons";
 import { AGENT_ATTACHMENTS_MAX, AGENT_ATTACHMENT_MAX_BYTES, AGENT_ATTACHMENTS_TOTAL_MAX_BYTES } from "../contract/limits";
 import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
 import { MarkdownText } from "./markdown-text";
 import { ThinkingOrb } from "thinking-orbs";
-import { DraftChip, HistoryAttachment, ImagePreview, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
+import { useShareDescriber } from "../share/visible";
+import { flushShareViews } from "../share/share-view";
+import { AttachmentChip, DraftChip, HistoryAttachment, ImagePreview, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
 
 type AgentChatBlockData = Extract<Block, { type: "agent_chat" }>;
 
@@ -15,6 +17,12 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const desktop = context.snapshot.shared.desktops.find((item) => item.id === context.window.desktop_id);
   const workspaceId = desktop?.workspace_id ?? "";
   const connected = context.snapshot.link.state === "connected";
+  const sharedWindows = context.snapshot.sharing.flatMap((id) => {
+    const shared = context.snapshot.shared.windows.find((item) => item.id === id);
+    if (!shared || !context.snapshot.shared.desktops.some((item) => item.id === shared.desktop_id && item.workspace_id === workspaceId)) return [];
+    const name = context.snapshot.shared.app_versions.find((item) => item.app_id === shared.app_id && item.version === shared.app_version)?.definition.name ?? shared.app_id;
+    return [{ id, name }];
+  });
   const [agent, setAgent] = useState<AgentInfo | null>(null);
   const [items, setItems] = useState<AgentItem[]>([]);
   const [models, setModels] = useState<AgentModel[]>([]);
@@ -32,6 +40,8 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const [busy, setBusy] = useState(false);
   const [tool, setTool] = useState<string | null>(null);
   const [delta, setDelta] = useState("");
+  const shareRef = useRef<HTMLElement>(null);
+  useShareDescriber(shareRef, () => ({ text: "[작업 PAS 대화]", visual: false }));
   const historyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -173,6 +183,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     if (returnFocus) inputRef.current?.focus();
     try {
       const uploads = await Promise.all(submittedAttachments.map(readUpload));
+      await flushShareViews();
       await context.store.call({ op: "agent.send", workspace_id: workspaceId, text, ...(uploads.length ? { attachments: uploads } : {}) });
     } catch (reason) {
       setPending(null);
@@ -249,7 +260,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   }
 
   return (
-    <section className="ks-agent-chat">
+    <section className="ks-agent-chat" ref={shareRef}>
       <div
         aria-label="대화 기록"
         className="ks-agent-chat-history"
@@ -273,6 +284,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       </div>
       <div className="ks-agent-chat-input-area">
         {sendError ? <Notice role="alert">{sendError}</Notice> : null}
+        {sharedWindows.length ? <div className="ks-agent-attachment-list">{sharedWindows.map(({ id, name }) => <AttachmentChip key={id} name={name} preview={<span className="ks-agent-attachment-chip-preview ks-share-chip-icon"><ScreenShare /></span>} removeLabel={`${name} 같이 보기 끄기`} onRemove={() => void context.store.call({ op: "share.set", window_id: id, on: false })} />)}</div> : null}
         {attachments.length ? <div className="ks-agent-attachment-list">{attachments.map((attachment) => <DraftChip key={attachment.id} attachment={attachment} onPreview={setPreview} onRemove={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))} />)}</div> : null}
         <div className="ks-agent-chat-input-row">
           <input type="file" multiple hidden ref={fileRef} onChange={(event) => {
