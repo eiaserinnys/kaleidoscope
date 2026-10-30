@@ -161,7 +161,11 @@ impl AppState {
                 open_target.as_ref().map(|target| target.id.clone())
             };
             if open_requested {
-                self.send_event_with_target_for_account(event, target, &account_id);
+                if preferred_device.is_some() && !defer_open {
+                    self.send_event_with_strict_open_target_for_account(event, target, &account_id);
+                } else {
+                    self.send_event_with_target_for_account(event, target, &account_id);
+                }
             } else {
                 self.send_event_with_target(event, target);
             }
@@ -191,24 +195,28 @@ impl AppState {
                 }
             }
             if defer_open {
-                self.send_event_with_target_for_account(
-                    DeviceEvent::AppOpen {
-                        app_id: result.0.app.id.clone(),
-                        workspace_id: event_workspace_id,
-                    },
-                    open_target.as_ref().map(|target| target.id.clone()),
-                    &account_id,
-                );
-            }
-        } else if open_requested {
-            self.send_event_with_target_for_account(
-                DeviceEvent::AppOpen {
+                let event = DeviceEvent::AppOpen {
                     app_id: result.0.app.id.clone(),
                     workspace_id: event_workspace_id,
-                },
-                open_target.as_ref().map(|target| target.id.clone()),
-                &account_id,
-            );
+                };
+                let target = open_target.as_ref().map(|target| target.id.clone());
+                if preferred_device.is_some() {
+                    self.send_event_with_strict_open_target_for_account(event, target, &account_id);
+                } else {
+                    self.send_event_with_target_for_account(event, target, &account_id);
+                }
+            }
+        } else if open_requested {
+            let event = DeviceEvent::AppOpen {
+                app_id: result.0.app.id.clone(),
+                workspace_id: event_workspace_id,
+            };
+            let target = open_target.as_ref().map(|target| target.id.clone());
+            if preferred_device.is_some() {
+                self.send_event_with_strict_open_target_for_account(event, target, &account_id);
+            } else {
+                self.send_event_with_target_for_account(event, target, &account_id);
+            }
         }
         Ok((result.0, result.1, open_target))
     }
@@ -221,6 +229,7 @@ impl AppState {
         let _ = self.0.events.send(Broadcast {
             event,
             open_target,
+            strict_open_target: false,
             account_id: None,
         });
     }
@@ -234,6 +243,21 @@ impl AppState {
         let _ = self.0.events.send(Broadcast {
             event,
             open_target,
+            strict_open_target: false,
+            account_id: Some(account_id.to_string()),
+        });
+    }
+
+    pub(crate) fn send_event_with_strict_open_target_for_account(
+        &self,
+        event: DeviceEvent,
+        open_target: Option<String>,
+        account_id: &str,
+    ) {
+        let _ = self.0.events.send(Broadcast {
+            event,
+            open_target,
+            strict_open_target: true,
             account_id: Some(account_id.to_string()),
         });
     }
@@ -242,6 +266,7 @@ impl AppState {
         let _ = self.0.events.send(Broadcast {
             event,
             open_target: None,
+            strict_open_target: false,
             account_id: Some(account_id.to_string()),
         });
     }
@@ -336,6 +361,25 @@ impl AppState {
         workspace_id: Option<&str>,
         requires: &Requires,
     ) -> usize {
+        self.count_open_targets(target, workspace_id, requires, false)
+    }
+
+    pub(crate) fn open_sent_to_strict_target(
+        &self,
+        target: Option<&OpenTarget>,
+        workspace_id: Option<&str>,
+        requires: &Requires,
+    ) -> usize {
+        self.count_open_targets(target, workspace_id, requires, true)
+    }
+
+    fn count_open_targets(
+        &self,
+        target: Option<&OpenTarget>,
+        workspace_id: Option<&str>,
+        requires: &Requires,
+        strict_target: bool,
+    ) -> usize {
         let Ok(account_id) = self.mcp_account_id() else {
             return 0;
         };
@@ -374,6 +418,10 @@ impl AppState {
                 }
                 if !renders_on(support.get(*id).and_then(Option::as_ref), requires) {
                     return false;
+                }
+                if strict_target {
+                    return syncing.contains(*id)
+                        && target.is_some_and(|target| target.id.as_str() == id.as_str());
                 }
                 if syncing.contains(*id) {
                     return target.is_some_and(|target| target.id.as_str() == id.as_str());

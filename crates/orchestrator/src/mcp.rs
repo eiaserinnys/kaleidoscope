@@ -174,11 +174,19 @@ impl McpServer {
         ) {
             Ok((row, unchanged, target)) => {
                 let sent = if args.open && (principal.device_id.is_none() || target.is_some()) {
-                    self.state.open_sent_to(
-                        target.as_ref(),
-                        args.workspace_id.as_deref(),
-                        &row.version.definition.requires,
-                    )
+                    if principal.device_id.is_some() {
+                        self.state.open_sent_to_strict_target(
+                            target.as_ref(),
+                            args.workspace_id.as_deref(),
+                            &row.version.definition.requires,
+                        )
+                    } else {
+                        self.state.open_sent_to(
+                            target.as_ref(),
+                            args.workspace_id.as_deref(),
+                            &row.version.definition.requires,
+                        )
+                    }
                 } else {
                     0
                 };
@@ -373,17 +381,30 @@ impl McpServer {
                         Ok(account_id) => account_id,
                         Err(error) => return Ok(json_error(error)),
                     };
-                    self.state.send_event_with_target_for_account(
-                        DeviceEvent::AppOpen {
-                            app_id: args.app_id.clone(),
-                            workspace_id: args.workspace_id.clone(),
-                        },
-                        target.as_ref().map(|target| target.id.clone()),
-                        &account_id,
-                    );
+                    let event = DeviceEvent::AppOpen {
+                        app_id: args.app_id.clone(),
+                        workspace_id: args.workspace_id.clone(),
+                    };
+                    let target = target.as_ref().map(|target| target.id.clone());
+                    if principal.device_id.is_some() {
+                        self.state.send_event_with_strict_open_target_for_account(
+                            event,
+                            target,
+                            &account_id,
+                        );
+                    } else {
+                        self.state
+                            .send_event_with_target_for_account(event, target, &account_id);
+                    }
                 }
                 let sent = if principal.device_id.is_some() && target.is_none() {
                     0
+                } else if principal.device_id.is_some() {
+                    self.state.open_sent_to_strict_target(
+                        target.as_ref(),
+                        args.workspace_id.as_deref(),
+                        &app.version.definition.requires,
+                    )
                 } else {
                     self.state.open_sent_to(
                         target.as_ref(),

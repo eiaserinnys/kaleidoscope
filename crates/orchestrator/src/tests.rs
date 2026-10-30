@@ -395,12 +395,13 @@ async fn mcp_http_open_uses_origin_device_and_global_token_uses_last_active_devi
     let (origin_id, origin_token) = make_device(&state);
     let (recent_id, _) = make_device(&state);
     let (offline_id, offline_token) = make_device(&state);
+    let (legacy_id, _) = make_device(&state);
     state
         .lock_db()
         .unwrap()
         .execute(
-            "UPDATE devices SET name=CASE id WHEN ?1 THEN 'Origin PC' WHEN ?2 THEN 'Recent PC' WHEN ?3 THEN 'Offline PC' END WHERE id IN (?1,?2,?3)",
-            params![origin_id, recent_id, offline_id],
+            "UPDATE devices SET name=CASE id WHEN ?1 THEN 'Origin PC' WHEN ?2 THEN 'Recent PC' WHEN ?3 THEN 'Offline PC' WHEN ?4 THEN 'Legacy PC' END WHERE id IN (?1,?2,?3,?4)",
+            params![origin_id, recent_id, offline_id, legacy_id],
         )
         .unwrap();
     let _origin_stream = state
@@ -415,6 +416,27 @@ async fn mcp_http_open_uses_origin_device_and_global_token_uses_last_active_devi
             recent_id.clone(),
             Some(Supported::current()),
             registry::LAYOUT_SYNC_REGISTRY_VERSION,
+        )
+        .unwrap();
+    let _legacy_stream = state
+        .stream_with_registry(
+            legacy_id.clone(),
+            None,
+            registry::LAYOUT_SYNC_REGISTRY_VERSION - 1,
+        )
+        .unwrap();
+    state
+        .save_layout(
+            &legacy_id,
+            &kaleidoscope_contract::registry::DeviceLayout {
+                workspaces: vec![Workspace {
+                    id: "w".into(),
+                    name: "Work".into(),
+                    created_at: "now".into(),
+                    updated_at: "now".into(),
+                }],
+                ..Default::default()
+            },
         )
         .unwrap();
     state
@@ -445,10 +467,19 @@ async fn mcp_http_open_uses_origin_device_and_global_token_uses_last_active_devi
     let uploaded = mcp_tool_json(&uploaded);
     assert_eq!(uploaded["open_sent_to"], 1);
     assert_eq!(uploaded["open_target"], "Origin PC");
-    assert_eq!(
-        events.try_recv().unwrap().open_target.as_deref(),
-        Some(origin_id.as_str())
-    );
+    let published = events.try_recv().unwrap();
+    assert!(matches!(
+        state.event_for_broadcast(&origin_id, published.clone()),
+        Some(DeviceEvent::AppPublished { open: true, .. })
+    ));
+    assert!(matches!(
+        state.event_for_broadcast(&recent_id, published.clone()),
+        Some(DeviceEvent::AppPublished { open: false, .. })
+    ));
+    assert!(matches!(
+        state.event_for_broadcast(&legacy_id, published),
+        Some(DeviceEvent::AppPublished { open: false, .. })
+    ));
 
     let origin_open = mcp_call(
         &app,
@@ -462,10 +493,17 @@ async fn mcp_http_open_uses_origin_device_and_global_token_uses_last_active_devi
     let origin_open = mcp_tool_json(&origin_open);
     assert_eq!(origin_open["open_sent_to"], 1);
     assert_eq!(origin_open["open_target"], "Origin PC");
-    assert_eq!(
-        events.try_recv().unwrap().open_target.as_deref(),
-        Some(origin_id.as_str())
-    );
+    let origin_open_event = events.try_recv().unwrap();
+    assert!(matches!(
+        state.event_for_broadcast(&origin_id, origin_open_event.clone()),
+        Some(DeviceEvent::AppOpen { app_id: id, .. }) if id == app_id
+    ));
+    assert!(state
+        .event_for_broadcast(&recent_id, origin_open_event.clone())
+        .is_none());
+    assert!(state
+        .event_for_broadcast(&legacy_id, origin_open_event)
+        .is_none());
 
     let offline_session = initialize_mcp_session(&app, &offline_token, Some("w"))
         .await
@@ -497,12 +535,17 @@ async fn mcp_http_open_uses_origin_device_and_global_token_uses_last_active_devi
     )
     .await;
     let global_open = mcp_tool_json(&global_open);
-    assert_eq!(global_open["open_sent_to"], 1);
+    assert_eq!(global_open["open_sent_to"], 2);
     assert_eq!(global_open["open_target"], "Recent PC");
-    assert_eq!(
-        events.try_recv().unwrap().open_target.as_deref(),
-        Some(recent_id.as_str())
-    );
+    let global_open_event = events.try_recv().unwrap();
+    assert!(matches!(
+        state.event_for_broadcast(&recent_id, global_open_event.clone()),
+        Some(DeviceEvent::AppOpen { app_id: id, .. }) if id == app_id
+    ));
+    assert!(matches!(
+        state.event_for_broadcast(&legacy_id, global_open_event),
+        Some(DeviceEvent::AppOpen { app_id: id, .. }) if id == app_id
+    ));
 }
 
 #[tokio::test]

@@ -82,6 +82,7 @@ struct Inner {
 struct Broadcast {
     event: DeviceEvent,
     open_target: Option<String>,
+    strict_open_target: bool,
     account_id: Option<String>,
 }
 

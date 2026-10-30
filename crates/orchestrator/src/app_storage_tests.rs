@@ -453,6 +453,7 @@ async fn storage_changed_is_account_and_registry_scoped_without_content() {
     let broadcast = Broadcast {
         event: event.clone(),
         open_target: None,
+        strict_open_target: false,
         account_id: Some(account_a),
     };
     assert!(state

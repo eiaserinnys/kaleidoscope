@@ -297,6 +297,7 @@ impl AppState {
             Broadcast {
                 event,
                 open_target: None,
+                strict_open_target: false,
                 account_id: None,
             },
         )
@@ -384,6 +385,34 @@ impl AppState {
         }
         if let Some(target) = broadcast.open_target {
             match event.clone() {
+                DeviceEvent::AppPublished {
+                    app,
+                    open: true,
+                    workspace_id,
+                } if broadcast.strict_open_target => {
+                    return Some(if device_id == target {
+                        DeviceEvent::AppPublished {
+                            app,
+                            open: true,
+                            workspace_id,
+                        }
+                    } else {
+                        DeviceEvent::AppPublished {
+                            app,
+                            open: false,
+                            workspace_id: None,
+                        }
+                    });
+                }
+                DeviceEvent::AppOpen {
+                    app_id,
+                    workspace_id,
+                } if broadcast.strict_open_target => {
+                    return (device_id == target).then_some(DeviceEvent::AppOpen {
+                        app_id,
+                        workspace_id,
+                    });
+                }
                 DeviceEvent::AppPublished {
                     app,
                     open: true,
