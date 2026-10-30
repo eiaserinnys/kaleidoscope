@@ -19,5 +19,5 @@ export function describeEditor(view: EditorView | null, path: string | null, nam
   }
   const header = path ? `파일 ${path}` : name;
   if (!visible.length) return { text: `[${header}]`, visual: false };
-  return { text: `[${header}, ${visible[0]}~${visible[visible.length - 1]}줄 / 전체 ${doc.lines}줄]\n${visible.map((number) => `${number}│ ${doc.line(number).text}`).join("\n")}`, visual: false };
+  return { text: `[${header}, ${visible[0]}~${visible[visible.length - 1]}줄 / 전체 ${doc.lines}줄]\n${visible.map((number) => doc.line(number).text).join("\n")}`, visual: false };
 }

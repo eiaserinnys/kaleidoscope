@@ -22,14 +22,15 @@ test("같이 보는 편집기의 보이는 줄, 대기 중 갱신과 PAS 칩", a
   await expect.poll(async () => (await calls(page)).length).toBeGreaterThan(0);
   const initial = (await calls(page)).at(-1)!.view.text;
   expect(initial).toMatch(/\[파일 README\.md, 1~\d+줄 \/ 전체 120줄\]/);
-  expect(initial).toContain("1│ 줄 1");
+  expect(initial).toMatch(/\n줄 1\n/);
+  expect(initial).not.toContain("│");
   await expect(pas.getByText("마크다운 편집기", { exact: true })).toBeVisible();
   const count = (await calls(page)).length;
   await editor.locator(".cm-scroller").evaluate((el) => { el.scrollTop = el.scrollHeight / 2; });
   await pas.getByRole("textbox", { name: "메시지" }).fill("지금 보이는 줄");
   await pas.getByRole("textbox", { name: "메시지" }).press("Enter");
   await expect.poll(async () => (await calls(page)).length).toBeGreaterThan(count);
-  expect((await calls(page)).at(-1)!.view.text).not.toContain("1│ 줄 1\n");
+  expect((await calls(page)).at(-1)!.view.text).not.toMatch(/\n줄 1\n/);
   const ops = await page.evaluate(() => window.__kaleidoscopeHarness!.getCalls().map((call) => call.op));
   expect(ops.lastIndexOf("share.view")).toBeLessThan(ops.lastIndexOf("agent.send"));
   await pas.getByRole("button", { name: "마크다운 편집기 같이 보기 끄기" }).click();
