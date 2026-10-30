@@ -1,0 +1,314 @@
+use super::*;
+use kaleidoscope_contract::{registry::LayoutChanges, AppWindow, Desktop, Workspace};
+
+impl AppState {
+    pub(super) fn apply_layout_changes(
+        &self,
+        device_id: Option<&str>,
+        changes: &LayoutChanges,
+    ) -> Result<(LayoutChanges, LayoutChanges), CoreError> {
+        let mut db = self.lock_db()?;
+        let tx = db.transaction().map_err(db_error)?;
+        let mut changed = LayoutChanges::default();
+        let mut renamed_workspaces = Vec::new();
+        let mut retired_workspaces = Vec::new();
+        let deleted_workspace_ids: HashSet<_> =
+            changes.deleted_workspaces.iter().cloned().collect();
+        let deleted_desktop_ids: HashSet<_> = changes.deleted_desktops.iter().cloned().collect();
+        let deleted_window_ids: HashSet<_> = changes.deleted_windows.iter().cloned().collect();
+        let mut workspace_ids: HashSet<String> = changes
+            .workspaces
+            .iter()
+            .map(|item| item.id.clone())
+            .collect();
+        workspace_ids.extend(changes.deleted_workspaces.iter().cloned());
+        let mut desktop_ids: HashSet<String> = changes
+            .desktops
+            .iter()
+            .map(|item| item.id.clone())
+            .collect();
+        desktop_ids.extend(changes.deleted_desktops.iter().cloned());
+        let mut window_ids: HashSet<String> =
+            changes.windows.iter().map(|item| item.id.clone()).collect();
+        window_ids.extend(changes.deleted_windows.iter().cloned());
+
+        for workspace in &changes.workspaces {
+            if deleted_workspace_ids.contains(&workspace.id) {
+                continue;
+            }
+            let data = serde_json::to_string(workspace)
+                .map_err(|_| server_error("작업을 저장할 수 없습니다."))?;
+            let old: Option<String> = tx
+                .query_row(
+                    "SELECT data FROM workspaces WHERE id=?1",
+                    [&workspace.id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(db_error)?;
+            if old.as_deref() != Some(data.as_str()) {
+                if old
+                    .as_ref()
+                    .and_then(|raw| serde_json::from_str::<Workspace>(raw).ok())
+                    .is_some_and(|previous| previous.name != workspace.name)
+                {
+                    renamed_workspaces.push((workspace.id.clone(), workspace.name.clone()));
+                }
+                tx.execute("INSERT INTO workspaces(id,data,created_at) VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET data=excluded.data,created_at=excluded.created_at", params![workspace.id,data,workspace.created_at]).map_err(db_error)?;
+                changed.workspaces.push(workspace.clone());
+            }
+        }
+        for desktop in &changes.desktops {
+            if deleted_desktop_ids.contains(&desktop.id) {
+                continue;
+            }
+            let exists: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?1)",
+                    [&desktop.workspace_id],
+                    |row| row.get(0),
+                )
+                .map_err(db_error)?;
+            if !exists {
+                continue;
+            }
+            let data = serde_json::to_string(desktop)
+                .map_err(|_| server_error("데스크톱을 저장할 수 없습니다."))?;
+            let old: Option<String> = tx
+                .query_row(
+                    "SELECT data FROM desktops WHERE id=?1",
+                    [&desktop.id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(db_error)?;
+            if old.as_deref() != Some(data.as_str()) {
+                tx.execute("INSERT INTO desktops(id,workspace_id,data,created_at) VALUES(?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET workspace_id=excluded.workspace_id,data=excluded.data,created_at=excluded.created_at", params![desktop.id,desktop.workspace_id,data,desktop.created_at]).map_err(db_error)?;
+                changed.desktops.push(desktop.clone());
+            }
+        }
+        for window in &changes.windows {
+            if deleted_window_ids.contains(&window.id) {
+                continue;
+            }
+            let exists: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM desktops WHERE id=?1)",
+                    [&window.desktop_id],
+                    |row| row.get(0),
+                )
+                .map_err(db_error)?;
+            if !exists {
+                continue;
+            }
+            let data = serde_json::to_string(window)
+                .map_err(|_| server_error("창을 저장할 수 없습니다."))?;
+            let old: Option<String> = tx
+                .query_row(
+                    "SELECT data FROM windows WHERE id=?1",
+                    [&window.id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(db_error)?;
+            if old.as_deref() != Some(data.as_str()) {
+                tx.execute("INSERT INTO windows(id,desktop_id,app_id,data,created_at) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(id) DO UPDATE SET desktop_id=excluded.desktop_id,app_id=excluded.app_id,data=excluded.data,created_at=excluded.created_at", params![window.id,window.desktop_id,window.app_id,data,window.created_at]).map_err(db_error)?;
+                changed.windows.push(window.clone());
+            }
+        }
+
+        for id in &changes.deleted_windows {
+            if tx
+                .execute("DELETE FROM windows WHERE id=?1", [id])
+                .map_err(db_error)?
+                > 0
+            {
+                changed.deleted_windows.push(id.clone());
+            }
+        }
+        for id in &changes.deleted_desktops {
+            let existed = desktop_exists(&tx, id)?;
+            let children = child_ids(&tx, "windows", "desktop_id", id)?;
+            for child in children {
+                window_ids.insert(child.clone());
+                if tx
+                    .execute("DELETE FROM windows WHERE id=?1", [&child])
+                    .map_err(db_error)?
+                    > 0
+                {
+                    changed.deleted_windows.push(child);
+                }
+            }
+            tx.execute("DELETE FROM desktops WHERE id=?1", [id])
+                .map_err(db_error)?;
+            if existed {
+                changed.deleted_desktops.push(id.clone());
+            }
+        }
+        for id in &changes.deleted_workspaces {
+            let count: i64 = tx
+                .query_row("SELECT count(*) FROM workspaces", [], |row| row.get(0))
+                .map_err(db_error)?;
+            if count <= 1 && workspace_exists(&tx, id)? {
+                for desktop in child_ids(&tx, "desktops", "workspace_id", id)? {
+                    desktop_ids.insert(desktop.clone());
+                    for window in child_ids(&tx, "windows", "desktop_id", &desktop)? {
+                        window_ids.insert(window);
+                    }
+                }
+                continue;
+            }
+            if !workspace_exists(&tx, id)? {
+                continue;
+            }
+            let children = child_ids(&tx, "desktops", "workspace_id", id)?;
+            for child in &children {
+                for window in child_ids(&tx, "windows", "desktop_id", child)? {
+                    window_ids.insert(window.clone());
+                    if tx
+                        .execute("DELETE FROM windows WHERE id=?1", [&window])
+                        .map_err(db_error)?
+                        > 0
+                    {
+                        changed.deleted_windows.push(window);
+                    }
+                }
+            }
+            for child in children {
+                desktop_ids.insert(child.clone());
+                if tx
+                    .execute("DELETE FROM desktops WHERE id=?1", [&child])
+                    .map_err(db_error)?
+                    > 0
+                {
+                    changed.deleted_desktops.push(child);
+                }
+            }
+            tx.execute("DELETE FROM workspaces WHERE id=?1", [id])
+                .map_err(db_error)?;
+            changed.deleted_workspaces.push(id.clone());
+            retired_workspaces.push(id.clone());
+        }
+        if let Some(device_id) = device_id {
+            tx.execute(
+                "UPDATE devices SET last_active_at=?2 WHERE id=?1 AND revoked_at IS NULL",
+                params![device_id, timestamp()],
+            )
+            .map_err(db_error)?;
+        }
+
+        let mut reply = LayoutChanges::default();
+        for id in workspace_ids {
+            if let Some(value) = entity_by_id::<Workspace>(&tx, "workspaces", &id)? {
+                reply.workspaces.push(value);
+            } else {
+                reply.deleted_workspaces.push(id);
+            }
+        }
+        for id in desktop_ids {
+            if let Some(value) = entity_by_id::<Desktop>(&tx, "desktops", &id)? {
+                reply.desktops.push(value);
+            } else {
+                reply.deleted_desktops.push(id);
+            }
+        }
+        for id in window_ids {
+            if let Some(value) = entity_by_id::<AppWindow>(&tx, "windows", &id)? {
+                reply.windows.push(value);
+            } else {
+                reply.deleted_windows.push(id);
+            }
+        }
+        sort_changes(&mut reply);
+        sort_changes(&mut changed);
+        tx.commit().map_err(db_error)?;
+        drop(db);
+        self.refresh_device_workspaces()?;
+        for (id, name) in renamed_workspaces {
+            self.rename_agent(&id, &name);
+        }
+        for id in retired_workspaces {
+            self.retire_agent(&id);
+        }
+        Ok((reply, changed))
+    }
+}
+
+fn entity_by_id<T: for<'de> Deserialize<'de>>(
+    tx: &Transaction<'_>,
+    table: &str,
+    id: &str,
+) -> Result<Option<T>, CoreError> {
+    let query = match table {
+        "workspaces" => "SELECT data FROM workspaces WHERE id=?1",
+        "desktops" => "SELECT data FROM desktops WHERE id=?1",
+        "windows" => "SELECT data FROM windows WHERE id=?1",
+        _ => return Err(server_error("배치 표를 읽을 수 없습니다.")),
+    };
+    let raw: Option<String> = tx
+        .query_row(query, [id], |row| row.get(0))
+        .optional()
+        .map_err(db_error)?;
+    raw.map(|value| {
+        serde_json::from_str(&value)
+            .map_err(|error| server_error(&format!("배치 정본을 읽을 수 없습니다: {error}")))
+    })
+    .transpose()
+}
+
+fn child_ids(
+    tx: &Transaction<'_>,
+    table: &str,
+    parent: &str,
+    id: &str,
+) -> Result<Vec<String>, CoreError> {
+    let query = match (table, parent) {
+        ("windows", "desktop_id") => "SELECT id FROM windows WHERE desktop_id=?1 ORDER BY id",
+        ("desktops", "workspace_id") => "SELECT id FROM desktops WHERE workspace_id=?1 ORDER BY id",
+        _ => return Err(server_error("배치 관계를 읽을 수 없습니다.")),
+    };
+    let mut statement = tx.prepare(query).map_err(db_error)?;
+    let rows = statement
+        .query_map([id], |row| row.get(0))
+        .map_err(db_error)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(db_error)?;
+    Ok(rows)
+}
+
+fn workspace_exists(tx: &Transaction<'_>, id: &str) -> Result<bool, CoreError> {
+    tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?1)",
+        [id],
+        |row| row.get(0),
+    )
+    .map_err(db_error)
+}
+fn desktop_exists(tx: &Transaction<'_>, id: &str) -> Result<bool, CoreError> {
+    tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM desktops WHERE id=?1)",
+        [id],
+        |row| row.get(0),
+    )
+    .map_err(db_error)
+}
+fn sort_changes(changes: &mut LayoutChanges) {
+    changes.workspaces.sort_by(|a, b| {
+        a.created_at
+            .cmp(&b.created_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    changes.desktops.sort_by(|a, b| {
+        a.created_at
+            .cmp(&b.created_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    changes.windows.sort_by(|a, b| {
+        a.created_at
+            .cmp(&b.created_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    changes.deleted_workspaces.sort();
+    changes.deleted_desktops.sort();
+    changes.deleted_windows.sort();
+}

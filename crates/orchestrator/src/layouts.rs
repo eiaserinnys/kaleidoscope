@@ -1,6 +1,6 @@
 use super::*;
 use axum::{extract::rejection::JsonRejection, extract::Extension};
-use kaleidoscope_contract::registry::DeviceLayout;
+use kaleidoscope_contract::registry::{DeviceLayout, LayoutChanges};
 
 pub(super) fn load_device_workspaces(
     db: &Connection,
@@ -36,6 +36,38 @@ pub(super) async fn put_layout(
     }
 }
 
+pub(super) async fn post_layout_changes(
+    State(state): State<AppState>,
+    Extension(device): Extension<(String, String)>,
+    body: Result<Json<LayoutChanges>, JsonRejection>,
+) -> Response {
+    let Ok(Json(changes)) = body else {
+        return http::error_response(
+            StatusCode::BAD_REQUEST,
+            CoreError::new(ErrorCode::InvalidRequest),
+        );
+    };
+    if changes.windows.iter().any(|window| {
+        serde_json::to_vec(&window.state).map_or(true, |bytes| {
+            bytes.len() > kaleidoscope_contract::WINDOW_STATE_MAX_BYTES
+        })
+    }) {
+        return http::error_response(
+            StatusCode::BAD_REQUEST,
+            CoreError::new(ErrorCode::InvalidRequest),
+        );
+    }
+    match state.apply_layout_changes(Some(&device.0), &changes) {
+        Ok((reply, changed)) => {
+            if !changed.is_empty() {
+                state.send_event(DeviceEvent::LayoutChanged { changes: changed });
+            }
+            Json(reply).into_response()
+        }
+        Err(error) => http::error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
+    }
+}
+
 impl AppState {
     pub(super) fn reported_window_state(
         &self,
@@ -61,16 +93,33 @@ impl AppState {
         let workspaces = layout.workspaces.iter().map(|w| w.id.clone()).collect();
         let layout = serde_json::to_string(layout)
             .map_err(|_| server_error("배치를 저장할 수 없습니다."))?;
+        let now = timestamp();
         let db = self.lock_db()?;
         db.execute(
             "INSERT INTO device_layouts(device_id,layout,reported_at) VALUES(?1,?2,?3) ON CONFLICT(device_id) DO UPDATE SET layout=excluded.layout,reported_at=excluded.reported_at",
-            params![device_id, layout, timestamp()],
+            params![device_id, layout, now],
         ).map_err(db_error)?;
+        db.execute(
+            "UPDATE devices SET last_active_at=?2 WHERE id=?1 AND revoked_at IS NULL",
+            params![device_id, now],
+        )
+        .map_err(db_error)?;
         self.0
             .device_workspaces
             .lock()
             .unwrap()
             .insert(device_id.into(), workspaces);
+        Ok(())
+    }
+
+    pub(super) fn refresh_device_workspaces(&self) -> Result<(), CoreError> {
+        let db = self.lock_db()?;
+        let workspaces = load_device_workspaces(&db).map_err(db_error)?;
+        *self
+            .0
+            .device_workspaces
+            .lock()
+            .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))? = workspaces;
         Ok(())
     }
 
@@ -90,11 +139,40 @@ impl AppState {
             .count()
     }
 
+    #[cfg(test)]
     pub(super) fn event_for_device(
         &self,
         device_id: &str,
         event: DeviceEvent,
     ) -> Option<DeviceEvent> {
+        self.event_for_broadcast(
+            device_id,
+            Broadcast {
+                event,
+                open_target: None,
+            },
+        )
+    }
+
+    pub(super) fn event_for_broadcast(
+        &self,
+        device_id: &str,
+        broadcast: Broadcast,
+    ) -> Option<DeviceEvent> {
+        let syncing = self
+            .0
+            .layout_sync_devices
+            .lock()
+            .ok()
+            .is_some_and(|devices| devices.contains(device_id));
+        let event = broadcast.event;
+        if matches!(
+            event,
+            DeviceEvent::LayoutSnapshot { .. } | DeviceEvent::LayoutChanged { .. }
+        ) && !syncing
+        {
+            return None;
+        }
         if matches!(event, DeviceEvent::ConnectionsSnapshot { .. }) {
             let supports_connections = self
                 .0
@@ -125,6 +203,53 @@ impl AppState {
                 }
             }
         }
+        if let Some(target) = broadcast.open_target {
+            match event.clone() {
+                DeviceEvent::AppPublished {
+                    app,
+                    open: true,
+                    workspace_id,
+                } if syncing => {
+                    return if device_id == target {
+                        Some(DeviceEvent::AppPublished {
+                            app,
+                            open: true,
+                            workspace_id,
+                        })
+                    } else {
+                        Some(DeviceEvent::AppPublished {
+                            app,
+                            open: false,
+                            workspace_id: None,
+                        })
+                    };
+                }
+                DeviceEvent::AppOpen {
+                    app_id,
+                    workspace_id,
+                } if syncing => {
+                    return (device_id == target).then_some(DeviceEvent::AppOpen {
+                        app_id,
+                        workspace_id,
+                    });
+                }
+                _ => {}
+            }
+        } else if syncing {
+            match event.clone() {
+                DeviceEvent::AppPublished {
+                    app, open: true, ..
+                } => {
+                    return Some(DeviceEvent::AppPublished {
+                        app,
+                        open: false,
+                        workspace_id: None,
+                    })
+                }
+                DeviceEvent::AppOpen { .. } => return None,
+                _ => {}
+            }
+        }
         let workspaces = self.0.device_workspaces.lock().unwrap();
         let has = |id: &str| {
             workspaces
@@ -151,90 +276,28 @@ impl AppState {
             other => Some(other),
         }
     }
+}
 
-    fn layouts(&self) -> Result<Vec<(String, String, String, DeviceLayout)>, CoreError> {
-        let db = self.lock_db()?;
-        let mut stmt = db.prepare("SELECT d.id,d.name,l.reported_at,l.layout FROM device_layouts l JOIN devices d ON d.id=l.device_id ORDER BY l.reported_at DESC,d.id").map_err(db_error)?;
-        let rows = stmt
-            .query_map([], |row| {
-                let raw: String = row.get(3)?;
-                let layout = serde_json::from_str(&raw).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        3,
-                        rusqlite::types::Type::Text,
-                        Box::new(e),
-                    )
-                })?;
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?, layout))
-            })
-            .map_err(db_error)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
-    }
-
-    pub(super) fn get_workspace(&self, id: &str) -> Result<Option<Value>, CoreError> {
-        for (device_id, device_name, reported_at, layout) in self.layouts()? {
-            let Some(workspace) = layout.workspaces.iter().find(|w| w.id == id) else {
-                continue;
-            };
-            let active_desktop = layout.active_desktop_ids.get(id);
-            let mut desktops: Vec<_> = layout
-                .desktops
-                .iter()
-                .filter(|d| d.workspace_id == id)
-                .collect();
-            desktops.sort_by_key(|d| d.position);
-            let apps = self.current_apps()?;
-            let desktops: Vec<Value> = desktops.into_iter().map(|desktop| {
-                let mut windows: Vec<_> = layout.windows.iter().filter(|w| w.desktop_id == desktop.id).collect();
-                windows.sort_by_key(|w| std::cmp::Reverse(w.z));
-                let windows: Vec<Value> = windows.into_iter().map(|window| {
-                    let name = apps.iter().find(|a| a.app.id == window.app_id).map(|a| a.app.name.as_str()).unwrap_or(&window.app_id);
-                    let folders: std::collections::BTreeMap<_, _> = layout.folders.iter().filter(|f| f.window_id == window.id).map(|f| (f.permission.clone(), f.root_name.clone())).collect();
-                    let data_errors: Vec<_> = layout.data_errors.iter().filter(|error| error.window_id == window.id).map(|error| json!({"pointer":error.pointer,"message":error.message})).collect();
-                    let mut value = json!({"window_id":window.id,"app_id":window.app_id,"app_name":name,"app_version":window.app_version,"rect":window.rect,"z":window.z,"state":window.state,"folders":folders});
-                    if !data_errors.is_empty() {
-                        value["data_errors"] = json!(data_errors);
-                    }
-                    value
-                }).collect();
-                json!({"desktop_id":desktop.id,"name":desktop.name,"position":desktop.position,"active":active_desktop == Some(&desktop.id),"windows":windows})
-            }).collect();
-            let connected = self
-                .0
-                .connections
-                .lock()
-                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
-                .get(&device_id)
-                .copied()
-                .unwrap_or(0)
-                > 0;
-            let agent = self
-                .agent_row(id)?
-                .map(|a| json!({"session_id":a.session_id,"model_preset":a.model_preset}));
-            return Ok(Some(
-                json!({"workspace_id":id,"name":workspace.name,"device":{"id":device_id,"name":device_name,"connected":connected},"reported_at":reported_at,"active":layout.active_workspace_id.as_deref()==Some(id),"active_desktop_id":active_desktop,"desktops":desktops,"agent":agent}),
-            ));
-        }
-        Ok(None)
-    }
-
-    pub(super) fn list_workspaces(&self) -> Result<Value, CoreError> {
-        let mut result = Vec::new();
-        for (_, device_name, reported_at, layout) in self.layouts()? {
-            for workspace in &layout.workspaces {
-                let desktops: Vec<_> = layout
-                    .desktops
-                    .iter()
-                    .filter(|d| d.workspace_id == workspace.id)
-                    .collect();
-                let window_count = layout
-                    .windows
-                    .iter()
-                    .filter(|w| desktops.iter().any(|d| d.id == w.desktop_id))
-                    .count();
-                result.push(json!({"workspace_id":workspace.id,"name":workspace.name,"device_name":device_name,"desktop_count":desktops.len(),"window_count":window_count,"has_agent":self.agent_row(&workspace.id)?.is_some(),"reported_at":reported_at}));
-            }
-        }
-        Ok(json!(result))
-    }
+pub(super) fn load_entities<T: for<'de> Deserialize<'de>>(
+    db: &Connection,
+    table: &str,
+) -> Result<Vec<T>, CoreError> {
+    let query = match table {
+        "workspaces" => "SELECT data FROM workspaces ORDER BY created_at,id",
+        "desktops" => "SELECT data FROM desktops ORDER BY created_at,id",
+        "windows" => "SELECT data FROM windows ORDER BY created_at,id",
+        _ => return Err(server_error("배치 표를 읽을 수 없습니다.")),
+    };
+    let mut statement = db.prepare(query).map_err(db_error)?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(db_error)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(db_error)?;
+    rows.into_iter()
+        .map(|raw| {
+            serde_json::from_str(&raw)
+                .map_err(|error| server_error(&format!("배치 정본을 읽을 수 없습니다: {error}")))
+        })
+        .collect()
 }

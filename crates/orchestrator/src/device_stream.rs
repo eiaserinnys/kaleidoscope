@@ -1,10 +1,23 @@
 use super::*;
 
 impl AppState {
+    #[cfg(test)]
     pub(super) fn stream(
         &self,
         device_id: String,
         supported: Option<kaleidoscope_contract::Supported>,
+    ) -> Result<
+        impl Stream<Item = Result<Event, std::convert::Infallible>> + Send + 'static,
+        CoreError,
+    > {
+        self.stream_with_registry(device_id, supported, 0)
+    }
+
+    pub(super) fn stream_with_registry(
+        &self,
+        device_id: String,
+        supported: Option<kaleidoscope_contract::Supported>,
+        registry_version: u32,
     ) -> Result<
         impl Stream<Item = Result<Event, std::convert::Infallible>> + Send + 'static,
         CoreError,
@@ -25,6 +38,19 @@ impl AppState {
                 .lock()
                 .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
                 .insert(device_id.clone(), supported.clone());
+            if registry_version >= registry::LAYOUT_SYNC_REGISTRY_VERSION {
+                self.0
+                    .layout_sync_devices
+                    .lock()
+                    .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+                    .insert(device_id.clone());
+            } else {
+                self.0
+                    .layout_sync_devices
+                    .lock()
+                    .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+                    .remove(&device_id);
+            }
         }
         let snapshot = DeviceEvent::AppsSnapshot {
             apps: apps
@@ -43,6 +69,9 @@ impl AppState {
                 connections: self.connection_snapshot()?,
             });
         }
+        if registry_version >= registry::LAYOUT_SYNC_REGISTRY_VERSION {
+            initial_events.push(self.layout_snapshot()?);
+        }
         let state = self.clone();
         let interval = tokio::time::interval(Duration::from_secs(registry::PING_INTERVAL_SECS));
         let guard = ConnectionGuard {
@@ -60,7 +89,7 @@ impl AppState {
                 loop {
                     tokio::select! {
                         received=rx.recv()=>match received {
-                            Ok(event)=>if let Some(event) = state.event_for_device(&device_id, event) { return Some((Ok(Event::default().data(serde_json::to_string(&event).unwrap())),(rx,interval,state,device_id,guard))); },
+                            Ok(event)=>if let Some(event) = state.event_for_broadcast(&device_id, event) { return Some((Ok(Event::default().data(serde_json::to_string(&event).unwrap())),(rx,interval,state,device_id,guard))); },
                             Err(broadcast::error::RecvError::Closed)|Err(broadcast::error::RecvError::Lagged(_))=>{drop(guard);return None}
                         },
                         _=interval.tick()=>{
@@ -88,6 +117,9 @@ impl Drop for ConnectionGuard {
                     map.remove(&self.device_id);
                     if let Ok(mut support) = self.state.0.device_support.lock() {
                         support.remove(&self.device_id);
+                    }
+                    if let Ok(mut syncing) = self.state.0.layout_sync_devices.lock() {
+                        syncing.remove(&self.device_id);
                     }
                 }
             }

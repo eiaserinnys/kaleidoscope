@@ -213,7 +213,7 @@ impl AppState {
     }
 
     fn broadcast_connections(&self) -> Result<(), CoreError> {
-        let _ = self.0.events.send(DeviceEvent::ConnectionsSnapshot {
+        self.send_event(DeviceEvent::ConnectionsSnapshot {
             connections: self.connection_snapshot()?,
         });
         Ok(())

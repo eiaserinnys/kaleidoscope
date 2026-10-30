@@ -114,20 +114,23 @@ impl McpServer {
             Ok(missing) => missing,
             Err(error) => return Ok(json_error(error)),
         };
-        match self
-            .state
-            .publish_app(&definition, "agent", args.open, args.workspace_id.clone())
-        {
-            Ok((row, unchanged)) => {
+        match self.state.publish_app_with_target(
+            &definition,
+            "agent",
+            args.open,
+            args.workspace_id.clone(),
+        ) {
+            Ok((row, unchanged, target)) => {
                 let sent = if args.open {
-                    self.state.connected_count_for_app(
+                    self.state.open_sent_to(
+                        target.as_ref(),
                         args.workspace_id.as_deref(),
                         &row.version.definition.requires,
                     )
                 } else {
                     0
                 };
-                let mut value = json!({"app_id":row.app.id,"name":row.app.name,"version":row.version.version,"unchanged":unchanged,"open_sent_to":sent});
+                let mut value = json!({"app_id":row.app.id,"name":row.app.name,"version":row.version.version,"unchanged":unchanged,"open_sent_to":sent,"open_target":target.as_ref().map(|target| target.name.clone())});
                 if args.open
                     && sent == 0
                     && self.state.connected_count_for(args.workspace_id.as_deref()) == 0
@@ -196,15 +199,23 @@ impl McpServer {
     ) -> Result<CallToolResult, ErrorData> {
         match self.state.app(&args.app_id, None) {
             Ok(Some(app)) => {
-                let _ = self.state.0.events.send(DeviceEvent::AppOpen {
-                    app_id: args.app_id.clone(),
-                    workspace_id: args.workspace_id.clone(),
-                });
-                let sent = self.state.connected_count_for_app(
+                let target = match self.state.choose_open_target(args.workspace_id.as_deref()) {
+                    Ok(target) => target,
+                    Err(error) => return Ok(json_error(error)),
+                };
+                self.state.send_event_with_target(
+                    DeviceEvent::AppOpen {
+                        app_id: args.app_id.clone(),
+                        workspace_id: args.workspace_id.clone(),
+                    },
+                    target.as_ref().map(|target| target.id.clone()),
+                );
+                let sent = self.state.open_sent_to(
+                    target.as_ref(),
                     args.workspace_id.as_deref(),
                     &app.version.definition.requires,
                 );
-                let mut value = json!({"open_sent_to":sent});
+                let mut value = json!({"open_sent_to":sent,"open_target":target.as_ref().map(|target| target.name.clone())});
                 if sent == 0
                     && args.workspace_id.is_some()
                     && self.state.connected_count_for(args.workspace_id.as_deref()) == 0
@@ -231,17 +242,57 @@ impl McpServer {
         Ok(match self.state.get_workspace(&args.workspace_id) {
             Ok(Some(value)) => json_result(value),
             Ok(None) => json_error(server_error(
-                "그 작업의 배치 보고가 없습니다. 쉘이 서버에 연결돼 있는지 확인하세요.",
+                "작업을 찾을 수 없습니다. list_workspaces에서 현재 작업을 확인하세요.",
             )),
             Err(error) => json_error(error),
         })
     }
-    #[tool(description = "기기가 보고한 작업과 창 개수를 나열합니다.")]
+    #[tool(description = "현재 작업과 창 개수를 나열합니다.")]
     async fn list_workspaces(&self) -> Result<CallToolResult, ErrorData> {
         Ok(match self.state.list_workspaces() {
             Ok(value) => json_result(value),
             Err(error) => json_error(error),
         })
+    }
+    #[tool(description = "작업을 지우고 그 작업의 PAS를 내립니다. 마지막 작업은 지울 수 없습니다.")]
+    async fn delete_workspace(
+        &self,
+        Parameters(args): Parameters<WorkspaceArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let agent_retiring = self.state.0.soulstream.is_some()
+            && self
+                .state
+                .agent_row(&args.workspace_id)
+                .ok()
+                .flatten()
+                .is_some();
+        match self.state.apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                deleted_workspaces: vec![args.workspace_id.clone()],
+                ..Default::default()
+            },
+        ) {
+            Ok((reply, changed)) if reply.deleted_workspaces.contains(&args.workspace_id) => {
+                if !changed.is_empty() {
+                    self.state
+                        .send_event(DeviceEvent::LayoutChanged { changes: changed });
+                }
+                Ok(json_result(
+                    json!({"workspace_id":args.workspace_id,"deleted":true,"agent_retiring":agent_retiring}),
+                ))
+            }
+            Ok((reply, _))
+                if reply
+                    .workspaces
+                    .iter()
+                    .any(|workspace| workspace.id == args.workspace_id) =>
+            {
+                Ok(json_error(server_error("마지막 작업은 지울 수 없습니다.")))
+            }
+            Ok(_) => Ok(json_error(server_error("작업을 찾을 수 없습니다."))),
+            Err(error) => Ok(json_error(error)),
+        }
     }
     #[tool(
         description = "쉘에 표시된 연결 코드를 승인해 해당 기기에 토큰을 발급합니다. 디렉터가 코드를 전달한 뒤 사용합니다."
@@ -358,6 +409,10 @@ impl ServerHandler for McpServer {
             include_str!("../../../examples/web-browser.json"),
             include_str!("../../../examples/explorer.json")
         );
+        let instructions = format!(
+            "{}\ndelete_workspace로 작업을 지우면 그 작업의 PAS도 내려간다. 시험으로 만든 작업은 시험 끝에 지운다.",
+            instructions
+        );
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("kaleidoscope", "0.1.0"))
             .with_instructions(instructions)
@@ -393,3 +448,7 @@ fn add_unsupported_device_note(value: &mut Value, mut devices: Vec<String>) {
 #[cfg(test)]
 #[path = "mcp_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "mcp_workspace_tests.rs"]
+mod workspace_tests;

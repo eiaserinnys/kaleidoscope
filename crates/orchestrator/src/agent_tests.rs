@@ -235,7 +235,8 @@ async fn creation_finishes_and_broadcasts_after_client_disconnects() {
     let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
         .await
         .unwrap()
-        .unwrap();
+        .unwrap()
+        .event;
     assert!(
         matches!(event, DeviceEvent::AgentUpdate {workspace_id,update:AgentUpdate::Created {..}} if workspace_id == "w")
     );

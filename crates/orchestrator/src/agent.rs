@@ -5,7 +5,7 @@ use axum::{
 };
 use kaleidoscope_contract::{
     registry::{AgentCreateRequest, DeviceAgentReply},
-    AgentAttachment, AgentInfo, AgentItem, AgentItemKind, AgentUpdate,
+    AgentAttachment, AgentInfo, AgentItem, AgentItemKind, AgentUpdate, Workspace,
 };
 
 #[derive(Clone)]
@@ -99,8 +99,20 @@ impl AppState {
             return Ok(());
         }
         let rows = self.agent_rows().map_err(|e| e.message)?;
+        let workspaces: std::collections::HashSet<_> = {
+            let db = self.lock_db().map_err(|e| e.message)?;
+            super::layouts::load_entities::<Workspace>(&db, "workspaces")
+                .map_err(|e| e.message)?
+                .into_iter()
+                .map(|workspace| workspace.id)
+                .collect()
+        };
         for row in rows {
-            self.start_relay(row);
+            if workspaces.contains(&row.workspace_id) {
+                self.start_relay(row);
+            } else {
+                self.retire_agent(&row.workspace_id);
+            }
         }
         Ok(())
     }
@@ -126,6 +138,7 @@ impl AppState {
     pub(super) fn agent_row(&self, workspace_id: &str) -> Result<Option<AgentRow>, CoreError> {
         self.lock_db()?.query_row("SELECT workspace_id,session_id,model_preset,created_at,cursor,workspace_name FROM agents WHERE workspace_id=?1", [workspace_id], |r| Ok(AgentRow {workspace_id:r.get(0)?,session_id:r.get(1)?,model_preset:r.get(2)?,created_at:r.get(3)?,cursor:r.get(4)?,workspace_name:r.get(5)?})).optional().map_err(db_error)
     }
+
     fn agent_info(&self, row: &AgentRow) -> AgentInfo {
         let (busy, tool) = self
             .0
@@ -247,7 +260,7 @@ impl AppState {
         Ok(attachments.get(index as usize).cloned())
     }
     pub(super) fn emit(&self, workspace_id: &str, update: AgentUpdate) {
-        let _ = self.0.events.send(DeviceEvent::AgentUpdate {
+        self.send_event(DeviceEvent::AgentUpdate {
             workspace_id: workspace_id.into(),
             update,
         });
@@ -440,6 +453,13 @@ pub(super) fn initial_instruction(name: &str, id: &str) -> String {
 pub(super) fn role_text(name: &str, id: &str) -> String {
     format!("이 세션은 kaleidoscope 쉘의 작업 「{name}」을 맡은 PAS다(workspace_id: {id}).\n- 디렉터는 쉘 안의 「작업 PAS」 창에서 말한다. caller_info.source가 kaleidoscope인 말이 디렉터의 말이다.\n- 앱을 만들거나 고치면 kaleidoscope MCP의 upload_app에 workspace_id \"{id}\"를 넣어 이 작업에 띄운다. 이미 있는 앱을 다시 띄울 때는 open_app에 같은 workspace_id를 넣는다.\n- 「이 창」, 「지금 보는 것」처럼 화면을 가리키면 먼저 get_workspace(workspace_id \"{id}\")로 지금 펼친 데스크톱과 창(앱, 버전, 연 파일)을 읽는다. 고칠 때는 get_app으로 정의를 받아 고친 뒤 upload_app으로 올린다.\n- 앱 만들기와 고치기, 화면 읽기처럼 이 창에서 끝나는 일은 카드를 만들지 않고 바로 한다. 답은 짧게 한다.")
 }
+
+#[path = "agent_lifecycle.rs"]
+mod lifecycle;
+
+#[cfg(test)]
+#[path = "agent_lifecycle_tests.rs"]
+mod lifecycle_tests;
 
 #[path = "agent_attachments.rs"]
 mod attachments;
