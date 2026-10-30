@@ -79,22 +79,25 @@ def serve(provider):
                         items = [{"id": "1", "kind": "notice", "text": "notice", "at": "now", "attachments": []}]
                         if provider.late_item:
                             provider.late_ready = True
-                            items.append({"id": "3", "kind": "assistant", "text": "나중 답", "at": "now", "attachments": []})
-                        return self.respond(200, {"items": items, "cursor": "3" if provider.late_item else "1"})
+                            items.append({"id": "4", "kind": "assistant", "text": "나중 답", "at": "now", "attachments": []})
+                        return self.respond(200, {"items": items, "cursor": "4" if provider.late_item else "1"})
                     if parts[2] == "events":
                         cursor = self.headers.get("Last-Event-ID")
                         provider.events.append(cursor)
                         late = provider.late_ready
-                        snapshot = {"kind": "snapshot", "snapshot": {"cursor": "3" if late else "2", "busy": False, "tool": None, "stream_id": None, "text": None,
-                            "items": [{"id": "3" if late else "2", "kind": "assistant", "text": "답", "at": "now", "attachments": []}]}}
+                        snapshot = {"kind": "snapshot", "snapshot": {"cursor": "4" if late else "2", "busy": False, "tool": None, "stream_id": None, "text": None,
+                            "items": [{"id": "4" if late else "2", "kind": "assistant", "text": "답", "at": "now", "attachments": []}]}}
                         encoded = json.dumps(snapshot, ensure_ascii=False)
                         split = encoded.index('"snapshot"')
                         text1 = json.dumps({"kind": "text", "stream_id": "stream-1", "text": "한"}, ensure_ascii=False)
                         text2 = json.dumps({"kind": "text", "stream_id": "stream-1", "text": "한국"}, ensure_ascii=False)
                         duplicate = json.dumps({"kind": "item", "item": snapshot["snapshot"]["items"][0]}, ensure_ascii=False)
-                        payload = ("id: " + ("3" if late else "2") + "\r\ndata: " + encoded[:split] + "\r\ndata: " + encoded[split:]
-                                   + "\r\n\r\ndata: " + text1 + "\r\n\r\ndata: " + text2
-                                   + "\r\n\r\nid: " + ("3" if late else "2") + "\r\ndata: " + duplicate + "\r\n\r\n").encode()
+                        answer = json.dumps({"kind": "item", "item": {"id": "3", "kind": "assistant", "text": "최초 지시 답", "at": "now", "attachments": []}}, ensure_ascii=False)
+                        event_id = "4" if late else "2"
+                        payload = ("id: " + event_id + "\r\ndata: " + encoded[:split] + "\r\ndata: " + encoded[split:]
+                                   + "\r\n\r\nid: " + event_id + "\r\ndata: " + duplicate
+                                   + ("" if late else "\r\n\r\nid: 3\r\ndata: " + answer)
+                                   + "\r\n\r\ndata: " + text1 + "\r\n\r\ndata: " + text2 + "\r\n\r\n").encode()
                         self.send_response(200)
                         self.send_header("Content-Type", "text/event-stream")
                         self.send_header("Content-Length", str(len(payload)))
@@ -224,14 +227,18 @@ def run():
             for task in tasks: task.join(timeout=20)
             assert len(results) == 2 and results[0] == results[1], results
             assert len(provider.bindings) == 1
+            initial_snapshots = []
             def initial_answer():
                 while not events.empty():
                     event = events.get_nowait()
                     update = event.get("update", {})
-                    if update.get("kind") == "snapshot" and any(item["id"] == "2" for item in update["snapshot"]["items"]):
+                    if update.get("kind") == "snapshot":
+                        initial_snapshots.append(event)
+                    if initial_snapshots and update.get("kind") == "item" and update["item"]["id"] == "3":
                         return event
                 return None
             assert until("생성 뒤 get 없이 첫 대화 이벤트", initial_answer, seconds=15)
+            assert None in provider.events, provider.events
             assert not provider.posts, provider.posts
             call(url1, "conversation.send", window_id=window, request_id="draft-1", text="보존할 초안", attachments=[])
             with provider.lock:
@@ -240,7 +247,7 @@ def run():
             got = call(url1, "conversation.get", window_id=window)
             assert got["items"][0]["kind"] == "notice"
             assert call(url1, "conversation.history", window_id=window, before="1")["items"][0]["kind"] == "notice"
-            until("SSE 재연결 cursor", lambda: "2" in provider.events, seconds=15)
+            until("SSE 재연결 cursor", lambda: "3" in provider.events, seconds=15)
             delivered = []
             while not events.empty(): delivered.append(events.get_nowait())
             items = [item["id"] for event in delivered if event.get("event") == "conversation.update"
@@ -253,12 +260,12 @@ def run():
             with provider.lock:
                 provider.late_item = True
             second_history = call(url1, "conversation.get", window_id=second_window)
-            assert any(item["id"] == "3" for item in second_history["items"])
+            assert any(item["id"] == "4" for item in second_history["items"])
             def late_delivery():
                 while not events.empty():
                     event = events.get_nowait()
                     update = event.get("update", {})
-                    if update.get("kind") == "snapshot" and any(item["id"] == "3" for item in update["snapshot"]["items"]):
+                    if update.get("kind") == "snapshot" and any(item["id"] == "4" for item in update["snapshot"]["items"]):
                         return event
                 return None
             assert until("첫 창에 두 번째 창의 기록 이후 새 항목 전달", late_delivery, seconds=20)
@@ -366,7 +373,7 @@ def run():
                 provider.bindings[(old["namespace"], workspace2)] = provider.thread(old["namespace"], workspace2, "different-thread")
             status, conflict = request(url1 + "/core", "POST", {"op": "conversation.get", "window_id": window2})
             assert status == 400 and conflict["code"] == "binding_conflict", conflict
-            print("실제 코어와 가짜 제공자: 1 passed (로그인 필요, 빈 대화, 두 기기 ensure, notice, SSE cursor·중복, 단절·재시작 pending 재전송, 같이 보기, 첨부, adoption과 충돌)")
+            print("실제 코어와 가짜 제공자: 1 passed (로그인 필요, 빈 대화, 두 기기 ensure, 생성 직후 item, 다중 창 SSE·중복, 실패 초안 복원·정리, 단절·재시작 pending 재전송, 같이 보기, 첨부, adoption과 충돌)")
         except Exception:
             logs.flush()
             logs.seek(0)

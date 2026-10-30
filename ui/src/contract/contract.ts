@@ -398,7 +398,7 @@ export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } |
 /**
  * 코어의 응답. `op`는 명령과 같다.
  */
-export type CoreReply = { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "link.start", user_code: string, expires_at: string, } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, } | { "op": "files.open", window: AppWindow, } | { "op": "web.attach", page: WebPage, } | { "op": "web.place", } | { "op": "web.navigate", } | { "op": "web.history", } | { "op": "web.capture", 
+export type CoreReply = { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "link.start", user_code: string, expires_at: string, } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.allow_pc", access: PcAccess, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, } | { "op": "files.open", window: AppWindow, } | { "op": "web.attach", page: WebPage, } | { "op": "web.place", } | { "op": "web.navigate", } | { "op": "web.history", } | { "op": "web.capture", 
 /**
  * `data:image/png;base64,...`. 찍지 못하면 null.
  */
@@ -423,7 +423,7 @@ data_base64: string, } | { "op": "agent.attachment_open", } | { "op": "conversat
 /**
  * 화면이 코어에 보내는 명령. `op`로 가른다. 응답은 같은 `op`의 [`CoreReply`]다.
  */
-export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "files.open", window_id: string, permission: string, path: string, app_id: string, rect?: Rect, } | { "op": "web.attach", window_id: string, url: string, } | { "op": "web.place", window_id: string, bounds: Rect | null, } | { "op": "web.navigate", window_id: string, url: string, } | { "op": "web.history", window_id: string, action: WebHistoryAction, } | { "op": "web.capture", window_id: string, } | { "op": "web.detach", window_id: string, } | { "op": "agent.get", workspace_id: string, } | { "op": "agent.create", workspace_id: string, model_preset: string, } | { "op": "agent.send", workspace_id: string, text: string, 
+export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.allow_pc", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "files.open", window_id: string, permission: string, path: string, app_id: string, rect?: Rect, } | { "op": "web.attach", window_id: string, url: string, } | { "op": "web.place", window_id: string, bounds: Rect | null, } | { "op": "web.navigate", window_id: string, url: string, } | { "op": "web.history", window_id: string, action: WebHistoryAction, } | { "op": "web.capture", window_id: string, } | { "op": "web.detach", window_id: string, } | { "op": "agent.get", workspace_id: string, } | { "op": "agent.create", workspace_id: string, model_preset: string, } | { "op": "agent.send", workspace_id: string, text: string, 
 /**
  * 빼면 빈 배열이다(모듈 `agent` 1판의 명령 모양).
  */
@@ -463,7 +463,12 @@ export type DeviceState = { active_workspace_id: string | null,
 /**
  * 워크스페이스 id → 그 워크스페이스에서 마지막으로 본 데스크톱 id.
  */
-active_desktop_ids: { [key in string]: string }, grants: Array<Grant>, };
+active_desktop_ids: { [key in string]: string }, grants: Array<Grant>, 
+/**
+ * (계약 14판) 이 기기에서 `scope: pc` 권한을 허용한 앱과 권한. 앱마다 한 번이고 그 앱의 모든 창이 쓴다.
+ * 앱의 새 버전에서도 같은 `id`의 `pc` 권한이 있으면 이어 쓴다.
+ */
+pc_access: Array<PcAccess>, };
 
 /**
  * 문서를 저장소 md 항목에 연결한다.
@@ -529,7 +534,12 @@ size: number,
 /**
  * (8판) 마지막으로 바뀐 시각(RFC 3339 UTC, 초까지, 예: `2026-10-30T01:02:03Z`). 읽지 못하면 빈 문자열.
  */
-modified: string, };
+modified: string, 
+/**
+ * (계약 14판) `scope: pc`의 내 PC 목록(빈 경로)에서만 붙는 뿌리의 종류. 그때 `path`는 뿌리의 id이고
+ * `name`은 뿌리의 화면 이름, `kind`는 `dir`, `size`는 0, `modified`는 빈 문자열이다.
+ */
+root_kind?: PcRootKind, };
 
 export type FileKind = "file" | "dir";
 
@@ -544,6 +554,24 @@ export type FileKind = "file" | "dir";
  *   밖이면 `path_outside_root`로 거부한다.
  */
 export type FileRef = { permission: string, path: PathValue, };
+
+/**
+ * (모듈 `files` 2판) `files` 권한이 가리키는 범위.
+ *
+ * `pc`의 규칙:
+ * - 읽기 전용이다(`access: read`). 지금은 `explorer` 블록의 `root`만 이 권한을 가리킬 수 있다(검사기가 거부).
+ * - 이 기기에서 이 앱에 처음 쓸 때 허용을 받는다(`files.allow_pc`). 허용 전의 `files.*`는 `not_granted`다.
+ * - 경로의 첫 마디는 뿌리의 id([`PcRootKind`])이고 그 아래는 [`FileRef`]의 경로 규칙을 따른다. 빈 경로는 내 PC 자체이고
+ *   `files.list`는 뿌리들을 낸다(알려진 폴더 먼저, 그다음 볼륨, 각각 이 기기가 준 순서). 뿌리에 없는 첫 마디는
+ *   `not_found`다. 창 상태에 이 경로를 두므로 다른 PC에서도 같은 알려진 폴더 아래를 연다(없으면 `not_found`).
+ * - 코어는 이 쉘 자신의 데이터 폴더(기기 토큰, 로그인 정보) 안을 가리키는 경로를 `permission_denied`로 거부하고,
+ *   목록에서도 뺀다.
+ * - Windows에서는 숨김이나 시스템 속성이 있는 항목을 목록에서 뺀다(`$Recycle.Bin`, `System Volume Information`,
+ *   `pagefile.sys`, 문서 폴더의 `My Music` 같은 연결점). 이 규칙은 `folder` 범위의 목록에도 같다.
+ * - 탐색기가 이 범위의 파일을 열면(`files.open`) 여는 앱의 창에는 그 파일이 든 폴더를 고른 것으로 두고, 경로는
+ *   파일 이름이다. 여는 앱은 PC 전체를 받지 않는다.
+ */
+export type FilesScope = "folder" | "pc";
 
 /**
  * `folder` 원천의 항목.
@@ -698,13 +726,35 @@ export type PatchThreadRequest = { title?: string, archived?: boolean, model?: s
 export type PathValue = StateRef | string;
 
 /**
+ * (계약 14판) 이 기기에서 앱 하나의 `scope: pc` 권한 하나를 허용한 기록. 기기 밖으로 나가지 않는다.
+ */
+export type PcAccess = { app_id: string, 
+/**
+ * 앱 정의의 권한 `id`.
+ */
+permission: string, granted_at: string, };
+
+/**
+ * (계약 14판) 내 PC 뿌리의 종류. 뿌리 하나는 id(경로의 첫 마디), 종류, 화면 이름, 이 기기의 절대 경로이고,
+ * 코어의 호스트가 이 기기에서 찾아 준다(절대 경로는 화면과 서버에 보내지 않는다).
+ * - 알려진 폴더: id는 [`PC_KNOWN_FOLDERS`]의 id, 이름은 그 표의 이름.
+ * - 볼륨: Windows는 id가 드라이브 글자 하나(대문자, 예: `C`)이고 이름은 「볼륨 이름 (C:)」, 볼륨 이름이 없으면
+ *   「로컬 디스크 (C:)」다.
+ */
+export type PcRootKind = "known" | "volume";
+
+/**
  * 앱이 쓰겠다고 선언하는 권한. 실제로 허락하는 것은 기기마다 사용자다.
  */
 export type PermissionDecl = { "module": "files", id: string, access: FileAccess, 
 /**
- * 폴더를 고르라고 할 때 보일 이름(예: "문서 폴더").
+ * 폴더를 고르라고 할 때 보일 이름(예: "문서 폴더"). `scope: pc`면 탐색기 경로의 맨 앞 마디 이름(예: "내 PC").
  */
-label: string, } | { "module": "connection", id: string, 
+label: string, 
+/**
+ * (모듈 `files` 2판) 없으면 `folder`다.
+ */
+scope?: FilesScope, } | { "module": "connection", id: string, 
 /**
  * 서버에 등록한 연결 이름(소문자, 숫자, `-` 1~64자).
  */
