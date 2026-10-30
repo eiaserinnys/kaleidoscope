@@ -38,7 +38,9 @@ test("모델을 골라 시작", async ({ page }) => {
   await chat.getByRole("button", { name: "모델" }).click();
   const menu = page.getByRole("menu");
   await expect(menu.getByText("eiaserinnys")).toBeVisible();
-  await expect(menu.getByRole("menuitem", { name: /한도 거부 중, 내일 07:06 풀림/ })).toBeDisabled();
+  const blockedModel = menu.getByRole("menuitem", { name: /한도 거부 중/ });
+  await expect(blockedModel).toBeDisabled();
+  await expect(blockedModel).toContainText("풀림");
   await capture(page, "start-menu");
   await chat.getByRole("button", { name: "모델" }).click();
   await chat.getByRole("button", { name: "시작" }).click();

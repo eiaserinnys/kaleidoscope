@@ -195,7 +195,7 @@ const fakeTransport = createFakeTransport({
     profiles: [{ id: "profile-a", label: "서소영", available: true }, { id: "profile-b", label: "키키", available: true }],
     start: { profile: "profile-a", model: "sol" },
     models: [
-      { id: "argon", label: "Argon", available: false, reason: "한도 거부 중", reason_code: "limit_rejected", resets_at: new Date(2026, 9, 31, 7, 6).toISOString(), group: { id: "eiaserinnys", label: "eiaserinnys" } },
+      { id: "argon", label: "Argon", available: false, reason: "한도 거부 중", reason_code: "limit_rejected", resets_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), group: { id: "eiaserinnys", label: "eiaserinnys" } },
       { id: "sol", label: "Sol", available: true, group: { id: "eiaserinnys", label: "eiaserinnys" } },
       { id: "n1:eias-linegames:argon", label: "Argon", available: true, group: { id: "eias-linegames", label: "eias-linegames" } },
     ],

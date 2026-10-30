@@ -20,7 +20,7 @@ const item = (id: string, text: string): ConversationItem => ({ id, kind: "assis
 const models = [
   { id: "m", label: "모델", available: true, group: { id: "node-a", label: "노드 A" } },
   { id: "m-same", label: "모델 같은 노드", available: true, group: { id: "node-a", label: "노드 A" } },
-  { id: "off", label: "불가", available: false, reason: "한도 거부 중", reason_code: "limit_rejected", resets_at: "2026-10-31T07:06:00+09:00", group: { id: "node-a", label: "노드 A" } },
+  { id: "off", label: "불가", available: false, reason: "한도 거부 중", reason_code: "limit_rejected", resets_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), group: { id: "node-a", label: "노드 A" } },
   { id: "m2", label: "모델 2", available: true, group: { id: "node-b", label: "노드 B" } },
 ];
 const profiles = [{ id: "profile-a", label: "서소영", available: true }, { id: "profile-b", label: "키키", available: true }];
@@ -83,7 +83,8 @@ describe("대화 제공자 화면", () => {
     fireEvent.click(screen.getByRole("button", { name: "모델" }));
     expect(screen.getByRole("menuitem", { name: /불가/ })).toBeTruthy();
     expect((screen.getByRole("menuitem", { name: /불가/ }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/한도 거부 중, 내일 07:06 풀림/)).toBeTruthy();
+    expect(screen.getByText(/한도 거부 중/)).toBeTruthy();
+    expect(screen.getByText(/풀림/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "모델" }));
     fireEvent.click(screen.getByRole("button", { name: "시작" }));
     await screen.findByRole("textbox", { name: "메시지" });
@@ -292,11 +293,16 @@ describe("공용 대화 부품", () => {
 
 describe("모델 풀림 시각", () => {
   it("기기 지역 시각으로 오늘, 내일, 그 밖의 날짜를 표시한다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 30, 12, 0));
     const local = (month: number, day: number, hour: number, minute: number) => new Date(2026, month - 1, day, hour, minute).toISOString();
-    const now = new Date(2026, 9, 30, 12, 0);
-    expect(modelAvailabilityDescription({ reason: "한도 거부 중", resets_at: local(10, 30, 14, 6) }, now)).toBe("한도 거부 중, 오늘 14:06 풀림");
-    expect(modelAvailabilityDescription({ reason: "한도 거부 중", resets_at: local(10, 31, 7, 6) }, now)).toBe("한도 거부 중, 내일 07:06 풀림");
-    expect(modelAvailabilityDescription({ reason: "한도 거부 중", resets_at: local(11, 2, 7, 6) }, now)).toBe("한도 거부 중, 11월 2일 07:06 풀림");
+    try {
+      expect(modelAvailabilityDescription({ reason: "한도 거부 중", resets_at: local(10, 30, 14, 6) })).toBe("한도 거부 중, 오늘 14:06 풀림");
+      expect(modelAvailabilityDescription({ reason: "한도 거부 중", resets_at: local(10, 31, 7, 6) })).toBe("한도 거부 중, 내일 07:06 풀림");
+      expect(modelAvailabilityDescription({ reason: "한도 거부 중", resets_at: local(11, 2, 7, 6) })).toBe("한도 거부 중, 11월 2일 07:06 풀림");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
