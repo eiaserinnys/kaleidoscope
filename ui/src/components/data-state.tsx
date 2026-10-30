@@ -7,7 +7,7 @@ import { DataIcon } from "./data-icons";
 import { FolderOpen } from "./icons";
 import { Button, EmptyState } from "./primitives";
 
-export function DataState({ value, compact = false, onRetry }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; onRetry?: () => void }) {
+export function DataState({ value, compact = false, onRetry, onLogin }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; onRetry?: () => void; onLogin?: () => void }) {
   const data = useWindowData();
   const snapshot = useShellSnapshot(data.store);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +37,7 @@ export function DataState({ value, compact = false, onRetry }: { value: Exclude<
     <EmptyState icon={<DataIcon name={isLogin ? "log-in" : "triangle-alert"} size={compact ? "inline" : "empty"} />}
       text={error ?? (isLogin ? "로그인이 필요합니다" : value.message)}
       action={isLogin
-        ? <Button onClick={() => { void data.store.call({ op: "connection.login", window_id: data.windowId, permission: value.permission }).catch((reason: unknown) => setError(typeof reason === "object" && reason !== null && "message" in reason ? String(reason.message) : String(reason))); }}>로그인</Button>
+        ? <Button onClick={() => { setError(null); void data.store.call({ op: "connection.login", window_id: data.windowId, permission: value.permission }).then(() => onLogin?.()).catch((reason: unknown) => setError(toCoreError(reason).message)); }}>로그인</Button>
         : onRetry ? <Button onClick={onRetry}>다시 받기</Button> : value.retry.length ? <Button onClick={() => { void data.refresh(value.retry); }}>다시 받기</Button> : undefined} />
   </div>;
 }

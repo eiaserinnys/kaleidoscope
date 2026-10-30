@@ -37,6 +37,10 @@ const storageDocument: AppDefinition = {
 };
 const galleryParams = new URLSearchParams(window.location.search);
 const gallery = galleryForDocs(galleryJson as AppDefinition, galleryParams.has("long-log"), galleryParams.has("crop-image"), galleryParams.has("video-controls"));
+const conversationMode = new URLSearchParams(window.location.search).get("conversation");
+if (conversationMode) workspacePas.agent = {
+  protocol: "conversation-v1", permission: "conversation", base_path: "api", namespace: "test", profile: "test", collection: "test", model_order: [], selected_model: "", title_template: "", initial_instruction_template: "", instructions_template: "", thread_entry: "thread",
+};
 const definitions = [mdEditor, mdViewer, workspacePas, dataLayoutApp, gallery, dataViewsApp, storageDocument];
 const timestamp = "2026-10-28T00:00:00Z";
 
@@ -179,7 +183,7 @@ const connectedSnapshot: ShellSnapshot = {
   ...mdViewerSnapshot,
   link: { state: "connected", server_url: "https://kaleidoscope.example", device_name: "개발 PC" },
 };
-const demoSnapshot: ShellSnapshot = ["ready", "empty", "loading", "load-error", "send-error"].includes(pasMode ?? "")
+const demoSnapshot: ShellSnapshot = conversationMode ? connectedSnapshot : ["ready", "empty", "loading", "load-error", "send-error"].includes(pasMode ?? "")
   ? connectedSnapshot
   : pasMode === "offline"
     ? { ...mdViewerSnapshot, link: { state: "offline", server_url: "https://kaleidoscope.example", device_name: "개발 PC", reason: "서버에 닿지 않습니다" } }
@@ -203,6 +207,14 @@ const fakeTransport = createFakeTransport({
   media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone },
   folder: { root_path: "/fake/docs", root_name: "문서" },
   agentModels,
+  conversation: conversationMode ? {
+    thread: conversationMode === "start" ? null : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "argon", label: "Argon" }, created_at: timestamp, archived: false },
+    items: [{ id: "1", kind: "assistant", text: "기존 기록", at: timestamp, attachments: [] }],
+    older: [{ id: "0", kind: "user", text: "이전 기록", at: timestamp, attachments: [] }],
+    models: [{ id: "argon", label: "Argon", available: true }, { id: "disabled", label: "Sol", available: false, reason: "사용 불가" }],
+    loginRequired: conversationMode === "login", conflict: conversationMode === "conflict", delayMs: 350,
+    draft: conversationMode === "draft" ? { request_id: "draft-id", text: "복원된 초안", attachments: [{ name: "메모.txt", mime: "text/plain", data_base64: "aGVsbG8=" }], failed: false } : undefined,
+  } : undefined,
   agentGetDelayMs: pasMode === "loading" ? 5000 : undefined,
   agentGetError: pasMode === "load-error" ? "작업 PAS를 불러오지 못했습니다" : undefined,
   agentSendError: pasMode === "send-error" ? "메시지를 보내지 못했습니다" : undefined,
@@ -228,7 +240,10 @@ const fakeTransport = createFakeTransport({
 const coreUrl = new URLSearchParams(window.location.search).get("core");
 const transport = coreUrl ? createHttpTransport(coreUrl) : fakeTransport;
 const store = createShellStore(transport);
-if (!coreUrl) exposeDocsHarness(fakeTransport, store);
+if (!coreUrl) {
+  exposeDocsHarness(fakeTransport, store);
+  Object.assign(window, { conversationHarness: { emit: fakeTransport.emit, calls: fakeTransport.getCalls } });
+}
 
 function Harness() {
   const remoteEdits = useRef(0);
@@ -238,7 +253,7 @@ function Harness() {
   const dataWindow = snapshot?.shared.windows.find((item) => item.app_id === "data-controls");
   const viewsWindow = snapshot?.shared.windows.find((item) => item.app_id === "data-views-test");
   const galleryWindow = snapshot?.shared.windows.find((item) => item.app_id === "block-gallery");
-  const pasWindow = snapshot?.shared.windows.find((item) => item.app_id === "workspace-pas");
+  const pasWindow = snapshot?.shared.windows.find((item) => item.app_id === "workspace-pas" || (coreUrl && snapshot.shared.app_versions.some((version) => version.app_id === item.app_id && version.version === item.app_version && version.definition.agent)));
   const storageWindow = snapshot?.shared.windows.find((item) => item.app_id === "storage-document");
 
   return (

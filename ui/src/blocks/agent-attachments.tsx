@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import type { AgentAttachment, AgentUpload } from "../contract/contract";
+import type { AgentAttachment, AgentUpload, ConversationAttachment } from "../contract/contract";
 import { File as FileIcon, X } from "../components/icons";
 import { IconButton } from "../components/primitives";
 import type { ShellStore } from "../core/shell-store";
@@ -53,8 +53,8 @@ export function PendingAttachment({ attachment, onPreview }: { attachment: Draft
 
 const attachmentCache = new Map<string, Promise<string>>();
 
-export function HistoryAttachment({ attachment, workspaceId, itemId, index, store, onPreview, onError }: {
-  attachment: AgentAttachment; workspaceId: string; itemId: string; index: number; store: ShellStore;
+export function HistoryAttachment({ attachment, workspaceId, windowId, itemId, index, store, onPreview, onError }: {
+  attachment: AgentAttachment | ConversationAttachment; workspaceId: string; windowId?: string; itemId: string; index: number; store: ShellStore;
   onPreview: OpenPreview; onError: (message: string) => void;
 }) {
   const [src, setSrc] = useState<string | null>(null);
@@ -62,21 +62,27 @@ export function HistoryAttachment({ attachment, workspaceId, itemId, index, stor
   const [opening, setOpening] = useState(false);
   useEffect(() => {
     if (!attachment.mime.startsWith("image/")) return;
-    const key = JSON.stringify([workspaceId, itemId, index]);
+    const key = JSON.stringify([windowId ?? workspaceId, itemId, "id" in attachment ? attachment.id : index]);
     let promise = attachmentCache.get(key);
     if (!promise) {
-      promise = store.call({ op: "agent.attachment", workspace_id: workspaceId, item_id: itemId, index })
+      const request = windowId && "id" in attachment
+        ? { op: "conversation.attachment" as const, window_id: windowId, item_id: itemId, attachment_id: attachment.id }
+        : { op: "agent.attachment" as const, workspace_id: workspaceId, item_id: itemId, index };
+      promise = store.call(request)
         .then((reply) => `data:${reply.mime};base64,${reply.data_base64}`);
       attachmentCache.set(key, promise);
     }
     let active = true;
     promise.then((value) => { if (active) setSrc(value); }, () => { if (active) setFailed(true); });
     return () => { active = false; };
-  }, [attachment.mime, workspaceId, itemId, index, store]);
+  }, [attachment, workspaceId, windowId, itemId, index, store]);
 
   const open = async () => {
     setOpening(true);
-    try { await store.call({ op: "agent.attachment_open", workspace_id: workspaceId, item_id: itemId, index }); }
+    try {
+      if (windowId && "id" in attachment) await store.call({ op: "conversation.attachment_open", window_id: windowId, item_id: itemId, attachment_id: attachment.id });
+      else await store.call({ op: "agent.attachment_open", workspace_id: workspaceId, item_id: itemId, index });
+    }
     catch (reason) { onError(toCoreError(reason).message); }
     finally { setOpening(false); }
   };
