@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const captures = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../.local/tmp/card818-kl-followup");
+const captures = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../.local/tmp/card818-kl-focus");
 
 test("저장된 설정의 미적용 알림과 다시 시도", async ({ page }) => {
   await page.route("**/src/harness.tsx*", async (route) => {
@@ -43,7 +43,7 @@ test("저장된 설정의 미적용 알림과 다시 시도", async ({ page }) =
   await expect(notice).toBeVisible();
   await expect(retry).toBeDisabled();
   await expect(page.getByRole("status", { name: "적용 중" })).toBeVisible();
-  await expect(heading).toBeFocused();
+  expect(await page.evaluate(() => document.activeElement === document.body || Boolean(document.activeElement?.closest(".ks-settings-group[aria-busy=true]")))).toBe(true);
   await capture("pending");
   await page.evaluate(() => (window as any).__ksApplyStatus("unapplied"));
   await expect(retry).toBeEnabled();
@@ -51,6 +51,20 @@ test("저장된 설정의 미적용 알림과 다시 시도", async ({ page }) =
   await capture("failed");
   await retry.click();
   await expect(retry).toBeDisabled();
+  const input = page.getByRole("textbox", { name: "에이전트", exact: true });
+  await input.click();
+  await page.evaluate(() => (window as any).__ksApplyStatus("unapplied"));
+  await expect(input).toBeFocused();
+  await expect(retry).toBeEnabled();
+  await capture("editing-failed");
+  await retry.click();
+  await input.click();
+  await page.evaluate(() => (window as any).__ksApplyStatus("applied"));
+  await expect(notice).toHaveCount(0);
+  await expect(input).toBeFocused();
+  await page.evaluate(() => (window as any).__ksApplyStatus("unapplied"));
+  await expect(notice).toBeVisible();
+  await retry.click();
   await page.evaluate(() => (window as any).__ksApplyStatus("applied"));
   await expect(notice).toHaveCount(0);
   await expect(heading).toBeFocused();

@@ -42,6 +42,12 @@ it("저장과 제공자 적용을 따로 표시하고 다시 시도한다", asyn
   expect(retry.hasAttribute("disabled")).toBe(false);
   await userEvent.setup().click(retry);
   expect(retry.hasAttribute("disabled")).toBe(true);
+  const input = screen.getByRole("textbox", { name: "역할" });
+  await userEvent.setup().click(input);
+  act(() => transport.emit({ event: "conversation.apply_status", app_id: definition.id, status: "unapplied" }));
+  await waitFor(() => expect(retry.hasAttribute("disabled")).toBe(false));
+  expect(document.activeElement).toBe(input);
+  await userEvent.setup().click(retry);
   act(() => transport.emit({ event: "conversation.apply_status", app_id: definition.id, status: "applied" }));
   await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   expect(document.activeElement).toBe(screen.getByRole("heading", { name: "앱 설정" }));

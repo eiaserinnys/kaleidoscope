@@ -27,8 +27,11 @@ export function AppSettings({ context, open, onClose, onProblem }: { context: Bl
   useEffect(() => { if (open) title.current?.focus(); }, [open]);
   useEffect(() => {
     if (!open || !restoreRetryFocus.current || applyStatus === "applying") return;
-    if (applyStatus === "unapplied") applyNotice.current?.querySelector<HTMLButtonElement>("button")?.focus();
-    else title.current?.focus();
+    const focused = document.activeElement;
+    if (focused === document.body || (focused && applyNotice.current?.contains(focused))) {
+      if (applyStatus === "unapplied") applyNotice.current?.querySelector<HTMLButtonElement>("button")?.focus();
+      else title.current?.focus();
+    }
     restoreRetryFocus.current = false;
   }, [open, applyStatus]);
   useEffect(() => {
@@ -57,7 +60,6 @@ export function AppSettings({ context, open, onClose, onProblem }: { context: Bl
     <header className="ks-data-toolbar"><IconButton aria-label="앱으로 돌아가기" onClick={close}><ArrowLeft /></IconButton><h2 ref={title} tabIndex={-1}>앱 설정</h2></header>
     <div className="ks-app-settings-scroll">{context.definition.agent && showApplyNotice ? <section className="ks-settings-group" ref={applyNotice} aria-busy={applyStatus === "applying"}><Notice role="alert" actions={[<Button key="retry" disabled={applyStatus === "applying"} onClick={() => {
       restoreRetryFocus.current = true;
-      title.current?.focus();
       setApplyStatus("applying");
       void context.store.call({ op: "conversation.apply_retry", window_id: context.window.id }).catch(() => setApplyStatus("unapplied"));
     }}>{applyStatus === "applying" ? <span className="ks-settings-apply-progress" role="status" aria-label="적용 중"><LoaderCircle size="inline" className="ks-settings-apply-spinner" /></span> : null}다시 시도</Button>]}>대화에 적용 안 됨</Notice></section> : null}{groups.map((items, group) => items.length ? <section className="ks-settings-group" key={group}>
