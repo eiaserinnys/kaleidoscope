@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const artifactDir = path.join(root, ".local/artifacts/20261030-web-view-explorer");
+const artifactDir = path.join(root, ".local/artifacts/20261030-explorer-two-panes");
 
 interface HarnessWindow extends Window {
   __kaleidoscopeHarness?: {
@@ -51,6 +51,24 @@ async function raiseExplorer(page: Page, explorer: Locator) {
   const bounds = await explorer.boundingBox();
   if (!bounds) throw new Error("탐색기 창 위치를 읽지 못했습니다");
   await page.mouse.click(bounds.x + bounds.width * 0.8, bounds.y + 16);
+}
+
+async function explorerHeaderMetrics(page: Page) {
+  return page.evaluate(() => {
+    const root = document.querySelector<HTMLElement>('[data-testid="app-window-explorer"]');
+    const panes = root?.querySelectorAll<HTMLElement>(".ks-split-pane");
+    const left = panes?.[0]?.querySelector<HTMLElement>(".ks-file-tree-header");
+    const right = root?.querySelector<HTMLElement>(".ks-explorer-content > .ks-file-tree-header");
+    if (!left || !right) throw new Error("탐색기 좌우 머리를 찾지 못했습니다");
+    const leftBounds = left.getBoundingClientRect();
+    const rightBounds = right.getBoundingClientRect();
+    return {
+      left: { top: leftBounds.top, height: leftBounds.height },
+      right: { top: rightBounds.top, height: rightBounds.height },
+      topDelta: leftBounds.top - rightBounds.top,
+      heightDelta: leftBounds.height - rightBounds.height,
+    };
+  });
 }
 
 test("web view overlap and explorer open behavior in the shell harness", async ({ page }) => {
@@ -199,10 +217,47 @@ test("web view overlap and explorer open behavior in the shell harness", async (
 
   await raiseExplorer(page, explorer);
   await explorer.getByRole("button", { name: "볼 폴더 고르기" }).click();
-  await expect(explorer.getByRole("button", { name: "notes" })).toBeVisible();
+  const folders = explorer.getByRole("tree", { name: "폴더 목록" });
+  await expect(folders.getByRole("button", { name: "notes" })).toBeVisible();
   await expect(explorer.getByRole("button", { name: "새 파일" })).toHaveCount(0);
-  await explorer.getByRole("button", { name: "notes" }).click();
-  await explorer.getByRole("button", { name: "a.md" }).dblclick();
+  await folders.getByRole("button", { name: "notes" }).click();
+  await expect(explorer.locator('[data-file-path="notes/a.md"]')).toBeVisible();
+  await screenshot(page, "explorer-icons-wide-1440x900.png");
+
+  const explorerTitlebar = explorer.locator(".ks-window-titlebar");
+  const explorerTitlebarBounds = await explorerTitlebar.boundingBox();
+  if (!explorerTitlebarBounds) throw new Error("탐색기 제목 줄을 찾지 못했습니다");
+  const explorerTitlebarCenter = {
+    x: explorerTitlebarBounds.x + explorerTitlebarBounds.width / 2,
+    y: explorerTitlebarBounds.y + explorerTitlebarBounds.height / 2,
+  };
+  await page.mouse.move(explorerTitlebarCenter.x, explorerTitlebarCenter.y);
+  await page.mouse.down();
+  await page.mouse.move(explorerTitlebarCenter.x - 480, explorerTitlebarCenter.y - 150, { steps: 3 });
+  await page.mouse.up();
+  await page.setViewportSize({ width: 720, height: 600 });
+  await screenshot(page, "explorer-icons-narrow-720x600.png");
+  await explorer.getByRole("button", { name: "자세히 보기" }).click();
+  await expect(explorer.getByRole("table", { name: "폴더 내용" })).toBeVisible();
+  await screenshot(page, "explorer-details-narrow-720x600.png");
+  const narrowExplorerHeaders = await explorerHeaderMetrics(page);
+  expect(Math.abs(narrowExplorerHeaders.topDelta)).toBeLessThanOrEqual(1);
+  expect(Math.abs(narrowExplorerHeaders.heightDelta)).toBeLessThanOrEqual(1);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await screenshot(page, "explorer-details-wide-1440x900.png");
+  const wideExplorerHeaders = await explorerHeaderMetrics(page);
+  expect(Math.abs(wideExplorerHeaders.topDelta)).toBeLessThanOrEqual(1);
+  expect(Math.abs(wideExplorerHeaders.heightDelta)).toBeLessThanOrEqual(1);
+  await writeFile(path.join(artifactDir, "explorer-header-measurements.json"), JSON.stringify({ wide: wideExplorerHeaders, narrow: narrowExplorerHeaders }, null, 2));
+  await explorer.getByRole("button", { name: "아이콘 보기" }).click();
+  await expect(explorer.locator('[data-file-path="notes/a.md"]')).toBeVisible();
+  const movedExplorerBounds = await explorer.boundingBox();
+  if (!movedExplorerBounds) throw new Error("옮긴 탐색기 창 위치를 읽지 못했습니다");
+  await page.mouse.move(movedExplorerBounds.x + movedExplorerBounds.width / 2, movedExplorerBounds.y + 16);
+  await page.mouse.down();
+  await page.mouse.move(movedExplorerBounds.x + movedExplorerBounds.width / 2 + 480, movedExplorerBounds.y + 166, { steps: 3 });
+  await page.mouse.up();
+  await explorer.locator('[data-file-path="notes/a.md"]').dblclick();
 
   const editor = page.getByTestId("app-window-md-editor");
   await expect(editor).toBeVisible();
@@ -215,28 +270,32 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await raiseExplorer(page, explorer);
-  await explorer.getByRole("button", { name: "b.md" }).dblclick();
+  await explorer.locator('[data-file-path="notes/b.md"]').dblclick();
   await expect(editor.getByText("두 번째 노트")).toBeVisible();
   const afterB = (await controls(page)).snapshot?.shared.windows.filter((item) => item.app_id === "md-editor") ?? [];
   expect(afterB).toHaveLength(1);
   expect(afterB[0].id).toBe(openedA?.id);
   expect(afterB[0].state.current_file).toBe("notes/b.md");
-  const invariantBefore = await editor.locator(".ks-file-tree").screenshot();
+  await editor.locator(".ks-window-titlebar").click();
+  const editorFileTree = editor.locator(".ks-file-tree");
+  const invariantBefore = await editorFileTree.screenshot({ path: path.join(artifactDir, "md-editor-file-tree-before.png") });
 
   await raiseExplorer(page, explorer);
-  await explorer.getByRole("button", { name: "images" }).click();
-  await explorer.getByRole("button", { name: "cover.png" }).dblclick();
+  await folders.getByRole("button", { name: "images" }).click();
+  await explorer.locator('[data-file-path="images/cover.png"]').dblclick();
   const noOpeners = page.getByRole("menuitem", { name: "열 수 있는 앱이 없습니다" });
   await expect(noOpeners).toBeVisible();
   await expect(noOpeners).toBeDisabled();
   await page.keyboard.press("Escape");
 
-  await explorer.getByRole("button", { name: "a.md" }).click({ button: "right" });
+  await folders.getByRole("button", { name: "notes" }).click();
+  await expect(explorer.locator('[data-file-path="notes/a.md"]')).toBeVisible();
+  await explorer.locator('[data-file-path="notes/a.md"]').click({ button: "right" });
   const appOpenMenu = page.getByRole("menu");
   await expect(appOpenMenu).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "마크다운 편집기" })).toBeVisible();
   const appOpenPlacement = await page.evaluate(() => {
-    const anchor = document.querySelector<HTMLElement>('[data-file-path="notes/a.md"] button');
+    const anchor = document.querySelector<HTMLElement>('[data-file-path="notes/a.md"]');
     const menu = document.querySelector<HTMLElement>("[role=menu]");
     if (!anchor || !menu) throw new Error("앱 열기 메뉴의 위치를 읽지 못했습니다");
     const anchorBounds = anchor.getBoundingClientRect();
@@ -251,7 +310,7 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   await page.setViewportSize({ width: 960, height: 600 });
   await screenshot(page, "md-editor-invariant-narrow-after-others.png");
   await page.setViewportSize({ width: 1440, height: 900 });
-  const invariantAfter = await editor.locator(".ks-file-tree").screenshot();
+  const invariantAfter = await editorFileTree.screenshot({ path: path.join(artifactDir, "md-editor-file-tree-after.png") });
   const beforeHash = createHash("sha256").update(invariantBefore).digest("hex");
   const afterHash = createHash("sha256").update(invariantAfter).digest("hex");
   expect(afterHash).toBe(beforeHash);
@@ -305,11 +364,11 @@ test("keeps the last file open menu inside a 720x600 viewport", async ({ page })
   const explorer = page.getByTestId("app-window-explorer");
   await expect(explorer).toBeVisible();
   await explorer.getByRole("button", { name: "볼 폴더 고르기" }).click();
-  const files = explorer.locator("[data-file-path]");
+  const files = explorer.locator(".ks-explorer-content [data-file-path]");
   await expect(files).toHaveCount(30);
-  const list = explorer.locator(".ks-file-tree-list");
+  const list = explorer.locator(".ks-explorer-content .ks-data-view");
   await list.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-  const lastFile = explorer.getByRole("button", { name: "z29.md" });
+  const lastFile = explorer.locator('[data-file-path="z29.md"]');
   await lastFile.scrollIntoViewIfNeeded();
   await expect(lastFile).toBeVisible();
   await expect.poll(() => list.evaluate((element) => element.scrollTop + element.clientHeight >= element.scrollHeight - 1)).toBe(true);
@@ -318,7 +377,7 @@ test("keeps the last file open menu inside a 720x600 viewport", async ({ page })
   const menu = page.getByRole("menu");
   await expect(page.getByRole("menuitem", { name: "마크다운 편집기" })).toBeVisible();
   const placement = await page.evaluate(() => {
-    const anchor = document.querySelector<HTMLElement>('[data-file-path="z29.md"] button');
+    const anchor = document.querySelector<HTMLElement>('[data-file-path="z29.md"]');
     const menu = document.querySelector<HTMLElement>("[role=menu]");
     if (!anchor || !menu) throw new Error("마지막 파일 메뉴의 위치를 읽지 못했습니다");
     const anchorBounds = anchor.getBoundingClientRect();
