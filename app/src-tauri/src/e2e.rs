@@ -289,13 +289,6 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
     })?;
     record(log, "child.ipc", json!({"url": page.url}))?;
     ipc_denied(&page.url)?;
-    call(
-        core,
-        CoreRequest::WindowClose {
-            window_id: window_id.clone(),
-        },
-    )?;
-
     let (editor_id, editor_bounds) = match call(
         core,
         CoreRequest::WindowOpen {
@@ -379,6 +372,12 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
         log,
         "files.pick_folder",
         json!({"window_id": editor_id, "permission": "docs", "granted": true}),
+    )?;
+    call(
+        core,
+        CoreRequest::WindowClose {
+            window_id: window_id.clone(),
+        },
     )?;
     if let Err(error) = ui::run(app, core, out, log) {
         let _ = record(log, "ui.error", json!({"message": error}));

@@ -80,9 +80,6 @@ pub(crate) fn view(
     window_id: &str,
     view: VisibleView,
 ) -> Result<CoreReply, CoreError> {
-    if view.text.len() > SHARE_TEXT_MAX_BYTES {
-        return Err(error::make(ErrorCode::InvalidRequest));
-    }
     let upload = {
         let mut state = inner.state.lock().unwrap();
         if !state
@@ -95,6 +92,9 @@ pub(crate) fn view(
         }
         if !state.share.sharing.iter().any(|id| id == window_id) {
             return Ok(CoreReply::ShareView {});
+        }
+        if view.text.len() > SHARE_TEXT_MAX_BYTES {
+            return Err(error::make(ErrorCode::InvalidRequest));
         }
         state.share.views.insert(window_id.to_owned(), view.clone());
         if !connected(inner, &state)
@@ -328,8 +328,27 @@ pub(crate) fn capture_for_agent_send(
                     if !view.visual {
                         return None;
                     }
+                    let app = state
+                        .shared
+                        .apps
+                        .iter()
+                        .find(|app| app.id == window.app_id)?;
+                    let definition = crate::app_commands::definition_for(
+                        &state.shared,
+                        &app.id,
+                        app.current_version,
+                    )?;
+                    let mut has_web = false;
+                    kaleidoscope_contract::data::walk_blocks(
+                        &definition.ui,
+                        "",
+                        &mut |_, child| {
+                            if matches!(child, kaleidoscope_contract::Block::WebView { .. }) {
+                                has_web = true;
+                            }
+                        },
+                    );
                     let upload = share_upload(&state, id, view)?;
-                    let has_web = crate::web::window_web(&state, id).ok().flatten().is_some();
                     Some((
                         id.clone(),
                         view.bounds,

@@ -179,20 +179,30 @@ fn share_set_updates_snapshot_once_and_share_view_validates_size() {
     .unwrap();
     assert!(rx.try_recv().is_err());
 
-    let too_long = CoreRequest::ShareView {
-        window_id: window_id.clone(),
-        view: kaleidoscope_contract::VisibleView {
-            text: "x".repeat(kaleidoscope_contract::SHARE_TEXT_MAX_BYTES + 1),
-            visual: false,
-            bounds: Rect {
-                x: 0,
-                y: 0,
-                width: 10,
-                height: 10,
-            },
+    let oversized_view = || kaleidoscope_contract::VisibleView {
+        text: "x".repeat(kaleidoscope_contract::SHARE_TEXT_MAX_BYTES + 1),
+        visual: false,
+        bounds: Rect {
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
         },
     };
-    expect_error(core.handle(too_long), ErrorCode::InvalidRequest);
+    expect_error(
+        core.handle(CoreRequest::ShareView {
+            window_id: "missing-window".into(),
+            view: oversized_view(),
+        }),
+        ErrorCode::NotFound,
+    );
+    expect_error(
+        core.handle(CoreRequest::ShareView {
+            window_id: window_id.clone(),
+            view: oversized_view(),
+        }),
+        ErrorCode::InvalidRequest,
+    );
 
     core.handle(CoreRequest::ShareSet {
         window_id: window_id.clone(),
@@ -204,6 +214,11 @@ fn share_set_updates_snapshot_once_and_share_view_validates_size() {
         rx.recv_timeout(Duration::from_secs(1)).unwrap(),
         CoreEvent::StateChanged { .. }
     ));
+    core.handle(CoreRequest::ShareView {
+        window_id,
+        view: oversized_view(),
+    })
+    .unwrap();
 }
 
 #[test]
@@ -559,6 +574,79 @@ fn agent_send_captures_web_and_shell_views_then_suppresses_identical_images() {
         .1
         .attachments
         .is_empty());
+}
+
+#[test]
+fn share_capture_uses_web_view_without_navigation_binding() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(CaptureTestHost {
+        png: Mutex::new(test_png(8, 8)),
+        web_captures: AtomicUsize::new(0),
+        shell_captures: AtomicUsize::new(0),
+    });
+    let client = registry_client();
+    let mut definition: Value = serde_json::from_str(WEB_BROWSER).unwrap();
+    definition["id"] = json!("web-no-navigation");
+    definition["name"] = json!("웹 화면 바인딩 없음");
+    definition["ui"]
+        .as_object_mut()
+        .unwrap()
+        .remove("on_navigate");
+    let definition = serde_json::to_string(&definition).unwrap();
+    let core = Core::open_with_client(
+        CoreConfig {
+            data_dir: temp.path().join("data"),
+            seed_definitions: vec![definition],
+            server_url: "http://127.0.0.1:4219".into(),
+            device_name: "test-device".into(),
+        },
+        host.clone(),
+        client.clone(),
+    )
+    .unwrap();
+    mark_connected(&core);
+    let (workspace_id, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "web-no-navigation");
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    core.handle(CoreRequest::ShareView {
+        window_id,
+        view: kaleidoscope_contract::VisibleView {
+            text: "페이지 모습".into(),
+            visual: true,
+            bounds: Rect {
+                x: 1,
+                y: 1,
+                width: 4,
+                height: 4,
+            },
+        },
+    })
+    .unwrap();
+    core.handle(CoreRequest::AgentSend {
+        workspace_id,
+        text: "look".into(),
+        attachments: vec![],
+    })
+    .unwrap();
+
+    assert_eq!(host.web_captures.load(Ordering::SeqCst), 1);
+    assert_eq!(host.shell_captures.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        client
+            .agent_sends
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .1
+            .attachments
+            .len(),
+        1
+    );
 }
 
 fn active_ids(core: &Core) -> (String, String) {
