@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 20판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 21판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -103,6 +103,11 @@
 //! 블록 세트 8판의 `agent_session`, 모듈 `local_agent` 1판과 `local_agent` 권한을 더했다. 화면 명령 `local_agent.*`,
 //! `local_agent.update` 이벤트, 기기별 실행 허용 기록도 계약에 포함한다. 이 블록은 `agent_chat`의 작업 PAS와 별도로
 //! 기기에서 ACP 에이전트를 실행한다. 세부 wire DTO는 [`local_agent`]에 있다.
+//!
+//! # 계약 21판: 작업 PAS 프로필과 모델 선택
+//! `conversation.get`은 제공자 프로필 목록과 시작 기본값을 함께 돌려주고 선택 프로필로 모델을 조회한다.
+//! `conversation.create`는 선택 프로필을 받을 수 있고, `conversation.switch`는 같은 대화 기록 안에서 프로필이나 모델을 바꾼다.
+//! 모델의 실행 위치 묶음과 제한 정보, thread의 프로필·실행 식별자를 추가한다. 블록 세트, 모듈과 레지스트리 판은 그대로다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -1817,13 +1822,35 @@ pub enum CoreRequest {
 
     /// (모듈 `agent` 3판) 창의 제공자 대화와 최근 기록을 읽는다.
     #[serde(rename = "conversation.get")]
-    ConversationGet { window_id: String },
+    ConversationGet {
+        window_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        profile: Option<String>,
+    },
     /// 이전 기록을 읽는다.
     #[serde(rename = "conversation.history")]
     ConversationHistory { window_id: String, before: String },
     /// 고른 모델로 대화를 만든다.
     #[serde(rename = "conversation.create")]
-    ConversationCreate { window_id: String, model: String },
+    ConversationCreate {
+        window_id: String,
+        model: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        profile: Option<String>,
+    },
+    /// 현재 대화의 프로필이나 모델을 바꾼다. 실행이 바뀌어도 thread와 저장된 기록은 유지한다.
+    #[serde(rename = "conversation.switch")]
+    ConversationSwitch {
+        window_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        profile: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        model: Option<String>,
+    },
     /// 요청 식별자와 글, 첨부를 제공자에 보낸다.
     #[serde(rename = "conversation.send")]
     ConversationSend {
@@ -2151,6 +2178,8 @@ pub enum CoreReply {
         #[ts(optional)]
         next_before: Option<String>,
         models: Vec<conversation::ConversationModel>,
+        profiles: Vec<conversation::ConversationProfile>,
+        start: conversation::ConversationStart,
     },
     #[serde(rename = "conversation.history")]
     ConversationHistory {
@@ -2162,6 +2191,11 @@ pub enum CoreReply {
     #[serde(rename = "conversation.create")]
     ConversationCreate {
         thread: conversation::ConversationThread,
+    },
+    #[serde(rename = "conversation.switch")]
+    ConversationSwitch {
+        thread: conversation::ConversationThread,
+        notices: Vec<String>,
     },
     #[serde(rename = "conversation.send")]
     ConversationSend {},

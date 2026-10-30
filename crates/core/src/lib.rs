@@ -341,6 +341,7 @@ impl Core {
             request @ (CoreRequest::ConversationGet { .. }
             | CoreRequest::ConversationHistory { .. }
             | CoreRequest::ConversationCreate { .. }
+            | CoreRequest::ConversationSwitch { .. }
             | CoreRequest::ConversationSend { .. }
             | CoreRequest::ConversationAttachment { .. }
             | CoreRequest::ConversationAttachmentOpen { .. }) => {

@@ -13,8 +13,10 @@ pub enum ConversationProtocol {
 
 /// 앱 정의의 base_path 기준 경로다. query와 id는 URL component로 인코딩해 붙인다.
 pub const MODELS_PATH: &str = "/models";
+pub const PROFILES_PATH: &str = "/profiles";
 pub const THREADS_PATH: &str = "/threads";
 pub const THREADS_BY_KEY_PATH: &str = "/threads/by-key";
+pub const THREAD_EXECUTION_PATH: &str = "/threads/{thread_id}/execution";
 pub const THREAD_ADOPTION_PATH: &str = "/threads/by-key/adoption";
 pub const THREAD_ITEMS_PATH: &str = "/threads/{thread_id}/items";
 pub const THREAD_EVENTS_PATH: &str = "/threads/{thread_id}/events";
@@ -31,13 +33,53 @@ pub struct ConversationModel {
     pub available: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
+    pub group: Option<ConversationGroup>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub reason_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub resets_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ConversationGroup {
+    pub id: String,
+    pub label: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
 pub struct ModelsReply {
     pub models: Vec<ConversationModel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ConversationProfile {
+    pub id: String,
+    pub label: String,
+    pub available: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ProfilesReply {
+    pub profiles: Vec<ConversationProfile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ConversationStart {
+    pub profile: String,
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -52,6 +94,16 @@ pub struct ExternalKey {
 pub struct ThreadModel {
     pub id: String,
     pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub group: Option<ConversationGroup>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ThreadProfile {
+    pub id: String,
+    pub label: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -61,6 +113,12 @@ pub struct ConversationThread {
     pub external: ExternalKey,
     pub title: String,
     pub model: ThreadModel,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub profile: Option<ThreadProfile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub execution_id: Option<String>,
     pub created_at: String,
     pub archived: bool,
 }
@@ -99,6 +157,19 @@ pub struct AdoptThreadRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
 pub struct EnsureThreadRequest {
+    pub title: String,
+    pub selected_model: String,
+    pub model_order: Vec<String>,
+    pub profile: String,
+    pub collection: String,
+    pub initial_instruction: String,
+    pub instructions: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ExecutionThreadRequest {
+    pub expected_execution_id: String,
     pub title: String,
     pub selected_model: String,
     pub model_order: Vec<String>,
@@ -324,6 +395,36 @@ mod tests {
             matches!(event, ConversationEvent::Text { ref stream_id, ref text } if stream_id == "stream-1" && text == "hello")
         );
         assert_eq!(serde_json::to_value(event).unwrap(), event_json);
+
+        let models_json: serde_json::Value =
+            serde_json::from_str(include_str!("../fixtures/conversation-v1/models.json")).unwrap();
+        let models: ModelsReply = serde_json::from_value(models_json.clone()).unwrap();
+        assert_eq!(serde_json::to_value(models).unwrap(), models_json);
+
+        let profiles_json: serde_json::Value =
+            serde_json::from_str(include_str!("../fixtures/conversation-v1/profiles.json"))
+                .unwrap();
+        let profiles: ProfilesReply = serde_json::from_value(profiles_json.clone()).unwrap();
+        assert_eq!(serde_json::to_value(profiles).unwrap(), profiles_json);
+
+        let thread_json: serde_json::Value =
+            serde_json::from_str(include_str!("../fixtures/conversation-v1/thread.json")).unwrap();
+        let thread: ThreadByKeyReply = serde_json::from_value(thread_json.clone()).unwrap();
+        assert_eq!(serde_json::to_value(thread).unwrap(), thread_json);
+
+        let execution_json: serde_json::Value =
+            serde_json::from_str(include_str!("../fixtures/conversation-v1/execution.json"))
+                .unwrap();
+        let execution: ExecutionThreadRequest =
+            serde_json::from_value(execution_json.clone()).unwrap();
+        assert_eq!(serde_json::to_value(execution).unwrap(), execution_json);
+
+        let legacy: ConversationThread = serde_json::from_str(
+            r#"{"id":"legacy","external":{"namespace":"ns","key":"key"},"title":"Legacy","model":{"id":"model","label":"Model"},"created_at":"2026-10-30T12:00:00Z","archived":false}"#,
+        ).unwrap();
+        assert!(legacy.model.group.is_none());
+        assert!(legacy.profile.is_none());
+        assert!(legacy.execution_id.is_none());
     }
 
     #[test]

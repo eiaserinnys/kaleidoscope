@@ -10,9 +10,10 @@ use std::{collections::BTreeMap, sync::Arc};
 
 pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreReply, CoreError> {
     let window = match &request {
-        CoreRequest::ConversationGet { window_id }
+        CoreRequest::ConversationGet { window_id, .. }
         | CoreRequest::ConversationHistory { window_id, .. }
         | CoreRequest::ConversationCreate { window_id, .. }
+        | CoreRequest::ConversationSwitch { window_id, .. }
         | CoreRequest::ConversationSend { window_id, .. }
         | CoreRequest::ConversationAttachment { window_id, .. }
         | CoreRequest::ConversationAttachmentOpen { window_id, .. } => window_id,
@@ -35,9 +36,51 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
     ctx.client.require_login()?;
     let namespace = ctx.namespace(inner)?;
     match request {
-        CoreRequest::ConversationGet { .. } => {
-            let models = ctx.models()?.models;
+        CoreRequest::ConversationGet { profile, .. } => {
             let thread = ctx.thread(inner, &namespace)?;
+            let config = ctx.values(
+                inner,
+                &[
+                    ("profile", &ctx.provider.profile),
+                    ("selected_model", &ctx.provider.selected_model),
+                    ("model_order", &ctx.provider.model_order),
+                ],
+            )?;
+            let start_profile = config
+                .get("profile")
+                .and_then(Value::as_str)
+                .filter(|profile| !profile.trim().is_empty())
+                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?
+                .to_string();
+            let profile = profile
+                .as_deref()
+                .or_else(|| {
+                    thread
+                        .as_ref()
+                        .and_then(|thread| thread.profile.as_ref().map(|p| p.id.as_str()))
+                })
+                .unwrap_or(&start_profile);
+            let models = ctx.models(Some(profile))?.models;
+            let profiles = ctx.profiles()?.profiles;
+            let model_order: Vec<String> =
+                serde_json::from_value(config.get("model_order").cloned().unwrap_or_default())
+                    .map_err(|_| error::make(ErrorCode::InvalidRequest))?;
+            let selected_model = config.get("selected_model").and_then(Value::as_str);
+            let start_model = selected_model
+                .filter(|selected| {
+                    models
+                        .iter()
+                        .any(|model| model.id == *selected && model.available)
+                })
+                .map(str::to_string)
+                .or_else(|| {
+                    model_order.iter().find_map(|selected| {
+                        models
+                            .iter()
+                            .any(|model| model.id == *selected && model.available)
+                            .then(|| selected.clone())
+                    })
+                });
             let items = if let Some(thread) = &thread {
                 history(&ctx, &thread.id, None)?
             } else {
@@ -68,6 +111,11 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 cursor: items.cursor,
                 next_before: items.next_before,
                 models,
+                profiles,
+                start: kaleidoscope_contract::conversation::ConversationStart {
+                    profile: start_profile,
+                    model: start_model,
+                },
             })
         }
         CoreRequest::ConversationHistory { before, .. } => {
@@ -80,8 +128,8 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 next_before: items.next_before,
             })
         }
-        CoreRequest::ConversationCreate { model, .. } => {
-            let thread = ctx.create(inner, &namespace, &model)?;
+        CoreRequest::ConversationCreate { model, profile, .. } => {
+            let thread = ctx.create(inner, &namespace, &model, profile.as_deref())?;
             let key = format!(
                 "{}\u{0}{}\u{0}{}",
                 ctx.client.info.name, namespace, ctx.workspace.id
@@ -95,6 +143,23 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 "",
             );
             Ok(CoreReply::ConversationCreate { thread })
+        }
+        CoreRequest::ConversationSwitch { profile, model, .. } => {
+            let (thread, notices) =
+                ctx.switch(inner, &namespace, profile.as_deref(), model.as_deref())?;
+            let key = format!(
+                "{}\u{0}{}\u{0}{}",
+                ctx.client.info.name, namespace, ctx.workspace.id
+            );
+            crate::conversation_stream::watch(
+                inner,
+                key,
+                &window,
+                ctx.client.clone(),
+                &thread.id,
+                "",
+            );
+            Ok(CoreReply::ConversationSwitch { thread, notices })
         }
         CoreRequest::ConversationAttachment {
             item_id,

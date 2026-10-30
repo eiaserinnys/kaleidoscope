@@ -48,10 +48,14 @@ class Provider:
         self.cursors = []
         self.reject_patch = False
         self.failed_patches = 0
+        self.models_queries = []
+        self.profile_ensures = []
+        self.execution_requests = []
 
-    def thread(self, namespace, key, thread_id):
+    def thread(self, namespace, key, thread_id, profile="profile-a", model="model-argon", group="node-a", execution_id="execution-1"):
         return {"id": thread_id, "external": {"namespace": namespace, "key": key},
-                "title": "작업", "model": {"id": "model-argon", "label": "Model"},
+                "title": "작업", "model": {"id": model, "label": "Model", "group": {"id": group, "label": group}},
+                "profile": {"id": profile, "label": profile}, "execution_id": execution_id,
                 "created_at": "2026-10-30T00:00:00Z", "archived": False}
 
 
@@ -78,7 +82,18 @@ def serve(provider):
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))) or b"{}")
             with provider.lock:
                 if path == "/models":
-                    return self.respond(200, {"models": [{"id": "model-argon", "label": "Model", "available": True}]})
+                    profile = query.get("profile", [""])[0]
+                    provider.models_queries.append(profile)
+                    models = [
+                        {"id": "model-argon", "label": "Argon", "group": {"id": "node-a", "label": "node-a"}, "available": True},
+                        {"id": "model-sol", "label": "Sol", "group": {"id": "node-a", "label": "node-a"}, "available": True},
+                        {"id": "n1:node-b:preset-a", "label": "Preset A", "group": {"id": "node-b", "label": "node-b"}, "available": profile != "profile-a",
+                         **({} if profile != "profile-a" else {"reason": "이 노드에 프로필 없음", "reason_code": "profile_unavailable"})},
+                    ]
+                    return self.respond(200, {"models": models})
+                if path == "/profiles":
+                    return self.respond(200, {"profiles": [{"id": "profile-a", "label": "Profile A", "available": True},
+                        {"id": "profile-b", "label": "Profile B", "available": True}]})
                 if path == "/threads":
                     refs = [v for (ns, _), v in provider.bindings.items() if ns == key[0]]
                     offset = int(query.get("cursor", ["0"])[0])
@@ -89,7 +104,8 @@ def serve(provider):
                     return self.respond(200, result)
                 if path == "/threads/by-key":
                     if self.command == "PUT":
-                        thread = provider.bindings.setdefault(key, provider.thread(*key, "thread-" + key[1]))
+                        provider.profile_ensures.append(body)
+                        thread = provider.bindings.setdefault(key, provider.thread(*key, "thread-" + key[1], profile=body.get("profile", "profile-a"), model=body.get("selected_model", "model-argon")))
                         return self.respond(200, {"thread": thread, "created": True, "notices": ["notice"]})
                     thread = provider.bindings.get(key)
                     return self.respond(200, {"thread": thread}) if thread else self.respond(404, {"error": {"code": "not_found", "message": "missing"}})
@@ -98,6 +114,16 @@ def serve(provider):
                     thread = provider.bindings.setdefault(key, provider.thread(*key, body["session_id"]))
                     return self.respond(200, {"thread": thread, "created": True, "notices": []})
                 parts = path.strip("/").split("/")
+                if len(parts) == 3 and parts[0] == "threads" and parts[2] == "execution" and self.command == "PUT":
+                    thread = next((v for v in provider.bindings.values() if v["id"] == parts[1]), None)
+                    if not thread:
+                        return self.respond(404, {"error": {"code": "not_found", "message": "missing"}})
+                    provider.execution_requests.append(body)
+                    thread["profile"] = {"id": body["profile"], "label": body["profile"]}
+                    thread["model"]["id"] = body["selected_model"]
+                    thread["model"]["group"] = {"id": "node-b" if body["selected_model"].startswith("n1:") else "node-a", "label": "node-b" if body["selected_model"].startswith("n1:") else "node-a"}
+                    thread["execution_id"] = "execution-" + str(len(provider.execution_requests) + 1)
+                    return self.respond(200, {"thread": thread, "created": False, "notices": ["execution changed"]})
                 if len(parts) == 2 and parts[0] == "threads":
                     thread = next((v for v in provider.bindings.values() if v["id"] == parts[1]), None)
                     if not thread:
@@ -109,7 +135,9 @@ def serve(provider):
                         provider.patches.append((parts[1], body))
                         if "title" in body: thread["title"] = body["title"]
                         if body.get("archived"): thread["archived"] = True
-                        if "model" in body: thread["model"]["id"] = body["model"]
+                        if "model" in body:
+                            thread["model"]["id"] = body["model"]
+                            thread["model"]["group"] = {"id": "node-a", "label": "node-a"}
                         return self.respond(200, {"thread": thread})
                     return self.respond(200, {"thread": thread, "busy": False, "tool": None, "current_model": thread["model"]})
                 if len(parts) >= 3 and parts[0] == "threads":
@@ -266,7 +294,11 @@ def run(services_log_path=None):
             ready = threading.Event()
             threading.Thread(target=read_events, args=(url1, events, ready), daemon=True).start()
             assert ready.wait(5)
-            assert call(url1, "conversation.get", window_id=window)["thread"] is None
+            initial = call(url1, "conversation.get", window_id=window, profile="profile-b")
+            assert initial["thread"] is None
+            assert [profile["id"] for profile in initial["profiles"]] == ["profile-a", "profile-b"]
+            assert initial["start"] == {"profile": "default", "model": "model-argon"}, initial["start"]
+            assert provider.models_queries[-1] == "profile-b", provider.models_queries
             draft_event = until("보존 초안 전달", lambda: (event if (not events.empty() and (event := events.get_nowait()).get("event") == "conversation.draft") else None))
             assert draft_event["request_id"] == "draft-1" and draft_event["text"] == "보존할 초안" and draft_event["failed"] is False
             revision = call(url1, "storage.write", window_id=window, entry="title_template", content="작업 {unsupported}", expected_revision=None)["revision"]
@@ -275,12 +307,13 @@ def run(services_log_path=None):
             call(url1, "storage.reset", window_id=window, entry="title_template", expected_revision=revision)
             results = []
             def create(url):
-                results.append(call(url, "conversation.create", window_id=window, model="model-argon")["thread"]["id"])
+                results.append(call(url, "conversation.create", window_id=window, model="model-argon", profile="profile-b")["thread"]["id"])
             tasks = [threading.Thread(target=create, args=(url,)) for url in (url1, url2)]
             for task in tasks: task.start()
             for task in tasks: task.join(timeout=20)
             assert len(results) == 2 and results[0] == results[1], results
             assert len(provider.bindings) == 1
+            assert provider.profile_ensures[0]["profile"] == "profile-b", provider.profile_ensures
             initial_snapshots = []
             def initial_answer():
                 while not events.empty():
@@ -293,6 +326,19 @@ def run(services_log_path=None):
                 return None
             assert until("생성 뒤 get 없이 첫 대화 이벤트", initial_answer, seconds=15)
             assert None in provider.events, provider.events
+            switched = call(url1, "conversation.switch", window_id=window, profile="profile-a")
+            assert switched["thread"]["id"] == results[0] and switched["thread"]["profile"]["id"] == "profile-a", switched
+            assert provider.execution_requests[-1]["expected_execution_id"] == "execution-1", provider.execution_requests
+            assert provider.execution_requests[-1]["profile"] == "profile-a", provider.execution_requests
+            patched = call(url1, "conversation.switch", window_id=window, profile="profile-a", model="model-sol")
+            assert patched["thread"]["id"] == results[0] and patched["thread"]["model"]["id"] == "model-sol", patched
+            assert provider.patches[-1] == (results[0], {"model": "model-sol"}), provider.patches
+            call(url1, "conversation.switch", window_id=window, profile="profile-b")
+            crossed = call(url1, "conversation.switch", window_id=window, model="n1:node-b:preset-a")
+            assert crossed["thread"]["id"] == results[0] and crossed["thread"]["model"]["id"] == "n1:node-b:preset-a", crossed
+            assert provider.execution_requests[-1]["profile"] == "profile-b", provider.execution_requests
+            assert provider.execution_requests[-1]["selected_model"] == "n1:node-b:preset-a", provider.execution_requests
+            assert call(url1, "storage.get", window_id=window, entry="thread")["result"]["content"]["thread_id"] == results[0]
             legacy_event = next(item for event in initial_snapshots for item in event["update"]["snapshot"]["items"]
                                 if item["id"] == "legacy-event")
             assert legacy_event["text"] == "이전 글", legacy_event

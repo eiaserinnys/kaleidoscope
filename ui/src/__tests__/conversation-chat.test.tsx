@@ -32,7 +32,7 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
   render(<WindowDataProvider store={store} appWindow={window} definition={appDefinition}><AgentChatBlock block={{ type: "agent_chat" }} context={context} /></WindowDataProvider>);
   return { call, window, emit: (event: CoreEvent) => act(() => { listeners.forEach((fn) => fn(event)); }) };
 }
-const get = (value: ConversationThread | null = thread): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models });
+const get = (value: ConversationThread | null = thread): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles: [], start: { profile: "", model: null } });
 const error = (code: string) => ({ code, message: "실패", details: [] });
 beforeEach(() => { vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null as unknown as CanvasRenderingContext2D); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });

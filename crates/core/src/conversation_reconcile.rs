@@ -359,7 +359,6 @@ fn apply_thread(
             ("title_template", &p.title_template),
             ("instructions_template", &p.instructions_template),
             ("model_order", &p.model_order),
-            ("selected_model", &p.selected_model),
         ],
     )?;
     let template = |name: &str| -> Result<String, CoreError> {
@@ -388,11 +387,6 @@ fn apply_thread(
     {
         return Err(error::make(ErrorCode::InvalidRequest));
     }
-    let model = match values.get("selected_model") {
-        Some(Value::Null) | None => None,
-        Some(Value::String(value)) if !value.is_empty() => Some(value.clone()),
-        _ => return Err(error::make(ErrorCode::InvalidRequest)),
-    };
     let fingerprint = format!(
         "{:x}",
         Sha256::digest(
@@ -411,7 +405,7 @@ fn apply_thread(
         let patch = PatchThreadRequest {
             title: Some(title),
             archived: None,
-            model,
+            model: None,
             model_order: Some(model_order),
             instructions: Some(instructions),
         };

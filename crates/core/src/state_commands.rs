@@ -436,6 +436,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::ConversationGet { .. }
         | CoreRequest::ConversationHistory { .. }
         | CoreRequest::ConversationCreate { .. }
+        | CoreRequest::ConversationSwitch { .. }
         | CoreRequest::ConversationSend { .. }
         | CoreRequest::ConversationAttachment { .. }
         | CoreRequest::ConversationAttachmentOpen { .. }

@@ -473,7 +473,9 @@ fn conversation_get_uses_thread_and_conversation_items() {
         }],
         "cursor":"cursor-1",
         "next_before":"cursor-0",
-        "models":[{"id":"model-1","label":"Model 1","available":true}]
+        "models":[{"id":"model-1","label":"Model 1","available":true}],
+        "profiles":[{"id":"profile-1","label":"Profile 1","available":true}],
+        "start":{"profile":"profile-1","model":"model-1"}
     });
     let parsed: CoreReply = serde_json::from_value(provider_reply.clone()).unwrap();
     assert_eq!(serde_json::to_value(parsed).unwrap(), provider_reply);
@@ -488,8 +490,11 @@ fn conversation_get_uses_thread_and_conversation_items() {
 fn conversation_commands_and_replies_round_trip() {
     for request in [
         json!({"op":"conversation.get","window_id":"window-1"}),
+        json!({"op":"conversation.get","window_id":"window-1","profile":"profile-1"}),
         json!({"op":"conversation.history","window_id":"window-1","before":"cursor-0"}),
         json!({"op":"conversation.create","window_id":"window-1","model":"model-1"}),
+        json!({"op":"conversation.create","window_id":"window-1","model":"model-1","profile":"profile-1"}),
+        json!({"op":"conversation.switch","window_id":"window-1","profile":"profile-1","model":"model-1"}),
         json!({"op":"conversation.send","window_id":"window-1","request_id":"request-1","text":"안녕","attachments":[{"name":"그림.png","mime":"image/png","data_base64":"aGk="}]}),
         json!({"op":"conversation.attachment","window_id":"window-1","item_id":"item-1","attachment_id":"attachment-1"}),
         json!({"op":"conversation.attachment_open","window_id":"window-1","item_id":"item-1","attachment_id":"attachment-1"}),
@@ -500,6 +505,7 @@ fn conversation_commands_and_replies_round_trip() {
     for reply in [
         json!({"op":"conversation.history","items":[],"next_before":"cursor-0"}),
         json!({"op":"conversation.create","thread":{"id":"t","external":{"namespace":"n","key":"k"},"title":"작업","model":{"id":"m","label":"M"},"created_at":"2026-10-30","archived":false}}),
+        json!({"op":"conversation.switch","thread":{"id":"t","external":{"namespace":"n","key":"k"},"title":"작업","model":{"id":"m","label":"M"},"created_at":"2026-10-30","archived":false},"notices":["notice"]}),
         json!({"op":"conversation.send"}),
         json!({"op":"conversation.attachment","name":"그림.png","mime":"image/png","data_base64":"aGk="}),
         json!({"op":"conversation.attachment_open"}),
