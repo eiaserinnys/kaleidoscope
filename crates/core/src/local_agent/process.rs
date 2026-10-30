@@ -35,7 +35,9 @@ impl Process {
         #[cfg(windows)]
         {
             wrapped.wrap(process_wrap::tokio::JobObject);
-            wrapped.wrap(process_wrap::tokio::CreationFlags(0x08000000));
+            let mut flags = process_wrap::tokio::CreationFlags(Default::default());
+            flags.0.0 = 0x08000000; // CREATE_NO_WINDOW
+            wrapped.wrap(flags);
         }
         wrapped.wrap(KillOnDrop);
         let mut child = wrapped.spawn()?;
