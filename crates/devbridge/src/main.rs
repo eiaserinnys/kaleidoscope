@@ -127,7 +127,7 @@ async fn run() -> Result<(), String> {
     let app = Router::new()
         .route("/core", post(post_core))
         .layer(DefaultBodyLimit::max(
-            kaleidoscope_contract::registry::AGENT_SEND_BODY_MAX_BYTES,
+            kaleidoscope_contract::CONVERSATION_SEND_BODY_MAX_BYTES,
         ))
         .route("/events", get(get_events))
         .with_state(state)

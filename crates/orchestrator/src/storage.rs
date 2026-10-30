@@ -13,7 +13,7 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
             PRAGMA user_version=1;
             COMMIT;")?;
-    } else if version > 7 {
+    } else if version > 8 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 2 {
@@ -191,6 +191,9 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             PRAGMA user_version=7;
             COMMIT;",
         )?;
+    }
+    if version < 8 {
+        db.execute_batch("BEGIN IMMEDIATE; DROP TABLE agent_items; DROP TABLE agents; PRAGMA user_version=8; COMMIT;")?;
     }
     Ok(())
 }

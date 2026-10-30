@@ -30,10 +30,7 @@ fn explorer_opens_and_reuses_editor_with_folder_grant() {
     let host = Arc::new(FakeHost::default());
     let core = open_core(
         data.path(),
-        vec![
-            MD_EDITOR.into(),
-            FOLDER_EXPLORER.into(),
-        ],
+        vec![MD_EDITOR.into(), FOLDER_EXPLORER.into()],
         &host,
     );
     let (_, desktop) = active_ids(&core);
@@ -113,10 +110,7 @@ fn explorer_open_reports_missing_grant_file_and_extension() {
     let host = Arc::new(FakeHost::default());
     let core = open_core(
         data.path(),
-        vec![
-            MD_EDITOR.into(),
-            FOLDER_EXPLORER.into(),
-        ],
+        vec![MD_EDITOR.into(), FOLDER_EXPLORER.into()],
         &host,
     );
     let (_, desktop) = active_ids(&core);
@@ -337,10 +331,7 @@ fn explorer_opens_new_window_for_a_different_folder() {
     let host = Arc::new(FakeHost::default());
     let core = open_core(
         data.path(),
-        vec![
-            MD_EDITOR.into(),
-            FOLDER_EXPLORER.into(),
-        ],
+        vec![MD_EDITOR.into(), FOLDER_EXPLORER.into()],
         &host,
     );
     let (_, desktop) = active_ids(&core);

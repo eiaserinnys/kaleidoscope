@@ -430,11 +430,6 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         CoreRequest::LinkStart {} | CoreRequest::LinkCancel {} | CoreRequest::LinkUnlink {} => {
             Err(error::make(ErrorCode::Server))
         }
-        CoreRequest::AgentGet { .. }
-        | CoreRequest::AgentCreate { .. }
-        | CoreRequest::AgentSend { .. }
-        | CoreRequest::AgentAttachment { .. }
-        | CoreRequest::AgentAttachmentOpen { .. } => Err(error::make(ErrorCode::InvalidRequest)),
         CoreRequest::StateGet {}
         | CoreRequest::ConversationApplyStatus { .. }
         | CoreRequest::ConversationApplyRetry { .. }

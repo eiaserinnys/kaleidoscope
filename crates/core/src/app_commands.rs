@@ -95,7 +95,7 @@ pub(crate) fn import_registry(state: &mut CoreState, received: RegistryApp) -> b
             return false;
         }
     };
-    if let Err(error) = app_definition::parse_app_definition(&definition_json) {
+    if let Err(error) = app_definition::parse_cached_app_definition(&definition_json) {
         eprintln!(
             "레지스트리 앱 반영을 건너뜁니다: app_id={app_id}, code={:?}",
             error.code

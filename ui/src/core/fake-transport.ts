@@ -1,11 +1,6 @@
 import type {
   AppDefinition,
   AppWindow,
-  AgentInfo,
-  AgentItem,
-  AgentModel,
-  AgentUpdate,
-  AgentUpload,
   ConversationItem, ConversationModel, ConversationThread, ConversationUpload,
   CoreError,
   CoreEvent,
@@ -31,12 +26,6 @@ export interface FakeTransportSeed {
   folder: { root_path: string; root_name: string } | null;
   files: Record<string, string>;
   conversation?: FakeConversationSeed;
-  agents?: Record<string, FakeAgentSeed>;
-  agentModels?: AgentModel[];
-  agentGetDelayMs?: number;
-  agentGetError?: string;
-  agentSendError?: string;
-  agentSendDelayMs?: number;
   updateRestartError?: string;
   data?: FakeDataSeed;
   storage?: Array<{ window_id: string; entry: string; content: JsonValue }>;
@@ -54,13 +43,10 @@ export interface FakeConversationSeed {
   loginRequired?: boolean;
   conflict?: boolean;
   delayMs?: number;
+  getError?: string;
+  sendDelayMs?: number;
+  sendError?: string;
   draft?: { request_id: string; text: string; attachments: ConversationUpload[]; failed: boolean };
-}
-
-export interface FakeAgentSeed {
-  agent: AgentInfo | null;
-  items: AgentItem[];
-  models: AgentModel[];
 }
 
 export interface FakeTransport extends CoreTransport {
@@ -76,7 +62,6 @@ export interface FakeTransport extends CoreTransport {
   getShareCalls(): Array<{ window_id: string; view: VisibleView }>;
   getCalls(): CoreRequest[];
   failNextStorageWrite(message: string): void;
-  getOpenedAttachments(): Array<{ workspace_id: string; item_id: string; index: number }>;
 }
 
 export interface FakeWebViewSnapshot {
@@ -111,19 +96,6 @@ function clone<T>(value: T): T {
 
 function fail(code: CoreError["code"], message: string, details: string[] = []): never {
   throw { code, message, details } satisfies CoreError;
-}
-
-function legacyAgentWorkspaceId(request: { workspace_id?: string; window_id?: string }): string {
-  if (request.window_id) return fail("unavailable", "새 대화 제공자는 아직 사용할 수 없습니다");
-  if (!request.workspace_id) return fail("invalid_request", "workspace_id가 필요합니다");
-  return request.workspace_id;
-}
-
-function legacyAgentAttachment(request: { item_id?: string; index?: number }): [string, number] {
-  if (request.item_id === undefined || request.index === undefined) {
-    return fail("invalid_request", "첨부 식별자가 필요합니다");
-  }
-  return [request.item_id, request.index];
 }
 
 function validRelativePath(path: string, allowEmpty = false): boolean {
@@ -164,18 +136,6 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   let conversationLoggedIn = !conversation?.loginRequired;
   let conversationWatching = false;
   const conversationAttachments = new Map<string, ConversationUpload>();
-  const models = clone(seed.agentModels ?? [
-    { preset: "gemini-4-argon", label: "Argon" },
-    { preset: "claude-opus-5.5", label: "Opus" },
-    { preset: "codex-6.1-sol", label: "Sol 6.1" },
-  ]);
-  const agents = new Map<string, FakeAgentSeed>(
-    Object.entries(seed.agents ?? {}).map(([workspaceId, session]) => [workspaceId, clone(session)]),
-  );
-  const nextAgentIds = new Map<string, number>();
-  const agentAttachments = new Map<string, AgentUpload>();
-  const openedAttachments: Array<{ workspace_id: string; item_id: string; index: number }> = [];
-
   for (const [path, text] of Object.entries(seed.files)) {
     files.set(path, { text, revision: `fake-revision-${revisionNumber++}` });
   }
@@ -190,51 +150,12 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     for (const listener of eventListeners) listener(clone(event));
   };
 
-  const agentFor = (workspaceId: string): FakeAgentSeed => {
-    let session = agents.get(workspaceId);
-    if (!session) {
-      session = { agent: null, items: [], models: clone(models) };
-      agents.set(workspaceId, session);
-    }
-    return session;
-  };
-
-  const emitAgent = (workspaceId: string, update: AgentUpdate) => {
-    emit({ event: "agent.update", workspace_id: workspaceId, update });
-  };
-
-  const addAgentItem = (workspaceId: string, kind: AgentItem["kind"], text: string, attachments: AgentUpload[] = []) => {
-    const session = agentFor(workspaceId);
-    const id = (nextAgentIds.get(workspaceId) ?? session.items.length) + 1;
-    nextAgentIds.set(workspaceId, id);
-    const item: AgentItem = { id: String(id), kind, text, at: new Date().toISOString(), attachments: attachments.map(({ name, mime }) => ({ name, mime })) };
-    attachments.forEach((attachment, index) => agentAttachments.set(JSON.stringify([workspaceId, item.id, index]), attachment));
-    session.items.push(item);
-    emitAgent(workspaceId, { kind: "item", item });
-  };
-
-  const setAgentActivity = (workspaceId: string, busy: boolean, tool: string | null) => {
-    const session = agentFor(workspaceId);
-    if (session.agent) session.agent = { ...session.agent, busy, tool };
-    emitAgent(workspaceId, { kind: "activity", busy, tool });
-  };
-
   const delay = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
   const watchConversation = () => {
     if (!conversation?.thread || conversationWatching) return;
     conversationWatching = true;
     setTimeout(() => emit({ event: "conversation.update", thread_id: conversation.thread!.id, update: { kind: "snapshot", snapshot: { cursor: "1", busy: false, tool: null, stream_id: null, text: null, items: clone(conversation.items) } } }), 20);
-  };
-
-  const streamReply = async (workspaceId: string, text: string, tool: string | null) => {
-    setAgentActivity(workspaceId, true, tool);
-    for (const part of text.match(/[\s\S]{1,18}/g) ?? [text]) {
-      await delay(45);
-      emitAgent(workspaceId, { kind: "delta", text: part });
-    }
-    addAgentItem(workspaceId, "assistant", text);
-    setAgentActivity(workspaceId, false, null);
   };
 
   const findWindow = (windowId: string): AppWindow => {
@@ -413,6 +334,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         if (conversation.delayMs) await delay(conversation.delayMs);
         if (!conversationLoggedIn) return fail("login_required", "로그인이 필요합니다");
         if (conversation.conflict) return fail("binding_conflict", "대화 연결이 충돌합니다");
+        if (conversation.getError) return fail("server", conversation.getError);
         if (conversation.draft) emit({ event: "conversation.draft", window_id: request.window_id, ...conversation.draft });
         watchConversation();
         return { op: "conversation.get", thread: clone(conversation.thread), items: clone(conversation.items), cursor: "1", next_before: conversationOlderPages.length ? "older-0" : undefined, models: clone(conversation.models) };
@@ -435,6 +357,8 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       }
       case "conversation.send": {
         if (!conversation?.thread) return fail("not_found", "대화가 없습니다");
+        if (conversation.sendDelayMs) await delay(conversation.sendDelayMs);
+        if (conversation.sendError) return fail("server", conversation.sendError);
         if (conversation.delayMs) await delay(conversation.delayMs);
         if (!conversationLoggedIn) return fail("login_required", "로그인이 필요합니다");
         const threadId = conversation.thread.id;
@@ -463,59 +387,6 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         return { op: "conversation.attachment", ...attachment };
       }
       case "conversation.attachment_open": return { op: "conversation.attachment_open" };
-      case "agent.get": {
-        if (seed.agentGetDelayMs) await delay(seed.agentGetDelayMs);
-        if (seed.agentGetError) return fail("server", seed.agentGetError);
-        const session = agentFor(legacyAgentWorkspaceId(request));
-        return {
-          op: "agent.get",
-          agent: clone(session.agent),
-          items: clone(session.items),
-          models: clone(session.models),
-        };
-      }
-      case "agent.create": {
-        const workspaceId = legacyAgentWorkspaceId(request);
-        const session = agentFor(workspaceId);
-        if (session.agent) return { op: "agent.create", agent: clone(session.agent) };
-        const model = session.models.find((item) => item.preset === request.model_preset);
-        if (!model) return fail("invalid_request", "고를 수 없는 모델입니다");
-        const agent: AgentInfo = {
-          workspace_id: workspaceId,
-          model_preset: model.preset,
-          model_label: model.label,
-          busy: false,
-          tool: null,
-          created_at: new Date().toISOString(),
-        };
-        session.agent = agent;
-        emitAgent(workspaceId, { kind: "created", agent: clone(agent) });
-        void streamReply(workspaceId, "안녕하십니까. 이 작업을 맡겠습니다.", null);
-        return { op: "agent.create", agent: clone(agent) };
-      }
-      case "agent.send": {
-        if (seed.agentSendDelayMs) await delay(seed.agentSendDelayMs);
-        if (seed.agentSendError) return fail("server", seed.agentSendError);
-        const workspaceId = legacyAgentWorkspaceId(request);
-        const session = agentFor(workspaceId);
-        if (!session.agent) return fail("not_found", "이 작업의 PAS가 없습니다");
-        addAgentItem(workspaceId, "user", request.text, request.attachments ?? []);
-        void streamReply(workspaceId, "## 살펴볼 내용\n\n- 요청한 내용을 정리했습니다.\n- 다음 동작을 이어가겠습니다.", "문서 읽기");
-        return { op: "agent.send" };
-      }
-      case "agent.attachment": {
-        const workspaceId = legacyAgentWorkspaceId(request);
-        const [itemId, index] = legacyAgentAttachment(request);
-        const attachment = agentAttachments.get(JSON.stringify([workspaceId, itemId, index]));
-        if (!attachment) return fail("not_found", "첨부를 찾을 수 없습니다");
-        return { op: "agent.attachment", ...attachment };
-      }
-      case "agent.attachment_open": {
-        const workspaceId = legacyAgentWorkspaceId(request);
-        const [itemId, index] = legacyAgentAttachment(request);
-        openedAttachments.push({ workspace_id: workspaceId, item_id: itemId, index });
-        return { op: "agent.attachment_open" };
-      }
       case "link.start": {
         const userCode = "K7PQ-4XMR";
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
@@ -933,6 +804,5 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     failNextStorageWrite(message) { storageFailure = message; },
     getShareCalls() { return clone(shareCalls); },
     getCalls() { return clone(calls); },
-    getOpenedAttachments() { return clone(openedAttachments); },
   };
 }

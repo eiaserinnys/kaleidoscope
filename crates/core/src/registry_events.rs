@@ -105,17 +105,6 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 });
             }
         }
-        DeviceEvent::AgentUpdate {
-            workspace_id,
-            update,
-        } => {
-            if has_workspace(inner, Some(&workspace_id)) {
-                inner.emit(&CoreEvent::AgentUpdate {
-                    workspace_id,
-                    update,
-                });
-            }
-        }
         DeviceEvent::StorageSnapshot { app_id, snapshot } => {
             emit_storage_update(
                 inner,

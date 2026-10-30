@@ -13,8 +13,8 @@ const definition: AppDefinition = {
 const thread: ConversationThread = { id: "thread-1", external: { namespace: "n", key: "k" }, title: "대화", model: { id: "m", label: "모델" }, created_at: "2026-10-30T00:00:00Z", archived: false };
 const item = (id: string, text: string): ConversationItem => ({ id, kind: "assistant", text, at: "2026-10-30T00:00:00Z", attachments: [] });
 const models = [{ id: "m", label: "모델", available: true }, { id: "off", label: "불가", available: false, reason: "사용 불가" }];
-function setup(handler: (request: CoreRequest) => Promise<CoreReply>) {
-  const snapshot = makeTestSnapshot({ definitions: [definition] });
+function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinition: AppDefinition = definition) {
+  const snapshot = makeTestSnapshot({ definitions: [appDefinition] });
   snapshot.link = { state: "connected", server_url: "https://example.test", device_name: "시험" };
   const listeners = new Set<(event: CoreEvent) => void>();
   const call = vi.fn(async (request: CoreRequest): Promise<CoreReply> => {
@@ -24,8 +24,8 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>) {
   });
   const store = { call, getSnapshot: () => snapshot, getError: () => null, subscribe: () => () => {}, subscribeEvents: (fn: (event: CoreEvent) => void) => { listeners.add(fn); return () => listeners.delete(fn); }, ready: Promise.resolve(), dispose: () => {} } as unknown as ShellStore;
   const window = snapshot.shared.windows[0];
-  const context = { store, snapshot, window, definition };
-  render(<WindowDataProvider store={store} appWindow={window} definition={definition}><AgentChatBlock block={{ type: "agent_chat" }} context={context} /></WindowDataProvider>);
+  const context = { store, snapshot, window, definition: appDefinition };
+  render(<WindowDataProvider store={store} appWindow={window} definition={appDefinition}><AgentChatBlock block={{ type: "agent_chat" }} context={context} /></WindowDataProvider>);
   return { call, window, emit: (event: CoreEvent) => act(() => { listeners.forEach((fn) => fn(event)); }) };
 }
 const get = (value: ConversationThread | null = thread): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models });
@@ -34,6 +34,12 @@ beforeEach(() => { vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockRetur
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("대화 제공자 화면", () => {
+  it("기존 앱에 제공자가 없으면 빈 상태를 보이고 대화 요청을 보내지 않는다", () => {
+    const legacy: AppDefinition = { ...definition, agent: undefined };
+    const state = setup(async (request) => { throw new Error(request.op); }, legacy);
+    expect(screen.getByText("이 앱 판에는 대화 제공자가 없습니다")).toBeTruthy();
+    expect(state.call.mock.calls.some(([request]) => request.op.startsWith("conversation."))).toBe(false);
+  });
   it("기록과 이전 페이지를 합치고 같은 id를 중복하지 않으며 진행문을 교체한다", async () => {
     const state = setup(async (request) => {
       if (request.op === "conversation.get") return get();

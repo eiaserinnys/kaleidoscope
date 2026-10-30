@@ -8,6 +8,8 @@ fn migration_v5_builds_canonical_layout_from_live_reports_in_report_order() {
     let db = Connection::open_in_memory().unwrap();
     db.execute_batch("CREATE TABLE devices(id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
         CREATE TABLE device_layouts(device_id TEXT PRIMARY KEY,layout TEXT NOT NULL,reported_at TEXT NOT NULL);
+        CREATE TABLE agents(workspace_id TEXT PRIMARY KEY);
+        CREATE TABLE agent_items(id INTEGER PRIMARY KEY,attachments TEXT NOT NULL DEFAULT '[]');
         CREATE TABLE connections(name TEXT PRIMARY KEY,kind TEXT NOT NULL,base_url TEXT NOT NULL,writable INTEGER NOT NULL,paths TEXT NOT NULL DEFAULT '[]',headers TEXT NOT NULL DEFAULT '{}',issuer TEXT,scopes TEXT,resource TEXT,description TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL);
         INSERT INTO devices(id,name,token_sha256,created_at) VALUES('early','Early','a','now'),('late','Late','b','now');
         INSERT INTO devices(id,name,token_sha256,created_at,revoked_at) VALUES('revoked','Revoked','c','now','revoked');
@@ -41,7 +43,7 @@ fn migration_v5_builds_canonical_layout_from_live_reports_in_report_order() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 7);
+    assert_eq!(version, 8);
     let workspace: String = db
         .query_row("SELECT data FROM workspaces WHERE id='w'", [], |r| r.get(0))
         .unwrap();

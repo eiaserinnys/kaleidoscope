@@ -6,9 +6,10 @@ use base64::Engine as _;
 use image::{imageops::FilterType, DynamicImage, ImageFormat, RgbaImage};
 use kaleidoscope_contract::registry::ShareUpload;
 use kaleidoscope_contract::{
-    AgentUpload, CoreError, CoreEvent, CoreReply, ErrorCode, LinkStatus, VisibleView,
-    AGENT_ATTACHMENTS_MAX, AGENT_ATTACHMENTS_TOTAL_MAX_BYTES, AGENT_ATTACHMENT_MAX_BYTES,
-    SHARE_CAPTURE_MAX_EDGE, SHARE_CAPTURE_NAME_PREFIX, SHARE_TEXT_MAX_BYTES,
+    conversation::ConversationUpload, CoreError, CoreEvent, CoreReply, ErrorCode, LinkStatus,
+    VisibleView, AGENT_ATTACHMENTS_MAX, AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
+    AGENT_ATTACHMENT_MAX_BYTES, SHARE_CAPTURE_MAX_EDGE, SHARE_CAPTURE_NAME_PREFIX,
+    SHARE_TEXT_MAX_BYTES,
 };
 use sha2::{Digest, Sha256};
 
@@ -351,11 +352,11 @@ pub(crate) fn clear_server_before_unlink(inner: &Inner) {
     }
 }
 
-pub(crate) fn capture_for_agent_send(
+pub(crate) fn capture_for_conversation_send(
     inner: &Inner,
     workspace_id: &str,
-    existing: &[AgentUpload],
-) -> (Vec<AgentUpload>, Vec<(String, String)>) {
+    existing: &[ConversationUpload],
+) -> (Vec<ConversationUpload>, Vec<(String, String)>) {
     let candidates = {
         let state = inner.state.lock().unwrap();
         let active_workspace = state.device.active_workspace_id.clone();
@@ -480,7 +481,7 @@ pub(crate) fn capture_for_agent_send(
             .chars()
             .map(|ch| if "<>:\"/\\|?*".contains(ch) { '_' } else { ch })
             .collect();
-        attachments.push(AgentUpload {
+        attachments.push(ConversationUpload {
             name: format!("{SHARE_CAPTURE_NAME_PREFIX}{safe_name}.png"),
             mime: "image/png".into(),
             data_base64: STANDARD.encode(&bytes),

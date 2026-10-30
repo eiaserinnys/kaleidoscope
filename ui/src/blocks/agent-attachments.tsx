@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import type { AgentAttachment, AgentUpload, ConversationAttachment } from "../contract/contract";
+import type { ConversationUpload, ConversationAttachment } from "../contract/contract";
 import { File as FileIcon, X } from "../components/icons";
 import { IconButton } from "../components/primitives";
 import type { ShellStore } from "../core/shell-store";
@@ -14,7 +14,7 @@ export function makeDraftAttachment(file: File, name: string): DraftAttachment {
   return { id: nextDraftId++, file, name };
 }
 
-export function readUpload({ file, name }: DraftAttachment): Promise<AgentUpload> {
+export function readUpload({ file, name }: DraftAttachment): Promise<ConversationUpload> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve({ name, mime: file.type, data_base64: String(reader.result).split(",", 2)[1] });
@@ -53,8 +53,8 @@ export function PendingAttachment({ attachment, onPreview }: { attachment: Draft
 
 const attachmentCache = new Map<string, Promise<string>>();
 
-export function HistoryAttachment({ attachment, workspaceId, windowId, itemId, index, store, onPreview, onError }: {
-  attachment: AgentAttachment | ConversationAttachment; workspaceId: string; windowId?: string; itemId: string; index: number; store: ShellStore;
+export function HistoryAttachment({ attachment, windowId, itemId, store, onPreview, onError }: {
+  attachment: ConversationAttachment; windowId: string; itemId: string; store: ShellStore;
   onPreview: OpenPreview; onError: (message: string) => void;
 }) {
   const [src, setSrc] = useState<string | null>(null);
@@ -62,26 +62,22 @@ export function HistoryAttachment({ attachment, workspaceId, windowId, itemId, i
   const [opening, setOpening] = useState(false);
   useEffect(() => {
     if (!attachment.mime.startsWith("image/")) return;
-    const key = JSON.stringify([windowId ?? workspaceId, itemId, "id" in attachment ? attachment.id : index]);
+    const key = JSON.stringify([windowId, itemId, attachment.id]);
     let promise = attachmentCache.get(key);
     if (!promise) {
-      const request = windowId && "id" in attachment
-        ? { op: "conversation.attachment" as const, window_id: windowId, item_id: itemId, attachment_id: attachment.id }
-        : { op: "agent.attachment" as const, workspace_id: workspaceId, item_id: itemId, index };
-      promise = store.call(request)
+      promise = store.call({ op: "conversation.attachment", window_id: windowId, item_id: itemId, attachment_id: attachment.id })
         .then((reply) => `data:${reply.mime};base64,${reply.data_base64}`);
       attachmentCache.set(key, promise);
     }
     let active = true;
     promise.then((value) => { if (active) setSrc(value); }, () => { if (active) setFailed(true); });
     return () => { active = false; };
-  }, [attachment, workspaceId, windowId, itemId, index, store]);
+  }, [attachment, windowId, itemId, store]);
 
   const open = async () => {
     setOpening(true);
     try {
-      if (windowId && "id" in attachment) await store.call({ op: "conversation.attachment_open", window_id: windowId, item_id: itemId, attachment_id: attachment.id });
-      else await store.call({ op: "agent.attachment_open", workspace_id: workspaceId, item_id: itemId, index });
+      await store.call({ op: "conversation.attachment_open", window_id: windowId, item_id: itemId, attachment_id: attachment.id });
     }
     catch (reason) { onError(toCoreError(reason).message); }
     finally { setOpening(false); }

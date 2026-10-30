@@ -200,8 +200,6 @@ pub(crate) fn import_app(
     }
 }
 
-pub(crate) use crate::agent_commands::handle as handle_agent;
-
 fn poll_pairing(
     inner: Arc<Inner>,
     generation: u64,

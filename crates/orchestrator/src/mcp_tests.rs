@@ -1,7 +1,7 @@
 use super::*;
 use kaleidoscope_contract::registry::DeviceLayout;
 
-const LEGACY_APP: &str = include_str!("../../../examples/workspace-pas.json");
+const LEGACY_APP: &str = include_str!("fixtures/simple-app.json");
 
 #[tokio::test]
 async fn open_counts_connected_devices_with_the_requested_workspace() {
@@ -408,4 +408,33 @@ async fn upload_warns_about_connection_names_missing_from_the_server() {
         value["warnings"][0],
         "서버에 없는 연결: board. set_connection으로 등록하세요"
     );
+}
+
+#[tokio::test]
+async fn connection_rejects_environment_references() {
+    let server = McpServer::new(AppState::in_memory("secret"));
+    let result = server
+        .set_connection(Parameters(SetConnectionArgs {
+            name: "board".into(),
+            kind: ConnectionKindArg::Relay,
+            base_url: "https://example.test".into(),
+            description: None,
+            writable: None,
+            paths: None,
+            headers: Some(std::collections::BTreeMap::from([(
+                "Authorization".into(),
+                "Bearer ${env:KEY}".into(),
+            )])),
+            issuer: None,
+            scopes: None,
+            resource: None,
+        }))
+        .await
+        .unwrap();
+    assert!(result.is_error.unwrap_or_default());
+    let content = serde_json::to_value(&result).unwrap();
+    let error: Value =
+        serde_json::from_str(content["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(error["code"], "invalid_request");
+    assert!(server.state.connection("board").unwrap().is_none());
 }

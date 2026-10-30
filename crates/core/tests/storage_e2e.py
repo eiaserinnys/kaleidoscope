@@ -84,8 +84,6 @@ def run():
         server_url = f"http://127.0.0.1:{server_port}"
         url1, url2 = f"http://127.0.0.1:{p1}", f"http://127.0.0.1:{p2}"
         env = os.environ.copy()
-        for key in ("SOULSTREAM_URL", "SOULSTREAM_TOKEN", "KALEIDOSCOPE_AGENT_FOLDER_ID"):
-            env.pop(key, None)
         env.update(KALEIDOSCOPE_BIND=f"127.0.0.1:{server_port}", KALEIDOSCOPE_DB_PATH=str(db), KALEIDOSCOPE_MCP_TOKEN="test-mcp")
         logs = (root / "services.log").open("w+")
         try:

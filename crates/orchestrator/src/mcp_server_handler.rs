@@ -15,7 +15,7 @@ impl ServerHandler for McpServer {
             include_str!("../../../examples/explorer.json")
         );
         let instructions = format!(
-            "{}\ndelete_workspace로 작업을 지우면 그 작업의 PAS도 내려간다. 시험으로 만든 작업은 시험 끝에 지운다.",
+            "{}\ndelete_workspace로 작업을 지우면 제공자에 로그인한 기기가 정합화할 때 대화를 보관한다. 시험으로 만든 작업은 시험 끝에 지운다.",
             instructions
         );
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())

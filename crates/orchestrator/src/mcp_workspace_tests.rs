@@ -8,13 +8,7 @@ fn decode(result: CallToolResult) -> Value {
 
 #[tokio::test]
 async fn workspace_tools_read_and_delete_canonical_entities() {
-    let mut state = AppState::in_memory("secret");
-    state.configure_soulstream(
-        Some("https://soulstream.example".into()),
-        Some("token".into()),
-        "seosoyoung".into(),
-        None,
-    );
+    let state = AppState::in_memory("secret");
     let make_workspace = |id: &str| Workspace {
         id: id.into(),
         name: format!("작업 {id}"),
@@ -45,11 +39,6 @@ async fn workspace_tools_read_and_delete_canonical_entities() {
                 foreign_account,
                 serde_json::to_string(&make_workspace(&foreign_account)).unwrap()
             ],
-        )
-        .unwrap();
-        db.execute(
-            "INSERT INTO agents(workspace_id,device_id,session_id,model_preset,workspace_name,created_at,cursor) VALUES(?1,'device','foreign-pas','codex-6.1-sol','Other','now',0)",
-            [&foreign_account],
         )
         .unwrap();
     }
@@ -96,7 +85,6 @@ async fn workspace_tools_read_and_delete_canonical_entities() {
             .unwrap(),
     );
     assert_eq!(foreign["deleted"], true);
-    assert_eq!(foreign["agent_retiring"], false);
     assert!(server
         .state
         .lock_db()

@@ -1,18 +1,6 @@
 use super::*;
-use kaleidoscope_contract::registry::DeviceLayout;
 use kaleidoscope_contract::{AppWindow, Desktop, Rect, Workspace};
 use tower::ServiceExt;
-
-async fn legacy_pas_create(Json(_body): Json<Value>) -> (StatusCode, Json<Value>) {
-    (
-        StatusCode::CREATED,
-        Json(json!({"session":{"session_id":"legacy-pas"}})),
-    )
-}
-
-async fn legacy_pas_ok() -> Json<Value> {
-    Json(json!({}))
-}
 
 fn legacy_v5_state() -> AppState {
     let db = Connection::open_in_memory().unwrap();
@@ -57,13 +45,12 @@ fn legacy_v5_state() -> AppState {
 
 #[tokio::test]
 async fn v5_migration_attaches_existing_rows_and_preserves_existing_credentials_and_apps() {
-    use http_body_util::BodyExt;
     let state = legacy_v5_state();
     let db = state.lock_db().unwrap();
     let version: i64 = db
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 7);
+    assert_eq!(version, 8);
 
     let (
         account_id,
@@ -152,13 +139,7 @@ async fn v5_migration_attaches_existing_rows_and_preserves_existing_credentials_
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), axum::http::StatusCode::OK);
-    let body: Value =
-        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
-    assert_eq!(body["agent"], Value::Null);
-    assert_eq!(body["items"], json!([]));
-    assert_eq!(body["models"].as_array().unwrap().len(), 3);
-    assert_eq!(body.as_object().unwrap().len(), 3);
+    assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -362,6 +343,3 @@ async fn second_account_workspaces_connections_and_devices_are_hidden_from_mcp_p
         .unwrap();
     assert_eq!(remaining_name_count, 1);
 }
-
-#[path = "legacy_account_tests.rs"]
-mod legacy_account_tests;

@@ -453,31 +453,6 @@ fn storage_key_template_matches_exactly_one_concrete_workspace_segment() {
 }
 
 #[test]
-fn legacy_agent_wire_shapes_remain_unchanged() {
-    for request in [
-        json!({"op":"agent.get","workspace_id":"w"}),
-        json!({"op":"agent.create","workspace_id":"w","model_preset":"model"}),
-        json!({"op":"agent.send","workspace_id":"w","text":"안녕","attachments":[]}),
-        json!({"op":"agent.attachment","workspace_id":"w","item_id":"7","index":0}),
-        json!({"op":"agent.attachment_open","workspace_id":"w","item_id":"7","index":0}),
-    ] {
-        let parsed: CoreRequest = serde_json::from_value(request.clone()).unwrap();
-        assert_eq!(serde_json::to_value(parsed).unwrap(), request);
-    }
-    let agent = json!({"workspace_id":"w","model_preset":"model","model_label":"Model","busy":false,"tool":null,"created_at":"2026-10-30"});
-    for reply in [
-        json!({"op":"agent.get","agent":agent,"items":[],"models":[{"preset":"model","label":"Model"}]}),
-        json!({"op":"agent.create","agent":agent}),
-        json!({"op":"agent.send"}),
-        json!({"op":"agent.attachment","name":"그림.png","mime":"image/png","data_base64":"aGk="}),
-        json!({"op":"agent.attachment_open"}),
-    ] {
-        let parsed: CoreReply = serde_json::from_value(reply.clone()).unwrap();
-        assert_eq!(serde_json::to_value(parsed).unwrap(), reply);
-    }
-}
-
-#[test]
 fn conversation_get_uses_thread_and_conversation_items() {
     let provider_reply = json!({
         "op":"conversation.get",

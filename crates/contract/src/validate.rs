@@ -15,6 +15,15 @@ use crate::{
 /// 앱 정의 JSON 원문을 읽고 검사한다. 통과하면 정의를, 걸리면 `unsupported_app`이나
 /// `invalid_app_definition`(걸린 것은 `details`)을 돌려준다.
 pub fn parse_app_definition(definition_json: &str) -> Result<AppDefinition, CoreError> {
+    parse_definition(definition_json, false)
+}
+
+/// 이미 등록된 옛 앱은 제공자가 없어도 표시할 수 있다.
+pub fn parse_cached_app_definition(definition_json: &str) -> Result<AppDefinition, CoreError> {
+    parse_definition(definition_json, true)
+}
+
+fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition, CoreError> {
     let value: Value = serde_json::from_str(definition_json).map_err(|parse_error| {
         CoreError::with_details(
             ErrorCode::InvalidAppDefinition,
@@ -33,7 +42,16 @@ pub fn parse_app_definition(definition_json: &str) -> Result<AppDefinition, Core
         )
     })?;
 
-    let details = validate(&definition);
+    let mut details = validate(&definition);
+    if !cached && definition.agent.is_none() {
+        data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
+            if matches!(block, Block::AgentChat { .. }) {
+                details.push(format!(
+                    "{pointer}: agent_chat에는 대화 제공자가 필요합니다"
+                ));
+            }
+        });
+    }
     if details.is_empty() {
         Ok(definition)
     } else {

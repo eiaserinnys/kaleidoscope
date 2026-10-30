@@ -1,11 +1,5 @@
 //! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 8판, 261030)
 //!
-//! 2판에서 더한 것(카드 #779): 배치 보고(`PUT /api/device/layout`), 워크스페이스 PAS 경로 셋,
-//! 이벤트 `agent.update`, `app.published`와 `app.open`의 `workspace_id`. 아래 「워크스페이스 PAS」 절.
-//!
-//! 3판에서 더한 것(카드 #807): 보내기의 첨부([`AgentSendRequest::attachments`]), 기록의 첨부
-//! ([`crate::AgentItem::attachments`]), 첨부 읽기 경로. 아래 「첨부」 절.
-//!
 //! 4판에서 더한 것(카드 #806): 코어가 이벤트 스트림을 열 때 지원 범위를 알리고([`SUPPORTED_HEADER`]),
 //! 서버는 그 기기가 그릴 수 있는 앱만 보낸다. 아래 「기기마다 그릴 수 있는 앱만」 절.
 //!
@@ -19,8 +13,7 @@
 //! 아래 「작업과 배치 동기화」 절.
 //!
 //! 7판에서 더한 것(카드 #814): 창 같이 보기. 코어가 같이 보기 창에 보이는 글을 올리고 지우는 경로
-//! (`PUT`/`DELETE /api/device/shares/{window_id}`), 서버가 PAS에 가는 말 뒤에 달라진 것만 붙이는 규칙과 그 모양,
-//! 중계에서 그 부분을 떼는 규칙, MCP `get_shared_view`. 아래 「같이 보기」 절.
+//! (`PUT`/`DELETE /api/device/shares/{window_id}`)와 MCP `get_shared_view`. 아래 「같이 보기」 절.
 //!
 //! 8판에서 더한 것(카드 #818): 계정 × 앱 저장소의 기기 경로와 `storage.snapshot`/`storage.changed` 이벤트.
 //! 계정은 서버가 기기 토큰이나 MCP principal에서 찾으며 기기 요청 본문은 account id를 받지 않는다.
@@ -41,10 +34,6 @@
 //! | `POST /api/device/apps` | 같음 | [`DeviceUploadRequest`] | 200 [`RegistryApp`] | 400 검사 실패, 401 |
 //! | `PUT /api/device/layout` | 같음 | [`DeviceLayout`] | 200 `{}` | 400 형식, 401 |
 //! | `POST /api/device/layout/changes` | 같음 | [`LayoutChanges`] | 200 [`LayoutChanges`] | 400 형식이나 창 상태가 너무 큼, 401, 413 |
-//! | `GET /api/device/workspaces/{workspace_id}/agent` | 같음 | 없음 | 200 [`DeviceAgentReply`] | 401 |
-//! | `POST /api/device/workspaces/{workspace_id}/agent` | 같음 | [`AgentCreateRequest`] | 200 [`crate::AgentInfo`] | 400 모르는 모델, 401, 502 소울스트림 실패 |
-//! | `POST /api/device/workspaces/{workspace_id}/agent/messages` | 같음 | [`AgentSendRequest`] | 200 `{}` | 400 빈 말, 너무 김, 첨부 한도나 형식, 401, 404 PAS 없음, 502 |
-//! | `GET /api/device/workspaces/{workspace_id}/agent/items/{item_id}/attachments/{index}` | 같음 | 없음 | 200 [`AgentAttachmentReply`] | 400 너무 큼, 401, 404 기록이나 첨부 없음, 502 |
 //! | `GET /api/device/app-storage/{app_id}/items?workspace_id=...` | 같음 | 없음 | 200 [`crate::app_storage::StorageListReply`] | 400 선언되지 않은 항목이나 workspace, 401, 404 |
 //! | `GET /api/device/app-storage/{app_id}/items/{entry_id}?workspace_id=...` | 같음 | 없음 | 200 [`crate::app_storage::StorageReadReply`] | 400 선언되지 않은 항목이나 workspace, 401, 404 |
 //! | `PUT /api/device/app-storage/{app_id}/items/{entry_id}?workspace_id=...` | 같음 | [`crate::app_storage::StorageWriteRequest`] | 200 [`crate::app_storage::StorageWriteReply`] | 400 값 검사, 401, 404, 409 현재 revision, 413 |
@@ -56,9 +45,6 @@
 //!
 //! 실패 본문은 모두 [`CoreError`] JSON이다. 검사 실패(400)는 [`crate::validate::parse_app_definition`]의 오류
 //! 그대로이고(`invalid_app_definition`, `unsupported_app`), 401, 404, 429와 서버 오류는 code `server`에 한국어 설명이다.
-//! 예외: 워크스페이스 PAS 경로의 400은 code `invalid_request`, 404는 `not_found`다. 코어는 이 둘을 그대로
-//! 화면에 돌려주고, 그 밖의 실패는 `server`로 바꾼다. 연결 중계 경로의 403은 code `permission_denied`다.
-//!
 //! # 기기 연결 (장치 코드 방식)
 //! 1. 코어가 `pair/start`로 `device_code`(비밀, 코어만 안다)와 `user_code`(사람이 읽는 코드)를 받는다.
 //! 2. 디렉터가 `user_code`를 에이전트에게 전하고, 에이전트가 MCP의 기기 승인 도구로 승인한다.
@@ -82,13 +68,13 @@
 //!   아니면 `app.import`의 창 옮기기 규칙(상태 키, 고른 폴더)대로 반영하되, 버전 번호는 서버의 것을 쓰고
 //!   그 앱의 캐시 버전 목록은 받은 버전 하나로 바꾼다.
 //! - 스냅샷에 없는 캐시 앱(연결 전에 로컬로 가져온 앱)은 그대로 둔다. 레지스트리에서 앱을 지우는 기능은 아직 없다.
-//! - 받은 정의도 [`crate::validate::parse_app_definition`]로 다시 검사한다. 이 쉘이 그릴 수 없는 정의
+//! - 받은 정의도 [`crate::validate::parse_cached_app_definition`]로 다시 검사한다. 이 쉘이 그릴 수 없는 정의
 //!   (`unsupported_app` 등)는 캐시에 넣지 않고 넘긴다(더 새 쉘이 필요한 앱).
 //! - `app.published`의 `open`이 참이거나 `app.open`을 받으면, 반영한 `state.changed` 뒤에 화면에
 //!   `app.open_requested`를 보낸다. 캐시에 없는 앱의 `app.open`은 넘긴다.
 //! - 이벤트에 `workspace_id`가 있으면 그 값을 `app.open_requested`에 그대로 싣는다. 이 기기에 없는
 //!   워크스페이스면 띄우기 요청을 넘긴다(앱 캐시 반영은 그대로 한다). 서버는 `workspace_id`가 있는 띄우기와
-//!   `agent.update`를 그 워크스페이스를 마지막 배치 보고에 담은 기기에만 보내고, 다른 기기에는 `app.published`를
+//!   그 워크스페이스를 마지막 배치 보고에 담은 기기에만 보내고, 다른 기기에는 `app.published`를
 //!   `open: false`, `workspace_id` 없이 보내 캐시만 맞춘다. 배치 보고를 모르는 옛 쉘에 엉뚱한 창이 뜨지 않게 하려는 것이다.
 //! - 6판: 배치를 동기화하는 기기들 사이에서는 띄우기를 기기 하나에만 보낸다(「작업과 배치 동기화」의 「띄우기 대상」).
 //!   창이 동기화되므로 여러 기기가 같은 띄우기를 받으면 같은 창이 기기 수만큼 생기기 때문이다.
@@ -147,16 +133,10 @@
 //! - 이 기기의 마지막 활동 시각은 그 기기가 바뀐 것을 올린 시각, 또는 배치 보고에서 그 기기만의 것(지금 보는
 //!   워크스페이스와 데스크톱, 고른 폴더)이 이전 보고와 달라진 시각이다(아래 「띄우기 대상」). 다른 기기의 변경을
 //!   반영한 쉘도 배치를 다시 보고하므로 보고 자체는 활동으로 치지 않는다. 첫 보고는 활동이다.
-//! - 에이전트가 MCP로 워크스페이스를 지울 때도 위 4의 규칙(그 데스크톱과 창도, 마지막 하나는 지우지 않음)과 아래 PAS
-//!   내리기를 그대로 따르고 `layout.changed`로 알린다.
+//! - MCP로 작업을 지울 때도 위 규칙을 따르고 `layout.changed`로 알린다.
 //! - 앱의 새 버전을 저장하면 그 앱의 창을 [`crate::migrate_window_state`]로 옮기고 `app_version`을 바꿔 `app.published`
 //!   뒤에 `layout.changed`로 알린다. 그 버전을 그릴 수 없어 `app.published`를 받지 못한 기기는 코어의 맞추기 규칙대로
 //!   제 캐시의 버전으로 옮겨 그린다.
-//! - 작업과 PAS: 워크스페이스 이름이 바뀌면 묶인 PAS의 세션 제목을 `kaleidoscope · <이름>`으로 바꾼다(소울스트림
-//!   `PUT /api/persistent-sessions/{session_id}` 본문 `{"display_name": ...}`). 워크스페이스가 지워지면 묶인 PAS를
-//!   내린다: 같은 경로에 `{"enabled": false}`로 퍼시스턴트를 끄고, 성공하면 묶음과 기록을 지우고 중계를 멈춘다.
-//!   소울스트림 호출은 응답을 기다리게 하지 않는다. 내리기에 실패한 묶음은 서버가 시작할 때 다시 내린다(정본에 없는
-//!   워크스페이스의 묶음은 모두 내린다). 세션은 지우지 않는다.
 //! - 정본을 처음 만들 때(저장소 판 올림) 지우지 않은 기기의 마지막 배치 보고로 채우고, 지운 기기의 배치 보고는 지운다.
 //!   그 뒤에도 기기를 지우면(MCP 기기 연결 끊기) 그 기기의 배치 보고를 지운다. 작업 조회는 지운 기기의 보고를 읽지 않는다.
 //!   한 엔티티가 여러 보고에 있으면 늦은 보고의 것을 쓴다.
@@ -193,51 +173,6 @@
 //!   받는다). 새 쉘이 만든 빈 「작업 1」이 모든 기기에 퍼지지 않게 하려는 것이다. 맞춘 것은 `sync.json`에 적는다.
 //! - 전부터 보내던 배치 보고(`PUT /api/device/layout`)는 그대로 보낸다.
 //!
-//! # 워크스페이스 PAS
-//! 워크스페이스마다 소울스트림 퍼시스턴트 세션 하나를 서버가 만들어 묶는다. 소울스트림 서비스 토큰은
-//! 서버의 설정에만 있고 코어와 화면은 소울스트림을 모른다.
-//!
-//! 서버가 지키는 것:
-//! - 묶음은 `workspace_id` 하나에 PAS 하나다. 만든 기기를 함께 적어 둔다.
-//! - 만들기(`POST .../agent`): 이미 있으면 그대로 돌려준다. 없으면 [`AGENT_MODELS`]에서 고른 모델부터,
-//!   그다음 나머지를 [`AGENT_MODELS`] 순서로 시도한다. 소울스트림이 모델을 지금 쓸 수 없다고 거부하면
-//!   (422 `INVALID_MODEL_PRESET`) 다음 모델로 가고, 고른 것과 다른 모델로 만들었으면 `notice` 기록을 남긴다.
-//!   대체 순서(소울스트림 `fallback_models`)는 만든 모델을 뺀 나머지를 [`AGENT_MODELS`] 순서로 둔다.
-//!   만든 직후 PAS가 첫 인사 턴을 돌므로 `busy`는 참으로 시작한다. 모든 기기에 `created`를 보낸다.
-//! - 보내기(`POST .../agent/messages`): 소울스트림 세션에 개입으로 보낸다. 사용자 기록은 여기서 만들지 않고
-//!   PAS의 이벤트에서 확인한 뒤 만든다(소울스트림 화면에서 보낸 말도 같은 길로 들어온다).
-//! - 중계: 서버는 묶은 PAS마다 소울스트림 세션 이벤트 스트림을 이어 두고(마지막으로 처리한 이벤트 번호부터),
-//!   아래처럼 바꿔 기록하고 모든 기기에 `agent.update`로 보낸다. 나머지 이벤트는 버린다.
-//!   - 사용자 말(소울스트림 `user_message`와, 진행 중인 턴에 들어간 `intervention_sent`): 사람(쉘, 소울스트림 웹과 앱, 슬랙)이 보낸 것만 `user` 기록이 되고 `busy`가 참이 된다.
-//!     처음 지시와 캐시 유지 호출처럼 시스템이 넣은 말은 기록하지 않는다.
-//!   - 답의 조각: `delta`로 보낸다. 캐시 유지 호출의 답(`[SILENT]`)과 그 앞부분은 보내지 않는다.
-//!   - 답 한 덩이: `assistant` 기록. `[SILENT]`이면 기록하지 않는다.
-//!   - 도구 시작과 끝: `activity`(busy 참, 도구 이름이나 null).
-//!   - 턴 끝: `activity`(busy 거짓).
-//!   - 턴 실패: `error` 기록과 `activity`(busy 거짓).
-//! - 기록은 서버에 남고, `GET .../agent`는 최근 [`AGENT_HISTORY_LIMIT`]개를 오래된 것부터 준다.
-//!
-//! # 첨부
-//! 첨부는 소울스트림의 세션 첨부로 올려 PAS에 넘긴다. 파일은 소울스트림에 남고, 서버는 기록마다 첨부의
-//! 소울스트림 경로만 둔다(기기에는 이름과 MIME만 보낸다).
-//! - 보내기: 서버는 먼저 한도와 형식을 검사한다([`crate::CoreRequest::AgentSend`]의 `invalid_request`
-//!   조건과 같고, 걸리면 400 `invalid_request`). 첨부가 있으면 PAS의 노드(소울스트림
-//!   `GET /api/persistent-sessions/{session_id}`의 `session.node_id`)를 읽고, 첨부를 순서대로 소울스트림
-//!   `POST /api/attachments/sessions?nodeId=<노드>`(multipart: `session_id`, `file`. 파일 이름은 첨부 이름,
-//!   형식은 MIME, 비었으면 `application/octet-stream`)에 올린다. 모두 올라가면 받은 `path`들을 개입의
-//!   `attachment_paths`로 한 번에 보낸다. 하나라도 실패하면 개입을 보내지 않고 502다. 글이 비었으면 빈 글
-//!   그대로 보낸다. 쉘이 먼저 끊겨도 서버는 본문을 다 받았으면 끝까지 마친다(만들기와 같다).
-//! - 중계: 소울스트림 `user_message`와 `intervention_sent`의 `attachments`(워커 경로 배열)를 그 `user` 기록의
-//!   첨부로 저장한다. 쉘에서 보낸 것과 소울스트림 화면에서 보낸 것이 같은 길이다. 첨부가 있으면 글이 비어도
-//!   기록한다. 글에서 `[첨부 파일 로컬 경로: `로 시작하는 줄은 지운다(소울스트림이 붙이는 경로 안내).
-//!   - 이름: 경로의 파일 이름에서 소울스트림이 붙인 앞머리(`2026-10-29T16-35-31.519Z-` 꼴의 시각과 `-`)와
-//!     확장자 앞의 꼬리(`-`와 16진수 32자)를 뗀 것. 그 꼴이 아니면 파일 이름 그대로다.
-//!   - MIME: 확장자로 정한다. 모르면 `application/octet-stream`.
-//! - 읽기(`GET .../agent/items/{item_id}/attachments/{index}`): 그 워크스페이스의 기록에 있는 첨부만 준다.
-//!   PAS의 노드를 읽고 소울스트림 `GET /api/attachments/files?nodeId=<노드>&path=<경로>`로 받아 base64로
-//!   돌려준다. [`crate::AGENT_ATTACHMENT_MAX_BYTES`]보다 크면 400 `invalid_request`, 소울스트림이 404면 404
-//!   `not_found`, 그 밖의 실패는 502.
-//!
 //! # 같이 보기 (7판)
 //! 디렉터가 창의 「같이 보기」를 켜 두면 그 창에 보이는 글이 작업 PAS에 가는 말과 함께 간다(계약 9판 「같이 보기」 절).
 //! 서버는 보이는 글을 메모리에만 둔다(저장소 판을 바꾸지 않는다). 서버가 다시 켜지면 잊고, 코어가 다시 이을 때 올린다.
@@ -255,35 +190,6 @@
 //! - 기기의 이벤트 스트림이 하나도 남지 않으면 그 기기의 보기를 모두 지운다(쉘을 끄면 같이 보기도 끝난다).
 //! - 같은 창을 여러 기기가 같이 보면(창이 동기화되므로 있을 수 있다) 그 창은 가장 늦게 받은 보기 하나로 본다.
 //! - 워크스페이스마다 「PAS에 보낸 것」을 창 id별 글로 메모리에 둔다.
-//! - 보내기(`POST .../agent/messages`): 글과 첨부 검사는 사용자 글로 한다. 그다음 그 워크스페이스의 보기와 「PAS에 보낸
-//!   것」을 견주어 아래 블록을 만들고, 블록이 있으면 사용자 글 뒤에 빈 줄 하나를 두고 붙여(사용자 글이 비었으면 블록만)
-//!   개입으로 보낸다. 개입이 성공하면 「PAS에 보낸 것」을 지금 보기로 바꾸고 끝난 창은 지운다. 실패하면 바꾸지 않는다.
-//! - 블록은 그 워크스페이스에 지금 보기가 있는 창과, 「PAS에 보낸 것」에는 있는데 지금 보기가 없는 창(끝남)이 하나라도
-//!   있을 때만 만든다. 모양(창은 앱 이름, 창 id 순서):
-//!
-//! ```text
-//! <kaleidoscope-share>
-//! 디렉터가 kaleidoscope 쉘에서 「같이 보기」로 켠 창에 지금 보이는 내용입니다. 쉘이 디렉터의 말 뒤에 붙였고 디렉터가 쓴 글이 아닙니다. 지난번 말 뒤로 달라진 것만 담았습니다. 지금 모습 전체는 MCP get_shared_view로 읽을 수 있습니다. 이미지나 웹 화면이 보이는 창은 모습이 바뀌었을 때 「같이 보기 - 앱 이름.png」 첨부로 함께 옵니다.
-//!
-//! ## 마크다운 편집기 (창 3f2a91c0): 새로 같이 봄
-//! (지금 글 전체)
-//!
-//! ## 섀이 대사 보기 (창 8b1e0c77): 바뀜
-//! (지난번 글과 지금 글의 줄 단위 비교. 앞뒤 1줄을 두는 unified diff의 `@@` 줄부터. `---`, `+++` 머리 줄은 없음)
-//!
-//! ## 웹 브라우저 (창 0d4c2a19): 바뀜(전체)
-//! (비교가 지금 글보다 길면 지금 글 전체)
-//!
-//! ## 탐색기 (창 5e6f7a8b): 그대로
-//!
-//! ## 소울스트림 카드 (창 9a8b7c6d): 같이 보기 끝
-//! </kaleidoscope-share>
-//! ```
-//!   - 창 id는 앞 8자다. 「새로 같이 봄」은 「PAS에 보낸 것」에 그 창이 없을 때(서버가 다시 켜진 뒤 포함)다.
-//!   - 「그대로」와 「같이 보기 끝」은 머리 줄만 둔다. 앱 이름은 [`ShareUpload::app_name`]이고, 끝난 창은 보낸 때의 이름이다.
-//! - 중계: `user_message`와 `intervention_sent`의 글에서 [`SHARE_BLOCK_START`] 줄부터 [`SHARE_BLOCK_END`] 줄까지를
-//!   떼고 끝의 공백을 지운 뒤 기록한다(디렉터의 말풍선에는 디렉터가 쓴 글만 보이게). 떼고 나서 글이 비었고 첨부도
-//!   없으면 기록하지 않는다.
 //! - MCP `get_shared_view`(입력 `workspace_id`): 그 워크스페이스의 지금 보기를 창마다(창 id, 앱 이름, 기기 이름, 받은 시각,
 //!   `visual`, 글 전체) 돌려준다. 「PAS에 보낸 것」은 바꾸지 않는다. 없으면 같이 보는 창이 없다고 알린다.
 //!
@@ -296,7 +202,7 @@
 //! - `name`: 소문자, 숫자, `-` 1~64자. `kind`: `relay`나 `oauth`. `base_url`: `https://`(로컬 시험은 `http://`)
 //!   주소이고 끝의 `/`는 뗀다. 요청 주소는 `base_url` 뒤에 경로를 붙인 것이다.
 //! - `writable`: 거짓이면 GET만 보낸다(기본 거짓). `paths`: 비어 있지 않으면 경로가 그 가운데 하나로 시작해야 한다.
-//! - `relay`의 `headers`: 서버가 요청마다 붙이는 헤더. 값에 `${env:이름}`이 있으면 서버 환경변수로 바꾼다. 값은
+//! - `relay`의 `headers`: 서버가 요청마다 붙이는 헤더. `${env:` 참조는 거부한다. 값은
 //!   쓰기만 하고 MCP 조회에는 헤더 이름만 보인다.
 //! - `oauth`의 `issuer`(없으면 `base_url`의 origin), `scopes`(공백으로 나눈 목록, 선택), `resource`(RFC 8707, 선택).
 //!   비밀은 없다.
@@ -362,10 +268,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::data::HttpMethod;
-use crate::{
-    AgentInfo, AgentItem, AgentModel, AgentUpdate, AgentUpload, App, AppVersion, AppWindow,
-    Desktop, JsonValue, Workspace,
-};
+use crate::{App, AppVersion, AppWindow, Desktop, JsonValue, Workspace};
 
 pub const PAIR_START_PATH: &str = "/api/pair/start";
 pub const PAIR_POLL_PATH: &str = "/api/pair/poll";
@@ -399,26 +302,11 @@ pub const DEVICE_LAYOUT_PATH: &str = "/api/device/layout";
 pub const DEVICE_LAYOUT_CHANGES_PATH: &str = "/api/device/layout/changes";
 /// (7판) 같이 보기 창의 보이는 글. 뒤에 `/{window_id}`를 붙인다.
 pub const DEVICE_SHARES_PATH: &str = "/api/device/shares";
-/// (7판) PAS에 가는 말 뒤에 서버가 붙이는 같이 보기 블록의 첫 줄과 마지막 줄.
+/// 코어가 대화 문맥에 넣는 같이 보기 블록의 경계.
 pub const SHARE_BLOCK_START: &str = "<kaleidoscope-share>";
 pub const SHARE_BLOCK_END: &str = "</kaleidoscope-share>";
 /// 바뀐 것 올리기 본문의 최대 바이트 수. 처음 맞추기에서 창 상태가 큰 창 여럿을 한 번에 올릴 수 있게 넉넉히 둔다.
 pub const LAYOUT_CHANGES_BODY_MAX_BYTES: usize = 16 * 1024 * 1024;
-
-/// 워크스페이스 PAS 경로. `{workspace_id}` 자리에 워크스페이스 id를 넣는다.
-pub fn device_agent_path(workspace_id: &str) -> String {
-    format!("/api/device/workspaces/{workspace_id}/agent")
-}
-
-/// 워크스페이스 PAS에 말을 보내는 경로.
-pub fn device_agent_messages_path(workspace_id: &str) -> String {
-    format!("/api/device/workspaces/{workspace_id}/agent/messages")
-}
-
-/// 기록에 붙은 첨부 하나를 읽는 경로. `index`는 그 기록의 첨부 안 순서(0부터)다.
-pub fn device_agent_attachment_path(workspace_id: &str, item_id: &str, index: u32) -> String {
-    format!("/api/device/workspaces/{workspace_id}/agent/items/{item_id}/attachments/{index}")
-}
 
 /// 연결 중계 경로. `{name}` 자리에 연결 이름을 넣는다.
 pub fn device_connection_request_path(name: &str) -> String {
@@ -442,39 +330,6 @@ pub const LAYOUT_DATA_ERRORS_MAX: usize = 10;
 pub const LAYOUT_DEBOUNCE_MS: u64 = 1000;
 /// 배치 보고가 실패하면 이만큼 뒤에 다시 보낸다.
 pub const LAYOUT_RETRY_SECS: u64 = 10;
-/// 소울스트림이 PAS를 만들며 노드 등록까지 기다려 수십 초 걸릴 수 있다.
-/// 코어는 만들기 요청만 이만큼 기다린다. 서버는 쉘이 먼저 끊겨도 만들기를 끝까지 마치고 `created`를 보낸다.
-pub const AGENT_CREATE_TIMEOUT_SECS: u64 = 120;
-/// 소울스트림 개입은 PAS가 턴을 마무리하거나 다시 깨어나는 동안 기다려 15초를 넘길 수 있다.
-/// 코어는 보내기 요청만 이만큼 기다린다. 서버는 쉘이 먼저 끊겨도 보내기를 끝까지 마친다.
-pub const AGENT_SEND_TIMEOUT_SECS: u64 = 120;
-/// `GET .../agent`가 주는 대화 기록의 최대 개수.
-pub const AGENT_HISTORY_LIMIT: usize = 200;
-/// 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위).
-pub const AGENT_MESSAGE_MAX_CHARS: usize = 20_000;
-/// 보내기 요청 본문의 최대 바이트 수. 첨부 합의 한도를 base64로 바꾼 크기(4/3)에 글과 JSON의 여유를 더했다.
-/// 서버는 보내기 경로에만 이 한도를 건다.
-pub const AGENT_SEND_BODY_MAX_BYTES: usize = 48 * 1024 * 1024;
-
-/// 워크스페이스 PAS를 만들 때 고를 수 있는 모델(소울스트림 preset id, 화면 이름). 순서가 대체 순서다.
-/// 추론 등급은 정하지 않고 preset의 기본값을 쓴다. 쉘이 처음 고르는 값은 맨 앞이다.
-pub const AGENT_MODELS: &[(&str, &str)] = &[
-    ("gemini-4-argon", "Argon"),
-    ("claude-opus", "Opus"),
-    ("codex-6.1-sol", "Sol"),
-];
-
-/// [`AGENT_MODELS`]를 화면에 줄 모양으로.
-pub fn agent_models() -> Vec<AgentModel> {
-    AGENT_MODELS
-        .iter()
-        .map(|(preset, label)| AgentModel {
-            preset: (*preset).to_string(),
-            label: (*label).to_string(),
-        })
-        .collect()
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PairStartRequest {
@@ -586,27 +441,11 @@ pub struct LayoutFolder {
     pub root_name: String,
 }
 
-/// 워크스페이스 PAS의 지금 모습과 기록. 화면의 `agent.get` 응답과 같은 것을 담는다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct DeviceAgentReply {
-    pub agent: Option<AgentInfo>,
-    pub items: Vec<AgentItem>,
-    pub models: Vec<AgentModel>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AgentCreateRequest {
-    /// 소울스트림 세션 이름과 PAS에게 주는 지시에 쓴다.
-    pub workspace_name: String,
-    pub model_preset: String,
-}
-
 /// (7판) `PUT /api/device/shares/{window_id}` 본문. 같이 보기 창 하나에 지금 보이는 것.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ShareUpload {
-    /// 그 창의 워크스페이스. 서버는 이 값으로 그 작업의 PAS에 붙인다.
+    /// 그 창의 워크스페이스. 작업별 조회에 쓴다.
     pub workspace_id: String,
     /// 블록 머리에 보일 앱 이름(그 창 앱의 지금 버전의 `name`).
     pub app_name: String,
@@ -614,23 +453,6 @@ pub struct ShareUpload {
     pub text: String,
     /// [`crate::VisibleView::visual`].
     pub visual: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AgentSendRequest {
-    pub text: String,
-    /// 3판. 빼면 빈 배열이다.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub attachments: Vec<AgentUpload>,
-}
-
-/// 첨부 읽기 응답. 화면의 `agent.attachment` 응답과 같은 것을 담는다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AgentAttachmentReply {
-    pub name: String,
-    pub mime: String,
-    pub data_base64: String,
 }
 
 /// 연결 하나(비밀 없이). 「연결」 절.
@@ -729,13 +551,6 @@ pub enum DeviceEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace_id: Option<String>,
     },
-    /// 워크스페이스 PAS에 일어난 일. 「워크스페이스 PAS」 절.
-    #[serde(rename = "agent.update")]
-    AgentUpdate {
-        workspace_id: String,
-        update: AgentUpdate,
-    },
-    /// (5판) 서버의 연결 목록 전체. 연결 직후(`apps.snapshot` 뒤)와 연결이 바뀔 때마다. 「연결」 절.
     #[serde(rename = "connections.snapshot")]
     ConnectionsSnapshot { connections: Vec<ConnectionInfo> },
     /// (8판) 저장소 metadata 전체. 본문 값은 별도 읽기로 받는다.
@@ -789,43 +604,6 @@ mod tests {
                 workspace_id: Some("w".into())
             }
         );
-    }
-
-    #[test]
-    fn agent_update_event_round_trips() {
-        let event = DeviceEvent::AgentUpdate {
-            workspace_id: "w".into(),
-            update: AgentUpdate::Delta { text: "안".into() },
-        };
-        let json = serde_json::to_string(&event).unwrap();
-        assert_eq!(
-            json,
-            r#"{"event":"agent.update","workspace_id":"w","update":{"kind":"delta","text":"안"}}"#
-        );
-        assert_eq!(serde_json::from_str::<DeviceEvent>(&json).unwrap(), event);
-    }
-
-    #[test]
-    fn agent_paths_and_models() {
-        assert_eq!(device_agent_path("w1"), "/api/device/workspaces/w1/agent");
-        assert_eq!(
-            device_agent_messages_path("w1"),
-            "/api/device/workspaces/w1/agent/messages"
-        );
-        assert_eq!(
-            device_agent_attachment_path("w1", "42", 0),
-            "/api/device/workspaces/w1/agent/items/42/attachments/0"
-        );
-        // 2판 코어의 보내기 본문은 3판 서버에서도 읽히고, 첨부 없는 3판 본문은 2판 모양 그대로다.
-        let old: AgentSendRequest = serde_json::from_str(r#"{"text":"안녕"}"#).unwrap();
-        assert!(old.attachments.is_empty());
-        assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"text":"안녕"}"#);
-        let models = agent_models();
-        assert_eq!(
-            models.first().map(|m| m.preset.as_str()),
-            Some("gemini-4-argon")
-        );
-        assert_eq!(models.len(), AGENT_MODELS.len());
     }
 
     #[test]

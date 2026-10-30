@@ -32,7 +32,7 @@ test("같이 보는 편집기의 보이는 줄, 대기 중 갱신과 PAS 칩", a
   await expect.poll(async () => (await calls(page)).length).toBeGreaterThan(count);
   expect((await calls(page)).at(-1)!.view.text).not.toMatch(/\n줄 1\n/);
   const ops = await page.evaluate(() => window.__kaleidoscopeHarness!.getCalls().map((call) => call.op));
-  expect(ops.lastIndexOf("share.view")).toBeLessThan(ops.lastIndexOf("agent.send"));
+  expect(ops.lastIndexOf("share.view")).toBeLessThan(ops.lastIndexOf("conversation.send"));
   await pas.getByRole("button", { name: "마크다운 편집기 같이 보기 끄기" }).click();
   await expect(editor).not.toHaveClass(/ks-window-sharing/);
   await expect(pas.getByRole("button", { name: "마크다운 편집기 같이 보기 끄기" })).toHaveCount(0);

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { AgentInfo, AgentItem, AgentModel, App, AppDefinition, AppVersion, AppWindow, ShellSnapshot } from "../src/contract/contract";
+import type { App, AppDefinition, AppVersion, AppWindow, ShellSnapshot } from "../src/contract/contract";
 import {
   AppWindowContent,
   createFakeTransport,
@@ -174,11 +174,6 @@ const mdViewerSnapshot: ShellSnapshot = params.has("md-ready")
     },
   }
   : initialSnapshot;
-const agentModels: AgentModel[] = [
-  { preset: "gemini-4-argon", label: "Argon" },
-  { preset: "claude-opus-5.5", label: "Opus" },
-  { preset: "codex-6.1-sol", label: "Sol 6.1" },
-];
 const connectedSnapshot: ShellSnapshot = {
   ...mdViewerSnapshot,
   link: { state: "connected", server_url: "https://kaleidoscope.example", device_name: "개발 PC" },
@@ -188,40 +183,22 @@ const demoSnapshot: ShellSnapshot = conversationMode ? connectedSnapshot : ["rea
   : pasMode === "offline"
     ? { ...mdViewerSnapshot, link: { state: "offline", server_url: "https://kaleidoscope.example", device_name: "개발 PC", reason: "서버에 닿지 않습니다" } }
     : mdViewerSnapshot;
-const greetingAgent: AgentInfo = {
-  workspace_id: "workspace-1",
-  model_preset: "gemini-4-argon",
-  model_label: "Argon",
-  busy: false,
-  tool: null,
-  created_at: timestamp,
-};
-const greetingItems: AgentItem[] = [
-  { id: "1", kind: "user", text: "이 작업의 범위를 정리해 주세요.", at: timestamp },
-  { id: "2", kind: "assistant", text: "## 작업 범위\n\n- 목표와 현재 상태를 확인합니다.\n- 필요한 다음 단계를 정리합니다.", at: timestamp },
-];
-
 const fakeTransport = createFakeTransport({
   snapshot: demoSnapshot,
   data: { sources: { pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [{ kind: "file", name: "tone.wav", path: "tone.wav", ext: "wav", size: 128044, modified: timestamp }, { kind: "file", name: "tone-second.wav", path: "tone-second.wav", ext: "wav", size: 128044, modified: timestamp }] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
   media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone },
   folder: { root_path: "/fake/docs", root_name: "문서" },
-  agentModels,
-  conversation: conversationMode ? {
-    thread: conversationMode === "start" || conversationMode === "login-start" ? null : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "argon", label: "Argon" }, created_at: timestamp, archived: false },
+  conversation: conversationMode || pasMode ? {
+    thread: conversationMode === "start" || conversationMode === "login-start" || pasMode === "empty" ? null : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "argon", label: "Argon" }, created_at: timestamp, archived: false },
     items: [{ id: "1", kind: "assistant", text: "기존 기록", at: timestamp, attachments: [] }],
     olderPages: [[{ id: "0", kind: "user", text: "이전 기록", at: timestamp, attachments: [] }], [{ id: "older", kind: "assistant", text: "더 이전 기록", at: timestamp, attachments: [] }]],
     models: [{ id: "argon", label: "Argon", available: true }, { id: "disabled", label: "Sol", available: false, reason: "사용 불가" }],
-    loginRequired: conversationMode === "login" || conversationMode === "login-start", conflict: conversationMode === "conflict", delayMs: 350,
+    loginRequired: conversationMode === "login" || conversationMode === "login-start", conflict: conversationMode === "conflict", delayMs: pasMode === "loading" ? 5000 : conversationMode ? 350 : 0,
+    getError: pasMode === "load-error" ? "작업 PAS를 불러오지 못했습니다" : undefined,
+    sendError: pasMode === "send-error" ? "메시지를 보내지 못했습니다" : undefined,
+    sendDelayMs: Number(params.get("send-delay")) || undefined,
     draft: conversationMode === "draft" ? { request_id: "draft-id", text: "복원된 초안", attachments: [{ name: "메모.txt", mime: "text/plain", data_base64: "aGVsbG8=" }], failed: false } : undefined,
   } : undefined,
-  agentGetDelayMs: pasMode === "loading" ? 5000 : undefined,
-  agentGetError: pasMode === "load-error" ? "작업 PAS를 불러오지 못했습니다" : undefined,
-  agentSendError: pasMode === "send-error" ? "메시지를 보내지 못했습니다" : undefined,
-  agentSendDelayMs: Number(params.get("send-delay")) || undefined,
-  agents: pasMode === "ready" || pasMode === "send-error"
-    ? { "workspace-1": { agent: greetingAgent, items: greetingItems, models: agentModels } }
-    : {},
   files: {
     "settings.json": "{\r\n  \"theme\": \"system\"\r\n}\r\n",
     "README.md": "# 첫 문서\n\n편집과 자동 저장을 확인합니다.\n",

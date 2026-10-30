@@ -1,7 +1,7 @@
 // 기존 코어의 상태와 명령 진입점이 한 파일에 모여 있어 500줄을 넘는다.
-mod agent_commands;
 mod app_commands;
 mod app_storage;
+mod attachment;
 mod connections;
 mod conversation;
 mod conversation_context;
@@ -323,11 +323,6 @@ impl Core {
             CoreRequest::AppImport { definition_json } => {
                 link::import_app(&self.inner, definition_json)
             }
-            request @ (CoreRequest::AgentGet { .. }
-            | CoreRequest::AgentCreate { .. }
-            | CoreRequest::AgentSend { .. }
-            | CoreRequest::AgentAttachment { .. }
-            | CoreRequest::AgentAttachmentOpen { .. }) => link::handle_agent(&self.inner, request),
             request @ (CoreRequest::ConversationGet { .. }
             | CoreRequest::ConversationHistory { .. }
             | CoreRequest::ConversationCreate { .. }

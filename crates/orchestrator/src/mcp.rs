@@ -68,7 +68,7 @@ struct SetConnectionArgs {
     writable: Option<bool>,
     /// 요청을 보낼 수 있는 경로 접두어 목록.
     paths: Option<Vec<String>>,
-    /// relay 요청에 붙일 헤더 이름과 값. 값의 ${env:NAME}은 서버 환경변수로 치환합니다.
+    /// relay 요청에 붙일 헤더 이름과 값. 환경변수 참조는 허용하지 않습니다.
     headers: Option<std::collections::BTreeMap<String, String>>,
     /// oauth 발급자 주소.
     issuer: Option<String>,
@@ -298,23 +298,13 @@ impl McpServer {
             Err(error) => json_error(error),
         })
     }
-    #[tool(description = "작업을 지우고 그 작업의 PAS를 내립니다. 마지막 작업은 지울 수 없습니다.")]
+    #[tool(
+        description = "작업을 지웁니다. 제공자에 로그인한 기기가 정합화할 때 대화를 보관합니다. 마지막 작업은 지울 수 없습니다."
+    )]
     async fn delete_workspace(
         &self,
         Parameters(args): Parameters<WorkspaceArgs>,
     ) -> Result<CallToolResult, ErrorData> {
-        let workspace_accessible = self
-            .state
-            .mcp_owns_workspace(&args.workspace_id)
-            .unwrap_or(false);
-        let agent_retiring = workspace_accessible
-            && self.state.0.soulstream.is_some()
-            && self
-                .state
-                .agent_row(&args.workspace_id)
-                .ok()
-                .flatten()
-                .is_some();
         match self.state.apply_layout_changes(
             None,
             &registry::LayoutChanges {
@@ -333,7 +323,7 @@ impl McpServer {
                     }
                 }
                 Ok(json_result(
-                    json!({"workspace_id":args.workspace_id,"deleted":true,"agent_retiring":agent_retiring}),
+                    json!({"workspace_id":args.workspace_id,"deleted":true}),
                 ))
             }
             Ok((reply, _))
