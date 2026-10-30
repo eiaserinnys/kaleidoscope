@@ -209,7 +209,7 @@ export function ExplorerContent({
           : view === "icons" ? <div aria-label="폴더 내용" className="ks-data-view ks-explorer-icons" ref={grid} role="listbox">
             {sortedEntries.map((entry, index) => {
               const active = selected === entry.path;
-              return <button aria-label={entry.name} aria-selected={active} className={`ks-explorer-icon${active ? " is-selected" : ""}`} data-file-path={entry.kind === "file" ? entry.path : undefined} data-folder-path={entry.kind === "dir" ? entry.path : undefined} data-focus-index={index} key={entry.path} onClick={() => onChoose(entry)} onContextMenu={(event) => {
+              return <button aria-label={entry.name} aria-posinset={index + 1} aria-selected={active} aria-setsize={sortedEntries.length} className={`ks-explorer-icon${active ? " is-selected" : ""}`} data-file-path={entry.kind === "file" ? entry.path : undefined} data-folder-path={entry.kind === "dir" ? entry.path : undefined} data-focus-index={index} key={entry.path} onClick={() => onChoose(entry)} onContextMenu={(event) => {
                 if (entry.kind === "file") { event.preventDefault(); setSelected(entry.path); onContextFile(event.currentTarget, entry.path); }
               }} onDoubleClick={(event) => activate(event.currentTarget, entry)} onFocus={() => roving.setFocus(index)} onKeyDown={(event) => roving.keyDown(event, index, () => activate(event.currentTarget, entry), gridColumns)} role="option" tabIndex={roving.focus === index ? 0 : -1} title={entry.name} type="button">
                 {entry.kind === "dir" ? <Folder size="tile" /> : fileIcon(entry, "tile")}

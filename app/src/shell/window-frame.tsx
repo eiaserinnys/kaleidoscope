@@ -153,7 +153,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, store, o
         >
           <span className="ks-window-title" title={appName}>{appName}</span>
           <div className="ks-window-title-actions">
-          {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} pressed={sharing} onClick={() => void onCall({ op: "share.set", window_id: appWindow.id, on: !sharing })}><ScreenShare /></IconButton> : null}
+          {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} tone="share" pressed={sharing} onClick={() => void onCall({ op: "share.set", window_id: appWindow.id, on: !sharing })}><ScreenShare /></IconButton> : null}
           <IconButton
             aria-label="창 닫기"
             onClick={() => void onCall({ op: "window.close", window_id: appWindow.id })}

@@ -366,7 +366,7 @@ export function FileBrowserTree({
             <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}><FolderOpen /></IconButton>
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
           </div>
-      <div aria-label={mode === "folders" ? "폴더 목록" : "파일 목록"} className="ks-file-tree-list" onKeyDown={handleTreeKeyDown} role="tree">
+          <div aria-label={mode === "folders" ? "폴더 목록" : "파일 목록"} className="ks-file-tree-list" onKeyDown={handleTreeKeyDown} role="tree">
             {loadingDirectories.has("") && !entriesByDirectory[""] ? <StatusText>불러오는 중</StatusText> : null}
             {errors[""] ? <span className="ks-inline-error" role="alert">{errors[""]}</span> : null}
             {renderDirectory("")}

@@ -29,10 +29,6 @@
   background: var(--ks-color-selection);
 }
 
-.ks-icon-button.is-selected {
-  background: var(--ks-color-selection);
-}
-
 .ks-button:disabled,
 .ks-icon-button:disabled {
   cursor: default;
@@ -43,7 +39,8 @@
   opacity: 0.56;
 }
 
-.ks-icon-button[aria-pressed="true"] { color: var(--ks-color-share); }
+.ks-icon-button[aria-pressed="true"] { background: var(--ks-color-selection); }
+.ks-icon-button-share[aria-pressed="true"] { color: var(--ks-color-share); background: transparent; }
 
 .ks-icon-button {
   display: inline-grid;

@@ -5,6 +5,7 @@ import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
+import { describeVisible } from "../share/visible";
 import { grantFor, makeTestSeed, mdEditorDefinition } from "./fixtures";
 import { mockVirtualLayout } from "./virtual-layout";
 
@@ -48,8 +49,8 @@ function setup({ legacy = false, folder = "", view = "icons", files }: { legacy?
   const transport = createFakeTransport(seed);
   const originalCall = transport.call;
   const calls = vi.spyOn(transport, "call");
-  render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
-  return { calls, originalCall, seed, transport };
+  const { container } = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  return { calls, container, originalCall, seed, transport };
 }
 
 describe("explorer block", () => {
@@ -97,6 +98,25 @@ describe("explorer block", () => {
     fireEvent.click(within(folders).getByRole("button", { name: "notes" }));
     expect(await screen.findByRole("option", { name: /a\.md/ })).toBeTruthy();
     expect(calls).not.toHaveBeenCalledWith(expect.objectContaining({ op: "window.set_state" }));
+  });
+
+  it("describes visible explorer icons, details rows, and folder tree for sharing", async () => {
+    const { container } = setup();
+    await screen.findByRole("option", { name: "readme.txt" });
+    const rect = (left: number, top: number, width: number, height: number) => ({ left, top, right: left + width, bottom: top + height, x: left, y: top, width, height, toJSON() {} });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => rect(0, 0, 100, 40));
+    vi.spyOn(document, "createRange").mockImplementation(() => ({ setStart() {}, setEnd() {}, getClientRects: () => [rect(0, 0, 60, 20)] }) as unknown as Range);
+
+    const root = container.firstElementChild as HTMLElement;
+    let description = describeVisible(root).text;
+    expect(description).toContain("[목록, 전체 3개 중 1~3번째]");
+    expect(description).toContain("[트리, 전체 2개 중 1~2번째]");
+
+    fireEvent.click(screen.getByRole("button", { name: "자세히 보기" }));
+    await screen.findByRole("table", { name: "폴더 내용" });
+    description = describeVisible(root).text;
+    expect(description).toContain("[표, 전체 3줄 중 1~3번째]");
+    expect(description).toContain("[트리, 전체 2개 중 1~2번째]");
   });
 
   it("returns to the selected root and persists it when the saved folder no longer exists", async () => {
