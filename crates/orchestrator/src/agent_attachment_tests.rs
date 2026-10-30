@@ -2,12 +2,16 @@ use super::*;
 use axum::extract::State as MockState;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::registry::AgentSendRequest;
+use kaleidoscope_contract::registry::ShareUpload;
 
 #[derive(Clone, Default)]
 struct Mock(Arc<Mutex<Vec<(String, Value)>>>);
 async fn intervene(MockState(mock): MockState<Mock>, Json(body): Json<Value>) -> Json<Value> {
     mock.0.lock().unwrap().push(("intervene".into(), body));
     Json(json!({}))
+}
+async fn intervene_fail(Json(_body): Json<Value>) -> StatusCode {
+    StatusCode::BAD_GATEWAY
 }
 async fn session(MockState(mock): MockState<Mock>, Path(id): Path<String>) -> Json<Value> {
     mock.0.lock().unwrap().push(("session".into(), json!(id)));
@@ -160,6 +164,118 @@ async fn send_uploads_attachments_in_order_and_forwards_paths() {
         json!(["/incoming/0.txt", "/incoming/1.txt"])
     );
     server.abort();
+}
+
+#[tokio::test]
+async fn send_appends_share_block_and_only_marks_it_after_success() {
+    let mock = Mock::default();
+    let app = Router::new()
+        .route("/api/sessions/{id}/intervene", post(intervene))
+        .with_state(mock.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let mut state = AppState::in_memory("secret");
+    state.configure_soulstream(
+        Some(format!("http://{address}")),
+        Some("token".into()),
+        "seosoyoung".into(),
+        None,
+    );
+    state.lock_db().unwrap().execute(
+        "INSERT INTO agents(workspace_id,device_id,session_id,model_preset,workspace_name,created_at) VALUES('w','d','pas1','codex-6.1-sol','작업','now')",
+        [],
+    ).unwrap();
+    state
+        .put_shared_view(
+            "d",
+            "test-pc",
+            "window-12345678",
+            ShareUpload {
+                workspace_id: "w".into(),
+                app_name: "편집기".into(),
+                text: "보이는 글".into(),
+                visual: false,
+            },
+        )
+        .unwrap();
+
+    attachments::send(
+        &state,
+        "w",
+        AgentSendRequest {
+            text: "안녕".into(),
+            attachments: vec![],
+        },
+    )
+    .await
+    .unwrap();
+    let sent = mock
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(kind, _)| kind == "intervene")
+        .unwrap()
+        .1["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(sent.starts_with("안녕\n\n<kaleidoscope-share>"));
+    assert!(sent.contains("## 편집기 (창 window-1): 새로 같이 봄\n보이는 글"));
+    assert!(state
+        .share_block_for_send("w")
+        .unwrap()
+        .unwrap()
+        .0
+        .contains("## 편집기 (창 window-1): 그대로"));
+    server.abort();
+
+    let app = Router::new().route("/api/sessions/{id}/intervene", post(intervene_fail));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let failing_server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let mut failed_state = AppState::in_memory("secret");
+    failed_state.configure_soulstream(
+        Some(format!("http://{address}")),
+        Some("token".into()),
+        "seosoyoung".into(),
+        None,
+    );
+    failed_state.lock_db().unwrap().execute(
+        "INSERT INTO agents(workspace_id,device_id,session_id,model_preset,workspace_name,created_at) VALUES('w','d','pas1','codex-6.1-sol','작업','now')",
+        [],
+    ).unwrap();
+    failed_state
+        .put_shared_view(
+            "d",
+            "test-pc",
+            "window-12345678",
+            ShareUpload {
+                workspace_id: "w".into(),
+                app_name: "편집기".into(),
+                text: "보이는 글".into(),
+                visual: false,
+            },
+        )
+        .unwrap();
+    assert!(attachments::send(
+        &failed_state,
+        "w",
+        AgentSendRequest {
+            text: "안녕".into(),
+            attachments: vec![],
+        },
+    )
+    .await
+    .is_err());
+    assert!(failed_state
+        .share_block_for_send("w")
+        .unwrap()
+        .unwrap()
+        .0
+        .contains("## 편집기 (창 window-1): 새로 같이 봄"));
+    failing_server.abort();
 }
 
 #[tokio::test]

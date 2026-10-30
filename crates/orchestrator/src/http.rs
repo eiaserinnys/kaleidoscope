@@ -29,6 +29,10 @@ pub fn router(state: AppState) -> Router {
             )),
         )
         .route(
+            "/shares/{window_id}",
+            axum::routing::put(super::share::put_share).delete(super::share::delete_share),
+        )
+        .route(
             "/connections/{name}/request",
             post(super::connection_relay::device_request).layer(DefaultBodyLimit::max(
                 super::connection_relay::connection_request_body_limit(),

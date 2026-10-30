@@ -115,6 +115,7 @@ impl Drop for ConnectionGuard {
                 *count = count.saturating_sub(1);
                 if *count == 0 {
                     map.remove(&self.device_id);
+                    self.state.delete_device_shared_views(&self.device_id);
                     if let Ok(mut support) = self.state.0.device_support.lock() {
                         support.remove(&self.device_id);
                     }

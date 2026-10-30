@@ -1,4 +1,3 @@
-
 use super::*;
 use kaleidoscope_contract::registry::DeviceLayout;
 
@@ -70,6 +69,66 @@ async fn open_counts_connected_devices_with_the_requested_workspace() {
             .unwrap(),
     );
     assert_eq!(targeted["open_sent_to"], 1);
+}
+
+#[tokio::test]
+async fn get_shared_view_returns_latest_window_and_empty_note() {
+    use kaleidoscope_contract::registry::ShareUpload;
+    let state = AppState::in_memory("secret");
+    state
+        .put_shared_view(
+            "device-a",
+            "PC A",
+            "window-1",
+            ShareUpload {
+                workspace_id: "w".into(),
+                app_name: "편집기".into(),
+                text: "오래된 글".into(),
+                visual: false,
+            },
+        )
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(3));
+    state
+        .put_shared_view(
+            "device-b",
+            "PC B",
+            "window-1",
+            ShareUpload {
+                workspace_id: "w".into(),
+                app_name: "편집기".into(),
+                text: "새 글".into(),
+                visual: true,
+            },
+        )
+        .unwrap();
+    let server = McpServer::new(state);
+    let value = |result: CallToolResult| {
+        let json = serde_json::to_value(result).unwrap();
+        serde_json::from_str::<Value>(json["content"][0]["text"].as_str().unwrap()).unwrap()
+    };
+    let shared = value(
+        server
+            .get_shared_view(Parameters(WorkspaceArgs {
+                workspace_id: "w".into(),
+            }))
+            .await
+            .unwrap(),
+    );
+    assert_eq!(shared["views"].as_array().unwrap().len(), 1);
+    assert_eq!(shared["views"][0]["text"], "새 글");
+    assert_eq!(shared["views"][0]["device_name"], "PC B");
+    assert_eq!(shared["views"][0]["visual"], true);
+    let empty = value(
+        server
+            .get_shared_view(Parameters(WorkspaceArgs {
+                workspace_id: "missing".into(),
+            }))
+            .await
+            .unwrap(),
+    );
+    assert_eq!(empty["views"], json!([]));
+    assert_eq!(empty["note"], "같이 보기로 켠 창이 없습니다");
 }
 
 #[tokio::test]

@@ -144,7 +144,7 @@ fn process(
     match event {
         "user_message" | "intervention_sent" => {
             let source = data["caller_info"]["source"].as_str().unwrap_or("");
-            let text = data["text"].as_str().unwrap_or("");
+            let text = super::share::strip_share_block(data["text"].as_str().unwrap_or(""));
             let attachments: Vec<_> = data["attachments"]
                 .as_array()
                 .into_iter()
@@ -170,7 +170,9 @@ fn process(
                     .lines()
                     .filter(|line| !line.starts_with("[첨부 파일 로컬 경로: "))
                     .collect::<Vec<_>>()
-                    .join("\n");
+                    .join("\n")
+                    .trim_end()
+                    .to_string();
                 if !text.trim().is_empty() || !attachments.is_empty() {
                     item(AgentItemKind::User, &text, &attachments)?;
                     state.activity(workspace, true, None);
@@ -402,6 +404,40 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn share_block_is_removed_from_user_message_and_blank_share_is_not_recorded() {
+        let state = AppState::in_memory("secret");
+        let mut projection = Projection::default();
+        let mut cursor = Projection::default();
+        process(
+            &state,
+            "w",
+            "처음 지시",
+            "user_message",
+            &json!({
+                "text":"요청\n\n<kaleidoscope-share>\n보이는 화면\n</kaleidoscope-share>  ",
+                "caller_info":{"source":"kaleidoscope"}
+            }),
+            &mut projection,
+        )
+        .unwrap();
+        process(
+            &state,
+            "w",
+            "처음 지시",
+            "intervention_sent",
+            &json!({
+                "text":"<kaleidoscope-share>\n보이는 화면\n</kaleidoscope-share>",
+                "caller_info":{"source":"kaleidoscope"}
+            }),
+            &mut cursor,
+        )
+        .unwrap();
+        let history = state.history("w").unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].text, "요청");
     }
 
     #[test]

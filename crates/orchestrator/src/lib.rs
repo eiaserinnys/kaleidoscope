@@ -51,6 +51,7 @@ struct Inner {
     db: Mutex<Connection>,
     events: broadcast::Sender<Broadcast>,
     connections: Mutex<HashMap<String, usize>>,
+    shares: Mutex<share::ShareStore>,
     device_support: Mutex<HashMap<String, Option<Supported>>>,
     layout_sync_devices: Mutex<HashSet<String>>,
     device_workspaces: Mutex<HashMap<String, HashSet<String>>>,
@@ -137,6 +138,7 @@ impl AppState {
             db: Mutex::new(connection),
             events,
             connections: Mutex::new(HashMap::new()),
+            shares: Mutex::new(share::ShareStore::default()),
             device_support: Mutex::new(HashMap::new()),
             layout_sync_devices: Mutex::new(HashSet::new()),
             device_workspaces: Mutex::new(device_workspaces),
@@ -379,6 +381,7 @@ mod pairing;
 mod preview;
 mod publish;
 mod relay;
+mod share;
 mod storage;
 mod workspace_queries;
 
