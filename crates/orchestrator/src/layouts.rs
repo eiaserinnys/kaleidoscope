@@ -91,19 +91,38 @@ impl AppState {
         layout: &DeviceLayout,
     ) -> Result<(), CoreError> {
         let workspaces = layout.workspaces.iter().map(|w| w.id.clone()).collect();
-        let layout = serde_json::to_string(layout)
+        let raw = serde_json::to_string(layout)
             .map_err(|_| server_error("배치를 저장할 수 없습니다."))?;
         let now = timestamp();
         let db = self.lock_db()?;
+        let previous: Option<String> = db
+            .query_row(
+                "SELECT layout FROM device_layouts WHERE device_id=?1",
+                [device_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(db_error)?;
+        // 다른 기기의 변경을 반영한 쉘도 배치를 다시 보고하므로, 보고 자체는 활동이 아니다. 그 기기만의 것
+        // (지금 보는 워크스페이스와 데스크톱, 고른 폴더)이 바뀌었을 때만 마지막 활동으로 친다.
+        let active = previous
+            .and_then(|raw| serde_json::from_str::<DeviceLayout>(&raw).ok())
+            .map_or(true, |previous| {
+                previous.active_workspace_id != layout.active_workspace_id
+                    || previous.active_desktop_ids != layout.active_desktop_ids
+                    || previous.folders != layout.folders
+            });
         db.execute(
             "INSERT INTO device_layouts(device_id,layout,reported_at) VALUES(?1,?2,?3) ON CONFLICT(device_id) DO UPDATE SET layout=excluded.layout,reported_at=excluded.reported_at",
-            params![device_id, layout, now],
+            params![device_id, raw, now],
         ).map_err(db_error)?;
-        db.execute(
-            "UPDATE devices SET last_active_at=?2 WHERE id=?1 AND revoked_at IS NULL",
-            params![device_id, now],
-        )
-        .map_err(db_error)?;
+        if active {
+            db.execute(
+                "UPDATE devices SET last_active_at=?2 WHERE id=?1 AND revoked_at IS NULL",
+                params![device_id, now],
+            )
+            .map_err(db_error)?;
+        }
         self.0
             .device_workspaces
             .lock()

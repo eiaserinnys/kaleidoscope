@@ -281,6 +281,45 @@ async fn latest_sync_device_gets_open_while_legacy_targeting_remains() {
     );
 }
 
+#[test]
+fn layout_report_counts_as_activity_only_when_device_choices_change() {
+    let state = AppState::in_memory("secret");
+    insert_device(&state, "pc", "PC");
+    let last_active = |state: &AppState| -> Option<String> {
+        state
+            .lock_db()
+            .unwrap()
+            .query_row("SELECT last_active_at FROM devices WHERE id='pc'", [], |row| row.get(0))
+            .unwrap()
+    };
+    let mut layout = DeviceLayout {
+        workspaces: vec![workspace("w", "작업")],
+        active_workspace_id: Some("w".into()),
+        ..Default::default()
+    };
+    state.save_layout("pc", &layout).unwrap();
+    assert!(last_active(&state).is_some(), "첫 보고는 활동이다");
+
+    let marker = "2000-01-01T00:00:00Z".to_string();
+    let reset = |state: &AppState| {
+        state
+            .lock_db()
+            .unwrap()
+            .execute("UPDATE devices SET last_active_at=?1 WHERE id='pc'", [&marker])
+            .unwrap();
+    };
+    reset(&state);
+    // 다른 기기의 변경을 반영해 다시 보고한 것(공유 배치만 바뀜)은 활동이 아니다.
+    layout.windows = vec![window("x", "d", "md-editor")];
+    state.save_layout("pc", &layout).unwrap();
+    assert_eq!(last_active(&state), Some(marker.clone()));
+
+    // 지금 보는 워크스페이스를 바꾼 것은 활동이다.
+    layout.active_workspace_id = Some("v".into());
+    state.save_layout("pc", &layout).unwrap();
+    assert_ne!(last_active(&state), Some(marker.clone()));
+}
+
 #[tokio::test]
 async fn app_version_moves_saved_windows_before_sending_open() {
     let state = AppState::in_memory("secret");
