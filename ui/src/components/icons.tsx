@@ -22,6 +22,7 @@ import {
   Import as ImportIcon,
   LayoutGrid as LayoutGridIcon,
   List as ListIcon,
+  LoaderCircle as LoaderCircleIcon,
   MessageSquare as MessageSquareIcon,
   Monitor as MonitorIcon,
   Music as MusicIcon,
@@ -98,6 +99,7 @@ export const Video = (props: IconProps) => renderIcon(VideoIcon, props);
 export const Plus = (props: IconProps) => renderIcon(PlusIcon, props);
 export const LayoutGrid = (props: IconProps) => renderIcon(LayoutGridIcon, props);
 export const List = (props: IconProps) => renderIcon(ListIcon, props);
+export const LoaderCircle = (props: IconProps) => renderIcon(LoaderCircleIcon, props);
 export const Import = (props: IconProps) => renderIcon(ImportIcon, props);
 export const ScreenShare = (props: IconProps) => renderIcon(ScreenShareIcon, props);
 export const X = (props: IconProps) => renderIcon(XIcon, props);

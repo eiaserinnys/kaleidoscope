@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { SelectOption, StorageEntryDecl } from "../contract/contract";
+import type { ConversationApplyStatus, SelectOption, StorageEntryDecl } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import type { BlockContext } from "../blocks/block-context";
 import { MarkdownEditorBlock } from "../blocks/markdown-editor";
 import { documentEditorSession } from "../blocks/document-editor-session";
 import { useBinding } from "../data/window-data";
 import { DataState } from "../components/data-state";
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronRight, Plus, RotateCcw, X } from "../components/icons";
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronRight, LoaderCircle, Plus, RotateCcw, X } from "../components/icons";
 import { Button, IconButton, Notice, StatusText } from "../components/primitives";
 import { Select, Toggle, equalOption, optionValue } from "../components/select-toggle";
 import { TextInput } from "../components/text-input";
@@ -15,12 +15,42 @@ import { SettingsEntrySession } from "./settings-entry-session";
 export function AppSettings({ context, open, onClose, onProblem }: { context: BlockContext; open: boolean; onClose: () => void; onProblem?: (message: string | null) => void }) {
   const title = useRef<HTMLHeadingElement>(null);
   const root = useRef<HTMLDivElement>(null);
+  const applyNotice = useRef<HTMLElement>(null);
+  const restoreRetryFocus = useRef(false);
+  const [applyStatus, setApplyStatus] = useState<ConversationApplyStatus>("applying");
+  const [showApplyNotice, setShowApplyNotice] = useState(false);
   const problems = useRef(new Map<string, string>());
   const reportProblem = (id: string, message: string | null) => {
     if (message) problems.current.set(id, message); else problems.current.delete(id);
     onProblem?.(problems.current.values().next().value ?? null);
   };
   useEffect(() => { if (open) title.current?.focus(); }, [open]);
+  useEffect(() => {
+    if (!open || !restoreRetryFocus.current || applyStatus === "applying") return;
+    const focused = document.activeElement;
+    if (focused === document.body || (focused && applyNotice.current?.contains(focused))) {
+      if (applyStatus === "unapplied") applyNotice.current?.querySelector<HTMLButtonElement>("button")?.focus();
+      else title.current?.focus();
+    }
+    restoreRetryFocus.current = false;
+  }, [open, applyStatus]);
+  useEffect(() => {
+    if (!context.definition.agent || !open) return;
+    let active = true;
+    let updated = false;
+    const updateStatus = (status: ConversationApplyStatus) => {
+      setApplyStatus(status);
+      if (status === "unapplied") setShowApplyNotice(true);
+      if (status === "applied") setShowApplyNotice(false);
+    };
+    const unsubscribe = context.store.subscribeEvents((event) => {
+      if (event.event === "conversation.apply_status" && event.app_id === context.window.app_id) { updated = true; updateStatus(event.status); }
+    });
+    void context.store.call({ op: "conversation.apply_status", window_id: context.window.id })
+      .then((reply) => { if (active && !updated) updateStatus(reply.status); })
+      .catch(() => { if (active && !updated) updateStatus("unapplied"); });
+    return () => { active = false; unsubscribe(); };
+  }, [context.store, context.window.id, context.window.app_id, context.definition.agent, open]);
   const entries = context.definition.storage?.entries ?? [];
   const groups = [false, true].map((workspace) => entries.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry.presentation === "settings" && entry.key.includes("{workspace_id}") === workspace));
   const close = () => { if (document.activeElement instanceof HTMLElement && root.current?.contains(document.activeElement)) document.activeElement.blur(); onClose(); };
@@ -28,7 +58,11 @@ export function AppSettings({ context, open, onClose, onProblem }: { context: Bl
     if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); close(); }
   }}>
     <header className="ks-data-toolbar"><IconButton aria-label="앱으로 돌아가기" onClick={close}><ArrowLeft /></IconButton><h2 ref={title} tabIndex={-1}>앱 설정</h2></header>
-    <div className="ks-app-settings-scroll">{groups.map((items, group) => items.length ? <section className="ks-settings-group" key={group}>
+    <div className="ks-app-settings-scroll">{context.definition.agent && showApplyNotice ? <section className="ks-settings-group" ref={applyNotice} aria-busy={applyStatus === "applying"}><Notice role="alert" actions={[<Button key="retry" disabled={applyStatus === "applying"} onClick={() => {
+      restoreRetryFocus.current = true;
+      setApplyStatus("applying");
+      void context.store.call({ op: "conversation.apply_retry", window_id: context.window.id }).catch(() => setApplyStatus("unapplied"));
+    }}>{applyStatus === "applying" ? <span className="ks-settings-apply-progress" role="status" aria-label="적용 중"><LoaderCircle size="inline" className="ks-settings-apply-spinner" /></span> : null}다시 시도</Button>]}>대화에 적용 안 됨</Notice></section> : null}{groups.map((items, group) => items.length ? <section className="ks-settings-group" key={group}>
       <h3 className="ks-data-section-title">{group ? "이 작업" : "모든 작업"}</h3>
       {items.map(({ entry, index }) => <SettingsEntry key={entry.id} context={context} entry={entry} index={index} open={open} onProblem={reportProblem} />)}
     </section> : null)}</div>

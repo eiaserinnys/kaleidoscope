@@ -117,6 +117,7 @@ pub(crate) fn write(
             },
         )
         .map_err(|e| map_error(inner, &ctx.link, e))?;
+    crate::conversation_reconcile::storage_changed(inner, &ctx.app, Some(entry));
     Ok(reply.revision)
 }
 
@@ -150,6 +151,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                     &StorageResetRequest { expected_revision },
                 )
                 .map_err(|e| map_error(inner, &ctx.link, e))?;
+            crate::conversation_reconcile::storage_changed(inner, &ctx.app, Some(&entry));
             Ok(CoreReply::StorageReset {
                 revision: result.revision,
             })

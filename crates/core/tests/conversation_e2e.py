@@ -31,6 +31,11 @@ class Provider:
         self.drop_before = set()
         self.late_item = False
         self.late_ready = False
+        self.patches = []
+        self.pages = 0
+        self.cursors = []
+        self.reject_patch = False
+        self.failed_patches = 0
 
     def thread(self, namespace, key, thread_id):
         return {"id": thread_id, "external": {"namespace": namespace, "key": key},
@@ -62,6 +67,14 @@ def serve(provider):
             with provider.lock:
                 if path == "/models":
                     return self.respond(200, {"models": [{"id": "model-argon", "label": "Model", "available": True}]})
+                if path == "/threads":
+                    refs = [v for (ns, _), v in provider.bindings.items() if ns == key[0]]
+                    offset = int(query.get("cursor", ["0"])[0])
+                    provider.pages += 1
+                    provider.cursors.append(offset)
+                    result = {"refs": [{k: v[k] for k in ("id", "title", "created_at", "archived")} for v in refs[offset:offset + 1]]}
+                    if offset + 1 < len(refs): result["next_cursor"] = str(offset + 1)
+                    return self.respond(200, result)
                 if path == "/threads/by-key":
                     if self.command == "PUT":
                         thread = provider.bindings.setdefault(key, provider.thread(*key, "thread-" + key[1]))
@@ -73,6 +86,20 @@ def serve(provider):
                     thread = provider.bindings.setdefault(key, provider.thread(*key, body["session_id"]))
                     return self.respond(200, {"thread": thread, "created": True, "notices": []})
                 parts = path.strip("/").split("/")
+                if len(parts) == 2 and parts[0] == "threads":
+                    thread = next((v for v in provider.bindings.values() if v["id"] == parts[1]), None)
+                    if not thread:
+                        return self.respond(404, {"error": {"code": "not_found", "message": "missing"}})
+                    if self.command == "PATCH":
+                        if provider.reject_patch:
+                            provider.failed_patches += 1
+                            return self.respond(503, {"error": {"code": "unavailable", "message": "test failure"}})
+                        provider.patches.append((parts[1], body))
+                        if "title" in body: thread["title"] = body["title"]
+                        if body.get("archived"): thread["archived"] = True
+                        if "model" in body: thread["model"]["id"] = body["model"]
+                        return self.respond(200, {"thread": thread})
+                    return self.respond(200, {"thread": thread, "busy": False, "tool": None, "current_model": thread["model"]})
                 if len(parts) >= 3 and parts[0] == "threads":
                     thread_id = parts[1]
                     if parts[2] == "items" and len(parts) == 3:
@@ -147,6 +174,7 @@ def serve(provider):
         do_GET = route
         do_PUT = route
         do_POST = route
+        do_PATCH = route
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()

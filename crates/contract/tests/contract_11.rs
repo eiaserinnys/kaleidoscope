@@ -15,6 +15,96 @@ fn workspace_pas_v2() -> Value {
 }
 
 #[test]
+fn agent_settings_reject_window_state_and_runtime_variables() {
+    for field in [
+        "namespace",
+        "profile",
+        "collection",
+        "model_order",
+        "selected_model",
+        "title_template",
+        "initial_instruction_template",
+        "instructions_template",
+    ] {
+        for binding in [
+            json!({"state":"choice"}),
+            json!({"expr":"$state.choice"}),
+            json!({"expr":"$data.choice"}),
+            json!({"expr":"$event.choice"}),
+            json!({"expr":"$item.choice"}),
+        ] {
+            let mut definition = workspace_pas_v2();
+            definition["state"] = json!({"choice":"value"});
+            definition["agent"][field] = binding.clone();
+            let error = parse_app_definition(&definition.to_string())
+                .expect_err(&format!("{field}: {binding}"));
+            assert!(
+                error.details.iter().any(|detail| detail
+                    .contains("대화 설정은 창마다 다를 수 없으니 저장소 항목으로 선언하라")),
+                "{field}: {binding}: {error:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn agent_expression_allows_storage_and_variable_names_in_string_literals() {
+    let mut definition = workspace_pas_v2();
+    definition["agent"]["instructions_template"] =
+        json!({"expr":"$storage.role & ' $state $data $event $item'"});
+    assert!(parse_app_definition(&definition.to_string()).is_ok());
+}
+
+#[test]
+fn agent_json_schema_excludes_state_bindings_and_describes_expression_scope() {
+    let schema = kaleidoscope_contract::app_definition_schema();
+    let provider = &schema["$defs"]["AgentProvider"]["properties"];
+    for field in [
+        "namespace",
+        "profile",
+        "collection",
+        "model_order",
+        "selected_model",
+        "title_template",
+        "initial_instruction_template",
+        "instructions_template",
+    ] {
+        assert_eq!(
+            provider[field]["not"]["required"],
+            json!(["state"]),
+            "{field}"
+        );
+        assert!(
+            provider[field]["description"]
+                .as_str()
+                .unwrap()
+                .contains("$storage"),
+            "{field}"
+        );
+    }
+}
+
+#[test]
+fn agent_typescript_exposes_a_storage_only_binding_type() {
+    let provider = <kaleidoscope_contract::AgentProvider as TS>::decl(&Config::new());
+    for field in [
+        "namespace",
+        "profile",
+        "collection",
+        "model_order",
+        "selected_model",
+        "title_template",
+        "initial_instruction_template",
+        "instructions_template",
+    ] {
+        assert!(
+            provider.contains(&format!("{field}: AgentBinding")),
+            "{field}: {provider}"
+        );
+    }
+}
+
+#[test]
 fn contract_11_workspace_pas_example_accepts_storage_provider_and_document() {
     let definition = workspace_pas_v2();
     let parsed = parse_app_definition(&definition.to_string());

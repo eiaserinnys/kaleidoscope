@@ -30,6 +30,11 @@ name: string,
 mime: string, };
 
 /**
+ * TypeScript에서 대화 설정 바인딩의 창 상태 형태를 제외한다. 실행 시 공통 검사기가 식도 검사한다.
+ */
+export type AgentBinding = ExprRef | string | number | boolean | null | Array<JsonValue> | ({ [key: string]: JsonValue } & { state?: never; expr?: never });
+
+/**
  * 워크스페이스 PAS 하나.
  */
 export type AgentInfo = { workspace_id: string, 
@@ -77,13 +82,14 @@ export type AgentItemKind = "user" | "assistant" | "error" | "notice";
 export type AgentModel = { preset: string, label: string, };
 
 /**
- * 앱의 대화 제공자. 프로필과 대화 설정 값은 저장소 항목에서 읽고, 특정 서비스를 코드에 넣지 않는다.
+ * 앱의 대화 제공자. 바인딩은 리터럴 또는 `$storage`, `$storage_meta`만 읽는다.
+ * 창 상태 바인딩과 `$state`, `$data`, `$event`, `$item`은 사용할 수 없다.
  */
 export type AgentProvider = { protocol: ConversationProtocol, permission: string, 
 /**
  * 연결 base URL 아래의 안전한 상대 경로.
  */
-base_path: string, namespace: Binding, profile: Binding, collection: Binding, model_order: Binding, selected_model: Binding, title_template: Binding, initial_instruction_template: Binding, instructions_template: Binding, 
+base_path: string, namespace: AgentBinding, profile: AgentBinding, collection: AgentBinding, model_order: AgentBinding, selected_model: AgentBinding, title_template: AgentBinding, initial_instruction_template: AgentBinding, instructions_template: AgentBinding, 
 /**
  * 현재 작업에 thread id를 저장하는 JSON 항목 id.
  */
@@ -352,6 +358,11 @@ export type ColumnWidth = "narrow" | "medium" | "wide" | "fill";
  */
 export type Confirm = { title: string, body?: Binding, ok?: string, };
 
+/**
+ * 기기에 저장된 앱 설정의 제공자 적용 상태.
+ */
+export type ConversationApplyStatus = "applying" | "applied" | "unapplied";
+
 export type ConversationAttachment = { id: string, name: string, mime: string, };
 
 export type ConversationError = { code: ConversationErrorCode, message: string, };
@@ -393,12 +404,12 @@ details: Array<string>, };
 /**
  * 코어가 화면에 보내는 이벤트. `event`로 가른다.
  */
-export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "agent.update", workspace_id: string, update: AgentUpdate, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, code: ErrorCode, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, failed: boolean, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, };
+export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "conversation.apply_status", app_id: string, status: ConversationApplyStatus, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "agent.update", workspace_id: string, update: AgentUpdate, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, code: ErrorCode, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, failed: boolean, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, };
 
 /**
  * 코어의 응답. `op`는 명령과 같다.
  */
-export type CoreReply = { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "link.start", user_code: string, expires_at: string, } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.allow_pc", access: PcAccess, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, } | { "op": "files.open", window: AppWindow, } | { "op": "web.attach", page: WebPage, } | { "op": "web.place", } | { "op": "web.navigate", } | { "op": "web.history", } | { "op": "web.capture", 
+export type CoreReply = { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "conversation.apply_status", status: ConversationApplyStatus, } | { "op": "conversation.apply_retry", } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "link.start", user_code: string, expires_at: string, } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.allow_pc", access: PcAccess, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, } | { "op": "files.open", window: AppWindow, } | { "op": "web.attach", page: WebPage, } | { "op": "web.place", } | { "op": "web.navigate", } | { "op": "web.history", } | { "op": "web.capture", 
 /**
  * `data:image/png;base64,...`. 찍지 못하면 null.
  */
@@ -423,7 +434,7 @@ data_base64: string, } | { "op": "agent.attachment_open", } | { "op": "conversat
 /**
  * 화면이 코어에 보내는 명령. `op`로 가른다. 응답은 같은 `op`의 [`CoreReply`]다.
  */
-export type CoreRequest = { "op": "state.get", } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.allow_pc", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "files.open", window_id: string, permission: string, path: string, app_id: string, rect?: Rect, } | { "op": "web.attach", window_id: string, url: string, } | { "op": "web.place", window_id: string, bounds: Rect | null, } | { "op": "web.navigate", window_id: string, url: string, } | { "op": "web.history", window_id: string, action: WebHistoryAction, } | { "op": "web.capture", window_id: string, } | { "op": "web.detach", window_id: string, } | { "op": "agent.get", workspace_id: string, } | { "op": "agent.create", workspace_id: string, model_preset: string, } | { "op": "agent.send", workspace_id: string, text: string, 
+export type CoreRequest = { "op": "state.get", } | { "op": "conversation.apply_status", window_id: string, } | { "op": "conversation.apply_retry", window_id: string, } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.allow_pc", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "files.open", window_id: string, permission: string, path: string, app_id: string, rect?: Rect, } | { "op": "web.attach", window_id: string, url: string, } | { "op": "web.place", window_id: string, bounds: Rect | null, } | { "op": "web.navigate", window_id: string, url: string, } | { "op": "web.history", window_id: string, action: WebHistoryAction, } | { "op": "web.capture", window_id: string, } | { "op": "web.detach", window_id: string, } | { "op": "agent.get", workspace_id: string, } | { "op": "agent.create", workspace_id: string, model_preset: string, } | { "op": "agent.send", workspace_id: string, text: string, 
 /**
  * 빼면 빈 배열이다(모듈 `agent` 1판의 명령 모양).
  */
