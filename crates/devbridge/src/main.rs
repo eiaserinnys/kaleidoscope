@@ -13,7 +13,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use kaleidoscope_contract::{CoreError, CoreEvent, CoreRequest, ErrorCode};
-use kaleidoscope_core::{Core, CoreConfig, Host};
+use kaleidoscope_core::{Core, CoreConfig, Host, PcRoot};
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
@@ -32,6 +32,28 @@ struct DevHost;
 impl Host for DevHost {
     fn pick_folder(&self) -> Option<PathBuf> {
         env::var_os("KALEIDOSCOPE_DEV_PICK").map(PathBuf::from)
+    }
+
+    fn pc_roots(&self) -> Vec<PcRoot> {
+        let Some(value) = env::var_os("KALEIDOSCOPE_DEV_PC_ROOTS") else {
+            return Vec::new();
+        };
+        let Ok(serde_json::Value::Array(roots)) =
+            serde_json::from_slice(value.to_string_lossy().as_bytes())
+        else {
+            return Vec::new();
+        };
+        roots
+            .into_iter()
+            .filter_map(|root| {
+                Some(PcRoot {
+                    id: root.get("id")?.as_str()?.into(),
+                    kind: serde_json::from_value(root.get("kind")?.clone()).ok()?,
+                    name: root.get("name")?.as_str()?.into(),
+                    path: root.get("path")?.as_str()?.into(),
+                })
+            })
+            .collect()
     }
 
     fn open_url(&self, _: &str) -> std::io::Result<()> {

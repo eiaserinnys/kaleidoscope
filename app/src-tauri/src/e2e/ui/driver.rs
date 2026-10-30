@@ -13,6 +13,7 @@ pub(super) fn observe(request: &CoreRequest) {
             | CoreRequest::WebCapture { .. }
             | CoreRequest::WebNavigate { .. }
             | CoreRequest::FilesPickFolder { .. }
+            | CoreRequest::FilesAllowPc { .. }
             | CoreRequest::FilesOpen { .. }
             | CoreRequest::WindowRaise { .. }
     ) {

@@ -26,6 +26,7 @@ use crate::storage::LinkFile;
 use crate::{Core, CoreConfig, CoreError, Host};
 
 mod layout_sync_tests;
+mod pc_tests;
 
 const MD_EDITOR: &str = include_str!("../../../examples/md-editor.json");
 const MD_VIEWER: &str = include_str!("../../../examples/md-viewer.json");
@@ -94,6 +95,7 @@ fn test_png_with_blue(width: u32, height: u32, blue: u8) -> Vec<u8> {
 #[derive(Default)]
 struct FakeHost {
     selected: Mutex<Option<PathBuf>>,
+    roots: Mutex<Vec<crate::PcRoot>>,
 }
 
 impl FakeHost {
@@ -105,6 +107,9 @@ impl FakeHost {
 impl Host for FakeHost {
     fn pick_folder(&self) -> Option<PathBuf> {
         self.selected.lock().unwrap().clone()
+    }
+    fn pc_roots(&self) -> Vec<crate::PcRoot> {
+        self.roots.lock().unwrap().clone()
     }
 }
 

@@ -2160,6 +2160,7 @@ name = "kaleidoscope-app"
 version = "0.5.2"
 dependencies = [
  "base64 0.22.1",
+ "dirs",
  "kaleidoscope-core",
  "serde_json",
  "tauri",

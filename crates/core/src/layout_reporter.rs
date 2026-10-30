@@ -96,21 +96,54 @@ fn is_active(inner: &Inner, generation: u64, epoch: u64) -> bool {
         && inner.link_file.lock().unwrap().is_some()
 }
 
-fn device_layout(state: &CoreState) -> DeviceLayout {
+pub(crate) fn device_layout(state: &CoreState) -> DeviceLayout {
+    let mut folders: Vec<LayoutFolder> = state
+        .device
+        .grants
+        .iter()
+        .filter(|grant| {
+            crate::files::scope(state, &grant.window_id, &grant.permission).ok()
+                != Some(kaleidoscope_contract::FilesScope::Pc)
+        })
+        .map(|grant| LayoutFolder {
+            window_id: grant.window_id.clone(),
+            permission: grant.permission.clone(),
+            root_name: grant.root_name.clone(),
+        })
+        .collect();
+    for window in &state.shared.windows {
+        if let Some(definition) =
+            crate::app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
+        {
+            for permission in &definition.permissions {
+                if let kaleidoscope_contract::PermissionDecl::Files {
+                    id,
+                    label,
+                    scope: kaleidoscope_contract::FilesScope::Pc,
+                    ..
+                } = permission
+                {
+                    if state
+                        .device
+                        .pc_access
+                        .iter()
+                        .any(|a| a.app_id == window.app_id && a.permission == *id)
+                    {
+                        folders.push(LayoutFolder {
+                            window_id: window.id.clone(),
+                            permission: id.clone(),
+                            root_name: label.clone(),
+                        });
+                    }
+                }
+            }
+        }
+    }
     DeviceLayout {
         workspaces: state.shared.workspaces.clone(),
         desktops: state.shared.desktops.clone(),
         windows: state.shared.windows.clone(),
-        folders: state
-            .device
-            .grants
-            .iter()
-            .map(|grant| LayoutFolder {
-                window_id: grant.window_id.clone(),
-                permission: grant.permission.clone(),
-                root_name: grant.root_name.clone(),
-            })
-            .collect(),
+        folders,
         active_workspace_id: state.device.active_workspace_id.clone(),
         active_desktop_ids: state.device.active_desktop_ids.clone(),
         // 식 오류 보고는 코어 데이터 런타임 PR에서 채운다.

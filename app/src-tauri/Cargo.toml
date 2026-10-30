@@ -23,10 +23,11 @@ tauri-plugin-updater = "2"
 tokio = { version = "1", features = ["time"] }
 base64 = { version = "0.22", optional = true }
 serde_json = { workspace = true }
+dirs = "7"
 
 [dev-dependencies]
 serde_json = "1"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39.1"
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_Storage_FileSystem"] }

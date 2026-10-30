@@ -11,7 +11,31 @@ pub(super) fn observe(request: &CoreRequest) {
     driver::observe(request);
 }
 
+struct NotesFixture(PathBuf);
+
+impl NotesFixture {
+    fn create() -> Result<Self, String> {
+        let documents = dirs::document_dir().ok_or("Documents folder unavailable")?;
+        let root = documents.join("kaleidoscope-e2e");
+        if root.exists() {
+            return Err("kaleidoscope-e2e fixture already exists".into());
+        }
+        fs::create_dir_all(root.join("notes")).map_err(|e| e.to_string())?;
+        let fixture = Self(root);
+        fs::write(fixture.0.join("notes/a.md"), "# 첫 번째 노트").map_err(|e| e.to_string())?;
+        fs::write(fixture.0.join("notes/b.md"), "# 두 번째 노트").map_err(|e| e.to_string())?;
+        Ok(fixture)
+    }
+}
+
+impl Drop for NotesFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
 pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<(), String> {
+    let fixture = NotesFixture::create()?;
     let snap = snapshot(core)?;
     let workspace = snap
         .device
@@ -210,49 +234,60 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
         app,
         r#"
       const root=document.querySelector('[data-testid="app-window-explorer"]');
-      const button=[...root.querySelectorAll('button')].find(b=>b.textContent.trim()==='볼 폴더 고르기');
+      const button=[...root.querySelectorAll('button')].find(b=>b.textContent.trim()==='이 PC의 파일 읽기 허용');
       if(!button)return false; button.click(); return true;
     "#,
-        "pick folder",
+        "allow PC access",
     )?;
-    require_request(log, start, "UI folder selection", |request| {
-        matches!(request,
-            CoreRequest::FilesPickFolder { window_id, permission } if window_id == &explorer_id && permission == "folder"
-        )
-    })?;
-    wait_until("explorer grant", || {
+    require_request(
+        log,
+        start,
+        "UI PC access",
+        |request| matches!(request, CoreRequest::FilesAllowPc { window_id, permission } if window_id == &explorer_id && permission == "pc"),
+    )?;
+    wait_until("PC access", || {
         Ok(snapshot(core)?
             .device
-            .grants
+            .pc_access
             .iter()
-            .any(|grant| grant.window_id == explorer_id && grant.permission == "folder"))
+            .any(|access| access.app_id == "explorer" && access.permission == "pc"))
     })?;
     wait_dom(
         app,
         r#"
       const root=document.querySelector('[data-testid="app-window-explorer"]');
-      const tree=root?.querySelector('[role="tree"][aria-label="폴더 목록"]');
-      return !!tree && [...tree.querySelectorAll('button')].some(b=>b.textContent.trim()==='notes');
+      return !!root?.querySelector('[role="tree"][aria-label="폴더 목록"]') &&
+        !!root.querySelector('[role="listbox"] [data-folder-path="documents"]') &&
+        !!root.querySelector('[role="listbox"] [data-folder-path="C"]');
     "#,
-        "notes directory",
+        "PC roots and C drive",
     )?;
-    action(
-        app,
-        r#"
-      const root=document.querySelector('[data-testid="app-window-explorer"]');
-      const tree=root.querySelector('[role="tree"][aria-label="폴더 목록"]');
-      const button=[...tree.querySelectorAll('button')].find(b=>b.textContent.trim()==='notes');
-      if(!button)return false; button.click(); return true;
-    "#,
-        "expand notes",
-    )?;
-    wait_dom(app, "return !!document.querySelector('[data-testid=\"app-window-explorer\"] [data-file-path=\"notes/a.md\"]') && !!document.querySelector('[data-testid=\"app-window-explorer\"] [data-file-path=\"notes/b.md\"]');", "notes files")?;
+    screen(out, log, "08-pc-icons")?;
+    for path in [
+        "documents",
+        "documents/kaleidoscope-e2e",
+        "documents/kaleidoscope-e2e/notes",
+    ] {
+        let selector = format!("return !!document.querySelector('[data-testid=\"app-window-explorer\"] [role=\"listbox\"] [data-folder-path=\"{path}\"]');");
+        wait_dom(app, &selector, path)?;
+        let script = format!(
+            r#"
+          const b=document.querySelector('[data-testid="app-window-explorer"] [role="listbox"] [data-folder-path="{path}"]');
+          if(!b)return false;
+          b.dispatchEvent(new MouseEvent('click',{{bubbles:true,detail:1}}));
+          b.dispatchEvent(new MouseEvent('click',{{bubbles:true,detail:2}}));
+          b.dispatchEvent(new MouseEvent('dblclick',{{bubbles:true,detail:2}})); return true;
+        "#
+        );
+        action(app, &script, path)?;
+    }
+    wait_dom(app, "return !!document.querySelector('[data-testid=\"app-window-explorer\"] [data-file-path=\"documents/kaleidoscope-e2e/notes/a.md\"]') && !!document.querySelector('[data-testid=\"app-window-explorer\"] [data-file-path=\"documents/kaleidoscope-e2e/notes/b.md\"]');", "notes files")?;
 
     let start = request_mark();
     action(
         app,
         r#"
-      const b=document.querySelector('[data-testid="app-window-explorer"] [data-file-path="notes/a.md"]');
+      const b=document.querySelector('[data-testid="app-window-explorer"] [data-file-path="documents/kaleidoscope-e2e/notes/a.md"]');
       if(!b)return false;
       b.dispatchEvent(new MouseEvent('click',{bubbles:true,detail:1}));
       b.dispatchEvent(new MouseEvent('click',{bubbles:true,detail:2}));
@@ -262,18 +297,29 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     )?;
     require_request(log, start, "open a.md", |request| {
         matches!(request,
-            CoreRequest::FilesOpen { window_id, path, app_id, .. } if window_id == &explorer_id && path == "notes/a.md" && app_id == "md-editor"
+            CoreRequest::FilesOpen { window_id, path, app_id, .. } if window_id == &explorer_id && path == "documents/kaleidoscope-e2e/notes/a.md" && app_id == "md-editor"
         )
     })?;
     wait_until("a.md editor state", || {
-        Ok(editor_state(core, "notes/a.md")?.is_some())
+        Ok(editor_state(core, "a.md")?.is_some())
     })?;
     wait_dom(app, "const e=document.querySelector('[data-testid=\"app-window-md-editor\"] .ks-markdown-editor'); return !!e && e.textContent.includes('첫 번째 노트');", "a.md editor content")?;
-    let (editor_id, count_a) = editor_state(core, "notes/a.md")?.ok_or("a.md editor missing")?;
+    let (editor_id, count_a) = editor_state(core, "a.md")?.ok_or("a.md editor missing")?;
+    let expected_parent = fs::canonicalize(fixture.0.join("notes")).map_err(|e| e.to_string())?;
+    let snap = snapshot(core)?;
+    let grant = snap
+        .device
+        .grants
+        .iter()
+        .find(|grant| grant.window_id == editor_id && grant.permission == "docs")
+        .ok_or("editor folder grant missing")?;
+    if Path::new(&grant.root_path) != expected_parent {
+        return Err("editor grant is not the file parent".into());
+    }
     record(
         log,
         "ui.editor.a",
-        json!({"window_id": editor_id, "count": count_a, "path": "notes/a.md"}),
+        json!({"window_id": editor_id, "count": count_a, "path": "documents/kaleidoscope-e2e/notes/a.md"}),
     )?;
     screen(out, log, "09-a-md")?;
 
@@ -290,7 +336,7 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     action(
         app,
         r#"
-      const b=document.querySelector('[data-testid="app-window-explorer"] [data-file-path="notes/b.md"]');
+      const b=document.querySelector('[data-testid="app-window-explorer"] [data-file-path="documents/kaleidoscope-e2e/notes/b.md"]');
       if(!b)return false;
       b.dispatchEvent(new MouseEvent('click',{bubbles:true,detail:1}));
       b.dispatchEvent(new MouseEvent('click',{bubbles:true,detail:2}));
@@ -300,14 +346,14 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     )?;
     require_request(log, start, "open b.md", |request| {
         matches!(request,
-            CoreRequest::FilesOpen { window_id, path, app_id, .. } if window_id == &explorer_id && path == "notes/b.md" && app_id == "md-editor"
+            CoreRequest::FilesOpen { window_id, path, app_id, .. } if window_id == &explorer_id && path == "documents/kaleidoscope-e2e/notes/b.md" && app_id == "md-editor"
         )
     })?;
     wait_until("b.md editor state", || {
-        Ok(editor_state(core, "notes/b.md")?.is_some())
+        Ok(editor_state(core, "b.md")?.is_some())
     })?;
     wait_dom(app, "const e=document.querySelector('[data-testid=\"app-window-md-editor\"] .ks-markdown-editor'); return !!e && e.textContent.includes('두 번째 노트');", "b.md editor content")?;
-    let (editor_b, count_b) = editor_state(core, "notes/b.md")?.ok_or("b.md editor missing")?;
+    let (editor_b, count_b) = editor_state(core, "b.md")?.ok_or("b.md editor missing")?;
     if editor_b != editor_id || count_b != count_a {
         return Err(format!(
             "editor was not reused: {editor_id}/{count_a}, {editor_b}/{count_b}"
@@ -316,7 +362,7 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     record(
         log,
         "ui.editor.b",
-        json!({"window_id": editor_b, "count": count_b, "path": "notes/b.md"}),
+        json!({"window_id": editor_b, "count": count_b, "path": "documents/kaleidoscope-e2e/notes/b.md"}),
     )?;
     screen(out, log, "10-b-md")?;
 

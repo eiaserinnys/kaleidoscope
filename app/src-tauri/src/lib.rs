@@ -11,7 +11,7 @@ use std::sync::Arc;
 use kaleidoscope_core::kaleidoscope_contract::{
     CoreError, CoreReply, CoreRequest, ErrorCode, TAURI_EVENT,
 };
-use kaleidoscope_core::{Core, CoreConfig, Host};
+use kaleidoscope_core::{Core, CoreConfig, Host, PcRoot};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
@@ -45,6 +45,9 @@ impl Host for DialogHost {
             .blocking_pick_folder()
             .and_then(|path| path.into_path().ok())
     }
+    fn pc_roots(&self) -> Vec<PcRoot> {
+        pc_roots()
+    }
     #[cfg(windows)]
     fn web(&self) -> Option<&dyn kaleidoscope_core::WebHost> {
         Some(&self.web)
@@ -52,6 +55,75 @@ impl Host for DialogHost {
     fn updater(&self) -> Option<&dyn kaleidoscope_core::UpdateHost> {
         Some(self.updater.as_ref())
     }
+}
+
+fn pc_roots() -> Vec<PcRoot> {
+    use kaleidoscope_core::kaleidoscope_contract::{PcRootKind, PC_KNOWN_FOLDERS};
+    let paths = [
+        dirs::desktop_dir(),
+        dirs::document_dir(),
+        dirs::download_dir(),
+        dirs::picture_dir(),
+        dirs::audio_dir(),
+        dirs::video_dir(),
+    ];
+    let roots: Vec<PcRoot> = PC_KNOWN_FOLDERS
+        .iter()
+        .zip(paths)
+        .filter_map(|((id, name), path)| {
+            let path = path.filter(|path| path.is_dir())?;
+            Some(PcRoot {
+                id: (*id).into(),
+                kind: PcRootKind::Known,
+                name: (*name).into(),
+                path,
+            })
+        })
+        .collect();
+    #[cfg(windows)]
+    let roots = {
+        let mut roots = roots;
+        use windows::core::PCWSTR;
+        use windows::Win32::Storage::FileSystem::{GetLogicalDrives, GetVolumeInformationW};
+        let drives = unsafe { GetLogicalDrives() };
+        for index in 0..26 {
+            if drives & (1 << index) == 0 {
+                continue;
+            }
+            let letter = (b'A' + index as u8) as char;
+            let path = format!("{letter}:\\");
+            let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+            let mut volume = [0u16; 256];
+            let result = unsafe {
+                GetVolumeInformationW(
+                    PCWSTR(wide.as_ptr()),
+                    Some(&mut volume),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+            };
+            if result.is_err() {
+                continue;
+            }
+            let length = volume.iter().position(|&c| c == 0).unwrap_or(volume.len());
+            let label = String::from_utf16_lossy(&volume[..length]);
+            let label = if label.is_empty() {
+                "로컬 디스크"
+            } else {
+                &label
+            };
+            roots.push(PcRoot {
+                id: letter.to_string(),
+                kind: PcRootKind::Volume,
+                name: format!("{label} ({letter}:)"),
+                path: PathBuf::from(path),
+            });
+        }
+        roots
+    };
+    roots
 }
 
 #[tauri::command]
