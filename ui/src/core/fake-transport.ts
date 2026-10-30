@@ -48,6 +48,7 @@ export interface FakeConversationSeed {
   thread: ConversationThread | null;
   items: ConversationItem[];
   older?: ConversationItem[];
+  olderPages?: ConversationItem[][];
   models: ConversationModel[];
   loginRequired?: boolean;
   conflict?: boolean;
@@ -152,7 +153,9 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   let storageFailure: string | null = null;
   let windowNumber = 1;
   const conversation = seed.conversation ? clone(seed.conversation) : null;
+  const conversationOlderPages = conversation?.olderPages ?? (conversation?.older?.length ? [conversation.older] : []);
   let conversationLoggedIn = !conversation?.loginRequired;
+  let conversationWatching = false;
   const conversationAttachments = new Map<string, ConversationUpload>();
   const models = clone(seed.agentModels ?? [
     { preset: "gemini-4-argon", label: "Argon" },
@@ -210,6 +213,12 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   };
 
   const delay = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+
+  const watchConversation = () => {
+    if (!conversation?.thread || conversationWatching) return;
+    conversationWatching = true;
+    setTimeout(() => emit({ event: "conversation.update", thread_id: conversation.thread!.id, update: { kind: "snapshot", snapshot: { cursor: "1", busy: false, tool: null, stream_id: null, text: null, items: clone(conversation.items) } } }), 20);
+  };
 
   const streamReply = async (workspaceId: string, text: string, tool: string | null) => {
     setAgentActivity(workspaceId, true, tool);
@@ -384,13 +393,14 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         if (!conversationLoggedIn) return fail("login_required", "로그인이 필요합니다");
         if (conversation.conflict) return fail("binding_conflict", "대화 연결이 충돌합니다");
         if (conversation.draft) emit({ event: "conversation.draft", window_id: request.window_id, ...conversation.draft });
-        if (conversation.thread) setTimeout(() => emit({ event: "conversation.update", thread_id: conversation.thread!.id, update: { kind: "snapshot", snapshot: { cursor: "1", busy: false, tool: null, stream_id: null, text: null, items: clone(conversation.items) } } }), 20);
-        return { op: "conversation.get", thread: clone(conversation.thread), items: clone(conversation.items), cursor: "1", next_before: conversation.older?.length ? "older" : undefined, models: clone(conversation.models) };
+        watchConversation();
+        return { op: "conversation.get", thread: clone(conversation.thread), items: clone(conversation.items), cursor: "1", next_before: conversationOlderPages.length ? "older-0" : undefined, models: clone(conversation.models) };
       }
       case "conversation.history": {
         if (!conversation) return fail("unavailable", "대화를 사용할 수 없습니다");
         if (conversation.delayMs) await delay(conversation.delayMs);
-        return { op: "conversation.history", items: clone(conversation.older ?? []) };
+        const page = Number(request.before.slice("older-".length));
+        return { op: "conversation.history", items: clone(conversationOlderPages[page] ?? []), next_before: page + 1 < conversationOlderPages.length ? `older-${page + 1}` : undefined };
       }
       case "conversation.create": {
         if (!conversation) return fail("unavailable", "대화를 사용할 수 없습니다");
@@ -399,6 +409,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         const model = conversation.models.find((item) => item.id === request.model && item.available);
         if (!model) return fail("invalid_request", "고를 수 없는 모델입니다");
         conversation.thread ??= { id: "fake-thread", external: { namespace: "fake", key: request.window_id }, title: "대화", model: { id: model.id, label: model.label }, created_at: new Date().toISOString(), archived: false };
+        watchConversation();
         return { op: "conversation.create", thread: clone(conversation.thread) };
       }
       case "conversation.send": {
