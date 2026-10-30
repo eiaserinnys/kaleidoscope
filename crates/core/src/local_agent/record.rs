@@ -15,7 +15,7 @@ use std::{
 };
 use uuid::Uuid;
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub(super) struct Record {
     pub spec_hash: String,
     pub cwd: PathBuf,
@@ -24,7 +24,7 @@ pub(super) struct Record {
     pub items: Vec<ConversationItem>,
     pub attachments: BTreeMap<String, StoredAttachment>,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(super) struct StoredAttachment {
     item_id: String,
     mime: String,

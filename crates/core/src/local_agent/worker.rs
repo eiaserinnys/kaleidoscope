@@ -1,5 +1,6 @@
 //! ACP 연결과 세션 하나를 소유하는 워커.
-use super::{process::Process, prompt, updates, Command, PromptInput, Shared};
+use super::{process::Process, prompt, updates, Command, Shared};
+use crate::error;
 use agent_client_protocol::{
     schema::{
         v1::{self as acp},
@@ -27,6 +28,9 @@ fn fail(owner: &Shared, reason: &str) {
     });
     s.snapshot.activity.busy = false;
     s.snapshot.activity.tool = None;
+    s.snapshot.text.clear();
+    s.snapshot.stream_id = None;
+    s.tools.clear();
     s.snapshot.queued.clear();
     drop(s);
     owner.publish_state();
@@ -198,52 +202,6 @@ async fn configure(
     owner.publish_state();
     Ok(())
 }
-fn begin_prompt(
-    conn: &ConnectionTo<Agent>,
-    owner: &Arc<Shared>,
-    session: acp::SessionId,
-    input: PromptInput,
-    image: bool,
-) -> AcpResult<()> {
-    let (blocks, event) = {
-        let mut s = owner.state.lock().unwrap();
-        let (blocks, attachments) =
-            prompt::prepare(&input, &mut s.record, &owner.config.record_dir, image)
-                .map_err(|e| agent_client_protocol::Error::internal_error().data(e.message))?;
-        let event = owner.append(
-            &mut s,
-            ConversationItemKind::User,
-            input.request_id.clone(),
-            input.text,
-            attachments,
-        )?;
-        s.snapshot.phase = LocalAgentPhase::Responding;
-        s.snapshot.activity.busy = true;
-        s.snapshot.queued.retain(|q| q.id != input.request_id);
-        (blocks, event)
-    };
-    (owner.emit)(event);
-    owner.publish_state();
-    (owner.emit)(LocalAgentUpdate::Conversation {
-        update: ConversationEvent::Activity {
-            busy: true,
-            tool: None,
-        },
-    });
-    let queued = owner.state.lock().unwrap().snapshot.queued.clone();
-    (owner.emit)(LocalAgentUpdate::Queue { queued });
-    let connection = conn.clone();
-    let tx = owner.tx.clone();
-    tokio::spawn(async move {
-        let result = connection
-            .send_request(acp::PromptRequest::new(session, blocks))
-            .block_task()
-            .await
-            .map(|_| ());
-        let _ = tx.send(Command::Finished(result));
-    });
-    Ok(())
-}
 async fn interrupt<T>(
     rx: &mut mpsc::UnboundedReceiver<Command>,
     pending: &mut VecDeque<Command>,
@@ -377,12 +335,54 @@ async fn session_loop(
                     }
                 }
             }
-            Command::Send(input) => {
-                if active {
+            Command::Send(input, reply) => {
+                let mut s = owner.state.lock().unwrap();
+                if !matches!(
+                    s.snapshot.phase,
+                    LocalAgentPhase::Ready | LocalAgentPhase::Responding
+                ) {
+                    let _ = reply.send(Err(error::make(ErrorCode::InvalidRequest)));
+                } else if s.seen.contains(&input.request_id) {
+                    let queued = s.snapshot.queued.iter().any(|q| q.id == input.request_id);
+                    let _ = reply.send(Ok(queued));
+                } else if active {
+                    s.seen.insert(input.request_id.clone());
+                    s.snapshot
+                        .queued
+                        .push(kaleidoscope_contract::local_agent::QueuedMessage {
+                            id: input.request_id.clone(),
+                            text: input.text.clone(),
+                            attachments: input
+                                .uploads
+                                .iter()
+                                .enumerate()
+                                .map(|(i, a)| {
+                                    kaleidoscope_contract::conversation::ConversationAttachment {
+                                        id: i.to_string(),
+                                        name: a.name.clone(),
+                                        mime: a.mime.clone(),
+                                    }
+                                })
+                                .collect(),
+                        });
+                    let queued = s.snapshot.queued.clone();
                     queue.push_back(input);
-                } else if let Some(id) = session.clone() {
-                    begin_prompt(&conn, &owner, id, input, caps.prompt_capabilities.image)?;
-                    active = true;
+                    drop(s);
+                    (owner.emit)(LocalAgentUpdate::Queue { queued });
+                    let _ = reply.send(Ok(true));
+                } else {
+                    drop(s);
+                    let result = match session.clone() {
+                        Some(id) => {
+                            prompt::begin(&conn, &owner, id, input, caps.prompt_capabilities.image)
+                                .map(|()| {
+                                    active = true;
+                                    false
+                                })
+                        }
+                        None => Err(error::make(ErrorCode::InvalidRequest)),
+                    };
+                    let _ = reply.send(result);
                 }
             }
             Command::Cancel => {
@@ -415,7 +415,10 @@ async fn session_loop(
                 });
                 if let Some(input) = queue.pop_front() {
                     if let Some(id) = session.clone() {
-                        begin_prompt(&conn, &owner, id, input, caps.prompt_capabilities.image)?;
+                        prompt::begin(&conn, &owner, id, input, caps.prompt_capabilities.image)
+                            .map_err(|e| {
+                                agent_client_protocol::Error::internal_error().data(e.message)
+                            })?;
                         active = true;
                     }
                 } else {
@@ -482,6 +485,9 @@ pub(super) async fn run(owner: Arc<Shared>, mut rx: mpsc::UnboundedReceiver<Comm
         loop {
             match rx.recv().await {
                 Some(Command::Retry) => break,
+                Some(Command::Send(_, reply)) => {
+                    let _ = reply.send(Err(error::make(ErrorCode::LocalAgentFailed)));
+                }
                 Some(Command::Shutdown) | None => {
                     phase(&owner, LocalAgentPhase::Ended);
                     return;

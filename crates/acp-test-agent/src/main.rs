@@ -121,7 +121,19 @@ fn main() {
             }
             "session/prompt" => {
                 let text = value["params"]["prompt"].to_string();
-                if text.contains("permission") {
+                if text.contains("fail-turn") {
+                    update(
+                        json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"OLD"}}),
+                    );
+                    emit(
+                        json!({"jsonrpc":"2.0","id":id,"error":{"code":-32603,"message":"turn failed"}}),
+                    );
+                } else if text.contains("fresh-turn") {
+                    update(
+                        json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"NEW"}}),
+                    );
+                    emit(json!({"jsonrpc":"2.0","id":id,"result":{"stopReason":"end_turn"}}));
+                } else if text.contains("permission") {
                     pending = id;
                     emit(
                         json!({"jsonrpc":"2.0","id":"permission-1","method":"session/request_permission","params":{"sessionId":"session-1","toolCall":{"toolCallId":"tool-1","title":"파일 수정"},"options":[{"optionId":"yes","name":"허용","kind":"allow_once"},{"optionId":"no","name":"거부","kind":"reject_once"}]}}),

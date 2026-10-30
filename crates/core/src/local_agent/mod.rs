@@ -11,7 +11,6 @@ use kaleidoscope_contract::{
     conversation::{ConversationItemKind, ConversationUpload},
     local_agent::{
         AgentControlValue, AgentSpec, LocalAgentPhase, LocalAgentSnapshot, LocalAgentUpdate,
-        QueuedMessage,
     },
     CoreError, ErrorCode,
 };
@@ -132,50 +131,18 @@ impl WorkerHandle {
     }
     pub fn send(&self, input: PromptInput) -> Result<bool, CoreError> {
         prompt::validate(&input)?;
-        let mut s = self.shared.state.lock().unwrap();
-        if !matches!(
-            s.snapshot.phase,
-            LocalAgentPhase::Ready | LocalAgentPhase::Responding
-        ) {
+        let phase = self.shared.state.lock().unwrap().snapshot.phase;
+        if !matches!(phase, LocalAgentPhase::Ready | LocalAgentPhase::Responding) {
             return Err(error::make(ErrorCode::InvalidRequest));
         }
-        if s.seen.contains(&input.request_id) {
-            return Ok(s.snapshot.queued.iter().any(|q| q.id == input.request_id));
-        }
-        let queued = s.snapshot.phase == LocalAgentPhase::Responding;
-        s.seen.insert(input.request_id.clone());
-        if queued {
-            s.snapshot.queued.push(QueuedMessage {
-                id: input.request_id.clone(),
-                text: input.text.clone(),
-                attachments: input
-                    .uploads
-                    .iter()
-                    .enumerate()
-                    .map(
-                        |(i, a)| kaleidoscope_contract::conversation::ConversationAttachment {
-                            id: i.to_string(),
-                            name: a.name.clone(),
-                            mime: a.mime.clone(),
-                        },
-                    )
-                    .collect(),
-            });
-        } else {
-            s.snapshot.phase = LocalAgentPhase::Responding;
-        }
-        let queue = s.snapshot.queued.clone();
-        drop(s);
+        let (reply, result) = std::sync::mpsc::sync_channel(1);
         self.shared
             .tx
-            .send(Command::Send(input))
+            .send(Command::Send(input, reply))
             .map_err(|_| error::make(ErrorCode::LocalAgentFailed))?;
-        if queued {
-            (self.shared.emit)(LocalAgentUpdate::Queue { queued: queue });
-        } else {
-            self.shared.publish_state();
-        }
-        Ok(queued)
+        result
+            .recv()
+            .map_err(|_| error::make(ErrorCode::LocalAgentFailed))?
     }
     pub fn cancel(&self) {
         let _ = self.shared.tx.send(Command::Cancel);

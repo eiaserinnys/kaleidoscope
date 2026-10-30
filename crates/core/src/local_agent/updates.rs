@@ -23,7 +23,10 @@ use std::{
 };
 
 pub(super) enum Command {
-    Send(PromptInput),
+    Send(
+        PromptInput,
+        std::sync::mpsc::SyncSender<Result<bool, kaleidoscope_contract::CoreError>>,
+    ),
     Cancel,
     Configure(String, AgentControlValue),
     Authenticate(String),

@@ -1,13 +1,21 @@
 //! 전송 크기 검사와 ACP 입력 구성.
-use super::{record::Record, PromptInput};
+use super::{record::Record, Command, PromptInput, Shared};
 use crate::error;
-use agent_client_protocol::schema::v1::{ContentBlock, ImageContent, ResourceLink, TextContent};
+use agent_client_protocol::schema::v1::{
+    self as acp, ContentBlock, ImageContent, ResourceLink, TextContent,
+};
+use agent_client_protocol::{Agent, ConnectionTo};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::{
     conversation::ConversationAttachment, CoreError, ErrorCode, AGENT_ATTACHMENTS_MAX,
     AGENT_ATTACHMENTS_TOTAL_MAX_BYTES, AGENT_ATTACHMENT_MAX_BYTES, CONVERSATION_MESSAGE_MAX_CHARS,
 };
+use kaleidoscope_contract::{
+    conversation::{ConversationEvent, ConversationItemKind},
+    local_agent::{LocalAgentPhase, LocalAgentUpdate},
+};
 use std::path::Path;
+use std::sync::Arc;
 
 pub(super) fn validate(input: &PromptInput) -> Result<(), CoreError> {
     if input.request_id.is_empty()
@@ -93,4 +101,65 @@ pub(super) fn prepare(
         }
     }
     Ok((blocks, attachments))
+}
+
+pub(super) fn begin(
+    conn: &ConnectionTo<Agent>,
+    owner: &Arc<Shared>,
+    session: acp::SessionId,
+    input: PromptInput,
+    image: bool,
+) -> Result<(), CoreError> {
+    let (blocks, event) = {
+        let mut s = owner.state.lock().unwrap();
+        let original = s.record.clone();
+        let result = (|| {
+            let (blocks, attachments) =
+                prepare(&input, &mut s.record, &owner.config.record_dir, image)?;
+            let event = owner
+                .append(
+                    &mut s,
+                    ConversationItemKind::User,
+                    input.request_id.clone(),
+                    input.text.clone(),
+                    attachments,
+                )
+                .map_err(|e| error::with_message(ErrorCode::Io, &e.to_string()))?;
+            Ok::<_, CoreError>((blocks, event))
+        })();
+        let (blocks, event) = match result {
+            Ok(value) => value,
+            Err(error) => {
+                s.record = original;
+                s.snapshot.history = s.record.items.clone();
+                return Err(error);
+            }
+        };
+        s.seen.insert(input.request_id.clone());
+        s.snapshot.phase = LocalAgentPhase::Responding;
+        s.snapshot.activity.busy = true;
+        s.snapshot.queued.retain(|q| q.id != input.request_id);
+        (blocks, event)
+    };
+    (owner.emit)(event);
+    owner.publish_state();
+    (owner.emit)(LocalAgentUpdate::Conversation {
+        update: ConversationEvent::Activity {
+            busy: true,
+            tool: None,
+        },
+    });
+    let queued = owner.state.lock().unwrap().snapshot.queued.clone();
+    (owner.emit)(LocalAgentUpdate::Queue { queued });
+    let connection = conn.clone();
+    let tx = owner.tx.clone();
+    tokio::spawn(async move {
+        let result = connection
+            .send_request(acp::PromptRequest::new(session, blocks))
+            .block_task()
+            .await
+            .map(|_| ());
+        let _ = tx.send(Command::Finished(result));
+    });
+    Ok(())
 }

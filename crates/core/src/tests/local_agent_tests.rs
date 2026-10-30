@@ -493,3 +493,5 @@ fn cwd_change_does_not_load_old_session() {
         .iter()
         .any(|i| i.text.contains("새 세션")));
 }
+
+mod regressions;
