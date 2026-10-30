@@ -13,6 +13,24 @@ use tauri::AppHandle;
 
 use super::{call, record, screen};
 
+#[cfg(windows)]
+pub(super) fn record_startup(app: &AppHandle) {
+    let path = env::temp_dir().join(format!(
+        "kaleidoscope-e2e-start-{}.json",
+        std::process::id()
+    ));
+    let entry = json!({
+        "pid": std::process::id(),
+        "version": app.package_info().version.to_string(),
+        "executable": env::current_exe().ok(),
+        "scenario": env::var("KALEIDOSCOPE_E2E_SCENARIO").ok(),
+        "out": env::var("KALEIDOSCOPE_E2E_OUT").ok(),
+    });
+    if let Err(error) = fs::write(path, entry.to_string()) {
+        eprintln!("E2E 기동 기록 실패: {error}");
+    }
+}
+
 fn snapshot(core: &Core) -> Result<ShellSnapshot, String> {
     match call(core, CoreRequest::StateGet {})? {
         CoreReply::StateGet { snapshot } => Ok(snapshot),
@@ -99,6 +117,7 @@ pub(super) fn scenario(
                     return Err("unexpected ready update".into());
                 }
                 screen(out, log, "update-ready")?;
+                record(log, "restart.request", json!({"version": version}))?;
                 call(core, CoreRequest::UpdateRestart {})?;
                 return Err("update restart returned without exiting".into());
             }

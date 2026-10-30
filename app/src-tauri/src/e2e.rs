@@ -389,6 +389,8 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
 }
 
 pub fn start(app: AppHandle, core: Arc<Core>) {
+    #[cfg(windows)]
+    update::record_startup(&app);
     let Some(out) = env::var_os("KALEIDOSCOPE_E2E_OUT") else {
         return;
     };

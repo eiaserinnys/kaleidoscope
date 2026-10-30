@@ -79,6 +79,25 @@ jobs:
           $manifest | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $testDir 'update.json')
           $server = Start-Process python -ArgumentList @('-m', 'http.server', '8719', '--bind', '127.0.0.1') -WorkingDirectory $testDir -PassThru -WindowStyle Hidden
           $app = $null
+          $exe = $null
+          function Write-Diagnostics([string]$phase) {
+            try {
+              $processes = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'kaleidoscope|installer|setup' } | ForEach-Object {
+                @{ name = $_.Name; pid = $_.ProcessId; path = $_.ExecutablePath; started = $_.CreationDate }
+              })
+              $installers = @(Get-ChildItem $env:TEMP -Directory -Filter 'kaleidoscope-*-updater-*' -ErrorAction SilentlyContinue | ForEach-Object {
+                Get-ChildItem $_.FullName -Recurse -File -ErrorAction SilentlyContinue | Select-Object FullName, Length, LastWriteTime
+              })
+              $starts = @(Get-ChildItem $env:TEMP -File -Filter 'kaleidoscope-e2e-start-*.json' -ErrorAction SilentlyContinue | ForEach-Object {
+                @{ path = $_.FullName; contents = (Get-Content -Raw $_.FullName -ErrorAction SilentlyContinue) }
+              })
+              $installed = if ($exe -and (Test-Path $exe)) { (Get-Item $exe).VersionInfo.ProductVersion } else { $null }
+              $entry = @{ phase = $phase; at = (Get-Date).ToString('o'); installed_exe = $exe; installed_version = $installed; processes = $processes; temp_installers = $installers; startup_records = $starts }
+              $json = $entry | ConvertTo-Json -Depth 6 -Compress
+              Add-Content -Encoding utf8 (Join-Path $out 'diagnostics.jsonl') $json
+              Write-Host $json
+            } catch { Write-Warning "진단 수집 실패: $_" }
+          }
           try {
             $installer = Start-Process (Join-Path $testDir 'old.exe') -ArgumentList '/S' -Wait -PassThru
             if ($installer.ExitCode -ne 0) { throw "A 설치 실패: $($installer.ExitCode)" }
@@ -103,6 +122,7 @@ jobs:
             $deadline = (Get-Date).AddMinutes(4)
             $captured = $false
             $complete = $false
+            $nextDiagnostics = Get-Date
             while ((Get-Date) -lt $deadline) {
               $request = Join-Path $env:KALEIDOSCOPE_E2E_OUT 'update-ready.request'
               if ((Test-Path $request) -and -not $captured) {
@@ -110,6 +130,10 @@ jobs:
                 if ($capture.ExitCode -ne 0) { throw '업데이트 화면 캡처 실패' }
                 New-Item -ItemType File (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'update-ready.done') | Out-Null
                 $captured = $true
+              }
+              if ((Get-Date) -ge $nextDiagnostics) {
+                Write-Diagnostics 'update-wait'
+                $nextDiagnostics = (Get-Date).AddSeconds(5)
               }
               $eventsPath = Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl'
               if (Test-Path $eventsPath) {
@@ -122,6 +146,16 @@ jobs:
             if (-not $complete -or -not $captured) { throw '업데이트 완료 또는 화면 캡처 시간 초과' }
             if ((Get-Item $exe).VersionInfo.ProductVersion -ne '0.0.2') { throw 'B 설치 판 불일치' }
           } finally {
+            Write-Diagnostics 'final'
+            try {
+              $roots = @($env:RUNNER_TEMP, $env:GITHUB_WORKSPACE, $env:APPDATA, $env:LOCALAPPDATA) | Select-Object -Unique
+              $eventPaths = @(foreach ($root in $roots) {
+                Get-ChildItem $root -Filter 'events.jsonl' -File -Recurse -Depth 5 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+              })
+              $eventPaths | Set-Content -Encoding utf8 (Join-Path $out 'event-paths.txt')
+              $eventPaths | ForEach-Object { Write-Host "이벤트 기록: $_" }
+              Get-ChildItem $env:TEMP -File -Filter 'kaleidoscope-e2e-start-*.json' -ErrorAction SilentlyContinue | Copy-Item -Destination $out
+            } catch { Write-Warning "진단 파일 수집 실패: $_" }
             if ($app -and -not $app.HasExited) { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
             Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
           }
