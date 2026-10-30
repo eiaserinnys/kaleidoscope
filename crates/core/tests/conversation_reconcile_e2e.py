@@ -5,6 +5,7 @@ import os
 import sqlite3
 import subprocess
 import tempfile
+import time
 import urllib.request
 from pathlib import Path
 
@@ -78,6 +79,20 @@ def run():
             until("역할 두 작업 적용", lambda: all(any(i == t and b.get("instructions") == text for i, b in provider.patches) for t, text in [(thread1, "역할 작업 1"), (thread2, "역할 둘째 작업")]), seconds=30)
             until("둘째 기기 동기화", lambda: any(w["id"] == window2 for w in call(urls[1], "state.get")["snapshot"]["shared"]["windows"]))
             until("적용 완료 상태", lambda: call(urls[0], "conversation.apply_status", window_id=window)["status"] == "applied")
+            time.sleep(1.5)
+            with provider.lock: before_moves = provider.pages
+            for x in (80, 100, 120):
+                call(urls[0], "window.set_rect", window_id=window, rect={"x": x, "y": 40, "width": 600, "height": 400})
+            until("창 위치 원격 반영", lambda: next((w for w in call(urls[1], "state.get")["snapshot"]["shared"]["windows"] if w["id"] == window and w["rect"]["x"] == 120), None))
+            time.sleep(1.5)
+            with provider.lock: assert provider.pages == before_moves, f"창 이동에 제공자 목록 {provider.pages - before_moves}회 조회"
+            extra = call(urls[0], "desktop.create", workspace_id=workspace, name="빈 화면")["desktop"]["id"]
+            until("데스크톱 원격 반영", lambda: any(d["id"] == extra for d in call(urls[1], "state.get")["snapshot"]["shared"]["desktops"]))
+            call(urls[0], "desktop.rename", desktop_id=extra, name="이름 변경")
+            call(urls[0], "desktop.delete", desktop_id=extra)
+            until("데스크톱 삭제 원격 반영", lambda: not any(d["id"] == extra for d in call(urls[1], "state.get")["snapshot"]["shared"]["desktops"]))
+            time.sleep(1.5)
+            with provider.lock: assert provider.pages == before_moves, f"데스크톱 변경에 제공자 목록 {provider.pages - before_moves}회 조회"
             provider.reject_patch = True
             call(urls[1], "storage.write", window_id=window2, entry="selected_model", content="model-sol", expected_revision=None)
             until("제공자 실패", lambda: provider.failed_patches > 0)

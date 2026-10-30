@@ -112,8 +112,9 @@ fn run(inner: Arc<Inner>, generation: u64, epoch: u64) {
                         || inner.layout_connection_epoch.load(Ordering::SeqCst) != epoch
                         || !matches!(state.link, LinkStatus::Connected { .. })
                     {
-                        return;
+                        return (false, false);
                     }
+                    let before = crate::conversation_reconcile::workspace_names(state);
                     for (key, sent_seq) in &sent {
                         if !valid || state.sync.pending.get(key) == Some(sent_seq) {
                             state.sync.pending.remove(key);
@@ -122,13 +123,23 @@ fn run(inner: Arc<Inner>, generation: u64, epoch: u64) {
                     if let Ok(reply) = result {
                         layout_apply::apply_changes(state, reply);
                     }
+                    let workspace_changed =
+                        before != crate::conversation_reconcile::workspace_names(state);
+                    let waited = valid
+                        && state.sync.pending.is_empty()
+                        && inner
+                            .conversation_workspace_sync_waiting
+                            .swap(false, Ordering::SeqCst);
+                    (workspace_changed, waited)
                 });
                 match applied {
-                    Ok(((), event)) => {
+                    Ok(((workspace_changed, waited), event)) => {
                         if let Some(event) = event {
                             inner.emit(&event);
                         }
-                        if valid {
+                        if workspace_changed {
+                            crate::conversation_reconcile::workspace_changed(&inner);
+                        } else if waited {
                             crate::conversation_reconcile::schedule(&inner);
                         }
                     }

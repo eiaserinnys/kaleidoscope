@@ -167,8 +167,8 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                     inner
                         .conversation_snapshot_epoch
                         .store(epoch, Ordering::SeqCst);
+                    crate::conversation_reconcile::workspace_changed(inner);
                     crate::layout_sync::start(Arc::clone(inner), generation, epoch);
-                    crate::conversation_reconcile::schedule(inner);
                 }
                 Ok((false, _)) => return false,
                 Err(error) => {
@@ -179,19 +179,22 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
         DeviceEvent::LayoutChanged { changes } => {
             let result = apply_layout_change(inner, |state| {
                 if inner.generation.load(Ordering::SeqCst) != generation {
-                    return false;
+                    return None;
                 }
+                let before = crate::conversation_reconcile::workspace_names(state);
                 crate::layout_apply::apply_changes(state, changes);
-                true
+                Some(before != crate::conversation_reconcile::workspace_names(state))
             });
             match result {
-                Ok((true, event)) => {
+                Ok((Some(workspace_changed), event)) => {
                     if let Some(event) = event {
                         inner.emit(&event);
                     }
-                    crate::conversation_reconcile::schedule(inner);
+                    if workspace_changed {
+                        crate::conversation_reconcile::workspace_changed(inner);
+                    }
                 }
-                Ok((false, _)) => return false,
+                Ok((None, _)) => return false,
                 Err(error) => {
                     link::set_offline(inner, generation, &link::load_link(inner), error.message)
                 }

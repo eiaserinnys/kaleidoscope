@@ -76,6 +76,26 @@ pub(crate) fn schedule(inner: &Arc<Inner>) {
     });
 }
 
+/// 작업 변경이 전송 대기 중이면 배치가 모두 풀린 뒤에도 다시 확인한다.
+pub(crate) fn workspace_changed(inner: &Arc<Inner>) {
+    let state = inner.state.lock().unwrap();
+    inner
+        .conversation_workspace_sync_waiting
+        .store(!state.sync.pending.is_empty(), Ordering::SeqCst);
+    drop(state);
+    schedule(inner);
+}
+
+/// 시간만 바뀐 작업은 대화의 생성, 이름 변경이나 삭제가 아니다.
+pub(crate) fn workspace_names(state: &crate::CoreState) -> BTreeMap<String, String> {
+    state
+        .shared
+        .workspaces
+        .iter()
+        .map(|workspace| (workspace.id.clone(), workspace.name.clone()))
+        .collect()
+}
+
 /// 대화와 무관한 앱 문서 저장은 제공자 조회를 일으키지 않는다.
 pub(crate) fn storage_changed(inner: &Arc<Inner>, app_id: &str, entry: Option<&str>) {
     let relevant = {

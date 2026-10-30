@@ -41,7 +41,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Condvar, Mutex};
 
 use kaleidoscope_contract::{
@@ -140,6 +140,7 @@ pub(crate) struct Inner {
     pub(crate) layout_reported_epoch: Mutex<Option<u64>>,
     pub(crate) layout_synced_epoch: Mutex<Option<u64>>,
     pub(crate) conversation_snapshot_epoch: AtomicU64,
+    pub(crate) conversation_workspace_sync_waiting: AtomicBool,
     pub(crate) conversation_reconcile: conversation_reconcile::Runtime,
     pub(crate) layout_signal: LayoutSignal,
     pub(crate) data_runtimes: data_runtime::DataRuntimes,
@@ -255,6 +256,7 @@ impl Core {
             layout_reported_epoch: Mutex::new(None),
             layout_synced_epoch: Mutex::new(None),
             conversation_snapshot_epoch: AtomicU64::new(0),
+            conversation_workspace_sync_waiting: AtomicBool::new(false),
             conversation_reconcile: conversation_reconcile::Runtime::default(),
             web_attached: Mutex::new(std::collections::HashSet::new()),
             web_follow: Mutex::new(HashMap::new()),
@@ -455,7 +457,7 @@ impl Core {
         );
         let reply = self.apply_state_change(|state| state_commands::handle(state, request))?;
         if workspace_change {
-            conversation_reconcile::schedule(&self.inner);
+            conversation_reconcile::workspace_changed(&self.inner);
         }
         Ok(reply)
     }
