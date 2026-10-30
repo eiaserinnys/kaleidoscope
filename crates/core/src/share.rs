@@ -15,6 +15,7 @@ use sha2::{Digest, Sha256};
 use crate::error;
 use crate::storage::LinkFile;
 use crate::{snapshot, CoreState, Inner};
+use kaleidoscope_contract::conversation::{ConversationItem, ConversationItemKind};
 
 #[derive(Clone, Default, PartialEq)]
 pub(crate) struct ShareState {
@@ -54,6 +55,12 @@ pub(crate) fn prepare_text(
             .cloned()
             .unwrap_or_default(),
     )
+}
+
+pub(crate) fn strip_legacy_share_from_item(item: &mut ConversationItem) {
+    if item.kind == ConversationItemKind::User {
+        item.text = kaleidoscope_data::share::strip_legacy_share_block(&item.text);
+    }
 }
 
 pub(crate) fn mark_sent_text(

@@ -312,6 +312,37 @@ fn shared_view_delivery_baselines_are_separate_for_each_app() {
 }
 
 #[test]
+fn legacy_share_block_is_removed_from_user_items_only() {
+    use kaleidoscope_contract::conversation::{ConversationItem, ConversationItemKind};
+
+    let text = "오 이거 이제 보여?\n\n<kaleidoscope-share>\n옛 같이 보기 글\n</kaleidoscope-share>";
+    let mut user = ConversationItem {
+        id: "legacy".into(),
+        kind: ConversationItemKind::User,
+        text: text.into(),
+        at: "now".into(),
+        attachments: vec![],
+    };
+    crate::share::strip_legacy_share_from_item(&mut user);
+    assert_eq!(user.text, "오 이거 이제 보여?");
+
+    let mut assistant = ConversationItem {
+        kind: ConversationItemKind::Assistant,
+        ..user.clone()
+    };
+    assistant.text = text.into();
+    crate::share::strip_legacy_share_from_item(&mut assistant);
+    assert_eq!(assistant.text, text);
+
+    assert_eq!(
+        kaleidoscope_data::share::strip_legacy_share_block(
+            "앞 <kaleidoscope-share>중간</kaleidoscope-share> 뒤"
+        ),
+        "앞 <kaleidoscope-share>중간</kaleidoscope-share> 뒤"
+    );
+}
+
+#[test]
 fn share_view_uploads_once_and_unlink_clears_server_but_keeps_local_toggle() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());

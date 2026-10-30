@@ -251,8 +251,17 @@ async fn read_stream(
 
 fn deduplicate(state: &mut Stream, event: ConversationEvent) -> Option<ConversationEvent> {
     match event {
-        ConversationEvent::Item { item } if !state.seen.insert(item.id.clone()) => None,
+        ConversationEvent::Item { mut item } => {
+            crate::share::strip_legacy_share_from_item(&mut item);
+            state
+                .seen
+                .insert(item.id.clone())
+                .then_some(ConversationEvent::Item { item })
+        }
         ConversationEvent::Snapshot { mut snapshot } => {
+            for item in &mut snapshot.items {
+                crate::share::strip_legacy_share_from_item(item);
+            }
             snapshot
                 .items
                 .retain(|item| state.seen.insert(item.id.clone()));

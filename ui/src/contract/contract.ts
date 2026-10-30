@@ -803,7 +803,7 @@ export type SelectOption = string | { value: JsonValue, label: string, };
 
 export type SelectStyle = "dropdown" | "segmented";
 
-export type SendMessageRequest = { request_id: string, text: string, attachments: Array<ConversationUpload>, };
+export type SendMessageRequest = { request_id: string, text: string, attachments: Array<ConversationUpload>, context?: string, };
 
 /**
  * 블록 이벤트의 값을 창 상태 키 하나에 쓴다. 예: `{ "set_state": "current_file" }`.

@@ -104,6 +104,9 @@ def serve(provider):
                     thread_id = parts[1]
                     if parts[2] == "items" and len(parts) == 3:
                         items = [{"id": "1", "kind": "notice", "text": "notice", "at": "now", "attachments": []}]
+                        items.append({"id": "legacy-share", "kind": "user",
+                            "text": "오 이거 이제 보여?\n\n<kaleidoscope-share>\n옛 같이 보기 글\n</kaleidoscope-share>",
+                            "at": "now", "attachments": []})
                         if provider.late_item:
                             provider.late_ready = True
                             items.append({"id": "4", "kind": "assistant", "text": "나중 답", "at": "now", "attachments": []})
@@ -113,7 +116,12 @@ def serve(provider):
                         provider.events.append(cursor)
                         late = provider.late_ready
                         snapshot = {"kind": "snapshot", "snapshot": {"cursor": "4" if late else "2", "busy": False, "tool": None, "stream_id": None, "text": None,
-                            "items": [{"id": "4" if late else "2", "kind": "assistant", "text": "답", "at": "now", "attachments": []}]}}
+                            "items": [
+                                {"id": "4" if late else "2", "kind": "assistant", "text": "답", "at": "now", "attachments": []},
+                                {"id": "legacy-event", "kind": "user",
+                                 "text": "이전 글\n\n<kaleidoscope-share>\n옛 같이 보기 글\n</kaleidoscope-share>",
+                                 "at": "now", "attachments": []},
+                            ]}}
                         encoded = json.dumps(snapshot, ensure_ascii=False)
                         split = encoded.index('"snapshot"')
                         text1 = json.dumps({"kind": "text", "stream_id": "stream-1", "text": "한"}, ensure_ascii=False)
@@ -267,6 +275,9 @@ def run():
                 return None
             assert until("생성 뒤 get 없이 첫 대화 이벤트", initial_answer, seconds=15)
             assert None in provider.events, provider.events
+            legacy_event = next(item for event in initial_snapshots for item in event["update"]["snapshot"]["items"]
+                                if item["id"] == "legacy-event")
+            assert legacy_event["text"] == "이전 글", legacy_event
             assert not provider.posts, provider.posts
             call(url1, "conversation.send", window_id=window, request_id="draft-1", text="보존할 초안", attachments=[])
             with provider.lock:
@@ -274,6 +285,7 @@ def run():
                 provider.interventions = 0
             got = call(url1, "conversation.get", window_id=window)
             assert got["items"][0]["kind"] == "notice"
+            assert got["items"][1]["text"] == "오 이거 이제 보여?", got["items"][1]
             assert call(url1, "conversation.history", window_id=window, before="1")["items"][0]["kind"] == "notice"
             until("SSE 재연결 cursor", lambda: "3" in provider.events, seconds=15)
             delivered = []
@@ -304,9 +316,11 @@ def run():
             call(url1, "conversation.send", window_id=window, request_id="request-1", text="안녕", attachments=[upload])
             assert len(provider.posts) == 2 and provider.posts[0] == provider.posts[1], provider.posts
             assert provider.interventions == 1
-            assert "새로 같이 봄" in provider.posts[-1]["text"] and "첫 줄" in provider.posts[-1]["text"]
+            assert provider.posts[-1]["text"] == "안녕", provider.posts[-1]
+            assert "새로 같이 봄" in provider.posts[-1]["context"] and "첫 줄" in provider.posts[-1]["context"]
             call(url1, "conversation.send", window_id=window, request_id="request-2", text="다시", attachments=[])
-            assert "그대로" in provider.posts[-1]["text"] and "첫 줄" not in provider.posts[-1]["text"]
+            assert provider.posts[-1]["text"] == "다시", provider.posts[-1]
+            assert "그대로" in provider.posts[-1]["context"] and "첫 줄" not in provider.posts[-1]["context"]
             call(url1, "share.view", window_id=window, view={"text": "수정된 줄", "visual": False,
                  "bounds": {"x": 0, "y": 0, "width": 400, "height": 300}})
             provider.fail_ids.add("failed-request")
@@ -314,7 +328,8 @@ def run():
                 "request_id": "failed-request", "text": "실패", "attachments": []})
             assert status == 400 and failure["code"] == "server", failure
             call(url1, "conversation.send", window_id=window, request_id="request-3", text="다시", attachments=[])
-            assert "바뀜" in provider.posts[-1]["text"] and "수정된 줄" in provider.posts[-1]["text"]
+            assert provider.posts[-1]["text"] == "다시", provider.posts[-1]
+            assert "바뀜" in provider.posts[-1]["context"] and "수정된 줄" in provider.posts[-1]["context"]
             provider.fail_ids.add("failed-persist")
             status, failure = request(url1 + "/core", "POST", {"op": "conversation.send", "window_id": window,
                 "request_id": "failed-persist", "text": "실패한 초안", "attachments": [upload]})
@@ -344,6 +359,9 @@ def run():
             assert restored["failed"] is True and restored["text"] == "실패한 초안" and restored["attachments"] == [upload], restored
             call(url1, "conversation.send", window_id=window, request_id="after-failed", text="실패한 초안", attachments=[upload])
             assert saved_failed() is None, "새 요청 접수 후 실패한 초안이 남았다"
+            call(url1, "share.set", window_id=window, on=True)
+            call(url1, "share.view", window_id=window, view={"text": "수정된 줄", "visual": False,
+                 "bounds": {"x": 0, "y": 0, "width": 400, "height": 300}})
             provider.drop_before.add("unreceived")
             status, failure = request(url1 + "/core", "POST", {"op": "conversation.send", "window_id": window,
                 "request_id": "unreceived", "text": "다시 보낼 초안", "attachments": []})
@@ -352,7 +370,20 @@ def run():
             call(url1, "conversation.get", window_id=window)
             recovered = until("미접수 초안", lambda: (event if (not events.empty() and (event := events.get_nowait()).get("event") == "conversation.draft" and event["request_id"] == "unreceived") else None))
             assert recovered["text"] == "다시 보낼 초안" and recovered["failed"] is False
+            call(url1, "share.view", window_id=window, view={"text": "다른 context", "visual": False,
+                 "bounds": {"x": 0, "y": 0, "width": 400, "height": 300}})
+            original_posts = [post for post in provider.posts if post["request_id"] == "unreceived"]
+            assert len(original_posts) == 1 and original_posts[0]["text"] == "다시 보낼 초안", original_posts
+            original_context = original_posts[0]["context"]
+            status, changed = request(url1 + "/core", "POST", {"op": "conversation.send", "window_id": window,
+                "request_id": "unreceived", "text": "다시 보낼 초안", "attachments": []})
+            assert status == 400 and changed["code"] == "conflict", changed
+            call(url1, "share.view", window_id=window, view={"text": "수정된 줄", "visual": False,
+                 "bounds": {"x": 0, "y": 0, "width": 400, "height": 300}})
             call(url1, "conversation.send", window_id=window, request_id="unreceived", text="다시 보낼 초안", attachments=[])
+            replay = [post for post in provider.posts if post["request_id"] == "unreceived"]
+            assert len(replay) >= 2 and all(post == replay[0] for post in replay)
+            assert replay[0]["context"] == original_context, replay
             attachment = call(url1, "conversation.attachment", window_id=window, item_id="1", attachment_id="asset-1")
             assert attachment["name"] == "note.txt" and base64.b64decode(attachment["data_base64"]) == b"attachment", attachment
             def interrupted_send():
@@ -371,6 +402,7 @@ def run():
             until("재시작 뒤 같은 요청 접수", lambda: provider.receipts.get("restart-1") == "accepted", seconds=20)
             replay = [p for p in provider.posts if p["request_id"] == "restart-1"]
             assert len(replay) == 2 and replay[0] == replay[1], replay
+            assert replay[0]["text"] == "재시작" and "수정된 줄" in replay[0]["context"], replay
             assert provider.interventions == 6
             until("대기 파일 제거", lambda: not list((root / "device-a" / "conversation-pending").glob("*.json")))
             until("재시작한 코어 연결", lambda: call(url1, "state.get")["snapshot"]["link"]["state"] == "connected")

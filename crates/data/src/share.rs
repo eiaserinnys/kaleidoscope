@@ -18,6 +18,23 @@ pub struct View {
     pub text: String,
 }
 
+/// 이전 버전이 사람 글 끝에 붙인 같이 보기 블록을 표시용 기록에서 걷어 낸다.
+pub fn strip_legacy_share_block(text: &str) -> String {
+    let Some(end) = text.rfind(SHARE_BLOCK_END) else {
+        return text.to_string();
+    };
+    if !text[end + SHARE_BLOCK_END.len()..].trim().is_empty() {
+        return text.to_string();
+    }
+    let Some(start) = text[..end].rfind(SHARE_BLOCK_START) else {
+        return text.to_string();
+    };
+    if start != 0 && !text[..start].ends_with('\n') {
+        return text.to_string();
+    }
+    text[..start].trim_end().to_string()
+}
+
 pub fn build_share_block(
     views: &[View],
     sent: &BTreeMap<String, SentView>,

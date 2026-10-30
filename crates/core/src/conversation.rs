@@ -151,12 +151,17 @@ fn history(ctx: &Context, id: &str, before: Option<&str>) -> Result<ThreadItemsR
     if let Some(before) = before {
         query.insert("before".into(), before.into());
     }
-    ctx.client
+    let mut reply: ThreadItemsReply = ctx
+        .client
         .json(
             reqwest::Method::GET,
             &ctx.client.path(&["threads", id, "items"])?,
             &query,
             None::<&Value>,
         )?
-        .ok_or_else(|| error::make(ErrorCode::NotFound))
+        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+    for item in &mut reply.items {
+        crate::share::strip_legacy_share_from_item(item);
+    }
+    Ok(reply)
 }
