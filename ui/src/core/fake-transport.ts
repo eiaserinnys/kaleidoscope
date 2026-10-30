@@ -32,6 +32,7 @@ export interface FakeTransportSeed {
   agentGetError?: string;
   agentSendError?: string;
   agentSendDelayMs?: number;
+  updateRestartError?: string;
   data?: FakeDataSeed;
   webUnavailable?: boolean;
   media?: Record<string, string>;
@@ -384,6 +385,9 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         snapshot = { ...snapshot, link: { state: "unlinked" } };
         emitState();
         return { op: "link.unlink" };
+      case "update.restart":
+        if (seed.updateRestartError) return fail("io", seed.updateRestartError);
+        return { op: "update.restart" };
       case "desktop.activate": {
         const desktop = snapshot.shared.desktops.find((item) => item.id === request.desktop_id);
         if (!desktop) return fail("not_found", "데스크톱을 찾을 수 없습니다");

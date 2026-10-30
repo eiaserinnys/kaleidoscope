@@ -14,6 +14,8 @@ import {
   PairingCloud,
   Plus,
   TextInput,
+  UpdateReady,
+  flushEditors,
   toCoreError,
   useShellSnapshot,
   type CoreError,
@@ -40,6 +42,7 @@ export function Shell({ store }: { store: ShellStore }) {
   const [notice, setNotice] = useState<CoreError | null>(null);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
   const [renamingDesktopId, setRenamingDesktopId] = useState<string | null>(null);
+  const [restartingUpdate, setRestartingUpdate] = useState(false);
   const desktopAreaRef = useRef({ width: 0, height: 0 });
   const activeDesktopTabRef = useRef<HTMLDivElement>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -184,6 +187,32 @@ export function Shell({ store }: { store: ShellStore }) {
     setMenu({ kind: "link", anchor });
   };
 
+  const restartUpdate = async () => {
+    closeMenu();
+    setRestartingUpdate(true);
+    if (!await flushEditors()) {
+      setNotice({ code: "io", message: "저장하지 못한 편집이 있어 다시 시작하지 않았습니다", details: [] });
+      setRestartingUpdate(false);
+      return;
+    }
+    const reply = await runCommand({ op: "update.restart" });
+    if (reply?.op !== "update.restart") setRestartingUpdate(false);
+  };
+
+  const openUpdateMenu = (anchor: HTMLElement) => {
+    const update = snapshot.update;
+    if (update.state !== "ready") return;
+    setMenu({
+      kind: "items",
+      anchor,
+      entries: [
+        { id: "update-version", label: `${update.current_version} → ${update.version}`, disabled: true },
+        { id: "update-separator", type: "separator" },
+        { id: "update-restart", label: "다시 시작해서 업데이트", onSelect: () => void restartUpdate() },
+      ],
+    });
+  };
+
   const linkMenuEntries = (anchor: HTMLElement): MenuEntry[] => {
     const status = snapshot.link;
     const command = (op: "link.start" | "link.cancel" | "link.unlink") => () => void runCommand({ op });
@@ -320,6 +349,16 @@ export function Shell({ store }: { store: ShellStore }) {
           <IconButton aria-label="앱 정의 가져오기" onClick={() => fileInput.current?.click()} title="앱 정의 가져오기">
             <Import />
           </IconButton>
+          {snapshot.update.state === "ready" ? (
+            <IconButton
+              aria-label={restartingUpdate ? "다시 시작하는 중" : `새 판 ${snapshot.update.version} 받음`}
+              disabled={restartingUpdate}
+              onClick={(event) => openUpdateMenu(event.currentTarget)}
+              title={restartingUpdate ? "다시 시작하는 중" : `새 판 ${snapshot.update.version} 받음`}
+            >
+              <UpdateReady className="ks-link-icon-accent" />
+            </IconButton>
+          ) : null}
           {snapshot.link.state === "connected" ? (
             <IconButton
               aria-label="연결됨"
