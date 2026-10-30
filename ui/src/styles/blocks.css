@@ -233,6 +233,11 @@
   gap: var(--ks-space-1);
 }
 
+.ks-explorer-crumb.is-current {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
 .ks-explorer-chevron {
   flex: 0 0 auto;
   color: var(--ks-color-muted);
@@ -260,6 +265,7 @@
 }
 
 .ks-explorer-crumb-current {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--ks-color-text);
@@ -298,6 +304,7 @@
   font: inherit;
   padding: var(--ks-space-2);
   text-align: center;
+  user-select: none;
 }
 
 .ks-explorer-icon:hover {

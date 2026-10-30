@@ -60,6 +60,8 @@ export function FileBrowserTree({
   const rootPath = grant?.root_path ?? null;
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [entriesByDirectory, setEntriesByDirectory] = useState<Record<string, FileEntry[]>>({});
+  const entriesByDirectoryRef = useRef(entriesByDirectory);
+  entriesByDirectoryRef.current = entriesByDirectory;
   const [loadingDirectories, setLoadingDirectories] = useState<Set<string>>(() => new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [localActionError, setLocalActionError] = useState<string | null>(null);
@@ -143,7 +145,7 @@ export function FileBrowserTree({
     setExpanded((current) => new Set([...current, ...ancestors]));
     void (async () => {
       for (const directory of ancestors) {
-        await loadDirectory(directory);
+        if (!Object.hasOwn(entriesByDirectoryRef.current, directory)) await loadDirectory(directory);
       }
       requestAnimationFrame(() => {
         const selected = [...(treeRef.current?.querySelectorAll<HTMLElement>("[data-folder-path]") ?? [])]

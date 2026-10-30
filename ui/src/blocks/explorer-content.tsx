@@ -43,7 +43,7 @@ function formatSize(size: number) {
     value /= 1024;
     unit += 1;
   }
-  const digits = value < 10 ? 1 : 0;
+  const digits = unit === 0 ? 0 : value < 10 ? 1 : 0;
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits }).format(value)} ${units[unit]}`;
 }
 
@@ -72,8 +72,10 @@ export function ExplorerContent({
   context,
   permission,
   rootName,
+  rootPath,
   folder,
   view,
+  actionError,
   onNavigate,
   onViewChange,
   onActivateFile,
@@ -82,8 +84,10 @@ export function ExplorerContent({
   context: BlockContext;
   permission: string;
   rootName: string;
+  rootPath: string;
   folder: string;
   view: ExplorerView;
+  actionError: string | null;
   onNavigate: (folder: string) => void;
   onViewChange: (view: ExplorerView) => void;
   onActivateFile: (anchor: HTMLElement, path: string) => void;
@@ -97,6 +101,10 @@ export function ExplorerContent({
   const requestId = useRef(0);
   const folderRef = useRef(folder);
   folderRef.current = folder;
+  const rootPathRef = useRef(rootPath);
+  rootPathRef.current = rootPath;
+  const onNavigateRef = useRef(onNavigate);
+  onNavigateRef.current = onNavigate;
   const rows = useMemo(() => (entries ?? []).map(toRow), [entries]);
   const grid = useRef<HTMLDivElement>(null);
   const breadcrumbRef = useRef<HTMLElement>(null);
@@ -105,35 +113,38 @@ export function ExplorerContent({
 
   const readFolder = async (directory: string, showLoading = false) => {
     const request = ++requestId.current;
+    const requestedRoot = rootPath;
     if (showLoading) setLoading(true);
     setError(null);
     try {
       const reply = await store.call({ op: "files.list", window_id: window.id, permission, dir: directory });
-      if (reply.op === "files.list" && request === requestId.current && folderRef.current === directory) {
+      if (reply.op === "files.list" && request === requestId.current && folderRef.current === directory && rootPathRef.current === requestedRoot) {
         setEntries(reply.entries);
       }
     } catch (cause) {
-      if (request !== requestId.current || folderRef.current !== directory) return;
+      if (request !== requestId.current || folderRef.current !== directory || rootPathRef.current !== requestedRoot) return;
       const coreError = toCoreError(cause);
       if ((coreError.code === "not_found" || coreError.code === "invalid_request") && directory !== "") {
-        onNavigate("");
+        onNavigateRef.current("");
       } else {
         setError(coreError.message);
       }
     } finally {
-      if (request === requestId.current && folderRef.current === directory) setLoading(false);
+      if (request === requestId.current && folderRef.current === directory && rootPathRef.current === requestedRoot) setLoading(false);
     }
   };
+  const readFolderRef = useRef(readFolder);
+  readFolderRef.current = readFolder;
 
   useEffect(() => {
     setSelected(null);
     setEntries(null);
     setError(null);
     void readFolder(folder, true);
-  }, [folder, permission, store, window.id]);
+  }, [folder, permission, rootPath, store, window.id]);
 
   useEffect(() => {
-    const refresh = () => void readFolder(folderRef.current);
+    const refresh = () => void readFolderRef.current(folderRef.current);
     globalThis.window.addEventListener("focus", refresh);
     return () => globalThis.window.removeEventListener("focus", refresh);
   }, [permission, store, window.id]);
@@ -179,7 +190,7 @@ export function ExplorerContent({
     <div className="ks-file-tree-header ks-explorer-toolbar">
       <IconButton aria-label="위 폴더" disabled={!folder} onClick={() => onNavigate(parent)}><ArrowUp /></IconButton>
       <nav aria-label="경로" className="ks-explorer-breadcrumb" ref={breadcrumbRef}>
-        {breadcrumb.map((crumb, index) => <span className="ks-explorer-crumb" key={`${crumb.path}:${index}`}>
+        {breadcrumb.map((crumb, index) => <span className={`ks-explorer-crumb${index === breadcrumb.length - 1 ? " is-current" : ""}`} key={`${crumb.path}:${index}`}>
           {index > 0 ? <ChevronRight className="ks-explorer-chevron" size="inline" /> : null}
           {index === breadcrumb.length - 1
             ? <span aria-current="page" className="ks-explorer-crumb-current" title={crumb.name}>{crumb.name}</span>
@@ -191,6 +202,7 @@ export function ExplorerContent({
         <IconButton aria-label="자세히 보기" pressed={view === "details"} onClick={() => onViewChange("details")}><List /></IconButton>
       </div>
     </div>
+    {actionError ? <div className="ks-inline-error" role="alert">{actionError}</div> : null}
     {error ? <div className="ks-inline-error" role="alert">{error}</div>
       : !visible && loading ? <StatusText>불러오는 중</StatusText>
       : visible && sortedEntries.length === 0 ? <div className="ks-explorer-empty"><EmptyState icon={<FolderOpen size="empty" />} text="빈 폴더" /></div>

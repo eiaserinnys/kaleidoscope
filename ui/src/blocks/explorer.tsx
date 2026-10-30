@@ -57,12 +57,14 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
   const [actionError, setActionError] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ anchor: HTMLElement; entries: MenuEntry[] } | null>(null);
   const previousRoot = useRef(rootPath);
+  const windowStateRef = useRef(context.window.state);
+  windowStateRef.current = context.window.state;
   const folderValue = block.folder ? context.window.state[block.folder.state] : undefined;
-  const folder = block.folder && block.on_folder
+  const folder = block.folder
     ? validFolderPath(folderValue) ? folderValue : ""
     : localFolder;
   const viewValue = block.view ? context.window.state[block.view.state] : undefined;
-  const view: ExplorerView = block.view && block.on_view
+  const view: ExplorerView = block.view
     ? viewValue === "details" ? "details" : "icons"
     : localView;
 
@@ -75,7 +77,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
       await context.store.call({
         op: "window.set_state",
         window_id: context.window.id,
-        state: { ...context.window.state, [block.on_folder.set_state]: path },
+        state: { ...windowStateRef.current, [block.on_folder.set_state]: path },
       });
     } catch (error) {
       setActionError(toCoreError(error).message);
@@ -89,7 +91,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
       await context.store.call({
         op: "window.set_state",
         window_id: context.window.id,
-        state: { ...context.window.state, [block.on_view.set_state]: next },
+        state: { ...windowStateRef.current, [block.on_view.set_state]: next },
       });
     } catch (error) {
       setActionError(toCoreError(error).message);
@@ -105,7 +107,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
   }, [rootPath]);
 
   useEffect(() => {
-    if (block.folder && block.on_folder && folderValue !== undefined && folderValue !== folder) void navigate("");
+    if (block.folder && folderValue !== undefined && folderValue !== folder) void navigate("");
   }, [block.folder, block.on_folder, folder, folderValue]);
 
   const appsFor = (path: string) => findAppsForExtension(context.snapshot, fileExtension(path));
@@ -138,12 +140,10 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
   const contextFile = (anchor: HTMLElement, path: string) => openMenu(anchor, path);
 
   const fileTree = <FileBrowserTree
-    actionError={actionError}
     canCreate={false}
     context={context}
     extensions={[]}
     mode={rootPath === null ? "files" : "folders"}
-    onActionError={setActionError}
     onSelect={navigate}
     permission={permission}
     permissionLabel={permissionLabel}
@@ -160,6 +160,8 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
           <ExplorerContent
             context={context}
             folder={folder}
+            rootPath={rootPath}
+            actionError={actionError}
             onActivateFile={activateFile}
             onContextFile={contextFile}
             onNavigate={navigate}
@@ -170,7 +172,6 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
           />,
         ]}
       </SplitPanes>
-      {actionError ? <span className="ks-inline-error" role="alert">{actionError}</span> : null}
     </div>
     {menu ? <Menu anchor={menu.anchor} items={menu.entries} onClose={() => setMenu(null)} /> : null}
   </>;
