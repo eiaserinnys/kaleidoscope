@@ -36,6 +36,8 @@ declare global {
 const timestamp = "2026-10-30T00:00:00Z";
 const bottomMenuScenario = new URLSearchParams(window.location.search).has("bottom-menu");
 const harnessParams = new URLSearchParams(window.location.search);
+const longFolderScenario = harnessParams.has("long-folder");
+const pcAllowErrorScenario = harnessParams.has("pc-allow-error");
 const settingsPreview = harnessParams.get("preview") === "app-settings";
 const settingsSample = harnessParams.get("app") === "sample" || harnessParams.get("app") === "empty-group";
 const shareScenario = new URLSearchParams(window.location.search).get("share");
@@ -87,7 +89,7 @@ const shareWindows: AppWindow[] = [shareAppId, "workspace-pas"].map((appId, inde
   state: appId === "md-editor" ? { current_file: "README.md" } : appId === "web-browser" ? { url: "https://www.google.com/" } : { selected: "1" },
   created_at: timestamp, updated_at: timestamp,
 }));
-const windows: AppWindow[] = settingsPreview ? [{ id: "settings-window", desktop_id: "desktop-1", app_id: "settings-preview", app_version: 1, rect: { x: 348, y: 16, width: 720, height: 900 }, z: 1, state: {}, created_at: timestamp, updated_at: timestamp }] : shareScenario ? shareWindows : bottomMenuScenario
+const windows: AppWindow[] = settingsPreview ? [{ id: "settings-window", desktop_id: "desktop-1", app_id: "settings-preview", app_version: 1, rect: { x: 348, y: 16, width: 720, height: 900 }, z: 1, state: {}, created_at: timestamp, updated_at: timestamp }] : shareScenario ? shareWindows : bottomMenuScenario || longFolderScenario
   ? [{
     id: "explorer-window",
     desktop_id: "desktop-1",
@@ -152,7 +154,7 @@ const snapshot: ShellSnapshot = {
     windows,
   },
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: shareScenario === "editor" ? [{ window_id: "md-editor-window", permission: "docs", root_path: "/fake/docs", root_name: "문서", granted_at: timestamp }] : [], pc_access: [] },
-  supported: { blocks: 4, modules: { files: 1, web: 1 } },
+  supported: { blocks: 5, modules: { files: 2, web: 1 } },
   link: linkStatus(shareScenario ? "connected" : new URLSearchParams(window.location.search).get("link")),
   sharing: [],
   update: harnessParams.get("update") === "ready"
@@ -163,13 +165,14 @@ const snapshot: ShellSnapshot = {
 };
 
 const files = shareScenario === "editor" ? { "README.md": Array.from({ length: 120 }, (_, i) => `줄 ${i + 1}`).join("\n") } : bottomMenuScenario
-  ? Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`z${String(index).padStart(2, "0")}.md`, `# File ${index}`]))
+  ? Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`documents/z${String(index).padStart(2, "0")}.md`, `# File ${index}`]))
   : {
-    "README.md": "# kaleidoscope\n\n쉘 화면 캡처용 문서입니다.\n",
-    "notes/a.md": "# 첫 번째 노트\n",
-    "notes/b.md": "# 두 번째 노트\n",
-    "notes/todo.txt": "확인할 항목\n",
-    "images/cover.png": "가짜 이미지 파일",
+    "documents/README.md": "# kaleidoscope\n\n쉘 화면 캡처용 문서입니다.\n",
+    "documents/notes/a.md": "# 첫 번째 노트\n",
+    "documents/notes/b.md": "# 두 번째 노트\n",
+    "documents/notes/todo.txt": "확인할 항목\n",
+    "documents/images/cover.png": "가짜 이미지 파일",
+    ...(longFolderScenario ? { "documents/notes/아주 긴 폴더 이름을 넣어서 경로의 마지막 마디가 어떻게 보이는지 확인하는 폴더/inner/a.md": "# 노트" } : {}),
   };
 
 const transport: FakeTransport = createFakeTransport({
@@ -191,9 +194,12 @@ const transport: FakeTransport = createFakeTransport({
   ]) : undefined,
   files,
 });
-if (harnessParams.has("reset-review")) {
+if (harnessParams.has("reset-review") || pcAllowErrorScenario) {
   const call = transport.call.bind(transport);
   transport.call = (async (request: CoreRequest) => {
+    if (pcAllowErrorScenario && request.op === "files.allow_pc") {
+      return Promise.reject({ code: "permission_denied", message: "허용할 수 없습니다", details: [] });
+    }
     if (request.op === "storage.reset") await new Promise((resolve) => setTimeout(resolve, 1200));
     return call(request);
   }) as typeof transport.call;

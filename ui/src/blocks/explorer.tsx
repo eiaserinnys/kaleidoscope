@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { App, AppDefinition, Block, ExplorerView } from "../contract/contract";
 import { Menu, type MenuEntry } from "../components/menu";
+import { Button, EmptyState } from "../components/primitives";
+import { Monitor } from "../components/icons";
 import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
 import { FileBrowserTree } from "./file-browser-tree";
@@ -45,13 +47,18 @@ function validFolderPath(value: unknown): value is string {
 
 export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; context: BlockContext }) {
   const permission = block.root.permission;
-  const permissionLabel = context.definition.permissions.find(
+  const filesPermission = context.definition.permissions.find(
     (item) => item.module === "files" && item.id === permission,
-  )?.label ?? permission;
+  );
+  const permissionLabel = filesPermission?.module === "files" ? filesPermission.label : permission;
+  const scope = filesPermission?.module === "files" && filesPermission.scope === "pc" ? "pc" : "folder";
   const grant = context.snapshot.device.grants.find(
     (item) => item.window_id === context.window.id && item.permission === permission,
   ) ?? null;
-  const rootPath = grant?.root_path ?? null;
+  const pcAccess = scope === "pc" && context.snapshot.device.pc_access.some(
+    (item) => item.app_id === context.window.app_id && item.permission === permission,
+  );
+  const rootPath = scope === "pc" ? pcAccess ? "" : null : grant?.root_path ?? null;
   const [localFolder, setLocalFolder] = useState("");
   const [localView, setLocalView] = useState<ExplorerView>("icons");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -93,6 +100,15 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
         window_id: context.window.id,
         state: { ...windowStateRef.current, [block.on_view.set_state]: next },
       });
+    } catch (error) {
+      setActionError(toCoreError(error).message);
+    }
+  };
+
+  const allowPc = async () => {
+    setActionError(null);
+    try {
+      await context.store.call({ op: "files.allow_pc", window_id: context.window.id, permission });
     } catch (error) {
       setActionError(toCoreError(error).message);
     }
@@ -143,12 +159,20 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
     canCreate={false}
     context={context}
     extensions={[]}
+    scope={scope}
     mode={rootPath === null ? "files" : "folders"}
     onSelect={navigate}
     permission={permission}
     permissionLabel={permissionLabel}
     selectedPath={rootPath === null ? null : folder}
   />;
+
+  if (scope === "pc" && rootPath === null) return <div className={`ks-explorer-empty${actionError ? " has-error" : ""}`}>
+    <EmptyState icon={<Monitor size="empty" />} action={<>
+      <Button onClick={() => void allowPc()}>이 PC의 파일 읽기 허용</Button>
+      {actionError ? <span className="ks-inline-error" role="alert">{actionError}</span> : null}
+    </>} />
+  </div>;
 
   if (rootPath === null) return fileTree;
 
@@ -167,7 +191,9 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
             onNavigate={navigate}
             onViewChange={changeView}
             permission={permission}
-            rootName={grant?.root_name ?? ""}
+            permissionLabel={permissionLabel}
+            scope={scope}
+            rootName={scope === "pc" ? permissionLabel : grant?.root_name ?? ""}
             view={view}
           />,
         ]}

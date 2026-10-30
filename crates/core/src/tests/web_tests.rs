@@ -2,6 +2,26 @@ use super::*;
 
 mod nested;
 
+/// 고른 폴더 범위의 탐색기(계약 8판 모양). examples/explorer.json은 내 PC 범위로 바뀌었고,
+/// 이 시험들은 폴더 범위의 열기 규칙을 본다.
+const FOLDER_EXPLORER: &str = r#"{
+  "id": "explorer",
+  "name": "탐색기",
+  "requires": { "blocks": 5, "modules": { "files": 1 } },
+  "permissions": [
+    { "module": "files", "id": "folder", "access": "read", "label": "볼 폴더" }
+  ],
+  "state": { "folder": "", "view": "icons" },
+  "ui": {
+    "type": "explorer",
+    "root": { "permission": "folder" },
+    "folder": { "state": "folder" },
+    "on_folder": { "set_state": "folder" },
+    "view": { "state": "view" },
+    "on_view": { "set_state": "view" }
+  }
+}"#;
+
 #[test]
 fn explorer_opens_and_reuses_editor_with_folder_grant() {
     let data = TempDir::new().unwrap();
@@ -12,7 +32,7 @@ fn explorer_opens_and_reuses_editor_with_folder_grant() {
         data.path(),
         vec![
             MD_EDITOR.into(),
-            include_str!("../../../../examples/explorer.json").into(),
+            FOLDER_EXPLORER.into(),
         ],
         &host,
     );
@@ -95,7 +115,7 @@ fn explorer_open_reports_missing_grant_file_and_extension() {
         data.path(),
         vec![
             MD_EDITOR.into(),
-            include_str!("../../../../examples/explorer.json").into(),
+            FOLDER_EXPLORER.into(),
         ],
         &host,
     );
@@ -319,7 +339,7 @@ fn explorer_opens_new_window_for_a_different_folder() {
         data.path(),
         vec![
             MD_EDITOR.into(),
-            include_str!("../../../../examples/explorer.json").into(),
+            FOLDER_EXPLORER.into(),
         ],
         &host,
     );
