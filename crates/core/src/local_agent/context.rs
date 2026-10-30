@@ -26,7 +26,6 @@ pub(super) struct Context {
     pub app_id: String,
     pub permission: String,
     pub workspace: String,
-    pub cwd: Option<PathBuf>,
 }
 
 pub(super) fn record_dir(inner: &Inner, window: &str) -> PathBuf {
@@ -95,7 +94,6 @@ pub(super) fn resolve(
     };
     let app_id = window.app_id.clone();
     let workspace = desktop.workspace_id.clone();
-    let current_cwd = cwd.clone();
     let access = state.device.local_agent_access.clone();
     drop(state);
     let mut snapshot = LocalAgentSnapshot {
@@ -136,7 +134,6 @@ pub(super) fn resolve(
                     app_id,
                     permission,
                     workspace,
-                    cwd: current_cwd.clone(),
                 }));
             }
         },
@@ -148,7 +145,6 @@ pub(super) fn resolve(
                 app_id,
                 permission,
                 workspace,
-                cwd: current_cwd.clone(),
             }))
         }
     };
@@ -170,7 +166,6 @@ pub(super) fn resolve(
             app_id,
             permission,
             workspace,
-            cwd: current_cwd.clone(),
         }));
     };
     let Some(cwd) = cwd else {
@@ -182,7 +177,6 @@ pub(super) fn resolve(
             app_id,
             permission,
             workspace,
-            cwd: current_cwd.clone(),
         }));
     };
     let hash = agent_spec_hash(&spec);
@@ -205,7 +199,6 @@ pub(super) fn resolve(
             app_id,
             permission,
             workspace,
-            cwd: current_cwd.clone(),
         }));
     }
     let link = inner.link_file.lock().unwrap().clone();
@@ -246,6 +239,5 @@ pub(super) fn resolve(
         app_id,
         permission,
         workspace,
-        cwd: current_cwd,
     }))
 }

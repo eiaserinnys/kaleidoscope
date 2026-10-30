@@ -1,3 +1,4 @@
+mod link_transition;
 mod process;
 mod sharing;
 
@@ -393,7 +394,7 @@ fn changed_storage_requires_new_execution_consent() {
 }
 
 #[test]
-fn changing_folder_while_storage_loads_stops_the_old_worker() {
+fn changing_folder_while_storage_loads_waits_for_the_spec() {
     use kaleidoscope_contract::app_storage::{StorageSnapshot, StorageUpdate};
     let temp = TempDir::new().unwrap();
     let first = TempDir::new().unwrap();
@@ -454,7 +455,10 @@ fn changing_folder_while_storage_loads_stops_the_old_worker() {
         permission: "work".into(),
     })
     .unwrap();
-    assert_ne!(attach(&core, &window).generation, current.generation);
+    assert_eq!(attach(&core, &window).generation, current.generation);
     release.send(()).unwrap();
-    until(&core, &window, LocalAgentPhase::Ready);
+    wait_for(|| {
+        let next = attach(&core, &window);
+        next.generation != current.generation && next.phase == LocalAgentPhase::Ready
+    });
 }

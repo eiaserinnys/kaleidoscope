@@ -171,23 +171,21 @@ fn reconcile(inner: &Arc<Inner>, window: &str) {
         }
         Err(_) => return,
     };
-    // A loading value is transient; do not tear down a live session until it resolves.
+    // An unavailable binding does not establish that the execution spec changed.
     let binding_pending = data_runtime::binding_value(inner, window, &agent_pointer(inner, window))
-        .is_none_or(|v| matches!(v, kaleidoscope_contract::data::BindingValue::Loading {}));
+        .is_none_or(|v| {
+            matches!(
+                v,
+                kaleidoscope_contract::data::BindingValue::Loading {}
+                    | kaleidoscope_contract::data::BindingValue::Failed { .. }
+            )
+        });
     let mut windows = inner.local_agents.windows.lock().unwrap();
     let Some(c) = windows.get_mut(window) else {
         return;
     };
     if binding_pending && c.worker.is_some() {
-        let same_selection = c
-            .snapshot
-            .as_ref()
-            .and_then(|snapshot| snapshot.selected.as_deref())
-            == ctx.snapshot.selected.as_deref();
-        let same_folder = c.fingerprint.as_ref().map(|value| &value.cwd) == ctx.cwd.as_ref();
-        if same_selection && same_folder {
-            return;
-        }
+        return;
     }
     let change = match (&c.fingerprint, &ctx.fingerprint) {
         (Some(old), Some(new)) if old.spec_hash == new.spec_hash && old.cwd == new.cwd => {
