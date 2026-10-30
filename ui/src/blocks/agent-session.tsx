@@ -26,14 +26,20 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
   const shareRef = useRef<HTMLElement>(null);
   const historyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const generationRef = useRef<string | null>(null);
   const followTail = useRef(true);
   useShareDescriber(shareRef, () => ({ text: "[에이전트 대화]", visual: false }));
 
   const applyUpdate = useCallback((event: Extract<CoreEvent, { event: "local_agent.update" }>) => {
+    const update = event.update;
+    if (update.type === "snapshot") {
+      generationRef.current = update.snapshot.generation;
+      setSnapshot(update.snapshot);
+      return;
+    }
+    if (generationRef.current !== event.generation) return;
     setSnapshot((current) => {
       if (!current || current.generation !== event.generation) return current;
-      const update = event.update;
-      if (update.type === "snapshot") return update.snapshot;
       if (update.type === "state") return {
         ...current,
         phase: update.phase,
@@ -50,21 +56,21 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
 
   useEffect(() => {
     let active = true;
-    let generation: string | null = null;
     const buffered: Extract<CoreEvent, { event: "local_agent.update" }>[] = [];
+    generationRef.current = null;
     const unsubscribe = context.store.subscribeEvents((event) => {
       if (event.event !== "local_agent.update" || event.window_id !== windowId) return;
-      if (!generation) buffered.push(event);
-      else if (event.generation === generation) applyUpdate(event);
+      if (generationRef.current === null) buffered.push(event);
+      else applyUpdate(event);
     });
     setSnapshot(null);
     setLoadError(null);
     void context.store.call({ op: "local_agent.attach", window_id: windowId }).then((reply) => {
       if (!active) return;
       if (reply.op !== "local_agent.attach") throw new Error("에이전트 상태를 불러오지 못했습니다");
-      generation = reply.snapshot.generation;
+      generationRef.current = reply.snapshot.generation;
       setSnapshot(reply.snapshot);
-      buffered.filter((event) => event.generation === generation).forEach(applyUpdate);
+      buffered.forEach(applyUpdate);
       buffered.length = 0;
     }).catch((reason: unknown) => {
       if (active) setLoadError(toCoreError(reason).message);
@@ -72,15 +78,21 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
     return () => {
       active = false;
       unsubscribe();
+      generationRef.current = null;
       void context.store.call({ op: "local_agent.detach", window_id: windowId }).catch(() => undefined);
     };
   }, [applyUpdate, context.store, windowId]);
 
+  const withLatestGeneration = useCallback((request: CoreRequest): CoreRequest => {
+    if (generationRef.current && "generation" in request) return { ...request, generation: generationRef.current };
+    return request;
+  }, []);
+
   const call = useCallback(async <K extends CoreRequest["op"],>(request: Extract<CoreRequest, { op: K }>) => {
     setActionError(null);
-    try { await context.store.call(request); }
+    try { await context.store.call(withLatestGeneration(request)); }
     catch (reason) { setActionError(toCoreError(reason).message); }
-  }, [context.store]);
+  }, [context.store, withLatestGeneration]);
 
   const chooseAgent = useCallback((value: unknown) => {
     if (typeof value === "string") void data.act(`${pointer}/on_select`, value);
@@ -104,10 +116,10 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
     try {
       const uploads = await Promise.all(submittedAttachments.map(readUpload));
       await flushShareViews();
-      const reply = await context.store.call({
+      const reply = await context.store.call(withLatestGeneration({
         op: "local_agent.send", window_id: windowId, generation: snapshot.generation,
         request_id: requestId, text, attachments: uploads,
-      });
+      }));
       if (reply.op === "local_agent.send" && reply.queued) {
         const queued = { id: requestId, text, attachments: uploads.map((item, index) => ({ id: String(index), name: item.name, mime: item.mime })) };
         setSnapshot((current) => current && current.generation === snapshot.generation && !current.queued.some((item) => item.id === requestId)
@@ -119,7 +131,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
       setDraft((current) => current ? `${submittedDraft}\n${current}` : submittedDraft);
       setAttachments((current) => [...submittedAttachments, ...current]);
     }
-  }, [attachments, context.store, draft, snapshot, windowId]);
+  }, [attachments, context.store, draft, snapshot, windowId, withLatestGeneration]);
 
   const renderAttachment = useCallback((attachment: ConversationAttachment, item: ConversationItem, index: number) => <HistoryAttachmentView
     key={`${item.id}:${attachment.id}:${index}`}
@@ -166,7 +178,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
       {execution ? <>
         <strong>{execution.name}</strong>
         <code className="ks-agent-session-command">{[execution.command, ...execution.args].join(" ")}</code>
-        {Object.keys(execution.env).length ? <span>환경 변수: {Object.keys(execution.env).join(", ")}</span> : null}
+        {Object.entries(execution.env).map(([name, value]) => <span className="ks-agent-session-env" key={name} title={`${name}=${value}`}>{name}={value}</span>)}
         <StatusText>이 PC에서 프로그램을 실행합니다</StatusText>
         <Button variant="emphasis" onClick={() => void call({ op: "local_agent.allow", window_id: windowId, spec_hash: execution.spec_hash })}>허용</Button>
       </> : <StatusText>실행 정보를 불러오는 중</StatusText>}

@@ -4,7 +4,9 @@ import { AgentSessionBlock } from "../blocks/agent-session";
 import { WindowDataProvider } from "../data/window-data";
 import type { AppDefinition, CoreEvent, CoreReply, CoreRequest, LocalAgentSnapshot } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
+import { createFakeTransport } from "../core/fake-transport";
 import { makeTestSnapshot } from "./fixtures";
+import agentJson from "../../../examples/agent.json";
 
 const definition: AppDefinition = {
   id: "agent", name: "에이전트", requires: { blocks: 8, modules: { files: 1, local_agent: 1 } },
@@ -23,7 +25,7 @@ function localAgent(phase: LocalAgentSnapshot["phase"]): LocalAgentSnapshot {
     agents: [{ id: "claude", name: "Claude Code" }, { id: "codex", name: "Codex" }],
     selected: phase === "choosing_agent" ? null : "codex",
     folder_name: phase === "choosing_agent" ? null : "work folder",
-    execution: { spec_hash: "spec-hash", name: "Codex", command: "npx", args: ["-y", "@agentclientprotocol/codex-acp"], env: { HOME: "ignored" } },
+    execution: phase === "awaiting_permission" ? { spec_hash: "spec-hash", name: "Codex", command: "npx", args: ["-y", "@agentclientprotocol/codex-acp"], env: { HOME: "ignored" } } : null,
     auth_methods: [{ id: "chat-gpt", name: "ChatGPT 로그인", description: "브라우저에서 로그인" }],
     controls: [
       { id: "model", label: "모델", category: null, value: "balanced", kind: { kind: "select", options: [{ name: "모델", options: [{ id: "balanced", name: "균형" }, { id: "fast", name: "빠름" }] }] } },
@@ -86,6 +88,7 @@ describe("기기 로컬 에이전트 화면", () => {
     setup(localAgent(phase));
     if (phase === "ready") expect(await screen.findByRole("textbox", { name: "메시지" })).toBeTruthy();
     else if (phase === "responding") expect(await screen.findByRole("button", { name: "멈춤" })).toBeTruthy();
+    else if (phase === "awaiting_permission") expect(await screen.findByText("HOME=ignored")).toBeTruthy();
     else expect(await screen.findByText(expected, { exact: false })).toBeTruthy();
     expect(screen.getByRole("button", { name: "에이전트" })).toBeTruthy();
   });
@@ -151,5 +154,92 @@ describe("기기 로컬 에이전트 화면", () => {
     expect(await screen.findByText("대기 중인 말")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "멈춤" }));
     expect(state.call).toHaveBeenCalledWith({ op: "local_agent.cancel", window_id: state.window.id, generation: "generation-1" });
+  });
+
+  it("새 generation snapshot을 받고 오래된 부분 업데이트는 무시한 뒤 최신 generation으로 보낸다", async () => {
+    const state = setup(localAgent("ready"));
+    await screen.findByRole("textbox", { name: "메시지" });
+    const next = { ...localAgent("ready"), generation: "generation-2" };
+    state.emit({ event: "local_agent.update", window_id: state.window.id, generation: "generation-2", update: { type: "snapshot", snapshot: next } });
+    const failed = localAgent("failed");
+    state.emit({ event: "local_agent.update", window_id: state.window.id, generation: "generation-1", update: { type: "state", phase: "failed", controls: failed.controls, auth_methods: failed.auth_methods, execution: failed.execution, failure: failed.failure } });
+
+    expect(screen.getByRole("textbox", { name: "메시지" })).toBeTruthy();
+    expect(screen.queryByText("실행에 실패했습니다")).toBeNull();
+    const input = screen.getByRole("textbox", { name: "메시지" });
+    fireEvent.change(input, { target: { value: "최신 세션에 전송" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(state.call.mock.calls.some(([request]) => request.op === "local_agent.send")).toBe(true));
+    expect(state.call.mock.calls.find(([request]) => request.op === "local_agent.send")?.[0]).toMatchObject({ generation: "generation-2" });
+  });
+
+  it("attach 응답 전에 받은 새 generation snapshot을 적용한다", async () => {
+    const state = setup(localAgent("ready"));
+    const next = { ...localAgent("ready"), generation: "generation-2" };
+    state.emit({ event: "local_agent.update", window_id: state.window.id, generation: "generation-2", update: { type: "snapshot", snapshot: next } });
+
+    const input = await screen.findByRole("textbox", { name: "메시지" });
+    fireEvent.change(input, { target: { value: "attach 이후 전송" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(state.call.mock.calls.some(([request]) => request.op === "local_agent.send")).toBe(true));
+    expect(state.call.mock.calls.find(([request]) => request.op === "local_agent.send")?.[0]).toMatchObject({ generation: "generation-2" });
+  });
+
+  it("가짜 코어가 선택부터 실행 허용과 도구 호출까지 새 세대로 이어간다", async () => {
+    const definition = agentJson as unknown as AppDefinition;
+    const seed = makeTestSnapshot({ definitions: [definition] });
+    const windowId = seed.shared.windows[0].id;
+    const transport = createFakeTransport({ snapshot: seed, folder: { root_path: "/fake/work", root_name: "작업 폴더" }, files: {}, localAgent: localAgent("choosing_agent") });
+    const updates: Extract<CoreEvent, { event: "local_agent.update" }>[] = [];
+    transport.subscribe((event) => { if (event.event === "local_agent.update") updates.push(event); });
+    await transport.call({ op: "data.attach", window_id: windowId });
+    const attached = await transport.call({ op: "local_agent.attach", window_id: windowId });
+    if (attached.op !== "local_agent.attach") throw new Error("attach reply expected");
+    const firstGeneration = attached.snapshot.generation;
+
+    await transport.call({ op: "data.act", window_id: windowId, pointer: "/ui/on_select", event: "codex" });
+    const chosen = updates.filter((event) => event.update.type === "snapshot").slice(-1)[0]?.update;
+    expect(chosen?.type === "snapshot" ? chosen.snapshot : null).toMatchObject({ phase: "choosing_folder", selected: "codex" });
+    const chosenGeneration = chosen?.type === "snapshot" ? chosen.snapshot.generation : firstGeneration;
+    expect(chosenGeneration).not.toBe(firstGeneration);
+
+    await transport.call({ op: "files.pick_folder", window_id: windowId, permission: "work" });
+    const permissionUpdate = updates.filter((event) => event.update.type === "snapshot").slice(-1)[0]?.update;
+    const execution = permissionUpdate?.type === "snapshot" ? permissionUpdate.snapshot.execution : null;
+    expect(permissionUpdate?.type === "snapshot" ? permissionUpdate.snapshot : null).toMatchObject({ phase: "awaiting_permission", folder_name: "작업 폴더" });
+    expect(execution).toMatchObject({ name: "Codex", command: "npx", args: ["-y", "@agentclientprotocol/codex-acp"], env: {} });
+    const permissionGeneration = permissionUpdate?.type === "snapshot" ? permissionUpdate.snapshot.generation : chosenGeneration;
+    expect(permissionGeneration).not.toBe(chosenGeneration);
+    if (!execution) throw new Error("execution consent expected");
+
+    await transport.call({ op: "local_agent.allow", window_id: windowId, spec_hash: execution.spec_hash });
+    const startingUpdate = updates.filter((event) => event.update.type === "snapshot").slice(-1)[0]?.update;
+    const starting = startingUpdate?.type === "snapshot" ? startingUpdate.snapshot : null;
+    expect(starting).toMatchObject({ phase: "starting", execution: null });
+    expect(starting?.generation).not.toBe(permissionGeneration);
+    const readyReply = await transport.call({ op: "local_agent.attach", window_id: windowId });
+    if (readyReply.op !== "local_agent.attach") throw new Error("ready snapshot expected");
+    const ready = readyReply.snapshot;
+    expect(ready).toMatchObject({ phase: "ready", execution: null });
+    expect(ready.generation).toBe(starting?.generation);
+
+    await transport.call({ op: "local_agent.retry", window_id: windowId, generation: ready.generation });
+    const retryUpdate = updates.filter((event) => event.update.type === "snapshot").slice(-1)[0]?.update;
+    const retryStart = retryUpdate?.type === "snapshot" ? retryUpdate.snapshot : null;
+    expect(retryStart).toMatchObject({ phase: "starting" });
+    expect(retryStart?.generation).not.toBe(ready.generation);
+    const retryReply = await transport.call({ op: "local_agent.attach", window_id: windowId });
+    if (retryReply.op !== "local_agent.attach") throw new Error("retry snapshot expected");
+    expect(retryReply.snapshot.phase).toBe("ready");
+
+    await transport.call({ op: "local_agent.send", window_id: windowId, generation: retryReply.snapshot.generation, request_id: "flow-1", text: "파일을 확인해 줘", attachments: [] });
+    const afterTool = await transport.call({ op: "local_agent.attach", window_id: windowId });
+    if (afterTool.op !== "local_agent.attach") throw new Error("attach reply expected");
+    expect(afterTool.snapshot).toMatchObject({ phase: "responding", text: "", stream_id: null, activity: { busy: true, tool: "파일 읽기" } });
+    expect(afterTool.snapshot.history.map((item) => [item.kind, item.text])).toContainEqual(["assistant", "파일을 확인하고 있습니다"]);
+    const assistantIndex = updates.findIndex((event) => event.update.type === "conversation" && event.update.update.kind === "item" && event.update.update.item.kind === "assistant");
+    const activityIndex = updates.findIndex((event) => event.update.type === "conversation" && event.update.update.kind === "activity" && event.update.update.tool === "파일 읽기");
+    expect(assistantIndex).toBeGreaterThanOrEqual(0);
+    expect(activityIndex).toBeGreaterThan(assistantIndex);
   });
 });

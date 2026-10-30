@@ -1,6 +1,7 @@
 import type {
   AppDefinition,
   AppWindow,
+  AgentSpec,
   ConversationItem, ConversationModel, ConversationThread, ConversationUpload,
   ConversationProfile, ConversationStart,
   CoreError,
@@ -163,6 +164,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   const conversationAttachments = new Map<string, ConversationUpload>();
   const localAgentSnapshots = new Map<string, LocalAgentSnapshot>();
   const localAgentAttachments = new Map<string, ConversationUpload>();
+  let localAgentGenerationNumber = 0;
   for (const [path, text] of Object.entries(seed.files)) {
     files.set(path, { text, revision: `fake-revision-${revisionNumber++}` });
   }
@@ -213,6 +215,21 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     emitLocalAgent(windowId, { type: "snapshot", snapshot: clone(current) });
   };
 
+  const rotateLocalAgentGeneration = (current: LocalAgentSnapshot) => {
+    current.generation = `${current.generation}:${++localAgentGenerationNumber}`;
+  };
+
+  const localAgentSpecsFor = (window: AppWindow): AgentSpec[] => {
+    const definition = definitionFor(window);
+    const declaration = definition?.storage?.entries.find((item) => item.id === "agents");
+    if (!definition || !declaration) return [];
+    const workspace = snapshot.shared.desktops.find((desktop) => desktop.id === window.desktop_id)?.workspace_id;
+    const key = declaration.key.replace("{workspace_id}", workspace ?? "");
+    const stored = storage.get(JSON.stringify([window.app_id, key]));
+    const value = stored?.content ?? declaration.default;
+    return Array.isArray(value) ? clone(value as AgentSpec[]) : [];
+  };
+
   const updateLocalAgentSelection = (window: AppWindow) => {
     const block = definitionFor(window)?.ui;
     if (block?.type !== "agent_session") return;
@@ -220,14 +237,32 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     const selected = window.state[block.selected.state];
     if (current.selected === selected) return;
     current.selected = typeof selected === "string" ? selected : null;
+    const specs = localAgentSpecsFor(window);
+    current.agents = specs.map((spec) => ({ id: spec.id, name: spec.name }));
     if (current.selected) {
       const grant = snapshot.device.grants.find((item) => item.window_id === window.id && item.permission === block.root.permission);
+      const spec = specs.find((item) => item.id === current.selected);
       current.phase = grant ? "awaiting_permission" : "choosing_folder";
       current.folder_name = grant?.root_name ?? null;
+      current.execution = grant && spec ? {
+        spec_hash: `fake-spec-${spec.id}`,
+        name: spec.name,
+        command: spec.command,
+        args: clone(spec.args),
+        env: clone(spec.env),
+      } : null;
+      current.auth_methods = (spec?.auth_methods ?? []).map((id) => ({
+        id,
+        name: id === "chat-gpt" ? "ChatGPT 로그인" : id === "oauth-personal" ? "Google 로그인" : id,
+        description: "",
+      }));
     } else {
       current.phase = "choosing_agent";
       current.folder_name = null;
+      current.execution = null;
+      current.auth_methods = [];
     }
+    rotateLocalAgentGeneration(current);
     emitLocalAgentSnapshot(window.id);
   };
 
@@ -474,6 +509,8 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         if (block?.type === "agent_session") {
           const selected = window.state[block.selected.state];
           if (typeof selected === "string") current.selected = selected;
+          const specs = localAgentSpecsFor(window);
+          if (specs.length) current.agents = specs.map((spec) => ({ id: spec.id, name: spec.name }));
         }
         return { op: "local_agent.attach", snapshot: clone(current) };
       }
@@ -483,16 +520,22 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       case "local_agent.allow": {
         const current = localAgentFor(request.window_id);
         if (current.execution?.spec_hash !== request.spec_hash) return fail("invalid_request", "실행 명세가 바뀌었습니다");
-        current.phase = "ready";
+        rotateLocalAgentGeneration(current);
+        current.phase = "starting";
         current.execution = null;
+        emitLocalAgentSnapshot(request.window_id);
+        current.phase = "ready";
         emitLocalAgent(request.window_id, { type: "state", phase: current.phase, controls: clone(current.controls), auth_methods: clone(current.auth_methods), execution: null, failure: current.failure });
         return { op: "local_agent.allow" };
       }
       case "local_agent.retry": {
         const current = localAgentFor(request.window_id);
         if (current.generation !== request.generation) return fail("invalid_request", "에이전트 상태가 바뀌었습니다");
+        rotateLocalAgentGeneration(current);
         current.phase = "starting";
         current.failure = null;
+        emitLocalAgentSnapshot(request.window_id);
+        current.phase = "ready";
         emitLocalAgent(request.window_id, { type: "state", phase: current.phase, controls: clone(current.controls), auth_methods: clone(current.auth_methods), execution: current.execution, failure: null });
         return { op: "local_agent.retry" };
       }
@@ -531,6 +574,16 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         emitLocalAgent(request.window_id, { type: "conversation", update: { kind: "item", item: clone(item) } });
         emitLocalAgent(request.window_id, { type: "conversation", update: { kind: "activity", busy: true, tool: null } });
         emitLocalAgent(request.window_id, { type: "state", phase: current.phase, controls: clone(current.controls), auth_methods: clone(current.auth_methods), execution: current.execution, failure: current.failure });
+        current.stream_id = `fake-stream-${request.request_id}`;
+        current.text = "파일을 확인하고 있습니다";
+        emitLocalAgent(request.window_id, { type: "conversation", update: { kind: "text", stream_id: current.stream_id, text: current.text } });
+        const assistant: ConversationItem = { id: current.stream_id, kind: "assistant", text: current.text, at: new Date().toISOString(), attachments: [] };
+        current.history.push(assistant);
+        current.text = "";
+        current.stream_id = null;
+        emitLocalAgent(request.window_id, { type: "conversation", update: { kind: "item", item: clone(assistant) } });
+        current.activity = { busy: true, tool: "파일 읽기" };
+        emitLocalAgent(request.window_id, { type: "conversation", update: { kind: "activity", busy: true, tool: current.activity.tool } });
         return { op: "local_agent.send", request_id: request.request_id, queued: false };
       }
       case "local_agent.cancel": {
@@ -822,7 +875,18 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         if (definitionFor(window)?.ui.type === "agent_session") {
           const current = localAgentFor(request.window_id);
           current.folder_name = grant.root_name;
-          if (current.selected) current.phase = "awaiting_permission";
+          if (current.selected) {
+            const spec = localAgentSpecsFor(window).find((item) => item.id === current.selected);
+            current.phase = "awaiting_permission";
+            current.execution = spec ? {
+              spec_hash: `fake-spec-${spec.id}`,
+              name: spec.name,
+              command: spec.command,
+              args: clone(spec.args),
+              env: clone(spec.env),
+            } : null;
+            rotateLocalAgentGeneration(current);
+          }
           emitLocalAgentSnapshot(request.window_id);
         }
         return { op: "files.pick_folder", grant: clone(grant) };

@@ -57,7 +57,7 @@ const fakeLocalAgent: LocalAgentSnapshot = {
   selected: agentSelected,
   folder_name: agentSelected ? agentFolderName : null,
   execution: agentPhase === "awaiting_permission" ? {
-    spec_hash: "harness-spec-hash", name: "Codex", command: "npx", args: ["-y", "@agentclientprotocol/codex-acp"], env: { OPENAI_API_KEY: "hidden" },
+    spec_hash: "harness-spec-hash", name: "Codex", command: "npx", args: ["-y", "@agentclientprotocol/codex-acp"], env: { OPENAI_API_KEY: "example-value-for-ellipsis" },
   } : null,
   auth_methods: agentPhase === "login_required" ? [{ id: "chat-gpt", name: "ChatGPT 로그인", description: "" }] : [],
   controls: [
@@ -68,9 +68,10 @@ const fakeLocalAgent: LocalAgentSnapshot = {
   history: [
     { id: "agent-user", kind: "user", text: "변경된 파일을 정리해 줘", at: timestamp, attachments: [] },
     { id: "agent-assistant", kind: "assistant", text: "변경된 파일 세 개를 확인했습니다.", at: timestamp, attachments: [] },
+    ...(agentPhase === "responding" ? [{ id: "agent-progress", kind: "assistant" as const, text: "파일 목록을 살펴보고 있습니다.", at: timestamp, attachments: [] }] : []),
   ],
-  stream_id: agentPhase === "responding" ? "harness-stream" : null,
-  text: agentPhase === "responding" ? "파일 목록을 살펴보고 있습니다." : "",
+  stream_id: null,
+  text: "",
   activity: { busy: agentPhase === "responding", tool: agentPhase === "responding" ? "파일 찾기" : null },
   permissions: agentPhase === "ready" || agentPhase === "responding" ? [{
     id: "permission-read-file", title: "파일 읽기", options: [{ id: "allow-once", label: "한 번 허용", kind: "allow_once" }, { id: "deny", label: "거부", kind: "deny" }],

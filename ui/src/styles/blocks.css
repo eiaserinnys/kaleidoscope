@@ -697,7 +697,7 @@
   gap: var(--ks-space-2);
 }
 
-.ks-agent-session-folder { flex: 1 1 auto; }
+.ks-agent-session-folder { flex: 0 1 auto; }
 
 .ks-agent-session-folder-name {
   min-width: 0;
@@ -711,12 +711,15 @@
 .ks-agent-session-controls {
   display: flex;
   min-width: 0;
-  flex: 1 1 auto;
+  max-width: 100%;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--ks-space-2);
   border: 0;
   margin: 0;
+  margin-inline-start: auto;
   padding: 0;
 }
 
@@ -762,6 +765,15 @@
   font-family: var(--ks-font-code);
   padding: var(--ks-space-2);
   white-space: pre;
+}
+
+.ks-agent-session-env {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--ks-font-code);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ks-agent-session-permissions,
