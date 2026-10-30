@@ -8,7 +8,7 @@ use serde_json::Value;
 use crate::app_storage::{self, StorageKind};
 use crate::data::{self, Action, Actions, Binding, SourceDecl};
 use crate::{
-    AgentProvider, AppDefinition, Block, CoreError, ErrorCode, FileAccess, FileRef, PathValue,
+    AgentProvider, AppDefinition, Block, CoreError, ErrorCode, FileAccess, FileRef, FilesScope, PathValue,
     PermissionDecl, UrlValue, BLOCK_SET_VERSION, MODULE_VERSIONS,
 };
 
@@ -109,6 +109,25 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
                 permission.id()
             ));
         }
+        if let PermissionDecl::Files {
+            scope: FilesScope::Pc,
+            access,
+            ..
+        } = permission
+        {
+            if definition.requires.modules.get("files").copied().unwrap_or(0) < 2 {
+                details.push(format!(
+                    "권한 {}의 scope는 files 모듈 2판이라 requires.modules.files가 2 이상이어야 합니다",
+                    permission.id()
+                ));
+            }
+            if *access != FileAccess::Read {
+                details.push(format!(
+                    "권한 {}는 scope가 pc라 access가 read여야 합니다",
+                    permission.id()
+                ));
+            }
+        }
         if let PermissionDecl::Connection { connection, .. } = permission {
             if !valid_id(connection) {
                 details.push(format!(
@@ -134,6 +153,12 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
             }
         }
         validate_permission(&opens.permission, definition, &mut details, "opens");
+        if find_permission(definition, &opens.permission).is_some_and(is_pc_scope) {
+            details.push(format!(
+                "opens: 권한 {}는 scope가 pc라 opens에 쓸 수 없습니다(여는 앱은 폴더 하나를 받는다)",
+                opens.permission
+            ));
+        }
         validate_state_key(&opens.state, definition, &mut details, "opens");
     }
 
@@ -775,7 +800,8 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             view,
             on_view,
         } => {
-            validate_permission_module(&root.permission, "files", definition, details, at);
+            // 탐색기의 root만 scope: pc 권한을 가리킬 수 있다(계약 14판).
+            validate_permission_declared_module(&root.permission, "files", definition, details, at);
             let reads = [folder, view]
                 .into_iter()
                 .flatten()
@@ -984,8 +1010,35 @@ fn validate_permission(
     }
 }
 
-/// 권한이 선언되어 있고 그 모듈이 `module`인지.
+fn is_pc_scope(permission: &PermissionDecl) -> bool {
+    matches!(
+        permission,
+        PermissionDecl::Files {
+            scope: FilesScope::Pc,
+            ..
+        }
+    )
+}
+
+/// 권한이 선언되어 있고 그 모듈이 `module`인지. `files` 권한이면 `scope: pc`가 아니어야 한다
+/// (그 범위는 `explorer`의 root만 쓴다, 계약 14판).
 fn validate_permission_module(
+    permission_id: &str,
+    module: &str,
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+    at: &str,
+) {
+    validate_permission_declared_module(permission_id, module, definition, details, at);
+    if find_permission(definition, permission_id).is_some_and(is_pc_scope) {
+        details.push(format!(
+            "{at}: 권한 {permission_id}는 scope가 pc라 explorer의 root에만 쓸 수 있습니다"
+        ));
+    }
+}
+
+/// 권한이 선언되어 있고 그 모듈이 `module`인지만 본다.
+fn validate_permission_declared_module(
     permission_id: &str,
     module: &str,
     definition: &AppDefinition,
