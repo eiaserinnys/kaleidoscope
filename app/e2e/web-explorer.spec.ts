@@ -356,6 +356,47 @@ test("shows the unavailable state when the shell cannot attach a web view", asyn
   await expect(page.getByTestId("fake-webview-web-browser-window")).toHaveCount(0);
 });
 
+test("keeps the current folder visible after a long ancestor", async ({ page }) => {
+  const longFolder = "아주 긴 폴더 이름을 넣어서 경로의 마지막 마디가 어떻게 보이는지 확인하는 폴더";
+  await page.route("**/src/harness.tsx", async (route) => {
+    const response = await route.fetch();
+    const source = await response.text();
+    const extraFiles = JSON.stringify({ [`notes/${longFolder}/inner/a.md`]: "# 노트" });
+    await route.fulfill({ response, body: source.replace("  files\n", `  files: { ...files, ...${extraFiles} }\n`) });
+  });
+  await page.setViewportSize({ width: 720, height: 600 });
+  await page.goto("/harness.html?bottom-menu");
+  const explorer = page.getByTestId("app-window-explorer");
+  await explorer.getByRole("button", { name: "볼 폴더 고르기" }).click();
+  await explorer.getByRole("option", { name: "notes", exact: true }).dblclick();
+  await explorer.getByRole("option", { name: longFolder, exact: true }).dblclick();
+  await explorer.getByRole("option", { name: "inner", exact: true }).dblclick();
+  const current = explorer.locator('.ks-explorer-breadcrumb [aria-current="page"]');
+  await expect(current).toHaveText("inner");
+  await expect.poll(() => current.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    const nav = element.closest("nav")!.getBoundingClientRect();
+    return bounds.width > 0 && bounds.left >= nav.left && bounds.right <= nav.right && element.scrollWidth <= element.clientWidth;
+  })).toBe(true);
+  const nav = explorer.locator(".ks-explorer-breadcrumb");
+  const longCrumb = nav.locator(".ks-explorer-crumb").last();
+  await nav.evaluate((element) => {
+    const crumb = Array.from(element.querySelectorAll<HTMLElement>(".ks-explorer-crumb")).at(-1)!;
+    const button = crumb.querySelector<HTMLButtonElement>("button")!;
+    const icon = crumb.querySelector<SVGElement>("svg")!;
+    const buttonStyle = getComputedStyle(button);
+    const gap = parseFloat(getComputedStyle(crumb).gap);
+    const reserved = icon.getBoundingClientRect().width + parseFloat(buttonStyle.paddingLeft) + parseFloat(buttonStyle.paddingRight) + gap;
+    element.style.flex = `0 0 ${element.querySelector<HTMLElement>('[aria-current="page"]')!.getBoundingClientRect().width + reserved}px`;
+  });
+  await expect(longCrumb).toBeHidden();
+  await expect(current).toBeVisible();
+  await nav.evaluate((element) => { element.style.flex = ""; });
+  await expect(longCrumb).toBeVisible();
+  await longCrumb.getByRole("button", { name: longFolder }).click();
+  await expect(explorer.getByRole("option", { name: "inner", exact: true })).toBeVisible();
+});
+
 test("keeps the last file open menu inside a 720x600 viewport", async ({ page }) => {
   await mkdir(artifactDir, { recursive: true });
   await page.setViewportSize({ width: 720, height: 600 });

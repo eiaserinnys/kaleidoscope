@@ -218,28 +218,32 @@
   min-width: 0;
   flex: 1 1 auto;
   align-items: center;
-  gap: var(--ks-space-1);
   overflow: hidden;
   font-size: var(--ks-type-body);
   font-weight: 400;
   white-space: nowrap;
 }
 
+.ks-explorer-ancestors {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
 .ks-explorer-crumb {
   display: inline-flex;
   min-width: 0;
+  max-width: 100%;
   flex: 0 0 auto;
   align-items: center;
   gap: var(--ks-space-1);
 }
 
-.ks-explorer-crumb.is-current {
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
 .ks-explorer-chevron {
   flex: 0 0 auto;
+  margin-inline-end: var(--ks-space-1);
   color: var(--ks-color-muted);
 }
 
@@ -265,8 +269,9 @@
 }
 
 .ks-explorer-crumb-current {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   color: var(--ks-color-text);
   text-overflow: ellipsis;

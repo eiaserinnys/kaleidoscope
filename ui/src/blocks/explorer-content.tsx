@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Column, ExplorerView, FileEntry, SortSpec } from "../contract/contract";
 import { EmptyState, IconButton, StatusText } from "../components/primitives";
 import { ArrowUp, ChevronRight, File, FileCode, FileImage, FileText, Folder, FolderOpen, LayoutGrid, List } from "../components/icons";
@@ -174,8 +174,32 @@ export function ExplorerContent({
     path: segments.slice(0, index + 1).join("/"),
   }))];
   useLayoutEffect(() => {
-    const element = breadcrumbRef.current;
-    if (element) element.scrollLeft = element.scrollWidth;
+    const nav = breadcrumbRef.current;
+    if (!nav) return;
+    const crumbs = Array.from(nav.querySelectorAll<HTMLElement>(".ks-explorer-crumb"));
+    const ellipsis = document.createElement("span");
+    ellipsis.textContent = "…";
+    ellipsis.style.cssText = "position: absolute; visibility: hidden; white-space: nowrap";
+    document.body.appendChild(ellipsis);
+    const update = () => {
+      for (const crumb of crumbs) {
+        const button = crumb.querySelector<HTMLButtonElement>("button")!;
+        const style = getComputedStyle(button);
+        ellipsis.style.font = style.font;
+        const textWidth = button.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        const enough = button.scrollWidth <= button.clientWidth
+          ? textWidth > 0
+          : textWidth >= ellipsis.getBoundingClientRect().width;
+        crumb.style.visibility = enough ? "" : "hidden";
+      }
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    crumbs.forEach((crumb) => {
+      observer.observe(crumb);
+      observer.observe(crumb.querySelector("button")!);
+    });
+    return () => { observer.disconnect(); ellipsis.remove(); };
   }, [folder, rootName]);
   const parent = folder.includes("/") ? folder.slice(0, folder.lastIndexOf("/")) : "";
   const sortedEntries = entries ?? [];
@@ -190,12 +214,15 @@ export function ExplorerContent({
     <div className="ks-file-tree-header ks-explorer-toolbar">
       <IconButton aria-label="위 폴더" disabled={!folder} onClick={() => onNavigate(parent)}><ArrowUp /></IconButton>
       <nav aria-label="경로" className="ks-explorer-breadcrumb" ref={breadcrumbRef}>
-        {breadcrumb.map((crumb, index) => <span className={`ks-explorer-crumb${index === breadcrumb.length - 1 ? " is-current" : ""}`} key={`${crumb.path}:${index}`}>
-          {index > 0 ? <ChevronRight className="ks-explorer-chevron" size="inline" /> : null}
-          {index === breadcrumb.length - 1
-            ? <span aria-current="page" className="ks-explorer-crumb-current" title={crumb.name}>{crumb.name}</span>
-            : <button className="ks-explorer-crumb-button" onClick={() => onNavigate(crumb.path)} title={crumb.name} type="button">{crumb.name}</button>}
-        </span>)}
+        {breadcrumb.slice(0, -1).reduce<ReactNode>((ancestors, crumb) =>
+          <span className="ks-explorer-ancestors" key={crumb.path}>
+            {ancestors}
+            <span className="ks-explorer-crumb">
+              <button className="ks-explorer-crumb-button" onClick={() => onNavigate(crumb.path)} title={crumb.name} type="button">{crumb.name}</button>
+              <ChevronRight className="ks-explorer-chevron" size="inline" />
+            </span>
+          </span>, null)}
+        <span aria-current="page" className="ks-explorer-crumb-current" title={breadcrumb.at(-1)!.name}>{breadcrumb.at(-1)!.name}</span>
       </nav>
       <div aria-label="보기" className="ks-explorer-view-buttons" role="group">
         <IconButton aria-label="아이콘 보기" pressed={view === "icons"} onClick={() => onViewChange("icons")}><LayoutGrid /></IconButton>
