@@ -54,6 +54,7 @@ struct Inner {
     shares: Mutex<share::ShareStore>,
     device_support: Mutex<HashMap<String, Option<Supported>>>,
     layout_sync_devices: Mutex<HashSet<String>>,
+    storage_devices: Mutex<HashSet<String>>,
     device_workspaces: Mutex<HashMap<String, HashSet<String>>>,
     pairings: AsyncMutex<HashMap<String, Pairing>>,
     mcp_token: String,
@@ -142,6 +143,7 @@ impl AppState {
             shares: Mutex::new(share::ShareStore::default()),
             device_support: Mutex::new(HashMap::new()),
             layout_sync_devices: Mutex::new(HashSet::new()),
+            storage_devices: Mutex::new(HashSet::new()),
             device_workspaces: Mutex::new(device_workspaces),
             pairings: AsyncMutex::new(HashMap::new()),
             mcp_token,
@@ -457,6 +459,9 @@ pub fn router(state: AppState) -> Router {
 }
 
 mod agent;
+mod app_storage;
+mod app_storage_context;
+mod app_storage_http;
 mod backup;
 mod connection_relay;
 mod connections;
@@ -478,6 +483,8 @@ use storage::*;
 
 #[cfg(test)]
 mod account_tests;
+#[cfg(test)]
+mod app_storage_tests;
 #[cfg(test)]
 #[path = "layout_store_tests.rs"]
 mod layout_store_tests;

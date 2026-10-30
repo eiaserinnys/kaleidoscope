@@ -13,7 +13,7 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
             PRAGMA user_version=1;
             COMMIT;")?;
-    } else if version > 6 {
+    } else if version > 7 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 2 {
@@ -169,6 +169,28 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
         )?;
         tx.pragma_update(None, "user_version", 6)?;
         tx.commit()?;
+    }
+    if version < 7 {
+        db.execute_batch(
+            "BEGIN IMMEDIATE;
+            CREATE TABLE app_storage_buckets (
+                id TEXT PRIMARY KEY,
+                account_id TEXT NOT NULL REFERENCES accounts(id),
+                app_id TEXT NOT NULL REFERENCES apps(id),
+                UNIQUE(account_id,app_id)
+            );
+            CREATE TABLE app_storage_items (
+                bucket_id TEXT NOT NULL REFERENCES app_storage_buckets(id) ON DELETE CASCADE,
+                key TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                content TEXT NOT NULL,
+                revision TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(bucket_id,key)
+            );
+            PRAGMA user_version=7;
+            COMMIT;",
+        )?;
     }
     Ok(())
 }

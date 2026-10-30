@@ -313,7 +313,7 @@ fn migration_upgrades_v1_without_losing_devices() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 6);
+    assert_eq!(version, 7);
     assert_eq!(
         db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -350,7 +350,7 @@ fn migration_upgrades_v2_agent_history_with_empty_attachments() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 6);
+    assert_eq!(version, 7);
     assert_eq!(
         db.query_row(
             "SELECT text || ':' || attachments FROM agent_items WHERE workspace_id='w'",

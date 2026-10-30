@@ -58,6 +58,26 @@ impl AppState {
                 .filter(|app| renders_on(supported.as_ref(), &app.version.definition.requires))
                 .collect(),
         };
+        let supports_storage = registry_version >= registry::REGISTRY_VERSION
+            && supported.as_ref().is_some_and(|supported| {
+                supported
+                    .modules
+                    .get("storage")
+                    .is_some_and(|version| *version >= 1)
+            });
+        if supports_storage {
+            self.0
+                .storage_devices
+                .lock()
+                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+                .insert(device_id.clone());
+        } else {
+            self.0
+                .storage_devices
+                .lock()
+                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+                .remove(&device_id);
+        }
         let mut initial_events = vec![snapshot];
         if supported.as_ref().is_some_and(|supported| {
             supported
@@ -71,6 +91,10 @@ impl AppState {
         }
         if registry_version >= registry::LAYOUT_SYNC_REGISTRY_VERSION {
             initial_events.push(self.layout_snapshot(&device_id)?);
+        }
+        if supports_storage {
+            initial_events
+                .extend(self.storage_snapshot_events(&self.device_account_id(&device_id)?)?);
         }
         let state = self.clone();
         let interval = tokio::time::interval(Duration::from_secs(registry::PING_INTERVAL_SECS));
@@ -121,6 +145,9 @@ impl Drop for ConnectionGuard {
                     }
                     if let Ok(mut syncing) = self.state.0.layout_sync_devices.lock() {
                         syncing.remove(&self.device_id);
+                    }
+                    if let Ok(mut storage) = self.state.0.storage_devices.lock() {
+                        storage.remove(&self.device_id);
                     }
                 }
             }
