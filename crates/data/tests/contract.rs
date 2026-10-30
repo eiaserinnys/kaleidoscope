@@ -221,6 +221,54 @@ fn storage_values_flow_through_expressions_source_plans_and_actions() {
 }
 
 #[test]
+fn storage_choices_bindings_are_evaluated_and_track_data_and_storage_dependencies() {
+    let mut definition = serde_json::to_value(fixture()).unwrap();
+    definition["requires"]["blocks"] = json!(6);
+    definition["requires"]["modules"]["storage"] = json!(2);
+    definition["storage"] = json!({"entries":[
+        {"id":"models","key":"settings/models","kind":"json","schema":{"type":"array","items":{"type":"string"}},"default":["argon"],"label":"Models","presentation":"settings","choices":{"expr":"$data.a[active=true].code"}},
+        {"id":"selection","key":"settings/selection","kind":"json","schema":{"type":["string","null"]},"default":null,"label":"Selection","presentation":"settings","choices":{"expr":"$storage.models"}}
+    ]});
+    let definition: AppDefinition = serde_json::from_value(definition).unwrap();
+    let app = CompiledApp::compile(&definition);
+    let data =
+        map(json!({"a":[{"code":"model-a","active":true},{"code":"model-b","active":false}]}));
+    let storage = map(json!({"models":["model-a","model-b"]}));
+    let values = app.evaluate_with_storage(
+        &BTreeMap::new(),
+        &data,
+        &storage,
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+    );
+
+    assert_eq!(
+        values["/storage/entries/0/choices"],
+        BindingValue::Ready {
+            value: json!("model-a")
+        }
+    );
+    assert_eq!(
+        values["/storage/entries/1/choices"],
+        BindingValue::Ready {
+            value: json!(["model-a", "model-b"])
+        }
+    );
+    let data_dependency = app
+        .binding_dependencies()
+        .iter()
+        .find(|dependency| dependency.pointer == "/storage/entries/0/choices")
+        .unwrap();
+    assert_eq!(data_dependency.data, vec!["a"]);
+    let storage_dependency = app
+        .binding_dependencies()
+        .iter()
+        .find(|dependency| dependency.pointer == "/storage/entries/1/choices")
+        .unwrap();
+    assert_eq!(storage_dependency.storage, vec!["models"]);
+}
+
+#[test]
 fn transforms_join_groups_and_limit_recursion() {
     let mut definition = serde_json::to_value(fixture()).unwrap();
     definition["ui"] = json!({"type":"stack","direction":"column","children":[

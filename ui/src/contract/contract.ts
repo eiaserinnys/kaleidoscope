@@ -804,6 +804,13 @@ export type StateRef = { state: string, };
  */
 export type StorageChanged = { bucket_id: string, item: StorageItemMeta, };
 
+/**
+ * 설정 선택지 하나. 문자열은 값과 라벨을 겸하고 객체는 별도 라벨을 제공한다.
+ */
+export type StorageChoice = string | StorageChoiceObject;
+
+export type StorageChoiceObject = { value: string, label?: string, };
+
 export type StorageConflict = { current_revision: string | null, };
 
 /**
@@ -822,7 +829,7 @@ key: string, kind: StorageKind, schema?: StorageValueSchema,
 /**
  * JSON 값 또는 UTF-8 Markdown 문자열.
  */
-default: JsonValue, label: string, presentation: StoragePresentation, agent_context?: boolean, };
+default: JsonValue, label: string, description?: string, presentation: StoragePresentation, choices?: Binding, agent_context?: boolean, };
 
 /**
  * 저장소 항목 하나의 메타데이터. 이벤트와 목록 응답에는 본문을 넣지 않는다.

@@ -108,6 +108,36 @@ async fn preview_accepts_device_source_samples_and_marks_unsampled_sources_idle(
 }
 
 #[tokio::test]
+async fn preview_returns_evaluated_storage_choice_binding_values() {
+    let server = McpServer::new(AppState::in_memory("secret"));
+    let mut definition = definition();
+    definition["requires"] = json!({
+        "blocks":6,
+        "modules":{"connection":1,"files":1,"storage":2}
+    });
+    definition["storage"] = json!({"entries":[{
+        "id":"model",
+        "key":"settings/model",
+        "kind":"json",
+        "schema":{"type":"string"},
+        "default":"argon",
+        "label":"Model",
+        "presentation":"settings",
+        "choices":{"expr":"$data.cards"}
+    }]});
+    let mut preview_args = args(definition);
+    preview_args.data = Some([("cards".into(), json!(["model-argon", "model-sol"]))].into());
+
+    let value = result_value(server.preview_app_result(preview_args).await.unwrap());
+
+    assert!(value["values"].as_array().unwrap().iter().any(|item| {
+        item["pointer"] == "/storage/entries/0/choices"
+            && item["status"] == "ready"
+            && item["value"] == r#"["model-argon","model-sol"]"#
+    }));
+}
+
+#[tokio::test]
 async fn preview_notes_missing_connection_even_when_request_source_uses_sample_data() {
     let server = McpServer::new(AppState::in_memory("secret"));
     let mut preview_args = args(definition());

@@ -3,6 +3,7 @@ use kaleidoscope_contract::{
         storage_key_matches, validate_storage_upgrade, JsonValueType, StorageDecl, StorageKind,
         StorageSchemaType, StorageWriteRequest, StoredStorageEntry,
     },
+    data,
     validate::parse_app_definition,
     CoreReply, CoreRequest, ErrorCode,
 };
@@ -23,6 +24,164 @@ fn contract_11_workspace_pas_example_accepts_storage_provider_and_document() {
     );
     let role_document = include_str!("../../../examples/workspace-pas-role.md");
     assert!(role_document.starts_with("이 작업의 목적"));
+}
+
+#[test]
+fn settings_entry_accepts_description_and_dynamic_choices_binding() {
+    let mut definition = workspace_pas_v2();
+    definition["requires"]["modules"]["storage"] = json!(2);
+    definition["storage"]["entries"][0]["description"] =
+        json!("대화 제공자에서 가져온 프로필입니다.");
+    definition["storage"]["entries"][3]["choices"] = json!({"expr":"$data.models"});
+    definition["sources"]["models"] = json!({
+        "kind":"request", "permission":"conversation", "path":"/models"
+    });
+
+    let parsed = parse_app_definition(&definition.to_string()).expect("설정 설명과 선택지");
+    let pointer = "/storage/entries/3/choices";
+    assert!(data::ui_bindings(&parsed)
+        .iter()
+        .any(|(at, _)| at == pointer));
+    assert!(data::all_exprs(&parsed)
+        .iter()
+        .any(|(at, expr)| at == pointer && *expr == "$data.models"));
+}
+
+#[test]
+fn settings_description_rejects_blank_multiline_and_over_120_characters() {
+    for description in [
+        "  ".to_owned(),
+        "첫 줄\n둘째 줄".to_owned(),
+        "가".repeat(121),
+    ] {
+        let mut definition = workspace_pas_v2();
+        definition["requires"]["modules"]["storage"] = json!(2);
+        definition["storage"]["entries"][0]["description"] = json!(description);
+        let error = parse_app_definition(&definition.to_string()).unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidAppDefinition);
+        assert!(error
+            .details
+            .iter()
+            .any(|detail| detail.contains("description")));
+    }
+}
+
+#[test]
+fn literal_storage_choices_accept_strings_and_labeled_strings_only() {
+    for choices in [
+        json!(["default", {"value":"fast", "label":"빠른 모델"}]),
+        json!(["only"]),
+        json!("single"),
+        json!({"value":"labeled"}),
+    ] {
+        let mut definition = workspace_pas_v2();
+        definition["requires"]["modules"]["storage"] = json!(2);
+        definition["storage"]["entries"][0]["choices"] = choices;
+        assert!(parse_app_definition(&definition.to_string()).is_ok());
+    }
+
+    for choices in [
+        json!(["valid", 3]),
+        json!([{"label":"이름만 있음"}]),
+        json!([{"value":3}]),
+        json!([{"value":"x", "label":3}]),
+        json!([{"value":"x", "extra":true}]),
+    ] {
+        let mut definition = workspace_pas_v2();
+        definition["requires"]["modules"]["storage"] = json!(2);
+        definition["storage"]["entries"][0]["choices"] = choices;
+        assert!(parse_app_definition(&definition.to_string()).is_err());
+    }
+}
+
+#[test]
+fn settings_json_schema_only_accepts_scalar_and_string_array_controls() {
+    for (schema, default) in [
+        (json!({"type":"boolean"}), json!(true)),
+        (json!({"type":["boolean","null"]}), Value::Null),
+        (json!({"type":"number","enum":[1,2]}), json!(1)),
+        (json!({"type":"integer"}), json!(2)),
+        (
+            json!({"type":"array","items":{"type":"string"}}),
+            json!(["a"]),
+        ),
+    ] {
+        let mut definition = workspace_pas_v2();
+        definition["storage"]["entries"][0]["schema"] = schema;
+        definition["storage"]["entries"][0]["default"] = default;
+        assert!(parse_app_definition(&definition.to_string()).is_ok());
+    }
+
+    for (schema, default) in [
+        (
+            json!({"type":"object","properties":{"name":{"type":"string"}}}),
+            json!({}),
+        ),
+        (
+            json!({"type":"array","items":{"type":"integer"}}),
+            json!([]),
+        ),
+        (json!({"type":["string","null","boolean"]}), Value::Null),
+    ] {
+        let mut definition = workspace_pas_v2();
+        definition["storage"]["entries"][0]["schema"] = schema;
+        definition["storage"]["entries"][0]["default"] = default;
+        let error = parse_app_definition(&definition.to_string()).unwrap_err();
+        assert!(error.details.iter().any(|detail| detail.contains("hidden")));
+    }
+
+    let mut hidden_object = workspace_pas_v2();
+    hidden_object["storage"]["entries"][7]["presentation"] = json!("hidden");
+    assert!(parse_app_definition(&hidden_object.to_string()).is_ok());
+}
+
+#[test]
+fn choices_require_a_settings_json_string_or_string_array_entry() {
+    let invalid = [
+        ("md", "settings", json!({"type":"string"})),
+        ("json", "hidden", json!({"type":"string"})),
+        ("json", "settings", json!({"type":"boolean"})),
+        (
+            "json",
+            "settings",
+            json!({"type":"array","items":{"type":"integer"}}),
+        ),
+    ];
+    for (kind, presentation, schema) in invalid {
+        let mut definition = workspace_pas_v2();
+        definition["requires"]["modules"]["storage"] = json!(2);
+        let entry = &mut definition["storage"]["entries"][0];
+        entry["kind"] = json!(kind);
+        entry["presentation"] = json!(presentation);
+        entry["schema"] = schema;
+        entry["default"] = json!("default");
+        entry["choices"] = json!(["a"]);
+        assert!(parse_app_definition(&definition.to_string()).is_err());
+    }
+}
+
+#[test]
+fn settings_fields_require_storage_module_two_and_legacy_entries_stay_at_one() {
+    let unchanged = workspace_pas_v2();
+    assert!(parse_app_definition(&unchanged.to_string()).is_ok());
+
+    for (field, value) in [
+        ("description", json!("보조 설명")),
+        ("choices", json!(["default"])),
+    ] {
+        let mut definition = workspace_pas_v2();
+        definition["storage"]["entries"][0][field] = value;
+        let error = parse_app_definition(&definition.to_string()).unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidAppDefinition);
+        assert!(error
+            .details
+            .iter()
+            .any(|detail| detail.contains("storage 모듈 2판")));
+
+        definition["requires"]["modules"]["storage"] = json!(2);
+        let accepted = parse_app_definition(&definition.to_string());
+        assert!(accepted.is_ok(), "{field}: {accepted:?}");
+    }
 }
 
 #[test]
