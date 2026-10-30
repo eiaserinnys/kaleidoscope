@@ -15,7 +15,7 @@ impl ServerHandler for McpServer {
             include_str!("../../../apps/explorer.json")
         );
         let instructions = format!(
-            "{}\n기본 앱(list_apps의 builtin: true)은 쉘과 함께 나가며 upload_app과 delete_app으로 고치거나 지울 수 없다. kaleidoscope 리포의 apps/에서 고치고 쉘 새 판으로 낸다. 시험으로 올린 앱은 시험 끝에 delete_app으로 지운다.\ndelete_workspace로 작업을 지우면 제공자에 로그인한 기기가 정합화할 때 대화를 보관한다. 시험으로 만든 작업은 시험 끝에 지운다.",
+            "{}\n앱을 만들거나 고쳐 달라는 요청은 list_apps와 get_app으로 현재 정의를 확인한 뒤 upload_app으로 올리고 get_workspace로 창을 확인합니다. workspace_id를 생략하면 이 MCP 연결의 작업을 쓰고, 명시한 workspace_id가 우선합니다. 기기에서 부른 upload_app과 open_app은 그 기기에 창을 띄웁니다.\n기본 앱(list_apps의 builtin: true)은 쉘과 함께 나가며 upload_app과 delete_app으로 고치거나 지울 수 없습니다. kaleidoscope 리포의 apps/에서 고치고 쉘 새 판으로 냅니다. 시험으로 올린 앱은 시험 끝에 delete_app으로 지웁니다.\ndelete_workspace로 작업을 지우면 제공자에 로그인한 기기가 정합화할 때 대화를 보관합니다. 시험으로 만든 작업은 시험 끝에 지웁니다.",
             instructions
         );
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())

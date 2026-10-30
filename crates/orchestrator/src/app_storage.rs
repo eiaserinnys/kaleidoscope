@@ -1,6 +1,7 @@
 use super::*;
 use kaleidoscope_contract::app_storage as contract;
 use kaleidoscope_contract::app_storage::{StorageItemMeta, StorageUpdate};
+use kaleidoscope_contract::builtin::BuiltinApp;
 use rusqlite::OptionalExtension;
 
 fn bucket_id(account_id: &str, app_id: &str) -> String {
@@ -8,9 +9,13 @@ fn bucket_id(account_id: &str, app_id: &str) -> String {
     sha256_hex(format!("{account_id}\0{app_id}").as_bytes())
 }
 
-fn current_definition(db: &Connection, app_id: &str) -> Result<Option<AppDefinition>, CoreError> {
-    if kaleidoscope_contract::builtin::is_builtin(app_id) {
-        return Ok(None);
+fn current_definition(
+    db: &Connection,
+    app_id: &str,
+    builtins: &[BuiltinApp],
+) -> Result<Option<AppDefinition>, CoreError> {
+    if let Some(builtin) = builtins.iter().find(|builtin| builtin.id == app_id) {
+        return parse_app_definition(builtin.definition_json).map(Some);
     }
     let raw: Option<String> = db.query_row(
         "SELECT v.definition FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.id=?1 AND a.deleted_at IS NULL",
@@ -177,9 +182,24 @@ impl AppState {
         app_id: &str,
         workspace_id: Option<&str>,
     ) -> Result<contract::StorageListReply, CoreError> {
+        self.list_app_storage_with_builtins(
+            account_id,
+            app_id,
+            workspace_id,
+            kaleidoscope_contract::builtin::BUILTIN_APPS,
+        )
+    }
+
+    pub(super) fn list_app_storage_with_builtins(
+        &self,
+        account_id: &str,
+        app_id: &str,
+        workspace_id: Option<&str>,
+        builtins: &[BuiltinApp],
+    ) -> Result<contract::StorageListReply, CoreError> {
         let db = self.lock_db()?;
-        let definition =
-            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = current_definition(&db, app_id, builtins)?
+            .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
         let entries = definition
             .storage
             .as_ref()
@@ -214,9 +234,26 @@ impl AppState {
         entry_id: &str,
         workspace_id: Option<&str>,
     ) -> Result<contract::StorageReadReply, CoreError> {
+        self.read_app_storage_with_builtins(
+            account_id,
+            app_id,
+            entry_id,
+            workspace_id,
+            kaleidoscope_contract::builtin::BUILTIN_APPS,
+        )
+    }
+
+    pub(super) fn read_app_storage_with_builtins(
+        &self,
+        account_id: &str,
+        app_id: &str,
+        entry_id: &str,
+        workspace_id: Option<&str>,
+        builtins: &[BuiltinApp],
+    ) -> Result<contract::StorageReadReply, CoreError> {
         let db = self.lock_db()?;
-        let definition =
-            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = current_definition(&db, app_id, builtins)?
+            .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
         let entry = declared_entry(&definition, entry_id)?;
         let key = resolve_key(entry, workspace_id)?;
         let mut tx = db.unchecked_transaction().map_err(db_error)?;
@@ -251,10 +288,31 @@ impl AppState {
         content: Value,
         expected_revision: Option<String>,
     ) -> Result<(contract::StorageWriteReply, String, StorageUpdate), CoreError> {
+        self.write_app_storage_with_builtins(
+            account_id,
+            app_id,
+            entry_id,
+            workspace_id,
+            content,
+            expected_revision,
+            kaleidoscope_contract::builtin::BUILTIN_APPS,
+        )
+    }
+
+    pub(super) fn write_app_storage_with_builtins(
+        &self,
+        account_id: &str,
+        app_id: &str,
+        entry_id: &str,
+        workspace_id: Option<&str>,
+        content: Value,
+        expected_revision: Option<String>,
+        builtins: &[BuiltinApp],
+    ) -> Result<(contract::StorageWriteReply, String, StorageUpdate), CoreError> {
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(db_error)?;
-        let definition =
-            current_definition(&tx, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = current_definition(&tx, app_id, builtins)?
+            .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
         let entry = declared_entry(&definition, entry_id)?.clone();
         let key = resolve_key(&entry, workspace_id)?;
         check_workspace_owner(&tx, account_id, workspace_id)?;
@@ -307,10 +365,29 @@ impl AppState {
         workspace_id: Option<&str>,
         expected_revision: Option<String>,
     ) -> Result<(contract::StorageResetReply, String, StorageUpdate), CoreError> {
+        self.reset_app_storage_with_builtins(
+            account_id,
+            app_id,
+            entry_id,
+            workspace_id,
+            expected_revision,
+            kaleidoscope_contract::builtin::BUILTIN_APPS,
+        )
+    }
+
+    pub(super) fn reset_app_storage_with_builtins(
+        &self,
+        account_id: &str,
+        app_id: &str,
+        entry_id: &str,
+        workspace_id: Option<&str>,
+        expected_revision: Option<String>,
+        builtins: &[BuiltinApp],
+    ) -> Result<(contract::StorageResetReply, String, StorageUpdate), CoreError> {
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(db_error)?;
-        let definition =
-            current_definition(&tx, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = current_definition(&tx, app_id, builtins)?
+            .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
         let entry = declared_entry(&definition, entry_id)?.clone();
         let key = resolve_key(&entry, workspace_id)?;
         check_workspace_owner(&tx, account_id, workspace_id)?;

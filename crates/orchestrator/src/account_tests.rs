@@ -50,7 +50,7 @@ async fn v5_migration_attaches_existing_rows_and_preserves_existing_credentials_
     let version: i64 = db
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 9);
+    assert_eq!(version, 10);
 
     let (
         account_id,

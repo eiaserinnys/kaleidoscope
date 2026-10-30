@@ -50,7 +50,7 @@ async fn workspace_tools_read_and_delete_canonical_entities() {
     let found = decode(
         server
             .get_workspace(Parameters(WorkspaceArgs {
-                workspace_id: "w1".into(),
+                workspace_id: Some("w1".into()),
             }))
             .await
             .unwrap(),
@@ -61,7 +61,7 @@ async fn workspace_tools_read_and_delete_canonical_entities() {
 
     let deleted = decode(
         server
-            .delete_workspace(Parameters(WorkspaceArgs {
+            .delete_workspace(Parameters(DeleteWorkspaceArgs {
                 workspace_id: "w1".into(),
             }))
             .await
@@ -70,7 +70,7 @@ async fn workspace_tools_read_and_delete_canonical_entities() {
     assert_eq!(deleted["deleted"], true);
     assert_eq!(deleted["workspace_id"], "w1");
     let last = server
-        .delete_workspace(Parameters(WorkspaceArgs {
+        .delete_workspace(Parameters(DeleteWorkspaceArgs {
             workspace_id: "w2".into(),
         }))
         .await
@@ -78,7 +78,7 @@ async fn workspace_tools_read_and_delete_canonical_entities() {
     assert!(last.is_error.unwrap_or_default());
     let foreign = decode(
         server
-            .delete_workspace(Parameters(WorkspaceArgs {
+            .delete_workspace(Parameters(DeleteWorkspaceArgs {
                 workspace_id: foreign_account.clone(),
             }))
             .await

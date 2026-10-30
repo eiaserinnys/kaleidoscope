@@ -272,7 +272,7 @@ async fn get_shared_view_returns_latest_window_and_empty_note() {
     let shared = value(
         server
             .get_shared_view(Parameters(WorkspaceArgs {
-                workspace_id: "w".into(),
+                workspace_id: Some("w".into()),
             }))
             .await
             .unwrap(),
@@ -284,7 +284,7 @@ async fn get_shared_view_returns_latest_window_and_empty_note() {
     let empty = value(
         server
             .get_shared_view(Parameters(WorkspaceArgs {
-                workspace_id: "missing".into(),
+                workspace_id: Some("missing".into()),
             }))
             .await
             .unwrap(),

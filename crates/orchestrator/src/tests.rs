@@ -1,5 +1,6 @@
 use super::*;
-use axum::body::Body;
+use axum::body::{to_bytes, Body};
+use kaleidoscope_contract::Workspace;
 use tower::ServiceExt;
 
 const EDITOR: &str = include_str!("../../../apps/md-editor.json");
@@ -54,7 +55,7 @@ fn migration_v8_adds_soft_delete_without_changing_existing_rows() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        9
+        10
     );
 }
 
@@ -195,6 +196,313 @@ async fn mcp_requires_bearer_token() {
     let app = router(AppState::in_memory("secret"));
     let response=app.oneshot(request("POST","/mcp",None,Body::from(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}"#))).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn mcp_http_uses_workspace_header_defaults_and_requires_explicit_delete_id() {
+    let state = AppState::in_memory("secret");
+    let make_workspace = |id: &str| Workspace {
+        id: id.into(),
+        name: format!("작업 {id}"),
+        created_at: "now".into(),
+        updated_at: "now".into(),
+    };
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: vec![make_workspace("w1"), make_workspace("w2")],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let (device_id, device_token) = make_device(&state);
+
+    let mut storage_app: Value = serde_json::from_str(&test_definition(LEGACY_APP)).unwrap();
+    storage_app["requires"]["blocks"] = json!(6);
+    storage_app["requires"]["modules"]["storage"] = json!(1);
+    storage_app["storage"] = json!({"entries":[{
+        "id":"workspace_value",
+        "key":"workspaces/{workspace_id}/value",
+        "kind":"json",
+        "schema":{"type":"string"},
+        "default":"default",
+        "label":"Workspace value",
+        "presentation":"hidden"
+    }]});
+    let app_id = storage_app["id"].as_str().unwrap().to_string();
+    state
+        .publish_app(&storage_app.to_string(), "test", false, None)
+        .unwrap();
+
+    let app = router(state.clone());
+    let session = initialize_mcp_session(&app, &device_token, Some("w1"))
+        .await
+        .unwrap();
+    let default_workspace = mcp_call(
+        &app,
+        &device_token,
+        Some("w1"),
+        &session,
+        "get_workspace",
+        json!({}),
+    )
+    .await;
+    assert_eq!(default_workspace["result"]["isError"], false);
+    assert_eq!(mcp_tool_json(&default_workspace)["workspace_id"], "w1");
+
+    let explicit_workspace = mcp_call(
+        &app,
+        &device_token,
+        Some("w1"),
+        &session,
+        "get_workspace",
+        json!({"workspace_id":"w2"}),
+    )
+    .await;
+    assert_eq!(mcp_tool_json(&explicit_workspace)["workspace_id"], "w2");
+
+    let listed = mcp_call(
+        &app,
+        &device_token,
+        Some("w1"),
+        &session,
+        "list_app_storage",
+        json!({"app_id":app_id}),
+    )
+    .await;
+    assert_eq!(
+        mcp_tool_json(&listed)["items"][0]["key"],
+        "workspaces/w1/value"
+    );
+    let explicit_storage = mcp_call(
+        &app,
+        &device_token,
+        Some("w1"),
+        &session,
+        "read_app_storage",
+        json!({"app_id":app_id,"entry_id":"workspace_value","workspace_id":"w2"}),
+    )
+    .await;
+    let explicit_read = mcp_tool_json(&explicit_storage);
+    assert_eq!(explicit_read["exists"], false);
+    assert_eq!(explicit_read["content"], "default");
+
+    let missing_delete_id = mcp_call(
+        &app,
+        &device_token,
+        Some("w1"),
+        &session,
+        "delete_workspace",
+        json!({}),
+    )
+    .await;
+    assert_eq!(missing_delete_id["result"]["isError"], true);
+    assert!(state
+        .lock_db()
+        .unwrap()
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id='w1')",
+            [],
+            |row| row.get::<_, bool>(0)
+        )
+        .unwrap());
+    assert_eq!(
+        state.authenticate_device(&device_token).unwrap().unwrap().0,
+        device_id
+    );
+}
+
+#[tokio::test]
+async fn mcp_http_authentication_keeps_global_token_and_rejects_invalid_foreign_and_revoked_tokens()
+{
+    let state = AppState::in_memory("secret");
+    let (device_id, device_token) = make_device(&state);
+    let foreign_account = Uuid::new_v4().to_string();
+    let foreign_token = "valid-device-token-for-another-account";
+    {
+        let db = state.lock_db().unwrap();
+        db.execute(
+            "INSERT INTO accounts(id,display_name,created_at) VALUES(?1,'Other','now')",
+            [&foreign_account],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES('foreign','Other',?1,?2,'now')",
+            params![foreign_account, sha256_hex(foreign_token.as_bytes())],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO workspaces(id,account_id,data,created_at) VALUES('foreign-workspace',?1,?2,'now')",
+            params![
+                foreign_account,
+                serde_json::to_string(&Workspace {
+                    id: "foreign-workspace".into(),
+                    name: "Other workspace".into(),
+                    created_at: "now".into(),
+                    updated_at: "now".into(),
+                })
+                .unwrap()
+            ],
+        )
+        .unwrap();
+    }
+    let app = router(state.clone());
+
+    let global_session = initialize_mcp_session(&app, "secret", None).await.unwrap();
+    let global_list = mcp_call(
+        &app,
+        "secret",
+        None,
+        &global_session,
+        "list_workspaces",
+        json!({}),
+    )
+    .await;
+    assert_eq!(global_list["result"]["isError"], false);
+
+    let wrong = mcp_initialize(&app, "wrong-token", None).await;
+    assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
+    let foreign_device = mcp_initialize(&app, foreign_token, None).await;
+    assert_eq!(foreign_device.status(), StatusCode::FORBIDDEN);
+    let foreign_workspace = mcp_initialize(&app, &device_token, Some("foreign-workspace")).await;
+    assert_eq!(foreign_workspace.status(), StatusCode::FORBIDDEN);
+
+    state.revoke_device(&device_id).unwrap();
+    let revoked = mcp_initialize(&app, &device_token, None).await;
+    assert_eq!(revoked.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn mcp_http_open_uses_origin_device_and_global_token_uses_last_active_device() {
+    use kaleidoscope_contract::Supported;
+
+    let state = AppState::in_memory("secret");
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: vec![Workspace {
+                    id: "w".into(),
+                    name: "Work".into(),
+                    created_at: "now".into(),
+                    updated_at: "now".into(),
+                }],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let (origin_id, origin_token) = make_device(&state);
+    let (recent_id, _) = make_device(&state);
+    let (offline_id, offline_token) = make_device(&state);
+    state
+        .lock_db()
+        .unwrap()
+        .execute(
+            "UPDATE devices SET name=CASE id WHEN ?1 THEN 'Origin PC' WHEN ?2 THEN 'Recent PC' WHEN ?3 THEN 'Offline PC' END WHERE id IN (?1,?2,?3)",
+            params![origin_id, recent_id, offline_id],
+        )
+        .unwrap();
+    let _origin_stream = state
+        .stream_with_registry(
+            origin_id.clone(),
+            Some(Supported::current()),
+            registry::LAYOUT_SYNC_REGISTRY_VERSION,
+        )
+        .unwrap();
+    let _recent_stream = state
+        .stream_with_registry(
+            recent_id.clone(),
+            Some(Supported::current()),
+            registry::LAYOUT_SYNC_REGISTRY_VERSION,
+        )
+        .unwrap();
+    state
+        .lock_db()
+        .unwrap()
+        .execute(
+            "UPDATE devices SET last_active_at=CASE id WHEN ?1 THEN '2026-10-29T00:00:00Z' WHEN ?2 THEN '2026-10-30T00:00:00Z' END WHERE id IN (?1,?2)",
+            params![origin_id, recent_id],
+        )
+        .unwrap();
+
+    let app = router(state.clone());
+    let upload_session = initialize_mcp_session(&app, &origin_token, Some("w"))
+        .await
+        .unwrap();
+    let definition: Value = serde_json::from_str(&test_definition(LEGACY_APP)).unwrap();
+    let app_id = definition["id"].as_str().unwrap().to_string();
+    let mut events = state.0.events.subscribe();
+    let uploaded = mcp_call(
+        &app,
+        &origin_token,
+        Some("w"),
+        &upload_session,
+        "upload_app",
+        json!({"definition":definition,"open":true}),
+    )
+    .await;
+    let uploaded = mcp_tool_json(&uploaded);
+    assert_eq!(uploaded["open_sent_to"], 1);
+    assert_eq!(uploaded["open_target"], "Origin PC");
+    assert_eq!(
+        events.try_recv().unwrap().open_target.as_deref(),
+        Some(origin_id.as_str())
+    );
+
+    let origin_open = mcp_call(
+        &app,
+        &origin_token,
+        Some("w"),
+        &upload_session,
+        "open_app",
+        json!({"app_id":app_id}),
+    )
+    .await;
+    let origin_open = mcp_tool_json(&origin_open);
+    assert_eq!(origin_open["open_sent_to"], 1);
+    assert_eq!(origin_open["open_target"], "Origin PC");
+    assert_eq!(
+        events.try_recv().unwrap().open_target.as_deref(),
+        Some(origin_id.as_str())
+    );
+
+    let offline_session = initialize_mcp_session(&app, &offline_token, Some("w"))
+        .await
+        .unwrap();
+    let offline_open = mcp_call(
+        &app,
+        &offline_token,
+        Some("w"),
+        &offline_session,
+        "open_app",
+        json!({"app_id":app_id}),
+    )
+    .await;
+    let offline_open = mcp_tool_json(&offline_open);
+    assert_eq!(offline_open["open_sent_to"], 0);
+    assert_eq!(offline_open["open_reason"], "origin_device_unavailable");
+    assert!(events.try_recv().is_err());
+
+    let global_session = initialize_mcp_session(&app, "secret", Some("w"))
+        .await
+        .unwrap();
+    let global_open = mcp_call(
+        &app,
+        "secret",
+        Some("w"),
+        &global_session,
+        "open_app",
+        json!({"app_id":app_id}),
+    )
+    .await;
+    let global_open = mcp_tool_json(&global_open);
+    assert_eq!(global_open["open_sent_to"], 1);
+    assert_eq!(global_open["open_target"], "Recent PC");
+    assert_eq!(
+        events.try_recv().unwrap().open_target.as_deref(),
+        Some(recent_id.as_str())
+    );
 }
 
 #[tokio::test]
@@ -360,6 +668,161 @@ fn request(method: &str, path: &str, token: Option<&str>, body: Body) -> Request
     builder.body(body).unwrap()
 }
 
+async fn mcp_initialize(
+    app: &Router,
+    token: &str,
+    workspace_id: Option<&str>,
+) -> axum::response::Response {
+    let mut request = request(
+        "POST",
+        "/mcp",
+        Some(token),
+        Body::from(
+            json!({
+                "jsonrpc":"2.0",
+                "id":1,
+                "method":"initialize",
+                "params":{
+                    "protocolVersion":"2025-03-26",
+                    "capabilities":{},
+                    "clientInfo":{"name":"test","version":"1"}
+                }
+            })
+            .to_string(),
+        ),
+    );
+    request
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
+    request
+        .headers_mut()
+        .insert(header::HOST, "localhost".parse().unwrap());
+    request.headers_mut().insert(
+        header::ACCEPT,
+        "application/json, text/event-stream".parse().unwrap(),
+    );
+    if let Some(workspace_id) = workspace_id {
+        request
+            .headers_mut()
+            .insert(registry::WORKSPACE_HEADER, workspace_id.parse().unwrap());
+    }
+    app.clone().oneshot(request).await.unwrap()
+}
+
+async fn initialize_mcp_session(
+    app: &Router,
+    token: &str,
+    workspace_id: Option<&str>,
+) -> Option<String> {
+    let response = mcp_initialize(app, token, workspace_id).await;
+    let status = response.status();
+    let session_id = response
+        .headers()
+        .get("mcp-session-id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "MCP initialize body: {}",
+        String::from_utf8_lossy(&body)
+    );
+    let session_id = session_id?;
+
+    let mut notification = request(
+        "POST",
+        "/mcp",
+        Some(token),
+        Body::from(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#),
+    );
+    notification
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
+    notification
+        .headers_mut()
+        .insert(header::HOST, "localhost".parse().unwrap());
+    notification.headers_mut().insert(
+        header::ACCEPT,
+        "application/json, text/event-stream".parse().unwrap(),
+    );
+    notification
+        .headers_mut()
+        .insert("mcp-session-id", session_id.parse().unwrap());
+    notification
+        .headers_mut()
+        .insert("mcp-protocol-version", "2025-03-26".parse().unwrap());
+    if let Some(workspace_id) = workspace_id {
+        notification
+            .headers_mut()
+            .insert(registry::WORKSPACE_HEADER, workspace_id.parse().unwrap());
+    }
+    let initialized = app.clone().oneshot(notification).await.unwrap();
+    assert_eq!(initialized.status(), StatusCode::ACCEPTED);
+    Some(session_id)
+}
+
+async fn mcp_call(
+    app: &Router,
+    token: &str,
+    workspace_id: Option<&str>,
+    session_id: &str,
+    name: &str,
+    arguments: Value,
+) -> Value {
+    let mut request = request(
+        "POST",
+        "/mcp",
+        Some(token),
+        Body::from(
+            json!({
+                "jsonrpc":"2.0",
+                "id":2,
+                "method":"tools/call",
+                "params":{"name":name,"arguments":arguments}
+            })
+            .to_string(),
+        ),
+    );
+    request
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
+    request
+        .headers_mut()
+        .insert(header::HOST, "localhost".parse().unwrap());
+    request.headers_mut().insert(
+        header::ACCEPT,
+        "application/json, text/event-stream".parse().unwrap(),
+    );
+    request
+        .headers_mut()
+        .insert("mcp-session-id", session_id.parse().unwrap());
+    request
+        .headers_mut()
+        .insert("mcp-protocol-version", "2025-03-26".parse().unwrap());
+    if let Some(workspace_id) = workspace_id {
+        request
+            .headers_mut()
+            .insert(registry::WORKSPACE_HEADER, workspace_id.parse().unwrap());
+    }
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let body = String::from_utf8(body.to_vec()).unwrap();
+    let json = body
+        .lines()
+        .find_map(|line| line.strip_prefix("data: ").filter(|data| !data.is_empty()))
+        .unwrap_or(&body);
+    serde_json::from_str(json).unwrap_or_else(|error| panic!("MCP call body {body:?}: {error}"))
+}
+
+fn mcp_tool_json(response: &Value) -> Value {
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .expect("tool response has a text block");
+    serde_json::from_str(text).expect("tool text contains JSON")
+}
+
 fn current_shell_request(method: &str, path: &str, token: &str, body: Body) -> Request<Body> {
     use kaleidoscope_contract::registry::SUPPORTED_HEADER;
     let mut request = request(method, path, Some(token), body);
@@ -409,7 +872,7 @@ fn migration_upgrades_v1_without_losing_devices() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 9);
+    assert_eq!(version, 10);
     assert_eq!(
         db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -453,7 +916,7 @@ fn migration_v7_removes_legacy_tables_and_preserves_other_data() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 9);
+    assert_eq!(version, 10);
     let old_tables: i64 = db.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('agents','agent_items')", [], |row| row.get(0)).unwrap();
     assert_eq!(old_tables, 0);
     let apps: i64 = db

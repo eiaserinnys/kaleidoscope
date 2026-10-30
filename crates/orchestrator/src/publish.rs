@@ -26,6 +26,17 @@ impl AppState {
         open: bool,
         workspace_id: Option<String>,
     ) -> Result<(RegistryApp, bool, Option<OpenTarget>), CoreError> {
+        self.publish_app_for_device(definition_json, created_by, open, workspace_id, None)
+    }
+
+    pub(crate) fn publish_app_for_device(
+        &self,
+        definition_json: &str,
+        created_by: &str,
+        open: bool,
+        workspace_id: Option<String>,
+        preferred_device: Option<&str>,
+    ) -> Result<(RegistryApp, bool, Option<OpenTarget>), CoreError> {
         let definition = parse_app_definition(definition_json)?;
         if kaleidoscope_contract::builtin::is_builtin(&definition.id) {
             return Err(CoreError::with_details(
@@ -39,13 +50,18 @@ impl AppState {
             None => true,
         };
         let event_workspace_id = workspace_accessible.then(|| workspace_id.clone()).flatten();
-        let open_requested = open && workspace_accessible;
         let account_id = self.mcp_account_id()?;
-        let open_target = if open_requested {
-            self.choose_open_target(workspace_id.as_deref())?
+        let open_target = if open && workspace_accessible {
+            self.choose_open_target(
+                workspace_id.as_deref(),
+                preferred_device,
+                &definition.requires,
+            )?
         } else {
             None
         };
+        let open_requested =
+            open && workspace_accessible && (preferred_device.is_none() || open_target.is_some());
         let result = {
             let mut db = self.lock_db()?;
             let tx = db.transaction().map_err(db_error)?;
@@ -233,6 +249,8 @@ impl AppState {
     pub(crate) fn choose_open_target(
         &self,
         workspace_id: Option<&str>,
+        preferred_device: Option<&str>,
+        requires: &kaleidoscope_contract::Requires,
     ) -> Result<Option<OpenTarget>, CoreError> {
         let account_id = self.mcp_account_id()?;
         let mut db = self.lock_db()?;
@@ -261,11 +279,24 @@ impl AppState {
                 .layout_sync_devices
                 .lock()
                 .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?;
+            let support = self
+                .0
+                .device_support
+                .lock()
+                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?;
             let mut values = Vec::new();
             for id in syncing
                 .iter()
                 .filter(|id| connected.get(*id).copied().unwrap_or(0) > 0)
             {
+                if preferred_device.is_some_and(|preferred| preferred != id.as_str()) {
+                    continue;
+                }
+                if preferred_device.is_some()
+                    && !renders_on(support.get(id).and_then(Option::as_ref), requires)
+                {
+                    continue;
+                }
                 let row: Option<(String, Option<String>)> = tx.query_row("SELECT name,last_active_at FROM devices WHERE id=?1 AND account_id=?2 AND revoked_at IS NULL", params![id, account_id], |r| Ok((r.get(0)?,r.get(1)?))).optional().map_err(db_error)?;
                 if let Some((name, active)) = row {
                     values.push((id.clone(), name, active.unwrap_or_default()));

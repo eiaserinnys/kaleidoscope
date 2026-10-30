@@ -30,6 +30,193 @@ fn add_device(state: &AppState, id: &str, account_id: &str, token: &str) {
     ).unwrap();
 }
 
+#[test]
+fn storage_migration_from_version_nine_preserves_buckets_and_items() {
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    state
+        .publish_app(&definition(), "test", false, None)
+        .unwrap();
+    let written = state
+        .write_app_storage(&account, "storage-test", "title", None, json!("kept"), None)
+        .unwrap();
+    let db = state.lock_db().unwrap();
+    assert_eq!(
+        db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        10
+    );
+    let fresh_violations = db
+        .prepare("PRAGMA foreign_key_check")
+        .unwrap()
+        .query_map([], |_| Ok(()))
+        .unwrap()
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .unwrap();
+    assert!(fresh_violations.is_empty());
+    db.execute_batch(
+        "PRAGMA foreign_keys=OFF;
+         CREATE TEMP TABLE saved_app_storage_buckets AS
+             SELECT id,account_id,app_id FROM app_storage_buckets;
+         DROP TABLE app_storage_buckets;
+         CREATE TABLE app_storage_buckets (
+             id TEXT PRIMARY KEY,
+             account_id TEXT NOT NULL REFERENCES accounts(id),
+             app_id TEXT NOT NULL REFERENCES apps(id),
+             UNIQUE(account_id,app_id)
+         );
+         INSERT INTO app_storage_buckets(id,account_id,app_id)
+             SELECT id,account_id,app_id FROM saved_app_storage_buckets;
+         DROP TABLE saved_app_storage_buckets;
+         PRAGMA user_version=9;
+         PRAGMA foreign_keys=ON;",
+    )
+    .unwrap();
+    let old_bucket_targets = db
+        .prepare("PRAGMA foreign_key_list(app_storage_buckets)")
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(2))
+        .unwrap()
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .unwrap();
+    assert!(old_bucket_targets.contains(&"apps".to_string()));
+
+    migrate(&db).unwrap();
+
+    assert_eq!(
+        db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        10
+    );
+    let stored: (String, String) = db
+        .query_row(
+            "SELECT i.content,i.revision FROM app_storage_items i JOIN app_storage_buckets b ON b.id=i.bucket_id WHERE b.account_id=?1 AND b.app_id='storage-test' AND i.key='settings/title'",
+            [&account],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(stored.0, "\"kept\"");
+    assert_eq!(stored.1, written.0.revision);
+    let violations = db
+        .prepare("PRAGMA foreign_key_check")
+        .unwrap()
+        .query_map([], |_| Ok(()))
+        .unwrap()
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .unwrap();
+    assert!(violations.is_empty());
+    let bucket_fks = db
+        .prepare("PRAGMA foreign_key_list(app_storage_buckets)")
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(2))
+        .unwrap()
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .unwrap();
+    assert!(bucket_fks.contains(&"accounts".to_string()));
+    assert!(!bucket_fks.contains(&"apps".to_string()));
+    let unique_index_count: i64 = db
+        .query_row(
+            "SELECT count(*) FROM pragma_index_list('app_storage_buckets') WHERE \"unique\"=1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(unique_index_count, 2);
+    let item_foreign_keys = db
+        .prepare("PRAGMA foreign_key_list(app_storage_items)")
+        .unwrap()
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(2)?, row.get::<_, String>(6)?))
+        })
+        .unwrap()
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .unwrap();
+    assert!(item_foreign_keys.contains(&("app_storage_buckets".to_string(), "CASCADE".to_string())));
+}
+
+#[test]
+fn builtin_storage_definition_supports_list_read_write_reset_cycle() {
+    use kaleidoscope_contract::builtin::BuiltinApp;
+
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    let fake_builtins = [BuiltinApp {
+        id: "agent",
+        version: 1,
+        updated_at: "2026-10-30T00:00:00Z",
+        definition_json: include_str!("../../../examples/agent.json"),
+    }];
+
+    let listed = state
+        .list_app_storage_with_builtins(&account, "agent", None, &fake_builtins)
+        .unwrap();
+    assert_eq!(listed.items.len(), 1);
+    assert!(!listed.items[0].exists);
+    let initial = state
+        .read_app_storage_with_builtins(&account, "agent", "agents", None, &fake_builtins)
+        .unwrap();
+    assert!(!initial.exists);
+    assert!(initial.revision.is_none());
+    assert_eq!(initial.content.as_array().unwrap().len(), 4);
+
+    let override_value =
+        json!([{ "id":"codex", "name":"Codex", "command":"codex", "args":[], "env":{} }]);
+    let (written, _, _) = state
+        .write_app_storage_with_builtins(
+            &account,
+            "agent",
+            "agents",
+            None,
+            override_value.clone(),
+            None,
+            &fake_builtins,
+        )
+        .unwrap();
+    let override_read = state
+        .read_app_storage_with_builtins(&account, "agent", "agents", None, &fake_builtins)
+        .unwrap();
+    assert!(override_read.exists);
+    assert_eq!(override_read.content, override_value);
+    assert_eq!(
+        override_read.revision.as_deref(),
+        Some(written.revision.as_str())
+    );
+
+    let stale = state.write_app_storage_with_builtins(
+        &account,
+        "agent",
+        "agents",
+        None,
+        json!([]),
+        None,
+        &fake_builtins,
+    );
+    assert_eq!(stale.unwrap_err().code, ErrorCode::Conflict);
+    let (reset, _, _) = state
+        .reset_app_storage_with_builtins(
+            &account,
+            "agent",
+            "agents",
+            None,
+            Some(written.revision),
+            &fake_builtins,
+        )
+        .unwrap();
+    assert!(reset.revision.is_none());
+    let restored = state
+        .read_app_storage_with_builtins(&account, "agent", "agents", None, &fake_builtins)
+        .unwrap();
+    assert!(!restored.exists);
+    assert_eq!(restored.content, initial.content);
+
+    assert!(state
+        .list_app_storage_with_builtins(&account, "not-builtin", None, &fake_builtins)
+        .is_err());
+    assert!(state
+        .read_app_storage_with_builtins(&account, "agent", "missing", None, &fake_builtins)
+        .is_err());
+}
+
 async fn request(
     state: &AppState,
     token: &str,
@@ -351,7 +538,7 @@ async fn mcp_storage_tools_and_workspace_context_use_declared_account_data() {
     let context = decode(
         server
             .get_workspace(Parameters(super::mcp::WorkspaceArgs {
-                workspace_id: "w1".into(),
+                workspace_id: Some("w1".into()),
             }))
             .await
             .unwrap(),

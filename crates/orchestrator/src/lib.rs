@@ -58,6 +58,12 @@ pub(crate) fn renders_on(supported: Option<&Supported>, requires: &Requires) -> 
 #[derive(Clone)]
 pub struct AppState(Arc<Inner>);
 
+#[derive(Clone, Debug, Default)]
+pub(crate) struct McpPrincipal {
+    pub(crate) device_id: Option<String>,
+    pub(crate) workspace_id: Option<String>,
+}
+
 struct Inner {
     db: Mutex<Connection>,
     events: broadcast::Sender<Broadcast>,
