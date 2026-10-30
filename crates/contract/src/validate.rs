@@ -5,10 +5,11 @@ use std::collections::{BTreeMap, HashSet};
 
 use serde_json::Value;
 
+use crate::app_storage::{self, StorageKind};
 use crate::data::{self, Action, Actions, Binding, SourceDecl};
 use crate::{
-    AppDefinition, Block, CoreError, ErrorCode, FileAccess, FileRef, PathValue, PermissionDecl,
-    UrlValue, BLOCK_SET_VERSION, MODULE_VERSIONS,
+    AgentProvider, AppDefinition, Block, CoreError, ErrorCode, FileAccess, FileRef, PathValue,
+    PermissionDecl, UrlValue, BLOCK_SET_VERSION, MODULE_VERSIONS,
 };
 
 /// 앱 정의 JSON 원문을 읽고 검사한다. 통과하면 정의를, 걸리면 `unsupported_app`이나
@@ -136,6 +137,19 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
         validate_state_key(&opens.state, definition, &mut details, "opens");
     }
 
+    if let Some(storage) = &definition.storage {
+        if definition.requires.blocks < 6 {
+            details.push(
+                "storage 선언은 블록 세트 6판이라 requires.blocks가 6 이상이어야 합니다".into(),
+            );
+        }
+        validate_module_version("storage", 1, definition, &mut details, "/storage");
+        details.extend(app_storage::validate_storage_decl(storage));
+    }
+    if let Some(agent) = &definition.agent {
+        validate_agent_provider(agent, definition, &mut details);
+    }
+
     validate_sources(definition, &mut details);
 
     let mut web_views = 0;
@@ -146,7 +160,9 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
         validate_block(block, definition, &mut details, pointer);
     });
     if web_views > 1 {
-        details.push(format!("web_view는 정의에 하나까지 둘 수 있습니다(지금 {web_views}개)"));
+        details.push(format!(
+            "web_view는 정의에 하나까지 둘 수 있습니다(지금 {web_views}개)"
+        ));
     }
 
     for (pointer, actions) in data::ui_actions(definition) {
@@ -221,7 +237,8 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
                     validate_binding_shape(dir, definition, details, &format!("{at}/dir"));
                     if let Binding::Literal(Value::String(dir)) = dir {
                         if !valid_relative_path(dir, true) {
-                            details.push(format!("{at}/dir: 고른 폴더 밖 경로를 요구합니다: {dir}"));
+                            details
+                                .push(format!("{at}/dir: 고른 폴더 밖 경로를 요구합니다: {dir}"));
                         }
                     }
                 }
@@ -237,6 +254,172 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
     }
 }
 
+fn validate_agent_provider(
+    agent: &AgentProvider,
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+) {
+    let at = "/agent";
+    if definition.requires.blocks < 6 {
+        details.push(
+            "agent provider는 블록 세트 6판이라 requires.blocks가 6 이상이어야 합니다".into(),
+        );
+    }
+    validate_module_version("agent", 3, definition, details, at);
+    validate_module_version("connection", 2, definition, details, at);
+    validate_module_version("storage", 1, definition, details, at);
+    validate_permission_module(&agent.permission, "connection", definition, details, at);
+    match find_permission(definition, &agent.permission) {
+        Some(PermissionDecl::Connection { access, .. }) if *access == FileAccess::Readwrite => {}
+        Some(_) => details.push(format!(
+            "{at}/permission은 readwrite connection 권한이어야 합니다"
+        )),
+        None => {}
+    }
+    if !valid_request_path(&agent.base_path) {
+        details.push(format!(
+            "{at}/base_path는 /로 시작하는 안전한 연결 경로여야 합니다"
+        ));
+    }
+
+    let storage = definition.storage.as_ref();
+    if let Some(storage) = storage {
+        let thread_entry = storage
+            .entries
+            .iter()
+            .find(|entry| entry.id == agent.thread_entry);
+        match thread_entry {
+            Some(entry)
+                if entry.kind == StorageKind::Json && entry.key.contains("{workspace_id}") => {}
+            Some(_) => details.push(format!(
+                "{at}/thread_entry는 workspace_id 키를 가진 json 저장 항목이어야 합니다"
+            )),
+            None => details.push(format!(
+                "{at}/thread_entry가 storage 선언에 없습니다: {}",
+                agent.thread_entry
+            )),
+        }
+    } else {
+        details.push(format!(
+            "{at}/thread_entry를 검사하려면 storage 선언이 필요합니다"
+        ));
+    }
+
+    let fields = [
+        ("namespace", &agent.namespace),
+        ("profile", &agent.profile),
+        ("collection", &agent.collection),
+        ("model_order", &agent.model_order),
+        ("selected_model", &agent.selected_model),
+        ("title_template", &agent.title_template),
+        (
+            "initial_instruction_template",
+            &agent.initial_instruction_template,
+        ),
+        ("instructions_template", &agent.instructions_template),
+    ];
+    for (field, binding) in fields {
+        let pointer = format!("{at}/{field}");
+        validate_binding_shape(binding, definition, details, &pointer);
+        if let Some(value) = static_binding_value(binding, definition) {
+            if matches!(
+                field,
+                "title_template" | "initial_instruction_template" | "instructions_template"
+            ) {
+                if let Some(template) = value.as_str() {
+                    if let Err(reason) = validate_workspace_template(template) {
+                        details.push(format!("{pointer}: {reason}"));
+                    }
+                }
+            }
+            if field == "namespace" && value.as_str().is_some_and(str::is_empty) {
+                details.push(format!("{pointer}는 비어 있을 수 없습니다"));
+            }
+            if field == "model_order" {
+                if let Some(models) = value.as_array() {
+                    let mut seen = HashSet::new();
+                    if models.is_empty() {
+                        details.push(format!("{pointer}는 하나 이상의 model id가 필요합니다"));
+                    }
+                    for model in models {
+                        let Some(model) = model.as_str() else {
+                            details.push(format!("{pointer}의 model id는 문자열이어야 합니다"));
+                            continue;
+                        };
+                        if model.is_empty() || !seen.insert(model) {
+                            details
+                                .push(format!("{pointer}의 model id가 비었거나 겹칩니다: {model}"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn validate_module_version(
+    module: &str,
+    minimum: u32,
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+    at: &str,
+) {
+    if definition
+        .requires
+        .modules
+        .get(module)
+        .copied()
+        .unwrap_or(0)
+        < minimum
+    {
+        details.push(format!(
+            "{at}: {module} 모듈 {minimum}판을 requires.modules에 선언해야 합니다"
+        ));
+    }
+}
+
+fn static_binding_value<'a>(
+    binding: &'a Binding,
+    definition: &'a AppDefinition,
+) -> Option<&'a Value> {
+    match binding {
+        Binding::Literal(value) => Some(value),
+        Binding::State(reference) => definition.state.get(&reference.state),
+        Binding::Expr(expr) => {
+            let reference = expr.expr.strip_prefix("$storage.")?;
+            if reference.is_empty() || reference.contains('.') || reference.contains('[') {
+                return None;
+            }
+            definition
+                .storage
+                .as_ref()?
+                .entries
+                .iter()
+                .find(|entry| entry.id == reference)
+                .map(|entry| &entry.default)
+        }
+    }
+}
+
+fn validate_workspace_template(template: &str) -> Result<(), &'static str> {
+    let mut rest = template;
+    while let Some(open) = rest.find('{') {
+        let after_open = &rest[open + 1..];
+        let Some(close) = after_open.find('}') else {
+            return Err("닫히지 않은 template 자리표시자가 있습니다");
+        };
+        let placeholder = &after_open[..close];
+        if !matches!(placeholder, "workspace.id" | "workspace.name") {
+            return Err("template은 {workspace.id}와 {workspace.name}만 쓸 수 있습니다");
+        }
+        rest = &after_open[close + 1..];
+    }
+    if rest.contains('}') {
+        return Err("짝이 맞지 않는 template 괄호가 있습니다");
+    }
+    Ok(())
+}
+
 /// 모든 식을 읽어 보고, 원천 참조와 원천 값 자리의 변수 규칙을 본다.
 fn validate_exprs(definition: &AppDefinition, details: &mut Vec<String>) {
     let mut has_expr = false;
@@ -248,14 +431,36 @@ fn validate_exprs(definition: &AppDefinition, details: &mut Vec<String>) {
         }
         for name in data::data_refs(expr) {
             if !definition.sources.contains_key(&name) {
-                details.push(format!("{pointer}: 식이 없는 원천을 읽습니다: $data.{name}"));
+                details.push(format!(
+                    "{pointer}: 식이 없는 원천을 읽습니다: $data.{name}"
+                ));
+            }
+        }
+        for entry in data::storage_refs(expr) {
+            if definition
+                .storage
+                .as_ref()
+                .is_none_or(|storage| !storage.entries.iter().any(|item| item.id == entry))
+            {
+                details.push(format!(
+                    "{pointer}: 식이 없는 저장 항목을 읽습니다: $storage.{entry}"
+                ));
+            }
+        }
+        for field in data::storage_meta_refs(expr) {
+            if field != "bucket_id" {
+                details.push(format!(
+                    "{pointer}: $storage_meta에 없는 필드입니다: {field}"
+                ));
             }
         }
         if pointer.starts_with("/sources/")
-            && ["$data", "$event", "$item"].iter().any(|var| uses_var(expr, var))
+            && ["$data", "$event", "$item"]
+                .iter()
+                .any(|var| uses_var(expr, var))
         {
             details.push(format!(
-                "{pointer}: 원천의 값 자리 식은 $state만 볼 수 있습니다($data, $event, $item 불가)"
+                "{pointer}: 원천의 값 자리 식은 $state와 $storage만 볼 수 있습니다($data, $event, $item 불가)"
             ));
         }
     }
@@ -314,14 +519,41 @@ fn validate_actions(
                     Action::SetState(set) => {
                         validate_state_key(&set.set_state, definition, details, &at);
                         if let Some(value) = &set.value {
-                            validate_binding_shape(value, definition, details, &format!("{at}/value"));
+                            validate_binding_shape(
+                                value,
+                                definition,
+                                details,
+                                &format!("{at}/value"),
+                            );
                         }
                     }
                     Action::Refresh(refresh) => {
                         for name in &refresh.refresh {
                             if !definition.sources.contains_key(name) {
-                                details.push(format!("{at}: 없는 원천을 다시 받으려 합니다: {name}"));
+                                details
+                                    .push(format!("{at}: 없는 원천을 다시 받으려 합니다: {name}"));
                             }
+                        }
+                    }
+                    Action::SetStorage(set_storage) => {
+                        if !definition.requires.modules.contains_key("storage") {
+                            details.push(format!("{at}: set_storage가 사용하는 storage 모듈을 requires.modules에 선언해야 합니다"));
+                        }
+                        let spec = &set_storage.set_storage;
+                        match definition.storage.as_ref().and_then(|storage| {
+                            storage.entries.iter().find(|entry| entry.id == spec.entry)
+                        }) {
+                            Some(_) => {}
+                            None => details
+                                .push(format!("{at}: 없는 저장 항목에 씁니다: {}", spec.entry)),
+                        }
+                        if let Some(value) = &spec.value {
+                            validate_binding_shape(
+                                value,
+                                definition,
+                                details,
+                                &format!("{at}/set_storage/value"),
+                            );
                         }
                     }
                     Action::Call(call) => {
@@ -334,8 +566,9 @@ fn validate_actions(
                             &at,
                         );
                         if call.method != data::HttpMethod::Get
-                            && find_permission(definition, &call.permission)
-                                .is_some_and(|permission| permission.access() != FileAccess::Readwrite)
+                            && find_permission(definition, &call.permission).is_some_and(
+                                |permission| permission.access() != FileAccess::Readwrite,
+                            )
                         {
                             details.push(format!(
                                 "{at}: {} 부르기는 권한 {}가 readwrite여야 합니다",
@@ -343,7 +576,12 @@ fn validate_actions(
                                 call.permission
                             ));
                         }
-                        validate_binding_shape(&call.path, definition, details, &format!("{at}/call/path"));
+                        validate_binding_shape(
+                            &call.path,
+                            definition,
+                            details,
+                            &format!("{at}/call/path"),
+                        );
                         if let Binding::Literal(Value::String(path)) = &call.path {
                             if !valid_request_path(path) {
                                 details.push(format!(
@@ -360,7 +598,12 @@ fn validate_actions(
                             );
                         }
                         if let Some(body) = &call.body {
-                            validate_binding_shape(body, definition, details, &format!("{at}/call/body"));
+                            validate_binding_shape(
+                                body,
+                                definition,
+                                details,
+                                &format!("{at}/call/body"),
+                            );
                         }
                     }
                 }
@@ -412,7 +655,10 @@ pub fn valid_request_path(path: &str) -> bool {
                 .replace("%2e", ".")
                 .replace("%2f", "/")
                 .replace("%5c", "/");
-            !part.is_empty() && decoded.split('/').all(|piece| piece != "." && piece != "..")
+            !part.is_empty()
+                && decoded
+                    .split('/')
+                    .all(|piece| piece != "." && piece != "..")
         })
 }
 
@@ -458,7 +704,10 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             validate_state_key(&selected.state, definition, details, at);
             validate_state_key(&on_select.set_state, definition, details, at);
         }
-        Block::MarkdownEditor { file } | Block::CodeEditor { file, .. } => {
+        Block::MarkdownEditor { file, document } => {
+            validate_markdown_binding(file, document, true, definition, details, at);
+        }
+        Block::CodeEditor { file, .. } => {
             validate_file_ref(file, definition, details, at);
             if find_permission(definition, &file.permission)
                 .is_some_and(|permission| permission.access() != FileAccess::Readwrite)
@@ -470,7 +719,9 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 ));
             }
         }
-        Block::MarkdownView { file } => validate_file_ref(file, definition, details, at),
+        Block::MarkdownView { file, document } => {
+            validate_markdown_binding(file, document, false, definition, details, at);
+        }
         Block::AgentChat {} => {
             if !definition.requires.modules.contains_key("agent") {
                 details.push(format!(
@@ -510,7 +761,10 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             on_view,
         } => {
             validate_permission_module(&root.permission, "files", definition, details, at);
-            let reads = [folder, view].into_iter().flatten().map(|reference| &reference.state);
+            let reads = [folder, view]
+                .into_iter()
+                .flatten()
+                .map(|reference| &reference.state);
             let writes = [on_folder, on_view]
                 .into_iter()
                 .flatten()
@@ -570,7 +824,9 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
         }
-        Block::List { selected, .. } | Block::Tree { selected, .. } | Block::Feed { selected, .. } => {
+        Block::List { selected, .. }
+        | Block::Tree { selected, .. }
+        | Block::Feed { selected, .. } => {
             if let Some(selected) = selected {
                 validate_state_key(&selected.state, definition, details, at);
             }
@@ -587,12 +843,18 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             let mut fields = HashSet::new();
             for column in columns {
                 if !fields.insert(column.field.as_str()) {
-                    details.push(format!("{at}: table 열의 field가 겹칩니다: {}", column.field));
+                    details.push(format!(
+                        "{at}: table 열의 field가 겹칩니다: {}",
+                        column.field
+                    ));
                 }
             }
             if let Some(sort) = sort {
                 if !fields.contains(sort.field.as_str()) {
-                    details.push(format!("{at}: sort의 field가 열에 없습니다: {}", sort.field));
+                    details.push(format!(
+                        "{at}: sort의 field가 열에 없습니다: {}",
+                        sort.field
+                    ));
                 }
             }
             if let Some(selected) = selected {
@@ -620,12 +882,11 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         Block::CodeView { value, file, .. } => match (value, file) {
             (Some(_), None) => {}
             (None, Some(file)) => validate_file_ref(file, definition, details, at),
-            _ => details.push(format!("{at}: code_view는 value와 file 가운데 꼭 하나를 씁니다")),
+            _ => details.push(format!(
+                "{at}: code_view는 value와 file 가운데 꼭 하나를 씁니다"
+            )),
         },
-        Block::Section { .. }
-        | Block::Text { .. }
-        | Block::Image { .. }
-        | Block::Media { .. } => {}
+        Block::Section { .. } | Block::Text { .. } | Block::Image { .. } | Block::Media { .. } => {}
     }
 }
 
@@ -634,6 +895,52 @@ fn find_permission<'a>(definition: &'a AppDefinition, id: &str) -> Option<&'a Pe
         .permissions
         .iter()
         .find(|permission| permission.id() == id)
+}
+
+fn validate_markdown_binding(
+    file: &Option<FileRef>,
+    document: &Option<crate::DocumentRef>,
+    editable: bool,
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+    at: &str,
+) {
+    match (file, document) {
+        (Some(file), None) => {
+            validate_file_ref(file, definition, details, at);
+            if editable
+                && find_permission(definition, &file.permission)
+                    .is_some_and(|permission| permission.access() != FileAccess::Readwrite)
+            {
+                details.push(format!(
+                    "{at}: markdown_editor 파일 권한 {}는 readwrite여야 합니다",
+                    file.permission
+                ));
+            }
+        }
+        (None, Some(document)) => {
+            let entry = definition.storage.as_ref().and_then(|storage| {
+                storage
+                    .entries
+                    .iter()
+                    .find(|entry| entry.id == document.entry)
+            });
+            match entry {
+                Some(entry) if entry.kind == StorageKind::Md => {}
+                Some(_) => details.push(format!(
+                    "{at}: document는 md 저장 항목이어야 합니다: {}",
+                    document.entry
+                )),
+                None => details.push(format!(
+                    "{at}: document가 storage 선언에 없습니다: {}",
+                    document.entry
+                )),
+            }
+            validate_module_version("storage", 1, definition, details, at);
+        }
+        (Some(_), Some(_)) => details.push(format!("{at}: file과 document를 함께 쓸 수 없습니다")),
+        (None, None) => details.push(format!("{at}: file과 document 가운데 하나가 필요합니다")),
+    }
 }
 
 fn validate_permission(
@@ -675,7 +982,12 @@ fn validate_state_key(key: &str, definition: &AppDefinition, details: &mut Vec<S
     }
 }
 
-fn validate_file_ref(file: &FileRef, definition: &AppDefinition, details: &mut Vec<String>, at: &str) {
+fn validate_file_ref(
+    file: &FileRef,
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+    at: &str,
+) {
     validate_permission_module(&file.permission, "files", definition, details, at);
     validate_file_path(&file.path, definition, details, at);
 }

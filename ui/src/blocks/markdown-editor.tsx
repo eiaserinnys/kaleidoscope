@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useShareDescriber } from "../share/visible";
 import { describeEditor } from "../share/editor";
 import { EditorView } from "@codemirror/view";
-import type { Block } from "../contract/contract";
+import type { Block, FileRef } from "../contract/contract";
 import { Notice, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
@@ -11,8 +11,14 @@ import { EditorConflict } from "./editor-conflict";
 import { createMarkdownEditorState } from "./markdown-editor-state";
 
 type MarkdownEditorBlockData = Extract<Block, { type: "markdown_editor" }>;
+type FileMarkdownEditorBlockData = MarkdownEditorBlockData & { file: FileRef };
 
 export function MarkdownEditorBlock({ block, context }: { block: MarkdownEditorBlockData; context: BlockContext }) {
+  if (!block.file) return null;
+  return <FileMarkdownEditorBlock block={{ ...block, file: block.file }} context={context} />;
+}
+
+function FileMarkdownEditorBlock({ block, context }: { block: FileMarkdownEditorBlockData; context: BlockContext }) {
   const path = resolveFilePath(block.file, context.window);
   const emptyShareRef = useRef<HTMLDivElement>(null);
   useShareDescriber(emptyShareRef, () => ({ text: "[마크다운 편집기]", visual: false }));

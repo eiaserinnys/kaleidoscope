@@ -443,6 +443,9 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::AgentAttachment { .. }
         | CoreRequest::AgentAttachmentOpen { .. } => Err(error::make(ErrorCode::InvalidRequest)),
         CoreRequest::StateGet {}
+        | CoreRequest::StorageGet { .. }
+        | CoreRequest::StorageWrite { .. }
+        | CoreRequest::StorageReset { .. }
         | CoreRequest::FilesPickFolder { .. }
         | CoreRequest::FilesList { .. }
         | CoreRequest::FilesRead { .. }

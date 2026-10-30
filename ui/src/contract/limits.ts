@@ -8,6 +8,12 @@ export const AGENT_ATTACHMENT_MAX_BYTES = 20971520;
 export const AGENT_ATTACHMENTS_TOTAL_MAX_BYTES = 31457280;
 /** 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위). */
 export const AGENT_MESSAGE_MAX_CHARS = 20000;
+/** JSON 저장 항목 하나의 최대 바이트 수. */
+export const STORAGE_JSON_MAX_BYTES = 65536;
+/** Markdown 저장 항목 하나의 최대 UTF-8 바이트 수. */
+export const STORAGE_MD_MAX_BYTES = 1048576;
+/** 저장소 명령 HTTP 본문의 최대 바이트 수. */
+export const STORAGE_COMMAND_BODY_MAX_BYTES = 8388608;
 /** (9판) 같이 보기 글 하나의 최대 바이트 수(UTF-8). */
 export const SHARE_TEXT_MAX_BYTES = 16384;
 /** (9판) 잘린 같이 보기 글의 마지막 줄. */

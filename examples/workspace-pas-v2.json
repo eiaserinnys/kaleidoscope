@@ -1,0 +1,130 @@
+{
+  "id": "workspace-pas-v2",
+  "name": "작업 PAS",
+  "description": "작업마다 저장 설정과 대화를 둔다",
+  "requires": {
+    "blocks": 6,
+    "modules": { "agent": 3, "connection": 2, "storage": 1 }
+  },
+  "permissions": [
+    {
+      "module": "connection",
+      "id": "conversation",
+      "connection": "conversation",
+      "access": "readwrite",
+      "label": "대화 제공자"
+    }
+  ],
+  "storage": {
+    "entries": [
+      {
+        "id": "profile",
+        "key": "settings/profile",
+        "kind": "json",
+        "schema": { "type": "string", "minLength": 1 },
+        "default": "default",
+        "label": "프로필",
+        "presentation": "settings"
+      },
+      {
+        "id": "collection",
+        "key": "settings/collection",
+        "kind": "json",
+        "schema": { "type": "string", "minLength": 1 },
+        "default": "default",
+        "label": "모음",
+        "presentation": "settings"
+      },
+      {
+        "id": "model_order",
+        "key": "settings/model-order",
+        "kind": "json",
+        "schema": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "default": ["model-argon", "model-sol"],
+        "label": "모델 순서",
+        "presentation": "settings"
+      },
+      {
+        "id": "selected_model",
+        "key": "settings/selected-model",
+        "kind": "json",
+        "schema": { "type": ["string", "null"], "minLength": 1 },
+        "default": null,
+        "label": "선택 모델",
+        "presentation": "settings"
+      },
+      {
+        "id": "title_template",
+        "key": "settings/title-template",
+        "kind": "json",
+        "schema": { "type": "string", "minLength": 1 },
+        "default": "작업 PAS · {workspace.name}",
+        "label": "대화 제목 형식",
+        "presentation": "settings"
+      },
+      {
+        "id": "initial_instruction",
+        "key": "settings/initial-instruction",
+        "kind": "md",
+        "default": "이 작업을 도와주세요.",
+        "label": "처음 지시",
+        "presentation": "settings"
+      },
+      {
+        "id": "role",
+        "key": "instructions/role",
+        "kind": "md",
+        "default": "이 작업의 목적과 제약을 먼저 확인합니다.",
+        "label": "지속 지시",
+        "presentation": "settings"
+      },
+      {
+        "id": "thread",
+        "key": "workspaces/{workspace_id}/thread",
+        "kind": "json",
+        "schema": {
+          "type": ["object", "null"],
+          "properties": {
+            "connection": { "type": "string", "minLength": 1 },
+            "namespace": { "type": "string", "minLength": 1 },
+            "external_key": { "type": "string", "minLength": 1 },
+            "thread_id": { "type": "string", "minLength": 1 },
+            "created_at": { "type": "string", "minLength": 1 }
+          },
+          "required": ["connection", "namespace", "external_key", "thread_id", "created_at"],
+          "additionalProperties": false
+        },
+        "default": null,
+        "label": "대화 연결",
+        "presentation": "hidden",
+        "agent_context": true
+      }
+    ]
+  },
+  "agent": {
+    "protocol": "conversation-v1",
+    "permission": "conversation",
+    "base_path": "/api/conversations/v1",
+    "namespace": { "expr": "$storage_meta.bucket_id" },
+    "profile": { "expr": "$storage.profile" },
+    "collection": { "expr": "$storage.collection" },
+    "model_order": { "expr": "$storage.model_order" },
+    "selected_model": { "expr": "$storage.selected_model" },
+    "title_template": { "expr": "$storage.title_template" },
+    "initial_instruction_template": { "expr": "$storage.initial_instruction" },
+    "instructions_template": { "expr": "$storage.role" },
+    "thread_entry": "thread"
+  },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "children": [
+      { "type": "markdown_editor", "document": { "entry": "role" } },
+      { "type": "agent_chat" }
+    ]
+  }
+}

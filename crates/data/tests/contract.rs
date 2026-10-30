@@ -98,6 +98,8 @@ fn source_status_is_scoped_to_each_expression_and_actions_are_ordered() {
     let env = Env {
         state: &state,
         data: &data,
+        storage: &BTreeMap::new(),
+        storage_meta: &BTreeMap::new(),
         event: &event,
         item: &item,
     };
@@ -134,6 +136,8 @@ fn explicit_null_differs_from_missing_value() {
     let env = Env {
         state: &state,
         data: &data,
+        storage: &BTreeMap::new(),
+        storage_meta: &BTreeMap::new(),
         event: &event,
         item: &item,
     };
@@ -151,6 +155,67 @@ fn explicit_null_differs_from_missing_value() {
         Step::SetState {
             key: "selected".into(),
             value: json!("event")
+        }
+    );
+}
+
+#[test]
+fn storage_values_flow_through_expressions_source_plans_and_actions() {
+    let mut definition = serde_json::to_value(fixture()).unwrap();
+    definition["sources"]["a"]["path"] = json!({"expr":"$storage.path"});
+    definition["ui"]["children"][0]["items"] = json!({"expr":"$storage.name"});
+    definition["ui"]["children"][0]["on_select"] = json!([
+        {"set_storage":{"entry":"selection","value":{"expr":"$event"}}}
+    ]);
+    definition["ui"]["children"][1]["value"] = json!({"expr":"$storage_meta.bucket_id"});
+    let definition: AppDefinition = serde_json::from_value(definition).unwrap();
+    let app = CompiledApp::compile(&definition);
+    let state = map(json!({"path":"/old"}));
+    let data = BTreeMap::new();
+    let storage = map(json!({"path":"/stored","name":"Stored"}));
+    let storage_meta = map(json!({"bucket_id":"account-app"}));
+
+    assert!(matches!(
+        app.plan_source_with_storage("a", &state, &storage, &storage_meta),
+        SourcePlan::Request { path, .. } if path == "/stored"
+    ));
+    let values =
+        app.evaluate_with_storage(&state, &data, &storage, &storage_meta, &BTreeMap::new());
+    assert_eq!(
+        values["/ui/children/0/items"],
+        BindingValue::Ready {
+            value: json!("Stored")
+        }
+    );
+    assert_eq!(
+        values["/ui/children/1/value"],
+        BindingValue::Ready {
+            value: json!("account-app")
+        }
+    );
+    let dependency = app
+        .binding_dependencies()
+        .iter()
+        .find(|dependency| dependency.pointer == "/ui/children/0/items")
+        .unwrap();
+    assert_eq!(dependency.storage, vec!["name"]);
+
+    let event = json!("model-sol");
+    let item = Value::Null;
+    let env = Env {
+        state: &state,
+        data: &data,
+        storage: &storage,
+        storage_meta: &storage_meta,
+        event: &event,
+        item: &item,
+    };
+    assert_eq!(
+        app.action_step("/ui/children/0/on_select", 0, &env)
+            .unwrap(),
+        Step::SetStorage {
+            entry: "selection".into(),
+            value: json!("model-sol")
         }
     );
 }

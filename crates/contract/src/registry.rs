@@ -1,4 +1,4 @@
-//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 7판, 261030)
+//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 8판, 261030)
 //!
 //! 2판에서 더한 것(카드 #779): 배치 보고(`PUT /api/device/layout`), 워크스페이스 PAS 경로 셋,
 //! 이벤트 `agent.update`, `app.published`와 `app.open`의 `workspace_id`. 아래 「워크스페이스 PAS」 절.
@@ -22,6 +22,10 @@
 //! (`PUT`/`DELETE /api/device/shares/{window_id}`), 서버가 PAS에 가는 말 뒤에 달라진 것만 붙이는 규칙과 그 모양,
 //! 중계에서 그 부분을 떼는 규칙, MCP `get_shared_view`. 아래 「같이 보기」 절.
 //!
+//! 8판에서 더한 것(카드 #818): 계정 × 앱 저장소의 기기 경로와 `storage.snapshot`/`storage.changed` 이벤트.
+//! 계정은 서버가 기기 토큰이나 MCP principal에서 찾으며 기기 요청 본문은 account id를 받지 않는다.
+//! 연결 등록도 계정마다 이뤄진다. 아래 「앱 저장소」 절.
+//!
 //! 오케스트레이터는 앱 레지스트리의 정본이다. 쉘의 코어는 기기 토큰으로 붙어 앱을 받고, 에이전트는 같은
 //! 서버의 MCP(`/mcp`, MCP 토큰)로 앱을 올린다. MCP 도구의 모양은 오케스트레이터 코드에 있고 이 파일에는 없다.
 //! 이 파일의 타입은 화면에 가지 않으므로 TS로 만들지 않는다.
@@ -41,6 +45,10 @@
 //! | `POST /api/device/workspaces/{workspace_id}/agent` | 같음 | [`AgentCreateRequest`] | 200 [`crate::AgentInfo`] | 400 모르는 모델, 401, 502 소울스트림 실패 |
 //! | `POST /api/device/workspaces/{workspace_id}/agent/messages` | 같음 | [`AgentSendRequest`] | 200 `{}` | 400 빈 말, 너무 김, 첨부 한도나 형식, 401, 404 PAS 없음, 502 |
 //! | `GET /api/device/workspaces/{workspace_id}/agent/items/{item_id}/attachments/{index}` | 같음 | 없음 | 200 [`AgentAttachmentReply`] | 400 너무 큼, 401, 404 기록이나 첨부 없음, 502 |
+//! | `GET /api/device/app-storage/{app_id}/items?workspace_id=...` | 같음 | 없음 | 200 [`crate::app_storage::StorageListReply`] | 400 선언되지 않은 항목이나 workspace, 401, 404 |
+//! | `GET /api/device/app-storage/{app_id}/items/{entry_id}?workspace_id=...` | 같음 | 없음 | 200 [`crate::app_storage::StorageReadReply`] | 400 선언되지 않은 항목이나 workspace, 401, 404 |
+//! | `PUT /api/device/app-storage/{app_id}/items/{entry_id}?workspace_id=...` | 같음 | [`crate::app_storage::StorageWriteRequest`] | 200 [`crate::app_storage::StorageWriteReply`] | 400 값 검사, 401, 404, 409 현재 revision, 413 |
+//! | `DELETE /api/device/app-storage/{app_id}/items/{entry_id}?workspace_id=...` | 같음 | [`crate::app_storage::StorageResetRequest`] | 200 [`crate::app_storage::StorageResetReply`] | 400 형식, 401, 404, 409 현재 revision |
 //! | `PUT /api/device/shares/{window_id}` | 같음 | [`ShareUpload`] | 200 `{}` | 400 글이 너무 김이나 형식, 401 |
 //! | `DELETE /api/device/shares/{window_id}` | 같음 | 없음 | 200 `{}`(없어도) | 401 |
 //! | `POST /api/device/connections/{name}/request` | 같음 | [`ConnectionRequest`] | 200 [`ConnectionReply`] | 400 경로나 메서드, 401, 403 앱이 선언하지 않음이나 쓰기 불가, 404 없는 연결, 413 너무 큼, 502 원천에 닿지 못함, 504 시간 초과 |
@@ -292,6 +300,7 @@
 //!   쓰기만 하고 MCP 조회에는 헤더 이름만 보인다.
 //! - `oauth`의 `issuer`(없으면 `base_url`의 origin), `scopes`(공백으로 나눈 목록, 선택), `resource`(RFC 8707, 선택).
 //!   비밀은 없다.
+//! - 등록 소유자는 계정이다. 같은 계정 안에서 연결 이름은 하나만 쓴다.
 //!
 //! 연결 목록:
 //! - 서버는 이벤트 스트림의 `apps.snapshot` 바로 뒤에 [`DeviceEvent::ConnectionsSnapshot`]을 보내고, 연결이 바뀔 때마다
@@ -325,6 +334,26 @@
 //!   토큰이 만료됐거나 원천이 401이면 리프레시 토큰이 있을 때 한 번 바꿔 보고, 안 되면 로그인 정보의 토큰을 지우고
 //!   그 원천을 `login_required`로 둔다.
 //!
+//! # 앱 저장소 (8판, 모듈 `storage` 1판)
+//! 앱 정의의 [`crate::app_storage::StorageDecl`]이 저장할 항목, kind, 기본값, 스키마를 선언한다. 저장 칸은 계정 × 앱이며
+//! 워크스페이스 전용 키에는 `{workspace_id}`를 쓴다. 계정 id는 API 인자나 저장 본문에 없다. 서버는 기기 요청에서
+//! 기기 토큰의 계정을, MCP 요청에서 MCP principal의 계정을 해석한다.
+//!
+//! - 항목 목록: `GET {DEVICE_APP_STORAGE_PATH}/{app_id}/items?workspace_id={id}`. 경로의 앱과 선언된 항목만 다룬다.
+//! - 읽기: `GET {DEVICE_APP_STORAGE_PATH}/{app_id}/items/{entry_id}?workspace_id={id}`. 없으면 선언 기본값과
+//!   `exists: false`, `revision: null`을 돌려준다.
+//! - 쓰기: 같은 항목 경로의 `PUT`. [`crate::app_storage::StorageWriteRequest`]에 본문과
+//!   `expected_revision`을 함께 보내는 compare-and-set이다. `null`은 아직 행이 없을 때만 맞고, 성공하면 새 revision을 준다.
+//!   충돌은 409와 [`crate::app_storage::StorageConflict::current_revision`]이다.
+//! - 기본값으로 되돌리기: 같은 항목 경로의 `DELETE`, 본문은 [`crate::app_storage::StorageResetRequest`].
+//!   revision 비교를 통과하면 저장 행을 지우고 기본값으로 돌아가며, 응답은 [`crate::app_storage::StorageResetReply`]다.
+//! - 저장 항목 변경은 `storage.changed`에 metadata만 담고 본문은 싣지 않는다. 연결 직후 `storage.snapshot`은
+//!   현재 계정 × 앱 칸의 항목 metadata를 보낸다. 기기에서 쓰는 코어는 `storage.update`로 화면에 전달한다.
+//!   서버는 이벤트 스트림의 지원 범위에 `storage: 1`을 보낸 기기에만 두 이벤트를 보낸다. 저장소 모듈을 모르는
+//!   옛 쉘에는 새 이벤트 variant를 보내지 않는다.
+//! - 앱을 새 버전으로 올릴 때 저장값이 있는 선언의 `id`, key, kind가 바뀌거나 기존 값이 새 schema를 통과하지 못하면
+//!   올리기를 거부한다. revision은 md 원문 UTF-8 바이트 또는 키를 정렬한 JSON 직렬화 바이트의 SHA-256이다.
+//!
 //! 식 오류 보고: 코어는 배치 보고([`DeviceLayout::data_errors`])에 이은 창의 식과 원천 오류를 창마다 앞에서부터
 //! [`LAYOUT_DATA_ERRORS_MAX`]개까지 싣는다. 에이전트가 MCP의 작업 조회로 보고 고친다.
 
@@ -334,21 +363,23 @@ use serde::{Deserialize, Serialize};
 
 use crate::data::HttpMethod;
 use crate::{
-    AgentInfo, AgentItem, AgentModel, AgentUpdate, AgentUpload, App, AppVersion, AppWindow, Desktop,
-    JsonValue, Workspace,
+    AgentInfo, AgentItem, AgentModel, AgentUpdate, AgentUpload, App, AppVersion, AppWindow,
+    Desktop, JsonValue, Workspace,
 };
 
 pub const PAIR_START_PATH: &str = "/api/pair/start";
 pub const PAIR_POLL_PATH: &str = "/api/pair/poll";
 pub const DEVICE_EVENTS_PATH: &str = "/api/device/events";
 pub const DEVICE_APPS_PATH: &str = "/api/device/apps";
+/// (8판) 계정 × 앱 저장소. 뒤에 `/{app_id}/items`와 항목 id를 붙인다.
+pub const DEVICE_APP_STORAGE_PATH: &str = "/api/device/app-storage";
 pub const HEALTH_PATH: &str = "/api/health";
 /// 코어가 이벤트 스트림을 열 때 지원 범위([`crate::Supported`] JSON)를 싣는 헤더.
 pub const SUPPORTED_HEADER: &str = "x-kaleidoscope-supported";
 /// 코어가 이벤트 스트림을 열 때 자기가 아는 레지스트리 판(정수)을 싣는 헤더. 6 이상이면 배치를 동기화한다.
 pub const REGISTRY_HEADER: &str = "x-kaleidoscope-registry";
 /// 이 빌드가 아는 레지스트리 판.
-pub const REGISTRY_VERSION: u32 = 7;
+pub const REGISTRY_VERSION: u32 = 8;
 /// 배치를 동기화하는 레지스트리 판. 서버는 [`REGISTRY_HEADER`]가 이 값 이상인 연결과 배치를 맞춘다.
 pub const LAYOUT_SYNC_REGISTRY_VERSION: u32 = 6;
 
@@ -392,6 +423,16 @@ pub fn device_agent_attachment_path(workspace_id: &str, item_id: &str, index: u3
 /// 연결 중계 경로. `{name}` 자리에 연결 이름을 넣는다.
 pub fn device_connection_request_path(name: &str) -> String {
     format!("/api/device/connections/{name}/request")
+}
+
+/// (8판) 앱의 계정 × 앱 저장소 항목 모음 경로.
+pub fn device_app_storage_items_path(app_id: &str) -> String {
+    format!("{DEVICE_APP_STORAGE_PATH}/{app_id}/items")
+}
+
+/// (8판) 앱 저장소에서 선언된 항목 하나의 경로.
+pub fn device_app_storage_item_path(app_id: &str, entry_id: &str) -> String {
+    format!("{}/{}", device_app_storage_items_path(app_id), entry_id)
 }
 
 /// 배치 보고에 창마다 싣는 식과 원천 오류의 최대 수.
@@ -697,6 +738,18 @@ pub enum DeviceEvent {
     /// (5판) 서버의 연결 목록 전체. 연결 직후(`apps.snapshot` 뒤)와 연결이 바뀔 때마다. 「연결」 절.
     #[serde(rename = "connections.snapshot")]
     ConnectionsSnapshot { connections: Vec<ConnectionInfo> },
+    /// (8판) 저장소 metadata 전체. 본문 값은 별도 읽기로 받는다.
+    #[serde(rename = "storage.snapshot")]
+    StorageSnapshot {
+        app_id: String,
+        snapshot: crate::app_storage::StorageSnapshot,
+    },
+    /// (8판) 저장소 metadata가 바뀌었다. 본문 값은 이벤트에 싣지 않는다.
+    #[serde(rename = "storage.changed")]
+    StorageChanged {
+        app_id: String,
+        changed: crate::app_storage::StorageChanged,
+    },
     /// 서버 정본의 워크스페이스, 데스크톱, 창 전체. 동기화하는 연결에만 스냅샷들 바로 뒤에 한 번 보낸다(6판).
     #[serde(rename = "layout.snapshot")]
     LayoutSnapshot {
@@ -727,7 +780,8 @@ mod tests {
             serde_json::from_str(r#"{"event":"apps.snapshot","apps":[]}"#).unwrap();
         assert_eq!(parsed, DeviceEvent::AppsSnapshot { apps: vec![] });
         let targeted: DeviceEvent =
-            serde_json::from_str(r#"{"event":"app.open","app_id":"a","workspace_id":"w"}"#).unwrap();
+            serde_json::from_str(r#"{"event":"app.open","app_id":"a","workspace_id":"w"}"#)
+                .unwrap();
         assert_eq!(
             targeted,
             DeviceEvent::AppOpen {
@@ -767,7 +821,10 @@ mod tests {
         assert!(old.attachments.is_empty());
         assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"text":"안녕"}"#);
         let models = agent_models();
-        assert_eq!(models.first().map(|m| m.preset.as_str()), Some("gemini-4-argon"));
+        assert_eq!(
+            models.first().map(|m| m.preset.as_str()),
+            Some("gemini-4-argon")
+        );
         assert_eq!(models.len(), AGENT_MODELS.len());
     }
 
@@ -783,10 +840,13 @@ mod tests {
         .unwrap();
         assert_eq!(request.method, HttpMethod::Get);
         assert_eq!(request.accept, ConnectionAccept::Json);
-        assert!(serde_json::from_str::<ConnectionRequest>(
-            r#"{"app_id":"a","method":"GET","path":"/","accept":"json","headers":{}}"#
-        )
-        .is_err(), "기기는 헤더를 보낼 수 없다");
+        assert!(
+            serde_json::from_str::<ConnectionRequest>(
+                r#"{"app_id":"a","method":"GET","path":"/","accept":"json","headers":{}}"#
+            )
+            .is_err(),
+            "기기는 헤더를 보낼 수 없다"
+        );
         let event = DeviceEvent::ConnectionsSnapshot {
             connections: vec![ConnectionInfo {
                 name: "board".into(),
@@ -805,7 +865,9 @@ mod tests {
         );
         // 식 오류가 없는 배치 보고는 4판 모양 그대로다.
         let layout = DeviceLayout::default();
-        assert!(!serde_json::to_string(&layout).unwrap().contains("data_errors"));
+        assert!(!serde_json::to_string(&layout)
+            .unwrap()
+            .contains("data_errors"));
     }
 
     #[test]
@@ -845,7 +907,10 @@ mod tests {
         assert_eq!(serde_json::from_str::<DeviceEvent>(&json).unwrap(), event);
         assert!(!changes.is_empty());
         assert!(LayoutChanges::default().is_empty());
-        assert_eq!(serde_json::to_string(&LayoutChanges::default()).unwrap(), "{}");
+        assert_eq!(
+            serde_json::to_string(&LayoutChanges::default()).unwrap(),
+            "{}"
+        );
 
         let snapshot: DeviceEvent = serde_json::from_str(
             r#"{"event":"layout.snapshot","workspaces":[],"desktops":[],"windows":[]}"#,
