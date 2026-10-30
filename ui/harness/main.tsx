@@ -12,7 +12,7 @@ import {
 import "@kaleidoscope/ui/styles.css";
 import "./harness.css";
 import galleryJson from "../../examples/block-gallery.json";
-import agentJson from "../../examples/agent.json";
+import agentJson from "../../apps/agent.json";
 import sampleOne from "./assets/landscape.png";
 import sampleTwo from "./assets/shapes.png";
 import sampleTone from "./assets/tone.wav";

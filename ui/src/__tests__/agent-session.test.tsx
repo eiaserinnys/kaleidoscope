@@ -6,7 +6,7 @@ import type { AppDefinition, CoreEvent, CoreReply, CoreRequest, LocalAgentSnapsh
 import type { ShellStore } from "../core/shell-store";
 import { createFakeTransport } from "../core/fake-transport";
 import { makeTestSnapshot } from "./fixtures";
-import agentJson from "../../../examples/agent.json";
+import agentJson from "../../../apps/agent.json";
 
 const definition: AppDefinition = {
   id: "agent", name: "에이전트", requires: { blocks: 8, modules: { files: 1, local_agent: 1 } },
