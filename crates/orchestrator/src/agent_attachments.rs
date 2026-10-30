@@ -42,6 +42,14 @@ pub(super) async fn send(
             "글이나 첨부 파일을 하나 이상 입력해 주세요.",
         ));
     }
+    let share_plan = state
+        .share_block_for_send(id)
+        .map_err(|_| server("같이 보기 내용을 읽을 수 없습니다."))?;
+    let message_text = match &share_plan {
+        Some((block, _)) if text.is_empty() => block.clone(),
+        Some((block, _)) => format!("{text}\n\n{block}"),
+        None => text.to_string(),
+    };
     let mut decoded = Vec::with_capacity(request.attachments.len());
     let mut total_bytes = 0u64;
     for attachment in &request.attachments {
@@ -150,8 +158,7 @@ pub(super) async fn send(
             );
         }
     }
-    let mut body =
-        json!({"text":text,"caller_info":{"source":"kaleidoscope","display_name":"디렉터"}});
+    let mut body = json!({"text":message_text,"caller_info":{"source":"kaleidoscope","display_name":"디렉터"}});
     if !attachment_paths.is_empty() {
         body["attachment_paths"] = json!(attachment_paths);
     }
@@ -168,6 +175,11 @@ pub(super) async fn send(
         .map_err(|_| server("소울스트림에 말을 보내지 못했습니다."))?;
     if !result.status().is_success() {
         return Err(server("소울스트림에 말을 보내지 못했습니다."));
+    }
+    if let Some((_, sent)) = share_plan {
+        state
+            .mark_shared_views_sent(id, sent)
+            .map_err(|_| server("같이 보기 전송 상태를 저장할 수 없습니다."))?;
     }
     Ok(json!({}))
 }

@@ -247,7 +247,25 @@ impl McpServer {
             Err(error) => json_error(error),
         })
     }
-    #[tool(description = "현재 작업과 창 개수를 나열합니다.")]
+    #[tool(
+        description = "디렉터가 kaleidoscope 쉘에서 같이 보기로 켠 창에 지금 보이는 글 전체를 읽는다. 디렉터의 말 뒤에 붙어 오는 같이 보기 블록은 달라진 부분뿐이라, 지금 모습 전체가 필요할 때 쓴다."
+    )]
+    async fn get_shared_view(
+        &self,
+        Parameters(args): Parameters<WorkspaceArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Ok(match self.state.shared_views(&args.workspace_id) {
+            Ok(views) => {
+                let mut result = json!({"views": views});
+                if result["views"].as_array().is_some_and(Vec::is_empty) {
+                    result["note"] = json!("같이 보기로 켠 창이 없습니다");
+                }
+                json_result(result)
+            }
+            Err(error) => json_error(error),
+        })
+    }
+    #[tool(description = "기기가 보고한 작업과 창 개수를 나열합니다.")]
     async fn list_workspaces(&self) -> Result<CallToolResult, ErrorData> {
         Ok(match self.state.list_workspaces() {
             Ok(value) => json_result(value),
