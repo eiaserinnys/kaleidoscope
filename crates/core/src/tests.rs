@@ -693,6 +693,8 @@ fn expect_error(result: Result<CoreReply, CoreError>, code: ErrorCode) -> CoreEr
 
 #[derive(Default)]
 struct FakeRegistryClient {
+    storage_value: Mutex<Option<(Value, String)>>,
+    storage_workspace: Mutex<String>,
     pair_start: Mutex<Option<Result<PairStartReply, RegistryError>>>,
     pair_polls: Mutex<VecDeque<Result<PairPollReply, RegistryError>>>,
     uploads: Mutex<VecDeque<Result<RegistryApp, RegistryError>>>,
@@ -723,6 +725,50 @@ struct FakeRegistryClient {
 }
 
 impl RegistryClient for FakeRegistryClient {
+    fn storage_get(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+        workspace: &str,
+    ) -> Result<kaleidoscope_contract::app_storage::StorageReadReply, RegistryError> {
+        *self.storage_workspace.lock().unwrap() = workspace.into();
+        let value = self.storage_value.lock().unwrap().clone();
+        Ok(kaleidoscope_contract::app_storage::StorageReadReply {
+            kind: kaleidoscope_contract::app_storage::StorageKind::Json,
+            content: value
+                .as_ref()
+                .map(|v| v.0.clone())
+                .unwrap_or_else(|| json!("one.json")),
+            revision: value.as_ref().map(|v| v.1.clone()),
+            exists: value.is_some(),
+        })
+    }
+    fn storage_write(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+        workspace: &str,
+        request: &kaleidoscope_contract::app_storage::StorageWriteRequest,
+    ) -> Result<kaleidoscope_contract::app_storage::StorageWriteReply, RegistryError> {
+        *self.storage_workspace.lock().unwrap() = workspace.into();
+        let mut stored = self.storage_value.lock().unwrap();
+        if stored.as_ref().map(|v| &v.1) != request.expected_revision.0.as_ref() {
+            return Err(RegistryError::Validation(CoreError::new(
+                ErrorCode::Conflict,
+            )));
+        }
+        let revision = kaleidoscope_contract::app_storage::storage_revision(
+            kaleidoscope_contract::app_storage::StorageKind::Json,
+            &request.content,
+        )
+        .unwrap();
+        *stored = Some((request.content.clone(), revision.clone()));
+        Ok(kaleidoscope_contract::app_storage::StorageWriteReply { revision })
+    }
     fn push_layout_changes(
         &self,
         _server_url: &str,

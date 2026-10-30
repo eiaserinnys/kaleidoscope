@@ -1,11 +1,14 @@
 //! 창별 원천과 식 결과. 입출력은 잠금 밖에서 수행하고 세대가 같은 결과만 반영한다.
+// 기존 창별 원천 수명 경로가 이미 500줄을 넘는다. 별도 수명 리팩터링은 이 변경에 섞지 않는다.
 mod actions;
+mod storage;
 pub(crate) use actions::{act, layout_errors};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+pub(crate) use storage::changed as storage_changed;
 
 use kaleidoscope_contract::{
     data::{DataView, SourceDecl, SourceFormat, SourceStatus},
@@ -41,6 +44,8 @@ struct Runtime {
     state: BTreeMap<String, Value>,
     sources: BTreeMap<String, Source>,
     data: BTreeMap<String, Value>,
+    storage: BTreeMap<String, storage::Slot>,
+    storage_meta: storage::MetaSlot,
     attached: usize,
     last: DataView,
 }
@@ -78,6 +83,7 @@ impl Runtime {
                 )
             })
             .collect();
+        let (storage, storage_meta) = storage::initial_slots(&definition);
         Self {
             version,
             definition,
@@ -85,6 +91,8 @@ impl Runtime {
             state,
             sources,
             data: BTreeMap::new(),
+            storage,
+            storage_meta,
             attached: 0,
             last: DataView::default(),
         }
@@ -95,8 +103,56 @@ impl Runtime {
             .iter()
             .map(|(name, source)| (name.clone(), source.status.clone()))
             .collect();
+        let (storage, meta) = self.storage_values();
+        let mut values = self.compiled.evaluate_with_storage(
+            &self.state,
+            &self.data,
+            &storage,
+            &meta,
+            &statuses,
+        );
+        for binding in self.compiled.binding_dependencies() {
+            if let Some(status) =
+                self.storage_problem(&binding.storage, !binding.storage_meta.is_empty())
+            {
+                values.insert(binding.pointer.clone(), status);
+            }
+        }
         DataView {
-            values: self.compiled.evaluate(&self.state, &self.data, &statuses),
+            values,
+            sources: statuses,
+        }
+    }
+    fn view_selected(&self, selected: &std::collections::BTreeSet<String>) -> DataView {
+        let statuses: BTreeMap<_, _> = self
+            .sources
+            .iter()
+            .map(|(name, source)| (name.clone(), source.status.clone()))
+            .collect();
+        let (storage, meta) = self.storage_values();
+        let mut values = self.last.values.clone();
+        values.extend(self.compiled.evaluate_selected_with_storage(
+            &self.state,
+            &self.data,
+            &storage,
+            &meta,
+            &statuses,
+            Some(selected),
+        ));
+        for binding in self
+            .compiled
+            .binding_dependencies()
+            .iter()
+            .filter(|binding| selected.contains(&binding.pointer))
+        {
+            if let Some(problem) =
+                self.storage_problem(&binding.storage, !binding.storage_meta.is_empty())
+            {
+                values.insert(binding.pointer.clone(), problem);
+            }
+        }
+        DataView {
+            values,
             sources: statuses,
         }
     }
@@ -193,7 +249,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                     if !state.shared.windows.iter().any(|window| {
                         window.id == job.window
                             && window.app_version == runtime.version
-                            && runtime.compiled.plan_source(&job.name, &window.state) == job.plan
+                            && runtime.plan_source_at(&job.name, &window.state) == job.plan
                     }) {
                         return;
                     }
@@ -236,7 +292,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
 }
 
 pub(crate) fn attach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, CoreError> {
-    let (view, pending) = {
+    let (view, pending, start_storage) = {
         let state = inner.state.lock().unwrap();
         let window = state
             .shared
@@ -264,8 +320,9 @@ pub(crate) fn attach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, C
         let names: Vec<_> = runtime.sources.keys().cloned().collect();
         let mut pending = Vec::new();
         for name in names {
-            let plan = runtime.compiled.plan_source(&name, &runtime.state);
+            let plan = runtime.plan_source(&name);
             let changed = set_plan(&inner.data_runtimes, runtime, &name, plan);
+            runtime.apply_source_storage_status(&name);
             if (changed || !runtime.data.contains_key(&name)) && !runtime.sources[&name].in_flight {
                 if let Some(job) = prepare(&inner.data_runtimes, runtime, window_id, &name) {
                     pending.push(job);
@@ -279,8 +336,11 @@ pub(crate) fn attach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, C
                 .events
                 .send((window_id.into(), version, delta));
         }
-        (view, pending)
+        (view, pending, !already_attached)
     };
+    if start_storage {
+        storage::load(inner, window_id, None);
+    }
     jobs(inner, pending);
     inner.layout_signal.notify();
     Ok(CoreReply::DataAttach { view })
@@ -359,8 +419,9 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
             runtime.state = window.state.clone();
             let names: Vec<_> = runtime.sources.keys().cloned().collect();
             for name in names {
-                let plan = runtime.compiled.plan_source(&name, &runtime.state);
+                let plan = runtime.plan_source(&name);
                 if set_plan(&inner.data_runtimes, runtime, &name, plan) {
+                    runtime.apply_source_storage_status(&name);
                     if let Some(job) = prepare(&inner.data_runtimes, runtime, id, &name) {
                         pending.push(job);
                     }

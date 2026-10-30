@@ -5,7 +5,6 @@ use kaleidoscope_contract::{
     registry::{LayoutDataError, LAYOUT_DATA_ERRORS_MAX},
 };
 use kaleidoscope_data::{Env, Step};
-use std::collections::BTreeMap;
 
 pub(crate) fn act(
     inner: &Arc<Inner>,
@@ -22,13 +21,15 @@ pub(crate) fn act(
             .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?
     };
     for index in 0..len {
-        let storage = BTreeMap::new();
-        let storage_meta = BTreeMap::new();
         let step = {
             let windows = inner.data_runtimes.windows.lock().unwrap();
             let runtime = windows
                 .get(window_id)
                 .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            if let Some(error) = runtime.action_storage_error(pointer, index) {
+                return Err(error);
+            }
+            let (storage, storage_meta) = runtime.storage_values();
             runtime
                 .compiled
                 .action_step(
@@ -52,8 +53,22 @@ pub(crate) fn act(
                 }
                 .set_state_key(window_id, key, value)?;
             }
-            Step::SetStorage { .. } => {
-                return Err(error::make(ErrorCode::Unavailable));
+            Step::SetStorage { entry, value } => {
+                let revision = {
+                    let windows = inner.data_runtimes.windows.lock().unwrap();
+                    windows
+                        .get(window_id)
+                        .ok_or_else(|| error::make(ErrorCode::NotFound))?
+                        .revision(&entry)?
+                };
+                let revision = crate::app_storage::write(
+                    inner,
+                    window_id,
+                    &entry,
+                    value.clone(),
+                    kaleidoscope_contract::app_storage::ExpectedRevision(revision),
+                )?;
+                super::storage::written(inner, window_id, &entry, value, revision);
             }
             Step::Refresh { names } => refresh(inner, window_id, &names, true)?,
             Step::Call {

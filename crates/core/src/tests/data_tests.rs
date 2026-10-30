@@ -833,3 +833,149 @@ fn path_change_failed_fetch_preserves_prior_value() {
         matches!(view.values.get("/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == &json!([{"key":"previous"}]))
     );
 }
+
+#[test]
+fn unavailable_storage_never_looks_like_a_null_default() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let definition = json!({
+        "id":"storage-app","name":"Storage","requires":{"blocks":6,"modules":{"storage":1}},
+        "state":{},"permissions":[],
+        "storage":{"entries":[{"id":"choice","key":"settings/choice","kind":"json","schema":{"type":["string","null"]},"default":null,"label":"선택","presentation":"hidden"}]},
+        "ui":{"type":"text","value":{"expr":"$storage.choice"}}
+    }).to_string();
+    let core = open_core(temp.path(), vec![definition], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "storage-app");
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+    })
+    .unwrap();
+    wait_until(|| {
+        let view = core
+            .handle(CoreRequest::DataAttach {
+                window_id: window.clone(),
+            })
+            .unwrap();
+        matches!(view, CoreReply::DataAttach { view } if matches!(view.values.get("/ui/value"), Some(BindingValue::Failed { .. })))
+    });
+}
+
+#[test]
+fn storage_actions_and_remote_change_replan_file_source() {
+    let temp = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    fs::write(folder.path().join("one.json"), r#"{"title":"One"}"#).unwrap();
+    fs::write(folder.path().join("two.json"), r#"{"title":"Two"}"#).unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(folder.path().to_path_buf()));
+    let registry = Arc::new(FakeRegistryClient::default());
+    let definition = json!({
+        "id":"storage-flow","name":"Storage flow","requires":{"blocks":6,"modules":{"storage":1,"files":1}},
+        "permissions":[{"module":"files","id":"docs","access":"read","label":"Docs"}],
+        "state":{"seen":null},
+        "storage":{"entries":[{"id":"path","key":"workspaces/{workspace_id}/path","kind":"json","schema":{"type":"string"},"default":"one.json","label":"경로","presentation":"hidden"}]},
+        "sources":{"file":{"kind":"file","permission":"docs","path":{"expr":"$storage.path"}}},
+        "ui":{"type":"stack","direction":"column","children":[
+            {"type":"text","value":{"expr":"$data.file.title"}},
+            {"type":"text","value":{"expr":"$storage.path"}},
+            {"type":"button","label":"저장","on_click":[{"set_storage":{"entry":"path","value":"two.json"}},{"set_state":"seen","value":{"expr":"$storage.path"}}]}
+        ]}
+    }).to_string();
+    let core = open_core_with_client(temp.path(), vec![definition], &host, registry.clone());
+    let (workspace, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "storage-flow");
+    pick_folder(&core, &window);
+    mark_connected(&core);
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+    })
+    .unwrap();
+    wait_until(
+        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() }).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("One") })),
+    );
+    core.handle(CoreRequest::DataAct {
+        window_id: window.clone(),
+        pointer: "/ui/children/2/on_click".into(),
+        event: Value::Null,
+        item: Value::Null,
+    })
+    .unwrap();
+    let current = snapshot(&core);
+    assert_eq!(
+        current
+            .shared
+            .windows
+            .iter()
+            .find(|w| w.id == window)
+            .unwrap()
+            .state["seen"],
+        "two.json"
+    );
+    wait_until(
+        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() }).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("Two") })),
+    );
+    assert_eq!(*registry.storage_workspace.lock().unwrap(), workspace);
+    let revision = "remote-revision".to_string();
+    *registry.storage_value.lock().unwrap() = Some((json!("one.json"), revision.clone()));
+    crate::registry_events::apply_event(
+        &core.inner,
+        0,
+        DeviceEvent::StorageChanged {
+            app_id: "storage-flow".into(),
+            changed: kaleidoscope_contract::app_storage::StorageChanged {
+                bucket_id: "bucket".into(),
+                item: kaleidoscope_contract::app_storage::StorageItemMeta {
+                    entry_id: "path".into(),
+                    key: format!("workspaces/{workspace}/path"),
+                    kind: kaleidoscope_contract::app_storage::StorageKind::Json,
+                    revision: Some(revision),
+                    exists: true,
+                },
+            },
+        },
+    );
+    wait_until(
+        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() }).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("One") })),
+    );
+    core.handle(CoreRequest::WindowSetState {
+        window_id: window.clone(),
+        state: BTreeMap::from([("seen".into(), json!("before"))]),
+    })
+    .unwrap();
+    *registry.storage_value.lock().unwrap() = Some((json!("one.json"), "newer-revision".into()));
+    let error = core
+        .handle(CoreRequest::DataAct {
+            window_id: window.clone(),
+            pointer: "/ui/children/2/on_click".into(),
+            event: Value::Null,
+            item: Value::Null,
+        })
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::Conflict);
+    assert_eq!(
+        snapshot(&core)
+            .shared
+            .windows
+            .iter()
+            .find(|w| w.id == window)
+            .unwrap()
+            .state["seen"],
+        "before"
+    );
+}
+
+#[test]
+fn agent_three_definitions_are_not_imported_by_this_core() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(temp.path(), vec![], &host);
+    let mut definition: Value = serde_json::from_str(MD_EDITOR).unwrap();
+    definition["requires"]["modules"]["agent"] = json!(3);
+    let error = core
+        .handle(CoreRequest::AppImport {
+            definition_json: definition.to_string(),
+        })
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::UnsupportedApp);
+}

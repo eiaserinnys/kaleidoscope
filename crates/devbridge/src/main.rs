@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::body::Bytes;
-use axum::extract::{Request, State};
+use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::http::{header, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -104,6 +104,9 @@ async fn run() -> Result<(), String> {
         .allow_headers([header::CONTENT_TYPE]);
     let app = Router::new()
         .route("/core", post(post_core))
+        .layer(DefaultBodyLimit::max(
+            kaleidoscope_contract::registry::AGENT_SEND_BODY_MAX_BYTES,
+        ))
         .route("/events", get(get_events))
         .with_state(state)
         .layer(cors)
