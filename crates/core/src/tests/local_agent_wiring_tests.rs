@@ -32,6 +32,50 @@ fn until(core: &Core, window: &str, phase: LocalAgentPhase) -> LocalAgentSnapsho
 }
 
 #[test]
+fn literal_agent_binding_reaches_execution_consent() {
+    let temp = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(folder.path().into()));
+    let mut definition: Value =
+        serde_json::from_str(include_str!("../../../../apps/agent.json")).unwrap();
+    definition["id"] = json!("test-agent-literal");
+    definition["ui"]["agents"] = json!([{
+        "id": "test-agent",
+        "name": "Test agent",
+        "command": "fake-agent",
+        "args": ["hello"],
+        "env": {}
+    }]);
+    let core = open_core(temp.path(), vec![definition.to_string()], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "test-agent-literal");
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+    })
+    .unwrap();
+    core.handle(CoreRequest::WindowSetState {
+        window_id: window.clone(),
+        state: BTreeMap::from([("agent_id".into(), json!("test-agent"))]),
+    })
+    .unwrap();
+    core.handle(CoreRequest::FilesPickFolder {
+        window_id: window.clone(),
+        permission: "work".into(),
+    })
+    .unwrap();
+
+    let awaiting = attach(&core, &window);
+    assert_eq!(awaiting.phase, LocalAgentPhase::AwaitingPermission);
+    let execution = awaiting
+        .execution
+        .expect("execution consent should be present");
+    assert_eq!(execution.name, "Test agent");
+    assert_eq!(execution.command, "fake-agent");
+    assert_eq!(execution.args, ["hello"]);
+}
+
+#[test]
 fn local_agent_window_lifecycle_and_generation() {
     let temp = TempDir::new().unwrap();
     let folder = TempDir::new().unwrap();

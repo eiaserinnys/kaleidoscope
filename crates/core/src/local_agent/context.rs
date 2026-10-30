@@ -65,6 +65,7 @@ pub(super) fn resolve(
         if let Block::AgentSession {
             permission,
             root,
+            agents,
             selected,
             ..
         } = block
@@ -73,11 +74,20 @@ pub(super) fn resolve(
                 pointer.to_string(),
                 permission.clone(),
                 root.permission.clone(),
+                agents.clone(),
+                match agents {
+                    data::Binding::State(reference) => window
+                        .state
+                        .get(&reference.state)
+                        .filter(|value| !value.is_null())
+                        .cloned(),
+                    _ => None,
+                },
                 selected.state.clone(),
             ));
         }
     });
-    let Some((pointer, permission, root, selected_key)) = found else {
+    let Some((pointer, permission, root, agents, agent_state, selected_key)) = found else {
         return Ok(None);
     };
     let selected = window
@@ -122,7 +132,13 @@ pub(super) fn resolve(
         queued: vec![],
         failure: None,
     };
-    let result = data_runtime::binding_value(inner, id, &format!("{pointer}/agents"));
+    let result = match agents {
+        data::Binding::Literal(value) => Some(BindingValue::Ready { value }),
+        data::Binding::State(_) => agent_state.map(|value| BindingValue::Ready { value }),
+        data::Binding::Expr(_) => {
+            data_runtime::binding_value(inner, id, &format!("{pointer}/agents"))
+        }
+    };
     let specs = match result {
         Some(BindingValue::Ready { value }) => match validate_agent_specs(&value) {
             Ok(specs) => specs,
