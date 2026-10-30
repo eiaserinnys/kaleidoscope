@@ -129,14 +129,18 @@ impl AppState {
         for id in &changes.deleted_desktops {
             let existed = desktop_exists(&tx, id)?;
             let children = child_ids(&tx, "windows", "desktop_id", id)?;
-            tx.execute("DELETE FROM desktops WHERE id=?1", [id])
-                .map_err(db_error)?;
-            if !children.is_empty() {
-                for child in children {
-                    window_ids.insert(child.clone());
+            for child in children {
+                window_ids.insert(child.clone());
+                if tx
+                    .execute("DELETE FROM windows WHERE id=?1", [&child])
+                    .map_err(db_error)?
+                    > 0
+                {
                     changed.deleted_windows.push(child);
                 }
             }
+            tx.execute("DELETE FROM desktops WHERE id=?1", [id])
+                .map_err(db_error)?;
             if existed {
                 changed.deleted_desktops.push(id.clone());
             }

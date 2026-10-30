@@ -352,3 +352,67 @@ async fn app_version_moves_saved_windows_before_sending_open() {
         matches!(events.try_recv().unwrap().event, DeviceEvent::AppOpen { app_id, workspace_id: Some(id) } if app_id == "md-editor" && id == "w")
     );
 }
+
+#[tokio::test]
+async fn desktop_delete_removes_child_window_from_database_reply_and_event() {
+    use http_body_util::BodyExt;
+
+    let state = AppState::in_memory("secret");
+    let token = insert_device(&state, "sync", "Sync PC");
+    state
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                workspaces: vec![workspace("w", "작업")],
+                desktops: vec![desktop("d", "w")],
+                windows: vec![window("x", "d", "unknown")],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let _stream = state
+        .stream_with_registry(
+            "sync".into(),
+            Some(Supported::current()),
+            registry::LAYOUT_SYNC_REGISTRY_VERSION,
+        )
+        .unwrap();
+    let mut events = state.0.events.subscribe();
+    let changes = LayoutChanges {
+        deleted_desktops: vec!["d".into()],
+        ..Default::default()
+    };
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/device/layout/changes")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&changes).unwrap()))
+        .unwrap();
+
+    let response = router(state.clone()).oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let reply: LayoutChanges =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert!(reply.windows.is_empty());
+    assert_eq!(reply.deleted_desktops, vec!["d"]);
+    assert_eq!(reply.deleted_windows, vec!["x"]);
+    assert_eq!(
+        state
+            .lock_db()
+            .unwrap()
+            .query_row("SELECT count(*) FROM windows WHERE id='x'", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .unwrap(),
+        0
+    );
+    let event = events.try_recv().unwrap().event;
+    assert!(matches!(
+        state.event_for_device("sync", event).unwrap(),
+        DeviceEvent::LayoutChanged { changes }
+            if changes.windows.is_empty()
+                && changes.deleted_desktops == vec!["d"]
+                && changes.deleted_windows == vec!["x"]
+    ));
+}
