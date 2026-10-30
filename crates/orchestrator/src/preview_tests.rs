@@ -43,7 +43,7 @@ async fn fake_origin(status: u16, body: &'static str) -> (String, JoinHandle<()>
 
 fn add_relay(state: &AppState, base_url: &str) {
     state.lock_db().unwrap().execute(
-        "INSERT INTO connections(name,kind,base_url,writable,paths,headers,description,updated_at) VALUES('board','relay',?1,0,'[\"/items\"]','{}','','now')",
+        "INSERT INTO connections(account_id,name,kind,base_url,writable,paths,headers,description,updated_at) VALUES((SELECT account_id FROM mcp_principal WHERE id=1),'board','relay',?1,0,'[\"/items\"]','{}','','now')",
         [base_url],
     ).unwrap();
 }
@@ -114,9 +114,11 @@ async fn preview_notes_missing_connection_even_when_request_source_uses_sample_d
 
     let value = result_value(server.preview_app_result(preview_args).await.unwrap());
 
-    assert!(value["notes"].as_array().unwrap().iter().any(|note| {
-        note.as_str().unwrap().contains("서버에 없는 연결: board")
-    }));
+    assert!(value["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|note| { note.as_str().unwrap().contains("서버에 없는 연결: board") }));
 }
 
 #[tokio::test]
@@ -133,9 +135,11 @@ async fn preview_notes_missing_connection_used_only_by_action() {
 
     let value = result_value(server.preview_app_result(args(definition)).await.unwrap());
 
-    assert!(value["notes"].as_array().unwrap().iter().any(|note| {
-        note.as_str().unwrap().contains("서버에 없는 연결: board")
-    }));
+    assert!(value["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|note| { note.as_str().unwrap().contains("서버에 없는 연결: board") }));
 }
 
 #[tokio::test]
@@ -148,14 +152,26 @@ async fn preview_uses_the_reported_window_state() {
     let state = AppState::in_memory("secret");
     add_relay(&state, &url);
     state.lock_db().unwrap().execute(
-        "INSERT INTO devices(id,name,token_sha256,created_at) VALUES('device','기기','hash','now')",
+        "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES('device','기기',(SELECT account_id FROM mcp_principal WHERE id=1),'hash','now')",
         [],
     ).unwrap();
     let layout: kaleidoscope_contract::registry::DeviceLayout = serde_json::from_value(json!({
-        "workspaces": [], "desktops": [],
+        "workspaces": [{"id":"workspace","name":"작업","created_at":"now","updated_at":"now"}],
+        "desktops": [{"id":"desktop","workspace_id":"workspace","name":"Desktop","position":0,"created_at":"now","updated_at":"now"}],
         "windows": [{"id":"window-1","desktop_id":"desktop","app_id":"preview-test","app_version":1,"rect":{"x":0,"y":0,"width":800,"height":600},"z":0,"state":{"filter":"running"},"created_at":"now","updated_at":"now"}],
         "folders": [], "active_workspace_id": null, "active_desktop_ids": {}
     })).unwrap();
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: layout.workspaces.clone(),
+                desktops: layout.desktops.clone(),
+                windows: layout.windows.clone(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
     state.save_layout("device", &layout).unwrap();
     let server = McpServer::new(state);
     let mut preview_args = args(definition());

@@ -1,6 +1,8 @@
 use super::*;
 use kaleidoscope_contract::registry::DeviceLayout;
 
+const LEGACY_APP: &str = include_str!("../../../examples/workspace-pas.json");
+
 #[tokio::test]
 async fn open_counts_connected_devices_with_the_requested_workspace() {
     use kaleidoscope_contract::Supported;
@@ -10,11 +12,25 @@ async fn open_counts_connected_devices_with_the_requested_workspace() {
             .lock_db()
             .unwrap()
             .execute(
-                "INSERT INTO devices(id,name,token_sha256,created_at) VALUES(?1,?1,?1,'now')",
+                "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,?1,(SELECT account_id FROM mcp_principal WHERE id=1),?1,'now')",
                 [id],
             )
             .unwrap();
     }
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: vec![kaleidoscope_contract::Workspace {
+                    id: "w".into(),
+                    name: "작업".into(),
+                    created_at: "t".into(),
+                    updated_at: "t".into(),
+                }],
+                ..Default::default()
+            },
+        )
+        .unwrap();
     let layout: DeviceLayout = serde_json::from_value(json!({"workspaces":[{"id":"w","name":"작업","created_at":"t","updated_at":"t"}],"desktops":[],"windows":[],"folders":[],"active_workspace_id":null,"active_desktop_ids":{}})).unwrap();
     state.save_layout("a", &layout).unwrap();
     let _a = state
@@ -72,9 +88,78 @@ async fn open_counts_connected_devices_with_the_requested_workspace() {
 }
 
 #[tokio::test]
+async fn app_open_and_opening_upload_are_scoped_away_from_other_accounts_legacy_shells() {
+    let state = AppState::in_memory("secret");
+    let owner_account = state.mcp_account_id().unwrap();
+    let second_account = Uuid::new_v4().to_string();
+    {
+        let db = state.lock_db().unwrap();
+        db.execute(
+            "INSERT INTO accounts(id,display_name,created_at) VALUES(?1,'Second','now')",
+            [&second_account],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES('owner-old','Owner PC',?1,'owner','now'),('second-old','Second PC',?2,'second','now')",
+            params![owner_account, second_account],
+        )
+        .unwrap();
+    }
+    let _owner = state
+        .stream_with_registry("owner-old".into(), None, 0)
+        .unwrap();
+    let _second = state
+        .stream_with_registry("second-old".into(), None, 0)
+        .unwrap();
+    let mut events = state.0.events.subscribe();
+    let server = McpServer::new(state.clone());
+
+    server
+        .upload_app(Parameters(UploadArgs {
+            definition: serde_json::from_str(LEGACY_APP).unwrap(),
+            open: true,
+            workspace_id: None,
+        }))
+        .await
+        .unwrap();
+    let app = state.app("workspace-pas", None).unwrap().unwrap();
+    let published = events.try_recv().unwrap();
+    assert!(matches!(
+        state.event_for_broadcast("owner-old", published.clone()),
+        Some(DeviceEvent::AppPublished { app: row, open: true, .. }) if row.app.id == app.app.id
+    ));
+    assert!(matches!(
+        state.event_for_broadcast("second-old", published),
+        Some(DeviceEvent::AppPublished { app: row, open: false, workspace_id: None }) if row.app.id == app.app.id
+    ));
+
+    server
+        .open_app(Parameters(AppIdArgs {
+            app_id: app.app.id.clone(),
+            workspace_id: None,
+        }))
+        .await
+        .unwrap();
+    let opened = events.try_recv().unwrap();
+    assert!(matches!(
+        state.event_for_broadcast("owner-old", opened.clone()),
+        Some(DeviceEvent::AppOpen { app_id, workspace_id: None }) if app_id == app.app.id
+    ));
+    assert!(state.event_for_broadcast("second-old", opened).is_none());
+}
+
+#[tokio::test]
 async fn get_shared_view_returns_latest_window_and_empty_note() {
     use kaleidoscope_contract::registry::ShareUpload;
     let state = AppState::in_memory("secret");
+    {
+        let db = state.lock_db().unwrap();
+        db.execute_batch("INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES('device-a','PC A',(SELECT account_id FROM mcp_principal WHERE id=1),'a','now'),('device-b','PC B',(SELECT account_id FROM mcp_principal WHERE id=1),'b','now');").unwrap();
+        db.execute(
+            "INSERT INTO workspaces(id,account_id,data,created_at) VALUES('w',(SELECT account_id FROM mcp_principal WHERE id=1),'{\"id\":\"w\",\"name\":\"작업\",\"created_at\":\"t\",\"updated_at\":\"t\"}','t')",
+            [],
+        ).unwrap();
+    }
     state
         .put_shared_view(
             "device-a",
@@ -136,6 +221,20 @@ async fn upload_and_open_report_connected_shells_that_cannot_render_the_app() {
     use kaleidoscope_contract::Supported;
 
     let state = AppState::in_memory("secret");
+    for id in ["AD02028236", "current"] {
+        state.lock_db().unwrap().execute(
+            "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,?1,(SELECT account_id FROM mcp_principal WHERE id=1),?1,'now')",
+            [id],
+        ).unwrap();
+    }
+    state
+        .lock_db()
+        .unwrap()
+        .execute(
+            "UPDATE devices SET last_active_at='2026-01-02' WHERE id='current'",
+            [],
+        )
+        .unwrap();
     let _old = state.stream("AD02028236".into(), None).unwrap();
     let _current = state
         .stream("current".into(), Some(Supported::current()))
@@ -181,6 +280,10 @@ async fn compatible_upload_result_has_no_unsupported_shell_note() {
     use kaleidoscope_contract::Supported;
 
     let state = AppState::in_memory("secret");
+    state.lock_db().unwrap().execute(
+        "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES('current','current',(SELECT account_id FROM mcp_principal WHERE id=1),'current','now')",
+        [],
+    ).unwrap();
     let _current = state
         .stream("current".into(), Some(Supported::current()))
         .unwrap();
@@ -203,6 +306,10 @@ async fn compatible_upload_result_has_no_unsupported_shell_note() {
 #[tokio::test]
 async fn upload_with_only_an_old_shell_does_not_claim_no_shell_is_connected() {
     let state = AppState::in_memory("secret");
+    state.lock_db().unwrap().execute(
+        "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES('AD02028236','AD02028236',(SELECT account_id FROM mcp_principal WHERE id=1),'old','now')",
+        [],
+    ).unwrap();
     let _old = state.stream("AD02028236".into(), None).unwrap();
     let server = McpServer::new(state);
     let definition: Value =

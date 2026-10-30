@@ -4,6 +4,29 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::registry::AgentSendRequest;
 use kaleidoscope_contract::registry::ShareUpload;
 
+fn add_device_workspace(state: &AppState, device_id: &str, workspace_id: &str) {
+    let db = state.lock_db().unwrap();
+    let account_id: String = db
+        .query_row(
+            "SELECT account_id FROM mcp_principal WHERE id=1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    db.execute(
+        "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,'test',?2,?1,'now')",
+        params![device_id, account_id],
+    )
+    .unwrap();
+    let data =
+        json!({"id":workspace_id,"name":"작업","created_at":"now","updated_at":"now"}).to_string();
+    db.execute(
+        "INSERT INTO workspaces(id,account_id,data,created_at) VALUES(?1,?2,?3,'now')",
+        params![workspace_id, account_id, data],
+    )
+    .unwrap();
+}
+
 #[derive(Clone, Default)]
 struct Mock(Arc<Mutex<Vec<(String, Value)>>>);
 async fn intervene(MockState(mock): MockState<Mock>, Json(body): Json<Value>) -> Json<Value> {
@@ -96,6 +119,7 @@ async fn send_uploads_attachments_in_order_and_forwards_paths() {
         "INSERT INTO agents(workspace_id,device_id,session_id,model_preset,workspace_name,created_at) VALUES('w','d','pas1','codex-6.1-sol','작업','now')",
         [],
     ).unwrap();
+    add_device_workspace(&state, "d", "w");
 
     let response = send_message(
         State(state),
@@ -182,6 +206,7 @@ async fn send_appends_share_block_and_only_marks_it_after_success() {
         "seosoyoung".into(),
         None,
     );
+    add_device_workspace(&state, "d", "w");
     state.lock_db().unwrap().execute(
         "INSERT INTO agents(workspace_id,device_id,session_id,model_preset,workspace_name,created_at) VALUES('w','d','pas1','codex-6.1-sol','작업','now')",
         [],
@@ -246,6 +271,7 @@ async fn send_appends_share_block_and_only_marks_it_after_success() {
         "INSERT INTO agents(workspace_id,device_id,session_id,model_preset,workspace_name,created_at) VALUES('w','d','pas1','codex-6.1-sol','작업','now')",
         [],
     ).unwrap();
+    add_device_workspace(&failed_state, "d", "w");
     failed_state
         .put_shared_view(
             "d",
@@ -430,10 +456,19 @@ async fn attachment_route_authenticates_and_reads_only_recorded_workspace_files(
         .lock_db()
         .unwrap()
         .execute(
-            "INSERT INTO devices(id,name,token_sha256,created_at) VALUES('device','test',?1,'now')",
+            "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES('device','test',(SELECT account_id FROM mcp_principal WHERE id=1),?1,'now')",
             [sha256_hex(token.as_bytes())],
         )
         .unwrap();
+    {
+        let db = state.lock_db().unwrap();
+        for workspace_id in ["w", "other"] {
+            db.execute(
+                "INSERT INTO workspaces(id,account_id,data,created_at) VALUES(?1,(SELECT account_id FROM mcp_principal WHERE id=1),?2,'now')",
+                params![workspace_id, json!({"id":workspace_id,"name":"작업","created_at":"now","updated_at":"now"}).to_string()],
+            ).unwrap();
+        }
+    }
     let app = crate::router(state);
     let unauthenticated = app
         .clone()

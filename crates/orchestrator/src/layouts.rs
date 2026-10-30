@@ -60,7 +60,12 @@ pub(super) async fn post_layout_changes(
     match state.apply_layout_changes(Some(&device.0), &changes) {
         Ok((reply, changed)) => {
             if !changed.is_empty() {
-                state.send_event(DeviceEvent::LayoutChanged { changes: changed });
+                if let Ok(account_id) = state.device_account_id(&device.0) {
+                    state.send_event_for_account(
+                        DeviceEvent::LayoutChanged { changes: changed },
+                        &account_id,
+                    );
+                }
             }
             Json(reply).into_response()
         }
@@ -69,11 +74,26 @@ pub(super) async fn post_layout_changes(
 }
 
 impl AppState {
+    pub(super) fn load_account_entities<T: for<'de> Deserialize<'de>>(
+        db: &Connection,
+        table: &str,
+        account_id: &str,
+    ) -> Result<Vec<T>, CoreError> {
+        let query = match table {
+            "workspaces" => "SELECT data FROM workspaces WHERE account_id=?1 ORDER BY created_at,id",
+            "desktops" => "SELECT d.data FROM desktops d JOIN workspaces w ON w.id=d.workspace_id WHERE w.account_id=?1 ORDER BY d.created_at,d.id",
+            "windows" => "SELECT v.data FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE w.account_id=?1 ORDER BY v.created_at,v.id",
+            _ => return Err(server_error("배치 표를 읽을 수 없습니다.")),
+        };
+        read_entities(db, query, Some(account_id))
+    }
+
     pub(super) fn reported_window_state(
         &self,
         window_id: &str,
     ) -> Result<Option<std::collections::BTreeMap<String, serde_json::Value>>, CoreError> {
-        for (_, _, _, layout) in self.layouts()? {
+        let account_id = self.mcp_account_id()?;
+        for (_, _, _, layout) in self.layouts(&account_id)? {
             if let Some(window) = layout
                 .windows
                 .into_iter()
@@ -90,12 +110,117 @@ impl AppState {
         device_id: &str,
         layout: &DeviceLayout,
     ) -> Result<(), CoreError> {
-        let workspaces = layout.workspaces.iter().map(|w| w.id.clone()).collect();
-        let raw = serde_json::to_string(layout)
+        let legacy_shell = !self
+            .0
+            .layout_sync_devices
+            .lock()
+            .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+            .contains(device_id);
+        let mut db = self.lock_db()?;
+        let tx = db.transaction().map_err(db_error)?;
+        let account_id: String = tx
+            .query_row(
+                "SELECT account_id FROM devices WHERE id=?1 AND revoked_at IS NULL",
+                [device_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(db_error)?
+            .ok_or_else(|| server_error("기기를 찾을 수 없습니다."))?;
+        let mut safe_layout = layout.clone();
+        let owns = |table: &str, id: &str| -> Result<bool, CoreError> {
+            let sql = match table {
+                "workspace" => "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?1 AND account_id=?2)",
+                "desktop" => "SELECT EXISTS(SELECT 1 FROM desktops d JOIN workspaces w ON w.id=d.workspace_id WHERE d.id=?1 AND w.account_id=?2)",
+                "window" => "SELECT EXISTS(SELECT 1 FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.id=?1 AND w.account_id=?2)",
+                _ => return Err(server_error("배치 표를 읽을 수 없습니다.")),
+            };
+            tx.query_row(sql, params![id, account_id], |row| row.get(0))
+                .map_err(db_error)
+        };
+        let mut workspace_ids = HashSet::new();
+        for item in &layout.workspaces {
+            let canonical_owner: Option<String> = tx
+                .query_row(
+                    "SELECT account_id FROM workspaces WHERE id=?1",
+                    [&item.id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(db_error)?;
+            let legacy_owner: Option<String> = tx
+                .query_row(
+                    "SELECT account_id FROM legacy_workspace_owners WHERE workspace_id=?1",
+                    [&item.id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(db_error)?;
+            let owned = match (canonical_owner, legacy_owner) {
+                (Some(owner), _) => owner == account_id,
+                (None, Some(owner)) => owner == account_id,
+                (None, None) if legacy_shell => {
+                    tx.execute(
+                        "INSERT INTO legacy_workspace_owners(workspace_id,account_id) VALUES(?1,?2)",
+                        params![item.id, account_id],
+                    )
+                    .map_err(db_error)?;
+                    true
+                }
+                (None, None) => false,
+            };
+            if owned {
+                workspace_ids.insert(item.id.clone());
+            }
+        }
+        safe_layout
+            .workspaces
+            .retain(|item| workspace_ids.contains(&item.id));
+        let mut desktop_ids = HashSet::new();
+        for item in &layout.desktops {
+            if workspace_ids.contains(&item.workspace_id) && owns("desktop", &item.id)? {
+                desktop_ids.insert(item.id.clone());
+            }
+        }
+        safe_layout
+            .desktops
+            .retain(|item| desktop_ids.contains(&item.id));
+        let mut window_ids = HashSet::new();
+        for item in &layout.windows {
+            if desktop_ids.contains(&item.desktop_id) && owns("window", &item.id)? {
+                window_ids.insert(item.id.clone());
+            }
+        }
+        safe_layout
+            .windows
+            .retain(|item| window_ids.contains(&item.id));
+        if safe_layout
+            .active_workspace_id
+            .as_ref()
+            .is_some_and(|id| !workspace_ids.contains(id))
+        {
+            safe_layout.active_workspace_id = None;
+        }
+        safe_layout
+            .active_desktop_ids
+            .retain(|workspace_id, desktop_id| {
+                workspace_ids.contains(workspace_id) && desktop_ids.contains(desktop_id)
+            });
+        safe_layout
+            .folders
+            .retain(|item| window_ids.contains(&item.window_id));
+        safe_layout
+            .data_errors
+            .retain(|item| window_ids.contains(&item.window_id));
+        let workspaces = safe_layout
+            .workspaces
+            .iter()
+            .map(|w| w.id.clone())
+            .collect();
+        let raw = serde_json::to_string(&safe_layout)
             .map_err(|_| server_error("배치를 저장할 수 없습니다."))?;
         let now = timestamp();
-        let db = self.lock_db()?;
-        let previous: Option<String> = db
+        let previous: Option<String> = tx
             .query_row(
                 "SELECT layout FROM device_layouts WHERE device_id=?1",
                 [device_id],
@@ -108,21 +233,23 @@ impl AppState {
         let active = previous
             .and_then(|raw| serde_json::from_str::<DeviceLayout>(&raw).ok())
             .map_or(true, |previous| {
-                previous.active_workspace_id != layout.active_workspace_id
-                    || previous.active_desktop_ids != layout.active_desktop_ids
-                    || previous.folders != layout.folders
+                previous.active_workspace_id != safe_layout.active_workspace_id
+                    || previous.active_desktop_ids != safe_layout.active_desktop_ids
+                    || previous.folders != safe_layout.folders
             });
-        db.execute(
+        tx.execute(
             "INSERT INTO device_layouts(device_id,layout,reported_at) VALUES(?1,?2,?3) ON CONFLICT(device_id) DO UPDATE SET layout=excluded.layout,reported_at=excluded.reported_at",
             params![device_id, raw, now],
         ).map_err(db_error)?;
         if active {
-            db.execute(
+            tx.execute(
                 "UPDATE devices SET last_active_at=?2 WHERE id=?1 AND revoked_at IS NULL",
                 params![device_id, now],
             )
             .map_err(db_error)?;
         }
+        tx.commit().map_err(db_error)?;
+        drop(db);
         self.0
             .device_workspaces
             .lock()
@@ -143,17 +270,18 @@ impl AppState {
     }
 
     pub(super) fn connected_count_for(&self, workspace_id: Option<&str>) -> usize {
-        let Some(workspace_id) = workspace_id else {
-            return self.connected_count();
-        };
+        let owned_devices = self.mcp_device_ids();
         let connected = self.0.connections.lock().unwrap();
         let workspaces = self.0.device_workspaces.lock().unwrap();
         connected
             .keys()
             .filter(|device| {
-                workspaces
-                    .get(*device)
-                    .is_some_and(|ids| ids.contains(workspace_id))
+                owned_devices.contains(*device)
+                    && workspace_id.is_none_or(|workspace_id| {
+                        workspaces
+                            .get(*device)
+                            .is_some_and(|ids| ids.contains(workspace_id))
+                    })
             })
             .count()
     }
@@ -169,6 +297,7 @@ impl AppState {
             Broadcast {
                 event,
                 open_target: None,
+                account_id: None,
             },
         )
     }
@@ -178,13 +307,26 @@ impl AppState {
         device_id: &str,
         broadcast: Broadcast,
     ) -> Option<DeviceEvent> {
+        let mut event = broadcast.event;
+        if let Some(account_id) = broadcast.account_id.as_deref() {
+            if self.device_account_id(device_id).ok().as_deref() != Some(account_id) {
+                event = match event {
+                    DeviceEvent::AppPublished { app, .. } => DeviceEvent::AppPublished {
+                        app,
+                        open: false,
+                        workspace_id: None,
+                    },
+                    DeviceEvent::AppOpen { .. } => return None,
+                    _ => return None,
+                };
+            }
+        }
         let syncing = self
             .0
             .layout_sync_devices
             .lock()
             .ok()
             .is_some_and(|devices| devices.contains(device_id));
-        let event = broadcast.event;
         if matches!(
             event,
             DeviceEvent::LayoutSnapshot { .. } | DeviceEvent::LayoutChanged { .. }
@@ -210,6 +352,12 @@ impl AppState {
                 return None;
             }
         }
+        let event = match event {
+            DeviceEvent::ConnectionsSnapshot { .. } => DeviceEvent::ConnectionsSnapshot {
+                connections: self.connection_snapshot_for_device(device_id).ok()?,
+            },
+            other => other,
+        };
         if let DeviceEvent::AppPublished { app, .. } = &event {
             if !self.device_can_render(device_id, &app.version.definition.requires) {
                 return None;
@@ -220,6 +368,15 @@ impl AppState {
                 if !self.device_can_render(device_id, &app.version.definition.requires) {
                     return None;
                 }
+            }
+        }
+        if let DeviceEvent::AppOpen {
+            workspace_id: Some(workspace_id),
+            ..
+        } = &event
+        {
+            if !self.device_owns_workspace(device_id, workspace_id).ok()? {
+                return None;
             }
         }
         if let Some(target) = broadcast.open_target {
@@ -307,12 +464,27 @@ pub(super) fn load_entities<T: for<'de> Deserialize<'de>>(
         "windows" => "SELECT data FROM windows ORDER BY created_at,id",
         _ => return Err(server_error("배치 표를 읽을 수 없습니다.")),
     };
+    read_entities(db, query, None)
+}
+
+fn read_entities<T: for<'de> Deserialize<'de>>(
+    db: &Connection,
+    query: &str,
+    account_id: Option<&str>,
+) -> Result<Vec<T>, CoreError> {
     let mut statement = db.prepare(query).map_err(db_error)?;
-    let rows = statement
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(db_error)?
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(db_error)?;
+    let rows = match account_id {
+        Some(account_id) => statement
+            .query_map([account_id], |row| row.get::<_, String>(0))
+            .map_err(db_error)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(db_error)?,
+        None => statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(db_error)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(db_error)?,
+    };
     rows.into_iter()
         .map(|raw| {
             serde_json::from_str(&raw)

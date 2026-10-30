@@ -66,11 +66,11 @@ impl AppState {
                 .is_some_and(|version| *version >= 1)
         }) {
             initial_events.push(DeviceEvent::ConnectionsSnapshot {
-                connections: self.connection_snapshot()?,
+                connections: self.connection_snapshot_for_device(&device_id)?,
             });
         }
         if registry_version >= registry::LAYOUT_SYNC_REGISTRY_VERSION {
-            initial_events.push(self.layout_snapshot()?);
+            initial_events.push(self.layout_snapshot(&device_id)?);
         }
         let state = self.clone();
         let interval = tokio::time::interval(Duration::from_secs(registry::PING_INTERVAL_SECS));

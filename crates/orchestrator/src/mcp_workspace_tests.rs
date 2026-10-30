@@ -8,7 +8,13 @@ fn decode(result: CallToolResult) -> Value {
 
 #[tokio::test]
 async fn workspace_tools_read_and_delete_canonical_entities() {
-    let state = AppState::in_memory("secret");
+    let mut state = AppState::in_memory("secret");
+    state.configure_soulstream(
+        Some("https://soulstream.example".into()),
+        Some("token".into()),
+        "seosoyoung".into(),
+        None,
+    );
     let make_workspace = |id: &str| Workspace {
         id: id.into(),
         name: format!("작업 {id}"),
@@ -24,6 +30,29 @@ async fn workspace_tools_read_and_delete_canonical_entities() {
             },
         )
         .unwrap();
+    let foreign_account = Uuid::new_v4().to_string();
+    {
+        let db = state.lock_db().unwrap();
+        db.execute(
+            "INSERT INTO accounts(id,display_name,created_at) VALUES(?1,'Other','now')",
+            [&foreign_account],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO workspaces(id,account_id,data,created_at) VALUES(?1,?2,?3,'now')",
+            params![
+                foreign_account,
+                foreign_account,
+                serde_json::to_string(&make_workspace(&foreign_account)).unwrap()
+            ],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO agents(workspace_id,device_id,session_id,model_preset,workspace_name,created_at,cursor) VALUES(?1,'device','foreign-pas','codex-6.1-sol','Other','now',0)",
+            [&foreign_account],
+        )
+        .unwrap();
+    }
     let server = McpServer::new(state);
 
     let listed = decode(server.list_workspaces().await.unwrap());
@@ -58,6 +87,26 @@ async fn workspace_tools_read_and_delete_canonical_entities() {
         .await
         .unwrap();
     assert!(last.is_error.unwrap_or_default());
+    let foreign = decode(
+        server
+            .delete_workspace(Parameters(WorkspaceArgs {
+                workspace_id: foreign_account.clone(),
+            }))
+            .await
+            .unwrap(),
+    );
+    assert_eq!(foreign["deleted"], true);
+    assert_eq!(foreign["agent_retiring"], false);
+    assert!(server
+        .state
+        .lock_db()
+        .unwrap()
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?1 AND account_id=?2)",
+            params![foreign_account, foreign_account],
+            |row| row.get::<_, bool>(0)
+        )
+        .unwrap());
     let remaining = decode(server.list_workspaces().await.unwrap());
     assert_eq!(remaining.as_array().unwrap().len(), 1);
     assert_eq!(remaining[0]["workspace_id"], "w2");

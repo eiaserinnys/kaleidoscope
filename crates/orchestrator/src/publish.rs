@@ -28,7 +28,14 @@ impl AppState {
     ) -> Result<(RegistryApp, bool, Option<OpenTarget>), CoreError> {
         let definition = parse_app_definition(definition_json)?;
         let now = timestamp();
-        let open_target = if open {
+        let workspace_accessible = match workspace_id.as_deref() {
+            Some(id) => self.mcp_owns_workspace(id)?,
+            None => true,
+        };
+        let event_workspace_id = workspace_accessible.then(|| workspace_id.clone()).flatten();
+        let open_requested = open && workspace_accessible;
+        let account_id = self.mcp_account_id()?;
+        let open_target = if open_requested {
             self.choose_open_target(workspace_id.as_deref())?
         } else {
             None
@@ -94,46 +101,69 @@ impl AppState {
             (RegistryApp { app, version }, unchanged, migrated_windows)
         };
         if !result.1 {
-            let defer_open = open && !result.2.is_empty();
-            self.send_event_with_target(
-                DeviceEvent::AppPublished {
-                    app: result.0.clone(),
-                    open: open && !defer_open,
-                    workspace_id: if defer_open {
-                        None
-                    } else {
-                        workspace_id.clone()
-                    },
-                },
-                if defer_open {
+            let defer_open = open_requested && !result.2.is_empty();
+            let event = DeviceEvent::AppPublished {
+                app: result.0.clone(),
+                open: open_requested && !defer_open,
+                workspace_id: if defer_open {
                     None
                 } else {
-                    open_target.as_ref().map(|target| target.id.clone())
+                    event_workspace_id.clone()
                 },
-            );
+            };
+            let target = if defer_open {
+                None
+            } else {
+                open_target.as_ref().map(|target| target.id.clone())
+            };
+            if open_requested {
+                self.send_event_with_target_for_account(event, target, &account_id);
+            } else {
+                self.send_event_with_target(event, target);
+            }
             if !result.2.is_empty() {
-                let changes = registry::LayoutChanges {
-                    windows: result.2.clone(),
-                    ..Default::default()
-                };
-                self.send_event(DeviceEvent::LayoutChanged { changes });
+                let mut accounts = HashMap::<String, Vec<AppWindow>>::new();
+                {
+                    let db = self.lock_db()?;
+                    for window in &result.2 {
+                        let account_id: String = db.query_row(
+                            "SELECT w.account_id FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.id=?1",
+                            [&window.id],
+                            |row| row.get(0),
+                        ).map_err(db_error)?;
+                        accounts.entry(account_id).or_default().push(window.clone());
+                    }
+                }
+                for (account_id, windows) in accounts {
+                    self.send_event_for_account(
+                        DeviceEvent::LayoutChanged {
+                            changes: registry::LayoutChanges {
+                                windows,
+                                ..Default::default()
+                            },
+                        },
+                        &account_id,
+                    );
+                }
             }
             if defer_open {
-                self.send_event_with_target(
+                self.send_event_with_target_for_account(
                     DeviceEvent::AppOpen {
                         app_id: result.0.app.id.clone(),
-                        workspace_id,
+                        workspace_id: event_workspace_id,
                     },
                     open_target.as_ref().map(|target| target.id.clone()),
+                    &account_id,
                 );
             }
-        } else if open {
-            self.send_event_with_target(
+        } else if open_requested {
+            self.send_event_with_target_for_account(
                 DeviceEvent::AppOpen {
                     app_id: result.0.app.id.clone(),
-                    workspace_id,
+                    workspace_id: event_workspace_id,
                 },
                 open_target.as_ref().map(|target| target.id.clone()),
+                &account_id,
             );
         }
         Ok((result.0, result.1, open_target))
@@ -144,20 +174,46 @@ impl AppState {
     }
 
     pub(crate) fn send_event_with_target(&self, event: DeviceEvent, open_target: Option<String>) {
-        let _ = self.0.events.send(Broadcast { event, open_target });
+        let _ = self.0.events.send(Broadcast {
+            event,
+            open_target,
+            account_id: None,
+        });
+    }
+
+    pub(crate) fn send_event_with_target_for_account(
+        &self,
+        event: DeviceEvent,
+        open_target: Option<String>,
+        account_id: &str,
+    ) {
+        let _ = self.0.events.send(Broadcast {
+            event,
+            open_target,
+            account_id: Some(account_id.to_string()),
+        });
+    }
+
+    pub(crate) fn send_event_for_account(&self, event: DeviceEvent, account_id: &str) {
+        let _ = self.0.events.send(Broadcast {
+            event,
+            open_target: None,
+            account_id: Some(account_id.to_string()),
+        });
     }
 
     pub(crate) fn choose_open_target(
         &self,
         workspace_id: Option<&str>,
     ) -> Result<Option<OpenTarget>, CoreError> {
+        let account_id = self.mcp_account_id()?;
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(db_error)?;
         if let Some(workspace_id) = workspace_id {
             let exists: bool = tx
                 .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?1)",
-                    [workspace_id],
+                    "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?1 AND account_id=?2)",
+                    params![workspace_id, account_id],
                     |r| r.get(0),
                 )
                 .map_err(db_error)?;
@@ -182,7 +238,7 @@ impl AppState {
                 .iter()
                 .filter(|id| connected.get(*id).copied().unwrap_or(0) > 0)
             {
-                let row: Option<(String, Option<String>)> = tx.query_row("SELECT name,last_active_at FROM devices WHERE id=?1 AND revoked_at IS NULL", [id], |r| Ok((r.get(0)?,r.get(1)?))).optional().map_err(db_error)?;
+                let row: Option<(String, Option<String>)> = tx.query_row("SELECT name,last_active_at FROM devices WHERE id=?1 AND account_id=?2 AND revoked_at IS NULL", params![id, account_id], |r| Ok((r.get(0)?,r.get(1)?))).optional().map_err(db_error)?;
                 if let Some((name, active)) = row {
                     values.push((id.clone(), name, active.unwrap_or_default()));
                 }
@@ -221,6 +277,23 @@ impl AppState {
         workspace_id: Option<&str>,
         requires: &Requires,
     ) -> usize {
+        let Ok(account_id) = self.mcp_account_id() else {
+            return 0;
+        };
+        let owned_devices: HashSet<String> = self
+            .lock_db()
+            .ok()
+            .and_then(|db| {
+                db.prepare("SELECT id FROM devices WHERE account_id=?1")
+                    .ok()
+                    .and_then(|mut statement| {
+                        statement
+                            .query_map([&account_id], |row| row.get(0))
+                            .ok()
+                            .and_then(|rows| rows.collect::<rusqlite::Result<HashSet<_>>>().ok())
+                    })
+            })
+            .unwrap_or_default();
         let Ok(connections) = self.0.connections.lock() else {
             return 0;
         };
@@ -237,6 +310,9 @@ impl AppState {
             .iter()
             .filter(|(_, count)| **count > 0)
             .filter(|(id, _)| {
+                if !owned_devices.contains(*id) {
+                    return false;
+                }
                 if !renders_on(support.get(*id).and_then(Option::as_ref), requires) {
                     return false;
                 }

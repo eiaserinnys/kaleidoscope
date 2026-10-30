@@ -94,6 +94,15 @@ async fn targeted_events_follow_each_devices_last_report_and_survive_restart() {
         }],
         ..Default::default()
     };
+    state
+        .apply_layout_changes(
+            Some(&a),
+            &registry::LayoutChanges {
+                workspaces: layout.workspaces.clone(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
     let req = Request::builder()
         .method("PUT")
         .uri("/api/device/layout")

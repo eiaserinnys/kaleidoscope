@@ -35,7 +35,8 @@ impl AppState {
         validate_registration(&input)?;
         input.base_url = input.base_url.trim_end_matches('/').to_string();
 
-        let old = self.connection(&input.name)?;
+        let account_id = self.mcp_account_id()?;
+        let old = self.connection_for_account(&account_id, &input.name)?;
         let headers = input.headers.unwrap_or_else(|| {
             if input.kind == ConnectionKind::Relay
                 && old
@@ -71,8 +72,9 @@ impl AppState {
         };
         self.lock_db()?
             .execute(
-                "INSERT INTO connections(name,kind,base_url,writable,paths,headers,issuer,scopes,resource,description,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11) ON CONFLICT(name) DO UPDATE SET kind=excluded.kind,base_url=excluded.base_url,writable=excluded.writable,paths=excluded.paths,headers=excluded.headers,issuer=excluded.issuer,scopes=excluded.scopes,resource=excluded.resource,description=excluded.description,updated_at=excluded.updated_at",
+                "INSERT INTO connections(account_id,name,kind,base_url,writable,paths,headers,issuer,scopes,resource,description,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12) ON CONFLICT(account_id,name) DO UPDATE SET kind=excluded.kind,base_url=excluded.base_url,writable=excluded.writable,paths=excluded.paths,headers=excluded.headers,issuer=excluded.issuer,scopes=excluded.scopes,resource=excluded.resource,description=excluded.description,updated_at=excluded.updated_at",
                 params![
+                    account_id,
                     info.name,
                     kind,
                     info.base_url,
@@ -94,7 +96,8 @@ impl AppState {
     pub(super) fn list_connections(
         &self,
     ) -> Result<Vec<(ConnectionInfo, Vec<String>, String)>, CoreError> {
-        self.connection_records().map(|records| {
+        let account_id = self.mcp_account_id()?;
+        self.connection_records(&account_id).map(|records| {
             records
                 .into_iter()
                 .map(|record| {
@@ -107,9 +110,13 @@ impl AppState {
     }
 
     pub(super) fn delete_connection(&self, name: &str) -> Result<bool, CoreError> {
+        let account_id = self.mcp_account_id()?;
         let deleted = self
             .lock_db()?
-            .execute("DELETE FROM connections WHERE name=?1", [name])
+            .execute(
+                "DELETE FROM connections WHERE account_id=?1 AND name=?2",
+                params![account_id, name],
+            )
             .map_err(db_error)?;
         if deleted > 0 {
             self.broadcast_connections()?;
@@ -118,11 +125,20 @@ impl AppState {
     }
 
     pub(super) fn connection(&self, name: &str) -> Result<Option<ConnectionRecord>, CoreError> {
+        let account_id = self.mcp_account_id()?;
+        self.connection_for_account(&account_id, name)
+    }
+
+    pub(super) fn connection_for_account(
+        &self,
+        account_id: &str,
+        name: &str,
+    ) -> Result<Option<ConnectionRecord>, CoreError> {
         let db = self.lock_db()?;
         let row: Option<(String, String, bool, String, String, Option<String>, Option<String>, Option<String>, String)> = db
             .query_row(
-                "SELECT kind,base_url,writable,paths,headers,issuer,scopes,resource,description FROM connections WHERE name=?1",
-                [name],
+                "SELECT kind,base_url,writable,paths,headers,issuer,scopes,resource,description FROM connections WHERE account_id=?1 AND name=?2",
+                params![account_id, name],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
             )
             .optional()
@@ -153,13 +169,13 @@ impl AppState {
         .transpose()
     }
 
-    fn connection_records(&self) -> Result<Vec<ConnectionRecord>, CoreError> {
+    fn connection_records(&self, account_id: &str) -> Result<Vec<ConnectionRecord>, CoreError> {
         let db = self.lock_db()?;
         let mut statement = db
-            .prepare("SELECT name,kind,base_url,writable,paths,headers,issuer,scopes,resource,description FROM connections ORDER BY name")
+            .prepare("SELECT name,kind,base_url,writable,paths,headers,issuer,scopes,resource,description FROM connections WHERE account_id=?1 ORDER BY name")
             .map_err(db_error)?;
         let rows = statement
-            .query_map([], |row| {
+            .query_map([account_id], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
@@ -208,7 +224,17 @@ impl AppState {
     }
 
     pub(super) fn connection_snapshot(&self) -> Result<Vec<ConnectionInfo>, CoreError> {
-        self.connection_records()
+        let account_id = self.mcp_account_id()?;
+        self.connection_records(&account_id)
+            .map(|records| records.into_iter().map(|record| record.info).collect())
+    }
+
+    pub(super) fn connection_snapshot_for_device(
+        &self,
+        device_id: &str,
+    ) -> Result<Vec<ConnectionInfo>, CoreError> {
+        let account_id = self.device_account_id(device_id)?;
+        self.connection_records(&account_id)
             .map(|records| records.into_iter().map(|record| record.info).collect())
     }
 
@@ -220,8 +246,9 @@ impl AppState {
     }
 
     fn connection_names(&self) -> Result<std::collections::HashSet<String>, CoreError> {
+        let account_id = self.mcp_account_id()?;
         Ok(self
-            .connection_records()?
+            .connection_records(&account_id)?
             .into_iter()
             .map(|record| record.info.name)
             .collect())

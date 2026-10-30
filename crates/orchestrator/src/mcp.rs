@@ -199,17 +199,31 @@ impl McpServer {
     ) -> Result<CallToolResult, ErrorData> {
         match self.state.app(&args.app_id, None) {
             Ok(Some(app)) => {
+                let workspace_accessible = match args.workspace_id.as_deref() {
+                    Some(id) => match self.state.mcp_owns_workspace(id) {
+                        Ok(owned) => owned,
+                        Err(error) => return Ok(json_error(error)),
+                    },
+                    None => true,
+                };
                 let target = match self.state.choose_open_target(args.workspace_id.as_deref()) {
                     Ok(target) => target,
                     Err(error) => return Ok(json_error(error)),
                 };
-                self.state.send_event_with_target(
-                    DeviceEvent::AppOpen {
-                        app_id: args.app_id.clone(),
-                        workspace_id: args.workspace_id.clone(),
-                    },
-                    target.as_ref().map(|target| target.id.clone()),
-                );
+                if workspace_accessible {
+                    let account_id = match self.state.mcp_account_id() {
+                        Ok(account_id) => account_id,
+                        Err(error) => return Ok(json_error(error)),
+                    };
+                    self.state.send_event_with_target_for_account(
+                        DeviceEvent::AppOpen {
+                            app_id: args.app_id.clone(),
+                            workspace_id: args.workspace_id.clone(),
+                        },
+                        target.as_ref().map(|target| target.id.clone()),
+                        &account_id,
+                    );
+                }
                 let sent = self.state.open_sent_to(
                     target.as_ref(),
                     args.workspace_id.as_deref(),
@@ -277,7 +291,12 @@ impl McpServer {
         &self,
         Parameters(args): Parameters<WorkspaceArgs>,
     ) -> Result<CallToolResult, ErrorData> {
-        let agent_retiring = self.state.0.soulstream.is_some()
+        let workspace_accessible = self
+            .state
+            .mcp_owns_workspace(&args.workspace_id)
+            .unwrap_or(false);
+        let agent_retiring = workspace_accessible
+            && self.state.0.soulstream.is_some()
             && self
                 .state
                 .agent_row(&args.workspace_id)
@@ -293,8 +312,13 @@ impl McpServer {
         ) {
             Ok((reply, changed)) if reply.deleted_workspaces.contains(&args.workspace_id) => {
                 if !changed.is_empty() {
-                    self.state
-                        .send_event(DeviceEvent::LayoutChanged { changes: changed });
+                    match self.state.mcp_account_id() {
+                        Ok(account_id) => self.state.send_event_for_account(
+                            DeviceEvent::LayoutChanged { changes: changed },
+                            &account_id,
+                        ),
+                        Err(error) => return Ok(json_error(error)),
+                    }
                 }
                 Ok(json_result(
                     json!({"workspace_id":args.workspace_id,"deleted":true,"agent_retiring":agent_retiring}),
