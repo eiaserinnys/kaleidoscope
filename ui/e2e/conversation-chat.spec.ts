@@ -21,7 +21,7 @@ test("기록, 이전 페이지, 지연 발송과 진행문", async ({ page }) =>
   await expect(chat.getByText("답변 작성 중")).toBeVisible();
   await capture(page, "stream");
   await page.evaluate(() => (window as any).conversationHarness.emit({ event: "conversation.update", thread_id: "fake-thread", update: { kind: "activity", busy: false, tool: null } }));
-  await expect(chat.getByText("이전 기록")).toBeVisible();
+  await expect(chat.getByText("이전 기록", { exact: true })).toBeVisible();
   await expect(chat.getByText("더 이전 기록")).toBeVisible();
   const input = chat.getByRole("textbox", { name: "메시지" });
   await input.fill("새 요청");
