@@ -115,6 +115,20 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 });
             }
         }
+        DeviceEvent::StorageSnapshot { app_id, snapshot } => {
+            emit_storage_update(
+                inner,
+                &app_id,
+                kaleidoscope_contract::app_storage::StorageUpdate::Snapshot { snapshot },
+            );
+        }
+        DeviceEvent::StorageChanged { app_id, changed } => {
+            emit_storage_update(
+                inner,
+                &app_id,
+                kaleidoscope_contract::app_storage::StorageUpdate::Changed { changed },
+            );
+        }
         DeviceEvent::LayoutSnapshot {
             workspaces,
             desktops,
@@ -197,6 +211,40 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
         }
     }
     link::is_current(inner, generation)
+}
+
+fn emit_storage_update(
+    inner: &Arc<Inner>,
+    app_id: &str,
+    update: kaleidoscope_contract::app_storage::StorageUpdate,
+) {
+    let window_ids = {
+        let state = inner.state.lock().unwrap();
+        let supports_storage = state.shared.apps.iter().any(|app| {
+            app.id == app_id
+                && state.shared.app_versions.iter().any(|version| {
+                    version.app_id == app.id
+                        && version.version == app.current_version
+                        && version.definition.storage.is_some()
+                })
+        });
+        if !supports_storage {
+            return;
+        }
+        state
+            .shared
+            .windows
+            .iter()
+            .filter(|window| window.app_id == app_id)
+            .map(|window| window.id.clone())
+            .collect::<Vec<_>>()
+    };
+    for window_id in window_ids {
+        inner.emit(&CoreEvent::StorageUpdate {
+            window_id,
+            update: update.clone(),
+        });
+    }
 }
 
 fn has_workspace(inner: &Inner, workspace_id: Option<&str>) -> bool {

@@ -20,8 +20,17 @@ use serde_json::Value;
 pub struct CompiledApp {
     sources: BTreeMap<String, SourceDecl>,
     expressions: BTreeMap<String, Result<AstNode, String>>,
-    bindings: Vec<(String, Vec<String>)>,
+    bindings: Vec<BindingDependencies>,
     actions: BTreeMap<String, Actions>,
+}
+
+/// 식 하나가 읽는 데이터 원천과 저장 항목. Core가 준비할 의존성을 드러낸다.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BindingDependencies {
+    pub pointer: String,
+    pub data: Vec<String>,
+    pub storage: Vec<String>,
+    pub storage_meta: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -49,6 +58,8 @@ pub enum SourcePlan {
 pub struct Env<'a> {
     pub state: &'a BTreeMap<String, Value>,
     pub data: &'a BTreeMap<String, Value>,
+    pub storage: &'a BTreeMap<String, Value>,
+    pub storage_meta: &'a BTreeMap<String, Value>,
     pub event: &'a Value,
     pub item: &'a Value,
 }
@@ -57,6 +68,10 @@ pub struct Env<'a> {
 pub enum Step {
     SetState {
         key: String,
+        value: Value,
+    },
+    SetStorage {
+        entry: String,
         value: Value,
     },
     Refresh {
@@ -81,7 +96,12 @@ impl CompiledApp {
             .into_iter()
             .filter_map(|(pointer, binding)| {
                 if let Binding::Expr(expr) = binding {
-                    Some((pointer, data::data_refs(&expr.expr)))
+                    Some(BindingDependencies {
+                        pointer,
+                        data: data::data_refs(&expr.expr),
+                        storage: data::storage_refs(&expr.expr),
+                        storage_meta: data::storage_meta_refs(&expr.expr),
+                    })
                 } else {
                     None
                 }
@@ -100,11 +120,21 @@ impl CompiledApp {
     }
 
     pub fn plan_source(&self, name: &str, state: &BTreeMap<String, Value>) -> SourcePlan {
+        self.plan_source_with_storage(name, state, &BTreeMap::new(), &BTreeMap::new())
+    }
+
+    pub fn plan_source_with_storage(
+        &self,
+        name: &str,
+        state: &BTreeMap<String, Value>,
+        storage: &BTreeMap<String, Value>,
+        storage_meta: &BTreeMap<String, Value>,
+    ) -> SourcePlan {
         let Some(source) = self.sources.get(name) else {
             return SourcePlan::Invalid("없는 원천입니다".into());
         };
         let base = format!("/sources/{}", data::escape_pointer(name));
-        let vars = Variables::new(state, &BTreeMap::new(), None, None);
+        let vars = Variables::new(state, &BTreeMap::new(), storage, storage_meta, None, None);
         let plan = || -> Result<SourcePlan, String> {
             match source {
                 SourceDecl::Request {
@@ -178,17 +208,33 @@ impl CompiledApp {
         plan().unwrap_or_else(SourcePlan::Invalid)
     }
 
+    pub fn binding_dependencies(&self) -> &[BindingDependencies] {
+        &self.bindings
+    }
+
     pub fn evaluate(
         &self,
         state: &BTreeMap<String, Value>,
         data: &BTreeMap<String, Value>,
         statuses: &BTreeMap<String, SourceStatus>,
     ) -> BTreeMap<String, BindingValue> {
-        let vars = Variables::new(state, data, None, None);
+        self.evaluate_with_storage(state, data, &BTreeMap::new(), &BTreeMap::new(), statuses)
+    }
+
+    pub fn evaluate_with_storage(
+        &self,
+        state: &BTreeMap<String, Value>,
+        data: &BTreeMap<String, Value>,
+        storage: &BTreeMap<String, Value>,
+        storage_meta: &BTreeMap<String, Value>,
+        statuses: &BTreeMap<String, SourceStatus>,
+    ) -> BTreeMap<String, BindingValue> {
+        let vars = Variables::new(state, data, storage, storage_meta, None, None);
         self.bindings
             .iter()
-            .map(|(pointer, refs)| {
-                let missing: Vec<_> = refs
+            .map(|binding| {
+                let missing: Vec<_> = binding
+                    .data
                     .iter()
                     .filter(|name| !data.contains_key(*name))
                     .collect();
@@ -218,7 +264,7 @@ impl CompiledApp {
                 } else if loading {
                     BindingValue::Loading {}
                 } else {
-                    match self.eval(pointer, &vars) {
+                    match self.eval(&binding.pointer, &vars) {
                         Ok(value) => BindingValue::Ready { value },
                         Err(message) => BindingValue::Failed {
                             message,
@@ -226,7 +272,7 @@ impl CompiledApp {
                         },
                     }
                 };
-                (pointer.clone(), result)
+                (binding.pointer.clone(), result)
             })
             .collect()
     }
@@ -240,7 +286,14 @@ impl CompiledApp {
 
     pub fn action_step(&self, pointer: &str, index: usize, env: &Env<'_>) -> Result<Step, String> {
         let actions = self.actions.get(pointer).ok_or("없는 동작입니다")?;
-        let vars = Variables::new(env.state, env.data, Some(env.event), Some(env.item));
+        let vars = Variables::new(
+            env.state,
+            env.data,
+            env.storage,
+            env.storage_meta,
+            Some(env.event),
+            Some(env.item),
+        );
         match actions {
             Actions::One(set) if index == 0 => Ok(Step::SetState {
                 key: set.set_state.clone(),
@@ -256,6 +309,18 @@ impl CompiledApp {
                             Some(binding) => {
                                 self.binding(binding, &format!("{base}/value"), env.state, &vars)?
                             }
+                            None => env.event.clone(),
+                        },
+                    }),
+                    Action::SetStorage(set_storage) => Ok(Step::SetStorage {
+                        entry: set_storage.set_storage.entry.clone(),
+                        value: match &set_storage.set_storage.value {
+                            Some(binding) => self.binding(
+                                binding,
+                                &format!("{base}/set_storage/value"),
+                                env.state,
+                                &vars,
+                            )?,
                             None => env.event.clone(),
                         },
                     }),
@@ -354,6 +419,8 @@ impl CompiledApp {
         let mut context = Context::new();
         context.bind("state".into(), vars.state.clone());
         context.bind("data".into(), vars.data.clone());
+        context.bind("storage".into(), vars.storage.clone());
+        context.bind("storage_meta".into(), vars.storage_meta.clone());
         if let Some(event) = &vars.event {
             context.bind("event".into(), event.clone());
         }
@@ -386,6 +453,8 @@ impl CompiledApp {
 struct Variables {
     state: JValue,
     data: JValue,
+    storage: JValue,
+    storage_meta: JValue,
     event: Option<JValue>,
     item: Option<JValue>,
 }
@@ -393,12 +462,18 @@ impl Variables {
     fn new(
         state: &BTreeMap<String, Value>,
         data: &BTreeMap<String, Value>,
+        storage: &BTreeMap<String, Value>,
+        storage_meta: &BTreeMap<String, Value>,
         event: Option<&Value>,
         item: Option<&Value>,
     ) -> Self {
         Self {
             state: JValue::from(serde_json::to_value(state).expect("JSON 상태")),
             data: JValue::from(serde_json::to_value(data).expect("JSON 원천")),
+            storage: JValue::from(serde_json::to_value(storage).expect("JSON 저장소")),
+            storage_meta: JValue::from(
+                serde_json::to_value(storage_meta).expect("JSON 저장소 메타데이터"),
+            ),
             event: event.cloned().map(JValue::from),
             item: item.cloned().map(JValue::from),
         }

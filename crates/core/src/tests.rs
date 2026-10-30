@@ -2076,6 +2076,24 @@ fn cancel_and_unlink_clear_only_connection_state() {
 }
 
 #[test]
+fn conversation_commands_are_unavailable_until_provider_is_implemented() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = seeded_core(temp.path(), &host);
+    for request in [
+        serde_json::json!({"op":"conversation.get","window_id":"w"}),
+        serde_json::json!({"op":"conversation.history","window_id":"w","before":"c"}),
+        serde_json::json!({"op":"conversation.create","window_id":"w","model":"m"}),
+        serde_json::json!({"op":"conversation.send","window_id":"w","request_id":"r","text":"안녕","attachments":[]}),
+        serde_json::json!({"op":"conversation.attachment","window_id":"w","item_id":"i","attachment_id":"a"}),
+        serde_json::json!({"op":"conversation.attachment_open","window_id":"w","item_id":"i","attachment_id":"a"}),
+    ] {
+        let request = serde_json::from_value(request).unwrap();
+        expect_error(core.handle(request), ErrorCode::Unavailable);
+    }
+}
+
+#[test]
 fn agent_commands_require_connection_and_a_local_workspace() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());

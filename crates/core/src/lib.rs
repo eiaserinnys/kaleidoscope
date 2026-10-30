@@ -279,6 +279,17 @@ impl Core {
             | CoreRequest::AgentSend { .. }
             | CoreRequest::AgentAttachment { .. }
             | CoreRequest::AgentAttachmentOpen { .. }) => link::handle_agent(&self.inner, request),
+            CoreRequest::ConversationGet { .. }
+            | CoreRequest::ConversationHistory { .. }
+            | CoreRequest::ConversationCreate { .. }
+            | CoreRequest::ConversationSend { .. }
+            | CoreRequest::ConversationAttachment { .. }
+            | CoreRequest::ConversationAttachmentOpen { .. }
+            | CoreRequest::StorageGet { .. }
+            | CoreRequest::StorageWrite { .. }
+            | CoreRequest::StorageReset { .. } => {
+                Err(error::make(kaleidoscope_contract::ErrorCode::Unavailable))
+            }
             CoreRequest::FilesList {
                 window_id,
                 permission,

@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 10판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 11판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -54,6 +54,11 @@
 //! 10판에서 바뀐 것(쉘 자동 업데이트, 카드 #819): [`ShellSnapshot::update`]와 `update.restart` 명령. 설치본 쉘이 새 판을
 //! 스스로 받아 두고, 디렉터가 고를 때 다시 시작하며 깐다. 블록 세트와 모듈 판, 레지스트리는 그대로다(앱 정의가 쓰는 것이
 //! 아니라 쉘 자신의 기능이고, 업데이트 서버는 오케스트레이터가 아니다). 아래 「쉘 업데이트」 절.
+//!
+//! 11판에서 바뀐 것(P1, 카드 #818): 블록 세트 6판의 Markdown 저장소 문서 바인딩, 앱 정의 storage와 대화 provider,
+//! 모듈 `storage` 1판, `agent` 3판, `connection` 2판, registry 8판. 계정은 서버가 인증 문맥에서 해석하고 기기 계약은
+//! account id를 받지 않는다. 구 `agent.update`와 `workspace_id` 요청 모양은 이행 중 유지한다.
+//! 대화 provider 이벤트는 `conversation.update`로 전달하고 저장소 알림은 metadata만 보낸다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -126,6 +131,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+pub mod app_storage;
+pub mod conversation;
 pub mod data;
 pub mod registry;
 pub mod validate;
@@ -155,7 +162,8 @@ pub const TAURI_EVENT: &str = "core-event";
 ///   `input`, `select`, `toggle`, `button`, `code_editor`, `code_view`, `image`, `media`, 앱 정의의 `sources`.
 /// - 5판: 4판 + `explorer`의 `folder`, `on_folder`, `view`, `on_view`. 5판 쉘은 탐색기를 폴더 트리와 내용의 두 칸으로
 ///   그리고, 이 필드가 없는 3판 정의의 탐색기도 같은 모습으로 그린다.
-pub const BLOCK_SET_VERSION: u32 = 5;
+/// - 6판: 5판 + `markdown_editor`와 `markdown_view`의 `document` 바인딩, 앱 정의의 `storage`와 `agent`.
+pub const BLOCK_SET_VERSION: u32 = 6;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -163,10 +171,19 @@ pub const BLOCK_SET_VERSION: u32 = 5;
 /// - `agent` 2판: 1판 + 첨부(보내기, 기록에서 보기와 열기). 모듈의 새 판도 더하기만 하므로
 ///   `agent: 1`을 요구하는 정의는 2판 쉘에서 그대로 돌고 첨부도 쓴다.
 /// - `web` 1판: 창 안에 웹 페이지를 띄우는 웹 화면(`web.*` 명령). 쉘이 그린 화면 위에 따로 뜬다.
+/// - `agent` 3판: `conversation-v1` 제공자 설정과 `window_id` 기반 대화 명령. 옛 `workspace_id` 명령은 이행 중 유지한다.
+/// - `storage` 1판: 계정 × 앱 저장소의 선언과 읽기, CAS 쓰기, 초기화.
 /// - `connection` 1판: 서버에 등록한 이름 붙인 연결(`connection` 권한). 원천 받기, 동작의 연결 부르기,
 ///   이미지와 소리 받기. 연결은 서버가 헤더를 쥐고 대신 부르는 `relay`와 이 기기가 로그인해 직접 부르는
 ///   `oauth` 두 가지다([`registry`]의 「연결」 절).
-pub const MODULE_VERSIONS: &[(&str, u32)] = &[("files", 1), ("agent", 2), ("web", 1), ("connection", 1)];
+/// - `connection` 2판: 계정마다 연결 이름을 등록한다.
+pub const MODULE_VERSIONS: &[(&str, u32)] = &[
+    ("files", 1),
+    ("agent", 3),
+    ("web", 1),
+    ("connection", 2),
+    ("storage", 1),
+];
 
 /// 지원 범위를 알리지 않는 옛 쉘(블록 세트 3판 전)이 그릴 수 있는 블록 세트 판. 서버가 그런 기기에 보낼 앱을
 /// 거를 때 쓴다([`registry`]의 「기기마다 그릴 수 있는 앱만」 절).
@@ -395,9 +412,15 @@ pub enum UpdateStatus {
     /// 지금 판이 최신이거나 아직 묻지 않았다. `current_version`은 이 쉘의 판(예: `0.5.0`).
     Idle { current_version: String },
     /// 새 판 `version`을 받는 중이다.
-    Downloading { current_version: String, version: String },
+    Downloading {
+        current_version: String,
+        version: String,
+    },
     /// 새 판 `version`을 받아 서명까지 확인했다. `update.restart`로 다시 시작하면 깔린다.
-    Ready { current_version: String, version: String },
+    Ready {
+        current_version: String,
+        version: String,
+    },
     /// 실패했다. `version`은 받으려던 새 판(묻기에서 실패했으면 null), `reason`은 사람이 읽는 한국어 한 줄.
     Failed {
         current_version: String,
@@ -504,6 +527,14 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[ts(optional, as = "Option<BTreeMap<String, SourceDecl>>")]
     pub sources: BTreeMap<String, SourceDecl>,
+    /// (계약 11판, 모듈 `storage` 1판) 계정 × 앱 저장소에 둘 항목과 기본값.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub storage: Option<app_storage::StorageDecl>,
+    /// (계약 11판, 모듈 `agent` 3판) 앱이 사용하는 범용 대화 제공자와 저장소 바인딩.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub agent: Option<AgentProvider>,
     /// 창 안을 채우는 블록 트리의 뿌리.
     pub ui: Block,
 }
@@ -519,6 +550,35 @@ pub struct OpensDecl {
     pub permission: String,
     /// 연 파일의 경로(그 폴더 기준 상대 경로)를 쓸 상태 키. 블록은 이 키로 그 파일을 연다.
     pub state: String,
+}
+
+/// 앱의 대화 제공자. 프로필과 대화 설정 값은 저장소 항목에서 읽고, 특정 서비스를 코드에 넣지 않는다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AgentProvider {
+    pub protocol: conversation::ConversationProtocol,
+    pub permission: String,
+    /// 연결 base URL 아래의 안전한 상대 경로.
+    pub base_path: String,
+    pub namespace: Binding,
+    pub profile: Binding,
+    pub collection: Binding,
+    pub model_order: Binding,
+    pub selected_model: Binding,
+    pub title_template: Binding,
+    pub initial_instruction_template: Binding,
+    pub instructions_template: Binding,
+    /// 현재 작업에 thread id를 저장하는 JSON 항목 id.
+    pub thread_entry: String,
+}
+
+/// 문서를 저장소 md 항목에 연결한다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct DocumentRef {
+    pub entry: String,
 }
 
 /// 앱이 필요로 하는 블록 세트와 모듈의 버전.
@@ -573,7 +633,9 @@ impl PermissionDecl {
 
     pub fn access(&self) -> FileAccess {
         match self {
-            PermissionDecl::Files { access, .. } | PermissionDecl::Connection { access, .. } => *access,
+            PermissionDecl::Files { access, .. } | PermissionDecl::Connection { access, .. } => {
+                *access
+            }
         }
     }
 }
@@ -623,12 +685,30 @@ pub enum Block {
     /// 자동 저장: 입력을 멈추고 1초 뒤, 다른 파일로 바뀌기 전, Ctrl+S에 저장한다. 저장은 읽은 revision을
     /// 함께 보내고, 그 사이 디스크에서 바뀌었으면(`conflict`) 다시 불러오기와 덮어쓰기를 고르게 한다.
     /// 고치지 않은 상태에서 쉘 창이 포커스를 다시 얻으면 파일을 다시 읽는다. 경로가 null이면 빈 상태를 보인다.
-    MarkdownEditor { file: FileRef },
+    /// (블록 세트 6판) `document`는 선언된 md 저장 항목을 읽고 쓴다. `file`과 함께 쓰지 않는다.
+    MarkdownEditor {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        file: Option<FileRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        document: Option<DocumentRef>,
+    },
     /// 마크다운을 렌더해서 읽기만 한다. 원문의 HTML은 그리지 않는다.
-    /// 쉘 창이 포커스를 다시 얻으면 파일을 다시 읽는다. 경로가 null이면 빈 상태를 보인다.
-    MarkdownView { file: FileRef },
+    /// 쉘 창이 포커스를 다시 얻으면 파일이나 문서를 다시 읽는다. 경로가 null이면 빈 상태를 보인다.
+    /// (블록 세트 6판) `document`는 선언된 md 저장 항목을 읽는다. `file`과 함께 쓰지 않는다.
+    MarkdownView {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        file: Option<FileRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        document: Option<DocumentRef>,
+    },
     /// (블록 세트 2판) 이 창이 있는 워크스페이스의 PAS와 나누는 대화. `requires.modules`에 `agent`가
     /// 있어야 한다. 창마다 설정할 것이 없다. 같은 워크스페이스의 대화 창은 모두 같은 PAS를 본다.
+    /// 앱 정의에 `agent` provider가 있으면 `agent` 3판의 대화 제공자를 사용한다. 선언이 없는 기존
+    /// `agent_chat {}`는 아래 워크스페이스 PAS 동작을 유지한다.
     /// - 서버에 연결하지 않았으면 연결하라는 빈 상태를 보인다.
     /// - 그 워크스페이스에 PAS가 없으면 모델을 고르고 시작하는 판을 보인다(`agent.create`).
     /// - PAS가 있으면 대화 기록과 진행 중인 답을 보이고, 아래 입력창으로 보낸다(`agent.send`).
@@ -960,10 +1040,14 @@ impl Block {
     /// 이 블록이 처음 생긴 블록 세트 판. 정의의 `requires.blocks`는 쓴 블록의 이 값 이상이어야 한다.
     pub fn introduced_in(&self) -> u32 {
         match self {
-            Block::Split { .. }
-            | Block::FileTree { .. }
-            | Block::MarkdownEditor { .. }
-            | Block::MarkdownView { .. } => 1,
+            Block::Split { .. } | Block::FileTree { .. } => 1,
+            Block::MarkdownEditor {
+                document: Some(_), ..
+            }
+            | Block::MarkdownView {
+                document: Some(_), ..
+            } => 6,
+            Block::MarkdownEditor { .. } | Block::MarkdownView { .. } => 1,
             Block::AgentChat {} => 2,
             Block::WebView { .. } | Block::Explorer { .. } => 3,
             Block::Stack { .. }
@@ -1574,6 +1658,61 @@ pub enum CoreRequest {
         index: u32,
     },
 
+    /// (모듈 `agent` 3판) 창의 제공자 대화와 최근 기록을 읽는다. 아직 구현되지 않아 `unavailable`이다.
+    #[serde(rename = "conversation.get")]
+    ConversationGet { window_id: String },
+    /// 이전 기록을 읽는다.
+    #[serde(rename = "conversation.history")]
+    ConversationHistory { window_id: String, before: String },
+    /// 고른 모델로 대화를 만든다.
+    #[serde(rename = "conversation.create")]
+    ConversationCreate { window_id: String, model: String },
+    /// 요청 식별자와 글, 첨부를 제공자에 보낸다.
+    #[serde(rename = "conversation.send")]
+    ConversationSend {
+        window_id: String,
+        request_id: String,
+        text: String,
+        attachments: Vec<conversation::ConversationUpload>,
+    },
+    /// 제공자 기록의 첨부를 읽는다.
+    #[serde(rename = "conversation.attachment")]
+    ConversationAttachment {
+        window_id: String,
+        item_id: String,
+        attachment_id: String,
+    },
+    /// 제공자 기록의 첨부를 기기에서 연다.
+    #[serde(rename = "conversation.attachment_open")]
+    ConversationAttachmentOpen {
+        window_id: String,
+        item_id: String,
+        attachment_id: String,
+    },
+
+    /// (모듈 `storage` 1판) 창의 앱 선언 항목을 읽는다. 새 저장소 명령은 현재 unavailable이다.
+    #[serde(rename = "storage.get")]
+    StorageGet { window_id: String, entry: String },
+    /// (모듈 `storage` 1판) expected_revision CAS로 선언 항목을 쓴다. 빠지거나 null이면 저장값이 없을 때만 만든다.
+    #[serde(rename = "storage.write")]
+    StorageWrite {
+        window_id: String,
+        entry: String,
+        content: JsonValue,
+        #[serde(default)]
+        #[ts(optional, as = "Option<app_storage::ExpectedRevision>")]
+        expected_revision: app_storage::ExpectedRevision,
+    },
+    /// (모듈 `storage` 1판) expected_revision CAS로 저장 override를 지우고 선언 기본값으로 돌아간다.
+    #[serde(rename = "storage.reset")]
+    StorageReset {
+        window_id: String,
+        entry: String,
+        #[serde(default)]
+        #[ts(optional, as = "Option<app_storage::ExpectedRevision>")]
+        expected_revision: app_storage::ExpectedRevision,
+    },
+
     /// (블록 세트 4판) 창의 데이터를 잇는다. 4판 블록이 든 창이 그려질 때 한 번 부른다. 코어는 아직 받지 않은
     /// 원천을 받기 시작하고, 지금 모습 전체를 돌려준다. 그 뒤 바뀐 것은 `data.update`로 온다. 같은 창을 여러 화면이
     /// 이어도 된다(개발용 다리). 앱의 지금 버전에 `sources`도 식 바인딩도 없으면 빈 모습이다. 없는 창이면 `not_found`.
@@ -1648,7 +1787,10 @@ pub enum CoreRequest {
     ///   다르면 서버에 올린 뒤 응답한다. 올리다 실패해도 성공으로 응답하고, 다음 `share.view`나 다시 이을 때 올린다.
     ///   상태를 바꾸지 않으므로 이벤트가 없다.
     #[serde(rename = "share.view")]
-    ShareView { window_id: String, view: VisibleView },
+    ShareView {
+        window_id: String,
+        view: VisibleView,
+    },
 
     /// (10판) 받아 둔 새 판으로 다시 시작한다. 위 「쉘 업데이트」 절.
     /// - 업데이터가 없는 쉘([`UpdateStatus::Unavailable`])이면 `unavailable`, 그 밖에 `ready`가 아니면 `invalid_request`.
@@ -1749,7 +1891,10 @@ pub enum CoreReply {
     AppImport { app: App, version: AppVersion },
 
     #[serde(rename = "link.start")]
-    LinkStart { user_code: String, expires_at: String },
+    LinkStart {
+        user_code: String,
+        expires_at: String,
+    },
     #[serde(rename = "link.cancel")]
     LinkCancel {},
     #[serde(rename = "link.unlink")]
@@ -1808,6 +1953,47 @@ pub enum CoreReply {
     },
     #[serde(rename = "agent.attachment_open")]
     AgentAttachmentOpen {},
+
+    #[serde(rename = "conversation.get")]
+    ConversationGet {
+        thread: Option<conversation::ConversationThread>,
+        items: Vec<conversation::ConversationItem>,
+        cursor: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        next_before: Option<String>,
+        models: Vec<conversation::ConversationModel>,
+    },
+    #[serde(rename = "conversation.history")]
+    ConversationHistory {
+        items: Vec<conversation::ConversationItem>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        next_before: Option<String>,
+    },
+    #[serde(rename = "conversation.create")]
+    ConversationCreate {
+        thread: conversation::ConversationThread,
+    },
+    #[serde(rename = "conversation.send")]
+    ConversationSend {},
+    #[serde(rename = "conversation.attachment")]
+    ConversationAttachment {
+        name: String,
+        mime: String,
+        data_base64: String,
+    },
+    #[serde(rename = "conversation.attachment_open")]
+    ConversationAttachmentOpen {},
+
+    #[serde(rename = "storage.get")]
+    StorageGet {
+        result: app_storage::StorageReadReply,
+    },
+    #[serde(rename = "storage.write")]
+    StorageWrite { revision: String },
+    #[serde(rename = "storage.reset")]
+    StorageReset { revision: Option<String> },
 
     #[serde(rename = "data.attach")]
     DataAttach { view: data::DataView },
@@ -1978,6 +2164,17 @@ pub enum CoreEvent {
         workspace_id: String,
         update: AgentUpdate,
     },
+    /// (모듈 `agent` 3판) 제공자 대화 이벤트. 기존 `agent.update`(바깥 workspace_id, 안쪽 기존 AgentUpdate)는 이행 중 그대로 둔다.
+    /// 블록은 `conversation.get` 응답의 `thread.id`를 얻고 `conversation.update`를 thread_id로 거른다.
+    /// 같은 PC에서 같은 thread를 연 창이 여럿이면 모두 같은 이벤트를 받는다.
+    /// 아직 thread가 없는 시작 판은 `conversation.create` 응답이나 thread 저장 항목의 `storage.update` 뒤 `conversation.get`을 다시 불러 id를 얻는다.
+    /// envelope는 `{ thread_id, update }`이며 `update`는 `conversation.rs`의 `ConversationEvent` 그대로다.
+    /// envelope에는 window_id와 workspace_id를 넣지 않는다.
+    #[serde(rename = "conversation.update")]
+    ConversationUpdate {
+        thread_id: String,
+        update: conversation::ConversationEvent,
+    },
     /// 창의 웹 화면 페이지가 바뀌었다(주소, 제목, 읽는 중, 뒤로와 앞으로 갈 수 있는지 가운데 하나라도).
     /// 페이지 전체를 보낸다. 웹 화면을 이은(`web.attach`) 창의 것만 온다.
     #[serde(rename = "web.update")]
@@ -1989,6 +2186,12 @@ pub enum CoreEvent {
         window_id: String,
         #[serde(default)]
         view: data::DataView,
+    },
+    /// (모듈 `storage` 1판) 창이 사용하는 bucket의 snapshot이나 항목 변경 알림. 본문은 이벤트에 담지 않는다.
+    #[serde(rename = "storage.update")]
+    StorageUpdate {
+        window_id: String,
+        update: app_storage::StorageUpdate,
     },
 }
 
@@ -2047,7 +2250,9 @@ impl ErrorCode {
             ErrorCode::PathOutsideRoot => "고른 폴더 밖의 경로입니다.",
             ErrorCode::Conflict => "파일이 읽은 뒤 바뀌었거나 이미 존재합니다.",
             ErrorCode::Io => "파일을 읽거나 쓸 수 없습니다.",
-            ErrorCode::Server => "kaleidoscope 서버에 연결되어 있지 않거나 서버가 요청을 처리하지 못했습니다.",
+            ErrorCode::Server => {
+                "kaleidoscope 서버에 연결되어 있지 않거나 서버가 요청을 처리하지 못했습니다."
+            }
             ErrorCode::Unavailable => "이 쉘에서는 쓸 수 없는 기능입니다.",
         }
     }
@@ -2113,7 +2318,10 @@ mod tests {
             ("gone".to_string(), serde_json::json!(1)),
         ]);
         let next = migrate_window_state(&definition, &old);
-        assert_eq!(next.get("current_file"), Some(&serde_json::json!("notes/a.md")));
+        assert_eq!(
+            next.get("current_file"),
+            Some(&serde_json::json!("notes/a.md"))
+        );
         assert!(!next.contains_key("gone"));
         assert_eq!(
             migrate_window_state(&definition, &BTreeMap::new()),
@@ -2124,11 +2332,15 @@ mod tests {
     #[test]
     fn agent_chat_needs_agent_module() {
         validate::parse_app_definition(&example("workspace-pas.json")).expect("작업 PAS 예제");
-        let without_module = example("workspace-pas.json").replace(r#""agent": 1"#, r#""files": 1"#);
+        let without_module =
+            example("workspace-pas.json").replace(r#""agent": 1"#, r#""files": 1"#);
         assert_ne!(without_module, example("workspace-pas.json"));
         let error = validate::parse_app_definition(&without_module).unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidAppDefinition);
-        assert!(error.details.iter().any(|d| d.contains("agent 모듈")), "{error:?}");
+        assert!(
+            error.details.iter().any(|d| d.contains("agent 모듈")),
+            "{error:?}"
+        );
 
         let block: Block = serde_json::from_str(r#"{"type":"agent_chat"}"#).unwrap();
         assert_eq!(block, Block::AgentChat {});
@@ -2138,7 +2350,10 @@ mod tests {
     #[test]
     fn block_set_one_definitions_stay_valid() {
         let old = example("md-viewer.json");
-        assert!(old.contains(r#""blocks": 1"#), "md 예제는 1판으로 남겨 호환을 보인다");
+        assert!(
+            old.contains(r#""blocks": 1"#),
+            "md 예제는 1판으로 남겨 호환을 보인다"
+        );
         validate::parse_app_definition(&old).expect("1판 정의는 2판 쉘에서도 유효");
     }
 
@@ -2152,7 +2367,7 @@ mod tests {
             req,
             CoreRequest::AgentCreate {
                 workspace_id: "w".into(),
-                model_preset: "gemini-4-argon".into()
+                model_preset: "gemini-4-argon".into(),
             }
         );
         let event = CoreEvent::AgentUpdate {
@@ -2165,6 +2380,23 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&event).unwrap(),
             r#"{"event":"agent.update","workspace_id":"w","update":{"kind":"activity","busy":true,"tool":"upload_app"}}"#
+        );
+        let conversation = CoreEvent::ConversationUpdate {
+            thread_id: "thread-1".into(),
+            update: conversation::ConversationEvent::Text {
+                stream_id: "stream-1".into(),
+                text: "누적된 답".into(),
+            },
+        };
+        let serialized = serde_json::to_value(&conversation).unwrap();
+        assert_eq!(serialized["event"], "conversation.update");
+        assert_eq!(serialized["thread_id"], "thread-1");
+        assert_eq!(serialized["update"]["kind"], "text");
+        assert_eq!(serialized["update"]["stream_id"], "stream-1");
+        assert_eq!(serialized["update"]["text"], "누적된 답");
+        assert_eq!(
+            serde_json::from_value::<CoreEvent>(serialized).unwrap(),
+            conversation
         );
         let item = AgentItem {
             id: "3".into(),
@@ -2180,7 +2412,8 @@ mod tests {
     fn agent_attachments_are_optional_on_input_and_round_trip() {
         // 1판 모양의 보내기는 첨부 없이 읽힌다.
         let old: CoreRequest =
-            serde_json::from_str(r#"{"op":"agent.send","workspace_id":"w","text":"안녕"}"#).unwrap();
+            serde_json::from_str(r#"{"op":"agent.send","workspace_id":"w","text":"안녕"}"#)
+                .unwrap();
         assert_eq!(
             old,
             CoreRequest::AgentSend {
@@ -2218,7 +2451,7 @@ mod tests {
             CoreRequest::AgentAttachment {
                 workspace_id: "w".into(),
                 item_id: "7".into(),
-                index: 0
+                index: 0,
             }
         );
         let reply = CoreReply::AgentAttachmentOpen {};
@@ -2304,6 +2537,12 @@ mod tests {
              export const AGENT_ATTACHMENTS_TOTAL_MAX_BYTES = {};\n\
              /** 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위). */\n\
              export const AGENT_MESSAGE_MAX_CHARS = {};\n\
+             /** JSON 저장 항목 하나의 최대 바이트 수. */\n\
+             export const STORAGE_JSON_MAX_BYTES = {};\n\
+             /** Markdown 저장 항목 하나의 최대 UTF-8 바이트 수. */\n\
+             export const STORAGE_MD_MAX_BYTES = {};\n\
+             /** 저장소 명령 HTTP 본문의 최대 바이트 수. */\n\
+             export const STORAGE_COMMAND_BODY_MAX_BYTES = {};\n\
              /** (9판) 같이 보기 글 하나의 최대 바이트 수(UTF-8). */\n\
              export const SHARE_TEXT_MAX_BYTES = {};\n\
              /** (9판) 잘린 같이 보기 글의 마지막 줄. */\n\
@@ -2317,6 +2556,9 @@ mod tests {
             AGENT_ATTACHMENT_MAX_BYTES,
             AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
             registry::AGENT_MESSAGE_MAX_CHARS,
+            app_storage::STORAGE_JSON_MAX_BYTES,
+            app_storage::STORAGE_MD_MAX_BYTES,
+            app_storage::STORAGE_COMMAND_BODY_MAX_BYTES,
             SHARE_TEXT_MAX_BYTES,
             SHARE_TEXT_CUT_MARK,
             SHARE_DEBOUNCE_MS,
@@ -2326,7 +2568,8 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join(", "),
         );
-        let dir = std::env::var("TS_RS_EXPORT_DIR").expect("TS_RS_EXPORT_DIR는 .cargo/config.toml에 있다");
+        let dir = std::env::var("TS_RS_EXPORT_DIR")
+            .expect("TS_RS_EXPORT_DIR는 .cargo/config.toml에 있다");
         let path = std::path::Path::new(&dir).join("limits.ts");
         if std::fs::read_to_string(&path).ok().as_deref() != Some(body.as_str()) {
             std::fs::write(&path, &body).unwrap();
@@ -2386,16 +2629,24 @@ mod tests {
     #[test]
     fn validator_accepts_examples_and_rejects_outside_path() {
         for name in ["md-editor.json", "md-viewer.json"] {
-            validate::parse_app_definition(&example(name)).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            validate::parse_app_definition(&example(name))
+                .unwrap_or_else(|e| panic!("{name}: {e:?}"));
         }
         let outside = example("md-viewer.json").replace(
             r#""path": { "state": "current_file" }"#,
             r#""path": "../secret.md""#,
         );
-        assert_ne!(outside, example("md-viewer.json"), "예제의 경로 자리를 바꿨는지 확인");
+        assert_ne!(
+            outside,
+            example("md-viewer.json"),
+            "예제의 경로 자리를 바꿨는지 확인"
+        );
         let error = validate::parse_app_definition(&outside).unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidAppDefinition);
-        assert!(error.details.iter().any(|d| d.contains("고른 폴더 밖")), "{error:?}");
+        assert!(
+            error.details.iter().any(|d| d.contains("고른 폴더 밖")),
+            "{error:?}"
+        );
     }
 
     #[test]
@@ -2428,14 +2679,23 @@ mod tests {
             "image",
             "media",
         ] {
-            assert!(schema.contains(&format!("\"{block}\"")), "스키마에 {block}이 없다");
+            assert!(
+                schema.contains(&format!("\"{block}\"")),
+                "스키마에 {block}이 없다"
+            );
         }
     }
 
     #[test]
     fn web_and_explorer_examples_validate() {
-        for name in ["web-browser.json", "explorer.json", "md-editor.json", "workspace-pas.json"] {
-            validate::parse_app_definition(&example(name)).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        for name in [
+            "web-browser.json",
+            "explorer.json",
+            "md-editor.json",
+            "workspace-pas.json",
+        ] {
+            validate::parse_app_definition(&example(name))
+                .unwrap_or_else(|e| panic!("{name}: {e:?}"));
         }
         let editor = validate::parse_app_definition(&example("md-editor.json")).unwrap();
         let opens = editor.opens.expect("편집기는 md를 연다");
@@ -2454,16 +2714,16 @@ mod tests {
     #[test]
     fn web_view_rules() {
         let browser = example("web-browser.json");
-        rejected(
-            &browser.replace(r#""web": 1"#, r#""files": 1"#),
-            "web 모듈",
-        );
+        rejected(&browser.replace(r#""web": 1"#, r#""files": 1"#), "web 모듈");
         rejected(
             &browser.replace(r#""blocks": 3"#, r#""blocks": 2"#),
             "블록 세트 3판",
         );
         rejected(
-            &browser.replace(r#""url": { "state": "url" }"#, r#""url": "file:///C:/a.html""#),
+            &browser.replace(
+                r#""url": { "state": "url" }"#,
+                r#""url": "file:///C:/a.html""#,
+            ),
             "http://",
         );
         rejected(
@@ -2511,13 +2771,19 @@ mod tests {
             "하나 이상",
         );
         rejected(
-            &editor.replace(r#""permission": "docs", "state""#, r#""permission": "notes", "state""#),
+            &editor.replace(
+                r#""permission": "docs", "state""#,
+                r#""permission": "notes", "state""#,
+            ),
             "선언되지 않은 권한",
         );
         rejected(
-            &editor.replace(r#""state": "current_file" },
-  "ui""#, r#""state": "open_file" },
-  "ui""#),
+            &editor.replace(
+                r#""state": "current_file" },
+  "ui""#,
+                r#""state": "open_file" },
+  "ui""#,
+            ),
             "선언되지 않은 상태 키",
         );
     }
@@ -2544,11 +2810,23 @@ mod tests {
         let definition = validate::parse_app_definition(&five).expect("5판 탐색기");
         assert!(matches!(
             &definition.ui,
-            Block::Explorer { folder: Some(_), on_folder: Some(_), view: Some(_), on_view: Some(_), .. }
+            Block::Explorer {
+                folder: Some(_),
+                on_folder: Some(_),
+                view: Some(_),
+                on_view: Some(_),
+                ..
+            }
         ));
-        rejected(&five.replace(r#""blocks": 5"#, r#""blocks": 4"#), "블록 세트 5판");
         rejected(
-            &five.replace(r#""view": { "state": "view" }"#, r#""view": { "state": "mode" }"#),
+            &five.replace(r#""blocks": 5"#, r#""blocks": 4"#),
+            "블록 세트 5판",
+        );
+        rejected(
+            &five.replace(
+                r#""view": { "state": "view" }"#,
+                r#""view": { "state": "mode" }"#,
+            ),
             "mode",
         );
         assert_eq!(
@@ -2573,7 +2851,7 @@ mod tests {
         assert!(!current.renders(&unknown_module));
         assert_eq!(
             serde_json::to_string(&current).unwrap(),
-            r#"{"blocks":5,"modules":{"agent":2,"connection":1,"files":1,"web":1}}"#
+            r#"{"blocks":6,"modules":{"agent":3,"connection":2,"files":1,"storage":1,"web":1}}"#
         );
         // 4판 쉘(v0.4.x)은 5판 필드를 쓴 탐색기를 받지 않는다.
         let explorer = validate::parse_app_definition(&example("explorer.json")).unwrap();
@@ -2602,7 +2880,8 @@ mod tests {
             }
         );
         let req: CoreRequest =
-            serde_json::from_str(r#"{"op":"web.history","window_id":"x","action":"back"}"#).unwrap();
+            serde_json::from_str(r#"{"op":"web.history","window_id":"x","action":"back"}"#)
+                .unwrap();
         assert!(matches!(
             req,
             CoreRequest::WebHistory {
@@ -2633,14 +2912,18 @@ mod tests {
     #[test]
     fn block_set_four_examples_validate() {
         for name in ["block-gallery.json", "card-board.json"] {
-            validate::parse_app_definition(&example(name)).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            validate::parse_app_definition(&example(name))
+                .unwrap_or_else(|e| panic!("{name}: {e:?}"));
         }
         rejected(
             &example("block-gallery.json").replace(r#""blocks": 4"#, r#""blocks": 3"#),
             "블록 세트 4판",
         );
         rejected(
-            &example("card-board.json").replace(r#""modules": { "connection": 1 }"#, r#""modules": { "files": 1 }"#),
+            &example("card-board.json").replace(
+                r#""modules": { "connection": 1 }"#,
+                r#""modules": { "files": 1 }"#,
+            ),
             "connection 모듈",
         );
     }
@@ -2666,7 +2949,10 @@ mod tests {
                 "/ui/children/1/children/1/fields/3/value",
             ]
         );
-        let actions: Vec<String> = data::ui_actions(&board).into_iter().map(|(pointer, _)| pointer).collect();
+        let actions: Vec<String> = data::ui_actions(&board)
+            .into_iter()
+            .map(|(pointer, _)| pointer)
+            .collect();
         assert_eq!(
             actions,
             vec![
@@ -2691,7 +2977,9 @@ mod tests {
             assert!(json.pointer(&pointer).is_some(), "{pointer}");
         }
         let exprs = data::all_exprs(&board);
-        assert!(exprs.iter().any(|(pointer, _)| pointer == "/sources/detail/path"));
+        assert!(exprs
+            .iter()
+            .any(|(pointer, _)| pointer == "/sources/detail/path"));
         assert!(exprs
             .iter()
             .any(|(pointer, _)| pointer == "/ui/children/1/children/0/end/0/on_click/0/call/path"));
@@ -2710,7 +2998,10 @@ mod tests {
         assert!(validate::valid_request_path("/api/cards"));
         assert!(validate::valid_request_path("/"));
         assert!(validate::valid_request_path("/media/portrait/a%20b.png"));
-        assert!(validate::valid_request_path("/files/a.%2econfig"), "점이 섞인 보통 이름은 받는다");
+        assert!(
+            validate::valid_request_path("/files/a.%2econfig"),
+            "점이 섞인 보통 이름은 받는다"
+        );
         assert!(
             validate::valid_request_path("/api/narrative/narrative%2F_rev2%2Fx.yaml"),
             "점 조각이 없는 인코딩 / 는 식별자로 받는다"
@@ -2749,43 +3040,167 @@ mod tests {
 
     #[test]
     fn block_set_four_rules() {
-        let ok = with_ui(r#"{"type":"list","items":{"expr":"$data.cards.items"}}"#, r#","sources":{"cards":{"kind":"request","permission":"board","path":"/api/items"}}"#);
+        let ok = with_ui(
+            r#"{"type":"list","items":{"expr":"$data.cards.items"}}"#,
+            r#","sources":{"cards":{"kind":"request","permission":"board","path":"/api/items"}}"#,
+        );
         validate::parse_app_definition(&ok).unwrap_or_else(|e| panic!("{e:?}"));
 
-        rejected(&with_ui(r#"{"type":"list","items":{"expr":"$data.cards["}}"#, ""), "식을 읽을 수 없습니다");
-        rejected(&with_ui(r#"{"type":"list","items":{"expr":"$data.cardz.items"}}"#, r#","sources":{"cards":{"kind":"request","permission":"board","path":"/api/items"}}"#), "없는 원천");
-        rejected(&with_ui(r#"{"type":"text","value":"x"}"#, r#","sources":{"cards":{"kind":"request","permission":"board","path":{"expr":"'/api/' & $data.x"}}}"#), "$state만");
-        rejected(&with_ui(r#"{"type":"text","value":{"state":1}}"#, ""), "바인딩 모양");
-        rejected(&with_ui(r#"{"type":"text","value":{"state":"nope"}}"#, ""), "선언되지 않은 상태 키");
-        rejected(&with_ui(r#"{"type":"toolbar","start":[{"type":"list","items":[]}]}"#, ""), "toolbar에는");
-        rejected(&with_ui(r#"{"type":"button","label":"a","icon":"rocket","on_click":{"set_state":"q"}}"#, ""), "없는 아이콘");
-        rejected(&with_ui(r#"{"type":"code_view","value":"a","file":{"permission":"docs","path":"a.json"}}"#, ""), "꼭 하나");
-        rejected(&with_ui(r#"{"type":"code_editor","file":{"permission":"docs","path":"a.json"}}"#, ""), "readwrite");
-        rejected(&with_ui(r#"{"type":"button","label":"a","on_click":[{"call":{"permission":"board","method":"POST","path":"/api/x"}}]}"#, ""), "readwrite");
-        rejected(&with_ui(r#"{"type":"button","label":"a","on_click":[{"call":{"permission":"docs","method":"GET","path":"/api/x"}}]}"#, ""), "connection 권한");
-        rejected(&with_ui(r#"{"type":"button","label":"a","on_click":[{"refresh":["nope"]}]}"#, ""), "없는 원천을 다시");
-        rejected(&with_ui(r#"{"type":"button","label":"a","on_click":[{"set_state":"nope","value":1}]}"#, ""), "선언되지 않은 상태 키");
-        rejected(&with_ui(r#"{"type":"stack","direction":"column","fill":3,"children":[{"type":"text","value":"a"}]}"#, ""), "fill");
-        rejected(&with_ui(r#"{"type":"table","rows":[],"columns":[{"field":"a","label":"A"},{"field":"a","label":"B"}]}"#, ""), "겹칩니다");
-        rejected(&with_ui(r#"{"type":"text","value":"a"}"#, r#","sources":{"Cards":{"kind":"request","permission":"board","path":"/api"}}"#), "원천 이름");
-        rejected(&with_ui(r#"{"type":"text","value":"a"}"#, r#","sources":{"cards":{"kind":"file","permission":"board","path":"a.json"}}"#), "files 권한");
-        rejected(&with_ui(r#"{"type":"text","value":"a"}"#, r#","sources":{"cards":{"kind":"request","permission":"board","path":"api"}}"#), "/로 시작");
-        rejected(&with_ui(r#"{"type":"text","value":"a"}"#, r#","sources":{"cards":{"kind":"file","permission":"docs","path":"../a.json"}}"#), "고른 폴더 밖");
-        rejected(&with_ui(r#"{"type":"text","value":"a"}"#, r#","sources":{"cards":{"kind":"request","permission":"board","path":"/a","refresh_secs":3}}"#), "refresh_secs");
-        rejected(&with_ui(r#"{"type":"file_tree","root":{"permission":"board"},"selected":{"state":"sel"},"on_select":{"set_state":"sel"}}"#, ""), "files 권한");
+        rejected(
+            &with_ui(r#"{"type":"list","items":{"expr":"$data.cards["}}"#, ""),
+            "식을 읽을 수 없습니다",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"list","items":{"expr":"$data.cardz.items"}}"#,
+                r#","sources":{"cards":{"kind":"request","permission":"board","path":"/api/items"}}"#,
+            ),
+            "없는 원천",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"text","value":"x"}"#,
+                r#","sources":{"cards":{"kind":"request","permission":"board","path":{"expr":"'/api/' & $data.x"}}}"#,
+            ),
+            "원천의 값 자리 식은 $state와 $storage만",
+        );
+        rejected(
+            &with_ui(r#"{"type":"text","value":{"state":1}}"#, ""),
+            "바인딩 모양",
+        );
+        rejected(
+            &with_ui(r#"{"type":"text","value":{"state":"nope"}}"#, ""),
+            "선언되지 않은 상태 키",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"toolbar","start":[{"type":"list","items":[]}]}"#,
+                "",
+            ),
+            "toolbar에는",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"button","label":"a","icon":"rocket","on_click":{"set_state":"q"}}"#,
+                "",
+            ),
+            "없는 아이콘",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"code_view","value":"a","file":{"permission":"docs","path":"a.json"}}"#,
+                "",
+            ),
+            "꼭 하나",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"code_editor","file":{"permission":"docs","path":"a.json"}}"#,
+                "",
+            ),
+            "readwrite",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"button","label":"a","on_click":[{"call":{"permission":"board","method":"POST","path":"/api/x"}}]}"#,
+                "",
+            ),
+            "readwrite",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"button","label":"a","on_click":[{"call":{"permission":"docs","method":"GET","path":"/api/x"}}]}"#,
+                "",
+            ),
+            "connection 권한",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"button","label":"a","on_click":[{"refresh":["nope"]}]}"#,
+                "",
+            ),
+            "없는 원천을 다시",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"button","label":"a","on_click":[{"set_state":"nope","value":1}]}"#,
+                "",
+            ),
+            "선언되지 않은 상태 키",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"stack","direction":"column","fill":3,"children":[{"type":"text","value":"a"}]}"#,
+                "",
+            ),
+            "fill",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"table","rows":[],"columns":[{"field":"a","label":"A"},{"field":"a","label":"B"}]}"#,
+                "",
+            ),
+            "겹칩니다",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"text","value":"a"}"#,
+                r#","sources":{"Cards":{"kind":"request","permission":"board","path":"/api"}}"#,
+            ),
+            "원천 이름",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"text","value":"a"}"#,
+                r#","sources":{"cards":{"kind":"file","permission":"board","path":"a.json"}}"#,
+            ),
+            "files 권한",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"text","value":"a"}"#,
+                r#","sources":{"cards":{"kind":"request","permission":"board","path":"api"}}"#,
+            ),
+            "/로 시작",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"text","value":"a"}"#,
+                r#","sources":{"cards":{"kind":"file","permission":"docs","path":"../a.json"}}"#,
+            ),
+            "고른 폴더 밖",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"text","value":"a"}"#,
+                r#","sources":{"cards":{"kind":"request","permission":"board","path":"/a","refresh_secs":3}}"#,
+            ),
+            "refresh_secs",
+        );
+        rejected(
+            &with_ui(
+                r#"{"type":"file_tree","root":{"permission":"board"},"selected":{"state":"sel"},"on_select":{"set_state":"sel"}}"#,
+                "",
+            ),
+            "files 권한",
+        );
 
         // 식은 4판부터다.
         let old = r#"{"id":"t","name":"시험","requires":{"blocks":3},"ui":{"type":"text","value":{"expr":"1"}}}"#;
         rejected(old, "블록 세트 4판");
         // 바인딩이 아닌 리터럴 객체는 그대로 받는다.
-        let literal = with_ui(r##"{"type":"properties","fields":[{"label":"상태","value":{"text":"진행","color":"#315da8"},"format":"badge"}]}"##, "");
+        let literal = with_ui(
+            r##"{"type":"properties","fields":[{"label":"상태","value":{"text":"진행","color":"#315da8"},"format":"badge"}]}"##,
+            "",
+        );
         validate::parse_app_definition(&literal).unwrap_or_else(|e| panic!("{e:?}"));
     }
 
     #[test]
     fn data_messages_round_trip() {
         let act: CoreRequest =
-            serde_json::from_str(r#"{"op":"data.act","window_id":"w","pointer":"/ui/on_click"}"#).unwrap();
+            serde_json::from_str(r#"{"op":"data.act","window_id":"w","pointer":"/ui/on_click"}"#)
+                .unwrap();
         assert_eq!(
             act,
             CoreRequest::DataAct {
@@ -2799,7 +3214,13 @@ mod tests {
             r#"{"op":"data.media","window_id":"w","media":{"permission":"shots","path":"a.png","crop":{"x":0.1,"y":0.2,"w":0.5,"h":0.5}},"max_px":256}"#,
         )
         .unwrap();
-        assert!(matches!(media, CoreRequest::DataMedia { max_px: Some(256), .. }));
+        assert!(matches!(
+            media,
+            CoreRequest::DataMedia {
+                max_px: Some(256),
+                ..
+            }
+        ));
         let event = CoreEvent::DataUpdate {
             window_id: "w".into(),
             view: data::DataView {
@@ -2813,11 +3234,15 @@ mod tests {
                     ("/ui/items".to_string(), data::BindingValue::Loading {}),
                     (
                         "/ui/title".to_string(),
-                        data::BindingValue::Ready { value: JsonValue::String("가".into()) },
+                        data::BindingValue::Ready {
+                            value: JsonValue::String("가".into()),
+                        },
                     ),
                     (
                         "/ui/children/1/items".to_string(),
-                        data::BindingValue::LoginRequired { permission: "shay".into() },
+                        data::BindingValue::LoginRequired {
+                            permission: "shay".into(),
+                        },
                     ),
                 ]
                 .into_iter()
@@ -2839,16 +3264,24 @@ mod tests {
             r#"[{"set_state":"file","value":{"expr":"$item.file"}},{"refresh":[]},{"call":{"permission":"b","method":"DELETE","path":"/x"}}]"#,
         )
         .unwrap();
-        let data::Actions::Many(list) = actions else { panic!() };
+        let data::Actions::Many(list) = actions else {
+            panic!()
+        };
         assert_eq!(list.len(), 3);
         assert!(matches!(list[2], data::Action::Call(_)));
 
         // value를 빼면 $event, null을 적으면 null을 쓴다.
         let clear: data::Actions =
             serde_json::from_str(r#"[{"set_state":"a"},{"set_state":"b","value":null}]"#).unwrap();
-        let data::Actions::Many(list) = clear else { panic!() };
-        let data::Action::SetState(first) = &list[0] else { panic!() };
-        let data::Action::SetState(second) = &list[1] else { panic!() };
+        let data::Actions::Many(list) = clear else {
+            panic!()
+        };
+        let data::Action::SetState(first) = &list[0] else {
+            panic!()
+        };
+        let data::Action::SetState(second) = &list[1] else {
+            panic!()
+        };
         assert_eq!(first.value, None);
         assert_eq!(second.value, Some(data::Binding::Literal(JsonValue::Null)));
         assert_eq!(

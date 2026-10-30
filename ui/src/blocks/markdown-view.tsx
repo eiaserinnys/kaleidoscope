@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Block } from "../contract/contract";
+import type { Block, FileRef } from "../contract/contract";
 import { Notice, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
@@ -8,8 +8,14 @@ import { useShareDescriber } from "../share/visible";
 import { MarkdownText } from "./markdown-text";
 
 type MarkdownViewBlockData = Extract<Block, { type: "markdown_view" }>;
+type FileMarkdownViewBlockData = MarkdownViewBlockData & { file: FileRef };
 
 export function MarkdownViewBlock({ block, context }: { block: MarkdownViewBlockData; context: BlockContext }) {
+  if (!block.file) return null;
+  return <FileMarkdownViewBlock block={{ ...block, file: block.file }} context={context} />;
+}
+
+function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBlockData; context: BlockContext }) {
   const path = resolveFilePath(block.file, context.window);
   const grantRoot = context.snapshot.device.grants.find(
     (item) => item.window_id === context.window.id && item.permission === block.file.permission,

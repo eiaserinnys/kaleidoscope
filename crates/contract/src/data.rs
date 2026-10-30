@@ -17,6 +17,7 @@
 //! - 식이 보는 것(변수). 입력 문서(`$`)는 비어 있다.
 //!   - `$state`: 그 창의 상태 객체(앱 정의 `state`의 키들).
 //!   - `$data`: 원천 이름 → 받은 값. 아직 값이 없는 원천은 없다(undefined).
+//!   - `$storage`: 선언된 저장 항목 id → JSON 값 또는 md 문자열. `$storage_meta.bucket_id`는 현재 계정 × 앱 칸 id다.
 //!   - `$event`, `$item`: 동작 안에서만. `$event`는 블록 이벤트의 값(고른 항목의 `key`, 입력한 글, 켜고 끈 값 등),
 //!     `$item`은 목록, 표, 트리, 흐름에서 그 항목 전체다.
 //! - 원천의 값 자리(`path`, `query` 등)에 쓴 식은 `$state`만 본다(원천끼리 기대지 않는다).
@@ -35,7 +36,7 @@
 //! 둘째 자식이 `list`면 그 `items`는 `/ui/children/1/items`다. 동작 자리도 같은 규칙이다(`/ui/children/1/on_select`).
 //! 화면은 블록 트리를 그리며 같은 규칙으로 자리를 만든다. 열쇠는 앱 정의의 JSON 필드 이름과 배열 순서 그대로다
 //! (`tabs`의 `/tabs/0/child`, `toolbar`의 `/start/0`, `properties`의 `/fields/2/value`, `button`의 `/confirm/body`).
-//! [`ui_bindings`]와 [`ui_actions`]가 이 규칙의 정본이다.
+//! `set_storage` 값은 `/ui/.../set_storage/value` 자리다. [`ui_bindings`]와 [`ui_actions`]가 이 규칙의 정본이다.
 //!
 //! # 원천의 상태와 값의 상태
 //! - 코어는 창이 이어지면(`data.attach`) 입력이 갖춰진 원천을 받는다. 입력(식이나 상태로 정한 `path` 등)이 null이면
@@ -275,6 +276,30 @@ pub enum Action {
     SetState(SetStateAction),
     Refresh(RefreshAction),
     Call(CallAction),
+    SetStorage(SetStorageAction),
+}
+
+/// 저장소 항목 하나에 값을 쓴다. 예: `{ "set_storage": { "entry": "selection", "value": { "expr": "$event" } } }`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct SetStorageAction {
+    pub set_storage: SetStorageSpec,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct SetStorageSpec {
+    pub entry: String,
+    /// 빠졌으면 `$event`, 적혀 있으면 null도 값이다.
+    #[serde(
+        default,
+        deserialize_with = "present_binding",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[ts(optional)]
+    pub value: Option<Binding>,
 }
 
 /// 창 상태 키 하나에 값을 쓴다. `value`를 빼면 `$event`를 쓴다. `"value": null`은 null을 쓴다(상태 비우기).
@@ -570,7 +595,9 @@ pub enum SourceStatus {
 #[serde(tag = "status", rename_all = "snake_case")]
 #[ts(export, export_to = "contract.ts")]
 pub enum BindingValue {
-    Ready { value: JsonValue },
+    Ready {
+        value: JsonValue,
+    },
     /// 기대는 원천을 처음 받는 중이다. 블록은 불러오는 모습을 보인다.
     Loading {},
     /// 기대는 원천을 받지 못했거나 식이 실패했다. 블록은 오류와(`retry`가 있으면) 다시 받기를 보인다.
@@ -581,7 +608,9 @@ pub enum BindingValue {
         retry: Vec<String>,
     },
     /// 기대는 원천의 연결에 로그인해야 한다. 블록은 로그인 단추를 보이고 `connection.login`을 부른다.
-    LoginRequired { permission: String },
+    LoginRequired {
+        permission: String,
+    },
 }
 
 /// `data.media` 응답의 내용.
@@ -805,6 +834,25 @@ pub fn all_exprs(definition: &AppDefinition) -> Vec<(String, &str)> {
             }
         }
     }
+    if let Some(agent) = &definition.agent {
+        for (field, binding) in [
+            ("namespace", &agent.namespace),
+            ("profile", &agent.profile),
+            ("collection", &agent.collection),
+            ("model_order", &agent.model_order),
+            ("selected_model", &agent.selected_model),
+            ("title_template", &agent.title_template),
+            (
+                "initial_instruction_template",
+                &agent.initial_instruction_template,
+            ),
+            ("instructions_template", &agent.instructions_template),
+        ] {
+            if let Binding::Expr(expr) = binding {
+                out.push((format!("/agent/{field}"), expr.expr.as_str()));
+            }
+        }
+    }
     out
 }
 
@@ -842,6 +890,12 @@ pub fn action_bindings(action: &Action) -> Vec<(String, &Binding)> {
             }
             out
         }
+        Action::SetStorage(set_storage) => set_storage
+            .set_storage
+            .value
+            .iter()
+            .map(|value| ("set_storage/value".to_string(), value))
+            .collect(),
     }
 }
 
@@ -861,7 +915,9 @@ pub fn data_refs(expr: &str) -> Vec<String> {
             let start = index + needle.len();
             let mut end = start;
             while end < bytes.len()
-                && (bytes[end].is_ascii_lowercase() || bytes[end].is_ascii_digit() || bytes[end] == b'_')
+                && (bytes[end].is_ascii_lowercase()
+                    || bytes[end].is_ascii_digit()
+                    || bytes[end] == b'_')
             {
                 end += 1;
             }
@@ -877,6 +933,64 @@ pub fn data_refs(expr: &str) -> Vec<String> {
         }
     }
     out
+}
+
+/// 식이 `$storage.항목_id`로 읽는 저장 항목 id들(겹치지 않게, 처음 나온 순서).
+pub fn storage_refs(expr: &str) -> Vec<String> {
+    refs_after(expr, "$storage.")
+}
+
+/// `$storage_meta.` 뒤에서 읽는 필드들. 현재 허용되는 필드는 `bucket_id`뿐이다.
+pub fn storage_meta_refs(expr: &str) -> Vec<String> {
+    refs_after(expr, "$storage_meta.")
+}
+
+fn refs_after(expr: &str, prefix: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let bytes = expr.as_bytes();
+    let needle = prefix.as_bytes();
+    let mut index = 0;
+    while index + needle.len() <= bytes.len() {
+        if &bytes[index..index + needle.len()] == needle {
+            let start = index + needle.len();
+            let mut end = start;
+            while end < bytes.len()
+                && (bytes[end].is_ascii_lowercase()
+                    || bytes[end].is_ascii_digit()
+                    || bytes[end] == b'_')
+            {
+                end += 1;
+            }
+            if end > start {
+                let name = &expr[start..end];
+                if !out.iter().any(|known| known == name) {
+                    out.push(name.to_string());
+                }
+            }
+            index = end.max(start);
+        } else {
+            index += 1;
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod storage_reference_tests {
+    use super::{storage_meta_refs, storage_refs};
+
+    #[test]
+    fn storage_references_are_deduplicated_and_ignore_invalid_unicode_names() {
+        assert_eq!(
+            storage_refs("$storage.profile & $storage.profile & $storage_meta.bucket_id"),
+            vec!["profile"]
+        );
+        assert_eq!(
+            storage_meta_refs("$storage_meta.bucket_id"),
+            vec!["bucket_id"]
+        );
+        assert!(storage_refs("$storage.한글").is_empty());
+    }
 }
 
 /// 원천 이름의 규칙. 소문자로 시작하고 소문자, 숫자, `_`로 1~32자.

@@ -5,6 +5,7 @@ use kaleidoscope_contract::{
     registry::{LayoutDataError, LAYOUT_DATA_ERRORS_MAX},
 };
 use kaleidoscope_data::{Env, Step};
+use std::collections::BTreeMap;
 
 pub(crate) fn act(
     inner: &Arc<Inner>,
@@ -21,6 +22,8 @@ pub(crate) fn act(
             .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?
     };
     for index in 0..len {
+        let storage = BTreeMap::new();
+        let storage_meta = BTreeMap::new();
         let step = {
             let windows = inner.data_runtimes.windows.lock().unwrap();
             let runtime = windows
@@ -34,6 +37,8 @@ pub(crate) fn act(
                     &Env {
                         state: &runtime.state,
                         data: &runtime.data,
+                        storage: &storage,
+                        storage_meta: &storage_meta,
                         event: &event,
                         item: &item,
                     },
@@ -46,6 +51,9 @@ pub(crate) fn act(
                     inner: Arc::clone(inner),
                 }
                 .set_state_key(window_id, key, value)?;
+            }
+            Step::SetStorage { .. } => {
+                return Err(error::make(ErrorCode::Unavailable));
             }
             Step::Refresh { names } => refresh(inner, window_id, &names, true)?,
             Step::Call {
