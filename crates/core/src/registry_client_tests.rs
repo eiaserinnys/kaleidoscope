@@ -54,7 +54,7 @@ fn events_send_supported_header() {
         .unwrap();
     let supported: kaleidoscope_contract::Supported =
         serde_json::from_str(header.split_once(": ").unwrap().1).unwrap();
-    assert_eq!(supported.blocks, 6);
+    assert_eq!(supported.blocks, kaleidoscope_contract::BLOCK_SET_VERSION);
     assert_eq!(supported.modules.get("storage"), Some(&2));
     assert_eq!(supported.modules.get("agent"), Some(&2));
     assert!(request.contains(&format!("{REGISTRY_HEADER}: {REGISTRY_VERSION}")));
