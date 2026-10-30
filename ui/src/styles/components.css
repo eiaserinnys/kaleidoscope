@@ -199,6 +199,16 @@
   white-space: nowrap;
 }
 
+.ks-menu-item.has-description {
+  white-space: normal;
+}
+
+.ks-menu-item-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
 .ks-menu-item:hover:not(:disabled),
 .ks-menu-item:focus-visible:not(:disabled) {
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
@@ -216,6 +226,34 @@
 .ks-menu-item-label {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.ks-menu-item-description {
+  color: var(--ks-color-muted);
+  font-size: var(--ks-type-meta);
+  line-height: var(--ks-line-meta);
+}
+
+.ks-menu-group-heading {
+  color: var(--ks-color-muted);
+  font-size: var(--ks-type-meta);
+  line-height: var(--ks-line-meta);
+  padding: var(--ks-space-1) var(--ks-space-3);
+}
+
+.ks-select-group-label {
+  flex: 0 0 auto;
+  margin-inline-start: var(--ks-space-2);
+  color: var(--ks-color-muted);
+  font-size: var(--ks-type-meta);
+  line-height: var(--ks-line-meta);
+}
+
+.ks-select-choice-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ks-menu-check {

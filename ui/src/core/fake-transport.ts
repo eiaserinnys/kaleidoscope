@@ -2,6 +2,7 @@ import type {
   AppDefinition,
   AppWindow,
   ConversationItem, ConversationModel, ConversationThread, ConversationUpload,
+  ConversationProfile, ConversationStart,
   CoreError,
   CoreEvent,
   CoreReply,
@@ -40,6 +41,8 @@ export interface FakeConversationSeed {
   older?: ConversationItem[];
   olderPages?: ConversationItem[][];
   models: ConversationModel[];
+  profiles?: ConversationProfile[];
+  start?: ConversationStart;
   loginRequired?: boolean;
   conflict?: boolean;
   delayMs?: number;
@@ -337,7 +340,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         if (conversation.getError) return fail("server", conversation.getError);
         if (conversation.draft) emit({ event: "conversation.draft", window_id: request.window_id, ...conversation.draft });
         watchConversation();
-        return { op: "conversation.get", thread: clone(conversation.thread), items: clone(conversation.items), cursor: "1", next_before: conversationOlderPages.length ? "older-0" : undefined, models: clone(conversation.models), profiles: [], start: { profile: "", model: null } };
+        return { op: "conversation.get", thread: clone(conversation.thread), items: clone(conversation.items), cursor: "1", next_before: conversationOlderPages.length ? "older-0" : undefined, models: clone(conversation.models), profiles: clone(conversation.profiles ?? []), start: clone(conversation.start ?? { profile: conversation.profiles?.find((profile) => profile.available)?.id ?? "", model: conversation.models.find((model) => model.available)?.id ?? null }) };
       }
       case "conversation.history": {
         if (!conversation) return fail("unavailable", "대화를 사용할 수 없습니다");
@@ -351,9 +354,24 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         if (!conversationLoggedIn) return fail("login_required", "로그인이 필요합니다");
         const model = conversation.models.find((item) => item.id === request.model && item.available);
         if (!model) return fail("invalid_request", "고를 수 없는 모델입니다");
-        conversation.thread ??= { id: "fake-thread", external: { namespace: "fake", key: request.window_id }, title: "대화", model: { id: model.id, label: model.label }, created_at: new Date().toISOString(), archived: false };
+        conversation.thread ??= { id: "fake-thread", external: { namespace: "fake", key: request.window_id }, title: "대화", model: { id: model.id, label: model.label, group: model.group }, profile: conversation.profiles?.find((profile) => profile.id === request.profile) ? { id: request.profile!, label: conversation.profiles.find((profile) => profile.id === request.profile)!.label } : undefined, created_at: new Date().toISOString(), archived: false };
         watchConversation();
         return { op: "conversation.create", thread: clone(conversation.thread) };
+      }
+      case "conversation.switch": {
+        if (!conversation?.thread) return fail("not_found", "대화가 없습니다");
+        if (conversation.delayMs) await delay(conversation.delayMs);
+        if (!conversationLoggedIn) return fail("login_required", "로그인이 필요합니다");
+        const model = request.model ? conversation.models.find((item) => item.id === request.model && item.available) : conversation.models.find((item) => item.id === conversation.thread?.model.id);
+        if (request.model && !model) return fail("invalid_request", "고를 수 없는 모델입니다");
+        const profile = request.profile ? conversation.profiles?.find((item) => item.id === request.profile && item.available) : conversation.profiles?.find((item) => item.id === conversation.thread?.profile?.id);
+        if (request.profile && !profile) return fail("invalid_request", "고를 수 없는 프로필입니다");
+        conversation.thread = {
+          ...conversation.thread,
+          ...(model ? { model: { id: model.id, label: model.label, group: model.group } } : {}),
+          ...(profile ? { profile: { id: profile.id, label: profile.label } } : {}),
+        };
+        return { op: "conversation.switch", thread: clone(conversation.thread), notices: [] };
       }
       case "conversation.send": {
         if (!conversation?.thread) return fail("not_found", "대화가 없습니다");
