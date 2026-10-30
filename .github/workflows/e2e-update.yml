@@ -77,9 +77,28 @@ jobs:
           New-Item -ItemType Directory -Force $out | Out-Null
           $manifest = @{ version = '0.0.2'; notes = 'E2E'; pub_date = '2026-01-01T00:00:00Z'; url = 'http://127.0.0.1:8719/new.exe'; signature = (Get-Content -Raw (Join-Path $testDir 'old.exe.sig')).Trim() }
           $manifest | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $testDir 'update.json')
-          $server = Start-Process python -ArgumentList @('-m', 'http.server', '8719', '--bind', '127.0.0.1') -WorkingDirectory $testDir -PassThru -WindowStyle Hidden
           $app = $null
           $exe = $null
+          function Read-Events([string]$path, [switch]$Final) {
+            for ($attempt = 0; $attempt -lt 2; $attempt++) {
+              $events = @()
+              $skipped = 0
+              foreach ($line in (Get-Content -LiteralPath $path)) {
+                try { $events += ConvertFrom-Json -InputObject $line -ErrorAction Stop }
+                catch { $skipped++ }
+              }
+              if (-not $Final -or $skipped -eq 0 -or $attempt -eq 1) { return $events }
+              Start-Sleep -Milliseconds 200
+            }
+          }
+          $fixture = Join-Path $env:RUNNER_TEMP 'partial-events.jsonl'
+          @('{"step":"complete"}', ('{"step":"part' + [char]0)) | Set-Content -Encoding utf8 $fixture
+          $parsed = @(Read-Events $fixture)
+          if ($parsed.Count -ne 1 -or $parsed[0].step -ne 'complete') { throw '부분 기록 읽기 검사 실패' }
+          $parsed = @(Read-Events $fixture -Final)
+          if ($parsed.Count -ne 1 -or $parsed[0].step -ne 'complete') { throw '최종 기록 읽기 검사 실패' }
+          Remove-Item $fixture
+          $server = Start-Process python -ArgumentList @('-m', 'http.server', '8719', '--bind', '127.0.0.1') -WorkingDirectory $testDir -PassThru -WindowStyle Hidden
           function Write-Diagnostics([string]$phase) {
             try {
               $processes = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'kaleidoscope|trustedinstaller' } | ForEach-Object {
@@ -110,7 +129,7 @@ jobs:
             $app = Start-Process $exe -ArgumentList @('--e2e-scenario=update-reject', "--e2e-out=$rejectOut") -PassThru
             if (-not $app.WaitForExit(110000)) { throw '서명 거부 시험 시간 초과' }
             if ($app.ExitCode -ne 0) { throw "서명 거부 시험 실패: $($app.ExitCode)" }
-            $rejected = Get-Content (Join-Path $rejectOut 'events.jsonl') | ForEach-Object { $_ | ConvertFrom-Json }
+            $rejected = @(Read-Events (Join-Path $rejectOut 'events.jsonl') -Final)
             if (-not ($rejected | Where-Object { $_.step -eq 'failed' -and $_.data.version -eq '0.0.2' -and $_.data.reason -eq '서명이 맞지 않아 깔지 않았습니다' })) { throw '서명 거부 기록 없음' }
             if ((Get-Item $exe).VersionInfo.ProductVersion -ne '0.0.1') { throw '거부 후 설치 판 변경됨' }
             $manifest.signature = (Get-Content -Raw (Join-Path $testDir 'new.exe.sig')).Trim()
@@ -135,11 +154,16 @@ jobs:
               }
               $eventsPath = Join-Path $updateOut 'events.jsonl'
               if (Test-Path $eventsPath) {
-                $events = Get-Content $eventsPath | ForEach-Object { $_ | ConvertFrom-Json }
+                $events = @(Read-Events $eventsPath)
                 if ($events | Where-Object { $_.step -eq 'error' }) { throw '업데이트 시나리오 오류, events.jsonl 확인' }
                 if ($events | Where-Object { $_.step -eq 'complete' -and $_.data.version -eq '0.0.2' }) { $complete = $true; break }
               }
               Start-Sleep -Milliseconds 200
+            }
+            if (Test-Path $eventsPath) {
+              $events = @(Read-Events $eventsPath -Final)
+              if ($events | Where-Object { $_.step -eq 'error' }) { throw '업데이트 시나리오 오류, events.jsonl 확인' }
+              $complete = [bool]($events | Where-Object { $_.step -eq 'complete' -and $_.data.version -eq '0.0.2' })
             }
             if (-not $complete -or -not $captured) { throw '업데이트 완료 또는 화면 캡처 시간 초과' }
             if ((Get-Item $exe).VersionInfo.ProductVersion -ne '0.0.2') { throw 'B 설치 판 불일치' }
