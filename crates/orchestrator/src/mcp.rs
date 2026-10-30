@@ -211,12 +211,17 @@ impl McpServer {
                     Err(error) => return Ok(json_error(error)),
                 };
                 if workspace_accessible {
-                    self.state.send_event_with_target(
+                    let account_id = match self.state.mcp_account_id() {
+                        Ok(account_id) => account_id,
+                        Err(error) => return Ok(json_error(error)),
+                    };
+                    self.state.send_event_with_target_for_account(
                         DeviceEvent::AppOpen {
                             app_id: args.app_id.clone(),
                             workspace_id: args.workspace_id.clone(),
                         },
                         target.as_ref().map(|target| target.id.clone()),
+                        &account_id,
                     );
                 }
                 let sent = self.state.open_sent_to(

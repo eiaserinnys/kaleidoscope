@@ -34,6 +34,7 @@ impl AppState {
         };
         let event_workspace_id = workspace_accessible.then(|| workspace_id.clone()).flatten();
         let open_requested = open && workspace_accessible;
+        let account_id = self.mcp_account_id()?;
         let open_target = if open_requested {
             self.choose_open_target(workspace_id.as_deref())?
         } else {
@@ -101,22 +102,25 @@ impl AppState {
         };
         if !result.1 {
             let defer_open = open_requested && !result.2.is_empty();
-            self.send_event_with_target(
-                DeviceEvent::AppPublished {
-                    app: result.0.clone(),
-                    open: open_requested && !defer_open,
-                    workspace_id: if defer_open {
-                        None
-                    } else {
-                        event_workspace_id.clone()
-                    },
-                },
-                if defer_open {
+            let event = DeviceEvent::AppPublished {
+                app: result.0.clone(),
+                open: open_requested && !defer_open,
+                workspace_id: if defer_open {
                     None
                 } else {
-                    open_target.as_ref().map(|target| target.id.clone())
+                    event_workspace_id.clone()
                 },
-            );
+            };
+            let target = if defer_open {
+                None
+            } else {
+                open_target.as_ref().map(|target| target.id.clone())
+            };
+            if open_requested {
+                self.send_event_with_target_for_account(event, target, &account_id);
+            } else {
+                self.send_event_with_target(event, target);
+            }
             if !result.2.is_empty() {
                 let mut accounts = HashMap::<String, Vec<AppWindow>>::new();
                 {
@@ -143,21 +147,23 @@ impl AppState {
                 }
             }
             if defer_open {
-                self.send_event_with_target(
+                self.send_event_with_target_for_account(
                     DeviceEvent::AppOpen {
                         app_id: result.0.app.id.clone(),
                         workspace_id: event_workspace_id,
                     },
                     open_target.as_ref().map(|target| target.id.clone()),
+                    &account_id,
                 );
             }
         } else if open_requested {
-            self.send_event_with_target(
+            self.send_event_with_target_for_account(
                 DeviceEvent::AppOpen {
                     app_id: result.0.app.id.clone(),
                     workspace_id: event_workspace_id,
                 },
                 open_target.as_ref().map(|target| target.id.clone()),
+                &account_id,
             );
         }
         Ok((result.0, result.1, open_target))
@@ -172,6 +178,19 @@ impl AppState {
             event,
             open_target,
             account_id: None,
+        });
+    }
+
+    pub(crate) fn send_event_with_target_for_account(
+        &self,
+        event: DeviceEvent,
+        open_target: Option<String>,
+        account_id: &str,
+    ) {
+        let _ = self.0.events.send(Broadcast {
+            event,
+            open_target,
+            account_id: Some(account_id.to_string()),
         });
     }
 

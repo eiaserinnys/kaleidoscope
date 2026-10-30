@@ -132,6 +132,9 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
                  base_url TEXT NOT NULL,writable INTEGER NOT NULL,paths TEXT NOT NULL DEFAULT '[]',
                  headers TEXT NOT NULL DEFAULT '{}',issuer TEXT,scopes TEXT,resource TEXT,
                  description TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,PRIMARY KEY(account_id,name)
+             );
+             CREATE TABLE legacy_workspace_owners (
+                 workspace_id TEXT PRIMARY KEY,account_id TEXT NOT NULL REFERENCES accounts(id)
              );",
         )?;
         tx.execute(

@@ -1,6 +1,8 @@
 use super::*;
 use kaleidoscope_contract::registry::DeviceLayout;
 
+const LEGACY_APP: &str = include_str!("../../../examples/workspace-pas.json");
+
 #[tokio::test]
 async fn open_counts_connected_devices_with_the_requested_workspace() {
     use kaleidoscope_contract::Supported;
@@ -83,6 +85,67 @@ async fn open_counts_connected_devices_with_the_requested_workspace() {
             .unwrap(),
     );
     assert_eq!(targeted["open_sent_to"], 1);
+}
+
+#[tokio::test]
+async fn app_open_and_opening_upload_are_scoped_away_from_other_accounts_legacy_shells() {
+    let state = AppState::in_memory("secret");
+    let owner_account = state.mcp_account_id().unwrap();
+    let second_account = Uuid::new_v4().to_string();
+    {
+        let db = state.lock_db().unwrap();
+        db.execute(
+            "INSERT INTO accounts(id,display_name,created_at) VALUES(?1,'Second','now')",
+            [&second_account],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES('owner-old','Owner PC',?1,'owner','now'),('second-old','Second PC',?2,'second','now')",
+            params![owner_account, second_account],
+        )
+        .unwrap();
+    }
+    let _owner = state
+        .stream_with_registry("owner-old".into(), None, 0)
+        .unwrap();
+    let _second = state
+        .stream_with_registry("second-old".into(), None, 0)
+        .unwrap();
+    let mut events = state.0.events.subscribe();
+    let server = McpServer::new(state.clone());
+
+    server
+        .upload_app(Parameters(UploadArgs {
+            definition: serde_json::from_str(LEGACY_APP).unwrap(),
+            open: true,
+            workspace_id: None,
+        }))
+        .await
+        .unwrap();
+    let app = state.app("workspace-pas", None).unwrap().unwrap();
+    let published = events.try_recv().unwrap();
+    assert!(matches!(
+        state.event_for_broadcast("owner-old", published.clone()),
+        Some(DeviceEvent::AppPublished { app: row, open: true, .. }) if row.app.id == app.app.id
+    ));
+    assert!(matches!(
+        state.event_for_broadcast("second-old", published),
+        Some(DeviceEvent::AppPublished { app: row, open: false, workspace_id: None }) if row.app.id == app.app.id
+    ));
+
+    server
+        .open_app(Parameters(AppIdArgs {
+            app_id: app.app.id.clone(),
+            workspace_id: None,
+        }))
+        .await
+        .unwrap();
+    let opened = events.try_recv().unwrap();
+    assert!(matches!(
+        state.event_for_broadcast("owner-old", opened.clone()),
+        Some(DeviceEvent::AppOpen { app_id, workspace_id: None }) if app_id == app.app.id
+    ));
+    assert!(state.event_for_broadcast("second-old", opened).is_none());
 }
 
 #[tokio::test]

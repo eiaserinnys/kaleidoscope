@@ -110,8 +110,15 @@ impl AppState {
         device_id: &str,
         layout: &DeviceLayout,
     ) -> Result<(), CoreError> {
-        let db = self.lock_db()?;
-        let account_id: String = db
+        let legacy_shell = !self
+            .0
+            .layout_sync_devices
+            .lock()
+            .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+            .contains(device_id);
+        let mut db = self.lock_db()?;
+        let tx = db.transaction().map_err(db_error)?;
+        let account_id: String = tx
             .query_row(
                 "SELECT account_id FROM devices WHERE id=?1 AND revoked_at IS NULL",
                 [device_id],
@@ -128,12 +135,41 @@ impl AppState {
                 "window" => "SELECT EXISTS(SELECT 1 FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.id=?1 AND w.account_id=?2)",
                 _ => return Err(server_error("배치 표를 읽을 수 없습니다.")),
             };
-            db.query_row(sql, params![id, account_id], |row| row.get(0))
+            tx.query_row(sql, params![id, account_id], |row| row.get(0))
                 .map_err(db_error)
         };
         let mut workspace_ids = HashSet::new();
         for item in &layout.workspaces {
-            if owns("workspace", &item.id)? {
+            let canonical_owner: Option<String> = tx
+                .query_row(
+                    "SELECT account_id FROM workspaces WHERE id=?1",
+                    [&item.id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(db_error)?;
+            let legacy_owner: Option<String> = tx
+                .query_row(
+                    "SELECT account_id FROM legacy_workspace_owners WHERE workspace_id=?1",
+                    [&item.id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(db_error)?;
+            let owned = match (canonical_owner, legacy_owner) {
+                (Some(owner), _) => owner == account_id,
+                (None, Some(owner)) => owner == account_id,
+                (None, None) if legacy_shell => {
+                    tx.execute(
+                        "INSERT INTO legacy_workspace_owners(workspace_id,account_id) VALUES(?1,?2)",
+                        params![item.id, account_id],
+                    )
+                    .map_err(db_error)?;
+                    true
+                }
+                (None, None) => false,
+            };
+            if owned {
                 workspace_ids.insert(item.id.clone());
             }
         }
@@ -184,7 +220,7 @@ impl AppState {
         let raw = serde_json::to_string(&safe_layout)
             .map_err(|_| server_error("배치를 저장할 수 없습니다."))?;
         let now = timestamp();
-        let previous: Option<String> = db
+        let previous: Option<String> = tx
             .query_row(
                 "SELECT layout FROM device_layouts WHERE device_id=?1",
                 [device_id],
@@ -201,17 +237,19 @@ impl AppState {
                     || previous.active_desktop_ids != safe_layout.active_desktop_ids
                     || previous.folders != safe_layout.folders
             });
-        db.execute(
+        tx.execute(
             "INSERT INTO device_layouts(device_id,layout,reported_at) VALUES(?1,?2,?3) ON CONFLICT(device_id) DO UPDATE SET layout=excluded.layout,reported_at=excluded.reported_at",
             params![device_id, raw, now],
         ).map_err(db_error)?;
         if active {
-            db.execute(
+            tx.execute(
                 "UPDATE devices SET last_active_at=?2 WHERE id=?1 AND revoked_at IS NULL",
                 params![device_id, now],
             )
             .map_err(db_error)?;
         }
+        tx.commit().map_err(db_error)?;
+        drop(db);
         self.0
             .device_workspaces
             .lock()
@@ -269,9 +307,18 @@ impl AppState {
         device_id: &str,
         broadcast: Broadcast,
     ) -> Option<DeviceEvent> {
+        let mut event = broadcast.event;
         if let Some(account_id) = broadcast.account_id.as_deref() {
             if self.device_account_id(device_id).ok().as_deref() != Some(account_id) {
-                return None;
+                event = match event {
+                    DeviceEvent::AppPublished { app, .. } => DeviceEvent::AppPublished {
+                        app,
+                        open: false,
+                        workspace_id: None,
+                    },
+                    DeviceEvent::AppOpen { .. } => return None,
+                    _ => return None,
+                };
             }
         }
         let syncing = self
@@ -280,7 +327,6 @@ impl AppState {
             .lock()
             .ok()
             .is_some_and(|devices| devices.contains(device_id));
-        let event = broadcast.event;
         if matches!(
             event,
             DeviceEvent::LayoutSnapshot { .. } | DeviceEvent::LayoutChanged { .. }

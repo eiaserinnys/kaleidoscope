@@ -211,7 +211,14 @@ impl AppState {
         let db = self.lock_db()?;
         let owned: bool = db
             .query_row(
-                "SELECT EXISTS(SELECT 1 FROM workspaces w JOIN devices d ON d.account_id=w.account_id WHERE d.id=?1 AND w.id=?2)",
+                "SELECT EXISTS(
+                     SELECT 1 FROM devices d JOIN workspaces w ON w.account_id=d.account_id
+                     WHERE d.id=?1 AND w.id=?2
+                 ) OR EXISTS(
+                     SELECT 1 FROM devices d JOIN legacy_workspace_owners o ON o.account_id=d.account_id
+                     WHERE d.id=?1 AND o.workspace_id=?2
+                       AND NOT EXISTS(SELECT 1 FROM workspaces w WHERE w.id=?2)
+                 )",
                 params![device_id, workspace_id],
                 |row| row.get(0),
             )
