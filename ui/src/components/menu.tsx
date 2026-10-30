@@ -1,8 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-export type MenuEntry = MenuItem | MenuSeparator;
-
 export interface MenuItem {
   type?: "item";
   id: string;
@@ -11,12 +9,21 @@ export interface MenuItem {
   disabled?: boolean;
   danger?: boolean;
   checked?: boolean;
+  description?: string;
+}
+
+export interface MenuHeading {
+  id: string;
+  type: "heading";
+  label: string;
 }
 
 export interface MenuSeparator {
   id: string;
   type: "separator";
 }
+
+export type MenuEntry = MenuItem | MenuSeparator | MenuHeading;
 
 export interface MenuProps {
   anchor: HTMLElement;
@@ -106,10 +113,12 @@ export function Menu({ anchor, items, onClose }: MenuProps) {
     >
       {items.map((item) => item.type === "separator" ? (
         <div aria-orientation="horizontal" className="ks-menu-separator" key={item.id} role="separator" />
+      ) : item.type === "heading" ? (
+        <div className="ks-menu-group-heading" key={item.id} role="presentation">{item.label}</div>
       ) : (
         <button
           aria-current={item.checked ? "true" : undefined}
-          className={`ks-menu-item${item.danger ? " ks-menu-item-danger" : ""}`}
+          className={`ks-menu-item${item.danger ? " ks-menu-item-danger" : ""}${item.description ? " has-description" : ""}`}
           disabled={item.disabled}
           key={item.id}
           onClick={() => {
@@ -124,7 +133,7 @@ export function Menu({ anchor, items, onClose }: MenuProps) {
           role="menuitem"
           type="button"
         >
-          <span className="ks-menu-item-label">{item.label}</span>
+          <span className="ks-menu-item-copy"><span className="ks-menu-item-label">{item.label}</span>{item.description ? <span className="ks-menu-item-description">{item.description}</span> : null}</span>
           {item.checked ? <span aria-hidden="true" className="ks-menu-check">✓</span> : null}
         </button>
       ))}

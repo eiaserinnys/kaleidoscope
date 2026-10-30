@@ -189,10 +189,16 @@ const fakeTransport = createFakeTransport({
   media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone },
   folder: { root_path: "/fake/docs", root_name: "문서" },
   conversation: conversationMode || pasMode ? {
-    thread: conversationMode === "start" || conversationMode === "login-start" || pasMode === "empty" ? null : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "argon", label: "Argon" }, created_at: timestamp, archived: false },
+    thread: conversationMode === "start" || conversationMode === "login-start" || pasMode === "empty" ? null : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false },
     items: [{ id: "1", kind: "assistant", text: "기존 기록", at: timestamp, attachments: [] }],
     olderPages: [[{ id: "0", kind: "user", text: "이전 기록", at: timestamp, attachments: [] }], [{ id: "older", kind: "assistant", text: "더 이전 기록", at: timestamp, attachments: [] }]],
-    models: [{ id: "argon", label: "Argon", available: true }, { id: "disabled", label: "Sol", available: false, reason: "사용 불가" }],
+    profiles: [{ id: "profile-a", label: "서소영", available: true }, { id: "profile-b", label: "키키", available: true }],
+    start: { profile: "profile-a", model: "sol" },
+    models: [
+      { id: "argon", label: "Argon", available: false, reason: "한도 거부 중", reason_code: "limit_rejected", resets_at: new Date(2026, 9, 31, 7, 6).toISOString(), group: { id: "eiaserinnys", label: "eiaserinnys" } },
+      { id: "sol", label: "Sol", available: true, group: { id: "eiaserinnys", label: "eiaserinnys" } },
+      { id: "n1:eias-linegames:argon", label: "Argon", available: true, group: { id: "eias-linegames", label: "eias-linegames" } },
+    ],
     loginRequired: conversationMode === "login" || conversationMode === "login-start", conflict: conversationMode === "conflict", delayMs: pasMode === "loading" ? 5000 : conversationMode ? 350 : 0,
     getError: pasMode === "load-error" ? "작업 PAS를 불러오지 못했습니다" : undefined,
     sendError: pasMode === "send-error" ? "메시지를 보내지 못했습니다" : undefined,

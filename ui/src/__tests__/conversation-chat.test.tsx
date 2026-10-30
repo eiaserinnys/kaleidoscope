@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatComposer } from "../blocks/chat-composer";
 import { ChatHistory } from "../blocks/chat-history";
 import { HistoryAttachmentView } from "../blocks/agent-attachments";
-import { AgentChatBlock } from "../blocks/agent-chat";
+import { AgentChatBlock, modelAvailabilityDescription } from "../blocks/agent-chat";
+import { Select } from "../components/select-toggle";
 import { WindowDataProvider } from "../data/window-data";
 import type { AppDefinition, CoreEvent, CoreReply, CoreRequest, ConversationItem, ConversationThread } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
@@ -14,9 +15,15 @@ const definition: AppDefinition = {
   id: "provider-chat", name: "대화", requires: { blocks: 2, modules: { agent: 3 } }, permissions: [], state: {}, ui: { type: "agent_chat" },
   agent: { protocol: "conversation-v1", permission: "login", base_path: "api", namespace: "n", profile: "p", collection: "c", model_order: [], selected_model: "", title_template: "", initial_instruction_template: "", instructions_template: "", thread_entry: "thread" },
 };
-const thread: ConversationThread = { id: "thread-1", external: { namespace: "n", key: "k" }, title: "대화", model: { id: "m", label: "모델" }, created_at: "2026-10-30T00:00:00Z", archived: false };
+const thread: ConversationThread = { id: "thread-1", external: { namespace: "n", key: "k" }, title: "대화", model: { id: "m", label: "모델", group: { id: "node-a", label: "노드 A" } }, profile: { id: "profile-a", label: "서소영" }, created_at: "2026-10-30T00:00:00Z", archived: false };
 const item = (id: string, text: string): ConversationItem => ({ id, kind: "assistant", text, at: "2026-10-30T00:00:00Z", attachments: [] });
-const models = [{ id: "m", label: "모델", available: true }, { id: "off", label: "불가", available: false, reason: "사용 불가" }];
+const models = [
+  { id: "m", label: "모델", available: true, group: { id: "node-a", label: "노드 A" } },
+  { id: "m-same", label: "모델 같은 노드", available: true, group: { id: "node-a", label: "노드 A" } },
+  { id: "off", label: "불가", available: false, reason: "한도 거부 중", reason_code: "limit_rejected", resets_at: "2026-10-31T07:06:00+09:00", group: { id: "node-a", label: "노드 A" } },
+  { id: "m2", label: "모델 2", available: true, group: { id: "node-b", label: "노드 B" } },
+];
+const profiles = [{ id: "profile-a", label: "서소영", available: true }, { id: "profile-b", label: "키키", available: true }];
 function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinition: AppDefinition = definition) {
   const snapshot = makeTestSnapshot({ definitions: [appDefinition] });
   snapshot.link = { state: "connected", server_url: "https://example.test", device_name: "시험" };
@@ -32,7 +39,7 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
   render(<WindowDataProvider store={store} appWindow={window} definition={appDefinition}><AgentChatBlock block={{ type: "agent_chat" }} context={context} /></WindowDataProvider>);
   return { call, window, emit: (event: CoreEvent) => act(() => { listeners.forEach((fn) => fn(event)); }) };
 }
-const get = (value: ConversationThread | null = thread): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles: [], start: { profile: "", model: null } });
+const get = (value: ConversationThread | null = thread, profile = "profile-a"): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles, start: { profile, model: "m" } });
 const error = (code: string) => ({ code, message: "실패", details: [] });
 beforeEach(() => { vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null as unknown as CanvasRenderingContext2D); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -62,17 +69,46 @@ describe("대화 제공자 화면", () => {
     state.emit({ event: "conversation.update", thread_id: "thread-1", update: { kind: "item", item: item("1", "기록") } });
     expect(screen.getAllByText("기록")).toHaveLength(1);
   });
-  it("시작 판에서 이용 가능한 모델로 생성하고 다시 조회한다", async () => {
+  it("시작 판은 프로필과 묶인 모델을 보이고 고른 값으로 생성한다", async () => {
     let created = false;
     const state = setup(async (request) => {
       if (request.op === "conversation.get") return get(created ? thread : null);
       if (request.op === "conversation.create") { created = true; return { op: "conversation.create", thread }; }
       throw new Error(request.op);
     });
-    expect((await screen.findByRole("button", { name: /불가/ }) as HTMLButtonElement).disabled).toBe(true);
+    await screen.findByRole("button", { name: "프로필" });
+    expect(screen.getByRole("button", { name: "프로필" }).textContent).toContain("서소영");
+    expect(screen.getByRole("button", { name: "모델" }).textContent).toContain("모델");
+    expect(screen.queryByRole("button", { name: /불가/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "모델" }));
+    expect(screen.getByRole("menuitem", { name: /불가/ })).toBeTruthy();
+    expect((screen.getByRole("menuitem", { name: /불가/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/한도 거부 중, 내일 07:06 풀림/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "모델" }));
     fireEvent.click(screen.getByRole("button", { name: "시작" }));
     await screen.findByRole("textbox", { name: "메시지" });
-    expect(state.call).toHaveBeenCalledWith({ op: "conversation.create", window_id: state.window.id, model: "m" });
+    expect(state.call).toHaveBeenCalledWith({ op: "conversation.create", window_id: state.window.id, model: "m", profile: "profile-a" });
+  });
+  it("시작 프로필을 바꾸면 그 프로필의 모델을 다시 받고 선택값으로 생성한다", async () => {
+    let created = false;
+    const state = setup(async (request) => {
+      if (request.op === "conversation.get") {
+        if (created) return get(thread);
+        const profile = request.profile ?? "profile-a";
+        const reply = get(null, profile);
+        return { ...reply, start: { profile, model: profile === "profile-b" ? "m2" : "m" } };
+      }
+      if (request.op === "conversation.create") { created = true; return { op: "conversation.create", thread }; }
+      throw new Error(request.op);
+    });
+    await screen.findByRole("button", { name: "프로필" });
+    fireEvent.click(screen.getByRole("button", { name: "프로필" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "키키" }));
+    await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "conversation.get", window_id: state.window.id, profile: "profile-b" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "모델" }).textContent).toContain("모델 2"));
+    fireEvent.click(screen.getByRole("button", { name: "시작" }));
+    await screen.findByRole("textbox", { name: "메시지" });
+    expect(state.call).toHaveBeenCalledWith({ op: "conversation.create", window_id: state.window.id, model: "m2", profile: "profile-b" });
   });
   it("생성 응답 전에 온 진행문을 조회 뒤에도 보인다", async () => {
     let finishCreate!: (value: CoreReply) => void;
@@ -206,5 +242,75 @@ describe("공용 대화 부품", () => {
     ]);
     expect(loadConversation).toHaveBeenCalledTimes(1);
     expect(loadLocalAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it("기존 대화의 프로필 변경은 확인 뒤 switch하고 notice를 보인다", async () => {
+    const changed: ConversationThread = { ...thread, profile: { id: "profile-b", label: "키키" } };
+    let current = thread;
+    const state = setup(async (request) => {
+      if (request.op === "conversation.get") return get(current, request.profile ?? "profile-a");
+      if (request.op === "conversation.switch") { current = changed; return { op: "conversation.switch", thread: changed, notices: ["키키 프로필로 바꿨습니다"] }; }
+      throw new Error(request.op);
+    });
+    await screen.findByText("기록");
+    fireEvent.click(screen.getByRole("button", { name: "프로필" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "키키" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("키키(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "바꾸기" }));
+    await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "conversation.switch", window_id: state.window.id, profile: "profile-b" }));
+    expect(await screen.findByText("키키 프로필로 바꿨습니다")).toBeTruthy();
+  });
+
+  it("같은 노드 모델은 바로 switch하고 다른 노드 모델은 확인한다", async () => {
+    const state = setup(async (request) => {
+      if (request.op === "conversation.get") return get();
+      if (request.op === "conversation.switch") return { op: "conversation.switch", thread: { ...thread, model: { id: "m-same", label: "모델 같은 노드", group: { id: "node-a", label: "노드 A" } } }, notices: [] };
+      throw new Error(request.op);
+    });
+    await screen.findByText("기록");
+    fireEvent.click(screen.getByRole("button", { name: "모델" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /모델 같은 노드/ }));
+    await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "conversation.switch", window_id: state.window.id, model: "m-same" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "모델" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /모델 2/ }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "바꾸기" }));
+    await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "conversation.switch", window_id: state.window.id, model: "m2" }));
+  });
+
+  it("답하는 중에는 고르기를 막고 안내한다", async () => {
+    const state = setup(async (request) => request.op === "conversation.get" ? get() : (() => { throw new Error(request.op); })());
+    await screen.findByText("기록");
+    state.emit({ event: "conversation.update", thread_id: "thread-1", update: { kind: "activity", busy: true, tool: "작업 중" } });
+    expect((screen.getByRole("button", { name: "프로필" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "모델" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("답변이 끝난 뒤 바꿀 수 있습니다")).toBeTruthy();
+  });
+});
+
+describe("모델 풀림 시각", () => {
+  it("기기 지역 시각으로 오늘, 내일, 그 밖의 날짜를 표시한다", () => {
+    const local = (month: number, day: number, hour: number, minute: number) => new Date(2026, month - 1, day, hour, minute).toISOString();
+    const now = new Date(2026, 9, 30, 12, 0);
+    expect(modelAvailabilityDescription({ reason: "한도 거부 중", resets_at: local(10, 30, 14, 6) }, now)).toBe("한도 거부 중, 오늘 14:06 풀림");
+    expect(modelAvailabilityDescription({ reason: "한도 거부 중", resets_at: local(10, 31, 7, 6) }, now)).toBe("한도 거부 중, 내일 07:06 풀림");
+    expect(modelAvailabilityDescription({ reason: "한도 거부 중", resets_at: local(11, 2, 7, 6) }, now)).toBe("한도 거부 중, 11월 2일 07:06 풀림");
+  });
+});
+
+describe("공용 Select 묶음", () => {
+  it("묶음 머리와 막힌 선택지는 건너뛰고 설명을 보인다", () => {
+    const onChange = vi.fn();
+    render(<Select groups={[{ name: "노드 A", options: [{ value: "a", label: "A" }, { value: "b", label: "B", disabled: true, description: "한도 거부 중" }, { value: "c", label: "C" }] }]} value="a" label="모델" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "모델" }));
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getByText("노드 A")).toBeTruthy();
+    const blocked = within(menu).getByRole("menuitem", { name: /B/ }) as HTMLButtonElement;
+    expect(blocked.disabled).toBe(true);
+    expect(within(blocked).getByText("한도 거부 중")).toBeTruthy();
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: "C" }));
   });
 });

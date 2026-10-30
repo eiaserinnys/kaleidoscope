@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Block, ConversationAttachment, ConversationEvent, ConversationItem, CoreEvent, CoreError, ConversationUpload } from "../contract/contract";
+import type { Block, ConversationAttachment, ConversationEvent, ConversationItem, ConversationModel, ConversationProfile, ConversationThread, CoreEvent, CoreError, ConversationUpload } from "../contract/contract";
 import { useConversationHistory } from "./conversation-history";
 import { DataState } from "../components/data-state";
 import { Button, EmptyState, Notice, StatusText } from "../components/primitives";
@@ -11,6 +11,9 @@ import { flushShareViews } from "../share/share-view";
 import { HistoryAttachmentView, ImagePreview, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
 import { ChatComposer } from "./chat-composer";
 import { ChatHistory } from "./chat-history";
+import { Select } from "../components/select-toggle";
+import { Dialog } from "../components/dialog";
+import type { JsonValue } from "../contract/serde_json/JsonValue";
 
 type AgentChatBlockData = Extract<Block, { type: "agent_chat" }>;
 
@@ -31,7 +34,10 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   });
   const [agent, setAgent] = useState(false);
   const [items, setItems] = useState<ConversationItem[]>([]);
-  const [models, setModels] = useState<{ preset: string; label: string; available?: boolean; reason?: string }[]>([]);
+  const [models, setModels] = useState<ConversationModel[]>([]);
+  const [profiles, setProfiles] = useState<ConversationProfile[]>([]);
+  const [thread, setThread] = useState<ConversationThread | null>(null);
+  const [selectedProfile, setSelectedProfile] = useState("");
   const [selectedPreset, setSelectedPreset] = useState("");
   const [loading, setLoading] = useState(true);
   const [loginRequired, setLoginRequired] = useState(false);
@@ -40,6 +46,10 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const [loadError, setLoadError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [switching, setSwitching] = useState(false);
+  const [loadingChoices, setLoadingChoices] = useState(false);
+  const [pendingSwitch, setPendingSwitch] = useState<{ profile?: string; model?: string; label: string } | null>(null);
+  const [notices, setNotices] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingMessage | null>(null);
   const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
@@ -128,7 +138,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     setAttachments((current) => [...files, ...current]);
   }, []);
 
-  const load = useCallback(async (initialEvents: CoreEvent[] = []) => {
+  const load = useCallback(async (initialEvents: CoreEvent[] = [], profile?: string) => {
     if (!connected || !workspaceId || !hasProvider) return;
     const generation = ++loadGeneration.current;
     const events = initialEvents;
@@ -140,16 +150,21 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     setBindingConflict(false);
     try {
       {
-        const reply = await context.store.call({ op: "conversation.get", window_id: windowId });
+        const reply = await context.store.call({ op: "conversation.get", window_id: windowId, ...(profile ? { profile } : {}) });
         if (generation !== loadGeneration.current) return;
         const sameThread = threadId.current !== null && threadId.current === reply.thread?.id;
         threadId.current = reply.thread?.id ?? null;
         setAgent(Boolean(reply.thread));
+        setThread(reply.thread);
         setItems(uniqueItems(reply.items));
         acknowledge(reply.items);
         setNextBefore(reply.next_before);
-        setModels(reply.models.map((model) => ({ preset: model.id, label: model.label, available: model.available, reason: model.reason })));
-        setSelectedPreset(reply.models.find((model) => model.available)?.id ?? "");
+        setModels(reply.models);
+        setProfiles(reply.profiles);
+        if (!reply.thread) {
+          setSelectedProfile(reply.start.profile);
+          setSelectedPreset(reply.start.model ?? "");
+        }
         if (!sameThread) { setBusy(false); setTool(null); setDelta(""); }
         conversationQueue.current = null;
         events.forEach((event) => {
@@ -209,14 +224,126 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     items,
   });
 
+  const loadModelChoices = async (profile: string) => {
+    setLoadingChoices(true);
+    setLoadError(null);
+    try {
+      const reply = await context.store.call({ op: "conversation.get", window_id: windowId, profile });
+      if (reply.op !== "conversation.get") return;
+      setModels(reply.models);
+      setProfiles(reply.profiles);
+      if (!reply.thread) setSelectedPreset(reply.start.model ?? "");
+    } catch (reason) {
+      const error = toCoreError(reason);
+      if (!handleError(error)) setLoadError(error.message);
+    } finally {
+      setLoadingChoices(false);
+    }
+  };
+
+  const switchConversation = async (selection: { profile?: string; model?: string }) => {
+    if (!thread || switching || busy) return;
+    setSwitching(true);
+    setLoadError(null);
+    try {
+      const reply = await context.store.call({ op: "conversation.switch", window_id: windowId, ...selection });
+      if (reply.op !== "conversation.switch") return;
+      setThread(reply.thread);
+      setAgent(true);
+      setNotices(reply.notices);
+      setPendingSwitch(null);
+      await load([], reply.thread.profile?.id);
+    } catch (reason) {
+      const error = toCoreError(reason);
+      if (!handleError(error)) setLoadError(error.message);
+    } finally {
+      setSwitching(false);
+    }
+  };
+
+  const selectProfile = (value: JsonValue) => {
+    if (typeof value !== "string" || busy || switching) return;
+    const profile = profiles.find((item) => item.id === value);
+    if (!profile?.available) return;
+    if (!agent) {
+      setSelectedProfile(value);
+      setSelectedPreset("");
+      void loadModelChoices(value);
+      return;
+    }
+    if (!thread?.profile || thread.profile.id === value) return;
+    setPendingSwitch({ profile: value, label: profile.label });
+  };
+
+  const selectModel = (value: JsonValue) => {
+    if (typeof value !== "string" || busy || switching) return;
+    const model = models.find((item) => item.id === value);
+    if (!model?.available) return;
+    if (!agent) { setSelectedPreset(value); return; }
+    if (!thread || thread.model.id === value) return;
+    if (thread.model.group?.id !== model.group?.id) {
+      setPendingSwitch({ model: value, label: model.label });
+      return;
+    }
+    void switchConversation({ model: value });
+  };
+
+  const visibleProfiles = thread?.profile && !profiles.some((item) => item.id === thread.profile?.id)
+    ? [...profiles, { ...thread.profile, available: true }]
+    : profiles;
+  const profileGroups = [{ options: visibleProfiles.map((profile) => ({
+    value: profile.id,
+    label: profile.label,
+    disabled: !profile.available,
+    description: !profile.available ? profile.reason ?? "쓸 수 없음" : undefined,
+  })) }];
+  const modelGroups = models.reduce<Array<{ name?: string; options: Array<{ value: string; label: string; disabled?: boolean; description?: string }> }>>((groups, model) => {
+    const name = model.group?.label;
+    let group = groups.find((item) => item.name === name);
+    if (!group) { group = { ...(name ? { name } : {}), options: [] }; groups.push(group); }
+    group.options.push({
+      value: model.id,
+      label: model.label,
+      disabled: !model.available,
+      description: !model.available ? modelAvailabilityDescription(model) : undefined,
+    });
+    return groups;
+  }, []);
+  const selectedStartProfile = profiles.find((item) => item.id === selectedProfile);
+  const selectedStartModel = models.find((item) => item.id === selectedPreset);
+  const selectorsDisabled = busy || switching || loadingChoices;
+  const selectorRow = (
+    <div className="ks-file-tree-header ks-web-toolbar ks-agent-chat-toolbar">
+      <Select
+        groups={profileGroups}
+        value={agent ? thread?.profile?.id : selectedProfile}
+        label="프로필"
+        placeholder={agent && !thread?.profile ? "" : "프로필 선택"}
+        disabled={selectorsDisabled || (agent ? !thread?.profile : visibleProfiles.length === 0)}
+        onChange={selectProfile}
+      />
+      <Select
+        groups={modelGroups}
+        value={agent ? thread?.model.id : selectedPreset}
+        label="모델"
+        placeholder="모델 선택"
+        disabled={selectorsDisabled || modelGroups.length === 0}
+        onChange={selectModel}
+      />
+      {agent && busy ? <span className="ks-agent-chat-change-hint">답변이 끝난 뒤 바꿀 수 있습니다</span> : null}
+    </div>
+  );
+
   const start = async () => {
-    if (!selectedPreset || creating) return;
+    const profile = profiles.find((item) => item.id === selectedProfile);
+    const model = models.find((item) => item.id === selectedPreset);
+    if (!profile?.available || !model?.available || creating || loadingChoices) return;
     setCreating(true);
     setCreateError(null);
     const events: CoreEvent[] = [];
     conversationQueue.current = events; creatingConversation.current = true;
     try {
-      await context.store.call({ op: "conversation.create", window_id: windowId, model: selectedPreset });
+      await context.store.call({ op: "conversation.create", window_id: windowId, model: selectedPreset, profile: selectedProfile });
       await load(events);
     } catch (reason) {
       const error = toCoreError(reason);
@@ -278,27 +405,20 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   if (!agent) {
     return (
       <div className="ks-agent-chat-start" ref={startRef}>
-        <div className="ks-agent-chat-models">
-          {models.map((model) => (
-            <Button
-              key={model.preset}
-              aria-pressed={selectedPreset === model.preset}
-              disabled={creating || model.available === false}
-              onClick={() => setSelectedPreset(model.preset)}
-            >
-              {model.label}{model.reason ? ` · ${model.reason}` : ""}
-            </Button>
-          ))}
+        {selectorRow}
+        <div className="ks-agent-chat-start-action">
+          <Button disabled={!selectedStartProfile?.available || !selectedStartModel?.available || creating || switching || loadingChoices} variant="emphasis" onClick={() => void start()}>시작</Button>
+          {creating ? <StatusText>시작하는 중</StatusText> : null}
+          {createError ? <Notice role="alert">{createError}</Notice> : null}
         </div>
-        <Button disabled={!selectedPreset || creating} variant="emphasis" onClick={() => void start()}>시작</Button>
-        {creating ? <StatusText>시작하는 중</StatusText> : null}
-        {createError ? <Notice role="alert">{createError}</Notice> : null}
       </div>
     );
   }
 
   return (
     <section className="ks-agent-chat" ref={shareRef}>
+      {selectorRow}
+      {notices.length ? <Notice>{notices.join("\n")}</Notice> : null}
       <ChatHistory
         items={items}
         pending={pending}
@@ -331,8 +451,35 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         onError={setSendError}
       />
       {preview ? <ImagePreview preview={preview} onClose={closePreview} /> : null}
+      {pendingSwitch ? (() => {
+        const host = shareRef.current?.closest<HTMLElement>(".ks-data-window") ?? shareRef.current?.parentElement;
+        return host ? <Dialog
+          host={host}
+          title={`${pendingSwitch.label}(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.`}
+          ok="바꾸기"
+          onCancel={() => setPendingSwitch(null)}
+          onConfirm={() => void switchConversation({ ...(pendingSwitch.profile ? { profile: pendingSwitch.profile } : {}), ...(pendingSwitch.model ? { model: pendingSwitch.model } : {}) })}
+        /> : null;
+      })() : null}
     </section>
   );
+}
+
+export function modelAvailabilityDescription(model: { reason?: string; resets_at?: string }, now = new Date()): string {
+  const reason = model.reason;
+  if (!model.resets_at) return reason || "쓸 수 없음";
+  const resetsAt = new Date(model.resets_at);
+  if (!Number.isFinite(resetsAt.getTime())) return reason || "쓸 수 없음";
+  const formatDay = (date: Date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const day = formatDay(resetsAt) === formatDay(now)
+    ? "오늘"
+    : formatDay(resetsAt) === formatDay(nextDay)
+      ? "내일"
+      : `${resetsAt.getMonth() + 1}월 ${resetsAt.getDate()}일`;
+  const time = new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(resetsAt);
+  const reset = `${day} ${time} 풀림`;
+  return reason ? `${reason}, ${reset}` : reset;
 }
 
 function uniqueItems(items: ConversationItem[]): ConversationItem[] {

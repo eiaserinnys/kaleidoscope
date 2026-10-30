@@ -34,11 +34,38 @@ test("기록, 이전 페이지, 지연 발송과 진행문", async ({ page }) =>
 
 test("모델을 골라 시작", async ({ page }) => {
   const chat = await open(page, "start");
-  await expect(chat.getByRole("button", { name: "Sol · 사용 불가" })).toBeDisabled();
   await capture(page, "start");
+  await chat.getByRole("button", { name: "모델" }).click();
+  const menu = page.getByRole("menu");
+  await expect(menu.getByText("eiaserinnys")).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /한도 거부 중, 내일 07:06 풀림/ })).toBeDisabled();
+  await capture(page, "start-menu");
+  await chat.getByRole("button", { name: "모델" }).click();
   await chat.getByRole("button", { name: "시작" }).click();
   await expect(chat.getByText("시작하는 중")).toBeVisible();
   await expect(chat.getByRole("textbox", { name: "메시지" })).toBeVisible();
+});
+
+test("프로필과 다른 노드 모델 변경은 확인하고 답변 중에는 잠근다", async ({ page }) => {
+  const chat = await open(page, "ready");
+  await expect(chat.getByText("기존 기록")).toBeVisible();
+  await chat.getByRole("button", { name: "프로필" }).click();
+  await chat.getByRole("menuitem", { name: "키키" }).click();
+  await expect(chat.getByRole("dialog")).toContainText("키키(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.");
+  await capture(page, "profile-switch-confirm");
+  await chat.getByRole("button", { name: "바꾸기" }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).conversationHarness.calls().some((c: any) => c.op === "conversation.switch" && c.profile === "profile-b"))).toBe(true);
+  await chat.getByRole("button", { name: "모델" }).click();
+  const models = await page.getByRole("menu").getByRole("menuitem", { name: "Argon" }).all();
+  await models[1].click();
+  await expect(chat.getByRole("dialog")).toContainText("Argon(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.");
+  await chat.getByRole("button", { name: "바꾸기" }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).conversationHarness.calls().some((c: any) => c.op === "conversation.switch" && c.model === "n1:eias-linegames:argon"))).toBe(true);
+  await page.evaluate(() => (window as any).conversationHarness.emit({ event: "conversation.update", thread_id: "fake-thread", update: { kind: "activity", busy: true, tool: null } }));
+  await expect(chat.getByRole("button", { name: "프로필" })).toBeDisabled();
+  await expect(chat.getByRole("button", { name: "모델" })).toBeDisabled();
+  await expect(chat.getByText("답변이 끝난 뒤 바꿀 수 있습니다")).toBeVisible();
+  await capture(page, "selectors-busy");
 });
 
 test("짧은 기록은 스크롤 없이 이전 페이지를 모두 읽는다", async ({ page }) => {
@@ -63,7 +90,7 @@ test("로그인 뒤 기록으로 복귀", async ({ page }) => {
 test("로그인 뒤 시작 판의 첫 조작에 포커스를 둔다", async ({ page }) => {
   const chat = await open(page, "login-start");
   await chat.getByRole("button", { name: "로그인" }).click();
-  await expect(chat.getByRole("button", { name: "Argon" })).toBeFocused();
+  await expect(chat.getByRole("button", { name: "프로필" })).toBeFocused();
 });
 
 test("묶음 충돌은 시작이나 입력을 보이지 않는다", async ({ page }) => {
