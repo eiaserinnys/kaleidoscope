@@ -3,8 +3,6 @@ import { createPortal } from "react-dom";
 import type { ConversationUpload, ConversationAttachment } from "../contract/contract";
 import { File as FileIcon, X } from "../components/icons";
 import { IconButton } from "../components/primitives";
-import type { ShellStore } from "../core/shell-store";
-import { toCoreError } from "../core/core-transport";
 
 export type DraftAttachment = { id: number; file: File; name: string };
 export type Preview = { src: string; name: string; trigger: HTMLElement };
@@ -53,33 +51,37 @@ export function PendingAttachment({ attachment, onPreview }: { attachment: Draft
 
 const attachmentCache = new Map<string, Promise<string>>();
 
-export function HistoryAttachment({ attachment, windowId, itemId, store, onPreview, onError }: {
-  attachment: ConversationAttachment; windowId: string; itemId: string; store: ShellStore;
-  onPreview: OpenPreview; onError: (message: string) => void;
+export function HistoryAttachmentView({ attachment, cacheKey, load, open, onPreview, onError }: {
+  attachment: ConversationAttachment; cacheKey: readonly unknown[];
+  load: () => Promise<{ mime: string; data_base64: string }>;
+  open: () => Promise<void>;
+  onPreview: OpenPreview; onError: (reason: unknown) => void;
 }) {
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [opening, setOpening] = useState(false);
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  const key = JSON.stringify(cacheKey);
   useEffect(() => {
     if (!attachment.mime.startsWith("image/")) return;
-    const key = JSON.stringify([windowId, itemId, attachment.id]);
     let promise = attachmentCache.get(key);
     if (!promise) {
-      promise = store.call({ op: "conversation.attachment", window_id: windowId, item_id: itemId, attachment_id: attachment.id })
+      promise = loadRef.current()
         .then((reply) => `data:${reply.mime};base64,${reply.data_base64}`);
       attachmentCache.set(key, promise);
     }
     let active = true;
     promise.then((value) => { if (active) setSrc(value); }, () => { if (active) setFailed(true); });
     return () => { active = false; };
-  }, [attachment, windowId, itemId, store]);
+  }, [attachment.mime, key]);
 
-  const open = async () => {
+  const handleOpen = async () => {
     setOpening(true);
     try {
-      await store.call({ op: "conversation.attachment_open", window_id: windowId, item_id: itemId, attachment_id: attachment.id });
+      await open();
     }
-    catch (reason) { onError(toCoreError(reason).message); }
+    catch (reason) { onError(reason); }
     finally { setOpening(false); }
   };
   if (attachment.mime.startsWith("image/") && !failed) {
@@ -87,7 +89,7 @@ export function HistoryAttachment({ attachment, windowId, itemId, store, onPrevi
       ? <button type="button" className="ks-agent-attachment-image" aria-label={attachment.name} onClick={(event) => onPreview({ src, name: attachment.name, trigger: event.currentTarget })}><img src={src} alt="" /></button>
       : <div className="ks-agent-attachment-placeholder" aria-label={attachment.name} />;
   }
-  return <button type="button" className="ks-agent-attachment-chip ks-agent-attachment-file" disabled={opening} onClick={() => void open()} aria-label={attachment.name}>
+  return <button type="button" className="ks-agent-attachment-chip ks-agent-attachment-file" disabled={opening} onClick={() => void handleOpen()} aria-label={attachment.name}>
     <span className="ks-agent-attachment-chip-preview"><FileIcon /></span><span className="ks-agent-attachment-name" title={attachment.name}>{attachment.name}</span>
   </button>;
 }
