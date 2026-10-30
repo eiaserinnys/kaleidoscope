@@ -101,11 +101,22 @@ impl AppState {
         let rows = self.agent_rows().map_err(|e| e.message)?;
         let workspaces: std::collections::HashSet<_> = {
             let db = self.lock_db().map_err(|e| e.message)?;
-            super::layouts::load_entities::<Workspace>(&db, "workspaces")
-                .map_err(|e| e.message)?
-                .into_iter()
-                .map(|workspace| workspace.id)
-                .collect()
+            let mut ids: std::collections::HashSet<_> =
+                super::layouts::load_entities::<Workspace>(&db, "workspaces")
+                    .map_err(|e| e.message)?
+                    .into_iter()
+                    .map(|workspace| workspace.id)
+                    .collect();
+            let mut statement = db
+                .prepare("SELECT workspace_id FROM legacy_workspace_owners")
+                .map_err(|e| e.to_string())?;
+            let legacy_ids = statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(|e| e.to_string())?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(|e| e.to_string())?;
+            ids.extend(legacy_ids);
+            ids
         };
         for row in rows {
             if workspaces.contains(&row.workspace_id) {

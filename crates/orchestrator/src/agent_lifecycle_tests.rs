@@ -211,7 +211,7 @@ async fn failed_pas_retirement_keeps_the_relay_and_local_history() {
 }
 
 #[tokio::test]
-async fn startup_retires_pas_without_canonical_workspace_and_starts_valid_relay() {
+async fn startup_keeps_canonical_and_legacy_pas_and_retires_orphan() {
     let mock = LifecycleMock::default();
     let app = Router::new()
         .route(
@@ -246,10 +246,34 @@ async fn startup_retires_pas_without_canonical_workspace_and_starts_valid_relay(
         .unwrap();
     insert_agent(&state, "valid", "valid-pas", "작업");
     insert_agent(&state, "orphan", "orphan-pas", "옛 작업");
+    let (device_id, _) = crate::tests::make_device(&state);
+    state
+        .save_layout(
+            &device_id,
+            &registry::DeviceLayout {
+                workspaces: vec![Workspace {
+                    id: "legacy".into(),
+                    name: "옛 쉘 작업".into(),
+                    created_at: "created".into(),
+                    updated_at: "updated".into(),
+                }],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    insert_agent(&state, "legacy", "legacy-pas", "옛 쉘 작업");
 
     state.start_relays().unwrap();
     assert!(state.0.relays.lock().unwrap().contains_key("valid"));
+    assert!(state.0.relays.lock().unwrap().contains_key("legacy"));
     wait_until(|| state.agent_row("orphan").unwrap().is_none()).await;
+    assert!(state.agent_row("legacy").unwrap().is_some());
+    assert!(!mock
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|(session, body)| { session == "legacy-pas" && body["enabled"] == false }));
     assert!(mock
         .0
         .lock()
@@ -257,6 +281,8 @@ async fn startup_retires_pas_without_canonical_workspace_and_starts_valid_relay(
         .iter()
         .any(|(session, body)| { session == "orphan-pas" && body["enabled"] == false }));
     let relay = state.0.relays.lock().unwrap().remove("valid").unwrap();
+    relay.abort();
+    let relay = state.0.relays.lock().unwrap().remove("legacy").unwrap();
     relay.abort();
     server.abort();
 }

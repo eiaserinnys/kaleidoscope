@@ -54,6 +54,16 @@ impl AppState {
             if deleted_workspace_ids.contains(&workspace.id) {
                 continue;
             }
+            let owned_by_another_account: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM legacy_workspace_owners WHERE workspace_id=?1 AND account_id<>?2)",
+                    params![workspace.id, account_id],
+                    |row| row.get(0),
+                )
+                .map_err(db_error)?;
+            if owned_by_another_account {
+                continue;
+            }
             let data = serde_json::to_string(workspace)
                 .map_err(|_| server_error("작업을 저장할 수 없습니다."))?;
             let old: Option<String> = tx
