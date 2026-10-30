@@ -120,6 +120,11 @@ fn version_app(state: &CoreState, version: &AppVersion) -> App {
 fn apply_version(state: &mut CoreState, app: App, version: AppVersion, replace_history: bool) {
     let definition = &version.definition;
     let new_permissions = app_definition::permission_modules(definition);
+    state.device.pc_access.retain(|access| {
+        access.app_id != app.id || definition.permissions.iter().any(|permission| matches!(permission,
+            kaleidoscope_contract::PermissionDecl::Files { id, scope: kaleidoscope_contract::FilesScope::Pc, .. }
+            if id == &access.permission))
+    });
 
     if state.shared.apps.iter().any(|current| current.id == app.id) {
         let windows_to_update = state

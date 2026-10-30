@@ -274,13 +274,6 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .insert(desktop.workspace_id.clone(), desktop.id.clone());
             Ok(CoreReply::DesktopActivate {})
         }
-        CoreRequest::FilesOpen {
-            window_id,
-            permission,
-            path,
-            app_id,
-            rect,
-        } => crate::files::open(state, &window_id, &permission, &path, &app_id, rect),
         CoreRequest::WindowOpen {
             desktop_id,
             app_id,
@@ -453,8 +446,8 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::StorageWrite { .. }
         | CoreRequest::StorageReset { .. }
         | CoreRequest::FilesPickFolder { .. }
-        // 계약 14판: 코어 구현 전에는 받지 않는다(코어 PR에서 lib.rs가 처리).
         | CoreRequest::FilesAllowPc { .. }
+        | CoreRequest::FilesOpen { .. }
         | CoreRequest::FilesList { .. }
         | CoreRequest::FilesRead { .. }
         | CoreRequest::FilesWrite { .. }

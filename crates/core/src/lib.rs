@@ -44,7 +44,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Condvar, Mutex};
 
 use kaleidoscope_contract::{
-    CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, Grant, LinkStatus, Rect,
+    CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, Grant, LinkStatus, PcRootKind, Rect,
     SharedState, ShellSnapshot, UpdateStatus, WebHistoryAction, WebPage,
 };
 use registry_client::{HttpRegistryClient, RegistryClient};
@@ -59,6 +59,9 @@ pub fn crop_share_capture_png(bytes: &[u8], bounds: Rect, scale_factor: f64) -> 
 pub trait Host: Send + Sync + 'static {
     /// 폴더 고르기 창을 띄우고 고른 폴더의 절대 경로를 돌려준다. 취소하면 None이다.
     fn pick_folder(&self) -> Option<PathBuf>;
+    fn pc_roots(&self) -> Vec<PcRoot> {
+        Vec::new()
+    }
     /// 기본 브라우저에서 OAuth 인가 주소를 연다.
     fn open_url(&self, url: &str) -> io::Result<()> {
         opener::open_browser(url).map_err(|error| io::Error::other(error.to_string()))
@@ -69,6 +72,15 @@ pub trait Host: Send + Sync + 'static {
     fn updater(&self) -> Option<&dyn UpdateHost> {
         None
     }
+}
+
+/// 절대 경로는 코어 내부에서만 쓴다.
+#[derive(Debug, Clone)]
+pub struct PcRoot {
+    pub id: String,
+    pub kind: PcRootKind,
+    pub name: String,
+    pub path: PathBuf,
 }
 
 /// 준비된 설치본을 검증하고 설치한다.
@@ -128,6 +140,7 @@ pub(crate) struct Inner {
     pub(crate) data_dir: PathBuf,
     pub(crate) state: Mutex<CoreState>,
     pub(crate) host: Arc<dyn Host>,
+    pub(crate) pc_roots: Mutex<Vec<PcRoot>>,
     pub(crate) listeners: Mutex<Vec<Arc<dyn Fn(&CoreEvent) + Send + Sync>>>,
     pub(crate) server_url: String,
     pub(crate) device_name: String,
@@ -241,6 +254,7 @@ impl Core {
             data_dir: config.data_dir,
             state: Mutex::new(state),
             host,
+            pc_roots: Mutex::new(Vec::new()),
             listeners: Mutex::new(Vec::new()),
             server_url: config.server_url,
             device_name: config.device_name,
@@ -320,7 +334,7 @@ impl Core {
                 dir,
             } => {
                 let state = self.inner.state.lock().unwrap();
-                files::list(&state, &window_id, &permission, &dir)
+                files::list(&self.inner, &state, &window_id, &permission, &dir)
             }
             CoreRequest::FilesRead {
                 window_id,
@@ -328,7 +342,7 @@ impl Core {
                 path,
             } => {
                 let state = self.inner.state.lock().unwrap();
-                files::read(&state, &window_id, &permission, &path)
+                files::read(&self.inner, &state, &window_id, &permission, &path)
             }
             CoreRequest::FilesWrite {
                 window_id,
@@ -339,6 +353,7 @@ impl Core {
             } => {
                 let state = self.inner.state.lock().unwrap();
                 files::write(
+                    &self.inner,
                     &state,
                     &window_id,
                     &permission,
@@ -351,6 +366,27 @@ impl Core {
                 window_id,
                 permission,
             } => self.pick_folder(&window_id, &permission),
+            CoreRequest::FilesAllowPc {
+                window_id,
+                permission,
+            } => self.allow_pc(&window_id, &permission),
+            CoreRequest::FilesOpen {
+                window_id,
+                permission,
+                path,
+                app_id,
+                rect,
+            } => self.apply_state_change(|state| {
+                files::open(
+                    &self.inner,
+                    state,
+                    &window_id,
+                    &permission,
+                    &path,
+                    &app_id,
+                    rect,
+                )
+            }),
             request @ (CoreRequest::WebAttach { .. }
             | CoreRequest::WebPlace { .. }
             | CoreRequest::WebNavigate { .. }
@@ -512,6 +548,12 @@ impl Core {
         {
             let state = self.inner.state.lock().unwrap();
             files::permission(&state, window_id, permission, false)?;
+            if files::scope(&state, window_id, permission)? == kaleidoscope_contract::FilesScope::Pc
+            {
+                return Err(error::make(
+                    kaleidoscope_contract::ErrorCode::InvalidRequest,
+                ));
+            }
         }
 
         let Some(selected_path) = self.inner.host.pick_folder() else {
@@ -559,6 +601,56 @@ impl Core {
         data_runtime::grant_changed(&self.inner, window_id, permission);
 
         Ok(CoreReply::FilesPickFolder { grant: Some(grant) })
+    }
+
+    fn allow_pc(&self, window_id: &str, permission: &str) -> Result<CoreReply, CoreError> {
+        use kaleidoscope_contract::{ErrorCode, FilesScope, PcAccess};
+        let mut state = self.inner.state.lock().unwrap();
+        let window = state
+            .shared
+            .windows
+            .iter()
+            .find(|w| w.id == window_id)
+            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        let app_id = window.app_id.clone();
+        let definition = app_commands::definition_for(&state.shared, &app_id, window.app_version)
+            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        if !definition.permissions.iter().any(|p| matches!(p,
+            kaleidoscope_contract::PermissionDecl::Files { id, scope: FilesScope::Pc, .. } if id == permission)) {
+            return Err(error::make(ErrorCode::InvalidRequest));
+        }
+        if let Some(access) = state
+            .device
+            .pc_access
+            .iter()
+            .find(|a| a.app_id == app_id && a.permission == permission)
+        {
+            return Ok(CoreReply::FilesAllowPc {
+                access: access.clone(),
+            });
+        }
+        let access = PcAccess {
+            app_id,
+            permission: permission.into(),
+            granted_at: state_commands::timestamp(),
+        };
+        state.device.pc_access.push(access.clone());
+        if let Err(err) = storage::save_changed_state(
+            &self.inner.data_dir,
+            &state.shared,
+            &state.device,
+            false,
+            true,
+        ) {
+            state.device.pc_access.pop();
+            return Err(err);
+        }
+        let event = CoreEvent::StateChanged {
+            snapshot: snapshot(&state),
+        };
+        drop(state);
+        self.inner.emit(&event);
+        Ok(CoreReply::FilesAllowPc { access })
     }
 }
 

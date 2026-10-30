@@ -90,7 +90,7 @@ pub(crate) fn get(
         PermissionDecl::Files { .. } => {
             let state = inner.state.lock().unwrap();
             let root = files::granted_root(&state, window, &media.permission, false)?;
-            let path = files::resolve_path(&root, &media.path, false, false)?;
+            let path = files::resolve_path(&inner.data_dir, &root, &media.path, false, false)?;
             let modified = fs::metadata(&path)
                 .map_err(|err| error::io_error(&err))?
                 .modified()
