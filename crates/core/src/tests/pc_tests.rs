@@ -4,6 +4,8 @@ fn pc_explorer() -> String {
     let mut definition: Value =
         serde_json::from_str(include_str!("../../../../examples/explorer.json")).unwrap();
     definition["requires"]["modules"]["files"] = json!(2);
+    definition["permissions"][0]["id"] = json!("folder");
+    definition["ui"]["root"]["permission"] = json!("folder");
     definition["permissions"][0]["scope"] = json!("pc");
     definition["permissions"][0]["label"] = json!("내 PC");
     definition.to_string()
@@ -262,7 +264,9 @@ fn pc_open_grants_parent_and_reuses_editor_then_revokes_on_version_change() {
     assert_eq!(reused.state["current_file"], json!("b.md"));
     import(&core, &pc_explorer());
     assert_eq!(snapshot(&core).device.pc_access.len(), 1);
-    import(&core, include_str!("../../../../examples/explorer.json"));
+    let mut folder_definition: Value = serde_json::from_str(&pc_explorer()).unwrap();
+    folder_definition["permissions"][0]["scope"] = json!("folder");
+    import(&core, &folder_definition.to_string());
     assert!(snapshot(&core).device.pc_access.is_empty());
 }
 

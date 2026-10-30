@@ -672,12 +672,14 @@ pub enum PermissionDecl {
 ///
 /// `pc`의 규칙:
 /// - 읽기 전용이다(`access: read`). 지금은 `explorer` 블록의 `root`만 이 권한을 가리킬 수 있다(검사기가 거부).
-/// - 이 기기에서 이 앱에 처음 쓸 때 허용을 받는다(`files.allow_pc`). 허용 전의 `files.*`는 `not_granted`다.
+/// - 이 기기에서 이 앱에 처음 쓸 때 허용을 받는다(`files.allow_pc`). 허용 전의 `files.list`와 `files.open`은 `not_granted`다.
+/// - `pc` 권한으로는 `files.list`와 `files.open`만 한다. `files.read`는 `not_granted`, `files.write`는
+///   `permission_denied`이고 파일 내용은 여는 앱이 넘겨받은 폴더로 읽는다.
 /// - 경로의 첫 마디는 뿌리의 id([`PcRootKind`])이고 그 아래는 [`FileRef`]의 경로 규칙을 따른다. 빈 경로는 내 PC 자체이고
 ///   `files.list`는 뿌리들을 낸다(알려진 폴더 먼저, 그다음 볼륨, 각각 이 기기가 준 순서). 뿌리에 없는 첫 마디는
 ///   `not_found`다. 창 상태에 이 경로를 두므로 다른 PC에서도 같은 알려진 폴더 아래를 연다(없으면 `not_found`).
 /// - 코어는 이 쉘 자신의 데이터 폴더(기기 토큰, 로그인 정보) 안을 가리키는 경로를 `permission_denied`로 거부하고,
-///   목록에서도 뺀다.
+///   목록에서도 뺀다. 이 규칙은 `folder` 범위와 탐색기가 열며 넘겨준 폴더에도 같다.
 /// - Windows에서는 숨김이나 시스템 속성이 있는 항목을 목록에서 뺀다(`$Recycle.Bin`, `System Volume Information`,
 ///   `pagefile.sys`, 문서 폴더의 `My Music` 같은 연결점). 이 규칙은 `folder` 범위의 목록에도 같다.
 /// - 탐색기가 이 범위의 파일을 열면(`files.open`) 여는 앱의 창에는 그 파일이 든 폴더를 고른 것으로 두고, 경로는
