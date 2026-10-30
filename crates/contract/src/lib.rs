@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 19판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 20판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -99,6 +99,11 @@
 //! 기본 앱은 리포의 apps/와 [`builtin`] 표가 정본이고 쉘과 함께 나간다.
 //! 개인 앱 삭제와 동기화는 레지스트리 9판에서 처리한다.
 //!
+//! # 계약 20판: 기기 로컬 에이전트
+//! 블록 세트 8판의 `agent_session`, 모듈 `local_agent` 1판과 `local_agent` 권한을 더했다. 화면 명령 `local_agent.*`,
+//! `local_agent.update` 이벤트, 기기별 실행 허용 기록도 계약에 포함한다. 이 블록은 `agent_chat`의 작업 PAS와 별도로
+//! 기기에서 ACP 에이전트를 실행한다. 세부 wire DTO는 [`local_agent`]에 있다.
+//!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
 //! - 코어는 이벤트 채널 하나로 [`CoreEvent`]를 보낸다.
@@ -173,6 +178,7 @@ pub mod app_storage;
 pub mod builtin;
 pub mod conversation;
 pub mod data;
+pub mod local_agent;
 pub mod registry;
 pub mod validate;
 
@@ -208,7 +214,8 @@ pub const TAURI_EVENT: &str = "core-event";
 ///   그리고, 이 필드가 없는 3판 정의의 탐색기도 같은 모습으로 그린다.
 /// - 6판: 5판 + `markdown_editor`와 `markdown_view`의 `document` 바인딩, 앱 정의의 `storage`와 `agent`.
 /// - 7판: 6판 + `feed`의 `columns`, `copy`.
-pub const BLOCK_SET_VERSION: u32 = 7;
+/// - 8판: 7판 + 기기 로컬 ACP 대화 블록 `agent_session`.
+pub const BLOCK_SET_VERSION: u32 = 8;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -223,12 +230,14 @@ pub const BLOCK_SET_VERSION: u32 = 7;
 ///   이미지와 소리 받기. 연결은 서버가 헤더를 쥐고 대신 부르는 `relay`와 이 기기가 로그인해 직접 부르는
 ///   `oauth` 두 가지다([`registry`]의 「연결」 절).
 /// - `connection` 2판: 계정마다 연결 이름을 등록한다.
+/// - `local_agent` 1판: 앱이 선언한 ACP 실행 명세로 이 기기에서 로컬 에이전트와 대화한다.
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("files", 2),
     ("agent", 3),
     ("web", 1),
     ("connection", 2),
     ("storage", 2),
+    ("local_agent", 1),
 ];
 
 /// 지원 범위를 알리지 않는 옛 쉘(블록 세트 3판 전)이 그릴 수 있는 블록 세트 판. 서버가 그런 기기에 보낼 앱을
@@ -400,6 +409,9 @@ pub struct DeviceState {
     /// 앱의 새 버전에서도 같은 `id`의 `pc` 권한이 있으면 이어 쓴다.
     #[serde(default)]
     pub pc_access: Vec<PcAccess>,
+    /// (계약 20판) 이 기기에서 앱 권한과 실행 명세별로 허용한 로컬 에이전트.
+    #[serde(default)]
+    pub local_agent_access: Vec<local_agent::LocalAgentAccess>,
 }
 
 /// (계약 14판) 이 기기에서 앱 하나의 `scope: pc` 권한 하나를 허용한 기록. 기기 밖으로 나가지 않는다.
@@ -715,6 +727,8 @@ pub enum PermissionDecl {
         /// 로그인을 구할 때와 오류에 보일 이름(예: "카드 보드").
         label: String,
     },
+    /// (모듈 `local_agent` 1판) 이 기기에서 선언한 ACP 에이전트 프로그램을 실행한다.
+    LocalAgent { id: String, label: String },
 }
 
 /// (모듈 `files` 2판) `files` 권한이 가리키는 범위.
@@ -778,7 +792,9 @@ pub const PC_KNOWN_FOLDERS: &[(&str, &str)] = &[
 impl PermissionDecl {
     pub fn id(&self) -> &str {
         match self {
-            PermissionDecl::Files { id, .. } | PermissionDecl::Connection { id, .. } => id,
+            PermissionDecl::Files { id, .. }
+            | PermissionDecl::Connection { id, .. }
+            | PermissionDecl::LocalAgent { id, .. } => id,
         }
     }
 
@@ -787,6 +803,7 @@ impl PermissionDecl {
         match self {
             PermissionDecl::Files { .. } => "files",
             PermissionDecl::Connection { .. } => "connection",
+            PermissionDecl::LocalAgent { .. } => "local_agent",
         }
     }
 
@@ -795,6 +812,8 @@ impl PermissionDecl {
             PermissionDecl::Files { access, .. } | PermissionDecl::Connection { access, .. } => {
                 *access
             }
+            // 로컬 에이전트 권한은 파일 접근 권한이 아니다. 기존 파일 전용 검사는 읽기 수준으로 취급한다.
+            PermissionDecl::LocalAgent { .. } => FileAccess::Read,
         }
     }
 }
@@ -877,6 +896,16 @@ pub enum Block {
     ///   보낼 첨부로 쌓인다. 첨부가 있으면 글 없이도 보낸다. 기록의 사용자 말에 첨부가 보이고, 이미지는
     ///   눌러 크게 보고 다른 파일은 눌러 기기의 기본 앱으로 연다.
     AgentChat {},
+    /// (블록 세트 8판) 이 창 안에서 기기 로컬 ACP 에이전트 하나와 대화한다.
+    /// `permission`은 `local_agent` 권한, `root`는 `files`의 `folder/readwrite` 권한이다.
+    /// `agents`는 실행 명세 배열이며, `selected`와 `on_select`는 같은 창 상태 키를 쓴다.
+    AgentSession {
+        permission: String,
+        root: FolderRef,
+        agents: Binding,
+        selected: StateRef,
+        on_select: SetState,
+    },
     /// (블록 세트 3판) 웹 페이지 하나를 띄우는 웹 화면. `requires.modules`에 `web`이 있어야 하고 정의에
     /// 하나까지 둘 수 있다. 위에 뒤로, 앞으로, 새로고침 단추와 페이지 제목 줄이 있고, `address_bar`면 제목 자리에
     /// 주소창이 온다(Enter로 이동, scheme이 없으면 `https://`를 붙이고 주소로 보이지 않는 글은 검색한다).
@@ -1218,6 +1247,7 @@ impl Block {
             } => 6,
             Block::MarkdownEditor { .. } | Block::MarkdownView { .. } => 1,
             Block::AgentChat {} => 2,
+            Block::AgentSession { .. } => 8,
             Block::WebView { .. } | Block::Explorer { .. } => 3,
             Block::Stack { .. }
             | Block::Tabs { .. }
@@ -1248,6 +1278,7 @@ impl Block {
             Block::MarkdownEditor { .. } => "markdown_editor",
             Block::MarkdownView { .. } => "markdown_view",
             Block::AgentChat {} => "agent_chat",
+            Block::AgentSession { .. } => "agent_session",
             Block::WebView { .. } => "web_view",
             Block::Explorer { .. } => "explorer",
             Block::Stack { .. } => "stack",
@@ -1918,6 +1949,67 @@ pub enum CoreRequest {
         view: VisibleView,
     },
 
+    /// (계약 20판) 기기 로컬 에이전트 창 명령. 자세한 응답과 세대 규칙은 [`local_agent`]에 있다.
+    #[serde(rename = "local_agent.attach")]
+    LocalAgentAttach { window_id: String },
+    #[serde(rename = "local_agent.detach")]
+    LocalAgentDetach { window_id: String },
+    #[serde(rename = "local_agent.allow")]
+    LocalAgentAllow {
+        window_id: String,
+        spec_hash: String,
+    },
+    #[serde(rename = "local_agent.retry")]
+    LocalAgentRetry {
+        window_id: String,
+        generation: String,
+    },
+    #[serde(rename = "local_agent.authenticate")]
+    LocalAgentAuthenticate {
+        window_id: String,
+        generation: String,
+        method_id: String,
+    },
+    #[serde(rename = "local_agent.configure")]
+    LocalAgentConfigure {
+        window_id: String,
+        generation: String,
+        control_id: String,
+        value: local_agent::AgentControlValue,
+    },
+    #[serde(rename = "local_agent.send")]
+    LocalAgentSend {
+        window_id: String,
+        generation: String,
+        request_id: String,
+        text: String,
+        attachments: Vec<conversation::ConversationUpload>,
+    },
+    #[serde(rename = "local_agent.cancel")]
+    LocalAgentCancel {
+        window_id: String,
+        generation: String,
+    },
+    #[serde(rename = "local_agent.permission")]
+    LocalAgentPermission {
+        window_id: String,
+        generation: String,
+        request_id: String,
+        option_id: String,
+    },
+    #[serde(rename = "local_agent.attachment")]
+    LocalAgentAttachment {
+        window_id: String,
+        item_id: String,
+        attachment_id: String,
+    },
+    #[serde(rename = "local_agent.attachment_open")]
+    LocalAgentAttachmentOpen {
+        window_id: String,
+        item_id: String,
+        attachment_id: String,
+    },
+
     /// (10판) 받아 둔 새 판으로 다시 시작한다. 위 「쉘 업데이트」 절.
     /// - 업데이터가 없는 쉘([`UpdateStatus::Unavailable`])이면 `unavailable`, 그 밖에 `ready`가 아니면 `invalid_request`.
     /// - 코어는 디스크에 아직 쓰지 않은 상태를 쓰고 설치를 시작한다. Windows에서는 설치를 시작하면 응답 전에 쉘이
@@ -2082,6 +2174,31 @@ pub enum CoreReply {
     #[serde(rename = "conversation.attachment_open")]
     ConversationAttachmentOpen {},
 
+    #[serde(rename = "local_agent.attach")]
+    LocalAgentAttach {
+        snapshot: local_agent::LocalAgentSnapshot,
+    },
+    #[serde(rename = "local_agent.detach")]
+    LocalAgentDetach {},
+    #[serde(rename = "local_agent.allow")]
+    LocalAgentAllow {},
+    #[serde(rename = "local_agent.retry")]
+    LocalAgentRetry {},
+    #[serde(rename = "local_agent.authenticate")]
+    LocalAgentAuthenticate {},
+    #[serde(rename = "local_agent.configure")]
+    LocalAgentConfigure {},
+    #[serde(rename = "local_agent.send")]
+    LocalAgentSend { request_id: String, queued: bool },
+    #[serde(rename = "local_agent.cancel")]
+    LocalAgentCancel {},
+    #[serde(rename = "local_agent.permission")]
+    LocalAgentPermission {},
+    #[serde(rename = "local_agent.attachment")]
+    LocalAgentAttachment { mime: String, data_base64: String },
+    #[serde(rename = "local_agent.attachment_open")]
+    LocalAgentAttachmentOpen {},
+
     #[serde(rename = "storage.get")]
     StorageGet {
         result: app_storage::StorageReadReply,
@@ -2233,6 +2350,13 @@ pub enum CoreEvent {
         window_id: String,
         update: app_storage::StorageUpdate,
     },
+    /// (계약 20판) 로컬 에이전트 창의 상태 변경. 세대가 다른 업데이트는 화면이 넘긴다.
+    #[serde(rename = "local_agent.update")]
+    LocalAgentUpdate {
+        window_id: String,
+        generation: String,
+        update: local_agent::LocalAgentUpdate,
+    },
 }
 
 /// 명령의 실패.
@@ -2247,7 +2371,7 @@ pub struct CoreError {
     pub details: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "contract.ts")]
 pub enum ErrorCode {
@@ -2277,6 +2401,8 @@ pub enum ErrorCode {
     Server,
     /// 이 쉘의 실행 환경에서는 쓸 수 없는 기능이다(개발용 HTTP 다리의 웹 화면 등).
     Unavailable,
+    /// 로컬 에이전트와의 ACP 연결 또는 프로토콜 처리에 실패했다.
+    LocalAgentFailed,
 }
 
 impl ErrorCode {
@@ -2300,6 +2426,7 @@ impl ErrorCode {
                 "kaleidoscope 서버에 연결되어 있지 않거나 서버가 요청을 처리하지 못했습니다."
             }
             ErrorCode::Unavailable => "이 쉘에서는 쓸 수 없는 기능입니다.",
+            ErrorCode::LocalAgentFailed => "로컬 에이전트와 통신할 수 없습니다.",
         }
     }
 }
@@ -2819,7 +2946,7 @@ mod tests {
         assert!(!current.renders(&unknown_module));
         assert_eq!(
             serde_json::to_string(&current).unwrap(),
-            r#"{"blocks":7,"modules":{"agent":3,"connection":2,"files":2,"storage":2,"web":1}}"#
+            r#"{"blocks":8,"modules":{"agent":3,"connection":2,"files":2,"local_agent":1,"storage":2,"web":1}}"#
         );
         // 4판 쉘(v0.4.x)은 5판 필드를 쓴 탐색기를 받지 않는다.
         let explorer = validate::parse_app_definition(&example("explorer.json")).unwrap();

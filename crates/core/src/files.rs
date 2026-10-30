@@ -42,7 +42,9 @@ pub(crate) fn permission(
     let access = match permission {
         PermissionDecl::Files { access, .. } => *access,
         // 연결 권한으로는 파일을 다루지 않는다.
-        PermissionDecl::Connection { .. } => return Err(error::make(ErrorCode::PermissionDenied)),
+        PermissionDecl::Connection { .. } | PermissionDecl::LocalAgent { .. } => {
+            return Err(error::make(ErrorCode::PermissionDenied));
+        }
     };
     if write && access != FileAccess::Readwrite {
         return Err(error::make(ErrorCode::PermissionDenied));

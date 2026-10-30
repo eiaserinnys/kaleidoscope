@@ -1,0 +1,52 @@
+{
+  "id": "agent",
+  "name": "에이전트",
+  "requires": {
+    "blocks": 8,
+    "modules": { "local_agent": 1, "files": 1, "storage": 1 }
+  },
+  "permissions": [
+    { "module": "local_agent", "id": "run", "label": "에이전트 실행" },
+    { "module": "files", "id": "work", "access": "readwrite", "label": "작업 폴더" }
+  ],
+  "state": { "agent_id": null },
+  "storage": {
+    "entries": [{
+      "id": "agents",
+      "key": "settings/agents",
+      "kind": "json",
+      "label": "에이전트",
+      "presentation": "hidden",
+      "schema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "name": { "type": "string", "minLength": 1 },
+            "command": { "type": "string", "minLength": 1 },
+            "args": { "type": "array", "items": { "type": "string" } },
+            "env": { "type": "object" },
+            "auth_methods": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["id", "name", "command", "args", "env"],
+          "additionalProperties": false
+        }
+      },
+      "default": [
+        { "id": "claude", "name": "Claude Code", "command": "npx", "args": ["-y", "@agentclientprotocol/claude-agent-acp"], "env": {} },
+        { "id": "codex", "name": "Codex", "command": "npx", "args": ["-y", "@agentclientprotocol/codex-acp"], "env": {}, "auth_methods": ["chat-gpt"] },
+        { "id": "gemini", "name": "Gemini CLI", "command": "npx", "args": ["-y", "@google/gemini-cli", "--acp"], "env": {}, "auth_methods": ["oauth-personal"] },
+        { "id": "antigravity", "name": "Antigravity", "command": "agy", "args": ["acp"], "env": {}, "auth_methods": ["oauth-personal"] }
+      ]
+    }]
+  },
+  "ui": {
+    "type": "agent_session",
+    "permission": "run",
+    "root": { "permission": "work" },
+    "agents": { "expr": "$storage.agents" },
+    "selected": { "state": "agent_id" },
+    "on_select": { "set_state": "agent_id" }
+  }
+}
