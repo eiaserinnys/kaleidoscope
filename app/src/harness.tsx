@@ -110,6 +110,7 @@ const snapshot: ShellSnapshot = {
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [] },
   supported: { blocks: 4, modules: { files: 1, web: 1 } },
   link: linkStatus(new URLSearchParams(window.location.search).get("link")),
+  sharing: [],
 };
 
 const files = bottomMenuScenario

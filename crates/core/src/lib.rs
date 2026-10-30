@@ -310,6 +310,10 @@ impl Core {
             | CoreRequest::WebHistory { .. }
             | CoreRequest::WebCapture { .. }
             | CoreRequest::WebDetach { .. }) => web::handle(&self.inner, request),
+            CoreRequest::ShareSet { .. } | CoreRequest::ShareView { .. } => Err(error::with_message(
+                kaleidoscope_contract::ErrorCode::Unavailable,
+                "같이 보기는 아직 이 코어에 없습니다",
+            )),
             CoreRequest::DataAttach { window_id } => data_runtime::attach(&self.inner, &window_id),
             CoreRequest::DataDetach { window_id } => data_runtime::detach(&self.inner, &window_id),
             CoreRequest::DataAct {
@@ -491,5 +495,7 @@ pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
         device: state.device.clone(),
         supported: kaleidoscope_contract::Supported::current(),
         link: state.link.clone(),
+        // 같이 보기는 코어 구현(카드 #814)이 채운다.
+        sharing: Vec::new(),
     }
 }
