@@ -66,6 +66,18 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
         "previous windows closed",
     )?;
 
+    let mut browser: Value =
+        serde_json::from_str(include_str!("../../../../apps/web-browser.json"))
+            .map_err(|error| error.to_string())?;
+    browser["id"] = json!("e2e-web-browser");
+    browser["state"]["url"] = json!("https://example.com/");
+    call(
+        core,
+        CoreRequest::AppImport {
+            definition_json: browser.to_string(),
+        },
+    )?;
+
     let events: WebEvents = Arc::new(Mutex::new(Vec::new()));
     let events_listener = events.clone();
     core.subscribe(Box::new(move |event| {
@@ -81,7 +93,7 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     let browser_id = open(
         core,
         &desktop,
-        "web-browser",
+        "e2e-web-browser",
         Rect {
             x: 12,
             y: 12,
@@ -89,16 +101,9 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
             height: 600,
         },
     )?;
-    call(
-        core,
-        CoreRequest::WindowSetState {
-            window_id: browser_id.clone(),
-            state: [("url".to_string(), json!("https://example.com/"))].into(),
-        },
-    )?;
     require_request(log, start, "browser UI attach", |request| {
         matches!(request,
-            CoreRequest::WebAttach { window_id, url } | CoreRequest::WebNavigate { window_id, url } if window_id == &browser_id && url.starts_with("https://example.com/")
+            CoreRequest::WebAttach { window_id, url } if window_id == &browser_id && url.starts_with("https://example.com/")
         )
     })?;
     let page = wait_web(&events, &browser_id, "https://example.com/")?;
@@ -108,7 +113,7 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
         json!({"window_id": browser_id, "page": page}),
     )?;
     wait_place(&browser_id, start, true, log)?;
-    wait_dom(app, "return !!document.querySelector('[data-testid=\"app-window-web-browser\"] [data-ks-web-surface]') && !document.querySelector('.ks-web-frozen-image');", "live browser")?;
+    wait_dom(app, "return !!document.querySelector('[data-testid=\"app-window-e2e-web-browser\"] [data-ks-web-surface]') && !document.querySelector('.ks-web-frozen-image');", "live browser")?;
     screen(out, log, "04-ui-live")?;
 
     let start = request_mark();
@@ -116,7 +121,7 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     wait_dom(
         app,
         r#"
-      const menu=document.querySelector('[role=menu]'); const surface=document.querySelector('[data-testid="app-window-web-browser"] [data-ks-web-surface]');
+      const menu=document.querySelector('[role=menu]'); const surface=document.querySelector('[data-testid="app-window-e2e-web-browser"] [data-ks-web-surface]');
       const image=surface?.querySelector('.ks-web-frozen-image'); if(!menu||!surface||!image?.src.startsWith('data:image/png;base64,')) return false;
       const m=menu.getBoundingClientRect(), s=surface.getBoundingClientRect();
       const overlap=Math.min(m.right,s.right)>Math.max(m.left,s.left) && Math.min(m.bottom,s.bottom)>Math.max(m.top,s.top);
@@ -156,7 +161,7 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
         app,
         r#"
       const editor=document.querySelector('[data-testid="app-window-md-editor"]');
-      const surface=document.querySelector('[data-testid="app-window-web-browser"] [data-ks-web-surface]');
+      const surface=document.querySelector('[data-testid="app-window-e2e-web-browser"] [data-ks-web-surface]');
       if(!editor||!surface||!surface.querySelector('.ks-web-frozen-image')) return false;
       const e=editor.getBoundingClientRect(), s=surface.getBoundingClientRect();
       return Math.min(e.right,s.right)>Math.max(e.left,s.left) && Math.min(e.bottom,s.bottom)>Math.max(e.top,s.top);
@@ -175,7 +180,7 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     action(
         app,
         r#"
-      const surface=document.querySelector('[data-testid="app-window-web-browser"] [data-ks-web-surface]');
+      const surface=document.querySelector('[data-testid="app-window-e2e-web-browser"] [data-ks-web-surface]');
       if(!surface?.querySelector('.ks-web-frozen-image')) return false;
       const r=surface.getBoundingClientRect(), x=r.left+20, y=r.top+20;
       const target=document.elementFromPoint(x,y); if(!target||!surface.contains(target)) return false;
@@ -361,7 +366,7 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     action(
         app,
         r#"
-      const w=document.querySelector('[data-testid="app-window-web-browser"]'); if(!w)return false;
+      const w=document.querySelector('[data-testid="app-window-e2e-web-browser"]'); if(!w)return false;
       w.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerId:1,pointerType:'mouse',isPrimary:true})); return true;
     "#,
         "raise browser for address",
@@ -371,16 +376,16 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     action(
         app,
         r#"
-      const input=document.querySelector('[data-testid="app-window-web-browser"] input[aria-label="주소"]');
+      const input=document.querySelector('[data-testid="app-window-e2e-web-browser"] input[aria-label="주소"]');
       if(!input)return false; input.click(); return true;
     "#,
         "edit address",
     )?;
-    wait_dom(app, "const i=document.querySelector('[data-testid=\"app-window-web-browser\"] input[aria-label=\"주소\"]'); return !!i && !i.readOnly;", "editable address")?;
+    wait_dom(app, "const i=document.querySelector('[data-testid=\"app-window-e2e-web-browser\"] input[aria-label=\"주소\"]'); return !!i && !i.readOnly;", "editable address")?;
     action(
         app,
         r#"
-      const input=document.querySelector('[data-testid="app-window-web-browser"] input[aria-label="주소"]');
+      const input=document.querySelector('[data-testid="app-window-e2e-web-browser"] input[aria-label="주소"]');
       if(!input||input.readOnly)return false;
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'https://example.org/');
       input.dispatchEvent(new Event('input',{bubbles:true})); return true;
@@ -392,7 +397,7 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     action(
         app,
         r#"
-      const input=document.querySelector('[data-testid="app-window-web-browser"] input[aria-label="주소"]');
+      const input=document.querySelector('[data-testid="app-window-e2e-web-browser"] input[aria-label="주소"]');
       if(!input)return false; input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true,cancelable:true})); return true;
     "#,
         "submit address",
