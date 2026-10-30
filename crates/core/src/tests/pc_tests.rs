@@ -342,3 +342,125 @@ fn windows_hidden_and_system_entries_are_omitted() {
         .arg(&system)
         .status();
 }
+
+fn assert_grant_protect_data_dir(core: &Core, window: &str) {
+    let list = || {
+        core.handle(CoreRequest::FilesList {
+            window_id: window.into(),
+            permission: "docs".into(),
+            dir: "".into(),
+        })
+    };
+    let CoreReply::FilesList { entries } = list().unwrap() else {
+        panic!()
+    };
+    assert!(entries.iter().any(|entry| entry.name == "readme.md"));
+    assert!(!entries.iter().any(|entry| entry.name == "private-data"));
+    expect_error(
+        core.handle(CoreRequest::FilesRead {
+            window_id: window.into(),
+            permission: "docs".into(),
+            path: "private-data/missing.json".into(),
+        }),
+        ErrorCode::PermissionDenied,
+    );
+    expect_error(
+        core.handle(CoreRequest::FilesRead {
+            window_id: window.into(),
+            permission: "docs".into(),
+            path: "private-data/link.json".into(),
+        }),
+        ErrorCode::PermissionDenied,
+    );
+    expect_error(
+        core.handle(CoreRequest::FilesWrite {
+            window_id: window.into(),
+            permission: "docs".into(),
+            path: "private-data/new.md".into(),
+            text: "x".into(),
+            expected_revision: None,
+        }),
+        ErrorCode::PermissionDenied,
+    );
+    expect_error(
+        core.handle(CoreRequest::FilesOpen {
+            window_id: window.into(),
+            permission: "docs".into(),
+            path: "private-data/link.json".into(),
+            app_id: "md-editor".into(),
+            rect: None,
+        }),
+        ErrorCode::PermissionDenied,
+    );
+    expect_error(
+        core.handle(CoreRequest::DataMedia {
+            window_id: window.into(),
+            media: kaleidoscope_contract::data::MediaRef {
+                permission: "docs".into(),
+                path: "private-data/link.json".into(),
+                query: Default::default(),
+                crop: None,
+            },
+            max_px: None,
+        }),
+        ErrorCode::PermissionDenied,
+    );
+}
+
+#[test]
+fn pc_opened_parent_grant_must_protect_data_dir() {
+    use kaleidoscope_contract::PcRootKind;
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("sandbox");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("readme.md"), "readme").unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.roots.lock().unwrap().push(crate::PcRoot {
+        id: "C".into(),
+        kind: PcRootKind::Volume,
+        name: "C".into(),
+        path: root.clone(),
+    });
+    let core = open_core(
+        &root.join("private-data"),
+        vec![pc_explorer(), MD_EDITOR.into()],
+        &host,
+    );
+    fs::write(root.join("private-data/link.json"), "secret").unwrap();
+    let (_, desktop) = active_ids(&core);
+    let explorer = open_window(&core, &desktop, "explorer");
+    core.handle(CoreRequest::FilesAllowPc {
+        window_id: explorer.clone(),
+        permission: "folder".into(),
+    })
+    .unwrap();
+    let CoreReply::FilesOpen { window } = core
+        .handle(CoreRequest::FilesOpen {
+            window_id: explorer,
+            permission: "folder".into(),
+            path: "C/readme.md".into(),
+            app_id: "md-editor".into(),
+            rect: None,
+        })
+        .unwrap()
+    else {
+        panic!()
+    };
+    assert_grant_protect_data_dir(&core, &window.id);
+}
+
+#[test]
+fn selected_parent_grant_must_protect_data_dir() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("sandbox");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("readme.md"), "readme").unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(root.clone()));
+    let core = open_core(&root.join("private-data"), vec![MD_EDITOR.into()], &host);
+    fs::write(root.join("private-data/link.json"), "secret").unwrap();
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "md-editor");
+    pick_folder(&core, &window);
+    assert_grant_protect_data_dir(&core, &window);
+}

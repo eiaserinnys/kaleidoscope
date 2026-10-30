@@ -342,7 +342,7 @@ impl Core {
                 path,
             } => {
                 let state = self.inner.state.lock().unwrap();
-                files::read(&state, &window_id, &permission, &path)
+                files::read(&self.inner, &state, &window_id, &permission, &path)
             }
             CoreRequest::FilesWrite {
                 window_id,
@@ -353,6 +353,7 @@ impl Core {
             } => {
                 let state = self.inner.state.lock().unwrap();
                 files::write(
+                    &self.inner,
                     &state,
                     &window_id,
                     &permission,

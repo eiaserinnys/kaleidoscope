@@ -13,7 +13,7 @@ use crate::{CoreState, Inner};
 
 mod pc;
 pub(crate) use pc::scope;
-use pc::{pc_access, pc_resolve, pc_roots, reject_data_dir};
+use pc::{pc_access, pc_resolve, pc_roots};
 
 pub(crate) fn permission(
     state: &CoreState,
@@ -66,7 +66,7 @@ pub(crate) fn list(
             for kind in [PcRootKind::Known, PcRootKind::Volume] {
                 for root in roots.iter().filter(|root| root.kind == kind) {
                     if let Ok(path) = fs::canonicalize(&root.path) {
-                        if reject_data_dir(inner, &path).is_err() {
+                        if resolve_path(&inner.data_dir, &path, "", true, false).is_err() {
                             continue;
                         }
                         entries.push(FileEntry {
@@ -87,7 +87,7 @@ pub(crate) fn list(
         (root, directory, relative)
     } else {
         let root = granted_root(state, window_id, permission_id, false)?;
-        let directory = resolve_path(&root, dir, true, false)?;
+        let directory = resolve_path(&inner.data_dir, &root, dir, true, false)?;
         (root, directory, dir)
     };
     let mut entries = Vec::new();
@@ -122,12 +122,9 @@ pub(crate) fn list(
         } else {
             format!("{relative_dir}/{name}")
         };
-        let Ok(resolved) = resolve_path(&root, &relative_path, false, true) else {
+        let Ok(resolved) = resolve_path(&inner.data_dir, &root, &relative_path, false, true) else {
             continue;
         };
-        if pc && reject_data_dir(inner, &resolved).is_err() {
-            continue;
-        }
         let Ok(metadata) = fs::metadata(&resolved) else {
             continue;
         };
@@ -163,13 +160,14 @@ pub(crate) fn list(
 }
 
 pub(crate) fn read(
+    inner: &Inner,
     state: &CoreState,
     window_id: &str,
     permission_id: &str,
     path: &str,
 ) -> Result<CoreReply, CoreError> {
     let root = granted_root(state, window_id, permission_id, false)?;
-    let resolved = resolve_path(&root, path, false, false)?;
+    let resolved = resolve_path(&inner.data_dir, &root, path, false, false)?;
     let file = fs::File::open(resolved).map_err(|error| error::io_error(&error))?;
     let mut bytes = Vec::new();
     file.take(FILE_READ_MAX_BYTES + 1)
@@ -191,6 +189,7 @@ pub(crate) fn read(
 }
 
 pub(crate) fn write(
+    inner: &Inner,
     state: &CoreState,
     window_id: &str,
     permission_id: &str,
@@ -199,7 +198,7 @@ pub(crate) fn write(
     expected_revision: Option<&str>,
 ) -> Result<CoreReply, CoreError> {
     let root = granted_root(state, window_id, permission_id, true)?;
-    let resolved = resolve_path(&root, path, false, true)?;
+    let resolved = resolve_path(&inner.data_dir, &root, path, false, true)?;
 
     match expected_revision {
         Some(expected) => {
@@ -253,6 +252,7 @@ pub(crate) fn granted_root(
 }
 
 pub(crate) fn resolve_path(
+    data_dir: &Path,
     root: &Path,
     relative: &str,
     allow_root: bool,
@@ -266,24 +266,42 @@ pub(crate) fn resolve_path(
     } else {
         root.join(relative)
     };
-    match fs::canonicalize(&candidate) {
+    let (resolved, exists) = match fs::canonicalize(&candidate) {
         Ok(canonical) => {
             if canonical.starts_with(root) {
-                Ok(canonical)
+                Ok((canonical, true))
             } else {
                 Err(error::make(ErrorCode::PathOutsideRoot))
             }
         }
         Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
             ensure_missing_path_inside(root, &candidate)?;
-            if allow_missing {
-                Ok(candidate)
-            } else {
-                Err(error::make(ErrorCode::NotFound))
-            }
+            Ok((candidate, false))
         }
         Err(io_error) => Err(error::io_error(&io_error)),
+    }?;
+    let actual = if exists {
+        resolved.clone()
+    } else {
+        let parent = resolved
+            .parent()
+            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        fs::canonicalize(parent)
+            .map_err(|error| error::io_error(&error))?
+            .join(
+                resolved
+                    .file_name()
+                    .ok_or_else(|| error::make(ErrorCode::NotFound))?,
+            )
+    };
+    let protected = fs::canonicalize(data_dir).map_err(|error| error::io_error(&error))?;
+    if actual.starts_with(protected) {
+        return Err(error::make(ErrorCode::PermissionDenied));
     }
+    if !exists && !allow_missing {
+        return Err(error::make(ErrorCode::NotFound));
+    }
+    Ok(resolved)
 }
 
 fn ensure_missing_path_inside(root: &Path, candidate: &Path) -> Result<(), CoreError> {
@@ -355,7 +373,7 @@ pub(crate) fn open(
         pc_resolve(inner, path)?.1
     } else {
         let root = granted_root(state, window_id, permission_id, false)?;
-        resolve_path(&root, path, false, false)?
+        resolve_path(&inner.data_dir, &root, path, false, false)?
     };
     if !resolved.is_file() {
         return Err(error::make(ErrorCode::InvalidRequest));

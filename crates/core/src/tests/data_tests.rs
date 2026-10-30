@@ -978,3 +978,46 @@ fn agent_three_definitions_are_imported_by_this_core() {
         .unwrap();
     assert!(matches!(reply, CoreReply::AppImport { app, .. } if app.id == "workspace-pas-v2"));
 }
+
+#[test]
+fn folder_and_file_sources_must_protect_data_dir() {
+    use kaleidoscope_contract::data::SourceFormat;
+    use kaleidoscope_data::SourcePlan;
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("sandbox");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("readme.json"), "{}").unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(root.clone()));
+    let core = open_core(&root.join("private-data"), vec![definition()], &host);
+    fs::write(root.join("private-data/link.json"), "{}").unwrap();
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "data-app");
+    pick_folder(&core, &window);
+    for recursive in [false, true] {
+        let plan = SourcePlan::Folder {
+            permission: "docs".into(),
+            dir: String::new(),
+            recursive,
+            extensions: vec![],
+        };
+        let entries =
+            crate::data_sources::fetch(&core.inner, &window, &plan, SourceFormat::Json).unwrap();
+        let paths = entries
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry["path"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert!(paths.contains(&"readme.json"));
+        assert!(!paths.iter().any(|path| path.starts_with("private-data")));
+    }
+    let plan = SourcePlan::File {
+        permission: "docs".into(),
+        path: "private-data/link.json".into(),
+        format: SourceFormat::Json,
+    };
+    assert!(
+        matches!(crate::data_sources::fetch(&core.inner, &window, &plan, SourceFormat::Json), Err(crate::connections::RequestError::Core(error)) if error.code == ErrorCode::PermissionDenied)
+    );
+}

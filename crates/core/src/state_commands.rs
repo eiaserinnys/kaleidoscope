@@ -446,6 +446,8 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::StorageWrite { .. }
         | CoreRequest::StorageReset { .. }
         | CoreRequest::FilesPickFolder { .. }
+        | CoreRequest::FilesAllowPc { .. }
+        | CoreRequest::FilesOpen { .. }
         | CoreRequest::FilesList { .. }
         | CoreRequest::FilesRead { .. }
         | CoreRequest::FilesWrite { .. }
@@ -464,7 +466,6 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::ShareSet { .. }
         | CoreRequest::ShareView { .. }
         | CoreRequest::UpdateRestart {} => Err(error::make(ErrorCode::InvalidRequest)),
-        _ => Err(error::make(ErrorCode::InvalidRequest)),
     }
 }
 

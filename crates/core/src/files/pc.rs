@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use kaleidoscope_contract::validate::valid_relative_path;
 use kaleidoscope_contract::{CoreError, ErrorCode, FilesScope, PermissionDecl};
@@ -57,18 +57,8 @@ pub(super) fn pc_resolve(inner: &Inner, path: &str) -> Result<(PathBuf, PathBuf)
     }
     let root = root.ok_or_else(|| error::make(ErrorCode::NotFound))?;
     let root = fs::canonicalize(root.path).map_err(|e| error::io_error(&e))?;
-    let resolved = resolve_path(&root, relative, true, false)?;
-    reject_data_dir(inner, &resolved)?;
+    let resolved = resolve_path(&inner.data_dir, &root, relative, true, false)?;
     Ok((root, resolved))
-}
-
-pub(super) fn reject_data_dir(inner: &Inner, path: &Path) -> Result<(), CoreError> {
-    let data_dir = fs::canonicalize(&inner.data_dir).map_err(|e| error::io_error(&e))?;
-    if path.starts_with(data_dir) {
-        Err(error::make(ErrorCode::PermissionDenied))
-    } else {
-        Ok(())
-    }
 }
 
 pub(crate) fn scope(

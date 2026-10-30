@@ -32,7 +32,7 @@ pub(crate) fn fetch(
             format,
         } => {
             let root = root(inner, window, permission)?;
-            let path = files::resolve_path(&root, path, false, false)?;
+            let path = files::resolve_path(&inner.data_dir, &root, path, false, false)?;
             let file = fs::File::open(path).map_err(|err| error::io_error(&err))?;
             let mut bytes = Vec::new();
             file.take(data::SOURCE_MAX_BYTES + 1)
@@ -50,10 +50,11 @@ pub(crate) fn fetch(
             extensions,
         } => {
             let root = root(inner, window, permission)?;
-            let directory = files::resolve_path(&root, dir, true, false)?;
+            let directory = files::resolve_path(&inner.data_dir, &root, dir, true, false)?;
             let mut entries = Vec::new();
             let mut visited = HashSet::new();
             walk(
+                &inner.data_dir,
                 &root,
                 &directory,
                 dir,
@@ -139,6 +140,7 @@ fn decode(bytes: Vec<u8>, format: SourceFormat) -> Result<Value, CoreError> {
 }
 
 fn walk(
+    data_dir: &Path,
     root: &Path,
     directory: &Path,
     relative: &str,
@@ -161,7 +163,7 @@ fn walk(
         } else {
             format!("{relative}/{name}")
         };
-        let Ok(resolved) = files::resolve_path(root, &path, false, false) else {
+        let Ok(resolved) = files::resolve_path(data_dir, root, &path, false, false) else {
             continue;
         };
         let Ok(metadata) = fs::metadata(&resolved) else {
@@ -195,7 +197,9 @@ fn walk(
             });
         }
         if is_dir && recursive {
-            walk(root, &resolved, &path, true, extensions, visited, entries)?;
+            walk(
+                data_dir, root, &resolved, &path, true, extensions, visited, entries,
+            )?;
         }
     }
     Ok(())
