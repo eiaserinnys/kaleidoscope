@@ -75,6 +75,132 @@ fn literal_agent_binding_reaches_execution_consent() {
     assert_eq!(execution.args, ["hello"]);
 }
 
+fn binding_test_spec(temp: &TempDir, args: Value) -> Value {
+    json!({
+        "id": "test-agent",
+        "name": "Test agent",
+        "command": super::local_agent_tests::agent_binary(),
+        "args": args,
+        "env": { "TEST_LOG": temp.path().join("binding-calls").to_string_lossy() }
+    })
+}
+
+fn binding_test_definition(id: &str) -> Value {
+    let mut definition: Value =
+        serde_json::from_str(include_str!("../../../../apps/agent.json")).unwrap();
+    definition["id"] = json!(id);
+    definition
+}
+
+#[test]
+fn literal_binding_change_restarts_worker_and_requires_new_consent() {
+    let temp = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(folder.path().into()));
+    let initial_spec = binding_test_spec(&temp, json!([]));
+    let mut definition = binding_test_definition("literal-binding-agent");
+    definition["ui"]["agents"] = json!([initial_spec]);
+    let core = open_core(temp.path(), vec![definition.to_string()], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "literal-binding-agent");
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+    })
+    .unwrap();
+    select(&core, &window, "test-agent");
+    until(&core, &window, LocalAgentPhase::ChoosingFolder);
+    core.handle(CoreRequest::FilesPickFolder {
+        window_id: window.clone(),
+        permission: "work".into(),
+    })
+    .unwrap();
+    let consent = until(&core, &window, LocalAgentPhase::AwaitingPermission);
+    let old_hash = consent.execution.as_ref().unwrap().spec_hash.clone();
+    let ready = allow_and_start(&core, &window);
+
+    let mut changed = definition;
+    changed["ui"]["agents"][0]["args"] = json!(["changed"]);
+    core.handle(CoreRequest::AppImport {
+        definition_json: changed.to_string(),
+    })
+    .unwrap();
+
+    let next = until(&core, &window, LocalAgentPhase::AwaitingPermission);
+    assert_ne!(next.generation, ready.generation);
+    let execution = next
+        .execution
+        .expect("new execution consent should be visible");
+    assert_ne!(execution.spec_hash, old_hash);
+    assert_eq!(execution.args, ["changed"]);
+    assert_eq!(
+        core.handle(CoreRequest::LocalAgentCancel {
+            window_id: window,
+            generation: ready.generation,
+        })
+        .unwrap_err()
+        .code,
+        ErrorCode::InvalidRequest
+    );
+}
+
+#[test]
+fn state_binding_null_stops_worker_and_returns_to_agent_choice() {
+    let temp = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(folder.path().into()));
+    let spec = binding_test_spec(&temp, json!([]));
+    let mut definition = binding_test_definition("state-binding-agent");
+    definition["state"]["agents"] = json!([spec]);
+    definition["ui"]["agents"] = json!({ "state": "agents" });
+    let core = open_core(temp.path(), vec![definition.to_string()], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "state-binding-agent");
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+    })
+    .unwrap();
+    core.handle(CoreRequest::WindowSetState {
+        window_id: window.clone(),
+        state: BTreeMap::from([
+            ("agent_id".into(), json!("test-agent")),
+            ("agents".into(), json!([spec])),
+        ]),
+    })
+    .unwrap();
+    until(&core, &window, LocalAgentPhase::ChoosingFolder);
+    core.handle(CoreRequest::FilesPickFolder {
+        window_id: window.clone(),
+        permission: "work".into(),
+    })
+    .unwrap();
+    let ready = allow_and_start(&core, &window);
+
+    core.handle(CoreRequest::WindowSetState {
+        window_id: window.clone(),
+        state: BTreeMap::from([
+            ("agent_id".into(), json!("test-agent")),
+            ("agents".into(), Value::Null),
+        ]),
+    })
+    .unwrap();
+
+    let choosing = until(&core, &window, LocalAgentPhase::ChoosingAgent);
+    assert_ne!(choosing.generation, ready.generation);
+    assert!(choosing.execution.is_none());
+    assert!(choosing.agents.is_empty());
+    assert_eq!(
+        core.handle(CoreRequest::LocalAgentCancel {
+            window_id: window,
+            generation: ready.generation,
+        })
+        .unwrap_err()
+        .code,
+        ErrorCode::InvalidRequest
+    );
+}
+
 #[test]
 fn local_agent_window_lifecycle_and_generation() {
     let temp = TempDir::new().unwrap();

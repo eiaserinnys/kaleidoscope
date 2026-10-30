@@ -30,6 +30,8 @@ pub(super) struct Context {
     pub cwd: Option<PathBuf>,
     // 블록 위치, 실행 권한, 폴더 권한은 명세를 못 읽어도 비교할 수 있다.
     pub block_scope: (String, String, String),
+    // 식 바인딩을 아직 해석할 수 없을 때만 이전 실행을 유지한다.
+    pub binding_pending: bool,
 }
 
 pub(super) fn record_dir(inner: &Inner, window: &str) -> PathBuf {
@@ -132,11 +134,19 @@ pub(super) fn resolve(
         queued: vec![],
         failure: None,
     };
-    let result = match agents {
-        data::Binding::Literal(value) => Some(BindingValue::Ready { value }),
-        data::Binding::State(_) => agent_state.map(|value| BindingValue::Ready { value }),
+    let (result, binding_pending) = match agents {
+        data::Binding::Literal(value) => (Some(BindingValue::Ready { value }), false),
+        data::Binding::State(_) => (
+            agent_state.map(|value| BindingValue::Ready { value }),
+            false,
+        ),
         data::Binding::Expr(_) => {
-            data_runtime::binding_value(inner, id, &format!("{pointer}/agents"))
+            let value = data_runtime::binding_value(inner, id, &format!("{pointer}/agents"));
+            let pending = matches!(
+                value.as_ref(),
+                Some(BindingValue::Loading {} | BindingValue::Failed { .. })
+            );
+            (value, pending)
         }
     };
     let specs = match result {
@@ -158,6 +168,7 @@ pub(super) fn resolve(
                     workspace,
                     cwd: current_cwd,
                     block_scope,
+                    binding_pending,
                 }));
             }
         },
@@ -171,6 +182,7 @@ pub(super) fn resolve(
                 workspace,
                 cwd: current_cwd,
                 block_scope,
+                binding_pending,
             }))
         }
     };
@@ -194,6 +206,7 @@ pub(super) fn resolve(
             workspace,
             cwd: current_cwd,
             block_scope,
+            binding_pending,
         }));
     };
     let Some(cwd) = cwd else {
@@ -207,6 +220,7 @@ pub(super) fn resolve(
             workspace,
             cwd: current_cwd,
             block_scope,
+            binding_pending,
         }));
     };
     let hash = agent_spec_hash(&spec);
@@ -231,6 +245,7 @@ pub(super) fn resolve(
             workspace,
             cwd: current_cwd,
             block_scope,
+            binding_pending,
         }));
     }
     let link = inner.link_file.lock().unwrap().clone();
@@ -274,5 +289,6 @@ pub(super) fn resolve(
         workspace,
         cwd: current_cwd,
         block_scope,
+        binding_pending,
     }))
 }

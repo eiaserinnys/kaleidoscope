@@ -197,15 +197,15 @@ fn open_and_run(
     }
     let consent = snapshot(core, &window_id)?;
     let phase = consent.phase.clone();
-    let execution = consent
-        .execution
-        .as_ref()
-        .ok_or("execution consent is missing")?;
-    if execution.command != COMMAND || execution.args != ["tree"] {
-        return Err(format!("unexpected command in consent: {execution:?}"));
-    }
     match &phase {
         LocalAgentPhase::AwaitingPermission => {
+            let execution = consent
+                .execution
+                .as_ref()
+                .ok_or("execution consent is missing")?;
+            if execution.command != COMMAND || execution.args != ["tree"] {
+                return Err(format!("unexpected command in consent: {execution:?}"));
+            }
             call(
                 core,
                 CoreRequest::LocalAgentAllow {
@@ -270,6 +270,20 @@ fn open_and_run(
             .any(|item| item.kind == ConversationItemKind::Assistant && item.text.contains("안녕"))
     })?;
     let pids = wait_pid_file(&pid_log)?;
+    let mut alive_pids = Vec::with_capacity(pids.len());
+    let mut exited_pids = Vec::new();
+    for pid in &pids {
+        if process_is_alive(*pid)? {
+            alive_pids.push(*pid);
+        } else {
+            exited_pids.push(*pid);
+        }
+    }
+    if !exited_pids.is_empty() {
+        return Err(format!(
+            "local agent process tree was not alive after replying: {exited_pids:?}"
+        ));
+    }
     let visible = visible_windows(&pids)?;
     if !visible.is_empty() {
         return Err(format!(
@@ -287,6 +301,7 @@ fn open_and_run(
             "wrapper_pid": pids[0],
             "agent_pid": pids[1],
             "grandchild_pid": pids[2],
+            "alive_pids": alive_pids,
             "visible_window_pids": visible,
             "passed": true
         }),
@@ -348,7 +363,7 @@ pub(super) fn scenario(core: &Core, out: &Path, log: &mut fs::File) -> Result<()
     record(
         log,
         "local-agent.shell-exit-pending",
-        json!({ "window_id": open_window, "pids": open_pids }),
+        json!({ "window_id": open_window, "pids": open_pids.clone(), "alive_pids": open_pids }),
     )?;
     record(
         log,
