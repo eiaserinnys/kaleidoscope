@@ -87,10 +87,9 @@ pub(crate) fn send(
         .collect();
     let conversation = format!("{}\0{}", ctx.storage.app, ctx.workspace.id);
     let plan = share::prepare_text(inner, &ctx.workspace.id, &conversation);
-    let body = match &plan {
-        Some((block, _)) if text.trim().is_empty() => block.clone(),
-        Some((block, _)) => format!("{}\n\n{}", text.trim(), block),
-        None => text.trim().to_string(),
+    let (body, context, sent_views) = match plan {
+        Some((block, views)) => (text.trim().to_string(), Some(block), Some(views)),
+        None => (text.trim().to_string(), None, None),
     };
     let mut pending = Pending {
         connection: ctx.client.info.name.clone(),
@@ -106,8 +105,9 @@ pub(crate) fn send(
             request_id: id,
             text: body,
             attachments,
+            context,
         },
-        sent_views: plan.map(|(_, views)| views),
+        sent_views,
         sent_visuals: visuals,
     };
     let path = path_for(

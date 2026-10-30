@@ -186,7 +186,7 @@ pub struct ThreadItemsReply {
     pub cursor: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, schemars::JsonSchema)]
 #[ts(export, export_to = "contract.ts")]
 pub struct ConversationUpload {
     pub name: String,
@@ -194,13 +194,23 @@ pub struct ConversationUpload {
     pub data_base64: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, schemars::JsonSchema)]
 #[ts(export, export_to = "contract.ts")]
 pub struct SendMessageRequest {
     pub request_id: String,
     pub text: String,
     #[serde(default)]
     pub attachments: Vec<ConversationUpload>,
+    #[serde(default, skip_serializing_if = "option_is_none_or_empty")]
+    #[schemars(
+        description = "비어 있지 않을 때 사람 기록에는 넣지 않고 에이전트 입력에만 덧붙이는 내용."
+    )]
+    #[ts(optional)]
+    pub context: Option<String>,
+}
+
+fn option_is_none_or_empty(value: &Option<String>) -> bool {
+    value.as_ref().is_none_or(String::is_empty)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -294,6 +304,12 @@ mod tests {
         let request: EnsureThreadRequest = serde_json::from_value(request_json.clone()).unwrap();
         assert_eq!(serde_json::to_value(request).unwrap(), request_json);
 
+        let send_json: serde_json::Value =
+            serde_json::from_str(include_str!("../fixtures/conversation-v1/send.json")).unwrap();
+        let send: SendMessageRequest = serde_json::from_value(send_json.clone()).unwrap();
+        assert_eq!(send.context.as_deref(), Some("에이전트에게만 가는 덧붙임"));
+        assert_eq!(serde_json::to_value(send).unwrap(), send_json);
+
         let response_json: serde_json::Value =
             serde_json::from_str(include_str!("../fixtures/conversation-v1/response.json"))
                 .unwrap();
@@ -308,5 +324,33 @@ mod tests {
             matches!(event, ConversationEvent::Text { ref stream_id, ref text } if stream_id == "stream-1" && text == "hello")
         );
         assert_eq!(serde_json::to_value(event).unwrap(), event_json);
+    }
+
+    #[test]
+    fn empty_context_is_omitted() {
+        let request = SendMessageRequest {
+            request_id: "request-1".into(),
+            text: "hello".into(),
+            attachments: vec![],
+            context: Some(String::new()),
+        };
+        let value = serde_json::to_value(request).unwrap();
+        assert!(value.get("context").is_none());
+
+        let legacy: SendMessageRequest =
+            serde_json::from_str(r#"{"request_id":"legacy","text":"hello","attachments":[]}"#)
+                .unwrap();
+        assert!(legacy.context.is_none());
+    }
+
+    #[test]
+    fn send_message_request_schema_includes_optional_context() {
+        let schema = serde_json::to_value(schemars::schema_for!(SendMessageRequest)).unwrap();
+        assert!(schema["properties"]["context"].is_object());
+        assert!(!schema["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|field| field == "context"));
     }
 }

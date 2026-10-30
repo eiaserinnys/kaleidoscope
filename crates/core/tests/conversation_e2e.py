@@ -1,4 +1,5 @@
 """빈 로컬 레지스트리와 가짜 대화 제공자로 실제 코어 두 기기를 시험한다."""
+import argparse
 import base64
 import hashlib
 import json
@@ -15,6 +16,17 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit, unquote
 
 from storage_e2e import BIN, ROOT, call, port, read_events, request, until
+
+LEGACY_SHARE_INTRO = (
+    "디렉터가 kaleidoscope 쉘에서 「같이 보기」로 켠 창에 지금 보이는 내용입니다. "
+    "쉘이 디렉터의 말 뒤에 붙였고 디렉터가 쓴 글이 아닙니다. 지난번 말 뒤로 달라진 것만 담았습니다. "
+    "지금 모습 전체는 MCP get_shared_view로 읽을 수 있습니다. 이미지나 웹 화면이 보이는 창은 "
+    "모습이 바뀌었을 때 「같이 보기 - 앱 이름.png」 첨부로 함께 옵니다."
+)
+LEGACY_SHARE_BLOCK = (
+    "<kaleidoscope-share>\n" + LEGACY_SHARE_INTRO
+    + "\n\n## 마크다운 편집기 (창 45dda342): 새로 같이 봄\n옛 같이 보기 글\n</kaleidoscope-share>"
+)
 
 
 class Provider:
@@ -104,6 +116,12 @@ def serve(provider):
                     thread_id = parts[1]
                     if parts[2] == "items" and len(parts) == 3:
                         items = [{"id": "1", "kind": "notice", "text": "notice", "at": "now", "attachments": []}]
+                        items.append({"id": "legacy-share", "kind": "user",
+                            "text": "오 이거 이제 보여?\n\n" + LEGACY_SHARE_BLOCK,
+                            "at": "now", "attachments": []})
+                        items.append({"id": "manual-share-tag", "kind": "user",
+                            "text": "사람이 직접 쓴 태그\n\n<kaleidoscope-share>\n태그 본문\n</kaleidoscope-share>",
+                            "at": "now", "attachments": []})
                         if provider.late_item:
                             provider.late_ready = True
                             items.append({"id": "4", "kind": "assistant", "text": "나중 답", "at": "now", "attachments": []})
@@ -113,7 +131,15 @@ def serve(provider):
                         provider.events.append(cursor)
                         late = provider.late_ready
                         snapshot = {"kind": "snapshot", "snapshot": {"cursor": "4" if late else "2", "busy": False, "tool": None, "stream_id": None, "text": None,
-                            "items": [{"id": "4" if late else "2", "kind": "assistant", "text": "답", "at": "now", "attachments": []}]}}
+                            "items": [
+                                {"id": "4" if late else "2", "kind": "assistant", "text": "답", "at": "now", "attachments": []},
+                                {"id": "legacy-event", "kind": "user",
+                                 "text": "이전 글\n\n" + LEGACY_SHARE_BLOCK,
+                                 "at": "now", "attachments": []},
+                                {"id": "manual-event-tag", "kind": "user",
+                                 "text": "SSE 사람이 직접 쓴 태그\n\n<kaleidoscope-share>\n태그 본문\n</kaleidoscope-share>",
+                                 "at": "now", "attachments": []},
+                            ]}}
                         encoded = json.dumps(snapshot, ensure_ascii=False)
                         split = encoded.index('"snapshot"')
                         text1 = json.dumps({"kind": "text", "stream_id": "stream-1", "text": "한"}, ensure_ascii=False)
@@ -181,7 +207,7 @@ def serve(provider):
     return server
 
 
-def run():
+def run(services_log_path=None):
     provider = Provider()
     fake = serve(provider)
     fake_url = "http://127.0.0.1:" + str(fake.server_port)
@@ -267,6 +293,11 @@ def run():
                 return None
             assert until("생성 뒤 get 없이 첫 대화 이벤트", initial_answer, seconds=15)
             assert None in provider.events, provider.events
+            legacy_event = next(item for event in initial_snapshots for item in event["update"]["snapshot"]["items"]
+                                if item["id"] == "legacy-event")
+            assert legacy_event["text"] == "이전 글", legacy_event
+            manual_event = next(item for event in initial_snapshots for item in event["update"]["snapshot"]["items"]
+                                if item["id"] == "manual-event-tag")
             assert not provider.posts, provider.posts
             call(url1, "conversation.send", window_id=window, request_id="draft-1", text="보존할 초안", attachments=[])
             with provider.lock:
@@ -274,6 +305,8 @@ def run():
                 provider.interventions = 0
             got = call(url1, "conversation.get", window_id=window)
             assert got["items"][0]["kind"] == "notice"
+            assert got["items"][1]["text"] == "오 이거 이제 보여?", got["items"][1]
+            manual_history = got["items"][2]
             assert call(url1, "conversation.history", window_id=window, before="1")["items"][0]["kind"] == "notice"
             until("SSE 재연결 cursor", lambda: "3" in provider.events, seconds=15)
             delivered = []
@@ -304,9 +337,11 @@ def run():
             call(url1, "conversation.send", window_id=window, request_id="request-1", text="안녕", attachments=[upload])
             assert len(provider.posts) == 2 and provider.posts[0] == provider.posts[1], provider.posts
             assert provider.interventions == 1
-            assert "새로 같이 봄" in provider.posts[-1]["text"] and "첫 줄" in provider.posts[-1]["text"]
+            assert provider.posts[-1]["text"] == "안녕", provider.posts[-1]
+            assert "새로 같이 봄" in provider.posts[-1]["context"] and "첫 줄" in provider.posts[-1]["context"]
             call(url1, "conversation.send", window_id=window, request_id="request-2", text="다시", attachments=[])
-            assert "그대로" in provider.posts[-1]["text"] and "첫 줄" not in provider.posts[-1]["text"]
+            assert provider.posts[-1]["text"] == "다시", provider.posts[-1]
+            assert "그대로" in provider.posts[-1]["context"] and "첫 줄" not in provider.posts[-1]["context"]
             call(url1, "share.view", window_id=window, view={"text": "수정된 줄", "visual": False,
                  "bounds": {"x": 0, "y": 0, "width": 400, "height": 300}})
             provider.fail_ids.add("failed-request")
@@ -314,7 +349,8 @@ def run():
                 "request_id": "failed-request", "text": "실패", "attachments": []})
             assert status == 400 and failure["code"] == "server", failure
             call(url1, "conversation.send", window_id=window, request_id="request-3", text="다시", attachments=[])
-            assert "바뀜" in provider.posts[-1]["text"] and "수정된 줄" in provider.posts[-1]["text"]
+            assert provider.posts[-1]["text"] == "다시", provider.posts[-1]
+            assert "바뀜" in provider.posts[-1]["context"] and "수정된 줄" in provider.posts[-1]["context"]
             provider.fail_ids.add("failed-persist")
             status, failure = request(url1 + "/core", "POST", {"op": "conversation.send", "window_id": window,
                 "request_id": "failed-persist", "text": "실패한 초안", "attachments": [upload]})
@@ -344,6 +380,9 @@ def run():
             assert restored["failed"] is True and restored["text"] == "실패한 초안" and restored["attachments"] == [upload], restored
             call(url1, "conversation.send", window_id=window, request_id="after-failed", text="실패한 초안", attachments=[upload])
             assert saved_failed() is None, "새 요청 접수 후 실패한 초안이 남았다"
+            call(url1, "share.set", window_id=window, on=True)
+            call(url1, "share.view", window_id=window, view={"text": "수정된 줄", "visual": False,
+                 "bounds": {"x": 0, "y": 0, "width": 400, "height": 300}})
             provider.drop_before.add("unreceived")
             status, failure = request(url1 + "/core", "POST", {"op": "conversation.send", "window_id": window,
                 "request_id": "unreceived", "text": "다시 보낼 초안", "attachments": []})
@@ -352,7 +391,30 @@ def run():
             call(url1, "conversation.get", window_id=window)
             recovered = until("미접수 초안", lambda: (event if (not events.empty() and (event := events.get_nowait()).get("event") == "conversation.draft" and event["request_id"] == "unreceived") else None))
             assert recovered["text"] == "다시 보낼 초안" and recovered["failed"] is False
+
+            pending_path = next(path for path in (root / "device-a" / "conversation-pending").glob("*.json")
+                                if json.loads(path.read_text())["request"]["request_id"] == "unreceived")
+            pending = json.loads(pending_path.read_text())
+            legacy_request = pending["request"]
+            legacy_context = legacy_request.pop("context")
+            legacy_request["text"] += "\n\n" + legacy_context
+            pending_path.write_text(json.dumps(pending, ensure_ascii=False), encoding="utf-8")
+            with provider.lock:
+                first_post = next(index for index, post in enumerate(provider.posts)
+                                  if post["request_id"] == "unreceived")
+                # 모델이 이미 보낸 v0.5.2 요청을 나타내며, pending 파일과 wire 본문을 맞춘다.
+                provider.posts[first_post] = legacy_request
+
+            call(url1, "share.view", window_id=window, view={"text": "다른 context", "visual": False,
+                 "bounds": {"x": 0, "y": 0, "width": 400, "height": 300}})
             call(url1, "conversation.send", window_id=window, request_id="unreceived", text="다시 보낼 초안", attachments=[])
+            replay = [post for post in provider.posts if post["request_id"] == "unreceived"]
+            assert len(replay) >= 2 and all(post == legacy_request for post in replay), replay
+            assert manual_event["text"] == "SSE 사람이 직접 쓴 태그\n\n<kaleidoscope-share>\n태그 본문\n</kaleidoscope-share>", manual_event
+            assert manual_history["text"] == "사람이 직접 쓴 태그\n\n<kaleidoscope-share>\n태그 본문\n</kaleidoscope-share>", manual_history
+
+            call(url1, "share.view", window_id=window, view={"text": "수정된 줄", "visual": False,
+                 "bounds": {"x": 0, "y": 0, "width": 400, "height": 300}})
             attachment = call(url1, "conversation.attachment", window_id=window, item_id="1", attachment_id="asset-1")
             assert attachment["name"] == "note.txt" and base64.b64decode(attachment["data_base64"]) == b"attachment", attachment
             def interrupted_send():
@@ -371,6 +433,8 @@ def run():
             until("재시작 뒤 같은 요청 접수", lambda: provider.receipts.get("restart-1") == "accepted", seconds=20)
             replay = [p for p in provider.posts if p["request_id"] == "restart-1"]
             assert len(replay) == 2 and replay[0] == replay[1], replay
+            assert replay[0]["text"] == "재시작" and "그대로" in replay[0]["context"] \
+                and "수정된 줄" not in replay[0]["context"], replay
             assert provider.interventions == 6
             until("대기 파일 제거", lambda: not list((root / "device-a" / "conversation-pending").glob("*.json")))
             until("재시작한 코어 연결", lambda: call(url1, "state.get")["snapshot"]["link"]["state"] == "connected")
@@ -405,7 +469,13 @@ def run():
         except Exception:
             logs.flush()
             logs.seek(0)
-            print(logs.read()[-6000:])
+            log_text = logs.read()
+            print(log_text[-6000:])
+            if services_log_path is not None:
+                services_log_path = Path(services_log_path)
+                services_log_path.parent.mkdir(parents=True, exist_ok=True)
+                services_log_path.write_text(log_text, encoding="utf-8")
+                print(f"services.log saved: {services_log_path}")
             raise
         finally:
             for child in reversed(children):
@@ -419,4 +489,6 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--services-log", type=Path)
+    run(parser.parse_args().services_log)

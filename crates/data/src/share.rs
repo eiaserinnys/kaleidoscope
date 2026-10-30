@@ -18,6 +18,33 @@ pub struct View {
     pub text: String,
 }
 
+/// 이전 버전이 사람 글 끝에 붙인 같이 보기 블록을 표시용 기록에서 걷어 낸다.
+pub fn strip_legacy_share_block(text: &str) -> String {
+    let Some(end) = text.rfind(SHARE_BLOCK_END) else {
+        return text.to_string();
+    };
+    if !text[end + SHARE_BLOCK_END.len()..].trim().is_empty() {
+        return text.to_string();
+    }
+    let Some(start) = text[..end].rfind(SHARE_BLOCK_START) else {
+        return text.to_string();
+    };
+    if start != 0 && !text[..start].ends_with('\n') {
+        return text.to_string();
+    }
+    let Some(content) = text[start..end]
+        .strip_prefix(SHARE_BLOCK_START)
+        .and_then(|block| block.strip_prefix('\n'))
+        .and_then(|block| block.strip_prefix(INTRO))
+    else {
+        return text.to_string();
+    };
+    if !content.starts_with("\n\n") {
+        return text.to_string();
+    }
+    text[..start].trim_end().to_string()
+}
+
 pub fn build_share_block(
     views: &[View],
     sent: &BTreeMap<String, SentView>,
@@ -85,4 +112,29 @@ pub fn build_share_block(
         ),
         next,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_share_block, strip_legacy_share_block, SentView, View};
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn only_generated_share_blocks_are_removed() {
+        let (block, _) = build_share_block(
+            &[View {
+                window_id: "window-1234".into(),
+                app_name: "작업 PAS".into(),
+                text: "보이는 글".into(),
+            }],
+            &BTreeMap::<String, SentView>::new(),
+        )
+        .unwrap();
+        let generated = format!("사람의 글\n\n{block}");
+        assert_eq!(strip_legacy_share_block(&generated), "사람의 글");
+
+        let handwritten =
+            "사람의 글\n\n<kaleidoscope-share>\n직접 작성한 태그 블록\n</kaleidoscope-share>";
+        assert_eq!(strip_legacy_share_block(handwritten), handwritten);
+    }
 }
