@@ -1,5 +1,6 @@
 #[cfg(feature = "e2e")]
 mod e2e;
+mod updater;
 #[cfg(windows)]
 mod web_host;
 
@@ -22,6 +23,7 @@ const SERVER_URL: &str = match option_env!("KALEIDOSCOPE_SERVER_URL") {
 
 struct DialogHost {
     app: AppHandle,
+    updater: Arc<updater::TauriUpdateHost>,
     #[cfg(windows)]
     web: web_host::TauriWebHost,
 }
@@ -47,6 +49,9 @@ impl Host for DialogHost {
     fn web(&self) -> Option<&dyn kaleidoscope_core::WebHost> {
         Some(&self.web)
     }
+    fn updater(&self) -> Option<&dyn kaleidoscope_core::UpdateHost> {
+        Some(self.updater.as_ref())
+    }
 }
 
 #[tauri::command]
@@ -69,8 +74,10 @@ async fn core(request: CoreRequest, core: State<'_, Arc<Core>>) -> Result<CoreRe
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
+            let updater = Arc::new(updater::TauriUpdateHost::default());
             let core = match Core::open(
                 CoreConfig {
                     data_dir,
@@ -82,6 +89,7 @@ pub fn run() {
                 },
                 Arc::new(DialogHost {
                     app: app.handle().clone(),
+                    updater: Arc::clone(&updater),
                     #[cfg(windows)]
                     web: web_host::TauriWebHost::new(app.handle().clone()),
                 }),
@@ -108,6 +116,18 @@ pub fn run() {
                 let _ = event_app.emit(TAURI_EVENT, event);
             }));
             app.manage(Arc::clone(&core));
+            #[cfg(feature = "e2e")]
+            let run_updater = matches!(
+                e2e::setting("SCENARIO")
+                    .as_deref()
+                    .and_then(std::ffi::OsStr::to_str),
+                Some("update" | "update-reject")
+            );
+            #[cfg(not(feature = "e2e"))]
+            let run_updater = true;
+            if run_updater {
+                updater::start(app.handle().clone(), Arc::clone(&core), updater);
+            }
             #[cfg(feature = "e2e")]
             e2e::start(app.handle().clone(), core);
             Ok(())

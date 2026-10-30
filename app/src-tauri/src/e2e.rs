@@ -15,6 +15,30 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
 mod ui;
+mod update;
+
+fn resolve_setting(
+    args: impl Iterator<Item = std::ffi::OsString>,
+    name: &str,
+    fallback: Option<std::ffi::OsString>,
+) -> Option<std::ffi::OsString> {
+    let prefix = format!("--e2e-{}=", name.to_ascii_lowercase());
+    args.filter_map(|arg| {
+        arg.to_str()
+            .and_then(|value| value.strip_prefix(&prefix))
+            .map(std::ffi::OsString::from)
+    })
+    .next()
+    .or(fallback)
+}
+
+pub(crate) fn setting(name: &str) -> Option<std::ffi::OsString> {
+    resolve_setting(
+        env::args_os(),
+        name,
+        env::var_os(format!("KALEIDOSCOPE_E2E_{name}")),
+    )
+}
 
 pub(crate) fn observe_ui(request: &CoreRequest) {
     ui::observe(request);
@@ -388,26 +412,46 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
 }
 
 pub fn start(app: AppHandle, core: Arc<Core>) {
-    let Some(out) = env::var_os("KALEIDOSCOPE_E2E_OUT") else {
+    #[cfg(windows)]
+    update::record_startup(&app);
+    let Some(out) = setting("OUT") else {
         return;
     };
     thread::spawn(move || {
         let out = PathBuf::from(out);
-        let status =
-            match fs::create_dir_all(&out).and_then(|_| File::create(out.join("events.jsonl"))) {
-                Ok(mut log) => match scenario(&app, &core, &out, &mut log) {
-                    Ok(()) => 0,
-                    Err(error) => {
-                        let _ = record(&mut log, "error", json!({"message": error}));
-                        eprintln!("E2E 실패: {error}");
-                        1
-                    }
-                },
+        let update_scenario = matches!(
+            setting("SCENARIO")
+                .as_deref()
+                .and_then(std::ffi::OsStr::to_str),
+            Some("update" | "update-reject")
+        );
+        let status = match fs::create_dir_all(&out).and_then(|_| {
+            if update_scenario {
+                fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(out.join("events.jsonl"))
+            } else {
+                File::create(out.join("events.jsonl"))
+            }
+        }) {
+            Ok(mut log) => match if update_scenario {
+                update::scenario(&app, &core, &out, &mut log)
+            } else {
+                scenario(&app, &core, &out, &mut log)
+            } {
+                Ok(()) => 0,
                 Err(error) => {
-                    eprintln!("E2E 로그 생성 실패: {error}");
+                    let _ = record(&mut log, "error", json!({"message": error}));
+                    eprintln!("E2E 실패: {error}");
                     1
                 }
-            };
+            },
+            Err(error) => {
+                eprintln!("E2E 로그 생성 실패: {error}");
+                1
+            }
+        };
         app.exit(status);
     });
 }
@@ -415,6 +459,32 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn update_arguments_override_environment_and_preserve_fallback() {
+        use std::ffi::OsString;
+        let args = || {
+            vec![
+                OsString::from("app.exe"),
+                OsString::from("--e2e-scenario=update"),
+                OsString::from("--e2e-out=C:/시험 폴더"),
+            ]
+            .into_iter()
+        };
+        assert_eq!(
+            resolve_setting(args(), "SCENARIO", Some("update-reject".into())),
+            Some("update".into())
+        );
+        assert_eq!(
+            resolve_setting(args(), "OUT", Some("old".into())),
+            Some("C:/시험 폴더".into())
+        );
+        assert_eq!(
+            resolve_setting(std::iter::empty(), "SCENARIO", Some("update-reject".into())),
+            Some("update-reject".into())
+        );
+        assert_eq!(resolve_setting(std::iter::empty(), "OUT", None), None);
+    }
 
     #[test]
     fn png_check_rejects_missing_and_non_png_data() {

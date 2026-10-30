@@ -1,3 +1,4 @@
+// 기존 코어의 상태와 명령 진입점이 한 파일에 모여 있어 500줄을 넘는다.
 mod agent_commands;
 mod app_commands;
 mod app_storage;
@@ -27,6 +28,9 @@ mod logins_tests;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod update_tests;
+
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io;
@@ -36,7 +40,7 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use kaleidoscope_contract::{
     CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, Grant, LinkStatus, Rect,
-    SharedState, ShellSnapshot, WebHistoryAction, WebPage,
+    SharedState, ShellSnapshot, UpdateStatus, WebHistoryAction, WebPage,
 };
 use registry_client::{HttpRegistryClient, RegistryClient};
 
@@ -57,6 +61,14 @@ pub trait Host: Send + Sync + 'static {
     fn web(&self) -> Option<&dyn WebHost> {
         None
     }
+    fn updater(&self) -> Option<&dyn UpdateHost> {
+        None
+    }
+}
+
+/// 준비된 설치본을 검증하고 설치한다.
+pub trait UpdateHost: Send + Sync + 'static {
+    fn install(&self) -> Result<(), String>;
 }
 
 /// 플랫폼 웹뷰의 수명과 조작. 페이지 변화는 Core::web_update로 알린다.
@@ -102,6 +114,7 @@ pub(crate) struct CoreState {
     pub(crate) shared: SharedState,
     pub(crate) device: DeviceState,
     pub(crate) link: LinkStatus,
+    pub(crate) update: UpdateStatus,
     pub(crate) sync: sync_state::SyncState,
     pub(crate) share: share::ShareState,
 }
@@ -199,6 +212,7 @@ impl Core {
             sync: sync_state::load(&config.data_dir, link_file.as_ref())?,
             link,
             share: share::ShareState::default(),
+            update: UpdateStatus::Unavailable {},
         };
         let login_store = Arc::new(logins::Logins::open(&config.data_dir)?);
 
@@ -334,14 +348,11 @@ impl Core {
             | CoreRequest::WebHistory { .. }
             | CoreRequest::WebCapture { .. }
             | CoreRequest::WebDetach { .. }) => web::handle(&self.inner, request),
-            CoreRequest::UpdateRestart {} => Err(error::with_message(
-                kaleidoscope_contract::ErrorCode::Unavailable,
-                "쉘 업데이트는 아직 이 코어에 없습니다",
-            )),
             CoreRequest::ShareSet { window_id, on } => share::set(&self.inner, &window_id, on),
             CoreRequest::ShareView { window_id, view } => {
                 share::view(&self.inner, &window_id, view)
             }
+            CoreRequest::UpdateRestart {} => self.restart_for_update(),
             CoreRequest::DataAttach { window_id } => data_runtime::attach(&self.inner, &window_id),
             CoreRequest::DataDetach { window_id } => data_runtime::detach(&self.inner, &window_id),
             CoreRequest::DataAct {
@@ -375,6 +386,46 @@ impl Core {
             .lock()
             .unwrap()
             .push(Arc::from(listener));
+    }
+
+    /// 앱 업데이터의 현재 상태가 바뀐 경우에만 화면에 알린다.
+    pub fn set_update_status(&self, status: UpdateStatus) {
+        let mut state = self.inner.state.lock().unwrap();
+        if state.update == status {
+            return;
+        }
+        state.update = status;
+        let event = CoreEvent::StateChanged {
+            snapshot: snapshot(&state),
+        };
+        drop(state);
+        self.inner.emit(&event);
+    }
+
+    fn restart_for_update(&self) -> Result<CoreReply, CoreError> {
+        use kaleidoscope_contract::ErrorCode;
+        let (current_version, version) = match self.inner.state.lock().unwrap().update.clone() {
+            UpdateStatus::Unavailable {} => return Err(error::make(ErrorCode::Unavailable)),
+            UpdateStatus::Ready {
+                current_version,
+                version,
+            } => (current_version, version),
+            _ => return Err(error::make(ErrorCode::InvalidRequest)),
+        };
+        let updater = self
+            .inner
+            .host
+            .updater()
+            .ok_or_else(|| error::make(ErrorCode::Unavailable))?;
+        if let Err(reason) = updater.install() {
+            self.set_update_status(UpdateStatus::Failed {
+                current_version,
+                version: Some(version),
+                reason: reason.clone(),
+            });
+            return Err(error::with_message(ErrorCode::Io, &reason));
+        }
+        Ok(CoreReply::UpdateRestart {})
     }
 
     fn handle_state_change(&self, request: CoreRequest) -> Result<CoreReply, CoreError> {
@@ -543,7 +594,6 @@ pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
             .filter(|id| state.shared.windows.iter().any(|window| &window.id == *id))
             .cloned()
             .collect(),
-        // 쉘 업데이트는 앱 크레이트의 업데이터 구현(카드 #819)이 채운다.
-        update: kaleidoscope_contract::UpdateStatus::Unavailable {},
+        update: state.update.clone(),
     }
 }
