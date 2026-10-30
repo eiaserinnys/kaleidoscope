@@ -125,7 +125,6 @@ pub(crate) fn send(
             let previous = read(&path)?;
             if previous.user_text != pending.user_text
                 || previous.user_uploads != pending.user_uploads
-                || previous.request != pending.request
                 || previous.failed_reason.is_some()
             {
                 return Err(error::make(ErrorCode::Conflict));

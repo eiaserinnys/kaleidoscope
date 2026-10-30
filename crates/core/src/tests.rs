@@ -315,11 +315,21 @@ fn shared_view_delivery_baselines_are_separate_for_each_app() {
 fn legacy_share_block_is_removed_from_user_items_only() {
     use kaleidoscope_contract::conversation::{ConversationItem, ConversationItemKind};
 
-    let text = "오 이거 이제 보여?\n\n<kaleidoscope-share>\n옛 같이 보기 글\n</kaleidoscope-share>";
+    let block = kaleidoscope_data::share::build_share_block(
+        &[kaleidoscope_data::share::View {
+            window_id: "window-1234".into(),
+            app_name: "작업 PAS".into(),
+            text: "옛 같이 보기 글".into(),
+        }],
+        &std::collections::BTreeMap::new(),
+    )
+    .unwrap()
+    .0;
+    let text = format!("오 이거 이제 보여?\n\n{block}");
     let mut user = ConversationItem {
         id: "legacy".into(),
         kind: ConversationItemKind::User,
-        text: text.into(),
+        text: text.clone(),
         at: "now".into(),
         attachments: vec![],
     };
@@ -330,7 +340,7 @@ fn legacy_share_block_is_removed_from_user_items_only() {
         kind: ConversationItemKind::Assistant,
         ..user.clone()
     };
-    assistant.text = text.into();
+    assistant.text = text.clone();
     crate::share::strip_legacy_share_from_item(&mut assistant);
     assert_eq!(assistant.text, text);
 
