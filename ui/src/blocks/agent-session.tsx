@@ -253,16 +253,30 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
           <IconButton aria-label="작업 폴더 선택" onClick={() => void chooseFolder()}><Folder /></IconButton>
           {folderName ? <span className="ks-agent-session-folder-name" title={folderName}>{folderName}</span> : null}
         </div>
-        {snapshot?.controls.length ? <fieldset className="ks-agent-session-controls" disabled={responding}>{snapshot.controls.map((control) => <div className="ks-agent-session-control" key={control.id}>
-        {control.kind.kind === "boolean"
-          ? <Toggle checked={control.value === true} label={control.label} onChange={(value) => runControl(control.id, value)} />
-          : <><span className="ks-agent-session-control-label">{control.label}</span><Select
-            items={control.kind.options.flatMap((group) => group.options.map((option) => ({ value: option.id, label: option.name })))}
-            value={typeof control.value === "string" ? control.value : undefined}
-            label={control.label}
-            onChange={(value) => { if (typeof value === "string") runControl(control.id, value); }}
-          /></>}
-        </div>)}</fieldset> : null}
+        {snapshot?.controls.length ? <fieldset className="ks-agent-session-controls" disabled={responding}>{snapshot.controls.map((control) => {
+          let content: ReactNode;
+          if (control.kind.kind === "boolean") {
+            content = <Toggle checked={control.value === true} label={control.label} onChange={(value) => runControl(control.id, value)} />;
+          } else {
+            const groups = control.kind.options.map((group) => ({
+              ...(group.name ? { name: group.name } : {}),
+              options: group.options.map((option) => ({ value: option.id, label: option.name })),
+            }));
+            const selectedGroup = groups.find((group) => group.options.some((option) => option.value === control.value));
+            const showLabel = !selectedGroup?.name || selectedGroup.name !== control.label;
+            const selectProps = groups.length === 1 && !groups[0].name
+              ? { items: groups[0].options }
+              : { groups };
+            content = <>{showLabel ? <span className="ks-agent-session-control-label">{control.label}</span> : null}<Select
+              {...selectProps}
+              value={typeof control.value === "string" ? control.value : undefined}
+              label={control.label}
+              disabled={responding}
+              onChange={(value) => { if (typeof value === "string") runControl(control.id, value); }}
+            /></>;
+          }
+          return <div className="ks-agent-session-control" key={control.id}>{content}</div>;
+        })}</fieldset> : null}
       </> : null}
     </div>
     {main}
