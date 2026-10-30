@@ -17,7 +17,9 @@ import type {
   ShellSnapshot,
   WebPage,
   VisibleView,
+  StorageEntryDecl,
 } from "../contract/contract";
+import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { SHARE_TEXT_MAX_BYTES } from "../contract/limits";
 import { toCoreError, type CoreTransport } from "./core-transport";
 import { createFakeData, type FakeDataSeed } from "./fake-data";
@@ -121,6 +123,7 @@ function isFakeHttpAddress(value: string): boolean {
 export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   let snapshot = clone(seed.snapshot);
   const files = new Map<string, FakeFile>();
+  const storage = new Map<string, { content: JsonValue; revision: string }>();
   const eventListeners = new Set<(event: CoreEvent) => void>();
   const fileListeners = new Set<() => void>();
   const webListeners = new Set<() => void>();
@@ -207,6 +210,25 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   const definitionFor = (window: AppWindow): AppDefinition | null => snapshot.shared.app_versions
     .find((version) => version.app_id === window.app_id && version.version === window.app_version)
     ?.definition ?? null;
+
+  const storageEntry = (windowId: string, entry: string) => {
+    const window = findWindow(windowId);
+    const declaration = definitionFor(window)?.storage?.entries.find((item) => item.id === entry);
+    if (!declaration) return fail("not_found", "저장 항목을 찾을 수 없습니다");
+    const workspace = snapshot.shared.desktops.find((desktop) => desktop.id === window.desktop_id)?.workspace_id;
+    const key = declaration.key.replace("{workspace_id}", workspace ?? "");
+    return { window, declaration, key, id: JSON.stringify([window.app_id, key]) };
+  };
+  const emitStorage = (appId: string, key: string, declaration: StorageEntryDecl, revision: string | null) => {
+    for (const window of snapshot.shared.windows) {
+      if (window.app_id !== appId) continue;
+      const target = storageEntry(window.id, declaration.id);
+      if (target.key !== key) continue;
+      emit({ event: "storage.update", window_id: window.id, update: { kind: "changed", changed: {
+        bucket_id: appId, item: { entry_id: declaration.id, key, kind: declaration.kind, revision, exists: revision !== null },
+      } } });
+    }
+  };
 
   const data = createFakeData(seed.data ?? {}, findWindow, (window) => definitionFor(window) ?? undefined,
     async (windowId, state) => { await callRequest({ op: "window.set_state", window_id: windowId, state }); },
@@ -665,6 +687,33 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         const file = files.get(request.path);
         if (!file) return fail("not_found", "파일을 찾을 수 없습니다");
         return { op: "files.read", path: request.path, text: file.text, revision: file.revision };
+      }
+      case "storage.get": {
+        const { declaration, id } = storageEntry(request.window_id, request.entry);
+        const item = storage.get(id);
+        return { op: "storage.get", result: {
+          kind: declaration.kind, content: clone(item ? item.content : declaration.default),
+          revision: item?.revision ?? null, exists: item !== undefined,
+        } };
+      }
+      case "storage.write": {
+        const { window, declaration, key, id } = storageEntry(request.window_id, request.entry);
+        const current = storage.get(id);
+        if ((request.expected_revision ?? null) !== (current?.revision ?? null)) return fail("conflict", "문서가 읽은 뒤에 바뀌었습니다");
+        if (declaration.kind === "md" && typeof request.content !== "string") return fail("invalid_request", "마크다운 문서는 글이어야 합니다");
+        if (current && JSON.stringify(current.content) === JSON.stringify(request.content)) return { op: "storage.write", revision: current.revision };
+        const revision = `fake-revision-${revisionNumber++}`;
+        storage.set(id, { content: clone(request.content), revision });
+        emitStorage(window.app_id, key, declaration, revision);
+        return { op: "storage.write", revision };
+      }
+      case "storage.reset": {
+        const { window, declaration, key, id } = storageEntry(request.window_id, request.entry);
+        const current = storage.get(id);
+        if ((request.expected_revision ?? null) !== (current?.revision ?? null)) return fail("conflict", "문서가 읽은 뒤에 바뀌었습니다");
+        storage.delete(id);
+        emitStorage(window.app_id, key, declaration, null);
+        return { op: "storage.reset", revision: null };
       }
       case "files.write": {
         const { declaration } = permissionFor(request.window_id, request.permission);
