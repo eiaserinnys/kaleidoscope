@@ -43,7 +43,7 @@ fn agent_session_definition_passes_contract_validation() {
 
 #[test]
 fn example_agent_definition_passes_contract_validation() {
-    let app: Value = serde_json::from_str(include_str!("../../../examples/agent.json")).unwrap();
+    let app: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
     assert!(parse_app_definition(&app.to_string()).is_ok());
 }
 

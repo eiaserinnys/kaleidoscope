@@ -13,6 +13,16 @@ pub(crate) struct Context {
     pub(crate) link: LinkFile,
 }
 
+pub(crate) fn uses_defaults(inner: &Inner) -> bool {
+    let state = inner.state.lock().unwrap();
+    uses_defaults_for(&state, inner.link_file.lock().unwrap().is_some())
+}
+
+pub(crate) fn uses_defaults_for(state: &crate::CoreState, has_link: bool) -> bool {
+    matches!(state.link, LinkStatus::Unlinked {})
+        || (matches!(state.link, LinkStatus::Pairing { .. }) && !has_link)
+}
+
 pub(crate) fn context(
     inner: &Inner,
     window_id: &str,
@@ -82,6 +92,32 @@ pub(crate) fn read(
     window: &str,
     entry: &str,
 ) -> Result<StorageReadReply, CoreError> {
+    {
+        let state = inner.state.lock().unwrap();
+        let unlinked = uses_defaults_for(&state, inner.link_file.lock().unwrap().is_some());
+        if unlinked {
+            let window = state
+                .shared
+                .windows
+                .iter()
+                .find(|w| w.id == window)
+                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            let definition =
+                app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
+                    .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            let item = definition
+                .storage
+                .as_ref()
+                .and_then(|storage| storage.entries.iter().find(|item| item.id == entry))
+                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+            return Ok(StorageReadReply {
+                kind: item.kind,
+                content: item.default.clone(),
+                revision: None,
+                exists: false,
+            });
+        }
+    }
     let ctx = context(inner, window, Some(entry))?;
     inner
         .registry

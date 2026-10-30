@@ -10,6 +10,15 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 pub(crate) use storage::changed as storage_changed;
 
+pub(crate) fn binding_value(
+    inner: &Inner,
+    window: &str,
+    pointer: &str,
+) -> Option<kaleidoscope_contract::data::BindingValue> {
+    let windows = inner.data_runtimes.windows.lock().unwrap();
+    windows.get(window)?.view().values.get(pointer).cloned()
+}
+
 use kaleidoscope_contract::{
     data::{DataView, SourceDecl, SourceFormat, SourceStatus},
     AppDefinition, CoreError, CoreEvent, CoreReply, ErrorCode,
@@ -39,6 +48,7 @@ impl Default for DataRuntimes {
 
 struct Runtime {
     version: u32,
+    using_defaults: bool,
     definition: AppDefinition,
     compiled: CompiledApp,
     state: BTreeMap<String, Value>,
@@ -65,7 +75,12 @@ struct Job {
 }
 
 impl Runtime {
-    fn new(version: u32, definition: AppDefinition, state: BTreeMap<String, Value>) -> Self {
+    fn new(
+        version: u32,
+        definition: AppDefinition,
+        state: BTreeMap<String, Value>,
+        using_defaults: bool,
+    ) -> Self {
         let compiled = CompiledApp::compile(&definition);
         let sources = definition
             .sources
@@ -86,6 +101,7 @@ impl Runtime {
         let (storage, storage_meta) = storage::initial_slots(&definition);
         Self {
             version,
+            using_defaults,
             definition,
             compiled,
             state,
@@ -285,6 +301,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                         ));
                     }
                 }
+                crate::local_agent::data_changed(&inner, &job.window);
                 inner.layout_signal.notify();
             })
         })
@@ -304,6 +321,10 @@ pub(crate) fn attach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, C
             app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
                 .ok_or_else(|| error::make(ErrorCode::NotFound))?;
         let version = window.app_version;
+        let using_defaults = crate::app_storage::uses_defaults_for(
+            &state,
+            inner.link_file.lock().unwrap().is_some(),
+        );
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
         if windows
             .get(window_id)
@@ -311,9 +332,14 @@ pub(crate) fn attach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, C
         {
             windows.remove(window_id);
         }
-        let runtime = windows
-            .entry(window_id.into())
-            .or_insert_with(|| Runtime::new(version, definition.clone(), window.state.clone()));
+        let runtime = windows.entry(window_id.into()).or_insert_with(|| {
+            Runtime::new(
+                version,
+                definition.clone(),
+                window.state.clone(),
+                using_defaults,
+            )
+        });
         let already_attached = runtime.attached > 0;
         runtime.state = window.state.clone();
         runtime.attached += 1;
@@ -395,8 +421,12 @@ pub(crate) fn refresh(
 }
 
 pub(crate) fn state_changed(inner: &Arc<Inner>) {
-    let pending = {
+    let (pending, reloads) = {
         let state = inner.state.lock().unwrap();
+        let using_defaults = crate::app_storage::uses_defaults_for(
+            &state,
+            inner.link_file.lock().unwrap().is_some(),
+        );
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
         windows.retain(|id, runtime| {
             state
@@ -406,7 +436,14 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                 .any(|window| window.id == *id && window.app_version == runtime.version)
         });
         let mut pending = Vec::new();
+        let mut reloads = Vec::new();
         for (id, runtime) in windows.iter_mut() {
+            if runtime.using_defaults != using_defaults {
+                runtime.using_defaults = using_defaults;
+                if runtime.attached > 0 {
+                    reloads.push(id.clone());
+                }
+            }
             let window = state
                 .shared
                 .windows
@@ -434,9 +471,12 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                     .send((id.clone(), runtime.version, view));
             }
         }
-        pending
+        (pending, reloads)
     };
     jobs(inner, pending);
+    for id in reloads {
+        storage::load(inner, &id, None);
+    }
     inner.layout_signal.notify();
 }
 

@@ -11,7 +11,7 @@ use std::{
 
 // 깨끗한 checkout에서 코어 시험만 실행해도 가짜 에이전트를 준비한다.
 #[rustfmt::skip]
-fn agent_binary() -> std::path::PathBuf {
+pub(super) fn agent_binary() -> std::path::PathBuf {
     static BIN: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
     BIN.get_or_init(|| {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");

@@ -205,8 +205,15 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![core])
-        .run(tauri::generate_context!())
-        .expect("error while running kaleidoscope application");
+        .build(tauri::generate_context!())
+        .expect("error while building kaleidoscope application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(core) = app.try_state::<Arc<Core>>() {
+                    core.shutdown();
+                }
+            }
+        });
 }
 
 #[cfg(test)]

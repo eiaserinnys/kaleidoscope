@@ -847,6 +847,11 @@ fn unavailable_storage_never_looks_like_a_null_default() {
     let core = open_core(temp.path(), vec![definition], &host);
     let (_, desktop) = active_ids(&core);
     let window = open_window(&core, &desktop, "storage-app");
+    core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        server_url: "https://registry.test".into(),
+        device_name: "test-device".into(),
+        reason: "offline".into(),
+    };
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
     })
@@ -858,6 +863,44 @@ fn unavailable_storage_never_looks_like_a_null_default() {
             })
             .unwrap();
         matches!(view, CoreReply::DataAttach { view } if matches!(view.values.get("/ui/value"), Some(BindingValue::Failed { .. })))
+    });
+}
+
+#[test]
+fn storage_binding_drops_unlinked_defaults_when_the_link_goes_offline() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let definition = json!({
+        "id":"storage-transition","name":"Storage","requires":{"blocks":6,"modules":{"storage":1}},
+        "state":{},"permissions":[],
+        "storage":{"entries":[{"id":"choice","key":"settings/choice","kind":"json","schema":{"type":"string"},"default":"local","label":"선택","presentation":"hidden"}]},
+        "ui":{"type":"text","value":{"expr":"$storage.choice"}}
+    }).to_string();
+    let core = open_core(temp.path(), vec![definition], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "storage-transition");
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+    })
+    .unwrap();
+    wait_until(
+        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"), Some(BindingValue::Ready { value }) if value == "local"),
+    );
+    *core.inner.link_file.lock().unwrap() = Some(connected_link_file());
+    core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        server_url: "https://registry.test".into(),
+        device_name: "test-device".into(),
+        reason: "offline".into(),
+    };
+    let event = CoreEvent::StateChanged {
+        snapshot: crate::snapshot(&core.inner.state.lock().unwrap()),
+    };
+    core.inner.emit(&event);
+    wait_until(|| {
+        matches!(
+            crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"),
+            Some(BindingValue::Failed { .. })
+        )
     });
 }
 

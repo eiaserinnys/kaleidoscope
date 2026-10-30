@@ -13,6 +13,11 @@ export type Action = SetStateAction | RefreshAction | CallAction | SetStorageAct
  */
 export type Actions = SetState | Array<Action>;
 
+/**
+ * 추가 객체 필드를 금지하거나 각 값에 적용할 스키마를 지정한다.
+ */
+export type AdditionalProperties = boolean | StorageValueSchema;
+
 export type AdoptThreadRequest = { session_id: string, first_input_is_initial_instruction: boolean, };
 
 export type AgentActivity = { busy: boolean, tool: string | null, };
@@ -885,7 +890,7 @@ export type StorageUpdate = { "kind": "snapshot", snapshot: StorageSnapshot, } |
 /**
  * storage 값 검사가 지원하는 JSON Schema 부분집합. 알 수 없는 키는 serde가 거부한다.
  */
-export type StorageValueSchema = { type: StorageSchemaType, properties?: { [key in string]: StorageValueSchema }, required?: Array<string>, additionalProperties?: boolean, items?: StorageValueSchema, enum?: Array<JsonValue>, uniqueItems?: boolean, minLength?: number, };
+export type StorageValueSchema = { type: StorageSchemaType, properties?: { [key in string]: StorageValueSchema }, required?: Array<string>, additionalProperties?: AdditionalProperties, items?: StorageValueSchema, enum?: Array<JsonValue>, uniqueItems?: boolean, minLength?: number, };
 
 export type StorageWriteReply = { revision: string, };
 

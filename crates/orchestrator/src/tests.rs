@@ -11,10 +11,10 @@ const LEGACY_APP: &str = include_str!("fixtures/simple-app.json");
 fn builtin_apps_are_listed_and_upload_is_rejected() {
     let state = AppState::in_memory("secret");
     let apps = state.list_apps().unwrap();
-    for id in ["explorer", "md-editor", "md-viewer", "web-browser"] {
+    for id in ["agent", "explorer", "md-editor", "md-viewer", "web-browser"] {
         assert!(apps.iter().any(|app| app.id == id && app.builtin));
     }
-    assert_eq!(apps.len(), 4);
+    assert_eq!(apps.len(), 5);
     assert!(state.publish_app(EDITOR, "agent", false, None).is_err());
 }
 

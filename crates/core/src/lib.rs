@@ -157,6 +157,7 @@ pub(crate) struct Inner {
     pub(crate) conversation_reconcile: conversation_reconcile::Runtime,
     pub(crate) layout_signal: LayoutSignal,
     pub(crate) data_runtimes: data_runtime::DataRuntimes,
+    pub(crate) local_agents: local_agent::LocalAgents,
     pub(crate) conversation_streams: conversation_stream::Streams,
     pub(crate) conversation_sends: Mutex<HashSet<String>>,
     pub(crate) connections: Mutex<Vec<kaleidoscope_contract::registry::ConnectionInfo>>,
@@ -198,6 +199,15 @@ impl LayoutSignal {
 
 pub struct Core {
     inner: Arc<Inner>,
+    owner: bool,
+}
+
+impl Drop for Core {
+    fn drop(&mut self) {
+        if self.owner {
+            local_agent::shutdown(&self.inner);
+        }
+    }
 }
 
 impl Core {
@@ -280,6 +290,7 @@ impl Core {
                 changed: Condvar::new(),
             },
             data_runtimes: data_runtime::DataRuntimes::default(),
+            local_agents: local_agent::LocalAgents::default(),
             conversation_streams: conversation_stream::Streams::default(),
             conversation_sends: Mutex::new(HashSet::new()),
             connections: Mutex::new(Vec::new()),
@@ -287,12 +298,13 @@ impl Core {
             login_in_progress: Mutex::new(HashSet::new()),
             media_cache: media::MediaCache::default(),
         });
+        local_agent::start_events(&inner);
         {
             let state = inner.state.lock().unwrap();
             storage::save_state(&inner.data_dir, &state.shared, &state.device)?;
         }
 
-        let core = Core { inner };
+        let core = Core { inner, owner: true };
         data_runtime::start_timer(Arc::downgrade(&core.inner));
         if core
             .inner
@@ -350,6 +362,19 @@ impl Core {
             request @ (CoreRequest::StorageGet { .. }
             | CoreRequest::StorageWrite { .. }
             | CoreRequest::StorageReset { .. }) => app_storage::handle(&self.inner, request),
+            request @ (CoreRequest::LocalAgentAttach { .. }
+            | CoreRequest::LocalAgentDetach { .. }
+            | CoreRequest::LocalAgentAllow { .. }
+            | CoreRequest::LocalAgentRetry { .. }
+            | CoreRequest::LocalAgentAuthenticate { .. }
+            | CoreRequest::LocalAgentConfigure { .. }
+            | CoreRequest::LocalAgentSend { .. }
+            | CoreRequest::LocalAgentCancel { .. }
+            | CoreRequest::LocalAgentPermission { .. }
+            | CoreRequest::LocalAgentAttachment { .. }
+            | CoreRequest::LocalAgentAttachmentOpen { .. }) => {
+                local_agent::handle(&self.inner, request)
+            }
             CoreRequest::FilesList {
                 window_id,
                 permission,
@@ -453,6 +478,10 @@ impl Core {
             .lock()
             .unwrap()
             .push(Arc::from(listener));
+    }
+
+    pub fn shutdown(&self) {
+        local_agent::shutdown(&self.inner);
     }
 
     /// 앱 업데이터의 현재 상태가 바뀐 경우에만 화면에 알린다.
@@ -705,6 +734,7 @@ impl Inner {
         if matches!(event, CoreEvent::StateChanged { .. }) {
             data_runtime::state_changed(self);
             conversation_stream::state_changed(self);
+            local_agent::state_changed(self);
         }
     }
 }
