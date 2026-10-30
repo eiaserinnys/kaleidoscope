@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 const output = process.env.KS_DATA_CAPTURE_DIR;
 async function capture(page: Page, name: string) {
@@ -130,7 +130,23 @@ test("400px 선택 흐름에 Tab으로 들어가고 화살표와 Enter로 고른
 
 test("흐름 본문을 넓은 화면에서 나란히, 좁은 화면에서 쌓고 원문을 복사한다", async ({ page }) => {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.setViewportSize({ width: 1280, height: 700 });
+  const metrics: Record<string, unknown> = {};
+  const overlaps = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  const assertContained = (inner: { x: number; y: number; width: number; height: number }, outer: { x: number; y: number; width: number; height: number }) => {
+    expect(inner.x).toBeGreaterThanOrEqual(outer.x);
+    expect(inner.y).toBeGreaterThanOrEqual(outer.y);
+    expect(inner.x + inner.width).toBeLessThanOrEqual(outer.x + outer.width);
+    expect(inner.y + inner.height).toBeLessThanOrEqual(outer.y + outer.height);
+  };
+  const copyAtCenter = async (button: Locator, text: string) => {
+    const box = await button.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(text);
+  };
+
+  await page.setViewportSize({ width: 900, height: 700 });
   await page.goto("/?preview=data-views-test");
   const app = page.getByTestId("app-window-data-views-test");
   await app.getByRole("tab", { name: "병기 시험" }).click();
@@ -139,19 +155,54 @@ test("흐름 본문을 넓은 화면에서 나란히, 좁은 화면에서 쌓고
   await expect(cells).toHaveCount(2);
   const wide = await cells.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
   expect(Math.abs(wide[0].y - wide[1].y)).toBeLessThanOrEqual(1);
-  await capture(page, "feed-columns-wide-1280");
-
   await firstEntry.hover();
-  const copyButton = cells.first().getByRole("button", { name: "복사" });
-  await expect(copyButton).toBeVisible();
-  await capture(page, "feed-copy-hover-1280");
-  await copyButton.click();
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("문을 열어라.\n지금 바로.");
+  const header = firstEntry.locator(".ks-feed-header");
+  const metaButton = firstEntry.locator(".ks-feed-meta-copy").getByRole("button", { name: "복사" });
+  const bodyButtons = cells.locator(".ks-feed-copy-control > button");
+  await expect(metaButton).toBeVisible();
+  await expect(bodyButtons).toHaveCount(2);
+  const headerRect = await header.boundingBox();
+  const metaRect = await metaButton.boundingBox();
+  const bodyRects = await Promise.all([0, 1].map((index) => bodyButtons.nth(index).boundingBox()));
+  const cellRects = await cells.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
+  expect(headerRect).not.toBeNull();
+  expect(metaRect).not.toBeNull();
+  expect(bodyRects.every((rect) => rect !== null)).toBe(true);
+  assertContained(metaRect!, headerRect!);
+  bodyRects.forEach((rect, index) => assertContained(rect!, cellRects[index]));
+  const wideButtons = [metaRect!, ...bodyRects.map((rect) => rect!)];
+  for (let left = 0; left < wideButtons.length; left++) {
+    for (let right = left + 1; right < wideButtons.length; right++) expect(overlaps(wideButtons[left], wideButtons[right])).toBe(false);
+  }
+  metrics.wide = { header: headerRect, buttons: wideButtons, cells: cellRects };
+  await capture(page, "feed-columns-wide-900");
+  if (output) {
+    mkdirSync(output, { recursive: true });
+    await firstEntry.screenshot({ path: join(output, "feed-copy-900-header-first-row.png") });
+  }
+  await capture(page, "feed-copy-hover-900");
 
   await page.setViewportSize({ width: 400, height: 700 });
   const narrow = await cells.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
   expect(narrow[1].y).toBeGreaterThan(narrow[0].y);
+  await firstEntry.hover();
+  const narrowButtons = await Promise.all([metaButton, bodyButtons.nth(0), bodyButtons.nth(1)].map((button) => button.boundingBox()));
+  const narrowHeader = await header.boundingBox();
+  expect(narrowButtons.every((rect) => rect !== null)).toBe(true);
+  expect(narrowHeader).not.toBeNull();
+  assertContained(narrowButtons[0]!, narrowHeader!);
+  narrowButtons.slice(1).forEach((rect, index) => assertContained(rect!, narrow[index]));
+  expect(overlaps(narrowButtons[1]!, narrowButtons[2]!)).toBe(false);
+  metrics.narrow = { header: narrowHeader, buttons: narrowButtons, cells: narrow };
   await capture(page, "feed-columns-narrow-400");
+  if (output) {
+    await firstEntry.screenshot({ path: join(output, "feed-copy-400-stacked.png") });
+    writeFileSync(join(output, "feed-copy-button-metrics.json"), JSON.stringify(metrics, null, 2));
+  }
+
+  await copyAtCenter(metaButton, "id-001");
+  await copyAtCenter(bodyButtons.nth(0), "문을 열어라.\n지금 바로.");
+  await copyAtCenter(bodyButtons.nth(1), "Open the door.\nRight now.");
 });
 
 test("견본의 다섯 보기와 다크 배지 캡처", async ({ page }) => {

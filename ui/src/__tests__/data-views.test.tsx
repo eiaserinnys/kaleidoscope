@@ -96,8 +96,33 @@ it("copies feed metadata and each original body paragraph without selecting the 
     expect(buttons).toHaveLength(3);
     fireEvent.click(buttons[0]);
     fireEvent.click(buttons[1]);
-    await waitFor(() => expect(writeText.mock.calls).toEqual([["id-1"], ["첫 줄\n둘째 줄"]]));
+    fireEvent.click(buttons[2]);
+    await waitFor(() => expect(writeText.mock.calls).toEqual([["id-1"], ["첫 줄\n둘째 줄"], ["다른 문단"]]));
     expect(calls.mock.calls.some(([request]) => request.op === "data.act")).toBe(false);
+  } finally {
+    Reflect.deleteProperty(navigator, "clipboard");
+  }
+});
+
+it("keeps feed copy feedback with its entry when entries reorder", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  try {
+    const entries = [
+      { key: "first", meta: "id-1", body: "첫 내용" },
+      { key: "second", meta: "id-2", body: "둘째 내용" },
+    ];
+    const { transport } = setup({ type: "feed", copy: true, entries: { expr: "$state.entries" } } as unknown as Block, { entries });
+    const second = (await screen.findByText("둘째 내용")).closest("article")!;
+    fireEvent.click(second.querySelector(".ks-feed-meta-copy button")!);
+    await waitFor(() => expect(second.querySelector(".ks-feed-meta-copy .ks-feed-copy-control")?.classList.contains("is-feedback")).toBe(true));
+
+    act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/entries": { status: "ready", value: [entries[1], entries[0]] } } } }));
+
+    const movedSecond = screen.getByText("둘째 내용").closest("article")!;
+    const movedFirst = screen.getByText("첫 내용").closest("article")!;
+    expect(movedSecond.querySelector(".ks-feed-meta-copy .ks-feed-copy-control")?.classList.contains("is-feedback")).toBe(true);
+    expect(movedFirst.querySelector(".ks-feed-meta-copy .ks-feed-copy-control")?.classList.contains("is-feedback")).toBe(false);
   } finally {
     Reflect.deleteProperty(navigator, "clipboard");
   }
