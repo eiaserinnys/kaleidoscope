@@ -11,7 +11,20 @@ impl AppState {
             return;
         }
         let state = self.clone();
-        tokio::spawn(async move { relay(state, row).await });
+        let workspace_id = row.workspace_id.clone();
+        if self
+            .0
+            .relays
+            .lock()
+            .ok()
+            .is_some_and(|relays| relays.contains_key(&workspace_id))
+        {
+            return;
+        }
+        let handle = tokio::spawn(async move { relay(state, row).await });
+        if let Ok(mut relays) = self.0.relays.lock() {
+            relays.insert(workspace_id, handle.abort_handle());
+        }
     }
 }
 
@@ -303,10 +316,10 @@ mod tests {
             &mut projection,
         );
         assert!(
-            matches!(events.try_recv().unwrap(), DeviceEvent::AgentUpdate { update: AgentUpdate::Item { item }, .. } if item.kind == AgentItemKind::User)
+            matches!(events.try_recv().unwrap().event, DeviceEvent::AgentUpdate { update: AgentUpdate::Item { item }, .. } if item.kind == AgentItemKind::User)
         );
         assert!(matches!(
-            events.try_recv().unwrap(),
+            events.try_recv().unwrap().event,
             DeviceEvent::AgentUpdate {
                 update: AgentUpdate::Activity {
                     busy: true,
@@ -331,11 +344,11 @@ mod tests {
             &mut projection,
         );
         assert!(
-            matches!(events.try_recv().unwrap(), DeviceEvent::AgentUpdate { update: AgentUpdate::Item { item }, .. } if item.kind == AgentItemKind::Assistant)
+            matches!(events.try_recv().unwrap().event, DeviceEvent::AgentUpdate { update: AgentUpdate::Item { item }, .. } if item.kind == AgentItemKind::Assistant)
         );
         emit("complete", json!({}), &mut projection);
         assert!(matches!(
-            events.try_recv().unwrap(),
+            events.try_recv().unwrap().event,
             DeviceEvent::AgentUpdate {
                 update: AgentUpdate::Activity {
                     busy: false,
@@ -377,10 +390,10 @@ mod tests {
         assert_eq!(history[0].kind, AgentItemKind::User);
         assert_eq!(history[0].text, "회의록을 살펴봐");
         assert!(
-            matches!(events.try_recv().unwrap(), DeviceEvent::AgentUpdate { update: AgentUpdate::Item { item }, .. } if item.kind == AgentItemKind::User)
+            matches!(events.try_recv().unwrap().event, DeviceEvent::AgentUpdate { update: AgentUpdate::Item { item }, .. } if item.kind == AgentItemKind::User)
         );
         assert!(matches!(
-            events.try_recv().unwrap(),
+            events.try_recv().unwrap().event,
             DeviceEvent::AgentUpdate {
                 update: AgentUpdate::Activity {
                     busy: true,
@@ -427,12 +440,15 @@ mod tests {
         emit("assistant_message", json!({"content":"답변"}), &mut p);
         emit("complete", json!({}), &mut p);
         let all: Vec<_> = std::iter::from_fn(|| events.try_recv().ok()).collect();
-        assert!(all.iter().any(|e| matches!(e, DeviceEvent::AgentUpdate {update:AgentUpdate::Delta {text},..} if text == "[SI작합니다")));
-        assert!(all.iter().any(|e| matches!(e, DeviceEvent::AgentUpdate {update:AgentUpdate::Activity {tool:Some(name),..},..} if name == "list_apps")));
+        assert!(all.iter().any(|e| matches!(&e.event, DeviceEvent::AgentUpdate {update:AgentUpdate::Delta {text},..} if text == "[SI작합니다")));
+        assert!(all.iter().any(|e| matches!(&e.event, DeviceEvent::AgentUpdate {update:AgentUpdate::Activity {tool:Some(name),..},..} if name == "list_apps")));
         assert!(all.iter().any(|e| matches!(
             e,
-            DeviceEvent::AgentUpdate {
-                update: AgentUpdate::Activity { busy: false, .. },
+            Broadcast {
+                event: DeviceEvent::AgentUpdate {
+                    update: AgentUpdate::Activity { busy: false, .. },
+                    ..
+                },
                 ..
             }
         )));

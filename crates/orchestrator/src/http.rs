@@ -23,6 +23,12 @@ pub fn router(state: AppState) -> Router {
         .route("/events", get(device_events))
         .route("/layout", axum::routing::put(super::layouts::put_layout))
         .route(
+            "/layout/changes",
+            post(super::layouts::post_layout_changes).layer(DefaultBodyLimit::max(
+                registry::LAYOUT_CHANGES_BODY_MAX_BYTES,
+            )),
+        )
+        .route(
             "/connections/{name}/request",
             post(super::connection_relay::device_request).layer(DefaultBodyLimit::max(
                 super::connection_relay::connection_request_body_limit(),
@@ -148,7 +154,12 @@ async fn device_events(State(state): State<AppState>, headers: HeaderMap) -> Res
         .get(registry::SUPPORTED_HEADER)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| serde_json::from_str::<Supported>(value).ok());
-    match state.stream(device.0, supported) {
+    let registry_version = headers
+        .get(registry::REGISTRY_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(0);
+    match state.stream_with_registry(device.0, supported, registry_version) {
         Ok(stream) => (StatusCode::OK, Sse::new(stream)).into_response(),
         Err(error) => error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
     }

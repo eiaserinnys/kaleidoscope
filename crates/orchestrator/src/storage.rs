@@ -1,5 +1,6 @@
 use super::*;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use kaleidoscope_contract::registry::DeviceLayout;
 use rand::RngExt;
 use sha2::{Digest, Sha256};
 
@@ -12,7 +13,7 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
             PRAGMA user_version=1;
             COMMIT;")?;
-    } else if version > 4 {
+    } else if version > 5 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 2 {
@@ -39,6 +40,64 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             PRAGMA user_version=4;
             COMMIT;",
         )?;
+    }
+    if version < 5 {
+        let tx = db.unchecked_transaction()?;
+        tx.execute_batch(
+            "ALTER TABLE devices ADD COLUMN last_active_at TEXT;
+             CREATE TABLE workspaces (id TEXT PRIMARY KEY, data TEXT NOT NULL, created_at TEXT NOT NULL);
+             CREATE TABLE desktops (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL);
+             CREATE TABLE windows (id TEXT PRIMARY KEY, desktop_id TEXT NOT NULL, app_id TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL);",
+        )?;
+        let reports = {
+            let mut statement = tx.prepare(
+                "SELECT l.device_id,l.layout,l.reported_at FROM device_layouts l JOIN devices d ON d.id=l.device_id WHERE d.revoked_at IS NULL ORDER BY l.reported_at,d.id",
+            )?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            rows
+        };
+        for (device_id, raw, reported_at) in reports {
+            let layout: DeviceLayout =
+                serde_json::from_str(&raw).map_err(|_| rusqlite::Error::InvalidQuery)?;
+            for workspace in layout.workspaces {
+                let data =
+                    serde_json::to_string(&workspace).map_err(|_| rusqlite::Error::InvalidQuery)?;
+                tx.execute("INSERT INTO workspaces(id,data,created_at) VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET data=excluded.data,created_at=excluded.created_at", params![workspace.id,data,workspace.created_at])?;
+            }
+            for desktop in layout.desktops {
+                let data =
+                    serde_json::to_string(&desktop).map_err(|_| rusqlite::Error::InvalidQuery)?;
+                tx.execute("INSERT INTO desktops(id,workspace_id,data,created_at) VALUES(?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET workspace_id=excluded.workspace_id,data=excluded.data,created_at=excluded.created_at", params![desktop.id,desktop.workspace_id,data,desktop.created_at])?;
+            }
+            for window in layout.windows {
+                let data =
+                    serde_json::to_string(&window).map_err(|_| rusqlite::Error::InvalidQuery)?;
+                tx.execute("INSERT INTO windows(id,desktop_id,app_id,data,created_at) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(id) DO UPDATE SET desktop_id=excluded.desktop_id,app_id=excluded.app_id,data=excluded.data,created_at=excluded.created_at", params![window.id,window.desktop_id,window.app_id,data,window.created_at])?;
+            }
+            tx.execute(
+                "UPDATE devices SET last_active_at=?2 WHERE id=?1",
+                params![device_id, reported_at],
+            )?;
+        }
+        tx.execute(
+            "DELETE FROM desktops WHERE workspace_id NOT IN (SELECT id FROM workspaces)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM windows WHERE desktop_id NOT IN (SELECT id FROM desktops)",
+            [],
+        )?;
+        tx.execute("DELETE FROM device_layouts WHERE device_id IN (SELECT id FROM devices WHERE revoked_at IS NOT NULL)", [])?;
+        tx.pragma_update(None, "user_version", 5)?;
+        tx.commit()?;
     }
     Ok(())
 }
