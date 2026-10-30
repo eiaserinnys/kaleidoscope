@@ -360,9 +360,11 @@ fn wait_processes_exit(pids: &[u32]) -> Result<(), String> {
 #[cfg(windows)]
 fn process_is_alive(pid: u32) -> Result<bool, String> {
     use windows::Win32::Foundation::{CloseHandle, WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT};
-    use windows::Win32::System::Threading::{OpenProcess, WaitForSingleObject, SYNCHRONIZE};
+    use windows::Win32::System::Threading::{
+        OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+    };
 
-    let handle = match unsafe { OpenProcess(SYNCHRONIZE, false, pid) } {
+    let handle = match unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) } {
         Ok(handle) => handle,
         Err(error) if error.code() == windows::core::HRESULT::from_win32(87) => return Ok(false),
         Err(error) => return Err(format!("could not query process {pid}: {error}")),
@@ -386,7 +388,8 @@ fn process_is_alive(_pid: u32) -> Result<bool, String> {
 
 #[cfg(windows)]
 fn visible_windows(pids: &[u32]) -> Result<Vec<u32>, String> {
-    use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
+    use windows::core::BOOL;
+    use windows::Win32::Foundation::{HWND, LPARAM};
     use windows::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
     };
