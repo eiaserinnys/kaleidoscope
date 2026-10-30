@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 12판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 13판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -71,6 +71,8 @@
 //! 충돌 안내는 편집기와 같은 다시 불러오기/덮어쓰기 흐름을 쓴다. 저장값이 있을 때만 「기본값으로」를 보여 `storage.reset`한다.
 //! 손대지 않은 항목은 `storage.update`를 받으면 다시 읽는다. 선택지에 없는 현재 값은 그대로 보이고, 선택지 목록이 아직 없을 때
 //! 기본값으로 덮지 않는다. 이 필드가 있는 앱 정의는 `requires.modules.storage` 2판 이상을 요구한다.
+//! 13판에서 바뀐 것(흐름 블록 본문 나란히와 복사 단추, 카드 #808): 블록 세트 7판. `feed`의 `columns`(본문 문단 나란히)와
+//! `copy`(`meta`와 문단마다 복사 단추). 모듈과 레지스트리 판은 그대로다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -175,7 +177,8 @@ pub const TAURI_EVENT: &str = "core-event";
 /// - 5판: 4판 + `explorer`의 `folder`, `on_folder`, `view`, `on_view`. 5판 쉘은 탐색기를 폴더 트리와 내용의 두 칸으로
 ///   그리고, 이 필드가 없는 3판 정의의 탐색기도 같은 모습으로 그린다.
 /// - 6판: 5판 + `markdown_editor`와 `markdown_view`의 `document` 바인딩, 앱 정의의 `storage`와 `agent`.
-pub const BLOCK_SET_VERSION: u32 = 6;
+/// - 7판: 6판 + `feed`의 `columns`, `copy`.
+pub const BLOCK_SET_VERSION: u32 = 7;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -914,6 +917,16 @@ pub enum Block {
         #[serde(default)]
         #[ts(optional, as = "Option<bool>")]
         follow: bool,
+        /// (블록 세트 7판) 본문 문단(`body`가 배열일 때)을 같은 너비의 칸으로 나란히 놓는다. 창이 좁아 칸마다
+        /// 최소 너비를 지킬 수 없으면 위아래로 쌓는다. 예: 여러 문단 비교.
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        columns: bool,
+        /// (블록 세트 7판) 항목의 `meta`와 본문 문단마다 복사 단추를 붙인다. 누르면 그 글을 그대로(줄바꿈 포함)
+        /// 클립보드에 쓴다. 단추를 눌러도 항목 고르기는 돌지 않는다.
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        copy: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         selected: Option<StateRef>,
@@ -2876,7 +2889,7 @@ mod tests {
         assert!(!current.renders(&unknown_module));
         assert_eq!(
             serde_json::to_string(&current).unwrap(),
-            r#"{"blocks":6,"modules":{"agent":3,"connection":2,"files":1,"storage":2,"web":1}}"#
+            r#"{"blocks":7,"modules":{"agent":3,"connection":2,"files":1,"storage":2,"web":1}}"#
         );
         // 4판 쉘(v0.4.x)은 5판 필드를 쓴 탐색기를 받지 않는다.
         let explorer = validate::parse_app_definition(&example("explorer.json")).unwrap();

@@ -71,6 +71,70 @@ it("preserves feed text selection without selecting an entry", async () => {
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a" })));
 });
 
+it("enables feed columns only when requested", async () => {
+  setup({ type: "feed", columns: true, entries: [{ key: "a", body: ["첫째", "둘째"] }] } as unknown as Block);
+  const body = (await screen.findByText("첫째")).closest(".ks-feed-body")!;
+  expect(body.classList.contains("is-columns")).toBe(true);
+
+  cleanup();
+  setup({ type: "feed", entries: [{ key: "a", body: ["셋째", "넷째"] }] });
+  const plainBody = (await screen.findByText("셋째")).closest(".ks-feed-body")!;
+  expect(plainBody.classList.contains("is-columns")).toBe(false);
+});
+
+it("copies feed metadata and each original body paragraph without selecting the entry", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  const { calls } = setup({
+    type: "feed",
+    copy: true,
+    entries: [{ key: "a", meta: "id-1", body: ["첫 줄\n둘째 줄", "다른 문단"] }],
+    on_select: { set_state: "choice" },
+  } as unknown as Block, { choice: null });
+  try {
+    const buttons = await screen.findAllByRole("button", { name: "복사" });
+    expect(buttons).toHaveLength(3);
+    fireEvent.click(buttons[0]);
+    fireEvent.click(buttons[1]);
+    fireEvent.click(buttons[2]);
+    await waitFor(() => expect(writeText.mock.calls).toEqual([["id-1"], ["첫 줄\n둘째 줄"], ["다른 문단"]]));
+    expect(calls.mock.calls.some(([request]) => request.op === "data.act")).toBe(false);
+  } finally {
+    Reflect.deleteProperty(navigator, "clipboard");
+  }
+});
+
+it("keeps feed copy feedback with its entry when entries reorder", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  try {
+    const entries = [
+      { key: "first", meta: "id-1", body: "첫 내용" },
+      { key: "second", meta: "id-2", body: "둘째 내용" },
+    ];
+    const { transport } = setup({ type: "feed", copy: true, entries: { expr: "$state.entries" } } as unknown as Block, { entries });
+    const second = (await screen.findByText("둘째 내용")).closest("article")!;
+    fireEvent.click(second.querySelector(".ks-feed-meta-copy button")!);
+    await waitFor(() => expect(second.querySelector(".ks-feed-meta-copy .ks-feed-copy-control")?.classList.contains("is-feedback")).toBe(true));
+
+    act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/entries": { status: "ready", value: [entries[1], entries[0]] } } } }));
+
+    const movedSecond = screen.getByText("둘째 내용").closest("article")!;
+    const movedFirst = screen.getByText("첫 내용").closest("article")!;
+    expect(movedSecond.querySelector(".ks-feed-meta-copy .ks-feed-copy-control")?.classList.contains("is-feedback")).toBe(true);
+    expect(movedFirst.querySelector(".ks-feed-meta-copy .ks-feed-copy-control")?.classList.contains("is-feedback")).toBe(false);
+  } finally {
+    Reflect.deleteProperty(navigator, "clipboard");
+  }
+});
+
+it("does not add feed copy controls when copy is off", async () => {
+  setup({ type: "feed", entries: [{ key: "a", meta: "id-1", body: "본문" }] });
+  await screen.findByText("본문");
+  expect(screen.queryByRole("button", { name: "복사" })).toBeNull();
+  expect(document.querySelector(".ks-feed-copy-cell")).toBeNull();
+});
+
 it("does not select a feed entry with Enter while its text is selected", async () => {
   const { calls } = setup({ type: "feed", entries: [{ key: "a", name: "이름", body: "첫 줄" }], on_select: { set_state: "choice" } }, { choice: null });
   const text = await screen.findByText("첫 줄");

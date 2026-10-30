@@ -839,9 +839,22 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
         }
-        Block::List { selected, .. }
-        | Block::Tree { selected, .. }
-        | Block::Feed { selected, .. } => {
+        Block::List { selected, .. } | Block::Tree { selected, .. } => {
+            if let Some(selected) = selected {
+                validate_state_key(&selected.state, definition, details, at);
+            }
+        }
+        Block::Feed {
+            columns,
+            copy,
+            selected,
+            ..
+        } => {
+            if (*columns || *copy) && definition.requires.blocks < 7 {
+                details.push(format!(
+                    "{at}: feed의 columns, copy는 블록 세트 7판이라 requires.blocks가 7 이상이어야 합니다"
+                ));
+            }
             if let Some(selected) = selected {
                 validate_state_key(&selected.state, definition, details, at);
             }

@@ -295,7 +295,17 @@ on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap,
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
-meta?: Binding, collapsible?: boolean, collapsed?: boolean, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: StateRef, on_select?: Actions, } | { "type": "properties", fields: Array<PropertyField>, } | { "type": "tree", items: Binding, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", value: Binding, format?: TextFormat, style?: TextStyle, } | { "type": "input", value: StateRef, on_change: Actions, kind?: InputKind, multiline?: boolean, placeholder?: string, on_submit?: Actions, } | { "type": "select", value: StateRef, on_change: Actions, options: Binding, style?: SelectStyle, placeholder?: string, } | { "type": "toggle", value: StateRef, on_change: Actions, label: string, } | { "type": "button", label: string, icon?: string, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code_editor", file: FileRef, language?: CodeLanguage, } | { "type": "code_view", value?: Binding, file?: FileRef, language?: CodeLanguage, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, };
+meta?: Binding, collapsible?: boolean, collapsed?: boolean, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: StateRef, on_select?: Actions, } | { "type": "properties", fields: Array<PropertyField>, } | { "type": "tree", items: Binding, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
+/**
+ * (블록 세트 7판) 본문 문단(`body`가 배열일 때)을 같은 너비의 칸으로 나란히 놓는다. 창이 좁아 칸마다
+ * 최소 너비를 지킬 수 없으면 위아래로 쌓는다. 예: 여러 문단 비교.
+ */
+columns?: boolean, 
+/**
+ * (블록 세트 7판) 항목의 `meta`와 본문 문단마다 복사 단추를 붙인다. 누르면 그 글을 그대로(줄바꿈 포함)
+ * 클립보드에 쓴다. 단추를 눌러도 항목 고르기는 돌지 않는다.
+ */
+copy?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", value: Binding, format?: TextFormat, style?: TextStyle, } | { "type": "input", value: StateRef, on_change: Actions, kind?: InputKind, multiline?: boolean, placeholder?: string, on_submit?: Actions, } | { "type": "select", value: StateRef, on_change: Actions, options: Binding, style?: SelectStyle, placeholder?: string, } | { "type": "toggle", value: StateRef, on_change: Actions, label: string, } | { "type": "button", label: string, icon?: string, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code_editor", file: FileRef, language?: CodeLanguage, } | { "type": "code_view", value?: Binding, file?: FileRef, language?: CodeLanguage, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, };
 
 export type ButtonVariant = "default" | "primary" | "danger" | "ghost";
 
