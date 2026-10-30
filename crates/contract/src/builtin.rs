@@ -13,6 +13,12 @@ pub struct BuiltinApp {
 
 pub const BUILTIN_APPS: &[BuiltinApp] = &[
     BuiltinApp {
+        id: "agent",
+        version: 1,
+        updated_at: "2026-10-30T00:00:00Z",
+        definition_json: include_str!("../../../apps/agent.json"),
+    },
+    BuiltinApp {
         id: "explorer",
         version: 3,
         updated_at: "2026-10-30T00:00:00Z",

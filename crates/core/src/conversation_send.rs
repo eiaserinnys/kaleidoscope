@@ -66,9 +66,9 @@ pub(crate) fn send(
             return Err(error::make(ErrorCode::InvalidRequest));
         }
     }
-    let (attachments, visuals) =
-        share::capture_for_conversation_send(inner, &ctx.workspace.id, &uploads);
     let conversation = format!("{}\0{}", ctx.storage.app, ctx.workspace.id);
+    let (attachments, visuals) =
+        share::capture_for_send(inner, &ctx.workspace.id, &conversation, &uploads);
     let plan = share::prepare_text(inner, &ctx.workspace.id, &conversation);
     let (body, context, sent_views) = match plan {
         Some((block, views)) => (text.trim().to_string(), Some(block), Some(views)),
@@ -267,7 +267,13 @@ fn spawn(
                                 format!("{}\0{}", pending.context.app, pending.workspace);
                             share::mark_sent_text(&owner, &conversation, views);
                         }
-                        share::mark_sent_visuals(&owner, pending.sent_visuals.clone());
+                        let conversation =
+                            format!("{}\0{}", pending.context.app, pending.workspace);
+                        share::mark_sent_visuals(
+                            &owner,
+                            &conversation,
+                            pending.sent_visuals.clone(),
+                        );
                         remove_failed(&owner, &pending);
                         finish(&owner, &path, &mut reply, Ok(()), true);
                     }

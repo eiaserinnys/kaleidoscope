@@ -108,7 +108,7 @@ pub struct StorageValueSchema {
         skip_serializing_if = "Option::is_none"
     )]
     #[ts(rename = "additionalProperties", optional)]
-    pub additional_properties: Option<bool>,
+    pub additional_properties: Option<AdditionalProperties>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub items: Option<Box<StorageValueSchema>>,
@@ -125,6 +125,15 @@ pub struct StorageValueSchema {
     #[serde(default, rename = "minLength", skip_serializing_if = "Option::is_none")]
     #[ts(rename = "minLength", optional, type = "number")]
     pub min_length: Option<u64>,
+}
+
+/// 추가 객체 필드를 금지하거나 각 값에 적용할 스키마를 지정한다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum AdditionalProperties {
+    Boolean(bool),
+    Schema(Box<StorageValueSchema>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
@@ -672,10 +681,16 @@ fn validate_json_schema(schema: &StorageValueSchema, at: &str) -> Result<(), Str
             return Err(format!("{at}/schema/required에는 properties가 필요합니다"));
         }
     }
-    if schema.additional_properties == Some(true) {
-        return Err(format!(
-            "{at}/schema/additionalProperties는 고정 필드 객체를 위해 false여야 합니다"
-        ));
+    match &schema.additional_properties {
+        Some(AdditionalProperties::Boolean(true)) => {
+            return Err(format!(
+                "{at}/schema/additionalProperties는 false 또는 값 스키마여야 합니다"
+            ));
+        }
+        Some(AdditionalProperties::Schema(child)) => {
+            validate_json_schema(child, &format!("{at}/schema/additionalProperties"))?;
+        }
+        _ => {}
     }
     if let Some(items) = &schema.items {
         validate_json_schema(items, &format!("{at}/schema/items"))?;
@@ -714,6 +729,9 @@ fn validate_json_value(schema: &StorageValueSchema, value: &Value, at: &str) -> 
                 .and_then(|properties| properties.get(name))
             {
                 validate_json_value(field_schema, field_value, &format!("{at}/{name}"))?;
+            } else if let Some(AdditionalProperties::Schema(child)) = &schema.additional_properties
+            {
+                validate_json_value(child, field_value, &format!("{at}/{name}"))?;
             } else {
                 return Err(format!("{at}: 허용되지 않은 필드입니다: {name}"));
             }
@@ -805,6 +823,47 @@ mod tests {
         }))
         .unwrap();
         assert!(validate_json_schema(&open_object, "/schema").is_err());
+    }
+
+    #[test]
+    fn storage_schema_validates_additional_property_values() {
+        let schema: StorageValueSchema = serde_json::from_value(json!({
+            "type":"object",
+            "properties":{"fixed":{"type":"string"}},
+            "additionalProperties":{"type":"object","additionalProperties":{"type":"string"}}
+        }))
+        .unwrap();
+        assert!(validate_json_schema(&schema, "/schema").is_ok());
+        assert!(validate_json_value(
+            &schema,
+            &json!({"fixed":"ok","env":{"A":"one","B":"two"}}),
+            "/content"
+        )
+        .is_ok());
+        assert!(validate_json_value(&schema, &json!({"env":{"A":2}}), "/content").is_err());
+        assert!(!settings_schema_supported(&schema));
+        let entry: StorageEntryDecl = serde_json::from_value(json!({
+            "id":"map", "key":"settings/map", "kind":"json", "label":"Map",
+            "presentation":"settings", "schema": schema, "default":{}
+        }))
+        .unwrap();
+        assert!(!validate_storage_decl(&StorageDecl {
+            entries: vec![entry]
+        })
+        .is_empty());
+        for extra in [json!(false), Value::Null] {
+            let mut value = json!({"type":"object","properties":{"fixed":{"type":"string"}}});
+            if !extra.is_null() {
+                value["additionalProperties"] = extra;
+            }
+            let fixed: StorageValueSchema = serde_json::from_value(value).unwrap();
+            assert!(validate_json_schema(&fixed, "/schema").is_ok());
+            assert!(validate_json_value(&fixed, &json!({"fixed":"ok"}), "/content").is_ok());
+            assert!(validate_json_value(&fixed, &json!({"other":"no"}), "/content").is_err());
+        }
+        let open: StorageValueSchema =
+            serde_json::from_value(json!({"type":"object","additionalProperties":true})).unwrap();
+        assert!(validate_json_schema(&open, "/schema").is_err());
     }
 
     #[test]

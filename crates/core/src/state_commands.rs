@@ -463,18 +463,8 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::ConnectionLogin { .. }
         | CoreRequest::ShareSet { .. }
         | CoreRequest::ShareView { .. }
-        | CoreRequest::LocalAgentAttach { .. }
-        | CoreRequest::LocalAgentDetach { .. }
-        | CoreRequest::LocalAgentAllow { .. }
-        | CoreRequest::LocalAgentRetry { .. }
-        | CoreRequest::LocalAgentAuthenticate { .. }
-        | CoreRequest::LocalAgentConfigure { .. }
-        | CoreRequest::LocalAgentSend { .. }
-        | CoreRequest::LocalAgentCancel { .. }
-        | CoreRequest::LocalAgentPermission { .. }
-        | CoreRequest::LocalAgentAttachment { .. }
-        | CoreRequest::LocalAgentAttachmentOpen { .. }
         | CoreRequest::UpdateRestart {} => Err(error::make(ErrorCode::InvalidRequest)),
+        _ => Err(error::make(ErrorCode::InvalidRequest)),
     }
 }
 

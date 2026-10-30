@@ -304,6 +304,7 @@ pub(super) fn load(inner: &Arc<Inner>, window: &str, selected: Option<&str>) {
                 replan(&inner, &window, runtime, Some(&entry))
             };
             jobs(&inner, pending);
+            crate::local_agent::data_changed(&inner, &window);
             inner.layout_signal.notify();
         });
     }
@@ -311,7 +312,11 @@ pub(super) fn load(inner: &Arc<Inner>, window: &str, selected: Option<&str>) {
         let inner = Arc::clone(inner);
         let window = window.to_string();
         thread::spawn(move || {
-            let result = crate::app_storage::list(&inner, &window);
+            let result = if crate::app_storage::uses_defaults(&inner) {
+                Ok(None)
+            } else {
+                crate::app_storage::list(&inner, &window).map(|value| Some(value.bucket_id))
+            };
             let pending = {
                 let mut windows = inner.data_runtimes.windows.lock().unwrap();
                 let Some(runtime) = windows.get_mut(&window) else {
@@ -324,7 +329,7 @@ pub(super) fn load(inner: &Arc<Inner>, window: &str, selected: Option<&str>) {
                 meta.in_flight = false;
                 match result {
                     Ok(value) => {
-                        meta.value = Some(value.bucket_id);
+                        meta.value = value;
                         meta.status = Status::Ready;
                     }
                     Err(err) => {
@@ -335,6 +340,7 @@ pub(super) fn load(inner: &Arc<Inner>, window: &str, selected: Option<&str>) {
                 replan(&inner, &window, runtime, None)
             };
             jobs(&inner, pending);
+            crate::local_agent::data_changed(&inner, &window);
             inner.layout_signal.notify();
         });
     }
@@ -381,6 +387,7 @@ pub(super) fn written(
         replan(inner, window, runtime, Some(entry))
     };
     jobs(inner, pending);
+    crate::local_agent::data_changed(inner, window);
     inner.layout_signal.notify();
 }
 

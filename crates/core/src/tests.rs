@@ -152,6 +152,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
     let apps = snapshot(&core).shared.apps;
     for (id, version) in [
+        ("agent", 1),
         ("explorer", 3),
         ("md-editor", 2),
         ("md-viewer", 1),
@@ -161,13 +162,28 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
             .iter()
             .any(|app| app.id == id && app.current_version == version));
     }
-    assert_eq!(apps.len(), 4);
+    assert_eq!(apps.len(), 5);
     let error = core
         .handle(CoreRequest::AppImport {
             definition_json: MD_EDITOR.into(),
         })
         .unwrap_err();
     assert_eq!(error.code, ErrorCode::InvalidAppDefinition);
+}
+
+#[test]
+fn local_agent_is_available_and_reads_defaults_before_linking() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "agent");
+    let value = crate::app_storage::read(&core.inner, &window, "agents").unwrap();
+    assert!(!value.exists);
+    assert_eq!(value.revision, None);
+    assert!(!value.content.as_array().unwrap().is_empty());
+    assert!(
+        matches!(core.handle(CoreRequest::LocalAgentAttach { window_id: window }), Ok(CoreReply::LocalAgentAttach { snapshot }) if snapshot.phase == kaleidoscope_contract::local_agent::LocalAgentPhase::ChoosingAgent)
+    );
 }
 
 #[test]
@@ -201,7 +217,7 @@ fn builtin_window_state_survives_restart_at_the_same_version() {
         .find(|w| w.id == window_id)
         .unwrap();
     assert_eq!(before, after);
-    assert_eq!(snapshot(&reopened).shared.apps.len(), 4);
+    assert_eq!(snapshot(&reopened).shared.apps.len(), 5);
 }
 
 #[test]
@@ -694,13 +710,12 @@ fn conversation_capture_respects_visual_baseline() {
         },
     })
     .unwrap();
-    let (first, visuals) =
-        crate::share::capture_for_conversation_send(&core.inner, &workspace_id, &[]);
+    let (first, visuals) = crate::share::capture_for_send(&core.inner, &workspace_id, "test", &[]);
     assert_eq!(first.len(), 2);
     assert_eq!(host.shell_captures.load(Ordering::SeqCst), 1);
     assert_eq!(host.web_captures.load(Ordering::SeqCst), 1);
-    crate::share::mark_sent_visuals(&core.inner, visuals);
-    let (second, _) = crate::share::capture_for_conversation_send(&core.inner, &workspace_id, &[]);
+    crate::share::mark_sent_visuals(&core.inner, "test", visuals);
+    let (second, _) = crate::share::capture_for_send(&core.inner, &workspace_id, "test", &[]);
     assert!(second.is_empty());
 }
 
@@ -749,6 +764,7 @@ fn expect_error(result: Result<CoreReply, CoreError>, code: ErrorCode) -> CoreEr
 #[derive(Default)]
 struct FakeRegistryClient {
     storage_value: Mutex<Option<(Value, String)>>,
+    storage_pause: Mutex<Option<mpsc::Receiver<()>>>,
     storage_workspace: Mutex<String>,
     pair_start: Mutex<Option<Result<PairStartReply, RegistryError>>>,
     pair_polls: Mutex<VecDeque<Result<PairPollReply, RegistryError>>>,
@@ -780,6 +796,10 @@ impl RegistryClient for FakeRegistryClient {
         _: &str,
         workspace: &str,
     ) -> Result<kaleidoscope_contract::app_storage::StorageReadReply, RegistryError> {
+        let pause = self.storage_pause.lock().unwrap().take();
+        if let Some(pause) = pause {
+            let _ = pause.recv_timeout(Duration::from_secs(10));
+        }
         *self.storage_workspace.lock().unwrap() = workspace.into();
         let value = self.storage_value.lock().unwrap().clone();
         Ok(kaleidoscope_contract::app_storage::StorageReadReply {
@@ -1608,7 +1628,7 @@ fn unreadable_state_json_is_renamed_and_core_starts_with_empty_state() {
     let core = open_core(&data_dir, vec![], &host);
     let snapshot = snapshot(&core);
     assert_eq!(snapshot.shared.workspaces.len(), 1);
-    assert_eq!(snapshot.shared.apps.len(), 4);
+    assert_eq!(snapshot.shared.apps.len(), 5);
     assert!(fs::read_dir(&data_dir).unwrap().any(|entry| {
         entry
             .unwrap()
@@ -2227,3 +2247,4 @@ mod oauth_tests;
 mod web_tests;
 
 mod local_agent_tests;
+mod local_agent_wiring_tests;

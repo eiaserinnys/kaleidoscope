@@ -119,7 +119,10 @@ async fn run() -> Result<(), String> {
     core.subscribe(Box::new(move |event| {
         let _ = event_sender.send(event.clone());
     }));
-    let state = AppState { core, events };
+    let state = AppState {
+        core: Arc::clone(&core),
+        events,
+    };
     let cors = CorsLayer::new()
         .allow_origin(HeaderValue::from_static(DEV_UI_ORIGIN))
         .allow_methods([Method::GET, Method::POST])
@@ -139,14 +142,18 @@ async fn run() -> Result<(), String> {
         .await
         .map_err(|error| format!("개발용 HTTP 다리에 바인드할 수 없습니다: {error}"))?;
     eprintln!("개발용 HTTP 다리: http://{address}");
+    let shutdown_core = Arc::clone(&core);
     axum::serve(listener, app)
-        .with_graceful_shutdown(async {
+        .with_graceful_shutdown(async move {
             if let Err(error) = tokio::signal::ctrl_c().await {
                 eprintln!("종료 신호를 기다릴 수 없습니다: {error}");
             }
+            shutdown_core.shutdown();
         })
         .await
-        .map_err(|error| format!("개발용 HTTP 다리가 종료됐습니다: {error}"))
+        .map_err(|error| format!("개발용 HTTP 다리가 종료됐습니다: {error}"))?;
+    core.shutdown();
+    Ok(())
 }
 
 async fn restrict_origin(request: Request, next: Next) -> Response {

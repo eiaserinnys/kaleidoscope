@@ -24,7 +24,7 @@ pub(crate) struct ShareState {
     views: HashMap<String, VisibleView>,
     uploaded: HashMap<String, ShareUpload>,
     pending_deletes: HashSet<String>,
-    visual_hashes: HashMap<String, String>,
+    visual_hashes: HashMap<String, HashMap<String, String>>,
     sent: HashMap<String, BTreeMap<String, kaleidoscope_data::share::SentView>>,
 }
 
@@ -109,7 +109,9 @@ pub(crate) fn set(
             state.share.sharing.retain(|id| id != window_id);
             state.share.views.remove(window_id);
             state.share.uploaded.remove(window_id);
-            state.share.visual_hashes.remove(window_id);
+            for hashes in state.share.visual_hashes.values_mut() {
+                hashes.remove(window_id);
+            }
             state.share.pending_deletes.insert(window_id.to_owned());
             (
                 Some(CoreEvent::StateChanged {
@@ -278,7 +280,9 @@ pub(crate) fn state_changed(inner: &Inner) {
             state.share.sharing.retain(|sharing| sharing != id);
             state.share.views.remove(id);
             state.share.uploaded.remove(id);
-            state.share.visual_hashes.remove(id);
+            for hashes in state.share.visual_hashes.values_mut() {
+                hashes.remove(id);
+            }
             state.share.pending_deletes.insert(id.clone());
         }
         removed
@@ -352,9 +356,10 @@ pub(crate) fn clear_server_before_unlink(inner: &Inner) {
     }
 }
 
-pub(crate) fn capture_for_conversation_send(
+pub(crate) fn capture_for_send(
     inner: &Inner,
     workspace_id: &str,
+    conversation: &str,
     existing: &[ConversationUpload],
 ) -> (Vec<ConversationUpload>, Vec<(String, String)>) {
     let candidates = {
@@ -407,7 +412,12 @@ pub(crate) fn capture_for_conversation_send(
                         view.bounds,
                         upload.app_name,
                         has_web,
-                        state.share.visual_hashes.get(id).cloned(),
+                        state
+                            .share
+                            .visual_hashes
+                            .get(conversation)
+                            .and_then(|hashes| hashes.get(id))
+                            .cloned(),
                     ))
                 })
                 .collect::<Vec<_>>()
@@ -492,11 +502,16 @@ pub(crate) fn capture_for_conversation_send(
     (attachments, sent)
 }
 
-pub(crate) fn mark_sent_visuals(inner: &Inner, sent: Vec<(String, String)>) {
+pub(crate) fn mark_sent_visuals(inner: &Inner, conversation: &str, sent: Vec<(String, String)>) {
     let mut state = inner.state.lock().unwrap();
     for (id, hash) in sent {
         if state.share.sharing.iter().any(|sharing| sharing == &id) {
-            state.share.visual_hashes.insert(id, hash);
+            state
+                .share
+                .visual_hashes
+                .entry(conversation.to_owned())
+                .or_default()
+                .insert(id, hash);
         }
     }
 }

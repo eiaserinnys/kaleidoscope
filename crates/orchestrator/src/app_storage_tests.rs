@@ -144,7 +144,7 @@ fn builtin_storage_definition_supports_list_read_write_reset_cycle() {
         id: "agent",
         version: 1,
         updated_at: "2026-10-30T00:00:00Z",
-        definition_json: include_str!("../../../examples/agent.json"),
+        definition_json: include_str!("../../../apps/agent.json"),
     }];
 
     let listed = state

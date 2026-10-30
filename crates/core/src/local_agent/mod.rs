@@ -5,6 +5,9 @@ mod prompt;
 mod record;
 mod updates;
 mod worker;
+mod context;
+mod wiring;
+pub(crate) use wiring::{data_changed, handle, shutdown, start_events, state_changed, LocalAgents};
 
 use crate::error;
 use kaleidoscope_contract::{

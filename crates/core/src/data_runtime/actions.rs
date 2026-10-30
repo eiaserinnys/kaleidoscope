@@ -50,6 +50,7 @@ pub(crate) fn act(
             Step::SetState { key, value } => {
                 crate::Core {
                     inner: Arc::clone(inner),
+                    owner: false,
                 }
                 .set_state_key(window_id, key, value)?;
             }
