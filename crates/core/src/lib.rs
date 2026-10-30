@@ -314,6 +314,10 @@ impl Core {
                 kaleidoscope_contract::ErrorCode::Unavailable,
                 "같이 보기는 아직 이 코어에 없습니다",
             )),
+            CoreRequest::UpdateRestart {} => Err(error::with_message(
+                kaleidoscope_contract::ErrorCode::Unavailable,
+                "쉘 업데이트는 아직 이 코어에 없습니다",
+            )),
             CoreRequest::DataAttach { window_id } => data_runtime::attach(&self.inner, &window_id),
             CoreRequest::DataDetach { window_id } => data_runtime::detach(&self.inner, &window_id),
             CoreRequest::DataAct {
@@ -497,5 +501,7 @@ pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
         link: state.link.clone(),
         // 같이 보기는 코어 구현(카드 #814)이 채운다.
         sharing: Vec::new(),
+        // 쉘 업데이트는 앱 크레이트의 업데이터 구현(카드 #819)이 채운다.
+        update: kaleidoscope_contract::UpdateStatus::Unavailable {},
     }
 }
