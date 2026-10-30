@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 6판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 7판, 261030)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -37,6 +37,10 @@
 //! `data.update` 이벤트. 블록은 서비스의 데이터 모양을 모르고, 앱 정의의 JSONata 식이 데이터를 블록의 모양으로
 //! 바꾼다(결정 「쉘은 OS처럼 범용 기능과 범용 애셋만 (261030)」). 서버 쪽은 [`registry`]의 「연결」 절에 있다.
 //!
+//! 7판에서 바뀐 것(작업과 창 배치 동기화, 카드 #780): 화면 계약은 그대로다. 연결한 쉘에서 워크스페이스, 데스크톱,
+//! 앱 창의 정본이 오케스트레이터로 옮겨 가고, 코어가 서버와 바뀐 것을 주고받는다([`registry`]의 「작업과 배치 동기화」 절).
+//! 앱의 새 버전으로 창 상태를 옮기는 규칙은 코어와 서버가 같이 쓰도록 [`migrate_window_state`]로 뺐다.
+//!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
 //! - 코어는 이벤트 채널 하나로 [`CoreEvent`]를 보낸다.
@@ -63,8 +67,12 @@
 //!   - 앱과 앱 버전: 오케스트레이터에 연결했으면 오케스트레이터 레지스트리가 정본이고 `state.json`은 그
 //!     캐시다. 코어는 레지스트리의 앱마다 지금 버전 하나만 캐시에 둔다(창은 늘 지금 버전을 그리므로).
 //!     연결하지 않았으면 1판처럼 코어가 정본이다.
-//!   - 워크스페이스, 데스크톱, 앱 창: 아직 코어가 정본이다. 기기 사이 동기화는 다음 단계다.
+//!   - 워크스페이스, 데스크톱, 앱 창: 오케스트레이터에 연결했으면 오케스트레이터가 정본이고 `state.json`은 그
+//!     사본이다. 코어는 바꾼 것을 서버에 올리고 서버가 알리는 것을 받아 맞춘다. 끊긴 동안 바꾼 것은 다시 이으면
+//!     올린다. 연결하지 않았으면 코어가 정본이다. 규칙은 [`registry`]의 「작업과 배치 동기화」 절에 있다.
+//!   - 화면은 이 경계를 모른다. 다른 기기에서 바뀐 것도 `state.changed`로 온다.
 //! - [`DeviceState`]: 지금 고른 워크스페이스와 데스크톱, 고른 폴더. 그 기기의 `device.json`에만 둔다.
+//!   다른 기기에서 워크스페이스나 데스크톱, 창이 지워지면 코어가 이 기기의 고른 것과 고른 폴더를 맞춘다.
 //! - 오케스트레이터 연결 정보(서버 주소, 기기 id, 기기 토큰)는 그 기기의 `link.json`에만 두고 화면에
 //!   보내지 않는다. 화면은 [`LinkStatus`]만 본다.
 
@@ -202,6 +210,24 @@ pub struct Rect {
     pub y: i32,
     pub width: u32,
     pub height: u32,
+}
+
+/// 앱의 다른 버전으로 창을 옮길 때의 창 상태. 새 정의의 `state`에 선언된 키만 남기고, 옛 상태에 같은 키가
+/// 있으면 그 값을, 없으면 새 정의의 기본값을 쓴다.
+///
+/// 코어(앱의 새 버전을 받았을 때와 서버에서 받은 창의 버전이 캐시와 다를 때)와 오케스트레이터(앱의 새 버전을
+/// 올렸을 때 저장한 창을 옮길 때)가 같은 규칙을 쓴다. 창의 `app_version`은 부른 쪽이 바꾼다.
+pub fn migrate_window_state(
+    definition: &AppDefinition,
+    old_state: &BTreeMap<String, JsonValue>,
+) -> BTreeMap<String, JsonValue> {
+    let mut next = definition.state.clone();
+    for (key, value) in old_state {
+        if let Some(slot) = next.get_mut(key) {
+            *slot = value.clone();
+        }
+    }
+    next
 }
 
 /// 이 기기에서 앱 창의 권한 하나에 고른 폴더. 기기 밖으로 나가지 않는다.
@@ -1869,6 +1895,22 @@ mod tests {
                 serde_json::from_str(&example(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(def.requires.blocks <= BLOCK_SET_VERSION, "{name}");
         }
+    }
+
+    #[test]
+    fn migrate_window_state_keeps_declared_keys() {
+        let definition: AppDefinition = serde_json::from_str(&example("md-editor.json")).unwrap();
+        let old = BTreeMap::from([
+            ("current_file".to_string(), serde_json::json!("notes/a.md")),
+            ("gone".to_string(), serde_json::json!(1)),
+        ]);
+        let next = migrate_window_state(&definition, &old);
+        assert_eq!(next.get("current_file"), Some(&serde_json::json!("notes/a.md")));
+        assert!(!next.contains_key("gone"));
+        assert_eq!(
+            migrate_window_state(&definition, &BTreeMap::new()),
+            definition.state
+        );
     }
 
     #[test]

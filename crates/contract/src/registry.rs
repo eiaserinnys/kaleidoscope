@@ -1,4 +1,4 @@
-//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 5판, 261030)
+//! 코어와 오케스트레이터 사이 HTTP 약속 (레지스트리 6판, 261030)
 //!
 //! 2판에서 더한 것(카드 #779): 배치 보고(`PUT /api/device/layout`), 워크스페이스 PAS 경로 셋,
 //! 이벤트 `agent.update`, `app.published`와 `app.open`의 `workspace_id`. 아래 「워크스페이스 PAS」 절.
@@ -12,6 +12,11 @@
 //! 5판에서 더한 것(카드 #809): 이름 붙인 연결(모듈 `connection` 1판). 연결 목록 이벤트 `connections.snapshot`,
 //! 서버가 대신 부르는 `relay` 연결의 중계 경로, 기기 로그인 `oauth` 연결의 코어 쪽 절차, 배치 보고의 식 오류.
 //! 아래 「연결」 절.
+//!
+//! 6판에서 더한 것(카드 #780): 연결한 쉘의 워크스페이스, 데스크톱, 앱 창을 서버가 정본으로 들고 기기 사이에 맞춘다.
+//! 코어가 [`REGISTRY_HEADER`]로 레지스트리 판을 알리고, 바뀐 것 올리기(`POST /api/device/layout/changes`), 이벤트
+//! `layout.snapshot`과 `layout.changed`, 에이전트의 띄우기를 기기 하나에만 보내는 규칙, 작업과 PAS의 이름과 수명 맞추기.
+//! 아래 「작업과 배치 동기화」 절.
 //!
 //! 오케스트레이터는 앱 레지스트리의 정본이다. 쉘의 코어는 기기 토큰으로 붙어 앱을 받고, 에이전트는 같은
 //! 서버의 MCP(`/mcp`, MCP 토큰)로 앱을 올린다. MCP 도구의 모양은 오케스트레이터 코드에 있고 이 파일에는 없다.
@@ -27,6 +32,7 @@
 //! | `GET /api/device/events` | `Authorization: Bearer <기기 토큰>`, [`SUPPORTED_HEADER`] | 없음 | 200 `text/event-stream` | 401 토큰 거부 |
 //! | `POST /api/device/apps` | 같음 | [`DeviceUploadRequest`] | 200 [`RegistryApp`] | 400 검사 실패, 401 |
 //! | `PUT /api/device/layout` | 같음 | [`DeviceLayout`] | 200 `{}` | 400 형식, 401 |
+//! | `POST /api/device/layout/changes` | 같음 | [`LayoutChanges`] | 200 [`LayoutChanges`] | 400 형식이나 창 상태가 너무 큼, 401, 413 |
 //! | `GET /api/device/workspaces/{workspace_id}/agent` | 같음 | 없음 | 200 [`DeviceAgentReply`] | 401 |
 //! | `POST /api/device/workspaces/{workspace_id}/agent` | 같음 | [`AgentCreateRequest`] | 200 [`crate::AgentInfo`] | 400 모르는 모델, 401, 502 소울스트림 실패 |
 //! | `POST /api/device/workspaces/{workspace_id}/agent/messages` | 같음 | [`AgentSendRequest`] | 200 `{}` | 400 빈 말, 너무 김, 첨부 한도나 형식, 401, 404 PAS 없음, 502 |
@@ -70,6 +76,8 @@
 //!   워크스페이스면 띄우기 요청을 넘긴다(앱 캐시 반영은 그대로 한다). 서버는 `workspace_id`가 있는 띄우기와
 //!   `agent.update`를 그 워크스페이스를 마지막 배치 보고에 담은 기기에만 보내고, 다른 기기에는 `app.published`를
 //!   `open: false`, `workspace_id` 없이 보내 캐시만 맞춘다. 배치 보고를 모르는 옛 쉘에 엉뚱한 창이 뜨지 않게 하려는 것이다.
+//! - 6판: 배치를 동기화하는 기기들 사이에서는 띄우기를 기기 하나에만 보낸다(「작업과 배치 동기화」의 「띄우기 대상」).
+//!   창이 동기화되므로 여러 기기가 같은 띄우기를 받으면 같은 창이 기기 수만큼 생기기 때문이다.
 //!
 //! # 기기마다 그릴 수 있는 앱만
 //! 옛 쉘은 이벤트 줄 하나를 통째로 타입에 맞춰 읽으므로, 모르는 블록을 쓴 앱이 하나라도 `apps.snapshot`에
@@ -88,12 +96,83 @@
 //!
 //! # 배치 보고
 //! 에이전트가 「지금 펼친 데스크톱에 어떤 창이 무엇을 보고 있는지」를 MCP로 읽을 수 있게, 연결한 코어는
-//! 자기 워크스페이스, 데스크톱, 창 배치를 서버에 알린다(기기 사이 동기화 전까지 정본은 여전히 코어다).
+//! 자기 워크스페이스, 데스크톱, 창 배치를 서버에 알린다. 6판에서 배치를 동기화하는 기기도 같은 보고를 그대로 보낸다.
+//! 서버는 그 보고에서 기기마다 다른 것(지금 보는 워크스페이스와 데스크톱, 고른 폴더 이름, 식 오류)과 기기의 마지막
+//! 활동 시각만 쓰고, 워크스페이스, 데스크톱, 창의 정본은 「작업과 배치 동기화」의 저장소다. 동기화하지 않는 옛 쉘의
+//! 보고는 그 쉘의 배치로만 남고 정본에 들어가지 않는다.
 //! - 코어는 `connected`가 될 때마다 한 번, 그 뒤로는 [`DeviceLayout`]에 담길 값이 바뀔 때마다 보낸다.
 //!   바뀐 뒤 [`LAYOUT_DEBOUNCE_MS`] 동안 더 바뀌지 않으면 보내고, 마지막으로 보낸 것과 같으면 보내지 않는다.
 //!   실패하면 연결이 이어져 있는 동안 [`LAYOUT_RETRY_SECS`] 뒤에 다시 보낸다.
 //! - 서버는 기기마다 마지막 보고 하나를 통째로 바꿔 둔다.
 //! - 고른 폴더의 절대 경로는 보내지 않는다. 폴더 이름만 보낸다(`root_name`).
+//!
+//! # 작업과 배치 동기화 (6판)
+//! 연결한 쉘의 워크스페이스, 데스크톱, 앱 창([`crate::Workspace`], [`crate::Desktop`], [`crate::AppWindow`])은 서버가
+//! 정본이다. 기기마다 다른 것(지금 보는 워크스페이스와 데스크톱, 고른 폴더, 로그인)은 기기에만 둔다.
+//!
+//! 동기화하는 기기: 코어가 `GET /api/device/events`에 [`REGISTRY_HEADER`]로 [`LAYOUT_SYNC_REGISTRY_VERSION`] 이상을 보낸 연결이다.
+//! 헤더가 없으면 옛 쉘로 보고 이 절의 이벤트를 보내지 않으며, 띄우기는 위 5판까지의 규칙대로 보낸다.
+//!
+//! 서버가 지키는 것:
+//! - 저장: 워크스페이스, 데스크톱, 창을 계약 타입 모양 그대로 둔다. 데스크톱의 워크스페이스와 창의 데스크톱은 있어야 한다.
+//!   목록은 만든 시각(`created_at`), id 순으로 준다. 창의 앱이 레지스트리에 있는지는 보지 않는다.
+//! - 이벤트: 동기화하는 연결에는 `apps.snapshot`(과 `connections.snapshot`) 바로 뒤에 [`DeviceEvent::LayoutSnapshot`]을
+//!   보낸다. 그 뒤로 정본이 바뀌면 바뀐 것만 [`DeviceEvent::LayoutChanged`]로 모든 동기화하는 연결에 보낸다. 바꾼
+//!   기기에도 보낸다. 구독을 먼저 걸고 스냅샷을 만들므로 겹쳐 온 것은 코어가 같은 값으로 넘긴다.
+//! - 바뀐 것 받기(`POST /api/device/layout/changes`, 본문 한도 [`LAYOUT_CHANGES_BODY_MAX_BYTES`]): 한 트랜잭션에서
+//!   1. 워크스페이스 upsert(엔티티 통째로 바꾼다. 충돌은 서버에 늦게 도착한 쪽이 이긴다),
+//!   2. 데스크톱 upsert(워크스페이스가 없으면 저장하지 않는다),
+//!   3. 창 upsert(데스크톱이 없으면 저장하지 않는다. 창 상태가 [`crate::WINDOW_STATE_MAX_BYTES`]를 넘으면 요청 전체를 400
+//!      `invalid_request`로 거부한다),
+//!   4. 창 지우기, 데스크톱 지우기(그 창도), 워크스페이스 지우기(그 데스크톱과 창도) 순서로 한다. 없는 id를 지워도 된다.
+//!      한 요청에 같은 id의 upsert와 지우기가 함께 있으면 지우기가 이긴다. 지우면 서버에 워크스페이스가 하나도 남지
+//!      않는 워크스페이스 지우기는 하지 않는다.
+//! - 응답은 요청에 나온 모든 id와 함께 지워진 것의 결과다. 있으면 upsert 목록에 지금 모습으로, 없으면 지운 목록에
+//!   담는다. 저장하지 않은 upsert는 지운 목록에, 하지 않은 워크스페이스 지우기는 그 워크스페이스와 데스크톱, 창을
+//!   지금 모습으로 담는다. 같은 내용 가운데 실제로 바뀐 것만 `layout.changed`로 보낸다.
+//! - 이 기기의 마지막 활동 시각은 배치 보고나 바뀐 것을 받은 시각이다(아래 「띄우기 대상」).
+//! - 에이전트가 MCP로 워크스페이스를 지울 때도 위 4의 규칙(그 데스크톱과 창도, 마지막 하나는 지우지 않음)과 아래 PAS
+//!   내리기를 그대로 따르고 `layout.changed`로 알린다.
+//! - 앱의 새 버전을 저장하면 그 앱의 창을 [`crate::migrate_window_state`]로 옮기고 `app_version`을 바꿔 `app.published`
+//!   뒤에 `layout.changed`로 알린다. 그 버전을 그릴 수 없어 `app.published`를 받지 못한 기기는 코어의 맞추기 규칙대로
+//!   제 캐시의 버전으로 옮겨 그린다.
+//! - 작업과 PAS: 워크스페이스 이름이 바뀌면 묶인 PAS의 세션 제목을 `kaleidoscope · <이름>`으로 바꾼다(소울스트림
+//!   `PUT /api/persistent-sessions/{session_id}` 본문 `{"display_name": ...}`). 워크스페이스가 지워지면 묶인 PAS를
+//!   내린다: 같은 경로에 `{"enabled": false}`로 퍼시스턴트를 끄고, 성공하면 묶음과 기록을 지우고 중계를 멈춘다.
+//!   소울스트림 호출은 응답을 기다리게 하지 않는다. 내리기에 실패한 묶음은 서버가 시작할 때 다시 내린다(정본에 없는
+//!   워크스페이스의 묶음은 모두 내린다). 세션은 지우지 않는다.
+//! - 정본을 처음 만들 때(저장소 판 올림) 지우지 않은 기기의 마지막 배치 보고로 채우고, 지운 기기의 배치 보고는 지운다.
+//!   한 엔티티가 여러 보고에 있으면 늦은 보고의 것을 쓴다.
+//!
+//! 띄우기 대상:
+//! - 에이전트가 `workspace_id`를 주고 띄우면 서버 정본에 그 워크스페이스가 있어야 하고, 연결된 동기화하는 기기 가운데
+//!   마지막 활동 시각이 가장 늦은 기기 하나가 대상이다(디렉터가 지금 앞에 앉은 기기). `workspace_id`가 없을 때도 같다.
+//! - 대상 기기에는 `app.published`를 `open: true`로(또는 `app.open`을), 다른 동기화하는 기기에는 `app.published`를
+//!   `open: false`, `workspace_id` 없이 보낸다(`app.open`은 보내지 않는다). 대상 기기의 쉘이 창을 열면 그 창이 동기화된다.
+//! - MCP의 올리기와 띄우기 결과에 띄우기를 보낸 기기 이름을 적는다.
+//!
+//! 코어가 지키는 것:
+//! - 동기화는 `link.json`이 있을 때(연결했을 때) 한다. 연결하지 않은 쉘은 코어가 정본이다.
+//! - 미전송 목록: 이 기기에서 명령으로 바꾼(만들기, 바꾸기, 지우기) 워크스페이스, 데스크톱, 창의 id를 서버가 받을 때까지
+//!   들고 있고, 앱 데이터 폴더의 `sync.json`에 기기 id와 함께 둔다(기기 id가 다르면 없는 것으로 본다). 서버 이벤트를
+//!   반영한 것과 앱의 새 버전으로 창을 옮긴 것은 넣지 않는다.
+//! - 올리기: 이 연결의 `layout.snapshot`을 반영한 뒤부터, 미전송 목록이 있으면 각 id의 지금 모습(있으면 upsert, 없으면
+//!   지우기)을 [`LayoutChanges`] 하나로 보낸다. 끊긴 동안 바꾼 것도 다시 이으면 이렇게 올라간다. 200이면 보낸 뒤로 다시
+//!   바뀌지 않은 id를 목록에서 빼고 응답을 서버 이벤트처럼 반영한다. 실패하면 연결이 이어져 있는 동안
+//!   [`LAYOUT_RETRY_SECS`] 뒤에 다시 보낸다. 401은 토큰 거부다. 400이면 보낸 id를 목록에서 빼고 로그를 남긴다.
+//! - 반영: `layout.snapshot`은 정본 전체로 바꾸고, `layout.changed`와 올리기 응답은 담긴 id만 바꾼다. 어느 쪽이든
+//!   미전송 목록에 있는 id는 이 기기의 것을 그대로 둔다. 반영 뒤에 맞춘다.
+//!   - 워크스페이스가 없는 데스크톱, 데스크톱이 없는 창은 지운다(미전송 목록에서도 뺀다).
+//!   - 창의 `app_version`이 캐시의 그 앱 지금 버전과 다르면 [`crate::migrate_window_state`]로 옮긴다(올리지 않는다).
+//!     캐시에 없는 앱의 창은 그대로 둔다.
+//!   - 기기 상태: 지금 보는 워크스페이스가 없으면 첫 워크스페이스로, 지운 워크스페이스와 데스크톱을 가리키는 마지막 본
+//!     데스크톱은 빼고, 지운 창의 고른 폴더는 지운다.
+//!   - 목록의 자리: 스냅샷은 서버 순서를 따르고, 바뀐 것은 이미 있는 id면 제자리에서 바꾸고 새 id면 뒤에 붙인다.
+//! - 처음 맞추기: 이 연결 정보(`link.json`의 기기 id)로 처음 받은 `layout.snapshot`에서, 스냅샷에 없는 이 기기의 엔티티를
+//!   미전송 목록에 넣어 올린다. 단 스냅샷에 워크스페이스가 하나라도 있으면, 창이 하나도 없는 이 기기의 워크스페이스는
+//!   (그 데스크톱과 함께) 올리지 않고 버린다. 새 쉘이 만든 빈 「작업 1」이 모든 기기에 퍼지지 않게 하려는 것이다.
+//!   맞춘 것은 `sync.json`에 적는다.
+//! - 전부터 보내던 배치 보고(`PUT /api/device/layout`)는 그대로 보낸다.
 //!
 //! # 워크스페이스 PAS
 //! 워크스페이스마다 소울스트림 퍼시스턴트 세션 하나를 서버가 만들어 묶는다. 소울스트림 서비스 토큰은
@@ -206,6 +285,12 @@ pub const DEVICE_APPS_PATH: &str = "/api/device/apps";
 pub const HEALTH_PATH: &str = "/api/health";
 /// 코어가 이벤트 스트림을 열 때 지원 범위([`crate::Supported`] JSON)를 싣는 헤더.
 pub const SUPPORTED_HEADER: &str = "x-kaleidoscope-supported";
+/// 코어가 이벤트 스트림을 열 때 자기가 아는 레지스트리 판(정수)을 싣는 헤더. 6 이상이면 배치를 동기화한다.
+pub const REGISTRY_HEADER: &str = "x-kaleidoscope-registry";
+/// 이 빌드가 아는 레지스트리 판.
+pub const REGISTRY_VERSION: u32 = 6;
+/// 배치를 동기화하는 레지스트리 판. 서버는 [`REGISTRY_HEADER`]가 이 값 이상인 연결과 배치를 맞춘다.
+pub const LAYOUT_SYNC_REGISTRY_VERSION: u32 = 6;
 
 /// 서버가 보내는 주석 줄 간격.
 pub const PING_INTERVAL_SECS: u64 = 15;
@@ -219,6 +304,10 @@ pub const PAIRING_POLL_INTERVAL_SECS: u32 = 3;
 pub const PAIRING_MAX_PENDING: usize = 20;
 
 pub const DEVICE_LAYOUT_PATH: &str = "/api/device/layout";
+/// 바뀐 워크스페이스, 데스크톱, 창을 올리는 경로.
+pub const DEVICE_LAYOUT_CHANGES_PATH: &str = "/api/device/layout/changes";
+/// 바뀐 것 올리기 본문의 최대 바이트 수. 처음 맞추기에서 창 상태가 큰 창 여럿을 한 번에 올릴 수 있게 넉넉히 둔다.
+pub const LAYOUT_CHANGES_BODY_MAX_BYTES: usize = 16 * 1024 * 1024;
 
 /// 워크스페이스 PAS 경로. `{workspace_id}` 자리에 워크스페이스 id를 넣는다.
 pub fn device_agent_path(workspace_id: &str) -> String {
@@ -341,6 +430,36 @@ pub struct DeviceLayout {
     /// (5판) 이은 창의 식과 원천 오류. 없으면 빼고 보낸다(4판 서버도 읽게).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub data_errors: Vec<LayoutDataError>,
+}
+
+/// 바뀐 워크스페이스, 데스크톱, 창. 코어가 올리는 본문, 서버의 응답, `layout.changed` 이벤트가 같은 모양이다.
+/// upsert 목록은 엔티티의 지금 모습 전체이고, 지운 목록은 id다. 규칙은 「작업과 배치 동기화」 절.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LayoutChanges {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workspaces: Vec<Workspace>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub desktops: Vec<Desktop>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub windows: Vec<AppWindow>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deleted_workspaces: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deleted_desktops: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deleted_windows: Vec<String>,
+}
+
+impl LayoutChanges {
+    pub fn is_empty(&self) -> bool {
+        self.workspaces.is_empty()
+            && self.desktops.is_empty()
+            && self.windows.is_empty()
+            && self.deleted_workspaces.is_empty()
+            && self.deleted_desktops.is_empty()
+            && self.deleted_windows.is_empty()
+    }
 }
 
 /// 창 하나의 식이나 원천 오류. `pointer`는 바인딩 자리나 `/sources/이름`이다.
@@ -499,6 +618,16 @@ pub enum DeviceEvent {
     /// (5판) 서버의 연결 목록 전체. 연결 직후(`apps.snapshot` 뒤)와 연결이 바뀔 때마다. 「연결」 절.
     #[serde(rename = "connections.snapshot")]
     ConnectionsSnapshot { connections: Vec<ConnectionInfo> },
+    /// 서버 정본의 워크스페이스, 데스크톱, 창 전체. 동기화하는 연결에만 스냅샷들 바로 뒤에 한 번 보낸다(6판).
+    #[serde(rename = "layout.snapshot")]
+    LayoutSnapshot {
+        workspaces: Vec<Workspace>,
+        desktops: Vec<Desktop>,
+        windows: Vec<AppWindow>,
+    },
+    /// 서버 정본에서 바뀐 것. 모든 동기화하는 연결에 보낸다(6판).
+    #[serde(rename = "layout.changed")]
+    LayoutChanged { changes: LayoutChanges },
 }
 
 #[cfg(test)]
@@ -611,6 +740,45 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&approved).unwrap(),
             r#"{"status":"approved","device_id":"d","token":"t"}"#
+        );
+    }
+
+    #[test]
+    fn layout_events_round_trip() {
+        let changes = LayoutChanges {
+            workspaces: vec![Workspace {
+                id: "w".into(),
+                name: "작업 1".into(),
+                created_at: "2026-10-30T00:00:00Z".into(),
+                updated_at: "2026-10-30T00:00:00Z".into(),
+            }],
+            deleted_windows: vec!["x".into()],
+            ..LayoutChanges::default()
+        };
+        let event = DeviceEvent::LayoutChanged {
+            changes: changes.clone(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert_eq!(
+            json,
+            r#"{"event":"layout.changed","changes":{"workspaces":[{"id":"w","name":"작업 1","created_at":"2026-10-30T00:00:00Z","updated_at":"2026-10-30T00:00:00Z"}],"deleted_windows":["x"]}}"#
+        );
+        assert_eq!(serde_json::from_str::<DeviceEvent>(&json).unwrap(), event);
+        assert!(!changes.is_empty());
+        assert!(LayoutChanges::default().is_empty());
+        assert_eq!(serde_json::to_string(&LayoutChanges::default()).unwrap(), "{}");
+
+        let snapshot: DeviceEvent = serde_json::from_str(
+            r#"{"event":"layout.snapshot","workspaces":[],"desktops":[],"windows":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            snapshot,
+            DeviceEvent::LayoutSnapshot {
+                workspaces: vec![],
+                desktops: vec![],
+                windows: vec![],
+            }
         );
     }
 }

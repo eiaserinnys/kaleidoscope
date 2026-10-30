@@ -114,6 +114,9 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 });
             }
         }
+        // 배치 동기화(레지스트리 6판)는 코어 동기화 작업에서 반영한다. 서버는 REGISTRY_HEADER를 보내지 않은
+        // 연결에 이 이벤트를 보내지 않는다.
+        DeviceEvent::LayoutSnapshot { .. } | DeviceEvent::LayoutChanged { .. } => {}
         DeviceEvent::ConnectionsSnapshot { connections } => {
             let changed = {
                 let mut current = inner.connections.lock().unwrap();
