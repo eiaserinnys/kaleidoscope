@@ -108,6 +108,7 @@ export function ExplorerContent({
   const rows = useMemo(() => (entries ?? []).map(toRow), [entries]);
   const grid = useRef<HTMLDivElement>(null);
   const breadcrumbRef = useRef<HTMLElement>(null);
+  const ellipsisRef = useRef<HTMLSpanElement>(null);
   const [gridColumns, setGridColumns] = useState(1);
   const roving = useRoving(rows, selected, grid);
 
@@ -175,12 +176,9 @@ export function ExplorerContent({
   }))];
   useLayoutEffect(() => {
     const nav = breadcrumbRef.current;
-    if (!nav) return;
+    const ellipsis = ellipsisRef.current;
+    if (!nav || !ellipsis) return;
     const crumbs = Array.from(nav.querySelectorAll<HTMLElement>(".ks-explorer-crumb"));
-    const ellipsis = document.createElement("span");
-    ellipsis.textContent = "…";
-    ellipsis.style.cssText = "position: absolute; visibility: hidden; white-space: nowrap";
-    document.body.appendChild(ellipsis);
     const update = () => {
       for (const crumb of crumbs) {
         const button = crumb.querySelector<HTMLButtonElement>("button")!;
@@ -199,7 +197,7 @@ export function ExplorerContent({
       observer.observe(crumb);
       observer.observe(crumb.querySelector("button")!);
     });
-    return () => { observer.disconnect(); ellipsis.remove(); };
+    return () => observer.disconnect();
   }, [folder, rootName]);
   const parent = folder.includes("/") ? folder.slice(0, folder.lastIndexOf("/")) : "";
   const sortedEntries = entries ?? [];
@@ -223,6 +221,7 @@ export function ExplorerContent({
             </span>
           </span>, null)}
         <span aria-current="page" className="ks-explorer-crumb-current" title={breadcrumb.at(-1)!.name}>{breadcrumb.at(-1)!.name}</span>
+        <span aria-hidden="true" className="ks-explorer-crumb-measure" ref={ellipsisRef}>…</span>
       </nav>
       <div aria-label="보기" className="ks-explorer-view-buttons" role="group">
         <IconButton aria-label="아이콘 보기" pressed={view === "icons"} onClick={() => onViewChange("icons")}><LayoutGrid /></IconButton>

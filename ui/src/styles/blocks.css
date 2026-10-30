@@ -214,6 +214,7 @@
 }
 
 .ks-explorer-breadcrumb {
+  position: relative;
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
@@ -222,6 +223,13 @@
   font-size: var(--ks-type-body);
   font-weight: 400;
   white-space: nowrap;
+}
+
+.ks-explorer-crumb-measure {
+  position: absolute;
+  visibility: hidden;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .ks-explorer-ancestors {

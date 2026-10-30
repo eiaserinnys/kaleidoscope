@@ -454,3 +454,76 @@ test("keeps the last file open menu inside a 720x600 viewport", async ({ page })
   await screenshot(page, "bottom-menu-720x600.png");
   await expect(menu).toBeVisible();
 });
+
+test("shell document does not scroll and the top bar stays at the top", async ({ page }) => {
+  await mkdir(artifactDir, { recursive: true });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/harness.html");
+
+  const explorer = page.getByTestId("app-window-explorer");
+  await expect(explorer).toBeVisible();
+  await explorer.getByRole("button", { name: "볼 폴더 고르기" }).click();
+  const notes = explorer.getByRole("option", { name: "notes", exact: true });
+  await expect(notes).toBeVisible();
+  await notes.dblclick();
+  await expect(explorer.locator('.ks-explorer-breadcrumb [aria-current="page"]')).toHaveText("notes");
+
+  const expectShellAtTop = async () => {
+    const metrics = await page.evaluate(() => {
+      const documentElement = document.scrollingElement;
+      const appRoot = document.querySelector<HTMLElement>(".app-root");
+      const shellBar = document.querySelector<HTMLElement>(".ks-shell-bar");
+      if (!documentElement || !appRoot || !shellBar) throw new Error("쉘 스크롤 측정 대상을 찾지 못했습니다");
+      return {
+        documentScrollHeight: documentElement.scrollHeight,
+        documentClientHeight: documentElement.clientHeight,
+        documentScrollTop: documentElement.scrollTop,
+        appRootScrollTop: appRoot.scrollTop,
+        shellBarTop: shellBar.getBoundingClientRect().top,
+      };
+    });
+    expect(metrics.documentScrollHeight).toBeLessThanOrEqual(metrics.documentClientHeight);
+    expect(metrics.documentScrollTop).toBe(0);
+    expect(metrics.appRootScrollTop).toBe(0);
+    expect(metrics.shellBarTop).toBe(0);
+  };
+  const wheelOver = async (locator: Locator, capture?: string) => {
+    const bounds = await locator.boundingBox();
+    if (!bounds) throw new Error("휠 동작 위치를 읽지 못했습니다");
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.mouse.wheel(0, 400);
+    if (capture) await screenshot(page, capture);
+    await expectShellAtTop();
+  };
+
+  const shellBar = page.locator(".ks-shell-bar");
+  await wheelOver(shellBar, "shell-document-scroll-after-1440x900.png");
+
+  await wheelOver(explorer.locator(".ks-explorer-content .ks-data-view"));
+
+  await page.getByRole("button", { name: "kaleidoscope" }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expectShellAtTop();
+
+  await page.getByRole("button", { name: "두 번째 화면" }).click();
+  await expectShellAtTop();
+  await page.getByRole("button", { name: "작업" }).click();
+  await expect(explorer).toBeVisible();
+  await expectShellAtTop();
+
+  const titlebar = explorer.locator(".ks-window-titlebar");
+  const titleBounds = await titlebar.boundingBox();
+  if (!titleBounds) throw new Error("탐색기 제목 줄을 찾지 못했습니다");
+  const dragX = titleBounds.x + titleBounds.width / 2;
+  const dragY = titleBounds.y + titleBounds.height / 2;
+  await page.mouse.move(dragX, dragY);
+  await page.mouse.down();
+  await page.mouse.move(dragX, dragY + 40, { steps: 4 });
+  await page.mouse.up();
+  await expectShellAtTop();
+
+  await page.setViewportSize({ width: 960, height: 600 });
+  await wheelOver(shellBar);
+});
