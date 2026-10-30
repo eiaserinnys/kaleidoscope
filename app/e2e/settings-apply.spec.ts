@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const captures = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../.local/tmp/card818-kl");
 
 test("저장된 설정의 미적용 알림과 다시 시도", async ({ page }) => {
   await page.route("**/src/harness.tsx*", async (route) => {
@@ -27,11 +31,11 @@ test("저장된 설정의 미적용 알림과 다시 시도", async ({ page }) =
   await page.getByRole("button", { name: "앱 설정", exact: true }).click();
   const notice = page.getByRole("alert").filter({ hasText: "대화에 적용 안 됨" });
   await expect(notice).toBeVisible();
-  await mkdir("/home/eias/workspace/.local/tmp/card818-kl", { recursive: true });
-  await page.screenshot({ path: "/home/eias/workspace/.local/tmp/card818-kl/settings-wide.png" });
+  await mkdir(captures, { recursive: true });
+  await page.screenshot({ path: path.join(captures, "settings-wide.png") });
   await page.setViewportSize({ width: 384, height: 900 });
   await expect(notice).toBeVisible();
-  await page.screenshot({ path: "/home/eias/workspace/.local/tmp/card818-kl/settings-narrow.png" });
+  await page.screenshot({ path: path.join(captures, "settings-narrow.png") });
   await notice.getByRole("button", { name: "다시 시도" }).click();
   await expect(notice).toHaveCount(0);
 });
