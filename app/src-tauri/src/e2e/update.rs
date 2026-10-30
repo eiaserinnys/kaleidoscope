@@ -1,3 +1,4 @@
+#[cfg(windows)]
 use std::env;
 use std::fs::{self, File};
 use std::path::Path;
@@ -23,8 +24,10 @@ pub(super) fn record_startup(app: &AppHandle) {
         "pid": std::process::id(),
         "version": app.package_info().version.to_string(),
         "executable": env::current_exe().ok(),
-        "scenario": env::var("KALEIDOSCOPE_E2E_SCENARIO").ok(),
-        "out": env::var("KALEIDOSCOPE_E2E_OUT").ok(),
+        "scenario": super::setting("SCENARIO").map(|v| v.to_string_lossy().into_owned()),
+        "out": super::setting("OUT").map(|v| v.to_string_lossy().into_owned()),
+        "environment_scenario": env::var("KALEIDOSCOPE_E2E_SCENARIO").ok(),
+        "environment_out": env::var("KALEIDOSCOPE_E2E_OUT").ok(),
     });
     if let Err(error) = fs::write(path, entry.to_string()) {
         eprintln!("E2E 기동 기록 실패: {error}");
@@ -66,7 +69,8 @@ pub(super) fn scenario(
     log: &mut File,
 ) -> Result<(), String> {
     let version = app.package_info().version.to_string();
-    let reject = env::var("KALEIDOSCOPE_E2E_SCENARIO").as_deref() == Ok("update-reject");
+    let reject =
+        super::setting("SCENARIO").as_deref() == Some(std::ffi::OsStr::new("update-reject"));
     record(log, "start", json!({"version": version, "reject": reject}))?;
     if version == "0.0.2" && !reject {
         let ids: Value =

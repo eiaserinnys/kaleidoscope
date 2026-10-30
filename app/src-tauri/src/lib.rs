@@ -118,8 +118,10 @@ pub fn run() {
             app.manage(Arc::clone(&core));
             #[cfg(feature = "e2e")]
             let run_updater = matches!(
-                env::var("KALEIDOSCOPE_E2E_SCENARIO").as_deref(),
-                Ok("update" | "update-reject")
+                e2e::setting("SCENARIO")
+                    .as_deref()
+                    .and_then(std::ffi::OsStr::to_str),
+                Some("update" | "update-reject")
             );
             #[cfg(not(feature = "e2e"))]
             let run_updater = true;

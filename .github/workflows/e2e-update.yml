@@ -82,8 +82,8 @@ jobs:
           $exe = $null
           function Write-Diagnostics([string]$phase) {
             try {
-              $processes = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'kaleidoscope|installer|setup' } | ForEach-Object {
-                @{ name = $_.Name; pid = $_.ProcessId; path = $_.ExecutablePath; started = $_.CreationDate }
+              $processes = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'kaleidoscope|trustedinstaller' } | ForEach-Object {
+                @{ name = $_.Name; pid = $_.ProcessId; parent_pid = $_.ParentProcessId; command_line = $_.CommandLine; path = $_.ExecutablePath; started = $_.CreationDate }
               })
               $installers = @(Get-ChildItem $env:TEMP -Directory -Filter 'kaleidoscope-*-updater-*' -ErrorAction SilentlyContinue | ForEach-Object {
                 Get-ChildItem $_.FullName -Recurse -File -ErrorAction SilentlyContinue | Select-Object FullName, Length, LastWriteTime
@@ -105,37 +105,35 @@ jobs:
             $exe = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "kaleidoscope/$exeName"
             if (-not (Test-Path $exe)) { throw "설치된 실행 파일 없음: $exe" }
             if ((Get-Item $exe).VersionInfo.ProductVersion -ne '0.0.1') { throw 'A 설치 판 불일치' }
-            $env:KALEIDOSCOPE_E2E_OUT = Join-Path $out 'reject'
-            $env:KALEIDOSCOPE_E2E_SCENARIO = 'update-reject'
+            $rejectOut = Join-Path $out 'reject'
             $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $testDir 'webview'
-            $app = Start-Process $exe -PassThru
+            $app = Start-Process $exe -ArgumentList @('--e2e-scenario=update-reject', "--e2e-out=$rejectOut") -PassThru
             if (-not $app.WaitForExit(110000)) { throw '서명 거부 시험 시간 초과' }
             if ($app.ExitCode -ne 0) { throw "서명 거부 시험 실패: $($app.ExitCode)" }
-            $rejected = Get-Content (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl') | ForEach-Object { $_ | ConvertFrom-Json }
+            $rejected = Get-Content (Join-Path $rejectOut 'events.jsonl') | ForEach-Object { $_ | ConvertFrom-Json }
             if (-not ($rejected | Where-Object { $_.step -eq 'failed' -and $_.data.version -eq '0.0.2' -and $_.data.reason -eq '서명이 맞지 않아 깔지 않았습니다' })) { throw '서명 거부 기록 없음' }
             if ((Get-Item $exe).VersionInfo.ProductVersion -ne '0.0.1') { throw '거부 후 설치 판 변경됨' }
             $manifest.signature = (Get-Content -Raw (Join-Path $testDir 'new.exe.sig')).Trim()
             $manifest | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $testDir 'update.json')
-            $env:KALEIDOSCOPE_E2E_OUT = Join-Path $out 'update'
-            $env:KALEIDOSCOPE_E2E_SCENARIO = 'update'
-            $app = Start-Process $exe -PassThru
+            $updateOut = Join-Path $out 'update'
+            $app = Start-Process $exe -ArgumentList @('--e2e-scenario=update', "--e2e-out=$updateOut") -PassThru
             $deadline = (Get-Date).AddMinutes(4)
             $captured = $false
             $complete = $false
             $nextDiagnostics = Get-Date
             while ((Get-Date) -lt $deadline) {
-              $request = Join-Path $env:KALEIDOSCOPE_E2E_OUT 'update-ready.request'
+              $request = Join-Path $updateOut 'update-ready.request'
               if ((Test-Path $request) -and -not $captured) {
-                $capture = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $env:GITHUB_WORKSPACE 'app/e2e-windows/capture.ps1'), (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'update-ready.png')) -WindowStyle Hidden -Wait -PassThru
+                $capture = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $env:GITHUB_WORKSPACE 'app/e2e-windows/capture.ps1'), (Join-Path $updateOut 'update-ready.png')) -WindowStyle Hidden -Wait -PassThru
                 if ($capture.ExitCode -ne 0) { throw '업데이트 화면 캡처 실패' }
-                New-Item -ItemType File (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'update-ready.done') | Out-Null
+                New-Item -ItemType File (Join-Path $updateOut 'update-ready.done') | Out-Null
                 $captured = $true
               }
               if ((Get-Date) -ge $nextDiagnostics) {
                 Write-Diagnostics 'update-wait'
                 $nextDiagnostics = (Get-Date).AddSeconds(5)
               }
-              $eventsPath = Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl'
+              $eventsPath = Join-Path $updateOut 'events.jsonl'
               if (Test-Path $eventsPath) {
                 $events = Get-Content $eventsPath | ForEach-Object { $_ | ConvertFrom-Json }
                 if ($events | Where-Object { $_.step -eq 'error' }) { throw '업데이트 시나리오 오류, events.jsonl 확인' }
