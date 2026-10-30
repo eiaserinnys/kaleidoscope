@@ -265,7 +265,7 @@ impl McpServer {
             Err(error) => json_error(error),
         })
     }
-    #[tool(description = "기기가 보고한 작업과 창 개수를 나열합니다.")]
+    #[tool(description = "현재 작업과 창 개수를 나열합니다.")]
     async fn list_workspaces(&self) -> Result<CallToolResult, ErrorData> {
         Ok(match self.state.list_workspaces() {
             Ok(value) => json_result(value),
