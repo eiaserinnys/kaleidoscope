@@ -30,6 +30,8 @@ pub(super) struct Context {
     pub cwd: Option<PathBuf>,
     // 블록 위치, 실행 권한, 폴더 권한은 명세를 못 읽어도 비교할 수 있다.
     pub block_scope: (String, String, String),
+    // 식 바인딩을 아직 해석할 수 없을 때만 이전 실행을 유지한다.
+    pub binding_pending: bool,
 }
 
 pub(super) fn record_dir(inner: &Inner, window: &str) -> PathBuf {
@@ -65,6 +67,7 @@ pub(super) fn resolve(
         if let Block::AgentSession {
             permission,
             root,
+            agents,
             selected,
             ..
         } = block
@@ -73,11 +76,20 @@ pub(super) fn resolve(
                 pointer.to_string(),
                 permission.clone(),
                 root.permission.clone(),
+                agents.clone(),
+                match agents {
+                    data::Binding::State(reference) => window
+                        .state
+                        .get(&reference.state)
+                        .filter(|value| !value.is_null())
+                        .cloned(),
+                    _ => None,
+                },
                 selected.state.clone(),
             ));
         }
     });
-    let Some((pointer, permission, root, selected_key)) = found else {
+    let Some((pointer, permission, root, agents, agent_state, selected_key)) = found else {
         return Ok(None);
     };
     let selected = window
@@ -122,7 +134,21 @@ pub(super) fn resolve(
         queued: vec![],
         failure: None,
     };
-    let result = data_runtime::binding_value(inner, id, &format!("{pointer}/agents"));
+    let (result, binding_pending) = match agents {
+        data::Binding::Literal(value) => (Some(BindingValue::Ready { value }), false),
+        data::Binding::State(_) => (
+            agent_state.map(|value| BindingValue::Ready { value }),
+            false,
+        ),
+        data::Binding::Expr(_) => {
+            let value = data_runtime::binding_value(inner, id, &format!("{pointer}/agents"));
+            let pending = matches!(
+                value.as_ref(),
+                Some(BindingValue::Loading {} | BindingValue::Failed { .. })
+            );
+            (value, pending)
+        }
+    };
     let specs = match result {
         Some(BindingValue::Ready { value }) => match validate_agent_specs(&value) {
             Ok(specs) => specs,
@@ -142,6 +168,7 @@ pub(super) fn resolve(
                     workspace,
                     cwd: current_cwd,
                     block_scope,
+                    binding_pending,
                 }));
             }
         },
@@ -155,6 +182,7 @@ pub(super) fn resolve(
                 workspace,
                 cwd: current_cwd,
                 block_scope,
+                binding_pending,
             }))
         }
     };
@@ -178,6 +206,7 @@ pub(super) fn resolve(
             workspace,
             cwd: current_cwd,
             block_scope,
+            binding_pending,
         }));
     };
     let Some(cwd) = cwd else {
@@ -191,6 +220,7 @@ pub(super) fn resolve(
             workspace,
             cwd: current_cwd,
             block_scope,
+            binding_pending,
         }));
     };
     let hash = agent_spec_hash(&spec);
@@ -215,6 +245,7 @@ pub(super) fn resolve(
             workspace,
             cwd: current_cwd,
             block_scope,
+            binding_pending,
         }));
     }
     let link = inner.link_file.lock().unwrap().clone();
@@ -258,5 +289,6 @@ pub(super) fn resolve(
         workspace,
         cwd: current_cwd,
         block_scope,
+        binding_pending,
     }))
 }

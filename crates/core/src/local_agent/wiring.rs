@@ -172,14 +172,7 @@ fn reconcile(inner: &Arc<Inner>, window: &str) {
         Err(_) => return,
     };
     // 명세를 못 읽어도 선택·폴더·블록·권한이 달라졌으면 이전 실행을 끝낸다.
-    let binding_pending = data_runtime::binding_value(inner, window, &agent_pointer(inner, window))
-        .is_none_or(|v| {
-            matches!(
-                v,
-                kaleidoscope_contract::data::BindingValue::Loading {}
-                    | kaleidoscope_contract::data::BindingValue::Failed { .. }
-            )
-        });
+    let binding_pending = ctx.binding_pending;
     let mut windows = inner.local_agents.windows.lock().unwrap();
     let Some(c) = windows.get_mut(window) else {
         return;
@@ -271,25 +264,6 @@ fn reconcile(inner: &Arc<Inner>, window: &str) {
             update: LocalAgentUpdate::Snapshot { snapshot },
         });
     }
-}
-
-fn agent_pointer(inner: &Inner, window: &str) -> String {
-    let state = inner.state.lock().unwrap();
-    let Some(w) = state.shared.windows.iter().find(|w| w.id == window) else {
-        return String::new();
-    };
-    let Some(definition) =
-        crate::app_commands::definition_for(&state.shared, &w.app_id, w.app_version)
-    else {
-        return String::new();
-    };
-    let mut pointer = String::new();
-    kaleidoscope_contract::data::walk_blocks(&definition.ui, "/ui", &mut |p, block| {
-        if matches!(block, kaleidoscope_contract::Block::AgentSession { .. }) {
-            pointer = format!("{p}/agents");
-        }
-    });
-    pointer
 }
 
 pub(crate) fn state_changed(inner: &Arc<Inner>) {

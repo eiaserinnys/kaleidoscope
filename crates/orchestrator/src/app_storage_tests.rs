@@ -160,7 +160,7 @@ fn builtin_storage_definition_supports_list_read_write_reset_cycle() {
     assert_eq!(initial.content.as_array().unwrap().len(), 4);
 
     let override_value =
-        json!([{ "id":"codex", "name":"Codex", "command":"codex", "args":[], "env":{} }]);
+        json!([{ "id":"agent-b", "name":"Agent B", "command":"agent-b", "args":[], "env":{} }]);
     let (written, _, _) = state
         .write_app_storage_with_builtins(
             &account,

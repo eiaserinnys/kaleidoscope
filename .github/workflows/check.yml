@@ -19,6 +19,15 @@ jobs:
           if [ "$result" -eq 0 ]; then exit 1; fi
           exit "$result"
 
+      - name: Check agent vendor names
+        run: |
+          set +e
+          git grep -I -n -i -w -E 'claude|codex|gemini|antigravity|agy' -- crates app ui ':(exclude)**/fixtures/**'
+          result=$?
+          if [ "$result" -eq 1 ]; then exit 0; fi
+          if [ "$result" -eq 0 ]; then exit 1; fi
+          exit "$result"
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
