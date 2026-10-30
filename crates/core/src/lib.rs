@@ -728,3 +728,5 @@ pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
         update: state.update.clone(),
     }
 }
+
+mod local_agent;

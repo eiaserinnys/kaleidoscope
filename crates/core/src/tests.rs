@@ -2225,3 +2225,5 @@ fn layout_report_sends_sanitized_initial_state_and_debounces_changes() {
 mod data_tests;
 mod oauth_tests;
 mod web_tests;
+
+mod local_agent_tests;
