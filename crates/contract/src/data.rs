@@ -735,11 +735,22 @@ pub struct FeedEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub meta: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<Badge>>")]
+    pub badges: Vec<Badge>,
+    /// 스레드 깊이(0부터). `children`으로 중첩해 넘기면 쉘이 깊이를 계산한다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub depth: Option<u32>,
     /// 본문. 문자열 하나나 문자열 배열(문단마다 하나, 예: 한국어와 영어).
     pub body: FeedBody,
     #[serde(default)]
     #[ts(optional, as = "Option<Tone>")]
     pub tone: Tone,
+    /// 대댓글·하위 스레드 항목.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<FeedEntry>>")]
+    pub children: Vec<FeedEntry>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

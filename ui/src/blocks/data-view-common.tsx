@@ -12,8 +12,9 @@ export function groups<T>(value: unknown, grouped: boolean, valid: (item: unknow
   if (!grouped) return [{ title: "", items: values.filter(valid) }];
   return values.filter((g): g is Record<string, unknown> => isObject(g) && typeof g.title === "string" && "items" in g).map((g) => ({ title: g.title as string, meta: typeof g.meta === "string" ? g.meta : undefined, items: asArray(g.items).filter(valid) }));
 }
+export function asBadges(value: unknown): BadgeValue[] { return asArray(value).filter(isBadge); }
 export function Badges({ values }: { values: unknown }) {
-  const badges = asArray(values).filter(isBadge);
+  const badges = asBadges(values);
   return badges.length ? <span className="ks-view-badges">{badges.map((badge: BadgeValue, i: number) => <Badge key={i} value={badge} />)}</span> : null;
 }
 export function GroupHeading({ title, meta }: { title: string; meta?: string }) {

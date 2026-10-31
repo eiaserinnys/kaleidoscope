@@ -47,12 +47,22 @@
 .ks-tree-name { flex: 1 1 auto; }
 .ks-feed { padding-top: var(--ks-space-3); }
 .ks-feed-entry { display: flex; gap: var(--ks-space-2); padding: 0 var(--ks-space-3) var(--ks-space-3); user-select: text; }
+.ks-feed-entry-nested { margin-inline-start: calc(var(--ks-feed-depth, 0) * var(--ks-space-3)); border-inline-start: var(--ks-line-width) solid var(--ks-color-border); padding-inline-start: var(--ks-space-2); }
 .ks-feed-entry.is-selected { background: var(--ks-color-selection); }
 .ks-feed-entry.is-selectable { cursor: pointer; }
 .ks-feed-avatar { flex-basis: var(--ks-space-5); width: var(--ks-space-5); height: var(--ks-space-5); border-radius: 50%; }
 .ks-feed-content { flex: 1 1 auto; min-width: 0; }
 .ks-feed-header { display: flex; justify-content: space-between; align-items: baseline; gap: var(--ks-space-2); }
 .ks-feed-header.is-copy { min-height: var(--ks-icon-button-size); align-items: center; }
+.ks-feed-ident { display: flex; min-width: 0; flex: 1 1 auto; align-items: baseline; justify-content: space-between; gap: var(--ks-space-2); }
+.ks-feed-name-line { display: flex; min-width: 0; align-items: center; gap: var(--ks-space-2); }
+.ks-feed-name-line > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-feed-head-actions { display: flex; flex: none; align-items: center; gap: var(--ks-space-1); }
+.ks-feed-group-head { display: flex; align-items: center; justify-content: space-between; padding-inline-end: var(--ks-space-3); }
+.ks-feed-group-head[role="button"] { cursor: pointer; }
+.ks-feed-group-head[role="button"]:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
+.ks-feed-group-head > .ks-view-group { flex: 1 1 auto; }
+.ks-feed-group-chevron { display: grid; flex: none; width: var(--ks-icon-button-size); height: var(--ks-icon-button-size); place-items: center; }
 .ks-feed-body { white-space: pre-wrap; overflow-wrap: anywhere; }
 .ks-feed-body > * + * { margin-top: var(--ks-space-1); }
 .ks-feed-body.is-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ks-feed-column-min)), 1fr)); column-gap: var(--ks-space-4); row-gap: var(--ks-space-1); }

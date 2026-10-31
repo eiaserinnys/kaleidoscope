@@ -230,9 +230,7 @@ pub(crate) fn get(
         PermissionDecl::Http {
             base_url, paths, ..
         } => {
-            if !paths.contains(&media.path)
-                || !kaleidoscope_contract::validate::valid_public_http_path(&media.path)
-            {
+            if !kaleidoscope_contract::validate::allowed_public_http_path(&paths, &media.path) {
                 return Err(error::make(ErrorCode::PermissionDenied));
             }
             (
