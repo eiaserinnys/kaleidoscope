@@ -7,6 +7,7 @@ import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import { makeTestSeed, mdViewerDefinition } from "./fixtures";
 import { mockVirtualLayout } from "./virtual-layout";
+import calculatorJson from "../../../apps/calculator.json";
 
 beforeEach(() => {
   mockVirtualLayout();
@@ -56,6 +57,9 @@ it("dispatches keypad clicks and shortcuts once, ignoring text entry", async () 
   fireEvent.keyDown(document.body, { key: "1" });
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "1" })));
   calls.mockClear();
+  fireEvent.keyDown(document.body, { key: "=" });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "=", item: buttons[1] })));
+  calls.mockClear();
   const input = screen.getByPlaceholderText("입력");
   input.focus();
   fireEvent.keyDown(input, { key: "1" });
@@ -73,6 +77,23 @@ it("dispatches keypad clicks and shortcuts once, ignoring text entry", async () 
   await userEvent.keyboard("{Enter}");
   await waitFor(() => expect(calls.mock.calls.filter(([request]) => request.op === "data.act" && request.pointer.endsWith("/on_press"))).toHaveLength(1));
   expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "1" }));
+});
+
+it("calculates 1 + 2 = from keyboard input using the bundled calculator definition", async () => {
+  const definition = calculatorJson as AppDefinition;
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].id = "calculator-window";
+  seed.snapshot.shared.windows[0].state = structuredClone(definition.state);
+  const transport = createFakeTransport(seed);
+  render(<AppWindowContent store={createShellStore(transport)} windowId="calculator-window" />);
+
+  await screen.findByRole("button", { name: "=" });
+  for (const key of ["1", "+", "2", "="]) fireEvent.keyDown(document.body, { key });
+
+  await waitFor(() => {
+    expect(screen.getByText("1 + 2 =")).toBeTruthy();
+    expect(document.querySelector(".ks-metric-value")?.textContent).toBe("3");
+  });
 });
 
 it("sends keypad shortcuts only to the active app window", async () => {

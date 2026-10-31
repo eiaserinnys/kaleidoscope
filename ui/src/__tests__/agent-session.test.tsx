@@ -5,7 +5,9 @@ import { WindowDataProvider } from "../data/window-data";
 import type { AppDefinition, CoreEvent, CoreReply, CoreRequest, DataView, LocalAgentSnapshot } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 import { createFakeTransport } from "../core/fake-transport";
-import { makeTestSnapshot } from "./fixtures";
+import { makeTestSeed, makeTestSnapshot } from "./fixtures";
+import { AppWindowContent } from "../render/app-window-content";
+import { createShellStore } from "../core/shell-store";
 import agentJson from "../../../apps/agent.json";
 
 const definition: AppDefinition = {
@@ -116,7 +118,7 @@ describe("기기 로컬 에이전트 화면", () => {
     const state = setup(choosing);
     fireEvent.click(await screen.findByRole("button", { name: "에이전트" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Agent B" }));
-    await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "data.act", window_id: state.window.id, pointer: "/ui/on_select", event: "agent-b" }));
+    await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "window.set_state", window_id: state.window.id, state: { agent_id: "agent-b" } }));
 
     cleanup();
     const folder = setup(localAgent("choosing_folder"));
@@ -215,17 +217,27 @@ describe("기기 로컬 에이전트 화면", () => {
     }).storage.entries.find((entry) => entry.id === "agents")?.default;
     const configuredAgent = configuredAgents?.[0];
     if (!configuredAgent) throw new Error("configured agent expected");
-    const seed = makeTestSnapshot({ definitions: [definition] });
-    const windowId = seed.shared.windows[0].id;
-    const transport = createFakeTransport({ snapshot: seed, folder: { root_path: "/fake/work", root_name: "작업 폴더" }, files: {}, localAgent: localAgent("choosing_agent") });
+    const seed = makeTestSeed({ definitions: [definition] });
+    seed.snapshot.shared.windows[0].id = "agent-window";
+    seed.snapshot.shared.windows[0].state = { agent_id: null };
+    const windowId = seed.snapshot.shared.windows[0].id;
+    const transport = createFakeTransport({ snapshot: seed.snapshot, folder: { root_path: "/fake/work", root_name: "작업 폴더" }, files: {}, localAgent: localAgent("choosing_agent") });
+    const store = createShellStore(transport);
     const updates: Extract<CoreEvent, { event: "local_agent.update" }>[] = [];
     transport.subscribe((event) => { if (event.event === "local_agent.update") updates.push(event); });
-    await transport.call({ op: "data.attach", window_id: windowId });
+    render(<AppWindowContent store={store} windowId={windowId} />);
+    await screen.findByRole("button", { name: "에이전트" });
+    await expect(transport.call({ op: "data.act", window_id: windowId, pointer: "/ui/on_select", event: configuredAgent.id })).rejects.toMatchObject({
+      code: "invalid_request", message: "명령을 처리할 수 없습니다.",
+    });
     const attached = await transport.call({ op: "local_agent.attach", window_id: windowId });
     if (attached.op !== "local_agent.attach") throw new Error("attach reply expected");
     const firstGeneration = attached.snapshot.generation;
 
-    await transport.call({ op: "data.act", window_id: windowId, pointer: "/ui/on_select", event: configuredAgent.id });
+    fireEvent.click(screen.getByRole("button", { name: "에이전트" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: configuredAgent.name }));
+    expect(await screen.findByText("작업 폴더를 골라 주세요")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
     const chosen = updates.filter((event) => event.update.type === "snapshot").slice(-1)[0]?.update;
     expect(chosen?.type === "snapshot" ? chosen.snapshot : null).toMatchObject({ phase: "choosing_folder", selected: configuredAgent.id });
     const chosenGeneration = chosen?.type === "snapshot" ? chosen.snapshot.generation : firstGeneration;

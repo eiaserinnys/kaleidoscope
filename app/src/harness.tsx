@@ -18,6 +18,9 @@ import mdEditorJson from "../../apps/md-editor.json";
 import mdViewerJson from "../../apps/md-viewer.json";
 import webBrowserJson from "../../apps/web-browser.json";
 import explorerJson from "../../apps/explorer.json";
+import agentJson from "../../apps/agent.json";
+import calculatorJson from "../../apps/calculator.json";
+import weatherJson from "../../apps/weather.json";
 import pasJson from "../../examples/workspace-pas.json";
 
 declare global {
@@ -40,6 +43,7 @@ const longFolderScenario = harnessParams.has("long-folder");
 const pcAllowErrorScenario = harnessParams.has("pc-allow-error");
 const settingsPreview = harnessParams.get("preview") === "app-settings";
 const settingsSample = harnessParams.get("app") === "sample" || harnessParams.get("app") === "empty-group";
+const requestedAppWindow = ["agent", "calculator"].includes(harnessParams.get("window") ?? "") ? harnessParams.get("window")! : null;
 const shareScenario = new URLSearchParams(window.location.search).get("share");
 const entries = Array.from({ length: 80 }, (_, i) => ({ key: String(i + 1), title: `항목 ${i + 1}`, value: `값 ${i + 1}` }));
 const shareDefinition: AppDefinition = {
@@ -68,7 +72,7 @@ const settingsDefinition: AppDefinition = {
   ui: harnessParams.has("settings-web") ? { type: "web_view", url: "https://example.com", address_bar: false } : harnessParams.has("settings-document") ? { type: "markdown_editor", document: { entry: "initial" } } : { type: "text", value: "앱 본문" },
 };
 if (harnessParams.get("app") === "empty-group") settingsDefinition.storage!.entries = settingsDefinition.storage!.entries.filter((entry) => !entry.key.includes("{workspace_id}"));
-const definitions = [mdEditorJson, mdViewerJson, webBrowserJson, explorerJson, pasJson, ...(settingsPreview ? [settingsDefinition] : []), ...(shareScenario === "table" || shareScenario === "list" ? [shareDefinition] : [])] as AppDefinition[];
+const definitions = [mdEditorJson, mdViewerJson, webBrowserJson, explorerJson, agentJson, calculatorJson, weatherJson, pasJson, ...(settingsPreview ? [settingsDefinition] : []), ...(shareScenario === "table" || shareScenario === "list" ? [shareDefinition] : [])] as AppDefinition[];
 const apps: App[] = definitions.map((definition) => ({
   id: definition.id,
   name: definition.name,
@@ -89,7 +93,12 @@ const shareWindows: AppWindow[] = [shareAppId, "workspace-pas"].map((appId, inde
   state: appId === "md-editor" ? { current_file: "README.md" } : appId === "web-browser" ? { url: "https://www.google.com/" } : { selected: "1" },
   created_at: timestamp, updated_at: timestamp,
 }));
-const windows: AppWindow[] = settingsPreview ? [{ id: "settings-window", desktop_id: "desktop-1", app_id: "settings-preview", app_version: 1, rect: { x: 348, y: 16, width: 720, height: 900 }, z: 1, state: {}, created_at: timestamp, updated_at: timestamp }] : shareScenario ? shareWindows : bottomMenuScenario || longFolderScenario
+const windows: AppWindow[] = settingsPreview ? [{ id: "settings-window", desktop_id: "desktop-1", app_id: "settings-preview", app_version: 1, rect: { x: 348, y: 16, width: 720, height: 900 }, z: 1, state: {}, created_at: timestamp, updated_at: timestamp }] : shareScenario ? shareWindows : requestedAppWindow ? [{
+  id: `${requestedAppWindow}-window`, desktop_id: "desktop-1", app_id: requestedAppWindow, app_version: 1,
+  rect: { x: 48, y: 48, width: 520, height: 480 }, z: 1,
+  state: requestedAppWindow === "calculator" ? structuredClone(calculatorJson.state) as AppWindow["state"] : { agent_id: null },
+  created_at: timestamp, updated_at: timestamp,
+}] : bottomMenuScenario || longFolderScenario
   ? [{
     id: "explorer-window",
     desktop_id: "desktop-1",
@@ -154,7 +163,7 @@ const snapshot: ShellSnapshot = {
     windows,
   },
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: shareScenario === "editor" ? [{ window_id: "md-editor-window", permission: "docs", root_path: "/fake/docs", root_name: "문서", granted_at: timestamp }] : [], pc_access: [], local_agent_access: [] },
-  supported: { blocks: 5, modules: { files: 2, web: 1 } },
+  supported: { blocks: 9, modules: { files: 2, web: 1, local_agent: 1, storage: 2, assets: 1, http: 1 } },
   link: linkStatus(shareScenario ? "connected" : new URLSearchParams(window.location.search).get("link")),
   sharing: [],
   update: harnessParams.get("update") === "ready"

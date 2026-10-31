@@ -44,15 +44,24 @@ function KeypadReady({ block, context, pointer, buttons }: { block: Extract<Bloc
       if (desktop && (context.snapshot.device.active_workspace_id !== desktop.workspace_id || context.snapshot.device.active_desktop_ids[desktop.workspace_id] !== desktop.id)) return;
       const windows = context.snapshot.shared.windows.filter((item) => item.desktop_id === context.window.desktop_id);
       if (windows.some((item) => item.z > context.window.z)) return;
-      const button = buttons.find((item) => !item.disabled && item.shortcut === event.key);
+      const enabledButtons = buttons.filter((item) => !item.disabled);
+      const directButton = enabledButtons.find((item) => item.shortcut === event.key);
+      const button = directButton ?? (event.key.length === 1
+        ? enabledButtons.find((item) => Boolean(item.shortcut) && item.key.length === 1 && item.key === event.key)
+        : undefined);
       if (!button) return;
       const app = element.closest(".ks-app-window-content");
       const focusedKeypad = target?.closest(".ks-keypad");
       if (focusedKeypad && focusedKeypad !== element) return;
       if (!focusedKeypad && app) {
-        const candidates = [...app.querySelectorAll<HTMLElement>(".ks-keypad-cell[data-shortcut]")]
-          .filter((cell) => cell.dataset.shortcut === event.key && !cell.querySelector<HTMLButtonElement>("button")?.disabled);
+        const enabledCells = [...app.querySelectorAll<HTMLElement>(".ks-keypad-cell[data-shortcut]")]
+          .filter((cell) => !cell.querySelector<HTMLButtonElement>("button")?.disabled);
+        const directMatches = enabledCells.filter((cell) => cell.dataset.shortcut === event.key);
+        const candidates = directMatches.length > 0 ? directMatches : (event.key.length === 1
+          ? enabledCells.filter((cell) => cell.dataset.key?.length === 1 && cell.dataset.key === event.key)
+          : []);
         if (candidates.length !== 1) return;
+        if (!element.contains(candidates[0])) return;
       }
       event.preventDefault();
       press(button);
@@ -61,7 +70,7 @@ function KeypadReady({ block, context, pointer, buttons }: { block: Extract<Bloc
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [buttons, context.snapshot, context.window, data, pointer]);
   return <div ref={root} className="ks-keypad" onPointerDownCapture={() => { pointerFocus.current = true; }} style={{ "--ks-keypad-columns": block.columns } as CSSProperties}>
-    {buttons.map((button) => <div key={button.key} className={`ks-keypad-cell is-${button.variant ?? "default"}`} data-shortcut={button.shortcut} style={{ "--ks-keypad-span": button.span ?? 1 } as CSSProperties}>
+    {buttons.map((button) => <div key={button.key} className={`ks-keypad-cell is-${button.variant ?? "default"}`} data-key={button.key} data-shortcut={button.shortcut} style={{ "--ks-keypad-span": button.span ?? 1 } as CSSProperties}>
       <Button variant={button.variant === "primary" ? "emphasis" : "default"} disabled={button.disabled} onClick={() => press(button)}>
         {button.icon && <DataIcon name={button.icon} />}<span>{button.label}</span>{button.sublabel && <span className="ks-keypad-sublabel">{button.sublabel}</span>}
       </Button>
