@@ -60,11 +60,35 @@ pub(crate) fn renders_definition_on(
     definition: &AppDefinition,
 ) -> bool {
     match supported {
-        Some(supported) => supported.renders_app(definition),
+        Some(supported) => renders_requirements(
+            Some(supported),
+            &effective_client_requires(definition),
+            &definition.assets,
+        ),
         None => {
             definition.assets.is_empty() && definition.requires.blocks <= LEGACY_BLOCK_SET_VERSION
         }
     }
+}
+
+pub(crate) fn effective_client_requires(definition: &AppDefinition) -> Requires {
+    let mut requires = definition.requires.clone();
+    if !kaleidoscope_contract::data::ui_uses_worker_action(definition) {
+        requires.modules.remove("worker");
+    }
+    requires
+}
+
+pub(crate) fn app_for_client(mut app: RegistryApp, supported: Option<&Supported>) -> RegistryApp {
+    if !supported
+        .and_then(|support| support.modules.get("worker"))
+        .is_some_and(|version| *version >= 1)
+        && !kaleidoscope_contract::data::ui_uses_worker_action(&app.version.definition)
+    {
+        app.version.definition.worker = None;
+        app.version.definition.requires.modules.remove("worker");
+    }
+    app
 }
 
 fn renders_requirements(
@@ -101,6 +125,7 @@ struct Inner {
     pairings: AsyncMutex<HashMap<String, Pairing>>,
     mcp_token: String,
     db_path: Option<PathBuf>,
+    workers: worker::WorkerState,
 }
 
 #[derive(Clone)]
@@ -190,6 +215,7 @@ impl AppState {
             pairings: AsyncMutex::new(HashMap::new()),
             mcp_token,
             db_path,
+            workers: worker::WorkerState::default(),
         })))
     }
 
@@ -564,6 +590,7 @@ mod preview;
 mod publish;
 mod share;
 mod storage;
+pub mod worker;
 mod workspace_queries;
 
 pub use backup::{backup_loop, backup_once};
@@ -587,3 +614,5 @@ mod layout_sync_tests;
 mod server_exclusion_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod worker_tests;

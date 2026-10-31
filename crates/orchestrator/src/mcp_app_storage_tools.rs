@@ -246,6 +246,13 @@ impl super::McpServer {
                     &account,
                     update,
                 );
+                super::super::worker::spawn_watch(
+                    &self.state,
+                    &account,
+                    &args.app_id,
+                    entry_id,
+                    args.workspace_id.as_deref(),
+                );
                 Ok(json_result(serde_json::to_value(reply).unwrap()))
             }
             Err(error) => Ok(json_error(error)),
@@ -319,6 +326,13 @@ impl super::McpServer {
                     &args.app_id,
                     &account,
                     update,
+                );
+                super::super::worker::spawn_watch(
+                    &self.state,
+                    &account,
+                    &args.app_id,
+                    entry_id,
+                    args.workspace_id.as_deref(),
                 );
                 Ok(json_result(serde_json::to_value(reply).unwrap()))
             }

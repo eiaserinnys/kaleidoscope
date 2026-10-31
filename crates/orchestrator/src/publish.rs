@@ -78,7 +78,7 @@ impl AppState {
             self.choose_open_target(
                 workspace_id.as_deref(),
                 preferred_device,
-                &definition.requires,
+                &effective_client_requires(&definition),
                 &definition.assets,
             )?
         } else {

@@ -3,6 +3,7 @@ use crate::connections;
 use kaleidoscope_contract::{
     data::{self, BindingValue},
     registry::{LayoutDataError, LAYOUT_DATA_ERRORS_MAX},
+    LinkStatus,
 };
 use kaleidoscope_data::{Env, Step};
 
@@ -99,6 +100,51 @@ pub(crate) fn act(
                 .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))?
         };
         match step {
+            Step::Worker { action, args } => {
+                let (app, workspace, link) = {
+                    let state = inner.state.lock().unwrap();
+                    let window = state
+                        .shared
+                        .windows
+                        .iter()
+                        .find(|window| window.id == window_id)
+                        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                    let desktop = state
+                        .shared
+                        .desktops
+                        .iter()
+                        .find(|desktop| desktop.id == window.desktop_id)
+                        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                    if !matches!(state.link, LinkStatus::Connected { .. }) {
+                        return Err(error::make(ErrorCode::Unavailable));
+                    }
+                    let link = inner
+                        .link_file
+                        .lock()
+                        .unwrap()
+                        .clone()
+                        .ok_or_else(|| error::make(ErrorCode::Unavailable))?;
+                    (window.app_id.clone(), desktop.workspace_id.clone(), link)
+                };
+                inner
+                    .registry
+                    .invoke_worker(
+                        &link.server_url,
+                        &link.token,
+                        &app,
+                        &kaleidoscope_contract::worker::WorkerInvokeRequest {
+                            action,
+                            workspace_id: Some(workspace),
+                            args,
+                        },
+                    )
+                    .map_err(|err| {
+                        if matches!(err, crate::registry_client::RegistryError::Unauthorized) {
+                            crate::link::token_rejected(inner, link.clone());
+                        }
+                        crate::link::registry_error_to_core(err, "서버 워커를 호출할 수 없습니다.")
+                    })?;
+            }
             Step::SetState { key, value } => {
                 crate::Core {
                     inner: Arc::clone(inner),

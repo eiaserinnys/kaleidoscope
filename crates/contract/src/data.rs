@@ -277,6 +277,25 @@ pub enum Action {
     Refresh(RefreshAction),
     Call(CallAction),
     SetStorage(SetStorageAction),
+    Worker(WorkerAction),
+}
+
+/// 서버 워커의 선언된 동작을 호출한다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct WorkerAction {
+    pub worker: WorkerCallSpec,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct WorkerCallSpec {
+    pub action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub args: Option<Binding>,
 }
 
 /// 저장소 항목 하나에 값을 쓴다. 예: `{ "set_storage": { "entry": "selection", "value": { "expr": "$event" } } }`.
@@ -868,6 +887,17 @@ pub fn ui_actions(definition: &AppDefinition) -> Vec<(String, &Actions)> {
     out
 }
 
+pub fn ui_uses_worker_action(definition: &AppDefinition) -> bool {
+    ui_actions(definition)
+        .iter()
+        .any(|(_, actions)| match actions {
+            Actions::Many(actions) => actions
+                .iter()
+                .any(|action| matches!(action, Action::Worker(_))),
+            Actions::One(_) => false,
+        })
+}
+
 /// 블록 하나와 그 아래 블록들을 앞에서부터 깊이 우선으로 돈다(검사와 자리 계산이 같이 쓴다).
 pub fn walk_blocks<'a>(block: &'a Block, pointer: &str, visit: &mut dyn FnMut(&str, &'a Block)) {
     visit(pointer, block);
@@ -1181,6 +1211,12 @@ pub fn action_bindings(action: &Action) -> Vec<(String, &Binding)> {
             .value
             .iter()
             .map(|value| ("set_storage/value".to_string(), value))
+            .collect(),
+        Action::Worker(worker) => worker
+            .worker
+            .args
+            .iter()
+            .map(|args| ("worker/args".to_string(), args))
             .collect(),
     }
 }

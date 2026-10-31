@@ -5,7 +5,7 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * 동작 하나.
  */
-export type Action = SetStateAction | RefreshAction | CallAction | SetStorageAction;
+export type Action = SetStateAction | RefreshAction | CallAction | SetStorageAction | WorkerAction;
 
 /**
  * 블록 이벤트에 거는 동작. 상태 키 하나에 이벤트 값을 쓰는 짧은 꼴(`{ "set_state": "키" }`)이나 동작 목록이다.
@@ -140,6 +140,10 @@ storage?: StorageDecl,
  * (계약 11판, 모듈 `agent` 3판) 앱이 사용하는 범용 대화 제공자와 저장소 바인딩.
  */
 agent?: AgentProvider, 
+/**
+ * 개인 앱 서버에서 실행할 워커.
+ */
+worker?: WorkerDecl, 
 /**
  * 창 안을 채우는 블록 트리의 뿌리.
  */
@@ -1076,6 +1080,21 @@ title: string,
  * 페이지를 읽는 중인가.
  */
 loading: boolean, can_go_back: boolean, can_go_forward: boolean, };
+
+/**
+ * 서버 워커의 선언된 동작을 호출한다.
+ */
+export type WorkerAction = { worker: WorkerCallSpec, };
+
+export type WorkerCallSpec = { action: string, args?: Binding, };
+
+export type WorkerDecl = { runtime: WorkerRuntime, code: string, timeout_secs?: number, schedule?: WorkerScheduleDecl, watch_entries?: Array<string>, actions?: Array<string>, secrets?: Array<WorkerSecretDecl>, };
+
+export type WorkerRuntime = "python3";
+
+export type WorkerScheduleDecl = { interval_secs: number, jitter_secs?: number, enabled_entry: string, };
+
+export type WorkerSecretDecl = { id: string, description?: string, };
 
 /**
  * 작업 주제 하나. 데스크톱 여러 장을 가진다.

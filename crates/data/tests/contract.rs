@@ -26,6 +26,34 @@ fn fixture() -> AppDefinition {
         ]}
     })).unwrap()
 }
+
+#[test]
+fn worker_action_evaluates_arguments_in_event_context() {
+    let mut definition = serde_json::to_value(fixture()).unwrap();
+    definition["ui"]["children"][0]["on_select"] =
+        json!([{"worker":{"action":"run","args":{"expr":"$event"}}}]);
+    let app = CompiledApp::compile(&serde_json::from_value(definition).unwrap());
+    let empty = BTreeMap::new();
+    let event = json!({"value":"선택"});
+    let item = Value::Null;
+    let env = Env {
+        state: &empty,
+        data: &empty,
+        data_meta: &empty,
+        storage: &empty,
+        storage_meta: &empty,
+        event: &event,
+        item: &item,
+    };
+    assert_eq!(
+        app.action_step("/ui/children/0/on_select", 0, &env)
+            .unwrap(),
+        Step::Worker {
+            action: "run".into(),
+            args: Some(event.clone())
+        }
+    );
+}
 fn map(value: Value) -> BTreeMap<String, Value> {
     serde_json::from_value(value).unwrap()
 }
