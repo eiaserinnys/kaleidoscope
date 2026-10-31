@@ -11,7 +11,7 @@ use ts_rs::TS;
 use crate::{data, JsonValue};
 
 /// JSON 저장 항목 하나의 UTF-8 직렬화 바이트 상한.
-pub const STORAGE_JSON_MAX_BYTES: usize = 64 * 1024;
+pub const STORAGE_JSON_MAX_BYTES: usize = 1024 * 1024;
 /// Markdown 저장 항목 하나의 원문 UTF-8 바이트 상한.
 pub const STORAGE_MD_MAX_BYTES: usize = 1024 * 1024;
 /// 저장소 명령 HTTP 본문의 상한. JSON escape 여유를 포함한다.
@@ -825,6 +825,18 @@ fn canonicalize(value: Value) -> Value {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn json_storage_accepts_large_values_up_to_one_mebibyte() {
+        let entry: StorageEntryDecl = serde_json::from_value(json!({
+            "id":"document", "key":"document", "kind":"json", "label":"문서", "presentation":"hidden",
+            "schema":{"type":"string"}, "default":""
+        })).unwrap();
+        assert!(validate_storage_content(&entry, &json!("x".repeat(128 * 1024))).is_ok());
+        assert!(
+            validate_storage_content(&entry, &json!("x".repeat(STORAGE_JSON_MAX_BYTES))).is_err()
+        );
+    }
 
     #[test]
     fn json_revision_sorts_keys_and_markdown_revision_keeps_raw_bytes() {

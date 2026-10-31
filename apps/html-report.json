@@ -1,0 +1,50 @@
+{
+  "id": "html-report",
+  "name": "시안과 리포트",
+  "description": "앱 저장소의 HTML 시안과 리포트를 리비전별로 보고 선택 영역에 코멘트를 남긴다",
+  "requires": { "blocks": 10, "modules": { "storage": 1 } },
+  "permissions": [],
+  "storage": {
+    "entries": [{
+      "id": "reports", "key": "reports", "kind": "json", "label": "시안과 리포트 문서", "presentation": "hidden",
+      "schema": {
+        "type": "object", "required": ["documents"],
+        "properties": {
+          "documents": { "type": "array", "items": {
+            "type": "object", "required": ["id", "title", "revisions"],
+            "properties": {
+              "id": { "type": "string" }, "title": { "type": "string" },
+              "revisions": { "type": "array", "items": {
+                "type": "object", "required": ["rev", "html"],
+                "properties": {
+                  "rev": { "type": "number" }, "title": { "type": "string" }, "html": { "type": "string" },
+                  "created_at": { "type": "string" }, "note": { "type": "string" },
+                  "comments": { "type": "array", "items": {
+                    "type": "object", "required": ["id", "selected_text", "comment", "status"],
+                    "properties": {
+                      "id": { "type": "string" }, "selected_text": { "type": "string" },
+                      "prefix": { "type": "string" }, "suffix": { "type": "string" }, "selector": { "type": "string" },
+                      "comment": { "type": "string" }, "status": { "type": "string", "enum": ["needs_agent_review", "needs_user_reply", "resolved"] },
+                      "created_at": { "type": "string" },
+                      "replies": { "type": "array", "items": {
+                        "type": "object", "required": ["id", "body"],
+                        "properties": { "id": { "type": "string" }, "author": { "type": "string" }, "role": { "type": "string", "enum": ["user", "agent"] }, "body": { "type": "string" }, "created_at": { "type": "string" } }
+                      } }
+                    }
+                  } }
+                }
+              } }
+            }
+          } }
+        }
+      },
+      "default": { "documents": [] }
+    }]
+  },
+  "state": { "selected_doc": null, "selected_revision": null },
+  "ui": {
+    "type": "html_view", "document": { "entry": "reports" },
+    "selected_doc": { "state": "selected_doc" }, "on_select_doc": { "set_state": "selected_doc" },
+    "selected_revision": { "state": "selected_revision" }, "on_select_revision": { "set_state": "selected_revision" }
+  }
+}

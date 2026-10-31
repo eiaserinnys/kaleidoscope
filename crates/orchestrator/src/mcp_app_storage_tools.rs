@@ -17,7 +17,7 @@ pub(crate) struct AppStorageEntryArgs {
     pub(crate) app_id: String,
     /// 앱 정의 storage.entries에 선언된 항목 id.
     pub(crate) entry_id: Option<String>,
-    /// 기본 앱은 선언 항목 id 대신 실제 저장 키를 지정합니다.
+    /// 기본 앱은 실제 저장 키를 지정하거나 키와 같은 항목 id를 사용합니다.
     pub(crate) key: Option<String>,
     /// 작업 전용 항목일 때 작업 id. 일반 설정 항목에는 생략합니다.
     pub(crate) workspace_id: Option<String>,
@@ -50,6 +50,25 @@ pub(crate) struct AppStorageResetArgs {
     pub(crate) workspace_id: Option<String>,
     /// 읽기에서 받은 revision. 생략하면 저장값이 없을 때만 reset합니다.
     pub(crate) expected_revision: Option<String>,
+}
+
+fn builtin_key(
+    entry: Option<&str>,
+    key: Option<&str>,
+    workspace: Option<String>,
+    principal: &McpPrincipal,
+) -> Option<(String, Option<String>)> {
+    let key = match (entry, key) {
+        (Some(entry), Some(key)) if entry != key => return None,
+        (_, Some(key)) | (Some(key), None) => key,
+        (None, None) => return None,
+    };
+    if key.contains("{workspace_id}") {
+        let workspace = effective_workspace_id(workspace, principal)?;
+        Some((key.replace("{workspace_id}", &workspace), Some(workspace)))
+    } else {
+        Some((key.to_owned(), workspace))
+    }
 }
 
 #[tool_router(router = app_storage_tool_router, vis = "pub(super)")]
@@ -120,7 +139,7 @@ impl super::McpServer {
 
     #[tool(
         name = "read_app_storage",
-        description = "개인 앱은 entry_id로 읽고 기본 앱은 key로 원시 값을 읽습니다. 기본 앱에 저장값이 없으면 exists가 false입니다."
+        description = "개인 앱은 entry_id로 읽고 기본 앱은 key 또는 키와 같은 entry_id로 원시 값을 읽습니다. 기본 앱에 저장값이 없으면 exists가 false입니다."
     )]
     async fn tool_read_app_storage(
         &self,
@@ -131,27 +150,32 @@ impl super::McpServer {
             .await
     }
 
-    async fn read_app_storage_for_principal(
+    pub(crate) async fn read_app_storage_for_principal(
         &self,
         mut args: AppStorageEntryArgs,
         principal: McpPrincipal,
     ) -> Result<CallToolResult, ErrorData> {
-        args.workspace_id = effective_workspace_id(args.workspace_id, &principal);
         let account_id = match self.state.mcp_account_id() {
             Ok(value) => value,
             Err(error) => return Ok(json_error(error)),
         };
         if kaleidoscope_contract::builtin::is_builtin(&args.app_id) {
-            let Some(key) = args.key.as_deref().filter(|_| args.entry_id.is_none()) else {
+            let Some((key, _)) = builtin_key(
+                args.entry_id.as_deref(),
+                args.key.as_deref(),
+                args.workspace_id,
+                &principal,
+            ) else {
                 return Ok(json_error(CoreError::new(ErrorCode::InvalidRequest)));
             };
             return Ok(
-                match self.state.read_app_value(&account_id, &args.app_id, key) {
+                match self.state.read_app_value(&account_id, &args.app_id, &key) {
                     Ok(value) => json_result(json!(value)),
                     Err(error) => json_error(error),
                 },
             );
         }
+        args.workspace_id = effective_workspace_id(args.workspace_id, &principal);
         let Some(entry_id) = args.entry_id.as_deref().filter(|_| args.key.is_none()) else {
             return Ok(json_error(CoreError::new(ErrorCode::InvalidRequest)));
         };
@@ -179,7 +203,7 @@ impl super::McpServer {
 
     #[tool(
         name = "write_app_storage",
-        description = "expected_revision으로 비교해 기록합니다. 개인 앱은 entry_id, 기본 앱은 key와 kind를 지정합니다."
+        description = "expected_revision으로 비교해 기록합니다. 기본 앱은 key 또는 키와 같은 entry_id를 지정하고 kind를 생략하면 저장된 종류 또는 json을 사용합니다."
     )]
     async fn tool_write_app_storage(
         &self,
@@ -190,7 +214,7 @@ impl super::McpServer {
             .await
     }
 
-    async fn write_app_storage_for_principal(
+    pub(crate) async fn write_app_storage_for_principal(
         &self,
         mut args: AppStorageWriteArgs,
         principal: McpPrincipal,
@@ -203,21 +227,32 @@ impl super::McpServer {
             Err(error) => return Ok(json_error(error)),
         };
         if kaleidoscope_contract::builtin::is_builtin(&args.app_id) {
-            let Some(key) = args.key.as_deref().filter(|_| args.entry_id.is_none()) else {
+            let Some((key, workspace)) = builtin_key(
+                args.entry_id.as_deref(),
+                args.key.as_deref(),
+                args.workspace_id,
+                &principal,
+            ) else {
                 return Ok(json_error(CoreError::new(ErrorCode::InvalidRequest)));
             };
-            let Some(kind) = args.kind else {
-                return Ok(json_error(CoreError::new(ErrorCode::InvalidRequest)));
+            let kind = match args.kind {
+                Some(kind) => kind,
+                None => match self.state.read_app_value(&account_id, &args.app_id, &key) {
+                    Ok(value) => value
+                        .kind
+                        .unwrap_or(kaleidoscope_contract::app_storage::StorageKind::Json),
+                    Err(error) => return Ok(json_error(error)),
+                },
             };
             return Ok(
                 match self.state.write_app_value(
                     &account_id,
                     &args.app_id,
-                    key,
+                    &key,
                     kind,
                     args.content,
                     args.expected_revision,
-                    args.workspace_id.as_deref(),
+                    workspace.as_deref(),
                 ) {
                     Ok(revision) => json_result(json!({"revision":revision})),
                     Err(error) => json_error(error),
@@ -270,7 +305,7 @@ impl super::McpServer {
 
     #[tool(
         name = "reset_app_storage",
-        description = "expected_revision으로 비교해 지웁니다. 개인 앱은 entry_id, 기본 앱은 key를 지정합니다."
+        description = "expected_revision으로 비교해 지웁니다. 기본 앱은 key 또는 키와 같은 entry_id를 지정합니다."
     )]
     async fn tool_reset_app_storage(
         &self,
@@ -294,16 +329,21 @@ impl super::McpServer {
             Err(error) => return Ok(json_error(error)),
         };
         if kaleidoscope_contract::builtin::is_builtin(&args.app_id) {
-            let Some(key) = args.key.as_deref().filter(|_| args.entry_id.is_none()) else {
+            let Some((key, workspace)) = builtin_key(
+                args.entry_id.as_deref(),
+                args.key.as_deref(),
+                args.workspace_id,
+                &principal,
+            ) else {
                 return Ok(json_error(CoreError::new(ErrorCode::InvalidRequest)));
             };
             return Ok(
                 match self.state.reset_app_value(
                     &account_id,
                     &args.app_id,
-                    key,
+                    &key,
                     args.expected_revision,
-                    args.workspace_id.as_deref(),
+                    workspace.as_deref(),
                 ) {
                     Ok(()) => json_result(json!({"revision":null})),
                     Err(error) => json_error(error),
@@ -338,5 +378,30 @@ impl super::McpServer {
             }
             Err(error) => Ok(json_error(error)),
         }
+    }
+}
+
+#[cfg(test)]
+mod builtin_key_tests {
+    use super::*;
+
+    #[test]
+    fn resolves_workspace_templates_without_scoping_global_keys() {
+        let principal = McpPrincipal {
+            workspace_id: Some("work".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            builtin_key(Some("reports"), None, None, &principal),
+            Some(("reports".into(), None))
+        );
+        assert_eq!(
+            builtin_key(None, Some("notes/{workspace_id}"), None, &principal),
+            Some(("notes/work".into(), Some("work".into())))
+        );
+        assert_eq!(
+            builtin_key(Some("one"), Some("two"), None, &principal),
+            None
+        );
     }
 }

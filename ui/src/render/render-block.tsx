@@ -4,6 +4,7 @@ import type { BlockContext } from "../blocks/block-context";
 import { FileTreeBlock } from "../blocks/file-tree";
 import { MarkdownEditorBlock } from "../blocks/markdown-editor";
 import { MarkdownViewBlock } from "../blocks/markdown-view";
+import { HtmlViewBlock } from "../blocks/html-view";
 import { SplitBlock } from "../blocks/split";
 import { StackBlock, TabsBlock, ToolbarBlock, SectionBlock, TextBlock } from "../blocks/data-layout";
 import { InputBlock, SelectBlock, ToggleBlock, ButtonBlock } from "../blocks/data-input";
@@ -34,6 +35,8 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
       return <MarkdownEditorBlock block={block} context={context} />;
     case "markdown_view":
       return <MarkdownViewBlock block={block} context={context} />;
+    case "html_view":
+      return <HtmlViewBlock block={block} context={context} />;
     case "agent_chat":
       return <AgentChatBlock block={block} context={context} />;
     case "agent_session":

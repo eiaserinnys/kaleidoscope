@@ -17,7 +17,8 @@ import sampleOne from "./assets/landscape.png";
 import sampleTwo from "./assets/shapes.png";
 import sampleTone from "./assets/tone.wav";
 import mdEditorJson from "../../apps/md-editor.json";
-import mdViewerJson from "../../apps/md-viewer.json";
+import htmlReportJson from "../../apps/html-report.json";
+import { htmlReportSample } from "./html-report-sample";
 import workspacePasJson from "../../examples/workspace-pas.json";
 import { dataViewsApp } from "./data-views-app";
 import { dataLayoutApp } from "./data-layout-app";
@@ -25,7 +26,7 @@ import pluginsDocument from "./fixtures/create-plugins.txt?raw";
 import { exposeDocsHarness, galleryForDocs } from "./docs-media-test";
 
 const mdEditor = mdEditorJson as AppDefinition;
-const mdViewer = mdViewerJson as AppDefinition;
+const htmlReport = htmlReportJson as AppDefinition;
 const workspacePas = workspacePasJson as unknown as AppDefinition;
 const agentApp = agentJson as unknown as AppDefinition;
 const storageDocument: AppDefinition = {
@@ -43,7 +44,7 @@ const conversationMode = new URLSearchParams(window.location.search).get("conver
 if (conversationMode) workspacePas.agent = {
   protocol: "conversation-v1", permission: "conversation", base_path: "api", namespace: "test", profile: "test", collection: "test", model_order: [], selected_model: "", title_template: "", initial_instruction_template: "", instructions_template: "", thread_entry: "thread",
 };
-const definitions = [mdEditor, mdViewer, workspacePas, agentApp, dataLayoutApp, gallery, dataViewsApp, storageDocument];
+const definitions = [mdEditor, htmlReport, workspacePas, agentApp, dataLayoutApp, gallery, dataViewsApp, storageDocument];
 const timestamp = "2026-10-28T00:00:00Z";
 const agentHarnessParams = new URLSearchParams(window.location.search);
 const agentPhases = ["choosing_agent", "choosing_folder", "awaiting_permission", "starting", "login_required", "ready", "responding", "failed", "ended"] as const;
@@ -116,10 +117,10 @@ const initialSnapshot: ShellSnapshot = {
     app_versions: appVersions,
     workspaces: [{ id: "workspace-1", name: "kaleidoscope", created_at: timestamp, updated_at: timestamp }],
     desktops: [{ id: "desktop-1", workspace_id: "workspace-1", name: "작업", position: 0, created_at: timestamp, updated_at: timestamp }],
-  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(mdViewer, "viewer-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4), makeWindow(gallery, "gallery-window", 5), makeWindow(dataViewsApp, "views-window", 6), makeWindow(storageDocument, "storage-window", 7), agentWindow],
+  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(htmlReport, "html-report-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4), makeWindow(gallery, "gallery-window", 5), makeWindow(dataViewsApp, "views-window", 6), makeWindow(storageDocument, "storage-window", 7), agentWindow],
   },
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [], pc_access: [], local_agent_access: [] },
-  supported: { blocks: 1, modules: { files: 1 } },
+  supported: { blocks: 10, modules: { files: 1, storage: 1 } },
   link: { state: "unlinked" },
   sharing: [],
   update: { state: "unavailable" },
@@ -197,21 +198,7 @@ const params = new URLSearchParams(window.location.search);
 const pasMode = params.get("pas");
 const previewAppId = params.get("preview") || "md-editor";
 const previewOnly = params.has("preview");
-const mdViewerSnapshot: ShellSnapshot = params.has("md-ready")
-  ? {
-    ...initialSnapshot,
-    shared: {
-      ...initialSnapshot.shared,
-      windows: initialSnapshot.shared.windows.map((item) => item.id === "viewer-window"
-        ? { ...item, state: { ...item.state, current_file: "Kaleidoscope.md" } }
-        : item),
-    },
-    device: {
-      ...initialSnapshot.device,
-      grants: [{ window_id: "viewer-window", permission: "docs", root_path: "/fake/docs", root_name: "문서", granted_at: timestamp }],
-    },
-  }
-  : initialSnapshot;
+const mdViewerSnapshot = initialSnapshot;
 const connectedSnapshot: ShellSnapshot = {
   ...mdViewerSnapshot,
   link: { state: "connected", server_url: "https://kaleidoscope.example", device_name: "개발 PC" },
@@ -223,6 +210,7 @@ const demoSnapshot: ShellSnapshot = conversationMode ? connectedSnapshot : ["rea
     : mdViewerSnapshot;
 const fakeTransport = createFakeTransport({
   snapshot: demoSnapshot,
+  storage: [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }],
   localAgent: fakeLocalAgent,
   data: { sources: { pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [{ kind: "file", name: "tone.wav", path: "tone.wav", ext: "wav", size: 128044, modified: timestamp }, { kind: "file", name: "tone-second.wav", path: "tone-second.wav", ext: "wav", size: 128044, modified: timestamp }] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
   media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone },
@@ -271,7 +259,7 @@ function Harness() {
   const remoteEdits = useRef(0);
   const snapshot = useShellSnapshot(store);
   const editorWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-editor");
-  const viewerWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-viewer");
+  const htmlReportWindow = snapshot?.shared.windows.find((item) => item.app_id === "html-report");
   const dataWindow = snapshot?.shared.windows.find((item) => item.app_id === "data-controls");
   const agentAppWindow = snapshot?.shared.windows.find((item) => item.app_id === "agent");
   const viewsWindow = snapshot?.shared.windows.find((item) => item.app_id === "data-views-test");
@@ -294,11 +282,11 @@ function Harness() {
               : <div className="ks-harness-loading">불러오는 중</div>}
           </div>
         </section>
-        <section aria-label="md-viewer" className={`ks-harness-window${previewOnly && previewAppId !== "md-viewer" ? " is-hidden" : ""}`} data-app-id="md-viewer" data-testid="app-window-md-viewer">
-          <header className="ks-harness-window-header">md-viewer</header>
+        <section aria-label="html-report" className={`ks-harness-window${previewOnly && previewAppId !== "html-report" ? " is-hidden" : ""}`} data-app-id="html-report" data-testid="app-window-html-report">
+          <header className="ks-harness-window-header">html-report</header>
           <div className="ks-harness-window-content">
-            {viewerWindow
-              ? <AppWindowContent store={store} windowId={viewerWindow.id} />
+            {htmlReportWindow
+              ? <AppWindowContent store={store} windowId={htmlReportWindow.id} />
               : <div className="ks-harness-loading">불러오는 중</div>}
           </div>
         </section>

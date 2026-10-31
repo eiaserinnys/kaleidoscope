@@ -1,13 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-test("creates a markdown file, keeps read-only controls hidden, and cancels without writing", async ({ page }) => {
+test("creates a markdown file and cancels without writing", async ({ page }) => {
   await page.goto("/");
   const editor = page.getByTestId("app-window-md-editor");
-  const viewer = page.getByTestId("app-window-md-viewer");
   await editor.getByRole("button", { name: "문서 폴더 고르기" }).click();
-  await viewer.getByRole("button", { name: "읽을 폴더 고르기" }).click();
   await expect(editor.getByRole("button", { name: "새 파일" })).toBeVisible();
-  await expect(viewer.getByRole("button", { name: "새 파일" })).toHaveCount(0);
 
   await editor.getByRole("button", { name: "새 파일" }).click();
   const fileName = editor.getByRole("textbox", { name: "새 파일 이름" });

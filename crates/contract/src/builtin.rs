@@ -50,12 +50,12 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         assets: &[],
     },
     BuiltinIdentity {
-        id: "md-viewer",
-        name: "마크다운 보기",
+        id: "html-report",
+        name: "시안과 리포트",
         version: 1,
-        updated_at: "2026-10-30T00:00:00Z",
-        blocks: 1,
-        modules: &[("files", 1)],
+        updated_at: "2026-10-31T00:00:00Z",
+        blocks: 10,
+        modules: &[("storage", 1)],
         assets: &[],
     },
     BuiltinIdentity {

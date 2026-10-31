@@ -226,7 +226,8 @@ pub const TAURI_EVENT: &str = "core-event";
 /// - 7판: 6판 + `feed`의 `columns`, `copy`.
 /// - 8판: 7판 + 기기 로컬 ACP 대화 블록 `agent_session`.
 /// - 9판: 8판 + `metrics`, `keypad`, `chart`(캔들 포함), 표의 등락률과 스파크라인.
-pub const BLOCK_SET_VERSION: u32 = 9;
+/// - 10판: 9판 + 저장소 HTML 문서와 코멘트를 다루는 `html_view`.
+pub const BLOCK_SET_VERSION: u32 = 10;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -959,6 +960,22 @@ pub enum Block {
         #[ts(optional)]
         document: Option<DocumentRef>,
     },
+    /// (블록 세트 10판) JSON 저장 항목의 HTML 문서와 리비전을 보고 코멘트를 남긴다.
+    HtmlView {
+        document: DocumentRef,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        selected_doc: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_select_doc: Option<SetState>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        selected_revision: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_select_revision: Option<SetState>,
+    },
     /// (블록 세트 2판) 이 창이 있는 워크스페이스의 PAS와 나누는 대화. `requires.modules`에 `agent`가
     /// 있어야 한다. 창마다 설정할 것이 없다. 같은 워크스페이스의 대화 창은 모두 같은 PAS를 본다.
     /// 앱 정의에 `agent` provider가 있으면 `agent` 3판의 대화 제공자를 사용한다. 선언이 없는 기존
@@ -1343,6 +1360,7 @@ impl Block {
     /// 이 블록이 처음 생긴 블록 세트 판. 정의의 `requires.blocks`는 쓴 블록의 이 값 이상이어야 한다.
     pub fn introduced_in(&self) -> u32 {
         match self {
+            Block::HtmlView { .. } => 10,
             Block::Split { .. } | Block::FileTree { .. } => 1,
             Block::MarkdownEditor {
                 document: Some(_), ..
@@ -1383,6 +1401,7 @@ impl Block {
             Block::FileTree { .. } => "file_tree",
             Block::MarkdownEditor { .. } => "markdown_editor",
             Block::MarkdownView { .. } => "markdown_view",
+            Block::HtmlView { .. } => "html_view",
             Block::AgentChat {} => "agent_chat",
             Block::AgentSession { .. } => "agent_session",
             Block::WebView { .. } => "web_view",
@@ -2635,7 +2654,30 @@ pub fn app_definition_schema() -> serde_json::Value {
 mod tests {
     use super::*;
 
+    #[test]
+    fn html_view_accepts_json_documents_and_checks_references() {
+        let raw = r#"{"id":"review","name":"Review","requires":{"blocks":10,"modules":{"storage":1}},"permissions":[],"state":{"selected":null},"storage":{"entries":[{"id":"reports","key":"reports","kind":"json","label":"Reports","presentation":"hidden","schema":{"type":"object","properties":{"documents":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"}}}}}},"default":{"documents":[]}}]},"ui":{"type":"html_view","document":{"entry":"reports"},"selected_doc":{"state":"selected"}}}"#;
+        let definition = validate::parse_app_definition(raw).expect("HTML 보기 정의");
+        assert_eq!(definition.ui.introduced_in(), 10);
+        let entry = &definition.storage.as_ref().unwrap().entries[0];
+        assert!(app_storage::validate_storage_content(
+            entry,
+            &serde_json::json!({"documents":[{"id":"one"}]})
+        )
+        .is_ok());
+        assert!(validate::parse_app_definition(
+            &raw.replace("\"entry\":\"reports\"", "\"entry\":\"missing\"")
+        )
+        .is_err());
+        assert!(
+            validate::parse_app_definition(&raw.replace("\"blocks\":10", "\"blocks\":9")).is_err()
+        );
+    }
+
     fn example(name: &str) -> String {
+        if name == "md-viewer.json" {
+            return include_str!("../fixtures/md-viewer.json").to_string();
+        }
         let directory = if [
             "explorer.json",
             "md-editor.json",

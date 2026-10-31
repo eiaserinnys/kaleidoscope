@@ -15,8 +15,10 @@ fn builtin_apps_are_listed_and_upload_is_rejected() {
         "agent",
         "explorer",
         "md-editor",
-        "md-viewer",
+        "html-report",
         "web-browser",
+        "calculator",
+        "weather",
         "market",
     ] {
         assert!(apps.iter().any(|app| app.id == id && app.builtin));

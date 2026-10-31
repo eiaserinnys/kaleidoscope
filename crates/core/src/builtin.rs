@@ -11,7 +11,10 @@ const APPS: &[(&str, &str)] = &[
     ("agent", include_str!("../../../apps/agent.json")),
     ("explorer", include_str!("../../../apps/explorer.json")),
     ("md-editor", include_str!("../../../apps/md-editor.json")),
-    ("md-viewer", include_str!("../../../apps/md-viewer.json")),
+    (
+        "html-report",
+        include_str!("../../../apps/html-report.json"),
+    ),
     (
         "web-browser",
         include_str!("../../../apps/web-browser.json"),
@@ -154,6 +157,16 @@ mod tests {
                 kaleidoscope_contract::builtin::is_bundled_asset(&asset.id, asset.version)
             }));
         }
+    }
+
+    #[test]
+    fn html_report_accepts_a_document_with_revision_and_comment() {
+        let app = builtin_app("html-report").unwrap();
+        let entry = &app.version.definition.storage.unwrap().entries[0];
+        let content = serde_json::json!({"documents":[{"id":"doc","title":"시안","revisions":[{"rev":1,"html":"<h1>제목</h1>","comments":[{"id":"comment","selected_text":"제목","comment":"수정","status":"needs_agent_review","replies":[{"id":"reply","body":"확인","role":"agent"}]}]}]}]});
+        assert!(
+            kaleidoscope_contract::app_storage::validate_storage_content(entry, &content).is_ok()
+        );
     }
 
     #[test]

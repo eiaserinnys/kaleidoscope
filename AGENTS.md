@@ -18,7 +18,7 @@
 | `crates/orchestrator` | 앱 레지스트리, 기기 연결과 에이전트용 MCP 서버 |
 | `ui/` | 블록 렌더러와 블록(pnpm 패키지 `@kaleidoscope/ui`). `ui/src/contract/`는 생성물이라 손대지 않는다 |
 | `app/` | Tauri 앱. `app/src-tauri`는 코어를 얇게 감싸고, `app/src`는 쉘 화면이다 |
-| `apps/` | 쉘과 함께 제공하는 기본 앱 정의(explorer, md-editor, md-viewer, web-browser) |
+| `apps/` | 쉘과 함께 제공하는 기본 앱 정의(explorer, md-editor, html-report, web-browser 등) |
 | `examples/` | workspace-pas, block-gallery, card-board 등 예제 앱 정의 |
 
 ## 자주 쓰는 명령

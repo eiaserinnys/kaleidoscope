@@ -12,7 +12,7 @@ fn separate_windows_keep_separate_share_contexts_and_lifetimes() {
         &host,
     );
     let (_, desktop) = active_ids(&core);
-    let shared = open_window(&core, &desktop, "md-viewer");
+    let shared = open_window(&core, &desktop, "md-editor");
     core.handle(CoreRequest::ShareSet {
         window_id: shared.clone(),
         on: true,

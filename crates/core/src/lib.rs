@@ -251,7 +251,16 @@ impl Core {
         };
         layout_apply::reconcile(&mut state);
         state.share.active_shares = share::shared_window_ids(&state.shared);
+        let before_builtin = state.shared.clone();
         app_commands::ensure_builtin(&mut state);
+        if let Some(file) = &link_file {
+            let before_sync = state.sync.clone();
+            state.sync.mark_changes(&before_builtin, &state.shared);
+            if state.sync != before_sync {
+                state.sync.device_id = Some(file.device_id.clone());
+                sync_state::save(&config.data_dir, &state.sync)?;
+            }
+        }
         let login_store = Arc::new(logins::Logins::open(&config.data_dir)?);
 
         if state.shared.workspaces.is_empty() {

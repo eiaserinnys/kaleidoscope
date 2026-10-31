@@ -7,10 +7,17 @@ import type {
   ShellSnapshot,
 } from "../contract/contract";
 import mdEditorJson from "../../../apps/md-editor.json";
-import mdViewerJson from "../../../apps/md-viewer.json";
 
 export const mdEditorDefinition = mdEditorJson as AppDefinition;
-export const mdViewerDefinition = mdViewerJson as AppDefinition;
+export const mdViewerDefinition: AppDefinition = {
+  id: "md-viewer", name: "마크다운 보기", requires: { blocks: 1, modules: { files: 1 } },
+  permissions: [{ module: "files", id: "docs", access: "read", label: "읽을 폴더" }],
+  state: { current_file: null },
+  ui: { type: "split", direction: "row", sizes: [24, 76], children: [
+    { type: "file_tree", root: { permission: "docs" }, extensions: ["md"], selected: { state: "current_file" }, on_select: { set_state: "current_file" } },
+    { type: "markdown_view", file: { permission: "docs", path: { state: "current_file" } } },
+  ] },
+};
 
 export interface TestSeed {
   snapshot: ShellSnapshot;

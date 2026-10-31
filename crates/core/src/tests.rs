@@ -28,7 +28,7 @@ mod layout_sync_tests;
 mod pc_tests;
 
 const MD_EDITOR: &str = include_str!("../../../apps/md-editor.json");
-const MD_VIEWER: &str = include_str!("../../../apps/md-viewer.json");
+const MD_VIEWER: &str = include_str!("../../contract/fixtures/md-viewer.json");
 const WEB_BROWSER: &str = include_str!("../../../apps/web-browser.json");
 
 struct CaptureTestHost {
@@ -190,7 +190,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
         ("agent", 1),
         ("explorer", 3),
         ("md-editor", 2),
-        ("md-viewer", 1),
+        ("html-report", 1),
         ("web-browser", 1),
         ("calculator", 1),
         ("weather", 1),
@@ -207,6 +207,128 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
         })
         .unwrap_err();
     assert_eq!(error.code, ErrorCode::InvalidAppDefinition);
+}
+
+#[test]
+fn retired_builtin_is_removed_from_existing_device_state() {
+    let temp = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(folder.path().into()));
+    let core = open_core(temp.path(), vec![], &host);
+    core.handle(CoreRequest::AppImport {
+        definition_json: MD_VIEWER.into(),
+    })
+    .unwrap();
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "md-viewer");
+    core.handle(CoreRequest::FilesPickFolder {
+        window_id: window.clone(),
+        permission: "docs".into(),
+    })
+    .unwrap();
+    assert!(snapshot(&core)
+        .device
+        .grants
+        .iter()
+        .any(|grant| grant.window_id == window));
+    drop(core);
+    let reopened = open_core(temp.path(), vec![], &host);
+    let snapshot = snapshot(&reopened);
+    assert!(!snapshot.shared.apps.iter().any(|app| app.id == "md-viewer"));
+    assert!(!snapshot
+        .shared
+        .app_versions
+        .iter()
+        .any(|version| version.app_id == "md-viewer"));
+    assert!(!snapshot.shared.windows.iter().any(|item| item.id == window));
+    assert!(!snapshot
+        .device
+        .grants
+        .iter()
+        .any(|grant| grant.window_id == window));
+}
+
+#[test]
+fn retired_window_deletion_wins_over_the_next_server_snapshot() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(temp.path(), vec![], &host);
+    core.handle(CoreRequest::AppImport {
+        definition_json: MD_VIEWER.into(),
+    })
+    .unwrap();
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "md-viewer");
+    let previous = snapshot(&core).shared;
+    crate::storage::save_link(temp.path(), &connected_link_file()).unwrap();
+    drop(core);
+    let reopened = open_core_with_client(temp.path(), vec![], &host, registry_client());
+    let mut state = reopened.inner.state.lock().unwrap();
+    assert!(state
+        .sync
+        .contains(crate::sync_state::EntityKind::Window, &window));
+    crate::layout_apply::apply_snapshot(
+        &mut state,
+        "device-id",
+        kaleidoscope_contract::registry::LayoutChanges {
+            workspaces: previous.workspaces,
+            desktops: previous.desktops,
+            windows: previous.windows,
+            ..Default::default()
+        },
+    );
+    assert!(!state.shared.windows.iter().any(|item| item.id == window));
+}
+
+#[test]
+fn retired_windows_from_another_device_are_deleted_during_sync() {
+    let remote_dir = TempDir::new().unwrap();
+    let local_dir = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let remote = open_core(remote_dir.path(), vec![], &host);
+    remote
+        .handle(CoreRequest::AppImport {
+            definition_json: MD_VIEWER.into(),
+        })
+        .unwrap();
+    let (_, desktop) = active_ids(&remote);
+    let remote_window = open_window(&remote, &desktop, "md-viewer");
+    let layout = snapshot(&remote).shared;
+    let local = open_core(local_dir.path(), vec![], &host);
+    let mut state = local.inner.state.lock().unwrap();
+    state.sync.merged = true;
+    crate::layout_apply::apply_snapshot(
+        &mut state,
+        "device-id",
+        kaleidoscope_contract::registry::LayoutChanges {
+            workspaces: layout.workspaces,
+            desktops: layout.desktops,
+            windows: layout.windows.clone(),
+            ..Default::default()
+        },
+    );
+    assert!(!state
+        .shared
+        .windows
+        .iter()
+        .any(|item| item.id == remote_window));
+    assert!(state
+        .sync
+        .contains(crate::sync_state::EntityKind::Window, &remote_window));
+    let mut later = layout.windows[0].clone();
+    later.id = "another-retired-window".into();
+    crate::layout_apply::apply_changes(
+        &mut state,
+        kaleidoscope_contract::registry::LayoutChanges {
+            windows: vec![later.clone()],
+            ..Default::default()
+        },
+    );
+    assert!(!state.shared.windows.iter().any(|item| item.id == later.id));
+    assert!(state
+        .sync
+        .contains(crate::sync_state::EntityKind::Window, &later.id));
 }
 
 #[test]
