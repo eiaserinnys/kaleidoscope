@@ -90,6 +90,22 @@ async fn previews_definition_with_relay_data_using_definition_permissions() {
 }
 
 #[tokio::test]
+async fn preview_fetches_relay_sources_in_dependency_order() {
+    let (url, server_task) = fake_origin(200, r#"[{"status":"done","title":"항목"}]"#).await;
+    let state = AppState::in_memory("secret");
+    add_relay(&state, &url);
+    let server = McpServer::new(state);
+    let mut input = definition();
+    input["sources"]["aaa"] = json!({"kind":"request","permission":"relay","path":{"expr":"'/items/' & $data.cards[0].status"}});
+    input["ui"]["children"][0]["value"] = json!({"expr":"$data.aaa[0].title"});
+    let result = result_value(server.preview_app_result(args(input)).await.unwrap());
+    assert_eq!(result["sources"]["cards"]["state"], "ready");
+    assert_eq!(result["sources"]["aaa"]["state"], "ready");
+    assert_eq!(result["values"][0]["value"], "\"항목\"");
+    server_task.abort();
+}
+
+#[tokio::test]
 async fn preview_accepts_device_source_samples_and_marks_unsampled_sources_idle() {
     let server = McpServer::new(AppState::in_memory("secret"));
     let mut sample_args = args(definition());

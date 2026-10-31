@@ -22,6 +22,8 @@ use serde_json::Value;
 
 pub struct CompiledApp {
     sources: BTreeMap<String, SourceDecl>,
+    source_order: Vec<String>,
+    source_deps: BTreeMap<String, Vec<String>>,
     expressions: BTreeMap<String, Result<AstNode, String>>,
     bindings: Vec<BindingDependencies>,
     actions: BTreeMap<String, Actions>,
@@ -119,6 +121,13 @@ impl CompiledApp {
             .collect();
         Self {
             sources: definition.sources.clone(),
+            source_order: data::source_topological_order(&definition.sources)
+                .unwrap_or_else(|_| definition.sources.keys().cloned().collect()),
+            source_deps: definition
+                .sources
+                .iter()
+                .map(|(name, source)| (name.clone(), data::source_data_refs(source)))
+                .collect(),
             expressions,
             bindings,
             actions,
@@ -136,11 +145,30 @@ impl CompiledApp {
         storage: &BTreeMap<String, Value>,
         storage_meta: &BTreeMap<String, Value>,
     ) -> SourcePlan {
+        self.plan_source_with_data_and_storage(name, state, &BTreeMap::new(), storage, storage_meta)
+    }
+
+    pub fn source_order(&self) -> &[String] {
+        &self.source_order
+    }
+
+    pub fn source_dependencies(&self, name: &str) -> &[String] {
+        self.source_deps.get(name).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    pub fn plan_source_with_data_and_storage(
+        &self,
+        name: &str,
+        state: &BTreeMap<String, Value>,
+        data: &BTreeMap<String, Value>,
+        storage: &BTreeMap<String, Value>,
+        storage_meta: &BTreeMap<String, Value>,
+    ) -> SourcePlan {
         let Some(source) = self.sources.get(name) else {
             return SourcePlan::Invalid("없는 원천입니다".into());
         };
         let base = format!("/sources/{}", data::escape_pointer(name));
-        let vars = Variables::new(state, &BTreeMap::new(), storage, storage_meta, None, None);
+        let vars = Variables::new(state, data, storage, storage_meta, None, None);
         let plan = || -> Result<SourcePlan, String> {
             match source {
                 SourceDecl::Request {

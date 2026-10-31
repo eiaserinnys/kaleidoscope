@@ -610,18 +610,73 @@ fn validate_exprs(definition: &AppDefinition, details: &mut Vec<String>) {
             }
         }
         if pointer.starts_with("/sources/")
-            && ["$data", "$data_meta", "$event", "$item"]
+            && ["$data_meta", "$event", "$item"]
                 .iter()
                 .any(|var| uses_var(expr, var))
         {
             details.push(format!(
-                "{pointer}: 원천의 값 자리 식은 $state와 $storage만 볼 수 있습니다($data, $event, $item 불가)"
+                "{pointer}: 원천의 값 자리 식은 $state, $storage, $data만 볼 수 있습니다($data_meta, $event, $item 불가)"
             ));
         }
+        if pointer.starts_with("/sources/") && has_untracked_data_access(expr) {
+            details.push(format!(
+                "{pointer}: 원천의 값 자리 식에서 다른 원천은 $data.이름 꼴로만 읽을 수 있습니다"
+            ));
+        }
+    }
+    if let Err(cycle) = data::source_topological_order(&definition.sources) {
+        details.push(format!(
+            "/sources/{}: 원천 참조가 순환합니다: {}",
+            data::escape_pointer(&cycle[0]),
+            cycle.join(" -> ")
+        ));
     }
     if has_expr && definition.requires.blocks < 4 {
         details.push("식(expr)은 블록 세트 4판이라 requires.blocks가 4 이상이어야 합니다".into());
     }
+}
+
+/// 원천 식의 모든 `$data` 변수가 정적 원천 이름을 가리키는지 검사한다.
+fn has_untracked_data_access(expr: &str) -> bool {
+    let bytes = expr.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\'' || bytes[i] == b'"' {
+            let quote = bytes[i];
+            i += 1;
+            while i < bytes.len() {
+                if bytes[i] == b'\\' {
+                    i = (i + 2).min(bytes.len());
+                    continue;
+                }
+                if bytes[i] == quote {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        if bytes[i..].starts_with(b"$data") {
+            let end = i + 5;
+            if bytes
+                .get(end)
+                .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_')
+            {
+                i = end;
+                continue;
+            }
+            if bytes.get(end) != Some(&b'.')
+                || !bytes.get(end + 1).is_some_and(u8::is_ascii_lowercase)
+            {
+                return true;
+            }
+            i = end + 1;
+            continue;
+        }
+        i += 1;
+    }
+    false
 }
 
 /// 식에 변수가 이름 그대로 나오는가(`$data`가 `$database`에 걸리지 않게 뒤 글자를 본다).
@@ -910,10 +965,26 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
         }
-        Block::Chart { series, .. } => {
+        Block::Chart { kind, series, .. } => {
             if let data::Binding::Literal(value) = series {
-                if serde_json::from_value::<Vec<data::ChartSeries>>(value.clone()).is_err() {
-                    details.push(format!("{at}: chart series 형식이 올바르지 않습니다"));
+                match serde_json::from_value::<Vec<data::ChartSeries>>(value.clone()) {
+                    Err(_) => details.push(format!("{at}: chart series 형식이 올바르지 않습니다")),
+                    Ok(series) if *kind == crate::ChartKind::Candlestick => {
+                        if series.iter().flat_map(|s| &s.points).any(|p| {
+                            match (p.open, p.high, p.low, p.close) {
+                                (Some(o), Some(h), Some(l), Some(c)) => {
+                                    ![o, h, l, c].iter().all(|v| v.is_finite())
+                                        || l > o.min(c)
+                                        || h < o.max(c)
+                                        || l > h
+                                }
+                                _ => true,
+                            }
+                        }) {
+                            details.push(format!("{at}: candlestick chart 점에는 올바른 open, high, low, close 수치가 필요합니다"));
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -1126,6 +1197,16 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             selected,
             ..
         } => {
+            if definition.requires.blocks < 9
+                && columns.iter().any(|c| {
+                    matches!(
+                        c.format,
+                        crate::CellFormat::Delta | crate::CellFormat::Sparkline
+                    )
+                })
+            {
+                details.push(format!("{at}: table의 delta, sparkline 열 형식은 블록 세트 9판이라 requires.blocks가 9 이상이어야 합니다"));
+            }
             if columns.is_empty() {
                 details.push(format!("{at}: table에는 열이 하나 이상 필요합니다"));
             }

@@ -296,13 +296,13 @@ export type CallSpec = { permission: string, method: HttpMethod, path: Binding, 
 /**
  * 칸 값을 보이는 방법. `number`와 `date`는 끝에 맞추고, 나머지는 앞에 맞춘다.
  */
-export type CellFormat = "text" | "number" | "date" | "badge";
+export type CellFormat = "text" | "number" | "date" | "badge" | "delta" | "sparkline";
 
 export type ChartHeight = "compact" | "medium" | "tall";
 
-export type ChartKind = "line" | "bar" | "area";
+export type ChartKind = "line" | "bar" | "area" | "candlestick";
 
-export type ChartPoint = { x: string, y: number | null, label?: string, };
+export type ChartPoint = { x: string, y?: number | null, open?: number, high?: number, low?: number, close?: number, label?: string, };
 
 export type ChartSeries = { key: string, name: string, points: Array<ChartPoint>, };
 

@@ -64,3 +64,9 @@
 .ks-feed-copy-cell > .ks-feed-copy-control { position: absolute; inset-inline-end: 0; top: 0; }
 .ks-feed-body.tone-muted { color: var(--ks-color-muted); }
 .ks-feed-body.tone-error { color: var(--ks-color-danger); }
+.ks-table-delta { padding: 0 var(--ks-space-1); border-radius: var(--ks-radius-small); font-variant-numeric: tabular-nums; }
+.ks-table-delta.up, .ks-table-sparkline.up { color: var(--ks-color-share); }
+.ks-table-delta.down, .ks-table-sparkline.down { color: var(--ks-color-danger); }
+.ks-table-delta.flat { color: var(--ks-color-muted); }
+.ks-table-delta.up, .ks-table-delta.down { background: color-mix(in srgb, currentColor 12%, transparent); }
+.ks-table-sparkline { width: calc(var(--ks-space-6) * 2 + var(--ks-space-4)); height: var(--ks-space-5); fill: currentColor; stroke: currentColor; }

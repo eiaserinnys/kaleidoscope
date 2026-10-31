@@ -327,6 +327,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
             let inner = Arc::clone(inner);
             thread::spawn(move || {
                 let result = data_sources::fetch(&inner, &job.window, &job.plan, job.format);
+                let mut follow_up = Vec::new();
                 {
                     let state = inner.state.lock().unwrap();
                     let mut windows = inner.data_runtimes.windows.lock().unwrap();
@@ -367,6 +368,21 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                             }
                         }
                     }
+                    for name in runtime.compiled.source_order().to_vec() {
+                        if name == job.name {
+                            continue;
+                        }
+                        let plan = runtime.plan_source(&name);
+                        let changed = set_plan(&inner.data_runtimes, runtime, &name, plan);
+                        runtime.apply_source_storage_status(&name);
+                        if changed && !runtime.sources[&name].in_flight {
+                            if let Some(next) =
+                                prepare(&inner.data_runtimes, runtime, &job.window, &name)
+                            {
+                                follow_up.push(next);
+                            }
+                        }
+                    }
                     if let Some(view) = runtime.diff().filter(|_| runtime.attached > 0) {
                         let _ = inner.data_runtimes.events.send((
                             job.window.clone(),
@@ -375,8 +391,12 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                         ));
                     }
                 }
+                let handles = jobs(&inner, follow_up);
                 crate::local_agent::data_changed(&inner, &job.window);
                 inner.layout_signal.notify();
+                for handle in handles {
+                    let _ = handle.join();
+                }
             })
         })
         .collect()
@@ -417,7 +437,7 @@ pub(crate) fn attach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, C
         let already_attached = runtime.attached > 0;
         runtime.state = window.state.clone();
         runtime.attached += 1;
-        let names: Vec<_> = runtime.sources.keys().cloned().collect();
+        let names = runtime.compiled.source_order().to_vec();
         let mut pending = Vec::new();
         for name in names {
             let plan = runtime.plan_source(&name);
@@ -467,15 +487,39 @@ pub(crate) fn refresh(
         let runtime = windows
             .get_mut(window_id)
             .ok_or_else(|| error::make(ErrorCode::NotFound))?;
-        let names: Vec<_> = if names.is_empty() {
-            runtime.sources.keys().cloned().collect()
+        let mut selected: std::collections::BTreeSet<String> = if names.is_empty() {
+            runtime.compiled.source_order().iter().cloned().collect()
         } else {
-            names.to_vec()
+            names.iter().cloned().collect()
         };
+        for name in runtime.compiled.source_order().iter().rev() {
+            if selected.contains(name) {
+                for dep in runtime.compiled.source_dependencies(name) {
+                    if !runtime.data.contains_key(dep)
+                        || matches!(
+                            runtime.sources.get(dep).map(|s| &s.status),
+                            Some(SourceStatus::Failed { .. } | SourceStatus::LoginRequired { .. })
+                        )
+                    {
+                        selected.insert(dep.clone());
+                    }
+                }
+            }
+        }
+        let names: Vec<_> = runtime
+            .compiled
+            .source_order()
+            .iter()
+            .filter(|name| selected.contains(*name))
+            .cloned()
+            .collect();
         let pending = names
             .iter()
             .filter_map(|name| prepare(&inner.data_runtimes, runtime, window_id, name))
             .collect();
+        for name in runtime.compiled.source_order().to_vec() {
+            runtime.apply_source_storage_status(&name);
+        }
         if let Some(view) = runtime.diff().filter(|_| runtime.attached > 0) {
             let _ = inner
                 .data_runtimes
@@ -528,11 +572,12 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                 continue;
             }
             runtime.state = window.state.clone();
-            let names: Vec<_> = runtime.sources.keys().cloned().collect();
+            let names = runtime.compiled.source_order().to_vec();
             for name in names {
                 let plan = runtime.plan_source(&name);
-                if set_plan(&inner.data_runtimes, runtime, &name, plan) {
-                    runtime.apply_source_storage_status(&name);
+                let changed = set_plan(&inner.data_runtimes, runtime, &name, plan);
+                runtime.apply_source_storage_status(&name);
+                if changed {
                     if let Some(job) = prepare(&inner.data_runtimes, runtime, id, &name) {
                         pending.push(job);
                     }
