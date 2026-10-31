@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use kaleidoscope_contract::{
     data,
-    validate::{valid_https_origin, valid_public_http_path},
+    validate::{allowed_public_http_path, valid_https_origin},
 };
 
 pub struct PublicResponse {
@@ -60,10 +60,7 @@ pub fn get(
     query: &BTreeMap<String, String>,
     limit: u64,
 ) -> Result<PublicResponse, String> {
-    if !valid_https_origin(base_url)
-        || !valid_public_http_path(path)
-        || !paths.iter().any(|allowed| allowed == path)
-    {
+    if !valid_https_origin(base_url) || !allowed_public_http_path(paths, path) {
         return Err("허용하지 않은 공개 HTTPS 주소 또는 경로입니다".into());
     }
     let url = url::Url::parse(base_url).map_err(|error| error.to_string())?;

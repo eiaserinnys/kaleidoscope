@@ -82,6 +82,60 @@ it("enables feed columns only when requested", async () => {
   expect(plainBody.classList.contains("is-columns")).toBe(false);
 });
 
+it("renders nested feed replies with depth, badges, and collapsible descendants", async () => {
+  setup({
+    type: "feed", collapsible: true, copy: true, entries: [{
+      key: "root", name: "작성자", meta: "시각", badges: [{ text: "인기", color: "#4c8bf5" }], body: "부모 본문",
+      children: [{ key: "reply", name: "답글 작성자", body: "자식 본문", children: [{ key: "deep", body: "깊은 답글" }] }],
+    }],
+  } as unknown as Block);
+  const reply = await screen.findByText("자식 본문");
+  const root = screen.getByText("부모 본문").closest("article")!;
+  expect(root.getAttribute("data-depth")).toBe("0");
+  expect(reply.closest("article")?.getAttribute("data-depth")).toBe("1");
+  expect(screen.getByText("인기")).not.toBeNull();
+  expect(within(root).getByText("답글 2")).not.toBeNull();
+  expect(within(root).getAllByRole("button", { name: "복사" })).toHaveLength(2);
+  fireEvent.click(within(root).getByRole("button", { name: "답글 2개 접기" }));
+  expect(root.classList.contains("is-collapsed")).toBe(true);
+  expect(within(root).getByText("답글 2개 접힘")).not.toBeNull();
+  expect(within(root).queryByRole("button", { name: "복사" })).toBeNull();
+  expect(screen.queryByText("자식 본문")).toBeNull();
+  expect(screen.queryByText("깊은 답글")).toBeNull();
+  fireEvent.click(within(root).getByRole("button", { name: "답글 2개 펴기" }));
+  expect(await screen.findByText("깊은 답글")).not.toBeNull();
+});
+
+it("counts descendants across flat feed entries that carry depth", async () => {
+  setup({
+    type: "feed", entries: [
+      { key: "flat-root", depth: 0, body: "평탄한 부모" },
+      { key: "flat-reply", depth: 1, body: "평탄한 답글" },
+      { key: "flat-deep", depth: 2, body: "평탄한 깊은 답글" },
+    ],
+  } as unknown as Block);
+  const root = await screen.findByText("평탄한 부모");
+  const article = root.closest("article")!;
+  expect(within(article).getByRole("button", { name: "답글 2개 접기" })).not.toBeNull();
+  fireEvent.click(within(article).getByRole("button", { name: "답글 2개 접기" }));
+  expect(screen.queryByText("평탄한 답글")).toBeNull();
+  expect(screen.queryByText("평탄한 깊은 답글")).toBeNull();
+});
+
+it("collapses and expands a grouped feed from its heading", async () => {
+  setup({
+    type: "feed", grouped: true, collapsible: true, entries: [{ title: "오늘", items: [{ key: "story", body: "오늘의 댓글" }] }],
+  } as unknown as Block);
+  const title = await screen.findByText("오늘");
+  const heading = () => screen.getByRole("button", { name: "오늘" });
+  expect(heading().getAttribute("aria-expanded")).toBe("true");
+  fireEvent.click(title);
+  expect(screen.queryByText("오늘의 댓글")).toBeNull();
+  expect(heading().getAttribute("aria-expanded")).toBe("false");
+  fireEvent.keyDown(heading(), { key: "Enter" });
+  expect(await screen.findByText("오늘의 댓글")).not.toBeNull();
+});
+
 it("copies feed metadata and each original body paragraph without selecting the entry", async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });

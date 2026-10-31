@@ -282,7 +282,11 @@ columns?: boolean,
  * (블록 세트 7판) 항목의 `meta`와 본문 문단마다 복사 단추를 붙인다. 누르면 그 글을 그대로(줄바꿈 포함)
  * 클립보드에 쓴다. 단추를 눌러도 항목 고르기는 돌지 않는다.
  */
-copy?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", value: Binding, format?: TextFormat, style?: TextStyle, } | { "type": "input", value: StateRef, on_change: Actions, kind?: InputKind, multiline?: boolean, placeholder?: string, on_submit?: Actions, } | { "type": "select", value: StateRef, on_change: Actions, options: Binding, style?: SelectStyle, placeholder?: string, } | { "type": "toggle", value: StateRef, on_change: Actions, label: string, } | { "type": "button", label: string, icon?: string, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code_editor", file: FileRef, language?: CodeLanguage, } | { "type": "code_view", value?: Binding, file?: FileRef, language?: CodeLanguage, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "keypad", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
+copy?: boolean, 
+/**
+ * (블록 세트 10판) 대댓글과 긴 항목의 접기·펴기를 켠다.
+ */
+collapsible?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", value: Binding, format?: TextFormat, style?: TextStyle, } | { "type": "input", value: StateRef, on_change: Actions, kind?: InputKind, multiline?: boolean, placeholder?: string, on_submit?: Actions, } | { "type": "select", value: StateRef, on_change: Actions, options: Binding, style?: SelectStyle, placeholder?: string, } | { "type": "toggle", value: StateRef, on_change: Actions, label: string, } | { "type": "button", label: string, icon?: string, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code_editor", file: FileRef, language?: CodeLanguage, } | { "type": "code_view", value?: Binding, file?: FileRef, language?: CodeLanguage, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "keypad", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
 
 export type ButtonVariant = "default" | "primary" | "danger" | "ghost";
 
@@ -504,11 +508,19 @@ color?: string,
 /**
  * 이름 옆의 작은 원형 초상.
  */
-image?: MediaRef, meta?: string, 
+image?: MediaRef, meta?: string, badges?: Array<Badge>, 
+/**
+ * 스레드 깊이(0부터). `children`으로 중첩해 넘기면 쉘이 깊이를 계산한다.
+ */
+depth?: number, 
 /**
  * 본문. 문자열 하나나 문자열 배열(문단마다 하나, 예: 한국어와 영어).
  */
-body: FeedBody, tone?: Tone, };
+body: FeedBody, tone?: Tone, 
+/**
+ * 대댓글·하위 스레드 항목.
+ */
+children?: Array<FeedEntry>, };
 
 /**
  * 속성 값을 보이는 방법.

@@ -30,8 +30,8 @@
 .ks-data-toolbar-item.is-input { flex: 1 1 auto; min-width: calc(var(--ks-space-6) * 3); }
 .ks-data-toolbar .ks-button, .ks-data-toolbar .ks-data-segmented, .ks-data-toolbar .ks-data-toggle { flex-shrink: 0; white-space: nowrap; }
 .ks-data-section { min-width: 0; min-height: 0; }
-.ks-split-pane > .ks-data-section { display: flex; height: 100%; flex-direction: column; }
-.ks-split-pane > .ks-data-section > .ks-data-section-child { flex: 1 1 auto; min-height: 0; }
+.ks-split-pane > .ks-data-section, .ks-data-tab-panel > .ks-data-section { display: flex; height: 100%; flex-direction: column; }
+.ks-split-pane > .ks-data-section > .ks-data-section-child, .ks-data-tab-panel > .ks-data-section > .ks-data-section-child { flex: 1 1 auto; min-height: 0; }
 .ks-data-section-child > .ks-data-stack { height: auto; }
 .ks-data-section-header { display: flex; width: 100%; align-items: center; gap: var(--ks-space-2); }
 .ks-data-stack-item > .ks-data-section > .ks-data-section-header:not(.ks-data-tab-panel *),
@@ -42,6 +42,9 @@
 .ks-data-tab-panel .ks-split-row > .ks-split-pane:last-child { padding-inline-start: var(--ks-space-3); }
 .ks-data-tab-panel .ks-chart { padding-inline: 0; padding-block-end: var(--ks-space-3); }
 .ks-data-tab-panel .ks-properties { padding-inline: 0; padding-block: var(--ks-space-2) var(--ks-space-3); }
+.ks-data-tab-panel .ks-feed-entry:not(.ks-feed-entry-nested) { padding-inline: 0; }
+.ks-data-tab-panel .ks-feed-entry-nested { padding-inline-end: 0; }
+.ks-data-tab-panel .ks-data-section-child > .ks-properties-container > .ks-properties { padding-block-start: var(--ks-space-1); }
 .ks-data-section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 /* 머리 폭 전체를 차지하는 단추라 바깥 외곽선이 이웃 요소에 가려진다. 파일 트리의 접힌 단추처럼 안쪽에 그린다. */
 .ks-data-section-toggle { padding-block: var(--ks-space-1); border-radius: var(--ks-radius-small); }
@@ -76,7 +79,7 @@
 .ks-metrics { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; min-width: 0; gap: var(--ks-space-2); padding: var(--ks-space-3); }
 .ks-metrics-grid { display: grid; grid-template-columns: repeat(var(--ks-metrics-columns, auto-fit), minmax(min(100%, calc(var(--ks-space-6) * 2 + var(--ks-space-3))), 1fr)); min-width: 0; gap: var(--ks-space-2); }
 .ks-metrics.is-single .ks-metrics-grid { grid-template-columns: minmax(0, 1fr); }
-.ks-metric-card { display: flex; flex-direction: column; justify-content: center; gap: var(--ks-space-1); min-width: 0; padding: var(--ks-space-2) var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); }
+.ks-metric-card { display: flex; flex-direction: column; justify-content: flex-start; gap: var(--ks-space-1); min-width: 0; padding: var(--ks-space-2) var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); }
 .ks-metrics-grid .ks-metric-card { padding: var(--ks-space-2); }
 .ks-metric-card.is-featured { grid-column: 1 / -1; }
 .ks-metric-card.is-align-end { align-items: flex-end; text-align: end; }
