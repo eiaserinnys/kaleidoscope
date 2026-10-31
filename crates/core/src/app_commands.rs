@@ -117,6 +117,19 @@ pub(crate) fn import_registry(state: &mut CoreState, received: RegistryApp) -> b
 }
 
 pub(crate) fn ensure_builtin(state: &mut CoreState) {
+    if state.shared.apps.iter().any(|app| app.id == "md-viewer") {
+        state.shared.apps.retain(|app| app.id != "md-viewer");
+        state
+            .shared
+            .app_versions
+            .retain(|version| version.app_id != "md-viewer");
+        state
+            .device
+            .pc_access
+            .retain(|access| access.app_id != "md-viewer");
+    }
+    remove_retired_windows(state, false);
+    crate::layout_apply::reconcile(state);
     for row in crate::builtin::builtin_apps() {
         let same = state
             .shared
@@ -130,6 +143,36 @@ pub(crate) fn ensure_builtin(state: &mut CoreState) {
             });
         if !same {
             apply_version(state, row.app, row.version, true);
+        }
+    }
+}
+
+pub(crate) fn remove_retired_windows(state: &mut CoreState, sync: bool) {
+    if state.shared.apps.iter().any(|app| app.id == "md-viewer") {
+        return;
+    }
+    let retired_windows: Vec<String> = state
+        .shared
+        .windows
+        .iter()
+        .filter(|window| window.app_id == "md-viewer")
+        .map(|window| window.id.clone())
+        .collect();
+    state
+        .shared
+        .windows
+        .retain(|window| window.app_id != "md-viewer");
+    state
+        .device
+        .grants
+        .retain(|grant| !retired_windows.contains(&grant.window_id));
+    state
+        .share
+        .active_shares
+        .retain(|id| !retired_windows.contains(id));
+    if sync {
+        for id in retired_windows {
+            state.sync.mark(crate::sync_state::EntityKind::Window, &id);
         }
     }
 }

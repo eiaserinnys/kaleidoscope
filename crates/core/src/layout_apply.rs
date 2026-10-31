@@ -133,6 +133,7 @@ pub(crate) fn apply_snapshot(state: &mut CoreState, device_id: &str, changes: La
         &state.sync,
         EntityKind::Window,
     );
+    crate::app_commands::remove_retired_windows(state, true);
     reconcile(state);
 }
 
@@ -158,6 +159,7 @@ pub(crate) fn apply_changes(state: &mut CoreState, changes: LayoutChanges) {
         &state.sync,
         EntityKind::Window,
     );
+    crate::app_commands::remove_retired_windows(state, true);
     reconcile(state);
 }
 

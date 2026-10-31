@@ -1,0 +1,16 @@
+.ks-html-view { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; }
+.ks-html-header { display: flex; align-items: center; justify-content: flex-start; gap: var(--ks-space-2); }
+.ks-html-header > .ks-button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-html-content { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; }
+.ks-html-content iframe { flex: 1 1 0; width: 0; min-width: 0; border: 0; background: white; }
+.ks-html-rail { display: flex; flex: 0 0 260px; min-width: 240px; max-width: 300px; flex-direction: column; gap: var(--ks-space-3); overflow: auto; padding: var(--ks-space-3); border-left: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-html-compose, .ks-html-inspector, .ks-html-comment { display: flex; flex-direction: column; min-width: 0; gap: var(--ks-space-2); }
+.ks-html-compose > span, .ks-html-inspector > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-html-comment { padding: var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); }
+.ks-html-comment p { margin: 0; overflow-wrap: anywhere; }
+.ks-html-comment-target { display: flex; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.ks-html-comment-target > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-html-field { display: flex; flex-direction: column; min-width: 0; gap: var(--ks-space-1); }
+.ks-html-field .ks-text-input { width: 100%; }
+.ks-html-actions { display: flex; flex-wrap: wrap; gap: var(--ks-space-2); }
+.ks-html-reply { color: var(--ks-color-muted); }

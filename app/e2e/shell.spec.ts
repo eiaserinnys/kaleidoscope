@@ -324,9 +324,15 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await expect(editorWindow).toHaveCSS("left", `${Math.round(movedBox.x)}px`);
   await expect(editor).toContainText("E2E saved");
 
-  const viewerPath = path.join(root, "apps/md-viewer.json");
-  const viewerDefinition = JSON.parse(await readFile(viewerPath, "utf8"));
-  viewerDefinition.id = "test-md-viewer";
+  const viewerDefinition = {
+    id: "test-md-viewer", name: "마크다운 보기", requires: { blocks: 1, modules: { files: 1 } },
+    permissions: [{ module: "files", id: "docs", access: "read", label: "읽을 폴더" }],
+    state: { current_file: null },
+    ui: { type: "split", direction: "row", children: [
+      { type: "file_tree", root: { permission: "docs" }, extensions: ["md"], selected: { state: "current_file" }, on_select: { set_state: "current_file" } },
+      { type: "markdown_view", file: { permission: "docs", path: { state: "current_file" } } },
+    ] },
+  };
   await page.locator('input[type="file"]').setInputFiles({ name: "viewer.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(viewerDefinition)) });
   const viewerWindow = page.getByTestId("app-window-test-md-viewer");
   await expect(viewerWindow).toBeVisible();

@@ -1014,6 +1014,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         | Block::FileTree { .. }
         | Block::MarkdownEditor { .. }
         | Block::MarkdownView { .. }
+        | Block::HtmlView { .. }
         | Block::AgentChat {}
         | Block::WebView { .. }
         | Block::Explorer { .. }

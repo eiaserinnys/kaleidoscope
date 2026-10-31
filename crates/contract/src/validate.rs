@@ -960,6 +960,43 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         Block::MarkdownView { file, document } => {
             validate_markdown_binding(file, document, false, definition, details, at);
         }
+        Block::HtmlView {
+            document,
+            selected_doc,
+            on_select_doc,
+            selected_revision,
+            on_select_revision,
+        } => {
+            validate_module_version("storage", 1, definition, details, at);
+            let entry = definition.storage.as_ref().and_then(|storage| {
+                storage
+                    .entries
+                    .iter()
+                    .find(|entry| entry.id == document.entry)
+            });
+            match entry {
+                Some(entry) if entry.kind == StorageKind::Json => {}
+                Some(_) => details.push(format!(
+                    "{at}: html_view는 json 저장소 항목만 읽을 수 있습니다: {}",
+                    document.entry
+                )),
+                None => details.push(format!(
+                    "{at}: document가 storage 선언에 없습니다: {}",
+                    document.entry
+                )),
+            }
+            for key in [
+                selected_doc.as_ref().map(|value| &value.state),
+                on_select_doc.as_ref().map(|value| &value.set_state),
+                selected_revision.as_ref().map(|value| &value.state),
+                on_select_revision.as_ref().map(|value| &value.set_state),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                validate_state_key(key, definition, details, at);
+            }
+        }
         Block::AgentChat {} => {
             if !definition.requires.modules.contains_key("agent") {
                 details.push(format!(
