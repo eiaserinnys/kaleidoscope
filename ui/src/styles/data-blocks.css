@@ -36,7 +36,12 @@
 .ks-data-section-header { display: flex; width: 100%; align-items: center; gap: var(--ks-space-2); }
 .ks-data-stack-item > .ks-data-section > .ks-data-section-header:not(.ks-data-tab-panel *),
 .ks-split-pane > .ks-data-section > .ks-data-section-header:not(.ks-data-tab-panel *) { width: calc(100% - 2 * var(--ks-space-3)); margin-inline: var(--ks-space-3); padding-block-start: var(--ks-space-2); }
-.ks-data-section-child > .ks-chart { padding-block-start: var(--ks-space-2); }
+.ks-data-section-child > .ks-chart, .ks-data-section-child > .ks-map { padding-block-start: var(--ks-space-2); }
+.ks-data-tab-panel .ks-data-section-header { padding-block-start: var(--ks-space-2); }
+.ks-data-tab-panel .ks-split-row > .ks-split-pane:first-child { padding-inline-end: var(--ks-space-3); }
+.ks-data-tab-panel .ks-split-row > .ks-split-pane:last-child { padding-inline-start: var(--ks-space-3); }
+.ks-data-tab-panel .ks-chart { padding-inline: 0; padding-block-end: var(--ks-space-3); }
+.ks-data-tab-panel .ks-properties { padding-inline: 0; padding-block: var(--ks-space-2) var(--ks-space-3); }
 .ks-data-section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 /* 머리 폭 전체를 차지하는 단추라 바깥 외곽선이 이웃 요소에 가려진다. 파일 트리의 접힌 단추처럼 안쪽에 그린다. */
 .ks-data-section-toggle { padding-block: var(--ks-space-1); border-radius: var(--ks-radius-small); }
@@ -89,6 +94,9 @@
 .ks-metric-card:not(.is-featured) .ks-metric-unit { margin-inline-start: 1px; font-size: var(--ks-type-meta); font-weight: 500; }
 .ks-metric-subvalue { overflow: hidden; color: var(--ks-color-muted); font-size: var(--ks-type-meta); line-height: var(--ks-line-body); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .ks-metric-card.tone-muted .ks-metric-value { color: var(--ks-color-muted); }
+.ks-metric-card.tone-positive .ks-metric-value { color: var(--ks-color-share); }
+.ks-metric-card.tone-warning .ks-metric-value { color: color-mix(in srgb, var(--ks-color-danger) 65%, var(--ks-color-muted)); }
+.ks-metric-card.tone-negative .ks-metric-value { color: var(--ks-color-danger); }
 .ks-metric-card.tone-error { border-color: color-mix(in srgb, var(--ks-color-danger) 40%, var(--ks-color-border)); background: var(--ks-color-danger-surface); }
 .ks-metric-card.tone-error .ks-metric-value { color: var(--ks-color-danger); }
 @container (max-width: 319px) { .ks-metrics:not(.is-single) .ks-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -140,17 +148,18 @@
 .ks-chart-x-axis span { position: absolute; white-space: nowrap; }
 .ks-chart-accessible { position: absolute; width: var(--ks-line-width); height: var(--ks-line-width); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-.ks-map { display: flex; min-width: 0; flex-direction: column; gap: var(--ks-space-2); padding: var(--ks-space-2) var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); }
-.ks-map-compact { height: 180px; }
-.ks-map-medium { height: 256px; }
-.ks-map-tall { height: 340px; }
+.ks-map { width: 100%; height: 100%; min-width: 0; min-height: 0; padding: var(--ks-space-3); }
+.ks-data-stack.gap-none > .ks-data-stack-item + .ks-data-stack-item > .ks-map { padding-block-start: 0; }
+.ks-map-frame { display: flex; width: 100%; height: 100%; min-height: var(--ks-pane-min-size); flex-direction: column; gap: var(--ks-space-2); padding: var(--ks-space-2) var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); }
+.ks-map.is-medium .ks-map-frame { min-height: calc(var(--ks-pane-min-size) + var(--ks-space-6) * 2); }
+.ks-map.is-tall .ks-map-frame { min-height: calc(var(--ks-pane-min-size) + var(--ks-space-6) * 4); }
 .ks-map-readout { display: flex; min-width: 0; min-height: calc(var(--ks-type-body) * var(--ks-line-body)); align-items: baseline; justify-content: space-between; gap: var(--ks-space-2); font-size: var(--ks-type-meta); }
 .ks-map-readout-main, .ks-map-readout-meta { display: flex; min-width: 0; align-items: center; gap: var(--ks-space-2); overflow: hidden; white-space: nowrap; }
 .ks-map-readout-main strong, .ks-map-readout-main > span:not(.ks-map-swatch) { overflow: hidden; text-overflow: ellipsis; }
 .ks-map-readout-main > span:not(.ks-map-swatch), .ks-map-readout-meta { color: var(--ks-color-muted); }
 .ks-map-readout-meta { font-family: var(--ks-font-code); font-variant-numeric: tabular-nums; }
 .ks-map-swatch { flex: none; width: var(--ks-space-2); height: var(--ks-space-2); border-radius: 50%; background: currentColor; }
-.ks-map-canvas { min-width: 0; min-height: 0; flex: 1; }
+.ks-map-canvas { width: 100%; aspect-ratio: 2 / 1; min-width: 0; min-height: 0; border-radius: var(--ks-radius-small); overflow: hidden; background: var(--ks-color-background); }
 .ks-map-svg { display: block; width: 100%; height: 100%; }
 .ks-map-ocean { fill: var(--ks-color-background); }
 .ks-map-graticule, .ks-map-equator { stroke: var(--ks-color-border); stroke-width: 1; }
@@ -166,9 +175,7 @@
 .ks-map-marker { fill: currentColor; stroke: var(--ks-color-surface); stroke-width: 1.5; }
 .ks-map-marker-group[aria-pressed="true"] .ks-map-marker { stroke-width: 2.5; }
 .ks-map-marker-ring { fill: none; stroke: currentColor; stroke-width: 1.5; opacity: .55; }
-.ks-split-row:has(.ks-map-compact) .ks-table-scroll { max-height: 180px; }
-.ks-split-row:has(.ks-map-medium) .ks-table-scroll { max-height: 256px; }
-.ks-split-row:has(.ks-map-tall) .ks-table-scroll { max-height: 340px; }
+.ks-split-row:has(.ks-map) > .ks-split-pane > .ks-data-section > .ks-data-section-child > .ks-table-scroll { padding-block-start: var(--ks-space-2); max-height: calc(var(--ks-pane-min-size) * 2 + var(--ks-space-6) * 2); }
 .ks-data-text.is-meta { font-variant-numeric: tabular-nums; }
 .ks-data-stack-item > .ks-data-text { padding-inline: var(--ks-space-3); padding-block-end: var(--ks-space-3); }
 .ks-data-text .ks-markdown-text { color: inherit; font-size: inherit; line-height: inherit; }

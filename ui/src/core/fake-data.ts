@@ -21,7 +21,7 @@ function actionSlots(block: Block, pointer = "/ui"): Set<string> {
   const add = (field: string, present = true) => { if (present) slots.add(`${pointer}/${field}`); };
   switch (block.type) {
     case "keypad": add("on_press"); break;
-    case "chart": case "list": case "tree": case "table": case "feed": add("on_select", block.on_select !== undefined); break;
+    case "map": case "chart": case "list": case "tree": case "table": case "feed": add("on_select", block.on_select !== undefined); break;
     case "input": add("on_change"); add("on_submit", block.on_submit !== undefined); break;
     case "select": case "toggle": add("on_change"); break;
     case "button": add("on_click"); break;
@@ -48,6 +48,7 @@ function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]
     case "metrics": add("items", block.items); break;
     case "keypad": add("buttons", block.buttons); break;
     case "chart": add("series", block.series); break;
+    case "map": add("points", block.points); break;
   }
   return slots.concat(childBlocks(block, pointer).flatMap(([path, child]) => expressionSlots(child, path)));
 }

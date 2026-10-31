@@ -27,13 +27,16 @@ it("지점을 고르고 창 상태의 선택을 지도에 반영한다", async (
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a" })));
 });
 
-it("유효한 지점만 표시하고 선택이 null이면 첫 지점을 고른다", async () => {
-  const ui = { type: "map", points: [{ key: "first", lat: 0, lng: 0 }, { key: "null", lat: 20, lng: 30 }, { key: "bad", lat: 91, lng: 0 }, { key: "", lat: 0, lng: 0 }], selected: { state: "selected" } } as unknown as Block;
+it("유효한 지점만 표시하고 선택이 null이면 선택 표시 없이 클릭을 받는다", async () => {
+  const ui = { type: "map", points: [{ key: "first", lat: 0, lng: 0 }, { key: "null", lat: 20, lng: 30 }, { key: "bad", lat: 91, lng: 0 }, { key: "", lat: 0, lng: 0 }], selected: { state: "selected" }, on_select: { set_state: "selected" } } as unknown as Block;
   const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 10, modules: {} }, permissions: [], state: { selected: null }, ui };
   const seed = makeTestSeed({ definitions: [definition] });
   seed.snapshot.shared.windows[0].state = { selected: null };
   const { container } = render(<AppWindowContent store={createShellStore(createFakeTransport(seed))} windowId="viewer-window" />);
   const first = await screen.findByRole("button", { name: /first/ });
-  expect(first.getAttribute("aria-pressed")).toBe("true");
+  expect(first.getAttribute("aria-pressed")).toBe("false");
   expect(container.querySelectorAll(".ks-map-marker-group")).toHaveLength(2);
+  expect(container.querySelector(".ks-map-marker-ring")).toBeNull();
+  fireEvent.click(first);
+  await waitFor(() => expect(first.getAttribute("aria-pressed")).toBe("true"));
 });

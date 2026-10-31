@@ -6,7 +6,7 @@ import { DataState } from "../components/data-state";
 import { useBinding, useWindowData } from "../data/window-data";
 import { useShareDescriber } from "../share/visible";
 import type { BlockContext } from "./block-context";
-import { asArray, isObject } from "./data-view-common";
+import { asArray, isObject, NoItems } from "./data-view-common";
 import { WORLD_LAND } from "./world-land";
 
 type MapBlockType = Extract<Block, { type: "map" }>;
@@ -40,9 +40,10 @@ function MapReady({ block, context, pointer, value }: { block: MapBlockType; con
   const [index, setIndex] = useState(Math.max(0, selectedIndex));
   useEffect(() => { setIndex(Math.max(0, selectedIndex)); }, [selectedIndex, selectedKey, points]);
   const activeIndex = Math.min(index, points.length - 1);
-  const active = points[activeIndex];
+  const displayIndex = selectedIndex >= 0 ? selectedIndex : activeIndex;
+  const active = points[displayIndex];
   useShareDescriber(root, () => ({ text: `[지도, 지점 ${points.length}개${active ? `, 선택: ${active.label ?? active.key} (${coord(active.lat, active.lng)})` : ""}]\n${points.slice(0, 10).map((p) => `${p.label ?? p.key} · ${coord(p.lat, p.lng)}`).join("\n")}`, visual: true }));
-  if (!points.length) return <div className="ks-block-state ks-block-empty">표시할 지점이 없습니다.</div>;
+  if (!points.length) return <NoItems />;
   const sizes = points.map((p) => p.size).filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0);
   const min = Math.min(...sizes), max = Math.max(...sizes);
   const radius = (point: Point) => typeof point.size === "number" && Number.isFinite(point.size) && point.size >= 0 && max > min ? 4.5 + (point.size - min) / (max - min) * 6 : 6;
@@ -57,11 +58,12 @@ function MapReady({ block, context, pointer, value }: { block: MapBlockType; con
     event.preventDefault(); select(next);
   };
   const tone = (point: Point) => tones.includes(point.tone as typeof tones[number]) ? point.tone : "default";
-  const ordered = points.map((point, n) => ({ point, n })).filter(({ n }) => n !== activeIndex).concat([{ point: active, n: activeIndex }]);
-  return <div ref={root} className={`ks-map ks-map-${block.height ?? "medium"}`} role="region" aria-label="세계 지도" tabIndex={0} onKeyDown={keyDown}>
+  const ordered = points.map((point, n) => ({ point, n })).filter(({ n }) => n !== displayIndex).concat([{ point: active, n: displayIndex }]);
+  return <div ref={root} className={`ks-map is-${block.height ?? "medium"}`}>
+    <div className="ks-map-frame" role="region" aria-label="세계 지도" tabIndex={0} onKeyDown={keyDown}>
     <div className="ks-map-readout">
       <div className="ks-map-readout-main"><span className={`ks-map-swatch ks-map-tone-${tone(active)}`} /><strong>{active.label ?? active.key}</strong>{active.sublabel && <span>{active.sublabel}</span>}{isBadge(active.badge) && <Badge value={active.badge} />}</div>
-      <div className="ks-map-readout-meta"><span>{coord(active.lat, active.lng)}</span><span>{points.length}개 지점</span></div>
+      <div className="ks-map-readout-meta"><span>{coord(active.lat, active.lng)}</span></div>
     </div>
     <div className="ks-map-canvas"><svg className="ks-map-svg" viewBox="0 0 720 360" preserveAspectRatio="xMidYMid meet">
       <rect className="ks-map-ocean" width="720" height="360" />
@@ -71,11 +73,12 @@ function MapReady({ block, context, pointer, value }: { block: MapBlockType; con
       {WORLD_LAND.map((path, n) => <path className="ks-map-land" key={n} d={path} fillRule="evenodd" />)}
       <line className="ks-map-crosshair" x1="0" x2="720" y1={yOf(active.lat)} y2={yOf(active.lat)} />
       <line className="ks-map-crosshair" x1={xOf(active.lng)} x2={xOf(active.lng)} y1="0" y2="360" />
-      {ordered.map(({ point, n }) => <g className={`ks-map-marker-group ks-map-tone-${tone(point)}`} key={point.key} data-key={point.key} role="button" aria-label={`${point.label ?? point.key} · ${coord(point.lat, point.lng)}`} aria-pressed={n === activeIndex} onClick={() => select(n)}>
+      {ordered.map(({ point, n }) => <g className={`ks-map-marker-group ks-map-tone-${tone(point)}`} key={point.key} data-key={point.key} role="button" aria-label={`${point.label ?? point.key} · ${coord(point.lat, point.lng)}`} aria-pressed={block.selected ? n === selectedIndex : n === activeIndex} onClick={() => select(n)}>
         <title>{point.label ?? point.key} · {coord(point.lat, point.lng)}</title>
-        {n === activeIndex && <circle className="ks-map-marker-ring" cx={xOf(point.lng)} cy={yOf(point.lat)} r={radius(point) + 5} />}
+        {(block.selected ? n === selectedIndex : n === activeIndex) && <circle className="ks-map-marker-ring" cx={xOf(point.lng)} cy={yOf(point.lat)} r={radius(point) + 5} />}
         <circle className="ks-map-marker" cx={xOf(point.lng)} cy={yOf(point.lat)} r={radius(point)} />
       </g>)}
     </svg></div>
+    </div>
   </div>;
 }
