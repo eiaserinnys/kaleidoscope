@@ -153,12 +153,14 @@
 .ks-map-frame { display: flex; width: 100%; height: 100%; min-height: var(--ks-pane-min-size); flex-direction: column; gap: var(--ks-space-2); padding: var(--ks-space-2) var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); }
 .ks-map.is-medium .ks-map-frame { min-height: calc(var(--ks-pane-min-size) + var(--ks-space-6) * 2); }
 .ks-map.is-tall .ks-map-frame { min-height: calc(var(--ks-pane-min-size) + var(--ks-space-6) * 4); }
-.ks-map-readout { display: flex; min-width: 0; min-height: calc(var(--ks-type-body) * var(--ks-line-body)); align-items: center; justify-content: space-between; gap: var(--ks-space-2); font-size: var(--ks-type-meta); }
+.ks-map-readout { display: flex; min-width: 0; min-height: calc(var(--ks-type-body) * var(--ks-line-body)); flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ks-space-2); font-size: var(--ks-type-meta); }
 .ks-map-readout-main, .ks-map-readout-meta { display: flex; min-width: 0; align-items: center; gap: var(--ks-space-2); overflow: hidden; white-space: nowrap; }
+.ks-map-readout-main { flex: 1 1 auto; }
 .ks-map-readout-main strong, .ks-map-readout-main > span:not(.ks-map-swatch) { overflow: hidden; text-overflow: ellipsis; }
 .ks-map-readout-main > span:not(.ks-map-swatch), .ks-map-readout-meta { color: var(--ks-color-muted); }
-.ks-map-readout-meta { flex: none; font-family: var(--ks-font-code); font-variant-numeric: tabular-nums; }
-.ks-map-readout-meta .ks-data-segmented { flex: none; font-family: var(--ks-font-family); }
+.ks-map-readout-meta { max-width: 100%; flex: 0 1 auto; flex-wrap: wrap; overflow: visible; font-family: var(--ks-font-code); font-variant-numeric: tabular-nums; }
+.ks-map-readout-meta > span { white-space: normal; }
+.ks-map-readout-meta .ks-data-segmented { max-width: 100%; flex-wrap: wrap; font-family: var(--ks-font-family); }
 .ks-map-readout-meta .ks-data-segmented > .ks-button + .ks-button { margin-inline-start: calc(-1 * var(--ks-line-width)); }
 .ks-map-readout-meta .ks-data-segmented > .ks-button:focus-visible, .ks-map-readout-meta .ks-data-segmented > .ks-button[aria-pressed="true"] { position: relative; z-index: 1; }
 .ks-map-swatch { flex: none; width: var(--ks-space-2); height: var(--ks-space-2); border-radius: 50%; background: currentColor; }
