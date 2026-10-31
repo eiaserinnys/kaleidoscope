@@ -126,15 +126,49 @@ impl Runtime {
         self.plan_source_at(name, &self.state)
     }
     pub(super) fn plan_source_at(&self, name: &str, state: &BTreeMap<String, Value>) -> SourcePlan {
-        if self.source_storage_problem(name).is_some() {
+        if self.source_storage_problem(name).is_some() || self.source_data_problem(name).is_some() {
             return SourcePlan::Idle;
         }
         let (storage, meta) = self.storage_values();
         self.compiled
-            .plan_source_with_storage(name, state, &storage, &meta)
+            .plan_source_with_data_and_storage(name, state, &self.data, &storage, &meta)
+    }
+    pub(super) fn source_data_problem(&self, name: &str) -> Option<SourceStatus> {
+        let mut result = None;
+        let has_value = self.data.contains_key(name);
+        for dep in self
+            .compiled
+            .source_dependencies(name)
+            .iter()
+            .filter(|dep| !self.data.contains_key(*dep))
+        {
+            let status = self.sources.get(dep).map(|s| &s.status);
+            let candidate = match status {
+                Some(SourceStatus::LoginRequired { permission }) => (
+                    3,
+                    SourceStatus::LoginRequired {
+                        permission: permission.clone(),
+                    },
+                ),
+                Some(SourceStatus::Failed { message, .. }) => (
+                    2,
+                    SourceStatus::Failed {
+                        message: message.clone(),
+                        has_value,
+                    },
+                ),
+                Some(SourceStatus::Loading { .. }) => (1, SourceStatus::Loading { has_value }),
+                _ => (0, SourceStatus::Idle {}),
+            };
+            if result.as_ref().is_none_or(|(rank, _)| *rank < candidate.0) {
+                result = Some(candidate);
+            }
+        }
+        result.map(|(_, status)| status)
     }
     pub(super) fn apply_source_storage_status(&mut self, name: &str) {
         let problem = self.source_storage_problem(name);
+        let data_problem = self.source_data_problem(name);
         let source = self.sources.get_mut(name).unwrap();
         match problem {
             Some(BindingValue::Loading {}) => {
@@ -146,6 +180,7 @@ impl Runtime {
                     has_value: false,
                 }
             }
+            None if data_problem.is_some() => source.status = data_problem.unwrap(),
             None if matches!(source.plan, SourcePlan::Idle) => {
                 source.status = SourceStatus::Idle {}
             }
@@ -191,7 +226,7 @@ fn replan(
 ) -> Vec<Job> {
     let mut pending = Vec::new();
     let mut changed_sources = BTreeSet::new();
-    for name in runtime.sources.keys().cloned().collect::<Vec<_>>() {
+    for name in runtime.compiled.source_order().to_vec() {
         let previous = runtime.sources[&name].status.clone();
         let plan = runtime.plan_source(&name);
         let changed = set_plan(&inner.data_runtimes, runtime, &name, plan);

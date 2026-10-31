@@ -85,6 +85,15 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         modules: &[("assets", 1), ("http", 1)],
         assets: BUNDLED_ASSET_KEYS,
     },
+    BuiltinIdentity {
+        id: "market",
+        name: "시세와 환율",
+        version: 1,
+        updated_at: "2026-10-31T00:00:00Z",
+        blocks: 9,
+        modules: &[("http", 1)],
+        assets: &[],
+    },
 ];
 
 pub fn builtin_identity(id: &str) -> Option<&'static BuiltinIdentity> {

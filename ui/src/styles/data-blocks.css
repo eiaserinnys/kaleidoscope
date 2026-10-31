@@ -2,6 +2,7 @@
 .ks-data-window-body { flex: 1 1 auto; min-width: 0; min-height: 0; }
 .ks-data-stack { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; }
 .ks-data-stack.is-column { flex-direction: column; }
+.ks-data-stack.is-column:has(> .ks-data-stack-item.is-fill > .ks-split) { overflow-y: auto; }
 .ks-data-stack.is-row { flex-direction: row; }
 .ks-data-stack.gap-small { gap: var(--ks-space-2); }
 .ks-data-stack.gap-medium { gap: var(--ks-space-3); }
@@ -9,8 +10,10 @@
 .ks-data-stack-item { flex: 0 0 auto; min-width: 0; min-height: 0; }
 .ks-data-stack-item:empty { display: none; }
 .ks-data-stack-item.is-fill { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; }
+.ks-data-stack-item.is-fill:has(> .ks-split) { min-height: var(--ks-pane-min-size); }
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column { height: auto; min-height: 100%; }
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column > .ks-data-stack-item.is-fill { flex: 0 0 auto; overflow: visible; }
+.ks-data-stack-item.is-fill > .ks-data-tabs { min-height: calc(var(--ks-pane-min-size) * 2); }
 .ks-data-stack-item:not(.is-fill) > .ks-data-stack { height: auto; }
 .ks-data-stack-item:not(.is-fill) > .ks-data-view { height: auto; overflow: visible; }
 .ks-data-tabs { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
@@ -27,8 +30,13 @@
 .ks-data-toolbar-item.is-input { flex: 1 1 auto; min-width: calc(var(--ks-space-6) * 3); }
 .ks-data-toolbar .ks-button, .ks-data-toolbar .ks-data-segmented, .ks-data-toolbar .ks-data-toggle { flex-shrink: 0; white-space: nowrap; }
 .ks-data-section { min-width: 0; min-height: 0; }
+.ks-split-pane > .ks-data-section { display: flex; height: 100%; flex-direction: column; }
+.ks-split-pane > .ks-data-section > .ks-data-section-child { flex: 1 1 auto; min-height: 0; }
 .ks-data-section-child > .ks-data-stack { height: auto; }
 .ks-data-section-header { display: flex; width: 100%; align-items: center; gap: var(--ks-space-2); }
+.ks-data-stack-item > .ks-data-section > .ks-data-section-header:not(.ks-data-tab-panel *),
+.ks-split-pane > .ks-data-section > .ks-data-section-header:not(.ks-data-tab-panel *) { width: calc(100% - 2 * var(--ks-space-3)); margin-inline: var(--ks-space-3); padding-block-start: var(--ks-space-2); }
+.ks-data-section-child > .ks-chart { padding-block-start: var(--ks-space-2); }
 .ks-data-section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 /* 머리 폭 전체를 차지하는 단추라 바깥 외곽선이 이웃 요소에 가려진다. 파일 트리의 접힌 단추처럼 안쪽에 그린다. */
 .ks-data-section-toggle { padding-block: var(--ks-space-1); border-radius: var(--ks-radius-small); }
@@ -73,10 +81,11 @@
 .ks-metric-card.is-featured .ks-metric-media { flex-basis: calc(var(--ks-space-6) + var(--ks-space-4)); width: calc(var(--ks-space-6) + var(--ks-space-4)); height: calc(var(--ks-space-6) + var(--ks-space-4)); }
 .ks-metric-content { min-width: 0; max-width: 100%; }
 .ks-metric-label { width: 100%; min-height: calc(var(--ks-type-meta) * var(--ks-line-body)); overflow: hidden; color: var(--ks-color-muted); font-size: var(--ks-type-meta); line-height: var(--ks-line-body); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
-.ks-metric-value-row { display: flex; min-width: 0; max-width: 100%; align-items: baseline; gap: var(--ks-space-2); }
+.ks-metric-value-row { display: flex; flex-wrap: wrap; min-width: 0; max-width: 100%; align-items: baseline; gap: var(--ks-space-2); }
 .ks-metric-card.is-align-end .ks-metric-value-row { justify-content: flex-end; }
 .ks-metric-value { overflow: hidden; color: var(--ks-color-text); font-size: var(--ks-type-section); font-weight: 600; line-height: var(--ks-line-body); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
 .ks-metric-card.is-featured .ks-metric-value { font-size: var(--ks-type-page); }
+.ks-metric-card.is-featured .ks-metric-unit { margin-inline-start: var(--ks-space-1); color: var(--ks-color-muted); font-size: var(--ks-type-title); font-weight: 500; }
 .ks-metric-card:not(.is-featured) .ks-metric-unit { margin-inline-start: 1px; font-size: var(--ks-type-meta); font-weight: 500; }
 .ks-metric-subvalue { overflow: hidden; color: var(--ks-color-muted); font-size: var(--ks-type-meta); line-height: var(--ks-line-body); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .ks-metric-card.tone-muted .ks-metric-value { color: var(--ks-color-muted); }
@@ -121,6 +130,10 @@
 .ks-chart-series.is-series-2 .ks-chart-line { stroke-dasharray: 2 3; }
 .ks-chart-bar { fill: color-mix(in srgb, var(--ks-color-accent) 60%, transparent); }
 .ks-chart-bar.is-active { fill: var(--ks-color-accent); }
+.ks-chart-wick.up { stroke: var(--ks-color-share); }
+.ks-chart-wick.down { stroke: var(--ks-color-danger); }
+.ks-chart-candle.up { fill: var(--ks-color-share); }
+.ks-chart-candle.down { fill: var(--ks-color-danger); }
 .ks-chart-guide { stroke: var(--ks-color-border); stroke-width: var(--ks-line-width); }
 .ks-chart-dot { position: absolute; width: var(--ks-space-2); height: var(--ks-space-2); border: var(--ks-focus-width) solid var(--ks-color-surface); border-radius: 50%; background: var(--ks-color-accent); transform: translate(-50%, -50%); pointer-events: none; }
 .ks-chart-x-axis { position: relative; height: calc(var(--ks-type-meta) * var(--ks-line-body)); flex: 0 0 auto; color: var(--ks-color-muted); font-size: var(--ks-type-meta); font-variant-numeric: tabular-nums; }

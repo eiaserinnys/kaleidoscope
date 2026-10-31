@@ -36,6 +36,6 @@ export function MetricsBlock({ block, pointer }: { block: Extract<Block, { type:
     </div>;
   };
   return <div className="ks-metrics-container"><div className={`ks-metrics${items.length === 1 || block.columns === 1 ? " is-single" : ""}`} style={{ "--ks-metrics-columns": block.columns } as CSSProperties}>
-    {groups.map((group, index) => group.featured ? tile(group.items[0], index) : <div className="ks-metrics-grid" key={index}>{group.items.map(tile)}</div>)}
+    {groups.map((group, index) => group.featured ? tile(group.items[0], index) : <div className="ks-metrics-grid" key={index} style={block.columns ? { "--ks-metrics-columns": Math.min(block.columns, group.items.length) } as CSSProperties : undefined}>{group.items.map(tile)}</div>)}
   </div></div>;
 }

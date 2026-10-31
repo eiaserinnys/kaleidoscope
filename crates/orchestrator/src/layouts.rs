@@ -358,7 +358,7 @@ impl AppState {
                 return None;
             }
         }
-        let event = match event {
+        let mut event = match event {
             DeviceEvent::ConnectionsSnapshot { .. } => DeviceEvent::ConnectionsSnapshot {
                 connections: self.connection_snapshot_for_device(device_id).ok()?,
             },
@@ -368,6 +368,16 @@ impl AppState {
             if !self.device_can_render_app(device_id, &app.version.definition) {
                 return None;
             }
+        }
+        if let DeviceEvent::AppPublished { app, .. } = &mut event {
+            let support = self
+                .0
+                .device_support
+                .lock()
+                .ok()
+                .and_then(|devices| devices.get(device_id).cloned())
+                .flatten();
+            *app = app_for_client(app.clone(), support.as_ref());
         }
         if let DeviceEvent::AppOpen { app_id, .. } = &event {
             if let Some(identity) = kaleidoscope_contract::builtin::builtin_identity(app_id) {

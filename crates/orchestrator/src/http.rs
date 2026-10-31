@@ -21,6 +21,7 @@ pub fn router(state: AppState) -> Router {
         .route_layer(middleware::from_fn_with_state(state.clone(), mcp_auth));
     let device = Router::new()
         .route("/apps", post(device_upload))
+        .route("/apps/{app_id}/worker", post(super::worker::device_invoke))
         .route("/assets/{id}/{version}", get(super::assets::device_get))
         .route("/app-values/{app_id}", get(super::app_values::list))
         .route(

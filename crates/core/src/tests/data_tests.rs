@@ -1,6 +1,97 @@
 use super::*;
 use kaleidoscope_contract::data::{BindingValue, SourceStatus};
 
+#[test]
+fn source_pipeline_fetches_in_order_and_replans_when_state_changes() {
+    let temp = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    for (name, contents) in [
+        ("a.json", r#"{"next":"b.json"}"#),
+        ("b.json", r#"{"next":"c.json"}"#),
+        ("c.json", r#"{"result":"첫째"}"#),
+        ("other.json", r#"{"next":"d.json"}"#),
+        ("d.json", r#"{"next":"e.json"}"#),
+        ("e.json", r#"{"result":"둘째"}"#),
+    ] {
+        fs::write(folder.path().join(name), contents).unwrap();
+    }
+    let definition = json!({
+        "id":"pipeline", "name":"연쇄", "requires":{"blocks":4,"modules":{"files":1}},
+        "permissions":[{"module":"files","id":"docs","access":"read","label":"폴더"}],
+        "state":{"path":"a.json"},
+        "sources":{
+            "z":{"kind":"file","permission":"docs","path":{"state":"path"}},
+            "b":{"kind":"file","permission":"docs","path":{"expr":"$data.z.next"}},
+            "a":{"kind":"file","permission":"docs","path":{"expr":"$data.b.next"}}
+        },
+        "ui":{"type":"text","value":{"expr":"$data.a.result"}}
+    })
+    .to_string();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(folder.path().to_path_buf()));
+    let core = open_core(temp.path(), vec![definition], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "pipeline");
+    pick_folder(&core, &window);
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+    })
+    .unwrap();
+    wait_until(|| {
+        crate::data_runtime::binding_value(&core.inner, &window, "/ui/value")
+            == Some(BindingValue::Ready {
+                value: json!("첫째"),
+            })
+    });
+    core.handle(CoreRequest::WindowSetState {
+        window_id: window.clone(),
+        state: BTreeMap::from([("path".into(), json!("other.json"))]),
+    })
+    .unwrap();
+    wait_until(|| {
+        crate::data_runtime::binding_value(&core.inner, &window, "/ui/value")
+            == Some(BindingValue::Ready {
+                value: json!("둘째"),
+            })
+    });
+    fs::write(folder.path().join("other.json"), r#"{"next":"f.json"}"#).unwrap();
+    fs::write(folder.path().join("f.json"), r#"{"next":"g.json"}"#).unwrap();
+    fs::write(folder.path().join("g.json"), r#"{"result":"새 값"}"#).unwrap();
+    crate::data_runtime::refresh(&core.inner, &window, &["z".into()], true).unwrap();
+    assert_eq!(
+        crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"),
+        Some(BindingValue::Ready {
+            value: json!("새 값")
+        })
+    );
+    core.handle(CoreRequest::WindowSetState {
+        window_id: window.clone(),
+        state: BTreeMap::from([("path".into(), json!("missing.json"))]),
+    })
+    .unwrap();
+    wait_until(|| {
+        matches!(
+            crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"),
+            Some(BindingValue::Failed { .. })
+        )
+    });
+    let (sender, receiver) = mpsc::channel();
+    core.subscribe(Box::new(move |event| { let _ = sender.send(event.clone()); }));
+    fs::write(folder.path().join("missing.json"), r#"{"next":"f.json"}"#).unwrap();
+    crate::data_runtime::refresh(&core.inner, &window, &["a".into()], true).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut loading = false;
+    while Instant::now() < deadline {
+        if let Ok(CoreEvent::DataUpdate { view, .. }) = receiver.recv_timeout(Duration::from_millis(100)) {
+            if matches!(view.sources.get("z"), Some(SourceStatus::Loading { .. })) {
+                loading = matches!(view.sources.get("a"), Some(SourceStatus::Loading { .. }));
+                break;
+            }
+        }
+    }
+    assert!(loading, "하위 원천의 재시도 상태");
+}
+
 fn definition() -> String {
     json!({
         "id":"data-app","name":"Data","requires":{"blocks":4,"modules":{"files":1}},

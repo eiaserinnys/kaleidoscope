@@ -190,6 +190,7 @@ pub mod data;
 pub mod local_agent;
 pub mod registry;
 pub mod validate;
+pub mod worker;
 
 use data::{Actions, Binding, SourceDecl};
 
@@ -224,7 +225,7 @@ pub const TAURI_EVENT: &str = "core-event";
 /// - 6판: 5판 + `markdown_editor`와 `markdown_view`의 `document` 바인딩, 앱 정의의 `storage`와 `agent`.
 /// - 7판: 6판 + `feed`의 `columns`, `copy`.
 /// - 8판: 7판 + 기기 로컬 ACP 대화 블록 `agent_session`.
-/// - 9판: 8판 + `metrics`, `keypad`, `chart`.
+/// - 9판: 8판 + `metrics`, `keypad`, `chart`(캔들 포함), 표의 등락률과 스파크라인.
 /// - 10판: 9판 + 저장소 HTML 문서와 코멘트를 다루는 `html_view`.
 pub const BLOCK_SET_VERSION: u32 = 10;
 /// 이 쉘이 제공하는 모듈과 버전.
@@ -251,6 +252,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("local_agent", 1),
     ("assets", 1),
     ("http", 1),
+    ("worker", 1),
 ];
 
 /// 지원 범위를 알리지 않는 옛 쉘(블록 세트 3판 전)이 그릴 수 있는 블록 세트 판. 서버가 그런 기기에 보낼 앱을
@@ -669,6 +671,10 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub agent: Option<AgentProvider>,
+    /// 개인 앱 서버에서 실행할 워커.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub worker: Option<worker::WorkerDecl>,
     /// 창 안을 채우는 블록 트리의 뿌리.
     pub ui: Block,
 }
@@ -1433,6 +1439,7 @@ pub enum ChartKind {
     Line,
     Bar,
     Area,
+    Candlestick,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
@@ -1519,6 +1526,10 @@ pub enum CellFormat {
     Date,
     /// [`data::Badge`] 하나.
     Badge,
+    /// 등락률을 부호와 상승·하락 색으로 표시한다.
+    Delta,
+    /// 숫자 배열을 표 안의 추이 곡선으로 표시한다.
+    Sparkline,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
@@ -3443,6 +3454,60 @@ mod tests {
     }
 
     #[test]
+    fn source_pipeline_validation() {
+        let ui = r#"{"type":"text","value":"x"}"#;
+        let chain = r#", "sources": {
+          "c":{"kind":"request","permission":"board","path":{"expr":"'/c/' & $data.b.id"}},
+          "b":{"kind":"request","permission":"board","path":{"expr":"'/b/' & $data.a.id"}},
+          "a":{"kind":"request","permission":"board","path":"/a"}}"#;
+        validate::parse_app_definition(&with_ui(ui, chain)).unwrap();
+        rejected(
+            &with_ui(
+                ui,
+                r#", "sources":{"a":{"kind":"request","permission":"board","path":"/a"},"b":{"kind":"request","permission":"board","path":{"expr":"'/b/' & $data.a.id & $lookup($data, 'a').id"}}}"#,
+            ),
+            "다른 원천은 $data.이름 꼴로만",
+        );
+        rejected(
+            &with_ui(
+                ui,
+                r#", "sources":{"a":{"kind":"request","permission":"board","path":"/a"},"b":{"kind":"request","permission":"board","path":{"expr":"'/b/' & $data.a.id & $data['a'].id"}}}"#,
+            ),
+            "다른 원천은 $data.이름 꼴로만",
+        );
+        for sources in [
+            r#", "sources":{"a":{"kind":"request","permission":"board","path":{"expr":"'/a/' & $data.a.id"}}}"#,
+            r#", "sources":{"a":{"kind":"request","permission":"board","path":{"expr":"'/a/' & $data.b.id"}},"b":{"kind":"request","permission":"board","path":{"expr":"'/b/' & $data.a.id"}}}"#,
+            r#", "sources":{"a":{"kind":"request","permission":"board","path":{"expr":"'/a/' & $data.b.id"}},"b":{"kind":"request","permission":"board","path":{"expr":"'/b/' & $data.c.id"}},"c":{"kind":"request","permission":"board","path":{"expr":"'/c/' & $data.a.id"}}}"#,
+        ] {
+            rejected(&with_ui(ui, sources), "원천 참조가 순환합니다");
+        }
+        rejected(
+            &with_ui(
+                ui,
+                r#", "sources":{"a":{"kind":"request","permission":"board","path":{"expr":"'/a/' & $data.missing.id"}}}"#,
+            ),
+            "없는 원천",
+        );
+        for variable in ["$event", "$item", "$data_meta"] {
+            let sources = format!(
+                r#", "sources":{{"a":{{"kind":"request","permission":"board","path":{{"expr":"'/a/' & {variable}"}}}}}}"#
+            );
+            rejected(
+                &with_ui(ui, &sources),
+                "원천의 값 자리 식은 $state, $storage, $data만",
+            );
+        }
+        rejected(
+            &with_ui(
+                ui,
+                r#", "sources":{"a":{"kind":"request","permission":"board","path":{"expr":"'/a/' & $data"}}}"#,
+            ),
+            "다른 원천은 $data.이름 꼴로만",
+        );
+    }
+
+    #[test]
     fn block_set_four_rules() {
         let ok = with_ui(
             r#"{"type":"list","items":{"expr":"$data.cards.items"}}"#,
@@ -3466,7 +3531,7 @@ mod tests {
                 r#"{"type":"text","value":"x"}"#,
                 r#","sources":{"cards":{"kind":"request","permission":"board","path":{"expr":"'/api/' & $data.x"}}}"#,
             ),
-            "원천의 값 자리 식은 $state와 $storage만",
+            "없는 원천",
         );
         rejected(
             &with_ui(r#"{"type":"text","value":{"state":1}}"#, ""),

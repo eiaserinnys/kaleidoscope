@@ -83,6 +83,16 @@ it("keeps an input draft while focused and sends only after the debounce", async
   await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "data.act", window_id: "editor-window", pointer: "/ui/children/1/on_change", event: "초안" }));
 });
 
+it("does not overwrite a changed value when an untouched focused input blurs", async () => {
+  const { store, spy } = setup();
+  const input = await screen.findByPlaceholderText("입력") as HTMLInputElement;
+  fireEvent.focus(input);
+  await act(async () => { await store.call({ op: "window.set_state", window_id: "editor-window", state: { query: "새 값", choice: "a", enabled: false } }); });
+  fireEvent.blur(input);
+  await waitFor(() => expect(input.value).toBe("새 값"));
+  expect(spy.mock.calls.some(([request]) => request.op === "data.act" && request.pointer.endsWith("/on_change"))).toBe(false);
+});
+
 it("shows action failures and stale source failures with retry and dismissal", async () => {
   const { transport, spy } = setup();
   await screen.findByPlaceholderText("입력");

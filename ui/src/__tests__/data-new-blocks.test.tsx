@@ -11,7 +11,7 @@ import calculatorJson from "../../../apps/calculator.json";
 
 beforeEach(() => {
   mockVirtualLayout();
-  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   vi.spyOn(window, "open").mockImplementation(() => null);
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -25,6 +25,45 @@ function setup(ui: Block, state: AppDefinition["state"] = {}) {
   const rendered = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   return { calls, ...rendered };
 }
+
+it("renders and selects candles with their complete values", async () => {
+  const { calls, container } = setup({ type: "chart", kind: "candlestick", on_select: { set_state: "choice" }, series: [{ key: "s", name: "시세", points: [
+    { x: "a", open: 1, high: 4, low: 0, close: 3 }, { x: "b", open: 3, high: 4, low: 0, close: 1 },
+  ] }] }, { choice: null });
+  const chart = await screen.findByRole("slider", { name: "차트 시점" });
+  expect(container.querySelectorAll(".ks-chart-candle.up")).toHaveLength(1);
+  expect(container.querySelectorAll(".ks-chart-candle.down")).toHaveLength(1);
+  expect(container.querySelectorAll(".ks-chart-wick")).toHaveLength(2);
+  fireEvent.keyDown(chart, { key: "Home" });
+  fireEvent.keyDown(chart, { key: "Enter" });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a", item: expect.objectContaining({ open: 1, high: 4, low: 0, close: 3, y: 3 }) })));
+});
+
+it("renders signed changes and inline trends", async () => {
+  const { container } = setup({ type: "table", columns: [{ field: "change", label: "등락", format: "delta" }, { field: "trend", label: "추이", format: "sparkline" }], rows: [
+    { key: "a", change: 2.15, trend: [1, 2, 3] }, { key: "b", change: -1.04, trend: [3, 2, 1] },
+  ] });
+  expect(await screen.findByText("+2.15%")).toBeTruthy();
+  expect(screen.getByText("-1.04%")).toBeTruthy();
+  expect(container.querySelectorAll(".ks-table-sparkline polyline")).toHaveLength(2);
+  fireEvent.click(screen.getByRole("button", { name: "등락" }));
+  const rows = container.querySelectorAll(".ks-table-row");
+  expect(rows[0].textContent).toContain("-1.04%");
+  fireEvent.click(screen.getByRole("button", { name: "추이" }));
+  expect(container.querySelectorAll(".ks-table-row")[0].textContent).toContain("-1.04%");
+});
+
+it("keeps the first and last labels on a long candle chart", async () => {
+  const points = Array.from({ length: 30 }, (_, index) => ({ x: `날짜${index}`, open: 1, high: 4, low: 0, close: 3 }));
+  const { container } = setup({ type: "chart", kind: "candlestick", series: [{ key: "s", name: "시세", points }] });
+  await screen.findByRole("slider", { name: "차트 시점" });
+  const labels = [...container.querySelectorAll(".ks-chart-x-axis span")].map((el) => el.textContent);
+  expect(labels[0]).toBe("날짜0");
+  expect(labels.at(-1)).toBe("날짜29");
+  expect(labels.length).toBeLessThanOrEqual(7);
+  expect(labels.length).toBeGreaterThan(2);
+  expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("날짜29");
+});
 
 it("renders a featured metric with a badge, an asset, and an error tone", async () => {
   const { container } = setup({ type: "metrics", columns: 1, items: [{ label: "결과", value: "오류", tone: "error", align: "end", image: { asset: "builtin-icon" }, badge: "확인" }] });
@@ -118,6 +157,7 @@ it("moves the chart readout, selects a point, and breaks lines at missing values
   ] }, { choice: null });
   const chart = await screen.findByRole("slider", { name: "차트 시점" });
   expect(container.querySelectorAll(".ks-chart-line")).toHaveLength(2);
+  fireEvent.keyDown(chart, { key: "Home" });
   fireEvent.keyDown(chart, { key: "ArrowRight" });
   expect(container.querySelector(".ks-chart-readout")?.textContent).toContain("11:00");
   expect(container.querySelector(".ks-chart-readout")?.textContent).toContain("강수 20%");

@@ -26,8 +26,53 @@ fn fixture() -> AppDefinition {
         ]}
     })).unwrap()
 }
+
+#[test]
+fn worker_action_evaluates_arguments_in_event_context() {
+    let mut definition = serde_json::to_value(fixture()).unwrap();
+    definition["ui"]["children"][0]["on_select"] =
+        json!([{"worker":{"action":"run","args":{"expr":"$event"}}}]);
+    let app = CompiledApp::compile(&serde_json::from_value(definition).unwrap());
+    let empty = BTreeMap::new();
+    let event = json!({"value":"선택"});
+    let item = Value::Null;
+    let env = Env {
+        state: &empty,
+        data: &empty,
+        data_meta: &empty,
+        storage: &empty,
+        storage_meta: &empty,
+        event: &event,
+        item: &item,
+    };
+    assert_eq!(
+        app.action_step("/ui/children/0/on_select", 0, &env)
+            .unwrap(),
+        Step::Worker {
+            action: "run".into(),
+            args: Some(event.clone())
+        }
+    );
+}
 fn map(value: Value) -> BTreeMap<String, Value> {
     serde_json::from_value(value).unwrap()
+}
+
+#[test]
+fn source_pipeline_plans_in_dependency_order() {
+    let mut definition = serde_json::to_value(fixture()).unwrap();
+    definition["sources"] = json!({
+        "a": {"kind":"request","permission":"api","path":{"expr":"'/a/' & $data.b.id"}},
+        "b": {"kind":"request","permission":"api","path":{"expr":"'/b/' & $data.c.id"}},
+        "c": {"kind":"request","permission":"api","path":"/c"}
+    });
+    let app = CompiledApp::compile(&serde_json::from_value(definition).unwrap());
+    assert_eq!(app.source_order(), ["c", "b", "a"]);
+    assert_eq!(app.source_dependencies("a"), ["b"]);
+    let data = map(json!({"b":{"id":"42"}}));
+    assert!(
+        matches!(app.plan_source_with_data_and_storage("a", &BTreeMap::new(), &data, &BTreeMap::new(), &BTreeMap::new()), SourcePlan::Request { path, .. } if path == "/a/42")
+    );
 }
 
 #[test]

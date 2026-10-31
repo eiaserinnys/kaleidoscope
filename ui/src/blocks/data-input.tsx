@@ -22,6 +22,7 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const composing = useRef(false);
+  const edited = useRef(false);
   const pending = useRef(0);
   const latest = useRef({ current, focused });
   const lastCurrent = useRef(current);
@@ -57,14 +58,14 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
       }
     });
   };
-  const change = (value: string) => { setDraft(value); if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => send(value), 300); };
+  const change = (value: string) => { edited.current = true; setDraft(value); if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => send(value), 300); };
   const keyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || !block.on_submit || event.nativeEvent.isComposing || composing.current || (block.multiline && !event.ctrlKey)) return;
     event.preventDefault();
     void data.act(`${pointer}/on_submit`, eventValue(draft));
   };
   const props = { className: "ks-text-input", placeholder: block.placeholder, value: draft,
-    onFocus: () => setFocused(true), onBlur: () => { setFocused(false); send(draft); },
+    onFocus: () => setFocused(true), onBlur: () => { setFocused(false); if (edited.current) { edited.current = false; send(draft); } },
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => change(event.currentTarget.value), onKeyDown: keyDown,
     onCompositionStart: () => { composing.current = true; }, onCompositionEnd: () => { composing.current = false; },
   };

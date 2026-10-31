@@ -17,10 +17,13 @@ fn builtin_apps_are_listed_and_upload_is_rejected() {
         "md-editor",
         "html-report",
         "web-browser",
+        "calculator",
+        "weather",
+        "market",
     ] {
         assert!(apps.iter().any(|app| app.id == id && app.builtin));
     }
-    assert_eq!(apps.len(), 7);
+    assert_eq!(apps.len(), 8);
     assert!(state.publish_app(EDITOR, "agent", false, None).is_err());
 }
 
@@ -61,7 +64,7 @@ fn migration_v8_adds_soft_delete_without_changing_existing_rows() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        11
+        12
     );
 }
 
@@ -758,6 +761,46 @@ async fn mcp_initialize(
     app.clone().oneshot(request).await.unwrap()
 }
 
+#[tokio::test]
+async fn mcp_worker_action_executes_and_updates_storage() {
+    let (state, account) = super::worker_tests::setup(super::worker_tests::CODE);
+    let app = router(state.clone());
+    let session = initialize_mcp_session(&app, "server-token", None)
+        .await
+        .unwrap();
+    let original = mcp_call(
+        &app,
+        "server-token",
+        None,
+        &session,
+        "get_app",
+        json!({"app_id":"worker-test"}),
+    )
+    .await;
+    let original: Value =
+        serde_json::from_str(original["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(original["definition"]["worker"]["runtime"], "python3");
+    let response = mcp_call(
+        &app,
+        "server-token",
+        None,
+        &session,
+        "invoke_app_worker",
+        json!({"app_id":"worker-test","action":"run"}),
+    )
+    .await;
+    let text = response["result"]["content"][0]["text"].as_str().unwrap();
+    let reply: Value = serde_json::from_str(text).unwrap();
+    assert_eq!(reply["updated_entries"], json!(["counter"]));
+    assert_eq!(
+        state
+            .read_app_storage(&account, "worker-test", "counter", None)
+            .unwrap()
+            .content,
+        json!(1)
+    );
+}
+
 async fn initialize_mcp_session(
     app: &Router,
     token: &str,
@@ -921,7 +964,7 @@ fn migration_upgrades_v1_without_losing_devices() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 11);
+    assert_eq!(version, 12);
     assert_eq!(
         db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -965,7 +1008,7 @@ fn migration_v7_removes_legacy_tables_and_preserves_other_data() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 11);
+    assert_eq!(version, 12);
     let old_tables: i64 = db.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('agents','agent_items')", [], |row| row.get(0)).unwrap();
     assert_eq!(old_tables, 0);
     let apps: i64 = db

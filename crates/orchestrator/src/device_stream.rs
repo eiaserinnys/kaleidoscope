@@ -56,6 +56,7 @@ impl AppState {
             apps: apps
                 .into_iter()
                 .filter(|app| renders_definition_on(supported.as_ref(), &app.version.definition))
+                .map(|app| app_for_client(app, supported.as_ref()))
                 .collect(),
             deleted: self.deleted_app_ids()?,
         };

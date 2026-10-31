@@ -136,6 +136,8 @@ fn effective_workspace_id(explicit: Option<String>, principal: &McpPrincipal) ->
 pub(super) mod app_storage_tools;
 #[path = "mcp_server_handler.rs"]
 mod server_handler;
+#[path = "mcp_worker_tools.rs"]
+mod worker_tools;
 
 #[tool_router(router = base_tool_router, vis = "pub(super)")]
 impl McpServer {
@@ -187,14 +189,14 @@ impl McpServer {
                         self.state.open_sent_to_strict_target(
                             target.as_ref(),
                             args.workspace_id.as_deref(),
-                            &row.version.definition.requires,
+                            &effective_client_requires(&row.version.definition),
                             &row.version.definition.assets,
                         )
                     } else {
                         self.state.open_sent_to(
                             target.as_ref(),
                             args.workspace_id.as_deref(),
-                            &row.version.definition.requires,
+                            &effective_client_requires(&row.version.definition),
                             &row.version.definition.assets,
                         )
                     }
@@ -220,7 +222,7 @@ impl McpServer {
                 add_unsupported_device_note(
                     &mut value,
                     self.state.unsupported_connected_devices(
-                        &row.version.definition.requires,
+                        &effective_client_requires(&row.version.definition),
                         &row.version.definition.assets,
                     ),
                 );
@@ -447,7 +449,7 @@ impl McpServer {
             self.state.app(&args.app_id, None).map(|app| {
                 app.map(|app| {
                     (
-                        app.version.definition.requires,
+                        effective_client_requires(&app.version.definition),
                         app.version.definition.assets,
                     )
                 })
@@ -774,6 +776,7 @@ impl McpServer {
     fn tool_router() -> ToolRouter<Self> {
         let mut router = Self::base_tool_router();
         router.merge(Self::app_storage_tool_router());
+        router.merge(Self::worker_tool_router());
         router
     }
 }
