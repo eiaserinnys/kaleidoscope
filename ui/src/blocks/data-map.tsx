@@ -42,7 +42,7 @@ function MapReady({ block, context, pointer, value }: { block: MapBlockType; con
   const activeIndex = Math.min(index, points.length - 1);
   const displayIndex = selectedIndex >= 0 ? selectedIndex : activeIndex;
   const active = points[displayIndex];
-  useShareDescriber(root, () => ({ text: `[지도, 지점 ${points.length}개${active ? `, 선택: ${active.label ?? active.key} (${coord(active.lat, active.lng)})` : ""}]\n${points.slice(0, 10).map((p) => `${p.label ?? p.key} · ${coord(p.lat, p.lng)}`).join("\n")}`, visual: true }));
+  useShareDescriber(root, () => ({ text: `[지도, 지점 ${points.length}개${active ? `, ${block.selected && selectedIndex < 0 ? "표시" : "선택"}: ${active.label ?? active.key} (${coord(active.lat, active.lng)})` : ""}]\n${points.slice(0, 10).map((p) => `${p.label ?? p.key} · ${coord(p.lat, p.lng)}`).join("\n")}`, visual: true }));
   if (!points.length) return <NoItems />;
   const sizes = points.map((p) => p.size).filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0);
   const min = Math.min(...sizes), max = Math.max(...sizes);

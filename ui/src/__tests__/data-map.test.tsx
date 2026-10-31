@@ -4,6 +4,7 @@ import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
+import { describeVisible } from "../share/visible";
 import { makeTestSeed, mdViewerDefinition } from "./fixtures";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -34,9 +35,14 @@ it("유효한 지점만 표시하고 선택이 null이면 선택 표시 없이 �
   seed.snapshot.shared.windows[0].state = { selected: null };
   const { container } = render(<AppWindowContent store={createShellStore(createFakeTransport(seed))} windowId="viewer-window" />);
   const first = await screen.findByRole("button", { name: /first/ });
+  const rect = { left: 0, top: 0, right: 200, bottom: 100, x: 0, y: 0, width: 200, height: 100, toJSON() {} };
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
+  const map = container.querySelector<HTMLElement>(".ks-map")!;
+  expect(describeVisible(map).text).toContain("표시: first");
   expect(first.getAttribute("aria-pressed")).toBe("false");
   expect(container.querySelectorAll(".ks-map-marker-group")).toHaveLength(2);
   expect(container.querySelector(".ks-map-marker-ring")).toBeNull();
   fireEvent.click(first);
   await waitFor(() => expect(first.getAttribute("aria-pressed")).toBe("true"));
+  expect(describeVisible(map).text).toContain("선택: first");
 });

@@ -167,4 +167,13 @@ fn filter_empty_stops_dependent_requests_and_clears_quake_views() {
             values[pointer]
         );
     }
+    for index in 0..5 {
+        let pointer =
+            format!("/ui/children/1/children/2/tabs/0/child/children/1/child/fields/{index}/value");
+        assert!(
+            matches!(&values[&pointer], BindingValue::Ready { value } if value.is_null()),
+            "{pointer}: {:?}",
+            values[&pointer]
+        );
+    }
 }
