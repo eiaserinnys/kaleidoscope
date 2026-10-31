@@ -393,11 +393,11 @@ export type Desktop = { id: string, workspace_id: string, name: string,
 /**
  * 워크스페이스 안의 순서. 0부터.
  */
-position: number,
+position: number, 
 /**
  * 이 데스크톱에서 같이 보기를 켠 창 id. 켠 순서다.
  */
-sharing?: Array<string>,
+sharing?: Array<string>, 
 /**
  * 대화 키별로 이 데스크톱에서 마지막으로 보낸 창별 컨텍스트.
  */
