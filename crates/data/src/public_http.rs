@@ -15,6 +15,11 @@ pub struct PublicResponse {
     pub bytes: Vec<u8>,
 }
 
+fn client_builder() -> reqwest::blocking::ClientBuilder {
+    reqwest::blocking::Client::builder()
+        .user_agent(concat!("kaleidoscope/", env!("CARGO_PKG_VERSION")))
+}
+
 pub fn is_public_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => public_v4(ip),
@@ -70,7 +75,7 @@ pub fn get(
     if addresses.is_empty() || addresses.iter().any(|address| !is_public_ip(address.ip())) {
         return Err("공개 주소가 아닌 DNS 결과입니다".into());
     }
-    let client = reqwest::blocking::Client::builder()
+    let client = client_builder()
         .no_proxy()
         .resolve_to_addrs(host, &addresses)
         .redirect(reqwest::redirect::Policy::none())
@@ -103,4 +108,38 @@ pub fn get(
         mime,
         bytes,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::client_builder;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    #[test]
+    fn public_client_sends_product_user_agent() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 4096];
+            let count = stream.read(&mut request).unwrap();
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+                .unwrap();
+            String::from_utf8_lossy(&request[..count]).into_owned()
+        });
+        client_builder()
+            .no_proxy()
+            .build()
+            .unwrap()
+            .get(format!("http://{address}/"))
+            .send()
+            .unwrap();
+        let request = server.join().unwrap().to_lowercase();
+        assert!(request.contains(&format!(
+            "user-agent: kaleidoscope/{}",
+            env!("CARGO_PKG_VERSION")
+        )));
+    }
 }
