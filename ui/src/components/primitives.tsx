@@ -47,14 +47,15 @@ export interface IconButtonProps {
   title?: string;
   pressed?: boolean;
   tone?: "share";
+  className?: string;
 }
 
-export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone }: IconButtonProps) {
+export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className }: IconButtonProps) {
   return (
     <button
       aria-label={label}
       aria-pressed={pressed}
-      className={`ks-icon-button${tone === "share" ? " ks-icon-button-share" : ""}`}
+      className={`ks-icon-button${tone === "share" ? " ks-icon-button-share" : ""}${className ? ` ${className}` : ""}`}
       disabled={disabled}
       onClick={onClick}
       type="button"

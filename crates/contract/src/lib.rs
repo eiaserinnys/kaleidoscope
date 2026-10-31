@@ -226,7 +226,7 @@ pub const TAURI_EVENT: &str = "core-event";
 /// - 7판: 6판 + `feed`의 `columns`, `copy`.
 /// - 8판: 7판 + 기기 로컬 ACP 대화 블록 `agent_session`.
 /// - 9판: 8판 + `metrics`, `keypad`, `chart`(캔들 포함), 표의 등락률과 스파크라인.
-/// - 10판: 9판 + 저장소 HTML 문서와 코멘트를 다루는 `html_view`, 세계 지도 `map`.
+/// - 10판: 9판 + 저장소 HTML 문서와 코멘트를 다루는 `html_view`, 세계 지도 `map`, 피드의 중첩 답글과 접기.
 pub const BLOCK_SET_VERSION: u32 = 10;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
@@ -1171,6 +1171,7 @@ pub enum Block {
     /// 글을 고르고 복사할 수 있다. `format`이 `markdown`이면 본문을 마크다운으로 그린다(HTML은 그리지 않는다).
     /// `follow`면 끝에 붙어 있을 때 새 항목이 오면 끝을 따라간다. `on_select`가 있으면 항목을 누를 수 있다
     /// (글을 고르는 중의 누르기는 고르기가 아니다).
+    #[serde(alias = "thread")]
     Feed {
         entries: Binding,
         #[serde(default)]
@@ -1192,6 +1193,10 @@ pub enum Block {
         #[serde(default)]
         #[ts(optional, as = "Option<bool>")]
         copy: bool,
+        /// (블록 세트 10판) 대댓글과 긴 항목의 접기·펴기를 켠다.
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        collapsible: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         selected: Option<StateRef>,

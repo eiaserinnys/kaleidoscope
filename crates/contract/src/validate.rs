@@ -397,7 +397,7 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
                     if let Some(PermissionDecl::Http { paths, .. }) =
                         find_permission(definition, source.permission())
                     {
-                        if !paths.contains(path) {
+                        if !allowed_public_http_path(paths, path) {
                             details.push(format!(
                                 "{at}/path: 공개 HTTPS 권한에 선언되지 않은 경로입니다"
                             ));
@@ -975,6 +975,17 @@ pub fn valid_public_http_path(path: &str) -> bool {
             .any(|encoded| lower.contains(encoded))
 }
 
+/// 선언된 공개 HTTPS 경로가 요청 경로를 허용하는지 확인한다.
+pub fn allowed_public_http_path(paths: &[String], path: &str) -> bool {
+    if !valid_public_http_path(path) {
+        return false;
+    }
+    paths.iter().any(|allowed| {
+        allowed == path
+            || (allowed.len() > 1 && allowed.ends_with('/') && path.starts_with(allowed.as_str()))
+    })
+}
+
 /// 연결 경로의 규칙(정의에 적은 것, 식이 낸 것, 코어와 서버가 실행 때 보는 것 모두).
 /// `/`로 시작하고, `?`와 `#`를 담지 않으며(쿼리는 `query`로), `\`와 공백이 없다. `//`로 시작하지 않는다(다른 호스트로
 /// 읽힐 수 있어서). 빈 조각(`/a//b`)은 허락하지 않는다. `/`만은 허락한다.
@@ -1330,12 +1341,18 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         Block::Feed {
             columns,
             copy,
+            collapsible,
             selected,
             ..
         } => {
             if (*columns || *copy) && definition.requires.blocks < 7 {
                 details.push(format!(
                     "{at}: feed의 columns, copy는 블록 세트 7판이라 requires.blocks가 7 이상이어야 합니다"
+                ));
+            }
+            if *collapsible && definition.requires.blocks < 10 {
+                details.push(format!(
+                    "{at}: feed의 collapsible은 블록 세트 10판이라 requires.blocks가 10 이상이어야 합니다"
                 ));
             }
             if let Some(selected) = selected {
