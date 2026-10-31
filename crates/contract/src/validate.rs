@@ -1027,6 +1027,30 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         ));
     }
     match block {
+        Block::Map {
+            points, selected, ..
+        } => {
+            if let Some(selected) = selected {
+                validate_state_key(&selected.state, definition, details, at);
+            }
+            if let data::Binding::Literal(value) = points {
+                match serde_json::from_value::<Vec<data::MapPoint>>(value.clone()) {
+                    Ok(points)
+                        if points.iter().all(|point| {
+                            point.lat.is_finite()
+                                && (-90.0..=90.0).contains(&point.lat)
+                                && point.lng.is_finite()
+                                && (-180.0..=180.0).contains(&point.lng)
+                                && point
+                                    .size
+                                    .is_none_or(|size| size.is_finite() && size >= 0.0)
+                        }) => {}
+                    _ => details.push(format!(
+                        "{at}/points: 지도 지점 또는 좌표가 올바르지 않습니다"
+                    )),
+                }
+            }
+        }
         Block::Metrics { items, columns } => {
             if columns.is_some_and(|columns| !(1..=8).contains(&columns)) {
                 details.push(format!("{at}: metrics columns는 1부터 8까지입니다"));

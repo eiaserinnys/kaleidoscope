@@ -21,8 +21,13 @@ fn server_binary_has_no_builtin_definition_or_asset_content() {
     let agent = read_json("apps/agent.json");
     let html_report = read_json("apps/html-report.json");
     let market = read_json("apps/market.json");
+    let earth = read_json("apps/earth.json");
     let icon = std::fs::read(root.join("apps/assets/weather/clear.svg")).unwrap();
     let sentinels = [
+        earth["permissions"][0]["paths"][0]
+            .as_str()
+            .unwrap()
+            .as_bytes(),
         market["permissions"][1]["base_url"]
             .as_str()
             .unwrap()

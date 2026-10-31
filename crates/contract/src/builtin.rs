@@ -94,6 +94,15 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         modules: &[("http", 1)],
         assets: &[],
     },
+    BuiltinIdentity {
+        id: "earth",
+        name: "지구 상황판",
+        version: 1,
+        updated_at: "2026-10-31T00:00:00Z",
+        blocks: 10,
+        modules: &[("http", 1)],
+        assets: &[],
+    },
 ];
 
 pub fn builtin_identity(id: &str) -> Option<&'static BuiltinIdentity> {

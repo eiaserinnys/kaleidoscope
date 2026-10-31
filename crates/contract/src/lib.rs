@@ -226,7 +226,7 @@ pub const TAURI_EVENT: &str = "core-event";
 /// - 7판: 6판 + `feed`의 `columns`, `copy`.
 /// - 8판: 7판 + 기기 로컬 ACP 대화 블록 `agent_session`.
 /// - 9판: 8판 + `metrics`, `keypad`, `chart`(캔들 포함), 표의 등락률과 스파크라인.
-/// - 10판: 9판 + 저장소 HTML 문서와 코멘트를 다루는 `html_view`.
+/// - 10판: 9판 + 저장소 HTML 문서와 코멘트를 다루는 `html_view`, 세계 지도 `map`.
 pub const BLOCK_SET_VERSION: u32 = 10;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
@@ -1354,6 +1354,20 @@ pub enum Block {
         #[ts(optional)]
         on_select: Option<Actions>,
     },
+    /// (10판) 세계 지도 위에 위도·경도 지점을 표시한다. 고르면 `$event`는 키, `$item`은 지점이다.
+    Map {
+        #[serde(alias = "markers")]
+        points: data::Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_select: Option<data::Actions>,
+        #[serde(default)]
+        #[ts(optional, as = "Option<ChartHeight>")]
+        height: ChartHeight,
+    },
 }
 
 impl Block {
@@ -1371,6 +1385,7 @@ impl Block {
             Block::MarkdownEditor { .. } | Block::MarkdownView { .. } => 1,
             Block::AgentChat {} => 2,
             Block::AgentSession { .. } => 8,
+            Block::Map { .. } => 10,
             Block::Metrics { .. } | Block::Keypad { .. } | Block::Chart { .. } => 9,
             Block::WebView { .. } | Block::Explorer { .. } => 3,
             Block::Stack { .. }
@@ -1427,6 +1442,7 @@ impl Block {
             Block::Metrics { .. } => "metrics",
             Block::Keypad { .. } => "keypad",
             Block::Chart { .. } => "chart",
+            Block::Map { .. } => "map",
         }
     }
 }
