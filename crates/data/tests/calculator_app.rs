@@ -52,6 +52,47 @@ fn calculator_operations_percent_and_division_error_recovery() {
 }
 
 #[test]
+fn calculator_formula_uses_displayed_operator_symbols() {
+    use kaleidoscope_contract::data::BindingValue;
+    let definition = parse_app_definition(&app_file("calculator.json")).unwrap();
+    let app = CompiledApp::compile(&definition);
+    let mut state = definition.state;
+    state.get_mut("calc").unwrap()["formula"] = json!("8 / 2 * 3 - 1 =");
+    let values = app.evaluate(&state, &BTreeMap::new(), &BTreeMap::new());
+    let BindingValue::Ready { value } = &values["/ui/children/0/items"] else { panic!("표시식 계산 실패"); };
+    assert_eq!(value[0]["label"], "8 ÷ 2 × 3 − 1 =");
+}
+
+#[test]
+fn weather_city_selection_and_live_search_actions() {
+    let definition = parse_app_definition(&app_file("weather.json")).unwrap();
+    let app = CompiledApp::compile(&definition);
+    let empty = BTreeMap::new();
+    let sources = BTreeMap::from([("places".into(), json!({"results": [
+        {"id": 1, "name": "서울특별시"}, {"id": 2, "name": "부산광역시"}, {"id": 3, "name": "성남시"}
+    ]}))]);
+    for (id, expected) in [("1", "서울"), ("2", "부산"), ("3", "")] {
+        let event = json!(id);
+        let mut state = definition.state.clone();
+        let mut current_sources = sources.clone();
+        for index in 0..4 {
+            let env = Env { state: &state, data: &current_sources, data_meta: &empty, storage: &empty, storage_meta: &empty, event: &event, item: &Value::Null };
+            let Step::SetState { key, value } = app.action_step("/ui/children/1/children/0/on_select", index, &env).unwrap() else { panic!("도시 선택 동작이 필요합니다"); };
+            if key == "search" && value == "" { current_sources.remove("places"); }
+            state.insert(key, value);
+        }
+        assert_eq!(state["city"], expected);
+    }
+    let event = json!("  Seoul  ");
+    let env = Env { state: &definition.state, data: &sources, data_meta: &empty, storage: &empty, storage_meta: &empty, event: &event, item: &Value::Null };
+    for pointer in ["/ui/children/0/start/1/on_change", "/ui/children/0/start/1/on_submit"] {
+        let Step::SetState { key, value } = app.action_step(pointer, 1, &env).unwrap() else { panic!("검색 동작이 필요합니다"); };
+        assert_eq!(key, "search");
+        assert_eq!(value, "Seoul");
+    }
+}
+
+#[test]
 fn weather_definition_parses_with_its_declared_permissions_and_assets() {
     let app = parse_app_definition(&app_file("weather.json")).unwrap();
     assert_eq!(app.assets.len(), 8);

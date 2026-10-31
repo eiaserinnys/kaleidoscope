@@ -36,10 +36,11 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
   const numbers = series.flatMap((entry) => entry.points.flatMap((point) => point.y === null ? [] : [point.y]));
   let min = numbers.length ? Math.min(...numbers) : 0;
   let max = numbers.length ? Math.max(...numbers) : 1;
+  if (block.kind === "bar") { min = Math.min(0, min); max = Math.max(0, max); }
   if (min === max) { const margin = Math.abs(min) * 0.1 || 1; min -= margin; max += margin; }
   const xAt = (index: number) => labels.length === 1 ? 500 : index * 1000 / (labels.length - 1);
   const yAt = (value: number) => 10 + (max - value) / (max - min) * 140;
-  const baseline = Math.max(10, Math.min(150, yAt(0)));
+  const baseline = block.kind === "bar" ? yAt(0) : Math.max(10, Math.min(150, yAt(0)));
   const maxSteps = Math.max(1, Math.floor((width - 64) / 64));
   const labelStep = Math.max(1, Math.ceil((labels.length - 1) / maxSteps));
 
@@ -96,7 +97,8 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
           onKeyDown={keyDown} onPointerMove={(event) => setSelected(pointerIndex(event))}
           onPointerLeave={() => { if (document.activeElement !== graph.current) setSelected(0); }}
           onClick={(event) => { const index = pointerIndex(event); setSelected(index); select(index); }}>
-          <svg viewBox="0 0 1000 160" preserveAspectRatio="none" aria-hidden="true">
+          <div className="ks-chart-plot" aria-hidden="true">
+          <svg viewBox="0 0 1000 160" preserveAspectRatio="none">
             <defs><linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--ks-color-accent)" stopOpacity=".22" /><stop offset="100%" stopColor="var(--ks-color-accent)" stopOpacity="0" /></linearGradient></defs>
             {[10, 80, 150].map((y) => <line key={y} className="ks-chart-grid" x1="0" x2="1000" y1={y} y2={y} vectorEffect="non-scaling-stroke" />)}
             {series.map((entry, seriesIndex) => {
@@ -113,13 +115,19 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
               return <g key={entry.key} className={`ks-chart-series is-series-${seriesIndex % 4}`}>
                 {segments.filter((segment) => segment.length).map((segment, index) => {
                   const line = segment.map((point, n) => `${n ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
-                  return <g key={index}>{block.kind === "area" && segment.length > 1 && <path className="ks-chart-area" d={`${line} L ${segment.at(-1)!.x} 150 L ${segment[0].x} 150 Z`} fill={`url(#${gradient})`} />}<path className="ks-chart-line" d={line} vectorEffect="non-scaling-stroke" />{segment.length === 1 && <circle className="ks-chart-dot" cx={segment[0].x} cy={segment[0].y} r="4" vectorEffect="non-scaling-stroke" />}</g>;
+                  return <g key={index}>{block.kind === "area" && segment.length > 1 && <path className="ks-chart-area" d={`${line} L ${segment.at(-1)!.x} 150 L ${segment[0].x} 150 Z`} fill={`url(#${gradient})`} />}<path className="ks-chart-line" d={line} vectorEffect="non-scaling-stroke" /></g>;
                 })}
               </g>;
             })}
             <line className="ks-chart-guide" x1={xAt(current)} x2={xAt(current)} y1="10" y2="150" vectorEffect="non-scaling-stroke" />
-            {points.map((point, index) => point && point.y !== null ? <circle key={series[index].key} className="ks-chart-dot" cx={xAt(current)} cy={yAt(point.y)} r="4" vectorEffect="non-scaling-stroke" /> : null)}
           </svg>
+          {block.kind !== "bar" && series.flatMap((entry) => {
+            const ordered = labels.map((label) => entry.points.find((point) => point.x === label));
+            return ordered.map((point, index) => point && point.y !== null && index !== current && ordered[index - 1]?.y == null && ordered[index + 1]?.y == null
+              ? <span key={`${entry.key}-${index}`} className="ks-chart-dot" style={{ left: `${xAt(index) / 10}%`, top: `${yAt(point.y) / 160 * 100}%` }} /> : null);
+          })}
+          {points.map((point, index) => point && point.y !== null ? <span key={series[index].key} className="ks-chart-dot" style={{ left: `${xAt(current) / 10}%`, top: `${yAt(point.y) / 160 * 100}%` }} /> : null)}
+          </div>
           <div className="ks-chart-x-axis" aria-hidden="true">{labels.map((label, index) => index % labelStep === 0 ? <span key={`${label}-${index}`} style={{ left: `${xAt(index) / 10}%`, transform: index === 0 ? "translateX(0)" : index === labels.length - 1 ? "translateX(-100%)" : "translateX(-50%)" }}>{label}</span> : null)}</div>
         </div>
       </div>

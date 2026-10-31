@@ -27,7 +27,7 @@ function KeypadReady({ block, context, pointer, buttons }: { block: Extract<Bloc
   const pointerFocus = useRef(false);
   const press = (button: KeypadButton) => {
     if (button.disabled) return;
-    pending.current = pending.current.then(() => data.act(`${pointer}/on_press`, button.key, button as unknown as JsonValue));
+    pending.current = pending.current.then(async () => { await data.act(`${pointer}/on_press`, button.key, button as unknown as JsonValue); });
   };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

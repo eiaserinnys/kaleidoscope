@@ -108,6 +108,16 @@ it("moves the chart readout, selects a point, and breaks lines at missing values
   expect(container.querySelector(".ks-chart-readout")?.textContent).toContain("14:00");
 });
 
+it("draws positive bar heights in proportion to values from zero", async () => {
+  const { container } = setup({ type: "chart", kind: "bar", series: [
+    { key: "s", name: "값", points: [{ x: "a", y: 10 }, { x: "b", y: 20 }] },
+  ] });
+  await screen.findByRole("slider", { name: "차트 시점" });
+  const bars = [...container.querySelectorAll(".ks-chart-bar")];
+  expect(bars).toHaveLength(2);
+  expect(Number(bars[0].getAttribute("height")) / Number(bars[1].getAttribute("height"))).toBeCloseTo(0.5);
+});
+
 it("hides a null list while retaining the empty state for an empty array", async () => {
   const { container } = setup({ type: "list", items: null });
   await waitFor(() => expect(container.querySelector(".ks-data-window-body")).toBeTruthy());

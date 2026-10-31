@@ -26,7 +26,7 @@
       {
         "type": "metrics",
         "items": {
-          "expr": "[{'key':'result','label':$state.calc.formula,'value':$state.calc.error ? $state.calc.error : $state.calc.display,'tone':$state.calc.error ? 'error' : 'default','align':'end'}]"
+          "expr": "[{'key':'result','label':$replace($replace($replace($state.calc.formula, '/', '÷'), '*', '×'), '-', '−'),'value':$state.calc.error ? $state.calc.error : $state.calc.display,'tone':$state.calc.error ? 'error' : 'default','align':'end'}]"
         },
         "columns": 1
       },

@@ -103,7 +103,8 @@ export class WindowData {
     try {
       await this.ready;
       await this.store.call({ op: "data.act", window_id: this.windowId, pointer, event, ...(item === undefined ? {} : { item }) });
-    } catch (error) { this.setNotice(toCoreError(error).message); }
+      return true;
+    } catch (error) { this.setNotice(toCoreError(error).message); return false; }
   };
   refresh = async (sources: string[]) => {
     try { await this.ready; await this.store.call({ op: "data.refresh", window_id: this.windowId, sources }); }

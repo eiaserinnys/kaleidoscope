@@ -117,6 +117,68 @@ it("keeps a blurred draft while its change is pending, then follows a later exte
   await waitFor(() => expect(input.value).toBe("외부 변경"));
 });
 
+it("shows an external change made while a blurred input request is finishing", async () => {
+  const { store, spy, originalCall } = setup();
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => { release = resolve; });
+  spy.mockImplementation(async (request) => {
+    const result = await originalCall(request);
+    if (request.op === "data.act" && request.pointer.endsWith("/on_change")) await waiting;
+    return result;
+  });
+  const input = await screen.findByPlaceholderText("입력") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "Paris" } });
+  fireEvent.blur(input);
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.query).toBe("Paris"));
+  await act(async () => { await store.call({ op: "window.set_state", window_id: "editor-window", state: { query: "", choice: "a", enabled: false } }); });
+  expect(input.value).toBe("Paris");
+  await act(async () => { release(); await waiting; });
+  await waitFor(() => expect(input.value).toBe(""));
+});
+
+it("keeps a blurred draft when its change fails", async () => {
+  const { spy, originalCall } = setup();
+  spy.mockImplementation(async (request) => {
+    if (request.op === "data.act" && request.pointer.endsWith("/on_change")) throw { code: "server", message: "전송 실패", details: [] };
+    return originalCall(request);
+  });
+  const input = await screen.findByPlaceholderText("입력") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "보존할 초안" } });
+  fireEvent.blur(input);
+  await screen.findByText("전송 실패");
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+  expect(input.value).toBe("보존할 초안");
+});
+
+it("keeps the latest failed draft when an earlier input request succeeds", async () => {
+  const { store, spy, originalCall } = setup();
+  let releaseFirst!: () => void;
+  let releaseSecond!: () => void;
+  const first = new Promise<void>((resolve) => { releaseFirst = resolve; });
+  const second = new Promise<void>((resolve) => { releaseSecond = resolve; });
+  spy.mockImplementation(async (request) => {
+    if (request.op === "data.act" && request.pointer.endsWith("/on_change")) {
+      if (request.event === "Par") { const reply = await originalCall(request); await first; return reply; }
+      if (request.event === "Paris") { await second; throw { code: "server", message: "전송 실패", details: [] }; }
+    }
+    return originalCall(request);
+  });
+  const input = await screen.findByPlaceholderText("입력") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "Par" } });
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.query).toBe("Par"));
+  fireEvent.change(input, { target: { value: "Paris" } });
+  fireEvent.blur(input);
+  await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "Paris" })));
+  await act(async () => { releaseFirst(); await first; });
+  await act(async () => { releaseSecond(); await second; });
+  await screen.findByText("전송 실패");
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+  expect(input.value).toBe("Paris");
+});
+
 it("keeps a button and its open confirmation visible when its disabled binding is loading", async () => {
   const definition: AppDefinition = {
     ...mdEditorDefinition, requires: { blocks: 4, modules: {} }, state: {},

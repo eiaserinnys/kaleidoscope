@@ -119,6 +119,7 @@
         "start": [
           {
             "type": "select",
+            "placeholder": "주요 도시",
             "value": {
               "state": "city"
             },
@@ -159,34 +160,31 @@
             "value": {
               "state": "q"
             },
-            "on_change": {
-              "set_state": "q"
-            },
-            "on_submit": [
+            "on_change": [
+              {
+                "set_state": "q"
+              },
               {
                 "set_state": "search",
                 "value": {
-                  "expr": "$trim($state.q)"
+                  "expr": "$trim($event)"
+                }
+              }
+            ],
+            "on_submit": [
+              {
+                "set_state": "q"
+              },
+              {
+                "set_state": "search",
+                "value": {
+                  "expr": "$trim($event)"
                 }
               }
             ]
           }
         ],
         "end": [
-          {
-            "type": "button",
-            "label": "검색",
-            "icon": "search",
-            "icon_only": true,
-            "on_click": [
-              {
-                "set_state": "search",
-                "value": {
-                  "expr": "$trim($state.q)"
-                }
-              }
-            ]
-          },
           {
             "type": "text",
             "style": "meta",
@@ -227,15 +225,17 @@
                 }
               },
               {
+                "set_state": "city",
+                "value": {
+                  "expr": "($n := $data.places.results[id=$number($event)].name; $m := ['서울','부산','대구','인천','광주','대전','울산','제주'][$contains($n, $)]; $m ? ($type($m)='array' ? $m[0] : $m) : '')"
+                }
+              },
+              {
                 "set_state": "q",
                 "value": ""
               },
               {
                 "set_state": "search",
-                "value": ""
-              },
-              {
-                "set_state": "city",
                 "value": ""
               }
             ]

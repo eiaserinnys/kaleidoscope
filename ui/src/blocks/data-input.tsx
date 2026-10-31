@@ -23,7 +23,17 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
   const textarea = useRef<HTMLTextAreaElement>(null);
   const composing = useRef(false);
   const pending = useRef(0);
-  useEffect(() => { if (!focused && pending.current === 0) setDraft(current == null ? "" : String(current)); }, [current, focused]);
+  const latest = useRef({ current, focused });
+  const lastCurrent = useRef(current);
+  const changedWhilePending = useRef(false);
+  const requestSequence = useRef(0);
+  const latestFailed = useRef(false);
+  latest.current = { current, focused };
+  useEffect(() => {
+    if (lastCurrent.current !== current && pending.current > 0) changedWhilePending.current = true;
+    lastCurrent.current = current;
+    if (!focused && pending.current === 0) setDraft(current == null ? "" : String(current));
+  }, [current, focused]);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   useLayoutEffect(() => {
     if (!textarea.current) return;
@@ -34,8 +44,18 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
   const send = (value: string) => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
+    if (pending.current === 0) changedWhilePending.current = false;
     pending.current += 1;
-    void data.act(`${pointer}/on_change`, eventValue(value)).finally(() => { pending.current -= 1; });
+    const sequence = ++requestSequence.current;
+    void data.act(`${pointer}/on_change`, eventValue(value)).then((success) => {
+      if (sequence === requestSequence.current) latestFailed.current = !success;
+    }).finally(() => {
+      pending.current -= 1;
+      if (pending.current === 0 && !latestFailed.current && changedWhilePending.current && !latest.current.focused) {
+        const value = latest.current.current;
+        setDraft(value == null ? "" : String(value));
+      }
+    });
   };
   const change = (value: string) => { setDraft(value); if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => send(value), 300); };
   const keyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {

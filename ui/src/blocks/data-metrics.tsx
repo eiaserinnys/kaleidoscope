@@ -30,7 +30,7 @@ export function MetricsBlock({ block, pointer }: { block: Extract<Block, { type:
       {hasMedia && <MediaThumbnail className="ks-metric-media" media={item.image!} size={featured ? 48 : 32} />}
       <div className="ks-metric-content">
         <div className="ks-metric-label">{item.label}</div>
-        <div className="ks-metric-value-row"><span className="ks-metric-value">{String(item.value)}{typeof item.unit === "string" && <><wbr /><span className="ks-metric-unit">{item.unit}</span></>}</span>{isBadge(item.badge) && <Badge value={item.badge} />}</div>
+        <div className="ks-metric-value-row"><span className="ks-metric-value">{String(item.value)}{typeof item.unit === "string" && <span className="ks-metric-unit">{item.unit}</span>}</span>{isBadge(item.badge) && <Badge value={item.badge} />}</div>
         {typeof item.subtext === "string" && item.subtext && <div className="ks-metric-subvalue">{item.subtext}</div>}
       </div>
     </div>;
