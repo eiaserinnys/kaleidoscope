@@ -30,8 +30,8 @@
 .ks-data-toolbar-item.is-input { flex: 1 1 auto; min-width: calc(var(--ks-space-6) * 3); }
 .ks-data-toolbar .ks-button, .ks-data-toolbar .ks-data-segmented, .ks-data-toolbar .ks-data-toggle { flex-shrink: 0; white-space: nowrap; }
 .ks-data-section { min-width: 0; min-height: 0; }
-.ks-split-pane > .ks-data-section { display: flex; height: 100%; flex-direction: column; }
-.ks-split-pane > .ks-data-section > .ks-data-section-child { flex: 1 1 auto; min-height: 0; }
+.ks-split-pane > .ks-data-section, .ks-data-tab-panel > .ks-data-section { display: flex; height: 100%; flex-direction: column; }
+.ks-split-pane > .ks-data-section > .ks-data-section-child, .ks-data-tab-panel > .ks-data-section > .ks-data-section-child { flex: 1 1 auto; min-height: 0; }
 .ks-data-section-child > .ks-data-stack { height: auto; }
 .ks-data-section-header { display: flex; width: 100%; align-items: center; gap: var(--ks-space-2); }
 .ks-data-stack-item > .ks-data-section > .ks-data-section-header:not(.ks-data-tab-panel *),

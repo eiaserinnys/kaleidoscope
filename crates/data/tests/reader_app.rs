@@ -10,6 +10,7 @@ const READER: &str = include_str!("../../../apps/reader.json");
 
 fn reader() -> (kaleidoscope_contract::AppDefinition, CompiledApp) {
     let definition = parse_app_definition(READER).expect("reader 앱 정의");
+    assert_eq!(definition.state["active_tab"], json!(0));
     let compiled = CompiledApp::compile(&definition);
     (definition, compiled)
 }
@@ -136,6 +137,36 @@ fn reader_chains_story_selection_to_hn_github_wikipedia_and_openalex() {
 }
 
 #[test]
+fn reader_prefers_submitted_query_for_related_sources() {
+    let (definition, app) = reader();
+    let mut state = definition.state.clone();
+    state.insert("query".into(), json!("  Rust  "));
+    state.insert("selected_story".into(), json!("123"));
+    let data = BTreeMap::from([(
+        "stories".into(),
+        json!({"hits":[{"objectID":"123","title":"Why Discord is switching from Go to Rust"}]}),
+    )]);
+
+    for (source, key) in [
+        ("github_search", "q"),
+        ("wiki_en_search", "srsearch"),
+        ("wiki_ko_search", "srsearch"),
+        ("papers", "search"),
+    ] {
+        let SourcePlan::Request { query, .. } = app.plan_source_with_data_and_storage(
+            source,
+            &state,
+            &data,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        ) else {
+            panic!("{source} 계획")
+        };
+        assert_eq!(query[key], "Rust");
+    }
+}
+
+#[test]
 fn reader_evaluates_nested_discussion_and_all_tab_bindings() {
     let (definition, app) = reader();
     let data = BTreeMap::from([
@@ -193,7 +224,7 @@ fn reader_evaluates_nested_discussion_and_all_tab_bindings() {
             "{pointer}: {value:?}"
         );
     }
-    let feed_pointer = "/ui/children/2/children/1/tabs/0/child/children/1/entries";
+    let feed_pointer = "/ui/children/2/children/1/tabs/0/child/child/entries";
     let BindingValue::Ready { value: feed } = &values[feed_pointer] else {
         panic!("중첩 피드 식 결과")
     };
@@ -205,20 +236,22 @@ fn reader_evaluates_nested_discussion_and_all_tab_bindings() {
         "feed: {feed:#}"
     );
 
-    let properties_prefix = "/ui/children/2/children/1/tabs/0/child/children/0/fields";
     let BindingValue::Ready {
-        value: discussion_url,
-    } = &values[&format!("{properties_prefix}/1/value")]
+        value: discussion_title,
+    } = &values["/ui/children/2/children/1/tabs/0/child/title"]
     else {
-        panic!("토론 URL 식 결과")
+        panic!("토론 제목 식 결과")
     };
-    assert_eq!(discussion_url, "https://news.ycombinator.com/item?id=123");
+    assert_eq!(discussion_title, "Rust tools");
     let BindingValue::Ready { value: story_meta } =
-        &values[&format!("{properties_prefix}/2/value")]
+        &values["/ui/children/2/children/1/tabs/0/child/meta"]
     else {
         panic!("이야기 메타 식 결과")
     };
-    assert!(story_meta.as_str().unwrap().contains("2026-10-31T11:52"));
+    let story_meta = story_meta.as_str().unwrap();
+    assert!(story_meta.contains("alice"));
+    assert!(story_meta.contains("2026-10-31T11:52"));
+    assert!(story_meta.ends_with("Rust tools"));
 
     let BindingValue::Ready { value: metrics } = &values["/ui/children/1/items"] else {
         panic!("지표 식 결과")
@@ -236,19 +269,20 @@ fn reader_evaluates_nested_discussion_and_all_tab_bindings() {
         .unwrap()
         .contains("최고 피인용 9"));
     let BindingValue::Ready { value: repos } =
-        &values["/ui/children/2/children/1/tabs/1/child/children/1/rows"]
+        &values["/ui/children/2/children/1/tabs/1/child/children/0/child/rows"]
     else {
         panic!("저장소 표 식 결과")
     };
     assert_eq!(repos[0]["stars"].as_f64(), Some(100.0));
-    let BindingValue::Ready { value: wiki } =
-        &values["/ui/children/2/children/1/tabs/2/child/children/1/items"]
+    let BindingValue::Ready {
+        value: related_titles,
+    } = &values["/ui/children/2/children/1/tabs/2/child/children/1/child/fields/2/value"]
     else {
-        panic!("위키 목록 식 결과")
+        panic!("위키 연관 항목 식 결과")
     };
-    assert_eq!(wiki[0]["title"], "Rust");
+    assert!(related_titles.as_str().unwrap().contains("Rust"));
     let BindingValue::Ready { value: papers } =
-        &values["/ui/children/2/children/1/tabs/2/child/children/2/rows"]
+        &values["/ui/children/2/children/1/tabs/2/child/children/0/child/rows"]
     else {
         panic!("논문 표 식 결과")
     };
@@ -309,7 +343,7 @@ fn reader_limits_roots_and_replies_while_including_depth_four() {
         &statuses,
         None,
     );
-    let pointer = "/ui/children/2/children/1/tabs/0/child/children/1/entries";
+    let pointer = "/ui/children/2/children/1/tabs/0/child/child/entries";
     let BindingValue::Ready { value: feed } = &values[pointer] else {
         panic!("중첩 댓글 제한 결과")
     };
