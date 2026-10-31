@@ -185,7 +185,9 @@ impl AppState {
             .execute_worker(account_id, app_id, trigger, workspace_id, &mut secrets)
             .await;
         let result = result.map_err(|mut error| {
-            for secret in secrets.values().filter(|s: &&String| s.len() >= 4) {
+            let mut values: Vec<_> = secrets.values().filter(|s| !s.is_empty()).collect();
+            values.sort_unstable_by_key(|value| std::cmp::Reverse(value.len()));
+            for secret in values {
                 error.message = error.message.replace(secret, "[REDACTED]");
                 for detail in &mut error.details {
                     *detail = detail.replace(secret, "[REDACTED]");
@@ -310,15 +312,15 @@ impl AppState {
                 .as_object()
                 .ok_or_else(|| server_error("set_storage는 객체여야 합니다"))?;
             for (entry, value) in writes {
-                let current = self.read_app_storage(account_id, app_id, entry, workspace_id)?;
-                let (_, account, update) = self.write_app_storage(
+                let (reply, account, update) = self.write_app_storage(
                     account_id,
                     app_id,
                     entry,
                     workspace_id,
                     value.clone(),
-                    current.revision,
+                    revisions.get(entry).cloned().unwrap_or(None),
                 )?;
+                revisions.insert(entry.clone(), Some(reply.revision));
                 super::app_storage_http::send_storage_update(self, app_id, &account, update);
                 updated_entries.push(entry.clone());
             }

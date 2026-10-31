@@ -9,7 +9,7 @@ fn definition(code: &str) -> String {
         "storage":{"entries":[
           {"id":"enabled","key":"enabled","kind":"json","schema":{"type":"boolean"},"default":false,"label":"사용","presentation":"hidden"},
           {"id":"counter","key":"counter","kind":"json","schema":{"type":"integer"},"default":0,"label":"횟수","presentation":"hidden"}]},
-        "worker":{"runtime":"python3","code":code,"schedule":{"interval_secs":10,"enabled_entry":"enabled"},"watch_entries":["counter"],"actions":["run"],"secrets":[{"id":"token"}]}}).to_string()
+        "worker":{"runtime":"python3","code":code,"schedule":{"interval_secs":10,"enabled_entry":"enabled"},"watch_entries":["counter"],"actions":["run"],"secrets":[{"id":"token"},{"id":"short"}]}}).to_string()
 }
 
 pub(super) const CODE: &str = r#"import sys, json, os
@@ -29,8 +29,12 @@ pub(super) fn setup(code: &str) -> (AppState, String) {
 async fn worker_secrets_invocation_storage_event_and_masking() {
     let (state, account) = setup(CODE);
     let secret = "private-value-123";
+    let short_secret = "pri";
     let set = state
         .set_app_secret(&account, "worker-test", "token", secret)
+        .unwrap();
+    state
+        .set_app_secret(&account, "worker-test", "short", short_secret)
         .unwrap();
     assert!(!set.to_string().contains(secret));
     assert!(!state
@@ -66,7 +70,7 @@ async fn worker_secrets_invocation_storage_event_and_masking() {
         DeviceEvent::StorageChanged { .. }
     ));
     assert!(events.try_recv().is_err());
-    let error_code = "import json,sys\nv=json.load(sys.stdin)\nprint(v['secrets']['token'], file=sys.stderr)\nsys.exit(1)";
+    let error_code = "import json,sys\nv=json.load(sys.stdin)\nprint(v['secrets']['token'], v['secrets']['short'], file=sys.stderr)\nsys.exit(1)";
     state
         .publish_app(&definition(error_code), "test", false, None)
         .unwrap();
@@ -83,6 +87,8 @@ async fn worker_secrets_invocation_storage_event_and_masking() {
         .await
         .unwrap_err();
     assert!(!error.message.contains(secret));
+    assert!(!error.message.contains(short_secret));
+    assert!(error.message.contains("[REDACTED] [REDACTED]"));
     assert!(error.message.contains("[REDACTED]"));
     assert!(!state
         .app_worker_status(&account, "worker-test")
@@ -90,6 +96,56 @@ async fn worker_secrets_invocation_storage_event_and_masking() {
         .last_error
         .unwrap()
         .contains(secret));
+}
+
+#[tokio::test]
+async fn worker_storage_write_conflicts_with_external_change_during_execution() {
+    let code = r#"import json, pathlib, sys, time
+v = json.load(sys.stdin)
+pathlib.Path('ready').write_text('ready')
+while not pathlib.Path('release').exists():
+    time.sleep(0.01)
+print(json.dumps({'set_storage': {'counter': v['storage']['counter'] + 1}}))"#;
+    let (state, account) = setup(code);
+    let state_dir = std::env::temp_dir()
+        .join("kaleidoscope-worker-state")
+        .join(super::app_storage::bucket_id(&account, "worker-test"))
+        .join("worker-test");
+    let running_state = state.clone();
+    let running_account = account.clone();
+    let running = tokio::spawn(async move {
+        running_state
+            .invoke_worker(
+                &running_account,
+                "worker-test",
+                WorkerInvokeRequest {
+                    action: "run".into(),
+                    workspace_id: None,
+                    args: None,
+                },
+            )
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !state_dir.join("ready").exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    state
+        .write_app_storage(&account, "worker-test", "counter", None, json!(42), None)
+        .unwrap();
+    std::fs::write(state_dir.join("release"), "release").unwrap();
+    let error = running.await.unwrap().unwrap_err();
+    assert_eq!(error.code, ErrorCode::Conflict);
+    assert_eq!(
+        state
+            .read_app_storage(&account, "worker-test", "counter", None)
+            .unwrap()
+            .content,
+        json!(42)
+    );
 }
 
 #[tokio::test]
