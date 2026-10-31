@@ -115,6 +115,13 @@ pub(super) async fn device_write(
     ) {
         Ok((reply, account, update)) => {
             send_storage_update(&state, &app_id, &account, update);
+            super::worker::spawn_watch(
+                &state,
+                &account,
+                &app_id,
+                &entry_id,
+                query.workspace_id.as_deref(),
+            );
             (StatusCode::OK, Json(reply)).into_response()
         }
         Err(error) => storage_error_response(error),
@@ -141,6 +148,13 @@ pub(super) async fn device_reset(
     ) {
         Ok((reply, account, update)) => {
             send_storage_update(&state, &app_id, &account, update);
+            super::worker::spawn_watch(
+                &state,
+                &account,
+                &app_id,
+                &entry_id,
+                query.workspace_id.as_deref(),
+            );
             (StatusCode::OK, Json(reply)).into_response()
         }
         Err(error) => storage_error_response(error),

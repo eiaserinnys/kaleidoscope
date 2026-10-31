@@ -31,6 +31,15 @@ pub(crate) struct AssetDownload {
 }
 
 pub(crate) trait RegistryClient: Send + Sync + 'static {
+    fn invoke_worker(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _request: &kaleidoscope_contract::worker::WorkerInvokeRequest,
+    ) -> Result<kaleidoscope_contract::worker::WorkerInvokeReply, RegistryError> {
+        Err(RegistryError::Failure("worker unavailable".into()))
+    }
     fn values_list(
         &self,
         _url: &str,
@@ -223,6 +232,23 @@ impl HttpRegistryClient {
 }
 
 impl RegistryClient for HttpRegistryClient {
+    fn invoke_worker(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        request: &kaleidoscope_contract::worker::WorkerInvokeRequest,
+    ) -> Result<kaleidoscope_contract::worker::WorkerInvokeReply, RegistryError> {
+        let response = self
+            .requests()?
+            .post(format!("{url}/api/device/apps/{app}/worker"))
+            .bearer_auth(token)
+            .timeout(Duration::from_secs(65))
+            .json(request)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        storage_success_json(response)
+    }
     fn values_list(
         &self,
         url: &str,

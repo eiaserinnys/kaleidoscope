@@ -71,6 +71,10 @@ pub struct Env<'a> {
 
 #[derive(Debug, PartialEq)]
 pub enum Step {
+    Worker {
+        action: String,
+        args: Option<Value>,
+    },
     SetState {
         key: String,
         value: Value,
@@ -366,6 +370,22 @@ impl CompiledApp {
                 let action = actions.get(index).ok_or("없는 동작 단계입니다")?;
                 let base = format!("{pointer}/{index}");
                 match action {
+                    Action::Worker(worker) => Ok(Step::Worker {
+                        action: worker.worker.action.clone(),
+                        args: worker
+                            .worker
+                            .args
+                            .as_ref()
+                            .map(|binding| {
+                                self.binding(
+                                    binding,
+                                    &format!("{base}/worker/args"),
+                                    env.state,
+                                    &vars,
+                                )
+                            })
+                            .transpose()?,
+                    }),
                     Action::SetState(set) => Ok(Step::SetState {
                         key: set.set_state.clone(),
                         value: match &set.value {

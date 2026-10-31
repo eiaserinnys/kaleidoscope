@@ -245,6 +245,7 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
         validate_agent_provider(agent, definition, &mut details);
     }
 
+    validate_worker(definition, &mut details);
     validate_sources(definition, &mut details);
 
     let mut web_views = 0;
@@ -277,6 +278,75 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
     }
     validate_exprs(definition, &mut details);
     details
+}
+
+fn validate_worker(definition: &AppDefinition, details: &mut Vec<String>) {
+    use crate::worker::*;
+    if definition.worker.is_some() || data::ui_uses_worker_action(definition) {
+        validate_module_version("worker", 1, definition, details, "/worker");
+    }
+    let Some(worker) = &definition.worker else {
+        return;
+    };
+    if crate::builtin::is_builtin(&definition.id) {
+        details.push("/worker: 기본 앱은 서버 워커를 선언할 수 없습니다".into());
+    }
+    if worker.code.trim().is_empty() || worker.code.len() > WORKER_CODE_MAX_BYTES {
+        details.push("/worker/code: 코드가 비었거나 너무 큽니다".into());
+    }
+    if worker
+        .timeout_secs
+        .is_some_and(|t| t == 0 || t > WORKER_TIMEOUT_MAX_SECS)
+    {
+        details.push("/worker/timeout_secs: 실행 시간 범위가 올바르지 않습니다".into());
+    }
+    let entries = definition
+        .storage
+        .as_ref()
+        .map(|s| s.entries.as_slice())
+        .unwrap_or_default();
+    if let Some(schedule) = &worker.schedule {
+        if !(WORKER_SCHEDULE_MIN_SECS..=WORKER_SCHEDULE_MAX_SECS).contains(&schedule.interval_secs)
+            || schedule
+                .jitter_secs
+                .is_some_and(|j| j > schedule.interval_secs)
+        {
+            details.push("/worker/schedule: 주기 또는 지연 범위가 올바르지 않습니다".into());
+        }
+        if !entries.iter().any(|entry| {
+            entry.id == schedule.enabled_entry
+                && !entry.key.contains("{workspace_id}")
+                && entry.kind == StorageKind::Json
+                && entry.default == Value::Bool(false)
+        }) {
+            details.push("/worker/schedule/enabled_entry: 기본값이 false인 불리언 json 저장 항목이어야 합니다".into());
+        }
+    }
+    let mut seen = HashSet::new();
+    for id in &worker.watch_entries {
+        if !seen.insert(id) || !entries.iter().any(|entry| &entry.id == id) {
+            details.push(format!(
+                "/worker/watch_entries: 없는 항목이거나 중복됩니다: {id}"
+            ));
+        }
+    }
+    seen.clear();
+    for id in &worker.actions {
+        if !valid_id(id) || !seen.insert(id) {
+            details.push(format!(
+                "/worker/actions: id가 올바르지 않거나 중복됩니다: {id}"
+            ));
+        }
+    }
+    seen.clear();
+    for secret in &worker.secrets {
+        if !valid_id(&secret.id) || !seen.insert(&secret.id) {
+            details.push(format!(
+                "/worker/secrets: id가 올바르지 않거나 중복됩니다: {}",
+                secret.id
+            ));
+        }
+    }
 }
 
 fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
@@ -671,6 +741,26 @@ fn validate_actions(
             for (index, action) in list.iter().enumerate() {
                 let at = format!("{at}/{index}");
                 match action {
+                    Action::Worker(worker) => {
+                        if !definition
+                            .worker
+                            .as_ref()
+                            .is_some_and(|decl| decl.actions.contains(&worker.worker.action))
+                        {
+                            details.push(format!(
+                                "{at}: 선언되지 않은 워커 동작입니다: {}",
+                                worker.worker.action
+                            ));
+                        }
+                        if let Some(args) = &worker.worker.args {
+                            validate_binding_shape(
+                                args,
+                                definition,
+                                details,
+                                &format!("{at}/worker/args"),
+                            );
+                        }
+                    }
                     Action::SetState(set) => {
                         validate_state_key(&set.set_state, definition, details, &at);
                         if let Some(value) = &set.value {

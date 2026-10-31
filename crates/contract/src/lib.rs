@@ -190,6 +190,7 @@ pub mod data;
 pub mod local_agent;
 pub mod registry;
 pub mod validate;
+pub mod worker;
 
 use data::{Actions, Binding, SourceDecl};
 
@@ -250,6 +251,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("local_agent", 1),
     ("assets", 1),
     ("http", 1),
+    ("worker", 1),
 ];
 
 /// 지원 범위를 알리지 않는 옛 쉘(블록 세트 3판 전)이 그릴 수 있는 블록 세트 판. 서버가 그런 기기에 보낼 앱을
@@ -668,6 +670,10 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub agent: Option<AgentProvider>,
+    /// 개인 앱 서버에서 실행할 워커.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub worker: Option<worker::WorkerDecl>,
     /// 창 안을 채우는 블록 트리의 뿌리.
     pub ui: Block,
 }

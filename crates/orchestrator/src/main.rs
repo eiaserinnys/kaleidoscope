@@ -32,6 +32,9 @@ async fn main() {
         eprintln!("초기 백업에 실패했습니다: {error}");
     }
     tokio::spawn(backup_loop(state.clone()));
+    tokio::spawn(kaleidoscope_orchestrator::worker::worker_schedule_loop(
+        state.clone(),
+    ));
     let listener = match tokio::net::TcpListener::bind(address).await {
         Ok(listener) => listener,
         Err(error) => {
