@@ -36,10 +36,11 @@ function MapReady({ block, context, pointer, value }: { block: MapBlockType; con
   const root = useRef<HTMLDivElement>(null);
   const points = useMemo(() => normalize(value), [value]);
   const selectedKey = block.selected ? context.window.state[block.selected.state] : undefined;
-  const selectedIndex = points.findIndex((point) => point.key === String(selectedKey));
+  const selectedIndex = selectedKey == null ? -1 : points.findIndex((point) => point.key === String(selectedKey));
   const [index, setIndex] = useState(Math.max(0, selectedIndex));
   useEffect(() => { setIndex(Math.max(0, selectedIndex)); }, [selectedIndex, selectedKey, points]);
-  const active = points[Math.min(index, points.length - 1)];
+  const activeIndex = Math.min(index, points.length - 1);
+  const active = points[activeIndex];
   useShareDescriber(root, () => ({ text: `[지도, 지점 ${points.length}개${active ? `, 선택: ${active.label ?? active.key} (${coord(active.lat, active.lng)})` : ""}]\n${points.slice(0, 10).map((p) => `${p.label ?? p.key} · ${coord(p.lat, p.lng)}`).join("\n")}`, visual: true }));
   if (!points.length) return <div className="ks-block-state ks-block-empty">표시할 지점이 없습니다.</div>;
   const sizes = points.map((p) => p.size).filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0);
@@ -56,7 +57,7 @@ function MapReady({ block, context, pointer, value }: { block: MapBlockType; con
     event.preventDefault(); select(next);
   };
   const tone = (point: Point) => tones.includes(point.tone as typeof tones[number]) ? point.tone : "default";
-  const ordered = points.map((point, n) => ({ point, n })).filter(({ n }) => n !== index).concat([{ point: active, n: index }]);
+  const ordered = points.map((point, n) => ({ point, n })).filter(({ n }) => n !== activeIndex).concat([{ point: active, n: activeIndex }]);
   return <div ref={root} className={`ks-map ks-map-${block.height ?? "medium"}`} role="region" aria-label="세계 지도" tabIndex={0} onKeyDown={keyDown}>
     <div className="ks-map-readout">
       <div className="ks-map-readout-main"><span className={`ks-map-swatch ks-map-tone-${tone(active)}`} /><strong>{active.label ?? active.key}</strong>{active.sublabel && <span>{active.sublabel}</span>}{isBadge(active.badge) && <Badge value={active.badge} />}</div>
@@ -70,9 +71,9 @@ function MapReady({ block, context, pointer, value }: { block: MapBlockType; con
       {WORLD_LAND.map((path, n) => <path className="ks-map-land" key={n} d={path} fillRule="evenodd" />)}
       <line className="ks-map-crosshair" x1="0" x2="720" y1={yOf(active.lat)} y2={yOf(active.lat)} />
       <line className="ks-map-crosshair" x1={xOf(active.lng)} x2={xOf(active.lng)} y1="0" y2="360" />
-      {ordered.map(({ point, n }) => <g className={`ks-map-marker-group ks-map-tone-${tone(point)}`} key={point.key} data-key={point.key} role="button" aria-label={`${point.label ?? point.key} · ${coord(point.lat, point.lng)}`} aria-pressed={n === index} onClick={() => select(n)}>
+      {ordered.map(({ point, n }) => <g className={`ks-map-marker-group ks-map-tone-${tone(point)}`} key={point.key} data-key={point.key} role="button" aria-label={`${point.label ?? point.key} · ${coord(point.lat, point.lng)}`} aria-pressed={n === activeIndex} onClick={() => select(n)}>
         <title>{point.label ?? point.key} · {coord(point.lat, point.lng)}</title>
-        {n === index && <circle className="ks-map-marker-ring" cx={xOf(point.lng)} cy={yOf(point.lat)} r={radius(point) + 5} />}
+        {n === activeIndex && <circle className="ks-map-marker-ring" cx={xOf(point.lng)} cy={yOf(point.lat)} r={radius(point) + 5} />}
         <circle className="ks-map-marker" cx={xOf(point.lng)} cy={yOf(point.lat)} r={radius(point)} />
       </g>)}
     </svg></div>
