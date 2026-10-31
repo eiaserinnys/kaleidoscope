@@ -145,7 +145,7 @@ fn reader_evaluates_nested_discussion_and_all_tab_bindings() {
         ),
         (
             "item".into(),
-            json!({"author":"alice","text":"<p>소개 &amp; 본문</p><pre><code>Vec&lt;T&gt;</code></pre>","children":[{"id":1,"author":"bob","created_at":"2026-10-31T10:00:00Z","text":"첫 댓글","children":[{"id":2,"author":"eve","created_at":"2026-10-31T10:05:00Z","text":"<p>깊은 답글</p>","children":[]}]}]}),
+            json!({"author":"alice","text":"<p>소개 &amp; 본문</p><code>inline</code><pre><code>Vec&lt;T&gt;</code></pre>","children":[{"id":1,"author":"bob","created_at":"2026-10-31T10:00:00Z","text":"첫 댓글","children":[{"id":2,"author":"eve","created_at":"2026-10-31T10:05:00Z","text":"<p>깊은 답글</p>","children":[]}]}]}),
         ),
         (
             "github_repo".into(),
@@ -260,26 +260,37 @@ fn reader_evaluates_nested_discussion_and_all_tab_bindings() {
 #[test]
 fn reader_limits_roots_and_replies_while_including_depth_four() {
     let (definition, app) = reader();
-    let depth4 = json!({"id":"depth-4","author":"d4","text":"깊이 4","children":[]});
-    let depth3 = json!({"id":"depth-3","author":"d3","text":"깊이 3","children":[depth4]});
-    let depth2 = json!({"id":"depth-2","author":"d2","text":"깊이 2","children":[depth3]});
+    let html_body = format!("<p>{}</p>", "답글 &amp; 본문 ".repeat(20));
+    let entity_body = format!("{} &amp; 본문", "답글 ".repeat(20));
+    let plain_body = "답글 본문 ".repeat(20);
+    let body_for = |index: usize| match index % 5 {
+        0 | 1 => html_body.as_str(),
+        2 => entity_body.as_str(),
+        _ => plain_body.as_str(),
+    };
+    let depth4 = json!({"id":"depth-4","author":"d4","text":body_for(4),"children":[]});
+    let depth3 = json!({"id":"depth-3","author":"d3","text":body_for(3),"children":[depth4]});
+    let depth2 = json!({"id":"depth-2","author":"d2","text":body_for(2),"children":[depth3]});
     let mut depth1_children = vec![depth2];
     depth1_children.extend(
         (0..8).map(
-            |i| json!({"id":format!("d1-{i}"),"author":"d1","text":"추가 답글","children":[]}),
+            |i| json!({"id":format!("d1-{i}"),"author":"d1","text":body_for(i),"children":[]}),
         ),
     );
-    let depth1 = json!({"id":"depth-1","author":"d1","text":"깊이 1","children":depth1_children});
+    let depth1 =
+        json!({"id":"depth-1","author":"d1","text":body_for(1),"children":depth1_children});
     let mut root_children = vec![depth1];
-    root_children.extend((0..8).map(
-        |i| json!({"id":format!("root-child-{i}"),"author":"child","text":"답글","children":[]}),
-    ));
+    root_children.extend((0..8).map(|i| {
+        json!({"id":format!("root-child-{i}"),"author":"child","text":body_for(i),"children":[]})
+    }));
     let mut roots =
-        vec![json!({"id":"root-0","author":"root","text":"첫 루트","children":root_children})];
-    roots
-        .extend((1..30).map(
-            |i| json!({"id":format!("root-{i}"),"author":"root","text":"루트","children":[]}),
-        ));
+        vec![json!({"id":"root-0","author":"root","text":body_for(0),"children":root_children})];
+    roots.extend((1..30).map(|i| {
+        let children = (0..8)
+            .map(|j| json!({"id":format!("root-{i}-child-{j}"),"author":"child","text":body_for(i+j),"children":[]}))
+            .collect::<Vec<_>>();
+        json!({"id":format!("root-{i}"),"author":"root","text":body_for(i),"children":children})
+    }));
     let data = BTreeMap::from([
         (
             "stories".into(),
@@ -306,6 +317,8 @@ fn reader_limits_roots_and_replies_while_including_depth_four() {
     assert_eq!(feed[0]["key"], "root-0");
     assert_eq!(feed[0]["children"].as_array().unwrap().len(), 8);
     assert_eq!(feed[0]["badges"][0]["text"], "답글 9");
+    assert_eq!(feed[1]["children"].as_array().unwrap().len(), 8);
+    assert!(feed[0]["body"].as_str().unwrap().contains("답글 & 본문"));
     assert_eq!(
         feed[0]["children"][0]["children"][0]["children"][0]["children"][0]["key"],
         "depth-4"
