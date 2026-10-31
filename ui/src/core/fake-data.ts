@@ -16,6 +16,22 @@ function childBlocks(block: Block, pointer: string): Array<[string, Block]> {
   }
 }
 
+function actionSlots(block: Block, pointer = "/ui"): Set<string> {
+  const slots = new Set<string>();
+  const add = (field: string, present = true) => { if (present) slots.add(`${pointer}/${field}`); };
+  switch (block.type) {
+    case "keypad": add("on_press"); break;
+    case "chart": case "list": case "tree": case "table": case "feed": add("on_select", block.on_select !== undefined); break;
+    case "input": add("on_change"); add("on_submit", block.on_submit !== undefined); break;
+    case "select": case "toggle": add("on_change"); break;
+    case "button": add("on_click"); break;
+  }
+  for (const [childPointer, child] of childBlocks(block, pointer)) {
+    for (const slot of actionSlots(child, childPointer)) slots.add(slot);
+  }
+  return slots;
+}
+
 function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]> {
   const slots: Array<[string, Binding]> = [];
   const add = (name: string, value: Binding | undefined) => { if (value !== undefined) slots.push([`${pointer}/${name}`, value]); };
@@ -138,6 +154,7 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
     async refresh(id: string, names: string[]) { const context = attached.get(id); if (!context) throw { code: "not_found", message: "연결된 데이터가 없습니다", details: [] }; await refresh(context, names); },
     async act(id: string, pointer: string, event: JsonValue, item?: JsonValue) {
       const context = attached.get(id); if (!context) throw { code: "not_found", message: "연결된 데이터가 없습니다", details: [] };
+      if (!actionSlots(context.definition.ui).has(pointer)) throw { code: "invalid_request", message: "명령을 처리할 수 없습니다.", details: [] };
       const actions = pointerValue(context.definition, pointer) as Actions | undefined;
       if (!actions) throw { code: "not_found", message: "동작을 찾을 수 없습니다", details: [] };
       const list: Action[] = Array.isArray(actions) ? actions : [actions];

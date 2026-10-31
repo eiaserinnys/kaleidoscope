@@ -2791,6 +2791,8 @@ mod tests {
              export const SHARE_TEXT_CUT_MARK = {:?};\n\
              /** (9판) 같이 보기 창이 바뀐 뒤 글을 다시 옮기기까지 기다리는 시간(ms). */\n\
              export const SHARE_DEBOUNCE_MS = {};\n\
+             /** 쉘에 기본 탑재되는 앱 ID 목록. */\n\
+             export const BUILTIN_APP_IDS = [{}] as const;\n\
              /** 단추 아이콘으로 쓸 수 있는 Lucide 아이콘 이름(블록 세트 4판). */\n\
              export const ICON_NAMES = [{}] as const;\n\
              export type IconName = (typeof ICON_NAMES)[number];\n",
@@ -2804,6 +2806,7 @@ mod tests {
             SHARE_TEXT_MAX_BYTES,
             SHARE_TEXT_CUT_MARK,
             SHARE_DEBOUNCE_MS,
+            builtin::BUILTIN_IDENTITIES.iter().map(|app| format!("\"{}\"", app.id)).collect::<Vec<_>>().join(", "),
             data::ICON_NAMES
                 .iter()
                 .map(|name| format!("\"{name}\""))

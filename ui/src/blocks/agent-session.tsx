@@ -4,7 +4,7 @@ import { Button, EmptyState, IconButton, Notice, StatusText } from "../component
 import { Folder, FolderOpen, MessageSquare } from "../components/icons";
 import { Select, Toggle } from "../components/select-toggle";
 import { toCoreError } from "../core/core-transport";
-import { useBinding, useWindowData } from "../data/window-data";
+import { useBinding } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { useShareDescriber } from "../share/visible";
 import { flushShareViews } from "../share/share-view";
@@ -16,7 +16,6 @@ type AgentSessionBlockData = Extract<Block, { type: "agent_session" }>;
 
 export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: AgentSessionBlockData; context: BlockContext; pointer?: string }) {
   const windowId = context.window.id;
-  const data = useWindowData();
   const agentsBinding = useBinding(`${pointer}/agents`, block.agents);
   const [snapshot, setSnapshot] = useState<LocalAgentSnapshot | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -96,8 +95,14 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
   }, [context.store, withLatestGeneration]);
 
   const chooseAgent = useCallback((value: unknown) => {
-    if (typeof value === "string") void data.act(`${pointer}/on_select`, value);
-  }, [data, pointer]);
+    if (typeof value === "string") {
+      void call({
+        op: "window.set_state",
+        window_id: windowId,
+        state: { ...context.window.state, [block.on_select.set_state]: value },
+      });
+    }
+  }, [block.on_select.set_state, call, context.window.state, windowId]);
 
   const chooseFolder = useCallback(async () => {
     await call({ op: "files.pick_folder", window_id: windowId, permission: block.root.permission });

@@ -5,6 +5,14 @@ import type { CoreEvent } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { makeTestSeed, makeTestSnapshot } from "./fixtures";
+import calculatorJson from "../../../apps/calculator.json";
+import weatherJson from "../../../apps/weather.json";
+import agentJson from "../../../apps/agent.json";
+import explorerJson from "../../../apps/explorer.json";
+import mdEditorJson from "../../../apps/md-editor.json";
+import mdViewerJson from "../../../apps/md-viewer.json";
+import webBrowserJson from "../../../apps/web-browser.json";
+import type { AppDefinition } from "../contract/contract";
 
 if (!globalThis.ResizeObserver) {
   Object.defineProperty(globalThis, "ResizeObserver", {
@@ -22,6 +30,54 @@ if (!globalThis.ResizeObserver) {
 afterEach(() => cleanup());
 
 describe("shell core events", () => {
+  it("앱 열기 메뉴에서 기본 앱과 커스텀 앱을 각각 가나다순으로 열 수 있다", async () => {
+    document.documentElement.style.setProperty("--ks-window-min-width", "360px");
+    document.documentElement.style.setProperty("--ks-window-min-height", "240px");
+    const definitions = [
+      calculatorJson, weatherJson, agentJson, explorerJson, mdEditorJson, mdViewerJson, webBrowserJson,
+      { ...mdViewerJson, id: "custom-z", name: "가나다 커스텀" },
+      { ...mdViewerJson, id: "custom-a", name: "가나가 커스텀" },
+      { ...mdViewerJson, id: "custom-b", name: "가나가 커스텀" },
+    ] as AppDefinition[];
+    const snapshot = makeTestSnapshot({ definitions });
+    snapshot.shared.windows.forEach((window) => { window.id = `test-window-${window.app_id}`; });
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const calls = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+
+    fireEvent.click(screen.getByRole("button", { name: "앱 열기" }));
+
+    const menu = screen.getByRole("menu");
+    expect([...menu.querySelectorAll(".ks-menu-group-heading")].map((item) => item.textContent)).toEqual(["기본앱", "커스텀 앱"]);
+    expect(menu.querySelectorAll('[role="separator"]')).toHaveLength(1);
+    expect([...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)).toEqual([
+      "계산기", "날씨", "마크다운 보기", "마크다운 편집기", "에이전트", "웹 브라우저", "탐색기",
+      "가나가 커스텀", "가나가 커스텀", "가나다 커스텀",
+    ]);
+    fireEvent.click(screen.getByRole("menu").querySelectorAll('[role="menuitem"]')[7]);
+    await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "window.open", app_id: "custom-a" })));
+    store.dispose();
+  });
+
+  it("기본 앱만 있으면 기본앱 섹션만 표시한다", async () => {
+    const definitions = [calculatorJson, mdViewerJson] as AppDefinition[];
+    const snapshot = makeTestSnapshot({ definitions });
+    snapshot.shared.windows.forEach((window) => { window.id = `builtin-window-${window.app_id}`; });
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    render(<Shell store={store} />);
+    await store.ready;
+
+    fireEvent.click(screen.getByRole("button", { name: "앱 열기" }));
+
+    const menu = screen.getByRole("menu");
+    expect([...menu.querySelectorAll(".ks-menu-group-heading")].map((item) => item.textContent)).toEqual(["기본앱"]);
+    expect(menu.querySelector('[role="separator"]')).toBeNull();
+    expect(screen.queryByText("커스텀 앱")).toBeNull();
+    store.dispose();
+  });
+
   it("delivers non-state events without replacing the snapshot", async () => {
     const transport = createFakeTransport(makeTestSeed());
     const store = createShellStore(transport);

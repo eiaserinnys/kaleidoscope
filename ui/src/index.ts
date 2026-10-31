@@ -31,7 +31,8 @@ export {
   ScreenShare,
   X,
 } from "./components/icons";
-export { Menu, type MenuEntry, type MenuItem, type MenuProps, type MenuSeparator } from "./components/menu";
+export { Menu, type MenuEntry, type MenuHeading, type MenuItem, type MenuProps, type MenuSeparator } from "./components/menu";
+export { BUILTIN_APP_IDS } from "./contract/limits";
 export { TextInput, type TextInputProps } from "./components/text-input";
 export { createHttpTransport } from "./core/http-transport";
 export {

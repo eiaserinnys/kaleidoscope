@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   Button,
+  BUILTIN_APP_IDS,
   ChevronDown,
   Cloud,
   CloudOff,
@@ -112,8 +113,11 @@ export function Shell({ store }: { store: ShellStore }) {
     .sort((a, b) => a.position - b.position);
 
   const openAppMenu = (anchor: HTMLElement) => {
-    const entries: MenuEntry[] = snapshot.shared.apps.length > 0
-      ? snapshot.shared.apps.map((app) => ({
+    const builtins = new Set<string>(BUILTIN_APP_IDS);
+    const sortApps = (apps: ShellSnapshot["shared"]["apps"]) => apps.slice().sort((a, b) => a.name.localeCompare(b.name, "ko") || a.id.localeCompare(b.id));
+    const builtinApps = sortApps(snapshot.shared.apps.filter((app) => builtins.has(app.id)));
+    const customApps = sortApps(snapshot.shared.apps.filter((app) => !builtins.has(app.id)));
+    const appEntries = (apps: typeof builtinApps) => apps.map((app) => ({
         id: `app-${app.id}`,
         label: app.name,
         onSelect: () => void runCommand({
@@ -122,8 +126,16 @@ export function Shell({ store }: { store: ShellStore }) {
           app_id: app.id,
           rect: newWindowRect(activeDesktop.id, snapshot),
         }),
-      }))
-      : [{ id: "no-apps", label: "앱 없음", disabled: true }];
+      }));
+    const entries: MenuEntry[] = [
+      ...(builtinApps.length ? [{ id: "app-group-builtin", type: "heading" as const, label: "기본앱" }, ...appEntries(builtinApps)] : []),
+      ...(customApps.length ? [
+        ...(builtinApps.length ? [{ id: "app-group-separator", type: "separator" as const }] : []),
+        { id: "app-group-custom", type: "heading" as const, label: "커스텀 앱" },
+        ...appEntries(customApps),
+      ] : []),
+    ];
+    if (!entries.length) entries.push({ id: "no-apps", label: "앱 없음", disabled: true });
     setMenu({ kind: "items", anchor, entries });
   };
 
