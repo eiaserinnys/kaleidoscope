@@ -23,6 +23,7 @@
 
 .ks-file-tree-header {
   display: flex;
+  flex: 0 0 auto;
   min-width: 0;
   min-height: var(--ks-control-height);
   align-items: center;
@@ -562,6 +563,7 @@
 }
 
 .ks-agent-chat-toolbar {
+  flex: 0 0 auto;
   flex-wrap: wrap;
   justify-content: flex-start;
 }

@@ -185,16 +185,25 @@ pub(crate) fn read(
             Err(err) => return Err(map_error(inner, &ctx.link, err)),
         }
     }
-    inner
-        .registry
-        .storage_get(
-            &ctx.link.server_url,
-            &ctx.link.token,
-            &ctx.app,
-            entry,
-            &ctx.workspace,
-        )
-        .map_err(|e| map_error(inner, &ctx.link, e))
+    match inner.registry.storage_get(
+        &ctx.link.server_url,
+        &ctx.link.token,
+        &ctx.app,
+        entry,
+        &ctx.workspace,
+    ) {
+        Ok(reply) => Ok(reply),
+        Err(RegistryError::NotFound) if kaleidoscope_contract::builtin::is_builtin(&ctx.app) => {
+            let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
+            Ok(StorageReadReply {
+                kind: decl.kind,
+                content: decl.default.clone(),
+                revision: None,
+                exists: false,
+            })
+        }
+        Err(err) => Err(map_error(inner, &ctx.link, err)),
+    }
 }
 
 pub(crate) fn write(

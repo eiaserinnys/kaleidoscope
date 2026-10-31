@@ -55,6 +55,7 @@ fn reconnect_while(responding: bool) {
     });
     let offline = attach(&core, &window);
     assert_eq!(offline.generation, original.generation);
+    assert_eq!(offline.agents, original.agents);
     assert_eq!(
         offline.phase,
         if responding {

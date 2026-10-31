@@ -109,12 +109,22 @@ pub(crate) fn start_events(inner: &Arc<Inner>) {
     });
 }
 
-fn merged(ctx: &context::Context, worker: Option<&Worker>) -> LocalAgentSnapshot {
+fn merged(
+    ctx: &context::Context,
+    worker: Option<&Worker>,
+    previous: Option<&LocalAgentSnapshot>,
+) -> LocalAgentSnapshot {
     let mut result = match worker {
         Some(worker) => worker.lock().unwrap().snapshot(),
         None => ctx.snapshot.clone(),
     };
-    result.agents = ctx.snapshot.agents.clone();
+    result.agents = if worker.is_some() && ctx.binding_pending && ctx.snapshot.agents.is_empty() {
+        previous
+            .map(|snapshot| snapshot.agents.clone())
+            .unwrap_or_default()
+    } else {
+        ctx.snapshot.agents.clone()
+    };
     result.selected = ctx.snapshot.selected.clone();
     result.folder_name = ctx.snapshot.folder_name.clone();
     if worker.is_some() {
@@ -250,7 +260,7 @@ fn reconcile(inner: &Arc<Inner>, window: &str) {
             c.fingerprint = Some(fingerprint);
         }
     }
-    let mut snapshot = merged(&ctx, c.worker.as_ref());
+    let mut snapshot = merged(&ctx, c.worker.as_ref(), c.snapshot.as_ref());
     snapshot.generation = c.generation.clone();
     let changed = c.snapshot.as_ref() != Some(&snapshot);
     c.snapshot = Some(snapshot.clone());

@@ -307,6 +307,14 @@ describe("모델 풀림 시각", () => {
 });
 
 describe("공용 Select 묶음", () => {
+  it("선택지가 없으면 비활성화하고 빈 메뉴를 열지 않는다", () => {
+    render(<Select items={[]} value={undefined} label="항목" onChange={vi.fn()} />);
+    const button = screen.getByRole("button", { name: "항목" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("묶음 머리와 막힌 선택지는 건너뛰고 설명을 보인다", () => {
     const onChange = vi.fn();
     render(<Select groups={[{ name: "노드 A", options: [{ value: "a", label: "A" }, { value: "b", label: "B", disabled: true, description: "한도 거부 중" }, { value: "c", label: "C" }] }]} value="a" label="모델" onChange={onChange} />);

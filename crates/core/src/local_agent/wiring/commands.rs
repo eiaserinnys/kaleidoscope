@@ -19,7 +19,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             let ctx = context::resolve(inner, &window_id, &c.generation)?
                 .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
             Ok(CoreReply::LocalAgentAttach {
-                snapshot: merged(&ctx, c.worker.as_ref()),
+                snapshot: merged(&ctx, c.worker.as_ref(), c.snapshot.as_ref()),
             })
         }
         CoreRequest::LocalAgentDetach { window_id } => {
