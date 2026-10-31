@@ -23,5 +23,5 @@ export function MediaThumbnail({ media, size, className = "" }: { media: MediaRe
   }, []);
   const result = useMedia(measured ? media : null, measured || size);
   const style = cropStyle(media?.crop);
-  return <span ref={ref} className={`ks-media-thumbnail ${className}`}>{result.status === "ready" ? <img alt="" src={result.url} style={style} /> : <DataIcon name="image" size="empty" />}</span>;
+  return <span ref={ref} className={`ks-media-thumbnail${media && "asset" in media ? " is-asset" : ""} ${className}`}>{result.status === "ready" ? <img alt="" src={result.url} style={style} /> : <DataIcon name="image" size="empty" />}</span>;
 }

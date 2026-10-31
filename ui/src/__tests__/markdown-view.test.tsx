@@ -1,12 +1,15 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import { grantFor, makeTestSeed } from "./fixtures";
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("markdown_view block", () => {
   it("does not render raw HTML or images and prevents link navigation", async () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
     const transport = createFakeTransport(makeTestSeed({
       viewerPath: "README.md",
       grants: [grantFor("viewer-window", "docs")],
@@ -27,6 +30,7 @@ describe("markdown_view block", () => {
     const event = new MouseEvent("click", { bubbles: true, cancelable: true });
     expect(link.dispatchEvent(event)).toBe(false);
     expect(event.defaultPrevented).toBe(true);
+    expect(open).toHaveBeenCalledWith("https://example.com/", "_blank", "noopener,noreferrer");
   });
 
   it.each(["editor-window", "viewer-window"])("keeps %s content blank until its folder permission is granted", async (windowId) => {

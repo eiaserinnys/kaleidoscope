@@ -177,6 +177,7 @@
             "type": "button",
             "label": "검색",
             "icon": "search",
+            "icon_only": true,
             "on_click": [
               {
                 "set_state": "search",
@@ -250,29 +251,12 @@
                 }
               },
               {
-                "type": "section",
-                "title": "시간별 기온",
-                "child": {
-                  "type": "chart",
-                  "kind": "area",
-                  "y_unit": "°C",
-                  "height": "medium",
-                  "series": {
-                    "expr": "($points := $map($data.forecast.hourly.time,function($t,$i){$t >= $data.forecast.current.time ? {'x':$substring($t,11,5),'y':$data.forecast.hourly.temperature_2m[$i], 'label':'강수 ' & $string($data.forecast.hourly.precipitation_probability[$i]) & '%'} : ()}); [{'key':'temp','name':'기온','points':[$points[0..23]]}])"
-                  }
-                }
-              },
-              {
-                "type": "section",
-                "title": "시간별 강수 확률",
-                "child": {
-                  "type": "chart",
-                  "kind": "bar",
-                  "y_unit": "%",
-                  "height": "compact",
-                  "series": {
-                    "expr": "($points := $map($data.forecast.hourly.time,function($t,$i){$t >= $data.forecast.current.time ? {'x':$substring($t,11,5),'y':$data.forecast.hourly.precipitation_probability[$i]} : ()}); [{'key':'rain','name':'강수 확률','points':[$points[0..23]]}])"
-                  }
+                "type": "chart",
+                "kind": "area",
+                "y_unit": "°C",
+                "height": "medium",
+                "series": {
+                  "expr": "($points := $map($data.forecast.hourly.time,function($t,$i){$t >= $data.forecast.current.time ? {'x':$substring($t,11,5),'y':$data.forecast.hourly.temperature_2m[$i], 'label':'강수 ' & $string($data.forecast.hourly.precipitation_probability[$i]) & '%'} : ()}); [{'key':'temp','name':'기온','points':[$points[0..23]]}])"
                 }
               },
               {

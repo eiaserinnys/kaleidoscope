@@ -83,15 +83,38 @@ fn weather_forecast_produces_declared_images_and_future_hourly_points() {
         panic!("현재 날씨 계산 실패: {:?}", values[pointer]);
     };
     assert_eq!(value[0]["image"]["asset"], "builtin-weather-showers");
-    let pointer = "/ui/children/1/children/1/children/1/child/series";
+    let pointer = "/ui/children/1/children/1/children/1/series";
     let BindingValue::Ready { value } = &values[pointer] else {
         panic!("시간별 계산 실패: {:?}", values[pointer]);
     };
     assert_eq!(value[0]["points"][0]["x"], "12:00");
-    let pointer = "/ui/children/1/children/1/children/3/items";
+    let pointer = "/ui/children/1/children/1/children/2/items";
     let BindingValue::Ready { value } = &values[pointer] else {
         panic!("일별 계산 실패: {:?}", values[pointer]);
     };
     assert_eq!(value[0]["title"], "오늘");
     assert_eq!(value[1]["title"], "일 11-01");
+}
+
+#[test]
+fn weather_daily_forecast_shows_each_korean_weekday() {
+    use kaleidoscope_contract::data::{BindingValue, SourceStatus};
+    let definition = parse_app_definition(&app_file("weather.json")).unwrap();
+    let app = CompiledApp::compile(&definition);
+    let sources = BTreeMap::from([("forecast".into(), json!({
+        "daily": {
+            "time":["2026-11-01","2026-11-02","2026-11-03","2026-11-04","2026-11-05","2026-11-06","2026-11-07","2026-11-08"],
+            "weather_code":[0,0,0,0,0,0,0,0],
+            "temperature_2m_min":[10,10,10,10,10,10,10,10],
+            "temperature_2m_max":[20,20,20,20,20,20,20,20],
+            "precipitation_probability_max":[0,0,0,0,0,0,0,0]
+        }
+    }))]);
+    let status = BTreeMap::from([("forecast".into(), SourceStatus::Ready { updated_at: "2026-11-01T00:00:00Z".into() })]);
+    let values = app.evaluate(&definition.state, &sources, &status);
+    let pointer = "/ui/children/1/children/1/children/2/items";
+    let BindingValue::Ready { value } = &values[pointer] else { panic!("일별 계산 실패: {:?}", values[pointer]); };
+    for (index, day) in ["월", "화", "수", "목", "금", "토", "일"].iter().enumerate() {
+        assert!(value[index + 1]["title"].as_str().unwrap().starts_with(day));
+    }
 }

@@ -20,6 +20,9 @@ import { CodeEditorBlock } from "../blocks/code-editor";
 import { CodeViewBlock } from "../blocks/code-view";
 import { ImageBlock } from "../blocks/data-image";
 import { MediaBlock } from "../blocks/data-media";
+import { MetricsBlock } from "../blocks/data-metrics";
+import { KeypadBlock } from "../blocks/data-keypad";
+import { ChartBlock } from "../blocks/data-chart";
 
 export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"): ReactNode {
   switch (block.type) {
@@ -53,10 +56,9 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
     case "code_view": return <CodeViewBlock block={block} context={context} pointer={pointer} />;
     case "image": return <ImageBlock block={block} pointer={pointer} />;
     case "media": return <MediaBlock block={block} pointer={pointer} />;
-    case "metrics":
-    case "keypad":
-    case "chart":
-      return null;
+    case "metrics": return <MetricsBlock block={block} pointer={pointer} />;
+    case "keypad": return <KeypadBlock block={block} context={context} pointer={pointer} />;
+    case "chart": return <ChartBlock block={block} pointer={pointer} />;
     case "web_view":
       return <WebViewBlock block={block} context={context} />;
     case "explorer":
