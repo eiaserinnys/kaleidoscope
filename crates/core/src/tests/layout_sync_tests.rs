@@ -206,6 +206,156 @@ fn local_commands_track_changed_entities_including_deletions() {
 }
 
 #[test]
+fn share_and_sent_context_changes_mark_desktop_pending_for_sync() {
+    use crate::sync_state::EntityKind::Desktop;
+    let dir = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core_with_client(
+        dir.path(),
+        vec![test_definition(MD_EDITOR)],
+        &host,
+        registry_client(),
+    );
+    mark_connected(&core);
+    let (_, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    assert!(is_pending(&core, Desktop, &desktop_id));
+
+    let clear_pending = || {
+        let mut state = core.inner.state.lock().unwrap();
+        state.sync.pending.clear();
+        crate::sync_state::save(&dir.path(), &state.sync).unwrap();
+    };
+    clear_pending();
+    crate::share::mark_sent_text(
+        &core.inner,
+        "thread",
+        BTreeMap::from([(
+            window_id.clone(),
+            kaleidoscope_data::share::SentView {
+                app_name: "마크다운 편집기".into(),
+                text: "마지막으로 보낸 글".into(),
+            },
+        )]),
+    );
+    assert!(is_pending(&core, Desktop, &desktop_id));
+
+    clear_pending();
+    crate::share::mark_sent_visuals(
+        &core.inner,
+        "thread",
+        vec![(window_id, "image-hash".into())],
+    );
+    assert!(is_pending(&core, Desktop, &desktop_id));
+    let sync: Value =
+        serde_json::from_slice(&fs::read(dir.path().join("sync.json")).unwrap()).unwrap();
+    assert!(sync["pending"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|key| key["kind"] == "desktop" && key["id"] == desktop_id));
+}
+
+#[test]
+fn another_core_keeps_synced_share_baselines_before_view_arrives() {
+    let first_dir = TempDir::new().unwrap();
+    let second_dir = TempDir::new().unwrap();
+    let png = test_png(8, 8);
+    let make_host = || {
+        Arc::new(CaptureTestHost {
+            png: Mutex::new(png.clone()),
+            web_captures: AtomicUsize::new(0),
+            shell_captures: AtomicUsize::new(0),
+        })
+    };
+    let open = |data_dir: &Path, host: &Arc<CaptureTestHost>| {
+        Core::open(
+            CoreConfig {
+                data_dir: data_dir.to_path_buf(),
+                seed_definitions: vec![test_definition(MD_EDITOR)],
+                server_url: "http://127.0.0.1:4219".into(),
+                device_name: "test-device".into(),
+            },
+            host.clone(),
+        )
+        .unwrap()
+    };
+    let first_host = make_host();
+    let first = open(first_dir.path(), &first_host);
+    let (workspace_id, desktop_id) = active_ids(&first);
+    let window_id = open_window(&first, &desktop_id, "test-md-editor");
+    first
+        .handle(CoreRequest::ShareSet {
+            window_id: window_id.clone(),
+            on: true,
+        })
+        .unwrap();
+    let view = kaleidoscope_contract::VisibleView {
+        text: "동기화된 글".into(),
+        visual: true,
+        bounds: Rect {
+            x: 0,
+            y: 0,
+            width: 8,
+            height: 8,
+        },
+    };
+    first
+        .handle(CoreRequest::ShareView {
+            window_id: window_id.clone(),
+            view: view.clone(),
+        })
+        .unwrap();
+    let (text, sent) = crate::share::prepare_text(&first.inner, &workspace_id, "thread").unwrap();
+    assert!(text.contains("새로 같이 봄"));
+    crate::share::mark_sent_text(&first.inner, "thread", sent);
+    let (attachments, visuals) =
+        crate::share::capture_for_send(&first.inner, &workspace_id, "thread", &[]);
+    assert_eq!(attachments.len(), 1);
+    crate::share::mark_sent_visuals(&first.inner, "thread", visuals);
+
+    let first_snapshot = snapshot(&first);
+    let second_host = make_host();
+    let second = open(second_dir.path(), &second_host);
+    mark_connected(&second);
+    crate::registry_events::apply_event(
+        &second.inner,
+        0,
+        DeviceEvent::LayoutSnapshot {
+            workspaces: first_snapshot.shared.workspaces.clone(),
+            desktops: first_snapshot.shared.desktops.clone(),
+            windows: first_snapshot.shared.windows.clone(),
+        },
+    );
+    let second_snapshot = snapshot(&second);
+    assert_eq!(second_snapshot.sharing, vec![window_id.clone()]);
+    assert!(
+        crate::share::prepare_text(&second.inner, &workspace_id, "thread")
+            .unwrap()
+            .0
+            .contains("그대로")
+    );
+
+    second
+        .handle(CoreRequest::ShareView { window_id, view })
+        .unwrap();
+    assert!(
+        crate::share::prepare_text(&second.inner, &workspace_id, "thread")
+            .unwrap()
+            .0
+            .contains("그대로")
+    );
+    let (same_attachments, _) =
+        crate::share::capture_for_send(&second.inner, &workspace_id, "thread", &[]);
+    assert!(same_attachments.is_empty());
+}
+
+#[test]
 fn first_sync_keeps_populated_local_work_and_pending_wins_in_both_events() {
     let dir = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());

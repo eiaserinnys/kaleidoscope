@@ -186,6 +186,8 @@ async fn second_account_workspaces_connections_and_devices_are_hidden_from_mcp_p
             workspace_id: second_account.clone(),
             name: "Desktop".into(),
             position: 0,
+            sharing: Vec::new(),
+            last_sent_context: Default::default(),
             created_at: "created".into(),
             updated_at: "updated".into(),
         };
