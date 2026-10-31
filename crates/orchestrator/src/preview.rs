@@ -1,12 +1,11 @@
 // 미리 보기의 저장소 문맥은 이번 위임 범위인 이 파일에 둔다.
 use super::mcp::{json_error, json_result, McpServer};
 use super::*;
-use futures::future::join_all;
 use kaleidoscope_contract::{
     data::{Binding, BindingValue, HttpMethod, SourceDecl, SourceFormat, SourceStatus},
     registry::{ConnectionAccept, ConnectionKind, ConnectionRequest},
     validate::parse_app_definition,
-    CoreError, ErrorCode, FileAccess, PermissionDecl,
+    CoreError, ErrorCode, PermissionDecl,
 };
 use kaleidoscope_data::{CompiledApp, SourcePlan};
 use rmcp::{model::CallToolResult, ErrorData};
@@ -121,10 +120,8 @@ impl McpServer {
         let mut statuses = BTreeMap::new();
         let mut source_results = BTreeMap::new();
         let mut notes = Vec::new();
-        let mut requests: Vec<(String, String, FileAccess, SourceFormat, ConnectionRequest)> =
-            Vec::new();
 
-        for name in definition.sources.keys() {
+        for name in compiled.source_order() {
             if let Some(sample) = samples.get(name) {
                 let bytes = sample.to_string().len();
                 data.insert(name.clone(), sample.clone());
@@ -138,7 +135,30 @@ impl McpServer {
                 continue;
             }
 
-            match compiled.plan_source_with_storage(name, &state, &storage, &storage_meta) {
+            let problem = compiled
+                .source_dependencies(name)
+                .iter()
+                .filter(|dep| !data.contains_key(*dep))
+                .filter_map(|dep| statuses.get(dep))
+                .max_by_key(|status| match status {
+                    SourceStatus::LoginRequired { .. } => 3,
+                    SourceStatus::Failed { .. } => 2,
+                    SourceStatus::Loading { .. } => 1,
+                    _ => 0,
+                })
+                .cloned();
+            if let Some(status) = problem {
+                source_results.insert(name.clone(), serde_json::to_value(&status).unwrap());
+                statuses.insert(name.clone(), status);
+                continue;
+            }
+            match compiled.plan_source_with_data_and_storage(
+                name,
+                &state,
+                &data,
+                &storage,
+                &storage_meta,
+            ) {
                 SourcePlan::Idle => {
                     statuses.insert(name.clone(), SourceStatus::Idle {});
                     source_results.insert(name.clone(), json!({"state":"idle"}));
@@ -305,91 +325,83 @@ impl McpServer {
                             SourceFormat::Text => ConnectionAccept::Text,
                         },
                     };
-                    requests.push((name.clone(), connection.clone(), *access, format, request));
+                    let response = self
+                        .state
+                        .relay_preview_request(connection, request, *access)
+                        .await;
+                    let name = name.clone();
+                    match response {
+                        Ok((reply, bytes)) if !(200..300).contains(&reply.status) => {
+                            let body = reply
+                                .text
+                                .or_else(|| reply.json.map(|value| value.to_string()))
+                                .unwrap_or_default();
+                            let excerpt: String = body.chars().take(200).collect();
+                            let message = format!("HTTP {}: {excerpt}", reply.status);
+                            statuses.insert(
+                                name.clone(),
+                                SourceStatus::Failed {
+                                    message: message.clone(),
+                                    has_value: false,
+                                },
+                            );
+                            source_results.insert(
+                                name,
+                                json!({"state":"failed","message":message,"bytes":bytes}),
+                            );
+                        }
+                        Ok((reply, bytes)) => {
+                            let source_value = match format {
+                                SourceFormat::Json => match (reply.json, reply.text) {
+                                    (Some(value), _) => Some(value),
+                                    (None, Some(_)) => None,
+                                    (None, None) => Some(Value::Null),
+                                },
+                                SourceFormat::Text => {
+                                    Some(Value::String(reply.text.unwrap_or_default()))
+                                }
+                            };
+                            if let Some(value) = source_value {
+                                data.insert(name.clone(), value);
+                                statuses.insert(
+                                    name.clone(),
+                                    SourceStatus::Ready {
+                                        updated_at: timestamp(),
+                                    },
+                                );
+                                source_results.insert(name, json!({"state":"ready","bytes":bytes}));
+                            } else {
+                                let message = "JSON을 읽을 수 없습니다";
+                                statuses.insert(
+                                    name.clone(),
+                                    SourceStatus::Failed {
+                                        message: message.into(),
+                                        has_value: false,
+                                    },
+                                );
+                                source_results.insert(
+                                    name,
+                                    json!({"state":"failed","message":message,"bytes":bytes}),
+                                );
+                            }
+                        }
+                        Err((status, error)) => {
+                            let message = format!("HTTP {}: {}", status.as_u16(), error.message);
+                            statuses.insert(
+                                name.clone(),
+                                SourceStatus::Failed {
+                                    message: message.clone(),
+                                    has_value: false,
+                                },
+                            );
+                            source_results
+                                .insert(name, json!({"state":"failed","message":message}));
+                        }
+                    }
                 }
             }
         }
 
-        let app_state = self.state.clone();
-        let responses = join_all(requests.into_iter().map(
-            |(name, connection, access, format, request)| {
-                let app_state = app_state.clone();
-                async move {
-                    let response = app_state
-                        .relay_preview_request(&connection, request, access)
-                        .await;
-                    (name, format, response)
-                }
-            },
-        ))
-        .await;
-        for (name, format, response) in responses {
-            match response {
-                Ok((reply, bytes)) if !(200..300).contains(&reply.status) => {
-                    let body = reply
-                        .text
-                        .or_else(|| reply.json.map(|value| value.to_string()))
-                        .unwrap_or_default();
-                    let excerpt: String = body.chars().take(200).collect();
-                    let message = format!("HTTP {}: {excerpt}", reply.status);
-                    statuses.insert(
-                        name.clone(),
-                        SourceStatus::Failed {
-                            message: message.clone(),
-                            has_value: false,
-                        },
-                    );
-                    source_results.insert(
-                        name,
-                        json!({"state":"failed","message":message,"bytes":bytes}),
-                    );
-                }
-                Ok((reply, bytes)) => {
-                    let source_value = match format {
-                        SourceFormat::Json => match (reply.json, reply.text) {
-                            (Some(value), _) => Some(value),
-                            (None, Some(_)) => None,
-                            (None, None) => Some(Value::Null),
-                        },
-                        SourceFormat::Text => Some(Value::String(reply.text.unwrap_or_default())),
-                    };
-                    if let Some(value) = source_value {
-                        data.insert(name.clone(), value);
-                        statuses.insert(
-                            name.clone(),
-                            SourceStatus::Ready {
-                                updated_at: timestamp(),
-                            },
-                        );
-                        source_results.insert(name, json!({"state":"ready","bytes":bytes}));
-                    } else {
-                        let message = "JSON을 읽을 수 없습니다";
-                        statuses.insert(
-                            name.clone(),
-                            SourceStatus::Failed {
-                                message: message.into(),
-                                has_value: false,
-                            },
-                        );
-                        source_results.insert(
-                            name,
-                            json!({"state":"failed","message":message,"bytes":bytes}),
-                        );
-                    }
-                }
-                Err((status, error)) => {
-                    let message = format!("HTTP {}: {}", status.as_u16(), error.message);
-                    statuses.insert(
-                        name.clone(),
-                        SourceStatus::Failed {
-                            message: message.clone(),
-                            has_value: false,
-                        },
-                    );
-                    source_results.insert(name, json!({"state":"failed","message":message}));
-                }
-            }
-        }
         for connection in missing_connections {
             notes.push(format!("서버에 없는 연결: {connection}"));
         }

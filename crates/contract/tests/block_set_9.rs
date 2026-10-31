@@ -29,3 +29,21 @@ fn keypad_rejects_invalid_columns_and_duplicate_keys() {
     let duplicates = json!({"type":"keypad", "columns":4, "buttons":[{"key":"1", "label":"1"},{"key":"1", "label":"다시"}], "on_press":{"set_state":"value"}});
     assert!(parse_app_definition(&definition(9, duplicates).to_string()).is_err());
 }
+
+#[test]
+fn candles_and_table_formats_validate_their_contract() {
+    let valid = json!({"type":"chart", "kind":"candlestick", "series":[{"key":"s","name":"값","points":[{"x":"날짜","open":3,"high":5,"low":1,"close":4}]}]});
+    assert!(parse_app_definition(&definition(9, valid.clone()).to_string()).is_ok());
+    let mut invalid = valid;
+    invalid["series"][0]["points"][0]["high"] = json!(2);
+    let error = parse_app_definition(&definition(9, invalid).to_string()).unwrap_err();
+    assert!(error
+        .details
+        .iter()
+        .any(|detail| detail.contains("candlestick chart 점")));
+    for format in ["delta", "sparkline"] {
+        let table = json!({"type":"table","rows":[],"columns":[{"field":"v","label":"값","format":format}]});
+        assert!(parse_app_definition(&definition(8, table.clone()).to_string()).is_err());
+        assert!(parse_app_definition(&definition(9, table).to_string()).is_ok());
+    }
+}

@@ -20,7 +20,7 @@
 //!   - `$storage`: 선언된 저장 항목 id → JSON 값 또는 md 문자열. `$storage_meta.bucket_id`는 현재 계정 × 앱 칸 id다.
 //!   - `$event`, `$item`: 동작 안에서만. `$event`는 블록 이벤트의 값(고른 항목의 `key`, 입력한 글, 켜고 끈 값 등),
 //!     `$item`은 목록, 표, 트리, 흐름에서 그 항목 전체다.
-//! - 원천의 값 자리(`path`, `query` 등)에 쓴 식은 `$state`만 본다(원천끼리 기대지 않는다).
+//! - 원천의 값 자리(`path`, `query`, `dir`)는 `$state`, `$storage`, `$storage_meta`와 다른 원천 `$data.이름`을 본다. 원천 참조는 순환할 수 없다.
 //! - 식이 원천을 읽는 것은 `$data.이름` 꼴로만 알아본다. 코어는 이 꼴로 식이 기대는 원천을 정하고, 그 원천의 상태
 //!   (불러오는 중, 실패, 로그인 필요)를 그 식의 값에 붙인다. `$data["이름"]`이나 `$lookup($data, ...)`처럼 쓰면
 //!   계산은 되지만 상태가 붙지 않는다.
@@ -592,7 +592,21 @@ pub struct ChartSeries {
 #[ts(export, export_to = "contract.ts")]
 pub struct ChartPoint {
     pub x: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
     pub y: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub open: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub high: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub low: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub close: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub label: Option<String>,
@@ -1087,6 +1101,60 @@ pub fn source_bindings(source: &SourceDecl) -> Vec<(String, &Binding)> {
         SourceDecl::File { path, .. } => vec![("path".to_string(), path)],
         SourceDecl::Folder { dir, .. } => dir.iter().map(|dir| ("dir".to_string(), dir)).collect(),
     }
+}
+
+/// 원천이 참조하는 다른 원천을 처음 등장한 순서로 모은다.
+pub fn source_data_refs(source: &SourceDecl) -> Vec<String> {
+    let mut refs = Vec::new();
+    for (_, binding) in source_bindings(source) {
+        if let Binding::Expr(expr) = binding {
+            for name in data_refs(&expr.expr) {
+                if !refs.contains(&name) {
+                    refs.push(name);
+                }
+            }
+        }
+    }
+    refs
+}
+
+/// 의존 원천이 먼저 나오도록 정렬하고 순환 경로를 돌려준다.
+pub fn source_topological_order(
+    sources: &BTreeMap<String, SourceDecl>,
+) -> Result<Vec<String>, Vec<String>> {
+    fn visit(
+        name: &str,
+        sources: &BTreeMap<String, SourceDecl>,
+        done: &mut std::collections::BTreeSet<String>,
+        stack: &mut Vec<String>,
+        order: &mut Vec<String>,
+    ) -> Result<(), Vec<String>> {
+        if let Some(index) = stack.iter().position(|item| item == name) {
+            let mut cycle = stack[index..].to_vec();
+            cycle.push(name.to_owned());
+            return Err(cycle);
+        }
+        if done.contains(name) {
+            return Ok(());
+        }
+        stack.push(name.to_owned());
+        for dep in source_data_refs(&sources[name]) {
+            if sources.contains_key(&dep) {
+                visit(&dep, sources, done, stack, order)?;
+            }
+        }
+        stack.pop();
+        done.insert(name.to_owned());
+        order.push(name.to_owned());
+        Ok(())
+    }
+    let mut done = std::collections::BTreeSet::new();
+    let mut stack = Vec::new();
+    let mut order = Vec::new();
+    for name in sources.keys() {
+        visit(name, sources, &mut done, &mut stack, &mut order)?;
+    }
+    Ok(order)
 }
 
 /// 동작 하나 안의 바인딩 자리(동작 자리 기준 상대 경로).

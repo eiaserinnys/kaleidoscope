@@ -31,6 +31,23 @@ fn map(value: Value) -> BTreeMap<String, Value> {
 }
 
 #[test]
+fn source_pipeline_plans_in_dependency_order() {
+    let mut definition = serde_json::to_value(fixture()).unwrap();
+    definition["sources"] = json!({
+        "a": {"kind":"request","permission":"api","path":{"expr":"'/a/' & $data.b.id"}},
+        "b": {"kind":"request","permission":"api","path":{"expr":"'/b/' & $data.c.id"}},
+        "c": {"kind":"request","permission":"api","path":"/c"}
+    });
+    let app = CompiledApp::compile(&serde_json::from_value(definition).unwrap());
+    assert_eq!(app.source_order(), ["c", "b", "a"]);
+    assert_eq!(app.source_dependencies("a"), ["b"]);
+    let data = map(json!({"b":{"id":"42"}}));
+    assert!(
+        matches!(app.plan_source_with_data_and_storage("a", &BTreeMap::new(), &data, &BTreeMap::new(), &BTreeMap::new()), SourcePlan::Request { path, .. } if path == "/a/42")
+    );
+}
+
+#[test]
 fn source_meta_is_available_without_waiting_for_source_value() {
     let mut definition = serde_json::to_value(fixture()).unwrap();
     definition["ui"]["children"][1]["value"] = json!({"expr":"$data_meta.a.updated_time"});

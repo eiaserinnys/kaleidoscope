@@ -21,6 +21,7 @@ import explorerJson from "../../apps/explorer.json";
 import agentJson from "../../apps/agent.json";
 import calculatorJson from "../../apps/calculator.json";
 import weatherJson from "../../apps/weather.json";
+import marketJson from "../../apps/market.json";
 import pasJson from "../../examples/workspace-pas.json";
 
 declare global {
@@ -72,7 +73,7 @@ const settingsDefinition: AppDefinition = {
   ui: harnessParams.has("settings-web") ? { type: "web_view", url: "https://example.com", address_bar: false } : harnessParams.has("settings-document") ? { type: "markdown_editor", document: { entry: "initial" } } : { type: "text", value: "앱 본문" },
 };
 if (harnessParams.get("app") === "empty-group") settingsDefinition.storage!.entries = settingsDefinition.storage!.entries.filter((entry) => !entry.key.includes("{workspace_id}"));
-const definitions = [mdEditorJson, mdViewerJson, webBrowserJson, explorerJson, agentJson, calculatorJson, weatherJson, pasJson, ...(settingsPreview ? [settingsDefinition] : []), ...(shareScenario === "table" || shareScenario === "list" ? [shareDefinition] : [])] as AppDefinition[];
+const definitions = [mdEditorJson, mdViewerJson, webBrowserJson, explorerJson, agentJson, calculatorJson, weatherJson, marketJson, pasJson, ...(settingsPreview ? [settingsDefinition] : []), ...(shareScenario === "table" || shareScenario === "list" ? [shareDefinition] : [])] as AppDefinition[];
 const apps: App[] = definitions.map((definition) => ({
   id: definition.id,
   name: definition.name,
