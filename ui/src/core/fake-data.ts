@@ -29,6 +29,9 @@ function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]
     case "select": add("options", block.options); break;
     case "button": add("disabled", block.disabled); add("confirm/body", block.confirm?.body); break;
     case "image": case "media": add("src", block.src); break;
+    case "metrics": add("items", block.items); break;
+    case "keypad": add("buttons", block.buttons); break;
+    case "chart": add("series", block.series); break;
   }
   return slots.concat(childBlocks(block, pointer).flatMap(([path, child]) => expressionSlots(child, path)));
 }

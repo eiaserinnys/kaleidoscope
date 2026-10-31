@@ -2,6 +2,7 @@
 mod app_commands;
 mod app_storage;
 mod attachment;
+pub mod builtin;
 mod connections;
 mod conversation;
 mod conversation_context;
@@ -45,8 +46,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Condvar, Mutex};
 
 use kaleidoscope_contract::{
-    CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, Grant, LinkStatus, PcRootKind, Rect,
-    SharedState, ShellSnapshot, UpdateStatus, WebHistoryAction, WebPage,
+    CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, ErrorCode, Grant, LinkStatus,
+    PcRootKind, Rect, SharedState, ShellSnapshot, UpdateStatus, WebHistoryAction, WebPage,
 };
 use registry_client::{HttpRegistryClient, RegistryClient};
 
@@ -442,6 +443,32 @@ impl Core {
             | CoreRequest::WebHistory { .. }
             | CoreRequest::WebCapture { .. }
             | CoreRequest::WebDetach { .. }) => web::handle(&self.inner, request),
+            CoreRequest::ExternalOpen { window_id, url } => {
+                let parsed =
+                    url::Url::parse(&url).map_err(|_| error::make(ErrorCode::InvalidRequest))?;
+                if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+                    return Err(error::make(ErrorCode::InvalidRequest));
+                }
+                if let Some(window_id) = window_id {
+                    if !self
+                        .inner
+                        .state
+                        .lock()
+                        .unwrap()
+                        .shared
+                        .windows
+                        .iter()
+                        .any(|window| window.id == window_id)
+                    {
+                        return Err(error::make(ErrorCode::NotFound));
+                    }
+                }
+                self.inner
+                    .host
+                    .open_url(&url)
+                    .map_err(|err| error::io_error(&err))?;
+                Ok(CoreReply::ExternalOpen {})
+            }
             CoreRequest::ShareSet { window_id, on } => share::set(&self.inner, &window_id, on),
             CoreRequest::ShareView { window_id, view } => {
                 share::view(&self.inner, &window_id, view)

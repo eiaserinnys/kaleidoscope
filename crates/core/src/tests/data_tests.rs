@@ -286,12 +286,12 @@ fn oauth_requires_login_and_media_is_resized_and_cached() {
     let (_, desktop) = active_ids(&core);
     let window = open_window(&core, &desktop, "data-app");
     pick_folder(&core, &window);
-    let media = MediaRef {
+    let media = MediaRef::Resource(kaleidoscope_contract::data::ResourceMediaRef {
         permission: "docs".into(),
         path: "test.png".into(),
         query: BTreeMap::new(),
         crop: None,
-    };
+    });
     let first = core
         .handle(CoreRequest::DataMedia {
             window_id: window.clone(),
@@ -765,7 +765,7 @@ fn reattach_during_state_notification_uses_new_state() {
 }
 
 #[test]
-fn path_change_failed_fetch_preserves_prior_value() {
+fn path_change_failed_fetch_clears_prior_value() {
     use kaleidoscope_contract::registry::ConnectionKind;
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
@@ -815,7 +815,7 @@ fn path_change_failed_fetch_preserves_prior_value() {
                 assert!(matches!(
                     view.sources.get("items"),
                     Some(SourceStatus::Failed {
-                        has_value: true,
+                        has_value: false,
                         ..
                     })
                 ));
@@ -829,9 +829,11 @@ fn path_change_failed_fetch_preserves_prior_value() {
     else {
         panic!("data.attach");
     };
-    assert!(
-        matches!(view.values.get("/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == &json!([{"key":"previous"}]))
-    );
+    assert!(!matches!(
+        view.values.get("/ui/children/0/items"),
+        Some(BindingValue::Ready { .. })
+    ));
+    assert!(view.source_meta["items"].updated_at.is_none());
 }
 
 #[test]
@@ -1020,6 +1022,86 @@ fn agent_three_definitions_are_imported_by_this_core() {
         })
         .unwrap();
     assert!(matches!(reply, CoreReply::AppImport { app, .. } if app.id == "workspace-pas-v2"));
+}
+
+#[test]
+fn storage_change_recalculates_source_metadata_bindings() {
+    let temp = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    fs::write(folder.path().join("one.json"), "{}").unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(folder.path().to_path_buf()));
+    let registry = Arc::new(FakeRegistryClient::default());
+    let definition = json!({
+        "id":"metadata-storage", "name":"메타 시험", "requires":{"blocks":6,"modules":{"storage":1,"files":1}},
+        "permissions":[{"module":"files","id":"docs","access":"read","label":"파일"}], "state":{},
+        "storage":{"entries":[{"id":"path","key":"workspaces/{workspace_id}/path","kind":"json","schema":{"type":"string"},"default":"one.json","label":"경로","presentation":"hidden"}]},
+        "sources":{"file":{"kind":"file","permission":"docs","path":{"expr":"$storage.path = 'none' ? null : $storage.path"}}},
+        "ui":{"type":"text","value":{"expr":"$data_meta.file.updated_at"}}
+    }).to_string();
+    let core = open_core_with_client(temp.path(), vec![definition], &host, registry.clone());
+    let (workspace, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "metadata-storage");
+    pick_folder(&core, &window);
+    mark_connected(&core);
+    let (sender, receiver) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        let _ = sender.send(event.clone());
+    }));
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+    })
+    .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut received_time = false;
+    while Instant::now() < deadline {
+        if let Ok(CoreEvent::DataUpdate { view, .. }) =
+            receiver.recv_timeout(Duration::from_millis(100))
+        {
+            if matches!(view.values.get("/ui/value"), Some(BindingValue::Ready { value }) if value.is_string())
+            {
+                received_time = true;
+                break;
+            }
+        }
+    }
+    assert!(received_time, "원천의 수신 시각을 받지 못했습니다");
+    while receiver.try_recv().is_ok() {}
+    *registry.storage_value.lock().unwrap() = Some((json!("none"), "changed".into()));
+    crate::registry_events::apply_event(
+        &core.inner,
+        0,
+        DeviceEvent::StorageChanged {
+            app_id: "metadata-storage".into(),
+            changed: kaleidoscope_contract::app_storage::StorageChanged {
+                bucket_id: "bucket".into(),
+                item: kaleidoscope_contract::app_storage::StorageItemMeta {
+                    entry_id: "path".into(),
+                    key: format!("workspaces/{workspace}/path"),
+                    kind: kaleidoscope_contract::app_storage::StorageKind::Json,
+                    revision: Some("changed".into()),
+                    exists: true,
+                },
+            },
+        },
+    );
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut cleared = false;
+    while Instant::now() < deadline {
+        if let Ok(CoreEvent::DataUpdate { view, .. }) =
+            receiver.recv_timeout(Duration::from_millis(100))
+        {
+            if matches!(view.values.get("/ui/value"), Some(BindingValue::Ready { value }) if value.is_null())
+            {
+                cleared = true;
+                break;
+            }
+        }
+    }
+    assert!(
+        cleared,
+        "원천이 꺼졌을 때 수신 시각이 초기화되지 않았습니다"
+    );
 }
 
 #[test]

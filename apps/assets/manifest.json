@@ -1,0 +1,90 @@
+[
+  {
+    "id": "builtin-weather-clear",
+    "version": 1,
+    "format": "svg",
+    "sha256": "1400fa4a92bec3b539669588d0ac4b833fde0eb4ceaf58e1e13627207f8cad26",
+    "source": "apps/assets/weather/clear.svg",
+    "license": "MIT",
+    "byte_size": 351,
+    "created_at": "2026-10-31T00:00:00Z",
+    "path": "weather/clear.svg"
+  },
+  {
+    "id": "builtin-weather-partly-cloudy",
+    "version": 1,
+    "format": "svg",
+    "sha256": "be2ddfc0d65779ba4a8a4cf26d66ae638797d5a5ffb0b5a8a8273e5e9ccb893a",
+    "source": "apps/assets/weather/partly-cloudy.svg",
+    "license": "MIT",
+    "byte_size": 428,
+    "created_at": "2026-10-31T00:00:00Z",
+    "path": "weather/partly-cloudy.svg"
+  },
+  {
+    "id": "builtin-weather-cloudy",
+    "version": 1,
+    "format": "svg",
+    "sha256": "e6519c58d7fe2d58d6845ec097b31d08730d5d803c3b9194a715b3eabdbef9a0",
+    "source": "apps/assets/weather/cloudy.svg",
+    "license": "MIT",
+    "byte_size": 278,
+    "created_at": "2026-10-31T00:00:00Z",
+    "path": "weather/cloudy.svg"
+  },
+  {
+    "id": "builtin-weather-fog",
+    "version": 1,
+    "format": "svg",
+    "sha256": "4c3bd22dc25c0dbef222691f57118a05f3a546aecaa7b0eb0055ce5c81d0254b",
+    "source": "apps/assets/weather/fog.svg",
+    "license": "MIT",
+    "byte_size": 320,
+    "created_at": "2026-10-31T00:00:00Z",
+    "path": "weather/fog.svg"
+  },
+  {
+    "id": "builtin-weather-rain",
+    "version": 1,
+    "format": "svg",
+    "sha256": "54405f90c63ad798e31f5b5d259f414a68bd47d8e57d6c1d715ff1ed38a7e916",
+    "source": "apps/assets/weather/rain.svg",
+    "license": "MIT",
+    "byte_size": 327,
+    "created_at": "2026-10-31T00:00:00Z",
+    "path": "weather/rain.svg"
+  },
+  {
+    "id": "builtin-weather-showers",
+    "version": 1,
+    "format": "svg",
+    "sha256": "0640f344c65b3b05c0a6993397bdb84c59cdef9ebfaa606ee61c4611bbac3da8",
+    "source": "apps/assets/weather/showers.svg",
+    "license": "MIT",
+    "byte_size": 415,
+    "created_at": "2026-10-31T00:00:00Z",
+    "path": "weather/showers.svg"
+  },
+  {
+    "id": "builtin-weather-snow",
+    "version": 1,
+    "format": "svg",
+    "sha256": "5b147b9dd8846fea04fc4dd9541753a3bd373e4ab1a8074a6a83c4548f112444",
+    "source": "apps/assets/weather/snow.svg",
+    "license": "MIT",
+    "byte_size": 329,
+    "created_at": "2026-10-31T00:00:00Z",
+    "path": "weather/snow.svg"
+  },
+  {
+    "id": "builtin-weather-thunderstorm",
+    "version": 1,
+    "format": "svg",
+    "sha256": "6d5b18fd9ef0ce2a73d259f9acb8c918ba40645e1f44b4c96bf086680bfcbdff",
+    "source": "apps/assets/weather/thunderstorm.svg",
+    "license": "MIT",
+    "byte_size": 363,
+    "created_at": "2026-10-31T00:00:00Z",
+    "path": "weather/thunderstorm.svg"
+  }
+]

@@ -3,8 +3,8 @@ use axum::body::{to_bytes, Body};
 use kaleidoscope_contract::Workspace;
 use tower::ServiceExt;
 
-const EDITOR: &str = include_str!("../../../apps/md-editor.json");
-const BROWSER: &str = include_str!("../../../apps/web-browser.json");
+const EDITOR: &str = include_str!("fixtures/editor-app.json");
+const BROWSER: &str = include_str!("fixtures/browser-app.json");
 const LEGACY_APP: &str = include_str!("fixtures/simple-app.json");
 
 #[test]
@@ -14,7 +14,7 @@ fn builtin_apps_are_listed_and_upload_is_rejected() {
     for id in ["agent", "explorer", "md-editor", "md-viewer", "web-browser"] {
         assert!(apps.iter().any(|app| app.id == id && app.builtin));
     }
-    assert_eq!(apps.len(), 5);
+    assert_eq!(apps.len(), 7);
     assert!(state.publish_app(EDITOR, "agent", false, None).is_err());
 }
 
@@ -55,7 +55,7 @@ fn migration_v8_adds_soft_delete_without_changing_existing_rows() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        10
+        11
     );
 }
 
@@ -72,7 +72,7 @@ fn app_upload_versions_and_deduplicates_identical_definitions() {
         .unwrap();
     assert_eq!(same.version.version, 1);
     assert!(unchanged);
-    let modified = test_definition(EDITOR).replace("마크다운 편집기", "편집기 변경");
+    let modified = test_definition(EDITOR).replace("시험 편집기", "편집기 변경");
     assert_ne!(modified, test_definition(EDITOR));
     let (second, unchanged) = state.publish_app(&modified, "agent", false, None).unwrap();
     assert_eq!(second.version.version, 2);
@@ -613,7 +613,7 @@ async fn event_stream_snapshot_filters_apps_by_supported_header() {
         .into_iter()
         .map(|app| app.app.id)
         .collect();
-    assert_eq!(old_ids, ["md-viewer", "workspace-pas"]);
+    assert_eq!(old_ids, ["workspace-pas"]);
 
     let mut storage_one = Supported::current();
     storage_one.modules.insert("storage".into(), 1);
@@ -910,12 +910,12 @@ async fn next_device_event(stream: &mut axum::body::BodyDataStream) -> Value {
 #[test]
 fn migration_upgrades_v1_without_losing_devices() {
     let db = Connection::open_in_memory().unwrap();
-    db.execute_batch("CREATE TABLE apps (id TEXT PRIMARY KEY,name TEXT NOT NULL,current_version INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL); CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT); INSERT INTO devices(id,name,token_sha256,created_at) VALUES('d','PC','hash','now'); PRAGMA user_version=1;").unwrap();
+    db.execute_batch("CREATE TABLE apps (id TEXT PRIMARY KEY,name TEXT NOT NULL,current_version INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL); CREATE TABLE app_versions(app_id TEXT NOT NULL,version INTEGER NOT NULL,definition TEXT NOT NULL,created_at TEXT NOT NULL,created_by TEXT NOT NULL,PRIMARY KEY(app_id,version)); CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT); INSERT INTO devices(id,name,token_sha256,created_at) VALUES('d','PC','hash','now'); PRAGMA user_version=1;").unwrap();
     migrate(&db).unwrap();
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 10);
+    assert_eq!(version, 11);
     assert_eq!(
         db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -959,7 +959,7 @@ fn migration_v7_removes_legacy_tables_and_preserves_other_data() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 10);
+    assert_eq!(version, 11);
     let old_tables: i64 = db.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('agents','agent_items')", [], |row| row.get(0)).unwrap();
     assert_eq!(old_tables, 0);
     let apps: i64 = db

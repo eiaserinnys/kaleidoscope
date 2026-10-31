@@ -12,6 +12,9 @@ struct UploadArgs {
     /// 쉘에서 사용할 앱 정의. 지원하는 블록과 모듈만 사용할 수 있습니다.
     #[schemars(schema_with = "app_schema")]
     definition: Value,
+    /// 앱과 함께 원자적으로 등록할 자산.
+    #[serde(default)]
+    asset_uploads: Option<Vec<kaleidoscope_contract::assets::AssetUpload>>,
     /// 올린 직후 연결된 쉘에 창을 띄워 달라고 요청합니다.
     #[serde(default = "default_open")]
     #[schemars(default = "default_open")]
@@ -37,6 +40,11 @@ struct VersionArgs {
     app_id: String,
     /// 생략하면 현재 버전을 조회합니다.
     version: Option<u32>,
+}
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct AssetIdArgs {
+    id: String,
+    version: u32,
 }
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct ApproveArgs {
@@ -165,12 +173,13 @@ impl McpServer {
             Ok(missing) => missing,
             Err(error) => return Ok(json_error(error)),
         };
-        match self.state.publish_app_for_device(
+        match self.state.publish_app_with_assets_for_device(
             &definition,
             "agent",
             args.open,
             args.workspace_id.clone(),
             principal.device_id.as_deref(),
+            args.asset_uploads.as_deref().unwrap_or(&[]),
         ) {
             Ok((row, unchanged, target)) => {
                 let sent = if args.open && (principal.device_id.is_none() || target.is_some()) {
@@ -179,12 +188,14 @@ impl McpServer {
                             target.as_ref(),
                             args.workspace_id.as_deref(),
                             &row.version.definition.requires,
+                            &row.version.definition.assets,
                         )
                     } else {
                         self.state.open_sent_to(
                             target.as_ref(),
                             args.workspace_id.as_deref(),
                             &row.version.definition.requires,
+                            &row.version.definition.assets,
                         )
                     }
                 } else {
@@ -208,8 +219,10 @@ impl McpServer {
                 }
                 add_unsupported_device_note(
                     &mut value,
-                    self.state
-                        .unsupported_connected_devices(&row.version.definition.requires),
+                    self.state.unsupported_connected_devices(
+                        &row.version.definition.requires,
+                        &row.version.definition.assets,
+                    ),
                 );
                 if !missing_connections.is_empty() {
                     value["warnings"] = json!([format!(
@@ -221,6 +234,38 @@ impl McpServer {
             }
             Err(error) => Ok(json_error(error)),
         }
+    }
+    #[tool(description = "계정에 불변 자산 한 판을 등록합니다.")]
+    async fn upload_asset(
+        &self,
+        Parameters(upload): Parameters<kaleidoscope_contract::assets::AssetUpload>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Ok(match self.state.upload_asset(&upload) {
+            Ok(meta) => json_result(json!({"meta":meta})),
+            Err(error) => json_error(error),
+        })
+    }
+    #[tool(description = "계정에 등록된 자산의 판과 메타데이터를 나열합니다.")]
+    async fn list_assets(&self) -> Result<CallToolResult, ErrorData> {
+        Ok(match self.state.list_assets() {
+            Ok(assets) => json_result(json!(assets)),
+            Err(error) => json_error(error),
+        })
+    }
+    #[tool(description = "계정의 자산 한 판에 대한 메타데이터를 읽습니다.")]
+    async fn get_asset(
+        &self,
+        Parameters(args): Parameters<AssetIdArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let result = self
+            .state
+            .mcp_account_id()
+            .and_then(|account| self.state.get_asset(&account, &args.id, args.version));
+        Ok(match result {
+            Ok(Some((meta, _))) => json_result(json!({"meta":meta})),
+            Ok(None) => json_error(CoreError::new(ErrorCode::NotFound)),
+            Err(error) => json_error(error),
+        })
     }
     #[tool(
         description = "레지스트리에 있는 앱의 현재 버전과 이름을 나열합니다. 수정할 앱을 찾을 때 사용합니다."
@@ -301,6 +346,24 @@ impl McpServer {
         &self,
         Parameters(args): Parameters<VersionArgs>,
     ) -> Result<CallToolResult, ErrorData> {
+        if let Some(identity) = kaleidoscope_contract::builtin::builtin_identity(&args.app_id) {
+            if args
+                .version
+                .is_some_and(|version| version != identity.version)
+            {
+                return Ok(json_error(CoreError::new(ErrorCode::NotFound)));
+            }
+            let modules: std::collections::BTreeMap<_, _> = identity
+                .modules
+                .iter()
+                .map(|(name, version)| (*name, *version))
+                .collect();
+            return Ok(json_result(
+                json!({"app_id":identity.id,"version":identity.version,"builtin":true,
+                "definition_available":false,"definition":null,"metadata":{"name":identity.name,
+                "requires":{"blocks":identity.blocks,"modules":modules},"updated_at":identity.updated_at}}),
+            ));
+        }
         Ok(match self.state.app(&args.app_id, args.version) {
             Ok(Some(row)) => json_result(
                 json!({"app_id":row.app.id,"version":row.version.version,"definition":row.version.definition}),
@@ -359,8 +422,39 @@ impl McpServer {
         principal: McpPrincipal,
     ) -> Result<CallToolResult, ErrorData> {
         args.workspace_id = effective_workspace_id(args.workspace_id, &principal);
-        match self.state.app(&args.app_id, None) {
-            Ok(Some(app)) => {
+        let requires = if let Some(identity) =
+            kaleidoscope_contract::builtin::builtin_identity(&args.app_id)
+        {
+            Ok(Some((
+                Requires {
+                    blocks: identity.blocks,
+                    modules: identity
+                        .modules
+                        .iter()
+                        .map(|(name, version)| ((*name).to_string(), *version))
+                        .collect(),
+                },
+                identity
+                    .assets
+                    .iter()
+                    .map(|(id, version)| kaleidoscope_contract::assets::AssetDep {
+                        id: (*id).into(),
+                        version: *version,
+                    })
+                    .collect::<Vec<_>>(),
+            )))
+        } else {
+            self.state.app(&args.app_id, None).map(|app| {
+                app.map(|app| {
+                    (
+                        app.version.definition.requires,
+                        app.version.definition.assets,
+                    )
+                })
+            })
+        };
+        match requires {
+            Ok(Some((requires, assets))) => {
                 let workspace_accessible = match args.workspace_id.as_deref() {
                     Some(id) => match self.state.mcp_owns_workspace(id) {
                         Ok(owned) => owned,
@@ -371,7 +465,8 @@ impl McpServer {
                 let target = match self.state.choose_open_target(
                     args.workspace_id.as_deref(),
                     principal.device_id.as_deref(),
-                    &app.version.definition.requires,
+                    &requires,
+                    &assets,
                 ) {
                     Ok(target) => target,
                     Err(error) => return Ok(json_error(error)),
@@ -403,13 +498,15 @@ impl McpServer {
                     self.state.open_sent_to_strict_target(
                         target.as_ref(),
                         args.workspace_id.as_deref(),
-                        &app.version.definition.requires,
+                        &requires,
+                        &assets,
                     )
                 } else {
                     self.state.open_sent_to(
                         target.as_ref(),
                         args.workspace_id.as_deref(),
-                        &app.version.definition.requires,
+                        &requires,
+                        &assets,
                     )
                 };
                 let mut value = json!({"open_sent_to":sent,"open_target":target.as_ref().map(|target| target.name.clone())});
@@ -426,8 +523,7 @@ impl McpServer {
                 }
                 add_unsupported_device_note(
                     &mut value,
-                    self.state
-                        .unsupported_connected_devices(&app.version.definition.requires),
+                    self.state.unsupported_connected_devices(&requires, &assets),
                 );
                 Ok(json_result(value))
             }

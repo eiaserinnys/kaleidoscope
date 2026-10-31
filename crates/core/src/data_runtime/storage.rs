@@ -214,6 +214,10 @@ fn replan(
                 .data
                 .iter()
                 .any(|name| changed_sources.contains(name))
+                || binding
+                    .data_meta
+                    .iter()
+                    .any(|name| changed_sources.contains(name))
                 || match changed_entry {
                     Some(entry) => binding.storage.iter().any(|name| name == entry),
                     None => !binding.storage.is_empty() || !binding.storage_meta.is_empty(),

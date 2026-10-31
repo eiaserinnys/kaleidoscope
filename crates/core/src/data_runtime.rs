@@ -20,7 +20,7 @@ pub(crate) fn binding_value(
 }
 
 use kaleidoscope_contract::{
-    data::{DataView, SourceDecl, SourceFormat, SourceStatus},
+    data::{DataView, SourceDecl, SourceFormat, SourceMeta, SourceState, SourceStatus},
     AppDefinition, CoreError, CoreEvent, CoreReply, ErrorCode,
 };
 use kaleidoscope_data::{CompiledApp, SourcePlan};
@@ -65,6 +65,9 @@ struct Source {
     generation: u64,
     in_flight: bool,
     last_fetched: Option<Instant>,
+    last_success_at: Option<chrono::DateTime<chrono::Utc>>,
+    last_success_instant: Option<Instant>,
+    retrying_after_failure: bool,
 }
 struct Job {
     window: String,
@@ -94,6 +97,9 @@ impl Runtime {
                         generation: 0,
                         in_flight: false,
                         last_fetched: None,
+                        last_success_at: None,
+                        last_success_instant: None,
+                        retrying_after_failure: false,
                     },
                 )
             })
@@ -113,6 +119,55 @@ impl Runtime {
             last: DataView::default(),
         }
     }
+    fn source_meta(&self) -> BTreeMap<String, SourceMeta> {
+        self.sources
+            .iter()
+            .map(|(name, source)| {
+                let (state, message) = match &source.status {
+                    SourceStatus::Idle {} => (SourceState::Idle, None),
+                    SourceStatus::Loading { .. } => (SourceState::Loading, None),
+                    SourceStatus::Ready { .. } => (SourceState::Ready, None),
+                    SourceStatus::Failed { message, .. } => {
+                        (SourceState::Failed, Some(message.clone()))
+                    }
+                    SourceStatus::LoginRequired { .. } => (SourceState::LoginRequired, None),
+                };
+                let expired = source
+                    .last_success_instant
+                    .zip(self.definition.sources[name].refresh_secs())
+                    .is_some_and(|(time, secs)| time.elapsed() >= Duration::from_secs(secs.into()));
+                let stale = source.last_success_at.is_some()
+                    && (expired
+                        || source.retrying_after_failure
+                        || matches!(state, SourceState::Failed | SourceState::LoginRequired));
+                (
+                    name.clone(),
+                    SourceMeta {
+                        state,
+                        updated_at: source
+                            .last_success_at
+                            .map(|at| at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+                        updated_time: source
+                            .last_success_at
+                            .map(|at| at.with_timezone(&chrono::Local).format("%H:%M").to_string()),
+                        stale,
+                        message,
+                    },
+                )
+            })
+            .collect()
+    }
+    fn data_meta_values(&self) -> BTreeMap<String, Value> {
+        self.source_meta()
+            .into_iter()
+            .map(|(name, meta)| {
+                (
+                    name,
+                    serde_json::to_value(meta).expect("원천 메타데이터 JSON"),
+                )
+            })
+            .collect()
+    }
     fn view(&self) -> DataView {
         let statuses: BTreeMap<_, _> = self
             .sources
@@ -120,12 +175,14 @@ impl Runtime {
             .map(|(name, source)| (name.clone(), source.status.clone()))
             .collect();
         let (storage, meta) = self.storage_values();
-        let mut values = self.compiled.evaluate_with_storage(
+        let mut values = self.compiled.evaluate_with_data_meta(
             &self.state,
             &self.data,
             &storage,
             &meta,
+            &self.data_meta_values(),
             &statuses,
+            None,
         );
         for binding in self.compiled.binding_dependencies() {
             if let Some(status) =
@@ -137,6 +194,7 @@ impl Runtime {
         DataView {
             values,
             sources: statuses,
+            source_meta: self.source_meta(),
         }
     }
     fn view_selected(&self, selected: &std::collections::BTreeSet<String>) -> DataView {
@@ -147,11 +205,12 @@ impl Runtime {
             .collect();
         let (storage, meta) = self.storage_values();
         let mut values = self.last.values.clone();
-        values.extend(self.compiled.evaluate_selected_with_storage(
+        values.extend(self.compiled.evaluate_with_data_meta(
             &self.state,
             &self.data,
             &storage,
             &meta,
+            &self.data_meta_values(),
             &statuses,
             Some(selected),
         ));
@@ -170,6 +229,7 @@ impl Runtime {
         DataView {
             values,
             sources: statuses,
+            source_meta: self.source_meta(),
         }
     }
     fn diff(&mut self) -> Option<DataView> {
@@ -184,6 +244,12 @@ impl Runtime {
                 .filter(|(key, value)| self.last.sources.get(*key) != Some(*value))
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),
+            source_meta: next
+                .source_meta
+                .iter()
+                .filter(|(key, value)| self.last.source_meta.get(*key) != Some(*value))
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect(),
             values: next
                 .values
                 .iter()
@@ -192,7 +258,7 @@ impl Runtime {
                 .collect(),
         };
         self.last = next;
-        if delta.sources.is_empty() && delta.values.is_empty() {
+        if delta.sources.is_empty() && delta.values.is_empty() && delta.source_meta.is_empty() {
             None
         } else {
             Some(delta)
@@ -215,9 +281,10 @@ fn set_plan(manager: &DataRuntimes, runtime: &mut Runtime, name: &str, plan: Sou
     source.generation = manager.next_generation.fetch_add(1, Ordering::SeqCst) + 1;
     source.in_flight = false;
     source.last_fetched = None;
-    if matches!(&plan, SourcePlan::Idle) {
-        runtime.data.remove(name);
-    }
+    source.last_success_at = None;
+    source.last_success_instant = None;
+    source.retrying_after_failure = false;
+    runtime.data.remove(name);
     source.status = match &plan {
         SourcePlan::Invalid(message) => SourceStatus::Failed {
             message: message.clone(),
@@ -234,6 +301,10 @@ fn prepare(manager: &DataRuntimes, runtime: &mut Runtime, window: &str, name: &s
     if matches!(source.plan, SourcePlan::Idle | SourcePlan::Invalid(_)) {
         return None;
     }
+    source.retrying_after_failure |= matches!(
+        source.status,
+        SourceStatus::Failed { .. } | SourceStatus::LoginRequired { .. }
+    );
     source.generation = manager.next_generation.fetch_add(1, Ordering::SeqCst) + 1;
     source.in_flight = true;
     source.last_fetched = Some(Instant::now());
@@ -279,6 +350,9 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                     match result {
                         Ok(value) => {
                             runtime.data.insert(job.name.clone(), value);
+                            source.last_success_at = Some(chrono::Utc::now());
+                            source.last_success_instant = Some(Instant::now());
+                            source.retrying_after_failure = false;
                             source.status = SourceStatus::Ready {
                                 updated_at: crate::state_commands::timestamp(),
                             };
@@ -586,11 +660,20 @@ pub(crate) fn start_timer(inner: Weak<Inner>) {
             return;
         };
         let due: Vec<_> = {
-            let windows = inner.data_runtimes.windows.lock().unwrap();
+            let mut windows = inner.data_runtimes.windows.lock().unwrap();
             windows
-                .iter()
+                .iter_mut()
                 .filter(|(_, runtime)| runtime.attached > 0)
                 .filter_map(|(window, runtime)| {
+                    if runtime.source_meta() != runtime.last.source_meta {
+                        if let Some(delta) = runtime.diff() {
+                            let _ = inner.data_runtimes.events.send((
+                                window.clone(),
+                                runtime.version,
+                                delta,
+                            ));
+                        }
+                    }
                     let names: Vec<_> = runtime
                         .sources
                         .iter()
@@ -611,4 +694,50 @@ pub(crate) fn start_timer(inner: Weak<Inner>) {
             let _ = refresh(&inner, &window, &names, false);
         }
     });
+}
+
+#[cfg(test)]
+mod freshness_tests {
+    use super::*;
+    use kaleidoscope_contract::validate::parse_app_definition;
+    use serde_json::json;
+
+    #[test]
+    fn failure_preserves_success_but_new_plan_clears_it() {
+        let definition = parse_app_definition(&json!({
+            "id":"freshness", "name":"신선도 시험", "requires":{"blocks":4,"modules":{"files":1}},
+            "permissions":[{"module":"files","id":"file","label":"파일","access":"read"}],
+            "state":{}, "sources":{"item":{"kind":"file","permission":"file","path":"a.json"}},
+            "ui":{"type":"text","value":{"expr":"$data_meta.item.stale"}}
+        }).to_string()).unwrap();
+        let mut runtime = Runtime::new(1, definition, BTreeMap::new(), true);
+        let manager = DataRuntimes::default();
+        let first = SourcePlan::File {
+            permission: "file".into(),
+            path: "a.json".into(),
+            format: SourceFormat::Json,
+        };
+        set_plan(&manager, &mut runtime, "item", first);
+        runtime.data.insert("item".into(), json!({"value":1}));
+        let source = runtime.sources.get_mut("item").unwrap();
+        source.last_success_at = Some(chrono::Utc::now());
+        source.last_success_instant = Some(Instant::now());
+        source.status = SourceStatus::Failed {
+            message: "오류".into(),
+            has_value: true,
+        };
+        let meta = &runtime.source_meta()["item"];
+        assert!(meta.stale && meta.updated_at.is_some());
+        assert_eq!(runtime.data["item"]["value"], 1);
+        prepare(&manager, &mut runtime, "window", "item");
+        assert!(runtime.source_meta()["item"].stale);
+        let next = SourcePlan::File {
+            permission: "file".into(),
+            path: "b.json".into(),
+            format: SourceFormat::Json,
+        };
+        assert!(set_plan(&manager, &mut runtime, "item", next));
+        assert!(!runtime.data.contains_key("item"));
+        assert!(runtime.source_meta()["item"].updated_at.is_none());
+    }
 }

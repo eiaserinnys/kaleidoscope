@@ -145,6 +145,44 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             );
             crate::conversation_reconcile::storage_changed(inner, &app_id, Some(&entry));
         }
+        DeviceEvent::AppValuesSnapshot {
+            app_id,
+            bucket_id,
+            items,
+        } => {
+            let items = raw_value_items(inner, &app_id, items);
+            emit_storage_update(
+                inner,
+                &app_id,
+                kaleidoscope_contract::app_storage::StorageUpdate::Snapshot {
+                    snapshot: kaleidoscope_contract::app_storage::StorageSnapshot {
+                        bucket_id,
+                        items,
+                    },
+                },
+            );
+            crate::conversation_reconcile::storage_changed(inner, &app_id, None);
+        }
+        DeviceEvent::AppValueChanged {
+            app_id,
+            bucket_id,
+            item,
+        } => {
+            for item in raw_value_items(inner, &app_id, vec![item]) {
+                let entry = item.entry_id.clone();
+                emit_storage_update(
+                    inner,
+                    &app_id,
+                    kaleidoscope_contract::app_storage::StorageUpdate::Changed {
+                        changed: kaleidoscope_contract::app_storage::StorageChanged {
+                            bucket_id: bucket_id.clone(),
+                            item,
+                        },
+                    },
+                );
+                crate::conversation_reconcile::storage_changed(inner, &app_id, Some(&entry));
+            }
+        }
         DeviceEvent::LayoutSnapshot {
             workspaces,
             desktops,
@@ -237,6 +275,42 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
         }
     }
     link::is_current(inner, generation)
+}
+
+fn raw_value_items(
+    inner: &Inner,
+    app_id: &str,
+    items: Vec<kaleidoscope_contract::app_storage::AppValueMeta>,
+) -> Vec<kaleidoscope_contract::app_storage::StorageItemMeta> {
+    use kaleidoscope_contract::app_storage::{storage_key_matches, StorageItemMeta};
+    let state = inner.state.lock().unwrap();
+    let Some(app) = state.shared.apps.iter().find(|app| app.id == app_id) else {
+        return vec![];
+    };
+    let Some(definition) = app_commands::definition_for(&state.shared, app_id, app.current_version)
+    else {
+        return vec![];
+    };
+    let Some(storage) = &definition.storage else {
+        return vec![];
+    };
+    items
+        .into_iter()
+        .filter_map(|item| {
+            let entry = storage
+                .entries
+                .iter()
+                .find(|entry| storage_key_matches(&entry.key, &item.key))?;
+            let exists = item.revision.is_some();
+            Some(StorageItemMeta {
+                entry_id: entry.id.clone(),
+                key: item.key,
+                kind: item.kind,
+                revision: item.revision,
+                exists,
+            })
+        })
+        .collect()
 }
 
 fn emit_storage_update(

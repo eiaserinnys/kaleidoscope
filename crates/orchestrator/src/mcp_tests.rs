@@ -118,10 +118,8 @@ async fn open_counts_connected_devices_with_the_requested_workspace() {
         .stream("b".into(), Some(Supported::current()))
         .unwrap();
     let server = McpServer::new(state);
-    let app: Value = serde_json::from_str(&test_definition(include_str!(
-        "../../../apps/md-editor.json"
-    )))
-    .unwrap();
+    let app: Value =
+        serde_json::from_str(&test_definition(include_str!("fixtures/editor-app.json"))).unwrap();
     let value = |result: CallToolResult| {
         let json = serde_json::to_value(result).unwrap();
         serde_json::from_str::<Value>(json["content"][0]["text"].as_str().unwrap()).unwrap()
@@ -129,6 +127,7 @@ async fn open_counts_connected_devices_with_the_requested_workspace() {
     let uploaded = value(
         server
             .upload_app(Parameters(UploadArgs {
+                asset_uploads: None,
                 definition: app,
                 open: true,
                 workspace_id: Some("w".into()),
@@ -193,6 +192,7 @@ async fn app_open_and_opening_upload_are_scoped_away_from_other_accounts_legacy_
 
     server
         .upload_app(Parameters(UploadArgs {
+            asset_uploads: None,
             definition: serde_json::from_str(LEGACY_APP).unwrap(),
             open: true,
             workspace_id: None,
@@ -317,10 +317,8 @@ async fn upload_and_open_report_connected_shells_that_cannot_render_the_app() {
         .stream("current".into(), Some(Supported::current()))
         .unwrap();
     let server = McpServer::new(state);
-    let browser: Value = serde_json::from_str(&test_definition(include_str!(
-        "../../../apps/web-browser.json"
-    )))
-    .unwrap();
+    let browser: Value =
+        serde_json::from_str(&test_definition(include_str!("fixtures/browser-app.json"))).unwrap();
     let value = |result: CallToolResult| {
         let json = serde_json::to_value(result).unwrap();
         serde_json::from_str::<Value>(json["content"][0]["text"].as_str().unwrap()).unwrap()
@@ -329,6 +327,7 @@ async fn upload_and_open_report_connected_shells_that_cannot_render_the_app() {
     let uploaded = value(
         server
             .upload_app(Parameters(UploadArgs {
+                asset_uploads: None,
                 definition: browser,
                 open: false,
                 workspace_id: None,
@@ -367,12 +366,11 @@ async fn compatible_upload_result_has_no_unsupported_shell_note() {
         .stream("current".into(), Some(Supported::current()))
         .unwrap();
     let server = McpServer::new(state);
-    let definition: Value = serde_json::from_str(&test_definition(include_str!(
-        "../../../apps/web-browser.json"
-    )))
-    .unwrap();
+    let definition: Value =
+        serde_json::from_str(&test_definition(include_str!("fixtures/browser-app.json"))).unwrap();
     let result = server
         .upload_app(Parameters(UploadArgs {
+            asset_uploads: None,
             definition,
             open: false,
             workspace_id: None,
@@ -393,12 +391,11 @@ async fn upload_with_only_an_old_shell_does_not_claim_no_shell_is_connected() {
     ).unwrap();
     let _old = state.stream("AD02028236".into(), None).unwrap();
     let server = McpServer::new(state);
-    let definition: Value = serde_json::from_str(&test_definition(include_str!(
-        "../../../apps/web-browser.json"
-    )))
-    .unwrap();
+    let definition: Value =
+        serde_json::from_str(&test_definition(include_str!("fixtures/browser-app.json"))).unwrap();
     let result = server
         .upload_app(Parameters(UploadArgs {
+            asset_uploads: None,
             definition,
             open: true,
             workspace_id: None,
@@ -479,6 +476,7 @@ async fn upload_warns_about_connection_names_missing_from_the_server() {
         serde_json::from_str(include_str!("../../../examples/card-board.json")).unwrap();
     let result = server
         .upload_app(Parameters(UploadArgs {
+            asset_uploads: None,
             definition,
             open: false,
             workspace_id: None,

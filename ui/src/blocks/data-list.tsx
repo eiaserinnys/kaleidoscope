@@ -48,6 +48,7 @@ function ListReady({ block, context, pointer, value }: { block: Extract<Block, {
   const selected = block.selected ? context.window.state[block.selected.state] : null;
   const roving = useRoving(items, selected, scroll, virtual, rowOf);
   keepRovingRow(virtual, rowOf(roving.focus));
+  if (value === null) return null;
   if (!items.length) return <NoItems />;
   const choose = (item: ListItem) => { if (block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue); };
   const virtualRows = virtual.getVirtualItems();

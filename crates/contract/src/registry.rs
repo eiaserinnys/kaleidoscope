@@ -290,7 +290,8 @@ pub const REGISTRY_HEADER: &str = "x-kaleidoscope-registry";
 /// 기기 토큰을 쓴 MCP 호출의 작업 기본값.
 pub const WORKSPACE_HEADER: &str = "x-kaleidoscope-workspace";
 /// 이 빌드가 아는 레지스트리 판.
-pub const REGISTRY_VERSION: u32 = 9;
+pub const REGISTRY_VERSION: u32 = 10;
+pub const APP_VALUES_REGISTRY_VERSION: u32 = 10;
 /// 배치를 동기화하는 레지스트리 판. 서버는 [`REGISTRY_HEADER`]가 이 값 이상인 연결과 배치를 맞춘다.
 pub const LAYOUT_SYNC_REGISTRY_VERSION: u32 = 6;
 /// 앱 저장소 동기화를 받을 수 있는 최소 레지스트리 판.
@@ -581,6 +582,18 @@ pub enum DeviceEvent {
     StorageChanged {
         app_id: String,
         changed: crate::app_storage::StorageChanged,
+    },
+    #[serde(rename = "app_values.snapshot")]
+    AppValuesSnapshot {
+        app_id: String,
+        bucket_id: String,
+        items: Vec<crate::app_storage::AppValueMeta>,
+    },
+    #[serde(rename = "app_value.changed")]
+    AppValueChanged {
+        app_id: String,
+        bucket_id: String,
+        item: crate::app_storage::AppValueMeta,
     },
     /// 서버 정본의 워크스페이스, 데스크톱, 창 전체. 동기화하는 연결에만 스냅샷들 바로 뒤에 한 번 보낸다(6판).
     #[serde(rename = "layout.snapshot")]

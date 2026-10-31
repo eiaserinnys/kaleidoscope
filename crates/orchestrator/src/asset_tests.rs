@@ -1,0 +1,69 @@
+use super::*;
+use base64::{engine::general_purpose::STANDARD, Engine};
+use kaleidoscope_contract::assets::{AssetFormat, AssetUpload};
+use sha2::{Digest, Sha256};
+
+fn upload(id: &str, svg: &str) -> AssetUpload {
+    AssetUpload {
+        id: id.into(),
+        version: 1,
+        format: AssetFormat::Svg,
+        sha256: format!("{:x}", Sha256::digest(svg.as_bytes())),
+        source: "시험".into(),
+        license: "MIT".into(),
+        data_base64: STANDARD.encode(svg),
+    }
+}
+
+#[test]
+fn asset_versions_are_immutable_and_account_scoped() {
+    let state = AppState::in_memory("secret");
+    let item = upload(
+        "icon",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M1 1\"/></svg>",
+    );
+    let first = state.upload_asset(&item).unwrap();
+    assert_eq!(state.upload_asset(&item).unwrap(), first);
+    assert_eq!(
+        state
+            .upload_asset(&upload("icon", "<svg/>"))
+            .unwrap_err()
+            .code,
+        ErrorCode::Conflict
+    );
+    let mut bad_hash = upload("wrong-hash", "<svg/>");
+    bad_hash.sha256 = "0".repeat(64);
+    assert!(state.upload_asset(&bad_hash).is_err());
+    assert!(state
+        .upload_asset(&upload("builtin-icon", "<svg/>"))
+        .is_err());
+    assert_eq!(state.list_assets().unwrap(), vec![first]);
+    state
+        .lock_db()
+        .unwrap()
+        .execute(
+            "INSERT INTO accounts(id,display_name,created_at) VALUES('other','다른 계정','now')",
+            [],
+        )
+        .unwrap();
+    assert!(state.get_asset("other", "icon", 1).unwrap().is_none());
+}
+
+#[test]
+fn missing_dependency_rolls_back_attached_upload() {
+    let state = AppState::in_memory("secret");
+    let item = upload("icon", "<svg/>");
+    let definition = json!({"id":"asset-example", "name":"자산 시험", "requires":{"blocks":4,"modules":{"assets":1}},
+        "assets":[{"id":"missing","version":1}], "permissions":[], "ui":{"type":"text","value":"시험"}});
+    let result = state.publish_app_with_assets_for_device(
+        &definition.to_string(),
+        "시험",
+        false,
+        None,
+        None,
+        &[item],
+    );
+    assert!(result.is_err());
+    assert!(state.list_assets().unwrap().is_empty());
+    assert!(state.app("asset-example", None).unwrap().is_none());
+}

@@ -433,13 +433,19 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         await data.act(request.window_id, request.pointer, request.event ?? null, request.item);
         return { op: "data.act" };
       case "data.media": {
-        const url = seed.media?.[request.media.path];
+        const url = seed.media?.[("asset" in request.media ? request.media.asset : request.media.path)];
         if (!url) return fail("not_found", "미디어를 찾을 수 없습니다");
         const response = await fetch(url);
         if (!response.ok) return fail("not_found", "미디어를 찾을 수 없습니다");
         const bytes = new Uint8Array(await response.arrayBuffer());
         const encoded = btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
         return { op: "data.media", media: { mime: response.headers.get("content-type")?.split(";")[0] || "image/png", data_base64: encoded, width: null, height: null } };
+      }
+      case "external.open": {
+        const url = new URL(request.url);
+        if (url.protocol !== "http:" && url.protocol !== "https:") return fail("invalid_request", "주소가 올바르지 않습니다");
+        globalThis.window.open(url.href, "_blank", "noopener,noreferrer");
+        return { op: "external.open" };
       }
       case "connection.login":
         if (conversation) { if (conversation.delayMs) await delay(conversation.delayMs); conversationLoggedIn = true; return { op: "connection.login" }; }

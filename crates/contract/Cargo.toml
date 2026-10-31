@@ -13,3 +13,4 @@ ts-rs.workspace = true
 schemars.workspace = true
 jsonata-core.workspace = true
 sha2 = "0.10"
+url = "2"

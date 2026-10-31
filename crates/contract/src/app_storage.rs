@@ -244,6 +244,46 @@ pub struct StorageConflict {
     pub current_revision: Option<String>,
 }
 
+/// 기본 앱이 선언을 가진 채 서버에 저장하는 원시 값의 메타데이터.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AppValueMeta {
+    pub key: String,
+    pub kind: StorageKind,
+    pub revision: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AppValueList {
+    pub bucket_id: String,
+    pub items: Vec<AppValueMeta>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AppValueRead {
+    pub bucket_id: String,
+    pub exists: bool,
+    pub kind: Option<StorageKind>,
+    pub content: Option<JsonValue>,
+    pub revision: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AppValueWrite {
+    pub kind: StorageKind,
+    pub content: JsonValue,
+    #[serde(default)]
+    #[ts(optional, as = "Option<ExpectedRevision>")]
+    pub expected_revision: ExpectedRevision,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub workspace_id: Option<String>,
+}
+
 /// 저장소 상태가 연결되었을 때 보내는 메타데이터 snapshot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export, export_to = "contract.ts")]
@@ -611,7 +651,7 @@ pub fn storage_key_matches(template: &str, concrete: &str) -> bool {
         )
 }
 
-fn valid_concrete_storage_key(key: &str) -> bool {
+pub fn valid_concrete_storage_key(key: &str) -> bool {
     !key.is_empty() && key.len() <= 512 && key.split('/').all(valid_storage_segment)
 }
 

@@ -1,0 +1,7 @@
+{
+  "id": "web-browser",
+  "name": "시험 웹 화면",
+  "requires": { "blocks": 3, "modules": { "web": 1 } },
+  "state": { "url": "https://example.test/" },
+  "ui": { "type": "web_view", "url": { "state": "url" }, "on_navigate": { "set_state": "url" }, "address_bar": true }
+}

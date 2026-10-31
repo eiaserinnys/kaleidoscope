@@ -31,6 +31,37 @@ fn map(value: Value) -> BTreeMap<String, Value> {
 }
 
 #[test]
+fn source_meta_is_available_without_waiting_for_source_value() {
+    let mut definition = serde_json::to_value(fixture()).unwrap();
+    definition["ui"]["children"][1]["value"] = json!({"expr":"$data_meta.a.updated_time"});
+    let app = CompiledApp::compile(&serde_json::from_value(definition).unwrap());
+    let meta = map(json!({"a":{"state":"failed","updated_time":"16:10","stale":true}}));
+    let statuses = BTreeMap::from([(
+        "a".into(),
+        SourceStatus::Failed {
+            message: "실패".into(),
+            has_value: false,
+        },
+    )]);
+    let values = app.evaluate_with_data_meta(
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &meta,
+        &statuses,
+        None,
+    );
+    assert_eq!(
+        values["/ui/children/1/value"],
+        BindingValue::Ready {
+            value: json!("16:10")
+        }
+    );
+    assert_eq!(app.binding_dependencies()[1].data_meta, vec!["a"]);
+}
+
+#[test]
 fn source_plans_handle_null_query_and_invalid_path() {
     let app = CompiledApp::compile(&fixture());
     let mut state = map(json!({"path":null}));
@@ -98,6 +129,7 @@ fn source_status_is_scoped_to_each_expression_and_actions_are_ordered() {
     let env = Env {
         state: &state,
         data: &data,
+        data_meta: &BTreeMap::new(),
         storage: &BTreeMap::new(),
         storage_meta: &BTreeMap::new(),
         event: &event,
@@ -136,6 +168,7 @@ fn explicit_null_differs_from_missing_value() {
     let env = Env {
         state: &state,
         data: &data,
+        data_meta: &BTreeMap::new(),
         storage: &BTreeMap::new(),
         storage_meta: &BTreeMap::new(),
         event: &event,
@@ -205,6 +238,7 @@ fn storage_values_flow_through_expressions_source_plans_and_actions() {
     let env = Env {
         state: &state,
         data: &data,
+        data_meta: &BTreeMap::new(),
         storage: &storage,
         storage_meta: &storage_meta,
         event: &event,

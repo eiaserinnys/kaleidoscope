@@ -183,6 +183,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 pub mod app_storage;
+pub mod assets;
 pub mod builtin;
 pub mod conversation;
 pub mod data;
@@ -223,7 +224,8 @@ pub const TAURI_EVENT: &str = "core-event";
 /// - 6판: 5판 + `markdown_editor`와 `markdown_view`의 `document` 바인딩, 앱 정의의 `storage`와 `agent`.
 /// - 7판: 6판 + `feed`의 `columns`, `copy`.
 /// - 8판: 7판 + 기기 로컬 ACP 대화 블록 `agent_session`.
-pub const BLOCK_SET_VERSION: u32 = 8;
+/// - 9판: 8판 + `metrics`, `keypad`, `chart`.
+pub const BLOCK_SET_VERSION: u32 = 9;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -246,6 +248,8 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("connection", 2),
     ("storage", 2),
     ("local_agent", 1),
+    ("assets", 1),
+    ("http", 1),
 ];
 
 /// 지원 범위를 알리지 않는 옛 쉘(블록 세트 3판 전)이 그릴 수 있는 블록 세트 판. 서버가 그런 기기에 보낼 앱을
@@ -464,6 +468,9 @@ pub struct PcAccess {
 pub struct Supported {
     pub blocks: u32,
     pub modules: BTreeMap<String, u32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<assets::AssetDep>>")]
+    pub assets: Vec<assets::AssetDep>,
 }
 
 impl Supported {
@@ -474,6 +481,13 @@ impl Supported {
             modules: MODULE_VERSIONS
                 .iter()
                 .map(|(name, version)| (name.to_string(), *version))
+                .collect(),
+            assets: builtin::BUNDLED_ASSET_KEYS
+                .iter()
+                .map(|(id, version)| assets::AssetDep {
+                    id: (*id).into(),
+                    version: *version,
+                })
                 .collect(),
         }
     }
@@ -487,6 +501,15 @@ impl Supported {
                     .get(name)
                     .is_some_and(|supported| version <= supported)
             })
+    }
+
+    /// 번들 자산은 해당 자산의 판을 가진 쉘에서만 쓸 수 있다.
+    pub fn renders_app(&self, definition: &AppDefinition) -> bool {
+        self.renders(&definition.requires)
+            && definition
+                .assets
+                .iter()
+                .all(|asset| !asset.id.starts_with("builtin-") || self.assets.contains(asset))
     }
 }
 
@@ -619,6 +642,10 @@ pub struct AppDefinition {
     #[ts(optional)]
     pub description: Option<String>,
     pub requires: Requires,
+    /// 앱이 참조할 수 있는 자산과 고정된 판.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<assets::AssetDep>>")]
+    pub assets: Vec<assets::AssetDep>,
     #[serde(default)]
     pub permissions: Vec<PermissionDecl>,
     /// 창 상태의 키와 기본값. 창을 열 때 이 값으로 시작한다.
@@ -761,6 +788,13 @@ pub enum PermissionDecl {
         /// 로그인을 구할 때와 오류에 보일 이름(예: "카드 보드").
         label: String,
     },
+    /// 인증 없이 공개 HTTPS 경로를 읽는다.
+    Http {
+        id: String,
+        label: String,
+        base_url: String,
+        paths: Vec<String>,
+    },
     /// (모듈 `local_agent` 1판) 이 기기에서 선언한 ACP 에이전트 프로그램을 실행한다.
     LocalAgent { id: String, label: String },
 }
@@ -828,6 +862,7 @@ impl PermissionDecl {
         match self {
             PermissionDecl::Files { id, .. }
             | PermissionDecl::Connection { id, .. }
+            | PermissionDecl::Http { id, .. }
             | PermissionDecl::LocalAgent { id, .. } => id,
         }
     }
@@ -837,6 +872,7 @@ impl PermissionDecl {
         match self {
             PermissionDecl::Files { .. } => "files",
             PermissionDecl::Connection { .. } => "connection",
+            PermissionDecl::Http { .. } => "http",
             PermissionDecl::LocalAgent { .. } => "local_agent",
         }
     }
@@ -847,7 +883,7 @@ impl PermissionDecl {
                 *access
             }
             // 로컬 에이전트 권한은 파일 접근 권한이 아니다. 기존 파일 전용 검사는 읽기 수준으로 취급한다.
-            PermissionDecl::LocalAgent { .. } => FileAccess::Read,
+            PermissionDecl::LocalAgent { .. } | PermissionDecl::Http { .. } => FileAccess::Read,
         }
     }
 }
@@ -1266,6 +1302,35 @@ pub enum Block {
         #[ts(optional, as = "Option<bool>")]
         autoplay: bool,
     },
+    /// (9판) 수치와 보조 정보를 타일로 표시한다.
+    Metrics {
+        items: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        columns: Option<u32>,
+    },
+    /// (9판) 키와 단축키를 가진 단추를 격자로 표시한다.
+    Keypad {
+        columns: u32,
+        buttons: Binding,
+        on_press: Actions,
+    },
+    /// (9판) 순서가 있는 수치 시리즈를 표시한다.
+    Chart {
+        #[serde(default)]
+        #[ts(optional, as = "Option<ChartKind>")]
+        kind: ChartKind,
+        series: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        y_unit: Option<String>,
+        #[serde(default)]
+        #[ts(optional, as = "Option<ChartHeight>")]
+        height: ChartHeight,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_select: Option<Actions>,
+    },
 }
 
 impl Block {
@@ -1282,6 +1347,7 @@ impl Block {
             Block::MarkdownEditor { .. } | Block::MarkdownView { .. } => 1,
             Block::AgentChat {} => 2,
             Block::AgentSession { .. } => 8,
+            Block::Metrics { .. } | Block::Keypad { .. } | Block::Chart { .. } => 9,
             Block::WebView { .. } | Block::Explorer { .. } => 3,
             Block::Stack { .. }
             | Block::Tabs { .. }
@@ -1333,8 +1399,31 @@ impl Block {
             Block::CodeView { .. } => "code_view",
             Block::Image { .. } => "image",
             Block::Media { .. } => "media",
+            Block::Metrics { .. } => "metrics",
+            Block::Keypad { .. } => "keypad",
+            Block::Chart { .. } => "chart",
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ChartKind {
+    #[default]
+    Line,
+    Bar,
+    Area,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ChartHeight {
+    Compact,
+    #[default]
+    Medium,
+    Tall,
 }
 
 /// `stack`의 자식 사이 간격. 쉘의 간격 토큰 가운데 하나다.
@@ -1835,6 +1924,14 @@ pub enum CoreRequest {
     /// 웹 화면을 그 주소로 보낸다. `http://`나 `https://` 주소가 아니면 `invalid_request`.
     #[serde(rename = "web.navigate")]
     WebNavigate { window_id: String, url: String },
+    /// http 또는 https 주소를 기기의 기본 브라우저로 연다.
+    #[serde(rename = "external.open")]
+    ExternalOpen {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        window_id: Option<String>,
+        url: String,
+    },
     /// 뒤로, 앞으로, 새로고침, 멈춤. 갈 곳이 없으면 아무것도 하지 않는다.
     #[serde(rename = "web.history")]
     WebHistory {
@@ -2189,6 +2286,8 @@ pub enum CoreReply {
     WebPlace {},
     #[serde(rename = "web.navigate")]
     WebNavigate {},
+    #[serde(rename = "external.open")]
+    ExternalOpen {},
     #[serde(rename = "web.history")]
     WebHistory {},
     #[serde(rename = "web.capture")]
@@ -3008,10 +3107,10 @@ mod tests {
             modules: [("shay".to_string(), 1)].into_iter().collect(),
         };
         assert!(!current.renders(&unknown_module));
-        assert_eq!(
-            serde_json::to_string(&current).unwrap(),
-            r#"{"blocks":8,"modules":{"agent":3,"connection":2,"files":2,"local_agent":1,"storage":2,"web":1}}"#
-        );
+        let decoded: Supported =
+            serde_json::from_str(&serde_json::to_string(&current).unwrap()).unwrap();
+        assert_eq!(decoded, current);
+        assert_eq!(current.assets.len(), builtin::BUNDLED_ASSET_KEYS.len());
         // 4판 쉘(v0.4.x)은 5판 필드를 쓴 탐색기를 받지 않는다.
         let explorer = validate::parse_app_definition(&example("explorer.json")).unwrap();
         let four = Supported {
@@ -3484,6 +3583,7 @@ mod tests {
         let event = CoreEvent::DataUpdate {
             window_id: "w".into(),
             view: data::DataView {
+                source_meta: BTreeMap::new(),
                 sources: [(
                     "cards".to_string(),
                     data::SourceStatus::Loading { has_value: false },

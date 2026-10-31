@@ -76,7 +76,7 @@ impl AppState {
             let mut windows_in:Vec<_>=windows.iter().filter(|window|window.desktop_id==desktop.id).collect();
             windows_in.sort_by_key(|window|std::cmp::Reverse(window.z));
             let rendered_windows:Vec<Value>=windows_in.into_iter().map(|window| {
-                let app_name=apps.iter().find(|app|app.app.id==window.app_id).map(|app|app.app.name.as_str()).unwrap_or(&window.app_id);
+                let app_name=apps.iter().find(|app|app.app.id==window.app_id).map(|app|app.app.name.as_str()).or_else(|| kaleidoscope_contract::builtin::builtin_identity(&window.app_id).map(|identity|identity.name)).unwrap_or(&window.app_id);
                 let report_layout=report.as_ref().map(|(_,_,_,layout)|layout);
                 let folders:std::collections::BTreeMap<_,_>=report_layout.into_iter().flat_map(|layout|layout.folders.iter()).filter(|folder|folder.window_id==window.id).map(|folder|(folder.permission.clone(),folder.root_name.clone())).collect();
                 let errors:Vec<_>=report_layout.into_iter().flat_map(|layout|layout.data_errors.iter()).filter(|error|error.window_id==window.id).map(|error|json!({"pointer":error.pointer,"message":error.message})).collect();

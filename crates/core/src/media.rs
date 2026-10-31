@@ -68,6 +68,107 @@ pub(crate) fn get(
     if max_px == Some(0) {
         return Err(error::make(ErrorCode::InvalidRequest));
     }
+    let media = match media {
+        MediaRef::Resource(media) => media,
+        MediaRef::Asset(media) => {
+            let version = {
+                let state = inner.state.lock().unwrap();
+                let window = state
+                    .shared
+                    .windows
+                    .iter()
+                    .find(|item| item.id == window)
+                    .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                let definition =
+                    app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
+                        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                let dependency = definition
+                    .assets
+                    .iter()
+                    .find(|asset| asset.id == media.asset)
+                    .ok_or_else(|| error::make(ErrorCode::PermissionDenied))?;
+                if media
+                    .version
+                    .is_some_and(|version| version != dependency.version)
+                {
+                    return Err(error::make(ErrorCode::PermissionDenied));
+                }
+                dependency.version
+            };
+            if let Some((meta, bytes)) = crate::builtin::bundled_asset(&media.asset, version) {
+                return Ok(MediaData {
+                    mime: match meta.format {
+                        kaleidoscope_contract::assets::AssetFormat::Svg => "image/svg+xml",
+                        kaleidoscope_contract::assets::AssetFormat::Png => "image/png",
+                        kaleidoscope_contract::assets::AssetFormat::Webp => "image/webp",
+                        kaleidoscope_contract::assets::AssetFormat::Jpeg => "image/jpeg",
+                        kaleidoscope_contract::assets::AssetFormat::Gif => "image/gif",
+                    }
+                    .into(),
+                    data_base64: STANDARD.encode(bytes),
+                    width: None,
+                    height: None,
+                });
+            }
+            if kaleidoscope_contract::builtin::is_bundled_asset(&media.asset, version) {
+                return Err(error::make(ErrorCode::NotFound));
+            }
+            let link = inner.link_file.lock().unwrap().clone().ok_or_else(|| {
+                error::with_message(ErrorCode::Server, "서버에 연결되어 있지 않습니다")
+            })?;
+            use sha2::{Digest, Sha256};
+            let namespace = format!(
+                "{:x}",
+                Sha256::digest(format!("{}\0{}", link.server_url, link.token).as_bytes())
+            );
+            let key = format!("asset:{namespace}:{}:{version}", media.asset);
+            let original_key = format!("{key}|original");
+            let original = if let Some(entry) = inner.media_cache.get(&original_key) {
+                entry
+            } else {
+                if !matches!(
+                    inner.state.lock().unwrap().link,
+                    kaleidoscope_contract::LinkStatus::Connected { .. }
+                ) {
+                    return Err(error::with_message(
+                        ErrorCode::Server,
+                        "서버에 연결되어 있지 않습니다",
+                    ));
+                }
+                let download = inner
+                    .registry
+                    .asset_get(&link.server_url, &link.token, &media.asset, version)
+                    .map_err(|error| {
+                        error::with_message(
+                            ErrorCode::Server,
+                            &format!("자산 받기 실패: {error:?}"),
+                        )
+                    })?;
+                if format!("{:x}", Sha256::digest(&download.bytes)) != download.sha256 {
+                    return Err(error::with_message(
+                        ErrorCode::Server,
+                        "자산 해시가 올바르지 않습니다",
+                    ));
+                }
+                let (width, height) = dimensions(&download.bytes, &download.mime);
+                let entry = Entry {
+                    bytes: Arc::new(download.bytes),
+                    mime: download.mime,
+                    width,
+                    height,
+                    used: Instant::now(),
+                };
+                inner.media_cache.put(original_key, entry.clone());
+                entry
+            };
+            let result = if let Some(max) = max_px {
+                shrink(&original, max)?
+            } else {
+                original
+            };
+            return Ok(as_data(&result));
+        }
+    };
     let module = {
         let state = inner.state.lock().unwrap();
         let window = state
@@ -120,6 +221,24 @@ pub(crate) fn get(
                 format!(
                     "connection:{}:{}:{}",
                     info.name,
+                    media.path,
+                    serde_json::to_string(&media.query).unwrap()
+                ),
+                None,
+            )
+        }
+        PermissionDecl::Http {
+            base_url, paths, ..
+        } => {
+            if !paths.contains(&media.path)
+                || !kaleidoscope_contract::validate::valid_public_http_path(&media.path)
+            {
+                return Err(error::make(ErrorCode::PermissionDenied));
+            }
+            (
+                format!(
+                    "http:{}:{}:{}",
+                    base_url,
                     media.path,
                     serde_json::to_string(&media.query).unwrap()
                 ),

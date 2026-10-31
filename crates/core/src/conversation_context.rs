@@ -70,6 +70,11 @@ impl Context {
                 app: definition.id.clone(),
                 workspace: workspace.id.clone(),
                 link,
+                entries: definition
+                    .storage
+                    .as_ref()
+                    .map(|storage| storage.entries.clone())
+                    .unwrap_or_default(),
             },
             provider,
             workspace,
@@ -104,6 +109,12 @@ impl Context {
                 app: saved.app.clone(),
                 workspace: saved.workspace.id.clone(),
                 link,
+                entries: saved
+                    .definition
+                    .storage
+                    .as_ref()
+                    .map(|storage| storage.entries.clone())
+                    .unwrap_or_default(),
             },
             provider,
             workspace: saved.workspace.clone(),
@@ -208,6 +219,7 @@ impl Context {
         let env = Env {
             state: &state,
             data: &data,
+            data_meta: &BTreeMap::new(),
             storage: &storage,
             storage_meta: &meta,
             event: &null,
