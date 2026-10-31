@@ -435,6 +435,146 @@ fn shared_view_delivery_baselines_are_separate_for_each_app() {
 }
 
 #[test]
+fn shared_view_baselines_survive_core_restart() {
+    let temp = TempDir::new().unwrap();
+    let data_dir = temp.path().join("data");
+    let host = Arc::new(CaptureTestHost {
+        png: Mutex::new(test_png(8, 8)),
+        web_captures: AtomicUsize::new(0),
+        shell_captures: AtomicUsize::new(0),
+    });
+    let open = || {
+        Core::open(
+            CoreConfig {
+                data_dir: data_dir.clone(),
+                seed_definitions: vec![test_definition(MD_EDITOR)],
+                server_url: "http://127.0.0.1:4219".into(),
+                device_name: "test-device".into(),
+            },
+            host.clone(),
+        )
+        .unwrap()
+    };
+    let core = open();
+    let (workspace, desktop_id) = active_ids(&core);
+    let window = open_window(&core, &desktop_id, "test-md-editor");
+    core.handle(CoreRequest::ShareSet {
+        window_id: window.clone(),
+        on: true,
+    })
+    .unwrap();
+    core.handle(CoreRequest::ShareView {
+        window_id: window.clone(),
+        view: kaleidoscope_contract::VisibleView {
+            text: "첫 화면".into(),
+            visual: true,
+            bounds: Rect {
+                x: 0,
+                y: 0,
+                width: 8,
+                height: 8,
+            },
+        },
+    })
+    .unwrap();
+    let first = crate::share::prepare_text(&core.inner, &workspace, "thread").unwrap();
+    assert!(first.0.contains("새로 같이 봄"));
+    crate::share::mark_sent_text(&core.inner, "thread", first.1);
+    let (attachments, visuals) =
+        crate::share::capture_for_send(&core.inner, &workspace, "thread", &[]);
+    assert_eq!(attachments.len(), 1);
+    crate::share::mark_sent_visuals(&core.inner, "thread", visuals);
+
+    let before_restart = snapshot(&core);
+    assert_eq!(before_restart.sharing, vec![window.clone()]);
+    assert_eq!(
+        before_restart.shared.desktops[0].sharing,
+        vec![window.clone()]
+    );
+    let context = &before_restart.shared.desktops[0].last_sent_context["thread"][&window];
+    assert_eq!(context.app_name.as_deref(), Some("마크다운 편집기"));
+    assert_eq!(context.text.as_deref(), Some("첫 화면"));
+    assert!(context.visual_hash.is_some());
+    drop(core);
+
+    let reopened = open();
+    let after_restart = snapshot(&reopened);
+    assert_eq!(after_restart.sharing, vec![window.clone()]);
+    assert_eq!(
+        after_restart.shared.desktops[0].sharing,
+        vec![window.clone()]
+    );
+    assert!(
+        crate::share::prepare_text(&reopened.inner, &workspace, "thread")
+            .unwrap()
+            .0
+            .contains("그대로")
+    );
+
+    reopened
+        .handle(CoreRequest::ShareView {
+            window_id: window.clone(),
+            view: kaleidoscope_contract::VisibleView {
+                text: "첫 화면".into(),
+                visual: true,
+                bounds: Rect {
+                    x: 0,
+                    y: 0,
+                    width: 8,
+                    height: 8,
+                },
+            },
+        })
+        .unwrap();
+    assert!(
+        crate::share::prepare_text(&reopened.inner, &workspace, "thread")
+            .unwrap()
+            .0
+            .contains("그대로")
+    );
+    let (same_attachments, _) =
+        crate::share::capture_for_send(&reopened.inner, &workspace, "thread", &[]);
+    assert!(same_attachments.is_empty());
+
+    reopened
+        .handle(CoreRequest::ShareView {
+            window_id: window.clone(),
+            view: kaleidoscope_contract::VisibleView {
+                text: "바뀐 화면".into(),
+                visual: true,
+                bounds: Rect {
+                    x: 0,
+                    y: 0,
+                    width: 8,
+                    height: 8,
+                },
+            },
+        })
+        .unwrap();
+    let changed = crate::share::prepare_text(&reopened.inner, &workspace, "thread").unwrap();
+    assert!(changed.0.contains("바뀜"));
+    crate::share::mark_sent_text(&reopened.inner, "thread", changed.1);
+
+    *host.png.lock().unwrap() = test_png_with_blue(8, 8, 200);
+    let (changed_attachments, visuals) =
+        crate::share::capture_for_send(&reopened.inner, &workspace, "thread", &[]);
+    assert_eq!(changed_attachments.len(), 1);
+    crate::share::mark_sent_visuals(&reopened.inner, "thread", visuals);
+
+    reopened
+        .handle(CoreRequest::WindowClose {
+            window_id: window.clone(),
+        })
+        .unwrap();
+    let closed = snapshot(&reopened);
+    assert!(closed.shared.desktops[0].sharing.is_empty());
+    let context = &closed.shared.desktops[0].last_sent_context["thread"][&window];
+    assert!(context.app_name.is_some());
+    assert!(context.text.is_some());
+    assert!(context.visual_hash.is_none());
+}
+
+#[test]
 fn legacy_share_block_is_removed_from_user_items_only() {
     use kaleidoscope_contract::conversation::{ConversationItem, ConversationItemKind};
 

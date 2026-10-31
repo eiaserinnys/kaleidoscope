@@ -387,13 +387,21 @@ sources: { [key in string]: SourceStatus },
 values: { [key in string]: BindingValue }, };
 
 /**
- * 화면 한 장. 앱 창 배치를 가진다.
+ * 화면 한 장. 앱 창 배치와 같이 보기 상태, 대화별 마지막 컨텍스트를 가진다.
  */
 export type Desktop = { id: string, workspace_id: string, name: string, 
 /**
  * 워크스페이스 안의 순서. 0부터.
  */
-position: number, created_at: string, updated_at: string, };
+position: number, 
+/**
+ * 이 데스크톱에서 같이 보기를 켠 창 id. 켠 순서다.
+ */
+sharing?: Array<string>, 
+/**
+ * 대화 키별로 이 데스크톱에서 마지막으로 보낸 창별 컨텍스트.
+ */
+last_sent_context?: { [key in string]: { [key in string]: SentShareContext } }, created_at: string, updated_at: string, };
 
 /**
  * 이 기기에만 두는 상태.
@@ -758,6 +766,11 @@ export type SelectStyle = "dropdown" | "segmented";
 export type SendMessageRequest = { request_id: string, text: string, attachments: Array<ConversationUpload>, context?: string, };
 
 /**
+ * 데스크톱에서 마지막으로 대화에 보낸 같이 보기 창 하나의 컨텍스트.
+ */
+export type SentShareContext = { app_name?: string, text?: string, visual_hash?: string, };
+
+/**
  * 블록 이벤트의 값을 창 상태 키 하나에 쓴다. 예: `{ "set_state": "current_file" }`.
  */
 export type SetState = { set_state: string, };
@@ -793,7 +806,7 @@ export type SharedState = { apps: Array<App>, app_versions: Array<AppVersion>, w
  */
 export type ShellSnapshot = { shared: SharedState, device: DeviceState, supported: Supported, link: LinkStatus, 
 /**
- * (9판) 이 기기에서 같이 보기를 켠 창의 id. 켠 순서다. 코어의 메모리에만 있어 쉘을 다시 켜면 빈 목록이다.
+ * 같이 보기 상태가 저장된 데스크톱과 현재 살아 있는 창에서 계산한 id. 켠 순서다.
  */
 sharing: Array<string>, 
 /**

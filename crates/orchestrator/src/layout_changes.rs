@@ -1,6 +1,24 @@
 use super::*;
 use kaleidoscope_contract::{registry::LayoutChanges, AppWindow, Desktop, Workspace};
 
+const MAX_ID_LEN: usize = 128;
+
+pub(super) fn validate_changes(changes: &LayoutChanges) -> bool {
+    changes.desktops.iter().all(|desktop| {
+        desktop
+            .sharing
+            .iter()
+            .all(|id| !id.trim().is_empty() && id.len() <= MAX_ID_LEN)
+            && desktop.last_sent_context.values().all(|contexts| {
+                contexts.values().all(|context| {
+                    context.text.as_ref().is_none_or(|text| {
+                        text.len() <= kaleidoscope_contract::SHARE_TEXT_MAX_BYTES
+                    })
+                })
+            })
+    })
+}
+
 impl AppState {
     pub(super) fn apply_layout_changes(
         &self,

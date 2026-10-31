@@ -117,6 +117,8 @@ async fn layout_changes_route_returns_current_state_and_broadcasts_only_real_cha
         workspace_id: "w".into(),
         name: "화면".into(),
         position: 0,
+        sharing: Vec::new(),
+        last_sent_context: Default::default(),
         created_at: "created".into(),
         updated_at: "updated".into(),
     };
@@ -180,6 +182,8 @@ fn canonical_workspace_delete_cascades_and_last_workspace_delete_is_refused() {
         workspace_id: "w".into(),
         name: "화면".into(),
         position: 0,
+        sharing: Vec::new(),
+        last_sent_context: Default::default(),
         created_at: "d".into(),
         updated_at: "d".into(),
     };
