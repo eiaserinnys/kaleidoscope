@@ -249,6 +249,8 @@ impl Core {
             share: share::ShareState::default(),
             update: UpdateStatus::Unavailable {},
         };
+        layout_apply::reconcile(&mut state);
+        state.share.active_shares = share::shared_window_ids(&state.shared);
         app_commands::ensure_builtin(&mut state);
         let login_store = Arc::new(logins::Logins::open(&config.data_dir)?);
 
@@ -776,13 +778,7 @@ pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
         device: state.device.clone(),
         supported: supported(),
         link: state.link.clone(),
-        sharing: state
-            .share
-            .sharing
-            .iter()
-            .filter(|id| state.shared.windows.iter().any(|window| &window.id == *id))
-            .cloned()
-            .collect(),
+        sharing: share::shared_window_order(&state.shared),
         update: state.update.clone(),
     }
 }

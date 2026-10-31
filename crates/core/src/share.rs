@@ -7,9 +7,9 @@ use image::{imageops::FilterType, DynamicImage, ImageFormat, RgbaImage};
 use kaleidoscope_contract::registry::ShareUpload;
 use kaleidoscope_contract::{
     conversation::ConversationUpload, CoreError, CoreEvent, CoreReply, ErrorCode, LinkStatus,
-    VisibleView, AGENT_ATTACHMENTS_MAX, AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
-    AGENT_ATTACHMENT_MAX_BYTES, SHARE_CAPTURE_MAX_EDGE, SHARE_CAPTURE_NAME_PREFIX,
-    SHARE_TEXT_MAX_BYTES,
+    SentShareContext, SharedState, VisibleView, AGENT_ATTACHMENTS_MAX,
+    AGENT_ATTACHMENTS_TOTAL_MAX_BYTES, AGENT_ATTACHMENT_MAX_BYTES, SHARE_CAPTURE_MAX_EDGE,
+    SHARE_CAPTURE_NAME_PREFIX, SHARE_TEXT_MAX_BYTES,
 };
 use sha2::{Digest, Sha256};
 
@@ -20,12 +20,68 @@ use kaleidoscope_contract::conversation::{ConversationItem, ConversationItemKind
 
 #[derive(Clone, Default, PartialEq)]
 pub(crate) struct ShareState {
-    pub(crate) sharing: Vec<String>,
+    pub(crate) active_shares: HashSet<String>,
     views: HashMap<String, VisibleView>,
     uploaded: HashMap<String, ShareUpload>,
     pending_deletes: HashSet<String>,
-    visual_hashes: HashMap<String, HashMap<String, String>>,
-    sent: HashMap<String, BTreeMap<String, kaleidoscope_data::share::SentView>>,
+}
+
+pub(crate) fn shared_window_order(shared: &SharedState) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut order = Vec::new();
+    for desktop in &shared.desktops {
+        for id in &desktop.sharing {
+            if shared
+                .windows
+                .iter()
+                .any(|window| window.id == *id && window.desktop_id == desktop.id)
+                && seen.insert(id.clone())
+            {
+                order.push(id.clone());
+            }
+        }
+    }
+    order
+}
+
+pub(crate) fn shared_window_ids(shared: &SharedState) -> HashSet<String> {
+    shared_window_order(shared).into_iter().collect()
+}
+
+fn is_sharing(state: &CoreState, window_id: &str) -> bool {
+    let Some(window) = state
+        .shared
+        .windows
+        .iter()
+        .find(|window| window.id == window_id)
+    else {
+        return false;
+    };
+    state.shared.desktops.iter().any(|desktop| {
+        desktop.id == window.desktop_id && desktop.sharing.iter().any(|id| id == window_id)
+    })
+}
+
+fn persist_shared_change(
+    inner: &Inner,
+    before: &CoreState,
+    state: &mut CoreState,
+) -> Result<bool, CoreError> {
+    if before.shared == state.shared {
+        return Ok(false);
+    }
+    crate::sync_state::mark_local_changes(inner, &before.shared, state);
+    crate::storage::save_changed_state(
+        &inner.data_dir,
+        &state.shared,
+        &state.device,
+        before.shared != state.shared,
+        false,
+    )?;
+    if before.sync != state.sync {
+        crate::sync_state::save(&inner.data_dir, &state.sync)?;
+    }
+    Ok(true)
 }
 
 pub(crate) fn prepare_text(
@@ -34,28 +90,59 @@ pub(crate) fn prepare_text(
     conversation: &str,
 ) -> Option<(String, BTreeMap<String, kaleidoscope_data::share::SentView>)> {
     let state = inner.state.lock().unwrap();
-    let views: Vec<_> = state
-        .share
-        .sharing
+    let mut sent = BTreeMap::new();
+    for desktop in state
+        .shared
+        .desktops
         .iter()
-        .filter_map(|id| {
-            let upload = share_upload(&state, id, state.share.views.get(id)?)?;
-            (upload.workspace_id == workspace).then(|| kaleidoscope_data::share::View {
-                window_id: id.clone(),
-                app_name: upload.app_name,
-                text: upload.text,
+        .filter(|desktop| desktop.workspace_id == workspace)
+    {
+        if let Some(contexts) = desktop.last_sent_context.get(conversation) {
+            for (id, context) in contexts {
+                if let (Some(app_name), Some(text)) = (&context.app_name, &context.text) {
+                    sent.insert(
+                        id.clone(),
+                        kaleidoscope_data::share::SentView {
+                            app_name: app_name.clone(),
+                            text: text.clone(),
+                        },
+                    );
+                }
+            }
+        }
+    }
+    let views = state
+        .shared
+        .desktops
+        .iter()
+        .filter(|desktop| desktop.workspace_id == workspace)
+        .flat_map(|desktop| {
+            desktop.sharing.iter().filter_map(|id| {
+                let alive = state
+                    .shared
+                    .windows
+                    .iter()
+                    .any(|window| window.id == *id && window.desktop_id == desktop.id);
+                if !alive {
+                    return None;
+                }
+                if let Some(view) = state.share.views.get(id) {
+                    let upload = share_upload(&state, id, view)?;
+                    return Some(kaleidoscope_data::share::View {
+                        window_id: id.clone(),
+                        app_name: upload.app_name,
+                        text: upload.text,
+                    });
+                }
+                sent.get(id).map(|previous| kaleidoscope_data::share::View {
+                    window_id: id.clone(),
+                    app_name: previous.app_name.clone(),
+                    text: previous.text.clone(),
+                })
             })
         })
-        .collect();
-    kaleidoscope_data::share::build_share_block(
-        &views,
-        &state
-            .share
-            .sent
-            .get(conversation)
-            .cloned()
-            .unwrap_or_default(),
-    )
+        .collect::<Vec<_>>();
+    kaleidoscope_data::share::build_share_block(&views, &sent)
 }
 
 pub(crate) fn strip_legacy_share_from_item(item: &mut ConversationItem) {
@@ -69,13 +156,70 @@ pub(crate) fn mark_sent_text(
     conversation: &str,
     sent: BTreeMap<String, kaleidoscope_data::share::SentView>,
 ) {
-    inner
-        .state
-        .lock()
-        .unwrap()
-        .share
-        .sent
-        .insert(conversation.to_string(), sent);
+    let mut state = inner.state.lock().unwrap();
+    let before = state.clone();
+    let window_desktops: HashMap<_, _> = state
+        .shared
+        .windows
+        .iter()
+        .map(|window| (window.id.clone(), window.desktop_id.clone()))
+        .collect();
+    for desktop in &mut state.shared.desktops {
+        let sent_for_desktop: BTreeMap<_, _> = sent
+            .iter()
+            .filter(|(id, _)| {
+                window_desktops.get(*id) == Some(&desktop.id)
+                    || desktop.sharing.iter().any(|sharing| sharing == *id)
+                    || desktop
+                        .last_sent_context
+                        .get(conversation)
+                        .is_some_and(|contexts| contexts.contains_key(*id))
+            })
+            .map(|(id, value)| (id.clone(), value.clone()))
+            .collect();
+        let previous = desktop.last_sent_context.get(conversation).cloned();
+        if sent_for_desktop.is_empty() && previous.is_none() {
+            continue;
+        }
+        let contexts = desktop
+            .last_sent_context
+            .entry(conversation.to_owned())
+            .or_default();
+        let sent_ids: HashSet<_> = sent_for_desktop.keys().map(String::as_str).collect();
+        for (id, context) in contexts.iter_mut() {
+            if !sent_ids.contains(id.as_str()) {
+                context.app_name = None;
+                context.text = None;
+            }
+        }
+        contexts.retain(|_, context| !empty_context(context));
+        for (id, view) in sent_for_desktop {
+            let context = contexts.entry(id).or_default();
+            context.app_name = Some(view.app_name);
+            context.text = Some(view.text);
+        }
+        if contexts.is_empty() {
+            desktop.last_sent_context.remove(conversation);
+        }
+        if desktop.last_sent_context.get(conversation) != previous.as_ref() {
+            desktop.updated_at = crate::state_commands::timestamp();
+        }
+    }
+    match persist_shared_change(inner, &before, &mut state) {
+        Ok(true) => inner.layout_signal.notify(),
+        Ok(false) => {}
+        Err(error) => {
+            *state = before;
+            eprintln!(
+                "같이 보기 전송 기준을 저장하지 못했습니다: {}",
+                error.message
+            );
+        }
+    }
+}
+
+fn empty_context(context: &SentShareContext) -> bool {
+    context.app_name.is_none() && context.text.is_none() && context.visual_hash.is_none()
 }
 
 pub(crate) fn set(
@@ -85,41 +229,59 @@ pub(crate) fn set(
 ) -> Result<CoreReply, CoreError> {
     let (event, delete) = {
         let mut state = inner.state.lock().unwrap();
-        if !state
+        let desktop_id = state
             .shared
             .windows
             .iter()
-            .any(|window| window.id == window_id)
-        {
-            return Err(error::make(ErrorCode::NotFound));
-        }
-        let was_on = state.share.sharing.iter().any(|id| id == window_id);
+            .find(|window| window.id == window_id)
+            .map(|window| window.desktop_id.clone())
+            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        let desktop_index = state
+            .shared
+            .desktops
+            .iter()
+            .position(|desktop| desktop.id == desktop_id)
+            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        let was_on = state.shared.desktops[desktop_index]
+            .sharing
+            .iter()
+            .any(|id| id == window_id);
         if was_on == on {
             return Ok(CoreReply::ShareSet {});
         }
+        let before = state.clone();
+        let desktop = &mut state.shared.desktops[desktop_index];
         if on {
-            state.share.sharing.push(window_id.to_owned());
-            (
-                Some(CoreEvent::StateChanged {
-                    snapshot: snapshot(&state),
-                }),
-                false,
-            )
+            desktop.sharing.push(window_id.to_owned());
+            desktop.updated_at = crate::state_commands::timestamp();
+            state.share.active_shares.insert(window_id.to_owned());
         } else {
-            state.share.sharing.retain(|id| id != window_id);
+            desktop.sharing.retain(|id| id != window_id);
+            for contexts in desktop.last_sent_context.values_mut() {
+                if let Some(context) = contexts.get_mut(window_id) {
+                    context.visual_hash = None;
+                }
+                contexts.retain(|_, context| !empty_context(context));
+            }
+            desktop
+                .last_sent_context
+                .retain(|_, contexts| !contexts.is_empty());
+            desktop.updated_at = crate::state_commands::timestamp();
+            state.share.active_shares.remove(window_id);
             state.share.views.remove(window_id);
             state.share.uploaded.remove(window_id);
-            for hashes in state.share.visual_hashes.values_mut() {
-                hashes.remove(window_id);
-            }
             state.share.pending_deletes.insert(window_id.to_owned());
-            (
-                Some(CoreEvent::StateChanged {
-                    snapshot: snapshot(&state),
-                }),
-                true,
-            )
         }
+        if let Err(error) = persist_shared_change(inner, &before, &mut state) {
+            *state = before;
+            return Err(error);
+        }
+        (
+            Some(CoreEvent::StateChanged {
+                snapshot: snapshot(&state),
+            }),
+            !on,
+        )
     };
     if delete {
         delete_pending(inner, window_id);
@@ -145,7 +307,7 @@ pub(crate) fn view(
         {
             return Err(error::make(ErrorCode::NotFound));
         }
-        if !state.share.sharing.iter().any(|id| id == window_id) {
+        if !is_sharing(&state, window_id) {
             return Ok(CoreReply::ShareView {});
         }
         if view.text.len() > SHARE_TEXT_MAX_BYTES {
@@ -224,7 +386,7 @@ fn post_share(inner: &Inner, window_id: &str, upload: ShareUpload, file: &LinkFi
         .is_ok()
     {
         let mut state = inner.state.lock().unwrap();
-        if state.share.sharing.iter().any(|id| id == window_id)
+        if is_sharing(&state, window_id)
             && state
                 .share
                 .views
@@ -263,28 +425,19 @@ fn delete_pending(inner: &Inner, window_id: &str) {
 pub(crate) fn state_changed(inner: &Inner) {
     let removed = {
         let mut state = inner.state.lock().unwrap();
-        let live: HashSet<_> = state
-            .shared
-            .windows
-            .iter()
-            .map(|window| window.id.as_str())
-            .collect();
+        let live = shared_window_ids(&state.shared);
         let removed: Vec<_> = state
             .share
-            .sharing
-            .iter()
-            .filter(|id| !live.contains(id.as_str()))
+            .active_shares
+            .difference(&live)
             .cloned()
             .collect();
         for id in &removed {
-            state.share.sharing.retain(|sharing| sharing != id);
             state.share.views.remove(id);
             state.share.uploaded.remove(id);
-            for hashes in state.share.visual_hashes.values_mut() {
-                hashes.remove(id);
-            }
             state.share.pending_deletes.insert(id.clone());
         }
+        state.share.active_shares = live;
         removed
     };
     for id in removed {
@@ -300,9 +453,7 @@ pub(crate) fn on_connected(inner: &Inner) {
         } else {
             None
         };
-        let uploads = state
-            .share
-            .sharing
+        let uploads = shared_window_ids(&state.shared)
             .iter()
             .filter_map(|id| {
                 state.share.views.get(id).and_then(|view| {
@@ -345,7 +496,12 @@ pub(crate) fn on_connected(inner: &Inner) {
 pub(crate) fn clear_server_before_unlink(inner: &Inner) {
     let (ids, file) = {
         let state = inner.state.lock().unwrap();
-        (state.share.sharing.clone(), link_file(inner))
+        (
+            shared_window_ids(&state.shared)
+                .into_iter()
+                .collect::<Vec<_>>(),
+            link_file(inner),
+        )
     };
     if let Some(file) = file {
         for id in ids {
@@ -370,18 +526,20 @@ pub(crate) fn capture_for_send(
             Vec::new()
         } else {
             state
-                .share
-                .sharing
+                .shared
+                .desktops
                 .iter()
+                .find(|desktop| {
+                    Some(desktop.id.as_str()) == active_desktop.as_deref()
+                        && desktop.workspace_id == workspace_id
+                })
+                .into_iter()
+                .flat_map(|desktop| desktop.sharing.iter())
                 .filter_map(|id| {
-                    let window = state
-                        .shared
-                        .windows
-                        .iter()
-                        .find(|window| &window.id == id)?;
-                    if Some(window.desktop_id.as_str()) != active_desktop.as_deref() {
-                        return None;
-                    }
+                    let window = state.shared.windows.iter().find(|window| {
+                        &window.id == id
+                            && Some(window.desktop_id.as_str()) == active_desktop.as_deref()
+                    })?;
                     let view = state.share.views.get(id)?;
                     if !view.visual {
                         return None;
@@ -413,11 +571,14 @@ pub(crate) fn capture_for_send(
                         upload.app_name,
                         has_web,
                         state
-                            .share
-                            .visual_hashes
+                            .shared
+                            .desktops
+                            .iter()
+                            .find(|desktop| desktop.id == window.desktop_id)?
+                            .last_sent_context
                             .get(conversation)
-                            .and_then(|hashes| hashes.get(id))
-                            .cloned(),
+                            .and_then(|contexts| contexts.get(id))
+                            .and_then(|context| context.visual_hash.clone()),
                     ))
                 })
                 .collect::<Vec<_>>()
@@ -504,14 +665,48 @@ pub(crate) fn capture_for_send(
 
 pub(crate) fn mark_sent_visuals(inner: &Inner, conversation: &str, sent: Vec<(String, String)>) {
     let mut state = inner.state.lock().unwrap();
+    let before = state.clone();
     for (id, hash) in sent {
-        if state.share.sharing.iter().any(|sharing| sharing == &id) {
-            state
-                .share
-                .visual_hashes
-                .entry(conversation.to_owned())
-                .or_default()
-                .insert(id, hash);
+        let desktop_id = state
+            .shared
+            .windows
+            .iter()
+            .find(|window| window.id == id)
+            .map(|window| window.desktop_id.clone());
+        let Some(desktop_id) = desktop_id else {
+            continue;
+        };
+        let Some(desktop) = state
+            .shared
+            .desktops
+            .iter_mut()
+            .find(|desktop| desktop.id == desktop_id)
+        else {
+            continue;
+        };
+        if !desktop.sharing.iter().any(|sharing| sharing == &id) {
+            continue;
+        }
+        let context = desktop
+            .last_sent_context
+            .entry(conversation.to_owned())
+            .or_default()
+            .entry(id)
+            .or_default();
+        if context.visual_hash.as_deref() != Some(hash.as_str()) {
+            context.visual_hash = Some(hash);
+            desktop.updated_at = crate::state_commands::timestamp();
+        }
+    }
+    match persist_shared_change(inner, &before, &mut state) {
+        Ok(true) => inner.layout_signal.notify(),
+        Ok(false) => {}
+        Err(error) => {
+            *state = before;
+            eprintln!(
+                "같이 보기 이미지 전송 기준을 저장하지 못했습니다: {}",
+                error.message
+            );
         }
     }
 }

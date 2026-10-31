@@ -47,11 +47,13 @@ pub(super) async fn post_layout_changes(
             CoreError::new(ErrorCode::InvalidRequest),
         );
     };
-    if changes.windows.iter().any(|window| {
-        serde_json::to_vec(&window.state).map_or(true, |bytes| {
-            bytes.len() > kaleidoscope_contract::WINDOW_STATE_MAX_BYTES
+    if !super::layout_changes::validate_changes(&changes)
+        || changes.windows.iter().any(|window| {
+            serde_json::to_vec(&window.state).map_or(true, |bytes| {
+                bytes.len() > kaleidoscope_contract::WINDOW_STATE_MAX_BYTES
+            })
         })
-    }) {
+    {
         return http::error_response(
             StatusCode::BAD_REQUEST,
             CoreError::new(ErrorCode::InvalidRequest),

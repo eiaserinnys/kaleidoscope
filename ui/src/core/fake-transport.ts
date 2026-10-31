@@ -391,9 +391,25 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     calls.push(clone(request));
     switch (request.op) {
       case "share.set": {
-        findWindow(request.window_id);
+        const window = findWindow(request.window_id);
         if (snapshot.sharing.includes(request.window_id) === request.on) return { op: "share.set" };
-        snapshot = { ...snapshot, sharing: request.on ? [...snapshot.sharing, request.window_id] : snapshot.sharing.filter((id) => id !== request.window_id) };
+        snapshot = {
+          ...snapshot,
+          sharing: request.on ? [...snapshot.sharing, request.window_id] : snapshot.sharing.filter((id) => id !== request.window_id),
+          shared: {
+            ...snapshot.shared,
+            desktops: snapshot.shared.desktops.map((desktop) => {
+              if (desktop.id !== window.desktop_id) return desktop;
+              const sharing = desktop.sharing ?? [];
+              return {
+                ...desktop,
+                sharing: request.on
+                  ? sharing.includes(request.window_id) ? sharing : [...sharing, request.window_id]
+                  : sharing.filter((id) => id !== request.window_id),
+              };
+            }),
+          },
+        };
         emitState();
         return { op: "share.set" };
       }

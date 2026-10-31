@@ -161,7 +161,7 @@ pub(crate) fn apply_changes(state: &mut CoreState, changes: LayoutChanges) {
     reconcile(state);
 }
 
-fn reconcile(state: &mut CoreState) {
+pub(crate) fn reconcile(state: &mut CoreState) {
     let workspaces: HashSet<_> = state
         .shared
         .workspaces
@@ -189,6 +189,32 @@ fn reconcile(state: &mut CoreState) {
         }
         valid
     });
+    for desktop in &mut state.shared.desktops {
+        let mut seen = HashSet::new();
+        desktop.sharing.retain(|id| {
+            state
+                .shared
+                .windows
+                .iter()
+                .any(|window| window.id == *id && window.desktop_id == desktop.id)
+                && seen.insert(id.clone())
+        });
+        for contexts in desktop.last_sent_context.values_mut() {
+            for (id, context) in contexts.iter_mut() {
+                if !desktop.sharing.iter().any(|sharing| sharing == id) {
+                    context.visual_hash = None;
+                }
+            }
+            contexts.retain(|_, context| {
+                context.app_name.is_some()
+                    || context.text.is_some()
+                    || context.visual_hash.is_some()
+            });
+        }
+        desktop
+            .last_sent_context
+            .retain(|_, contexts| !contexts.is_empty());
+    }
     for window in &mut state.shared.windows {
         if let Some(app) = state.shared.apps.iter().find(|a| a.id == window.app_id) {
             if window.app_version != app.current_version {

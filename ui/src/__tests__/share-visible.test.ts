@@ -31,11 +31,17 @@ it("가짜 코어는 같은 상태를 반복해도 이벤트를 보내지 않고
   const windowId = snapshot.shared.windows[0].id;
   const fake = createFakeTransport({ snapshot, folder: null, files: {} });
   const events: string[] = [];
-  fake.subscribe((event) => events.push(event.event));
+  let desktopSharing: string[] = [];
+  fake.subscribe((event) => {
+    events.push(event.event);
+    if (event.event === "state.changed") desktopSharing = event.snapshot.shared.desktops[0].sharing ?? [];
+  });
   await fake.call({ op: "share.set", window_id: windowId, on: true });
   await fake.call({ op: "share.set", window_id: windowId, on: true });
   expect(events).toEqual(["state.changed"]);
+  expect(desktopSharing).toEqual([windowId]);
   await fake.call({ op: "share.set", window_id: windowId, on: false });
+  expect(desktopSharing).toEqual([]);
   await fake.call({ op: "share.view", window_id: windowId, view: { text: "늦은 글", visual: false, bounds: { x: 0, y: 0, width: 100, height: 100 } } });
   expect(fake.getShareCalls()).toEqual([]);
 });

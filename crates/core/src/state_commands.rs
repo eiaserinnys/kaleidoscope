@@ -34,6 +34,8 @@ pub(crate) fn new_desktop(
         workspace_id,
         name,
         position,
+        sharing: Vec::new(),
+        last_sent_context: Default::default(),
         created_at: now.clone(),
         updated_at: now,
     }
@@ -381,10 +383,42 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
             })
         }
         CoreRequest::WindowClose { window_id } => {
+            let desktop_id = state
+                .shared
+                .windows
+                .iter()
+                .find(|window| window.id == window_id)
+                .map(|window| window.desktop_id.clone())
+                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
             let before = state.shared.windows.len();
             state.shared.windows.retain(|window| window.id != window_id);
-            if state.shared.windows.len() == before {
-                return Err(error::make(ErrorCode::NotFound));
+            if state.shared.windows.len() != before {
+                if let Some(desktop) = state
+                    .shared
+                    .desktops
+                    .iter_mut()
+                    .find(|desktop| desktop.id == desktop_id)
+                {
+                    let old_sharing = desktop.sharing.clone();
+                    let old_context = desktop.last_sent_context.clone();
+                    desktop.sharing.retain(|id| id != &window_id);
+                    for contexts in desktop.last_sent_context.values_mut() {
+                        if let Some(context) = contexts.get_mut(&window_id) {
+                            context.visual_hash = None;
+                        }
+                        contexts.retain(|_, context| {
+                            context.app_name.is_some()
+                                || context.text.is_some()
+                                || context.visual_hash.is_some()
+                        });
+                    }
+                    desktop
+                        .last_sent_context
+                        .retain(|_, contexts| !contexts.is_empty());
+                    if desktop.sharing != old_sharing || desktop.last_sent_context != old_context {
+                        desktop.updated_at = timestamp();
+                    }
+                }
             }
             state
                 .device

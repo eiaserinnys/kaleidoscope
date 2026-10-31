@@ -36,9 +36,10 @@
 //! 바뀐 시각이 붙었다.
 //!
 //! 9판에서 바뀐 것(창 같이 보기, 카드 #814): 창마다 켜는 「같이 보기」. `share.set`과 `share.view` 명령,
-//! [`ShellSnapshot::sharing`], 화면이 옮긴 보이는 글 [`VisibleView`], `conversation.send`가 같이 보는 창의 모습을 첨부로
-//! 붙이는 규칙. 블록 세트와 모듈 판은 그대로다(앱 정의가 쓰는 것이 아니라 쉘의 기능이다). 아래 「같이 보기」 절과
-//! [`registry`]의 「같이 보기」 절.
+//! [`Desktop::sharing`]과 [`Desktop::last_sent_context`], 화면이 옮긴 보이는 글 [`VisibleView`], `conversation.send`가
+//! 같이 보는 창의 모습을 첨부로 붙이는 규칙. 켠 창과 대화별 전송 기준은 데스크톱 속성으로 저장·동기화하고,
+//! 현재 보이는 글만 코어 메모리에 둔다. 블록 세트와 모듈 판은 그대로다(앱 정의가 쓰는 것이 아니라 쉘의 기능이다).
+//! 아래 「같이 보기」 절과 [`registry`]의 「같이 보기」 절.
 //!
 //! 10판에서 바뀐 것(쉘 자동 업데이트, 카드 #819): [`ShellSnapshot::update`]와 `update.restart` 명령. 설치본 쉘이 새 판을
 //! 스스로 받아 두고, 디렉터가 고를 때 다시 시작하며 깐다. 블록 세트와 모듈 판, 레지스트리는 그대로다(앱 정의가 쓰는 것이
@@ -143,17 +144,19 @@
 //!   다른 기기에서 워크스페이스나 데스크톱, 창이 지워지면 코어가 이 기기의 고른 것과 고른 폴더를 맞춘다.
 //! - 오케스트레이터 연결 정보(서버 주소, 기기 id, 기기 토큰)는 그 기기의 `link.json`에만 두고 화면에
 //!   보내지 않는다. 화면은 [`LinkStatus`]만 본다.
-//! - 같이 보기를 켠 창([`ShellSnapshot::sharing`])과 그 창의 보이는 글은 코어의 메모리에만 둔다.
+//! - 같이 보기를 켠 창과 대화마다 마지막으로 보낸 컨텍스트는 각 [`Desktop`]의 속성으로 저장하고
+//!   배치와 함께 동기화한다. 창에 지금 보이는 글([`VisibleView`])만 코어 메모리에 둔다.
 //!
 //! # 같이 보기 (9판)
 //! 디렉터가 창의 「같이 보기」를 켜 두면, 그 창에 지금 보이는 글을 작업 PAS가 디렉터의 다음 말과 함께 받는다.
-//! - 켜고 끄는 것은 그 기기의 그 창 하나에만 걸린다. 저장하지 않으므로 쉘을 다시 켜면 모두 꺼진 채로 시작한다.
+//! - 켜고 끄는 상태는 창이 속한 [`Desktop::sharing`]에 저장하고 다른 기기와 동기화한다.
+//!   마지막으로 보낸 대화별 컨텍스트는 [`Desktop::last_sent_context`]에 저장한다.
 //!   창이 없어지면(창 닫기, 데스크톱과 워크스페이스 지우기, 다른 기기에서 지운 것을 받은 때) 코어가 끈다.
 //! - 화면은 켜진 창에 보이는 부분을 글로 옮겨([`VisibleView`]) 바뀔 때마다 `share.view`로 코어에 준다. 앱마다
 //!   요약하지 않고, 쉘이 블록 종류와 접근성 정보(ARIA 역할과 이름)로 옮긴다. 스크롤 밖이나 다른 데스크톱처럼
 //!   보이지 않는 부분은 옮기지 않는다.
 //! - 코어는 연결되어 있으면 그 글을 서버에 올려 조회할 수 있게 한다. 대화 전송 시 코어가 지난번과 달라진
-//!   글을 제공자 요청의 context에 담는다. 글이 바뀔 때마다 대화를 깨우지 않는다.
+//!   글을 제공자 요청의 context에 담는다. 보낸 기준도 데스크톱과 동기화해 재시작 뒤 중복 전송을 막는다.
 //! - 이미지나 웹 화면처럼 글로 옮길 수 없는 것이 보이는 창(`visual`)은, `conversation.send` 때 코어가 그 창의 모습을
 //!   찍어 첨부로 붙인다. 지난번에 붙인 모습과 같으면 붙이지 않는다.
 //! - 같이 보기를 켠 창만, 켠 동안만 이 기기 밖(서버와 외부 대화 서비스)으로 나간다.
@@ -167,8 +170,8 @@
 //! - 쉘은 혼자 다시 시작하지 않는다. 디렉터가 화면에서 고르면 화면이 편집기의 저장 대기분을 먼저 저장하고(저장이
 //!   실패하거나 충돌이면 다시 시작하지 않는다) `update.restart`를 부른다. 코어는 디스크에 쓸 것을 쓰고 설치를 시작한다.
 //!   Windows에서는 설치 프로그램이 조용한 모드(진행 막대만)로 뜨고 쉘이 바로 끝나며, 설치가 끝나면 새 판 쉘이 다시 뜬다.
-//!   워크스페이스, 데스크톱, 창과 창 상태는 저장된 그대로 이어진다(연결한 쉘은 서버 정본). 같이 보기처럼 메모리에만
-//!   두는 것은 꺼진 채로 시작한다.
+//!   워크스페이스, 데스크톱, 창과 창 상태는 저장된 그대로 이어진다(연결한 쉘은 서버 정본). 창에 지금 보이는 글처럼
+//!   메모리에만 두는 것은 다시 계산될 때까지 비어 있다.
 //! - 서명은 쉘에 들어 있는 공개 키로 받은 직후와 깔기 직전에 확인한다. 맞지 않으면 깔지 않고 [`UpdateStatus::Failed`]다.
 //!   서명 비밀 키는 리포의 GitHub secrets에만 있고 릴리스 워크플로가 서명한다.
 //! - 개발용 HTTP 다리, 브라우저 하니스, 업데이터 설정이 없는 빌드는 늘 [`UpdateStatus::Unavailable`]이다.
@@ -322,7 +325,22 @@ pub struct Workspace {
     pub updated_at: String,
 }
 
-/// 화면 한 장. 앱 창 배치를 가진다.
+/// 데스크톱에서 마지막으로 대화에 보낸 같이 보기 창 하나의 컨텍스트.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct SentShareContext {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub app_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub visual_hash: Option<String>,
+}
+
+/// 화면 한 장. 앱 창 배치와 같이 보기 상태, 대화별 마지막 컨텍스트를 가진다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
 pub struct Desktop {
@@ -331,6 +349,17 @@ pub struct Desktop {
     pub name: String,
     /// 워크스페이스 안의 순서. 0부터.
     pub position: u32,
+    /// 이 데스크톱에서 같이 보기를 켠 창 id. 켠 순서다.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<String>>")]
+    pub sharing: Vec<String>,
+    /// 대화 키별로 이 데스크톱에서 마지막으로 보낸 창별 컨텍스트.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[ts(
+        optional,
+        as = "Option<BTreeMap<String, BTreeMap<String, SentShareContext>>>"
+    )]
+    pub last_sent_context: BTreeMap<String, BTreeMap<String, SentShareContext>>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -492,7 +521,7 @@ pub struct ShellSnapshot {
     pub device: DeviceState,
     pub supported: Supported,
     pub link: LinkStatus,
-    /// (9판) 이 기기에서 같이 보기를 켠 창의 id. 켠 순서다. 코어의 메모리에만 있어 쉘을 다시 켜면 빈 목록이다.
+    /// 같이 보기 상태가 저장된 데스크톱과 현재 살아 있는 창에서 계산한 id. 켠 순서다.
     pub sharing: Vec<String>,
     /// (10판) 이 쉘 자신의 새 판 받기 상태. 코어의 메모리에만 있다.
     pub update: UpdateStatus,
@@ -2051,12 +2080,13 @@ pub enum CoreRequest {
         permission: String,
     },
 
-    /// (9판) 창의 같이 보기를 켜거나 끈다. 코어의 메모리에만 두고, [`ShellSnapshot::sharing`]이 바뀌므로
-    /// `state.changed`가 따라온다. 이미 그 상태면 아무것도 하지 않는다(이벤트 없음). 없는 창이면 `not_found`.
+    /// (9판) 창의 같이 보기를 켜거나 끈다. 창이 속한 [`Desktop::sharing`]에 저장하고 동기화한다.
+    /// [`ShellSnapshot::sharing`]이 바뀌므로 `state.changed`가 따라온다. 이미 그 상태면 아무것도 하지 않는다(이벤트 없음). 없는 창이면 `not_found`.
     /// 연결 상태와 무관하게 성공한다.
     /// - 켜면 화면이 곧 `share.view`로 보이는 것을 준다. 코어는 그 전까지 서버에 올릴 것이 없다.
-    /// - 끄면 코어가 그 창의 보이는 글과 「지난번에 보낸 모습」을 버리고, 연결되어 있으면 서버의 그 창 보기를
-    ///   지운다([`registry`]의 「같이 보기」 절). 지우다 실패하면 다시 이을 때 지운다.
+    /// - 끄면 코어가 그 창의 현재 보이는 글과 마지막 이미지 해시를 지우고, 연결되어 있으면 서버의 그 창 보기를
+    ///   지운다([`registry`]의 「같이 보기」 절). 대화별 마지막 글은 다음 전송에서 「같이 보기 끝」을 보낼 때까지 둔다.
+    ///   서버 삭제에 실패하면 다시 이을 때 지운다.
     #[serde(rename = "share.set")]
     ShareSet { window_id: String, on: bool },
     /// (9판) 같이 보기 창에 지금 보이는 것을 코어에 준다. 화면은 켠 직후 한 번, 그 뒤로는 창에 보이는 것이나 창의
@@ -2064,7 +2094,7 @@ pub enum CoreRequest {
     /// 옮기기를 바로 해서 이 명령을 마친다(보낸 말이 방금 본 것과 함께 가도록).
     /// - 같이 보기가 꺼진 창이면 아무것도 하지 않고 성공한다(끈 직후 늦게 온 것). 없는 창이면 `not_found`.
     /// - `text`가 [`SHARE_TEXT_MAX_BYTES`]를 넘으면 `invalid_request`.
-    /// - 코어는 마지막 것을 창마다 하나 들고 있는다. 연결되어 있고 글이나 `visual`이 서버에 마지막으로 올린 것과
+    /// - 코어는 현재 보이는 글을 창마다 하나 메모리에 둔다. 연결되어 있고 글이나 `visual`이 서버에 마지막으로 올린 것과
     ///   다르면 서버에 올린 뒤 응답한다. 올리다 실패해도 성공으로 응답하고, 다음 `share.view`나 다시 이을 때 올린다.
     ///   상태를 바꾸지 않으므로 이벤트가 없다.
     #[serde(rename = "share.view")]

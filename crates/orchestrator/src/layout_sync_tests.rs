@@ -3,7 +3,7 @@ use axum::body::Body;
 use futures::StreamExt;
 use kaleidoscope_contract::{
     registry::{DeviceLayout, LayoutChanges},
-    AppWindow, Desktop, Rect, Workspace,
+    AppWindow, Desktop, Rect, SentShareContext, Workspace,
 };
 use std::collections::BTreeMap;
 use tower::ServiceExt;
@@ -26,6 +26,8 @@ fn desktop(id: &str, workspace_id: &str) -> Desktop {
         workspace_id: workspace_id.into(),
         name: id.into(),
         position: 0,
+        sharing: Vec::new(),
+        last_sent_context: Default::default(),
         created_at: format!("{id}-created"),
         updated_at: format!("{id}-updated"),
     }
@@ -141,6 +143,51 @@ fn layout_changes_report_skipped_upserts_delete_precedence_cascades_and_last_wor
     assert_eq!(refused.windows, vec![window("win2", "d2", "unknown")]);
 }
 
+#[test]
+fn layout_changes_validate_shared_context_ids_and_text_size() {
+    let mut value = desktop("d", "w");
+    value.sharing = vec!["window".into()];
+    value.last_sent_context.insert(
+        "thread".into(),
+        BTreeMap::from([(
+            "window".into(),
+            SentShareContext {
+                app_name: Some("앱".into()),
+                text: Some("화면".into()),
+                visual_hash: Some("hash".into()),
+            },
+        )]),
+    );
+    let valid = LayoutChanges {
+        desktops: vec![value.clone()],
+        ..Default::default()
+    };
+    assert!(layout_changes::validate_changes(&valid));
+
+    value.sharing = vec!["  ".into()];
+    assert!(!layout_changes::validate_changes(&LayoutChanges {
+        desktops: vec![value.clone()],
+        ..Default::default()
+    }));
+    value.sharing = vec!["x".repeat(129)];
+    assert!(!layout_changes::validate_changes(&LayoutChanges {
+        desktops: vec![value.clone()],
+        ..Default::default()
+    }));
+    value.sharing = vec!["window".into()];
+    value
+        .last_sent_context
+        .get_mut("thread")
+        .unwrap()
+        .get_mut("window")
+        .unwrap()
+        .text = Some("x".repeat(kaleidoscope_contract::SHARE_TEXT_MAX_BYTES + 1));
+    assert!(!layout_changes::validate_changes(&LayoutChanges {
+        desktops: vec![value],
+        ..Default::default()
+    }));
+}
+
 #[tokio::test]
 async fn registry_six_stream_sends_layout_snapshot_after_other_snapshots() {
     let state = AppState::in_memory("secret");
@@ -188,6 +235,125 @@ async fn registry_six_stream_sends_layout_snapshot_after_other_snapshots() {
             }
         )
         .is_none());
+}
+
+#[tokio::test]
+async fn desktop_share_context_changes_reach_post_event_and_another_device_snapshot() {
+    use http_body_util::BodyExt;
+
+    let state = AppState::in_memory("secret");
+    let first_token = insert_device(&state, "first", "첫 기기");
+    let second_token = insert_device(&state, "second", "둘째 기기");
+    state
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                workspaces: vec![workspace("w", "작업")],
+                desktops: vec![desktop("d", "w")],
+                windows: vec![window("win", "d", "unknown")],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    let first_request = Request::builder()
+        .method("GET")
+        .uri("/api/device/events")
+        .header(header::AUTHORIZATION, format!("Bearer {first_token}"))
+        .header(
+            registry::SUPPORTED_HEADER,
+            serde_json::to_string(&Supported::current()).unwrap(),
+        )
+        .header(
+            registry::REGISTRY_HEADER,
+            registry::LAYOUT_SYNC_REGISTRY_VERSION.to_string(),
+        )
+        .body(Body::empty())
+        .unwrap();
+    let first_response = router(state.clone()).oneshot(first_request).await.unwrap();
+    let mut first_stream = first_response.into_body().into_data_stream();
+    assert_eq!(
+        next_sse_event(&mut first_stream).await["event"],
+        "apps.snapshot"
+    );
+    assert_eq!(
+        next_sse_event(&mut first_stream).await["event"],
+        "connections.snapshot"
+    );
+    assert_eq!(
+        next_sse_event(&mut first_stream).await["event"],
+        "layout.snapshot"
+    );
+
+    let mut updated_desktop = desktop("d", "w");
+    updated_desktop.sharing = vec!["win".into()];
+    updated_desktop.last_sent_context.insert(
+        "thread".into(),
+        BTreeMap::from([(
+            "win".into(),
+            SentShareContext {
+                app_name: Some("문서".into()),
+                text: Some("마지막 글".into()),
+                visual_hash: Some("image-hash".into()),
+            },
+        )]),
+    );
+    let changes = LayoutChanges {
+        desktops: vec![updated_desktop.clone()],
+        ..Default::default()
+    };
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/device/layout/changes")
+        .header(header::AUTHORIZATION, format!("Bearer {first_token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&changes).unwrap()))
+        .unwrap();
+    let response = router(state.clone()).oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let reply: LayoutChanges =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(reply.desktops, vec![updated_desktop.clone()]);
+
+    let changed = next_sse_event(&mut first_stream).await;
+    assert_eq!(changed["event"], "layout.changed");
+    assert_eq!(changed["changes"]["desktops"][0]["sharing"][0], "win");
+    assert_eq!(
+        changed["changes"]["desktops"][0]["last_sent_context"]["thread"]["win"]["text"],
+        "마지막 글"
+    );
+
+    let second_request = Request::builder()
+        .method("GET")
+        .uri("/api/device/events")
+        .header(header::AUTHORIZATION, format!("Bearer {second_token}"))
+        .header(
+            registry::SUPPORTED_HEADER,
+            serde_json::to_string(&Supported::current()).unwrap(),
+        )
+        .header(
+            registry::REGISTRY_HEADER,
+            registry::LAYOUT_SYNC_REGISTRY_VERSION.to_string(),
+        )
+        .body(Body::empty())
+        .unwrap();
+    let second_response = router(state.clone()).oneshot(second_request).await.unwrap();
+    let mut second_stream = second_response.into_body().into_data_stream();
+    assert_eq!(
+        next_sse_event(&mut second_stream).await["event"],
+        "apps.snapshot"
+    );
+    assert_eq!(
+        next_sse_event(&mut second_stream).await["event"],
+        "connections.snapshot"
+    );
+    let snapshot = next_sse_event(&mut second_stream).await;
+    assert_eq!(snapshot["event"], "layout.snapshot");
+    assert_eq!(snapshot["desktops"][0]["sharing"][0], "win");
+    assert_eq!(
+        snapshot["desktops"][0]["last_sent_context"]["thread"]["win"]["visual_hash"],
+        "image-hash"
+    );
 }
 
 #[tokio::test]
