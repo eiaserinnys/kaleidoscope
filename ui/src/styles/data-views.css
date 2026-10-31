@@ -46,7 +46,7 @@
 .ks-data-tree { padding: var(--ks-space-2); }
 .ks-tree-name { flex: 1 1 auto; }
 .ks-feed { padding-top: var(--ks-space-3); }
-.ks-feed-entry { display: flex; gap: var(--ks-space-2); padding: 0 var(--ks-space-3) var(--ks-space-3); user-select: text; }
+.ks-feed-entry { display: flex; gap: var(--ks-space-2); padding: 0 var(--ks-space-3); margin-bottom: var(--ks-space-3); user-select: text; }
 .ks-feed-entry-nested { margin-inline-start: calc(var(--ks-feed-depth, 0) * 1.5 * var(--ks-space-3)); border-inline-start: var(--ks-line-width) solid var(--ks-color-border); padding-inline-start: var(--ks-space-2); }
 .ks-feed-entry.is-selected { background: var(--ks-color-selection); }
 .ks-feed-entry.is-selectable { cursor: pointer; }
@@ -55,6 +55,7 @@
 .ks-feed-header { display: flex; justify-content: space-between; align-items: baseline; gap: var(--ks-space-2); }
 .ks-feed-header.is-copy { min-height: var(--ks-icon-button-size); align-items: center; }
 .ks-feed-ident { display: flex; min-width: 0; flex: 1 1 auto; align-items: baseline; justify-content: space-between; gap: var(--ks-space-2); }
+.ks-feed-header.is-copy .ks-feed-ident { align-items: center; }
 .ks-feed-name-line { display: flex; min-width: 0; align-items: center; gap: var(--ks-space-2); }
 .ks-feed-name-line > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ks-feed-head-actions { display: flex; flex: none; align-items: center; gap: var(--ks-space-1); }

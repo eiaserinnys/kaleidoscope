@@ -11,6 +11,8 @@ const READER: &str = include_str!("../../../apps/reader.json");
 fn reader() -> (kaleidoscope_contract::AppDefinition, CompiledApp) {
     let definition = parse_app_definition(READER).expect("reader 앱 정의");
     assert_eq!(definition.state["active_tab"], json!(0));
+    assert_eq!(definition.state["selected_repo"], json!("top"));
+    assert_eq!(definition.state["selected_paper"], json!("0"));
     let compiled = CompiledApp::compile(&definition);
     (definition, compiled)
 }
@@ -105,7 +107,7 @@ fn reader_chains_story_selection_to_hn_github_wikipedia_and_openalex() {
     let wiki_data = BTreeMap::from([
         (
             "wiki_en_search".into(),
-            json!({"query":{"search":[{"title":"Rust programming language"}]}}),
+            json!({"query":{"search":[{"title":"Rust","snippet":"iron oxide"},{"title":"Rust programming language","snippet":"software"}]}}),
         ),
         (
             "wiki_ko_search".into(),
@@ -180,11 +182,11 @@ fn reader_evaluates_nested_discussion_and_all_tab_bindings() {
         ),
         (
             "github_repo".into(),
-            json!({"full_name":"acme/rust-tools","description":"도구","language":"Rust","stargazers_count":100,"forks_count":8,"open_issues_count":3,"topics":["rust"],"pushed_at":"2026-10-31T00:00:00Z","license":{"spdx_id":"MIT"}}),
+            json!({"id":10,"full_name":"acme/rust-tools","description":"도구","language":"Rust","stargazers_count":100,"forks_count":8,"open_issues_count":3,"topics":["rust"],"pushed_at":"2026-10-31T00:00:00Z","license":{"spdx_id":"MIT"}}),
         ),
         (
             "github_search".into(),
-            json!({"items":[{"id":10,"full_name":"acme/rust-tools","description":"도구","language":"Rust","stargazers_count":100,"forks_count":8,"open_issues_count":3}]}),
+            json!({"items":[{"id":10,"full_name":"acme/rust-tools","description":"도구","language":"Rust","stargazers_count":100,"forks_count":8,"open_issues_count":3},{"id":20,"full_name":"other/project","description":"다른 저장소","language":"Go","stargazers_count":50,"forks_count":2,"open_issues_count":1,"pushed_at":"2026-10-30T10:30:00Z"}]}),
         ),
         (
             "wiki_en_search".into(),
@@ -204,7 +206,7 @@ fn reader_evaluates_nested_discussion_and_all_tab_bindings() {
         ),
         (
             "papers".into(),
-            json!({"results":[{"title":"A paper","publication_year":2025,"cited_by_count":9,"authorships":[{"author":{"display_name":"Alice"}},{"author":{"display_name":"Bob"}}],"open_access":{"is_oa":true},"primary_location":{"source":{"display_name":"Journal"}}}]}),
+            json!({"results":[{"title":"A paper","publication_year":2025,"cited_by_count":9,"authorships":[{"author":{"display_name":"Alice"}},{"author":{"display_name":"Bob"}}],"open_access":{"is_oa":true},"primary_location":{"source":{"display_name":"Journal"}}},{"title":"Another paper","publication_year":2024,"cited_by_count":3,"authorships":[{"author":{"display_name":"Eve"}}],"open_access":{"is_oa":false},"primary_location":{"source":{"display_name":"Other journal"}}}]}),
         ),
     ]);
     let empty = BTreeMap::new();
@@ -250,33 +252,34 @@ fn reader_evaluates_nested_discussion_and_all_tab_bindings() {
     };
     let story_meta = story_meta.as_str().unwrap();
     assert!(story_meta.contains("alice"));
-    assert!(story_meta.contains("2026-10-31T11:52"));
-    assert!(story_meta.ends_with("Rust tools"));
+    assert_eq!(story_meta, "alice · 2026-10-31 11:52");
+    assert_eq!(feed[1]["meta"], "2026-10-31 10:00");
+    assert_eq!(feed[1]["badges"], json!([]));
 
     let BindingValue::Ready { value: metrics } = &values["/ui/children/1/items"] else {
         panic!("지표 식 결과")
     };
     assert_eq!(metrics[0]["value"].as_f64(), Some(42.0));
     assert_eq!(metrics[1]["value"].as_f64(), Some(1.0));
-    assert_eq!(metrics[1]["subtext"], "전체 답글 2개");
-    assert_eq!(metrics[2]["badge"], "Rust · 본문 저장소");
-    assert!(metrics[2]["subtext"]
-        .as_str()
-        .unwrap()
-        .contains("포크 8 · 이슈 3"));
+    assert_eq!(metrics[1]["subtext"], "전체 댓글 2개");
+    assert_eq!(metrics[1]["unit"], "개");
+    assert_eq!(metrics[2]["badge"], "Rust");
+    assert!(metrics[2]["subtext"].as_str().unwrap().contains("포크 8"));
     assert!(metrics[3]["subtext"]
         .as_str()
         .unwrap()
-        .contains("최고 피인용 9"));
+        .contains("최고 인용 9"));
     let BindingValue::Ready { value: repos } =
         &values["/ui/children/2/children/1/tabs/1/child/children/0/child/rows"]
     else {
         panic!("저장소 표 식 결과")
     };
     assert_eq!(repos[0]["stars"].as_f64(), Some(100.0));
+    assert_eq!(repos[0]["key"], "top");
+    assert_eq!(repos[1]["repo_id"], "20");
     let BindingValue::Ready {
         value: related_titles,
-    } = &values["/ui/children/2/children/1/tabs/2/child/children/1/child/fields/2/value"]
+    } = &values["/ui/children/2/children/1/tabs/2/child/children/1/child/fields/3/value"]
     else {
         panic!("위키 연관 항목 식 결과")
     };
@@ -289,6 +292,56 @@ fn reader_evaluates_nested_discussion_and_all_tab_bindings() {
     assert_eq!(papers[0]["title"], "A paper");
     assert_eq!(papers[0]["venue"], "Alice, Bob · Journal");
     assert_eq!(papers[0]["oa"], "OA");
+
+    let mut selected = definition.state.clone();
+    selected.insert("selected_repo".into(), json!("20"));
+    selected.insert("selected_paper".into(), json!("1"));
+    let selected_values =
+        app.evaluate_with_data_meta(&selected, &data, &empty, &empty, &empty, &statuses, None);
+    for (pointer, expected) in [
+        (
+            "/ui/children/2/children/1/tabs/1/child/children/1/child/fields/0/value",
+            "other/project",
+        ),
+        (
+            "/ui/children/2/children/1/tabs/1/child/children/1/child/fields/6/value",
+            "2026-10-30 10:30",
+        ),
+        (
+            "/ui/children/2/children/1/tabs/2/child/children/1/child/fields/0/value",
+            "Another paper",
+        ),
+    ] {
+        let BindingValue::Ready { value } = &selected_values[pointer] else {
+            panic!("선택 상세 식 결과: {pointer}");
+        };
+        assert!(
+            value.as_str().unwrap().contains(expected),
+            "{pointer}: {value}"
+        );
+    }
+    let no_related_data = BTreeMap::from([("stories".into(), data["stories"].clone())]);
+    let empty_values = app.evaluate_with_data_meta(
+        &definition.state,
+        &no_related_data,
+        &empty,
+        &empty,
+        &empty,
+        &statuses,
+        None,
+    );
+    let BindingValue::Ready {
+        value: empty_metrics,
+    } = &empty_values["/ui/children/1/items"]
+    else {
+        panic!("빈 지표 식 결과");
+    };
+    assert_eq!(empty_metrics[2]["value"], "—");
+    assert!(empty_metrics[2]["unit"].is_null());
+    assert!(empty_metrics[2]["badge"].is_null());
+    assert_eq!(empty_metrics[3]["value"], "—");
+    assert!(empty_metrics[3]["unit"].is_null());
+    assert!(empty_metrics[3]["badge"].is_null());
 }
 
 #[test]
@@ -350,7 +403,7 @@ fn reader_limits_roots_and_replies_while_including_depth_four() {
     assert_eq!(feed.as_array().unwrap().len(), 25);
     assert_eq!(feed[0]["key"], "root-0");
     assert_eq!(feed[0]["children"].as_array().unwrap().len(), 8);
-    assert_eq!(feed[0]["badges"][0]["text"], "답글 9");
+    assert_eq!(feed[0]["badges"], json!([]));
     assert_eq!(feed[1]["children"].as_array().unwrap().len(), 8);
     assert!(feed[0]["body"].as_str().unwrap().contains("답글 & 본문"));
     assert_eq!(

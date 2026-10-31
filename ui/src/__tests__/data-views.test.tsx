@@ -84,8 +84,8 @@ it("enables feed columns only when requested", async () => {
 
 it("renders nested feed replies with depth, badges, and collapsible descendants", async () => {
   setup({
-    type: "feed", collapsible: true, entries: [{
-      key: "root", name: "작성자", badges: [{ text: "인기", color: "#4c8bf5" }], body: "부모 본문",
+    type: "feed", collapsible: true, copy: true, entries: [{
+      key: "root", name: "작성자", meta: "시각", badges: [{ text: "인기", color: "#4c8bf5" }], body: "부모 본문",
       children: [{ key: "reply", name: "답글 작성자", body: "자식 본문", children: [{ key: "deep", body: "깊은 답글" }] }],
     }],
   } as unknown as Block);
@@ -94,7 +94,12 @@ it("renders nested feed replies with depth, badges, and collapsible descendants"
   expect(root.getAttribute("data-depth")).toBe("0");
   expect(reply.closest("article")?.getAttribute("data-depth")).toBe("1");
   expect(screen.getByText("인기")).not.toBeNull();
+  expect(within(root).getByText("답글 2")).not.toBeNull();
+  expect(within(root).getAllByRole("button", { name: "복사" })).toHaveLength(2);
   fireEvent.click(within(root).getByRole("button", { name: "답글 2개 접기" }));
+  expect(root.classList.contains("is-collapsed")).toBe(true);
+  expect(within(root).getByText("답글 2개 접힘")).not.toBeNull();
+  expect(within(root).queryByRole("button", { name: "복사" })).toBeNull();
   expect(screen.queryByText("자식 본문")).toBeNull();
   expect(screen.queryByText("깊은 답글")).toBeNull();
   fireEvent.click(within(root).getByRole("button", { name: "답글 2개 펴기" }));
