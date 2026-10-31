@@ -504,6 +504,32 @@ fn storage_defaults_only_apply_before_a_link() {
 }
 
 #[test]
+fn builtin_storage_uses_declared_default_when_legacy_value_is_not_found() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let registry = registry_client();
+    registry
+        .legacy_storage_not_found
+        .store(true, Ordering::SeqCst);
+    let core = open_core_with_client(temp.path(), vec![], &host, registry);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "agent");
+    mark_connected(&core);
+
+    let reply = crate::app_storage::read(&core.inner, &window, "agents").unwrap();
+    assert_eq!(
+        reply.kind,
+        kaleidoscope_contract::app_storage::StorageKind::Json
+    );
+    assert!(!reply.exists);
+    assert_eq!(reply.revision, None);
+    assert!(reply
+        .content
+        .as_array()
+        .is_some_and(|agents| !agents.is_empty()));
+}
+
+#[test]
 fn changed_storage_requires_new_execution_consent() {
     use kaleidoscope_contract::app_storage::{StorageSnapshot, StorageUpdate};
     let temp = TempDir::new().unwrap();

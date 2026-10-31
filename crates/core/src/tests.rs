@@ -941,6 +941,7 @@ fn expect_error(result: Result<CoreReply, CoreError>, code: ErrorCode) -> CoreEr
 #[derive(Default)]
 struct FakeRegistryClient {
     raw_values_enabled: std::sync::atomic::AtomicBool,
+    legacy_storage_not_found: std::sync::atomic::AtomicBool,
     storage_value: Mutex<Option<(Value, String)>>,
     storage_pause: Mutex<Option<mpsc::Receiver<()>>>,
     storage_workspace: Mutex<String>,
@@ -1018,6 +1019,9 @@ impl RegistryClient for FakeRegistryClient {
         _: &str,
         workspace: &str,
     ) -> Result<kaleidoscope_contract::app_storage::StorageReadReply, RegistryError> {
+        if self.legacy_storage_not_found.load(Ordering::SeqCst) {
+            return Err(RegistryError::NotFound);
+        }
         let pause = self.storage_pause.lock().unwrap().take();
         if let Some(pause) = pause {
             let _ = pause.recv_timeout(Duration::from_secs(10));

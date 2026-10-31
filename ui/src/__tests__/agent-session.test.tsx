@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentSessionBlock } from "../blocks/agent-session";
 import { WindowDataProvider } from "../data/window-data";
-import type { AppDefinition, CoreEvent, CoreReply, CoreRequest, LocalAgentSnapshot } from "../contract/contract";
+import type { AppDefinition, CoreEvent, CoreReply, CoreRequest, DataView, LocalAgentSnapshot } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 import { createFakeTransport } from "../core/fake-transport";
 import { makeTestSnapshot } from "./fixtures";
@@ -41,11 +41,11 @@ function localAgent(phase: LocalAgentSnapshot["phase"]): LocalAgentSnapshot {
   };
 }
 
-function setup(agent = localAgent("ready"), respond?: (request: CoreRequest) => Promise<CoreReply>) {
-  const base = makeTestSnapshot({ definitions: [definition] });
+function setup(agent = localAgent("ready"), respond?: (request: CoreRequest) => Promise<CoreReply>, view: DataView = { values: {}, sources: {} }, appDefinition = definition) {
+  const base = makeTestSnapshot({ definitions: [appDefinition] });
   const listeners = new Set<(event: CoreEvent) => void>();
   const call = vi.fn(async (request: CoreRequest): Promise<CoreReply> => {
-    if (request.op === "data.attach") return { op: "data.attach", view: { values: {}, sources: {} } };
+    if (request.op === "data.attach") return { op: "data.attach", view };
     if (request.op === "data.detach") return { op: "data.detach" };
     if (request.op === "local_agent.attach") return { op: "local_agent.attach", snapshot: agent };
     if (request.op === "local_agent.detach") return { op: "local_agent.detach" };
@@ -66,14 +66,32 @@ function setup(agent = localAgent("ready"), respond?: (request: CoreRequest) => 
     dispose: () => undefined,
   } as unknown as ShellStore;
   const window = base.shared.windows[0];
-  const context = { store, snapshot: base, window, definition };
-  render(<WindowDataProvider store={store} appWindow={window} definition={definition}><AgentSessionBlock block={definition.ui as Extract<AppDefinition["ui"], { type: "agent_session" }>} context={context} /></WindowDataProvider>);
+  const context = { store, snapshot: base, window, definition: appDefinition };
+  render(<WindowDataProvider store={store} appWindow={window} definition={appDefinition}><AgentSessionBlock block={appDefinition.ui as Extract<AppDefinition["ui"], { type: "agent_session" }>} context={context} /></WindowDataProvider>);
   return { call, window, emit: (event: CoreEvent) => act(() => { listeners.forEach((listener) => listener(event)); }) };
 }
 
 afterEach(() => cleanup());
 
 describe("기기 로컬 에이전트 화면", () => {
+  it("에이전트 목록을 읽지 못하면 오류를 보이고 선택 단추를 비활성화한다", async () => {
+    const failedDefinition = {
+      ...definition,
+      ui: { ...definition.ui, agents: { expr: "$storage.agents" } },
+    } as AppDefinition;
+    const empty = { ...localAgent("choosing_agent"), agents: [] };
+    setup(empty, undefined, {
+      values: { "/ui/agents": { status: "failed", message: "저장소를 읽지 못했습니다", retry: [] } },
+      sources: {},
+    }, failedDefinition);
+
+    expect((await screen.findByRole("alert")).textContent).toContain("저장소를 읽지 못했습니다");
+    const button = screen.getByRole("button", { name: "에이전트" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it.each([
     ["choosing_agent", "에이전트를 골라 주세요"],
     ["choosing_folder", "작업 폴더를 골라 주세요"],

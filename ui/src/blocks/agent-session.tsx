@@ -4,7 +4,7 @@ import { Button, EmptyState, IconButton, Notice, StatusText } from "../component
 import { Folder, FolderOpen, MessageSquare } from "../components/icons";
 import { Select, Toggle } from "../components/select-toggle";
 import { toCoreError } from "../core/core-transport";
-import { useWindowData } from "../data/window-data";
+import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { useShareDescriber } from "../share/visible";
 import { flushShareViews } from "../share/share-view";
@@ -17,6 +17,7 @@ type AgentSessionBlockData = Extract<Block, { type: "agent_session" }>;
 export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: AgentSessionBlockData; context: BlockContext; pointer?: string }) {
   const windowId = context.window.id;
   const data = useWindowData();
+  const agentsBinding = useBinding(`${pointer}/agents`, block.agents);
   const [snapshot, setSnapshot] = useState<LocalAgentSnapshot | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -170,7 +171,11 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
   let main: ReactNode;
   if (loadError) main = <div className="ks-agent-session-state"><Notice role="alert">{loadError}</Notice></div>;
   else if (!snapshot) main = <div className="ks-agent-session-state"><StatusText>불러오는 중</StatusText></div>;
-  else if (snapshot.phase === "choosing_agent") main = <div className="ks-agent-session-state"><EmptyState icon={<MessageSquare size="empty" />} text="에이전트를 골라 주세요" /></div>;
+  else if (snapshot.phase === "choosing_agent") main = <div className="ks-agent-session-state">{snapshot.agents.length === 0 && agentsBinding.status === "failed"
+    ? <Notice role="alert">{agentsBinding.message}</Notice>
+    : snapshot.agents.length === 0 && agentsBinding.status === "loading"
+      ? <StatusText>불러오는 중</StatusText>
+      : <EmptyState icon={<MessageSquare size="empty" />} text="에이전트를 골라 주세요" />}</div>;
   else if (snapshot.phase === "choosing_folder") main = <div className="ks-agent-session-state"><EmptyState icon={<FolderOpen size="empty" />} text="작업 폴더를 골라 주세요" action={<Button onClick={() => void chooseFolder()}>폴더 선택</Button>} /></div>;
   else if (snapshot.phase === "awaiting_permission") {
     const execution = snapshot.execution;
