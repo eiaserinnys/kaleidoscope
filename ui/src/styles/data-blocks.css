@@ -166,6 +166,9 @@
 .ks-map-marker { fill: currentColor; stroke: var(--ks-color-surface); stroke-width: 1.5; }
 .ks-map-marker-group[aria-pressed="true"] .ks-map-marker { stroke-width: 2.5; }
 .ks-map-marker-ring { fill: none; stroke: currentColor; stroke-width: 1.5; opacity: .55; }
+.ks-split-row:has(.ks-map-compact) .ks-table-scroll { max-height: 180px; }
+.ks-split-row:has(.ks-map-medium) .ks-table-scroll { max-height: 256px; }
+.ks-split-row:has(.ks-map-tall) .ks-table-scroll { max-height: 340px; }
 .ks-data-text.is-meta { font-variant-numeric: tabular-nums; }
 .ks-data-stack-item > .ks-data-text { padding-inline: var(--ks-space-3); padding-block-end: var(--ks-space-3); }
 .ks-data-text .ks-markdown-text { color: inherit; font-size: inherit; line-height: inherit; }
