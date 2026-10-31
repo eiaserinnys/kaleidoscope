@@ -236,7 +236,7 @@ extensions: Array<string>,
 /**
  * 선택 표시에 쓸 상태 키.
  */
-selected: StateRef, on_select: SetState, } | { "type": "markdown_editor", file?: FileRef, document?: DocumentRef, } | { "type": "markdown_view", file?: FileRef, document?: DocumentRef, } | { "type": "html_view", document: DocumentRef, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "agent_chat", } | { "type": "agent_session", permission: string, root: FolderRef, agents: Binding, selected: StateRef, on_select: SetState, } | { "type": "web_view",
+selected: StateRef, on_select: SetState, } | { "type": "markdown_editor", file?: FileRef, document?: DocumentRef, } | { "type": "markdown_view", file?: FileRef, document?: DocumentRef, } | { "type": "html_view", document: DocumentRef, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "agent_chat", } | { "type": "agent_session", permission: string, root: FolderRef, agents: Binding, selected: StateRef, on_select: SetState, } | { "type": "web_view", 
 /**
  * 열 주소. 상태에서 읽거나(`{ "state": "url" }`) 정의에 적는다(`"https://example.com"`).
  */

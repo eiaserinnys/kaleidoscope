@@ -53,7 +53,7 @@ it("문서의 최신 리비전을 열고 코멘트를 저장한다", async () =>
   expect(await screen.findByText("색을 바꿔 주세요")).toBeTruthy();
   await user.type(screen.getByRole("textbox", { name: "답글 1" }), "다시 확인해 주세요");
   await user.click(screen.getByRole("button", { name: "답글" }));
-  expect(await screen.findByText("다시 확인해 주세요")).toBeTruthy();
+  expect(await screen.findByText("나: 다시 확인해 주세요")).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "해결" }));
   expect(await screen.findByText("해결됨", { selector: ".ks-badge" })).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "미해결" }));
@@ -63,6 +63,43 @@ it("문서의 최신 리비전을 열고 코멘트를 저장한다", async () =>
   expect(await screen.findByText("검토 요청", { selector: ".ks-badge" })).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "삭제" }));
   await waitFor(() => expect(screen.queryByText("색을 바꿔 주세요")).toBeNull());
+});
+
+it("코멘트와 답글을 Enter로 제출하고 Escape와 취소 버튼으로 입력을 지운다", async () => {
+  const seed = makeTestSeed({ definitions: [definition as AppDefinition] });
+  const content: JsonValue = { documents: [{ id: "doc", title: "시안", revisions: [{ rev: 1, html: "<h1>제목</h1>", comments: [] }] }] };
+  const transport = createFakeTransport({ ...seed, storage: [{ window_id: "viewer-window", entry: "reports", content }] });
+  const store = createShellStore(transport);
+  render(<AppWindowContent store={store} windowId="viewer-window" />);
+  expect(await screen.findByText("코멘트가 없습니다")).toBeTruthy();
+  const iframe = screen.getByTitle("HTML 보기") as HTMLIFrameElement;
+  const select = () => act(() => window.dispatchEvent(new MessageEvent("message", { source: iframe.contentWindow, data: { type: "ks-html-selection", selected_text: "제목", selector: "h1" } })));
+  const writes = () => transport.getCalls().filter((call) => call.op === "storage.write");
+  const user = userEvent.setup();
+  select();
+  await user.type(await screen.findByRole("textbox", { name: "코멘트" }), "취소할 글");
+  await user.click(screen.getByRole("button", { name: "취소" }));
+  expect(screen.queryByRole("textbox", { name: "코멘트" })).toBeNull();
+  expect(writes()).toHaveLength(0);
+  select();
+  await user.type(await screen.findByRole("textbox", { name: "코멘트" }), "입력 취소{Escape}");
+  expect(screen.queryByRole("textbox", { name: "코멘트" })).toBeNull();
+  expect(writes()).toHaveLength(0);
+  select();
+  await user.type(await screen.findByRole("textbox", { name: "코멘트" }), "코멘트 내용{Enter}");
+  expect(await screen.findByText("코멘트 내용")).toBeTruthy();
+  await waitFor(() => expect(writes()).toHaveLength(1));
+  const reply = screen.getByRole("textbox", { name: "답글 1" }) as HTMLInputElement;
+  await user.type(reply, "임시 답글{Escape}");
+  expect(reply.value).toBe("");
+  await user.type(reply, "전송할 답글");
+  await user.tab();
+  expect(writes()).toHaveLength(1);
+  await user.click(reply);
+  await user.keyboard("{Enter}");
+  expect(await screen.findByText("나: 전송할 답글")).toBeTruthy();
+  await waitFor(() => expect(writes()).toHaveLength(2));
+  await waitFor(() => expect(reply.value).toBe(""));
 });
 
 it("원격 리비전과 요소 편집을 반영하고 새 판을 저장한다", async () => {
@@ -81,12 +118,38 @@ it("원격 리비전과 요소 편집을 반영하고 새 판을 저장한다", 
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "요소 다듬기" }));
   const text = screen.getByRole("textbox", { name: "문구" });
+  await user.clear(text); await user.type(text, "취소할 제목"); await user.keyboard("{Escape}");
+  expect((text as HTMLInputElement).value).toBe("둘째");
+  expect((screen.getByTitle("HTML 보기") as HTMLIFrameElement).srcdoc).toContain("둘째");
   await user.clear(text); await user.type(text, "새 제목");
   const color = screen.getByRole("textbox", { name: "글자 색" });
   await user.clear(color); await user.type(color, "red");
   await user.click(screen.getByRole("button", { name: "새 리비전으로 저장" }));
   await waitFor(() => expect(transport.getCalls().some((call) => call.op === "storage.write" && JSON.stringify(call.content).includes("새 제목") && JSON.stringify(call.content).includes("red"))).toBe(true));
   await waitFor(() => expect(screen.getByRole("button", { name: "리비전" }).textContent).toContain("v3"));
+});
+
+it("인라인 요소가 섞인 문구를 취소하면 원래 순서로 새 리비전에 저장한다", async () => {
+  const seed = makeTestSeed({ definitions: [definition as AppDefinition] });
+  const content: JsonValue = { documents: [{ id: "doc", title: "시안", revisions: [{ rev: 1, html: "<p>안녕 <strong>세계</strong> 반가워</p>" }] }] };
+  const transport = createFakeTransport({ ...seed, storage: [{ window_id: "viewer-window", entry: "reports", content }] });
+  const store = createShellStore(transport);
+  render(<AppWindowContent store={store} windowId="viewer-window" />);
+  await screen.findByRole("button", { name: "리비전" });
+  const iframe = screen.getByTitle("HTML 보기") as HTMLIFrameElement;
+  act(() => window.dispatchEvent(new MessageEvent("message", { source: iframe.contentWindow, data: { type: "ks-html-element-select", selector: "p", tagName: "p", selected_text: "안녕 세계 반가워", text: "안녕  반가워", styles: { color: "black", backgroundColor: "white", padding: "0px", margin: "0px" } } })));
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "요소 다듬기" }));
+  const text = screen.getByRole("textbox", { name: "문구" });
+  await user.clear(text); await user.type(text, "다른 문구{Escape}");
+  await user.click(screen.getByRole("button", { name: "새 리비전으로 저장" }));
+  await waitFor(() => expect(transport.getCalls().some((call) => call.op === "storage.write")).toBe(true));
+  const call = transport.getCalls().find((item) => item.op === "storage.write");
+  if (!call || call.op !== "storage.write") throw new Error("저장 요청이 없습니다");
+  const saved = call.content as { documents: { revisions: { html: string }[] }[] };
+  const paragraph = new DOMParser().parseFromString(saved.documents[0].revisions[1].html, "text/html").querySelector("p");
+  expect(paragraph?.textContent).toBe("안녕 세계 반가워");
+  expect(paragraph?.querySelector("strong")?.textContent).toBe("세계");
 });
 
 it("같이 보기에는 현재 문서와 미해결 스레드, 본문이 담긴다", () => {

@@ -15,8 +15,9 @@ type HtmlViewData = Extract<Block, { type: "html_view" }>;
 const label: Record<HtmlReportComment["status"], string> = { needs_agent_review: "검토 요청", needs_user_reply: "답변 도착", resolved: "해결됨" };
 const makeId = () => crypto.randomUUID();
 
-function Field({ name, value, onEdit }: { name: string; value: string; onEdit: (value: string) => void }) {
-  return <label className="ks-html-field"><span>{name}</span><TextInput aria-label={name} persistent value={value} onEdit={onEdit} onCommit={onEdit} onCancel={() => {}} /></label>;
+function Field({ name, value, onEdit, onBegin, onCancel }: { name: string; value: string; onEdit: (value: string) => void; onBegin?: () => void; onCancel?: () => void }) {
+  const baseline = useRef(value);
+  return <label className="ks-html-field"><span>{name}</span><TextInput aria-label={name} persistent value={value} onFocus={() => { baseline.current = value; onBegin?.(); }} onEdit={onEdit} onCommit={(next) => { baseline.current = next; onEdit(next); onBegin?.(); }} onCancel={() => { if (onCancel) onCancel(); else onEdit(baseline.current); }} /></label>;
 }
 
 export function HtmlViewBlock({ block, context }: { block: HtmlViewData; context: BlockContext }) {
@@ -33,11 +34,13 @@ export function HtmlViewBlock({ block, context }: { block: HtmlViewData; context
   const [note, setNote] = useState("");
   const [visibleText, setVisibleText] = useState("");
   const [draftHtml, setDraftHtml] = useState("");
+  const [frameRestore, setFrameRestore] = useState<{ html: string; sequence: number } | null>(null);
   const [saving, setSaving] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
   const root = useRef<HTMLElement>(null);
   const readSeq = useRef(0);
   const editSeq = useRef(0);
+  const textBaseline = useRef<{ html: string; element: HtmlElementSelection } | null>(null);
   const previousLatest = useRef<{ id: string; rev: number } | null>(null);
 
   const read = useCallback(async () => {
@@ -65,7 +68,7 @@ export function HtmlViewBlock({ block, context }: { block: HtmlViewData; context
   const selectedValue = block.selected_revision ? state[block.selected_revision.state] : null;
   const revision = doc?.revisions.find((item) => selectedValue !== null && selectedValue !== undefined && String(item.rev) === String(selectedValue)) ?? latest;
   const comments = revision?.comments ?? [];
-  const source = useMemo(() => revision ? htmlViewSource(revision.html) : "", [revision?.html]);
+  const source = useMemo(() => revision ? htmlViewSource(frameRestore?.html ?? revision.html) : "", [revision?.html, frameRestore?.html]);
 
   const setWindowState = useCallback((changes: Record<string, JsonValue>) => {
     const current = context.store.getSnapshot()?.shared.windows.find((item) => item.id === context.window.id)?.state ?? context.window.state;
@@ -81,7 +84,7 @@ export function HtmlViewBlock({ block, context }: { block: HtmlViewData; context
     previousLatest.current = { id: doc.id, rev: latest.rev };
   }, [doc?.id, latest?.rev, selectedValue, block.on_select_revision, setWindowState]);
 
-  useLayoutEffect(() => { setSelection(null); setElement(null); setVisibleText(""); setDraftHtml(revision?.html ?? ""); setNote(""); }, [doc?.id, revision?.rev, revision?.html]);
+  useLayoutEffect(() => { setSelection(null); setElement(null); setVisibleText(""); setDraftHtml(revision?.html ?? ""); setFrameRestore(null); textBaseline.current = null; setNote(""); }, [doc?.id, revision?.rev, revision?.html]);
   const sendFrame = useCallback((message: object) => frame.current?.contentWindow?.postMessage(message, "*"), []);
   useEffect(() => { sendFrame({ type: "ks-html-comments", comments }); }, [comments, sendFrame]);
   useLayoutEffect(() => {
@@ -113,10 +116,18 @@ export function HtmlViewBlock({ block, context }: { block: HtmlViewData; context
     return save(documents.map((item) => item.id === doc.id ? { ...item, revisions: item.revisions.map((rev) => rev.rev === revision.rev ? { ...rev, comments: next } : rev) } : item));
   };
   const updateComment = (id: string, update: (value: HtmlReportComment) => HtmlReportComment) => updateComments(comments.map((item) => item.id === id ? update(item) : item));
-  const addComment = async () => {
-    if (!selection || !commentText.trim()) return;
-    if (await updateComments([...comments, { id: makeId(), selected_text: selection.selected_text, ...(selection.prefix ? { prefix: selection.prefix } : {}), ...(selection.suffix ? { suffix: selection.suffix } : {}), ...(selection.selector ? { selector: selection.selector } : {}), comment: commentText.trim(), status: "needs_agent_review", created_at: new Date().toISOString(), replies: [] }])) {
+  const addComment = async (textOverride?: string) => {
+    const text = (textOverride ?? commentText).trim();
+    if (saving || !selection || !text) return;
+    if (await updateComments([...comments, { id: makeId(), selected_text: selection.selected_text, ...(selection.prefix ? { prefix: selection.prefix } : {}), ...(selection.suffix ? { suffix: selection.suffix } : {}), ...(selection.selector ? { selector: selection.selector } : {}), comment: text, status: "needs_agent_review", created_at: new Date().toISOString(), replies: [] }])) {
       setCommentText(""); setSelection(null);
+    }
+  };
+  const submitReply = async (commentId: string, textOverride?: string) => {
+    const body = (textOverride ?? replyText[commentId] ?? "").trim();
+    if (saving || !body) return;
+    if (await updateComment(commentId, (item) => ({ ...item, status: "needs_agent_review", replies: [...(item.replies ?? []), { id: makeId(), role: "user", body, created_at: new Date().toISOString() }] }))) {
+      setReplyText((previous) => ({ ...previous, [commentId]: "" }));
     }
   };
   const editElement = (next: HtmlElementSelection) => {
@@ -124,6 +135,15 @@ export function HtmlViewBlock({ block, context }: { block: HtmlViewData; context
     const styles = Object.fromEntries(Object.entries(next.styles).filter(([key, value]) => value !== element.styles[key as keyof typeof element.styles]));
     setElement(next); setDraftHtml((current) => editedHtml(current, next, element));
     sendFrame({ type: "ks-html-apply-edit", sequence: ++editSeq.current, selector: next.selector, ...(next.text !== element.text ? { text: next.text } : {}), styles });
+  };
+  const beginTextEdit = () => { if (element) textBaseline.current = { html: draftHtml, element }; };
+  const cancelTextEdit = () => {
+    const baseline = textBaseline.current;
+    if (!baseline) return;
+    editSeq.current++;
+    setElement(baseline.element);
+    setDraftHtml(baseline.html);
+    setFrameRestore((previous) => ({ html: baseline.html, sequence: (previous?.sequence ?? 0) + 1 }));
   };
   const saveRevision = async () => {
     if (!doc || !latest) return;
@@ -136,35 +156,36 @@ export function HtmlViewBlock({ block, context }: { block: HtmlViewData; context
   const shown = comments.map((comment, index) => ({ comment, index })).filter(({ comment }) => filter === "전체" || (filter === "해결됨" ? comment.status === "resolved" : comment.status !== "resolved"));
 
   return <section className="ks-html-view" ref={root}>
-    {!loaded ? <StatusText>불러오는 중</StatusText> : error && !doc ? <Notice role="alert">{error}</Notice> : !doc || !revision ? <StatusText>문서가 없습니다</StatusText> : <>
+    {!loaded ? <div className="ks-html-state"><StatusText>불러오는 중</StatusText></div> : error && !doc ? <div className="ks-html-state"><Notice role="alert">{error}</Notice></div> : !doc || !revision ? <div className="ks-html-state"><StatusText>문서가 없습니다</StatusText></div> : <>
       <header className="ks-file-tree-header ks-html-header">
         <Select label="문서" items={documents.map((item) => ({ value: item.id, label: item.title }))} value={doc.id} onChange={(value) => { const changes: Record<string, JsonValue> = {}; if (block.on_select_doc) changes[block.on_select_doc.set_state] = value; if (block.on_select_revision) changes[block.on_select_revision.set_state] = null; setWindowState(changes); }} />
         <Select label="리비전" items={doc.revisions.map((item) => ({ value: item.rev, label: `v${item.rev}${item.title ? ` ${item.title}` : ""}` }))} value={revision.rev} onChange={(value) => { if (block.on_select_revision) setWindowState({ [block.on_select_revision.set_state]: value }); }} />
       </header>
-      {error ? <Notice role="alert">{error}</Notice> : null}
+      {error ? <div className="ks-html-notice"><Notice role="alert">{error}</Notice></div> : null}
       <div className="ks-html-content">
-        <iframe ref={frame} title="HTML 보기" sandbox="allow-scripts" srcDoc={source} />
+        <iframe key={frameRestore?.sequence ?? 0} ref={frame} title="HTML 보기" sandbox="allow-scripts" srcDoc={source} />
         <aside className="ks-html-rail">
           <Select segmented items={["코멘트", "요소 다듬기"]} value={mode} onChange={(value) => setMode(String(value))} />
           {mode === "코멘트" ? <>
-            {selection ? <div className="ks-html-compose"><span>{selection.selected_text || selection.selector}</span><TextInput aria-label="코멘트" placeholder="코멘트 입력" persistent value={commentText} onEdit={setCommentText} onCommit={setCommentText} onCancel={() => {}} /><Button disabled={saving || !commentText.trim()} onClick={() => void addComment()}>등록</Button></div> : null}
+            {selection ? <div className="ks-html-compose"><span>{selection.selected_text || selection.selector}</span><TextInput aria-label="코멘트" placeholder="코멘트 입력" persistent commitOnBlur={false} cancelOnEscape value={commentText} onEdit={setCommentText} onCommit={(value) => { setCommentText(value); void addComment(value); }} onCancel={() => { setCommentText(""); setSelection(null); }} /><div className="ks-html-actions"><Button disabled={saving || !commentText.trim()} onClick={() => void addComment()}>등록</Button><Button disabled={saving} onClick={() => { setCommentText(""); setSelection(null); }}>취소</Button></div></div> : null}
             <Select segmented items={["전체", "미해결", "해결됨"]} value={filter} onChange={(value) => setFilter(String(value))} />
-            {shown.map(({ comment, index }) => <article className="ks-html-comment" id={`ks-html-comment-${comment.id}`} key={comment.id} onClick={(event) => { if (!(event.target as HTMLElement).closest("button, input")) sendFrame({ type: "ks-html-focus-comment", id: comment.id, comments }); }}>
+            {shown.length === 0 ? <div className="ks-html-empty"><StatusText>코멘트가 없습니다</StatusText></div> : null}
+            {shown.map(({ comment, index }) => <article className="ks-html-comment" data-status={comment.status} id={`ks-html-comment-${comment.id}`} key={comment.id} onClick={(event) => { if (!(event.target as HTMLElement).closest("button, input")) sendFrame({ type: "ks-html-focus-comment", id: comment.id, comments }); }}>
               <button className="ks-html-comment-target" onClick={() => sendFrame({ type: "ks-html-focus-comment", id: comment.id, comments })}><Badge value={String(index + 1)} /><Badge value={label[comment.status]} /><span>{comment.selected_text || comment.selector}</span></button>
               <p>{comment.comment}</p>
-              {(comment.replies ?? []).map((reply) => <p key={reply.id} className="ks-html-reply">{reply.author ? `${reply.author}: ` : ""}{reply.body}</p>)}
-              <TextInput aria-label={`답글 ${index + 1}`} placeholder="답글 입력" persistent value={replyText[comment.id] ?? ""} onEdit={(value) => setReplyText({ ...replyText, [comment.id]: value })} onCommit={(value) => setReplyText({ ...replyText, [comment.id]: value })} onCancel={() => {}} />
-              <div className="ks-html-actions"><Button disabled={saving || !replyText[comment.id]?.trim()} onClick={() => { const body = replyText[comment.id].trim(); void updateComment(comment.id, (item) => ({ ...item, status: "needs_agent_review", replies: [...(item.replies ?? []), { id: makeId(), role: "user", body, created_at: new Date().toISOString() }] })).then((saved) => { if (saved) setReplyText({ ...replyText, [comment.id]: "" }); }); }}>답글</Button>
+              {(comment.replies ?? []).map((reply) => <p key={reply.id} className="ks-html-reply">{reply.author ?? (reply.role === "agent" ? "에이전트" : "나")}: {reply.body}</p>)}
+              <TextInput aria-label={`답글 ${index + 1}`} placeholder="답글 입력" persistent commitOnBlur={false} syncWhileFocused cancelOnEscape value={replyText[comment.id] ?? ""} onEdit={(value) => setReplyText((previous) => ({ ...previous, [comment.id]: value }))} onCommit={(value) => { setReplyText((previous) => ({ ...previous, [comment.id]: value })); void submitReply(comment.id, value); }} onCancel={() => { setReplyText((previous) => ({ ...previous, [comment.id]: "" })); return ""; }} />
+              <div className="ks-html-actions"><Button disabled={saving || !replyText[comment.id]?.trim()} onClick={() => void submitReply(comment.id)}>답글</Button>
                 <Button disabled={saving} onClick={() => updateComment(comment.id, (item) => ({ ...item, status: item.status === "resolved" ? "needs_agent_review" : "resolved" }))}>{comment.status === "resolved" ? "다시 열기" : "해결"}</Button>
                 <Button disabled={saving} onClick={() => updateComments(comments.filter((item) => item.id !== comment.id))}>삭제</Button></div>
             </article>)}
           </> : element ? <div className="ks-html-inspector">
-            <span>{element.tagName} {element.selector}</span>
-            <Field name="문구" value={element.text} onEdit={(text) => editElement({ ...element, text })} />
+            <code className="ks-html-selector">{element.selector}</code>
+            <Field name="문구" value={element.text} onEdit={(text) => editElement({ ...element, text })} onBegin={beginTextEdit} onCancel={cancelTextEdit} />
             {([ ["글자 색", "color"], ["배경 색", "backgroundColor"], ["안쪽 여백", "padding"], ["바깥 여백", "margin"] ] as const).map(([name, key]) => <Field key={key} name={name} value={element.styles[key]} onEdit={(value) => editElement({ ...element, styles: { ...element.styles, [key]: value } })} />)}
             <Field name="리비전 메모" value={note} onEdit={setNote} />
             <Button disabled={saving} onClick={() => void saveRevision()}>새 리비전으로 저장</Button>
-          </div> : <StatusText>요소를 선택하세요</StatusText>}
+          </div> : <div className="ks-html-empty"><StatusText>요소를 선택하세요</StatusText></div>}
         </aside>
       </div>
     </>}
