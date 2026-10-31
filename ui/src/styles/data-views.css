@@ -47,7 +47,7 @@
 .ks-tree-name { flex: 1 1 auto; }
 .ks-feed { padding-top: var(--ks-space-3); }
 .ks-feed-entry { display: flex; gap: var(--ks-space-2); padding: 0 var(--ks-space-3) var(--ks-space-3); user-select: text; }
-.ks-feed-entry-nested { margin-inline-start: calc(var(--ks-feed-depth, 0) * var(--ks-space-3)); border-inline-start: var(--ks-line-width) solid var(--ks-color-border); padding-inline-start: var(--ks-space-2); }
+.ks-feed-entry-nested { margin-inline-start: calc(var(--ks-feed-depth, 0) * 1.5 * var(--ks-space-3)); border-inline-start: var(--ks-line-width) solid var(--ks-color-border); padding-inline-start: var(--ks-space-2); }
 .ks-feed-entry.is-selected { background: var(--ks-color-selection); }
 .ks-feed-entry.is-selectable { cursor: pointer; }
 .ks-feed-avatar { flex-basis: var(--ks-space-5); width: var(--ks-space-5); height: var(--ks-space-5); border-radius: 50%; }

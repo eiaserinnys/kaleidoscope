@@ -101,6 +101,22 @@ it("renders nested feed replies with depth, badges, and collapsible descendants"
   expect(await screen.findByText("깊은 답글")).not.toBeNull();
 });
 
+it("counts descendants across flat feed entries that carry depth", async () => {
+  setup({
+    type: "feed", entries: [
+      { key: "flat-root", depth: 0, body: "평탄한 부모" },
+      { key: "flat-reply", depth: 1, body: "평탄한 답글" },
+      { key: "flat-deep", depth: 2, body: "평탄한 깊은 답글" },
+    ],
+  } as unknown as Block);
+  const root = await screen.findByText("평탄한 부모");
+  const article = root.closest("article")!;
+  expect(within(article).getByRole("button", { name: "답글 2개 접기" })).not.toBeNull();
+  fireEvent.click(within(article).getByRole("button", { name: "답글 2개 접기" }));
+  expect(screen.queryByText("평탄한 답글")).toBeNull();
+  expect(screen.queryByText("평탄한 깊은 답글")).toBeNull();
+});
+
 it("collapses and expands a grouped feed from its heading", async () => {
   setup({
     type: "feed", grouped: true, collapsible: true, entries: [{ title: "오늘", items: [{ key: "story", body: "오늘의 댓글" }] }],

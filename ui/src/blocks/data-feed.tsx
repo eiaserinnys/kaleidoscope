@@ -31,17 +31,25 @@ function flattenFeedEntries(entries: FeedEntry[]): FlattenedFeedItem[] {
   const flattened: FlattenedFeedItem[] = [];
   const walk = (entry: FeedEntry, parentDepth: number, nested: boolean) => {
     const depth = entry.depth ?? (nested ? parentDepth + 1 : 0);
-    const index = flattened.length;
     flattened.push({ entry, depth, replyCount: 0 });
     (entry.children ?? []).forEach((child) => walk(child, depth, true));
-    let end = index + 1;
-    while (end < flattened.length && flattened[end].depth > depth) end++;
-    flattened[index].replyCount = end - index - 1;
   };
   entries.forEach((entry) => walk(entry, 0, false));
+  const ancestors: number[] = [];
+  for (let index = 0; index < flattened.length; index++) {
+    while (ancestors.length && flattened[ancestors[ancestors.length - 1]].depth >= flattened[index].depth) {
+      const ancestor = ancestors.pop()!;
+      flattened[ancestor].replyCount = index - ancestor - 1;
+    }
+    ancestors.push(index);
+  }
+  while (ancestors.length) {
+    const ancestor = ancestors.pop()!;
+    flattened[ancestor].replyCount = flattened.length - ancestor - 1;
+  }
   return flattened;
 }
-type Row = { kind: "heading"; title: string; meta?: string; groupKey: string; collapsed: boolean; count: number } | { kind: "entry"; item: FlattenedFeedItem; index: number };
+type Row = { kind: "heading"; title: string; meta?: string; groupKey: string; collapsed: boolean } | { kind: "entry"; item: FlattenedFeedItem; index: number };
 export function FeedBlock({ block, context, pointer }: { block: Extract<Block, { type: "feed" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/entries`, block.entries);
   if (value.status !== "ready") return <DataState value={value} />;
@@ -57,7 +65,7 @@ function FeedReady({ block, context, pointer, value }: { block: Extract<Block, {
     let index = 0;
     sourceGroups.forEach((group, groupIndex) => {
       const groupKey = `${groupIndex}:${group.title}`;
-      if (block.grouped) next.push({ kind: "heading", title: group.title, meta: group.meta, groupKey, collapsed: collapsedGroups.has(groupKey), count: group.items.length });
+      if (block.grouped) next.push({ kind: "heading", title: group.title, meta: group.meta, groupKey, collapsed: collapsedGroups.has(groupKey) });
       const entries = group.items.map((entry) => asFeedEntry(entry)!).filter(Boolean);
       if (collapsedGroups.has(groupKey)) return;
       const flattened = flattenFeedEntries(entries);
