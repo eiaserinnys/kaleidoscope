@@ -7,7 +7,7 @@ import { AppWindowContent } from "../render/app-window-content";
 import { describeVisible } from "../share/visible";
 import { makeTestSeed, mdViewerDefinition } from "./fixtures";
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it("지점을 고르고 창 상태의 선택을 지도에 반영한다", async () => {
   const points = [{ key: "a", lat: 37, lng: 127, label: "서울" }, { key: "b", lat: 35, lng: 139, label: "도쿄" }];
@@ -45,4 +45,67 @@ it("유효한 지점만 표시하고 선택이 null이면 선택 표시 없이 �
   fireEvent.click(first);
   await waitFor(() => expect(first.getAttribute("aria-pressed")).toBe("true"));
   expect(describeVisible(map).text).toContain("선택: first");
+});
+
+it("지구본 전환과 선택을 지도와 같이 보기에 반영한다", async () => {
+  const points = [{ key: "seoul", lat: 37, lng: 127, label: "서울" }, { key: "tokyo", lat: 35, lng: 139, label: "도쿄" }, { key: "lima", lat: -12, lng: -77, label: "리마" }];
+  const ui = { type: "map", points, selected: { state: "selected" }, on_select: { set_state: "selected" } } as unknown as Block;
+  const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 10, modules: {} }, permissions: [], state: { selected: "seoul" }, ui };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { selected: "seoul" };
+  const transport = createFakeTransport(seed);
+  const calls = vi.spyOn(transport, "call");
+  const { container } = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await screen.findByRole("button", { name: /서울/ });
+  fireEvent.click(screen.getByRole("button", { name: "3D 지구본" }));
+  expect(screen.getByRole("button", { name: "3D 지구본" }).getAttribute("aria-pressed")).toBe("true");
+  expect(container.querySelector(".ks-map-globe-ocean")).not.toBeNull();
+  expect(container.querySelector('[data-key="lima"]')).toBeNull();
+  expect(container.querySelector('[data-key="seoul"] .ks-map-marker')?.getAttribute("cx")).toBe("360");
+  fireEvent.click(screen.getByRole("button", { name: /도쿄/ }));
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "tokyo" })));
+  await waitFor(() => expect(container.querySelector('[data-key="tokyo"] .ks-map-marker')?.getAttribute("cx")).toBe("360"));
+  const rect = { left: 0, top: 0, right: 200, bottom: 100, x: 0, y: 0, width: 200, height: 100, toJSON() {} };
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
+  expect(describeVisible(container.querySelector<HTMLElement>(".ks-map")!).text).toContain("지도 (3D 지구본), 지점 3개");
+  fireEvent.keyDown(screen.getByRole("region", { name: "세계 지도" }), { key: "End" });
+  await waitFor(() => expect(screen.getByRole("button", { name: /리마/ }).getAttribute("aria-pressed")).toBe("true"));
+  expect(container.querySelector('[data-key="lima"] .ks-map-marker')?.getAttribute("cx")).toBe("360");
+  fireEvent.click(screen.getByRole("button", { name: "평면" }));
+  expect(container.querySelector(".ks-map-globe-ocean")).toBeNull();
+  expect(screen.getByRole("button", { name: /리마/ })).toBeTruthy();
+});
+
+it("지구본을 드래그하면 시점이 바뀌고 짧은 클릭은 지점을 선택한다", async () => {
+  vi.stubGlobal("PointerEvent", MouseEvent);
+  const points = [{ key: "a", lat: 0, lng: 0, label: "기준" }, { key: "b", lat: 0, lng: 30, label: "동쪽" }];
+  const ui = { type: "map", points, selected: { state: "selected" }, on_select: { set_state: "selected" } } as unknown as Block;
+  const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 10, modules: {} }, permissions: [], state: { selected: "a" }, ui };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { selected: "a" };
+  const transport = createFakeTransport(seed);
+  const calls = vi.spyOn(transport, "call");
+  const { container } = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await screen.findByRole("button", { name: /기준/ });
+  fireEvent.click(screen.getByRole("button", { name: "3D 지구본" }));
+  const svg = container.querySelector(".ks-map-svg")!;
+  const marker = () => container.querySelector('[data-key="a"] .ks-map-marker')!;
+  const before = marker().getAttribute("cx");
+  fireEvent.pointerDown(svg, { pointerId: 1, clientX: 100, clientY: 100, button: 0 });
+  fireEvent.pointerMove(svg, { pointerId: 1, clientX: 140, clientY: 110 });
+  fireEvent.pointerUp(svg, { pointerId: 1, clientX: 140, clientY: 110 });
+  expect(marker().getAttribute("cx")).not.toBe(before);
+  const east = screen.getByRole("button", { name: /동쪽/ });
+  fireEvent.click(east);
+  expect(calls).not.toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "b" }));
+  fireEvent.pointerDown(east, { pointerId: 2, clientX: 100, clientY: 100, button: 0 });
+  fireEvent.pointerUp(east, { pointerId: 2, clientX: 102, clientY: 100 });
+  fireEvent.click(east);
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "b" })));
+  fireEvent.pointerDown(svg, { pointerId: 3, clientX: 100, clientY: 100, button: 0 });
+  fireEvent.pointerMove(svg, { pointerId: 3, clientX: 140, clientY: 100 });
+  fireEvent.pointerUp(svg, { pointerId: 3, clientX: 140, clientY: 100 });
+  fireEvent.click(screen.getByRole("button", { name: "평면" }));
+  fireEvent.click(screen.getByRole("button", { name: /기준/ }));
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a" })));
 });
