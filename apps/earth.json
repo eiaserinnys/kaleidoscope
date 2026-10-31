@@ -1,0 +1,429 @@
+{
+  "id": "earth",
+  "name": "지구 상황판",
+  "description": "실시간 지진 진앙지와 현지 기상·대기질, 주변 지형 맥락을 연쇄 조회합니다",
+  "requires": {
+    "blocks": 10,
+    "modules": {
+      "http": 1
+    }
+  },
+  "permissions": [
+    {
+      "module": "http",
+      "id": "usgs",
+      "label": "USGS 실시간 지진 관측망",
+      "base_url": "https://earthquake.usgs.gov",
+      "paths": [
+        "/earthquakes/feed/v1.0/summary/significant_month.geojson",
+        "/earthquakes/feed/v1.0/summary/4.5_week.geojson",
+        "/earthquakes/feed/v1.0/summary/2.5_day.geojson"
+      ]
+    },
+    {
+      "module": "http",
+      "id": "meteo",
+      "label": "Open-Meteo 현지 기상 예보",
+      "base_url": "https://api.open-meteo.com",
+      "paths": [
+        "/v1/forecast"
+      ]
+    },
+    {
+      "module": "http",
+      "id": "meteo-air",
+      "label": "Open-Meteo 현지 대기질",
+      "base_url": "https://air-quality-api.open-meteo.com",
+      "paths": [
+        "/v1/air-quality"
+      ]
+    },
+    {
+      "module": "http",
+      "id": "wiki",
+      "label": "Wikipedia 지형·지질 백과",
+      "base_url": "https://en.wikipedia.org",
+      "paths": [
+        "/w/api.php"
+      ]
+    }
+  ],
+  "state": {
+    "feed": "4.5_week",
+    "min_mag": "all",
+    "selected_quake": null,
+    "tab": 0
+  },
+  "sources": {
+    "quakes": {
+      "kind": "request",
+      "permission": "usgs",
+      "path": {
+        "expr": "'/earthquakes/feed/v1.0/summary/' & ($state.feed ? $state.feed : '4.5_week') & '.geojson'"
+      },
+      "refresh_secs": 120
+    },
+    "weather": {
+      "kind": "request",
+      "permission": "meteo",
+      "path": "/v1/forecast",
+      "query": {
+        "latitude": {
+          "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $exists($q) ? $formatNumber($q.geometry.coordinates[1], \"0.0000\") : null)"
+        },
+        "longitude": {
+          "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $exists($q) ? $formatNumber($q.geometry.coordinates[0], \"0.0000\") : null)"
+        },
+        "current": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,wind_speed_10m,wind_gusts_10m,weather_code",
+        "hourly": "temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m",
+        "forecast_days": "1",
+        "timezone": "UTC"
+      },
+      "refresh_secs": 300
+    },
+    "air": {
+      "kind": "request",
+      "permission": "meteo-air",
+      "path": "/v1/air-quality",
+      "query": {
+        "latitude": {
+          "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $exists($q) ? $formatNumber($q.geometry.coordinates[1], \"0.0000\") : null)"
+        },
+        "longitude": {
+          "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $exists($q) ? $formatNumber($q.geometry.coordinates[0], \"0.0000\") : null)"
+        },
+        "current": "us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,ozone",
+        "hourly": "us_aqi,pm2_5,pm10",
+        "forecast_days": "1",
+        "timezone": "UTC"
+      },
+      "refresh_secs": 300
+    },
+    "wiki": {
+      "kind": "request",
+      "permission": "wiki",
+      "path": "/w/api.php",
+      "query": {
+        "action": "query",
+        "list": "geosearch|search",
+        "gscoord": {
+          "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $exists($q) ? $string($q.geometry.coordinates[1]) & \"|\" & $string($q.geometry.coordinates[0]) : null)"
+        },
+        "gsradius": "10000",
+        "gslimit": "6",
+        "srsearch": {
+          "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $region := $contains($q.properties.place, \" of \") ? $substringAfter($q.properties.place, \" of \") : $q.properties.place; $region & \" earthquake OR fault OR trench OR island\")"
+        },
+        "srlimit": "8",
+        "format": "json"
+      },
+      "refresh_secs": 600
+    }
+  },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "fill": 1,
+    "children": [
+      {
+        "type": "toolbar",
+        "start": [
+          {
+            "type": "select",
+            "style": "segmented",
+            "value": {
+              "state": "feed"
+            },
+            "on_change": {
+              "set_state": "feed"
+            },
+            "options": [
+              {
+                "value": "significant_month",
+                "label": "주요 지진 · 30일"
+              },
+              {
+                "value": "4.5_week",
+                "label": "M4.5+ · 7일"
+              },
+              {
+                "value": "2.5_day",
+                "label": "M2.5+ · 24시간"
+              }
+            ]
+          },
+          {
+            "type": "select",
+            "style": "segmented",
+            "value": {
+              "state": "min_mag"
+            },
+            "on_change": {
+              "set_state": "min_mag"
+            },
+            "options": [
+              {
+                "value": "all",
+                "label": "전체"
+              },
+              {
+                "value": "5",
+                "label": "M5.0+"
+              },
+              {
+                "value": "6",
+                "label": "M6.0+"
+              }
+            ]
+          }
+        ],
+        "end": [
+          {
+            "type": "button",
+            "label": "새로고침",
+            "icon": "refresh-cw",
+            "icon_only": true,
+            "on_click": [
+              {
+                "refresh": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "stack",
+        "direction": "column",
+        "children": [
+          {
+            "type": "metrics",
+            "columns": 4,
+            "items": {
+              "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); [{'key':'quake','label':$q.properties.place,'value':'M' & $formatNumber($q.properties.mag,'0.0'),'unit':'깊이 ' & $string($round($q.geometry.coordinates[2],1)) & 'km','subtext':$fromMillis($q.properties.time,'[M01]-[D01] [H01]:[m01] UTC') & ($q.properties.alert ? ' · 경보 ' & $q.properties.alert : ''),'tone':$q.properties.mag >= 6 ? 'negative' : ($q.properties.mag >= 5 ? 'warning' : 'default'),'featured':true},{'key':'weather','label':'진앙 현지 기상','value':$string($data.weather.current.temperature_2m) & '°C','unit':$data.weather.current.weather_code = 0 ? '맑음' : ($data.weather.current.weather_code <= 3 ? '흐림' : ($data.weather.current.weather_code <= 48 ? '안개' : ($data.weather.current.weather_code <= 67 ? '비' : ($data.weather.current.weather_code <= 77 ? '눈' : '소나기')))),'subtext':'풍속 ' & $string($data.weather.current.wind_speed_10m) & ' · 돌풍 ' & $string($data.weather.current.wind_gusts_10m) & 'km/h · 강수 ' & $string($data.weather.current.precipitation) & 'mm'},{'key':'air','label':'진앙 대기질 (US AQI)','value':'AQI ' & $string($data.air.current.us_aqi),'unit':$data.air.current.us_aqi <= 50 ? '좋음' : ($data.air.current.us_aqi <= 100 ? '보통' : ($data.air.current.us_aqi <= 150 ? '주의' : '나쁨')),'subtext':'PM2.5 ' & $string($data.air.current.pm2_5) & ' · PM10 ' & $string($data.air.current.pm10) & ' μg/m³'},{'key':'land','label':'쓰나미 · 지형 맥락','value':$q.properties.tsunami = 1 ? '쓰나미 경보' : '쓰나미 없음','unit':'고도 ' & $string($data.weather.elevation) & 'm','subtext':'10km 내 지형 ' & $string($count($data.wiki.query.geosearch)) & '곳 · 지질 문서 ' & $string($count($data.wiki.query.search)) & '건'}])"
+            }
+          },
+          {
+            "type": "split",
+            "direction": "row",
+            "sizes": [
+              60,
+              40
+            ],
+            "children": [
+              {
+                "type": "section",
+                "title": "세계 진앙 분포도",
+                "meta": {
+                  "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $string($count($fs)) & \"건\")"
+                },
+                "child": {
+                  "type": "map",
+                  "height": "medium",
+                  "points": {
+                    "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $append([], $fs[0..59].{'key':id,'lat':geometry.coordinates[1],'lng':geometry.coordinates[0],'label':'M' & $formatNumber(properties.mag,'0.0') & ' · ' & properties.place,'sublabel':'깊이 ' & $string($round(geometry.coordinates[2],1)) & 'km · ' & $fromMillis(properties.time,'[M01]-[D01] [H01]:[m01] UTC'),'size':properties.mag,'tone':properties.mag >= 6 ? 'negative' : (properties.mag >= 5 ? 'warning' : 'default'),'badge':properties.tsunami = 1 ? {'text':'쓰나미','color':'#c94a4a'} : 'M' & $formatNumber(properties.mag,'0.0')}))"
+                  },
+                  "selected": {
+                    "state": "selected_quake"
+                  },
+                  "on_select": {
+                    "set_state": "selected_quake"
+                  }
+                }
+              },
+              {
+                "type": "section",
+                "title": "감지 지진 목록",
+                "meta": "선택 시 기상·지형 자동 연쇄",
+                "child": {
+                  "type": "table",
+                  "rows": {
+                    "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $append([], $fs.{'key':id,'mag':'M' & $formatNumber(properties.mag,'0.0'),'place':properties.place,'depth':$string($round(geometry.coordinates[2],1)) & 'km','time':$fromMillis(properties.time,'[M01]-[D01] [H01]:[m01]')}))"
+                  },
+                  "columns": [
+                    {
+                      "field": "mag",
+                      "label": "규모",
+                      "width": "narrow",
+                      "format": "badge"
+                    },
+                    {
+                      "field": "place",
+                      "label": "진앙지"
+                    },
+                    {
+                      "field": "depth",
+                      "label": "깊이",
+                      "width": "narrow"
+                    },
+                    {
+                      "field": "time",
+                      "label": "시각 (UTC)",
+                      "width": "medium"
+                    }
+                  ],
+                  "selected": {
+                    "state": "selected_quake"
+                  },
+                  "on_select": {
+                    "set_state": "selected_quake"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "tabs",
+            "selected": {
+              "state": "tab"
+            },
+            "on_change": {
+              "set_state": "tab"
+            },
+            "tabs": [
+              {
+                "label": "주변 지형 · 지질 맥락",
+                "child": {
+                  "type": "split",
+                  "direction": "row",
+                  "sizes": [
+                    58,
+                    42
+                  ],
+                  "children": [
+                    {
+                      "type": "section",
+                      "title": "진앙 주변 지형 · 단층 · 역사 지진",
+                      "meta": "Wikipedia 연쇄 조회",
+                      "child": {
+                        "type": "table",
+                        "rows": {
+                          "expr": "($geo := $data.wiki.query.geosearch.{'key':'geo-' & $string(pageid),'kind':'반경 10km','title':title,'summary':'진앙에서 ' & $formatNumber(dist / 1000,'0.1') & ' km'}; $search := $data.wiki.query.search.{'key':'search-' & $string(pageid),'kind':'지질·역사','title':title,'summary':$replace($replace($replace($replace(snippet, /<[^>]+>/, ''),'&quot;','\"'),'&#039;',\"'\"),'&amp;','&')}; $append($append([], $geo), $search))"
+                        },
+                        "columns": [
+                          {
+                            "field": "kind",
+                            "label": "구분",
+                            "width": "narrow",
+                            "format": "badge"
+                          },
+                          {
+                            "field": "title",
+                            "label": "항목",
+                            "width": "wide"
+                          },
+                          {
+                            "field": "summary",
+                            "label": "거리 · 맥락 요약"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "type": "section",
+                      "title": "선택 진앙 상세 제원",
+                      "meta": {
+                        "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $q.properties.code ? $q.properties.code : $q.id)"
+                      },
+                      "child": {
+                        "type": "properties",
+                        "fields": [
+                          {
+                            "label": "진앙지",
+                            "value": {
+                              "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $q.properties.place)"
+                            }
+                          },
+                          {
+                            "label": "좌표",
+                            "value": {
+                              "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $string($q.geometry.coordinates[1]) & ', ' & $string($q.geometry.coordinates[0]))"
+                            }
+                          },
+                          {
+                            "label": "규모 · 깊이",
+                            "value": {
+                              "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); 'M' & $formatNumber($q.properties.mag,'0.0') & ' · ' & $string($round($q.geometry.coordinates[2],1)) & 'km')"
+                            }
+                          },
+                          {
+                            "label": "발생 시각 (UTC)",
+                            "value": {
+                              "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $fromMillis($q.properties.time,'[Y0001]-[M01]-[D01] [H01]:[m01] UTC'))"
+                            }
+                          },
+                          {
+                            "label": "쓰나미 · 경보",
+                            "value": {
+                              "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); ($q.properties.tsunami = 1 ? '쓰나미' : '없음') & ' · ' & ($q.properties.alert ? $q.properties.alert : '없음'))"
+                            }
+                          },
+                          {
+                            "label": "기온 · 체감 · 습도",
+                            "value": {
+                              "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $string($data.weather.current.temperature_2m) & '°C · ' & $string($data.weather.current.apparent_temperature) & '°C · ' & $string($data.weather.current.relative_humidity_2m) & '%')"
+                            }
+                          },
+                          {
+                            "label": "풍속 · 돌풍 · 강수",
+                            "value": {
+                              "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $string($data.weather.current.wind_speed_10m) & ' · ' & $string($data.weather.current.wind_gusts_10m) & ' km/h · ' & $string($data.weather.current.precipitation) & ' mm')"
+                            }
+                          },
+                          {
+                            "label": "AQI · PM2.5 · 오존",
+                            "value": {
+                              "expr": "($fs := $data.quakes.features[$state.min_mag = 'all' or properties.mag >= $number($state.min_mag)]; $m := $fs[id = $state.selected_quake]; $q := $exists($m) ? $m[0] : ($exists($fs) ? $fs[0] : $data.quakes.features[0]); $string($data.air.current.us_aqi) & ' · ' & $string($data.air.current.pm2_5) & ' · ' & $string($data.air.current.ozone))"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "label": "현지 24시간 기상 · 대기질 추이",
+                "child": {
+                  "type": "split",
+                  "direction": "row",
+                  "sizes": [
+                    50,
+                    50
+                  ],
+                  "children": [
+                    {
+                      "type": "section",
+                      "title": "진앙 24시간 기온 · 풍속 추이 (UTC)",
+                      "meta": "°C / km/h",
+                      "child": {
+                        "type": "chart",
+                        "kind": "line",
+                        "height": "compact",
+                        "series": {
+                          "expr": "[{'key':'temperature','name':'기온 °C','points':$append([], $map($data.weather.hourly.time, function($t,$i) { {'x':$substring($t,11,5),'y':$data.weather.hourly.temperature_2m[$i]} }))},{'key':'wind','name':'풍속 km/h','points':$append([], $map($data.weather.hourly.time, function($t,$i) { {'x':$substring($t,11,5),'y':$data.weather.hourly.wind_speed_10m[$i]} }))}]"
+                        }
+                      }
+                    },
+                    {
+                      "type": "section",
+                      "title": "진앙 24시간 대기질 추이 (UTC)",
+                      "meta": "AQI / μg/m³",
+                      "child": {
+                        "type": "chart",
+                        "kind": "area",
+                        "height": "compact",
+                        "series": {
+                          "expr": "[{'key':'aqi','name':'US AQI','points':$append([], $map($data.air.hourly.time, function($t,$i) { {'x':$substring($t,11,5),'y':$data.air.hourly.us_aqi[$i]} }))},{'key':'pm25','name':'PM2.5','points':$append([], $map($data.air.hourly.time, function($t,$i) { {'x':$substring($t,11,5),'y':$data.air.hourly.pm2_5[$i]} }))}]"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

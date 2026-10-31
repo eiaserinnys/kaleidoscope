@@ -22,6 +22,7 @@ const APPS: &[(&str, &str)] = &[
     ("calculator", include_str!("../../../apps/calculator.json")),
     ("weather", include_str!("../../../apps/weather.json")),
     ("market", include_str!("../../../apps/market.json")),
+    ("earth", include_str!("../../../apps/earth.json")),
 ];
 
 pub fn builtin_apps() -> Vec<RegistryApp> {

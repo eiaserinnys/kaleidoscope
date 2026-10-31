@@ -24,6 +24,7 @@ import { MediaBlock } from "../blocks/data-media";
 import { MetricsBlock } from "../blocks/data-metrics";
 import { KeypadBlock } from "../blocks/data-keypad";
 import { ChartBlock } from "../blocks/data-chart";
+import { MapBlock } from "../blocks/data-map";
 
 export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"): ReactNode {
   switch (block.type) {
@@ -62,6 +63,7 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
     case "metrics": return <MetricsBlock block={block} pointer={pointer} />;
     case "keypad": return <KeypadBlock block={block} context={context} pointer={pointer} />;
     case "chart": return <ChartBlock block={block} pointer={pointer} />;
+    case "map": return <MapBlock block={block} context={context} pointer={pointer} />;
     case "web_view":
       return <WebViewBlock block={block} context={context} />;
     case "explorer":

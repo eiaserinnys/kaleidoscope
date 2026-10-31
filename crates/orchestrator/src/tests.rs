@@ -20,10 +20,11 @@ fn builtin_apps_are_listed_and_upload_is_rejected() {
         "calculator",
         "weather",
         "market",
+        "earth",
     ] {
         assert!(apps.iter().any(|app| app.id == id && app.builtin));
     }
-    assert_eq!(apps.len(), 8);
+    assert_eq!(apps.len(), 9);
     assert!(state.publish_app(EDITOR, "agent", false, None).is_err());
 }
 

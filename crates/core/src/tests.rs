@@ -195,12 +195,13 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
         ("calculator", 1),
         ("weather", 1),
         ("market", 1),
+        ("earth", 1),
     ] {
         assert!(apps
             .iter()
             .any(|app| app.id == id && app.current_version == version));
     }
-    assert_eq!(apps.len(), 8);
+    assert_eq!(apps.len(), 9);
     let error = core
         .handle(CoreRequest::AppImport {
             definition_json: MD_EDITOR.into(),
@@ -377,7 +378,7 @@ fn builtin_window_state_survives_restart_at_the_same_version() {
         .find(|w| w.id == window_id)
         .unwrap();
     assert_eq!(before, after);
-    assert_eq!(snapshot(&reopened).shared.apps.len(), 8);
+    assert_eq!(snapshot(&reopened).shared.apps.len(), 9);
 }
 
 #[test]
@@ -2054,7 +2055,7 @@ fn unreadable_state_json_is_renamed_and_core_starts_with_empty_state() {
     let core = open_core(&data_dir, vec![], &host);
     let snapshot = snapshot(&core);
     assert_eq!(snapshot.shared.workspaces.len(), 1);
-    assert_eq!(snapshot.shared.apps.len(), 8);
+    assert_eq!(snapshot.shared.apps.len(), 9);
     assert!(fs::read_dir(&data_dir).unwrap().any(|entry| {
         entry
             .unwrap()

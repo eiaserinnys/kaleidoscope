@@ -481,6 +481,30 @@ pub enum MetricTone {
     Error,
 }
 
+/// `map` 블록의 지점 하나.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct MapPoint {
+    pub key: String,
+    pub lat: f64,
+    pub lng: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub sublabel: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub size: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub tone: Option<MetricTone>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub badge: Option<Badge>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "contract.ts")]
@@ -973,6 +997,14 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             series, on_select, ..
         } => {
             bind!("series", series);
+            if let Some(on_select) = on_select {
+                act!("on_select", on_select);
+            }
+        }
+        Block::Map {
+            points, on_select, ..
+        } => {
+            bind!("points", points);
             if let Some(on_select) = on_select {
                 act!("on_select", on_select);
             }

@@ -282,7 +282,7 @@ columns?: boolean,
  * (블록 세트 7판) 항목의 `meta`와 본문 문단마다 복사 단추를 붙인다. 누르면 그 글을 그대로(줄바꿈 포함)
  * 클립보드에 쓴다. 단추를 눌러도 항목 고르기는 돌지 않는다.
  */
-copy?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", value: Binding, format?: TextFormat, style?: TextStyle, } | { "type": "input", value: StateRef, on_change: Actions, kind?: InputKind, multiline?: boolean, placeholder?: string, on_submit?: Actions, } | { "type": "select", value: StateRef, on_change: Actions, options: Binding, style?: SelectStyle, placeholder?: string, } | { "type": "toggle", value: StateRef, on_change: Actions, label: string, } | { "type": "button", label: string, icon?: string, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code_editor", file: FileRef, language?: CodeLanguage, } | { "type": "code_view", value?: Binding, file?: FileRef, language?: CodeLanguage, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "keypad", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, };
+copy?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", value: Binding, format?: TextFormat, style?: TextStyle, } | { "type": "input", value: StateRef, on_change: Actions, kind?: InputKind, multiline?: boolean, placeholder?: string, on_submit?: Actions, } | { "type": "select", value: StateRef, on_change: Actions, options: Binding, style?: SelectStyle, placeholder?: string, } | { "type": "toggle", value: StateRef, on_change: Actions, label: string, } | { "type": "button", label: string, icon?: string, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code_editor", file: FileRef, language?: CodeLanguage, } | { "type": "code_view", value?: Binding, file?: FileRef, language?: CodeLanguage, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "keypad", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
 
 export type ButtonVariant = "default" | "primary" | "danger" | "ghost";
 
@@ -683,6 +683,11 @@ export type LocalAgentPhase = "choosing_agent" | "choosing_folder" | "awaiting_p
 export type LocalAgentSnapshot = { generation: string, phase: LocalAgentPhase, agents: Array<AgentChoice>, selected: string | null, folder_name: string | null, execution: ExecutionConsent | null, auth_methods: Array<AuthChoice>, controls: Array<AgentControl>, history: Array<ConversationItem>, stream_id: string | null, text: string, activity: AgentActivity, permissions: Array<PermissionPrompt>, queued: Array<QueuedMessage>, failure: AgentFailure | null, };
 
 export type LocalAgentUpdate = { "type": "snapshot", snapshot: LocalAgentSnapshot, } | { "type": "conversation", update: ConversationEvent, } | { "type": "state", phase: LocalAgentPhase, controls: Array<AgentControl>, auth_methods: Array<AuthChoice>, execution: ExecutionConsent | null, failure: AgentFailure | null, } | { "type": "permissions", permissions: Array<PermissionPrompt>, } | { "type": "queue", queued: Array<QueuedMessage>, };
+
+/**
+ * `map` 블록의 지점 하나.
+ */
+export type MapPoint = { key: string, lat: number, lng: number, label?: string, sublabel?: string, size?: number, tone?: MetricTone, badge?: Badge, };
 
 /**
  * `data.media` 응답의 내용.
