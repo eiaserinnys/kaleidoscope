@@ -13,7 +13,7 @@ fn earth_selects_quake_for_map_and_dependent_requests() {
         {"id":"a","geometry":{"coordinates":[127,37,10]},"properties":{"mag":5.2,"place":"20 km of Seoul","time":1760000000000i64,"tsunami":0,"code":"a"}},
         {"id":"b","geometry":{"coordinates":[139,35,20]},"properties":{"mag":6.2,"place":"10 km of Tokyo","time":1760000000000i64,"tsunami":1,"code":"b"}}
     ]});
-    let data = BTreeMap::from([
+    let mut data = BTreeMap::from([
         ("quakes".into(), quakes),
         (
             "weather".into(),
@@ -67,4 +67,18 @@ fn earth_selects_quake_for_map_and_dependent_requests() {
         panic!("지표 없음")
     };
     assert_eq!(metrics[0]["value"], "M6.2");
+    data.get_mut("air").unwrap()["current"]["us_aqi"] = Value::Null;
+    let values = app.evaluate_with_data_meta(
+        &state,
+        &data,
+        &empty,
+        &empty,
+        &empty,
+        &BTreeMap::new(),
+        None,
+    );
+    let BindingValue::Ready { value: metrics } = &values["/ui/children/1/children/0/items"] else {
+        panic!("대기질 지표 없음")
+    };
+    assert_eq!(metrics[2]["value"], "PM2.5 8");
 }
