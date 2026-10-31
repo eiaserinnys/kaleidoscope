@@ -34,8 +34,8 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
   const graph = useRef<HTMLDivElement>(null);
   const gradient = `ks-chart-gradient-${useId().replaceAll(":", "")}`;
   const [width, setWidth] = useState(320);
-  const [selected, setSelected] = useState(0);
   const labels = [...new Set(series.flatMap((entry) => entry.points.map((point) => point.x)))];
+  const [selected, setSelected] = useState(labels.length - 1);
   const current = Math.min(selected, labels.length - 1);
   const points = series.map((entry) => entry.points.find((point) => point.x === labels[current]));
   const numbers = series.flatMap((entry) => entry.points.flatMap((point) => block.kind === "candlestick" ? [point.open, point.high, point.low, point.close].filter((v): v is number => v !== undefined) : point.y === null ? [] : [point.y]));
@@ -103,7 +103,7 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
           aria-valuemin={0} aria-valuemax={labels.length - 1} aria-valuenow={current}
           aria-valuetext={`${labels[current]} ${series.map((entry, index) => `${entry.name} ${accessibleValue(points[index])}`).join(", ")}`}
           onKeyDown={keyDown} onPointerMove={(event) => setSelected(pointerIndex(event))}
-          onPointerLeave={() => { if (document.activeElement !== graph.current) setSelected(0); }}
+          onPointerLeave={() => { if (document.activeElement !== graph.current) setSelected(labels.length - 1); }}
           onClick={(event) => { const index = pointerIndex(event); setSelected(index); select(index); }}>
           <div className="ks-chart-plot" aria-hidden="true">
           <svg viewBox="0 0 1000 160" preserveAspectRatio="none">
@@ -142,7 +142,7 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
           })}
           {block.kind !== "candlestick" && points.map((point, index) => point && point.y !== null ? <span key={series[index].key} className="ks-chart-dot" style={{ left: `${xAt(current) / 10}%`, top: `${yAt(point.y) / 160 * 100}%` }} /> : null)}
           </div>
-          <div className="ks-chart-x-axis" aria-hidden="true">{labels.map((label, index) => index === labels.length - 1 || (index % axisStep === 0 && (labels.length <= 8 || index + axisStep < labels.length - 1)) ? <span key={`${label}-${index}`} style={{ left: `${xAt(index) / 10}%`, transform: index === 0 ? "translateX(0)" : index === labels.length - 1 ? "translateX(-100%)" : "translateX(-50%)" }}>{label}</span> : null)}</div>
+          <div className="ks-chart-x-axis" aria-hidden="true">{labels.map((label, index) => index === labels.length - 1 || (index % axisStep === 0 && (labels.length <= 8 || labels.length - 1 - index >= Math.max(1, Math.floor(axisStep * .6)))) ? <span key={`${label}-${index}`} style={{ left: `${xAt(index) / 10}%`, transform: index === 0 ? "translateX(0)" : index === labels.length - 1 ? "translateX(-100%)" : "translateX(-50%)" }}>{label}</span> : null)}</div>
         </div>
       </div>
       <table className="ks-chart-accessible"><caption>차트 데이터</caption><thead><tr><th>시점</th>{series.map((entry) => <th key={entry.key}>{entry.name}</th>)}</tr></thead><tbody>{labels.map((label) => <tr key={label}><th>{label}</th>{series.map((entry) => <td key={entry.key}>{accessibleValue(entry.points.find((point) => point.x === label))}</td>)}</tr>)}</tbody></table>

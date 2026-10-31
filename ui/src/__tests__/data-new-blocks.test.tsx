@@ -34,6 +34,7 @@ it("renders and selects candles with their complete values", async () => {
   expect(container.querySelectorAll(".ks-chart-candle.up")).toHaveLength(1);
   expect(container.querySelectorAll(".ks-chart-candle.down")).toHaveLength(1);
   expect(container.querySelectorAll(".ks-chart-wick")).toHaveLength(2);
+  fireEvent.keyDown(chart, { key: "Home" });
   fireEvent.keyDown(chart, { key: "Enter" });
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a", item: expect.objectContaining({ open: 1, high: 4, low: 0, close: 3, y: 3 }) })));
 });
@@ -60,6 +61,8 @@ it("keeps the first and last labels on a long candle chart", async () => {
   expect(labels[0]).toBe("날짜0");
   expect(labels.at(-1)).toBe("날짜29");
   expect(labels.length).toBeLessThanOrEqual(7);
+  expect(labels.length).toBeGreaterThan(2);
+  expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("날짜29");
 });
 
 it("renders a featured metric with a badge, an asset, and an error tone", async () => {
@@ -154,6 +157,7 @@ it("moves the chart readout, selects a point, and breaks lines at missing values
   ] }, { choice: null });
   const chart = await screen.findByRole("slider", { name: "차트 시점" });
   expect(container.querySelectorAll(".ks-chart-line")).toHaveLength(2);
+  fireEvent.keyDown(chart, { key: "Home" });
   fireEvent.keyDown(chart, { key: "ArrowRight" });
   expect(container.querySelector(".ks-chart-readout")?.textContent).toContain("11:00");
   expect(container.querySelector(".ks-chart-readout")?.textContent).toContain("강수 20%");

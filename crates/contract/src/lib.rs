@@ -3413,6 +3413,20 @@ mod tests {
           "b":{"kind":"request","permission":"board","path":{"expr":"'/b/' & $data.a.id"}},
           "a":{"kind":"request","permission":"board","path":"/a"}}"#;
         validate::parse_app_definition(&with_ui(ui, chain)).unwrap();
+        rejected(
+            &with_ui(
+                ui,
+                r#", "sources":{"a":{"kind":"request","permission":"board","path":"/a"},"b":{"kind":"request","permission":"board","path":{"expr":"'/b/' & $data.a.id & $lookup($data, 'a').id"}}}"#,
+            ),
+            "다른 원천은 $data.이름 꼴로만",
+        );
+        rejected(
+            &with_ui(
+                ui,
+                r#", "sources":{"a":{"kind":"request","permission":"board","path":"/a"},"b":{"kind":"request","permission":"board","path":{"expr":"'/b/' & $data.a.id & $data['a'].id"}}}"#,
+            ),
+            "다른 원천은 $data.이름 꼴로만",
+        );
         for sources in [
             r#", "sources":{"a":{"kind":"request","permission":"board","path":{"expr":"'/a/' & $data.a.id"}}}"#,
             r#", "sources":{"a":{"kind":"request","permission":"board","path":{"expr":"'/a/' & $data.b.id"}},"b":{"kind":"request","permission":"board","path":{"expr":"'/b/' & $data.a.id"}}}"#,

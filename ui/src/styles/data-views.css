@@ -69,4 +69,4 @@
 .ks-table-delta.down, .ks-table-sparkline.down { color: var(--ks-color-danger); }
 .ks-table-delta.flat { color: var(--ks-color-muted); }
 .ks-table-delta.up, .ks-table-delta.down { background: color-mix(in srgb, currentColor 12%, transparent); }
-.ks-table-sparkline { width: calc(var(--ks-space-6) * 3); height: var(--ks-space-5); fill: currentColor; stroke: currentColor; }
+.ks-table-sparkline { width: calc(var(--ks-space-6) * 2 + var(--ks-space-4)); height: var(--ks-space-5); fill: currentColor; stroke: currentColor; }

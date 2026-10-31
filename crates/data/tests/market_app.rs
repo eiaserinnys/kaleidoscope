@@ -54,23 +54,64 @@ fn market_bindings_evaluate_with_representative_public_api_data() {
             "{pointer}: {value:?}"
         );
     }
-    let BindingValue::Ready { value: metrics } = &values["/ui/children/1/items"] else {
+    let BindingValue::Ready { value: metrics } = &values["/ui/children/1/children/0/items"] else {
         unreachable!()
     };
     assert_eq!(metrics[0]["value"], json!("133,527"));
     assert_eq!(metrics[2]["value"], json!("800"));
-    let BindingValue::Ready { value: series } = &values["/ui/children/3/child/series"] else {
+    let BindingValue::Ready { value: series } = &values["/ui/children/1/children/2/child/series"]
+    else {
         unreachable!()
     };
     assert_eq!(series[0]["points"][0]["open"], json!(126850.65));
     assert_eq!(series[0]["points"][0]["close"], json!(133527.0));
-    let BindingValue::Ready { value: rows } = &values["/ui/children/4/children/0/child/rows"]
+    assert_eq!(series[0]["points"][0]["x"].as_str().unwrap().len(), 5);
+    let BindingValue::Ready { value: rows } =
+        &values["/ui/children/1/children/3/tabs/0/child/rows"]
     else {
         unreachable!()
     };
     assert_eq!(rows.as_array().unwrap().len(), 8);
     assert_eq!(rows[0]["currency"], "KRW · 대한민국 원");
-    assert_eq!(rows[0]["cpi"], json!(2.2));
+    assert_eq!(rows[0]["cpi"], json!("2.20%"));
+    let BindingValue::Ready { value: summary } =
+        &values["/ui/children/1/children/1/children/1/value"]
+    else {
+        unreachable!()
+    };
+    assert!(summary.as_str().unwrap().contains("1,335,270 KRW"));
+    data.get_mut("fx_asset_quote").unwrap()["rates"]["KRW"] = json!(138450);
+    let refreshed = app.evaluate_with_data_meta(
+        &definition.state,
+        &data,
+        &empty,
+        &empty,
+        &empty,
+        &BTreeMap::new(),
+        None,
+    );
+    let BindingValue::Ready { value: updated } =
+        &refreshed["/ui/children/1/children/1/children/1/value"]
+    else {
+        unreachable!()
+    };
+    assert!(updated.as_str().unwrap().contains("1,384,500 KRW"));
+    assert_eq!(definition.state["amount_local"], Value::Null);
+    let mut empty_state = definition.state.clone();
+    empty_state.insert("amount_usd".into(), Value::Null);
+    let cleared = app.evaluate_with_data_meta(
+        &empty_state,
+        &data,
+        &empty,
+        &empty,
+        &empty,
+        &BTreeMap::new(),
+        None,
+    );
+    assert_eq!(
+        cleared["/ui/children/1/children/1/children/1/value"],
+        BindingValue::Ready { value: json!("") }
+    );
 }
 
 #[test]
