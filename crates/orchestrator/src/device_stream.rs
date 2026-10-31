@@ -55,7 +55,7 @@ impl AppState {
         let snapshot = DeviceEvent::AppsSnapshot {
             apps: apps
                 .into_iter()
-                .filter(|app| renders_on(supported.as_ref(), &app.version.definition.requires))
+                .filter(|app| renders_definition_on(supported.as_ref(), &app.version.definition))
                 .collect(),
             deleted: self.deleted_app_ids()?,
         };
@@ -79,6 +79,20 @@ impl AppState {
                 .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
                 .remove(&device_id);
         }
+        let supports_app_values =
+            supports_storage && registry_version >= registry::APP_VALUES_REGISTRY_VERSION;
+        {
+            let mut devices = self
+                .0
+                .app_value_devices
+                .lock()
+                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?;
+            if supports_app_values {
+                devices.insert(device_id.clone());
+            } else {
+                devices.remove(&device_id);
+            }
+        }
         let mut initial_events = vec![snapshot];
         if supported.as_ref().is_some_and(|supported| {
             supported
@@ -96,6 +110,20 @@ impl AppState {
         if supports_storage {
             initial_events
                 .extend(self.storage_snapshot_events(&self.device_account_id(&device_id)?)?);
+        }
+        if supports_app_values {
+            let account = self.device_account_id(&device_id)?;
+            for id in kaleidoscope_contract::builtin::BUILTIN_IDENTITIES
+                .iter()
+                .map(|app| app.id)
+            {
+                let values = self.list_app_values(&account, id)?;
+                initial_events.push(DeviceEvent::AppValuesSnapshot {
+                    app_id: id.into(),
+                    bucket_id: values.bucket_id,
+                    items: values.items,
+                });
+            }
         }
         let state = self.clone();
         let interval = tokio::time::interval(Duration::from_secs(registry::PING_INTERVAL_SECS));
@@ -149,6 +177,9 @@ impl Drop for ConnectionGuard {
                     }
                     if let Ok(mut storage) = self.state.0.storage_devices.lock() {
                         storage.remove(&self.device_id);
+                    }
+                    if let Ok(mut devices) = self.state.0.app_value_devices.lock() {
+                        devices.remove(&self.device_id);
                     }
                 }
             }

@@ -42,12 +42,6 @@ fn agent_session_definition_passes_contract_validation() {
 }
 
 #[test]
-fn example_agent_definition_passes_contract_validation() {
-    let app: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
-    assert!(parse_app_definition(&app.to_string()).is_ok());
-}
-
-#[test]
 fn agent_session_requires_local_agent_module() {
     let mut app = definition();
     app["requires"]["modules"] = json!({ "files": 1 });

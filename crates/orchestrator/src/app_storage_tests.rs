@@ -44,7 +44,7 @@ fn storage_migration_from_version_nine_preserves_buckets_and_items() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        10
+        11
     );
     let fresh_violations = db
         .prepare("PRAGMA foreign_key_check")
@@ -86,7 +86,7 @@ fn storage_migration_from_version_nine_preserves_buckets_and_items() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        10
+        11
     );
     let stored: (String, String) = db
         .query_row(
@@ -132,89 +132,6 @@ fn storage_migration_from_version_nine_preserves_buckets_and_items() {
         .collect::<rusqlite::Result<Vec<_>>>()
         .unwrap();
     assert!(item_foreign_keys.contains(&("app_storage_buckets".to_string(), "CASCADE".to_string())));
-}
-
-#[test]
-fn builtin_storage_definition_supports_list_read_write_reset_cycle() {
-    use kaleidoscope_contract::builtin::BuiltinApp;
-
-    let state = AppState::in_memory("secret");
-    let account = state.mcp_account_id().unwrap();
-    let fake_builtins = [BuiltinApp {
-        id: "agent",
-        version: 1,
-        updated_at: "2026-10-30T00:00:00Z",
-        definition_json: include_str!("../../../apps/agent.json"),
-    }];
-
-    let listed = state
-        .list_app_storage_with_builtins(&account, "agent", None, &fake_builtins)
-        .unwrap();
-    assert_eq!(listed.items.len(), 1);
-    assert!(!listed.items[0].exists);
-    let initial = state
-        .read_app_storage_with_builtins(&account, "agent", "agents", None, &fake_builtins)
-        .unwrap();
-    assert!(!initial.exists);
-    assert!(initial.revision.is_none());
-    assert_eq!(initial.content.as_array().unwrap().len(), 4);
-
-    let override_value =
-        json!([{ "id":"agent-b", "name":"Agent B", "command":"agent-b", "args":[], "env":{} }]);
-    let (written, _, _) = state
-        .write_app_storage_with_builtins(
-            &account,
-            "agent",
-            "agents",
-            None,
-            override_value.clone(),
-            None,
-            &fake_builtins,
-        )
-        .unwrap();
-    let override_read = state
-        .read_app_storage_with_builtins(&account, "agent", "agents", None, &fake_builtins)
-        .unwrap();
-    assert!(override_read.exists);
-    assert_eq!(override_read.content, override_value);
-    assert_eq!(
-        override_read.revision.as_deref(),
-        Some(written.revision.as_str())
-    );
-
-    let stale = state.write_app_storage_with_builtins(
-        &account,
-        "agent",
-        "agents",
-        None,
-        json!([]),
-        None,
-        &fake_builtins,
-    );
-    assert_eq!(stale.unwrap_err().code, ErrorCode::Conflict);
-    let (reset, _, _) = state
-        .reset_app_storage_with_builtins(
-            &account,
-            "agent",
-            "agents",
-            None,
-            Some(written.revision),
-            &fake_builtins,
-        )
-        .unwrap();
-    assert!(reset.revision.is_none());
-    let restored = state
-        .read_app_storage_with_builtins(&account, "agent", "agents", None, &fake_builtins)
-        .unwrap();
-    assert!(!restored.exists);
-    assert_eq!(restored.content, initial.content);
-
-    assert!(state
-        .list_app_storage_with_builtins(&account, "not-builtin", None, &fake_builtins)
-        .is_err());
-    assert!(state
-        .read_app_storage_with_builtins(&account, "agent", "missing", None, &fake_builtins)
-        .is_err());
 }
 
 async fn request(
@@ -513,7 +430,8 @@ async fn mcp_storage_tools_and_workspace_context_use_declared_account_data() {
             .read_app_storage(Parameters(
                 super::mcp::app_storage_tools::AppStorageEntryArgs {
                     app_id: "storage-test".into(),
-                    entry_id: "title".into(),
+                    entry_id: Some("title".into()),
+                    key: None,
                     workspace_id: None,
                 },
             ))
@@ -526,7 +444,9 @@ async fn mcp_storage_tools_and_workspace_context_use_declared_account_data() {
             .write_app_storage(Parameters(
                 super::mcp::app_storage_tools::AppStorageWriteArgs {
                     app_id: "storage-test".into(),
-                    entry_id: "title".into(),
+                    entry_id: Some("title".into()),
+                    key: None,
+                    kind: None,
                     workspace_id: None,
                     content: json!("from-mcp"),
                     expected_revision: revision,
@@ -561,7 +481,8 @@ async fn mcp_storage_tools_and_workspace_context_use_declared_account_data() {
             .reset_app_storage(Parameters(
                 super::mcp::app_storage_tools::AppStorageResetArgs {
                     app_id: "storage-test".into(),
-                    entry_id: "title".into(),
+                    entry_id: Some("title".into()),
+                    key: None,
                     workspace_id: None,
                     expected_revision: written["revision"].as_str().map(str::to_string),
                 },

@@ -1,0 +1,8 @@
+{
+  "id": "md-editor",
+  "name": "시험 편집기",
+  "requires": { "blocks": 3, "modules": { "files": 1 } },
+  "permissions": [{ "module": "files", "id": "docs", "access": "readwrite", "label": "시험 폴더" }],
+  "state": { "current_file": null },
+  "ui": { "type": "markdown_editor", "file": { "permission": "docs", "path": { "state": "current_file" } } }
+}

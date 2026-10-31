@@ -17,9 +17,21 @@ pub fn router(state: AppState) -> Router {
     );
     let mcp = Router::new()
         .route_service("/mcp", service)
+        .layer(DefaultBodyLimit::max(48 * 1024 * 1024))
         .route_layer(middleware::from_fn_with_state(state.clone(), mcp_auth));
     let device = Router::new()
         .route("/apps", post(device_upload))
+        .route("/assets/{id}/{version}", get(super::assets::device_get))
+        .route("/app-values/{app_id}", get(super::app_values::list))
+        .route(
+            "/app-values/{app_id}/{*key}",
+            get(super::app_values::read)
+                .put(super::app_values::write)
+                .delete(super::app_values::reset)
+                .layer(DefaultBodyLimit::max(
+                    kaleidoscope_contract::app_storage::STORAGE_COMMAND_BODY_MAX_BYTES,
+                )),
+        )
         .route(
             "/app-storage/{app_id}/items",
             get(super::app_storage_http::device_list),

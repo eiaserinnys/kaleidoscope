@@ -53,6 +53,10 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
     case "code_view": return <CodeViewBlock block={block} context={context} pointer={pointer} />;
     case "image": return <ImageBlock block={block} pointer={pointer} />;
     case "media": return <MediaBlock block={block} pointer={pointer} />;
+    case "metrics":
+    case "keypad":
+    case "chart":
+      return null;
     case "web_view":
       return <WebViewBlock block={block} context={context} />;
     case "explorer":

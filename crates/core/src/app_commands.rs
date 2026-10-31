@@ -18,7 +18,7 @@ pub(crate) fn import(
             vec!["기본 앱은 kaleidoscope 리포의 apps/에서 고치고 쉘 새 판으로 냅니다".into()],
         ));
     }
-    if !crate::supported().renders(&definition.requires) {
+    if !crate::supported().renders_app(&definition) {
         return Err(CoreError::new(
             kaleidoscope_contract::ErrorCode::UnsupportedApp,
         ));
@@ -78,7 +78,7 @@ pub(crate) fn import_registry(state: &mut CoreState, received: RegistryApp) -> b
     if kaleidoscope_contract::builtin::is_builtin(&received.app.id) {
         return false;
     }
-    if !crate::supported().renders(&received.version.definition.requires) {
+    if !crate::supported().renders_app(&received.version.definition) {
         return false;
     }
     if state
@@ -117,7 +117,7 @@ pub(crate) fn import_registry(state: &mut CoreState, received: RegistryApp) -> b
 }
 
 pub(crate) fn ensure_builtin(state: &mut CoreState) {
-    for row in kaleidoscope_contract::builtin::builtin_apps() {
+    for row in crate::builtin::builtin_apps() {
         let same = state
             .shared
             .apps

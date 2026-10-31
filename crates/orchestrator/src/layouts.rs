@@ -363,13 +363,42 @@ impl AppState {
             other => other,
         };
         if let DeviceEvent::AppPublished { app, .. } = &event {
-            if !self.device_can_render(device_id, &app.version.definition.requires) {
+            if !self.device_can_render_app(device_id, &app.version.definition) {
                 return None;
             }
         }
         if let DeviceEvent::AppOpen { app_id, .. } = &event {
+            if let Some(identity) = kaleidoscope_contract::builtin::builtin_identity(app_id) {
+                let support = self
+                    .0
+                    .device_support
+                    .lock()
+                    .ok()
+                    .and_then(|devices| devices.get(device_id).cloned())
+                    .flatten();
+                let requires = Requires {
+                    blocks: identity.blocks,
+                    modules: identity
+                        .modules
+                        .iter()
+                        .map(|(name, version)| ((*name).to_string(), *version))
+                        .collect(),
+                };
+                let assets = identity
+                    .assets
+                    .iter()
+                    .map(|(id, version)| kaleidoscope_contract::assets::AssetDep {
+                        id: (*id).into(),
+                        version: *version,
+                    })
+                    .collect::<Vec<_>>();
+                let compatible = renders_requirements(support.as_ref(), &requires, &assets);
+                if !compatible {
+                    return None;
+                }
+            }
             if let Ok(Some(app)) = self.app(app_id, None) {
-                if !self.device_can_render(device_id, &app.version.definition.requires) {
+                if !self.device_can_render_app(device_id, &app.version.definition) {
                     return None;
                 }
             }

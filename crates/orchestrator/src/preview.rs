@@ -49,6 +49,21 @@ impl McpServer {
             data: samples,
             max_chars,
         } = args;
+        if app_id
+            .as_deref()
+            .is_some_and(kaleidoscope_contract::builtin::is_builtin)
+            || definition_input
+                .as_ref()
+                .and_then(|value| value.get("id"))
+                .and_then(Value::as_str)
+                .is_some_and(kaleidoscope_contract::builtin::is_builtin)
+        {
+            return Ok(json_error(CoreError {
+                code: ErrorCode::UnsupportedApp,
+                message: "기본 앱은 로컬 시험 쉘에서 미리 봅니다".into(),
+                details: vec![],
+            }));
+        }
         let definition = match (app_id, definition_input) {
             (Some(app_id), None) => match self.state.app(&app_id, None) {
                 Ok(Some(app)) => app.version.definition,
@@ -151,6 +166,73 @@ impl McpServer {
                     path,
                     query,
                 } => {
+                    if let Some(PermissionDecl::Http {
+                        base_url, paths, ..
+                    }) = definition
+                        .permissions
+                        .iter()
+                        .find(|decl| decl.id() == permission)
+                    {
+                        let base_url = base_url.clone();
+                        let paths = paths.clone();
+                        let source_format = match definition.sources.get(name) {
+                            Some(SourceDecl::Request { format, .. }) => *format,
+                            _ => SourceFormat::Json,
+                        };
+                        let result = tokio::task::spawn_blocking(move || {
+                            kaleidoscope_data::public_http::get(
+                                &base_url,
+                                &paths,
+                                &path,
+                                &query,
+                                kaleidoscope_contract::data::SOURCE_MAX_BYTES,
+                            )
+                        })
+                        .await;
+                        let result = result
+                            .map_err(|error| error.to_string())
+                            .and_then(|value| value);
+                        let value = result.and_then(|response| {
+                            if !(200..300).contains(&response.status) {
+                                return Err(format!("HTTP {}", response.status));
+                            }
+                            match source_format {
+                                SourceFormat::Json => serde_json::from_slice(&response.bytes)
+                                    .map_err(|error| error.to_string()),
+                                SourceFormat::Text => String::from_utf8(response.bytes)
+                                    .map(Value::String)
+                                    .map_err(|error| error.to_string()),
+                            }
+                        });
+                        match value {
+                            Ok(value) => {
+                                let bytes = value.to_string().len();
+                                data.insert(name.clone(), value);
+                                statuses.insert(
+                                    name.clone(),
+                                    SourceStatus::Ready {
+                                        updated_at: timestamp(),
+                                    },
+                                );
+                                source_results
+                                    .insert(name.clone(), json!({"state":"ready","bytes":bytes}));
+                            }
+                            Err(message) => {
+                                statuses.insert(
+                                    name.clone(),
+                                    SourceStatus::Failed {
+                                        message: message.clone(),
+                                        has_value: false,
+                                    },
+                                );
+                                source_results.insert(
+                                    name.clone(),
+                                    json!({"state":"failed","message":message}),
+                                );
+                            }
+                        }
+                        continue;
+                    }
                     let Some(PermissionDecl::Connection {
                         connection, access, ..
                     }) = definition
@@ -312,8 +394,26 @@ impl McpServer {
             notes.push(format!("서버에 없는 연결: {connection}"));
         }
 
-        let evaluated =
-            compiled.evaluate_with_storage(&state, &data, &storage, &storage_meta, &statuses);
+        let data_meta: BTreeMap<_, _> = statuses.iter().map(|(name, status)| {
+            let value = match status {
+                SourceStatus::Ready { updated_at } => json!({"state":"ready", "updated_at":updated_at,
+                    "updated_time":chrono::DateTime::parse_from_rfc3339(updated_at).ok().map(|at| at.with_timezone(&chrono::Local).format("%H:%M").to_string()), "stale":false,"message":null}),
+                SourceStatus::Failed { message, .. } => json!({"state":"failed","updated_at":null,"updated_time":null,"stale":false,"message":message}),
+                SourceStatus::Loading { .. } => json!({"state":"loading","updated_at":null,"updated_time":null,"stale":false,"message":null}),
+                SourceStatus::LoginRequired { .. } => json!({"state":"login_required","updated_at":null,"updated_time":null,"stale":false,"message":null}),
+                SourceStatus::Idle {} => json!({"state":"idle","updated_at":null,"updated_time":null,"stale":false,"message":null}),
+            };
+            (name.clone(), value)
+        }).collect();
+        let evaluated = compiled.evaluate_with_data_meta(
+            &state,
+            &data,
+            &storage,
+            &storage_meta,
+            &data_meta,
+            &statuses,
+            None,
+        );
         let mut blocks = Vec::new();
         kaleidoscope_contract::data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
             let block_type = serde_json::to_value(block)
@@ -361,6 +461,7 @@ impl McpServer {
 
         Ok(json_result(json!({
             "sources": source_results,
+            "source_meta": data_meta,
             "values": values,
             "notes": notes,
         })))

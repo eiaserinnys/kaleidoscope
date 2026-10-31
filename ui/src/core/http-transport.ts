@@ -17,6 +17,12 @@ export function createHttpTransport(baseUrl: string): CoreTransport {
 
   async function call<K extends CoreRequest["op"]>(request: RequestFor<K>): Promise<ReplyFor<K>> {
     try {
+      if (request.op === "external.open") {
+        const url = new URL((request as RequestFor<"external.open">).url);
+        if (url.protocol !== "http:" && url.protocol !== "https:") throw { code: "invalid_request", message: "주소가 올바르지 않습니다", details: [] } satisfies CoreError;
+        globalThis.window.open(url.href, "_blank", "noopener,noreferrer");
+        return { op: "external.open" } as ReplyFor<K>;
+      }
       const response = await fetch(`${base}/core`, {
         method: "POST",
         headers: { "content-type": "application/json" },

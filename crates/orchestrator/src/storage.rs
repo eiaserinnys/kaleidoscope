@@ -13,7 +13,7 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
             PRAGMA user_version=1;
             COMMIT;")?;
-    } else if version > 10 {
+    } else if version > 11 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 2 {
@@ -231,6 +231,44 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
         let foreign_keys = db.pragma_update(None, "foreign_keys", true);
         migration?;
         foreign_keys?;
+    }
+    if version < 11 {
+        let tx = db.unchecked_transaction()?;
+        let has_workspace_id = {
+            let mut statement = tx.prepare("PRAGMA table_info(app_storage_items)")?;
+            let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+            columns
+                .collect::<rusqlite::Result<Vec<_>>>()?
+                .iter()
+                .any(|name| name == "workspace_id")
+        };
+        if !has_workspace_id {
+            tx.execute(
+                "ALTER TABLE app_storage_items ADD COLUMN workspace_id TEXT",
+                [],
+            )?;
+        }
+        tx.execute_batch(
+            "CREATE TABLE IF NOT EXISTS asset_versions (
+                account_id TEXT NOT NULL REFERENCES accounts(id),
+                id TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                format TEXT NOT NULL,
+                sha256 TEXT NOT NULL,
+                source TEXT NOT NULL,
+                license TEXT NOT NULL,
+                byte_size INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                bytes BLOB NOT NULL,
+                PRIMARY KEY (account_id, id, version)
+             );",
+        )?;
+        for identity in kaleidoscope_contract::builtin::BUILTIN_IDENTITIES {
+            tx.execute("DELETE FROM app_versions WHERE app_id=?1", [identity.id])?;
+            tx.execute("DELETE FROM apps WHERE id=?1", [identity.id])?;
+        }
+        tx.pragma_update(None, "user_version", 11)?;
+        tx.commit()?;
     }
     Ok(())
 }

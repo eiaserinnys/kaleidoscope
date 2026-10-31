@@ -95,6 +95,7 @@ fn test_png_with_blue(width: u32, height: u32, blue: u8) -> Vec<u8> {
 struct FakeHost {
     selected: Mutex<Option<PathBuf>>,
     roots: Mutex<Vec<crate::PcRoot>>,
+    opened_urls: Mutex<Vec<String>>,
 }
 
 impl FakeHost {
@@ -110,6 +111,40 @@ impl Host for FakeHost {
     fn pc_roots(&self) -> Vec<crate::PcRoot> {
         self.roots.lock().unwrap().clone()
     }
+    fn open_url(&self, url: &str) -> std::io::Result<()> {
+        self.opened_urls.lock().unwrap().push(url.to_owned());
+        Ok(())
+    }
+}
+
+#[test]
+fn external_links_only_open_http_or_https() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(temp.path(), vec![], &host);
+    core.handle(CoreRequest::ExternalOpen {
+        window_id: None,
+        url: "https://example.com/".into(),
+    })
+    .unwrap();
+    assert_eq!(
+        host.opened_urls.lock().unwrap().as_slice(),
+        &["https://example.com/"]
+    );
+    for url in [
+        "file:///tmp/test",
+        "javascript:alert(1)",
+        "data:text/plain,a",
+    ] {
+        expect_error(
+            core.handle(CoreRequest::ExternalOpen {
+                window_id: None,
+                url: url.into(),
+            }),
+            ErrorCode::InvalidRequest,
+        );
+    }
+    assert_eq!(host.opened_urls.lock().unwrap().len(), 1);
 }
 
 fn open_core(data_dir: &Path, definitions: Vec<String>, host: &Arc<FakeHost>) -> Core {
@@ -157,12 +192,14 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
         ("md-editor", 2),
         ("md-viewer", 1),
         ("web-browser", 1),
+        ("calculator", 1),
+        ("weather", 1),
     ] {
         assert!(apps
             .iter()
             .any(|app| app.id == id && app.current_version == version));
     }
-    assert_eq!(apps.len(), 5);
+    assert_eq!(apps.len(), 7);
     let error = core
         .handle(CoreRequest::AppImport {
             definition_json: MD_EDITOR.into(),
@@ -217,7 +254,7 @@ fn builtin_window_state_survives_restart_at_the_same_version() {
         .find(|w| w.id == window_id)
         .unwrap();
     assert_eq!(before, after);
-    assert_eq!(snapshot(&reopened).shared.apps.len(), 5);
+    assert_eq!(snapshot(&reopened).shared.apps.len(), 7);
 }
 
 #[test]
@@ -763,6 +800,7 @@ fn expect_error(result: Result<CoreReply, CoreError>, code: ErrorCode) -> CoreEr
 
 #[derive(Default)]
 struct FakeRegistryClient {
+    raw_values_enabled: std::sync::atomic::AtomicBool,
     storage_value: Mutex<Option<(Value, String)>>,
     storage_pause: Mutex<Option<mpsc::Receiver<()>>>,
     storage_workspace: Mutex<String>,
@@ -788,6 +826,50 @@ struct FakeRegistryClient {
 }
 
 impl RegistryClient for FakeRegistryClient {
+    fn values_get(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        key: &str,
+    ) -> Result<kaleidoscope_contract::app_storage::AppValueRead, RegistryError> {
+        use kaleidoscope_contract::app_storage::{AppValueRead, StorageKind};
+        if !self.raw_values_enabled.load(Ordering::SeqCst) {
+            return Err(RegistryError::NotFound);
+        }
+        assert_eq!(key, "settings/agents");
+        let value = self.storage_value.lock().unwrap().clone();
+        Ok(AppValueRead {
+            bucket_id: "bucket".into(),
+            exists: value.is_some(),
+            kind: value.as_ref().map(|_| StorageKind::Json),
+            content: value.as_ref().map(|v| v.0.clone()),
+            revision: value.map(|v| v.1),
+        })
+    }
+    fn values_write(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        key: &str,
+        request: &kaleidoscope_contract::app_storage::AppValueWrite,
+    ) -> Result<kaleidoscope_contract::app_storage::StorageWriteReply, RegistryError> {
+        use kaleidoscope_contract::app_storage::{storage_revision, StorageWriteReply};
+        if !self.raw_values_enabled.load(Ordering::SeqCst) {
+            return Err(RegistryError::NotFound);
+        }
+        assert_eq!(key, "settings/agents");
+        let mut stored = self.storage_value.lock().unwrap();
+        if stored.as_ref().map(|v| &v.1) != request.expected_revision.0.as_ref() {
+            return Err(RegistryError::Validation(CoreError::new(
+                ErrorCode::Conflict,
+            )));
+        }
+        let revision = storage_revision(request.kind, &request.content).unwrap();
+        *stored = Some((request.content.clone(), revision.clone()));
+        Ok(StorageWriteReply { revision })
+    }
     fn storage_get(
         &self,
         _: &str,
@@ -1040,6 +1122,83 @@ fn mark_connected(core: &Core) {
         server_url: file.server_url,
         device_name: file.device_name,
     };
+}
+
+#[test]
+fn builtin_raw_storage_uses_declarations_and_translates_change_events() {
+    use kaleidoscope_contract::app_storage::{
+        AppValueMeta, ExpectedRevision, StorageKind, StorageUpdate,
+    };
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = Arc::new(FakeRegistryClient::default());
+    client.raw_values_enabled.store(true, Ordering::SeqCst);
+    let core = open_core_with_client(temp.path(), vec![], &host, client.clone());
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "agent");
+    mark_connected(&core);
+    let default = crate::app_storage::read(&core.inner, &window, "agents").unwrap();
+    assert!(!default.exists);
+    assert!(default
+        .content
+        .as_array()
+        .is_some_and(|items| !items.is_empty()));
+    let invalid = crate::app_storage::write(
+        &core.inner,
+        &window,
+        "agents",
+        json!("invalid"),
+        ExpectedRevision(None),
+    )
+    .unwrap_err();
+    assert_eq!(invalid.code, ErrorCode::InvalidRequest);
+    let revision = crate::app_storage::write(
+        &core.inner,
+        &window,
+        "agents",
+        json!([]),
+        ExpectedRevision(None),
+    )
+    .unwrap();
+    let stored = crate::app_storage::read(&core.inner, &window, "agents").unwrap();
+    assert_eq!(stored.content, json!([]));
+    assert_eq!(stored.revision.as_deref(), Some(revision.as_str()));
+
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        let _ = tx.send(event.clone());
+    }));
+    let item = AppValueMeta {
+        key: "settings/agents".into(),
+        kind: StorageKind::Json,
+        revision: Some(revision),
+    };
+    crate::registry_events::apply_event(
+        &core.inner,
+        0,
+        DeviceEvent::AppValueChanged {
+            app_id: "agent".into(),
+            bucket_id: "bucket".into(),
+            item: item.clone(),
+        },
+    );
+    let event = rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    assert!(
+        matches!(event, CoreEvent::StorageUpdate { window_id, update: StorageUpdate::Changed { changed } } if window_id == window && changed.bucket_id == "bucket" && changed.item.entry_id == "agents")
+    );
+    crate::registry_events::apply_event(
+        &core.inner,
+        0,
+        DeviceEvent::AppValuesSnapshot {
+            app_id: "agent".into(),
+            bucket_id: "bucket".into(),
+            items: vec![item],
+        },
+    );
+    let event = rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    assert!(
+        matches!(event, CoreEvent::StorageUpdate { window_id, update: StorageUpdate::Snapshot { snapshot } } if window_id == window && snapshot.bucket_id == "bucket" && snapshot.items[0].entry_id == "agents")
+    );
 }
 
 fn registry_app(version: u32, definition_json: &str) -> RegistryApp {
@@ -1628,7 +1787,7 @@ fn unreadable_state_json_is_renamed_and_core_starts_with_empty_state() {
     let core = open_core(&data_dir, vec![], &host);
     let snapshot = snapshot(&core);
     assert_eq!(snapshot.shared.workspaces.len(), 1);
-    assert_eq!(snapshot.shared.apps.len(), 5);
+    assert_eq!(snapshot.shared.apps.len(), 7);
     assert!(fs::read_dir(&data_dir).unwrap().any(|entry| {
         entry
             .unwrap()

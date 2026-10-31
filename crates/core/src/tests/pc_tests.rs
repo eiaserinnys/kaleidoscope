@@ -400,12 +400,14 @@ fn assert_grant_protect_data_dir(core: &Core, window: &str) {
     expect_error(
         core.handle(CoreRequest::DataMedia {
             window_id: window.into(),
-            media: kaleidoscope_contract::data::MediaRef {
-                permission: "docs".into(),
-                path: "private-data/link.json".into(),
-                query: Default::default(),
-                crop: None,
-            },
+            media: kaleidoscope_contract::data::MediaRef::Resource(
+                kaleidoscope_contract::data::ResourceMediaRef {
+                    permission: "docs".into(),
+                    path: "private-data/link.json".into(),
+                    query: Default::default(),
+                    crop: None,
+                },
+            ),
             max_px: None,
         }),
         ErrorCode::PermissionDenied,

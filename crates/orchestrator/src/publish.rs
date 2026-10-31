@@ -37,6 +37,25 @@ impl AppState {
         workspace_id: Option<String>,
         preferred_device: Option<&str>,
     ) -> Result<(RegistryApp, bool, Option<OpenTarget>), CoreError> {
+        self.publish_app_with_assets_for_device(
+            definition_json,
+            created_by,
+            open,
+            workspace_id,
+            preferred_device,
+            &[],
+        )
+    }
+
+    pub(crate) fn publish_app_with_assets_for_device(
+        &self,
+        definition_json: &str,
+        created_by: &str,
+        open: bool,
+        workspace_id: Option<String>,
+        preferred_device: Option<&str>,
+        asset_uploads: &[kaleidoscope_contract::assets::AssetUpload],
+    ) -> Result<(RegistryApp, bool, Option<OpenTarget>), CoreError> {
         let definition = parse_app_definition(definition_json)?;
         if kaleidoscope_contract::builtin::is_builtin(&definition.id) {
             return Err(CoreError::with_details(
@@ -45,6 +64,10 @@ impl AppState {
             ));
         }
         let now = timestamp();
+        let prepared = asset_uploads
+            .iter()
+            .map(super::assets::prepare)
+            .collect::<Result<Vec<_>, _>>()?;
         let workspace_accessible = match workspace_id.as_deref() {
             Some(id) => self.mcp_owns_workspace(id)?,
             None => true,
@@ -56,6 +79,7 @@ impl AppState {
                 workspace_id.as_deref(),
                 preferred_device,
                 &definition.requires,
+                &definition.assets,
             )?
         } else {
             None
@@ -65,6 +89,10 @@ impl AppState {
         let result = {
             let mut db = self.lock_db()?;
             let tx = db.transaction().map_err(db_error)?;
+            for asset in &prepared {
+                super::assets::insert(&tx, &account_id, asset)?;
+            }
+            super::assets::verify_dependencies(&tx, &account_id, &definition.assets)?;
             let current: Option<(u32, String, String, Option<String>)> = tx.query_row(
                 "SELECT a.current_version, v.definition, a.created_at, a.deleted_at FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.id=?1",
                 [&definition.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
@@ -276,6 +304,7 @@ impl AppState {
         workspace_id: Option<&str>,
         preferred_device: Option<&str>,
         requires: &kaleidoscope_contract::Requires,
+        assets: &[kaleidoscope_contract::assets::AssetDep],
     ) -> Result<Option<OpenTarget>, CoreError> {
         let account_id = self.mcp_account_id()?;
         let mut db = self.lock_db()?;
@@ -317,8 +346,7 @@ impl AppState {
                 if preferred_device.is_some_and(|preferred| preferred != id.as_str()) {
                     continue;
                 }
-                if preferred_device.is_some()
-                    && !renders_on(support.get(id).and_then(Option::as_ref), requires)
+                if !renders_requirements(support.get(id).and_then(Option::as_ref), requires, assets)
                 {
                     continue;
                 }
@@ -360,8 +388,9 @@ impl AppState {
         target: Option<&OpenTarget>,
         workspace_id: Option<&str>,
         requires: &Requires,
+        assets: &[kaleidoscope_contract::assets::AssetDep],
     ) -> usize {
-        self.count_open_targets(target, workspace_id, requires, false)
+        self.count_open_targets(target, workspace_id, requires, assets, false)
     }
 
     pub(crate) fn open_sent_to_strict_target(
@@ -369,8 +398,9 @@ impl AppState {
         target: Option<&OpenTarget>,
         workspace_id: Option<&str>,
         requires: &Requires,
+        assets: &[kaleidoscope_contract::assets::AssetDep],
     ) -> usize {
-        self.count_open_targets(target, workspace_id, requires, true)
+        self.count_open_targets(target, workspace_id, requires, assets, true)
     }
 
     fn count_open_targets(
@@ -378,6 +408,7 @@ impl AppState {
         target: Option<&OpenTarget>,
         workspace_id: Option<&str>,
         requires: &Requires,
+        assets: &[kaleidoscope_contract::assets::AssetDep],
         strict_target: bool,
     ) -> usize {
         let Ok(account_id) = self.mcp_account_id() else {
@@ -416,7 +447,11 @@ impl AppState {
                 if !owned_devices.contains(*id) {
                     return false;
                 }
-                if !renders_on(support.get(*id).and_then(Option::as_ref), requires) {
+                if !renders_requirements(
+                    support.get(*id).and_then(Option::as_ref),
+                    requires,
+                    assets,
+                ) {
                     return false;
                 }
                 if strict_target {

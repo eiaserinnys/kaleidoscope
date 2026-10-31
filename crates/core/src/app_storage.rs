@@ -1,7 +1,8 @@
 //! 창에서 앱과 작업을 해석해 선언된 저장 항목만 기기 API에 전달한다.
 use crate::{app_commands, error, link, registry_client::RegistryError, storage::LinkFile, Inner};
 use kaleidoscope_contract::app_storage::{
-    ExpectedRevision, StorageListReply, StorageReadReply, StorageResetRequest, StorageWriteRequest,
+    self as contract, ExpectedRevision, StorageListReply, StorageReadReply, StorageResetRequest,
+    StorageWriteRequest,
 };
 use kaleidoscope_contract::{CoreError, CoreReply, CoreRequest, ErrorCode, LinkStatus};
 use serde_json::Value;
@@ -11,6 +12,7 @@ pub(crate) struct Context {
     pub(crate) app: String,
     pub(crate) workspace: String,
     pub(crate) link: LinkFile,
+    pub(crate) entries: Vec<contract::StorageEntryDecl>,
 }
 
 pub(crate) fn uses_defaults(inner: &Inner) -> bool {
@@ -64,6 +66,7 @@ pub(crate) fn context(
         app: window.app_id.clone(),
         workspace: desktop.workspace_id.clone(),
         link,
+        entries: declaration.entries.clone(),
     })
 }
 
@@ -76,6 +79,36 @@ pub(crate) fn map_error(inner: &Arc<Inner>, file: &LinkFile, err: RegistryError)
 
 pub(crate) fn list(inner: &Arc<Inner>, window: &str) -> Result<StorageListReply, CoreError> {
     let ctx = context(inner, window, None)?;
+    if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
+        match inner
+            .registry
+            .values_list(&ctx.link.server_url, &ctx.link.token, &ctx.app)
+        {
+            Ok(list) => {
+                let items = ctx
+                    .entries
+                    .iter()
+                    .map(|entry| {
+                        let key = entry.key.replace("{workspace_id}", &ctx.workspace);
+                        let stored = list.items.iter().find(|item| item.key == key);
+                        contract::StorageItemMeta {
+                            entry_id: entry.id.clone(),
+                            key,
+                            kind: entry.kind,
+                            revision: stored.and_then(|item| item.revision.clone()),
+                            exists: stored.is_some(),
+                        }
+                    })
+                    .collect();
+                return Ok(StorageListReply {
+                    bucket_id: list.bucket_id,
+                    items,
+                });
+            }
+            Err(RegistryError::NotFound) => {}
+            Err(err) => return Err(map_error(inner, &ctx.link, err)),
+        }
+    }
     inner
         .registry
         .storage_list(
@@ -119,6 +152,39 @@ pub(crate) fn read(
         }
     }
     let ctx = context(inner, window, Some(entry))?;
+    if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
+        let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
+        let key = decl.key.replace("{workspace_id}", &ctx.workspace);
+        match inner
+            .registry
+            .values_get(&ctx.link.server_url, &ctx.link.token, &ctx.app, &key)
+        {
+            Ok(raw) => {
+                let content = if raw.exists {
+                    raw.content.unwrap_or(Value::Null)
+                } else {
+                    decl.default.clone()
+                };
+                if raw.exists
+                    && (raw.kind != Some(decl.kind)
+                        || contract::validate_storage_content(decl, &content).is_err())
+                {
+                    return Err(error::with_message(
+                        ErrorCode::InvalidRequest,
+                        "저장된 값이 앱의 저장소 선언과 다릅니다",
+                    ));
+                }
+                return Ok(StorageReadReply {
+                    kind: decl.kind,
+                    content,
+                    revision: raw.revision,
+                    exists: raw.exists,
+                });
+            }
+            Err(RegistryError::NotFound) => {}
+            Err(err) => return Err(map_error(inner, &ctx.link, err)),
+        }
+    }
     inner
         .registry
         .storage_get(
@@ -139,6 +205,35 @@ pub(crate) fn write(
     expected_revision: ExpectedRevision,
 ) -> Result<String, CoreError> {
     let ctx = context(inner, window, Some(entry))?;
+    if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
+        let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
+        contract::validate_storage_content(decl, &content)
+            .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))?;
+        let key = decl.key.replace("{workspace_id}", &ctx.workspace);
+        let request = contract::AppValueWrite {
+            kind: decl.kind,
+            content: content.clone(),
+            expected_revision: expected_revision.clone(),
+            workspace_id: decl
+                .key
+                .contains("{workspace_id}")
+                .then(|| ctx.workspace.clone()),
+        };
+        match inner.registry.values_write(
+            &ctx.link.server_url,
+            &ctx.link.token,
+            &ctx.app,
+            &key,
+            &request,
+        ) {
+            Ok(reply) => {
+                crate::conversation_reconcile::storage_changed(inner, &ctx.app, Some(entry));
+                return Ok(reply.revision);
+            }
+            Err(RegistryError::NotFound) => {}
+            Err(err) => return Err(map_error(inner, &ctx.link, err)),
+        }
+    }
     let reply = inner
         .registry
         .storage_write(
@@ -176,6 +271,32 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             expected_revision,
         } => {
             let ctx = context(inner, &window_id, Some(&entry))?;
+            if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
+                let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
+                let key = decl.key.replace("{workspace_id}", &ctx.workspace);
+                match inner.registry.values_reset(
+                    &ctx.link.server_url,
+                    &ctx.link.token,
+                    &ctx.app,
+                    &key,
+                    &StorageResetRequest {
+                        expected_revision: expected_revision.clone(),
+                    },
+                ) {
+                    Ok(result) => {
+                        crate::conversation_reconcile::storage_changed(
+                            inner,
+                            &ctx.app,
+                            Some(&entry),
+                        );
+                        return Ok(CoreReply::StorageReset {
+                            revision: result.revision,
+                        });
+                    }
+                    Err(RegistryError::NotFound) => {}
+                    Err(err) => return Err(map_error(inner, &ctx.link, err)),
+                }
+            }
             let result = inner
                 .registry
                 .storage_reset(

@@ -41,6 +41,58 @@ pub(crate) fn request(
     body: Option<serde_json::Value>,
     accept: ConnectionAccept,
 ) -> Result<ConnectionReply, RequestError> {
+    let public = {
+        let state = inner.state.lock().unwrap();
+        let window = state
+            .shared
+            .windows
+            .iter()
+            .find(|item| item.id == window_id)
+            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        let definition =
+            app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
+                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        match definition
+            .permissions
+            .iter()
+            .find(|decl| decl.id() == permission)
+        {
+            Some(PermissionDecl::Http {
+                base_url, paths, ..
+            }) => Some((base_url.clone(), paths.clone())),
+            _ => None,
+        }
+    };
+    if let Some((base_url, paths)) = public {
+        if method != HttpMethod::Get || body.is_some() {
+            return Err(error::make(ErrorCode::PermissionDenied).into());
+        }
+        let limit = if matches!(accept, ConnectionAccept::Bytes) {
+            data::MEDIA_MAX_BYTES
+        } else {
+            data::SOURCE_MAX_BYTES
+        };
+        let response = kaleidoscope_data::public_http::get(&base_url, &paths, path, &query, limit)
+            .map_err(server)?;
+        let mut reply = ConnectionReply {
+            status: response.status,
+            mime: response.mime,
+            json: None,
+            text: None,
+            data_base64: None,
+        };
+        match accept {
+            ConnectionAccept::Bytes => reply.data_base64 = Some(STANDARD.encode(response.bytes)),
+            ConnectionAccept::Text => {
+                reply.text = Some(String::from_utf8(response.bytes).map_err(server)?)
+            }
+            ConnectionAccept::Json => match serde_json::from_slice(&response.bytes) {
+                Ok(value) => reply.json = Some(value),
+                Err(_) => reply.text = Some(String::from_utf8_lossy(&response.bytes).into_owned()),
+            },
+        }
+        return Ok(reply);
+    }
     let (app_id, info) = authorize(inner, window_id, permission, method, path)?;
     let connection = info.name.clone();
     let req = ConnectionRequest {

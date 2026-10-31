@@ -55,6 +55,30 @@ pub(crate) fn renders_on(supported: Option<&Supported>, requires: &Requires) -> 
     }
 }
 
+pub(crate) fn renders_definition_on(
+    supported: Option<&Supported>,
+    definition: &AppDefinition,
+) -> bool {
+    match supported {
+        Some(supported) => supported.renders_app(definition),
+        None => {
+            definition.assets.is_empty() && definition.requires.blocks <= LEGACY_BLOCK_SET_VERSION
+        }
+    }
+}
+
+fn renders_requirements(
+    supported: Option<&Supported>,
+    requires: &Requires,
+    assets: &[kaleidoscope_contract::assets::AssetDep],
+) -> bool {
+    renders_on(supported, requires)
+        && assets
+            .iter()
+            .filter(|asset| asset.id.starts_with("builtin-"))
+            .all(|asset| supported.is_some_and(|supported| supported.assets.contains(asset)))
+}
+
 #[derive(Clone)]
 pub struct AppState(Arc<Inner>);
 
@@ -72,6 +96,7 @@ struct Inner {
     device_support: Mutex<HashMap<String, Option<Supported>>>,
     layout_sync_devices: Mutex<HashSet<String>>,
     storage_devices: Mutex<HashSet<String>>,
+    app_value_devices: Mutex<HashSet<String>>,
     device_workspaces: Mutex<HashMap<String, HashSet<String>>>,
     pairings: AsyncMutex<HashMap<String, Pairing>>,
     mcp_token: String,
@@ -102,6 +127,7 @@ struct AppSummary {
     current_version: u32,
     updated_at: String,
     builtin: bool,
+    definition_available: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -159,6 +185,7 @@ impl AppState {
             device_support: Mutex::new(HashMap::new()),
             layout_sync_devices: Mutex::new(HashSet::new()),
             storage_devices: Mutex::new(HashSet::new()),
+            app_value_devices: Mutex::new(HashSet::new()),
             device_workspaces: Mutex::new(device_workspaces),
             pairings: AsyncMutex::new(HashMap::new()),
             mcp_token,
@@ -248,7 +275,7 @@ impl AppState {
         ).map_err(db_error)
     }
 
-    fn device_can_render(&self, device_id: &str, requires: &Requires) -> bool {
+    fn device_can_render_app(&self, device_id: &str, definition: &AppDefinition) -> bool {
         let support = self
             .0
             .device_support
@@ -256,10 +283,14 @@ impl AppState {
             .ok()
             .and_then(|devices| devices.get(device_id).cloned())
             .flatten();
-        renders_on(support.as_ref(), requires)
+        renders_definition_on(support.as_ref(), definition)
     }
 
-    fn unsupported_connected_devices(&self, requires: &Requires) -> Vec<String> {
+    fn unsupported_connected_devices(
+        &self,
+        requires: &Requires,
+        assets: &[kaleidoscope_contract::assets::AssetDep],
+    ) -> Vec<String> {
         let owned_devices = self.mcp_device_ids();
         let Ok(connections) = self.0.connections.lock() else {
             return Vec::new();
@@ -271,7 +302,9 @@ impl AppState {
             .iter()
             .filter(|(_, count)| **count > 0)
             .filter(|(id, _)| owned_devices.contains(*id))
-            .filter(|(id, _)| !renders_on(support.get(*id).and_then(Option::as_ref), requires))
+            .filter(|(id, _)| {
+                !renders_requirements(support.get(*id).and_then(Option::as_ref), requires, assets)
+            })
             .map(|(id, _)| id.clone())
             .collect();
         devices.sort();
@@ -280,7 +313,7 @@ impl AppState {
 
     fn current_apps(&self) -> Result<Vec<RegistryApp>, CoreError> {
         let db = self.lock_db()?;
-        let builtin_ids: Vec<&str> = kaleidoscope_contract::builtin::BUILTIN_APPS
+        let builtin_ids: Vec<&str> = kaleidoscope_contract::builtin::BUILTIN_IDENTITIES
             .iter()
             .map(|app| app.id)
             .collect();
@@ -314,21 +347,12 @@ impl AppState {
                 })
             })
             .map_err(db_error)?;
-        let mut apps = rows.collect::<Result<Vec<_>, _>>().map_err(db_error)?;
-        apps.extend(kaleidoscope_contract::builtin::builtin_apps());
-        apps.sort_by(|a, b| a.app.id.cmp(&b.app.id));
-        Ok(apps)
+        rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
     }
 
     fn app(&self, app_id: &str, version: Option<u32>) -> Result<Option<RegistryApp>, CoreError> {
-        if let Some(app) = kaleidoscope_contract::builtin::builtin_app(app_id) {
-            return Ok(
-                if version.is_none_or(|version| version == app.version.version) {
-                    Some(app)
-                } else {
-                    None
-                },
-            );
+        if kaleidoscope_contract::builtin::is_builtin(app_id) {
+            return Ok(None);
         }
         let db = self.lock_db()?;
         let current: Option<(String, String, u32, String, String)> = db
@@ -392,16 +416,33 @@ impl AppState {
 
     fn list_apps(&self) -> Result<Vec<AppSummary>, CoreError> {
         self.current_apps().map(|apps| {
-            apps.into_iter()
+            let mut summaries: Vec<_> = apps
+                .into_iter()
                 .map(|row| AppSummary {
-                    builtin: kaleidoscope_contract::builtin::is_builtin(&row.app.id),
+                    builtin: false,
+                    definition_available: true,
                     id: row.app.id,
                     name: row.app.name,
                     description: row.version.definition.description,
                     current_version: row.app.current_version,
                     updated_at: row.app.updated_at,
                 })
-                .collect()
+                .collect();
+            summaries.extend(
+                kaleidoscope_contract::builtin::BUILTIN_IDENTITIES
+                    .iter()
+                    .map(|identity| AppSummary {
+                        id: identity.id.into(),
+                        name: identity.name.into(),
+                        description: None,
+                        current_version: identity.version,
+                        updated_at: identity.updated_at.into(),
+                        builtin: true,
+                        definition_available: false,
+                    }),
+            );
+            summaries.sort_by(|a, b| a.id.cmp(&b.id));
+            summaries
         })
     }
 
@@ -508,6 +549,8 @@ pub fn router(state: AppState) -> Router {
 mod app_storage;
 mod app_storage_context;
 mod app_storage_http;
+mod app_values;
+mod assets;
 mod backup;
 mod connection_relay;
 mod connections;
@@ -531,10 +574,16 @@ mod account_tests;
 #[cfg(test)]
 mod app_storage_tests;
 #[cfg(test)]
+mod app_values_tests;
+#[cfg(test)]
+mod asset_tests;
+#[cfg(test)]
 #[path = "layout_store_tests.rs"]
 mod layout_store_tests;
 #[cfg(test)]
 #[path = "layout_sync_tests.rs"]
 mod layout_sync_tests;
+#[cfg(test)]
+mod server_exclusion_tests;
 #[cfg(test)]
 mod tests;

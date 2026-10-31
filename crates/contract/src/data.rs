@@ -390,9 +390,18 @@ impl HttpMethod {
 /// 이미지와 소리 원본 하나. 식이 이 모양의 객체를 내면 블록이 `data.media`로 받아 그린다.
 /// `permission`의 모듈이 `connection`이면 `path`는 연결의 주소 아래 경로(`/`로 시작)이고 `query`를 붙인다.
 /// `files`면 `path`는 고른 폴더 기준 상대 경로다. `crop`은 그리는 방법이라 원본을 가르지 않는다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(untagged)]
 #[ts(export, export_to = "contract.ts")]
-pub struct MediaRef {
+pub enum MediaRef {
+    Resource(ResourceMediaRef),
+    Asset(AssetMediaRef),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ResourceMediaRef {
     pub permission: String,
     pub path: String,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -403,8 +412,21 @@ pub struct MediaRef {
     pub crop: Option<Crop>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AssetMediaRef {
+    pub asset: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub crop: Option<Crop>,
+}
+
 /// 이미지에서 보일 부분. 원본 가로와 세로에 대한 비율(0~1)이고 `x`, `y`는 왼쪽 위다.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export, export_to = "contract.ts")]
 pub struct Crop {
     pub x: f64,
@@ -415,7 +437,7 @@ pub struct Crop {
 
 /// 배지. 글만 쓰거나(`"진행 중"`) 색을 붙인다(`{ "text": "진행 중", "color": "#315da8" }`).
 /// 색은 `#rgb`나 `#rrggbb`이고, 쉘이 글자 대비를 맞춘다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(untagged)]
 #[ts(export, export_to = "contract.ts")]
 pub enum Badge {
@@ -426,6 +448,154 @@ pub enum Badge {
         #[ts(optional)]
         color: Option<String>,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum MetricTone {
+    Default,
+    Muted,
+    Positive,
+    Negative,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum MetricAlign {
+    Start,
+    End,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum MetricValue {
+    Number(f64),
+    Text(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct MetricItem {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub key: Option<String>,
+    pub label: String,
+    pub value: MetricValue,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub unit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub subtext: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub tone: Option<MetricTone>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub align: Option<MetricAlign>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub featured: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub badge: Option<Badge>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub image: Option<MediaRef>,
+}
+
+fn default_span() -> u32 {
+    1
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct KeypadButton {
+    pub key: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub sublabel: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    #[ts(optional, as = "Option<crate::ButtonVariant>")]
+    pub variant: crate::ButtonVariant,
+    #[serde(default = "default_span")]
+    #[ts(optional, as = "Option<u32>")]
+    pub span: u32,
+    #[serde(default)]
+    #[ts(optional, as = "Option<bool>")]
+    pub disabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub shortcut: Option<String>,
+}
+
+/// 키패드가 받는 현재 단추 목록을 검사한다.
+pub fn validate_keypad_buttons(
+    value: &JsonValue,
+    columns: u32,
+) -> Result<Vec<KeypadButton>, String> {
+    if !(1..=8).contains(&columns) {
+        return Err("keypad columns는 1부터 8까지입니다".into());
+    }
+    let normalized = match value {
+        serde_json::Value::Null => serde_json::json!([]),
+        serde_json::Value::Array(_) => value.clone(),
+        _ => serde_json::json!([value]),
+    };
+    let buttons: Vec<KeypadButton> = serde_json::from_value(normalized)
+        .map_err(|_| "keypad buttons 형식이 올바르지 않습니다".to_string())?;
+    let mut keys = std::collections::HashSet::new();
+    let mut shortcuts = std::collections::HashSet::new();
+    for button in &buttons {
+        if button.key.trim().is_empty() || !keys.insert(&button.key) {
+            return Err("keypad 단추 키가 비었거나 중복됩니다".into());
+        }
+        if button.span == 0 || button.span > columns {
+            return Err("keypad 단추 span이 열 범위를 벗어났습니다".into());
+        }
+        if button
+            .shortcut
+            .as_ref()
+            .is_some_and(|key| key.is_empty() || !shortcuts.insert(key))
+        {
+            return Err("keypad 단축키가 비었거나 중복됩니다".into());
+        }
+        if button
+            .icon
+            .as_ref()
+            .is_some_and(|icon| !ICON_NAMES.contains(&icon.as_str()))
+        {
+            return Err("keypad에 쉘에 없는 아이콘이 있습니다".into());
+        }
+    }
+    Ok(buttons)
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ChartSeries {
+    pub key: String,
+    pub name: String,
+    pub points: Vec<ChartPoint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ChartPoint {
+    pub x: String,
+    pub y: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub label: Option<String>,
 }
 
 /// `list` 항목.
@@ -569,8 +739,33 @@ pub struct FolderEntry {
 pub struct DataView {
     /// 원천 이름 → 상태.
     pub sources: BTreeMap<String, SourceStatus>,
+    /// 원천의 마지막 성공 시각과 신선도.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[ts(optional, as = "Option<BTreeMap<String, SourceMeta>>")]
+    pub source_meta: BTreeMap<String, SourceMeta>,
     /// 식 바인딩 자리(JSON Pointer) → 값. 리터럴과 상태 바인딩은 담지 않는다(화면이 스스로 푼다).
     pub values: BTreeMap<String, BindingValue>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum SourceState {
+    Idle,
+    Loading,
+    Ready,
+    Failed,
+    LoginRequired,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct SourceMeta {
+    pub state: SourceState,
+    pub updated_at: Option<String>,
+    pub updated_time: Option<String>,
+    pub stale: bool,
+    pub message: Option<String>,
 }
 
 /// 원천 하나의 상태. `state`로 가른다.
@@ -723,6 +918,21 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         };
     }
     match block {
+        Block::Metrics { items, .. } => bind!("items", items),
+        Block::Keypad {
+            buttons, on_press, ..
+        } => {
+            bind!("buttons", buttons);
+            act!("on_press", on_press);
+        }
+        Block::Chart {
+            series, on_select, ..
+        } => {
+            bind!("series", series);
+            if let Some(on_select) = on_select {
+                act!("on_select", on_select);
+            }
+        }
         Block::Section { title, meta, .. } => {
             bind!("title", title);
             if let Some(meta) = meta {
@@ -946,6 +1156,11 @@ pub fn data_refs(expr: &str) -> Vec<String> {
 /// 식이 `$storage.항목_id`로 읽는 저장 항목 id들(겹치지 않게, 처음 나온 순서).
 pub fn storage_refs(expr: &str) -> Vec<String> {
     refs_after(expr, "$storage.")
+}
+
+/// 식이 읽는 원천 메타데이터의 이름.
+pub fn data_meta_refs(expr: &str) -> Vec<String> {
+    refs_after(expr, "$data_meta.")
 }
 
 /// `$storage_meta.` 뒤에서 읽는 필드들. 현재 허용되는 필드는 `bucket_id`뿐이다.

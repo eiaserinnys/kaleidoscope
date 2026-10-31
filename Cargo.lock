@@ -2260,6 +2260,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "ts-rs",
+ "url",
 ]
 
 [[package]]
@@ -2291,11 +2292,17 @@ dependencies = [
 name = "kaleidoscope-data"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "image",
  "jsonata-core",
  "kaleidoscope-contract",
+ "quick-xml",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2",
  "similar",
+ "url",
 ]
 
 [[package]]

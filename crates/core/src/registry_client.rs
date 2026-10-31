@@ -24,7 +24,59 @@ pub(crate) enum RegistryError {
     Failure(String),
 }
 
+pub(crate) struct AssetDownload {
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) sha256: String,
+    pub(crate) mime: String,
+}
+
 pub(crate) trait RegistryClient: Send + Sync + 'static {
+    fn values_list(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+    ) -> Result<kaleidoscope_contract::app_storage::AppValueList, RegistryError> {
+        Err(RegistryError::NotFound)
+    }
+    fn values_get(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _key: &str,
+    ) -> Result<kaleidoscope_contract::app_storage::AppValueRead, RegistryError> {
+        Err(RegistryError::NotFound)
+    }
+    fn values_write(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _key: &str,
+        _request: &kaleidoscope_contract::app_storage::AppValueWrite,
+    ) -> Result<StorageWriteReply, RegistryError> {
+        Err(RegistryError::NotFound)
+    }
+    fn values_reset(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _key: &str,
+        _request: &StorageResetRequest,
+    ) -> Result<StorageResetReply, RegistryError> {
+        Err(RegistryError::NotFound)
+    }
+    fn asset_get(
+        &self,
+        _url: &str,
+        _token: &str,
+        _id: &str,
+        _version: u32,
+    ) -> Result<AssetDownload, RegistryError> {
+        Err(RegistryError::Failure("asset unavailable".into()))
+    }
     fn storage_list(
         &self,
         _url: &str,
@@ -171,6 +223,153 @@ impl HttpRegistryClient {
 }
 
 impl RegistryClient for HttpRegistryClient {
+    fn values_list(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+    ) -> Result<kaleidoscope_contract::app_storage::AppValueList, RegistryError> {
+        let response = self
+            .requests()?
+            .get(format!(
+                "{}/api/device/app-values/{app}",
+                url.trim_end_matches('/')
+            ))
+            .bearer_auth(token)
+            .send()
+            .map_err(|e| RegistryError::Failure(e.to_string()))?;
+        if response.status().as_u16() == 404 {
+            return Err(RegistryError::NotFound);
+        }
+        storage_success_json(response)
+    }
+    fn values_get(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        key: &str,
+    ) -> Result<kaleidoscope_contract::app_storage::AppValueRead, RegistryError> {
+        let response = self
+            .requests()?
+            .get(format!(
+                "{}/api/device/app-values/{app}/{key}",
+                url.trim_end_matches('/')
+            ))
+            .bearer_auth(token)
+            .send()
+            .map_err(|e| RegistryError::Failure(e.to_string()))?;
+        if response.status().as_u16() == 404 {
+            return Err(RegistryError::NotFound);
+        }
+        storage_success_json(response)
+    }
+    fn values_write(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        key: &str,
+        request: &kaleidoscope_contract::app_storage::AppValueWrite,
+    ) -> Result<StorageWriteReply, RegistryError> {
+        let response = self
+            .requests()?
+            .put(format!(
+                "{}/api/device/app-values/{app}/{key}",
+                url.trim_end_matches('/')
+            ))
+            .bearer_auth(token)
+            .json(request)
+            .send()
+            .map_err(|e| RegistryError::Failure(e.to_string()))?;
+        if response.status().as_u16() == 404 {
+            return Err(RegistryError::NotFound);
+        }
+        storage_success_json(response)
+    }
+    fn values_reset(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        key: &str,
+        request: &StorageResetRequest,
+    ) -> Result<StorageResetReply, RegistryError> {
+        let response = self
+            .requests()?
+            .delete(format!(
+                "{}/api/device/app-values/{app}/{key}",
+                url.trim_end_matches('/')
+            ))
+            .bearer_auth(token)
+            .json(request)
+            .send()
+            .map_err(|e| RegistryError::Failure(e.to_string()))?;
+        if response.status().as_u16() == 404 {
+            return Err(RegistryError::NotFound);
+        }
+        storage_success_json(response)
+    }
+    fn asset_get(
+        &self,
+        url: &str,
+        token: &str,
+        id: &str,
+        version: u32,
+    ) -> Result<AssetDownload, RegistryError> {
+        use sha2::{Digest, Sha256};
+        use std::io::Read;
+        let address = format!(
+            "{}/api/device/assets/{}/{}",
+            url.trim_end_matches('/'),
+            id,
+            version
+        );
+        let mut response = self
+            .requests()?
+            .get(address)
+            .bearer_auth(token)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        if !response.status().is_success() {
+            return Err(RegistryError::Failure(format!(
+                "HTTP {}",
+                response.status()
+            )));
+        }
+        let hash = response
+            .headers()
+            .get(reqwest::header::ETAG)
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.trim_matches('"').to_owned())
+            .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            .ok_or_else(|| RegistryError::Failure("자산 해시가 없습니다".into()))?;
+        let mime = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .to_owned();
+        let size = response.content_length();
+        let mut bytes = Vec::new();
+        (&mut response)
+            .take(kaleidoscope_contract::data::MEDIA_MAX_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        if bytes.len() as u64 > kaleidoscope_contract::data::MEDIA_MAX_BYTES
+            || size.is_some_and(|size| size != bytes.len() as u64)
+            || format!("{:x}", Sha256::digest(&bytes)) != hash
+        {
+            return Err(RegistryError::Failure(
+                "자산 크기 또는 해시가 올바르지 않습니다".into(),
+            ));
+        }
+        Ok(AssetDownload {
+            bytes,
+            sha256: hash,
+            mime,
+        })
+    }
     fn storage_list(
         &self,
         url: &str,

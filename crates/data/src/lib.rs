@@ -1,5 +1,7 @@
 //! 앱 정의의 원천 계획, 식 계산과 동작 단계. 입출력은 호출자가 맡는다.
 use std::collections::{BTreeMap, BTreeSet};
+pub mod asset_validation;
+pub mod public_http;
 pub mod share;
 
 use jsonata_core::{
@@ -30,6 +32,7 @@ pub struct CompiledApp {
 pub struct BindingDependencies {
     pub pointer: String,
     pub data: Vec<String>,
+    pub data_meta: Vec<String>,
     pub storage: Vec<String>,
     pub storage_meta: Vec<String>,
 }
@@ -59,6 +62,7 @@ pub enum SourcePlan {
 pub struct Env<'a> {
     pub state: &'a BTreeMap<String, Value>,
     pub data: &'a BTreeMap<String, Value>,
+    pub data_meta: &'a BTreeMap<String, Value>,
     pub storage: &'a BTreeMap<String, Value>,
     pub storage_meta: &'a BTreeMap<String, Value>,
     pub event: &'a Value,
@@ -100,6 +104,7 @@ impl CompiledApp {
                     Some(BindingDependencies {
                         pointer,
                         data: data::data_refs(&expr.expr),
+                        data_meta: data::data_meta_refs(&expr.expr),
                         storage: data::storage_refs(&expr.expr),
                         storage_meta: data::storage_meta_refs(&expr.expr),
                     })
@@ -227,7 +232,8 @@ impl CompiledApp {
             env.storage_meta,
             Some(env.event),
             Some(env.item),
-        );
+        )
+        .with_data_meta(env.data_meta);
         self.binding(binding, pointer, env.state, &vars)
     }
 
@@ -261,7 +267,30 @@ impl CompiledApp {
         statuses: &BTreeMap<String, SourceStatus>,
         selected: Option<&BTreeSet<String>>,
     ) -> BTreeMap<String, BindingValue> {
-        let vars = Variables::new(state, data, storage, storage_meta, None, None);
+        self.evaluate_with_data_meta(
+            state,
+            data,
+            storage,
+            storage_meta,
+            &BTreeMap::new(),
+            statuses,
+            selected,
+        )
+    }
+
+    /// 원천 메타데이터를 포함하여 지정한 바인딩을 계산한다.
+    pub fn evaluate_with_data_meta(
+        &self,
+        state: &BTreeMap<String, Value>,
+        data: &BTreeMap<String, Value>,
+        storage: &BTreeMap<String, Value>,
+        storage_meta: &BTreeMap<String, Value>,
+        data_meta: &BTreeMap<String, Value>,
+        statuses: &BTreeMap<String, SourceStatus>,
+        selected: Option<&BTreeSet<String>>,
+    ) -> BTreeMap<String, BindingValue> {
+        let vars = Variables::new(state, data, storage, storage_meta, None, None)
+            .with_data_meta(data_meta);
         self.bindings
             .iter()
             .filter(|binding| selected.is_none_or(|selected| selected.contains(&binding.pointer)))
@@ -326,7 +355,8 @@ impl CompiledApp {
             env.storage_meta,
             Some(env.event),
             Some(env.item),
-        );
+        )
+        .with_data_meta(env.data_meta);
         match actions {
             Actions::One(set) if index == 0 => Ok(Step::SetState {
                 key: set.set_state.clone(),
@@ -452,6 +482,7 @@ impl CompiledApp {
         let mut context = Context::new();
         context.bind("state".into(), vars.state.clone());
         context.bind("data".into(), vars.data.clone());
+        context.bind("data_meta".into(), vars.data_meta.clone());
         context.bind("storage".into(), vars.storage.clone());
         context.bind("storage_meta".into(), vars.storage_meta.clone());
         if let Some(event) = &vars.event {
@@ -486,6 +517,7 @@ impl CompiledApp {
 struct Variables {
     state: JValue,
     data: JValue,
+    data_meta: JValue,
     storage: JValue,
     storage_meta: JValue,
     event: Option<JValue>,
@@ -503,6 +535,7 @@ impl Variables {
         Self {
             state: JValue::from(serde_json::to_value(state).expect("JSON 상태")),
             data: JValue::from(serde_json::to_value(data).expect("JSON 원천")),
+            data_meta: JValue::from(serde_json::json!({})),
             storage: JValue::from(serde_json::to_value(storage).expect("JSON 저장소")),
             storage_meta: JValue::from(
                 serde_json::to_value(storage_meta).expect("JSON 저장소 메타데이터"),
@@ -510,6 +543,11 @@ impl Variables {
             event: event.cloned().map(JValue::from),
             item: item.cloned().map(JValue::from),
         }
+    }
+
+    fn with_data_meta(mut self, meta: &BTreeMap<String, Value>) -> Self {
+        self.data_meta = JValue::from(serde_json::to_value(meta).expect("JSON 원천 메타데이터"));
+        self
     }
 }
 fn string_path(value: Value) -> Result<String, String> {

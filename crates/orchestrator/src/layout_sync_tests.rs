@@ -8,7 +8,7 @@ use kaleidoscope_contract::{
 use std::collections::BTreeMap;
 use tower::ServiceExt;
 
-const EDITOR: &str = include_str!("../../../apps/md-editor.json");
+const EDITOR: &str = include_str!("fixtures/editor-app.json");
 const LEGACY_APP: &str = include_str!("fixtures/simple-app.json");
 
 fn workspace(id: &str, name: &str) -> Workspace {
@@ -254,7 +254,12 @@ async fn latest_sync_device_gets_open_while_legacy_targeting_remains() {
         Some("Latest PC")
     );
     assert_eq!(
-        state.open_sent_to(target.as_ref(), Some("w"), &app.version.definition.requires),
+        state.open_sent_to(
+            target.as_ref(),
+            Some("w"),
+            &app.version.definition.requires,
+            &app.version.definition.assets
+        ),
         2
     );
     let broadcast = events.try_recv().unwrap();

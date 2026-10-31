@@ -1,94 +1,98 @@
-//! 쉘에 실리는 기본 앱. 정의를 바꾸면 같은 PR에서 판을 올리고 날짜를 고친다.
-//! 새 앱은 apps/에 정의 파일을 넣고 표에 한 줄을 더한다.
-//! 기본 앱 정의와 저장소 선언은 계약 검사 규칙을 따른다.
+//! 쉘에 포함되는 기본 앱과 자산의 식별 및 호환 정보.
 
-use crate::{registry::RegistryApp, validate::parse_app_definition, App, AppVersion};
-
-pub struct BuiltinApp {
+pub struct BuiltinIdentity {
     pub id: &'static str,
+    pub name: &'static str,
     pub version: u32,
     pub updated_at: &'static str,
-    pub definition_json: &'static str,
+    pub blocks: u32,
+    pub modules: &'static [(&'static str, u32)],
+    pub assets: &'static [(&'static str, u32)],
 }
 
-pub const BUILTIN_APPS: &[BuiltinApp] = &[
-    BuiltinApp {
+pub const BUNDLED_ASSET_KEYS: &[(&str, u32)] = &[
+    ("builtin-weather-clear", 1),
+    ("builtin-weather-partly-cloudy", 1),
+    ("builtin-weather-cloudy", 1),
+    ("builtin-weather-fog", 1),
+    ("builtin-weather-rain", 1),
+    ("builtin-weather-showers", 1),
+    ("builtin-weather-snow", 1),
+    ("builtin-weather-thunderstorm", 1),
+];
+
+pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
+    BuiltinIdentity {
         id: "agent",
+        name: "에이전트",
         version: 1,
         updated_at: "2026-10-30T00:00:00Z",
-        definition_json: include_str!("../../../apps/agent.json"),
+        blocks: 8,
+        modules: &[("files", 1), ("local_agent", 1), ("storage", 1)],
+        assets: &[],
     },
-    BuiltinApp {
+    BuiltinIdentity {
         id: "explorer",
+        name: "탐색기",
         version: 3,
         updated_at: "2026-10-30T00:00:00Z",
-        definition_json: include_str!("../../../apps/explorer.json"),
+        blocks: 5,
+        modules: &[("files", 2)],
+        assets: &[],
     },
-    BuiltinApp {
+    BuiltinIdentity {
         id: "md-editor",
+        name: "마크다운 편집기",
         version: 2,
         updated_at: "2026-10-30T00:00:00Z",
-        definition_json: include_str!("../../../apps/md-editor.json"),
+        blocks: 3,
+        modules: &[("files", 1)],
+        assets: &[],
     },
-    BuiltinApp {
+    BuiltinIdentity {
         id: "md-viewer",
+        name: "마크다운 보기",
         version: 1,
         updated_at: "2026-10-30T00:00:00Z",
-        definition_json: include_str!("../../../apps/md-viewer.json"),
+        blocks: 1,
+        modules: &[("files", 1)],
+        assets: &[],
     },
-    BuiltinApp {
+    BuiltinIdentity {
         id: "web-browser",
+        name: "웹 브라우저",
         version: 1,
         updated_at: "2026-10-30T00:00:00Z",
-        definition_json: include_str!("../../../apps/web-browser.json"),
+        blocks: 3,
+        modules: &[("web", 1)],
+        assets: &[],
+    },
+    BuiltinIdentity {
+        id: "calculator",
+        name: "계산기",
+        version: 1,
+        updated_at: "2026-10-31T00:00:00Z",
+        blocks: 9,
+        modules: &[],
+        assets: &[],
+    },
+    BuiltinIdentity {
+        id: "weather",
+        name: "날씨",
+        version: 1,
+        updated_at: "2026-10-31T00:00:00Z",
+        blocks: 9,
+        modules: &[("assets", 1), ("http", 1)],
+        assets: BUNDLED_ASSET_KEYS,
     },
 ];
 
-pub fn builtin_apps() -> Vec<RegistryApp> {
-    BUILTIN_APPS
-        .iter()
-        .map(|builtin| {
-            let definition = parse_app_definition(builtin.definition_json)
-                .expect("기본 앱 정의가 유효해야 합니다");
-            let date = builtin.updated_at.to_string();
-            RegistryApp {
-                app: App {
-                    id: builtin.id.into(),
-                    name: definition.name.clone(),
-                    current_version: builtin.version,
-                    created_at: date.clone(),
-                    updated_at: date.clone(),
-                },
-                version: AppVersion {
-                    app_id: builtin.id.into(),
-                    version: builtin.version,
-                    definition,
-                    created_at: date,
-                },
-            }
-        })
-        .collect()
+pub fn builtin_identity(id: &str) -> Option<&'static BuiltinIdentity> {
+    BUILTIN_IDENTITIES.iter().find(|app| app.id == id)
 }
-
-pub fn builtin_app(id: &str) -> Option<RegistryApp> {
-    builtin_apps().into_iter().find(|app| app.app.id == id)
-}
-
 pub fn is_builtin(id: &str) -> bool {
-    BUILTIN_APPS.iter().any(|app| app.id == id)
+    builtin_identity(id).is_some()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn builtin_table_has_valid_unique_supported_definitions() {
-        let mut ids = std::collections::HashSet::new();
-        for app in BUILTIN_APPS {
-            assert!(ids.insert(app.id));
-            let definition = parse_app_definition(app.definition_json).unwrap();
-            assert_eq!(definition.id, app.id);
-            assert!(crate::Supported::current().renders(&definition.requires));
-        }
-    }
+pub fn is_bundled_asset(id: &str, version: u32) -> bool {
+    BUNDLED_ASSET_KEYS.contains(&(id, version))
 }

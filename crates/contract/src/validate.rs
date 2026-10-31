@@ -112,6 +112,19 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
         details.push("앱 이름이 비어 있습니다".into());
     }
 
+    if !definition.assets.is_empty() {
+        validate_module_version("assets", 1, definition, &mut details, "/assets");
+        let mut ids = HashSet::new();
+        for asset in &definition.assets {
+            if !valid_id(&asset.id) || asset.version == 0 || !ids.insert(&asset.id) {
+                details.push(format!(
+                    "자산 id 또는 판이 올바르지 않거나 중복됩니다: {}",
+                    asset.id
+                ));
+            }
+        }
+    }
+
     let mut permission_ids = HashSet::new();
     for permission in &definition.permissions {
         if !valid_id(permission.id()) {
@@ -157,6 +170,23 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
             if !valid_id(connection) {
                 details.push(format!(
                     "권한 {}의 연결 이름은 소문자, 숫자, - 1~64자여야 합니다: {connection}",
+                    permission.id()
+                ));
+            }
+        }
+        if let PermissionDecl::Http {
+            base_url, paths, ..
+        } = permission
+        {
+            if !valid_https_origin(base_url) {
+                details.push(format!(
+                    "권한 {}의 주소는 공개 HTTPS origin이어야 합니다",
+                    permission.id()
+                ));
+            }
+            if paths.is_empty() || paths.iter().any(|path| !valid_public_http_path(path)) {
+                details.push(format!(
+                    "권한 {}의 경로가 올바르지 않습니다",
                     permission.id()
                 ));
             }
@@ -264,6 +294,14 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
             ));
         }
         let module = match source {
+            SourceDecl::Request { .. }
+                if matches!(
+                    find_permission(definition, source.permission()),
+                    Some(PermissionDecl::Http { .. })
+                ) =>
+            {
+                "http"
+            }
             SourceDecl::Request { .. } => "connection",
             SourceDecl::File { .. } | SourceDecl::Folder { .. } => "files",
         };
@@ -285,6 +323,15 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
                         details.push(format!(
                             "{at}/path: 연결 경로는 /로 시작하고 .. 이나 \\ 없이 연결 주소 아래를 가리켜야 합니다: {path}"
                         ));
+                    }
+                    if let Some(PermissionDecl::Http { paths, .. }) =
+                        find_permission(definition, source.permission())
+                    {
+                        if !paths.contains(path) {
+                            details.push(format!(
+                                "{at}/path: 공개 HTTPS 권한에 선언되지 않은 경로입니다"
+                            ));
+                        }
                     }
                 }
                 for (key, value) in query {
@@ -537,6 +584,13 @@ fn validate_exprs(definition: &AppDefinition, details: &mut Vec<String>) {
                 ));
             }
         }
+        for name in data::data_meta_refs(expr) {
+            if !definition.sources.contains_key(&name) {
+                details.push(format!(
+                    "{pointer}: 식이 없는 원천 메타데이터를 읽습니다: $data_meta.{name}"
+                ));
+            }
+        }
         for entry in data::storage_refs(expr) {
             if definition
                 .storage
@@ -556,7 +610,7 @@ fn validate_exprs(definition: &AppDefinition, details: &mut Vec<String>) {
             }
         }
         if pointer.starts_with("/sources/")
-            && ["$data", "$event", "$item"]
+            && ["$data", "$data_meta", "$event", "$item"]
                 .iter()
                 .any(|var| uses_var(expr, var))
         {
@@ -659,9 +713,17 @@ fn validate_actions(
                     }
                     Action::Call(call) => {
                         let call = &call.call;
+                        let module = if matches!(
+                            find_permission(definition, &call.permission),
+                            Some(PermissionDecl::Http { .. })
+                        ) {
+                            "http"
+                        } else {
+                            "connection"
+                        };
                         validate_permission_module(
                             &call.permission,
-                            "connection",
+                            module,
                             definition,
                             details,
                             &at,
@@ -675,6 +737,11 @@ fn validate_actions(
                                 "{at}: {} 부르기는 권한 {}가 readwrite여야 합니다",
                                 call.method.as_str(),
                                 call.permission
+                            ));
+                        }
+                        if module == "http" && call.body.is_some() {
+                            details.push(format!(
+                                "{at}: 공개 HTTPS 요청에는 본문을 사용할 수 없습니다"
                             ));
                         }
                         validate_binding_shape(
@@ -726,6 +793,41 @@ pub fn valid_web_url(url: &str) -> bool {
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"));
     rest.is_some_and(|rest| !rest.is_empty() && !url.chars().any(char::is_whitespace))
+}
+
+/// 공개 HTTPS 요청에 쓸 origin만 허용한다.
+pub fn valid_https_origin(value: &str) -> bool {
+    let Ok(url) = url::Url::parse(value) else {
+        return false;
+    };
+    let Some(url::Host::Domain(host)) = url.host() else {
+        return false;
+    };
+    let authority_and_path = value.split_once("://").map(|(_, rest)| rest).unwrap_or("");
+    let raw_path = authority_and_path
+        .find('/')
+        .map(|index| &authority_and_path[index..])
+        .unwrap_or("");
+    url.scheme() == "https"
+        && !host.eq_ignore_ascii_case("localhost")
+        && !host.to_ascii_lowercase().ends_with(".localhost")
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.port().is_none()
+        && url.path() == "/"
+        && (raw_path.is_empty() || raw_path == "/")
+        && url.query().is_none()
+        && url.fragment().is_none()
+        && !value.chars().any(char::is_whitespace)
+}
+
+/// 공개 요청에서는 URL 인코딩으로 경로 구분자나 점을 우회할 수 없다.
+pub fn valid_public_http_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    valid_request_path(path)
+        && !["%25", "%2e", "%2f", "%5c"]
+            .iter()
+            .any(|encoded| lower.contains(encoded))
 }
 
 /// 연결 경로의 규칙(정의에 적은 것, 식이 낸 것, 코어와 서버가 실행 때 보는 것 모두).
@@ -780,6 +882,41 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         ));
     }
     match block {
+        Block::Metrics { items, columns } => {
+            if columns.is_some_and(|columns| !(1..=8).contains(&columns)) {
+                details.push(format!("{at}: metrics columns는 1부터 8까지입니다"));
+            }
+            if let data::Binding::Literal(value) = items {
+                match serde_json::from_value::<Vec<data::MetricItem>>(value.clone()) {
+                    Ok(items) => {
+                        for item in items {
+                            if let Some(media) = item.image {
+                                validate_media_asset(&media, definition, details, at);
+                            }
+                        }
+                    }
+                    Err(_) => details.push(format!("{at}: metrics items 형식이 올바르지 않습니다")),
+                }
+            }
+        }
+        Block::Keypad {
+            columns, buttons, ..
+        } => {
+            if !(1..=8).contains(columns) {
+                details.push(format!("{at}: keypad columns는 1부터 8까지입니다"));
+            } else if let data::Binding::Literal(value) = buttons {
+                if let Err(error) = data::validate_keypad_buttons(value, *columns) {
+                    details.push(format!("{at}: {error}"));
+                }
+            }
+        }
+        Block::Chart { series, .. } => {
+            if let data::Binding::Literal(value) = series {
+                if serde_json::from_value::<Vec<data::ChartSeries>>(value.clone()).is_err() {
+                    details.push(format!("{at}: chart series 형식이 올바르지 않습니다"));
+                }
+            }
+        }
         Block::Split {
             sizes, children, ..
         } => {
@@ -1038,7 +1175,39 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 "{at}: code_view는 value와 file 가운데 꼭 하나를 씁니다"
             )),
         },
-        Block::Section { .. } | Block::Text { .. } | Block::Image { .. } | Block::Media { .. } => {}
+        Block::Image { src, .. } | Block::Media { src, .. } => {
+            if let Binding::Literal(value) = src {
+                if !value.is_null() {
+                    match serde_json::from_value::<data::MediaRef>(value.clone()) {
+                        Ok(media) => validate_media_asset(&media, definition, details, at),
+                        Err(_) => {
+                            details.push(format!("{at}: 미디어 참조 형식이 올바르지 않습니다"))
+                        }
+                    }
+                }
+            }
+        }
+        Block::Section { .. } | Block::Text { .. } => {}
+    }
+}
+
+fn validate_media_asset(
+    media: &data::MediaRef,
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+    at: &str,
+) {
+    if let data::MediaRef::Asset(asset) = media {
+        if !definition
+            .assets
+            .iter()
+            .any(|decl| decl.id == asset.asset && asset.version.is_none_or(|v| v == decl.version))
+        {
+            details.push(format!(
+                "{at}: 선언되지 않은 자산 또는 판입니다: {}",
+                asset.asset
+            ));
+        }
     }
 }
 

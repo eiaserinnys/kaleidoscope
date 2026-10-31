@@ -21,6 +21,7 @@ export class WindowData {
   readonly mediaCache = new Map<string, Promise<string>>();
   private values: DataView["values"] = {};
   private sources: DataView["sources"] = emptySources;
+  private sourceMeta: NonNullable<DataView["source_meta"]> = {};
   private listeners = new Map<string, Set<() => void>>();
   private sourceListeners = new Set<() => void>();
   private noticeListeners = new Set<() => void>();
@@ -43,6 +44,7 @@ export class WindowData {
   getValue = (pointer: string) => this.values[pointer] ?? loading;
   subscribeSources = (listener: () => void) => { this.sourceListeners.add(listener); return () => this.sourceListeners.delete(listener); };
   getSources = () => this.sources;
+  getSourceMeta = () => this.sourceMeta;
   subscribeNotice = (listener: () => void) => { this.noticeListeners.add(listener); return () => this.noticeListeners.delete(listener); };
   getNotice = () => this.notice;
   setNotice = (message: string | null) => { this.notice = message; this.noticeListeners.forEach((listener) => listener()); };
@@ -53,8 +55,9 @@ export class WindowData {
       this.values[pointer] = value;
       this.listeners.get(pointer)?.forEach((listener) => listener());
     }
-    if (Object.keys(view.sources).length) {
+    if (Object.keys(view.sources).length || Object.keys(view.source_meta ?? {}).length) {
       this.sources = { ...this.sources, ...view.sources };
+      this.sourceMeta = { ...this.sourceMeta, ...view.source_meta };
       this.sourceListeners.forEach((listener) => listener());
     }
   }
@@ -124,6 +127,10 @@ export function useWindowData(): WindowData {
   const value = useContext(DataContext);
   if (!value) throw new Error("창 데이터가 연결되지 않았습니다");
   return value.data;
+}
+
+export function useOptionalWindowData(): WindowData | null {
+  return useContext(DataContext)?.data ?? null;
 }
 
 export function useBinding(pointer: string, binding: Binding): BindingValue {

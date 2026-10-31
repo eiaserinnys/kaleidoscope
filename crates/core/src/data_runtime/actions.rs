@@ -13,6 +13,57 @@ pub(crate) fn act(
     event: Value,
     item: Value,
 ) -> Result<CoreReply, CoreError> {
+    let item = {
+        let windows = inner.data_runtimes.windows.lock().unwrap();
+        let runtime = windows
+            .get(window_id)
+            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        let mut keypad = None;
+        data::walk_blocks(
+            &runtime.definition.ui,
+            "/ui",
+            &mut |block_pointer, block| {
+                if format!("{block_pointer}/on_press") == pointer {
+                    if let kaleidoscope_contract::Block::Keypad {
+                        columns, buttons, ..
+                    } = block
+                    {
+                        keypad = Some((
+                            *columns,
+                            buttons.clone(),
+                            format!("{block_pointer}/buttons"),
+                        ));
+                    }
+                }
+            },
+        );
+        if let Some((columns, binding, binding_pointer)) = keypad {
+            let value = match binding {
+                data::Binding::Literal(value) => value,
+                data::Binding::State(reference) => runtime
+                    .state
+                    .get(&reference.state)
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                data::Binding::Expr(_) => match runtime.last.values.get(&binding_pointer) {
+                    Some(BindingValue::Ready { value }) => value.clone(),
+                    _ => return Err(error::make(ErrorCode::InvalidRequest)),
+                },
+            };
+            let buttons = data::validate_keypad_buttons(&value, columns)
+                .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))?;
+            let key = event
+                .as_str()
+                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+            let button = buttons
+                .into_iter()
+                .find(|button| button.key == key && !button.disabled)
+                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+            serde_json::to_value(button).map_err(|_| error::make(ErrorCode::InvalidRequest))?
+        } else {
+            item
+        }
+    };
     let len = {
         let windows = inner.data_runtimes.windows.lock().unwrap();
         windows
@@ -38,6 +89,7 @@ pub(crate) fn act(
                     &Env {
                         state: &runtime.state,
                         data: &runtime.data,
+                        data_meta: &runtime.data_meta_values(),
                         storage: &storage,
                         storage_meta: &storage_meta,
                         event: &event,

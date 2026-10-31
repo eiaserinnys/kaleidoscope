@@ -1,0 +1,297 @@
+{
+  "id": "weather",
+  "name": "날씨",
+  "description": "현재 날씨와 7일 예보",
+  "requires": {
+    "blocks": 9,
+    "modules": {
+      "http": 1,
+      "assets": 1
+    }
+  },
+  "assets": [
+    {
+      "id": "builtin-weather-clear",
+      "version": 1
+    },
+    {
+      "id": "builtin-weather-partly-cloudy",
+      "version": 1
+    },
+    {
+      "id": "builtin-weather-cloudy",
+      "version": 1
+    },
+    {
+      "id": "builtin-weather-fog",
+      "version": 1
+    },
+    {
+      "id": "builtin-weather-rain",
+      "version": 1
+    },
+    {
+      "id": "builtin-weather-showers",
+      "version": 1
+    },
+    {
+      "id": "builtin-weather-snow",
+      "version": 1
+    },
+    {
+      "id": "builtin-weather-thunderstorm",
+      "version": 1
+    }
+  ],
+  "permissions": [
+    {
+      "module": "http",
+      "id": "geocoding",
+      "label": "장소 검색",
+      "base_url": "https://geocoding-api.open-meteo.com",
+      "paths": [
+        "/v1/search"
+      ]
+    },
+    {
+      "module": "http",
+      "id": "forecast",
+      "label": "예보",
+      "base_url": "https://api.open-meteo.com",
+      "paths": [
+        "/v1/forecast"
+      ]
+    }
+  ],
+  "state": {
+    "q": "",
+    "search": "",
+    "place": {
+      "name": "서울",
+      "latitude": 37.5665,
+      "longitude": 126.978
+    },
+    "city": "서울"
+  },
+  "sources": {
+    "places": {
+      "kind": "request",
+      "permission": "geocoding",
+      "path": {
+        "expr": "$length($trim($state.search)) > 0 ? '/v1/search' : null"
+      },
+      "query": {
+        "name": {
+          "state": "search"
+        },
+        "count": 8,
+        "language": "ko",
+        "format": "json"
+      }
+    },
+    "forecast": {
+      "kind": "request",
+      "permission": "forecast",
+      "path": "/v1/forecast",
+      "query": {
+        "latitude": {
+          "expr": "$state.place.latitude"
+        },
+        "longitude": {
+          "expr": "$state.place.longitude"
+        },
+        "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation",
+        "hourly": "temperature_2m,precipitation_probability,weather_code",
+        "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+        "timezone": "auto",
+        "forecast_days": 7
+      },
+      "refresh_secs": 1800
+    }
+  },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "fill": 1,
+    "children": [
+      {
+        "type": "toolbar",
+        "start": [
+          {
+            "type": "select",
+            "value": {
+              "state": "city"
+            },
+            "options": [
+              "서울",
+              "부산",
+              "대구",
+              "인천",
+              "광주",
+              "대전",
+              "울산",
+              "제주"
+            ],
+            "on_change": [
+              {
+                "set_state": "city"
+              },
+              {
+                "set_state": "place",
+                "value": {
+                  "expr": "([{'name':'서울','latitude':37.5665,'longitude':126.978},{'name':'부산','latitude':35.1796,'longitude':129.0756},{'name':'대구','latitude':35.8714,'longitude':128.6014},{'name':'인천','latitude':37.4563,'longitude':126.7052},{'name':'광주','latitude':35.1595,'longitude':126.8526},{'name':'대전','latitude':36.3504,'longitude':127.3845},{'name':'울산','latitude':35.5384,'longitude':129.3114},{'name':'제주','latitude':33.4996,'longitude':126.5312}])[name=$event]"
+                }
+              },
+              {
+                "set_state": "q",
+                "value": ""
+              },
+              {
+                "set_state": "search",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "type": "input",
+            "kind": "search",
+            "placeholder": "도시 검색",
+            "value": {
+              "state": "q"
+            },
+            "on_change": {
+              "set_state": "q"
+            },
+            "on_submit": [
+              {
+                "set_state": "search",
+                "value": {
+                  "expr": "$trim($state.q)"
+                }
+              }
+            ]
+          }
+        ],
+        "end": [
+          {
+            "type": "button",
+            "label": "검색",
+            "icon": "search",
+            "on_click": [
+              {
+                "set_state": "search",
+                "value": {
+                  "expr": "$trim($state.q)"
+                }
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "style": "meta",
+            "value": {
+              "expr": "$data_meta.forecast.updated_time ? $data_meta.forecast.updated_time & ($data_meta.forecast.stale ? ' 지연' : '') : ''"
+            }
+          },
+          {
+            "type": "button",
+            "label": "다시 받기",
+            "icon": "refresh-cw",
+            "icon_only": true,
+            "on_click": [
+              {
+                "refresh": [
+                  "forecast"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "stack",
+        "direction": "column",
+        "fill": 1,
+        "children": [
+          {
+            "type": "list",
+            "items": {
+              "expr": "$state.search = '' ? null : [$data.places.results.{'key':$string(id),'title':name,'subtitle':country & ' ' & admin1}]"
+            },
+            "on_select": [
+              {
+                "set_state": "place",
+                "value": {
+                  "expr": "($p := $data.places.results[id=$number($event)]; {'name':$p.name,'latitude':$p.latitude,'longitude':$p.longitude})"
+                }
+              },
+              {
+                "set_state": "q",
+                "value": ""
+              },
+              {
+                "set_state": "search",
+                "value": ""
+              },
+              {
+                "set_state": "city",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "type": "stack",
+            "direction": "column",
+            "children": [
+              {
+                "type": "metrics",
+                "items": {
+                  "expr": "($c := $data.forecast.current; $code := $c.weather_code; $icon := 'builtin-weather-' & ($code=0 ? 'clear' : $code in [1,2] ? 'partly-cloudy' : $code=3 ? 'cloudy' : $code in [45,48] ? 'fog' : $code in [71,73,75,77,85,86] ? 'snow' : $code in [80,81,82] ? 'showers' : $code in [95,96,99] ? 'thunderstorm' : 'rain'); [{'key':'temp','label':$state.place.name,'value':$c.temperature_2m,'unit':'°C','featured':true,'subtext':($code=0 ? '맑음' : $code in [1,2] ? '구름 조금' : $code=3 ? '흐림' : $code in [45,48] ? '안개' : $code in [71,73,75,77,85,86] ? '눈' : $code in [80,81,82] ? '소나기' : $code in [95,96,99] ? '뇌우' : '비') & ' 최고 ' & $string($data.forecast.daily.temperature_2m_max[0]) & '° / 최저 ' & $string($data.forecast.daily.temperature_2m_min[0]) & '°','image':{'asset':$icon}}, {'key':'feels','label':'체감','value':$c.apparent_temperature,'unit':'°C'}, {'key':'humidity','label':'습도','value':$c.relative_humidity_2m,'unit':'%'}, {'key':'wind','label':'풍속','value':$c.wind_speed_10m,'unit':'km/h'}, {'key':'rain','label':'강수','value':$c.precipitation,'unit':'mm'}])"
+                }
+              },
+              {
+                "type": "section",
+                "title": "시간별 기온",
+                "child": {
+                  "type": "chart",
+                  "kind": "area",
+                  "y_unit": "°C",
+                  "height": "medium",
+                  "series": {
+                    "expr": "($points := $map($data.forecast.hourly.time,function($t,$i){$t >= $data.forecast.current.time ? {'x':$substring($t,11,5),'y':$data.forecast.hourly.temperature_2m[$i], 'label':'강수 ' & $string($data.forecast.hourly.precipitation_probability[$i]) & '%'} : ()}); [{'key':'temp','name':'기온','points':[$points[0..23]]}])"
+                  }
+                }
+              },
+              {
+                "type": "section",
+                "title": "시간별 강수 확률",
+                "child": {
+                  "type": "chart",
+                  "kind": "bar",
+                  "y_unit": "%",
+                  "height": "compact",
+                  "series": {
+                    "expr": "($points := $map($data.forecast.hourly.time,function($t,$i){$t >= $data.forecast.current.time ? {'x':$substring($t,11,5),'y':$data.forecast.hourly.precipitation_probability[$i]} : ()}); [{'key':'rain','name':'강수 확률','points':[$points[0..23]]}])"
+                  }
+                }
+              },
+              {
+                "type": "list",
+                "items": {
+                  "expr": "$map($data.forecast.daily.time,function($t,$i){($code := $data.forecast.daily.weather_code[$i]; {'key':$t,'title':($i=0 ? '오늘' : $lookup({'1':'월','2':'화','3':'수','4':'목','5':'금','6':'토','7':'일'},$fromMillis($toMillis($t & 'T00:00:00Z'),'[F1]')) & ' ' & $substring($t,5,5)),'subtitle':($code=0 ? '맑음' : $code in [1,2] ? '구름 조금' : $code=3 ? '흐림' : $code in [45,48] ? '안개' : $code in [71,73,75,77,85,86] ? '눈' : $code in [80,81,82] ? '소나기' : $code in [95,96,99] ? '뇌우' : '비'),'image':{'asset':'builtin-weather-' & ($code=0 ? 'clear' : $code in [1,2] ? 'partly-cloudy' : $code=3 ? 'cloudy' : $code in [45,48] ? 'fog' : $code in [71,73,75,77,85,86] ? 'snow' : $code in [80,81,82] ? 'showers' : $code in [95,96,99] ? 'thunderstorm' : 'rain')},'badges':[$string($data.forecast.daily.precipitation_probability_max[$i]) & '%'],'meta':$string($data.forecast.daily.temperature_2m_min[$i]) & '° / ' & $string($data.forecast.daily.temperature_2m_max[$i]) & '°'})})"
+                }
+              },
+              {
+                "type": "text",
+                "value": "[Weather data by Open-Meteo.com](https://open-meteo.com/) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)",
+                "style": "meta",
+                "format": "markdown"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "gap": "none"
+  }
+}

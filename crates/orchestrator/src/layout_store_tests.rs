@@ -7,6 +7,7 @@ use tower::ServiceExt;
 fn migration_v5_builds_canonical_layout_from_live_reports_in_report_order() {
     let db = Connection::open_in_memory().unwrap();
     db.execute_batch("CREATE TABLE apps(id TEXT PRIMARY KEY,name TEXT NOT NULL,current_version INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+        CREATE TABLE app_versions(app_id TEXT NOT NULL,version INTEGER NOT NULL,definition TEXT NOT NULL,created_at TEXT NOT NULL,created_by TEXT NOT NULL,PRIMARY KEY(app_id,version));
         CREATE TABLE devices(id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
         CREATE TABLE device_layouts(device_id TEXT PRIMARY KEY,layout TEXT NOT NULL,reported_at TEXT NOT NULL);
         CREATE TABLE agents(workspace_id TEXT PRIMARY KEY);
@@ -44,7 +45,7 @@ fn migration_v5_builds_canonical_layout_from_live_reports_in_report_order() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 10);
+    assert_eq!(version, 11);
     let workspace: String = db
         .query_row("SELECT data FROM workspaces WHERE id='w'", [], |r| r.get(0))
         .unwrap();

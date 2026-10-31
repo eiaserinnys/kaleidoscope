@@ -11,3 +11,9 @@ jsonata-core.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 similar = "2"
+reqwest = { version = "0.12.4", default-features = false, features = ["blocking", "rustls-tls"] }
+url = "2"
+base64 = "0.22"
+sha2 = "0.10"
+quick-xml = "0.42"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
