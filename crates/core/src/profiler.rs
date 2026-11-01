@@ -104,12 +104,14 @@ impl Profiler {
             Some(_) => r.evaluated += 1,
             None => r.skipped += 1,
         }
-        let key = format!("{app_id}:{pointer}");
-        let binding = r.bindings.entry(key).or_default();
-        binding.app_id = app_id.into();
+        let key = format!("{app_id}:{expr}");
+        let binding = r.bindings.entry(key).or_insert_with(|| Binding {
+            app_id: app_id.into(),
+            pointer: pointer.into(),
+            expr: expr.into(),
+            ..Binding::default()
+        });
         binding.app_name = app_name.into();
-        binding.pointer = pointer.into();
-        binding.expr = expr.into();
         if let Some(ms) = duration_ms {
             binding.calls += 1;
             binding.total += ms;
@@ -133,57 +135,147 @@ impl Profiler {
     }
     pub(crate) fn snapshot(&self, category: &str) -> Value {
         let r = self.0.lock().unwrap();
+        let all_categories = category.is_empty() || category == "all";
         let spans: Vec<_> = r
             .spans
             .iter()
-            .filter(|s| category.is_empty() || category == "all" || s.category == category)
-            .cloned()
+            .filter(|s| all_categories || s.category == category)
             .collect();
-        let command: Vec<_> = r
-            .spans
+        let mut durations: Vec<_> = spans
             .iter()
-            .filter(|s| s.category == "command")
+            .filter(|s| !all_categories || s.category == "command")
             .map(|s| s.ms)
             .collect();
-        let (avg, p95, max, _) = stats(&command);
+        if all_categories && durations.is_empty() {
+            durations = spans.iter().map(|s| s.ms).collect();
+        }
+        let (avg, p95, max, _) = stats(&durations);
+        let (avg, p95, max) = (round2(avg), round2(p95), round2(max));
         let total = r.evaluated + r.skipped;
-        let ratio = if total == 0 {
+        let ratio = round2(if total == 0 {
             0.0
         } else {
             r.skipped as f64 * 100.0 / total as f64
-        };
+        });
         let mut groups: BTreeMap<String, Vec<&Span>> = BTreeMap::new();
         let mut app_groups: BTreeMap<String, Vec<&Span>> = BTreeMap::new();
-        for s in &r.spans {
+        for &s in &spans {
             groups.entry(s.category.clone()).or_default().push(s);
-            if !s.app_id.is_empty() {
-                app_groups.entry(s.app_id.clone()).or_default().push(s);
-            }
+            let app_id = if s.app_id.is_empty() {
+                "core"
+            } else {
+                &s.app_id
+            };
+            app_groups.entry(app_id.into()).or_default().push(s);
         }
-        let categories: Vec<_> = groups.iter().map(|(name, rows)| { let values: Vec<_> = rows.iter().map(|s| s.ms).collect(); let (avg,p95,max,total)=stats(&values); json!({"key":name,"category":name,"label":label(name),"calls":rows.len(),"avg_ms":avg,"p95_ms":p95,"max_ms":max,"total_ms":total}) }).collect();
-        let apps: Vec<_> = app_groups.iter().map(|(id, rows)| { let values: Vec<_> = rows.iter().map(|s|s.ms).collect(); let (avg,_,max,total)=stats(&values); json!({"key":id,"app_id":id,"app_name":rows[0].app_name,"calls":rows.len(),"avg_ms":avg,"max_ms":max,"total_ms":total,"evaluated_bindings":rows.iter().filter(|s|s.category == "data.view").map(|s|s.evaluated).sum::<usize>(),"skipped_bindings":rows.iter().filter(|s|s.category == "data.view").map(|s|s.skipped).sum::<usize>()}) }).collect();
-        let row = |s: &Span| json!({"key":s.id.to_string(),"id":s.id.to_string(),"category":s.category,"category_label":label(&s.category),"target":s.target,"app_id":s.app_id,"app_name":s.app_name,"duration_ms":s.ms,"bindings":format!("{} / {} 생략",s.evaluated,s.skipped),"detail":s.detail});
-        let recent: Vec<_> = spans.iter().rev().map(row).collect();
+        let categories: Vec<_> = groups
+            .iter()
+            .map(|(name, rows)| {
+                let values: Vec<_> = rows.iter().map(|s| s.ms).collect();
+                let (avg, p95, max, total) = stats(&values);
+                json!({
+                    "key": name, "category": name, "label": label(name), "calls": rows.len(),
+                    "avg_ms": round2(avg), "p95_ms": round2(p95),
+                    "max_ms": round2(max), "total_ms": round2(total),
+                })
+            })
+            .collect();
+        let apps: Vec<_> = app_groups
+            .iter()
+            .map(|(id, rows)| {
+                let values: Vec<_> = rows.iter().map(|s| s.ms).collect();
+                let (avg, _, max, total) = stats(&values);
+                let name = if rows[0].app_id.is_empty() {
+                    "코어 공통"
+                } else {
+                    &rows[0].app_name
+                };
+                let evaluated: usize = rows
+                    .iter()
+                    .filter(|s| s.category == "data.view")
+                    .map(|s| s.evaluated)
+                    .sum();
+                let skipped: usize = rows
+                    .iter()
+                    .filter(|s| s.category == "data.view")
+                    .map(|s| s.skipped)
+                    .sum();
+                json!({
+                    "key": id, "app_id": id, "app_name": name, "calls": rows.len(),
+                    "avg_ms": round2(avg), "max_ms": round2(max), "total_ms": round2(total),
+                    "evaluated_bindings": evaluated, "skipped_bindings": skipped,
+                })
+            })
+            .collect();
+        let row = |s: &Span| {
+            json!({
+                "key": s.id.to_string(), "id": s.id.to_string(), "category": s.category,
+                "category_label": label(&s.category), "target": s.target, "app_id": s.app_id,
+                "app_name": s.app_name, "duration_ms": round2(s.ms),
+                "bindings": format!("{} / {} 생략", s.evaluated, s.skipped), "detail": s.detail,
+            })
+        };
+        let recent: Vec<_> = spans.iter().rev().map(|s| row(s)).collect();
         let mut slow = spans.clone();
         slow.sort_by(|a, b| b.ms.total_cmp(&a.ms));
-        let slow: Vec<_> = slow.iter().take(30).map(row).collect();
-        let mut binding_rows: Vec<_> = r.bindings.iter().map(|(key,b)| json!({"key":key,"app_id":b.app_id,"app_name":b.app_name,"binding":b.pointer,"expr":b.expr,"calls":b.calls,"skipped_calls":b.skipped,"avg_ms":if b.calls == 0 {0.0} else {b.total/b.calls as f64},"max_ms":b.max,"total_ms":b.total})).collect();
+        let slow: Vec<_> = slow.iter().take(30).map(|s| row(s)).collect();
+        let mut binding_rows: Vec<_> = r
+            .bindings
+            .iter()
+            .map(|(key, binding)| {
+                let average = if binding.calls == 0 {
+                    0.0
+                } else {
+                    binding.total / binding.calls as f64
+                };
+                json!({
+                    "key": key, "app_id": binding.app_id, "app_name": binding.app_name,
+                    "binding": binding.pointer, "expr": binding.expr, "calls": binding.calls,
+                    "skipped_calls": binding.skipped, "avg_ms": round2(average),
+                    "max_ms": round2(binding.max), "total_ms": round2(binding.total),
+                })
+            })
+            .collect();
         binding_rows.sort_by(|a, b| {
             b["total_ms"]
                 .as_f64()
                 .unwrap_or(0.0)
                 .total_cmp(&a["total_ms"].as_f64().unwrap_or(0.0))
         });
-        let chart_series: Vec<_> = [ ("avg_ms", "평균(ms)"), ("max_ms", "최대(ms)") ].into_iter().map(|(key,name)| json!({"key":key,"name":name,"points":categories.iter().map(|c|json!({"x":c["label"],"y":c[key]})).collect::<Vec<_>>() })).collect();
+        let chart_series: Vec<_> = [("avg_ms", "평균(ms)"), ("max_ms", "최대(ms)")]
+            .into_iter()
+            .map(|(key, name)| {
+                json!({
+                    "key": key, "name": name,
+                    "points": categories.iter().map(|category| json!({
+                        "x": category["label"], "y": category[key],
+                    })).collect::<Vec<_>>(),
+                })
+            })
+            .collect();
+        let average_label = if all_categories {
+            "평균 명령 응답".into()
+        } else {
+            format!("{} 평균", label(category))
+        };
+        let count_label = if all_categories {
+            format!("기록 {}건", r.spans.len())
+        } else {
+            format!("{} {}건", label(category), spans.len())
+        };
         let metrics = vec![
-            json!({"key":"avg","label":"평균 명령 응답","value":format!("{avg:.2}"),"unit":"ms","subtext":format!("P95 {p95:.2} ms")}),
-            json!({"key":"max","label":"최대 응답 지연","value":format!("{max:.2}"),"unit":"ms","subtext":format!("기록 {}건",r.spans.len())}),
-            json!({"key":"skip","label":"바인딩 생략률","value":format!("{ratio:.1}"),"unit":"%","subtext":format!("{}회 생략",r.skipped)}),
+            json!({"key":"avg","label":average_label,"value":format!("{avg:.2}"),"unit":"ms","subtext":format!("P95 {p95:.2} ms")}),
+            json!({"key":"max","label":"최대 응답 지연","value":format!("{max:.2}"),"unit":"ms","subtext":count_label}),
+            json!({"key":"skip","label":"바인딩 생략률","value":format!("{ratio:.2}"),"unit":"%","subtext":format!("{}회 생략",r.skipped)}),
             json!({"key":"disk","label":"디스크 쓰기 병합","value":r.coalesced,"unit":"회","subtext":format!("디바운스 {}회",r.debounced)}),
         ];
         json!({"summary":{"total_spans":r.spans.len(),"avg_command_ms":avg,"p95_command_ms":p95,"max_command_ms":max,"binding_skip_ratio_pct":ratio,"evaluated_bindings":r.evaluated,"skipped_bindings":r.skipped,"debounced_state_saves":r.debounced,"coalesced_disk_writes":r.coalesced,"batched_action_steps":r.batched},"metrics":metrics,"chart_series":chart_series,"categories":categories,"apps":apps,"recent_spans":recent,"slowest_spans":slow,"slowest_bindings":binding_rows})
     }
 }
+fn round2(value: f64) -> f64 {
+    (value * 100.0).round() / 100.0
+}
+
 fn stats(values: &[f64]) -> (f64, f64, f64, f64) {
     if values.is_empty() {
         return (0.0, 0.0, 0.0, 0.0);
@@ -218,11 +310,13 @@ impl Profiler {
             own.spans.push_back(span);
         }
         for (key, other) in &other.bindings {
-            let binding = own.bindings.entry(key.clone()).or_default();
-            binding.app_id = other.app_id.clone();
+            let binding = own.bindings.entry(key.clone()).or_insert_with(|| Binding {
+                app_id: other.app_id.clone(),
+                pointer: other.pointer.clone(),
+                expr: other.expr.clone(),
+                ..Binding::default()
+            });
             binding.app_name = other.app_name.clone();
-            binding.pointer = other.pointer.clone();
-            binding.expr = other.expr.clone();
             binding.calls += other.calls;
             binding.skipped += other.skipped;
             binding.total += other.total;
@@ -269,7 +363,7 @@ fn benchmark(inner: &std::sync::Arc<crate::Inner>) -> Result<(), kaleidoscope_co
         let expr = if index < 2 {
             "$state.active_tab"
         } else {
-            "$state.extra"
+            ["$state.extra", "$state.a + $state.b", "$state.c + $state.d"][(index - 2) % 3]
         };
         children.push(json!({"type":"text","value":{"expr":expr}}));
     }

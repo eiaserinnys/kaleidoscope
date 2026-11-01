@@ -17,9 +17,7 @@
   ],
   "state": {
     "tab": 0,
-    "category": "all",
-    "selected_span": null,
-    "selected_binding": null
+    "category": "all"
   },
   "sources": {
     "profile": {
@@ -37,7 +35,7 @@
   "ui": {
     "type": "stack",
     "direction": "column",
-    "gap": "medium",
+    "gap": "none",
     "fill": 2,
     "children": [
       {
@@ -116,7 +114,8 @@
                   "profile"
                 ]
               }
-            ]
+            ],
+            "icon_only": true
           },
           {
             "type": "button",
@@ -142,7 +141,6 @@
       },
       {
         "type": "metrics",
-        "columns": 4,
         "items": {
           "expr": "$data.profile.metrics"
         }
@@ -157,207 +155,49 @@
         },
         "tabs": [
           {
-            "label": "구간 및 앱별 분석",
+            "label": "구간별 분석",
             "child": {
-              "type": "split",
-              "direction": "row",
-              "sizes": [
-                42,
-                58
-              ],
+              "type": "stack",
+              "direction": "column",
+              "gap": "none",
+              "fill": 1,
               "children": [
                 {
-                  "type": "section",
-                  "title": "구간별 응답 지연 (ms)",
-                  "child": {
-                    "type": "chart",
-                    "kind": "bar",
-                    "height": "medium",
-                    "y_unit": "ms",
-                    "series": {
-                      "expr": "$data.profile.chart_series"
-                    }
+                  "type": "chart",
+                  "kind": "bar",
+                  "height": "compact",
+                  "y_unit": "ms",
+                  "series": {
+                    "expr": "$data.profile.chart_series"
                   }
                 },
                 {
-                  "type": "stack",
-                  "direction": "column",
-                  "gap": "medium",
-                  "children": [
-                    {
-                      "type": "table",
-                      "rows": {
-                        "expr": "$data.profile.categories"
-                      },
-                      "columns": [
-                        {
-                          "label": "구간",
-                          "field": "label",
-                          "width": "medium",
-                          "format": "text"
-                        },
-                        {
-                          "label": "호출",
-                          "field": "calls",
-                          "width": "narrow",
-                          "format": "number"
-                        },
-                        {
-                          "label": "평균(ms)",
-                          "field": "avg_ms",
-                          "width": "narrow",
-                          "format": "number"
-                        },
-                        {
-                          "label": "P95(ms)",
-                          "field": "p95_ms",
-                          "width": "narrow",
-                          "format": "number"
-                        },
-                        {
-                          "label": "최대(ms)",
-                          "field": "max_ms",
-                          "width": "narrow",
-                          "format": "number"
-                        },
-                        {
-                          "label": "합계(ms)",
-                          "field": "total_ms",
-                          "width": "narrow",
-                          "format": "number"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "table",
-                      "rows": {
-                        "expr": "$data.profile.apps"
-                      },
-                      "columns": [
-                        {
-                          "label": "앱",
-                          "field": "app_name",
-                          "width": "medium",
-                          "format": "text"
-                        },
-                        {
-                          "label": "호출",
-                          "field": "calls",
-                          "width": "narrow",
-                          "format": "number"
-                        },
-                        {
-                          "label": "평균(ms)",
-                          "field": "avg_ms",
-                          "width": "narrow",
-                          "format": "number"
-                        },
-                        {
-                          "label": "최대(ms)",
-                          "field": "max_ms",
-                          "width": "narrow",
-                          "format": "number"
-                        },
-                        {
-                          "label": "평가 바인딩",
-                          "field": "evaluated_bindings",
-                          "width": "narrow",
-                          "format": "number"
-                        },
-                        {
-                          "label": "생략 바인딩",
-                          "field": "skipped_bindings",
-                          "width": "narrow",
-                          "format": "number"
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          },
-          {
-            "label": "느린 작업 및 바인딩",
-            "child": {
-              "type": "split",
-              "direction": "row",
-              "sizes": [
-                50,
-                50
-              ],
-              "children": [
-                {
                   "type": "table",
                   "rows": {
-                    "expr": "$data.profile.slowest_spans"
+                    "expr": "$data.profile.categories"
                   },
                   "columns": [
                     {
                       "label": "구간",
-                      "field": "category_label",
-                      "width": "medium",
+                      "field": "label",
+                      "width": "fill",
                       "format": "text"
                     },
                     {
-                      "label": "대상",
-                      "field": "target",
-                      "width": "medium",
-                      "format": "text"
-                    },
-                    {
-                      "label": "앱",
-                      "field": "app_name",
-                      "width": "medium",
-                      "format": "text"
-                    },
-                    {
-                      "label": "소요(ms)",
-                      "field": "duration_ms",
+                      "label": "호출",
+                      "field": "calls",
                       "width": "narrow",
                       "format": "number"
                     },
                     {
-                      "label": "바인딩",
-                      "field": "bindings",
-                      "width": "medium",
-                      "format": "text"
-                    },
-                    {
-                      "label": "세부",
-                      "field": "detail",
-                      "width": "medium",
-                      "format": "text"
-                    }
-                  ],
-                  "selected": {
-                    "state": "selected_span"
-                  },
-                  "on_select": {
-                    "set_state": "selected_span"
-                  }
-                },
-                {
-                  "type": "table",
-                  "rows": {
-                    "expr": "$data.profile.slowest_bindings"
-                  },
-                  "columns": [
-                    {
-                      "label": "앱",
-                      "field": "app_name",
-                      "width": "medium",
-                      "format": "text"
-                    },
-                    {
-                      "label": "식",
-                      "field": "expr",
-                      "width": "medium",
-                      "format": "text"
-                    },
-                    {
                       "label": "평균(ms)",
                       "field": "avg_ms",
+                      "width": "narrow",
+                      "format": "number"
+                    },
+                    {
+                      "label": "P95(ms)",
+                      "field": "p95_ms",
                       "width": "narrow",
                       "format": "number"
                     },
@@ -368,24 +208,153 @@
                       "format": "number"
                     },
                     {
-                      "label": "호출",
-                      "field": "calls",
-                      "width": "narrow",
-                      "format": "number"
-                    },
-                    {
-                      "label": "생략",
-                      "field": "skipped_calls",
+                      "label": "합계(ms)",
+                      "field": "total_ms",
                       "width": "narrow",
                       "format": "number"
                     }
-                  ],
-                  "selected": {
-                    "state": "selected_binding"
-                  },
-                  "on_select": {
-                    "set_state": "selected_binding"
-                  }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "label": "앱별 통계",
+            "child": {
+              "type": "table",
+              "rows": {
+                "expr": "$data.profile.apps"
+              },
+              "columns": [
+                {
+                  "label": "앱",
+                  "field": "app_name",
+                  "width": "fill",
+                  "format": "text"
+                },
+                {
+                  "label": "호출",
+                  "field": "calls",
+                  "width": "narrow",
+                  "format": "number"
+                },
+                {
+                  "label": "평균(ms)",
+                  "field": "avg_ms",
+                  "width": "narrow",
+                  "format": "number"
+                },
+                {
+                  "label": "최대(ms)",
+                  "field": "max_ms",
+                  "width": "narrow",
+                  "format": "number"
+                },
+                {
+                  "label": "평가 바인딩",
+                  "field": "evaluated_bindings",
+                  "width": "narrow",
+                  "format": "number"
+                },
+                {
+                  "label": "생략 바인딩",
+                  "field": "skipped_bindings",
+                  "width": "narrow",
+                  "format": "number"
+                }
+              ]
+            }
+          },
+          {
+            "label": "느린 작업",
+            "child": {
+              "type": "table",
+              "rows": {
+                "expr": "$data.profile.slowest_spans"
+              },
+              "columns": [
+                {
+                  "label": "구간",
+                  "field": "category_label",
+                  "width": "narrow",
+                  "format": "text"
+                },
+                {
+                  "label": "대상",
+                  "field": "target",
+                  "width": "medium",
+                  "format": "text"
+                },
+                {
+                  "label": "앱",
+                  "field": "app_name",
+                  "width": "narrow",
+                  "format": "text"
+                },
+                {
+                  "label": "소요(ms)",
+                  "field": "duration_ms",
+                  "width": "narrow",
+                  "format": "number"
+                },
+                {
+                  "label": "바인딩",
+                  "field": "bindings",
+                  "width": "narrow",
+                  "format": "text"
+                },
+                {
+                  "label": "세부",
+                  "field": "detail",
+                  "width": "fill",
+                  "format": "text"
+                }
+              ]
+            }
+          },
+          {
+            "label": "바인딩 통계",
+            "child": {
+              "type": "table",
+              "rows": {
+                "expr": "$data.profile.slowest_bindings"
+              },
+              "columns": [
+                {
+                  "label": "앱",
+                  "field": "app_name",
+                  "width": "narrow",
+                  "format": "text"
+                },
+                {
+                  "label": "식",
+                  "field": "expr",
+                  "width": "fill",
+                  "format": "text"
+                },
+                {
+                  "label": "평균(ms)",
+                  "field": "avg_ms",
+                  "width": "narrow",
+                  "format": "number"
+                },
+                {
+                  "label": "최대(ms)",
+                  "field": "max_ms",
+                  "width": "narrow",
+                  "format": "number"
+                },
+                {
+                  "label": "호출",
+                  "field": "calls",
+                  "width": "narrow",
+                  "format": "number"
+                },
+                {
+                  "label": "생략",
+                  "field": "skipped_calls",
+                  "width": "narrow",
+                  "format": "number"
                 }
               ]
             }
@@ -399,15 +368,9 @@
               },
               "columns": [
                 {
-                  "label": "순번",
-                  "field": "id",
-                  "width": "medium",
-                  "format": "text"
-                },
-                {
                   "label": "구간",
                   "field": "category_label",
-                  "width": "medium",
+                  "width": "narrow",
                   "format": "text"
                 },
                 {
@@ -419,7 +382,7 @@
                 {
                   "label": "앱",
                   "field": "app_name",
-                  "width": "medium",
+                  "width": "narrow",
                   "format": "text"
                 },
                 {
@@ -431,22 +394,16 @@
                 {
                   "label": "바인딩",
                   "field": "bindings",
-                  "width": "medium",
+                  "width": "narrow",
                   "format": "text"
                 },
                 {
                   "label": "세부",
                   "field": "detail",
-                  "width": "medium",
+                  "width": "fill",
                   "format": "text"
                 }
-              ],
-              "selected": {
-                "state": "selected_span"
-              },
-              "on_select": {
-                "set_state": "selected_span"
-              }
+              ]
             }
           }
         ]

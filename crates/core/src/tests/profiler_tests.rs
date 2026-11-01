@@ -81,7 +81,7 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
     .unwrap()
     .json
     .unwrap();
-    for key in ["recent_spans", "slowest_spans"] {
+    for key in ["recent_spans", "slowest_spans", "categories"] {
         let rows = filtered[key].as_array().unwrap();
         assert!(!rows.is_empty());
         assert!(rows.iter().all(|row| row["category"] == "data.view"));
@@ -100,12 +100,12 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
         matches!(crate::data_runtime::binding_value(&core.inner, &profiler, "/ui/children/1/items"), Some(BindingValue::Ready { value }) if value.as_array().is_some_and(|items| items.len() == 4))
     );
     for pointer in [
-        "/ui/children/2/tabs/0/child/children/0/child/series",
-        "/ui/children/2/tabs/0/child/children/1/children/0/rows",
-        "/ui/children/2/tabs/0/child/children/1/children/1/rows",
-        "/ui/children/2/tabs/1/child/children/0/rows",
-        "/ui/children/2/tabs/1/child/children/1/rows",
+        "/ui/children/2/tabs/0/child/children/0/series",
+        "/ui/children/2/tabs/0/child/children/1/rows",
+        "/ui/children/2/tabs/1/child/rows",
         "/ui/children/2/tabs/2/child/rows",
+        "/ui/children/2/tabs/3/child/rows",
+        "/ui/children/2/tabs/4/child/rows",
     ] {
         assert!(
             matches!(crate::data_runtime::binding_value(&core.inner, &profiler, pointer), Some(BindingValue::Ready { value }) if value.as_array().is_some_and(|rows| !rows.is_empty()) || value.is_object()),
@@ -161,6 +161,73 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
     .unwrap();
     assert_eq!(cleared["summary"]["total_spans"], 0);
     assert!(cleared["recent_spans"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn snapshot_filters_visible_statistics_and_rounds_numbers() {
+    let profiler = crate::profiler::Profiler::default();
+    profiler.span("command", "시작", "", "", 1.2345, 0, 0, "");
+    profiler.span("data.view", "계산", "sample", "견본", 2.3456, 2, 3, "");
+    profiler.span("data.view", "계산", "", "", 4.5678, 0, 0, "");
+    profiler.span("storage.flush", "저장", "", "", 6.7894, 0, 0, "");
+
+    let all = profiler.snapshot("all");
+    assert_eq!(all["metrics"][0]["label"], "평균 명령 응답");
+    assert_eq!(all["summary"]["avg_command_ms"], json!(1.23));
+    assert_eq!(all["metrics"][1]["subtext"], "기록 4건");
+
+    let filtered = profiler.snapshot("data.view");
+    assert_eq!(filtered["categories"].as_array().unwrap().len(), 1);
+    assert_eq!(filtered["categories"][0]["category"], "data.view");
+    assert_eq!(filtered["categories"][0]["avg_ms"], json!(3.46));
+    assert_eq!(filtered["categories"][0]["p95_ms"], json!(4.57));
+    assert_eq!(filtered["categories"][0]["total_ms"], json!(6.91));
+    assert_eq!(filtered["chart_series"][0]["points"][0]["x"], "화면 계산");
+    assert_eq!(filtered["chart_series"][0]["points"][0]["y"], json!(3.46));
+    assert_eq!(filtered["summary"]["avg_command_ms"], json!(3.46));
+    assert_eq!(filtered["summary"]["max_command_ms"], json!(4.57));
+    assert_eq!(filtered["metrics"][0]["label"], "화면 계산 평균");
+    assert_eq!(filtered["metrics"][1]["subtext"], "화면 계산 2건");
+    let apps = filtered["apps"].as_array().unwrap();
+    assert_eq!(apps.len(), 2);
+    let core = apps.iter().find(|app| app["app_id"] == "core").unwrap();
+    assert_eq!(core["app_name"], "코어 공통");
+    assert_eq!(core["avg_ms"], json!(4.57));
+    assert_eq!(filtered["recent_spans"][0]["duration_ms"], json!(4.57));
+
+    let only_storage = crate::profiler::Profiler::default();
+    only_storage.span("storage.flush", "저장", "", "", 6.7894, 0, 0, "");
+    let fallback = only_storage.snapshot("all");
+    assert_eq!(fallback["summary"]["avg_command_ms"], json!(6.79));
+    let storage = only_storage.snapshot("storage.flush");
+    assert_eq!(storage["apps"][0]["app_name"], "코어 공통");
+    assert_eq!(storage["metrics"][1]["subtext"], "디스크 플러시 1건");
+}
+
+#[test]
+fn identical_binding_expressions_are_aggregated_with_first_pointer() {
+    let profiler = crate::profiler::Profiler::default();
+    profiler.binding("sample", "견본", "/first", "$state.value", Some(1.234));
+    profiler.binding("sample", "견본", "/second", "$state.value", Some(3.452));
+    profiler.binding("sample", "견본", "/third", "$state.value", None);
+    profiler.binding("sample", "견본", "/fourth", "$state.other", Some(0.123));
+    profiler.binding("sample", "견본", "/fourth", "$state.other", None);
+    profiler.binding("other", "다른 앱", "/first", "$state.value", Some(0.456));
+
+    let snapshot = profiler.snapshot("all");
+    assert_eq!(snapshot["summary"]["binding_skip_ratio_pct"], json!(33.33));
+    let bindings = snapshot["slowest_bindings"].as_array().unwrap();
+    assert_eq!(bindings.len(), 3);
+    let row = bindings
+        .iter()
+        .find(|row| row["key"] == "sample:$state.value")
+        .unwrap();
+    assert_eq!(row["binding"], "/first");
+    assert_eq!(row["calls"], 2);
+    assert_eq!(row["skipped_calls"], 1);
+    assert_eq!(row["avg_ms"], json!(2.34));
+    assert_eq!(row["max_ms"], json!(3.45));
+    assert_eq!(row["total_ms"], json!(4.69));
 }
 
 #[test]
