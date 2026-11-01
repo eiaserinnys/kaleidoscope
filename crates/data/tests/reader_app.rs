@@ -129,7 +129,7 @@ fn reader_chains_story_selection_to_hn_github_wikipedia_and_openalex() {
     ) else {
         panic!("영어 위키 요약 계획")
     };
-    assert_eq!(path, "/api/rest_v1/page/summary/Rust");
+    assert_eq!(path, "/api/rest_v1/page/summary/Rust_programming_language");
     assert_eq!(query["redirect"], "false");
     let SourcePlan::Request { path, query, .. } = app.plan_source_with_data_and_storage(
         "wiki_ko_summary",
@@ -142,7 +142,7 @@ fn reader_chains_story_selection_to_hn_github_wikipedia_and_openalex() {
     };
     assert_eq!(
         path,
-        "/api/rest_v1/page/summary/%EB%9F%AC%EC%8A%A4%ED%8A%B8%5F%ED%94%84%EB%A1%9C%EA%B7%B8%EB%9E%98%EB%B0%8D%5F%EC%96%B8%EC%96%B4"
+        "/api/rest_v1/page/summary/러스트_프로그래밍_언어"
     );
     assert_eq!(query["redirect"], "false");
 }
@@ -509,7 +509,7 @@ fn reader_metrics_remain_ready_when_optional_sources_fail() {
     let (definition, app) = reader();
     let data = BTreeMap::from([(
         "stories".into(),
-        json!({"hits":[{"objectID":"123","title":"Rust","points":10}]}),
+        json!({"hits":[{"objectID":"123","title":"Rust","url":"https://github.com/acme/rust-tools","points":10}]}),
     )]);
     let statuses = BTreeMap::from([
         (
@@ -540,14 +540,8 @@ fn reader_metrics_remain_ready_when_optional_sources_fail() {
     let BindingValue::Ready { value: metrics } = &values["/ui/children/1/items"] else {
         panic!("지표 식 결과");
     };
-    assert!(metrics[2]["subtext"]
-        .as_str()
-        .unwrap()
-        .contains("오픈소스 탭에서 조회"));
-    assert!(metrics[3]["subtext"]
-        .as_str()
-        .unwrap()
-        .contains("Rust · 위키·논문 탭에서 조회"));
+    assert_eq!(metrics[2]["subtext"], json!("acme/rust-tools"));
+    assert_eq!(metrics[3]["subtext"], json!("Rust"));
 }
 
 #[test]
