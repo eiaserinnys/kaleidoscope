@@ -96,16 +96,32 @@ export function Shell({ store }: { store: ShellStore }) {
     }
   }), [newWindowRect, runCommand, store]);
 
+  const openLinkMenu = (anchor: HTMLElement) => {
+    setMenu({ kind: "link", anchor });
+  };
+
+  const linkAnchor = menu?.kind === "link" ? menu.anchor : null;
+  const serverButton = snapshot ? (
+    <Button className="shell-link-button" onClick={(event) => openLinkMenu(event.currentTarget)} aria-label={serverLabel(snapshot)} aria-expanded={linkAnchor !== null}>
+      <span aria-hidden="true" className={`shell-server-dot is-${snapshot.link.state}`} />
+      <span className="ks-truncate">{serverLabel(snapshot)}</span>
+    </Button>
+  ) : null;
+  const serverPanel = snapshot && linkAnchor ? <ServerPanel snapshot={snapshot} anchor={linkAnchor} onClose={closeMenu} call={runCommand} /> : null;
+
   if (!snapshot) {
     return <main className="app-root"><EmptyState icon={<LayoutGrid size="empty" />} text="코어에 연결할 수 없습니다" /></main>;
   }
 
   if (!activeWorkspace || !activeDesktop) {
     return <main className="app-root">
-      <header className="ks-shell-bar"><Button onClick={(event) => openLinkMenu(event.currentTarget)}>{serverLabel(snapshot)}</Button></header>
-      <EmptyState icon={<LayoutGrid size="empty" />} text={snapshot.link.state === "connected" ? "작업 없음" : "서버에 연결하는 중"} />
-      {snapshot.link.state === "connected" && <Button onClick={() => void runCommand({ op: "workspace.create", name: "작업 1" })}>작업 만들기</Button>}
-      {menu?.kind === "link" && <ServerPanel snapshot={snapshot} anchor={menu.anchor} onClose={closeMenu} call={runCommand} />}
+      <header className="ks-shell-bar"><div className="ks-shell-actions">{serverButton}</div></header>
+      <EmptyState
+        icon={<LayoutGrid size="empty" />}
+        text={snapshot.link.state === "connected" ? "작업 없음" : "서버에 연결하는 중"}
+        action={snapshot.link.state === "connected" ? <Button onClick={() => void runCommand({ op: "workspace.create", name: "작업 1" })}>작업 만들기</Button> : undefined}
+      />
+      {serverPanel}
     </main>;
   }
 
@@ -197,9 +213,6 @@ export function Shell({ store }: { store: ShellStore }) {
     });
   };
 
-  const openLinkMenu = (anchor: HTMLElement) => {
-    setMenu({ kind: "link", anchor });
-  };
 
   const restartUpdate = async () => {
     closeMenu();
@@ -331,10 +344,7 @@ export function Shell({ store }: { store: ShellStore }) {
               <UpdateReady className="ks-link-icon-accent" />
             </IconButton>
           ) : null}
-          <Button className="shell-link-button" onClick={(event) => openLinkMenu(event.currentTarget)} aria-label={serverLabel(snapshot)}>
-            <span aria-hidden="true" className={`shell-server-dot is-${snapshot.link.state}`} />
-            <span className="ks-truncate">{serverLabel(snapshot)}</span>
-          </Button>
+          {serverButton}
           <input
             accept=".json,application/json"
             aria-label="앱 정의 파일"
@@ -358,7 +368,7 @@ export function Shell({ store }: { store: ShellStore }) {
         store={store}
       />
 
-      {menu?.kind === "link" ? <ServerPanel snapshot={snapshot} anchor={menu.anchor} onClose={closeMenu} call={runCommand} /> : menu ? (
+      {menu?.kind === "link" ? serverPanel : menu ? (
         <Menu anchor={menu.anchor} items={menu.entries} onClose={closeMenu} />
       ) : null}
       {notice ? (

@@ -204,12 +204,53 @@ describe("shell server link control", () => {
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "내 PC 서버" }));
     fireEvent.change(screen.getByRole("textbox", { name: "원격 서버 URL" }), { target: { value: "https://remote.example" } });
-    fireEvent.click(screen.getByRole("button", { name: "원격 서버 연결" }));
+    fireEvent.blur(screen.getByRole("textbox", { name: "원격 서버 URL" }));
+    expect(spy.mock.calls.some(([request]) => request.op === "link.start")).toBe(false);
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "원격 서버 URL" }), { key: "Enter" });
     await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "link.start", server_url: "https://remote.example" }));
     expect(await screen.findByRole("button", { name: "123456 복사" })).toBeTruthy();
     expect(screen.getByText("https://remote.example")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "내 PC 서버로 돌아가기" }));
     await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "link.use_local" })); store.dispose();
+  });
+  it("opens the same server control in an empty workspace and groups its action", async () => {
+    const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
+    seed.snapshot.shared.workspaces = []; seed.snapshot.shared.desktops = []; seed.snapshot.shared.windows = [];
+    const transport = createFakeTransport(seed);
+    transport.setLink({ state: "connected", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC" });
+    const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
+    const button = screen.getByRole("button", { name: "내 PC 서버" });
+    expect(button.closest(".ks-shell-actions")).toBeTruthy();
+    expect(button.querySelector(".shell-server-dot")).toBeTruthy();
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("button", { name: "작업 만들기" }).closest(".ks-empty-state-action")).toBeTruthy();
+    fireEvent.click(button);
+    expect(screen.getByRole("dialog", { name: "서버 연결" })).toBeTruthy();
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    store.dispose();
+  });
+  it("offers prefilled remote re-pairing after revocation", async () => {
+    const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
+    const transport = createFakeTransport(seed);
+    transport.setLink({ state: "revoked", server_url: "https://revoked.example" });
+    const spy = vi.spyOn(transport, "call");
+    const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
+    fireEvent.click(screen.getByRole("button", { name: "연결 해제됨" }));
+    expect(screen.getByText("원격 연결 거부됨")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "내 PC 앱과 데이터 가져오기" })).toBeNull();
+    const input = screen.getByRole("textbox", { name: "원격 서버 URL" }) as HTMLInputElement;
+    expect(input.value).toBe("https://revoked.example");
+    expect(screen.getByRole("button", { name: "내 PC 서버로 전환" })).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "link.start", server_url: "https://revoked.example" }));
+    store.dispose();
+  });
+  it("names an unlinked panel without claiming a local connection", async () => {
+    const store = createShellStore(createFakeTransport(makeTestSeed()));
+    render(<Shell store={store} />); await store.ready;
+    fireEvent.click(screen.getByRole("button", { name: "연결 해제됨" }));
+    expect(screen.getByText("서버 연결")).toBeTruthy();
+    expect(screen.queryByText("내 PC 내장 서버")).toBeNull(); store.dispose();
   });
   it("copies a pairing code and updates the open panel on approval", async () => {
     const transport = createFakeTransport(makeTestSeed());
@@ -242,6 +283,7 @@ describe("shell server link control", () => {
     transport.setLink({ state: "offline", mode: "remote", server_url: "https://remote.example", device_name: "집", reason: "연결 끊김" });
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "원격 오프라인" }));
+    expect(screen.getByText("연결 끊김")).toBeTruthy();
     expect((screen.getByRole("button", { name: "내 PC 앱과 데이터 가져오기" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "서버 연결" })).toBeNull(); store.dispose();

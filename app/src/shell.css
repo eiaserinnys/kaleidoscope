@@ -291,4 +291,7 @@
 .shell-server-dot.is-pairing, .shell-server-dot.is-offline { background: var(--ks-color-warning); }
 .shell-link-panel.ks-menu { position: absolute; top: calc(var(--ks-control-height) + 2 * var(--ks-space-2)); right: var(--ks-space-3); left: auto; display: flex; flex-direction: column; gap: var(--ks-space-3); padding: var(--ks-space-3); width: calc(2 * var(--ks-workspace-label-max-width)); max-width: calc(100% - 2 * var(--ks-space-3)); max-height: calc(100% - var(--ks-control-height) - 4 * var(--ks-space-3)); overflow-y: auto; }
 .shell-server-heading { font-size: var(--ks-type-title); }
-.shell-server-meta { color: var(--ks-color-muted); overflow-wrap: anywhere; }
+.shell-server-meta-group { display: flex; flex-direction: column; gap: var(--ks-space-1); }
+.shell-server-meta, .shell-server-skipped { font-size: var(--ks-type-meta); color: var(--ks-color-muted); overflow-wrap: anywhere; }
+.shell-server-skipped, .shell-server-skipped-list { margin-block-start: var(--ks-space-1); }
+.shell-server-skipped-list { display: flex; flex-direction: column; gap: var(--ks-space-1); }

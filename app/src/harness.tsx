@@ -132,6 +132,7 @@ const windows: AppWindow[] = settingsPreview ? [{ id: "settings-window", desktop
 
 function linkStatus(state: string | null): LinkStatus {
   switch (state) {
+    case "embedded-offline": return { state: "offline", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC", reason: "연결하는 중" };
     case "embedded": return { state: "connected", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC" };
     case "pairing": return {
       state: "pairing",
@@ -177,6 +178,17 @@ const snapshot: ShellSnapshot = {
       ? { state: "idle", current_version: "0.5.0" }
       : { state: "unavailable" },
 };
+
+if (harnessParams.has("empty-workspace")) {
+  snapshot.shared.workspaces = [];
+  snapshot.shared.desktops = [];
+  snapshot.shared.windows = [];
+  snapshot.device.active_workspace_id = null;
+  snapshot.device.active_desktop_ids = {};
+}
+if (harnessParams.has("transfer-skips")) {
+  snapshot.last_transfer = { imported: 3, skipped: ["app:sample-a", "value:sample-a/settings"] };
+}
 
 const files = shareScenario === "editor" ? { "README.md": Array.from({ length: 120 }, (_, i) => `줄 ${i + 1}`).join("\n") } : bottomMenuScenario
   ? Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`documents/z${String(index).padStart(2, "0")}.md`, `# File ${index}`]))
