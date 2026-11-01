@@ -14,8 +14,8 @@ export const mdViewerDefinition: AppDefinition = {
   permissions: [{ module: "files", id: "docs", access: "read", label: "읽을 폴더" }],
   state: { current_file: null },
   ui: { type: "split", direction: "row", sizes: [24, 76], children: [
-    { type: "file_tree", root: { permission: "docs" }, extensions: ["md"], selected: { state: "current_file" }, on_select: { set_state: "current_file" } },
-    { type: "markdown_view", file: { permission: "docs", path: { state: "current_file" } } },
+    { type: "tree", root: { permission: "docs" }, extensions: ["md"], selected: { state: "current_file" }, on_select: { set_state: "current_file" } },
+    { type: "markdown", file: { permission: "docs", path: { state: "current_file" } }, read_only: true },
   ] },
 };
 

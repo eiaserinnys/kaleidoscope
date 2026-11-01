@@ -374,9 +374,18 @@ fn attachments_and_mcp_advertisement() {
             .iter()
             .find(|v| v["method"] == "session/prompt")
             .unwrap();
-        assert!(prompt["params"]["prompt"][0]["text"].as_str().unwrap().contains("upload_app"));
-        assert!(prompt["params"]["prompt"][0]["text"].as_str().unwrap().contains("http://localhost/mcp"));
-        assert!(!prompt["params"]["prompt"][0]["text"].as_str().unwrap().contains("secret-test-value"));
+        assert!(prompt["params"]["prompt"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("upload_app"));
+        assert!(prompt["params"]["prompt"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("http://localhost/mcp"));
+        assert!(!prompt["params"]["prompt"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("secret-test-value"));
         assert_eq!(prompt["params"]["prompt"][1]["text"], "context-only");
         assert_eq!(
             prompt["params"]["prompt"][3]["type"],

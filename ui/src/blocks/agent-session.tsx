@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import type { Block, ConversationAttachment, ConversationEvent, ConversationItem, CoreEvent, CoreRequest, LocalAgentSnapshot } from "../contract/contract";
+import type { Block, ConversationAttachment, ConversationEvent, ConversationItem, CoreEvent, CoreRequest, LocalAgentSnapshot, SetState } from "../contract/contract";
 import { Button, EmptyState, IconButton, Notice, StatusText } from "../components/primitives";
 import { Folder, FolderOpen, MessageSquare } from "../components/icons";
 import { Select, Toggle } from "../components/select-toggle";
@@ -12,7 +12,7 @@ import { HistoryAttachmentView, ImagePreview, readUpload, type DraftAttachment, 
 import { ChatComposer } from "./chat-composer";
 import { ChatHistory } from "./chat-history";
 
-type AgentSessionBlockData = Extract<Block, { type: "agent_session" }>;
+export type AgentSessionBlockData = Extract<Block, { type: "chat" }> & { permission: string; root: { permission: string }; agents: NonNullable<Extract<Block, { type: "chat" }>["agents"]>; selected: NonNullable<Extract<Block, { type: "chat" }>["selected"]>; on_select: SetState };
 
 export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: AgentSessionBlockData; context: BlockContext; pointer?: string }) {
   const windowId = context.window.id;
@@ -28,7 +28,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const generationRef = useRef<string | null>(null);
   const followTail = useRef(true);
-  useShareDescriber(shareRef, () => ({ text: "[에이전트 대화]", visual: false }));
+  useShareDescriber(shareRef, () => ({ text: "[채팅]", visual: false }));
 
   const applyUpdate = useCallback((event: Extract<CoreEvent, { event: "local_agent.update" }>) => {
     const update = event.update;

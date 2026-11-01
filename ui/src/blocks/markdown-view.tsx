@@ -1,20 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Block, FileRef } from "../contract/contract";
+import type { Binding, Block, FileRef } from "../contract/contract";
 import { Notice, StatusText } from "../components/primitives";
+import { DataState } from "../components/data-state";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
 import { toCoreError } from "../core/core-transport";
 import { useShareDescriber } from "../share/visible";
 import { MarkdownText } from "./markdown-text";
 import { createDocumentEditorTarget } from "./file-editor-session";
+import { useBinding } from "../data/window-data";
 
-type MarkdownViewBlockData = Extract<Block, { type: "markdown_view" }>;
+type MarkdownViewBlockData = Extract<Block, { type: "markdown" }>;
 type FileMarkdownViewBlockData = MarkdownViewBlockData & { file: FileRef };
 
-export function MarkdownViewBlock({ block, context }: { block: MarkdownViewBlockData; context: BlockContext }) {
+export function MarkdownViewBlock({ block, context, pointer }: { block: MarkdownViewBlockData; context: BlockContext; pointer: string }) {
+  if (block.value !== undefined) return <BoundMarkdownViewBlock binding={block.value} pointer={pointer} context={context} />;
   if (block.document) return <DocumentMarkdownViewBlock entry={block.document.entry} context={context} />;
   if (!block.file) return null;
   return <FileMarkdownViewBlock block={{ ...block, file: block.file }} context={context} />;
+}
+
+function BoundMarkdownViewBlock({ binding, pointer, context }: { binding: Binding; pointer: string; context: BlockContext }) {
+  const value = useBinding(`${pointer}/value`, binding);
+  const shareRef = useRef<HTMLElement>(null);
+  useShareDescriber(shareRef, () => ({ text: `[${context.definition.name || "Markdown 보기"}]`, visual: false, continue: true }));
+  if (value.status !== "ready") return <DataState value={value} />;
+  if (typeof value.value !== "string") return <div className="ks-markdown-error"><Notice role="alert">마크다운 값이 글이 아닙니다</Notice></div>;
+  return <article className="ks-markdown-view" ref={shareRef}><MarkdownText>{value.value}</MarkdownText></article>;
 }
 
 function DocumentMarkdownViewBlock({ entry, context }: { entry: string; context: BlockContext }) {

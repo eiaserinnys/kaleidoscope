@@ -117,7 +117,7 @@ function SettingsEntry({ context, entry, index, open, onProblem }: { context: Bl
     {entry.description ? <div className="ks-settings-description" id={`${id}-description`}>{entry.description}</div> : null}
     {!state.loaded && !state.error ? <StatusText>불러오는 중</StatusText> : null}
     {state.loaded ? <div className="ks-settings-control">
-      {entry.kind === "md" ? <div id={`${id}-document`} className="ks-settings-document" hidden={!expanded}><MarkdownEditorBlock block={{ type: "markdown_editor", document: { entry: entry.id } }} context={context} /></div>
+      {entry.kind === "md" ? <div id={`${id}-document`} className="ks-settings-document" hidden={!expanded}><MarkdownEditorBlock block={{ type: "markdown", document: { entry: entry.id } }} context={context} /></div>
         : <SettingControl id={id} entry={entry} index={index} value={state.value} session={session} invalid={state.error?.code === "invalid_request"} />}
     </div> : null}
     {state.conflict ? <Notice role="alert" actions={[

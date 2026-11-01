@@ -18,7 +18,7 @@ function setup(block: Block) {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it("코드 편집은 CRLF를 지켜 자동 저장하고 외부 변경 충돌을 알린다", async () => {
-  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "readwrite", label: "문서" }], state: {}, ui: { type: "code_editor", file: { permission: "docs", path: "settings.json" } } };
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "readwrite", label: "문서" }], state: {}, ui: { type: "code", file: { permission: "docs", path: "settings.json" } } };
   const seed = makeTestSeed({ definitions: [definition], grants: [grantFor("viewer-window", "docs")], files: { "settings.json": "{\r\n  \"a\": 1\r\n}\r\n" } });
   const transport = createFakeTransport(seed);
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
@@ -34,8 +34,17 @@ it("코드 편집은 CRLF를 지켜 자동 저장하고 외부 변경 충돌을 
   await waitFor(() => expect(screen.getByRole("textbox", { name: "코드 편집기" }).textContent).toContain("external"));
 });
 
-it("code_view는 값을 읽기만 하며 변경 시 위치를 지킨다", async () => {
-  const { transport } = setup({ type: "code_view", value: { expr: "$state.log" }, follow: true });
+it("code 편집기의 wrap 설정을 CodeMirror에 적용한다", async () => {
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "readwrite", label: "문서" }], state: {}, ui: { type: "code", file: { permission: "docs", path: "long.txt" }, wrap: true } };
+  const seed = makeTestSeed({ definitions: [definition], grants: [grantFor("viewer-window", "docs")], files: { "long.txt": "long line" } });
+  const rendered = render(<AppWindowContent store={createShellStore(createFakeTransport(seed))} windowId="viewer-window" />);
+  const content = await screen.findByRole("textbox", { name: "코드 편집기" });
+  expect(content.classList.contains("cm-lineWrapping")).toBe(true);
+  rendered.unmount();
+});
+
+it("code는 값을 읽기만 하며 변경 시 위치를 지킨다", async () => {
+  const { transport } = setup({ type: "code", value: { expr: "$state.log" }, follow: true });
   act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/value": { status: "ready", value: "처음" } } } }));
   const content = await screen.findByRole("textbox", { name: "코드 보기" });
   expect(content.getAttribute("contenteditable")).toBe("false");

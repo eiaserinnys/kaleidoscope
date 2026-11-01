@@ -15,6 +15,20 @@ import tauriConfig from "../../../app/src-tauri/tauri.conf.json";
 
 afterEach(cleanup);
 
+it("html_view의 value 바인딩을 격리된 HTML 프레임으로 표시한다", async () => {
+  const html = "<h1>바인딩 미리보기</h1><script>window.secret = true</script>";
+  const app: AppDefinition = {
+    id: "html-value", name: "미리보기", requires: { blocks: 6, modules: {} }, permissions: [], state: {},
+    ui: { type: "html_view", value: html },
+  };
+  const seed = makeTestSeed({ definitions: [app] });
+  render(<AppWindowContent store={createShellStore(createFakeTransport(seed))} windowId="viewer-window" />);
+  const frame = await screen.findByTitle("미리보기") as HTMLIFrameElement;
+  expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
+  expect(frame.getAttribute("srcdoc")).toContain("바인딩 미리보기");
+  expect(frame.getAttribute("srcdoc")).not.toContain("window.secret");
+});
+
 it("여러 직접 텍스트가 있는 요소의 문구를 바꾸되 안쪽 요소는 유지한다", () => {
   const previous: HtmlElementSelection = { selector: "p", tagName: "p", text: "안녕  반가워", selected_text: "안녕 세계 반가워", styles: { color: "", backgroundColor: "", margin: "", padding: "" } };
   const html = editedHtml("<p>안녕 <strong>세계</strong> 반가워</p>", { ...previous, text: "새 문구" }, previous);

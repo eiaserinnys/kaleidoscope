@@ -76,13 +76,17 @@ fn source_pipeline_fetches_in_order_and_replans_when_state_changes() {
         )
     });
     let (sender, receiver) = mpsc::channel();
-    core.subscribe(Box::new(move |event| { let _ = sender.send(event.clone()); }));
+    core.subscribe(Box::new(move |event| {
+        let _ = sender.send(event.clone());
+    }));
     fs::write(folder.path().join("missing.json"), r#"{"next":"f.json"}"#).unwrap();
     crate::data_runtime::refresh(&core.inner, &window, &["a".into()], true).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut loading = false;
     while Instant::now() < deadline {
-        if let Ok(CoreEvent::DataUpdate { view, .. }) = receiver.recv_timeout(Duration::from_millis(100)) {
+        if let Ok(CoreEvent::DataUpdate { view, .. }) =
+            receiver.recv_timeout(Duration::from_millis(100))
+        {
             if matches!(view.sources.get("z"), Some(SourceStatus::Loading { .. })) {
                 loading = matches!(view.sources.get("a"), Some(SourceStatus::Loading { .. }));
                 break;

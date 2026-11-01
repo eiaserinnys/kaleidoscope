@@ -42,7 +42,7 @@
     }]
   },
   "ui": {
-    "type": "agent_session",
+    "type": "chat",
     "permission": "run",
     "root": { "permission": "work" },
     "agents": { "expr": "$storage.agents" },

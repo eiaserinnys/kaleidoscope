@@ -19,17 +19,17 @@ pub(crate) fn act(
         let runtime = windows
             .get(window_id)
             .ok_or_else(|| error::make(ErrorCode::NotFound))?;
-        let mut keypad = None;
+        let mut button_grid = None;
         data::walk_blocks(
             &runtime.definition.ui,
             "/ui",
             &mut |block_pointer, block| {
                 if format!("{block_pointer}/on_press") == pointer {
-                    if let kaleidoscope_contract::Block::Keypad {
+                    if let kaleidoscope_contract::Block::ButtonGrid {
                         columns, buttons, ..
                     } = block
                     {
-                        keypad = Some((
+                        button_grid = Some((
                             *columns,
                             buttons.clone(),
                             format!("{block_pointer}/buttons"),
@@ -38,7 +38,7 @@ pub(crate) fn act(
                 }
             },
         );
-        if let Some((columns, binding, binding_pointer)) = keypad {
+        if let Some((columns, binding, binding_pointer)) = button_grid {
             let value = match binding {
                 data::Binding::Literal(value) => value,
                 data::Binding::State(reference) => runtime
@@ -51,7 +51,7 @@ pub(crate) fn act(
                     _ => return Err(error::make(ErrorCode::InvalidRequest)),
                 },
             };
-            let buttons = data::validate_keypad_buttons(&value, columns)
+            let buttons = data::validate_button_grid_items(&value, u32::from(columns))
                 .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))?;
             let key = event
                 .as_str()

@@ -1,8 +1,8 @@
-import type { Block } from "../contract/contract";
+import type { Block, FolderRef, SetState, StateRef } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { FileBrowserTree } from "./file-browser-tree";
 
-type FileTreeBlockData = Extract<Block, { type: "file_tree" }>;
+export type FileTreeBlockData = Extract<Block, { type: "tree" }> & { root: FolderRef; selected: StateRef; on_select: SetState };
 
 export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; context: BlockContext }) {
   const value = context.window.state[block.selected.state];
@@ -16,7 +16,7 @@ export function FileTreeBlock({ block, context }: { block: FileTreeBlockData; co
       canCreate={context.definition.permissions.some((item) =>
         item.module === "files" && item.id === block.root.permission && item.access === "readwrite")}
       context={context}
-      extensions={block.extensions}
+      extensions={block.extensions ?? []}
       onSelect={(path) => context.store.call({
         op: "window.set_state",
         window_id: context.window.id,

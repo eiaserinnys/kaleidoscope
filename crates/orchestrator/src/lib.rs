@@ -620,6 +620,5 @@ mod tests;
 #[cfg(test)]
 mod worker_tests;
 
-
 #[cfg(test)]
 mod transfer_tests;

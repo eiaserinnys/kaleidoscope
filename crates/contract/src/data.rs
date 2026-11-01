@@ -581,13 +581,16 @@ pub struct KeypadButton {
     pub shortcut: Option<String>,
 }
 
-/// 키패드가 받는 현재 단추 목록을 검사한다.
-pub fn validate_keypad_buttons(
+/// 일반 단추 격자가 받는 항목. 이전 이름과 같은 구조를 쓴다.
+pub type ButtonGridItem = KeypadButton;
+
+/// 단추 격자가 받는 현재 항목을 검사한다.
+pub fn validate_button_grid_items(
     value: &JsonValue,
     columns: u32,
 ) -> Result<Vec<KeypadButton>, String> {
     if !(1..=8).contains(&columns) {
-        return Err("keypad columns는 1부터 8까지입니다".into());
+        return Err("button_grid columns는 1부터 8까지입니다".into());
     }
     let normalized = match value {
         serde_json::Value::Null => serde_json::json!([]),
@@ -595,32 +598,40 @@ pub fn validate_keypad_buttons(
         _ => serde_json::json!([value]),
     };
     let buttons: Vec<KeypadButton> = serde_json::from_value(normalized)
-        .map_err(|_| "keypad buttons 형식이 올바르지 않습니다".to_string())?;
+        .map_err(|_| "button_grid buttons 형식이 올바르지 않습니다".to_string())?;
     let mut keys = std::collections::HashSet::new();
     let mut shortcuts = std::collections::HashSet::new();
     for button in &buttons {
         if button.key.trim().is_empty() || !keys.insert(&button.key) {
-            return Err("keypad 단추 키가 비었거나 중복됩니다".into());
+            return Err("button_grid 단추 키가 비었거나 중복됩니다".into());
         }
         if button.span == 0 || button.span > columns {
-            return Err("keypad 단추 span이 열 범위를 벗어났습니다".into());
+            return Err("button_grid 단추 span이 열 범위를 벗어났습니다".into());
         }
         if button
             .shortcut
             .as_ref()
             .is_some_and(|key| key.is_empty() || !shortcuts.insert(key))
         {
-            return Err("keypad 단축키가 비었거나 중복됩니다".into());
+            return Err("button_grid 단축키가 비었거나 중복됩니다".into());
         }
         if button
             .icon
             .as_ref()
             .is_some_and(|icon| !ICON_NAMES.contains(&icon.as_str()))
         {
-            return Err("keypad에 쉘에 없는 아이콘이 있습니다".into());
+            return Err("button_grid에 쉘에 없는 아이콘이 있습니다".into());
         }
     }
     Ok(buttons)
+}
+
+/// 이전 함수 이름을 사용하는 코드를 위한 호환 별칭.
+pub fn validate_keypad_buttons(
+    value: &JsonValue,
+    columns: u32,
+) -> Result<Vec<KeypadButton>, String> {
+    validate_button_grid_items(value, columns)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
@@ -998,7 +1009,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
     }
     match block {
         Block::Metrics { items, .. } => bind!("items", items),
-        Block::Keypad {
+        Block::ButtonGrid {
             buttons, on_press, ..
         } => {
             bind!("buttons", buttons);
@@ -1028,15 +1039,23 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         }
         Block::List {
             items, on_select, ..
-        }
-        | Block::Tree {
-            items, on_select, ..
         } => {
             bind!("items", items);
             if let Some(on_select) = on_select {
                 act!("on_select", on_select);
             }
         }
+        Block::Tree {
+            items: Some(items),
+            on_select,
+            ..
+        } => {
+            bind!("items", items);
+            if let Some(on_select) = on_select {
+                act!("on_select", on_select);
+            }
+        }
+        Block::Tree { items: None, .. } => {}
         Block::Table {
             rows, on_select, ..
         } => {
@@ -1090,25 +1109,27 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
                 bind!("disabled", disabled);
             }
         }
-        Block::CodeView { value, .. } => {
+        Block::Code { value, .. } | Block::Markdown { value, .. } => {
             if let Some(value) = value {
                 bind!("value", value);
             }
         }
         Block::Image { src, .. } | Block::Media { src, .. } => bind!("src", src),
-        Block::AgentSession { agents, .. } => bind!("agents", agents),
+        Block::Chat {
+            agents: Some(agents),
+            ..
+        } => bind!("agents", agents),
+        Block::Chat { agents: None, .. } => {}
+        Block::HtmlView {
+            value: Some(value), ..
+        } => bind!("value", value),
         Block::Split { .. }
-        | Block::FileTree { .. }
-        | Block::MarkdownEditor { .. }
-        | Block::MarkdownView { .. }
-        | Block::HtmlView { .. }
-        | Block::AgentChat {}
+        | Block::HtmlView { value: None, .. }
         | Block::WebView { .. }
         | Block::Explorer { .. }
         | Block::Stack { .. }
         | Block::Tabs { .. }
-        | Block::Toolbar { .. }
-        | Block::CodeEditor { .. } => {}
+        | Block::Toolbar { .. } => {}
     }
     slots
 }

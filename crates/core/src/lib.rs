@@ -246,20 +246,20 @@ impl Core {
         fs::create_dir_all(&config.data_dir).map_err(|error| error::io_error(&error))?;
 
         let link_file = server_switch::startup_link(&config)?;
-        let link = link_file
-            .as_ref()
-            .map_or(LinkStatus::Unlinked {}, |file| {
-                if file.revoked {
-                    LinkStatus::Revoked { server_url: file.server_url.clone() }
-                } else {
-                    LinkStatus::Offline {
-                        mode: file.mode,
-                        server_url: file.server_url.clone(),
-                        device_name: file.device_name.clone(),
-                        reason: "연결하는 중".into(),
-                    }
+        let link = link_file.as_ref().map_or(LinkStatus::Unlinked {}, |file| {
+            if file.revoked {
+                LinkStatus::Revoked {
+                    server_url: file.server_url.clone(),
                 }
-            });
+            } else {
+                LinkStatus::Offline {
+                    mode: file.mode,
+                    server_url: file.server_url.clone(),
+                    device_name: file.device_name.clone(),
+                    reason: "연결하는 중".into(),
+                }
+            }
+        });
         let mut state = CoreState {
             last_transfer: None,
             transfer_error: None,

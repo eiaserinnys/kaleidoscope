@@ -34,8 +34,8 @@ const storageDocument: AppDefinition = {
   permissions: [], state: {},
   storage: { entries: [{ id: "memo", key: "memo", kind: "md", default: "# 기본 문서", label: "문서", presentation: "hidden" }] },
   ui: { type: "split", direction: "row", sizes: [50, 50], children: [
-    { type: "markdown_editor", document: { entry: "memo" } },
-    { type: "markdown_view", document: { entry: "memo" } },
+    { type: "markdown", document: { entry: "memo" } },
+    { type: "markdown", document: { entry: "memo" }, read_only: true },
   ] },
 };
 const galleryParams = new URLSearchParams(window.location.search);

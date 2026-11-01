@@ -175,7 +175,10 @@ fn unlink_removes_sync_but_remote_revocation_preserves_it() {
         } else {
             core.handle(CoreRequest::LinkUnlink {}).unwrap();
         }
-        assert_eq!(dir.path().join("sync.json").exists(),revoked);
-        assert_eq!(core.inner.state.lock().unwrap().sync.pending.is_empty(),!revoked);
+        assert_eq!(dir.path().join("sync.json").exists(), revoked);
+        assert_eq!(
+            core.inner.state.lock().unwrap().sync.pending.is_empty(),
+            !revoked
+        );
     }
 }

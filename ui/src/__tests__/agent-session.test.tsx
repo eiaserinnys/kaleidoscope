@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AgentSessionBlock } from "../blocks/agent-session";
+import { AgentSessionBlock, type AgentSessionBlockData } from "../blocks/agent-session";
 import { WindowDataProvider } from "../data/window-data";
 import type { AppDefinition, CoreEvent, CoreReply, CoreRequest, DataView, LocalAgentSnapshot } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
@@ -17,7 +17,7 @@ const definition: AppDefinition = {
     { module: "files", id: "work", access: "readwrite", label: "작업 폴더" },
   ],
   state: { agent_id: null },
-  ui: { type: "agent_session", permission: "run", root: { permission: "work" }, agents: [], selected: { state: "agent_id" }, on_select: { set_state: "agent_id" } },
+  ui: { type: "chat", permission: "run", root: { permission: "work" }, agents: [], selected: { state: "agent_id" }, on_select: { set_state: "agent_id" } },
 };
 
 function localAgent(phase: LocalAgentSnapshot["phase"]): LocalAgentSnapshot {
@@ -69,7 +69,7 @@ function setup(agent = localAgent("ready"), respond?: (request: CoreRequest) => 
   } as unknown as ShellStore;
   const window = base.shared.windows[0];
   const context = { store, snapshot: base, window, definition: appDefinition };
-  render(<WindowDataProvider store={store} appWindow={window} definition={appDefinition}><AgentSessionBlock block={appDefinition.ui as Extract<AppDefinition["ui"], { type: "agent_session" }>} context={context} /></WindowDataProvider>);
+  render(<WindowDataProvider store={store} appWindow={window} definition={appDefinition}><AgentSessionBlock block={appDefinition.ui as AgentSessionBlockData} context={context} /></WindowDataProvider>);
   return { call, window, emit: (event: CoreEvent) => act(() => { listeners.forEach((listener) => listener(event)); }) };
 }
 

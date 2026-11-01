@@ -21,7 +21,7 @@
 //!
 //! 6판에서 바뀐 것(범용 블록 확충, 카드 #809): 블록 세트 4판(배치 `stack`, `tabs`, `toolbar`, `section`, 데이터
 //! `list`, `table`, `properties`, `tree`, `feed`, `text`, 입력 `input`, `select`, `toggle`, `button`, 문서와 미디어
-//! `code_editor`, `code_view`, `image`, `media`)과 앱 정의의 `sources`, 4판 블록의 식 바인딩과 동작([`data`]),
+//! `code`, `image`, `media`)과 앱 정의의 `sources`, 4판 블록의 식 바인딩과 동작([`data`]),
 //! 모듈 `connection` 1판(서버에 등록한 이름 붙인 연결, `connection` 권한), `data.*`와 `connection.login` 명령,
 //! `data.update` 이벤트. 블록은 서비스의 데이터 모양을 모르고, 앱 정의의 JSONata 식이 데이터를 블록의 모양으로
 //! 바꾼다(결정 「쉘은 OS처럼 범용 기능과 범용 애셋만 (261030)」). 서버 쪽은 [`registry`]의 「연결」 절에 있다.
@@ -101,8 +101,8 @@
 //! 개인 앱 삭제와 동기화는 레지스트리 9판에서 처리한다.
 //!
 //! # 계약 20판: 기기 로컬 에이전트
-//! 블록 세트 8판의 `agent_session`, 모듈 `local_agent` 1판과 `local_agent` 권한을 더했다. 화면 명령 `local_agent.*`,
-//! `local_agent.update` 이벤트, 기기별 실행 허용 기록도 계약에 포함한다. 이 블록은 `agent_chat`의 작업 PAS와 별도로
+//! 블록 세트 8판의 `chat` 로컬 세션 모드, 모듈 `local_agent` 1판과 `local_agent` 권한을 더했다. 화면 명령 `local_agent.*`,
+//! `local_agent.update` 이벤트, 기기별 실행 허용 기록도 계약에 포함한다. 이 모드는 제공자 `chat`의 작업 PAS와 별도로
 //! 기기에서 ACP 에이전트를 실행한다. 세부 wire DTO는 [`local_agent`]에 있다.
 //!
 //! # 계약 21판: 작업 PAS 프로필과 모델 선택
@@ -220,18 +220,18 @@ pub const TAURI_EVENT: &str = "core-event";
 ///   거부하고, 서버는 그 판을 그리지 못하는 쉘에 그 앱을 보내지 않는다. 필드를 쓰지 않은 정의는 전 판 그대로다.
 /// - 블록이 그리는 모양과 조작은 쉘이 판마다 다듬을 수 있다(OS가 기본 앱을 고치듯). 정의 필드의 뜻과 앱이 기대는
 ///   동작(예: 탐색기에서 파일을 열면 `opens`의 앱으로 연다)은 지킨다.
-/// - 1판: `split`, `file_tree`, `markdown_editor`, `markdown_view`.
-/// - 2판: 1판 + `agent_chat`.
+/// - 1판: `split`, 폴더 모드 `tree`, 파일 모드 `markdown`.
+/// - 2판: 1판 + 제공자 대화 모드 `chat`.
 /// - 3판: 2판 + `web_view`, `explorer`, 앱 정의의 `opens`.
 /// - 4판: 3판 + `stack`, `tabs`, `toolbar`, `section`, `list`, `table`, `properties`, `tree`, `feed`, `text`,
-///   `input`, `select`, `toggle`, `button`, `code_editor`, `code_view`, `image`, `media`, 앱 정의의 `sources`.
+///   `input`, `select`, `toggle`, `button`, `code`, `image`, `media`, 앱 정의의 `sources`.
 /// - 5판: 4판 + `explorer`의 `folder`, `on_folder`, `view`, `on_view`. 5판 쉘은 탐색기를 폴더 트리와 내용의 두 칸으로
 ///   그리고, 이 필드가 없는 3판 정의의 탐색기도 같은 모습으로 그린다.
-/// - 6판: 5판 + `markdown_editor`와 `markdown_view`의 `document` 바인딩, 앱 정의의 `storage`와 `agent`.
+/// - 6판: 5판 + `markdown`의 `document`와 읽기 전용 `value` 바인딩, `html_view`, 앱 정의의 `storage`와 `agent`.
 /// - 7판: 6판 + `feed`의 `columns`, `copy`.
-/// - 8판: 7판 + 기기 로컬 ACP 대화 블록 `agent_session`.
-/// - 9판: 8판 + `metrics`, `keypad`, `chart`(캔들 포함), 표의 등락률과 스파크라인.
-/// - 10판: 9판 + 저장소 HTML 문서와 코멘트를 다루는 `html_view`, 세계 지도 `map`, 피드의 중첩 답글과 접기.
+/// - 8판: 7판 + 기기 로컬 ACP 세션 모드의 `chat`.
+/// - 9판: 8판 + `metrics`, `button_grid`, `chart`(캔들 포함), 표의 등락률과 스파크라인.
+/// - 10판: 9판 + 세계 지도 `map`, 피드의 중첩 답글과 접기.
 pub const BLOCK_SET_VERSION: u32 = 10;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
@@ -636,12 +636,12 @@ pub enum LinkStatus {
 ///    - `id`와 권한 `id`는 소문자, 숫자, `-`로 1~64자. 권한 `id`는 겹치지 않는다. `name`은 비어 있지 않다.
 ///    - 권한의 `module`은 `requires.modules`에 있어야 한다.
 ///    - 블록이 가리키는 권한(`permission`)은 선언되어 있고 `files` 모듈이다.
-///    - `markdown_editor`가 가리키는 권한은 `readwrite`다.
+///    - `markdown`이나 `code`의 편집 모드에서 파일 권한은 `readwrite`다.
 ///    - 블록이 읽고 쓰는 상태 키(`state`, `set_state`)는 정의의 `state`에 선언되어 있다.
 ///    - 정의에 직접 적은 경로(문자열 `path`)는 [`FileRef`]의 경로 규칙을 지킨다. 어기면 고른 폴더 밖을
 ///      요구하는 정의로 보고 거부한다.
 ///    - `split`의 `children`은 둘 이상이고, `sizes`가 있으면 개수가 같고 모두 0보다 크다.
-///    - `agent_chat`을 쓰면 `requires.modules`에 `agent`가 있다.
+///    - `chat`의 제공자 모드를 쓰면 `requires.modules`에 `agent`가 있다. 로컬 세션 모드는 `local_agent`와 `files` 권한을 쓴다.
 ///    - 쓴 블록마다 처음 생긴 판([`Block::introduced_in`]) 이상을 `requires.blocks`에 적는다.
 ///      `opens`를 쓰면 `requires.blocks`가 3 이상이다.
 ///    - `web_view`는 정의에 하나까지이고, 쓰면 `requires.modules`에 `web`이 있다. 정의에 직접 적은 주소는
@@ -658,8 +658,7 @@ pub enum LinkStatus {
 ///    - (4판) `connection` 권한을 쓰면 `requires.modules`에 `connection`이 있다. 연결 이름은 소문자, 숫자, `-` 1~64자다.
 ///    - (4판) `toolbar`의 자식은 `input`, `select`, `toggle`, `button`, `text`뿐이다. `stack`의 `fill`은 자식 안의
 ///      순서다. `tabs`와 `stack`에는 자식이 하나 이상 있다. `table`의 열은 하나 이상이고 `field`가 겹치지 않는다.
-///      `button`의 `icon`은 [`data::ICON_NAMES`]에 있다. `code_editor`의 권한은 `readwrite`다.
-///      `code_view`는 `value`와 `file` 가운데 꼭 하나를 쓴다.
+///      `button`의 `icon`은 [`data::ICON_NAMES`]에 있다. `code`는 `value`와 `file` 가운데 꼭 하나를 쓴다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
@@ -938,7 +937,7 @@ pub enum FileAccess {
 /// 모양은 [`data`] 모듈의 [`data::ListItem`] 등에 있다. 식의 값이 아직 없으면(원천을 받는 중, 실패, 로그인 필요)
 /// 데이터 블록은 그 상태를 그 자리에 보인다. 4판 블록은 쉘의 토큰과 공통 부품만으로 그리고, 앱이 색이나 크기를
 /// 정하지 않는다(항목의 `color`와 배지 색만 예외).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub enum Block {
@@ -951,45 +950,64 @@ pub enum Block {
         sizes: Option<Vec<f64>>,
         children: Vec<Block>,
     },
-    /// 고른 폴더의 파일 트리. 폴더를 아직 안 골랐으면 폴더 고르기를 보인다.
-    /// 파일을 누르면 그 경로를 `on_select`의 상태 키에 쓴다. 폴더는 펼치고 접기만 한다.
-    /// 쉘 창이 포커스를 다시 얻으면 펼친 폴더를 다시 읽는다(다른 곳에서 생긴 파일이 보이게).
-    FileTree {
-        root: FolderRef,
+    /// `items`면 앱 데이터 항목의 트리, `root`면 폴더의 파일 트리다. 둘 중 하나를 둔다.
+    /// 데이터 모드의 항목은 [`data::TreeItem`]이고 `by`가 `path`면 항목의 경로를 나눠 폴더를 만든다.
+    /// 폴더 모드에서는 파일을 누르면 `on_select` 상태 키에 경로를 쓰고 폴더는 펼치고 접기만 한다.
+    /// 쉘 창이 포커스를 다시 얻으면 폴더 모드의 트리를 다시 읽는다.
+    Tree {
+        #[serde(
+            default,
+            deserialize_with = "present_binding",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[ts(optional)]
+        items: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        root: Option<FolderRef>,
         /// 보일 파일 확장자(점 없이, 소문자). 비어 있으면 모든 파일. 폴더는 늘 보인다.
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(optional, as = "Option<Vec<String>>")]
         extensions: Vec<String>,
-        /// 선택 표시에 쓸 상태 키.
-        selected: StateRef,
-        on_select: SetState,
+        #[serde(default)]
+        #[ts(optional, as = "Option<TreeBy>")]
+        by: TreeBy,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_select: Option<Actions>,
     },
-    /// 마크다운 원문 편집기. `file`이 가리키는 파일을 읽어 보이고, 원문을 그대로 쓴다.
-    /// 자동 저장: 입력을 멈추고 1초 뒤, 다른 파일로 바뀌기 전, Ctrl+S에 저장한다. 저장은 읽은 revision을
-    /// 함께 보내고, 그 사이 디스크에서 바뀌었으면(`conflict`) 다시 불러오기와 덮어쓰기를 고르게 한다.
-    /// 고치지 않은 상태에서 쉘 창이 포커스를 다시 얻으면 파일을 다시 읽는다. 경로가 null이면 빈 상태를 보인다.
-    /// (블록 세트 6판) `document`는 선언된 md 저장 항목을 읽고 쓴다. `file`과 함께 쓰지 않는다.
-    MarkdownEditor {
+    /// `file`, `document`, `value` 가운데 하나의 마크다운을 표시한다. `value`는 읽기 전용이다.
+    /// `read_only`가 거짓이면 `file`이나 `document`를 편집하고 저장한다. 파일은 원문 줄바꿈을 보존하며 자동 저장,
+    /// 충돌 안내, 포커스 때 다시 읽기를 한다. (블록 세트 6판) `document`는 선언된 md 저장 항목을 쓰며,
+    /// `file` 및 `value`와 함께 쓰지 않는다.
+    Markdown {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         file: Option<FileRef>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         document: Option<DocumentRef>,
-    },
-    /// 마크다운을 렌더해서 읽기만 한다. 원문의 HTML은 그리지 않는다.
-    /// 쉘 창이 포커스를 다시 얻으면 파일이나 문서를 다시 읽는다. 경로가 null이면 빈 상태를 보인다.
-    /// (블록 세트 6판) `document`는 선언된 md 저장 항목을 읽는다. `file`과 함께 쓰지 않는다.
-    MarkdownView {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        file: Option<FileRef>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        document: Option<DocumentRef>,
+        value: Option<Binding>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        #[ts(optional, as = "Option<bool>")]
+        read_only: bool,
     },
-    /// (블록 세트 10판) JSON 저장 항목의 HTML 문서와 리비전을 보고 코멘트를 남긴다.
+    /// HTML을 격리된 프레임으로 본다. document 모드는 문서·리비전·코멘트를 다루고 file/value 모드는 HTML을 읽기만 한다.
     HtmlView {
-        document: DocumentRef,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        document: Option<DocumentRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        file: Option<FileRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        value: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         selected_doc: Option<StateRef>,
@@ -1003,10 +1021,9 @@ pub enum Block {
         #[ts(optional)]
         on_select_revision: Option<SetState>,
     },
-    /// (블록 세트 2판) 이 창이 있는 워크스페이스의 PAS와 나누는 대화. `requires.modules`에 `agent`가
-    /// 있어야 한다. 창마다 설정할 것이 없다. 같은 워크스페이스의 대화 창은 모두 같은 PAS를 본다.
-    /// 앱 정의에 `agent` provider가 있으면 `agent` 3판의 대화 제공자를 사용한다. 선언이 없는 기존
-    /// `agent_chat {}`는 대화 제공자가 없다는 빈 상태를 보인다.
+    /// 작업 대화 또는 기기 로컬 에이전트 세션이다. 필드가 모두 없으면 작업 대화 모드이며 `requires.modules.agent`가
+    /// 필요하다. `permission`, `root`, `agents`, `selected`, `on_select`를 모두 선언하면 기기 로컬 ACP 세션 모드다.
+    /// 제공자 모드에서 앱 정의에 `agent` provider가 있으면 `agent` 3판의 대화 제공자를 사용한다. provider가 없으면 빈 상태다.
     /// - 서버에 연결하지 않았으면 연결하라는 빈 상태를 보인다.
     /// - 대화가 없으면 모델을 고르고 시작하는 판을 보인다(`conversation.create`).
     /// - 대화가 있으면 기록과 진행 중인 답을 보이고 입력창으로 보낸다(`conversation.send`).
@@ -1015,16 +1032,22 @@ pub enum Block {
     /// - (모듈 `agent` 2판) 입력 줄의 첨부 단추로 파일을 고르거나 입력창에 클립보드 이미지를 붙여 넣으면
     ///   보낼 첨부로 쌓인다. 첨부가 있으면 글 없이도 보낸다. 기록의 사용자 말에 첨부가 보이고, 이미지는
     ///   눌러 크게 보고 다른 파일은 눌러 기기의 기본 앱으로 연다.
-    AgentChat {},
-    /// (블록 세트 8판) 이 창 안에서 기기 로컬 ACP 에이전트 하나와 대화한다.
-    /// `permission`은 `local_agent` 권한, `root`는 `files`의 `folder/readwrite` 권한이다.
-    /// `agents`는 실행 명세 배열이며, `selected`와 `on_select`는 같은 창 상태 키를 쓴다.
-    AgentSession {
-        permission: String,
-        root: FolderRef,
-        agents: Binding,
-        selected: StateRef,
-        on_select: SetState,
+    Chat {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        permission: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        root: Option<FolderRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        agents: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_select: Option<SetState>,
     },
     /// (블록 세트 3판) 웹 페이지 하나를 띄우는 웹 화면. `requires.modules`에 `web`이 있어야 하고 정의에
     /// 하나까지 둘 수 있다. 위에 뒤로, 앞으로, 새로고침 단추와 페이지 제목 줄이 있고, `address_bar`면 제목 자리에
@@ -1181,18 +1204,6 @@ pub enum Block {
     /// (4판) 데이터 트리. `items`는 [`data::TreeItem`] 배열이다. `by`가 `path`면 항목의 `path`를 `/`로 나눠 폴더를
     /// 만든다. 아래 항목이 있는 것(폴더)은 펴고 접기만 하고, 끝 항목을 누르면 `on_select`가 돈다. 고른 항목의
     /// 위 폴더는 처음에 펴 둔다. 편 상태는 저장하지 않는다.
-    Tree {
-        items: Binding,
-        #[serde(default)]
-        #[ts(optional, as = "Option<TreeBy>")]
-        by: TreeBy,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        selected: Option<StateRef>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        on_select: Option<Actions>,
-    },
     /// (4판) 흐름. 대화 기록, 대사, 로그처럼 이름과 본문이 이어지는 것. `entries`는 [`data::FeedEntry`] 배열이고,
     /// `grouped`면 [`data::Group`]`<FeedEntry>` 배열이다(묶음 머리에 제목과 부가 정보). 본문은 줄바꿈을 지키고
     /// 글을 고르고 복사할 수 있다. `format`이 `markdown`이면 본문을 마크다운으로 그린다(HTML은 그리지 않는다).
@@ -1307,18 +1318,10 @@ pub enum Block {
     },
 
     // ----- 블록 세트 4판: 문서와 미디어 -----
-    /// (4판) 코드와 설정 파일 편집기. 저장, 충돌, 다시 읽기는 `markdown_editor`와 같다(원문 보존, 자동 저장).
-    /// `language`가 없으면 확장자로 정한다. 권한은 `readwrite`다.
-    CodeEditor {
-        file: FileRef,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        language: Option<CodeLanguage>,
-    },
-    /// (4판) 코드와 로그 보기(읽기만). `value`(식이나 상태의 글)나 `file` 가운데 하나를 보인다. `file`이면 쉘 창이
-    /// 포커스를 다시 얻을 때 다시 읽는다. `follow`면 끝에 붙어 있을 때 글이 늘면 끝을 따라간다. `wrap`이면 긴 줄을
-    /// 접는다. 줄 번호가 보이고 글을 고르고 복사할 수 있다.
-    CodeView {
+    /// 코드와 설정 파일의 편집기 또는 읽기 전용 보기다. `file`과 `value` 가운데 하나를 쓴다.
+    /// `file`은 기본으로 편집하고 `read_only`면 읽기 전용이다. `value`는 읽기 전용이다.
+    /// `language`가 없으면 확장자로 정하며, `follow`와 `wrap`은 보기 모양을 고른다.
+    Code {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         value: Option<Binding>,
@@ -1328,10 +1331,13 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         language: Option<CodeLanguage>,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "is_false")]
+        #[ts(optional, as = "Option<bool>")]
+        read_only: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
         #[ts(optional, as = "Option<bool>")]
         follow: bool,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "is_false")]
         #[ts(optional, as = "Option<bool>")]
         wrap: bool,
     },
@@ -1365,8 +1371,8 @@ pub enum Block {
         columns: Option<u32>,
     },
     /// (9판) 키와 단축키를 가진 단추를 격자로 표시한다.
-    Keypad {
-        columns: u32,
+    ButtonGrid {
+        columns: u8,
         buttons: Binding,
         on_press: Actions,
     },
@@ -1402,23 +1408,878 @@ pub enum Block {
     },
 }
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+fn present_binding<'de, D>(deserializer: D) -> Result<Option<Binding>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Binding::deserialize(deserializer).map(Some)
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+enum RawBlock {
+    /// 자식 블록을 나란히 놓는다. 경계를 끌어 크기를 바꿀 수 있다(바꾼 크기는 저장하지 않는다).
+    Split {
+        direction: SplitDirection,
+        /// 자식마다의 상대 크기. 없으면 똑같이 나눈다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sizes: Option<Vec<f64>>,
+        children: Vec<Block>,
+    },
+    /// 고른 폴더의 파일 트리. 폴더를 아직 안 골랐으면 폴더 고르기를 보인다.
+    /// 파일을 누르면 그 경로를 `on_select`의 상태 키에 쓴다. 폴더는 펼치고 접기만 한다.
+    /// 쉘 창이 포커스를 다시 얻으면 펼친 폴더를 다시 읽는다(다른 곳에서 생긴 파일이 보이게).
+    Tree {
+        #[serde(
+            default,
+            deserialize_with = "present_binding",
+            skip_serializing_if = "Option::is_none"
+        )]
+        items: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        root: Option<FolderRef>,
+        /// 보일 파일 확장자(점 없이, 소문자). 비어 있으면 모든 파일. 폴더는 늘 보인다.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        extensions: Vec<String>,
+        #[serde(default)]
+        by: TreeBy,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_select: Option<Actions>,
+    },
+    /// 마크다운 원문 편집기. `file`이 가리키는 파일을 읽어 보이고, 원문을 그대로 쓴다.
+    /// 자동 저장: 입력을 멈추고 1초 뒤, 다른 파일로 바뀌기 전, Ctrl+S에 저장한다. 저장은 읽은 revision을
+    /// 함께 보내고, 그 사이 디스크에서 바뀌었으면(`conflict`) 다시 불러오기와 덮어쓰기를 고르게 한다.
+    /// 고치지 않은 상태에서 쉘 창이 포커스를 다시 얻으면 파일을 다시 읽는다. 경로가 null이면 빈 상태를 보인다.
+    /// (블록 세트 6판) `document`는 선언된 md 저장 항목을 읽고 쓴다. `file`과 함께 쓰지 않는다.
+    Markdown {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        file: Option<FileRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        document: Option<DocumentRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<Binding>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        read_only: bool,
+    },
+    /// HTML을 격리된 프레임으로 본다. document 모드는 문서·리비전·코멘트를 다루고 file/value 모드는 HTML을 읽기만 한다.
+    HtmlView {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        document: Option<DocumentRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        file: Option<FileRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selected_doc: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_select_doc: Option<SetState>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selected_revision: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_select_revision: Option<SetState>,
+    },
+    /// (블록 세트 2판) 이 창이 있는 워크스페이스의 PAS와 나누는 대화. `requires.modules`에 `agent`가
+    /// 있어야 한다. 창마다 설정할 것이 없다. 같은 워크스페이스의 대화 창은 모두 같은 PAS를 본다.
+    /// 앱 정의에 `agent` provider가 있으면 `agent` 3판의 대화 제공자를 사용한다. 선언이 없는 기존
+    /// `agent_chat {}`는 대화 제공자가 없다는 빈 상태를 보인다.
+    /// - 서버에 연결하지 않았으면 연결하라는 빈 상태를 보인다.
+    /// - 대화가 없으면 모델을 고르고 시작하는 판을 보인다(`conversation.create`).
+    /// - 대화가 있으면 기록과 진행 중인 답을 보이고 입력창으로 보낸다(`conversation.send`).
+    ///   Enter는 보내기, Shift+Enter는 줄바꿈이다. 한글 조합 중의 Enter는 보내지 않는다.
+    /// - 답은 마크다운으로 렌더한다. HTML은 그리지 않고 링크를 눌러도 쉘이 다른 곳으로 가지 않는다.
+    /// - (모듈 `agent` 2판) 입력 줄의 첨부 단추로 파일을 고르거나 입력창에 클립보드 이미지를 붙여 넣으면
+    ///   보낼 첨부로 쌓인다. 첨부가 있으면 글 없이도 보낸다. 기록의 사용자 말에 첨부가 보이고, 이미지는
+    ///   눌러 크게 보고 다른 파일은 눌러 기기의 기본 앱으로 연다.
+    Chat {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        permission: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        root: Option<FolderRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agents: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_select: Option<SetState>,
+    },
+    /// (블록 세트 3판) 웹 페이지 하나를 띄우는 웹 화면. `requires.modules`에 `web`이 있어야 하고 정의에
+    /// 하나까지 둘 수 있다. 위에 뒤로, 앞으로, 새로고침 단추와 페이지 제목 줄이 있고, `address_bar`면 제목 자리에
+    /// 주소창이 온다(Enter로 이동, scheme이 없으면 `https://`를 붙이고 주소로 보이지 않는 글은 검색한다).
+    ///
+    /// - 처음 열 때 `url`의 주소를 연다(`web.attach`). 그 뒤 `url`이 가리키는 값이 바뀌어 지금 페이지와 다르면
+    ///   그 주소로 간다. 값이 `http://`나 `https://` 주소가 아니면 빈 상태를 보인다.
+    /// - 페이지가 다른 주소로 가면 코어가 그 주소를 `on_navigate`의 상태 키에 쓴다. 창을 다시 열거나 다른 기기에서
+    ///   열어도 보던 곳에서 이어 보게 하려는 것이다.
+    /// - 웹 화면은 쉘이 그린 화면 위에 따로 뜨는 화면이라, 쉘이 그린 것(위에 있는 다른 창, 메뉴, 팝오버)을 그 위에
+    ///   그릴 수 없다. 그래서 그런 것이 웹 화면에 조금이라도 겹치면 화면은 그 순간을 찍은 정지 화면으로 바꿔 보이고
+    ///   (`web.capture`, 웹 화면은 숨김), 겹친 것이 사라지면 다시 살아 있는 웹 화면을 보인다. 정지 화면을 누르면
+    ///   창이 맨 위로 올라와 살아난다. 자기 창을 끌거나 크기를 바꾸는 동안에는 살아 있는 채로 따라간다.
+    ///   보이지 않는 데스크톱의 웹 화면은 숨기되 닫지 않는다(돌아오면 보던 페이지 그대로다).
+    /// - 웹 화면은 `http`와 `https`만 연다. 다른 scheme(쉘 자신의 주소, `file`, `javascript` 등)으로 가는 이동은
+    ///   막는다. 새 창을 여는 링크와 `window.open`은 같은 웹 화면에서 연다. 웹 화면의 페이지는 코어 명령에 닿지 않는다.
+    /// - 이 쉘이 웹 화면을 띄울 수 없으면(개발용 HTTP 다리 등, `unavailable`) 그렇다는 빈 상태를 보인다.
+    WebView {
+        /// 열 주소. 상태에서 읽거나(`{ "state": "url" }`) 정의에 적는다(`"https://example.com"`).
+        url: UrlValue,
+        /// 페이지가 다른 주소로 가면 그 주소를 쓸 상태 키.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_navigate: Option<SetState>,
+        /// 주소창을 보일지. 거짓이면 그 자리에 페이지 제목만 보인다(정해진 사이트를 띄우는 앱).
+        #[serde(default)]
+        address_bar: bool,
+    },
+    /// (블록 세트 3판, 5판에서 두 칸으로) 고른 폴더를 보는 탐색기. 폴더를 아직 안 골랐으면 폴더 고르기를 보인다.
+    ///
+    /// - 왼쪽 칸은 폴더 트리(폴더만), 오른쪽 칸은 지금 보는 폴더의 내용이다. 처음에는 고른 폴더 자체를 본다.
+    ///   왼쪽 칸은 `split`의 첫 칸처럼 접을 수 있고, 두 칸 사이를 끌어 폭을 바꾼다(저장하지 않음).
+    /// - 왼쪽에서 폴더를 누르면 그 폴더를 보고 그 폴더를 편다. 오른쪽에서 폴더를 두 번 누르거나 고른 채 Enter를
+    ///   누르면 그 폴더로 들어가고, 왼쪽 트리도 그 폴더까지 펴서 고른다. 오른쪽 위에는 위 폴더로 가는 단추와
+    ///   지금 경로가 있고, 경로의 마디를 누르면 그 폴더로 간다.
+    /// - 오른쪽 보기는 [`ExplorerView`]의 둘이다. 「아이콘」은 파일 종류 아이콘과 이름의 격자, 「자세히」는 이름,
+    ///   수정한 날짜, 종류, 크기의 표이고 머리를 누르면 그 열로 정렬한다(오름차순, 내림차순, 처음 순서, 저장하지
+    ///   않음). 어느 보기든 폴더가 파일보다 앞이다.
+    /// - 파일을 누르면 고르기만 한다(창 상태에 쓰지 않는다). 파일을 두 번 누르거나 고른 채 Enter를 누르면 그
+    ///   확장자를 여는 앱(지금 버전 정의의 `opens`)으로 연다(`files.open`). 여는 앱이 하나면 바로 열고, 여럿이면 앱
+    ///   이름순 메뉴로 고르게 하고, 없으면 그 메뉴에 열 수 있는 앱이 없다고 보인다. 파일의 오른쪽 클릭 메뉴도 같은
+    ///   앱 목록이다.
+    /// - 쉘 창이 포커스를 다시 얻으면 지금 보는 폴더와 왼쪽에서 편 폴더를 다시 읽는다.
+    /// - `folder`와 `on_folder`, `view`와 `on_view`(5판)를 주면 보는 폴더와 보기 방식을 창 상태에서 읽고 바뀔 때 쓴다
+    ///   (창을 다시 열거나 다른 기기에서 열어도 그 자리). 없으면 쉘이 들고 저장하지 않는다. 읽은 폴더가 경로 규칙
+    ///   ([`FileRef`])에 맞지 않거나 읽을 수 없으면 고른 폴더 자체를 보고 그것을 쓴다. 보기 값이 [`ExplorerView`]가
+    ///   아니면 「아이콘」으로 본다. 고른 폴더를 바꾸면 고른 폴더 자체로 돌아간다.
+    Explorer {
+        root: FolderRef,
+        /// (5판) 지금 보는 폴더를 읽을 상태 키. 값은 고른 폴더 기준 상대 경로이고 빈 문자열이 고른 폴더 자체다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        folder: Option<StateRef>,
+        /// (5판) 보는 폴더가 바뀌면 그 경로를 쓸 상태 키.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_folder: Option<SetState>,
+        /// (5판) 보기 방식([`ExplorerView`]의 문자열)을 읽을 상태 키.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        view: Option<StateRef>,
+        /// (5판) 보기 방식을 바꾸면 그 값을 쓸 상태 키.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_view: Option<SetState>,
+    },
+
+    // ----- 블록 세트 4판: 배치 -----
+    /// (4판) 자식을 한 줄로 쌓는다. 끌어서 크기를 바꾸지 않는다(그건 `split`). 자식은 제 크기만 차지하고,
+    /// `fill`번째 자식(없으면 마지막)이 남은 자리를 모두 차지한다. 넘치면 그 칸 안에서 스크롤한다.
+    Stack {
+        direction: SplitDirection,
+        #[serde(default)]
+        gap: Gap,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fill: Option<u32>,
+        children: Vec<Block>,
+    },
+    /// (4판) 탭. 고른 탭의 자식만 그린다. `selected`를 주면 고른 탭의 순서(0부터)를 창 상태에서 읽고 바꿀 때
+    /// `on_change`로 쓴다(다시 열어도 그 탭). 없으면 쉘이 들고 저장하지 않는다.
+    Tabs {
+        tabs: Vec<Tab>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_change: Option<SetState>,
+    },
+    /// (4판) 도구 막대. 한 줄의 컨트롤을 앞(`start`)과 끝(`end`)으로 나눠 놓는다. 자식은 `input`, `select`,
+    /// `toggle`, `button`, `text`뿐이다. 높이와 여백, 아래 구분은 쉘이 정한다. `input`은 남은 폭을 차지한다.
+    Toolbar {
+        start: Vec<Block>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        end: Vec<Block>,
+    },
+    /// (4판) 제목이 있는 구역. `collapsible`이면 머리를 눌러 접고 편다(저장하지 않음). `collapsed`는 처음 모습이다.
+    Section {
+        title: Binding,
+        /// 제목 옆에 작게 보일 부가 정보(개수 등).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        meta: Option<Binding>,
+        #[serde(default)]
+        collapsible: bool,
+        #[serde(default)]
+        collapsed: bool,
+        child: Box<Block>,
+    },
+
+    // ----- 블록 세트 4판: 데이터 보기 -----
+    /// (4판) 목록. `items`는 [`data::ListItem`] 배열이고, `grouped`면 [`data::Group`]`<ListItem>` 배열이다.
+    /// `layout`이 `grid`면 그림 칸의 격자다(그림이 없는 항목은 빈 칸에 제목만). 항목을 누르면 `on_select`가
+    /// `$event`(항목의 `key`)와 `$item`(항목)으로 돈다. `selected`의 값과 `key`가 같은 항목을 고른 것으로 보인다.
+    /// 화살표 키로 옮겨 다니고 Enter로 고른다. 긴 목록은 보이는 줄만 그린다.
+    List {
+        items: Binding,
+        #[serde(default)]
+        layout: ListLayout,
+        #[serde(default)]
+        grouped: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_select: Option<Actions>,
+    },
+    /// (4판) 표. `rows`는 객체 배열이고 각 행에 `key`(문자열)가 있다. 칸은 `columns`의 `field`로 행에서 읽는다.
+    /// 열 머리를 누르면 오름차순, 내림차순, 처음 순서로 돈다(저장하지 않음, `sort`가 처음 모습). 머리는 위에
+    /// 붙어 있고 긴 표는 보이는 줄만 그린다. 고르기는 `list`와 같다.
+    Table {
+        rows: Binding,
+        columns: Vec<Column>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sort: Option<SortSpec>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_select: Option<Actions>,
+    },
+    /// (4판) 속성 이름과 값의 목록(상세 보기). 값이 null이거나 빈 글이면 그 줄을 뺀다. 값을 고르고 복사할 수 있다.
+    Properties { fields: Vec<PropertyField> },
+    /// (4판) 데이터 트리. `items`는 [`data::TreeItem`] 배열이다. `by`가 `path`면 항목의 `path`를 `/`로 나눠 폴더를
+    /// 만든다. 아래 항목이 있는 것(폴더)은 펴고 접기만 하고, 끝 항목을 누르면 `on_select`가 돈다. 고른 항목의
+    /// 위 폴더는 처음에 펴 둔다. 편 상태는 저장하지 않는다.
+    /// (4판) 흐름. 대화 기록, 대사, 로그처럼 이름과 본문이 이어지는 것. `entries`는 [`data::FeedEntry`] 배열이고,
+    /// `grouped`면 [`data::Group`]`<FeedEntry>` 배열이다(묶음 머리에 제목과 부가 정보). 본문은 줄바꿈을 지키고
+    /// 글을 고르고 복사할 수 있다. `format`이 `markdown`이면 본문을 마크다운으로 그린다(HTML은 그리지 않는다).
+    /// `follow`면 끝에 붙어 있을 때 새 항목이 오면 끝을 따라간다. `on_select`가 있으면 항목을 누를 수 있다
+    /// (글을 고르는 중의 누르기는 고르기가 아니다).
+    #[serde(alias = "thread")]
+    Feed {
+        entries: Binding,
+        #[serde(default)]
+        grouped: bool,
+        #[serde(default)]
+        format: TextFormat,
+        #[serde(default)]
+        follow: bool,
+        /// (블록 세트 7판) 본문 문단(`body`가 배열일 때)을 같은 너비의 칸으로 나란히 놓는다. 창이 좁아 칸마다
+        /// 최소 너비를 지킬 수 없으면 위아래로 쌓는다. 예: 여러 문단 비교.
+        #[serde(default)]
+        columns: bool,
+        /// (블록 세트 7판) 항목의 `meta`와 본문 문단마다 복사 단추를 붙인다. 누르면 그 글을 그대로(줄바꿈 포함)
+        /// 클립보드에 쓴다. 단추를 눌러도 항목 고르기는 돌지 않는다.
+        #[serde(default)]
+        copy: bool,
+        /// (블록 세트 10판) 대댓글과 긴 항목의 접기·펴기를 켠다.
+        #[serde(default)]
+        collapsible: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_select: Option<Actions>,
+    },
+    /// (4판) 글. 값이 문자열이 아니면 JSON으로 보인다. `format`이 `markdown`이면 마크다운으로 그린다(HTML은
+    /// 그리지 않는다). 글을 고르고 복사할 수 있다. 넘치면 그 칸 안에서 스크롤한다.
+    Text {
+        value: Binding,
+        #[serde(default)]
+        format: TextFormat,
+        #[serde(default)]
+        style: TextStyle,
+    },
+
+    // ----- 블록 세트 4판: 입력과 동작 -----
+    /// (4판) 글 입력. `value`의 상태를 보이고, 입력이 멈추고 0.3초 뒤와 포커스를 잃을 때 `on_change`가 `$event`
+    /// (입력한 글, `number`면 숫자나 null)로 돈다. 입력 중에는 상태가 바뀌어도 글을 덮지 않는다. `search`는 앞에
+    /// 돋보기, 글이 있으면 끝에 지우기 단추가 붙는다. `multiline`이면 한 줄로 시작해 글을 따라 자란다(최대 8줄).
+    /// Enter는 `on_submit`이 있으면 그것을 부른다(`multiline`에서는 Ctrl+Enter). 한글 조합 중의 Enter는 보내지 않는다.
+    Input {
+        value: StateRef,
+        on_change: Actions,
+        #[serde(default)]
+        kind: InputKind,
+        #[serde(default)]
+        multiline: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        placeholder: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_submit: Option<Actions>,
+    },
+    /// (4판) 고르기. `options`는 [`data::SelectOption`] 배열이다. 고르면 `on_change`가 `$event`(고른 값)로 돈다.
+    /// `segmented`는 선택지가 한 줄에 다 보이는 모양이다(선택지 2~5개에 쓴다).
+    Select {
+        value: StateRef,
+        on_change: Actions,
+        options: Binding,
+        #[serde(default)]
+        style: SelectStyle,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        placeholder: Option<String>,
+    },
+    /// (4판) 켜고 끄기. 바꾸면 `on_change`가 `$event`(참이나 거짓)로 돈다.
+    Toggle {
+        value: StateRef,
+        on_change: Actions,
+        label: String,
+    },
+    /// (4판) 단추. 누르면 `on_click`이 돈다(`$event`는 null). 도는 동안 단추는 쉬고, 실패하면 창 아래에 오류
+    /// 한 줄이 보인다. `confirm`이 있으면 확인 대화상자에서 확인했을 때만 돈다. `icon_only`면 아이콘만 보이고
+    /// `label`은 도움말과 읽어 주기에 쓴다. `disabled`가 참이면 누를 수 없다.
+    Button {
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        icon: Option<String>,
+        #[serde(default)]
+        icon_only: bool,
+        #[serde(default)]
+        variant: ButtonVariant,
+        on_click: Actions,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        confirm: Option<Confirm>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        disabled: Option<Binding>,
+    },
+
+    // ----- 블록 세트 4판: 문서와 미디어 -----
+    /// (4판) 코드와 설정 파일 편집기. 저장, 충돌, 다시 읽기는 `markdown_editor`와 같다(원문 보존, 자동 저장).
+    /// `language`가 없으면 확장자로 정한다. 권한은 `readwrite`다.
+    Code {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        file: Option<FileRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        language: Option<CodeLanguage>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        read_only: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        follow: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        wrap: bool,
+    },
+    /// (4판) 이미지 하나. `src`는 [`data::MediaRef`]이고 그 `crop`대로 자른다. `zoom`이면 휠과 단추로 확대하고
+    /// 끌어서 옮기며, 두 번 누르면 맞춤으로 돌아간다. 이미지가 없으면 빈 상태를 보인다.
+    Image {
+        src: Binding,
+        #[serde(default)]
+        fit: ImageFit,
+        #[serde(default)]
+        zoom: bool,
+    },
+    /// (4판) 소리나 영상 재생기. `src`는 [`data::MediaRef`]다. `kind`가 없으면 받은 MIME으로 정한다. 재생, 멈춤,
+    /// 위치 끌기, 시간, 소리 크기를 쉘이 그린다. `autoplay`면 `src`가 바뀔 때 바로 재생한다(목록에서 고르면 듣기).
+    Media {
+        src: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kind: Option<MediaKind>,
+        #[serde(default)]
+        autoplay: bool,
+    },
+    /// (9판) 수치와 보조 정보를 타일로 표시한다.
+    Metrics {
+        items: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        columns: Option<u32>,
+    },
+    /// (9판) 키와 단축키를 가진 단추를 격자로 표시한다.
+    ButtonGrid {
+        columns: u8,
+        buttons: Binding,
+        on_press: Actions,
+    },
+    /// (9판) 순서가 있는 수치 시리즈를 표시한다.
+    Chart {
+        #[serde(default)]
+        kind: ChartKind,
+        series: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        y_unit: Option<String>,
+        #[serde(default)]
+        height: ChartHeight,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_select: Option<Actions>,
+    },
+    /// (10판) 세계 지도 위에 위도·경도 지점을 표시한다. 고르면 `$event`는 키, `$item`은 지점이다.
+    Map {
+        #[serde(alias = "markers")]
+        points: data::Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_select: Option<data::Actions>,
+        #[serde(default)]
+        height: ChartHeight,
+    },
+    /// 이전 파일 탐색기 이름.
+    FileTree {
+        root: FolderRef,
+        #[serde(default)]
+        extensions: Vec<String>,
+        selected: StateRef,
+        on_select: SetState,
+    },
+    /// 이전 마크다운 편집기 이름.
+    MarkdownEditor {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        file: Option<FileRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        document: Option<DocumentRef>,
+    },
+    /// 이전 마크다운 보기 이름.
+    MarkdownView {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        file: Option<FileRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        document: Option<DocumentRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<Binding>,
+    },
+    /// 이전 코드 편집기 이름.
+    CodeEditor {
+        file: FileRef,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        language: Option<CodeLanguage>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        wrap: bool,
+    },
+    /// 이전 코드 보기 이름.
+    CodeView {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        file: Option<FileRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        language: Option<CodeLanguage>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        follow: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        wrap: bool,
+    },
+    /// 이전 제공자 대화 이름.
+    AgentChat {},
+    /// 이전 로컬 에이전트 세션 이름.
+    AgentSession {
+        permission: String,
+        root: FolderRef,
+        agents: Binding,
+        selected: StateRef,
+        on_select: SetState,
+    },
+    /// 이전 계산기 격자 이름.
+    Keypad {
+        columns: u8,
+        buttons: Binding,
+        on_press: Actions,
+    },
+}
+
+impl From<RawBlock> for Block {
+    fn from(raw: RawBlock) -> Self {
+        match raw {
+            RawBlock::Split {
+                direction,
+                sizes,
+                children,
+            } => Block::Split {
+                direction,
+                sizes,
+                children,
+            },
+            RawBlock::Tree {
+                items,
+                root,
+                extensions,
+                by,
+                selected,
+                on_select,
+            } => Block::Tree {
+                items,
+                root,
+                extensions,
+                by,
+                selected,
+                on_select,
+            },
+            RawBlock::Markdown {
+                file,
+                document,
+                value,
+                read_only,
+            } => Block::Markdown {
+                file,
+                document,
+                value,
+                read_only,
+            },
+            RawBlock::HtmlView {
+                document,
+                file,
+                value,
+                selected_doc,
+                on_select_doc,
+                selected_revision,
+                on_select_revision,
+            } => Block::HtmlView {
+                document,
+                file,
+                value,
+                selected_doc,
+                on_select_doc,
+                selected_revision,
+                on_select_revision,
+            },
+            RawBlock::Chat {
+                permission,
+                root,
+                agents,
+                selected,
+                on_select,
+            } => Block::Chat {
+                permission,
+                root,
+                agents,
+                selected,
+                on_select,
+            },
+            RawBlock::WebView {
+                url,
+                on_navigate,
+                address_bar,
+            } => Block::WebView {
+                url,
+                on_navigate,
+                address_bar,
+            },
+            RawBlock::Explorer {
+                root,
+                folder,
+                on_folder,
+                view,
+                on_view,
+            } => Block::Explorer {
+                root,
+                folder,
+                on_folder,
+                view,
+                on_view,
+            },
+            RawBlock::Stack {
+                direction,
+                gap,
+                fill,
+                children,
+            } => Block::Stack {
+                direction,
+                gap,
+                fill,
+                children,
+            },
+            RawBlock::Tabs {
+                tabs,
+                selected,
+                on_change,
+            } => Block::Tabs {
+                tabs,
+                selected,
+                on_change,
+            },
+            RawBlock::Toolbar { start, end } => Block::Toolbar { start, end },
+            RawBlock::Section {
+                title,
+                meta,
+                collapsible,
+                collapsed,
+                child,
+            } => Block::Section {
+                title,
+                meta,
+                collapsible,
+                collapsed,
+                child,
+            },
+            RawBlock::List {
+                items,
+                layout,
+                grouped,
+                selected,
+                on_select,
+            } => Block::List {
+                items,
+                layout,
+                grouped,
+                selected,
+                on_select,
+            },
+            RawBlock::Table {
+                rows,
+                columns,
+                sort,
+                selected,
+                on_select,
+            } => Block::Table {
+                rows,
+                columns,
+                sort,
+                selected,
+                on_select,
+            },
+            RawBlock::Properties { fields } => Block::Properties { fields },
+            RawBlock::Feed {
+                entries,
+                grouped,
+                format,
+                follow,
+                columns,
+                copy,
+                collapsible,
+                selected,
+                on_select,
+            } => Block::Feed {
+                entries,
+                grouped,
+                format,
+                follow,
+                columns,
+                copy,
+                collapsible,
+                selected,
+                on_select,
+            },
+            RawBlock::Text {
+                value,
+                format,
+                style,
+            } => Block::Text {
+                value,
+                format,
+                style,
+            },
+            RawBlock::Input {
+                value,
+                on_change,
+                kind,
+                multiline,
+                placeholder,
+                on_submit,
+            } => Block::Input {
+                value,
+                on_change,
+                kind,
+                multiline,
+                placeholder,
+                on_submit,
+            },
+            RawBlock::Select {
+                value,
+                on_change,
+                options,
+                style,
+                placeholder,
+            } => Block::Select {
+                value,
+                on_change,
+                options,
+                style,
+                placeholder,
+            },
+            RawBlock::Toggle {
+                value,
+                on_change,
+                label,
+            } => Block::Toggle {
+                value,
+                on_change,
+                label,
+            },
+            RawBlock::Button {
+                label,
+                icon,
+                icon_only,
+                variant,
+                on_click,
+                confirm,
+                disabled,
+            } => Block::Button {
+                label,
+                icon,
+                icon_only,
+                variant,
+                on_click,
+                confirm,
+                disabled,
+            },
+            RawBlock::Code {
+                value,
+                file,
+                language,
+                read_only,
+                follow,
+                wrap,
+            } => Block::Code {
+                value,
+                file,
+                language,
+                read_only,
+                follow,
+                wrap,
+            },
+            RawBlock::Image { src, fit, zoom } => Block::Image { src, fit, zoom },
+            RawBlock::Media {
+                src,
+                kind,
+                autoplay,
+            } => Block::Media {
+                src,
+                kind,
+                autoplay,
+            },
+            RawBlock::Metrics { items, columns } => Block::Metrics { items, columns },
+            RawBlock::ButtonGrid {
+                columns,
+                buttons,
+                on_press,
+            } => Block::ButtonGrid {
+                columns,
+                buttons,
+                on_press,
+            },
+            RawBlock::Chart {
+                kind,
+                series,
+                y_unit,
+                height,
+                on_select,
+            } => Block::Chart {
+                kind,
+                series,
+                y_unit,
+                height,
+                on_select,
+            },
+            RawBlock::Map {
+                points,
+                selected,
+                on_select,
+                height,
+            } => Block::Map {
+                points,
+                selected,
+                on_select,
+                height,
+            },
+            RawBlock::FileTree {
+                root,
+                extensions,
+                selected,
+                on_select,
+            } => Block::Tree {
+                items: None,
+                root: Some(root),
+                extensions,
+                by: TreeBy::default(),
+                selected: Some(selected),
+                on_select: Some(Actions::One(on_select)),
+            },
+            RawBlock::MarkdownEditor { file, document } => Block::Markdown {
+                file,
+                document,
+                value: None,
+                read_only: false,
+            },
+            RawBlock::MarkdownView {
+                file,
+                document,
+                value,
+            } => Block::Markdown {
+                file,
+                document,
+                value,
+                read_only: true,
+            },
+            RawBlock::CodeEditor {
+                file,
+                language,
+                wrap,
+            } => Block::Code {
+                value: None,
+                file: Some(file),
+                language,
+                read_only: false,
+                follow: false,
+                wrap,
+            },
+            RawBlock::CodeView {
+                value,
+                file,
+                language,
+                follow,
+                wrap,
+            } => Block::Code {
+                value,
+                file,
+                language,
+                read_only: true,
+                follow,
+                wrap,
+            },
+            RawBlock::AgentChat {} => Block::Chat {
+                permission: None,
+                root: None,
+                agents: None,
+                selected: None,
+                on_select: None,
+            },
+            RawBlock::AgentSession {
+                permission,
+                root,
+                agents,
+                selected,
+                on_select,
+            } => Block::Chat {
+                permission: Some(permission),
+                root: Some(root),
+                agents: Some(agents),
+                selected: Some(selected),
+                on_select: Some(on_select),
+            },
+            RawBlock::Keypad {
+                columns,
+                buttons,
+                on_press,
+            } => Block::ButtonGrid {
+                columns,
+                buttons,
+                on_press,
+            },
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Block {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        RawBlock::deserialize(deserializer).map(Block::from)
+    }
+}
+
 impl Block {
     /// 이 블록이 처음 생긴 블록 세트 판. 정의의 `requires.blocks`는 쓴 블록의 이 값 이상이어야 한다.
     pub fn introduced_in(&self) -> u32 {
         match self {
-            Block::HtmlView { .. } => 10,
-            Block::Split { .. } | Block::FileTree { .. } => 1,
-            Block::MarkdownEditor {
-                document: Some(_), ..
-            }
-            | Block::MarkdownView {
+            Block::HtmlView { .. } => 6,
+            Block::Split { .. } => 1,
+            Block::Tree {
+                root: Some(_),
+                items: None,
+                ..
+            } => 1,
+            Block::Tree { .. } => 4,
+            Block::Markdown {
                 document: Some(_), ..
             } => 6,
-            Block::MarkdownEditor { .. } | Block::MarkdownView { .. } => 1,
-            Block::AgentChat {} => 2,
-            Block::AgentSession { .. } => 8,
+            Block::Markdown { value: Some(_), .. } => 4,
+            Block::Markdown { .. } => 1,
+            Block::Chat { .. } if !self.is_local_agent_chat() => 2,
+            Block::Chat { .. } => 8,
             Block::Map { .. } => 10,
-            Block::Metrics { .. } | Block::Keypad { .. } | Block::Chart { .. } => 9,
+            Block::Metrics { .. } | Block::ButtonGrid { .. } | Block::Chart { .. } => 9,
             Block::WebView { .. } | Block::Explorer { .. } => 3,
             Block::Stack { .. }
             | Block::Tabs { .. }
@@ -1427,30 +2288,49 @@ impl Block {
             | Block::List { .. }
             | Block::Table { .. }
             | Block::Properties { .. }
-            | Block::Tree { .. }
             | Block::Feed { .. }
             | Block::Text { .. }
             | Block::Input { .. }
             | Block::Select { .. }
             | Block::Toggle { .. }
             | Block::Button { .. }
-            | Block::CodeEditor { .. }
-            | Block::CodeView { .. }
+            | Block::Code { .. }
             | Block::Image { .. }
             | Block::Media { .. } => 4,
         }
+    }
+
+    /// 로컬 ACP 세션 설정을 포함하는 chat인지 판단한다.
+    pub fn is_local_agent_chat(&self) -> bool {
+        matches!(
+            self,
+            Block::Chat {
+                permission: Some(_),
+                ..
+            } | Block::Chat { root: Some(_), .. }
+                | Block::Chat {
+                    agents: Some(_),
+                    ..
+                }
+                | Block::Chat {
+                    selected: Some(_),
+                    ..
+                }
+                | Block::Chat {
+                    on_select: Some(_),
+                    ..
+                }
+        )
     }
 
     /// JSON의 `type` 이름.
     pub fn type_name(&self) -> &'static str {
         match self {
             Block::Split { .. } => "split",
-            Block::FileTree { .. } => "file_tree",
-            Block::MarkdownEditor { .. } => "markdown_editor",
-            Block::MarkdownView { .. } => "markdown_view",
+            Block::Tree { .. } => "tree",
+            Block::Markdown { .. } => "markdown",
             Block::HtmlView { .. } => "html_view",
-            Block::AgentChat {} => "agent_chat",
-            Block::AgentSession { .. } => "agent_session",
+            Block::Chat { .. } => "chat",
             Block::WebView { .. } => "web_view",
             Block::Explorer { .. } => "explorer",
             Block::Stack { .. } => "stack",
@@ -1460,19 +2340,17 @@ impl Block {
             Block::List { .. } => "list",
             Block::Table { .. } => "table",
             Block::Properties { .. } => "properties",
-            Block::Tree { .. } => "tree",
             Block::Feed { .. } => "feed",
             Block::Text { .. } => "text",
             Block::Input { .. } => "input",
             Block::Select { .. } => "select",
             Block::Toggle { .. } => "toggle",
             Block::Button { .. } => "button",
-            Block::CodeEditor { .. } => "code_editor",
-            Block::CodeView { .. } => "code_view",
+            Block::Code { .. } => "code",
             Block::Image { .. } => "image",
             Block::Media { .. } => "media",
             Block::Metrics { .. } => "metrics",
-            Block::Keypad { .. } => "keypad",
+            Block::ButtonGrid { .. } => "button_grid",
             Block::Chart { .. } => "chart",
             Block::Map { .. } => "map",
         }
@@ -2715,10 +3593,72 @@ mod tests {
     use super::*;
 
     #[test]
+    fn generalized_block_names_accept_legacy_aliases_and_serialize_canonically() {
+        let cases = [
+            (
+                r#"{"type":"keypad","columns":4,"buttons":[],"on_press":{"set_state":"press"}}"#,
+                r#"{"type":"button_grid","columns":4,"buttons":[],"on_press":{"set_state":"press"}}"#,
+            ),
+            (
+                r#"{"type":"file_tree","root":{"permission":"files"},"extensions":["md"],"selected":{"state":"file"},"on_select":{"set_state":"file"}}"#,
+                r#"{"type":"tree","root":{"permission":"files"},"extensions":["md"],"by":"children","selected":{"state":"file"},"on_select":{"set_state":"file"}}"#,
+            ),
+            (
+                r#"{"type":"tree","items":null}"#,
+                r#"{"type":"tree","items":null,"by":"children"}"#,
+            ),
+            (
+                r#"{"type":"markdown_editor","file":{"permission":"files","path":{"state":"path"}}}"#,
+                r#"{"type":"markdown","file":{"permission":"files","path":{"state":"path"}}}"#,
+            ),
+            (
+                r#"{"type":"markdown_view","value":{"state":"body"}}"#,
+                r#"{"type":"markdown","value":{"state":"body"},"read_only":true}"#,
+            ),
+            (
+                r#"{"type":"code_editor","file":{"permission":"files","path":{"state":"path"}},"wrap":true}"#,
+                r#"{"type":"code","file":{"permission":"files","path":{"state":"path"}},"wrap":true}"#,
+            ),
+            (
+                r#"{"type":"code_view","value":{"state":"body"},"follow":true}"#,
+                r#"{"type":"code","value":{"state":"body"},"read_only":true,"follow":true}"#,
+            ),
+            (r#"{"type":"agent_chat"}"#, r#"{"type":"chat"}"#),
+            (
+                r#"{"type":"agent_session","permission":"local_agent","root":{"permission":"files"},"agents":[],"selected":{"state":"agent"},"on_select":{"set_state":"agent"}}"#,
+                r#"{"type":"chat","permission":"local_agent","root":{"permission":"files"},"agents":[],"selected":{"state":"agent"},"on_select":{"set_state":"agent"}}"#,
+            ),
+            (
+                r#"{"type":"html_view","value":{"state":"html"}}"#,
+                r#"{"type":"html_view","value":{"state":"html"}}"#,
+            ),
+        ];
+
+        for (legacy, canonical) in cases {
+            let block: Block = serde_json::from_str(legacy).expect("블록 별칭 역직렬화");
+            let actual = serde_json::to_value(block).expect("정본 블록 직렬화");
+            assert_eq!(
+                actual,
+                serde_json::from_str::<serde_json::Value>(canonical).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn generalized_tree_keeps_null_binding_and_independent_folder_state_keys() {
+        let null_tree = r#"{"id":"empty-tree","name":"빈 트리","requires":{"blocks":4,"modules":{}},"permissions":[],"state":{},"ui":{"type":"tree","items":null}}"#;
+        validate::parse_app_definition(null_tree).expect("null은 빈 데이터 트리 바인딩");
+
+        let folder_tree = r#"{"id":"legacy-tree","name":"옛 파일 트리","requires":{"blocks":1,"modules":{"files":1}},"permissions":[{"module":"files","id":"docs","access":"read","label":"문서"}],"state":{"selected":null,"opened":null},"ui":{"type":"file_tree","root":{"permission":"docs"},"selected":{"state":"selected"},"on_select":{"set_state":"opened"}}}"#;
+        validate::parse_app_definition(folder_tree)
+            .expect("옛 파일 트리는 선택 키와 쓰기 키가 달라도 유효");
+    }
+
+    #[test]
     fn html_view_accepts_json_documents_and_checks_references() {
-        let raw = r#"{"id":"review","name":"Review","requires":{"blocks":10,"modules":{"storage":1}},"permissions":[],"state":{"selected":null},"storage":{"entries":[{"id":"reports","key":"reports","kind":"json","label":"Reports","presentation":"hidden","schema":{"type":"object","properties":{"documents":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"}}}}}},"default":{"documents":[]}}]},"ui":{"type":"html_view","document":{"entry":"reports"},"selected_doc":{"state":"selected"}}}"#;
+        let raw = r#"{"id":"review","name":"Review","requires":{"blocks":6,"modules":{"storage":1}},"permissions":[],"state":{"selected":null},"storage":{"entries":[{"id":"reports","key":"reports","kind":"json","label":"Reports","presentation":"hidden","schema":{"type":"object","properties":{"documents":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"}}}}}},"default":{"documents":[]}}]},"ui":{"type":"html_view","document":{"entry":"reports"},"selected_doc":{"state":"selected"}}}"#;
         let definition = validate::parse_app_definition(raw).expect("HTML 보기 정의");
-        assert_eq!(definition.ui.introduced_in(), 10);
+        assert_eq!(definition.ui.introduced_in(), 6);
         let entry = &definition.storage.as_ref().unwrap().entries[0];
         assert!(app_storage::validate_storage_content(
             entry,
@@ -2730,7 +3670,7 @@ mod tests {
         )
         .is_err());
         assert!(
-            validate::parse_app_definition(&raw.replace("\"blocks\":10", "\"blocks\":9")).is_err()
+            validate::parse_app_definition(&raw.replace("\"blocks\":6", "\"blocks\":5")).is_err()
         );
     }
 
@@ -3024,10 +3964,9 @@ mod tests {
         let schema = schema.to_string();
         for block in [
             "split",
-            "file_tree",
-            "markdown_editor",
-            "markdown_view",
-            "agent_chat",
+            "tree",
+            "markdown",
+            "chat",
             "web_view",
             "explorer",
             "stack",
@@ -3044,10 +3983,13 @@ mod tests {
             "select",
             "toggle",
             "button",
-            "code_editor",
-            "code_view",
+            "code",
             "image",
             "media",
+            "html_view",
+            "button_grid",
+            "metrics",
+            "chart",
         ] {
             assert!(
                 schema.contains(&format!("\"{block}\"")),
@@ -3292,7 +4234,7 @@ mod tests {
             "state": { "file": null },
             "ui": { "type": "file_tree", "root": { "permission": "pc" }, "selected": { "state": "file" }, "on_select": { "set_state": "file" } }
         }"#;
-        rejected(tree, "explorer의 root에만");
+        rejected(tree, "folder 범위");
         let opens = explorer.replace(
             r#""state": { "folder": "", "view": "icons" },"#,
             r#""state": { "folder": "", "view": "icons", "file": null },

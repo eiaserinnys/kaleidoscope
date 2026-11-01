@@ -25,8 +25,8 @@ use crate::storage::LinkFile;
 use crate::{Core, CoreConfig, CoreError, Host};
 
 mod layout_sync_tests;
-mod server_switch_tests;
 mod pc_tests;
+mod server_switch_tests;
 
 const MD_EDITOR: &str = include_str!("../../../apps/md-editor.json");
 const MD_VIEWER: &str = include_str!("../../contract/fixtures/md-viewer.json");
@@ -189,12 +189,12 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
     let apps = snapshot(&core).shared.apps;
     for (id, version) in [
-        ("agent", 1),
+        ("agent", 2),
         ("explorer", 3),
-        ("md-editor", 2),
+        ("md-editor", 3),
         ("html-report", 1),
         ("web-browser", 1),
-        ("calculator", 1),
+        ("calculator", 2),
         ("weather", 1),
         ("market", 1),
         ("earth", 1),
@@ -435,7 +435,7 @@ fn registry_events_remove_personal_apps_but_preserve_builtins() {
     assert!(state
         .apps
         .iter()
-        .any(|app| app.id == "md-editor" && app.current_version == 2 && app.name != "바뀐 이름"));
+        .any(|app| app.id == "md-editor" && app.current_version == 3 && app.name != "바뀐 이름"));
 }
 
 #[test]
@@ -2589,8 +2589,13 @@ fn saved_link_reconnects_and_unauthorized_stream_revokes_it() {
     let core = open_core_with_client(&data_dir, vec![], &host, Arc::clone(&client));
     wait_until(|| matches!(snapshot(&core).link, LinkStatus::Revoked { .. }));
     assert_eq!(client.open_calls.load(Ordering::SeqCst), 1);
-    assert!(crate::storage::load_link(&data_dir).unwrap().unwrap().revoked);
-    let remote_workspaces=snapshot(&core).shared.workspaces;
+    assert!(
+        crate::storage::load_link(&data_dir)
+            .unwrap()
+            .unwrap()
+            .revoked
+    );
+    let remote_workspaces = snapshot(&core).shared.workspaces;
     let restarted = Core::open_with_client(
         CoreConfig {
             data_dir: data_dir.clone(),
@@ -2607,7 +2612,10 @@ fn saved_link_reconnects_and_unauthorized_stream_revokes_it() {
         client,
     )
     .unwrap();
-    assert!(matches!(snapshot(&restarted).link, LinkStatus::Revoked { .. }));
+    assert!(matches!(
+        snapshot(&restarted).link,
+        LinkStatus::Revoked { .. }
+    ));
     assert_eq!(snapshot(&restarted).shared.workspaces, remote_workspaces);
     let saved_link = crate::storage::load_link(&data_dir).unwrap().unwrap();
     assert_eq!(saved_link.mode, kaleidoscope_contract::ServerMode::Remote);

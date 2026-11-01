@@ -11,7 +11,7 @@ import { documentEditorSession } from "./document-editor-session";
 import { EditorConflict } from "./editor-conflict";
 import { createMarkdownEditorState } from "./markdown-editor-state";
 
-type MarkdownEditorBlockData = Extract<Block, { type: "markdown_editor" }>;
+type MarkdownEditorBlockData = Extract<Block, { type: "markdown" }>;
 type FileMarkdownEditorBlockData = MarkdownEditorBlockData & { file: FileRef };
 
 export function MarkdownEditorBlock({ block, context }: { block: MarkdownEditorBlockData; context: BlockContext }) {

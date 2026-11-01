@@ -6,6 +6,7 @@ import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
+import { normalizeBlock } from "../render/render-block";
 import { grantFor, makeTestSeed, mdEditorDefinition, mdViewerDefinition } from "./fixtures";
 
 const rangeGetClientRects = Object.getOwnPropertyDescriptor(Range.prototype, "getClientRects");
@@ -21,6 +22,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it("기존 블록 이름을 정본 이름과 모드로 정규화한다", () => {
+  const aliases = [
+    [{ type: "file_tree", root: { permission: "docs" }, extensions: [], selected: { state: "file" }, on_select: { set_state: "file" } }, { type: "tree", root: { permission: "docs" }, extensions: [], by: "children", selected: { state: "file" }, on_select: { set_state: "file" } }],
+    [{ type: "markdown_editor", file: { permission: "docs", path: "README.md" } }, { type: "markdown", file: { permission: "docs", path: "README.md" } }],
+    [{ type: "markdown_view", value: "# 제목" }, { type: "markdown", value: "# 제목", read_only: true }],
+    [{ type: "code_editor", file: { permission: "docs", path: "main.rs" } }, { type: "code", file: { permission: "docs", path: "main.rs" } }],
+    [{ type: "code_view", value: "fn main() {}" }, { type: "code", value: "fn main() {}", read_only: true }],
+    [{ type: "agent_chat" }, { type: "chat" }],
+    [{ type: "agent_session", permission: "run", root: { permission: "work" }, agents: [], selected: { state: "agent" }, on_select: { set_state: "agent" } }, { type: "chat", permission: "run", root: { permission: "work" }, agents: [], selected: { state: "agent" }, on_select: { set_state: "agent" } }],
+    [{ type: "keypad", columns: 4, buttons: [], on_press: { set_state: "value" } }, { type: "button_grid", columns: 4, buttons: [], on_press: { set_state: "value" } }],
+  ] as const;
+  for (const [legacy, canonical] of aliases) expect(normalizeBlock(legacy as unknown as Block)).toEqual(canonical);
+});
+
 describe("app definition renderer", () => {
   it("shows an unknown block error while rendering its sibling block", async () => {
     const definition: AppDefinition = {
@@ -30,7 +45,7 @@ describe("app definition renderer", () => {
         direction: "row",
         children: [
           { type: "future_block" } as unknown as Block,
-          { type: "markdown_view", file: { permission: "docs", path: "README.md" } },
+          { type: "markdown", file: { permission: "docs", path: "README.md" }, read_only: true },
         ],
       },
     };

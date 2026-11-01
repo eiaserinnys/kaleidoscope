@@ -45,10 +45,8 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     let mut details = validate(&definition);
     if !cached && definition.agent.is_none() {
         data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
-            if matches!(block, Block::AgentChat { .. }) {
-                details.push(format!(
-                    "{pointer}: agent_chat에는 대화 제공자가 필요합니다"
-                ));
+            if matches!(block, Block::Chat { .. }) && !block.is_local_agent_chat() {
+                details.push(format!("{pointer}: chat에는 대화 제공자가 필요합니다"));
             }
         });
     }
@@ -254,7 +252,7 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
         if matches!(block, Block::WebView { .. }) {
             web_views += 1;
         }
-        if matches!(block, Block::AgentSession { .. }) {
+        if block.is_local_agent_chat() {
             local_agent_blocks += 1;
         }
         validate_block(block, definition, &mut details, pointer);
@@ -266,7 +264,7 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
     }
     if local_agent_blocks > 1 {
         details.push(format!(
-            "agent_session은 앱 정의에 하나까지 둘 수 있습니다(지금 {local_agent_blocks}개)"
+            "로컬 에이전트 chat 블록은 앱 정의에 하나까지 둘 수 있습니다(지금 {local_agent_blocks}개)"
         ));
     }
 
@@ -1079,13 +1077,13 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
         }
-        Block::Keypad {
+        Block::ButtonGrid {
             columns, buttons, ..
         } => {
             if !(1..=8).contains(columns) {
-                details.push(format!("{at}: keypad columns는 1부터 8까지입니다"));
+                details.push(format!("{at}: button_grid columns는 1부터 8까지입니다"));
             } else if let data::Binding::Literal(value) = buttons {
-                if let Err(error) = data::validate_keypad_buttons(value, *columns) {
+                if let Err(error) = data::validate_button_grid_items(value, u32::from(*columns)) {
                     details.push(format!("{at}: {error}"));
                 }
             }
@@ -1128,113 +1126,233 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
         }
-        Block::FileTree {
+        Block::Tree {
+            items,
             root,
+            extensions,
             selected,
             on_select,
             ..
-        } => {
-            validate_permission_module(&root.permission, "files", definition, details, at);
-            validate_state_key(&selected.state, definition, details, at);
-            validate_state_key(&on_select.set_state, definition, details, at);
-        }
-        Block::MarkdownEditor { file, document } => {
-            validate_markdown_binding(file, document, true, definition, details, at);
-        }
-        Block::CodeEditor { file, .. } => {
-            validate_file_ref(file, definition, details, at);
-            if find_permission(definition, &file.permission)
-                .is_some_and(|permission| permission.access() != FileAccess::Readwrite)
-            {
-                details.push(format!(
-                    "{at}: {} 권한 {}는 readwrite여야 합니다",
-                    block.type_name(),
-                    file.permission
-                ));
+        } => match (items, root) {
+            (Some(items), None) => {
+                if !extensions.is_empty() {
+                    details.push(format!("{at}: 데이터 tree에는 extensions를 쓸 수 없습니다"));
+                }
+                validate_binding_shape(items, definition, details, &format!("{at}/items"));
+                if let Some(selected) = selected {
+                    validate_state_key(&selected.state, definition, details, at);
+                }
             }
-        }
-        Block::MarkdownView { file, document } => {
-            validate_markdown_binding(file, document, false, definition, details, at);
-        }
+            (None, Some(root)) => {
+                validate_permission_declared_module(
+                    &root.permission,
+                    "files",
+                    definition,
+                    details,
+                    at,
+                );
+                match find_permission(definition, &root.permission) {
+                    Some(PermissionDecl::Files {
+                        scope: FilesScope::Folder,
+                        ..
+                    }) => {}
+                    Some(PermissionDecl::Files { .. }) => details.push(format!(
+                        "{at}: 폴더 tree의 root 권한은 folder 범위여야 합니다"
+                    )),
+                    Some(_) => details.push(format!("{at}: tree의 root는 files 권한이어야 합니다")),
+                    None => {}
+                }
+                for extension in extensions {
+                    if !valid_extension(extension) {
+                        details.push(format!("{at}: extensions의 확장자는 점 없이 소문자와 숫자 1~16자여야 합니다: {extension}"));
+                    }
+                }
+                match (selected, on_select) {
+                    (Some(selected), Some(Actions::One(on_select))) => {
+                        validate_state_key(&selected.state, definition, details, at);
+                        validate_state_key(&on_select.set_state, definition, details, at);
+                    }
+                    _ => details.push(format!(
+                        "{at}: 폴더 tree에는 selected와 단일 on_select가 필요합니다"
+                    )),
+                }
+            }
+            _ => details.push(format!(
+                "{at}: tree 블록은 items와 root 가운데 꼭 하나만 가져야 합니다"
+            )),
+        },
+        Block::Markdown {
+            file,
+            document,
+            value,
+            read_only,
+        } => match (file, document, value) {
+            (Some(file), None, None) => {
+                validate_file_ref(file, definition, details, at);
+                if !*read_only
+                    && find_permission(definition, &file.permission)
+                        .is_some_and(|permission| permission.access() != FileAccess::Readwrite)
+                {
+                    details.push(format!(
+                        "{at}: markdown 파일 권한 {}는 readwrite여야 합니다",
+                        file.permission
+                    ));
+                }
+            }
+            (None, Some(document), None) => {
+                validate_markdown_binding(
+                    &None,
+                    &Some(document.clone()),
+                    false,
+                    definition,
+                    details,
+                    at,
+                );
+            }
+            (None, None, Some(value)) => {
+                validate_binding_shape(value, definition, details, &format!("{at}/value"))
+            }
+            _ => details.push(format!(
+                "{at}: markdown 블록은 file, document, value 가운데 꼭 하나만 가져야 합니다"
+            )),
+        },
+        Block::Code {
+            value,
+            file,
+            read_only,
+            ..
+        } => match (value, file) {
+            (Some(value), None) => {
+                validate_binding_shape(value, definition, details, &format!("{at}/value"))
+            }
+            (None, Some(file)) => {
+                validate_file_ref(file, definition, details, at);
+                if !*read_only
+                    && find_permission(definition, &file.permission)
+                        .is_some_and(|permission| permission.access() != FileAccess::Readwrite)
+                {
+                    details.push(format!(
+                        "{at}: code 파일 권한 {}는 readwrite여야 합니다",
+                        file.permission
+                    ));
+                }
+            }
+            _ => details.push(format!("{at}: code는 value와 file 가운데 꼭 하나를 씁니다")),
+        },
         Block::HtmlView {
             document,
+            file,
+            value,
             selected_doc,
             on_select_doc,
             selected_revision,
             on_select_revision,
-        } => {
-            validate_module_version("storage", 1, definition, details, at);
-            let entry = definition.storage.as_ref().and_then(|storage| {
-                storage
-                    .entries
-                    .iter()
-                    .find(|entry| entry.id == document.entry)
-            });
-            match entry {
-                Some(entry) if entry.kind == StorageKind::Json => {}
-                Some(_) => details.push(format!(
-                    "{at}: html_view는 json 저장소 항목만 읽을 수 있습니다: {}",
-                    document.entry
-                )),
-                None => details.push(format!(
-                    "{at}: document가 storage 선언에 없습니다: {}",
-                    document.entry
-                )),
+        } => match (document, file, value) {
+            (Some(document), None, None) => {
+                validate_module_version("storage", 1, definition, details, at);
+                let entry = definition.storage.as_ref().and_then(|storage| {
+                    storage
+                        .entries
+                        .iter()
+                        .find(|entry| entry.id == document.entry)
+                });
+                match entry {
+                    Some(entry) if entry.kind == StorageKind::Json => {}
+                    Some(_) => details.push(format!(
+                        "{at}: html_view는 json 저장소 항목만 읽을 수 있습니다: {}",
+                        document.entry
+                    )),
+                    None => details.push(format!(
+                        "{at}: document가 storage 선언에 없습니다: {}",
+                        document.entry
+                    )),
+                }
+                for key in [
+                    selected_doc.as_ref().map(|value| &value.state),
+                    on_select_doc.as_ref().map(|value| &value.set_state),
+                    selected_revision.as_ref().map(|value| &value.state),
+                    on_select_revision.as_ref().map(|value| &value.set_state),
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    validate_state_key(key, definition, details, at);
+                }
             }
-            for key in [
-                selected_doc.as_ref().map(|value| &value.state),
-                on_select_doc.as_ref().map(|value| &value.set_state),
-                selected_revision.as_ref().map(|value| &value.state),
-                on_select_revision.as_ref().map(|value| &value.set_state),
-            ]
-            .into_iter()
-            .flatten()
-            {
-                validate_state_key(key, definition, details, at);
+            (None, Some(file), None) => {
+                validate_file_ref(file, definition, details, at);
+                if selected_doc.is_some()
+                    || on_select_doc.is_some()
+                    || selected_revision.is_some()
+                    || on_select_revision.is_some()
+                {
+                    details.push(format!("{at}: file이나 value를 쓰는 html_view에는 문서/리비전 선택 상태를 둘 수 없습니다"));
+                }
             }
-        }
-        Block::AgentChat {} => {
-            if !definition.requires.modules.contains_key("agent") {
-                details.push(format!(
-                    "{at}: agent_chat이 사용하는 agent 모듈을 requires.modules에 선언해야 합니다"
-                ));
+            (None, None, Some(value)) => {
+                validate_binding_shape(value, definition, details, &format!("{at}/value"));
+                if selected_doc.is_some()
+                    || on_select_doc.is_some()
+                    || selected_revision.is_some()
+                    || on_select_revision.is_some()
+                {
+                    details.push(format!("{at}: file이나 value를 쓰는 html_view에는 문서/리비전 선택 상태를 둘 수 없습니다"));
+                }
             }
-        }
-        Block::AgentSession {
+            _ => details.push(format!(
+                "{at}: html_view 블록은 document, file, value 가운데 꼭 하나만 가져야 합니다"
+            )),
+        },
+        Block::Chat {
             permission,
             root,
             agents,
             selected,
             on_select,
         } => {
-            validate_module_version("local_agent", 1, definition, details, at);
-            validate_permission_module(permission, "local_agent", definition, details, at);
-            validate_permission_module(&root.permission, "files", definition, details, at);
-            match find_permission(definition, &root.permission) {
-                Some(PermissionDecl::Files {
-                    access: FileAccess::Readwrite,
-                    scope: FilesScope::Folder,
-                    ..
-                }) => {}
-                Some(PermissionDecl::Files { .. }) => details.push(format!(
-                    "{at}: agent_session의 root 권한은 folder 범위의 readwrite여야 합니다"
-                )),
-                Some(_) => details.push(format!(
-                    "{at}: agent_session의 root는 files 권한이어야 합니다"
-                )),
-                None => {}
-            }
-            if selected.state != on_select.set_state {
-                details.push(format!(
-                    "{at}: agent_session의 selected와 on_select는 같은 상태 키를 써야 합니다"
-                ));
-            }
-            validate_state_key(&selected.state, definition, details, at);
-            validate_state_key(&on_select.set_state, definition, details, at);
-            if let crate::data::Binding::Literal(value) = agents {
-                if let Err(error) = local_agent::validate_agent_specs(value) {
-                    details.push(format!("{at}/agents: {error}"));
+            if !block.is_local_agent_chat() {
+                if !definition.requires.modules.contains_key("agent") {
+                    details.push(format!(
+                        "{at}: chat이 사용하는 agent 모듈을 requires.modules에 선언해야 합니다"
+                    ));
                 }
+            } else if let (
+                Some(permission),
+                Some(root),
+                Some(agents),
+                Some(selected),
+                Some(on_select),
+            ) = (permission, root, agents, selected, on_select)
+            {
+                validate_module_version("local_agent", 1, definition, details, at);
+                validate_permission_module(permission, "local_agent", definition, details, at);
+                validate_permission_module(&root.permission, "files", definition, details, at);
+                match find_permission(definition, &root.permission) {
+                    Some(PermissionDecl::Files {
+                        access: FileAccess::Readwrite,
+                        scope: FilesScope::Folder,
+                        ..
+                    }) => {}
+                    Some(PermissionDecl::Files { .. }) => details.push(format!(
+                        "{at}: chat의 root 권한은 folder 범위의 readwrite여야 합니다"
+                    )),
+                    Some(_) => details.push(format!("{at}: chat의 root는 files 권한이어야 합니다")),
+                    None => {}
+                }
+                if selected.state != on_select.set_state {
+                    details.push(format!(
+                        "{at}: chat의 selected와 on_select는 같은 상태 키를 써야 합니다"
+                    ));
+                }
+                validate_state_key(&selected.state, definition, details, at);
+                validate_state_key(&on_select.set_state, definition, details, at);
+                if let crate::data::Binding::Literal(value) = agents {
+                    if let Err(error) = local_agent::validate_agent_specs(value) {
+                        details.push(format!("{at}/agents: {error}"));
+                    }
+                }
+            } else {
+                details.push(format!("{at}: 로컬 에이전트 chat 블록은 permission, root, agents, selected, on_select를 모두 선언해야 합니다"));
             }
         }
         Block::WebView {
@@ -1333,7 +1451,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
         }
-        Block::List { selected, .. } | Block::Tree { selected, .. } => {
+        Block::List { selected, .. } => {
             if let Some(selected) = selected {
                 validate_state_key(&selected.state, definition, details, at);
             }
@@ -1417,13 +1535,6 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
         }
-        Block::CodeView { value, file, .. } => match (value, file) {
-            (Some(_), None) => {}
-            (None, Some(file)) => validate_file_ref(file, definition, details, at),
-            _ => details.push(format!(
-                "{at}: code_view는 value와 file 가운데 꼭 하나를 씁니다"
-            )),
-        },
         Block::Image { src, .. } | Block::Media { src, .. } => {
             if let Binding::Literal(value) = src {
                 if !value.is_null() {
@@ -1483,7 +1594,7 @@ fn validate_markdown_binding(
                     .is_some_and(|permission| permission.access() != FileAccess::Readwrite)
             {
                 details.push(format!(
-                    "{at}: markdown_editor 파일 권한 {}는 readwrite여야 합니다",
+                    "{at}: markdown 파일 권한 {}는 readwrite여야 합니다",
                     file.permission
                 ));
             }

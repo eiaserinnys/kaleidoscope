@@ -31,7 +31,7 @@
         "columns": 1
       },
       {
-        "type": "keypad",
+        "type": "button_grid",
         "columns": 4,
         "buttons": [
           {

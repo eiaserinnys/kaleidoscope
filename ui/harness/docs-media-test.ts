@@ -8,7 +8,7 @@ export function galleryForDocs(definition: AppDefinition, longLog: boolean, crop
   if (gallery.ui.type !== "tabs") return gallery;
   if (longLog) {
     const code = gallery.ui.tabs.find((tab) => tab.label === "코드")?.child;
-    if (code?.type === "split" && code.children[0].type === "code_view") {
+    if (code?.type === "split" && code.children[0].type === "code") {
       gallery.state.log = Array.from({ length: 20000 }, (_, index) => `줄 ${index}`).join("\n");
       code.children[0].value = { state: "log" };
       code.children[0].follow = true;
