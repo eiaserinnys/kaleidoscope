@@ -53,21 +53,76 @@ pub(crate) struct AppStorageResetArgs {
 }
 
 fn builtin_key(
+    app_id: &str,
     entry: Option<&str>,
     key: Option<&str>,
     workspace: Option<String>,
     principal: &McpPrincipal,
-) -> Option<(String, Option<String>)> {
-    let key = match (entry, key) {
-        (Some(entry), Some(key)) if entry != key => return None,
-        (_, Some(key)) | (Some(key), None) => key,
-        (None, None) => return None,
+) -> Result<
+    (
+        String,
+        Option<String>,
+        kaleidoscope_contract::app_storage::StorageKind,
+    ),
+    CoreError,
+> {
+    use kaleidoscope_contract::app_storage::storage_key_matches;
+
+    let entries = kaleidoscope_contract::builtin::builtin_storage_entries(app_id);
+    let invalid = || {
+        CoreError::with_details(
+            ErrorCode::InvalidRequest,
+            vec![format!(
+                "기본 앱 '{app_id}'에 선언되지 않은 저장소 항목 또는 키입니다"
+            )],
+        )
     };
-    if key.contains("{workspace_id}") {
-        let workspace = effective_workspace_id(workspace, principal)?;
-        Some((key.replace("{workspace_id}", &workspace), Some(workspace)))
+
+    let (declared, raw_key) = match (entry, key) {
+        (Some(entry_id), maybe_key) => {
+            let declared = entries
+                .iter()
+                .find(|declared| declared.id == entry_id || declared.key == entry_id)
+                .ok_or_else(invalid)?;
+            if let Some(raw_key) = maybe_key {
+                if declared.key != raw_key && !storage_key_matches(&declared.key, raw_key) {
+                    return Err(invalid());
+                }
+            }
+            (declared, maybe_key)
+        }
+        (None, Some(raw_key)) => {
+            let declared = entries
+                .iter()
+                .find(|declared| {
+                    declared.key == raw_key || storage_key_matches(&declared.key, raw_key)
+                })
+                .ok_or_else(invalid)?;
+            (declared, Some(raw_key))
+        }
+        (None, None) => return Err(invalid()),
+    };
+
+    if declared.key.contains("{workspace_id}") {
+        let workspace = effective_workspace_id(workspace, principal).ok_or_else(|| {
+            CoreError::with_details(
+                ErrorCode::InvalidRequest,
+                vec![format!(
+                    "기본 앱 '{}' 저장소 항목에 작업 id가 필요합니다",
+                    declared.id
+                )],
+            )
+        })?;
+        let resolved = declared.key.replace("{workspace_id}", &workspace);
+        if raw_key.is_some_and(|raw| raw != declared.key && raw != resolved) {
+            return Err(invalid());
+        }
+        if !storage_key_matches(&declared.key, &resolved) {
+            return Err(invalid());
+        }
+        Ok((resolved, Some(workspace), declared.kind))
     } else {
-        Some((key.to_owned(), workspace))
+        Ok((declared.key.clone(), workspace, declared.kind))
     }
 }
 
@@ -84,7 +139,7 @@ impl super::McpServer {
 
     #[tool(
         name = "list_app_storage",
-        description = "개인 앱의 선언 항목을 나열합니다. 기본 앱은 저장된 원시 키와 revision만 나열합니다."
+        description = "앱 저장소 항목과 저장된 키 및 revision을 나열합니다."
     )]
     async fn tool_list_app_storage(
         &self,
@@ -106,12 +161,18 @@ impl super::McpServer {
             Err(error) => return Ok(json_error(error)),
         };
         if kaleidoscope_contract::builtin::is_builtin(&args.app_id) {
-            return Ok(
+            let (entries, bucket_id, items) =
                 match self.state.list_app_values(&account_id, &args.app_id) {
-                    Ok(items) => json_result(json!(items)),
-                    Err(error) => json_error(error),
-                },
-            );
+                    Ok(items) => (
+                        kaleidoscope_contract::builtin::builtin_storage_entries(&args.app_id),
+                        items.bucket_id,
+                        items.items,
+                    ),
+                    Err(error) => return Ok(json_error(error)),
+                };
+            return Ok(json_result(
+                json!({"storage":{"entries":entries},"bucket_id":bucket_id,"items":items}),
+            ));
         }
         match self
             .state
@@ -139,7 +200,7 @@ impl super::McpServer {
 
     #[tool(
         name = "read_app_storage",
-        description = "개인 앱은 entry_id로 읽고 기본 앱은 key 또는 키와 같은 entry_id로 원시 값을 읽습니다. 기본 앱에 저장값이 없으면 exists가 false입니다."
+        description = "개인 앱은 entry_id로 읽고 기본 앱은 선언된 entry_id 또는 저장 키로 읽습니다. 기본 앱에 저장값이 없으면 exists가 false입니다."
     )]
     async fn tool_read_app_storage(
         &self,
@@ -160,13 +221,15 @@ impl super::McpServer {
             Err(error) => return Ok(json_error(error)),
         };
         if kaleidoscope_contract::builtin::is_builtin(&args.app_id) {
-            let Some((key, _)) = builtin_key(
+            let (key, _, _) = match builtin_key(
+                &args.app_id,
                 args.entry_id.as_deref(),
                 args.key.as_deref(),
                 args.workspace_id,
                 &principal,
-            ) else {
-                return Ok(json_error(CoreError::new(ErrorCode::InvalidRequest)));
+            ) {
+                Ok(value) => value,
+                Err(error) => return Ok(json_error(error)),
             };
             return Ok(
                 match self.state.read_app_value(&account_id, &args.app_id, &key) {
@@ -203,7 +266,7 @@ impl super::McpServer {
 
     #[tool(
         name = "write_app_storage",
-        description = "expected_revision으로 비교해 기록합니다. 기본 앱은 key 또는 키와 같은 entry_id를 지정하고 kind를 생략하면 저장된 종류 또는 json을 사용합니다."
+        description = "expected_revision으로 비교해 기록합니다. 기본 앱은 선언된 entry_id 또는 저장 키를 지정하며 kind를 생략하면 선언된 종류를 사용합니다."
     )]
     async fn tool_write_app_storage(
         &self,
@@ -227,23 +290,17 @@ impl super::McpServer {
             Err(error) => return Ok(json_error(error)),
         };
         if kaleidoscope_contract::builtin::is_builtin(&args.app_id) {
-            let Some((key, workspace)) = builtin_key(
+            let (key, workspace, declared_kind) = match builtin_key(
+                &args.app_id,
                 args.entry_id.as_deref(),
                 args.key.as_deref(),
                 args.workspace_id,
                 &principal,
-            ) else {
-                return Ok(json_error(CoreError::new(ErrorCode::InvalidRequest)));
+            ) {
+                Ok(value) => value,
+                Err(error) => return Ok(json_error(error)),
             };
-            let kind = match args.kind {
-                Some(kind) => kind,
-                None => match self.state.read_app_value(&account_id, &args.app_id, &key) {
-                    Ok(value) => value
-                        .kind
-                        .unwrap_or(kaleidoscope_contract::app_storage::StorageKind::Json),
-                    Err(error) => return Ok(json_error(error)),
-                },
-            };
+            let kind = args.kind.unwrap_or(declared_kind);
             return Ok(
                 match self.state.write_app_value(
                     &account_id,
@@ -305,7 +362,7 @@ impl super::McpServer {
 
     #[tool(
         name = "reset_app_storage",
-        description = "expected_revision으로 비교해 지웁니다. 기본 앱은 key 또는 키와 같은 entry_id를 지정합니다."
+        description = "expected_revision으로 비교해 지웁니다. 기본 앱은 선언된 entry_id 또는 저장 키를 지정합니다."
     )]
     async fn tool_reset_app_storage(
         &self,
@@ -329,13 +386,15 @@ impl super::McpServer {
             Err(error) => return Ok(json_error(error)),
         };
         if kaleidoscope_contract::builtin::is_builtin(&args.app_id) {
-            let Some((key, workspace)) = builtin_key(
+            let (key, workspace, _) = match builtin_key(
+                &args.app_id,
                 args.entry_id.as_deref(),
                 args.key.as_deref(),
                 args.workspace_id,
                 &principal,
-            ) else {
-                return Ok(json_error(CoreError::new(ErrorCode::InvalidRequest)));
+            ) {
+                Ok(value) => value,
+                Err(error) => return Ok(json_error(error)),
             };
             return Ok(
                 match self.state.reset_app_value(
@@ -384,24 +443,37 @@ impl super::McpServer {
 #[cfg(test)]
 mod builtin_key_tests {
     use super::*;
+    use kaleidoscope_contract::app_storage::StorageKind;
 
     #[test]
-    fn resolves_workspace_templates_without_scoping_global_keys() {
+    fn resolves_declared_builtin_entry_ids_and_keys() {
         let principal = McpPrincipal {
             workspace_id: Some("work".into()),
             ..Default::default()
         };
         assert_eq!(
-            builtin_key(Some("reports"), None, None, &principal),
-            Some(("reports".into(), None))
+            builtin_key("html-report", Some("reports"), None, None, &principal),
+            Ok(("reports".into(), None, StorageKind::Json))
         );
         assert_eq!(
-            builtin_key(None, Some("notes/{workspace_id}"), None, &principal),
-            Some(("notes/work".into(), Some("work".into())))
+            builtin_key("agent", Some("agents"), None, None, &principal),
+            Ok(("settings/agents".into(), None, StorageKind::Json))
         );
         assert_eq!(
-            builtin_key(Some("one"), Some("two"), None, &principal),
-            None
+            builtin_key("html-report", None, Some("reports"), None, &principal),
+            Ok(("reports".into(), None, StorageKind::Json))
+        );
+        assert_eq!(
+            builtin_key("agent", None, None, None, &principal)
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidRequest
+        );
+        assert_eq!(
+            builtin_key("agent", Some("agents"), Some("other"), None, &principal)
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidRequest
         );
     }
 }

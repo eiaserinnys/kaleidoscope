@@ -294,7 +294,7 @@ impl AppState {
         let key = resolve_key(&entry, workspace_id)?;
         check_workspace_owner(&tx, account_id, workspace_id)?;
         contract::validate_storage_content(&entry, &content)
-            .map_err(|_| CoreError::new(ErrorCode::InvalidRequest))?;
+            .map_err(|err| CoreError::with_details(ErrorCode::InvalidRequest, vec![err]))?;
         let id = bucket_id(account_id, app_id);
         let old = load_item(&tx, &id, &key)?;
         let current_revision = old.as_ref().map(|(_, _, revision)| revision.clone());

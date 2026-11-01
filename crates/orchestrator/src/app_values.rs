@@ -29,6 +29,37 @@ fn content_size(kind: StorageKind, content: &Value) -> Result<(), CoreError> {
     }
 }
 
+pub(super) fn validate_builtin_app_value(
+    app_id: &str,
+    key: &str,
+    kind: StorageKind,
+    content: &Value,
+) -> Result<contract::StorageEntryDecl, CoreError> {
+    let entry = kaleidoscope_contract::builtin::builtin_storage_entries(app_id)
+        .into_iter()
+        .find(|entry| contract::storage_key_matches(&entry.key, key))
+        .ok_or_else(|| {
+            CoreError::with_details(
+                ErrorCode::InvalidRequest,
+                vec![format!(
+                    "기본 앱 '{app_id}'에 선언되지 않은 저장소 키입니다: {key}"
+                )],
+            )
+        })?;
+    if entry.kind != kind {
+        return Err(CoreError::with_details(
+            ErrorCode::InvalidRequest,
+            vec![format!(
+                "기본 앱 '{app_id}' 저장소 항목 '{}'의 종류가 맞지 않습니다",
+                entry.id
+            )],
+        ));
+    }
+    contract::validate_storage_content(&entry, content)
+        .map_err(|err| CoreError::with_details(ErrorCode::InvalidRequest, vec![err]))?;
+    Ok(entry)
+}
+
 fn conflict(revision: Option<&str>) -> CoreError {
     CoreError {
         code: ErrorCode::Conflict,
@@ -162,6 +193,9 @@ impl AppState {
         workspace: Option<&str>,
     ) -> Result<String, CoreError> {
         validate(app_id, key)?;
+        if kaleidoscope_contract::builtin::is_builtin(app_id) {
+            validate_builtin_app_value(app_id, key, kind, &content)?;
+        }
         content_size(kind, &content)?;
         if workspace.is_some_and(|workspace| !key.split('/').any(|segment| segment == workspace)) {
             return Err(CoreError::new(ErrorCode::InvalidRequest));
@@ -210,6 +244,18 @@ impl AppState {
         workspace: Option<&str>,
     ) -> Result<(), CoreError> {
         validate(app_id, key)?;
+        if kaleidoscope_contract::builtin::is_builtin(app_id)
+            && !kaleidoscope_contract::builtin::builtin_storage_entries(app_id)
+                .iter()
+                .any(|entry| contract::storage_key_matches(&entry.key, key))
+        {
+            return Err(CoreError::with_details(
+                ErrorCode::InvalidRequest,
+                vec![format!(
+                    "기본 앱 '{app_id}'에 선언되지 않은 저장소 키입니다: {key}"
+                )],
+            ));
+        }
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(db_error)?;
         super::app_storage::check_workspace_owner(&tx, account, workspace)?;
