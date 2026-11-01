@@ -1,0 +1,10 @@
+services:
+  orchestrator:
+    build: .
+    ports:
+      - "127.0.0.1:4219:4219"
+    volumes:
+      - kaleidoscope-data:/data
+    restart: unless-stopped
+volumes:
+  kaleidoscope-data:

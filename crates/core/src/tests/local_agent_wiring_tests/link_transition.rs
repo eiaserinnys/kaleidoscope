@@ -42,6 +42,7 @@ fn reconnect_while(responding: bool) {
     let file = connected_link_file();
     *core.inner.link_file.lock().unwrap() = Some(file.clone());
     core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: file.server_url.clone(),
         device_name: file.device_name.clone(),
         reason: "연결하는 중".into(),
@@ -69,6 +70,7 @@ fn reconnect_while(responding: bool) {
     }
 
     core.inner.state.lock().unwrap().link = LinkStatus::Connected {
+        mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: file.server_url,
         device_name: file.device_name,
     };
@@ -152,6 +154,7 @@ fn clearing_selection_while_storage_fails_stops_the_old_worker() {
     let file = connected_link_file();
     *core.inner.link_file.lock().unwrap() = Some(file.clone());
     core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: file.server_url,
         device_name: file.device_name,
         reason: "연결하는 중".into(),

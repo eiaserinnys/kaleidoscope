@@ -8,6 +8,7 @@ fn web_navigation_syncs_and_server_follow_redirect_does_not_echo() {
     let client = registry_client();
     let core = Core::open_with_client(
         CoreConfig {
+            embedded_server: None,
             data_dir: data.path().into(),
             seed_definitions: vec![test_definition(include_str!(
                 "../../../../../apps/web-browser.json"

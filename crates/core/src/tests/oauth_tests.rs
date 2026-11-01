@@ -335,6 +335,7 @@ fn make_core(
 ) -> (Core, String) {
     let core = Core::open(
         CoreConfig {
+            embedded_server: None,
             data_dir: temp.path().to_path_buf(),
             seed_definitions: vec![connection_definition()],
             server_url: "http://127.0.0.1:4219".into(),

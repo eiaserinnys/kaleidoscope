@@ -10,6 +10,7 @@ name = "kaleidoscope-devbridge"
 path = "src/main.rs"
 
 [dependencies]
+kaleidoscope-orchestrator = { path = "../orchestrator" }
 axum = "0.8"
 kaleidoscope-contract = { path = "../contract" }
 kaleidoscope-core = { path = "../core" }

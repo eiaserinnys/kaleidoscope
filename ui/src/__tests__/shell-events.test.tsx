@@ -196,158 +196,54 @@ describe("shell core events", () => {
 });
 
 describe("shell server link control", () => {
-  it("starts pairing from the unlinked menu", async () => {
-    const transport = createFakeTransport(makeTestSeed());
+  it("pairs with the entered remote URL and keeps the code visible", async () => {
+    const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
+    const transport = createFakeTransport(seed);
+    transport.setLink({ state: "connected", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC" });
     const spy = vi.spyOn(transport, "call");
-    const store = createShellStore(transport);
-    render(<Shell store={store} />);
-    await store.ready;
-
-    fireEvent.click(screen.getByRole("button", { name: "서버에 연결" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "서버에 연결" }));
-
-    await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "link.start" }));
-    await waitFor(() => expect(screen.getByRole("menuitem", { name: "K7PQ-4XMR 복사" })).toBeTruthy());
-    store.dispose();
+    const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
+    fireEvent.click(screen.getByRole("button", { name: "내 PC 서버" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "원격 서버 URL" }), { target: { value: "https://remote.example" } });
+    fireEvent.click(screen.getByRole("button", { name: "원격 서버 연결" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "link.start", server_url: "https://remote.example" }));
+    expect(await screen.findByRole("button", { name: "123456 복사" })).toBeTruthy();
+    expect(screen.getByText("https://remote.example")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "내 PC 서버로 돌아가기" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "link.use_local" })); store.dispose();
   });
-
-  it("shows the pairing code and copies it from the menu", async () => {
+  it("copies a pairing code and updates the open panel on approval", async () => {
     const transport = createFakeTransport(makeTestSeed());
-    transport.setLink({
-      state: "pairing",
-      server_url: "https://kaleidoscope.example",
-      user_code: "K7PQ-4XMR",
-      expires_at: "2026-10-29T00:10:00Z",
-    });
+    transport.setLink({ state: "pairing", server_url: "https://remote.example", user_code: "123456", expires_at: "2099-01-01T00:00:00Z" });
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
-    const store = createShellStore(transport);
-    render(<Shell store={store} />);
-    await store.ready;
-
-    fireEvent.click(screen.getByRole("button", { name: "연결 코드 K7PQ-4XMR" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "K7PQ-4XMR 복사" }));
-
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("K7PQ-4XMR"));
-    store.dispose();
+    const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
+    fireEvent.click(screen.getByRole("button", { name: "페어링 코드 123456" }));
+    fireEvent.click(screen.getByRole("button", { name: "123456 복사" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("123456"));
+    transport.setLink({ state: "connected", mode: "remote", server_url: "https://remote.example", device_name: "집" });
+    expect(await screen.findByText("집")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "연결 끊기" })).toBeTruthy(); store.dispose();
   });
-
-  it("cancels a pairing request from the code menu", async () => {
-    const transport = createFakeTransport(makeTestSeed());
-    transport.setLink({
-      state: "pairing",
-      server_url: "https://kaleidoscope.example",
-      user_code: "K7PQ-4XMR",
-      expires_at: "2026-10-29T00:10:00Z",
-    });
+  it("reports import results and switches back to the local server", async () => {
+    const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
+    const transport = createFakeTransport(seed);
+    transport.setLink({ state: "connected", mode: "remote", server_url: "https://remote.example", device_name: "집" });
     const spy = vi.spyOn(transport, "call");
-    const store = createShellStore(transport);
-    render(<Shell store={store} />);
-    await store.ready;
-
-    fireEvent.click(screen.getByRole("button", { name: "연결 코드 K7PQ-4XMR" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "연결 취소" }));
-
-    await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "link.cancel" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "서버에 연결" })).toBeTruthy());
-    store.dispose();
+    const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
+    fireEvent.click(screen.getByRole("button", { name: "원격 서버 (remote.example)" }));
+    fireEvent.click(screen.getByRole("button", { name: "내 PC 앱과 데이터 가져오기" }));
+    expect(await screen.findByText("가져오기 완료 3개")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "내 PC 서버로 전환" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "link.use_local" })); store.dispose();
   });
-
-  it("unlinks a connected device from its menu", async () => {
-    const transport = createFakeTransport(makeTestSeed());
-    transport.setLink({ state: "connected", server_url: "https://kaleidoscope.example", device_name: "Office PC" });
-    const spy = vi.spyOn(transport, "call");
-    const store = createShellStore(transport);
-    render(<Shell store={store} />);
-    await store.ready;
-
-    fireEvent.click(screen.getByTitle("연결됨 · Office PC"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "연결 끊기" }));
-
-    await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "link.unlink" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "서버에 연결" })).toBeTruthy());
-    store.dispose();
-  });
-
-  it("updates an open pairing menu when the server approves the link", async () => {
-    const transport = createFakeTransport(makeTestSeed());
-    transport.setLink({
-      state: "pairing",
-      server_url: "https://kaleidoscope.example",
-      user_code: "K7PQ-4XMR",
-      expires_at: "2026-10-29T00:10:00Z",
-    });
-    const store = createShellStore(transport);
-    render(<Shell store={store} />);
-    await store.ready;
-
-    fireEvent.click(screen.getByRole("button", { name: "연결 코드 K7PQ-4XMR" }));
-    expect(screen.getByRole("menuitem", { name: "연결 취소" })).toBeTruthy();
-    transport.setLink({ state: "connected", server_url: "https://kaleidoscope.example", device_name: "Office PC" });
-
-    await waitFor(() => {
-      expect(screen.getByRole("menuitem", { name: "kaleidoscope.example 연결됨" })).toBeTruthy();
-      expect(screen.getByRole("menuitem", { name: "연결 끊기" })).toBeTruthy();
-      expect(screen.queryByRole("menuitem", { name: "연결 취소" })).toBeNull();
-    });
-    store.dispose();
-  });
-
-  it("updates an open connected menu when the link goes offline", async () => {
-    const transport = createFakeTransport(makeTestSeed());
-    transport.setLink({ state: "connected", server_url: "https://kaleidoscope.example", device_name: "Office PC" });
-    const store = createShellStore(transport);
-    render(<Shell store={store} />);
-    await store.ready;
-
-    fireEvent.click(screen.getByTitle("연결됨 · Office PC"));
-    transport.setLink({
-      state: "offline",
-      server_url: "https://kaleidoscope.example",
-      device_name: "Office PC",
-      reason: "서버 응답 없음",
-    });
-
-    await waitFor(() => {
-      expect(screen.getByRole("menuitem", { name: "다시 연결하는 중" })).toBeTruthy();
-      expect(screen.getByRole("menuitem", { name: "연결 끊기" })).toBeTruthy();
-      expect(screen.queryByRole("menuitem", { name: "kaleidoscope.example 연결됨" })).toBeNull();
-    });
-    store.dispose();
-  });
-
-  it.each([
-    ["unlinked", { state: "unlinked" } as const, "서버에 연결"],
-    ["pairing", { state: "pairing", server_url: "https://kaleidoscope.example", user_code: "K7PQ-4XMR", expires_at: "2026-10-29T00:10:00Z" } as const, "연결 코드 K7PQ-4XMR"],
-    ["connected", { state: "connected", server_url: "https://kaleidoscope.example", device_name: "Office PC" } as const, "연결됨"],
-    ["offline", { state: "offline", server_url: "https://kaleidoscope.example", device_name: "Office PC", reason: "서버 응답 없음" } as const, "다시 연결하는 중"],
-    ["revoked", { state: "revoked", server_url: "https://kaleidoscope.example" } as const, "연결이 끊겼습니다"],
-  ])("renders %s as one shell IconButton with its status shape", async (state, link, label) => {
-    const transport = createFakeTransport({ ...makeTestSeed(), snapshot: { ...makeTestSeed().snapshot, link } });
-    const store = createShellStore(transport);
-    render(<Shell store={store} />);
-    await store.ready;
-
-    expect(screen.getByRole("button", { name: label })).toBeTruthy();
-    const controls = [...document.querySelectorAll(".ks-shell-actions > button")];
-    expect(controls).toHaveLength(3);
-    expect(controls.every((button) => button.classList.contains("ks-icon-button"))).toBe(true);
-    const icon = controls.at(-1)?.querySelector("svg");
-    expect(icon).toBeTruthy();
-    if (state === "pairing") {
-      expect(icon?.classList.contains("ks-link-icon-accent")).toBe(true);
-      expect(icon?.querySelectorAll("circle")).toHaveLength(3);
-    } else if (state === "offline") {
-      expect(icon?.classList.contains("lucide-cloud")).toBe(true);
-      expect(icon?.getAttribute("stroke-dasharray")).toBe("3 2");
-    } else if (state === "connected") {
-      expect(icon?.classList.contains("lucide-cloud")).toBe(true);
-      expect(icon?.querySelectorAll("path")).toHaveLength(1);
-      expect(icon?.querySelector("path")?.hasAttribute("stroke-dasharray")).toBe(false);
-    } else {
-      expect(icon?.classList.contains("lucide-cloud-off")).toBe(true);
-      expect(icon?.querySelectorAll("circle")).toHaveLength(0);
-    }
-    store.dispose();
+  it("shows offline state and disables importing until reconnected", async () => {
+    const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
+    const transport = createFakeTransport(seed);
+    transport.setLink({ state: "offline", mode: "remote", server_url: "https://remote.example", device_name: "집", reason: "연결 끊김" });
+    const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
+    fireEvent.click(screen.getByRole("button", { name: "원격 오프라인" }));
+    expect((screen.getByRole("button", { name: "내 PC 앱과 데이터 가져오기" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "서버 연결" })).toBeNull(); store.dispose();
   });
 });

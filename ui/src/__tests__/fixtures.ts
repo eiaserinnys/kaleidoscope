@@ -88,6 +88,7 @@ export function makeTestSnapshot(options: {
       local_agent_access: [],
     },
     supported: { blocks: 1, modules: { files: 1 } },
+    embedded_available: false,
     link: { state: "unlinked" },
     sharing: [],
     update: { state: "unavailable" },

@@ -1,6 +1,7 @@
 import type { MouseEvent, ReactNode } from "react";
 
 export interface ButtonProps {
+  className?: string,
   children: ReactNode;
   variant?: "default" | "emphasis";
   disabled?: boolean;
@@ -14,6 +15,7 @@ export interface ButtonProps {
 
 export function Button({
   children,
+  className,
   variant = "default",
   disabled = false,
   onClick,
@@ -25,7 +27,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`ks-button ks-button-${variant}${pressed === true ? " is-selected" : ""}`}
+      className={`ks-button ks-button-${variant}${pressed === true ? " is-selected" : ""}${className ? ` ${className}` : ""}`}
       disabled={disabled}
       aria-pressed={pressed}
       aria-label={label}

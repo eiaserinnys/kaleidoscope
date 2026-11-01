@@ -276,6 +276,7 @@ fn another_core_keeps_synced_share_baselines_before_view_arrives() {
     let open = |data_dir: &Path, host: &Arc<CaptureTestHost>| {
         Core::open(
             CoreConfig {
+                embedded_server: None,
                 data_dir: data_dir.to_path_buf(),
                 seed_definitions: vec![test_definition(MD_EDITOR)],
                 server_url: "http://127.0.0.1:4219".into(),

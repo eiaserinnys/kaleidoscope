@@ -203,6 +203,7 @@ fn web_commands_validate_and_delegate_and_emit_updates() {
     let host = Arc::new(HostWithWeb::default());
     let core = Core::open(
         CoreConfig {
+            embedded_server: None,
             data_dir: data.path().into(),
             seed_definitions: vec![
                 test_definition(include_str!("../../../../apps/web-browser.json")),
@@ -402,6 +403,7 @@ fn web_detaches_when_definition_loses_web_block() {
     let host = Arc::new(HostWithWeb::default());
     let core = Core::open(
         CoreConfig {
+            embedded_server: None,
             data_dir: data.path().into(),
             seed_definitions: vec![test_definition(include_str!(
                 "../../../../apps/web-browser.json"
@@ -436,6 +438,7 @@ fn removing_desktop_detaches_only_its_web_windows() {
     let host = Arc::new(HostWithWeb::default());
     let core = Core::open(
         CoreConfig {
+            embedded_server: None,
             data_dir: data.path().into(),
             seed_definitions: vec![test_definition(include_str!(
                 "../../../../apps/web-browser.json"

@@ -20,6 +20,14 @@ pub fn router(state: AppState) -> Router {
         .layer(DefaultBodyLimit::max(48 * 1024 * 1024))
         .route_layer(middleware::from_fn_with_state(state.clone(), mcp_auth));
     let device = Router::new()
+        .route(
+            "/transfer",
+            get(super::transfer::export)
+                .post(super::transfer::import)
+                .layer(DefaultBodyLimit::max(
+                    kaleidoscope_contract::transfer::TRANSFER_MAX_BYTES,
+                )),
+        )
         .route("/apps", post(device_upload))
         .route("/apps/{app_id}/worker", post(super::worker::device_invoke))
         .route("/assets/{id}/{version}", get(super::assets::device_get))

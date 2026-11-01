@@ -45,19 +45,34 @@ fn one_line(message: &str) -> String {
     message.lines().next().unwrap_or(message).trim().to_string()
 }
 
-pub(crate) fn start(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
-    let generation = {
-        let state = inner.state.lock().unwrap();
-        if matches!(
-            &state.link,
-            LinkStatus::Connected { .. } | LinkStatus::Offline { .. }
-        ) {
-            return Err(error::make(ErrorCode::InvalidRequest));
-        }
-        inner.generation.fetch_add(1, Ordering::SeqCst) + 1
-    };
-
-    let server_url = inner.server_url.clone();
+pub(crate) fn start(
+    inner: &Arc<Inner>,
+    requested_url: Option<String>,
+) -> Result<CoreReply, CoreError> {
+    let server_url = requested_url
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| inner.server_url.clone());
+    let server_url = server_url.trim().trim_end_matches('/').to_string();
+    let url =
+        reqwest::Url::parse(&server_url).map_err(|_| error::make(ErrorCode::InvalidRequest))?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(error::make(ErrorCode::InvalidRequest));
+    }
+    if let Some(file) = crate::server_switch::saved_remote(inner, &server_url)? {
+        let generation = inner.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        crate::server_switch::activate(inner, file.clone(), generation)?;
+        start_stream(inner.clone(), generation, file);
+        return Ok(CoreReply::LinkStart {
+            user_code: String::new(),
+            expires_at: Utc::now().to_rfc3339(),
+        });
+    }
     let reply = inner
         .registry
         .pair_start(
@@ -76,6 +91,7 @@ pub(crate) fn start(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
             server_error("kaleidoscope 서버에 닿지 않습니다", detail)
         })?;
 
+    let generation = inner.generation.fetch_add(1, Ordering::SeqCst) + 1;
     let pairing = LinkStatus::Pairing {
         server_url: server_url.clone(),
         user_code: reply.user_code.clone(),
@@ -108,6 +124,10 @@ pub(crate) fn start(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
 }
 
 pub(crate) fn cancel(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
+    if inner.embedded_server.is_some() {
+        crate::server_switch::use_local(inner)?;
+        return Ok(CoreReply::LinkCancel {});
+    }
     let changed = {
         let mut state = inner.state.lock().unwrap();
         if !matches!(&state.link, LinkStatus::Pairing { .. }) {
@@ -124,6 +144,10 @@ pub(crate) fn cancel(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
 }
 
 pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
+    if inner.embedded_server.is_some() {
+        crate::server_switch::use_local(inner)?;
+        return Ok(CoreReply::LinkUnlink {});
+    }
     crate::share::clear_server_before_unlink(inner);
     let changed = {
         let mut state = inner.state.lock().unwrap();
@@ -216,32 +240,27 @@ fn poll_pairing(
         match inner.registry.pair_poll(&server_url, &poll) {
             Ok(PairPollReply::Approved { device_id, token }) => {
                 let file = LinkFile {
+                    mode: kaleidoscope_contract::ServerMode::Remote,
                     format: 1,
                     server_url: server_url.clone(),
                     device_id,
                     device_name: inner.device_name.clone(),
                     token,
                 };
-                let status = LinkStatus::Offline {
-                    server_url: server_url.clone(),
-                    device_name: file.device_name.clone(),
-                    reason: "연결하는 중".into(),
-                };
-                let (saved, changed) = {
-                    let mut state = inner.state.lock().unwrap();
-                    if inner.generation.load(Ordering::SeqCst) != generation {
-                        (false, false)
-                    } else if storage::save_link(&inner.data_dir, &file).is_err() {
-                        (false, set_link_locked(&mut state, LinkStatus::Unlinked {}))
-                    } else {
-                        *inner.link_file.lock().unwrap() = Some(file.clone());
-                        (true, set_link_locked(&mut state, status))
-                    }
-                };
-                if changed {
-                    emit_state(&inner);
+                if let Err(e) = crate::server_switch::activate(&inner, file.clone(), generation) {
+                    eprintln!("서버 전환 실패: {}", e.message);
+                    return;
                 }
-                if saved && is_current(&inner, generation) {
+                if inner.embedded_server.is_some() {
+                    match crate::server_switch::sync(&inner) {
+                        Ok(_) => (),
+                        Err(e) => {
+                            inner.state.lock().unwrap().transfer_error = Some(e.message);
+                            emit_state(&inner);
+                        }
+                    }
+                }
+                if is_current(&inner, generation) {
                     run_stream(inner, generation, file);
                 }
                 return;
@@ -367,6 +386,7 @@ pub(crate) fn set_offline(inner: &Arc<Inner>, generation: u64, file: &LinkFile, 
             set_link_locked(
                 &mut state,
                 LinkStatus::Offline {
+                    mode: file.mode,
                     server_url: file.server_url.clone(),
                     device_name: file.device_name.clone(),
                     reason: one_line(&reason),
@@ -392,6 +412,7 @@ pub(crate) fn token_rejected(inner: &Arc<Inner>, file: LinkFile) {
             return;
         }
         inner.generation.fetch_add(1, Ordering::SeqCst);
+        if let Err(e)=crate::server_switch::forget_revoked(inner,&file) { eprintln!("거부된 연결 보관 정리 실패: {}",e.message); }
         if let Err(error) = storage::remove_link(&inner.data_dir) {
             eprintln!("연결 파일을 지울 수 없습니다: {}", error.message);
         }

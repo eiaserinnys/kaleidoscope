@@ -276,6 +276,10 @@ fn reconcile(inner: &Arc<Inner>, window: &str) {
     }
 }
 
+pub(crate) fn server_changed(inner: &Arc<Inner>) {
+    shutdown(inner);
+    inner.local_agents.known_windows.lock().unwrap().clear();
+}
 pub(crate) fn state_changed(inner: &Arc<Inner>) {
     let live: HashSet<_> = inner
         .state

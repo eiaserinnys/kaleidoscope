@@ -102,9 +102,22 @@ async fn run() -> Result<(), String> {
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
+    let embedded = kaleidoscope_orchestrator::EmbeddedServer::start(
+        kaleidoscope_orchestrator::EmbeddedConfig {
+            db_path: args.data_dir.join("local-orchestrator.db"),
+            token_path: args.data_dir.join("local-orchestrator.token"),
+            device_name: args.device_name.clone(),
+        },
+    )
+    .await?;
     let core = Arc::new(
         Core::open(
             CoreConfig {
+                embedded_server: Some(kaleidoscope_core::EmbeddedServerInfo {
+                    server_url: embedded.server_url.clone(),
+                    device_id: embedded.device_id.clone(),
+                    token: embedded.token.clone(),
+                }),
                 data_dir: args.data_dir,
                 seed_definitions,
                 server_url: args.server,

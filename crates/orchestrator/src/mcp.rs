@@ -48,7 +48,7 @@ struct AssetIdArgs {
 }
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct ApproveArgs {
-    /// 쉘에 보이는 XXXX-XXXX 연결 코드.
+    /// 쉘에 보이는 연결 코드. 새 서버는 숫자 여섯 자리다.
     code: String,
 }
 #[derive(Debug, Deserialize, schemars::JsonSchema)]

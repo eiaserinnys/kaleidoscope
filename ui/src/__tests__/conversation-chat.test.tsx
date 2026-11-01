@@ -26,7 +26,7 @@ const models = [
 const profiles = [{ id: "profile-a", label: "서소영", available: true }, { id: "profile-b", label: "키키", available: true }];
 function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinition: AppDefinition = definition) {
   const snapshot = makeTestSnapshot({ definitions: [appDefinition] });
-  snapshot.link = { state: "connected", server_url: "https://example.test", device_name: "시험" };
+  snapshot.link = { state: "connected", mode: "remote", server_url: "https://example.test", device_name: "시험" };
   const listeners = new Set<(event: CoreEvent) => void>();
   const call = vi.fn(async (request: CoreRequest): Promise<CoreReply> => {
     if (request.op === "data.attach") return { op: "data.attach", view: { values: {}, sources: {} } };

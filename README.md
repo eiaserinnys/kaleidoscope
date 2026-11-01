@@ -183,3 +183,32 @@ Use `tauri build` instead of `tauri dev` for an installer. A redistributed build
 ## License
 
 [MIT](LICENSE). Copyright (c) 2026 Jubok Kim.
+
+## 데스크톱과 내 PC 서버
+
+설치본을 실행하면 내장 서버가 자동으로 시작됩니다. 기기 연결 코드를 입력하지 않고 기본 에이전트에서 앱을 만들고, 앱 저장소와 서버 워커를 사용할 수 있습니다. 내장 서버는 루프백 주소만 열며 데이터와 토큰은 앱 데이터 폴더의 `local-orchestrator.db`, `local-orchestrator.token`에 보존됩니다. 기존 원격 연결을 쓰던 설치본은 업데이트 후에도 그 연결을 유지합니다.
+
+상단의 서버 버튼에서 원격 서버 주소를 입력하면 페어링 코드가 표시됩니다. 해당 서버의 MCP를 사용하는 에이전트에게 코드를 전달해 승인합니다. 연결 직후 내 PC의 자산, 개인 앱, 배치, 저장값을 순서대로 가져옵니다. 원격에 이미 있는 값은 보존하며 다른 내용은 건너뜁니다. 같은 메뉴의 **내 PC 앱과 데이터 가져오기**로 다시 실행하고 건너뛴 목록을 확인할 수 있습니다.
+
+**내 PC 서버로 전환**하면 로컬 배치로 돌아갑니다. 서버별 배치와 미전송 변경은 분리 보존됩니다. 외부 서비스 연결이나 로그인 정보, 워커 시크릿은 이관하지 않으므로 대상 서버와 기기에서 설정합니다.
+
+## 독립 서버 실행
+
+릴리스의 `kaleidoscope-orchestrator-x86_64-pc-windows-msvc.exe`를 내려받아 실행합니다. 별도 토큰 지정이 없으면 DB 경로 뒤에 `.token`을 붙인 파일을 만들고 다음 실행에도 재사용합니다.
+
+```sh
+kaleidoscope-orchestrator --bind 127.0.0.1:4219 --db ./data/kaleidoscope.db
+kaleidoscope-orchestrator --help
+kaleidoscope-orchestrator --db ./data/kaleidoscope.db --print-mcp-config
+```
+
+`--print-mcp-config`는 인증 토큰이 포함된 MCP 설정 JSON을 표준 출력으로 내보냅니다. 개인 에이전트 설정에만 저장합니다. 보통 실행 로그에는 토큰 값을 출력하지 않습니다. `--token`, `--token-file`을 지정할 수 있으며 기존 `KALEIDOSCOPE_BIND`, `KALEIDOSCOPE_DB_PATH`, `KALEIDOSCOPE_MCP_TOKEN` 환경변수도 지원합니다. CLI 옵션이 환경변수보다 우선합니다.
+
+```sh
+docker compose up -d --build
+docker compose logs orchestrator
+```
+
+Compose의 데이터 볼륨에 DB, 토큰과 백업을 보존하며 호스트 루프백의 4219 포트를 엽니다. 다른 PC에서 쓰려면 인증서를 둔 HTTPS 역방향 프록시를 연결합니다. 서버 워커를 쓰는 앱은 실행 환경에 필요한 의존성을 설치합니다. 기본 이미지는 Python 3를 포함합니다.
+
+서버 워커의 Python 3 실행 파일은 Linux에서는 `python3`, Windows에서는 `python`을 사용합니다. 데스크톱에서 Python 워커를 실행하려면 해당 실행 파일이 PATH에 있어야 합니다.

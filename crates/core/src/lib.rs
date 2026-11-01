@@ -121,7 +121,15 @@ impl AttachmentOpener for SystemAttachmentOpener {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct EmbeddedServerInfo {
+    pub server_url: String,
+    pub device_id: String,
+    pub token: String,
+}
+
 pub struct CoreConfig {
+    pub embedded_server: Option<EmbeddedServerInfo>,
     pub data_dir: PathBuf,
     pub seed_definitions: Vec<String>,
     pub server_url: String,
@@ -130,6 +138,9 @@ pub struct CoreConfig {
 
 #[derive(Clone, PartialEq)]
 pub(crate) struct CoreState {
+    pub(crate) last_transfer: Option<kaleidoscope_contract::transfer::TransferResult>,
+    pub(crate) transfer_error: Option<String>,
+    pub(crate) embedded_available: bool,
     pub(crate) shared: SharedState,
     pub(crate) device: DeviceState,
     pub(crate) link: LinkStatus,
@@ -139,6 +150,7 @@ pub(crate) struct CoreState {
 }
 
 pub(crate) struct Inner {
+    pub(crate) embedded_server: Option<EmbeddedServerInfo>,
     pub(crate) data_dir: PathBuf,
     pub(crate) state: Mutex<CoreState>,
     pub(crate) host: Arc<dyn Host>,
@@ -233,15 +245,19 @@ impl Core {
     ) -> Result<Core, CoreError> {
         fs::create_dir_all(&config.data_dir).map_err(|error| error::io_error(&error))?;
 
-        let link_file = storage::load_link(&config.data_dir)?;
+        let link_file = server_switch::startup_link(&config)?;
         let link = link_file
             .as_ref()
             .map_or(LinkStatus::Unlinked {}, |file| LinkStatus::Offline {
+                mode: file.mode,
                 server_url: file.server_url.clone(),
                 device_name: file.device_name.clone(),
                 reason: "연결하는 중".into(),
             });
         let mut state = CoreState {
+            last_transfer: None,
+            transfer_error: None,
+            embedded_available: config.embedded_server.is_some(),
             shared: storage::load_shared(&config.data_dir)?,
             device: storage::load_device(&config.data_dir)?,
             sync: sync_state::load(&config.data_dir, link_file.as_ref())?,
@@ -278,6 +294,7 @@ impl Core {
         }
 
         let inner = Arc::new(Inner {
+            embedded_server: config.embedded_server,
             data_dir: config.data_dir,
             state: Mutex::new(state),
             host,
@@ -352,7 +369,9 @@ impl Core {
                     snapshot: snapshot(&state),
                 })
             }
-            CoreRequest::LinkStart {} => link::start(&self.inner),
+            CoreRequest::LinkStart { server_url } => link::start(&self.inner, server_url),
+            CoreRequest::LinkUseLocal {} => server_switch::use_local(&self.inner),
+            CoreRequest::LinkSyncLocalToRemote {} => server_switch::sync(&self.inner),
             CoreRequest::LinkCancel {} => link::cancel(&self.inner),
             CoreRequest::LinkUnlink {} => link::unlink(&self.inner),
             request @ (CoreRequest::ConversationApplyStatus { .. }
@@ -783,6 +802,9 @@ pub(crate) fn supported() -> kaleidoscope_contract::Supported {
 
 pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
     ShellSnapshot {
+        last_transfer: state.last_transfer.clone(),
+        transfer_error: state.transfer_error.clone(),
+        embedded_available: state.embedded_available,
         shared: state.shared.clone(),
         device: state.device.clone(),
         supported: supported(),
@@ -793,3 +815,5 @@ pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
 }
 
 mod local_agent;
+
+mod server_switch;

@@ -5,11 +5,11 @@ use std::thread;
 use std::time::Duration;
 
 use kaleidoscope_contract::registry::{LayoutChanges, LAYOUT_RETRY_SECS};
-use kaleidoscope_contract::LinkStatus;
+use kaleidoscope_contract::{LinkStatus, SharedState};
 
 use crate::registry_client::RegistryError;
-use crate::sync_state::{EntityKey, EntityKind};
-use crate::{layout_apply, link, registry_events, CoreState, Inner};
+use crate::sync_state::{EntityKey, EntityKind, SyncState};
+use crate::{layout_apply, link, registry_events, Inner};
 
 pub(crate) fn start(inner: Arc<Inner>, generation: u64, epoch: u64) {
     if !is_active(&inner, generation, epoch) {
@@ -38,27 +38,27 @@ fn is_active(inner: &Inner, generation: u64, epoch: u64) -> bool {
         && inner.link_file.lock().unwrap().is_some()
 }
 
-fn batch(state: &CoreState) -> (LayoutChanges, BTreeMap<EntityKey, u64>) {
+pub(crate) fn batch(shared: &SharedState, sync: &SyncState) -> (LayoutChanges, BTreeMap<EntityKey, u64>) {
     let mut changes = LayoutChanges::default();
-    for key in state.sync.pending.keys() {
+    for key in sync.pending.keys() {
         match key.kind {
             EntityKind::Workspace => {
-                match state.shared.workspaces.iter().find(|v| v.id == key.id) {
+                match shared.workspaces.iter().find(|v| v.id == key.id) {
                     Some(value) => changes.workspaces.push(value.clone()),
                     None => changes.deleted_workspaces.push(key.id.clone()),
                 }
             }
-            EntityKind::Desktop => match state.shared.desktops.iter().find(|v| v.id == key.id) {
+            EntityKind::Desktop => match shared.desktops.iter().find(|v| v.id == key.id) {
                 Some(value) => changes.desktops.push(value.clone()),
                 None => changes.deleted_desktops.push(key.id.clone()),
             },
-            EntityKind::Window => match state.shared.windows.iter().find(|v| v.id == key.id) {
+            EntityKind::Window => match shared.windows.iter().find(|v| v.id == key.id) {
                 Some(value) => changes.windows.push(value.clone()),
                 None => changes.deleted_windows.push(key.id.clone()),
             },
         }
     }
-    (changes, state.sync.pending.clone())
+    (changes, sync.pending.clone())
 }
 
 fn run(inner: Arc<Inner>, generation: u64, epoch: u64) {
@@ -72,7 +72,7 @@ fn run(inner: Arc<Inner>, generation: u64, epoch: u64) {
         let sequence = inner.layout_signal.sequence();
         let (changes, sent) = {
             let state = inner.state.lock().unwrap();
-            batch(&state)
+            batch(&state.shared, &state.sync)
         };
         if sent.is_empty() {
             inner

@@ -248,7 +248,10 @@ impl AppState {
         std::fs::create_dir_all(&state_dir)
             .map_err(|e| server_error(&format!("워커 폴더를 만들 수 없습니다: {e}")))?;
         let input = serde_json::to_vec(&json!({"app_id":app_id,"trigger":trigger,"storage":storage,"storage_revisions":revisions,"secrets":secrets,"state_dir":state_dir,"now":timestamp()})).map_err(|e| server_error(&e.to_string()))?;
-        let mut command = tokio::process::Command::new("python3");
+        let interpreter = if cfg!(windows) { "python" } else { "python3" };
+        let mut command = tokio::process::Command::new(interpreter);
+        #[cfg(windows)]
+        command.creation_flags(0x08000000);
         command
             .arg("-c")
             .arg(&worker.code)

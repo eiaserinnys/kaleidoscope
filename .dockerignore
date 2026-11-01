@@ -1,0 +1,12 @@
+.git
+.local
+target
+node_modules
+**/node_modules
+**/dist
+*.db
+*.db-*
+*.token
+
+.env
+.env.*

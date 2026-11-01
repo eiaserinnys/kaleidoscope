@@ -120,6 +120,7 @@ async fn setup(
     let controls = updates::controls(&options, modes.as_ref(), models.as_ref());
     let saved = {
         let mut s = owner.state.lock().unwrap();
+        s.guide_sent = false;
         s.record.session_id = Some(session.to_string());
         s.snapshot.controls = controls;
         owner.persist(&mut s)?;

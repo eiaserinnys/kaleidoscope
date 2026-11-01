@@ -56,6 +56,8 @@ export type {
   Desktop,
   Rect,
   ShellSnapshot,
+  ServerMode,
+  TransferResult,
   Workspace,
 } from "./contract/contract";
 export { useShareView } from "./share/share-view";
