@@ -1,7 +1,7 @@
 {
   "id": "slackbot",
   "name": "슬랙봇",
-  "description": "슬랙 웹훅과 소켓·폴링으로 대화를 받아 에이전트 앱에 연결합니다.",
+  "description": "슬랙 웹훅과 폴링으로 대화를 받아 에이전트 앱에 연결합니다.",
   "requires": {
     "blocks": 9,
     "modules": {
@@ -236,7 +236,6 @@
     "type": "stack",
     "direction": "column",
     "gap": "none",
-    "fill": 1,
     "children": [
       {
         "type": "toolbar",
@@ -280,8 +279,11 @@
               }
             ]
           }
-        ],
-        "end": [
+        ]
+      },
+      {
+        "type": "toolbar",
+        "start": [
           {
             "type": "input",
             "value": {
@@ -301,7 +303,9 @@
                 }
               }
             ]
-          },
+          }
+        ],
+        "end": [
           {
             "type": "button",
             "label": "테스트 실행",
