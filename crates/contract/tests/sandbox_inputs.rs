@@ -49,3 +49,22 @@ fn interactive_app_layout_passes_validation() {
     ]});
     parse_app_definition(&app(ui)).unwrap();
 }
+
+#[test]
+fn sandbox_min_height_alias_is_validated_and_serialized_as_height() {
+    for kind in ["sandbox", "interactive_html"] {
+        let parsed = parse_app_definition(&app(json!({
+            "type": kind, "value": "<canvas></canvas>", "min_height": 620
+        })))
+        .unwrap();
+        let normalized = serde_json::to_value(&parsed.ui).unwrap();
+        assert_eq!(normalized["height"], 620);
+        assert!(normalized.get("min_height").is_none());
+        for invalid in [119, 2401] {
+            assert!(parse_app_definition(&app(json!({
+                "type": kind, "value": "<canvas></canvas>", "min_height": invalid
+            })))
+            .is_err());
+        }
+    }
+}

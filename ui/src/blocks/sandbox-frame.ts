@@ -77,7 +77,11 @@ function bridgeSource(init: SandboxInit): string {
         Promise.all([...pendingWrites]).then(() => send('ks-sandbox-flushed', { requestId: data.requestId, ok: true }), () => send('ks-sandbox-flushed', { requestId: data.requestId, ok: false }));
       }
     });
-    document.addEventListener('click', event => { if (event.target.closest?.('a')) event.preventDefault(); schedule(); }, true);
+    document.addEventListener('click', event => {
+      const anchor = event.target.closest?.('a');
+      if (anchor && !(anchor.hasAttribute('download') && /^(?:blob:|data:)/i.test((anchor.getAttribute('href') || '').trim()))) event.preventDefault();
+      schedule();
+    }, true);
     document.addEventListener('submit', event => { event.preventDefault(); schedule(); }, true);
     document.addEventListener('input', schedule, true); document.addEventListener('change', schedule, true);
     const ready = () => { send('ks-sandbox-ready'); report(); new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true, characterData: true }); };

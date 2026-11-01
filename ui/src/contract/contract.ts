@@ -235,7 +235,7 @@ export type BindingValue = { "status": "ready", value: JsonValue, } | { "status"
  * 데이터 블록은 그 상태를 그 자리에 보인다. 4판 블록은 쉘의 토큰과 공통 부품만으로 그리고, 앱이 색이나 크기를
  * 정하지 않는다(항목의 `color`와 배지 색만 예외).
  */
-export type Block = { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: StateRef, on_change: Actions, label?: string, min: number, max: number, step?: number, } | { "type": "color", value: StateRef, on_change: Actions, label?: string, } | { "type": "split", direction: SplitDirection,
+export type Block = { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: StateRef, on_change: Actions, label?: string, min: number, max: number, step?: number, } | { "type": "color", value: StateRef, on_change: Actions, label?: string, } | { "type": "split", direction: SplitDirection, 
 /**
  * 자식마다의 상대 크기. 없으면 똑같이 나눈다.
  */
@@ -1085,7 +1085,7 @@ visual: boolean,
 /**
  * 화면에서 직접 제공하는 PNG 이미지의 base64 표현.
  */
-image_base64?: string,
+image_base64?: string, 
 /**
  * 창의 내용 영역(제목 줄 아래)이 쉘 화면(메인 웹뷰) 왼쪽 위 기준 어디에 있는가(CSS px). 모습을 찍을 때 쓴다.
  */

@@ -52,3 +52,28 @@ it("body의 onload는 창 로드 때 body를 this로 받아 실행된다", () =>
   document.body.removeAttribute("data-ks-on-id");
   delete document.body.dataset.loaded;
 });
+
+it("로컬 download 링크는 허용하고 일반 링크 이동은 막는다", () => {
+  vi.useFakeTimers();
+  const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험" });
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
+  const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
+  vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  new Function(code)();
+  const prevented = (href: string, download: boolean) => {
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", href);
+    if (download) anchor.setAttribute("download", "file.txt");
+    const child = document.createElement("span"); anchor.append(child); document.body.append(anchor);
+    let wasPrevented = false;
+    anchor.addEventListener("click", (event) => { wasPrevented = event.defaultPrevented; event.preventDefault(); });
+    child.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    anchor.remove(); return wasPrevented;
+  };
+  expect(prevented("blob:https://example.test/file", true)).toBe(false);
+  expect(prevented("data:text/plain,hello", true)).toBe(false);
+  expect(prevented("blob:https://example.test/file", false)).toBe(true);
+  expect(prevented("https://example.test/", true)).toBe(true);
+  vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+});

@@ -164,7 +164,9 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
           send({ type: "ks-sandbox-storage-reply", requestId, error: message });
         });
       } else if (data.type === "ks-sandbox-share") {
-        setShare((previous) => ({ text: typeof data.text === "string" ? data.text : "", image: typeof data.imageBase64 === "string" ? data.imageBase64.replace(/^data:image\/png;base64,/, "") : "", sequence: previous.sequence + 1 }));
+        const text = typeof data.text === "string" ? data.text : "";
+        const image = typeof data.imageBase64 === "string" ? data.imageBase64.replace(/^data:image\/png;base64,/, "") : "";
+        setShare((previous) => previous.text === text && previous.image === image ? previous : { text, image, sequence: previous.sequence + 1 });
       }
     };
     window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);

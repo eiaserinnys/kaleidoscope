@@ -5,6 +5,7 @@ import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
+import { describeVisible } from "../share/visible";
 import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -63,6 +64,14 @@ it("범위와 색상 입력은 각각의 동작에 선택한 값을 전달한다
     expect(spy).toHaveBeenCalledWith({ op: "data.act", window_id: "editor-window", pointer: "/ui/start/1/on_change", event: "#abcdef" });
     expect(store.getSnapshot()?.shared.windows[0].state).toMatchObject({ amount: 45, color: "#abcdef" });
   });
+  const rect = { left: 0, top: 0, right: 100, bottom: 100, x: 0, y: 0, width: 100, height: 100, toJSON() {} };
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
+  vi.spyOn(document, "createRange").mockImplementation(() => ({ setStart() {}, setEnd() {}, getClientRects: () => [rect] }) as unknown as Range);
+  const text = describeVisible(screen.getByRole("slider", { name: "강도" }).closest(".ks-data-toolbar") as HTMLElement).text;
+  expect(text.match(/강도/g)).toHaveLength(1);
+  expect(text.match(/색상/g)).toHaveLength(1);
+  expect(text).toContain("강도: 45");
+  expect(text).toContain("색상: #abcdef");
 });
 
 it("attaches data and routes input, selection and toggle through their JSON pointers", async () => {

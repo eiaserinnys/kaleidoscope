@@ -88,10 +88,10 @@ export function SliderBlock({ block, context, pointer }: Props<"slider">) {
   const [draft, setDraft] = useState(current);
   useEffect(() => { setDraft(current); }, [current]);
   return <label className="ks-field ks-slider-field">
-    {block.label ? <span>{block.label}</span> : null}
+    {block.label ? <span data-ks-share-skip="">{block.label}</span> : null}
     <input type="range" className="ks-slider" aria-label={block.label ?? block.value.state} min={block.min} max={block.max} step={block.step ?? 1} value={draft}
       onChange={(event) => { const next = Number(event.currentTarget.value); setDraft(next); void data.act(`${pointer}/on_change`, next); }} />
-    <span className="ks-slider-value">{draft}</span>
+    <span className="ks-slider-value" data-ks-share-skip="">{draft}</span>
   </label>;
 }
 
@@ -100,9 +100,9 @@ export function ColorBlock({ block, context, pointer }: Props<"color">) {
   const value = context.window.state[block.value.state];
   const color = typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "#000000";
   return <label className="ks-field ks-color-field">
-    {block.label ? <span>{block.label}</span> : null}
+    {block.label ? <span data-ks-share-skip="">{block.label}</span> : null}
     <span className="ks-color-control"><input className="ks-color-input" type="color" aria-label={block.label ?? block.value.state} value={color}
-      onChange={(event) => { void data.act(`${pointer}/on_change`, event.currentTarget.value.toLowerCase()); }} /><span className="ks-color-code">{color}</span></span>
+      onChange={(event) => { void data.act(`${pointer}/on_change`, event.currentTarget.value.toLowerCase()); }} /><span className="ks-color-code" data-ks-share-skip="">{color}</span></span>
   </label>;
 }
 export function SelectBlock({ block, context, pointer }: Props<"select">) {

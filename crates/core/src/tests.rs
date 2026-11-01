@@ -972,7 +972,122 @@ fn shared_image_is_attached_without_a_web_host() {
 }
 
 #[test]
+fn shared_image_accepts_only_png_within_ten_mebibytes() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = seeded_core(temp.path(), &host);
+    let (workspace, desktop) = active_ids(&core);
+    let window_id = open_window(&core, &desktop, "test-md-editor");
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    let make_view = |encoded: String| kaleidoscope_contract::VisibleView {
+        text: "그림".into(),
+        visual: true,
+        image_base64: Some(encoded),
+        bounds: Rect {
+            x: 0,
+            y: 0,
+            width: 4,
+            height: 4,
+        },
+    };
+    let max_encoded = ((10 * 1024 * 1024 + 2) / 3) * 4;
+    expect_error(
+        core.handle(CoreRequest::ShareView {
+            window_id: window_id.clone(),
+            view: make_view("A".repeat(max_encoded + 1)),
+        }),
+        ErrorCode::InvalidRequest,
+    );
+
+    let mut jpeg = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgb8(image::RgbImage::new(1, 1))
+        .write_to(&mut jpeg, image::ImageFormat::Jpeg)
+        .unwrap();
+    core.handle(CoreRequest::ShareView {
+        window_id: window_id.clone(),
+        view: make_view(STANDARD.encode(jpeg.into_inner())),
+    })
+    .unwrap();
+    assert!(
+        crate::share::capture_for_send(&core.inner, &workspace, "test", &[])
+            .0
+            .is_empty()
+    );
+
+    let mut oversized_png = test_png(1, 1);
+    oversized_png.resize(10 * 1024 * 1024 + 1, 0);
+    core.handle(CoreRequest::ShareView {
+        window_id,
+        view: make_view(STANDARD.encode(oversized_png)),
+    })
+    .unwrap();
+    assert!(
+        crate::share::capture_for_send(&core.inner, &workspace, "test", &[])
+            .0
+            .is_empty()
+    );
+}
+
+#[test]
+fn shared_image_falls_back_when_native_capture_is_unavailable() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(CaptureTestHost {
+        png: Mutex::new(Vec::new()),
+        web_captures: AtomicUsize::new(0),
+        shell_captures: AtomicUsize::new(0),
+    });
+    let core = Core::open_with_client(
+        CoreConfig {
+            embedded_server: None,
+            data_dir: temp.path().join("data"),
+            seed_definitions: vec![test_definition(MD_EDITOR)],
+            server_url: "http://127.0.0.1:4219".into(),
+            device_name: "test-device".into(),
+        },
+        host.clone(),
+        registry_client(),
+    )
+    .unwrap();
+    let (workspace, desktop) = active_ids(&core);
+    let window_id = open_window(&core, &desktop, "test-md-editor");
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    let view = kaleidoscope_contract::VisibleView {
+        text: "그림".into(),
+        visual: true,
+        image_base64: Some(STANDARD.encode(test_png_with_blue(4, 4, 17))),
+        bounds: Rect {
+            x: 0,
+            y: 0,
+            width: 4,
+            height: 4,
+        },
+    };
+    core.handle(CoreRequest::ShareView { window_id, view })
+        .unwrap();
+    let (attachments, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", &[]);
+    assert_eq!(host.shell_captures.load(Ordering::SeqCst), 1);
+    assert_eq!(attachments.len(), 1);
+    let image = image::load_from_memory(&STANDARD.decode(&attachments[0].data_base64).unwrap())
+        .unwrap()
+        .to_rgba8();
+    assert_eq!(image.get_pixel(0, 0).0[2], 17);
+}
+
+#[test]
 fn conversation_capture_respects_visual_baseline() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
     let temp = TempDir::new().unwrap();
     let host = Arc::new(CaptureTestHost {
         png: Mutex::new(test_png(8, 8)),
@@ -1007,7 +1122,7 @@ fn conversation_capture_respects_visual_baseline() {
             view: kaleidoscope_contract::VisibleView {
                 text: "[이미지: 화면]".into(),
                 visual: true,
-                image_base64: None,
+                image_base64: Some(STANDARD.encode(test_png_with_blue(4, 4, 17))),
                 bounds: Rect {
                     x: 1,
                     y: 1,
@@ -1059,6 +1174,12 @@ fn conversation_capture_respects_visual_baseline() {
     .unwrap();
     let (first, visuals) = crate::share::capture_for_send(&core.inner, &workspace_id, "test", &[]);
     assert_eq!(first.len(), 2);
+    for attachment in &first {
+        let image = image::load_from_memory(&STANDARD.decode(&attachment.data_base64).unwrap())
+            .unwrap()
+            .to_rgba8();
+        assert_eq!(image.get_pixel(0, 0).0[2], 80);
+    }
     assert_eq!(host.shell_captures.load(Ordering::SeqCst), 1);
     assert_eq!(host.web_captures.load(Ordering::SeqCst), 1);
     crate::share::mark_sent_visuals(&core.inner, "test", visuals);

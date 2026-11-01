@@ -65,6 +65,10 @@ it("샌드박스의 허용된 상태와 저장을 중계하고 같이 볼 이미
   message({ type: "ks-sandbox-share", text: "보이는 글", imageBase64: "cG5n" });
   await waitFor(() => expect(iframe.closest(".ks-sandbox")?.getAttribute("data-share-seq")).toBe("1"));
   expect(describeVisible(iframe.closest(".ks-sandbox") as HTMLElement)).toMatchObject({ text: expect.stringContaining("보이는 글"), image_base64: "cG5n", visual: true });
+  act(() => message({ type: "ks-sandbox-share", text: "보이는 글", imageBase64: "cG5n" }));
+  expect(iframe.closest(".ks-sandbox")?.getAttribute("data-share-seq")).toBe("1");
+  act(() => message({ type: "ks-sandbox-share", text: "바뀐 글", imageBase64: "cG5n" }));
+  expect(iframe.closest(".ks-sandbox")?.getAttribute("data-share-seq")).toBe("2");
   const flushing = flushSandboxes("editor-window");
   await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-sandbox-flush" }), "*"));
   const flushRequest = post.mock.calls.map(([data]) => data).find((data) => data.type === "ks-sandbox-flush");

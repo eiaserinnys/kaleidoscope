@@ -967,7 +967,7 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         title: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(default, alias = "min_height", skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         height: Option<u16>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1493,7 +1493,7 @@ enum RawBlock {
         value: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         title: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(default, alias = "min_height", skip_serializing_if = "Option::is_none")]
         height: Option<u16>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         state_keys: Vec<String>,
