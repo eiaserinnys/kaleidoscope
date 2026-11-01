@@ -4508,6 +4508,7 @@ mod tests {
             vec!["narrative".to_string(), "master".to_string()]
         );
         assert!(data::data_refs("$database.x").is_empty());
+        assert!(data::data_refs("$lookup($data, 'optional_source').items").is_empty());
         assert!(data::valid_source_name("narrative_2"));
         assert!(!data::valid_source_name("2cards"));
         assert!(!data::valid_source_name("my-cards"));

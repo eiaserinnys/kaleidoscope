@@ -106,7 +106,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "reader",
         name: "해커뉴스와 위키",
-        version: 1,
+        version: 2,
         updated_at: "2026-11-01T00:00:00Z",
         blocks: 10,
         modules: &[("http", 1)],

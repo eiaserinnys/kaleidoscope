@@ -42,6 +42,7 @@ fn reader_chains_story_selection_to_hn_github_wikipedia_and_openalex() {
         panic!("item 계획")
     };
     assert_eq!(path, "/api/v1/items/123");
+    state.insert("active_tab".into(), json!(1));
     let SourcePlan::Request { path, .. } = app.plan_source_with_data_and_storage(
         "github_repo",
         &state,
@@ -71,6 +72,10 @@ fn reader_chains_story_selection_to_hn_github_wikipedia_and_openalex() {
         "wiki_ko_search",
         "papers",
     ] {
+        state.insert(
+            "active_tab".into(),
+            json!(if source == "github_search" { 1 } else { 2 }),
+        );
         let SourcePlan::Request { query, .. } = app.plan_source_with_data_and_storage(
             source,
             &state,
@@ -114,6 +119,7 @@ fn reader_chains_story_selection_to_hn_github_wikipedia_and_openalex() {
             json!({"query":{"search":[{"title":"러스트 프로그래밍 언어"}]}}),
         ),
     ]);
+    state.insert("active_tab".into(), json!(2));
     let SourcePlan::Request { path, query, .. } = app.plan_source_with_data_and_storage(
         "wiki_en_summary",
         &state,
@@ -123,7 +129,7 @@ fn reader_chains_story_selection_to_hn_github_wikipedia_and_openalex() {
     ) else {
         panic!("영어 위키 요약 계획")
     };
-    assert_eq!(path, "/api/rest_v1/page/summary/Rust_programming_language");
+    assert_eq!(path, "/api/rest_v1/page/summary/Rust");
     assert_eq!(query["redirect"], "false");
     let SourcePlan::Request { path, query, .. } = app.plan_source_with_data_and_storage(
         "wiki_ko_summary",
@@ -134,7 +140,10 @@ fn reader_chains_story_selection_to_hn_github_wikipedia_and_openalex() {
     ) else {
         panic!("한국어 위키 요약 계획")
     };
-    assert_eq!(path, "/api/rest_v1/page/summary/러스트_프로그래밍_언어");
+    assert_eq!(
+        path,
+        "/api/rest_v1/page/summary/%EB%9F%AC%EC%8A%A4%ED%8A%B8%5F%ED%94%84%EB%A1%9C%EA%B7%B8%EB%9E%98%EB%B0%8D%5F%EC%96%B8%EC%96%B4"
+    );
     assert_eq!(query["redirect"], "false");
 }
 
@@ -155,6 +164,10 @@ fn reader_prefers_submitted_query_for_related_sources() {
         ("wiki_ko_search", "srsearch"),
         ("papers", "search"),
     ] {
+        state.insert(
+            "active_tab".into(),
+            json!(if source == "github_search" { 1 } else { 2 }),
+        );
         let SourcePlan::Request { query, .. } = app.plan_source_with_data_and_storage(
             source,
             &state,
@@ -410,4 +423,201 @@ fn reader_limits_roots_and_replies_while_including_depth_four() {
         feed[0]["children"][0]["children"][0]["children"][0]["children"][0]["key"],
         "depth-4"
     );
+}
+
+#[test]
+fn reader_requests_only_the_active_tab_sources() {
+    let (definition, app) = reader();
+    let story =
+        json!({"objectID":"123","title":"Rust tools","url":"https://github.com/acme/rust-tools"});
+    let mut data = BTreeMap::from([("stories".into(), json!({"hits":[story]}))]);
+    let tab_sources = [
+        "github_repo",
+        "github_search",
+        "wiki_en_search",
+        "wiki_ko_search",
+        "papers",
+        "wiki_en_summary",
+        "wiki_ko_summary",
+    ];
+    let plan = |name: &str, tab: i64, data: &BTreeMap<String, serde_json::Value>| {
+        let mut state = definition.state.clone();
+        state.insert("active_tab".into(), json!(tab));
+        app.plan_source_with_data_and_storage(
+            name,
+            &state,
+            data,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        )
+    };
+
+    for name in ["stories", "item"] {
+        assert!(
+            matches!(plan(name, 0, &data), SourcePlan::Request { .. }),
+            "{name}"
+        );
+    }
+    for name in tab_sources {
+        assert_eq!(plan(name, 0, &data), SourcePlan::Idle, "tab 0: {name}");
+    }
+
+    for name in ["github_repo", "github_search"] {
+        assert!(
+            matches!(plan(name, 1, &data), SourcePlan::Request { .. }),
+            "{name}: {:?}",
+            plan(name, 1, &data)
+        );
+    }
+    for name in [
+        "wiki_en_search",
+        "wiki_ko_search",
+        "papers",
+        "wiki_en_summary",
+        "wiki_ko_summary",
+    ] {
+        assert_eq!(plan(name, 1, &data), SourcePlan::Idle, "tab 1: {name}");
+    }
+
+    data.insert(
+        "wiki_en_search".into(),
+        json!({"query":{"search":[{"title":"Rust"}]}}),
+    );
+    data.insert(
+        "wiki_ko_search".into(),
+        json!({"query":{"search":[{"title":"러스트"}]}}),
+    );
+    for name in ["wiki_en_search", "wiki_ko_search", "papers"] {
+        assert!(
+            matches!(plan(name, 2, &data), SourcePlan::Request { .. }),
+            "{name}"
+        );
+    }
+    for name in ["wiki_en_summary", "wiki_ko_summary"] {
+        assert!(
+            matches!(plan(name, 2, &data), SourcePlan::Request { .. }),
+            "{name}"
+        );
+    }
+    for name in ["github_repo", "github_search"] {
+        assert_eq!(plan(name, 2, &data), SourcePlan::Idle, "tab 2: {name}");
+    }
+}
+
+#[test]
+fn reader_metrics_remain_ready_when_optional_sources_fail() {
+    let (definition, app) = reader();
+    let data = BTreeMap::from([(
+        "stories".into(),
+        json!({"hits":[{"objectID":"123","title":"Rust","points":10}]}),
+    )]);
+    let statuses = BTreeMap::from([
+        (
+            "github_search".into(),
+            SourceStatus::Failed {
+                message: "GitHub 제한".into(),
+                has_value: false,
+            },
+        ),
+        (
+            "papers".into(),
+            SourceStatus::Failed {
+                message: "논문 검색 실패".into(),
+                has_value: false,
+            },
+        ),
+    ]);
+    let empty = BTreeMap::new();
+    let values = app.evaluate_with_data_meta(
+        &definition.state,
+        &data,
+        &empty,
+        &empty,
+        &empty,
+        &statuses,
+        None,
+    );
+    let BindingValue::Ready { value: metrics } = &values["/ui/children/1/items"] else {
+        panic!("지표 식 결과");
+    };
+    assert!(metrics[2]["subtext"]
+        .as_str()
+        .unwrap()
+        .contains("오픈소스 탭에서 조회"));
+    assert!(metrics[3]["subtext"]
+        .as_str()
+        .unwrap()
+        .contains("Rust · 위키·논문 탭에서 조회"));
+}
+
+#[test]
+fn reader_tab_details_fall_back_to_search_results_when_detail_sources_fail() {
+    let (definition, app) = reader();
+    let data = BTreeMap::from([
+        (
+            "github_search".into(),
+            json!({"items":[{"id":10,"full_name":"acme/rust-tools","language":"Rust","stargazers_count":100,"forks_count":8}]}),
+        ),
+        (
+            "wiki_en_search".into(),
+            json!({"query":{"search":[{"title":"Rust","snippet":"<span>Programming</span> language"}]}}),
+        ),
+        (
+            "wiki_ko_search".into(),
+            json!({"query":{"search":[{"title":"러스트","snippet":"<b>프로그래밍</b> 언어"}]}}),
+        ),
+    ]);
+    let statuses = BTreeMap::from([
+        (
+            "github_repo".into(),
+            SourceStatus::Failed {
+                message: "저장소 404".into(),
+                has_value: false,
+            },
+        ),
+        (
+            "wiki_en_summary".into(),
+            SourceStatus::Failed {
+                message: "영어 요약 실패".into(),
+                has_value: false,
+            },
+        ),
+        (
+            "wiki_ko_summary".into(),
+            SourceStatus::Failed {
+                message: "한국어 요약 실패".into(),
+                has_value: false,
+            },
+        ),
+    ]);
+    let empty = BTreeMap::new();
+    let values = app.evaluate_with_data_meta(
+        &definition.state,
+        &data,
+        &empty,
+        &empty,
+        &empty,
+        &statuses,
+        None,
+    );
+
+    for (pointer, expected) in [
+        (
+            "/ui/children/2/children/1/tabs/1/child/children/0/child/rows",
+            "acme/rust-tools",
+        ),
+        (
+            "/ui/children/2/children/1/tabs/2/child/children/1/child/fields/1/value",
+            "Programming language",
+        ),
+        (
+            "/ui/children/2/children/1/tabs/2/child/children/1/child/fields/2/value",
+            "프로그래밍 언어",
+        ),
+    ] {
+        let BindingValue::Ready { value } = &values[pointer] else {
+            panic!("검색 결과 폴백 바인딩: {pointer}: {:?}", values[pointer]);
+        };
+        assert!(value.to_string().contains(expected), "{pointer}: {value}");
+    }
 }

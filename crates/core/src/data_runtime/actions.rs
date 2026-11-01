@@ -194,6 +194,7 @@ pub(crate) fn act(
                 if !(200..300).contains(&reply.status) {
                     return Err(connections::response_error(&reply));
                 }
+                super::connection_changed(inner, &permission);
             }
         }
     }

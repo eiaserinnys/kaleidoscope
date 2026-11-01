@@ -203,6 +203,7 @@ pub(crate) fn login(
         .unwrap()
         .remove(&connection_name);
     result?;
+    crate::data_runtime::connection_changed(inner, permission);
     crate::data_runtime::refresh_login_required(inner, &connection_name);
     crate::conversation_stream::login_succeeded(inner, &connection_name);
     crate::conversation_send::recover(inner);
