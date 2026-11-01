@@ -236,6 +236,7 @@
     "type": "stack",
     "direction": "column",
     "gap": "none",
+    "fill": 3,
     "children": [
       {
         "type": "toolbar",
@@ -356,64 +357,54 @@
         }
       },
       {
-        "type": "split",
-        "direction": "row",
-        "sizes": [
-          2,
-          1
-        ],
-        "children": [
+        "type": "table",
+        "rows": {
+          "expr": "$map($storage.logs, function($l) { {\"key\": $l.id, \"time\": $contains($l.time, \"T\") ? $substring($l.time, 11, 5) : $l.time, \"prompt\": $l.prompt, \"status\": $l.status} })"
+        },
+        "columns": [
           {
-            "type": "table",
-            "rows": {
-              "expr": "$map($storage.logs, function($l) { {\"key\": $l.id, \"time\": $contains($l.time, \"T\") ? $substring($l.time, 11, 5) : $l.time, \"prompt\": $l.prompt, \"status\": $l.status} })"
-            },
-            "columns": [
-              {
-                "field": "time",
-                "label": "시각",
-                "width": "narrow"
-              },
-              {
-                "field": "prompt",
-                "label": "질문"
-              },
-              {
-                "field": "status",
-                "label": "상태",
-                "width": "narrow",
-                "format": "badge"
-              }
-            ],
-            "selected": {
-              "state": "selected_log"
-            },
-            "on_select": {
-              "set_state": "selected_log"
+            "field": "time",
+            "label": "시각",
+            "width": "narrow"
+          },
+          {
+            "field": "prompt",
+            "label": "질문"
+          },
+          {
+            "field": "status",
+            "label": "상태",
+            "width": "narrow",
+            "format": "badge"
+          }
+        ],
+        "selected": {
+          "state": "selected_log"
+        },
+        "on_select": {
+          "set_state": "selected_log"
+        }
+      },
+      {
+        "type": "properties",
+        "fields": [
+          {
+            "label": "시각 · 채널",
+            "value": {
+              "expr": "($m := $storage.logs[id = $state.selected_log]; $l := $exists($m) ? $m[0] : $storage.logs[0]; $exists($l) ? ($contains($l.time, \"T\") ? $replace($substring($l.time, 5, 11), \"T\", \" \") : $l.time) & \" · \" & ($l.channel != \"\" ? $l.channel : \"테스트\") & ($l.user != \"\" ? \" (\" & $l.user & \")\" : \"\") : null)"
             }
           },
           {
-            "type": "properties",
-            "fields": [
-              {
-                "label": "시각 · 채널",
-                "value": {
-                  "expr": "($m := $storage.logs[id = $state.selected_log]; $l := $exists($m) ? $m[0] : $storage.logs[0]; $exists($l) ? ($contains($l.time, \"T\") ? $replace($substring($l.time, 5, 11), \"T\", \" \") : $l.time) & \" · \" & ($l.channel != \"\" ? $l.channel : \"테스트\") & ($l.user != \"\" ? \" (\" & $l.user & \")\" : \"\") : null)"
-                }
-              },
-              {
-                "label": "질문",
-                "value": {
-                  "expr": "($m := $storage.logs[id = $state.selected_log]; $l := $exists($m) ? $m[0] : $storage.logs[0]; $l.prompt)"
-                }
-              },
-              {
-                "label": "답변",
-                "value": {
-                  "expr": "($m := $storage.logs[id = $state.selected_log]; $l := $exists($m) ? $m[0] : $storage.logs[0]; $l.reply)"
-                }
-              }
-            ]
+            "label": "질문",
+            "value": {
+              "expr": "($m := $storage.logs[id = $state.selected_log]; $l := $exists($m) ? $m[0] : $storage.logs[0]; $l.prompt)"
+            }
+          },
+          {
+            "label": "답변",
+            "value": {
+              "expr": "($m := $storage.logs[id = $state.selected_log]; $l := $exists($m) ? $m[0] : $storage.logs[0]; $l.reply)"
+            }
           }
         ]
       }
