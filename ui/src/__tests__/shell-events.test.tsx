@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Shell } from "../../../app/src/shell/shell";
 import type { CoreEvent } from "../contract/contract";
@@ -31,6 +31,25 @@ if (!globalThis.ResizeObserver) {
 afterEach(() => cleanup());
 
 describe("shell core events", () => {
+  it("빈 데스크톱은 작업 표시줄을 숨기고 최소화된 창의 작업 표시줄은 유지한다", async () => {
+    const snapshot = makeTestSnapshot();
+    const window = snapshot.shared.windows[0];
+    snapshot.shared.windows = [];
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+
+    expect(document.querySelector(".ks-taskbar")).toBeNull();
+    transport.emit({ event: "state.changed", snapshot: { ...snapshot, shared: { ...snapshot.shared, windows: [window] } } });
+    await waitFor(() => expect(document.querySelector(".ks-taskbar")).not.toBeNull());
+
+    await transport.call({ op: "window.minimize", window_id: window.id });
+    await waitFor(() => expect(document.querySelector(".ks-taskbar")).not.toBeNull());
+    expect(document.querySelector(".ks-taskbar-window")?.getAttribute("data-state")).toBe("minimized");
+    store.dispose();
+  });
+
   it("태스크바로 창을 올리고 최소화하며 우클릭 메뉴에서 최대화와 복원을 수행한다", async () => {
     const transport = createFakeTransport(makeTestSeed());
     const calls = vi.spyOn(transport, "call");
@@ -41,6 +60,10 @@ describe("shell core events", () => {
     const editorItem = document.querySelector<HTMLButtonElement>('[data-window-id="editor-window"]');
     const editorWindow = screen.getByTestId("app-window-md-editor");
     if (!editorItem) throw new Error("편집기 태스크바 항목을 찾지 못했습니다");
+    const titlebarIcons = [...editorWindow.querySelectorAll<SVGElement>(".ks-window-title-actions svg")];
+    expect(titlebarIcons.map((icon) => icon.getAttribute("width"))).toEqual(titlebarIcons.map(() => "18"));
+    const minimizeIcon = within(editorWindow).getByRole("button", { name: "창 최소화" }).querySelector("svg");
+    expect(minimizeIcon?.classList.contains("lucide-minus")).toBe(true);
     expect(editorItem.getAttribute("data-state")).toBe("inactive");
     expect(document.querySelector('[data-window-id="viewer-window"]')?.getAttribute("data-state")).toBe("active");
 
@@ -94,7 +117,7 @@ describe("shell core events", () => {
     render(<Shell store={store} />);
     await store.ready;
 
-    fireEvent.click(screen.getAllByRole("button", { name: "앱 열기" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "앱 열기" }));
 
     const menu = screen.getByRole("menu");
     expect([...menu.querySelectorAll(".ks-menu-group-heading")].map((item) => item.textContent)).toEqual(["기본앱", "커스텀 앱"]);
@@ -116,7 +139,7 @@ describe("shell core events", () => {
     render(<Shell store={store} />);
     await store.ready;
 
-    fireEvent.click(screen.getAllByRole("button", { name: "앱 열기" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "앱 열기" }));
 
     const menu = screen.getByRole("menu");
     expect([...menu.querySelectorAll(".ks-menu-group-heading")].map((item) => item.textContent)).toEqual(["기본앱"]);

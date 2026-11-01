@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { IconButton, Maximize2, Minimize, Minimize2, Notice, ScreenShare, Settings, X, useShareView, type ShellStore, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
+import { IconButton, Maximize2, Minus, Minimize2, Notice, ScreenShare, Settings, X, useShareView, type ShellStore, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
 
 export interface WindowFrameProps {
@@ -177,13 +177,13 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
           <div className="ks-window-title-actions">
           {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} tone="share" pressed={sharing} onClick={() => void onCall({ op: "share.set", window_id: appWindow.id, on: !sharing })}><ScreenShare /></IconButton> : null}
           {hasSettings ? <span ref={settingsButton}><IconButton aria-label={settingsProblem ? `앱 설정: ${settingsProblem}` : "앱 설정"} pressed={settingsOpen} onClick={() => { if (settingsOpen) closeSettings(); else { setSettingsVisited(true); setSettingsOpen(true); } }}><Settings /></IconButton></span> : null}
-          <IconButton aria-label="창 최소화" title="창 최소화" onClick={() => onMinimize(appWindow.id)}><Minimize size="inline" /></IconButton>
+          <IconButton aria-label="창 최소화" title="창 최소화" onClick={() => onMinimize(appWindow.id)}><Minus /></IconButton>
           <IconButton
             aria-label={isMaximized ? "이전 크기로 복원" : "창 최대화"}
             title={isMaximized ? "이전 크기로 복원" : "창 최대화"}
             onClick={() => (isMaximized ? onRestore(appWindow.id) : onMaximize(appWindow.id))}
           >
-            {isMaximized ? <Minimize2 size="inline" /> : <Maximize2 size="inline" />}
+            {isMaximized ? <Minimize2 /> : <Maximize2 />}
           </IconButton>
           <IconButton
             aria-label="창 닫기"

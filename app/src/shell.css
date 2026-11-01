@@ -246,14 +246,6 @@
   background: transparent;
 }
 
-.ks-taskbar-divider {
-  width: var(--ks-line-width);
-  height: var(--ks-space-4);
-  flex: 0 0 auto;
-  margin: 0 var(--ks-space-1);
-  background: var(--ks-color-border);
-}
-
 .ks-taskbar-windows {
   display: flex;
   min-width: 0;

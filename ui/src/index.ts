@@ -23,7 +23,7 @@ export {
   LayoutGrid,
   MessageSquare,
   Maximize2,
-  Minimize,
+  Minus,
   Minimize2,
   OfflineCloud,
   PairingCloud,

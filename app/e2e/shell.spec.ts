@@ -80,7 +80,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     const windows = page.getByTestId("app-window-md-editor");
     for (let index = 0; index < 4; index += 1) {
-      await page.getByRole("button", { name: "앱 열기" }).first().click();
+      await page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" }).click();
       await page.getByRole("menuitem", { name: "마크다운 편집기" }).click();
       await expect(windows).toHaveCount(index + 1);
     }
@@ -106,7 +106,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   };
 
   await expect(page.getByText("열린 앱이 없습니다")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "앱 열기" }).first()).toBeVisible();
+  await expect(page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" })).toBeVisible();
   await captureCascade(960, 600);
   await captureCascade(1440, 900);
   await captureMatrix("empty-desktop");
@@ -179,7 +179,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   measurements.tabsWithOverflow = tenTabMetrics;
 
   await page.getByRole("button", { name: "데스크톱 2" }).click();
-  await page.getByRole("button", { name: "앱 열기" }).first().click();
+  await page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" }).click();
   const appMenu = page.getByRole("menu");
   const appMenuBounds = await appMenu.boundingBox();
   if (!appMenuBounds) throw new Error("앱 메뉴의 위치를 확인하지 못했습니다");

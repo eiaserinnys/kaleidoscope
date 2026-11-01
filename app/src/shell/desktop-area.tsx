@@ -93,61 +93,53 @@ export function DesktopArea({
                 getNewWindowRect={getNewWindowRect}
               />
             ))}
-            <nav aria-label="작업 표시줄" className="ks-taskbar" role="toolbar">
-              <button
-                aria-label="앱 열기"
-                className="ks-taskbar-item ks-taskbar-launcher"
-                onClick={(event) => onOpenApps(event.currentTarget)}
-                type="button"
-              >
-                <LayoutGrid size="inline" />
-                <span className="ks-taskbar-item-label">앱 열기</span>
-              </button>
-              {windows.length > 0 ? <div aria-orientation="vertical" className="ks-taskbar-divider" role="separator" /> : null}
-              <div className="ks-taskbar-windows">
-                {windows.map((window) => {
-                  const title = windowTitle(window, snapshot);
-                  const isTop = window.id === topWindowId;
-                  const state = window.minimized ? "minimized" : isTop ? "active" : "inactive";
-                  const act = (op: CoreRequest["op"]) => {
-                    setWindowMenu(null);
-                    if (op === "window.raise") void onCall({ op, window_id: window.id });
-                    else if (op === "window.minimize") void onCall({ op, window_id: window.id });
-                    else if (op === "window.maximize") void onCall({ op, window_id: window.id });
-                    else if (op === "window.restore") void onCall({ op, window_id: window.id });
-                    else if (op === "window.close") void onCall({ op, window_id: window.id });
-                  };
-                  return (
-                    <button
-                      aria-pressed={!window.minimized && isTop}
-                      className="ks-taskbar-item ks-taskbar-window"
-                      data-state={state}
-                      data-window-id={window.id}
-                      key={window.id}
-                      onClick={() => act(!window.minimized && isTop ? "window.minimize" : "window.raise")}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        setWindowMenu({
-                          anchor: event.currentTarget,
-                          point: { x: event.clientX, y: event.clientY },
-                          entries: [
-                            { id: "window-toggle", label: window.minimized ? "복원" : "최소화", onSelect: () => act(window.minimized ? "window.raise" : "window.minimize") },
-                            { id: "window-size", label: window.maximized ? "이전 크기로 복원" : "최대화", onSelect: () => act(window.maximized ? "window.restore" : "window.maximize") },
-                            { id: "window-separator", type: "separator" },
-                            { id: "window-close", label: "창 닫기", danger: true, onSelect: () => act("window.close") },
-                          ],
-                        });
-                      }}
-                      title={title}
-                      type="button"
-                    >
-                      <span aria-hidden="true" className="ks-taskbar-window-dot" />
-                      <span className="ks-taskbar-item-label">{title}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </nav>
+            {windows.length > 0 ? (
+              <nav aria-label="작업 표시줄" className="ks-taskbar" role="toolbar">
+                <div className="ks-taskbar-windows">
+                  {windows.map((window) => {
+                    const title = windowTitle(window, snapshot);
+                    const isTop = window.id === topWindowId;
+                    const state = window.minimized ? "minimized" : isTop ? "active" : "inactive";
+                    const act = (op: CoreRequest["op"]) => {
+                      setWindowMenu(null);
+                      if (op === "window.raise") void onCall({ op, window_id: window.id });
+                      else if (op === "window.minimize") void onCall({ op, window_id: window.id });
+                      else if (op === "window.maximize") void onCall({ op, window_id: window.id });
+                      else if (op === "window.restore") void onCall({ op, window_id: window.id });
+                      else if (op === "window.close") void onCall({ op, window_id: window.id });
+                    };
+                    return (
+                      <button
+                        aria-pressed={!window.minimized && isTop}
+                        className="ks-taskbar-item ks-taskbar-window"
+                        data-state={state}
+                        data-window-id={window.id}
+                        key={window.id}
+                        onClick={() => act(!window.minimized && isTop ? "window.minimize" : "window.raise")}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          setWindowMenu({
+                            anchor: event.currentTarget,
+                            point: { x: event.clientX, y: event.clientY },
+                            entries: [
+                              { id: "window-toggle", label: window.minimized ? "복원" : "최소화", onSelect: () => act(window.minimized ? "window.raise" : "window.minimize") },
+                              { id: "window-size", label: window.maximized ? "이전 크기로 복원" : "최대화", onSelect: () => act(window.maximized ? "window.restore" : "window.maximize") },
+                              { id: "window-separator", type: "separator" },
+                              { id: "window-close", label: "창 닫기", danger: true, onSelect: () => act("window.close") },
+                            ],
+                          });
+                        }}
+                        title={title}
+                        type="button"
+                      >
+                        <span aria-hidden="true" className="ks-taskbar-window-dot" />
+                        <span className="ks-taskbar-item-label">{title}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </nav>
+            ) : null}
           </section>
         );
       })}

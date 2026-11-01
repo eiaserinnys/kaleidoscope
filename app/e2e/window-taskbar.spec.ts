@@ -6,16 +6,19 @@ test.beforeEach(async ({ page }) => {
 
 test("작업 표시줄에서 창을 복원하고 최대화와 이전 크기로 전환한다", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByRole("button", { name: "앱 열기" }).first().click();
+  await expect(page.locator(".ks-taskbar")).toHaveCount(0);
+  await page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" }).click();
   await page.getByRole("menuitem", { name: "계산기" }).click();
 
   const window = page.getByTestId("app-window-calculator");
   const taskbarItem = page.locator(".ks-taskbar-window").filter({ hasText: "계산기" });
+  await expect(page.locator(".ks-taskbar")).toHaveCount(1);
   await expect(window).toBeVisible();
   await expect(taskbarItem).toHaveAttribute("data-state", "active");
 
   await window.getByRole("button", { name: "창 최소화" }).click();
   await expect(window).toBeHidden();
+  await expect(page.locator(".ks-taskbar")).toHaveCount(1);
   await expect(taskbarItem).toHaveAttribute("data-state", "minimized");
   await page.screenshot({ path: testInfo.outputPath("taskbar-minimized-1440x900.png") });
 
@@ -26,6 +29,10 @@ test("작업 표시줄에서 창을 복원하고 최대화와 이전 크기로 �
   await window.getByRole("button", { name: "창 최대화" }).click();
   await expect(window).toHaveAttribute("data-maximized", "true");
   await expect(window.locator(".ks-window-resize-east")).toHaveCount(0);
+  const titlebarIcons = await window.locator(".ks-window-title-actions svg").evaluateAll((icons) => icons.map((icon) => ({ width: icon.getAttribute("width"), className: icon.getAttribute("class") })));
+  expect(titlebarIcons.every(({ width }) => width === "18")).toBe(true);
+  expect(titlebarIcons.some(({ className }) => className?.split(" ").includes("lucide-minus"))).toBe(true);
+  expect(titlebarIcons.some(({ className }) => className?.split(" ").includes("lucide-minimize-2"))).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("window-maximized-1440x900.png") });
 
   await page.setViewportSize({ width: 960, height: 600 });

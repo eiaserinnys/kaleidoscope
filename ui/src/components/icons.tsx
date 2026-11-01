@@ -23,7 +23,7 @@ import {
   LayoutGrid as LayoutGridIcon,
   List as ListIcon,
   Maximize2 as Maximize2Icon,
-  Minimize as MinimizeIcon,
+  Minus as MinusIcon,
   Minimize2 as Minimize2Icon,
   LoaderCircle as LoaderCircleIcon,
   MessageSquare as MessageSquareIcon,
@@ -103,7 +103,7 @@ export const Plus = (props: IconProps) => renderIcon(PlusIcon, props);
 export const LayoutGrid = (props: IconProps) => renderIcon(LayoutGridIcon, props);
 export const List = (props: IconProps) => renderIcon(ListIcon, props);
 export const Maximize2 = (props: IconProps) => renderIcon(Maximize2Icon, props);
-export const Minimize = (props: IconProps) => renderIcon(MinimizeIcon, props);
+export const Minus = (props: IconProps) => renderIcon(MinusIcon, props);
 export const Minimize2 = (props: IconProps) => renderIcon(Minimize2Icon, props);
 export const LoaderCircle = (props: IconProps) => renderIcon(LoaderCircleIcon, props);
 export const Import = (props: IconProps) => renderIcon(ImportIcon, props);
