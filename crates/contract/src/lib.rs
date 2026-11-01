@@ -182,6 +182,11 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+pub mod transfer;
+
+/// MCP와 로컬 에이전트가 공유하는 앱 제작 안내.
+pub const APP_AUTHORING_GUIDE: &str = include_str!("app_guide.txt");
+
 pub mod app_storage;
 pub mod assets;
 pub mod builtin;
@@ -1892,7 +1897,7 @@ pub enum CoreRequest {
     /// - `unlinked`: 위처럼 로컬에서 가져온다. 버전 번호는 로컬에서 센다.
     /// - `connected`: 오케스트레이터에 올리고(`registry` 모듈의 앱 올리기), 서버가 돌려준 앱과 버전을
     ///   위 규칙대로 캐시에 반영한 뒤 응답한다. 검사 실패는 서버의 오류를 그대로 돌려준다.
-    /// - `pairing`, `offline`, `revoked`: `server`로 거부한다(로컬과 레지스트리가 갈라지지 않게).
+    /// - `pairing`, 원격 `offline`, `revoked`: `server`로 거부한다. 내장 서버는 스트림 연결 전에도 HTTP로 가져온다.
     #[serde(rename = "app.import")]
     AppImport { definition_json: String },
 
@@ -3842,8 +3847,3 @@ mod tests {
         assert_eq!(json["code"], "path_outside_root");
     }
 }
-
-pub mod transfer;
-
-/// MCP와 로컬 에이전트가 공유하는 앱 제작 안내.
-pub const APP_AUTHORING_GUIDE: &str = include_str!("app_guide.txt");

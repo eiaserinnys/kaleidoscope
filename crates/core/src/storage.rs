@@ -14,6 +14,8 @@ const FORMAT: u32 = 1;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct LinkFile {
     #[serde(default)]
+    pub(crate) revoked: bool,
+    #[serde(default)]
     pub(crate) mode: kaleidoscope_contract::ServerMode,
     pub(crate) format: u32,
     pub(crate) server_url: String,

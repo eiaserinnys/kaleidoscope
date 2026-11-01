@@ -152,3 +152,52 @@ fn transfer_assets_precede_apps_and_conflicts_preserve_remote_asset() {
     assert!(result.skipped.contains(&"app:personal-test".into()));
     assert!(conflicting.app("personal-test", None).unwrap().is_none());
 }
+
+#[test]
+fn deleted_apps_retained_values_do_not_block_transfer() {
+    let local = AppState::in_memory("local");
+    let remote = AppState::in_memory("remote");
+    let definition = app();
+    local
+        .publish_app(
+            &serde_json::to_string(&definition).unwrap(),
+            "test",
+            false,
+            None,
+        )
+        .unwrap();
+    local
+        .write_app_storage(
+            &local.mcp_account_id().unwrap(),
+            &definition.id,
+            "setting",
+            None,
+            json!(7),
+            None,
+        )
+        .unwrap();
+    local
+        .lock_db()
+        .unwrap()
+        .execute(
+            "UPDATE apps SET deleted_at=?1 WHERE id=?2",
+            params![timestamp(), definition.id],
+        )
+        .unwrap();
+    let bundle = local.export_data(&local.mcp_account_id().unwrap()).unwrap();
+    assert!(bundle.apps.is_empty());
+    assert!(bundle.values.is_empty());
+    assert_eq!(
+        remote
+            .import_data(&remote.mcp_account_id().unwrap(), bundle)
+            .unwrap()
+            .imported,
+        0
+    );
+    let count: i64 = local
+        .lock_db()
+        .unwrap()
+        .query_row("SELECT count(*) FROM app_storage_items", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 1);
+}

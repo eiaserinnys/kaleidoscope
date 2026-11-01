@@ -65,6 +65,11 @@ impl AppState {
             .map_err(db_error)?;
         for row in rows {
             let (app_id, key, kind, content, workspace_id) = row.map_err(db_error)?;
+            if !kaleidoscope_contract::builtin::is_builtin(&app_id)
+                && !bundle.apps.iter().any(|app| app.id == app_id)
+            {
+                continue;
+            }
             bundle.values.push(TransferValue {
                 app_id,
                 key,

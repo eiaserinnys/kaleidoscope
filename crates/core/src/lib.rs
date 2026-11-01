@@ -248,11 +248,17 @@ impl Core {
         let link_file = server_switch::startup_link(&config)?;
         let link = link_file
             .as_ref()
-            .map_or(LinkStatus::Unlinked {}, |file| LinkStatus::Offline {
-                mode: file.mode,
-                server_url: file.server_url.clone(),
-                device_name: file.device_name.clone(),
-                reason: "연결하는 중".into(),
+            .map_or(LinkStatus::Unlinked {}, |file| {
+                if file.revoked {
+                    LinkStatus::Revoked { server_url: file.server_url.clone() }
+                } else {
+                    LinkStatus::Offline {
+                        mode: file.mode,
+                        server_url: file.server_url.clone(),
+                        device_name: file.device_name.clone(),
+                        reason: "연결하는 중".into(),
+                    }
+                }
             });
         let mut state = CoreState {
             last_transfer: None,
@@ -354,7 +360,7 @@ impl Core {
                 core.handle(CoreRequest::AppImport { definition_json })?;
             }
         }
-        if let Some(file) = link_file {
+        if let Some(file) = link_file.filter(|file| !file.revoked) {
             link::start_stream(Arc::clone(&core.inner), 0, file);
         }
 

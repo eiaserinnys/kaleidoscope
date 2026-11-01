@@ -14,6 +14,7 @@ use std::{
 
 fn local_file(info: &EmbeddedServerInfo, name: &str) -> LinkFile {
     LinkFile {
+        revoked: false,
         format: 1,
         mode: ServerMode::Embedded,
         server_url: info.server_url.clone(),
@@ -51,9 +52,7 @@ fn archive(inner: &Inner, file: &LinkFile) -> PathBuf {
 pub(crate) fn saved_remote(inner: &Inner, url: &str) -> Result<Option<LinkFile>, CoreError> {
     let key = format!("{:x}", Sha256::digest(url.trim_end_matches('/').as_bytes()));
     storage::load_link(&inner.data_dir.join("server-states").join(key))
-}
-pub(crate) fn forget_revoked(inner: &Inner, file: &LinkFile) -> Result<(), CoreError> {
-    storage::remove_link(&archive(inner, file))
+        .map(|file| file.filter(|file| !file.revoked))
 }
 pub(crate) fn activate(
     inner: &Arc<Inner>,
@@ -145,6 +144,7 @@ pub(crate) fn sync(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
         .embedded_server
         .as_ref()
         .ok_or_else(|| error::make(ErrorCode::Unavailable))?;
+    let generation = inner.generation.load(Ordering::SeqCst);
     let remote = inner
         .link_file
         .lock()
@@ -185,16 +185,32 @@ pub(crate) fn sync(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
         .and_then(|r| r.error_for_status())
         .and_then(|r| r.json())
         .map_err(http_error)?;
+    finish_sync(inner, generation, remote, result)
+}
+fn finish_sync(
+    inner: &Arc<Inner>,
+    generation: u64,
+    remote: LinkFile,
+    result: kaleidoscope_contract::transfer::TransferResult,
+) -> Result<CoreReply, CoreError> {
+    // 이관 도중 사용자가 다른 서버를 골랐으면 완료 결과와 스트림을 현재 상태에 적용하지 않는다.
+    let next = generation + 1;
+    if inner
+        .generation
+        .compare_exchange(generation, next, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok()
     {
         let mut state = inner.state.lock().unwrap();
-        state.last_transfer = Some(result.clone());
-        state.transfer_error = None;
+        if link::is_current(inner, next) {
+            state.last_transfer = Some(result.clone());
+            state.transfer_error = None;
+            drop(state);
+            link::start_stream(inner.clone(), next, remote);
+        }
     }
-    // 새 snapshot을 받아 이관한 앱, 배치, 저장값을 실제 창에 반영한다.
-    let generation = inner.generation.fetch_add(1, Ordering::SeqCst) + 1;
-    link::start_stream(inner.clone(), generation, remote);
     Ok(CoreReply::LinkSyncLocalToRemote { result })
 }
+
 fn http_error(e: reqwest::Error) -> CoreError {
     link::server_error(
         "내 PC 데이터 이관에 실패했습니다",
@@ -255,6 +271,7 @@ mod tests {
         cfg.embedded_server = None;
         let core = crate::Core::open(cfg, Arc::new(Host)).unwrap();
         let remote = LinkFile {
+            revoked: false,
             format: 1,
             mode: ServerMode::Remote,
             server_url: "https://remote.example".into(),
@@ -263,6 +280,7 @@ mod tests {
             token: "remote".into(),
         };
         let local = LinkFile {
+            revoked: false,
             format: 1,
             mode: ServerMode::Embedded,
             server_url: "http://127.0.0.1:1".into(),
@@ -308,6 +326,57 @@ mod tests {
             core.inner.state.lock().unwrap().shared.workspaces[0].name,
             "원격 작업"
         );
+        core.shutdown();
+    }
+    #[test]
+    fn completed_transfer_does_not_reconnect_a_server_the_user_left() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = config(dir.path());
+        cfg.embedded_server = None;
+        let core = crate::Core::open(cfg, Arc::new(Host)).unwrap();
+        let remote = LinkFile {
+            revoked: false,
+            format: 1,
+            mode: ServerMode::Remote,
+            server_url: "https://remote.example".into(),
+            device_id: "remote".into(),
+            device_name: "시험".into(),
+            token: "remote".into(),
+        };
+        let local = LinkFile {
+            revoked: false,
+            format: 1,
+            mode: ServerMode::Embedded,
+            server_url: "http://127.0.0.1:1".into(),
+            device_id: "local-device".into(),
+            device_name: "시험".into(),
+            token: "local".into(),
+        };
+        core.inner.generation.store(1, Ordering::SeqCst);
+        activate(&core.inner, local, 1).unwrap();
+        let before = core.inner.state.lock().unwrap().shared.clone();
+        finish_sync(
+            &core.inner,
+            0,
+            remote,
+            kaleidoscope_contract::transfer::TransferResult {
+                imported: 3,
+                skipped: vec![],
+            },
+        )
+        .unwrap();
+        let state = core.inner.state.lock().unwrap();
+        assert_eq!(state.shared, before);
+        assert!(state.last_transfer.is_none());
+        assert!(matches!(
+            state.link,
+            LinkStatus::Offline {
+                mode: ServerMode::Embedded,
+                ..
+            }
+        ));
+        assert_eq!(core.inner.generation.load(Ordering::SeqCst), 1);
+        drop(state);
         core.shutdown();
     }
 }

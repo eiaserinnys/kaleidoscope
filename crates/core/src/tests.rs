@@ -25,6 +25,7 @@ use crate::storage::LinkFile;
 use crate::{Core, CoreConfig, CoreError, Host};
 
 mod layout_sync_tests;
+mod server_switch_tests;
 mod pc_tests;
 
 const MD_EDITOR: &str = include_str!("../../../apps/md-editor.json");
@@ -1381,6 +1382,7 @@ fn open_core_with_attachment_opener(
 
 fn connected_link_file() -> LinkFile {
     LinkFile {
+        revoked: false,
         mode: kaleidoscope_contract::ServerMode::Remote,
         format: 1,
         server_url: "https://registry.test".into(),
@@ -2557,7 +2559,13 @@ fn saved_link_reconnects_and_unauthorized_stream_revokes_it() {
     let core = open_core_with_client(&data_dir, vec![], &host, Arc::clone(&client));
     wait_until(|| matches!(snapshot(&core).link, LinkStatus::Revoked { .. }));
     assert_eq!(client.open_calls.load(Ordering::SeqCst), 1);
-    assert!(!data_dir.join("link.json").exists());
+    assert!(crate::storage::load_link(&data_dir).unwrap().unwrap().revoked);
+    let remote_workspaces=snapshot(&core).shared.workspaces;
+    let restarted=Core::open_with_client(CoreConfig {data_dir:data_dir.clone(),seed_definitions:vec![],server_url:"https://registry.test".into(),device_name:"시험".into(),embedded_server:Some(crate::EmbeddedServerInfo {server_url:"http://127.0.0.1:54321".into(),device_id:"local-device".into(),token:"local".into()})},host,client).unwrap();
+    assert!(matches!(snapshot(&restarted).link,LinkStatus::Revoked {..}));
+    assert_eq!(snapshot(&restarted).shared.workspaces,remote_workspaces);
+    assert_eq!(crate::storage::load_link(&data_dir).unwrap().unwrap().mode,kaleidoscope_contract::ServerMode::Remote);
+    restarted.shutdown();
     assert!(!serde_json::to_string(&snapshot(&core))
         .unwrap()
         .contains("secret-device-token"));

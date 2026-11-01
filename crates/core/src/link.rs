@@ -183,7 +183,7 @@ pub(crate) fn import_app(
             }
             Ok(reply)
         }
-        LinkStatus::Connected { .. } => {
+        LinkStatus::Connected { .. } | LinkStatus::Offline { mode: kaleidoscope_contract::ServerMode::Embedded, .. } => {
             let Some(link_file) = link_file else {
                 return Err(server_error(NOT_CONNECTED_MESSAGE, Vec::new()));
             };
@@ -240,6 +240,7 @@ fn poll_pairing(
         match inner.registry.pair_poll(&server_url, &poll) {
             Ok(PairPollReply::Approved { device_id, token }) => {
                 let file = LinkFile {
+                    revoked: false,
                     mode: kaleidoscope_contract::ServerMode::Remote,
                     format: 1,
                     server_url: server_url.clone(),
@@ -292,6 +293,13 @@ fn expired(expires_at: &str) -> bool {
 }
 
 fn set_unlinked_if_current(inner: &Arc<Inner>, generation: u64) {
+    if inner.embedded_server.is_some() {
+        if !is_current(inner, generation) { return; }
+        if let Err(e) = crate::server_switch::use_local(inner) {
+            eprintln!("내 PC 서버 복귀 실패: {}", e.message);
+        }
+        return;
+    }
     let changed = {
         let mut state = inner.state.lock().unwrap();
         if inner.generation.load(Ordering::SeqCst) == generation {
@@ -399,7 +407,7 @@ pub(crate) fn set_offline(inner: &Arc<Inner>, generation: u64, file: &LinkFile, 
     }
 }
 
-pub(crate) fn token_rejected(inner: &Arc<Inner>, file: LinkFile) {
+pub(crate) fn token_rejected(inner: &Arc<Inner>, mut file: LinkFile) {
     let changed = {
         let mut state = inner.state.lock().unwrap();
         if inner
@@ -412,15 +420,23 @@ pub(crate) fn token_rejected(inner: &Arc<Inner>, file: LinkFile) {
             return;
         }
         inner.generation.fetch_add(1, Ordering::SeqCst);
-        if let Err(e)=crate::server_switch::forget_revoked(inner,&file) { eprintln!("거부된 연결 보관 정리 실패: {}",e.message); }
-        if let Err(error) = storage::remove_link(&inner.data_dir) {
-            eprintln!("연결 파일을 지울 수 없습니다: {}", error.message);
+        if file.mode == kaleidoscope_contract::ServerMode::Remote {
+            // 연결 거부 뒤에도 현재 배치의 서버 소유권과 미전송 변경을 보존한다.
+            file.revoked = true;
+            if let Err(e) = storage::save_link(&inner.data_dir, &file) {
+                eprintln!("연결 거부 상태 저장 실패: {}", e.message);
+            }
+            *inner.link_file.lock().unwrap() = Some(file.clone());
+        } else {
+            if let Err(e) = storage::remove_link(&inner.data_dir) {
+                eprintln!("연결 파일 정리 실패: {}", e.message);
+            }
+            if let Err(e) = crate::sync_state::remove(&inner.data_dir) {
+                eprintln!("미전송 목록 정리 실패: {}", e.message);
+            }
+            state.sync = Default::default();
+            *inner.link_file.lock().unwrap() = None;
         }
-        if let Err(error) = crate::sync_state::remove(&inner.data_dir) {
-            eprintln!("동기화 파일을 지울 수 없습니다: {}", error.message);
-        }
-        state.sync = Default::default();
-        *inner.link_file.lock().unwrap() = None;
         set_link_locked(
             &mut state,
             LinkStatus::Revoked {

@@ -571,6 +571,10 @@ pub fn router(state: AppState) -> Router {
     http::router(state)
 }
 
+mod embedded;
+mod transfer;
+pub use embedded::{load_or_create_token, EmbeddedConfig, EmbeddedServer};
+
 mod app_storage;
 mod app_storage_context;
 mod app_storage_http;
@@ -616,10 +620,6 @@ mod tests;
 #[cfg(test)]
 mod worker_tests;
 
-mod embedded;
-pub use embedded::{load_or_create_token, EmbeddedConfig, EmbeddedServer};
-
-mod transfer;
 
 #[cfg(test)]
 mod transfer_tests;
