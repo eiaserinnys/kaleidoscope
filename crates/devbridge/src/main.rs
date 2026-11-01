@@ -110,22 +110,22 @@ async fn run() -> Result<(), String> {
         },
     )
     .await?;
+    let config = CoreConfig {
+        embedded_server: Some(kaleidoscope_core::EmbeddedServerInfo {
+            server_url: embedded.server_url.clone(),
+            device_id: embedded.device_id.clone(),
+            token: embedded.token.clone(),
+        }),
+        data_dir: args.data_dir,
+        seed_definitions,
+        server_url: args.server,
+        device_name: args.device_name,
+    };
     let core = Arc::new(
-        Core::open(
-            CoreConfig {
-                embedded_server: Some(kaleidoscope_core::EmbeddedServerInfo {
-                    server_url: embedded.server_url.clone(),
-                    device_id: embedded.device_id.clone(),
-                    token: embedded.token.clone(),
-                }),
-                data_dir: args.data_dir,
-                seed_definitions,
-                server_url: args.server,
-                device_name: args.device_name,
-            },
-            Arc::new(DevHost),
-        )
-        .map_err(|error| format!("코어를 열 수 없습니다: {}", error.message))?,
+        tokio::task::spawn_blocking(move || Core::open(config, Arc::new(DevHost)))
+            .await
+            .map_err(|error| format!("코어 시작 태스크가 실패했습니다: {error}"))?
+            .map_err(|error| format!("코어를 열 수 없습니다: {}", error.message))?,
     );
     let (events, _) = broadcast::channel(100);
     let event_sender = events.clone();
