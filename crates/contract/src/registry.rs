@@ -29,7 +29,7 @@
 //! [`WORKSPACE_HEADER`]의 작업 id를 기본값으로 사용한다.
 //!
 //! # 주소와 인증
-//! 코어의 `server_url`(끝에 `/` 없음, 예: `https://eiaserinnys.me/kaleidoscope`) 뒤에 아래 경로를 붙인다.
+//! 코어의 `server_url`(끝에 `/` 없음, 예: `https://server.example`) 뒤에 아래 경로를 붙인다.
 //!
 //! | 메서드와 경로 | 인증 | 요청 본문 | 성공 | 실패 |
 //! |---|---|---|---|---|

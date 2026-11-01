@@ -18,7 +18,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 // const 문맥에서는 Option::unwrap_or를 부를 수 없어(E0658) match로 고른다.
 const SERVER_URL: &str = match option_env!("KALEIDOSCOPE_SERVER_URL") {
     Some(url) => url,
-    None => "https://eiaserinnys.me/kaleidoscope",
+    None => "",
 };
 
 struct DialogHost {

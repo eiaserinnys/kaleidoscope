@@ -53,6 +53,9 @@ pub(crate) fn start(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| inner.server_url.clone());
     let server_url = server_url.trim().trim_end_matches('/').to_string();
+    if server_url.is_empty() {
+        return Err(error::make(ErrorCode::InvalidRequest));
+    }
     let url =
         reqwest::Url::parse(&server_url).map_err(|_| error::make(ErrorCode::InvalidRequest))?;
     if !matches!(url.scheme(), "http" | "https")

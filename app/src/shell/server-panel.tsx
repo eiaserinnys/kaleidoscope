@@ -44,9 +44,12 @@ export function ServerPanel({ snapshot, anchor, onClose, call }: {
     : link.state === "revoked" ? "원격 연결 거부됨"
     : link.state === "unlinked" ? "서버 연결"
     : remote ? "원격 서버" : "내 PC 내장 서버";
+  const trimmedUrl = url.trim();
   const startRemote = (next: string) => {
     setUrl(next);
-    void run({ op: "link.start", ...(next.trim() ? { server_url: next.trim() } : {}) });
+    const target = next.trim();
+    if (!target) return;
+    void run({ op: "link.start", server_url: target });
   };
   return <div ref={panel} className="shell-link-panel ks-menu" role="dialog" aria-label="서버 연결" data-ks-overlay>
     <div className="shell-server-heading">{title}</div>
@@ -63,7 +66,7 @@ export function ServerPanel({ snapshot, anchor, onClose, call }: {
     </> : <>
       {link.state === "offline" && <div className="shell-server-meta-group"><span className="shell-server-meta">{link.reason}</span></div>}
       <TextInput aria-label="원격 서버 URL" type="url" placeholder="https://server.example" persistent commitOnBlur={false} value={url} onEdit={setUrl} onCommit={startRemote} onCancel={() => setUrl("")} disabled={busy} />
-      <Button disabled={busy} onClick={() => startRemote(url)}>원격 서버 연결</Button>
+      <Button disabled={busy || !trimmedUrl} onClick={() => startRemote(url)}>원격 서버 연결</Button>
     </>}
     {(remote || link.state === "revoked" || link.state === "pairing") && <Button disabled={busy} onClick={() => void run({ op: snapshot.embedded_available ? "link.use_local" : link.state === "pairing" ? "link.cancel" : "link.unlink" })}>{snapshot.embedded_available ? link.state === "pairing" ? "내 PC 서버로 돌아가기" : "내 PC 서버로 전환" : link.state === "pairing" ? "연결 취소" : "연결 끊기"}</Button>}
     {snapshot.transfer_error && <Notice role="alert">{snapshot.transfer_error}</Notice>}

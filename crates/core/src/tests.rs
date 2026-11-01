@@ -2186,6 +2186,36 @@ fn link_start_pairs_saves_token_privately_and_connects_after_snapshot() {
 }
 
 #[test]
+fn link_start_rejects_empty_server_url_when_no_default_is_configured() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = Core::open_with_client(
+        CoreConfig {
+            embedded_server: None,
+            data_dir: temp.path().join("data"),
+            seed_definitions: vec![],
+            server_url: String::new(),
+            device_name: "test-device".into(),
+        },
+        host,
+        client,
+    )
+    .unwrap();
+
+    expect_error(
+        core.handle(CoreRequest::LinkStart { server_url: None }),
+        ErrorCode::InvalidRequest,
+    );
+    expect_error(
+        core.handle(CoreRequest::LinkStart {
+            server_url: Some("  \t ".into()),
+        }),
+        ErrorCode::InvalidRequest,
+    );
+}
+
+#[test]
 fn registry_events_update_cache_dedupe_versions_and_order_open_requests() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
@@ -2561,10 +2591,27 @@ fn saved_link_reconnects_and_unauthorized_stream_revokes_it() {
     assert_eq!(client.open_calls.load(Ordering::SeqCst), 1);
     assert!(crate::storage::load_link(&data_dir).unwrap().unwrap().revoked);
     let remote_workspaces=snapshot(&core).shared.workspaces;
-    let restarted=Core::open_with_client(CoreConfig {data_dir:data_dir.clone(),seed_definitions:vec![],server_url:"https://registry.test".into(),device_name:"시험".into(),embedded_server:Some(crate::EmbeddedServerInfo {server_url:"http://127.0.0.1:54321".into(),device_id:"local-device".into(),token:"local".into()})},host,client).unwrap();
-    assert!(matches!(snapshot(&restarted).link,LinkStatus::Revoked {..}));
-    assert_eq!(snapshot(&restarted).shared.workspaces,remote_workspaces);
-    assert_eq!(crate::storage::load_link(&data_dir).unwrap().unwrap().mode,kaleidoscope_contract::ServerMode::Remote);
+    let restarted = Core::open_with_client(
+        CoreConfig {
+            data_dir: data_dir.clone(),
+            seed_definitions: vec![],
+            server_url: String::new(),
+            device_name: "시험".into(),
+            embedded_server: Some(crate::EmbeddedServerInfo {
+                server_url: "http://127.0.0.1:54321".into(),
+                device_id: "local-device".into(),
+                token: "local".into(),
+            }),
+        },
+        host,
+        client,
+    )
+    .unwrap();
+    assert!(matches!(snapshot(&restarted).link, LinkStatus::Revoked { .. }));
+    assert_eq!(snapshot(&restarted).shared.workspaces, remote_workspaces);
+    let saved_link = crate::storage::load_link(&data_dir).unwrap().unwrap();
+    assert_eq!(saved_link.mode, kaleidoscope_contract::ServerMode::Remote);
+    assert_eq!(saved_link.server_url, "https://registry.test");
     restarted.shutdown();
     assert!(!serde_json::to_string(&snapshot(&core))
         .unwrap()
