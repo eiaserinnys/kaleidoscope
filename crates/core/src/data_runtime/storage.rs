@@ -307,7 +307,13 @@ mod freshness_tests {
             .to_string(),
         )
         .unwrap();
-        Runtime::new(1, definition.clone(), definition.state.clone(), true)
+        Runtime::new(
+            1,
+            definition.clone(),
+            definition.state.clone(),
+            true,
+            Default::default(),
+        )
     }
 
     fn set_route(runtime: &mut Runtime, value: &str) {

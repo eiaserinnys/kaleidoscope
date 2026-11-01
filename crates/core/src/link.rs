@@ -8,14 +8,14 @@ use chrono::{DateTime, Utc};
 use kaleidoscope_contract::registry::{
     DeviceEvent, DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartRequest,
 };
-use kaleidoscope_contract::{CoreError, CoreEvent, CoreReply, ErrorCode, LinkStatus};
+use kaleidoscope_contract::{CoreError, CoreReply, ErrorCode, LinkStatus};
 
 use crate::app_commands;
 use crate::error;
 use crate::registry_client::{parse_event_line, RegistryError};
 use crate::registry_events;
 use crate::storage::{self, LinkFile};
-use crate::{snapshot, Inner};
+use crate::Inner;
 
 pub(crate) const NOT_CONNECTED_MESSAGE: &str =
     "kaleidoscope 서버에 연결되어 있지 않아 앱을 가져올 수 없습니다.";
@@ -156,6 +156,7 @@ pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
         let mut state = inner.state.lock().unwrap();
         inner.generation.fetch_add(1, Ordering::SeqCst);
         storage::remove_link(&inner.data_dir)?;
+        inner.flusher.clear_sync();
         crate::sync_state::remove(&inner.data_dir)?;
         *inner.link_file.lock().unwrap() = None;
         state.sync = Default::default();
@@ -182,7 +183,7 @@ pub(crate) fn import_app(
             })?;
             let reply = reply?;
             if let Some(event) = event {
-                inner.emit(&event);
+                inner.emit_state(&event);
             }
             Ok(reply)
         }
@@ -221,7 +222,7 @@ pub(crate) fn import_app(
                 app_commands::import_registry(state, received)
             })?;
             if let Some(event) = event {
-                inner.emit(&event);
+                inner.emit_state(&event);
             }
             Ok(reply)
         }
@@ -440,6 +441,7 @@ pub(crate) fn token_rejected(inner: &Arc<Inner>, mut file: LinkFile) {
             if let Err(e) = storage::remove_link(&inner.data_dir) {
                 eprintln!("연결 파일 정리 실패: {}", e.message);
             }
+            inner.flusher.clear_sync();
             if let Err(e) = crate::sync_state::remove(&inner.data_dir) {
                 eprintln!("미전송 목록 정리 실패: {}", e.message);
             }
@@ -483,11 +485,9 @@ pub(crate) fn set_link_locked(state: &mut crate::CoreState, status: LinkStatus) 
 fn emit_state(inner: &Arc<Inner>) {
     let event = {
         let state = inner.state.lock().unwrap();
-        CoreEvent::StateChanged {
-            snapshot: snapshot(&state),
-        }
+        inner.state_event_locked(&state)
     };
-    inner.emit(&event);
+    inner.emit_state(&event);
 }
 
 fn registry_failure_line(error: RegistryError) -> String {

@@ -125,7 +125,10 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
 
     let mut permission_ids = HashSet::new();
     for permission in &definition.permissions {
-        if !valid_id(permission.id()) {
+        if !valid_id(permission.id())
+            && !(matches!(permission, PermissionDecl::Profiler { .. })
+                && valid_permission_id(permission.id()))
+        {
             details.push(format!("권한 id가 올바르지 않습니다: {}", permission.id()));
         }
         if !permission_ids.insert(permission.id()) {
@@ -362,6 +365,14 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
             ));
         }
         let module = match source {
+            SourceDecl::Request { .. }
+                if matches!(
+                    find_permission(definition, source.permission()),
+                    Some(PermissionDecl::Profiler { .. })
+                ) =>
+            {
+                "profiler"
+            }
             SourceDecl::Request { .. }
                 if matches!(
                     find_permission(definition, source.permission()),
@@ -858,6 +869,11 @@ fn validate_actions(
                         let call = &call.call;
                         let module = if matches!(
                             find_permission(definition, &call.permission),
+                            Some(PermissionDecl::Profiler { .. })
+                        ) {
+                            "profiler"
+                        } else if matches!(
+                            find_permission(definition, &call.permission),
                             Some(PermissionDecl::Http { .. })
                         ) {
                             "http"
@@ -1025,6 +1041,14 @@ fn valid_id(value: &str) -> bool {
         && bytes
             .iter()
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
+}
+
+fn valid_permission_id(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    (1..=64).contains(&bytes.len())
+        && bytes.iter().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-' || *byte == b'_'
+        })
 }
 
 fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<String>, at: &str) {
@@ -1725,4 +1749,20 @@ pub fn valid_relative_path(path: &str, allow_root: bool) -> bool {
     }
     path.split('/')
         .all(|part| !part.is_empty() && part != "." && part != "..")
+}
+
+#[cfg(test)]
+mod profiler_permission_tests {
+    use super::parse_app_definition;
+    use serde_json::json;
+
+    #[test]
+    fn underscore_permission_requires_profiler_module() {
+        let mut definition = json!({"id":"sample","name":"시험","requires":{"blocks":4,"modules":{"profiler":1}},"permissions":[{"module":"profiler","id":"core_profiler","label":"성능"}],"ui":{"type":"text","value":"시험"}});
+        assert!(parse_app_definition(&definition.to_string()).is_ok());
+        definition["requires"]["modules"] = json!({"files":1});
+        definition["permissions"][0] =
+            json!({"module":"files","id":"core_profiler","label":"파일","access":"read"});
+        assert!(parse_app_definition(&definition.to_string()).is_err());
+    }
 }

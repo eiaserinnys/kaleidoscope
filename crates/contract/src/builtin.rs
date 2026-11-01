@@ -23,6 +23,15 @@ pub const BUNDLED_ASSET_KEYS: &[(&str, u32)] = &[
 
 pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
+        id: "profiler",
+        name: "프로파일러",
+        version: 1,
+        updated_at: "2026-11-01T00:00:00Z",
+        blocks: 9,
+        modules: &[("profiler", 1)],
+        assets: &[],
+    },
+    BuiltinIdentity {
         id: "agent",
         name: "에이전트",
         version: 2,

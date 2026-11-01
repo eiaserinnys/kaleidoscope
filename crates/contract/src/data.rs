@@ -180,7 +180,7 @@ pub struct ExprRef {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub enum SourceDecl {
-    /// 연결(모듈 `connection`)에 GET을 보낸다. `permission`은 `connection` 권한 id다.
+    /// 연결, 공개 HTTPS 또는 기기 성능 모듈에 GET을 보낸다. `permission`은 해당 모듈의 권한 id다.
     /// `path`는 연결의 주소 아래 경로로 `/`로 시작한다. `query`의 값은 문자열로 바꿔 붙인다(null이면 그 키를 뺀다).
     /// 응답이 2xx가 아니면 실패다.
     Request {
@@ -362,8 +362,8 @@ pub struct CallAction {
     pub call: CallSpec,
 }
 
-/// 연결 부르기. `permission`은 `connection` 권한이고, GET이 아니면 그 권한이 `readwrite`여야 한다
-/// (서버의 연결도 쓰기를 허락해야 한다). `body`는 JSON으로 보낸다.
+/// 모듈 부르기. `permission`은 연결, 공개 HTTPS 또는 기기 성능 권한이고, GET이 아니면 쓰기가 허용돼야 한다.
+/// `body`는 JSON으로 보낸다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
@@ -1291,6 +1291,70 @@ pub fn escape_pointer(token: &str) -> String {
     token.replace('~', "~0").replace('/', "~1")
 }
 
+/// 상태의 정적 첫 필드들을 돌려준다. 상태 자체를 참조하면 전체 변경에 의존한다.
+pub fn state_refs(expr: &str) -> Option<Vec<String>> {
+    let bytes = expr.as_bytes();
+    let mut refs = std::collections::BTreeSet::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i..].starts_with(b"/*") {
+            i += 2;
+            while i + 1 < bytes.len() && &bytes[i..i + 2] != b"*/" {
+                i += 1;
+            }
+            i = (i + 2).min(bytes.len());
+            continue;
+        }
+        if bytes[i] == b'\'' || bytes[i] == b'"' {
+            let quote = bytes[i];
+            i += 1;
+            while i < bytes.len() {
+                if bytes[i] == b'\\' {
+                    i += 2;
+                } else if bytes[i] == quote {
+                    i += 1;
+                    break;
+                } else {
+                    i += 1;
+                }
+            }
+            continue;
+        }
+        if bytes[i..].starts_with(b"$state") {
+            let end = i + 6;
+            if bytes
+                .get(end)
+                .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_')
+            {
+                i = end;
+                continue;
+            }
+            if bytes.get(end) != Some(&b'.') {
+                return None;
+            }
+            let start = end + 1;
+            if !bytes
+                .get(start)
+                .is_some_and(|b| b.is_ascii_alphabetic() || *b == b'_')
+            {
+                return None;
+            }
+            let mut finish = start + 1;
+            while bytes
+                .get(finish)
+                .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_')
+            {
+                finish += 1;
+            }
+            refs.insert(expr[start..finish].to_owned());
+            i = finish;
+        } else {
+            i += 1;
+        }
+    }
+    Some(refs.into_iter().collect())
+}
+
 /// 식이 `$data.이름` 꼴로 읽는 원천 이름들(겹치지 않게, 처음 나온 순서).
 pub fn data_refs(expr: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -1382,6 +1446,33 @@ mod storage_reference_tests {
             vec!["bucket_id"]
         );
         assert!(storage_refs("$storage.한글").is_empty());
+    }
+}
+
+#[cfg(test)]
+mod state_reference_tests {
+    use super::state_refs;
+
+    #[test]
+    fn 상태_참조에서_문자열을_제외하고_동적_참조를_구분한다() {
+        assert_eq!(
+            state_refs("$state.tab & $state.item.name & $state.tab"),
+            Some(vec!["item".into(), "tab".into()])
+        );
+        assert_eq!(
+            state_refs("'$state.hidden' & \"$state.other\""),
+            Some(vec![])
+        );
+        assert_eq!(state_refs("$keys($state)"), None);
+        assert_eq!(state_refs("$state[$foo]"), None);
+        assert_eq!(
+            state_refs("$stateful & $state.value"),
+            Some(vec!["value".into()])
+        );
+        assert_eq!(
+            state_refs("/* ' */ $state.value"),
+            Some(vec!["value".into()])
+        );
     }
 }
 

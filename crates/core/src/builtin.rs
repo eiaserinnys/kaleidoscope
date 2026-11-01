@@ -8,6 +8,7 @@ use kaleidoscope_contract::{
 use serde::Deserialize;
 
 const APPS: &[(&str, &str)] = &[
+    ("profiler", include_str!("../../../apps/profiler.json")),
     ("agent", include_str!("../../../apps/agent.json")),
     ("explorer", include_str!("../../../apps/explorer.json")),
     ("md-editor", include_str!("../../../apps/md-editor.json")),

@@ -181,3 +181,129 @@ pub(crate) fn save_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), Co
     }
     Ok(())
 }
+
+#[derive(Default)]
+struct DirtyFlags {
+    shared: bool,
+    device: bool,
+    sync: bool,
+    stop: bool,
+}
+
+#[derive(Default)]
+struct FlushSignal {
+    dirty: std::sync::Mutex<DirtyFlags>,
+    changed: std::sync::Condvar,
+}
+
+#[derive(Default)]
+pub(crate) struct StorageFlusher {
+    signal: std::sync::Arc<FlushSignal>,
+    worker: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
+}
+
+impl StorageFlusher {
+    pub(crate) fn schedule(
+        &self,
+        shared: bool,
+        device: bool,
+        sync: bool,
+        profiler: &crate::profiler::Profiler,
+    ) {
+        let mut dirty = self.signal.dirty.lock().unwrap();
+        let coalesced =
+            (shared && dirty.shared) || (device && dirty.device) || (sync && dirty.sync);
+        dirty.shared |= shared;
+        dirty.device |= device;
+        dirty.sync |= sync;
+        profiler.debounced(coalesced);
+        self.signal.changed.notify_one();
+    }
+    pub(crate) fn clear_sync(&self) {
+        self.signal.dirty.lock().unwrap().sync = false;
+    }
+    pub(crate) fn stop(&self) {
+        let mut dirty = self.signal.dirty.lock().unwrap();
+        dirty.stop = true;
+        self.signal.changed.notify_one();
+        drop(dirty);
+        if let Some(worker) = self.worker.lock().unwrap().take() {
+            if worker.join().is_err() {
+                eprintln!("상태 저장 스레드가 예기치 않게 끝났습니다");
+            }
+        }
+    }
+}
+
+impl crate::Inner {
+    pub(crate) fn save_state_locked(
+        &self,
+        state: &crate::CoreState,
+        shared: bool,
+        device: bool,
+        sync: bool,
+    ) -> Result<(), CoreError> {
+        let mut dirty = self.flusher.signal.dirty.lock().unwrap();
+        let write_shared = shared || dirty.shared;
+        let write_device = device || dirty.device;
+        let write_sync = sync || dirty.sync;
+        if !(write_shared || write_device || write_sync) {
+            return Ok(());
+        }
+        let started = std::time::Instant::now();
+        save_changed_state(
+            &self.data_dir,
+            &state.shared,
+            &state.device,
+            write_shared,
+            write_device,
+        )?;
+        if write_sync {
+            crate::sync_state::save(&self.data_dir, &state.sync)?;
+        }
+        dirty.shared = false;
+        dirty.device = false;
+        dirty.sync = false;
+        self.profiler.span(
+            "storage.flush",
+            "저장",
+            "",
+            "",
+            started.elapsed().as_secs_f64() * 1000.0,
+            0,
+            0,
+            "",
+        );
+        Ok(())
+    }
+}
+
+pub(crate) fn start_flusher(inner: &std::sync::Arc<crate::Inner>) {
+    let weak = std::sync::Arc::downgrade(inner);
+    let signal = inner.flusher.signal.clone();
+    let worker = std::thread::Builder::new()
+        .name("kaleidoscope-storage".into())
+        .spawn(move || loop {
+            let mut dirty = signal.dirty.lock().unwrap();
+            while !dirty.stop && !(dirty.shared || dirty.device || dirty.sync) {
+                dirty = signal.changed.wait(dirty).unwrap();
+            }
+            if dirty.stop {
+                break;
+            }
+            let (guard, _) = signal
+                .changed
+                .wait_timeout_while(dirty, std::time::Duration::from_millis(25), |flags| {
+                    !flags.stop
+                })
+                .unwrap();
+            drop(guard);
+            let Some(inner) = weak.upgrade() else { break };
+            let state = inner.state.lock().unwrap();
+            if let Err(err) = inner.save_state_locked(&state, false, false, false) {
+                eprintln!("상태를 저장할 수 없습니다: {}", err.message);
+            }
+        })
+        .expect("상태 저장 스레드를 시작할 수 없습니다");
+    *inner.flusher.worker.lock().unwrap() = Some(worker);
+}

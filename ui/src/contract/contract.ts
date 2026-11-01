@@ -299,8 +299,8 @@ export type ButtonVariant = "default" | "primary" | "danger" | "ghost";
 export type CallAction = { call: CallSpec, };
 
 /**
- * 연결 부르기. `permission`은 `connection` 권한이고, GET이 아니면 그 권한이 `readwrite`여야 한다
- * (서버의 연결도 쓰기를 허락해야 한다). `body`는 JSON으로 보낸다.
+ * 모듈 부르기. `permission`은 연결, 공개 HTTPS 또는 기기 성능 권한이고, GET이 아니면 쓰기가 허용돼야 한다.
+ * `body`는 JSON으로 보낸다.
  */
 export type CallSpec = { permission: string, method: HttpMethod, path: Binding, query?: { [key in string]: Binding }, body?: Binding, };
 
@@ -795,7 +795,7 @@ connection: string, access: FileAccess,
 /**
  * 로그인을 구할 때와 오류에 보일 이름(예: "카드 보드").
  */
-label: string, } | { "module": "http", id: string, label: string, base_url: string, paths: Array<string>, } | { "module": "local_agent", id: string, label: string, };
+label: string, } | { "module": "http", id: string, label: string, base_url: string, paths: Array<string>, } | { "module": "local_agent", id: string, label: string, } | { "module": "profiler", id: string, label: string, };
 
 export type PermissionPrompt = { id: string, title: string, options: Array<PermissionChoice>, };
 

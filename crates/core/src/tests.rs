@@ -1,3 +1,4 @@
+// 기존 통합 시험은 공통 장치와 픽스처를 공유하므로 이 변경에서 일괄 분리하지 않는다.
 use std::collections::BTreeMap;
 use std::collections::VecDeque;
 use std::fs;
@@ -26,6 +27,8 @@ use crate::{Core, CoreConfig, CoreError, Host};
 
 mod layout_sync_tests;
 mod pc_tests;
+mod profiler_concurrency_tests;
+mod profiler_tests;
 mod server_switch_tests;
 
 const MD_EDITOR: &str = include_str!("../../../apps/md-editor.json");
@@ -204,7 +207,8 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
             .iter()
             .any(|app| app.id == id && app.current_version == version));
     }
-    assert_eq!(apps.len(), 10);
+    assert_eq!(apps.len(), 11);
+    assert!(apps.iter().any(|app| app.id == "profiler"));
     let error = core
         .handle(CoreRequest::AppImport {
             definition_json: MD_EDITOR.into(),
@@ -381,7 +385,7 @@ fn builtin_window_state_survives_restart_at_the_same_version() {
         .find(|w| w.id == window_id)
         .unwrap();
     assert_eq!(before, after);
-    assert_eq!(snapshot(&reopened).shared.apps.len(), 10);
+    assert_eq!(snapshot(&reopened).shared.apps.len(), 11);
 }
 
 #[test]
@@ -1190,6 +1194,7 @@ struct FakeRegistryClient {
     share_deletes: Mutex<Vec<String>>,
     share_put_replies: Mutex<VecDeque<Result<(), RegistryError>>>,
     share_delete_replies: Mutex<VecDeque<Result<(), RegistryError>>>,
+    share_delete_pause: Mutex<Option<mpsc::Receiver<()>>>,
     layout_change_pause: Mutex<Option<mpsc::Receiver<()>>>,
     open_calls: AtomicUsize,
     connection_requests: Mutex<Vec<kaleidoscope_contract::registry::ConnectionRequest>>,
@@ -1432,6 +1437,9 @@ impl RegistryClient for FakeRegistryClient {
         window_id: &str,
     ) -> Result<(), RegistryError> {
         self.share_deletes.lock().unwrap().push(window_id.into());
+        if let Some(pause) = self.share_delete_pause.lock().unwrap().take() {
+            let _ = pause.recv_timeout(Duration::from_secs(5));
+        }
         self.share_delete_replies
             .lock()
             .unwrap()
@@ -2166,7 +2174,7 @@ fn unreadable_state_json_is_renamed_and_core_starts_with_empty_state() {
     let core = open_core(&data_dir, vec![], &host);
     let snapshot = snapshot(&core);
     assert_eq!(snapshot.shared.workspaces.len(), 1);
-    assert_eq!(snapshot.shared.apps.len(), 10);
+    assert_eq!(snapshot.shared.apps.len(), 11);
     assert!(fs::read_dir(&data_dir).unwrap().any(|entry| {
         entry
             .unwrap()
@@ -2838,9 +2846,11 @@ fn layout_report_sends_sanitized_initial_state_and_debounces_changes() {
     assert_eq!(client.layouts.lock().unwrap().len(), 2);
     assert_eq!(client.layouts.lock().unwrap()[1].windows[0].rect.x, 64);
 
-    core.inner.emit(&CoreEvent::StateChanged {
-        snapshot: snapshot(&core),
-    });
+    let event = {
+        let state = core.inner.state.lock().unwrap();
+        core.inner.state_event_locked(&state)
+    };
+    core.inner.emit_state(&event);
     thread::sleep(Duration::from_millis(1200));
     assert_eq!(client.layouts.lock().unwrap().len(), 2);
     core.handle(CoreRequest::LinkUnlink {}).unwrap();

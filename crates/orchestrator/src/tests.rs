@@ -25,7 +25,7 @@ fn builtin_apps_are_listed_and_upload_is_rejected() {
     ] {
         assert!(apps.iter().any(|app| app.id == id && app.builtin));
     }
-    assert_eq!(apps.len(), 10);
+    assert_eq!(apps.len(), 11);
     assert!(state.publish_app(EDITOR, "agent", false, None).is_err());
 }
 

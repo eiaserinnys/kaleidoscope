@@ -6,7 +6,7 @@ use base64::Engine as _;
 use image::{imageops::FilterType, DynamicImage, ImageFormat, RgbaImage};
 use kaleidoscope_contract::registry::ShareUpload;
 use kaleidoscope_contract::{
-    conversation::ConversationUpload, CoreError, CoreEvent, CoreReply, ErrorCode, LinkStatus,
+    conversation::ConversationUpload, CoreError, CoreReply, ErrorCode, LinkStatus,
     SentShareContext, SharedState, VisibleView, AGENT_ATTACHMENTS_MAX,
     AGENT_ATTACHMENTS_TOTAL_MAX_BYTES, AGENT_ATTACHMENT_MAX_BYTES, SHARE_CAPTURE_MAX_EDGE,
     SHARE_CAPTURE_NAME_PREFIX, SHARE_TEXT_MAX_BYTES,
@@ -15,7 +15,7 @@ use sha2::{Digest, Sha256};
 
 use crate::error;
 use crate::storage::LinkFile;
-use crate::{snapshot, CoreState, Inner};
+use crate::{CoreState, Inner};
 use kaleidoscope_contract::conversation::{ConversationItem, ConversationItemKind};
 
 #[derive(Clone, Default, PartialEq)]
@@ -71,16 +71,7 @@ fn persist_shared_change(
         return Ok(false);
     }
     crate::sync_state::mark_local_changes(inner, &before.shared, state);
-    crate::storage::save_changed_state(
-        &inner.data_dir,
-        &state.shared,
-        &state.device,
-        before.shared != state.shared,
-        false,
-    )?;
-    if before.sync != state.sync {
-        crate::sync_state::save(&inner.data_dir, &state.sync)?;
-    }
+    inner.save_state_locked(state, true, false, before.sync != state.sync)?;
     Ok(true)
 }
 
@@ -276,18 +267,13 @@ pub(crate) fn set(
             *state = before;
             return Err(error);
         }
-        (
-            Some(CoreEvent::StateChanged {
-                snapshot: snapshot(&state),
-            }),
-            !on,
-        )
+        (Some(inner.state_event_locked(&state)), !on)
     };
     if delete {
         delete_pending(inner, window_id);
     }
     if let Some(event) = event {
-        inner.emit(&event);
+        inner.emit_state(&event);
     }
     Ok(CoreReply::ShareSet {})
 }

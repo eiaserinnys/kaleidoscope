@@ -136,7 +136,7 @@ fn run(inner: Arc<Inner>, generation: u64, epoch: u64) {
                 match applied {
                     Ok(((workspace_changed, waited), event)) => {
                         if let Some(event) = event {
-                            inner.emit(&event);
+                            inner.emit_state(&event);
                         }
                         if workspace_changed {
                             crate::conversation_reconcile::workspace_changed(&inner);

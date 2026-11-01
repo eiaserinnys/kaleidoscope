@@ -6,8 +6,7 @@ use kaleidoscope_contract::{CoreError, CoreEvent, LinkStatus};
 
 use crate::app_commands;
 use crate::link;
-use crate::storage;
-use crate::{snapshot, Inner};
+use crate::Inner;
 
 pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEvent) -> bool {
     if !link::is_current(inner, generation) {
@@ -52,7 +51,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 return false;
             };
             if let Some(event) = state_event {
-                inner.emit(&event);
+                inner.emit_state(&event);
             }
             crate::share::on_connected(inner);
             crate::layout_reporter::start(Arc::clone(inner), generation, epoch);
@@ -68,7 +67,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             match result {
                 Ok((true, event)) => {
                     if let Some(event) = event {
-                        inner.emit(&event);
+                        inner.emit_state(&event);
                     }
                 }
                 Ok((false, _)) => return false,
@@ -100,7 +99,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 return false;
             }
             if let Some(event) = state_event {
-                inner.emit(&event);
+                inner.emit_state(&event);
             }
             crate::conversation_reconcile::schedule(inner);
             if open && has_workspace(inner, workspace_id.as_deref()) {
@@ -212,7 +211,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             match result {
                 Ok((true, event)) => {
                     if let Some(event) = event {
-                        inner.emit(&event);
+                        inner.emit_state(&event);
                     }
                     let epoch = inner.layout_connection_epoch.load(Ordering::SeqCst);
                     inner
@@ -239,7 +238,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             match result {
                 Ok((Some(workspace_changed), event)) => {
                     if let Some(event) = event {
-                        inner.emit(&event);
+                        inner.emit_state(&event);
                     }
                     if workspace_changed {
                         crate::conversation_reconcile::workspace_changed(inner);
@@ -401,14 +400,14 @@ fn has_workspace(inner: &Inner, workspace_id: Option<&str>) -> bool {
 pub(crate) fn apply_registry_change<T>(
     inner: &Inner,
     update: impl FnOnce(&mut crate::CoreState) -> T,
-) -> Result<(T, Option<CoreEvent>), CoreError> {
+) -> Result<(T, Option<crate::state_events::StateEvent>), CoreError> {
     apply_change(inner, update, false)
 }
 
 pub(crate) fn apply_layout_change<T>(
     inner: &Inner,
     update: impl FnOnce(&mut crate::CoreState) -> T,
-) -> Result<(T, Option<CoreEvent>), CoreError> {
+) -> Result<(T, Option<crate::state_events::StateEvent>), CoreError> {
     apply_change(inner, update, true)
 }
 
@@ -416,7 +415,7 @@ fn apply_change<T>(
     inner: &Inner,
     update: impl FnOnce(&mut crate::CoreState) -> T,
     server_layout: bool,
-) -> Result<(T, Option<CoreEvent>), CoreError> {
+) -> Result<(T, Option<crate::state_events::StateEvent>), CoreError> {
     let mut state = inner.state.lock().unwrap();
     let before = state.clone();
     let result = update(&mut state);
@@ -426,21 +425,11 @@ fn apply_change<T>(
     let sync_changed = before.sync != state.sync;
 
     if shared_changed || device_changed || sync_changed {
-        if let Err(error) = storage::save_changed_state(
-            &inner.data_dir,
-            &state.shared,
-            &state.device,
-            shared_changed,
-            device_changed,
-        ) {
+        if let Err(error) =
+            inner.save_state_locked(&state, shared_changed, device_changed, sync_changed)
+        {
             *state = before;
             return Err(error);
-        }
-        if sync_changed {
-            if let Err(error) = crate::sync_state::save(&inner.data_dir, &state.sync) {
-                *state = before;
-                return Err(error);
-            }
         }
     }
 
@@ -448,10 +437,8 @@ fn apply_change<T>(
         crate::web::record_server_navigation(inner, &before, &state);
     }
 
-    let event =
-        (shared_changed || device_changed || link_changed).then(|| CoreEvent::StateChanged {
-            snapshot: snapshot(&state),
-        });
+    let event = (shared_changed || device_changed || link_changed)
+        .then(|| inner.state_event_locked(&state));
     drop(state);
     crate::web::detach_removed(inner);
     Ok((result, event))
