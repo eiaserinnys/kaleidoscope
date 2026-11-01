@@ -65,6 +65,8 @@ cargo run -p kaleidoscope-orchestrator
 
 The server defaults to `127.0.0.1:4219`. Keep the generated MCP token for your agent's configuration. Use `KALEIDOSCOPE_BIND` to change the listen address. For devices on another machine, expose the server through an HTTPS reverse proxy and use that address in the shell.
 
+Windows 독립 서버에서 기기 연결 전에 기본 앱 워커를 쓰려면 릴리스의 서버 ZIP을 풀고, `apps` 폴더가 있는 디렉터리에서 서버를 실행합니다. 서버 워커에는 Python 3이 필요하며, `npx`를 쓰는 기본 에이전트에는 Node.js 22 이상과 해당 에이전트의 로그인이 필요합니다. Docker 이미지는 Python과 Node.js를 포함합니다.
+
 ### 2. Connect an MCP client
 
 Add the orchestrator as a Streamable HTTP MCP server in your agent's MCP configuration:

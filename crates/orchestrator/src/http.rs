@@ -21,6 +21,11 @@ pub fn router(state: AppState) -> Router {
         .route_layer(middleware::from_fn_with_state(state.clone(), mcp_auth));
     let device = Router::new()
         .route(
+            "/builtin-specs",
+            post(super::builtin_specs::device_register)
+                .layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
+        )
+        .route(
             "/transfer",
             get(super::transfer::export)
                 .post(super::transfer::import)
@@ -29,7 +34,10 @@ pub fn router(state: AppState) -> Router {
                 )),
         )
         .route("/apps", post(device_upload))
-        .route("/apps/{app_id}/worker", post(super::worker::device_invoke))
+        .route(
+            "/apps/{app_id}/worker",
+            post(super::worker_http::device_invoke),
+        )
         .route("/assets/{id}/{version}", get(super::assets::device_get))
         .route("/app-values/{app_id}", get(super::app_values::list))
         .route(
@@ -75,6 +83,14 @@ pub fn router(state: AppState) -> Router {
         .route_layer(middleware::from_fn_with_state(state.clone(), device_auth))
         .with_state(state.clone());
     let api = Router::new()
+        .route(
+            "/api/webhooks/{app_id}",
+            post(super::worker_webhook::webhook).layer(DefaultBodyLimit::max(256 * 1024)),
+        )
+        .route(
+            "/api/webhooks/{app_id}/{token}",
+            post(super::worker_webhook::webhook_token).layer(DefaultBodyLimit::max(256 * 1024)),
+        )
         .route(registry::PAIR_START_PATH, post(pair_start))
         .route(registry::PAIR_POLL_PATH, post(pair_poll))
         .route(registry::HEALTH_PATH, get(health))

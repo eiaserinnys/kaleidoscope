@@ -1,29 +1,36 @@
 //! 앱별 서버 워커 실행, 시크릿과 주기 트리거.
 use super::*;
-use axum::extract::{Extension, Path, State};
 use kaleidoscope_contract::worker::{
     WorkerDecl, WorkerInvokeReply, WorkerInvokeRequest, WorkerStatus, WORKER_SECRET_MAX_BYTES,
     WORKER_TIMEOUT_DEFAULT_SECS,
 };
-use rand::RngExt;
-use std::{collections::BTreeMap, process::Stdio, time::Instant};
-use tokio::io::AsyncWriteExt;
+use std::{collections::BTreeMap, time::Instant};
+
+pub(super) struct WorkerOutput {
+    pub(super) reply: WorkerInvokeReply,
+    pub(super) http_response: Option<Value>,
+    pub(super) defer: Option<Value>,
+}
 
 type WorkerKey = (String, String);
 #[derive(Default)]
 pub(super) struct WorkerState {
-    locks: Mutex<HashMap<WorkerKey, Arc<AsyncMutex<()>>>>,
-    statuses: Mutex<HashMap<WorkerKey, WorkerStatus>>,
-    next_due: Mutex<HashMap<WorkerKey, Instant>>,
+    locks: Mutex<HashMap<(WorkerKey, bool), Arc<AsyncMutex<()>>>>,
+    statuses: Mutex<HashMap<(WorkerKey, bool), WorkerStatus>>,
+    runs: Mutex<HashMap<WorkerKey, Vec<WorkerStatus>>>,
+    pub(super) next_due: Mutex<HashMap<WorkerKey, Instant>>,
 }
 
 impl AppState {
-    fn worker_definition(&self, app_id: &str) -> Result<(AppDefinition, WorkerDecl), CoreError> {
-        let definition = self
-            .app(app_id, None)?
-            .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?
-            .version
-            .definition;
+    pub(super) fn worker_definition(
+        &self,
+        app_id: &str,
+    ) -> Result<(AppDefinition, WorkerDecl), CoreError> {
+        let definition = {
+            let db = self.lock_db()?;
+            super::app_storage::current_definition(&db, app_id)?
+                .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?
+        };
         let worker = definition
             .worker
             .clone()
@@ -84,10 +91,25 @@ impl AppState {
         app_id: &str,
     ) -> Result<WorkerStatus, CoreError> {
         self.worker_definition(app_id)?;
+        let statuses = self.0.workers.statuses.lock().unwrap();
+        let key = (account_id.into(), app_id.into());
+        Ok(statuses
+            .get(&(key.clone(), false))
+            .or_else(|| statuses.get(&(key, true)))
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    pub fn list_worker_runs(
+        &self,
+        account_id: &str,
+        app_id: &str,
+    ) -> Result<Vec<WorkerStatus>, CoreError> {
+        self.worker_definition(app_id)?;
         Ok(self
             .0
             .workers
-            .statuses
+            .runs
             .lock()
             .unwrap()
             .get(&(account_id.into(), app_id.into()))
@@ -101,13 +123,33 @@ impl AppState {
         app_id: &str,
         req: WorkerInvokeRequest,
     ) -> Result<WorkerInvokeReply, CoreError> {
+        self.invoke_worker_chain(account_id, app_id, req, vec![app_id.to_owned()], None)
+            .await
+    }
+
+    pub(super) async fn invoke_worker_chain(
+        &self,
+        account_id: &str,
+        app_id: &str,
+        req: WorkerInvokeRequest,
+        chain: Vec<String>,
+        deadline: Option<tokio::time::Instant>,
+    ) -> Result<WorkerInvokeReply, CoreError> {
         let (_, worker) = self.worker_definition(app_id)?;
         if !worker.actions.contains(&req.action) {
             return Err(CoreError::new(ErrorCode::InvalidRequest));
         }
         let trigger = json!({"kind":"action","action":req.action,"args":req.args,"workspace_id":req.workspace_id});
-        self.run_worker(account_id, app_id, trigger, req.workspace_id.as_deref())
-            .await
+        self.run_worker(
+            account_id,
+            app_id,
+            trigger,
+            req.workspace_id.as_deref(),
+            chain,
+            deadline,
+        )
+        .await
+        .map(|output| output.reply)
     }
 
     pub async fn trigger_watched_entry(
@@ -117,12 +159,14 @@ impl AppState {
         entry_id: &str,
         workspace_id: Option<&str>,
     ) -> Result<Option<WorkerInvokeReply>, CoreError> {
-        let Some(app) = self.app(app_id, None)? else {
+        let definition = {
+            let db = self.lock_db()?;
+            super::app_storage::current_definition(&db, app_id)?
+        };
+        let Some(definition) = definition else {
             return Ok(None);
         };
-        if !app
-            .version
-            .definition
+        if !definition
             .worker
             .as_ref()
             .is_some_and(|w| w.watch_entries.iter().any(|id| id == entry_id))
@@ -130,78 +174,129 @@ impl AppState {
             return Ok(None);
         }
         let trigger = json!({"kind":"watch","entry_id":entry_id,"workspace_id":workspace_id});
-        self.run_worker(account_id, app_id, trigger, workspace_id)
-            .await
-            .map(Some)
+        self.run_worker(
+            account_id,
+            app_id,
+            trigger,
+            workspace_id,
+            vec![app_id.to_owned()],
+            None,
+        )
+        .await
+        .map(|output| Some(output.reply))
     }
 
-    async fn run_worker(
-        &self,
-        account_id: &str,
-        app_id: &str,
+    pub(super) fn run_worker<'a>(
+        &'a self,
+        account_id: &'a str,
+        app_id: &'a str,
         trigger: Value,
-        workspace_id: Option<&str>,
-    ) -> Result<WorkerInvokeReply, CoreError> {
-        let key = (account_id.to_owned(), app_id.to_owned());
-        let lock = self
-            .0
-            .workers
-            .locks
-            .lock()
-            .unwrap()
-            .entry(key.clone())
-            .or_default()
-            .clone();
-        let _guard = lock.lock().await;
-        if trigger["kind"] == "schedule" {
-            let (_, worker) = self.worker_definition(app_id)?;
-            let Some(schedule) = worker.schedule else {
-                return Ok(WorkerInvokeReply {
-                    result: Value::Null,
-                    updated_entries: Vec::new(),
-                });
+        workspace_id: Option<&'a str>,
+        chain: Vec<String>,
+        parent_deadline: Option<tokio::time::Instant>,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<WorkerOutput, CoreError>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            let key = (account_id.to_owned(), app_id.to_owned());
+            let webhook = trigger["kind"] == "webhook";
+            let run_key = (key.clone(), webhook);
+            let lock = self
+                .0
+                .workers
+                .locks
+                .lock()
+                .unwrap()
+                .entry(run_key.clone())
+                .or_default()
+                .clone();
+            let _guard = if let Some(deadline) = parent_deadline {
+                tokio::time::timeout_at(deadline, lock.lock())
+                    .await
+                    .map_err(|_| server_error("워커 호출 대기 시간이 초과되었습니다"))?
+            } else {
+                lock.lock().await
             };
-            if self
-                .read_app_storage(account_id, app_id, &schedule.enabled_entry, None)?
-                .content
-                != Value::Bool(true)
-            {
-                return Ok(WorkerInvokeReply {
-                    result: Value::Null,
-                    updated_entries: Vec::new(),
-                });
-            }
-        }
-        let started = Instant::now();
-        {
-            let mut statuses = self.0.workers.statuses.lock().unwrap();
-            let status = statuses.entry(key.clone()).or_default();
-            status.running = true;
-            status.last_run_at = Some(timestamp());
-            status.last_trigger = trigger["kind"].as_str().map(str::to_owned);
-        }
-        let mut secrets = BTreeMap::new();
-        let result = self
-            .execute_worker(account_id, app_id, trigger, workspace_id, &mut secrets)
-            .await;
-        let result = result.map_err(|mut error| {
-            let mut values: Vec<_> = secrets.values().filter(|s| !s.is_empty()).collect();
-            values.sort_unstable_by_key(|value| std::cmp::Reverse(value.len()));
-            for secret in values {
-                error.message = error.message.replace(secret, "[REDACTED]");
-                for detail in &mut error.details {
-                    *detail = detail.replace(secret, "[REDACTED]");
+            let (_, worker) = self.worker_definition(app_id)?;
+            let own_deadline = tokio::time::Instant::now()
+                + Duration::from_secs(
+                    worker.timeout_secs.unwrap_or(WORKER_TIMEOUT_DEFAULT_SECS) as u64
+                );
+            let deadline = parent_deadline.map_or(own_deadline, |parent| parent.min(own_deadline));
+            if trigger["kind"] == "schedule" {
+                let (_, worker) = self.worker_definition(app_id)?;
+                let Some(schedule) = worker.schedule else {
+                    return Ok(WorkerOutput {
+                        reply: WorkerInvokeReply {
+                            result: Value::Null,
+                            updated_entries: Vec::new(),
+                        },
+                        http_response: None,
+                        defer: None,
+                    });
+                };
+                if self
+                    .read_app_storage(account_id, app_id, &schedule.enabled_entry, None)?
+                    .content
+                    != Value::Bool(true)
+                {
+                    return Ok(WorkerOutput {
+                        reply: WorkerInvokeReply {
+                            result: Value::Null,
+                            updated_entries: Vec::new(),
+                        },
+                        http_response: None,
+                        defer: None,
+                    });
                 }
             }
-            error
-        });
-        let mut statuses = self.0.workers.statuses.lock().unwrap();
-        let status = statuses.entry(key).or_default();
-        status.running = false;
-        status.last_duration_ms = Some(started.elapsed().as_millis() as u64);
-        status.last_ok = Some(result.is_ok());
-        status.last_error = result.as_ref().err().map(|e| e.message.clone());
-        result
+            let started = Instant::now();
+            {
+                let mut statuses = self.0.workers.statuses.lock().unwrap();
+                let status = statuses.entry(run_key.clone()).or_default();
+                status.running = true;
+                status.last_run_at = Some(timestamp());
+                status.last_trigger = trigger["kind"].as_str().map(str::to_owned);
+            }
+            let mut secrets = BTreeMap::new();
+            let result = self
+                .execute_worker(
+                    account_id,
+                    app_id,
+                    trigger,
+                    workspace_id,
+                    &mut secrets,
+                    chain,
+                    deadline,
+                )
+                .await;
+            let result = result.map_err(|mut error| {
+                let mut values: Vec<_> = secrets.values().filter(|s| !s.is_empty()).collect();
+                values.sort_unstable_by_key(|value| std::cmp::Reverse(value.len()));
+                for secret in values {
+                    error.message = error.message.replace(secret, "[REDACTED]");
+                    for detail in &mut error.details {
+                        *detail = detail.replace(secret, "[REDACTED]");
+                    }
+                }
+                error
+            });
+            let mut statuses = self.0.workers.statuses.lock().unwrap();
+            let status = statuses.entry(run_key).or_default();
+            status.running = false;
+            status.last_duration_ms = Some(started.elapsed().as_millis() as u64);
+            status.last_ok = Some(result.is_ok());
+            status.last_error = result.as_ref().err().map(|e| e.message.clone());
+            let finished = status.clone();
+            drop(statuses);
+            let mut runs = self.0.workers.runs.lock().unwrap();
+            let history = runs
+                .entry((account_id.to_owned(), app_id.to_owned()))
+                .or_default();
+            history.insert(0, finished);
+            history.truncate(50);
+            result
+        })
     }
 
     async fn execute_worker(
@@ -211,7 +306,9 @@ impl AppState {
         trigger: Value,
         workspace_id: Option<&str>,
         secrets: &mut BTreeMap<String, String>,
-    ) -> Result<WorkerInvokeReply, CoreError> {
+        chain: Vec<String>,
+        deadline: tokio::time::Instant,
+    ) -> Result<WorkerOutput, CoreError> {
         let (definition, worker) = self.worker_definition(app_id)?;
         if workspace_id.is_some() {
             let db = self.lock_db()?;
@@ -248,46 +345,31 @@ impl AppState {
         std::fs::create_dir_all(&state_dir)
             .map_err(|e| server_error(&format!("워커 폴더를 만들 수 없습니다: {e}")))?;
         let input = serde_json::to_vec(&json!({"app_id":app_id,"trigger":trigger,"storage":storage,"storage_revisions":revisions,"secrets":secrets,"state_dir":state_dir,"now":timestamp()})).map_err(|e| server_error(&e.to_string()))?;
-        let interpreter = if cfg!(windows) { "python" } else { "python3" };
-        let mut command = tokio::process::Command::new(interpreter);
-        #[cfg(windows)]
-        command.creation_flags(0x08000000);
-        command
-            .arg("-c")
-            .arg(&worker.code)
-            .current_dir(&state_dir)
-            .env_clear();
-        for name in ["PATH", "HOME", "USER"] {
-            if let Some(value) = std::env::var_os(name) {
-                command.env(name, value);
-            }
-        }
-        command
-            .env("LANG", "C.UTF-8")
-            .env("PYTHONIOENCODING", "utf-8")
-            .env("PYTHONUTF8", "1")
-            .env("PYTHONDONTWRITEBYTECODE", "1")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
-        let mut child = command
-            .spawn()
-            .map_err(|e| server_error(&format!("워커를 시작할 수 없습니다: {e}")))?;
-        let timeout =
-            Duration::from_secs(worker.timeout_secs.unwrap_or(WORKER_TIMEOUT_DEFAULT_SECS) as u64);
-        let output = tokio::time::timeout(timeout, async {
-            let mut stdin = child
-                .stdin
-                .take()
-                .ok_or_else(|| std::io::Error::other("stdin 없음"))?;
-            stdin.write_all(&input).await?;
-            drop(stdin);
-            child.wait_with_output().await
-        })
-        .await
-        .map_err(|_| server_error("워커 실행 시간이 초과되었습니다"))?
-        .map_err(|e| server_error(&format!("워커 실행 실패: {e}")))?;
+        let code_dir = tempfile::tempdir().map_err(|e| server_error(&e.to_string()))?;
+        std::fs::write(
+            code_dir.path().join("kaleidoscope_worker.py"),
+            include_str!("kaleidoscope_worker.py"),
+        )
+        .map_err(|e| server_error(&e.to_string()))?;
+        let (bridge_url, bridge_token, _bridge) = super::worker_bridge::start(
+            self.clone(),
+            account_id,
+            worker.calls.clone(),
+            chain,
+            workspace_id,
+            deadline,
+        )
+        .await?;
+        let output = super::worker_process::execute(
+            &worker.code,
+            &state_dir,
+            code_dir.path(),
+            &input,
+            bridge_url,
+            bridge_token,
+            deadline,
+        )
+        .await?;
         if !output.status.success() {
             return Err(server_error(&format!(
                 "워커 실행 실패: {}",
@@ -328,9 +410,13 @@ impl AppState {
                 updated_entries.push(entry.clone());
             }
         }
-        Ok(WorkerInvokeReply {
-            result: object.get("result").cloned().unwrap_or(Value::Null),
-            updated_entries,
+        Ok(WorkerOutput {
+            reply: WorkerInvokeReply {
+                result: object.get("result").cloned().unwrap_or(Value::Null),
+                updated_entries,
+            },
+            http_response: object.get("http_response").cloned(),
+            defer: object.get("defer").cloned(),
         })
     }
 }
@@ -359,109 +445,4 @@ pub(super) fn spawn_watch(
     });
 }
 
-pub async fn worker_schedule_tick(state: &AppState) {
-    let apps = match state.current_apps() {
-        Ok(apps) => apps,
-        Err(error) => {
-            eprintln!("워커 앱 조회 실패: {}", error.message);
-            return;
-        }
-    };
-    let accounts = (|| -> Result<HashSet<String>, CoreError> {
-        let db = state.lock_db()?;
-        let mut statement = db.prepare("SELECT account_id FROM mcp_principal UNION SELECT account_id FROM app_storage_buckets").map_err(db_error)?;
-        let accounts = statement
-            .query_map([], |row| row.get(0))
-            .map_err(db_error)?
-            .collect::<rusqlite::Result<HashSet<_>>>()
-            .map_err(db_error)?;
-        Ok(accounts)
-    })();
-    let accounts = match accounts {
-        Ok(accounts) => accounts,
-        Err(error) => {
-            eprintln!("워커 계정 조회 실패: {}", error.message);
-            return;
-        }
-    };
-    for app in apps {
-        let Some(schedule) = app
-            .version
-            .definition
-            .worker
-            .as_ref()
-            .and_then(|w| w.schedule.as_ref())
-        else {
-            continue;
-        };
-        for account in &accounts {
-            let key = (account.clone(), app.app.id.clone());
-            let enabled =
-                match state.read_app_storage(account, &app.app.id, &schedule.enabled_entry, None) {
-                    Ok(value) => value.content == Value::Bool(true),
-                    Err(error) => {
-                        eprintln!("워커 주기 설정 조회 실패: {}", error.message);
-                        continue;
-                    }
-                };
-            let due = {
-                let mut next = state.0.workers.next_due.lock().unwrap();
-                if !enabled {
-                    next.remove(&key);
-                    false
-                } else if next.get(&key).is_none_or(|due| *due <= Instant::now()) {
-                    let jitter = rand::rng().random_range(0..=schedule.jitter_secs.unwrap_or(0));
-                    next.insert(
-                        key.clone(),
-                        Instant::now()
-                            + Duration::from_secs((schedule.interval_secs + jitter) as u64),
-                    );
-                    true
-                } else {
-                    false
-                }
-            };
-            if due {
-                let state = state.clone();
-                tokio::spawn(async move {
-                    if let Err(error) = state
-                        .run_worker(&key.0, &key.1, json!({"kind":"schedule"}), None)
-                        .await
-                    {
-                        eprintln!("워커 주기 실행 실패: {}", error.message);
-                    }
-                });
-            }
-        }
-    }
-}
-
-pub async fn worker_schedule_loop(state: AppState) {
-    loop {
-        worker_schedule_tick(&state).await;
-        tokio::time::sleep(Duration::from_secs(1)).await;
-    }
-}
-
-pub(super) async fn device_invoke(
-    State(state): State<AppState>,
-    Extension(device): Extension<(String, String)>,
-    Path(app): Path<String>,
-    Json(request): Json<WorkerInvokeRequest>,
-) -> Response {
-    let result = match state.device_account_id(&device.0) {
-        Ok(account) => state.invoke_worker(&account, &app, request).await,
-        Err(error) => Err(error),
-    };
-    match result {
-        Ok(reply) => (StatusCode::OK, Json(reply)).into_response(),
-        Err(error) => {
-            let status = match error.code {
-                ErrorCode::NotFound => StatusCode::NOT_FOUND,
-                ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
-            };
-            super::http::error_response(status, error)
-        }
-    }
-}
+pub use super::worker_schedule::{worker_schedule_loop, worker_schedule_tick};

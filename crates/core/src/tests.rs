@@ -189,7 +189,8 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
     let apps = snapshot(&core).shared.apps;
     for (id, version) in [
-        ("agent", 2),
+        ("agent", 3),
+        ("slackbot", 1),
         ("explorer", 3),
         ("md-editor", 3),
         ("html-report", 1),
@@ -204,7 +205,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
             .iter()
             .any(|app| app.id == id && app.current_version == version));
     }
-    assert_eq!(apps.len(), 10);
+    assert_eq!(apps.len(), 11);
     let error = core
         .handle(CoreRequest::AppImport {
             definition_json: MD_EDITOR.into(),
@@ -381,7 +382,7 @@ fn builtin_window_state_survives_restart_at_the_same_version() {
         .find(|w| w.id == window_id)
         .unwrap();
     assert_eq!(before, after);
-    assert_eq!(snapshot(&reopened).shared.apps.len(), 10);
+    assert_eq!(snapshot(&reopened).shared.apps.len(), 11);
 }
 
 #[test]
@@ -2166,7 +2167,7 @@ fn unreadable_state_json_is_renamed_and_core_starts_with_empty_state() {
     let core = open_core(&data_dir, vec![], &host);
     let snapshot = snapshot(&core);
     assert_eq!(snapshot.shared.workspaces.len(), 1);
-    assert_eq!(snapshot.shared.apps.len(), 10);
+    assert_eq!(snapshot.shared.apps.len(), 11);
     assert!(fs::read_dir(&data_dir).unwrap().any(|entry| {
         entry
             .unwrap()

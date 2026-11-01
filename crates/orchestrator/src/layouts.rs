@@ -365,13 +365,13 @@ impl AppState {
                     if !supports_storage {
                         return None;
                     }
-                    let entry = kaleidoscope_contract::builtin::builtin_storage_entries(&app_id)
-                        .into_iter()
-                        .find(|entry| {
-                            kaleidoscope_contract::app_storage::storage_key_matches(
-                                &entry.key, &item.key,
-                            )
-                        })?;
+                    let db = self.lock_db().ok()?;
+                    let definition = super::builtin_specs::load_definition(&db, &app_id).ok()??;
+                    let entry = definition.storage?.entries.into_iter().find(|entry| {
+                        kaleidoscope_contract::app_storage::storage_key_matches(
+                            &entry.key, &item.key,
+                        )
+                    })?;
                     DeviceEvent::StorageChanged {
                         app_id,
                         changed: kaleidoscope_contract::app_storage::StorageChanged {

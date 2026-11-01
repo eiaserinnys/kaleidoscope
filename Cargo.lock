@@ -2332,6 +2332,7 @@ dependencies = [
  "kaleidoscope-contract",
  "kaleidoscope-data",
  "mime_guess",
+ "process-wrap",
  "rand",
  "reqwest 0.12.28",
  "rmcp",

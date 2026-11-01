@@ -29,37 +29,6 @@ fn content_size(kind: StorageKind, content: &Value) -> Result<(), CoreError> {
     }
 }
 
-pub(super) fn validate_builtin_app_value(
-    app_id: &str,
-    key: &str,
-    kind: StorageKind,
-    content: &Value,
-) -> Result<contract::StorageEntryDecl, CoreError> {
-    let entry = kaleidoscope_contract::builtin::builtin_storage_entries(app_id)
-        .into_iter()
-        .find(|entry| contract::storage_key_matches(&entry.key, key))
-        .ok_or_else(|| {
-            CoreError::with_details(
-                ErrorCode::InvalidRequest,
-                vec![format!(
-                    "기본 앱 '{app_id}'에 선언되지 않은 저장소 키입니다: {key}"
-                )],
-            )
-        })?;
-    if entry.kind != kind {
-        return Err(CoreError::with_details(
-            ErrorCode::InvalidRequest,
-            vec![format!(
-                "기본 앱 '{app_id}' 저장소 항목 '{}'의 종류가 맞지 않습니다",
-                entry.id
-            )],
-        ));
-    }
-    contract::validate_storage_content(&entry, content)
-        .map_err(|err| CoreError::with_details(ErrorCode::InvalidRequest, vec![err]))?;
-    Ok(entry)
-}
-
 fn conflict(revision: Option<&str>) -> CoreError {
     CoreError {
         code: ErrorCode::Conflict,
@@ -193,10 +162,13 @@ impl AppState {
         workspace: Option<&str>,
     ) -> Result<String, CoreError> {
         validate(app_id, key)?;
-        if kaleidoscope_contract::builtin::is_builtin(app_id) {
-            validate_builtin_app_value(app_id, key, kind, &content)?;
-        }
         content_size(kind, &content)?;
+        let (entry, resolved) = self.builtin_entry(app_id, key, workspace)?;
+        if resolved != key || kind != entry.kind {
+            return Err(CoreError::new(ErrorCode::InvalidRequest));
+        }
+        contract::validate_storage_content(&entry, &content)
+            .map_err(|detail| CoreError::with_details(ErrorCode::InvalidRequest, vec![detail]))?;
         if workspace.is_some_and(|workspace| !key.split('/').any(|segment| segment == workspace)) {
             return Err(CoreError::new(ErrorCode::InvalidRequest));
         }
@@ -232,6 +204,25 @@ impl AppState {
             },
             account,
         );
+        self.publish_storage_update(
+            DeviceEvent::StorageChanged {
+                app_id: app_id.into(),
+                changed: contract::StorageChanged {
+                    bucket_id: super::app_storage::bucket_id(account, app_id),
+                    item: contract::StorageItemMeta {
+                        entry_id: entry.id.clone(),
+                        key: key.into(),
+                        kind,
+                        revision: Some(revision.clone()),
+                        exists: true,
+                    },
+                },
+            },
+            account,
+        );
+        if tokio::runtime::Handle::try_current().is_ok() {
+            super::worker::spawn_watch(self, account, app_id, &entry.id, workspace);
+        }
         Ok(revision)
     }
 
@@ -244,17 +235,9 @@ impl AppState {
         workspace: Option<&str>,
     ) -> Result<(), CoreError> {
         validate(app_id, key)?;
-        if kaleidoscope_contract::builtin::is_builtin(app_id)
-            && !kaleidoscope_contract::builtin::builtin_storage_entries(app_id)
-                .iter()
-                .any(|entry| contract::storage_key_matches(&entry.key, key))
-        {
-            return Err(CoreError::with_details(
-                ErrorCode::InvalidRequest,
-                vec![format!(
-                    "기본 앱 '{app_id}'에 선언되지 않은 저장소 키입니다: {key}"
-                )],
-            ));
+        let (entry, resolved) = self.builtin_entry(app_id, key, workspace)?;
+        if resolved != key {
+            return Err(CoreError::new(ErrorCode::InvalidRequest));
         }
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(db_error)?;
@@ -285,6 +268,25 @@ impl AppState {
                 },
                 account,
             );
+        }
+        self.publish_storage_update(
+            DeviceEvent::StorageChanged {
+                app_id: app_id.into(),
+                changed: contract::StorageChanged {
+                    bucket_id: super::app_storage::bucket_id(account, app_id),
+                    item: contract::StorageItemMeta {
+                        entry_id: entry.id.clone(),
+                        key: key.into(),
+                        kind: entry.kind,
+                        revision: None,
+                        exists: false,
+                    },
+                },
+            },
+            account,
+        );
+        if tokio::runtime::Handle::try_current().is_ok() {
+            super::worker::spawn_watch(self, account, app_id, &entry.id, workspace);
         }
         Ok(())
     }

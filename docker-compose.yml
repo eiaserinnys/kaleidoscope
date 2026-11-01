@@ -5,6 +5,8 @@ services:
       - "127.0.0.1:4219:4219"
     volumes:
       - kaleidoscope-data:/data
+      - kaleidoscope-home:/home/kaleidoscope
     restart: unless-stopped
 volumes:
   kaleidoscope-data:
+  kaleidoscope-home:

@@ -614,6 +614,24 @@ impl RegistryClient for HttpRegistryClient {
         server_url: &str,
         token: &str,
     ) -> Result<Box<dyn BufRead + Send>, RegistryError> {
+        let registration = self
+            .requests()?
+            .post(format!(
+                "{server_url}{}",
+                kaleidoscope_contract::registry::DEVICE_BUILTIN_SPECS_PATH
+            ))
+            .bearer_auth(token)
+            .json(&crate::builtin::builtin_runtime_specs())
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        if registration.status().as_u16() == 403 {
+            eprintln!("기본 앱 실행 선언은 서버의 주 계정 기기에서만 등록할 수 있습니다.");
+        } else if registration.status().as_u16() != 404 {
+            check_status(
+                registration.status(),
+                &registration.bytes().unwrap_or_default(),
+            )?;
+        }
         let response = self
             .events()?
             .get(format!("{server_url}{DEVICE_EVENTS_PATH}"))

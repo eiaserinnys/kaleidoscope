@@ -47,6 +47,38 @@ fn events_send_supported_header() {
     let server = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = server.local_addr().unwrap();
     let worker = std::thread::spawn(move || {
+        let (mut register, _) = server.accept().unwrap();
+        let mut reader = BufReader::new(register.try_clone().unwrap());
+        let mut headers = String::new();
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            if line == "\r\n" {
+                break;
+            }
+            headers.push_str(&line);
+        }
+        assert!(headers.starts_with("POST /api/device/builtin-specs "));
+        let length = headers
+            .lines()
+            .find_map(|line| {
+                line.to_lowercase()
+                    .strip_prefix("content-length: ")
+                    .and_then(|value| value.trim().parse::<usize>().ok())
+            })
+            .unwrap();
+        let mut body = vec![0; length];
+        reader.read_exact(&mut body).unwrap();
+        let specs: Vec<kaleidoscope_contract::worker::BuiltinRuntimeSpec> =
+            serde_json::from_slice(&body).unwrap();
+        assert!(specs
+            .iter()
+            .any(|spec| spec.app_id == "slackbot" && spec.worker.is_some()));
+        register
+            .write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .unwrap();
+        drop(register);
+        drop(reader);
         let (mut conn, _) = server.accept().unwrap();
         let mut bytes = [0; 8192];
         let size = conn.read(&mut bytes).unwrap();

@@ -125,6 +125,7 @@ pub const ICON_NAMES: &[&str] = &[
     "pencil",
     "play",
     "plus",
+    "power",
     "refresh-cw",
     "rotate-ccw",
     "save",

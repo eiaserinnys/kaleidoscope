@@ -49,7 +49,11 @@ jobs:
           cargo build --release -p kaleidoscope-orchestrator --target x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { throw '독립 서버 빌드 실패' }
           Copy-Item target/x86_64-pc-windows-msvc/release/kaleidoscope-orchestrator.exe kaleidoscope-orchestrator-x86_64-pc-windows-msvc.exe
-          gh release upload '${{ github.ref_name }}' kaleidoscope-orchestrator-x86_64-pc-windows-msvc.exe --clobber
+          New-Item -ItemType Directory -Force standalone-server/apps | Out-Null
+          Copy-Item kaleidoscope-orchestrator-x86_64-pc-windows-msvc.exe standalone-server/
+          Copy-Item apps/*.json standalone-server/apps/
+          Compress-Archive -Path standalone-server/* -DestinationPath kaleidoscope-orchestrator-x86_64-pc-windows-msvc.zip
+          gh release upload '${{ github.ref_name }}' kaleidoscope-orchestrator-x86_64-pc-windows-msvc.exe kaleidoscope-orchestrator-x86_64-pc-windows-msvc.zip --clobber
           if ($LASTEXITCODE -ne 0) { throw '독립 서버 업로드 실패' }
 
       - name: 설치본과 서명 자산 확인

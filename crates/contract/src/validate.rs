@@ -286,9 +286,6 @@ fn validate_worker(definition: &AppDefinition, details: &mut Vec<String>) {
     let Some(worker) = &definition.worker else {
         return;
     };
-    if crate::builtin::is_builtin(&definition.id) {
-        details.push("/worker: 기본 앱은 서버 워커를 선언할 수 없습니다".into());
-    }
     if worker.code.trim().is_empty() || worker.code.len() > WORKER_CODE_MAX_BYTES {
         details.push("/worker/code: 코드가 비었거나 너무 큽니다".into());
     }
@@ -320,6 +317,31 @@ fn validate_worker(definition: &AppDefinition, details: &mut Vec<String>) {
             details.push("/worker/schedule/enabled_entry: 기본값이 false인 불리언 json 저장 항목이어야 합니다".into());
         }
     }
+    if let Some(webhook) = &worker.webhook {
+        if let Some(id) = &webhook.enabled_entry {
+            if !entries.iter().any(|entry| {
+                entry.id == *id
+                    && !entry.key.contains("{workspace_id}")
+                    && entry.kind == StorageKind::Json
+                    && entry.default == Value::Bool(false)
+            }) {
+                details.push("/worker/webhook/enabled_entry: 기본값이 false인 불리언 json 저장 항목이어야 합니다".into());
+            }
+        }
+        if let Some(id) = &webhook.token_secret {
+            if id.is_empty() || !worker.secrets.iter().any(|secret| secret.id == *id) {
+                details.push("/worker/webhook/token_secret: 선언된 시크릿이어야 합니다".into());
+            }
+        }
+    }
+    let mut targets = HashSet::new();
+    for target in &worker.calls {
+        if !valid_id(target) || target == &definition.id || !targets.insert(target) {
+            details.push(format!(
+                "/worker/calls: 대상 id가 올바르지 않거나 중복됩니다: {target}"
+            ));
+        }
+    }
     let mut seen = HashSet::new();
     for id in &worker.watch_entries {
         if !seen.insert(id) || !entries.iter().any(|entry| &entry.id == id) {
@@ -330,7 +352,7 @@ fn validate_worker(definition: &AppDefinition, details: &mut Vec<String>) {
     }
     seen.clear();
     for id in &worker.actions {
-        if !valid_id(id) || !seen.insert(id) {
+        if !(valid_id(id) || data::valid_source_name(id)) || !seen.insert(id) {
             details.push(format!(
                 "/worker/actions: id가 올바르지 않거나 중복됩니다: {id}"
             ));
@@ -338,7 +360,9 @@ fn validate_worker(definition: &AppDefinition, details: &mut Vec<String>) {
     }
     seen.clear();
     for secret in &worker.secrets {
-        if !valid_id(&secret.id) || !seen.insert(&secret.id) {
+        if !(valid_id(&secret.id) || data::valid_source_name(&secret.id))
+            || !seen.insert(&secret.id)
+        {
             details.push(format!(
                 "/worker/secrets: id가 올바르지 않거나 중복됩니다: {}",
                 secret.id
