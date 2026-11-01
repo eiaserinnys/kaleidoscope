@@ -227,14 +227,9 @@ fn replan(
     let mut pending = Vec::new();
     let mut changed_sources = BTreeSet::new();
     for name in runtime.compiled.source_order().to_vec() {
-        let previous = runtime.sources[&name].status.clone();
-        let plan = runtime.plan_source(&name);
-        let changed = set_plan(&inner.data_runtimes, runtime, &name, plan);
-        runtime.apply_source_storage_status(&name);
-        if changed {
-            if let Some(job) = prepare(&inner.data_runtimes, runtime, id, &name) {
-                pending.push(job);
-            }
+        let (changed, previous, job) = replan_source(&inner.data_runtimes, runtime, id, &name);
+        if let Some(job) = job {
+            pending.push(job);
         }
         if changed || previous != runtime.sources[&name].status {
             changed_sources.insert(name);
@@ -268,6 +263,123 @@ fn replan(
             .send((id.into(), runtime.version, view));
     }
     pending
+}
+
+fn replan_source(
+    manager: &DataRuntimes,
+    runtime: &mut Runtime,
+    id: &str,
+    name: &str,
+) -> (bool, SourceStatus, Option<Job>) {
+    let previous = runtime.sources[name].status.clone();
+    let plan = runtime.plan_source(name);
+    let changed = set_plan(manager, runtime, name, plan);
+    runtime.apply_source_storage_status(name);
+    let job = if should_prepare_after_plan(runtime, name, changed, false) {
+        prepare(manager, runtime, id, name)
+    } else {
+        None
+    };
+    (changed, previous, job)
+}
+
+#[cfg(test)]
+mod freshness_tests {
+    use super::*;
+    use kaleidoscope_contract::{
+        app_storage::{StorageKind, StorageReadReply},
+        validate::parse_app_definition,
+    };
+    use serde_json::json;
+
+    fn runtime() -> Runtime {
+        let definition = parse_app_definition(
+            &json!({
+                "id":"storage-cache",
+                "name":"저장소 캐시 시험",
+                "requires":{"blocks":6,"modules":{"http":1,"storage":1}},
+                "permissions":[{"module":"http","id":"api","label":"API","base_url":"https://example.test","paths":["/records/one","/records/two"]}],
+                "storage":{"entries":[{"id":"route","key":"route","kind":"json","schema":{"type":"string"},"default":"one","label":"경로","presentation":"hidden"}]},
+                "state":{},
+                "sources":{"item":{"kind":"request","permission":"api","path":{"expr":"'/records/' & $storage.route"}}},
+                "ui":{"type":"text","value":{"expr":"$data.item"}}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        Runtime::new(1, definition.clone(), definition.state.clone(), true)
+    }
+
+    fn set_route(runtime: &mut Runtime, value: &str) {
+        let slot = runtime.storage.get_mut("route").unwrap();
+        slot.value = Some(StorageReadReply {
+            kind: StorageKind::Json,
+            content: Value::String(value.into()),
+            revision: Some(value.into()),
+            exists: true,
+        });
+        slot.status = Status::Ready;
+        slot.in_flight = false;
+    }
+
+    #[test]
+    fn storage_replan_restores_cached_request_without_preparing_a_job() {
+        let manager = DataRuntimes::default();
+        let mut runtime = runtime();
+        set_route(&mut runtime, "one");
+        let first = runtime.plan_source("item");
+        let SourcePlan::Request { path, .. } = &first else {
+            panic!("첫 저장소 경로 계획")
+        };
+        assert_eq!(path, "/records/one");
+        assert!(set_plan(&manager, &mut runtime, "item", first.clone()));
+
+        let cached_value = json!({"value":"first"});
+        let fetched_at = chrono::Utc::now();
+        let fetched_instant = Instant::now();
+        request_cache_store(
+            &mut runtime,
+            request_cache_key(&first, SourceFormat::Json).unwrap(),
+            CachedRequest {
+                value: cached_value.clone(),
+                fetched_at: fetched_at.clone(),
+                fetched_instant,
+                updated_at: Some("cached update".into()),
+            },
+        );
+        runtime.data.insert("item".into(), cached_value.clone());
+        {
+            let source = runtime.sources.get_mut("item").unwrap();
+            source.last_success_at = Some(fetched_at);
+            source.last_success_instant = Some(fetched_instant);
+            source.status = SourceStatus::Ready {
+                updated_at: "cached update".into(),
+            };
+        }
+
+        set_route(&mut runtime, "two");
+        let (changed, _, job) = replan_source(&manager, &mut runtime, "window", "item");
+        assert!(changed);
+        assert_eq!(
+            job.unwrap().plan,
+            SourcePlan::Request {
+                permission: "api".into(),
+                path: "/records/two".into(),
+                query: BTreeMap::new(),
+            }
+        );
+
+        set_route(&mut runtime, "one");
+        let (changed, _, job) = replan_source(&manager, &mut runtime, "window", "item");
+        assert!(changed);
+        assert!(job.is_none());
+        assert_eq!(runtime.data["item"], cached_value);
+        assert!(matches!(
+            runtime.sources["item"].status,
+            SourceStatus::Ready { .. }
+        ));
+        assert!(!runtime.sources["item"].in_flight);
+    }
 }
 
 /// None은 재연결 snapshot이나 최초 연결이며 전부 다시 읽는다.

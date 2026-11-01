@@ -42,6 +42,7 @@ fn reader_chains_story_selection_to_hn_github_wikipedia_and_openalex() {
         panic!("item 계획")
     };
     assert_eq!(path, "/api/v1/items/123");
+    state.insert("active_tab".into(), json!(1));
     let SourcePlan::Request { path, .. } = app.plan_source_with_data_and_storage(
         "github_repo",
         &state,
@@ -71,6 +72,10 @@ fn reader_chains_story_selection_to_hn_github_wikipedia_and_openalex() {
         "wiki_ko_search",
         "papers",
     ] {
+        state.insert(
+            "active_tab".into(),
+            json!(if source == "github_search" { 1 } else { 2 }),
+        );
         let SourcePlan::Request { query, .. } = app.plan_source_with_data_and_storage(
             source,
             &state,
@@ -114,6 +119,7 @@ fn reader_chains_story_selection_to_hn_github_wikipedia_and_openalex() {
             json!({"query":{"search":[{"title":"러스트 프로그래밍 언어"}]}}),
         ),
     ]);
+    state.insert("active_tab".into(), json!(2));
     let SourcePlan::Request { path, query, .. } = app.plan_source_with_data_and_storage(
         "wiki_en_summary",
         &state,
@@ -134,7 +140,10 @@ fn reader_chains_story_selection_to_hn_github_wikipedia_and_openalex() {
     ) else {
         panic!("한국어 위키 요약 계획")
     };
-    assert_eq!(path, "/api/rest_v1/page/summary/러스트_프로그래밍_언어");
+    assert_eq!(
+        path,
+        "/api/rest_v1/page/summary/러스트_프로그래밍_언어"
+    );
     assert_eq!(query["redirect"], "false");
 }
 
@@ -155,6 +164,10 @@ fn reader_prefers_submitted_query_for_related_sources() {
         ("wiki_ko_search", "srsearch"),
         ("papers", "search"),
     ] {
+        state.insert(
+            "active_tab".into(),
+            json!(if source == "github_search" { 1 } else { 2 }),
+        );
         let SourcePlan::Request { query, .. } = app.plan_source_with_data_and_storage(
             source,
             &state,
@@ -410,4 +423,258 @@ fn reader_limits_roots_and_replies_while_including_depth_four() {
         feed[0]["children"][0]["children"][0]["children"][0]["children"][0]["key"],
         "depth-4"
     );
+}
+
+#[test]
+fn reader_requests_only_the_active_tab_sources() {
+    let (definition, app) = reader();
+    let story =
+        json!({"objectID":"123","title":"Rust tools","url":"https://github.com/acme/rust-tools"});
+    let mut data = BTreeMap::from([("stories".into(), json!({"hits":[story]}))]);
+    let tab_sources = [
+        "github_repo",
+        "github_search",
+        "wiki_en_search",
+        "wiki_ko_search",
+        "papers",
+        "wiki_en_summary",
+        "wiki_ko_summary",
+    ];
+    let plan = |name: &str, tab: i64, data: &BTreeMap<String, serde_json::Value>| {
+        let mut state = definition.state.clone();
+        state.insert("active_tab".into(), json!(tab));
+        app.plan_source_with_data_and_storage(
+            name,
+            &state,
+            data,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        )
+    };
+
+    for name in ["stories", "item"] {
+        assert!(
+            matches!(plan(name, 0, &data), SourcePlan::Request { .. }),
+            "{name}"
+        );
+    }
+    for name in tab_sources {
+        assert_eq!(plan(name, 0, &data), SourcePlan::Idle, "tab 0: {name}");
+    }
+
+    for name in ["github_repo", "github_search"] {
+        assert!(
+            matches!(plan(name, 1, &data), SourcePlan::Request { .. }),
+            "{name}: {:?}",
+            plan(name, 1, &data)
+        );
+    }
+    for name in [
+        "wiki_en_search",
+        "wiki_ko_search",
+        "papers",
+        "wiki_en_summary",
+        "wiki_ko_summary",
+    ] {
+        assert_eq!(plan(name, 1, &data), SourcePlan::Idle, "tab 1: {name}");
+    }
+
+    data.insert(
+        "wiki_en_search".into(),
+        json!({"query":{"search":[{"title":"Rust"}]}}),
+    );
+    data.insert(
+        "wiki_ko_search".into(),
+        json!({"query":{"search":[{"title":"러스트"}]}}),
+    );
+    for name in ["wiki_en_search", "wiki_ko_search", "papers"] {
+        assert!(
+            matches!(plan(name, 2, &data), SourcePlan::Request { .. }),
+            "{name}"
+        );
+    }
+    for name in ["wiki_en_summary", "wiki_ko_summary"] {
+        assert!(
+            matches!(plan(name, 2, &data), SourcePlan::Request { .. }),
+            "{name}"
+        );
+    }
+    for name in ["github_repo", "github_search"] {
+        assert_eq!(plan(name, 2, &data), SourcePlan::Idle, "tab 2: {name}");
+    }
+}
+
+#[test]
+fn reader_metrics_remain_ready_when_optional_sources_fail() {
+    let (definition, app) = reader();
+    let data = BTreeMap::from([(
+        "stories".into(),
+        json!({"hits":[{"objectID":"123","title":"Rust","url":"https://github.com/acme/rust-tools","points":10}]}),
+    )]);
+    let statuses = BTreeMap::from([
+        (
+            "github_search".into(),
+            SourceStatus::Failed {
+                message: "GitHub 제한".into(),
+                has_value: false,
+            },
+        ),
+        (
+            "papers".into(),
+            SourceStatus::Failed {
+                message: "논문 검색 실패".into(),
+                has_value: false,
+            },
+        ),
+    ]);
+    let empty = BTreeMap::new();
+    let values = app.evaluate_with_data_meta(
+        &definition.state,
+        &data,
+        &empty,
+        &empty,
+        &empty,
+        &statuses,
+        None,
+    );
+    let BindingValue::Ready { value: metrics } = &values["/ui/children/1/items"] else {
+        panic!("지표 식 결과");
+    };
+    assert_eq!(metrics[2]["subtext"], json!("acme/rust-tools"));
+    assert_eq!(metrics[3]["subtext"], json!("Rust"));
+}
+
+#[test]
+fn reader_tab_details_fall_back_to_search_results_when_detail_sources_fail() {
+    let (definition, app) = reader();
+    let data = BTreeMap::from([
+        (
+            "github_search".into(),
+            json!({"items":[{"id":10,"full_name":"acme/rust-tools","language":"Rust","stargazers_count":100,"forks_count":8}]}),
+        ),
+        (
+            "wiki_en_search".into(),
+            json!({"query":{"search":[{"title":"Rust","snippet":"<span>Programming</span> language"}]}}),
+        ),
+        (
+            "wiki_ko_search".into(),
+            json!({"query":{"search":[{"title":"러스트","snippet":"<b>프로그래밍</b> 언어"}]}}),
+        ),
+    ]);
+    let statuses = BTreeMap::from([
+        (
+            "github_repo".into(),
+            SourceStatus::Failed {
+                message: "저장소 404".into(),
+                has_value: false,
+            },
+        ),
+        (
+            "wiki_en_summary".into(),
+            SourceStatus::Failed {
+                message: "영어 요약 실패".into(),
+                has_value: false,
+            },
+        ),
+        (
+            "wiki_ko_summary".into(),
+            SourceStatus::Failed {
+                message: "한국어 요약 실패".into(),
+                has_value: false,
+            },
+        ),
+    ]);
+    let empty = BTreeMap::new();
+    let values = app.evaluate_with_data_meta(
+        &definition.state,
+        &data,
+        &empty,
+        &empty,
+        &empty,
+        &statuses,
+        None,
+    );
+
+    for (pointer, expected) in [
+        (
+            "/ui/children/2/children/1/tabs/1/child/children/0/child/rows",
+            "acme/rust-tools",
+        ),
+        (
+            "/ui/children/2/children/1/tabs/2/child/children/1/child/fields/1/value",
+            "Programming language",
+        ),
+        (
+            "/ui/children/2/children/1/tabs/2/child/children/1/child/fields/2/value",
+            "프로그래밍 언어",
+        ),
+    ] {
+        let BindingValue::Ready { value } = &values[pointer] else {
+            panic!("검색 결과 폴백 바인딩: {pointer}: {:?}", values[pointer]);
+        };
+        assert!(value.to_string().contains(expected), "{pointer}: {value}");
+    }
+}
+
+#[test]
+fn reader_empty_tab_properties_hide_null_values_and_empty_description() {
+    let (definition, app) = reader();
+    let empty_data = BTreeMap::from([
+        (
+            "stories".into(),
+            json!({"hits":[{"objectID":"123","title":"Rust"}]}),
+        ),
+        ("item".into(), json!({"children":[]})),
+        ("github_search".into(), json!({"items":[]})),
+        ("wiki_en_search".into(), json!({"query":{"search":[]}})),
+        ("wiki_ko_search".into(), json!({"query":{"search":[]}})),
+        ("papers".into(), json!({"results":[]})),
+    ]);
+    let empty = BTreeMap::new();
+    let statuses = BTreeMap::new();
+    let values = app.evaluate_with_data_meta(
+        &definition.state,
+        &empty_data,
+        &empty,
+        &empty,
+        &empty,
+        &statuses,
+        None,
+    );
+
+    for pointer in [
+        "/ui/children/2/children/1/tabs/1/child/children/1/child/fields/3/value",
+        "/ui/children/2/children/1/tabs/1/child/children/1/child/fields/4/value",
+        "/ui/children/2/children/1/tabs/1/child/children/1/child/fields/6/value",
+        "/ui/children/2/children/1/tabs/2/child/children/1/child/fields/0/value",
+        "/ui/children/2/children/1/tabs/2/child/children/1/child/fields/1/value",
+        "/ui/children/2/children/1/tabs/2/child/children/1/child/fields/2/value",
+    ] {
+        let BindingValue::Ready { value } = &values[pointer] else {
+            panic!("빈 상세 필드 바인딩: {pointer}: {:?}", values[pointer]);
+        };
+        assert_eq!(value, &serde_json::Value::Null, "{pointer}");
+    }
+
+    let mut described = empty_data;
+    described.insert(
+        "wiki_en_summary".into(),
+        json!({"title":"History of YouTube","description":"","extract":"A short history."}),
+    );
+    let described_values = app.evaluate_with_data_meta(
+        &definition.state,
+        &described,
+        &empty,
+        &empty,
+        &empty,
+        &statuses,
+        None,
+    );
+    let BindingValue::Ready { value } =
+        &described_values["/ui/children/2/children/1/tabs/2/child/children/1/child/fields/1/value"]
+    else {
+        panic!("영어 위키 설명 바인딩")
+    };
+    assert_eq!(value.as_str(), Some("History of YouTube\nA short history."));
+    assert!(!value.as_str().unwrap().contains(" · "));
 }

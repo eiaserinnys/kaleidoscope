@@ -198,7 +198,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
         ("weather", 1),
         ("market", 1),
         ("earth", 1),
-        ("reader", 1),
+        ("reader", 2),
     ] {
         assert!(apps
             .iter()

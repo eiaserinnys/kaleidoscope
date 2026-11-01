@@ -54,10 +54,25 @@ struct Runtime {
     state: BTreeMap<String, Value>,
     sources: BTreeMap<String, Source>,
     data: BTreeMap<String, Value>,
+    request_cache: Vec<(RequestCacheKey, CachedRequest)>,
     storage: BTreeMap<String, storage::Slot>,
     storage_meta: storage::MetaSlot,
     attached: usize,
     last: DataView,
+}
+#[derive(Clone, PartialEq, Eq)]
+struct RequestCacheKey {
+    permission: String,
+    path: String,
+    query: BTreeMap<String, String>,
+    format: SourceFormat,
+}
+#[derive(Clone)]
+struct CachedRequest {
+    value: Value,
+    fetched_at: chrono::DateTime<chrono::Utc>,
+    fetched_instant: Instant,
+    updated_at: Option<String>,
 }
 struct Source {
     plan: SourcePlan,
@@ -113,6 +128,7 @@ impl Runtime {
             state,
             sources,
             data: BTreeMap::new(),
+            request_cache: Vec::new(),
             storage,
             storage_meta,
             attached: 0,
@@ -273,25 +289,112 @@ fn source_format(source: &SourceDecl) -> SourceFormat {
     }
 }
 
+fn request_cache_key(plan: &SourcePlan, format: SourceFormat) -> Option<RequestCacheKey> {
+    let SourcePlan::Request {
+        permission,
+        path,
+        query,
+    } = plan
+    else {
+        return None;
+    };
+    Some(RequestCacheKey {
+        permission: permission.clone(),
+        path: path.clone(),
+        query: query.clone(),
+        format,
+    })
+}
+
+fn request_cache_get(runtime: &Runtime, key: &RequestCacheKey) -> Option<CachedRequest> {
+    runtime
+        .request_cache
+        .iter()
+        .find(|(cached_key, _)| cached_key == key)
+        .map(|(_, cached)| cached.clone())
+}
+
+fn request_cache_store(runtime: &mut Runtime, key: RequestCacheKey, cached: CachedRequest) {
+    if let Some((_, existing)) = runtime
+        .request_cache
+        .iter_mut()
+        .find(|(cached_key, _)| cached_key == &key)
+    {
+        *existing = cached;
+        return;
+    }
+    runtime.request_cache.push((key, cached));
+    if runtime.request_cache.len() > 128 {
+        if let Some(oldest) = runtime
+            .request_cache
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, (_, cached))| cached.fetched_instant)
+            .map(|(index, _)| index)
+        {
+            runtime.request_cache.remove(oldest);
+        }
+    }
+}
+
+fn restored_ready(runtime: &Runtime, name: &str) -> bool {
+    runtime.data.contains_key(name)
+        && matches!(
+            runtime.sources.get(name).map(|source| &source.status),
+            Some(SourceStatus::Ready { .. })
+        )
+}
+
+fn should_prepare_after_plan(
+    runtime: &Runtime,
+    name: &str,
+    changed: bool,
+    fetch_missing: bool,
+) -> bool {
+    (changed || (fetch_missing && !runtime.data.contains_key(name)))
+        && !runtime.sources[name].in_flight
+        && !restored_ready(runtime, name)
+}
+
 fn set_plan(manager: &DataRuntimes, runtime: &mut Runtime, name: &str, plan: SourcePlan) -> bool {
-    let source = runtime.sources.get_mut(name).unwrap();
-    if source.plan == plan {
+    if runtime.sources[name].plan == plan {
         return false;
     }
+    let format = source_format(&runtime.definition.sources[name]);
+    let ttl = runtime.definition.sources[name]
+        .refresh_secs()
+        .map(|seconds| Duration::from_secs(seconds.into()))
+        .unwrap_or(Duration::from_secs(300));
+    let cache_hit = request_cache_key(&plan, format)
+        .and_then(|key| request_cache_get(runtime, &key))
+        .filter(|cached| Instant::now().saturating_duration_since(cached.fetched_instant) < ttl);
+    let source = runtime.sources.get_mut(name).unwrap();
     source.generation = manager.next_generation.fetch_add(1, Ordering::SeqCst) + 1;
     source.in_flight = false;
     source.last_fetched = None;
-    source.last_success_at = None;
-    source.last_success_instant = None;
     source.retrying_after_failure = false;
-    runtime.data.remove(name);
-    source.status = match &plan {
-        SourcePlan::Invalid(message) => SourceStatus::Failed {
-            message: message.clone(),
-            has_value: runtime.data.contains_key(name),
-        },
-        _ => SourceStatus::Idle {},
-    };
+    if let Some(cached) = cache_hit {
+        runtime.data.insert(name.to_owned(), cached.value);
+        source.last_fetched = Some(cached.fetched_instant);
+        source.last_success_at = Some(cached.fetched_at);
+        source.last_success_instant = Some(cached.fetched_instant);
+        source.status = SourceStatus::Ready {
+            updated_at: cached
+                .updated_at
+                .unwrap_or_else(crate::state_commands::timestamp),
+        };
+    } else {
+        runtime.data.remove(name);
+        source.last_success_at = None;
+        source.last_success_instant = None;
+        source.status = match &plan {
+            SourcePlan::Invalid(message) => SourceStatus::Failed {
+                message: message.clone(),
+                has_value: false,
+            },
+            _ => SourceStatus::Idle {},
+        };
+    }
     source.plan = plan;
     true
 }
@@ -341,6 +444,10 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                     }) {
                         return;
                     }
+                    let cache_key = request_cache_key(&job.plan, job.format);
+                    let fallback_cache = cache_key
+                        .as_ref()
+                        .and_then(|key| request_cache_get(runtime, key));
                     let Some(source) = runtime.sources.get_mut(&job.name) else {
                         return;
                     };
@@ -350,18 +457,40 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                     source.in_flight = false;
                     match result {
                         Ok(value) => {
-                            runtime.data.insert(job.name.clone(), value);
-                            source.last_success_at = Some(chrono::Utc::now());
-                            source.last_success_instant = Some(Instant::now());
+                            let fetched_at = chrono::Utc::now();
+                            let fetched_instant = Instant::now();
+                            let updated_at = crate::state_commands::timestamp();
+                            runtime.data.insert(job.name.clone(), value.clone());
+                            source.last_success_at = Some(fetched_at);
+                            source.last_success_instant = Some(fetched_instant);
                             source.retrying_after_failure = false;
                             source.status = SourceStatus::Ready {
-                                updated_at: crate::state_commands::timestamp(),
+                                updated_at: updated_at.clone(),
                             };
+                            if let Some(key) = cache_key.clone() {
+                                request_cache_store(
+                                    runtime,
+                                    key,
+                                    CachedRequest {
+                                        value,
+                                        fetched_at,
+                                        fetched_instant,
+                                        updated_at: Some(updated_at),
+                                    },
+                                );
+                            }
                         }
                         Err(RequestError::Login(permission)) => {
                             source.status = SourceStatus::LoginRequired { permission }
                         }
                         Err(RequestError::Core(err)) => {
+                            if !runtime.data.contains_key(&job.name) {
+                                if let Some(cached) = fallback_cache.clone() {
+                                    runtime.data.insert(job.name.clone(), cached.value);
+                                    source.last_success_at = Some(cached.fetched_at);
+                                    source.last_success_instant = Some(cached.fetched_instant);
+                                }
+                            }
                             source.status = SourceStatus::Failed {
                                 message: err.message,
                                 has_value: runtime.data.contains_key(&job.name),
@@ -375,7 +504,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                         let plan = runtime.plan_source(&name);
                         let changed = set_plan(&inner.data_runtimes, runtime, &name, plan);
                         runtime.apply_source_storage_status(&name);
-                        if changed && !runtime.sources[&name].in_flight {
+                        if should_prepare_after_plan(runtime, &name, changed, false) {
                             if let Some(next) =
                                 prepare(&inner.data_runtimes, runtime, &job.window, &name)
                             {
@@ -443,7 +572,7 @@ pub(crate) fn attach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, C
             let plan = runtime.plan_source(&name);
             let changed = set_plan(&inner.data_runtimes, runtime, &name, plan);
             runtime.apply_source_storage_status(&name);
-            if (changed || !runtime.data.contains_key(&name)) && !runtime.sources[&name].in_flight {
+            if should_prepare_after_plan(runtime, &name, changed, true) {
                 if let Some(job) = prepare(&inner.data_runtimes, runtime, window_id, &name) {
                     pending.push(job);
                 }
@@ -582,7 +711,7 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                 let plan = runtime.plan_source(&name);
                 let changed = set_plan(&inner.data_runtimes, runtime, &name, plan);
                 runtime.apply_source_storage_status(&name);
-                if changed {
+                if should_prepare_after_plan(runtime, &name, changed, false) {
                     if let Some(job) = prepare(&inner.data_runtimes, runtime, id, &name) {
                         pending.push(job);
                     }
@@ -627,7 +756,23 @@ pub(crate) fn grant_changed(inner: &Arc<Inner>, window: &str, permission: &str) 
 
 pub(crate) fn connections_changed(inner: &Arc<Inner>, changed: &[String]) {
     let retries: Vec<_> = {
-        let windows = inner.data_runtimes.windows.lock().unwrap();
+        let mut windows = inner.data_runtimes.windows.lock().unwrap();
+        for runtime in windows.values_mut() {
+            let permissions: std::collections::BTreeSet<_> = runtime
+                .definition
+                .permissions
+                .iter()
+                .filter_map(|permission| match permission {
+                    kaleidoscope_contract::PermissionDecl::Connection {
+                        id, connection, ..
+                    } if changed.contains(connection) => Some(id.clone()),
+                    _ => None,
+                })
+                .collect();
+            runtime
+                .request_cache
+                .retain(|(key, _)| !permissions.contains(&key.permission));
+        }
         windows.iter().filter_map(|(id, runtime)| {
             let names: Vec<_> = runtime.sources.iter().filter_map(|(name, source)| {
                 let declaration = &runtime.definition.sources[name];
@@ -643,6 +788,14 @@ pub(crate) fn connections_changed(inner: &Arc<Inner>, changed: &[String]) {
     };
     for (window, names) in retries {
         let _ = refresh(inner, &window, &names, false);
+    }
+}
+
+pub(crate) fn connection_changed(inner: &Inner, permission: &str) {
+    for runtime in inner.data_runtimes.windows.lock().unwrap().values_mut() {
+        runtime
+            .request_cache
+            .retain(|(key, _)| key.permission != permission);
     }
 }
 
@@ -752,6 +905,35 @@ mod freshness_tests {
     use kaleidoscope_contract::validate::parse_app_definition;
     use serde_json::json;
 
+    fn request_plan() -> SourcePlan {
+        SourcePlan::Request {
+            permission: "hn".into(),
+            path: "/api/v1/search".into(),
+            query: BTreeMap::from([("tags".into(), "front_page".into())]),
+        }
+    }
+
+    fn request_runtime() -> Runtime {
+        let definition = parse_app_definition(include_str!("../../../apps/reader.json")).unwrap();
+        Runtime::new(2, definition.clone(), definition.state.clone(), true)
+    }
+
+    fn seed_request_cache(runtime: &mut Runtime, plan: &SourcePlan, value: Value) {
+        let key = request_cache_key(plan, SourceFormat::Json).unwrap();
+        let fetched_at = chrono::Utc::now();
+        let fetched_instant = Instant::now();
+        request_cache_store(
+            runtime,
+            key,
+            CachedRequest {
+                value,
+                fetched_at,
+                fetched_instant,
+                updated_at: Some(crate::state_commands::timestamp()),
+            },
+        );
+    }
+
     #[test]
     fn failure_preserves_success_but_new_plan_clears_it() {
         let definition = parse_app_definition(&json!({
@@ -789,5 +971,55 @@ mod freshness_tests {
         assert!(set_plan(&manager, &mut runtime, "item", next));
         assert!(!runtime.data.contains_key("item"));
         assert!(runtime.source_meta()["item"].updated_at.is_none());
+    }
+
+    #[test]
+    fn request_idle_request_restores_fresh_data_without_preparing_a_job() {
+        let manager = DataRuntimes::default();
+        let mut runtime = request_runtime();
+        let request = request_plan();
+        assert!(set_plan(&manager, &mut runtime, "stories", request.clone()));
+        seed_request_cache(
+            &mut runtime,
+            &request,
+            json!({"hits":[{"objectID":"cached"}]}),
+        );
+        assert!(set_plan(
+            &manager,
+            &mut runtime,
+            "stories",
+            SourcePlan::Idle
+        ));
+        assert!(!runtime.data.contains_key("stories"));
+
+        assert!(set_plan(&manager, &mut runtime, "stories", request));
+        assert_eq!(runtime.data["stories"]["hits"][0]["objectID"], "cached");
+        assert!(matches!(
+            runtime.sources["stories"].status,
+            SourceStatus::Ready { .. }
+        ));
+        assert!(!should_prepare_after_plan(&runtime, "stories", true, true));
+    }
+
+    #[test]
+    fn explicit_refresh_prepares_request_even_when_cache_has_a_value() {
+        let manager = DataRuntimes::default();
+        let mut runtime = request_runtime();
+        let request = request_plan();
+        assert!(set_plan(&manager, &mut runtime, "stories", request.clone()));
+        seed_request_cache(&mut runtime, &request, json!({"cached":true}));
+        runtime
+            .data
+            .insert("stories".into(), json!({"cached":true}));
+        runtime.sources.get_mut("stories").unwrap().status = SourceStatus::Ready {
+            updated_at: crate::state_commands::timestamp(),
+        };
+
+        let job = prepare(&manager, &mut runtime, "window", "stories").unwrap();
+        assert_eq!(job.plan, request);
+        assert!(matches!(
+            runtime.sources["stories"].status,
+            SourceStatus::Loading { has_value: true }
+        ));
     }
 }

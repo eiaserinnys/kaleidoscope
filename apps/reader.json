@@ -84,29 +84,27 @@
           "expr": "$exists($state.query) and $trim($state.query) != '' ? $trim($state.query) : null"
         },
         "hitsPerPage": "30"
-      },
-      "refresh_secs": 120
+      }
     },
     "item": {
       "kind": "request",
       "permission": "hn",
       "path": {
         "expr": "($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $exists($s) ? '/api/v1/items/' & $string($s.objectID) : null)"
-      },
-      "refresh_secs": 120
+      }
     },
     "github_repo": {
       "kind": "request",
       "permission": "github",
       "path": {
-        "expr": "($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $url := $exists($s.url) ? $s.url : ''; $path := $contains($url, 'github.com/') ? $substringAfter($url, 'github.com/') : ''; $path := $replace($replace($path, /[?#].*$/, ''), /\\/+$/, ''); $segments := $split($path, '/'); $owner := $segments[0]; $repo := $exists($segments[1]) ? $replace($segments[1], /\\.git$/, '') : ''; $exists($segments[1]) and $count($segments) >= 2 and $owner != '' and $repo != '' and $not($lowercase($owner) in ['.', '..','orgs','topics','trending','features','about','pricing','sponsors','settings','login','explore','marketplace','gist']) and $not($lowercase($repo) in ['.', '..','orgs','topics','trending','features','about','pricing','sponsors','settings','login','explore','marketplace','gist']) and $not($contains($owner & $repo, /[%\\s]/)) ? '/repos/' & $owner & '/' & $repo : null)"
+        "expr": "$state.active_tab = 1 ? (($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $url := $exists($s.url) ? $s.url : ''; $path := $contains($url, 'github.com/') ? $substringAfter($url, 'github.com/') : ''; $path := $replace($replace($path, /[?#].*$/, ''), /\\/+$/, ''); $segments := $split($path, '/'); $owner := $segments[0]; $repo := $exists($segments[1]) ? $replace($segments[1], /\\.git$/, '') : ''; $exists($segments[1]) and $count($segments) >= 2 and $owner != '' and $repo != '' and $not($lowercase($owner) in ['.', '..','orgs','topics','trending','features','about','pricing','sponsors','settings','login','explore','marketplace','gist']) and $not($lowercase($repo) in ['.', '..','orgs','topics','trending','features','about','pricing','sponsors','settings','login','explore','marketplace','gist']) and $not($contains($owner & $repo, /[%\\s]/)) ? '/repos/' & $owner & '/' & $repo : null)) : null"
       }
     },
     "github_search": {
       "kind": "request",
       "permission": "github",
       "path": {
-        "expr": "$exists(($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $s)) and ($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $query := $trim($state.query); $query != '' ? $query : ($raw := $exists($s.title) ? $replace($replace($s.title, /^(Show|Ask|Tell|Launch)\\s+HN:\\s*/i, ''), /\\s*[\\(\\[—–-].*$/, '') : ''; $words := $filter($split($replace($raw, /[^A-Za-z0-9가-힣+#.\\s-]/, ' '), /\\s+/), function($w) { $length($w) >= 2 and $not($lowercase($w) in ['why','how','what','when','where','who','which','the','and','for','with','from','that','this','into','over','under','about','after','before','between','through','during','without','against','your','our','their','my','his','her','its','we','you','they','are','was','were','is','be','been','being','have','has','had','do','does','did','will','would','can','could','should','may','might','must','using','building','making','switching','leaving','getting','taking','took','just','elected','world','worlds','brainiest','years','year','days','new','old','first','last','best','favourite','favorite','more','most','some','any','all','other','such','only','own','same','than','too','very']) }); $count($words) > 0 ? $join($words[[0..1]], ' ') : $trim($raw))) != '' ? '/search/repositories' : null"
+        "expr": "$state.active_tab = 1 ? ($exists(($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $s)) and ($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $query := $trim($state.query); $query != '' ? $query : ($raw := $exists($s.title) ? $replace($replace($s.title, /^(Show|Ask|Tell|Launch)\\s+HN:\\s*/i, ''), /\\s*[\\(\\[—–-].*$/, '') : ''; $words := $filter($split($replace($raw, /[^A-Za-z0-9가-힣+#.\\s-]/, ' '), /\\s+/), function($w) { $length($w) >= 2 and $not($lowercase($w) in ['why','how','what','when','where','who','which','the','and','for','with','from','that','this','into','over','under','about','after','before','between','through','during','without','against','your','our','their','my','his','her','its','we','you','they','are','was','were','is','be','been','being','have','has','had','do','does','did','will','would','can','could','should','may','might','must','using','building','making','switching','leaving','getting','taking','took','just','elected','world','worlds','brainiest','years','year','days','new','old','first','last','best','favourite','favorite','more','most','some','any','all','other','such','only','own','same','than','too','very']) }); $count($words) > 0 ? $join($words[[0..1]], ' ') : $trim($raw))) != '' ? '/search/repositories' : null) : null"
       },
       "query": {
         "q": {
@@ -114,14 +112,13 @@
         },
         "sort": "stars",
         "per_page": "8"
-      },
-      "refresh_secs": 300
+      }
     },
     "wiki_en_search": {
       "kind": "request",
       "permission": "wiki-en",
       "path": {
-        "expr": "$exists(($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $s)) and ($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $query := $trim($state.query); $query != '' ? $query : ($raw := $exists($s.title) ? $replace($replace($s.title, /^(Show|Ask|Tell|Launch)\\s+HN:\\s*/i, ''), /\\s*[\\(\\[—–-].*$/, '') : ''; $words := $filter($split($replace($raw, /[^A-Za-z0-9가-힣+#.\\s-]/, ' '), /\\s+/), function($w) { $length($w) >= 2 and $not($lowercase($w) in ['why','how','what','when','where','who','which','the','and','for','with','from','that','this','into','over','under','about','after','before','between','through','during','without','against','your','our','their','my','his','her','its','we','you','they','are','was','were','is','be','been','being','have','has','had','do','does','did','will','would','can','could','should','may','might','must','using','building','making','switching','leaving','getting','taking','took','just','elected','world','worlds','brainiest','years','year','days','new','old','first','last','best','favourite','favorite','more','most','some','any','all','other','such','only','own','same','than','too','very']) }); $count($words) > 0 ? $join($words[[0..1]], ' ') : $trim($raw))) != '' ? '/w/api.php' : null"
+        "expr": "$state.active_tab = 2 ? ($exists(($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $s)) and ($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $query := $trim($state.query); $query != '' ? $query : ($raw := $exists($s.title) ? $replace($replace($s.title, /^(Show|Ask|Tell|Launch)\\s+HN:\\s*/i, ''), /\\s*[\\(\\[—–-].*$/, '') : ''; $words := $filter($split($replace($raw, /[^A-Za-z0-9가-힣+#.\\s-]/, ' '), /\\s+/), function($w) { $length($w) >= 2 and $not($lowercase($w) in ['why','how','what','when','where','who','which','the','and','for','with','from','that','this','into','over','under','about','after','before','between','through','during','without','against','your','our','their','my','his','her','its','we','you','they','are','was','were','is','be','been','being','have','has','had','do','does','did','will','would','can','could','should','may','might','must','using','building','making','switching','leaving','getting','taking','took','just','elected','world','worlds','brainiest','years','year','days','new','old','first','last','best','favourite','favorite','more','most','some','any','all','other','such','only','own','same','than','too','very']) }); $count($words) > 0 ? $join($words[[0..1]], ' ') : $trim($raw))) != '' ? '/w/api.php' : null) : null"
       },
       "query": {
         "action": "query",
@@ -131,14 +128,13 @@
         },
         "srlimit": "5",
         "format": "json"
-      },
-      "refresh_secs": 600
+      }
     },
     "wiki_ko_search": {
       "kind": "request",
       "permission": "wiki-ko",
       "path": {
-        "expr": "$exists(($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $s)) and ($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $query := $trim($state.query); $query != '' ? $query : ($raw := $exists($s.title) ? $replace($replace($s.title, /^(Show|Ask|Tell|Launch)\\s+HN:\\s*/i, ''), /\\s*[\\(\\[—–-].*$/, '') : ''; $words := $filter($split($replace($raw, /[^A-Za-z0-9가-힣+#.\\s-]/, ' '), /\\s+/), function($w) { $length($w) >= 2 and $not($lowercase($w) in ['why','how','what','when','where','who','which','the','and','for','with','from','that','this','into','over','under','about','after','before','between','through','during','without','against','your','our','their','my','his','her','its','we','you','they','are','was','were','is','be','been','being','have','has','had','do','does','did','will','would','can','could','should','may','might','must','using','building','making','switching','leaving','getting','taking','took','just','elected','world','worlds','brainiest','years','year','days','new','old','first','last','best','favourite','favorite','more','most','some','any','all','other','such','only','own','same','than','too','very']) }); $count($words) > 0 ? $join($words[[0..1]], ' ') : $trim($raw))) != '' ? '/w/api.php' : null"
+        "expr": "$state.active_tab = 2 ? ($exists(($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $s)) and ($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $query := $trim($state.query); $query != '' ? $query : ($raw := $exists($s.title) ? $replace($replace($s.title, /^(Show|Ask|Tell|Launch)\\s+HN:\\s*/i, ''), /\\s*[\\(\\[—–-].*$/, '') : ''; $words := $filter($split($replace($raw, /[^A-Za-z0-9가-힣+#.\\s-]/, ' '), /\\s+/), function($w) { $length($w) >= 2 and $not($lowercase($w) in ['why','how','what','when','where','who','which','the','and','for','with','from','that','this','into','over','under','about','after','before','between','through','during','without','against','your','our','their','my','his','her','its','we','you','they','are','was','were','is','be','been','being','have','has','had','do','does','did','will','would','can','could','should','may','might','must','using','building','making','switching','leaving','getting','taking','took','just','elected','world','worlds','brainiest','years','year','days','new','old','first','last','best','favourite','favorite','more','most','some','any','all','other','such','only','own','same','than','too','very']) }); $count($words) > 0 ? $join($words[[0..1]], ' ') : $trim($raw))) != '' ? '/w/api.php' : null) : null"
       },
       "query": {
         "action": "query",
@@ -148,14 +144,13 @@
         },
         "srlimit": "5",
         "format": "json"
-      },
-      "refresh_secs": 600
+      }
     },
     "papers": {
       "kind": "request",
       "permission": "openalex",
       "path": {
-        "expr": "$exists(($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $s)) and ($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $query := $trim($state.query); $query != '' ? $query : ($raw := $exists($s.title) ? $replace($replace($s.title, /^(Show|Ask|Tell|Launch)\\s+HN:\\s*/i, ''), /\\s*[\\(\\[—–-].*$/, '') : ''; $words := $filter($split($replace($raw, /[^A-Za-z0-9가-힣+#.\\s-]/, ' '), /\\s+/), function($w) { $length($w) >= 2 and $not($lowercase($w) in ['why','how','what','when','where','who','which','the','and','for','with','from','that','this','into','over','under','about','after','before','between','through','during','without','against','your','our','their','my','his','her','its','we','you','they','are','was','were','is','be','been','being','have','has','had','do','does','did','will','would','can','could','should','may','might','must','using','building','making','switching','leaving','getting','taking','took','just','elected','world','worlds','brainiest','years','year','days','new','old','first','last','best','favourite','favorite','more','most','some','any','all','other','such','only','own','same','than','too','very']) }); $count($words) > 0 ? $join($words[[0..1]], ' ') : $trim($raw))) != '' ? '/works' : null"
+        "expr": "$state.active_tab = 2 ? ($exists(($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $s)) and ($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $query := $trim($state.query); $query != '' ? $query : ($raw := $exists($s.title) ? $replace($replace($s.title, /^(Show|Ask|Tell|Launch)\\s+HN:\\s*/i, ''), /\\s*[\\(\\[—–-].*$/, '') : ''; $words := $filter($split($replace($raw, /[^A-Za-z0-9가-힣+#.\\s-]/, ' '), /\\s+/), function($w) { $length($w) >= 2 and $not($lowercase($w) in ['why','how','what','when','where','who','which','the','and','for','with','from','that','this','into','over','under','about','after','before','between','through','during','without','against','your','our','their','my','his','her','its','we','you','they','are','was','were','is','be','been','being','have','has','had','do','does','did','will','would','can','could','should','may','might','must','using','building','making','switching','leaving','getting','taking','took','just','elected','world','worlds','brainiest','years','year','days','new','old','first','last','best','favourite','favorite','more','most','some','any','all','other','such','only','own','same','than','too','very']) }); $count($words) > 0 ? $join($words[[0..1]], ' ') : $trim($raw))) != '' ? '/works' : null) : null"
       },
       "query": {
         "search": {
@@ -163,30 +158,27 @@
         },
         "per-page": "8",
         "select": "id,doi,title,publication_year,cited_by_count,open_access,primary_location,authorships,type"
-      },
-      "refresh_secs": 900
+      }
     },
     "wiki_en_summary": {
       "kind": "request",
       "permission": "wiki-en",
       "path": {
-        "expr": "($search := $data.wiki_en_search.query.search; $tech := $search[$contains(title, /language|software|computing|computer|program|system|protocol|algorithm|network|web|data|library|framework|kernel|browser|security|science/i) or $contains(snippet, /language|software|computing|computer|program|system|protocol|algorithm|network|web|data|library|framework|kernel|browser|security|science/i)]; $first := $exists($tech) ? $tech[0].title : $search[0].title; $slug := $exists($first) ? $replace($replace($replace($replace($replace($trim($first), '/', ''), '?', ''), '#', ''), '%', ''), /\\\\/g, '') : ''; $slug := $replace($slug, /\\s+/, '_'); $slug != '' and $slug != '.' and $slug != '..' ? '/api/rest_v1/page/summary/' & $slug : null)"
+        "expr": "$state.active_tab = 2 ? (($search := $data.wiki_en_search.query.search; $tech := $search[$contains(title, /language|software|computing|computer|program|system|protocol|algorithm|network|web|data|library|framework|kernel|browser|security|science/i) or $contains(snippet, /language|software|computing|computer|program|system|protocol|algorithm|network|web|data|library|framework|kernel|browser|security|science/i)]; $first := $exists($tech) ? $tech[0].title : $search[0].title; $slug := $exists($first) ? $replace($replace($replace($replace($replace($trim($first), '/', ''), '?', ''), '#', ''), '%', ''), /\\\\/g, '') : ''; $slug := $replace($slug, /\\s+/, '_'); $slug != '' and $slug != '.' and $slug != '..' ? '/api/rest_v1/page/summary/' & $slug : null)) : null"
       },
       "query": {
         "redirect": "false"
-      },
-      "refresh_secs": 900
+      }
     },
     "wiki_ko_summary": {
       "kind": "request",
       "permission": "wiki-ko",
       "path": {
-        "expr": "($first := $data.wiki_ko_search.query.search[0].title; $slug := $exists($first) ? $replace($replace($replace($replace($replace($trim($first), '/', ''), '?', ''), '#', ''), '%', ''), /\\\\/g, '') : ''; $slug := $replace($slug, /\\s+/, '_'); $slug != '' and $slug != '.' and $slug != '..' ? '/api/rest_v1/page/summary/' & $slug : null)"
+        "expr": "$state.active_tab = 2 ? (($first := $data.wiki_ko_search.query.search[0].title; $slug := $exists($first) ? $replace($replace($replace($replace($replace($trim($first), '/', ''), '?', ''), '#', ''), '%', ''), /\\\\/g, '') : ''; $slug := $replace($slug, /\\s+/, '_'); $slug != '' and $slug != '.' and $slug != '..' ? '/api/rest_v1/page/summary/' & $slug : null)) : null"
       },
       "query": {
         "redirect": "false"
-      },
-      "refresh_secs": 900
+      }
     }
   },
   "ui": {
@@ -311,7 +303,7 @@
         "type": "metrics",
         "columns": 4,
         "items": {
-          "expr": "($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $repo := $exists($data.github_repo.full_name) ? $data.github_repo : $data.github_search.items[0]; $hasRepo := $exists($repo.full_name); $papers := $data.papers.results; $peak := $count($papers) > 0 ? $max($papers.cited_by_count) : 0; $wikiTitle := $exists($data.wiki_en_summary.title) ? $data.wiki_en_summary.title : ($exists($data.wiki_ko_summary.title) ? $data.wiki_ko_summary.title : null); [{'key':'story','label':'선택한 이야기','value':$exists($s.points) ? $s.points : '—','unit':$exists($s.points) ? '점' : null,'badge':$exists($s.url) and $s.url != '' ? $replace($replace($s.url, /^https?:\\/\\/(www\\.)?/, ''), /\\/.*$/, '') : 'HN 토론','subtext':($exists($s.author) ? $s.author : '익명') & ' · 댓글 ' & $string($exists($s.num_comments) ? $s.num_comments : 0) & '개'},{'key':'thread','label':'토론','value':$count($data.item.children),'unit':'개','badge':'최상위 댓글','subtext':'전체 댓글 ' & $string($exists($s.num_comments) ? $s.num_comments : $count($data.item.children)) & '개'},{'key':'repo','label':'오픈소스 저장소','value':$hasRepo ? $repo.stargazers_count : '—','unit':$hasRepo ? '스타' : null,'badge':$hasRepo ? ($exists($repo.language) and $repo.language != null ? $repo.language : ($exists($data.github_repo.full_name) ? '본문 링크' : '연관 저장소')) : null,'subtext':$hasRepo ? $repo.full_name & ' · 포크 ' & $string($exists($repo.forks_count) ? $repo.forks_count : 0) : '관련 저장소 없음'},{'key':'knowledge','label':'백과 · 학술','value':$exists($wikiTitle) and $wikiTitle != null ? $wikiTitle : '—','unit':null,'badge':$exists($wikiTitle) and $wikiTitle != null ? 'Wikipedia' : null,'subtext':'논문 ' & $string($count($papers)) & '편 · 최고 인용 ' & $string($peak)}])"
+          "expr": "($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0];\n$directUrl := $exists($s.url) ? $s.url : '';\n$directPath := $contains($directUrl, 'github.com/') ? $substringAfter($directUrl, 'github.com/') : '';\n$directPath := $replace($replace($directPath, /[?#].*$/, ''), /\\/+$/, '');\n$directSegments := $split($directPath, '/');\n$directOwner := $directSegments[0];\n$directRepoName := $exists($directSegments[1]) ? $replace($directSegments[1], /\\.git$/, '') : '';\n$directRepo := $exists($directSegments[1]) and $count($directSegments) >= 2 and $directOwner != '' and $directRepoName != '' and $not($lowercase($directOwner) in ['.', '..','orgs','topics','trending','features','about','pricing','sponsors','settings','login','explore','marketplace','gist']) and $not($lowercase($directRepoName) in ['.', '..','orgs','topics','trending','features','about','pricing','sponsors','settings','login','explore','marketplace','gist']) and $not($contains($directOwner & $directRepoName, /[%\\s]/)) ? $directOwner & '/' & $directRepoName : null;\n$item := $lookup($data, 'item'); $githubRepo := $lookup($data, 'github_repo'); $githubSearch := $lookup($data, 'github_search');\n$repo := $exists($githubRepo.full_name) ? $githubRepo : $githubSearch.items[0]; $hasRepo := $exists($repo.full_name);\n$papersData := $lookup($data, 'papers'); $papers := $papersData.results; $peak := $count($papers) > 0 ? $max($papers.cited_by_count) : 0;\n$enSummary := $lookup($data, 'wiki_en_summary'); $koSummary := $lookup($data, 'wiki_ko_summary');\n$enSearch := $lookup($data, 'wiki_en_search'); $koSearch := $lookup($data, 'wiki_ko_search');\n$wikiTitle := $exists($enSummary.title) ? $enSummary.title : ($exists($koSummary.title) ? $koSummary.title : ($exists($enSearch.query.search[0].title) ? $enSearch.query.search[0].title : $koSearch.query.search[0].title));\n$raw := $exists($s.title) ? $replace($replace($s.title, /^(Show|Ask|Tell|Launch)\\s+HN:\\s*/i, ''), /\\s*[\\(\\[—–-].*$/, '') : '';\n$words := $filter($split($replace($raw, /[^A-Za-z0-9가-힣+#.\\s-]/, ' '), /\\s+/), function($w) { $length($w) >= 2 and $not($lowercase($w) in ['why','how','what','when','where','who','which','the','and','for','with','from','that','this','into','over','under','about','after','before','between','through','during','without','against','your','our','their','my','his','her','its','we','you','they','are','was','were','is','be','been','being','have','has','had','do','does','did','will','would','can','could','should','may','might','must','using','building','making','switching','leaving','getting','taking','took','just','elected','world','worlds','brainiest','years','year','days','new','old','first','last','best','favourite','favorite','more','most','some','any','all','other','such','only','own','same','than','too','very']) });\n$q := $trim($state.query) != '' ? $trim($state.query) : ($count($words) > 0 ? $join($words[[0..1]], ' ') : $trim($raw));\n$hasGithubData := $exists($githubRepo) or $exists($githubSearch);\n$hasWikiData := $exists($enSummary) or $exists($koSummary) or $exists($papersData) or $exists($enSearch) or $exists($koSearch);\n$wikiCount := $count($enSearch.query.search) + $count($koSearch.query.search);\n[{'key':'story','label':'선택한 이야기','value':$exists($s.points) ? $s.points : '—','unit':$exists($s.points) ? '점' : null,'badge':$exists($s.url) and $s.url != '' ? $replace($replace($s.url, /^https?:\\/\\/(www\\.)?/, ''), /\\/.*$/, '') : 'HN 토론','subtext':($exists($s.author) ? $s.author : '익명') & ' · 댓글 ' & $string($exists($s.num_comments) ? $s.num_comments : 0) & '개'},\n{'key':'thread','label':'토론','value':$count($item.children),'unit':'개','badge':'최상위 댓글','subtext':'전체 댓글 ' & $string($exists($s.num_comments) ? $s.num_comments : $count($item.children)) & '개'},\n{'key':'repo','label':'오픈소스 저장소','value':$hasRepo ? $repo.stargazers_count : '—','unit':$hasRepo ? '스타' : null,'badge':$hasRepo ? ($exists($repo.language) and $repo.language != null ? $repo.language : ($exists($githubRepo.full_name) ? '본문 링크' : '연관 저장소')) : null,'subtext':$hasRepo ? $repo.full_name & ' · 포크 ' & $string($exists($repo.forks_count) ? $repo.forks_count : 0) : ($hasGithubData ? '관련 저장소 없음' : $directRepo)},\n{'key':'knowledge','label':'백과 · 학술','value':$hasWikiData and ($exists($wikiTitle) or $count($papers) > 0) ? ($exists($wikiTitle) ? $wikiTitle : $string($count($papers)) & '편') : '—','unit':null,'badge':$exists($wikiTitle) ? 'Wikipedia' : null,'subtext':$hasWikiData ? '논문 ' & $string($count($papers)) & '편 · 최고 인용 ' & $string($peak) : ($q != '' ? $q : null)}])"
         }
       },
       {
@@ -409,12 +401,12 @@
                       "type": "section",
                       "title": "연관 오픈소스 저장소",
                       "meta": {
-                        "expr": "($repos := $exists($data.github_repo.full_name) ? $append([$data.github_repo], $data.github_search.items[full_name != $data.github_repo.full_name]) : $append([], $data.github_search.items); $string($count($repos)) & '건')"
+                        "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $string($count($repos)) & '건')"
                       },
                       "child": {
                         "type": "table",
                         "rows": {
-                          "expr": "($repos := $exists($data.github_repo.full_name) ? $append([$data.github_repo], $data.github_search.items[full_name != $data.github_repo.full_name]) : $append([], $data.github_search.items); $append([], $map($repos, function($r,$i) { {'key':$i = 0 and $state.selected_repo = 'top' ? 'top' : $string($r.id),'repo_id':$string($r.id),'name':$r.full_name,'language':$r.language,'stars':$r.stargazers_count} })))"
+                          "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $append([], $map($repos, function($r,$i) { {'key':$i = 0 and $state.selected_repo = 'top' ? 'top' : $string($r.id),'repo_id':$string($r.id),'name':$r.full_name,'language':$r.language,'stars':$r.stargazers_count} })))"
                         },
                         "columns": [
                           {
@@ -455,43 +447,43 @@
                           {
                             "label": "저장소",
                             "value": {
-                              "expr": "($repos := $exists($data.github_repo.full_name) ? $append([$data.github_repo], $data.github_search.items[full_name != $data.github_repo.full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $r.full_name)"
+                              "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $r.full_name)"
                             }
                           },
                           {
                             "label": "연결",
                             "value": {
-                              "expr": "($repos := $exists($data.github_repo.full_name) ? $append([$data.github_repo], $data.github_search.items[full_name != $data.github_repo.full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $exists($r.full_name) ? ($exists($data.github_repo.full_name) and $r.full_name = $data.github_repo.full_name ? '본문 직접 링크' : '주제어 검색') : '')"
+                              "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $exists($r.full_name) ? ($exists($lookup($data, 'github_repo').full_name) and $r.full_name = $lookup($data, 'github_repo').full_name ? '본문 직접 링크' : '주제어 검색') : '')"
                             }
                           },
                           {
                             "label": "설명",
                             "value": {
-                              "expr": "($repos := $exists($data.github_repo.full_name) ? $append([$data.github_repo], $data.github_search.items[full_name != $data.github_repo.full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $r.description)"
+                              "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $r.description)"
                             }
                           },
                           {
                             "label": "언어 · 라이선스",
                             "value": {
-                              "expr": "($repos := $exists($data.github_repo.full_name) ? $append([$data.github_repo], $data.github_search.items[full_name != $data.github_repo.full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; ($exists($r.language) and $r.language != null ? $r.language : '언어 미상') & ($exists($r.license.spdx_id) and $r.license.spdx_id != null ? ' · ' & $r.license.spdx_id : ''))"
+                              "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $exists($r.full_name) and $r.full_name != '' ? (($exists($r.language) and $r.language != null and $r.language != '' ? $r.language : '언어 미상') & ($exists($r.license.spdx_id) and $r.license.spdx_id != null and $r.license.spdx_id != '' ? ' · ' & $r.license.spdx_id : '')) : null)"
                             }
                           },
                           {
                             "label": "스타 · 포크 · 이슈",
                             "value": {
-                              "expr": "($repos := $exists($data.github_repo.full_name) ? $append([$data.github_repo], $data.github_search.items[full_name != $data.github_repo.full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $string($r.stargazers_count) & ' · ' & $string($r.forks_count) & ' · ' & $string($r.open_issues_count))"
+                              "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $exists($r.full_name) and $r.full_name != '' ? ($string($exists($r.stargazers_count) ? $r.stargazers_count : 0) & ' · ' & $string($exists($r.forks_count) ? $r.forks_count : 0) & ' · ' & $string($exists($r.open_issues_count) ? $r.open_issues_count : 0)) : null)"
                             }
                           },
                           {
                             "label": "토픽",
                             "value": {
-                              "expr": "($repos := $exists($data.github_repo.full_name) ? $append([$data.github_repo], $data.github_search.items[full_name != $data.github_repo.full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $join($r.topics, ' · '))"
+                              "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $join($r.topics, ' · '))"
                             }
                           },
                           {
                             "label": "최근 푸시",
                             "value": {
-                              "expr": "($repos := $exists($data.github_repo.full_name) ? $append([$data.github_repo], $data.github_search.items[full_name != $data.github_repo.full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $exists($r.pushed_at) and $r.pushed_at != null ? $replace($substring($r.pushed_at, 0, 16), 'T', ' ') : '—')"
+                              "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $exists($r.full_name) and $r.full_name != '' ? ($exists($r.pushed_at) and $r.pushed_at != null and $r.pushed_at != '' ? $replace($substring($r.pushed_at, 0, 16), 'T', ' ') : '—') : null)"
                             }
                           }
                         ]
@@ -563,19 +555,19 @@
                           {
                             "label": "선택한 논문",
                             "value": {
-                              "expr": "($p := $exists($data.papers.results[$number($state.selected_paper)]) ? $data.papers.results[$number($state.selected_paper)] : $data.papers.results[0]; $authors := $map($p.authorships[[0..1]], function($a){$a.author.display_name}); $p.title & '\\n' & ($count($authors) > 0 ? $join($authors, ', ') & ($count($p.authorships) > 2 ? ' 외' : '') : '저자 미상') & ($exists($p.primary_location.source.display_name) ? ' · ' & $p.primary_location.source.display_name : '') & '\\n' & $string($p.publication_year) & ' · 인용 ' & $string($p.cited_by_count) & '회 · ' & ($p.open_access.is_oa ? 'OA' : '구독'))"
+                              "expr": "($papers := $lookup($data, 'papers').results; $p := $exists($papers[$number($state.selected_paper)]) ? $papers[$number($state.selected_paper)] : $papers[0]; $authors := $map($p.authorships[[0..1]], function($a){$a.author.display_name}); $year := $exists($p.publication_year) and $p.publication_year != null ? $string($p.publication_year) & ' · ' : ''; $cited := $exists($p.cited_by_count) and $p.cited_by_count != null ? $p.cited_by_count : 0; $exists($p.title) and $trim($p.title) != '' ? ($p.title & '\\n' & ($count($authors) > 0 ? $join($authors, ', ') & ($count($p.authorships) > 2 ? ' 외' : '') : '저자 미상') & ($exists($p.primary_location.source.display_name) and $trim($p.primary_location.source.display_name) != '' ? ' · ' & $p.primary_location.source.display_name : '') & '\\n' & $year & '인용 ' & $string($cited) & '회 · ' & ($p.open_access.is_oa ? 'OA' : '구독')) : null)"
                             }
                           },
                           {
                             "label": "영어 위키",
                             "value": {
-                              "expr": "$data.wiki_en_summary.title & ' · ' & $data.wiki_en_summary.description & '\\n' & $data.wiki_en_summary.extract"
+                              "expr": "($summary := $lookup($data, 'wiki_en_summary'); $result := $data.wiki_en_search.query.search[0]; $title := $exists($summary.title) and $trim($summary.title) != '' ? $summary.title : $result.title; $description := $exists($summary.description) and $trim($summary.description) != '' ? ' · ' & $trim($summary.description) : ''; $extract := $exists($summary.extract) and $trim($summary.extract) != '' ? $summary.extract : ($exists($result.snippet) ? $replace($result.snippet, /<[^>]*>/g, '') : ''); $exists($title) and $trim($title) != '' ? ($title & $description & ($trim($extract) != '' ? '\\n' & $trim($extract) : '')) : null)"
                             }
                           },
                           {
                             "label": "한국어 위키",
                             "value": {
-                              "expr": "$data.wiki_ko_summary.title & '\\n' & $data.wiki_ko_summary.extract"
+                              "expr": "($summary := $lookup($data, 'wiki_ko_summary'); $result := $data.wiki_ko_search.query.search[0]; $title := $exists($summary.title) and $trim($summary.title) != '' ? $summary.title : $result.title; $extract := $exists($summary.extract) and $trim($summary.extract) != '' ? $summary.extract : ($exists($result.snippet) ? $replace($result.snippet, /<[^>]*>/g, '') : ''); $exists($title) and $trim($title) != '' ? ($title & ($trim($extract) != '' ? '\\n' & $trim($extract) : '')) : null)"
                             }
                           },
                           {
