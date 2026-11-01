@@ -337,6 +337,58 @@ impl AppState {
         {
             return None;
         }
+        event = match event {
+            DeviceEvent::AppValueChanged {
+                app_id,
+                bucket_id,
+                item,
+            } => {
+                let supports_app_values = self
+                    .0
+                    .app_value_devices
+                    .lock()
+                    .ok()
+                    .is_some_and(|devices| devices.contains(device_id));
+                if supports_app_values {
+                    DeviceEvent::AppValueChanged {
+                        app_id,
+                        bucket_id,
+                        item,
+                    }
+                } else {
+                    let supports_storage = self
+                        .0
+                        .storage_devices
+                        .lock()
+                        .ok()
+                        .is_some_and(|devices| devices.contains(device_id));
+                    if !supports_storage {
+                        return None;
+                    }
+                    let entry = kaleidoscope_contract::builtin::builtin_storage_entries(&app_id)
+                        .into_iter()
+                        .find(|entry| {
+                            kaleidoscope_contract::app_storage::storage_key_matches(
+                                &entry.key, &item.key,
+                            )
+                        })?;
+                    DeviceEvent::StorageChanged {
+                        app_id,
+                        changed: kaleidoscope_contract::app_storage::StorageChanged {
+                            bucket_id,
+                            item: kaleidoscope_contract::app_storage::StorageItemMeta {
+                                entry_id: entry.id,
+                                key: item.key,
+                                kind: item.kind,
+                                revision: item.revision.clone(),
+                                exists: item.revision.is_some(),
+                            },
+                        },
+                    }
+                }
+            }
+            other => other,
+        };
         if !self.should_deliver_storage_event(device_id, &event) {
             return None;
         }

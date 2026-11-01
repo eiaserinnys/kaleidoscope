@@ -158,6 +158,47 @@ mod tests {
             assert!(app.version.definition.assets.iter().all(|asset| {
                 kaleidoscope_contract::builtin::is_bundled_asset(&asset.id, asset.version)
             }));
+
+            let expected_entries = app
+                .version
+                .definition
+                .storage
+                .as_ref()
+                .map(|storage| storage.entries.as_slice())
+                .unwrap_or(&[]);
+            let contract_entries =
+                kaleidoscope_contract::builtin::builtin_storage_entries(identity.id);
+            assert_eq!(
+                contract_entries.len(),
+                expected_entries.len(),
+                "{}",
+                identity.id
+            );
+            for (contract_entry, expected_entry) in contract_entries.iter().zip(expected_entries) {
+                assert_eq!(contract_entry.id, expected_entry.id, "{}", identity.id);
+                assert_eq!(contract_entry.key, expected_entry.key, "{}", identity.id);
+                assert_eq!(contract_entry.kind, expected_entry.kind, "{}", identity.id);
+                assert_eq!(
+                    contract_entry.label, expected_entry.label,
+                    "{}",
+                    identity.id
+                );
+                assert_eq!(
+                    contract_entry.presentation, expected_entry.presentation,
+                    "{}",
+                    identity.id
+                );
+                assert_eq!(
+                    contract_entry.schema, expected_entry.schema,
+                    "{}",
+                    identity.id
+                );
+                kaleidoscope_contract::app_storage::validate_storage_content(
+                    contract_entry,
+                    &contract_entry.default,
+                )
+                .expect("기본 앱 저장소 기본값은 선언 스키마를 만족해야 합니다");
+            }
         }
     }
 
