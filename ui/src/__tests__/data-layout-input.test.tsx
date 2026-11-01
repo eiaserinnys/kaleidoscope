@@ -1,21 +1,22 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import type { AppDefinition } from "../contract/contract";
+import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
+import { describeVisible } from "../share/visible";
 import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-function setup() {
+function setup(rows?: number) {
   const definition: AppDefinition = {
     ...mdEditorDefinition, requires: { blocks: 4, modules: {} },
     state: { query: "", choice: "a", enabled: false },
     ui: { type: "stack", direction: "column", children: [
       { type: "text", value: { expr: "$state.query" } },
-      { type: "input", value: { state: "query" }, on_change: { set_state: "query" }, on_submit: { set_state: "query" }, placeholder: "입력" },
+      { type: "input", value: { state: "query" }, on_change: { set_state: "query" }, on_submit: { set_state: "query" }, placeholder: "입력", ...(rows ? { rows } : {}) },
       { type: "select", value: { state: "choice" }, on_change: { set_state: "choice" }, options: ["a", "b"], style: "segmented" },
       { type: "toggle", value: { state: "enabled" }, on_change: { set_state: "enabled" }, label: "켜기" },
       { type: "button", label: "확인", on_click: [{ call: { permission: "remote", method: "GET", path: "/" } }], confirm: { title: "진행할까요?" } },
@@ -30,6 +31,48 @@ function setup() {
   render(<AppWindowContent store={store} windowId="editor-window" />);
   return { transport, spy, store, originalCall };
 }
+
+it("여러 줄 입력은 지정한 줄 수로 표시하고 변경을 전달한다", async () => {
+  const { spy } = setup(4);
+  const input = await screen.findByPlaceholderText("입력");
+  expect(input.tagName).toBe("TEXTAREA");
+  expect(input.getAttribute("rows")).toBe("4");
+  fireEvent.change(input, { target: { value: "첫 줄\n둘째 줄" } });
+  fireEvent.blur(input);
+  await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "data.act", window_id: "editor-window", pointer: "/ui/children/1/on_change", event: "첫 줄\n둘째 줄" }));
+});
+
+it("범위와 색상 입력은 각각의 동작에 선택한 값을 전달한다", async () => {
+  const definition: AppDefinition = {
+    ...mdEditorDefinition, requires: { blocks: 11, modules: {} },
+    state: { amount: 30, color: "#123456" },
+    ui: { type: "toolbar", start: [
+      { type: "slider", value: { state: "amount" }, on_change: { set_state: "amount" }, label: "강도", min: 0, max: 100, step: 5 },
+      { type: "color", value: { state: "color" }, on_change: { set_state: "color" }, label: "색상" },
+    ] } as unknown as Block,
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { ...definition.state };
+  const transport = createFakeTransport(seed);
+  const spy = vi.spyOn(transport, "call");
+  const store = createShellStore(transport);
+  render(<AppWindowContent store={store} windowId="editor-window" />);
+  fireEvent.change(await screen.findByRole("slider", { name: "강도" }), { target: { value: "45" } });
+  fireEvent.change(screen.getByLabelText("색상"), { target: { value: "#abcdef" } });
+  await waitFor(() => {
+    expect(spy).toHaveBeenCalledWith({ op: "data.act", window_id: "editor-window", pointer: "/ui/start/0/on_change", event: 45 });
+    expect(spy).toHaveBeenCalledWith({ op: "data.act", window_id: "editor-window", pointer: "/ui/start/1/on_change", event: "#abcdef" });
+    expect(store.getSnapshot()?.shared.windows[0].state).toMatchObject({ amount: 45, color: "#abcdef" });
+  });
+  const rect = { left: 0, top: 0, right: 100, bottom: 100, x: 0, y: 0, width: 100, height: 100, toJSON() {} };
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
+  vi.spyOn(document, "createRange").mockImplementation(() => ({ setStart() {}, setEnd() {}, getClientRects: () => [rect] }) as unknown as Range);
+  const text = describeVisible(screen.getByRole("slider", { name: "강도" }).closest(".ks-data-toolbar") as HTMLElement).text;
+  expect(text.match(/강도/g)).toHaveLength(1);
+  expect(text.match(/색상/g)).toHaveLength(1);
+  expect(text).toContain("강도: 45");
+  expect(text).toContain("색상: #abcdef");
+});
 
 it("attaches data and routes input, selection and toggle through their JSON pointers", async () => {
   const { spy } = setup();

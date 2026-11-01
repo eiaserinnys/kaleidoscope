@@ -41,6 +41,26 @@ pub(crate) fn request(
     body: Option<serde_json::Value>,
     accept: ConnectionAccept,
 ) -> Result<ConnectionReply, RequestError> {
+    let is_profiler = {
+        let state = inner.state.lock().unwrap();
+        let window = state
+            .shared
+            .windows
+            .iter()
+            .find(|item| item.id == window_id)
+            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        let definition =
+            app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
+                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        definition
+            .permissions
+            .iter()
+            .any(|decl| matches!(decl, PermissionDecl::Profiler { id, .. } if id == permission))
+    };
+    if is_profiler {
+        return crate::profiler::request(inner, method, path, &query, body)
+            .map_err(RequestError::Core);
+    }
     let public = {
         let state = inner.state.lock().unwrap();
         let window = state

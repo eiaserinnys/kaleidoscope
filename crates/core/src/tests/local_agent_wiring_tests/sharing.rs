@@ -25,6 +25,7 @@ fn separate_windows_keep_separate_share_contexts_and_lifetimes() {
                 "공유 첫 줄\n둘째 줄\n셋째 줄\n넷째 줄\n다섯째 줄\n여섯째 줄\n일곱째 줄\n마지막 줄"
                     .into(),
             visual: false,
+            image_base64: None,
             bounds: Rect {
                 x: 0,
                 y: 0,
@@ -80,6 +81,7 @@ fn separate_windows_keep_separate_share_contexts_and_lifetimes() {
                 "공유 첫 줄\n둘째 줄\n셋째 줄\n바뀐 줄\n다섯째 줄\n여섯째 줄\n일곱째 줄\n마지막 줄"
                     .into(),
             visual: false,
+            image_base64: None,
             bounds: Rect {
                 x: 0,
                 y: 0,

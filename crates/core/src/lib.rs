@@ -21,10 +21,12 @@ mod link;
 mod logins;
 mod media;
 mod oauth;
+mod profiler;
 mod registry_client;
 mod registry_events;
 mod share;
 mod state_commands;
+mod state_events;
 mod storage;
 mod sync_state;
 mod web;
@@ -153,9 +155,12 @@ pub(crate) struct Inner {
     pub(crate) embedded_server: Option<EmbeddedServerInfo>,
     pub(crate) data_dir: PathBuf,
     pub(crate) state: Mutex<CoreState>,
+    pub(crate) flusher: storage::StorageFlusher,
+    pub(crate) profiler: profiler::Profiler,
     pub(crate) host: Arc<dyn Host>,
     pub(crate) pc_roots: Mutex<Vec<PcRoot>>,
     pub(crate) listeners: Mutex<Vec<Arc<dyn Fn(&CoreEvent) + Send + Sync>>>,
+    state_events: state_events::StateEvents,
     pub(crate) server_url: String,
     pub(crate) device_name: String,
     pub(crate) registry: Arc<dyn RegistryClient>,
@@ -219,6 +224,10 @@ impl Drop for Core {
     fn drop(&mut self) {
         if self.owner {
             local_agent::shutdown(&self.inner);
+            if let Err(err) = self.flush_storage() {
+                eprintln!("상태를 저장할 수 없습니다: {}", err.message);
+            }
+            self.inner.flusher.stop();
         }
     }
 }
@@ -243,6 +252,7 @@ impl Core {
         registry: Arc<dyn RegistryClient>,
         attachment_opener: Arc<dyn AttachmentOpener>,
     ) -> Result<Core, CoreError> {
+        let started = std::time::Instant::now();
         fs::create_dir_all(&config.data_dir).map_err(|error| error::io_error(&error))?;
 
         let link_file = server_switch::startup_link(&config)?;
@@ -303,9 +313,12 @@ impl Core {
             embedded_server: config.embedded_server,
             data_dir: config.data_dir,
             state: Mutex::new(state),
+            flusher: storage::StorageFlusher::default(),
+            profiler: profiler::Profiler::default(),
             host,
             pc_roots: Mutex::new(Vec::new()),
             listeners: Mutex::new(Vec::new()),
+            state_events: state_events::StateEvents::default(),
             server_url: config.server_url,
             device_name: config.device_name,
             registry,
@@ -333,12 +346,23 @@ impl Core {
             login_in_progress: Mutex::new(HashSet::new()),
             media_cache: media::MediaCache::default(),
         });
+        storage::start_flusher(&inner);
         local_agent::start_events(&inner);
         {
             let state = inner.state.lock().unwrap();
             storage::save_state(&inner.data_dir, &state.shared, &state.device)?;
         }
 
+        inner.profiler.span(
+            "command",
+            "코어 시작",
+            "",
+            "",
+            started.elapsed().as_secs_f64() * 1000.0,
+            0,
+            0,
+            "초기 앱과 창 준비",
+        );
         let core = Core { inner, owner: true };
         data_runtime::start_timer(Arc::downgrade(&core.inner));
         if core
@@ -368,6 +392,42 @@ impl Core {
     }
 
     pub fn handle(&self, request: CoreRequest) -> Result<CoreReply, CoreError> {
+        let started = std::time::Instant::now();
+        let (target, window_id) = match &request {
+            CoreRequest::WindowSetState { window_id, .. } => ("window.set_state", Some(window_id)),
+            CoreRequest::WindowSetRect { window_id, .. } => ("window.set_rect", Some(window_id)),
+            CoreRequest::WindowRaise { window_id } => ("window.raise", Some(window_id)),
+            CoreRequest::WindowMinimize { window_id } => ("window.minimize", Some(window_id)),
+            CoreRequest::WindowMaximize { window_id } => ("window.maximize", Some(window_id)),
+            CoreRequest::WindowRestore { window_id } => ("window.restore", Some(window_id)),
+            CoreRequest::DataAct { window_id, .. } => ("data.act", Some(window_id)),
+            CoreRequest::DataAttach { window_id } => ("data.attach", Some(window_id)),
+            CoreRequest::DataRefresh { window_id, .. } => ("data.refresh", Some(window_id)),
+            _ => ("명령", None),
+        };
+        let (app_id, app_name) = window_id
+            .and_then(|id| {
+                let state = self.inner.state.lock().unwrap();
+                let window = state.shared.windows.iter().find(|w| &w.id == id)?;
+                let app = state.shared.apps.iter().find(|a| a.id == window.app_id)?;
+                Some((app.id.clone(), app.name.clone()))
+            })
+            .unwrap_or_default();
+        let result = self.handle_inner(request);
+        self.inner.profiler.span(
+            "command",
+            target,
+            &app_id,
+            &app_name,
+            started.elapsed().as_secs_f64() * 1000.0,
+            0,
+            0,
+            "",
+        );
+        result
+    }
+
+    fn handle_inner(&self, request: CoreRequest) -> Result<CoreReply, CoreError> {
         match request {
             CoreRequest::StateGet {} => {
                 let state = self.inner.state.lock().unwrap();
@@ -545,6 +605,15 @@ impl Core {
 
     pub fn shutdown(&self) {
         local_agent::shutdown(&self.inner);
+        if let Err(err) = self.flush_storage() {
+            eprintln!("상태를 저장할 수 없습니다: {}", err.message);
+        }
+        self.inner.flusher.stop();
+    }
+
+    pub fn flush_storage(&self) -> Result<(), CoreError> {
+        let state = self.inner.state.lock().unwrap();
+        self.inner.save_state_locked(&state, false, false, false)
     }
 
     /// 앱 업데이터의 현재 상태가 바뀐 경우에만 화면에 알린다.
@@ -554,15 +623,14 @@ impl Core {
             return;
         }
         state.update = status;
-        let event = CoreEvent::StateChanged {
-            snapshot: snapshot(&state),
-        };
+        let event = self.inner.state_event_locked(&state);
         drop(state);
-        self.inner.emit(&event);
+        self.inner.emit_state(&event);
     }
 
     fn restart_for_update(&self) -> Result<CoreReply, CoreError> {
         use kaleidoscope_contract::ErrorCode;
+        self.flush_storage()?;
         let (current_version, version) = match self.inner.state.lock().unwrap().update.clone() {
             UpdateStatus::Unavailable {} => return Err(error::make(ErrorCode::Unavailable)),
             UpdateStatus::Ready {
@@ -588,26 +656,35 @@ impl Core {
     }
 
     fn handle_state_change(&self, request: CoreRequest) -> Result<CoreReply, CoreError> {
+        let debounced = matches!(
+            request,
+            CoreRequest::WindowSetState { .. }
+                | CoreRequest::WindowSetRect { .. }
+                | CoreRequest::WindowRaise { .. }
+                | CoreRequest::WindowMinimize { .. }
+                | CoreRequest::WindowMaximize { .. }
+                | CoreRequest::WindowRestore { .. }
+        );
         let workspace_change = matches!(
             request,
             CoreRequest::WorkspaceRename { .. }
                 | CoreRequest::WorkspaceDelete { .. }
                 | CoreRequest::WorkspaceCreate { .. }
         );
-        let reply = self.apply_state_change(|state| state_commands::handle(state, request))?;
+        let (reply, _) = self
+            .apply_state_change_mode(debounced, |state| state_commands::handle(state, request))?;
         if workspace_change {
             conversation_reconcile::workspace_changed(&self.inner);
         }
         Ok(reply)
     }
 
-    fn set_state_key(
+    pub(crate) fn set_state_entries(
         &self,
         window_id: &str,
-        key: String,
-        value: serde_json::Value,
-    ) -> Result<CoreReply, CoreError> {
-        self.apply_state_change(|state| {
+        entries: std::collections::BTreeMap<String, serde_json::Value>,
+    ) -> Result<ShellSnapshot, CoreError> {
+        self.apply_state_change_mode(true, |state| {
             let mut next = state
                 .shared
                 .windows
@@ -616,7 +693,7 @@ impl Core {
                 .ok_or_else(|| error::make(kaleidoscope_contract::ErrorCode::NotFound))?
                 .state
                 .clone();
-            next.insert(key, value);
+            next.extend(entries);
             state_commands::handle(
                 state,
                 CoreRequest::WindowSetState {
@@ -625,12 +702,22 @@ impl Core {
                 },
             )
         })
+        .map(|(_, snapshot)| snapshot)
     }
 
     fn apply_state_change(
         &self,
         change: impl FnOnce(&mut CoreState) -> Result<CoreReply, CoreError>,
     ) -> Result<CoreReply, CoreError> {
+        self.apply_state_change_mode(false, change)
+            .map(|(reply, _)| reply)
+    }
+
+    fn apply_state_change_mode(
+        &self,
+        debounced: bool,
+        change: impl FnOnce(&mut CoreState) -> Result<CoreReply, CoreError>,
+    ) -> Result<(CoreReply, ShellSnapshot), CoreError> {
         let mut state = self.inner.state.lock().unwrap();
         let before = state.clone();
         let reply = change(&mut state)?;
@@ -640,32 +727,31 @@ impl Core {
         let sync_changed = before.sync != state.sync;
 
         if shared_changed || device_changed || sync_changed {
-            if let Err(error) = storage::save_changed_state(
-                &self.inner.data_dir,
-                &state.shared,
-                &state.device,
-                shared_changed,
-                device_changed,
-            ) {
-                *state = before;
-                return Err(error);
-            }
-            if sync_changed {
-                if let Err(error) = sync_state::save(&self.inner.data_dir, &state.sync) {
+            if debounced {
+                self.inner.flusher.schedule(
+                    shared_changed,
+                    device_changed,
+                    sync_changed,
+                    &self.inner.profiler,
+                );
+            } else {
+                if let Err(error) = self.inner.save_state_locked(
+                    &state,
+                    shared_changed,
+                    device_changed,
+                    sync_changed,
+                ) {
                     *state = before;
                     return Err(error);
                 }
             }
         }
 
-        let event = CoreEvent::StateChanged {
-            snapshot: snapshot(&state),
-        };
+        let event = self.inner.state_event_locked(&state);
         drop(state);
         web::detach_removed(&self.inner);
-        self.inner.emit(&event);
-
-        Ok(reply)
+        self.inner.emit_state(&event);
+        Ok((reply, event.into_snapshot()))
     }
 
     fn pick_folder(&self, window_id: &str, permission: &str) -> Result<CoreReply, CoreError> {
@@ -707,21 +793,13 @@ impl Core {
         });
         state.device.grants.push(grant.clone());
 
-        if let Err(error) = storage::save_changed_state(
-            &self.inner.data_dir,
-            &state.shared,
-            &state.device,
-            false,
-            true,
-        ) {
+        if let Err(error) = self.inner.save_state_locked(&state, false, true, false) {
             *state = before;
             return Err(error);
         }
-        let event = CoreEvent::StateChanged {
-            snapshot: snapshot(&state),
-        };
+        let event = self.inner.state_event_locked(&state);
         drop(state);
-        self.inner.emit(&event);
+        self.inner.emit_state(&event);
         data_runtime::grant_changed(&self.inner, window_id, permission);
 
         Ok(CoreReply::FilesPickFolder { grant: Some(grant) })
@@ -759,46 +837,45 @@ impl Core {
             granted_at: state_commands::timestamp(),
         };
         state.device.pc_access.push(access.clone());
-        if let Err(err) = storage::save_changed_state(
-            &self.inner.data_dir,
-            &state.shared,
-            &state.device,
-            false,
-            true,
-        ) {
+        if let Err(err) = self.inner.save_state_locked(&state, false, true, false) {
             state.device.pc_access.pop();
             return Err(err);
         }
-        let event = CoreEvent::StateChanged {
-            snapshot: snapshot(&state),
-        };
+        let event = self.inner.state_event_locked(&state);
         drop(state);
-        self.inner.emit(&event);
+        self.inner.emit_state(&event);
         Ok(CoreReply::FilesAllowPc { access })
     }
 }
 
 impl Inner {
+    pub(crate) fn state_event_locked(&self, state: &CoreState) -> state_events::StateEvent {
+        self.state_events.prepare(snapshot(state))
+    }
+
     pub(crate) fn emit(self: &Arc<Self>, event: &CoreEvent) {
-        let event = if matches!(event, CoreEvent::StateChanged { .. }) {
-            share::state_changed(self);
-            self.layout_signal.notify();
-            let state = self.state.lock().unwrap();
-            CoreEvent::StateChanged {
-                snapshot: snapshot(&state),
-            }
+        if matches!(event, CoreEvent::AppOpenRequested { .. }) {
+            self.state_events
+                .deliver_open(event, |event| self.notify(event));
         } else {
-            event.clone()
-        };
+            self.notify(event);
+        }
+    }
+
+    fn notify(&self, event: &CoreEvent) {
         let listeners = self.listeners.lock().unwrap().clone();
         for listener in listeners {
-            listener(&event);
+            listener(event);
         }
-        if matches!(event, CoreEvent::StateChanged { .. }) {
-            data_runtime::state_changed(self);
-            conversation_stream::state_changed(self);
-            local_agent::state_changed(self);
-        }
+    }
+
+    pub(crate) fn emit_state(self: &Arc<Self>, event: &state_events::StateEvent) {
+        share::state_changed(self);
+        self.layout_signal.notify();
+        self.state_events.deliver(event, |event| self.notify(event));
+        data_runtime::state_changed(self);
+        conversation_stream::state_changed(self);
+        local_agent::state_changed(self);
     }
 }
 

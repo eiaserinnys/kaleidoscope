@@ -33,6 +33,8 @@ pub struct CompiledApp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BindingDependencies {
     pub pointer: String,
+    pub expr: String,
+    pub state: Option<Vec<String>>,
     pub data: Vec<String>,
     pub data_meta: Vec<String>,
     pub storage: Vec<String>,
@@ -109,6 +111,8 @@ impl CompiledApp {
                 if let Binding::Expr(expr) = binding {
                     Some(BindingDependencies {
                         pointer,
+                        expr: expr.expr.clone(),
+                        state: data::state_refs(&expr.expr),
                         data: data::data_refs(&expr.expr),
                         data_meta: data::data_meta_refs(&expr.expr),
                         storage: data::storage_refs(&expr.expr),
@@ -321,6 +325,38 @@ impl CompiledApp {
         statuses: &BTreeMap<String, SourceStatus>,
         selected: Option<&BTreeSet<String>>,
     ) -> BTreeMap<String, BindingValue> {
+        self.evaluate_profiled(
+            state,
+            data,
+            storage,
+            storage_meta,
+            data_meta,
+            statuses,
+            selected,
+            &mut |_, _| {},
+        )
+    }
+
+    pub fn evaluate_profiled(
+        &self,
+        state: &BTreeMap<String, Value>,
+        data: &BTreeMap<String, Value>,
+        storage: &BTreeMap<String, Value>,
+        storage_meta: &BTreeMap<String, Value>,
+        data_meta: &BTreeMap<String, Value>,
+        statuses: &BTreeMap<String, SourceStatus>,
+        selected: Option<&BTreeSet<String>>,
+        observe: &mut dyn FnMut(&BindingDependencies, f64),
+    ) -> BTreeMap<String, BindingValue> {
+        if selected.is_some_and(|selected| {
+            !self
+                .bindings
+                .iter()
+                .any(|binding| selected.contains(&binding.pointer))
+        }) || self.bindings.is_empty()
+        {
+            return BTreeMap::new();
+        }
         let vars = Variables::new(state, data, storage, storage_meta, None, None)
             .with_data_meta(data_meta);
         self.bindings
@@ -358,13 +394,16 @@ impl CompiledApp {
                 } else if loading {
                     BindingValue::Loading {}
                 } else {
-                    match self.eval(&binding.pointer, &vars) {
+                    let started = std::time::Instant::now();
+                    let result = match self.eval(&binding.pointer, &vars) {
                         Ok(value) => BindingValue::Ready { value },
                         Err(message) => BindingValue::Failed {
                             message,
                             retry: Vec::new(),
                         },
-                    }
+                    };
+                    observe(binding, started.elapsed().as_secs_f64() * 1000.0);
+                    result
                 };
                 (binding.pointer.clone(), result)
             })

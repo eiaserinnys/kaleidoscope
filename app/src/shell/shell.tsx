@@ -13,6 +13,7 @@ import {
   TextInput,
   UpdateReady,
   flushEditors,
+  flushSandboxes,
   toCoreError,
   useShellSnapshot,
   type CoreError,
@@ -60,6 +61,10 @@ export function Shell({ store }: { store: ShellStore }) {
 
   const runCommand = useCallback(async (request: CoreRequest): Promise<CoreReply | undefined> => {
     try {
+      if (request.op === "window.close" && !await flushSandboxes(request.window_id)) {
+        setNotice({ code: "io", message: "저장하지 못한 내용이 있어 창을 닫지 않았습니다", details: [] });
+        return undefined;
+      }
       const reply = await store.call(request as never) as CoreReply;
       return reply;
     } catch (reason) {
@@ -217,7 +222,7 @@ export function Shell({ store }: { store: ShellStore }) {
   const restartUpdate = async () => {
     closeMenu();
     setRestartingUpdate(true);
-    if (!await flushEditors()) {
+    if (!await flushEditors() || !await flushSandboxes()) {
       setNotice({ code: "io", message: "저장하지 못한 편집이 있어 다시 시작하지 않았습니다", details: [] });
       setRestartingUpdate(false);
       return;

@@ -12,6 +12,7 @@ fn builtin_apps_are_listed_and_upload_is_rejected() {
     let state = AppState::in_memory("secret");
     let apps = state.list_apps().unwrap();
     for id in [
+        "profiler",
         "agent",
         "slackbot",
         "explorer",
@@ -26,7 +27,7 @@ fn builtin_apps_are_listed_and_upload_is_rejected() {
     ] {
         assert!(apps.iter().any(|app| app.id == id && app.builtin));
     }
-    assert_eq!(apps.len(), 11);
+    assert_eq!(apps.len(), 12);
     assert!(state.publish_app(EDITOR, "agent", false, None).is_err());
 }
 

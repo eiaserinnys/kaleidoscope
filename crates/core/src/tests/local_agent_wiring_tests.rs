@@ -345,10 +345,11 @@ fn allow_and_start(core: &Core, window: &str) -> LocalAgentSnapshot {
     until(core, window, LocalAgentPhase::Ready)
 }
 fn emit_state(core: &Core) {
-    let event = CoreEvent::StateChanged {
-        snapshot: crate::snapshot(&core.inner.state.lock().unwrap()),
+    let event = {
+        let state = core.inner.state.lock().unwrap();
+        core.inner.state_event_locked(&state)
     };
-    core.inner.emit(&event);
+    core.inner.emit_state(&event);
 }
 fn calls(path: &Path) -> Vec<Value> {
     fs::read_to_string(path)

@@ -44,6 +44,7 @@ pub(crate) fn permission(
         // 연결 권한으로는 파일을 다루지 않는다.
         PermissionDecl::Connection { .. }
         | PermissionDecl::Http { .. }
+        | PermissionDecl::Profiler { .. }
         | PermissionDecl::LocalAgent { .. } => {
             return Err(error::make(ErrorCode::PermissionDenied));
         }

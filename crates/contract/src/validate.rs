@@ -125,7 +125,10 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
 
     let mut permission_ids = HashSet::new();
     for permission in &definition.permissions {
-        if !valid_id(permission.id()) {
+        if !valid_id(permission.id())
+            && !(matches!(permission, PermissionDecl::Profiler { .. })
+                && valid_permission_id(permission.id()))
+        {
             details.push(format!("권한 id가 올바르지 않습니다: {}", permission.id()));
         }
         if !permission_ids.insert(permission.id()) {
@@ -386,6 +389,14 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
             ));
         }
         let module = match source {
+            SourceDecl::Request { .. }
+                if matches!(
+                    find_permission(definition, source.permission()),
+                    Some(PermissionDecl::Profiler { .. })
+                ) =>
+            {
+                "profiler"
+            }
             SourceDecl::Request { .. }
                 if matches!(
                     find_permission(definition, source.permission()),
@@ -882,6 +893,11 @@ fn validate_actions(
                         let call = &call.call;
                         let module = if matches!(
                             find_permission(definition, &call.permission),
+                            Some(PermissionDecl::Profiler { .. })
+                        ) {
+                            "profiler"
+                        } else if matches!(
+                            find_permission(definition, &call.permission),
                             Some(PermissionDecl::Http { .. })
                         ) {
                             "http"
@@ -1051,6 +1067,14 @@ fn valid_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
 }
 
+fn valid_permission_id(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    (1..=64).contains(&bytes.len())
+        && bytes.iter().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-' || *byte == b'_'
+        })
+}
+
 fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<String>, at: &str) {
     let introduced_in = block.introduced_in();
     if definition.requires.blocks < introduced_in {
@@ -1060,6 +1084,85 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         ));
     }
     match block {
+        Block::Sandbox {
+            asset,
+            file,
+            document,
+            value,
+            height,
+            state_keys,
+            storage_entries,
+            ..
+        } => {
+            if [
+                asset.is_some(),
+                file.is_some(),
+                document.is_some(),
+                value.is_some(),
+            ]
+            .into_iter()
+            .filter(|present| *present)
+            .count()
+                != 1
+            {
+                details.push(format!("{at}: sandbox 블록은 asset, file, document, value 가운데 꼭 하나만 가져야 합니다"));
+            }
+            if let Some(asset_id) = asset {
+                if !definition.assets.iter().any(|decl| &decl.id == asset_id) {
+                    details.push(format!("{at}: 선언되지 않은 자산입니다: {asset_id}"));
+                }
+            }
+            if let Some(file) = file {
+                validate_file_ref(file, definition, details, at);
+            }
+            if let Some(document) = document {
+                validate_markdown_binding(
+                    &None,
+                    &Some(document.clone()),
+                    false,
+                    definition,
+                    details,
+                    at,
+                );
+            }
+            if let Some(value) = value {
+                validate_binding_shape(value, definition, details, &format!("{at}/value"));
+            }
+            if height.is_some_and(|h| !(120..=2400).contains(&h)) {
+                details.push(format!("{at}: sandbox의 height는 120부터 2400까지입니다"));
+            }
+            for key in state_keys {
+                validate_state_key(key, definition, details, at);
+            }
+            if !storage_entries.is_empty() {
+                validate_module_version("storage", 1, definition, details, at);
+                for entry in storage_entries {
+                    if !definition
+                        .storage
+                        .as_ref()
+                        .is_some_and(|storage| storage.entries.iter().any(|decl| &decl.id == entry))
+                    {
+                        details.push(format!("{at}: 선언되지 않은 저장 항목입니다: {entry}"));
+                    }
+                }
+            }
+        }
+        Block::Slider {
+            value,
+            min,
+            max,
+            step,
+            ..
+        } => {
+            validate_state_key(&value.state, definition, details, at);
+            if !min.is_finite() || !max.is_finite() || min >= max {
+                details.push(format!("{at}: slider의 min과 max가 올바르지 않습니다"));
+            }
+            if step.is_some_and(|s| !s.is_finite() || s <= 0.0) {
+                details.push(format!("{at}: slider의 step은 0보다 커야 합니다"));
+            }
+        }
+        Block::Color { value, .. } => validate_state_key(&value.state, definition, details, at),
         Block::Map {
             points, selected, ..
         } => {
@@ -1464,12 +1567,14 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                     child,
                     Block::Input { .. }
                         | Block::Select { .. }
+                        | Block::Slider { .. }
+                        | Block::Color { .. }
                         | Block::Toggle { .. }
                         | Block::Button { .. }
                         | Block::Text { .. }
                 ) {
                     details.push(format!(
-                        "{at}: toolbar에는 input, select, toggle, button, text만 둡니다({})",
+                        "{at}: toolbar에는 input, select, slider, color, toggle, button, text만 둡니다({})",
                         child.type_name()
                     ));
                 }
@@ -1546,7 +1651,18 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 details.push(format!("{at}: properties에는 줄이 하나 이상 필요합니다"));
             }
         }
-        Block::Input { value, .. } | Block::Select { value, .. } | Block::Toggle { value, .. } => {
+        Block::Input { value, rows, .. } => {
+            validate_state_key(&value.state, definition, details, at);
+            if let Some(rows) = rows {
+                if !(1..=20).contains(rows) {
+                    details.push(format!("{at}: input의 rows는 1부터 20까지입니다"));
+                }
+                if definition.requires.blocks < 11 {
+                    details.push(format!("{at}: input.rows는 blocks 11 이상이 필요합니다"));
+                }
+            }
+        }
+        Block::Select { value, .. } | Block::Toggle { value, .. } => {
             validate_state_key(&value.state, definition, details, at);
         }
         Block::Button { label, icon, .. } => {
@@ -1749,4 +1865,20 @@ pub fn valid_relative_path(path: &str, allow_root: bool) -> bool {
     }
     path.split('/')
         .all(|part| !part.is_empty() && part != "." && part != "..")
+}
+
+#[cfg(test)]
+mod profiler_permission_tests {
+    use super::parse_app_definition;
+    use serde_json::json;
+
+    #[test]
+    fn underscore_permission_requires_profiler_module() {
+        let mut definition = json!({"id":"sample","name":"시험","requires":{"blocks":4,"modules":{"profiler":1}},"permissions":[{"module":"profiler","id":"core_profiler","label":"성능"}],"ui":{"type":"text","value":"시험"}});
+        assert!(parse_app_definition(&definition.to_string()).is_ok());
+        definition["requires"]["modules"] = json!({"files":1});
+        definition["permissions"][0] =
+            json!({"module":"files","id":"core_profiler","label":"파일","access":"read"});
+        assert!(parse_app_definition(&definition.to_string()).is_err());
+    }
 }

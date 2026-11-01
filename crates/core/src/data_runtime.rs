@@ -3,7 +3,7 @@
 mod actions;
 mod storage;
 pub(crate) use actions::{act, layout_errors};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, Weak};
 use std::thread::{self, JoinHandle};
@@ -59,6 +59,7 @@ struct Runtime {
     storage_meta: storage::MetaSlot,
     attached: usize,
     last: DataView,
+    profiler: crate::profiler::Profiler,
 }
 #[derive(Clone, PartialEq, Eq)]
 struct RequestCacheKey {
@@ -98,6 +99,7 @@ impl Runtime {
         definition: AppDefinition,
         state: BTreeMap<String, Value>,
         using_defaults: bool,
+        profiler: crate::profiler::Profiler,
     ) -> Self {
         let compiled = CompiledApp::compile(&definition);
         let sources = definition
@@ -133,6 +135,7 @@ impl Runtime {
             storage_meta,
             attached: 0,
             last: DataView::default(),
+            profiler,
         }
     }
     fn source_meta(&self) -> BTreeMap<String, SourceMeta> {
@@ -185,13 +188,14 @@ impl Runtime {
             .collect()
     }
     fn view(&self) -> DataView {
+        let started = Instant::now();
         let statuses: BTreeMap<_, _> = self
             .sources
             .iter()
             .map(|(name, source)| (name.clone(), source.status.clone()))
             .collect();
         let (storage, meta) = self.storage_values();
-        let mut values = self.compiled.evaluate_with_data_meta(
+        let mut values = self.compiled.evaluate_profiled(
             &self.state,
             &self.data,
             &storage,
@@ -199,6 +203,25 @@ impl Runtime {
             &self.data_meta_values(),
             &statuses,
             None,
+            &mut |binding, ms| {
+                self.profiler.binding(
+                    &self.definition.id,
+                    &self.definition.name,
+                    &binding.pointer,
+                    &binding.expr,
+                    Some(ms),
+                )
+            },
+        );
+        self.profiler.span(
+            "data.view",
+            "바인딩 계산",
+            &self.definition.id,
+            &self.definition.name,
+            started.elapsed().as_secs_f64() * 1000.0,
+            self.compiled.binding_dependencies().len(),
+            0,
+            "",
         );
         for binding in self.compiled.binding_dependencies() {
             if let Some(status) =
@@ -214,6 +237,7 @@ impl Runtime {
         }
     }
     fn view_selected(&self, selected: &std::collections::BTreeSet<String>) -> DataView {
+        let started = Instant::now();
         let statuses: BTreeMap<_, _> = self
             .sources
             .iter()
@@ -221,7 +245,7 @@ impl Runtime {
             .collect();
         let (storage, meta) = self.storage_values();
         let mut values = self.last.values.clone();
-        values.extend(self.compiled.evaluate_with_data_meta(
+        values.extend(self.compiled.evaluate_profiled(
             &self.state,
             &self.data,
             &storage,
@@ -229,7 +253,43 @@ impl Runtime {
             &self.data_meta_values(),
             &statuses,
             Some(selected),
+            &mut |binding, ms| {
+                self.profiler.binding(
+                    &self.definition.id,
+                    &self.definition.name,
+                    &binding.pointer,
+                    &binding.expr,
+                    Some(ms),
+                )
+            },
         ));
+        for binding in self
+            .compiled
+            .binding_dependencies()
+            .iter()
+            .filter(|binding| !selected.contains(&binding.pointer))
+        {
+            self.profiler.binding(
+                &self.definition.id,
+                &self.definition.name,
+                &binding.pointer,
+                &binding.expr,
+                None,
+            );
+        }
+        self.profiler.span(
+            "data.view",
+            "바인딩 계산",
+            &self.definition.id,
+            &self.definition.name,
+            started.elapsed().as_secs_f64() * 1000.0,
+            selected.len(),
+            self.compiled
+                .binding_dependencies()
+                .len()
+                .saturating_sub(selected.len()),
+            "",
+        );
         for binding in self
             .compiled
             .binding_dependencies()
@@ -248,6 +308,41 @@ impl Runtime {
             source_meta: self.source_meta(),
         }
     }
+    fn selected_for(
+        &self,
+        keys: &BTreeSet<String>,
+        sources: &BTreeSet<String>,
+    ) -> BTreeSet<String> {
+        self.compiled
+            .binding_dependencies()
+            .iter()
+            .filter(|binding| {
+                let state_changed = !keys.is_empty()
+                    && binding
+                        .state
+                        .as_ref()
+                        .is_none_or(|refs| refs.iter().any(|name| keys.contains(name)));
+                let dynamic_data = ["$data", "$data_meta"].iter().any(|variable| {
+                    binding.expr.match_indices(variable).any(|(index, _)| {
+                        let next = binding.expr.as_bytes().get(index + variable.len()).copied();
+                        next.is_none_or(|byte| {
+                            byte != b'.' && !byte.is_ascii_alphanumeric() && byte != b'_'
+                        })
+                    })
+                });
+                let source_changed = !sources.is_empty()
+                    && (binding
+                        .data
+                        .iter()
+                        .chain(&binding.data_meta)
+                        .any(|name| sources.contains(name))
+                        || dynamic_data);
+                state_changed || source_changed || !self.last.values.contains_key(&binding.pointer)
+            })
+            .map(|binding| binding.pointer.clone())
+            .collect()
+    }
+
     fn diff(&mut self) -> Option<DataView> {
         let next = self.view();
         self.diff_view(next)
@@ -429,6 +524,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
         .map(|job| {
             let inner = Arc::clone(inner);
             thread::spawn(move || {
+                let started = Instant::now();
                 let result = data_sources::fetch(&inner, &job.window, &job.plan, job.format);
                 let mut follow_up = Vec::new();
                 {
@@ -437,6 +533,16 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                     let Some(runtime) = windows.get_mut(&job.window) else {
                         return;
                     };
+                    inner.profiler.span(
+                        "data.source",
+                        &job.name,
+                        &runtime.definition.id,
+                        &runtime.definition.name,
+                        started.elapsed().as_secs_f64() * 1000.0,
+                        0,
+                        0,
+                        "",
+                    );
                     if !state.shared.windows.iter().any(|window| {
                         window.id == job.window
                             && window.app_version == runtime.version
@@ -497,13 +603,18 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                             }
                         }
                     }
+                    let mut changed_sources = BTreeSet::from([job.name.clone()]);
                     for name in runtime.compiled.source_order().to_vec() {
                         if name == job.name {
                             continue;
                         }
                         let plan = runtime.plan_source(&name);
                         let changed = set_plan(&inner.data_runtimes, runtime, &name, plan);
+                        let old_status = runtime.sources[&name].status.clone();
                         runtime.apply_source_storage_status(&name);
+                        if changed || runtime.sources[&name].status != old_status {
+                            changed_sources.insert(name.clone());
+                        }
                         if should_prepare_after_plan(runtime, &name, changed, false) {
                             if let Some(next) =
                                 prepare(&inner.data_runtimes, runtime, &job.window, &name)
@@ -512,7 +623,9 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                             }
                         }
                     }
-                    if let Some(view) = runtime.diff().filter(|_| runtime.attached > 0) {
+                    let selected = runtime.selected_for(&BTreeSet::new(), &changed_sources);
+                    let next = runtime.view_selected(&selected);
+                    if let Some(view) = runtime.diff_view(next).filter(|_| runtime.attached > 0) {
                         let _ = inner.data_runtimes.events.send((
                             job.window.clone(),
                             runtime.version,
@@ -561,6 +674,7 @@ pub(crate) fn attach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, C
                 definition.clone(),
                 window.state.clone(),
                 using_defaults,
+                inner.profiler.clone(),
             )
         });
         let already_attached = runtime.attached > 0;
@@ -705,19 +819,70 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
             if runtime.state == window.state {
                 continue;
             }
+            let started = Instant::now();
+            let keys: BTreeSet<_> = runtime
+                .state
+                .keys()
+                .chain(window.state.keys())
+                .filter(|key| runtime.state.get(*key) != window.state.get(*key))
+                .cloned()
+                .collect();
             runtime.state = window.state.clone();
             let names = runtime.compiled.source_order().to_vec();
+            let mut changed_sources = BTreeSet::new();
             for name in names {
+                let source = &runtime.definition.sources[&name];
+                let depends = kaleidoscope_contract::data::source_bindings(source)
+                    .iter()
+                    .any(|(_, binding)| match binding {
+                        kaleidoscope_contract::data::Binding::State(reference) => {
+                            keys.contains(&reference.state)
+                        }
+                        kaleidoscope_contract::data::Binding::Expr(expr) => {
+                            kaleidoscope_contract::data::state_refs(&expr.expr)
+                                .is_none_or(|refs| refs.iter().any(|key| keys.contains(key)))
+                        }
+                        _ => false,
+                    })
+                    || runtime
+                        .compiled
+                        .source_dependencies(&name)
+                        .iter()
+                        .any(|dep| changed_sources.contains(dep))
+                    || !matches!(runtime.sources[&name].status, SourceStatus::Ready { .. });
+                if !depends {
+                    continue;
+                }
                 let plan = runtime.plan_source(&name);
                 let changed = set_plan(&inner.data_runtimes, runtime, &name, plan);
+                let old_status = runtime.sources[&name].status.clone();
                 runtime.apply_source_storage_status(&name);
+                if changed || runtime.sources[&name].status != old_status {
+                    changed_sources.insert(name.clone());
+                }
                 if should_prepare_after_plan(runtime, &name, changed, false) {
                     if let Some(job) = prepare(&inner.data_runtimes, runtime, id, &name) {
                         pending.push(job);
                     }
                 }
             }
-            if let Some(view) = runtime.diff().filter(|_| runtime.attached > 0) {
+            let selected = runtime.selected_for(&keys, &changed_sources);
+            let next = runtime.view_selected(&selected);
+            inner.profiler.span(
+                "data.state_change",
+                "상태 변경",
+                &runtime.definition.id,
+                &runtime.definition.name,
+                started.elapsed().as_secs_f64() * 1000.0,
+                selected.len(),
+                runtime
+                    .compiled
+                    .binding_dependencies()
+                    .len()
+                    .saturating_sub(selected.len()),
+                "",
+            );
+            if let Some(view) = runtime.diff_view(next).filter(|_| runtime.attached > 0) {
                 let _ = inner
                     .data_runtimes
                     .events
@@ -915,7 +1080,13 @@ mod freshness_tests {
 
     fn request_runtime() -> Runtime {
         let definition = parse_app_definition(include_str!("../../../apps/reader.json")).unwrap();
-        Runtime::new(2, definition.clone(), definition.state.clone(), true)
+        Runtime::new(
+            2,
+            definition.clone(),
+            definition.state.clone(),
+            true,
+            Default::default(),
+        )
     }
 
     fn seed_request_cache(runtime: &mut Runtime, plan: &SourcePlan, value: Value) {
@@ -942,7 +1113,7 @@ mod freshness_tests {
             "state":{}, "sources":{"item":{"kind":"file","permission":"file","path":"a.json"}},
             "ui":{"type":"text","value":{"expr":"$data_meta.item.stale"}}
         }).to_string()).unwrap();
-        let mut runtime = Runtime::new(1, definition, BTreeMap::new(), true);
+        let mut runtime = Runtime::new(1, definition, BTreeMap::new(), true, Default::default());
         let manager = DataRuntimes::default();
         let first = SourcePlan::File {
             permission: "file".into(),
@@ -982,7 +1153,7 @@ mod freshness_tests {
         seed_request_cache(
             &mut runtime,
             &request,
-            json!({"hits":[{"objectID":"cached"}]}),
+            json!({"hits":[{"objectID":"cached","title":"캐시"}]}),
         );
         assert!(set_plan(
             &manager,
@@ -991,6 +1162,7 @@ mod freshness_tests {
             SourcePlan::Idle
         ));
         assert!(!runtime.data.contains_key("stories"));
+        runtime.last = runtime.view();
 
         assert!(set_plan(&manager, &mut runtime, "stories", request));
         assert_eq!(runtime.data["stories"]["hits"][0]["objectID"], "cached");
@@ -999,6 +1171,9 @@ mod freshness_tests {
             SourceStatus::Ready { .. }
         ));
         assert!(!should_prepare_after_plan(&runtime, "stories", true, true));
+        let selected = runtime.selected_for(&BTreeSet::new(), &BTreeSet::from(["stories".into()]));
+        let incremental = runtime.view_selected(&selected);
+        assert_eq!(incremental.values, runtime.view().values);
     }
 
     #[test]
