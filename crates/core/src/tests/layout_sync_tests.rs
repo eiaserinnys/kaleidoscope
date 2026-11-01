@@ -299,6 +299,7 @@ fn another_core_keeps_synced_share_baselines_before_view_arrives() {
     let view = kaleidoscope_contract::VisibleView {
         text: "동기화된 글".into(),
         visual: true,
+        image_base64: None,
         bounds: Rect {
             x: 0,
             y: 0,

@@ -24,7 +24,7 @@ function actionSlots(block: Block, pointer = "/ui"): Set<string> {
     case "tree": if (block.items !== undefined) add("on_select", block.on_select !== undefined); break;
     case "map": case "chart": case "list": case "table": case "feed": add("on_select", block.on_select !== undefined); break;
     case "input": add("on_change"); add("on_submit", block.on_submit !== undefined); break;
-    case "select": case "toggle": add("on_change"); break;
+    case "select": case "toggle": case "slider": case "color": add("on_change"); break;
     case "button": add("on_click"); break;
   }
   for (const [childPointer, child] of childBlocks(block, pointer)) {
@@ -44,7 +44,7 @@ function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]
     case "properties": block.fields.forEach((field, index) => add(`fields/${index}/value`, field.value)); break;
     case "feed": add("entries", block.entries); break;
     case "text": case "code": add("value", block.value); break;
-    case "markdown": case "html_view": add("value", block.value); break;
+    case "markdown": case "html_view": case "sandbox": add("value", block.value); break;
     case "chat": add("agents", block.agents); break;
     case "select": add("options", block.options); break;
     case "button": add("disabled", block.disabled); add("confirm/body", block.confirm?.body); break;

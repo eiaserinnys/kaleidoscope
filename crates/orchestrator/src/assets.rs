@@ -19,6 +19,7 @@ pub(super) fn prepare(upload: &AssetUpload) -> Result<PreparedAsset, CoreError> 
 
 fn format_name(format: AssetFormat) -> &'static str {
     match format {
+        AssetFormat::Html => "html",
         AssetFormat::Svg => "svg",
         AssetFormat::Png => "png",
         AssetFormat::Webp => "webp",
@@ -30,6 +31,7 @@ fn format_name(format: AssetFormat) -> &'static str {
 fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(AssetMeta, Vec<u8>)> {
     let raw_format: String = row.get(2)?;
     let format = match raw_format.as_str() {
+        "html" => AssetFormat::Html,
         "svg" => AssetFormat::Svg,
         "png" => AssetFormat::Png,
         "webp" => AssetFormat::Webp,
@@ -160,6 +162,7 @@ pub(super) async fn device_get(
     match result {
         Ok(Some((meta, bytes))) => {
             let mime = match meta.format {
+                AssetFormat::Html => "text/html",
                 AssetFormat::Svg => "image/svg+xml",
                 AssetFormat::Png => "image/png",
                 AssetFormat::Webp => "image/webp",

@@ -32,7 +32,11 @@ export function useShareView({ windowId, root, enabled, store }: { windowId: str
       return pending;
     };
     const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { void send(); }, SHARE_DEBOUNCE_MS); };
-    const observer = new MutationObserver(schedule);
+    const observer = new MutationObserver((records) => {
+      if (records.some((record) => record.type === "attributes" && record.attributeName === "data-share-seq")) {
+        if (!timer) timer = setTimeout(() => { void send(); }, SHARE_DEBOUNCE_MS);
+      } else schedule();
+    });
     observer.observe(element, { subtree: true, childList: true, characterData: true, attributes: true });
     const frameObserver = new MutationObserver(schedule);
     if (element.parentElement?.parentElement) frameObserver.observe(element.parentElement.parentElement, { attributes: true, attributeFilter: ["style"] });

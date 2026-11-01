@@ -18,6 +18,9 @@ use crate::storage::LinkFile;
 use crate::{CoreState, Inner};
 use kaleidoscope_contract::conversation::{ConversationItem, ConversationItemKind};
 
+const SHARE_IMAGE_MAX_BYTES: u64 = 10 * 1024 * 1024;
+const SHARE_IMAGE_MAX_BASE64_BYTES: u64 = ((SHARE_IMAGE_MAX_BYTES + 2) / 3) * 4;
+
 #[derive(Clone, Default, PartialEq)]
 pub(crate) struct ShareState {
     pub(crate) active_shares: HashSet<String>,
@@ -296,7 +299,12 @@ pub(crate) fn view(
         if !is_sharing(&state, window_id) {
             return Ok(CoreReply::ShareView {});
         }
-        if view.text.len() > SHARE_TEXT_MAX_BYTES {
+        if view.text.len() > SHARE_TEXT_MAX_BYTES
+            || view
+                .image_base64
+                .as_ref()
+                .is_some_and(|image| image.len() as u64 > SHARE_IMAGE_MAX_BASE64_BYTES)
+        {
             return Err(error::make(ErrorCode::InvalidRequest));
         }
         state.share.views.insert(window_id.to_owned(), view.clone());
@@ -559,6 +567,7 @@ pub(crate) fn capture_for_send(
                         view.bounds,
                         upload.app_name,
                         has_web,
+                        view.image_base64.clone(),
                         state
                             .shared
                             .desktops
@@ -587,47 +596,60 @@ pub(crate) fn capture_for_send(
     if total > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES {
         return (attachments, Vec::new());
     }
-    let Some(web) = inner.host.web() else {
-        return (attachments, Vec::new());
-    };
+    let web = inner.host.web();
     let mut sent = Vec::new();
-    for (id, bounds, app_name, has_web, previous_hash) in candidates {
+    for (id, bounds, app_name, has_web, image_base64, previous_hash) in candidates {
         if attachments.len() >= AGENT_ATTACHMENTS_MAX {
             break;
         }
-        let png = if has_web {
-            match web.capture(&id) {
-                Ok(Some(bytes)) => prepare_png(&bytes, None).or_else(|| {
-                    eprintln!("같이 보기 웹 화면 PNG를 처리하지 못했습니다.");
-                    None
-                }),
-                Ok(None) => {
-                    eprintln!("같이 보기 웹 화면 캡처가 비었습니다.");
-                    None
+        let png = web
+            .and_then(|web| {
+                if has_web {
+                    match web.capture(&id) {
+                        Ok(Some(bytes)) => prepare_png(&bytes, None).or_else(|| {
+                            eprintln!("같이 보기 웹 화면 PNG를 처리하지 못했습니다.");
+                            None
+                        }),
+                        Ok(None) => {
+                            eprintln!("같이 보기 웹 화면 캡처가 비었습니다.");
+                            None
+                        }
+                        Err(error) => {
+                            eprintln!("같이 보기 모습 캡처 실패: {}", error.message);
+                            None
+                        }
+                    }
+                } else {
+                    match web.capture_shell() {
+                        Ok(Some((bytes, scale))) => prepare_png(&bytes, Some((bounds, scale)))
+                            .or_else(|| {
+                                eprintln!("같이 보기 쉘 PNG를 처리하지 못했습니다.");
+                                None
+                            }),
+                        Ok(None) => {
+                            eprintln!("같이 보기 쉘 캡처가 비었습니다.");
+                            None
+                        }
+                        Err(error) => {
+                            eprintln!("같이 보기 쉘 캡처 실패: {}", error.message);
+                            None
+                        }
+                    }
                 }
-                Err(error) => {
-                    eprintln!("같이 보기 모습 캡처 실패: {}", error.message);
-                    None
-                }
-            }
-        } else {
-            match web.capture_shell() {
-                Ok(Some((bytes, scale))) => {
-                    prepare_png(&bytes, Some((bounds, scale))).or_else(|| {
-                        eprintln!("같이 보기 쉘 PNG를 처리하지 못했습니다.");
-                        None
+            })
+            .or_else(|| {
+                image_base64
+                    .as_deref()
+                    .filter(|image| {
+                        !image.is_empty() && image.len() as u64 <= SHARE_IMAGE_MAX_BASE64_BYTES
                     })
-                }
-                Ok(None) => {
-                    eprintln!("같이 보기 쉘 캡처가 비었습니다.");
-                    None
-                }
-                Err(error) => {
-                    eprintln!("같이 보기 쉘 캡처 실패: {}", error.message);
-                    None
-                }
-            }
-        };
+                    .and_then(|image| STANDARD.decode(image.trim()).ok())
+                    .filter(|bytes| {
+                        bytes.len() as u64 <= SHARE_IMAGE_MAX_BYTES
+                            && bytes.starts_with(b"\x89PNG\r\n\x1a\n")
+                    })
+                    .and_then(|bytes| prepare_png(&bytes, None))
+            });
         let Some((bytes, hash)) = png else { continue };
         if previous_hash.as_deref() == Some(hash.as_str()) {
             continue;

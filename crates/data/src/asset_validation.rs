@@ -38,6 +38,14 @@ pub fn validate_upload(upload: &AssetUpload) -> Result<Vec<u8>, String> {
 }
 
 pub fn validate_bytes(format: AssetFormat, bytes: &[u8]) -> Result<(), String> {
+    if format == AssetFormat::Html {
+        let text = std::str::from_utf8(bytes).map_err(|error| error.to_string())?;
+        return if text.trim().is_empty() {
+            Err("HTML 자산이 비어 있습니다".into())
+        } else {
+            Ok(())
+        };
+    }
     if format == AssetFormat::Svg {
         return validate_svg(bytes);
     }
@@ -47,6 +55,7 @@ pub fn validate_bytes(format: AssetFormat, bytes: &[u8]) -> Result<(), String> {
         AssetFormat::Webp => image::ImageFormat::WebP,
         AssetFormat::Gif => image::ImageFormat::Gif,
         AssetFormat::Svg => unreachable!(),
+        AssetFormat::Html => unreachable!(),
     };
     if image::guess_format(bytes).ok() != Some(expected) {
         return Err("자산 이미지 형식이 일치하지 않습니다".into());

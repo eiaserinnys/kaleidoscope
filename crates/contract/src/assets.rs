@@ -8,6 +8,7 @@ use ts_rs::TS;
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "contract.ts")]
 pub enum AssetFormat {
+    Html,
     Svg,
     Png,
     Webp,

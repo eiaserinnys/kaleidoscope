@@ -1,4 +1,17 @@
+use kaleidoscope_contract::assets::AssetFormat;
+use kaleidoscope_data::asset_validation::validate_bytes;
 use kaleidoscope_data::asset_validation::validate_svg;
+
+#[test]
+fn html_assets_accept_scripts_and_reject_empty_or_invalid_utf8() {
+    assert!(validate_bytes(
+        AssetFormat::Html,
+        "<html><script>작동()</script></html>".as_bytes()
+    )
+    .is_ok());
+    assert!(validate_bytes(AssetFormat::Html, b" \n").is_err());
+    assert!(validate_bytes(AssetFormat::Html, &[0xff]).is_err());
+}
 
 #[test]
 fn svg_rejects_active_content_and_external_references() {

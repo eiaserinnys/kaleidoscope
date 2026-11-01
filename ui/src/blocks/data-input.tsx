@@ -16,6 +16,7 @@ interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; c
 
 export function InputBlock({ block, context, pointer }: Props<"input">) {
   const data = useWindowData();
+  const multiline = Boolean(block.multiline || (block.rows ?? 0) >= 2);
   const current = context.window.state[block.value.state];
   const [draft, setDraft] = useState(current == null ? "" : String(current));
   const [focused, setFocused] = useState(false);
@@ -37,10 +38,10 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
   }, [current, focused]);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   useLayoutEffect(() => {
-    if (!textarea.current) return;
+    if (!textarea.current || (block.rows ?? 0) >= 2) return;
     textarea.current.style.height = "auto";
     textarea.current.style.height = `${textarea.current.scrollHeight}px`;
-  }, [draft]);
+  }, [draft, block.rows]);
   const eventValue = (value: string): JsonValue => block.kind === "number" ? (value.trim() === "" || !Number.isFinite(Number(value)) ? null : Number(value)) : value;
   const send = (value: string) => {
     if (timer.current) clearTimeout(timer.current);
@@ -60,7 +61,7 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
   };
   const change = (value: string) => { edited.current = true; setDraft(value); if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => send(value), 300); };
   const keyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || !block.on_submit || event.nativeEvent.isComposing || composing.current || (block.multiline && !event.ctrlKey)) return;
+    if (event.key !== "Enter" || !block.on_submit || event.nativeEvent.isComposing || composing.current || (multiline && !event.ctrlKey)) return;
     event.preventDefault();
     void data.act(`${pointer}/on_submit`, eventValue(draft));
   };
@@ -69,15 +70,40 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => change(event.currentTarget.value), onKeyDown: keyDown,
     onCompositionStart: () => { composing.current = true; }, onCompositionEnd: () => { composing.current = false; },
   };
-  return <div className={`ks-data-input${block.kind === "search" ? " is-search" : ""}`}>
+  return <div className={`ks-data-input${block.kind === "search" ? " is-search" : ""}${(block.rows ?? 0) >= 2 ? " has-rows" : ""}`}>
     {block.kind === "search" ? <span className="ks-data-input-search"><DataIcon name="search" size="inline" /></span> : null}
-    {block.multiline ? <textarea {...props} ref={textarea} rows={1} /> : <input {...props} type={block.kind === "number" ? "number" : "text"} />}
+    {multiline ? <textarea {...props} ref={textarea} rows={block.rows ?? 1} /> : <input {...props} type={block.kind === "number" ? "number" : "text"} />}
     {block.kind === "search" && draft ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" onClick={() => { change(""); send(""); }}><X size="inline" /></IconButton></span> : null}
   </div>;
 }
 
 function validOption(value: unknown): value is SelectOption {
   return typeof value === "string" || (typeof value === "object" && value !== null && "label" in value && typeof value.label === "string" && "value" in value);
+}
+
+export function SliderBlock({ block, context, pointer }: Props<"slider">) {
+  const data = useWindowData();
+  const raw = Number(context.window.state[block.value.state] ?? block.min);
+  const current = Number.isFinite(raw) ? raw : block.min;
+  const [draft, setDraft] = useState(current);
+  useEffect(() => { setDraft(current); }, [current]);
+  return <label className="ks-field ks-slider-field">
+    {block.label ? <span data-ks-share-skip="">{block.label}</span> : null}
+    <input type="range" className="ks-slider" aria-label={block.label ?? block.value.state} min={block.min} max={block.max} step={block.step ?? 1} value={draft}
+      onChange={(event) => { const next = Number(event.currentTarget.value); setDraft(next); void data.act(`${pointer}/on_change`, next); }} />
+    <span className="ks-slider-value" data-ks-share-skip="">{draft}</span>
+  </label>;
+}
+
+export function ColorBlock({ block, context, pointer }: Props<"color">) {
+  const data = useWindowData();
+  const value = context.window.state[block.value.state];
+  const color = typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "#000000";
+  return <label className="ks-field ks-color-field">
+    {block.label ? <span data-ks-share-skip="">{block.label}</span> : null}
+    <span className="ks-color-control"><input className="ks-color-input" type="color" aria-label={block.label ?? block.value.state} value={color}
+      onChange={(event) => { void data.act(`${pointer}/on_change`, event.currentTarget.value.toLowerCase()); }} /><span className="ks-color-code" data-ks-share-skip="">{color}</span></span>
+  </label>;
 }
 export function SelectBlock({ block, context, pointer }: Props<"select">) {
   const data = useWindowData();
