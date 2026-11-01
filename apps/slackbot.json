@@ -190,7 +190,7 @@
   },
   "worker": {
     "runtime": "python3",
-    "code": "import json\nimport pathlib\nimport re\nimport sys\nimport time\nimport urllib.parse\nimport urllib.request\nfrom kaleidoscope_worker import call_app\n\nrequest = json.load(sys.stdin)\ntrigger = request.get('trigger') or {}\nstorage = request.get('storage') or {}\nsecrets = request.get('secrets') or {}\nstate_dir = pathlib.Path(request['state_dir'])\nstatus = dict(storage.get('status') or {})\nlogs = list(storage.get('logs') or [])\nwrites = {}\nbot_token = secrets.get('slack_bot_token') or ''\napi_base = (storage.get('api_base_url') or 'https://slack.com/api').rstrip('/')\nnow = request.get('now') or ''\n\n\ndef slack(method, data=None):\n    payload = json.dumps(data or {}, ensure_ascii=False).encode('utf-8')\n    req = urllib.request.Request(api_base + '/' + method, data=payload, headers={'Authorization': 'Bearer ' + bot_token, 'Content-Type': 'application/json; charset=utf-8'})\n    with urllib.request.urlopen(req, timeout=15) as response:\n        result = json.load(response)\n    if not result.get('ok'):\n        raise RuntimeError(result.get('error') or '슬랙 요청 실패')\n    return result\n\n\ndef check_connection():\n    status['last_checked_at'] = now\n    if not bot_token:\n        status['state'] = '토큰 미설정'\n        status['last_error'] = ''\n    else:\n        try:\n            info = slack('auth.test')\n            status.update({'state': '연결됨', 'team_name': info.get('team') or '-', 'bot_name': info.get('user') or '-', 'bot_user_id': info.get('user_id') or '', 'last_error': ''})\n        except (OSError, ValueError, RuntimeError) as error:\n            status.update({'state': '오류', 'last_error': str(error)})\n    writes['status'] = status\n\n\ndef read_file(name, default):\n    try:\n        return json.loads((state_dir / name).read_text(encoding='utf-8'))\n    except FileNotFoundError:\n        return default\n\n\ndef write_file(name, value):\n    (state_dir / name).write_text(json.dumps(value, ensure_ascii=False), encoding='utf-8')\n\n\ndef allowed(channel):\n    channels = [part for part in re.split(r'[\\s,]+', storage.get('allowed_channels') or '') if part]\n    return not channels or channel in channels\n\n\ndef respond(event, event_id=''):\n    channel = event.get('channel') or ''\n    user = event.get('user') or ''\n    if not allowed(channel) or event.get('bot_id') or event.get('subtype') or (user and user == status.get('bot_user_id')):\n        return {'ignored': True}\n    event_key = channel + ':' + event['ts'] if channel and event.get('ts') else event_id\n    processed = read_file('processed.json', [])\n    if event_key in processed:\n        return {'duplicate': True}\n    text = re.sub(r'<@[A-Z0-9]+>', '', event.get('text') or '').strip()\n    if not text:\n        return {'ignored': True}\n    thread = event.get('thread_ts') or event.get('ts') or ''\n    answer = call_app('agent', 'ask', {'prompt': text, 'session_key': 'slack:' + channel + ':' + thread, 'system_prompt': storage.get('system_prompt') or '', 'agent_id': storage.get('agent_id') or ''})\n    reply = answer['reply']\n    if bot_token:\n        message = {'channel': channel, 'text': reply}\n        if event.get('thread_ts'):\n            message['thread_ts'] = event['thread_ts']\n        slack('chat.postMessage', message)\n    logs.insert(0, {'id': event_key, 'time': now, 'channel': channel, 'user': user, 'prompt': text, 'reply': reply, 'status': '완료'})\n    del logs[50:]\n    status['total_replies'] = status.get('total_replies', 0) + 1\n    writes.update({'logs': logs, 'status': status})\n    processed.append(event_key)\n    write_file('processed.json', processed[-1000:])\n    return {'reply': reply}\n\n\nkind = trigger.get('kind')\naction = trigger.get('action')\nargs = trigger.get('args') or {}\nresult = {}\nif kind == 'webhook':\n    body = trigger.get('body') or {}\n    if body.get('type') == 'url_verification':\n        print(json.dumps({'http_response': {'status': 200, 'headers': {'content-type': 'application/json'}, 'body': {'challenge': body.get('challenge', '')}}}, ensure_ascii=False))\n    elif body.get('type') == 'event_callback':\n        event = body.get('event') or {}\n        ignored = event.get('bot_id') or event.get('subtype') or event.get('user') == status.get('bot_user_id') or event.get('type') not in ('app_mention', 'message')\n        output = {'http_response': {'status': 200, 'headers': {'content-type': 'application/json'}, 'body': {'ok': True}}}\n        if ignored:\n            output['http_response']['body']['ignored'] = True\n        else:\n            output['defer'] = {'action': 'handle_event', 'args': {'event': event, 'event_id': body.get('event_id', '')}}\n        print(json.dumps(output, ensure_ascii=False))\n    else:\n        print(json.dumps({'http_response': {'status': 200, 'body': {'ok': True, 'ignored': True}}}))\n    sys.exit(0)\nelif action == 'handle_event':\n    result = respond(args.get('event') or {}, args.get('event_id') or '')\nelif action == 'check_connection' or kind == 'watch':\n    check_connection()\nelif action == 'clear_logs':\n    writes['logs'] = []\nelif action == 'send_test':\n    prompt = args.get('prompt') or '안녕하세요! 슬랙봇 연결 테스트입니다. 한 줄로 인사해 주세요.'\n    answer = call_app('agent', 'ask', {'prompt': prompt, 'session_key': 'slack:test', 'system_prompt': storage.get('system_prompt') or '', 'agent_id': storage.get('agent_id') or ''})\n    reply = answer['reply']\n    channel = args.get('channel') or storage.get('test_channel') or ''\n    if channel and bot_token:\n        slack('chat.postMessage', {'channel': channel, 'text': reply})\n    logs.insert(0, {'id': 'test:' + str(time.time_ns()), 'time': now, 'channel': channel, 'user': '', 'prompt': prompt, 'reply': reply, 'status': '완료'})\n    writes.update({'logs': logs[:50], 'status': status})\n    status['total_replies'] = status.get('total_replies', 0) + 1\n    result = {'reply': reply}\nelif action == 'poll_now' or kind == 'schedule':\n    if bot_token:\n        if not status.get('bot_user_id'):\n            check_connection()\n        if status.get('bot_user_id'):\n            poll_state = read_file('poll_state.json', {})\n            channels = slack('conversations.list', {'types': 'im,public_channel,private_channel', 'limit': 30}).get('channels') or []\n            for item in channels:\n                channel = item.get('id') or ''\n                if not channel or not allowed(channel):\n                    continue\n                last = poll_state.get(channel)\n                if last is None and kind == 'schedule':\n                    poll_state[channel] = str(time.time())\n                    continue\n                last = last or '0'\n                messages = slack('conversations.history', {'channel': channel, 'limit': 30}).get('messages') or []\n                pending = []\n                for event in messages:\n                    if float(event.get('ts') or 0) > float(last):\n                        pending.append(event)\n                    if event.get('reply_count') and float(event.get('latest_reply') or 0) > float(last):\n                        replies = slack('conversations.replies', {'channel': channel, 'ts': event['ts'], 'oldest': last, 'limit': 30}).get('messages') or []\n                        pending.extend(reply for reply in replies if float(reply.get('ts') or 0) > float(last) and reply.get('ts') != event['ts'])\n                pending.sort(key=lambda event: float(event.get('ts') or 0))\n                for event in pending:\n                    event['channel'] = channel\n                    if channel.startswith('D') or ('<@' + status['bot_user_id'] + '>') in (event.get('text') or ''):\n                        respond(event)\n                timestamps = [event.get('ts') for event in pending if event.get('ts')]\n                if timestamps:\n                    poll_state[channel] = max(timestamps, key=float)\n                elif channel not in poll_state:\n                    poll_state[channel] = str(time.time())\n            write_file('poll_state.json', poll_state)\nprint(json.dumps({'result': result, 'set_storage': writes}, ensure_ascii=False))\n",
+    "code": "import json\nimport pathlib\nimport re\nimport sys\nimport time\nimport urllib.parse\nimport urllib.request\nfrom kaleidoscope_worker import call_app\n\nrequest = json.load(sys.stdin)\ntrigger = request.get('trigger') or {}\nstorage = request.get('storage') or {}\nsecrets = request.get('secrets') or {}\nstate_dir = pathlib.Path(request['state_dir'])\nstatus = dict(storage.get('status') or {})\nlogs = list(storage.get('logs') or [])\nwrites = {}\nbot_token = secrets.get('slack_bot_token') or ''\napi_base = (storage.get('api_base_url') or 'https://slack.com/api').rstrip('/')\nnow = request.get('now') or ''\n\n\ndef slack(method, data=None):\n    payload = json.dumps(data or {}, ensure_ascii=False).encode('utf-8')\n    req = urllib.request.Request(api_base + '/' + method, data=payload, headers={'Authorization': 'Bearer ' + bot_token, 'Content-Type': 'application/json; charset=utf-8'})\n    with urllib.request.urlopen(req, timeout=15) as response:\n        result = json.load(response)\n    if not result.get('ok'):\n        raise RuntimeError(result.get('error') or '슬랙 요청 실패')\n    return result\n\n\ndef check_connection():\n    status['last_checked_at'] = now\n    if not bot_token:\n        status['state'] = '토큰 미설정'\n        status['last_error'] = ''\n    else:\n        try:\n            info = slack('auth.test')\n            status.update({'state': '연결됨', 'team_name': info.get('team') or '-', 'bot_name': info.get('user') or '-', 'bot_user_id': info.get('user_id') or '', 'last_error': ''})\n        except (OSError, ValueError, RuntimeError) as error:\n            status.update({'state': '오류', 'last_error': str(error)})\n    writes['status'] = status\n\n\ndef read_file(name, default):\n    try:\n        return json.loads((state_dir / name).read_text(encoding='utf-8'))\n    except FileNotFoundError:\n        return default\n\n\ndef write_file(name, value):\n    (state_dir / name).write_text(json.dumps(value, ensure_ascii=False), encoding='utf-8')\n\n\ndef allowed(channel, explicit=False):\n    channels = [part for part in re.split(r'[\\s,]+', storage.get('allowed_channels') or '') if part]\n    return channel in channels if explicit else not channels or channel in channels\n\n\ndef respond(event, event_id=''):\n    channel = event.get('channel') or ''\n    user = event.get('user') or ''\n    if not allowed(channel) or event.get('bot_id') or event.get('subtype') or (user and user == status.get('bot_user_id')):\n        return {'ignored': True}\n    event_key = channel + ':' + event['ts'] if channel and event.get('ts') else event_id\n    processed = read_file('processed.json', [])\n    if event_key in processed:\n        return {'duplicate': True}\n    text = re.sub(r'<@[A-Z0-9]+>', '', event.get('text') or '').strip()\n    if not text:\n        return {'ignored': True}\n    thread = event.get('thread_ts') or event.get('ts') or ''\n    answer = call_app('agent', 'ask', {'prompt': text, 'session_key': 'slack:' + channel + ':' + thread, 'system_prompt': storage.get('system_prompt') or '', 'agent_id': storage.get('agent_id') or ''})\n    reply = answer['reply']\n    if bot_token:\n        message = {'channel': channel, 'text': reply}\n        if event.get('thread_ts'):\n            message['thread_ts'] = event['thread_ts']\n        slack('chat.postMessage', message)\n    logs.insert(0, {'id': event_key, 'time': now, 'channel': channel, 'user': user, 'prompt': text, 'reply': reply, 'status': '완료'})\n    del logs[50:]\n    status['total_replies'] = status.get('total_replies', 0) + 1\n    writes.update({'logs': logs, 'status': status})\n    processed.append(event_key)\n    write_file('processed.json', processed[-1000:])\n    return {'reply': reply}\n\n\nkind = trigger.get('kind')\naction = trigger.get('action')\nargs = trigger.get('args') or {}\nresult = {}\nif kind == 'webhook':\n    body = trigger.get('body') or {}\n    if body.get('type') == 'url_verification':\n        print(json.dumps({'http_response': {'status': 200, 'headers': {'content-type': 'application/json'}, 'body': {'challenge': body.get('challenge', '')}}}, ensure_ascii=False))\n    elif body.get('type') == 'event_callback':\n        event = body.get('event') or {}\n        ignored = event.get('bot_id') or event.get('subtype') or event.get('user') == status.get('bot_user_id') or event.get('type') not in ('app_mention', 'message')\n        output = {'http_response': {'status': 200, 'headers': {'content-type': 'application/json'}, 'body': {'ok': True}}}\n        if ignored:\n            output['http_response']['body']['ignored'] = True\n        else:\n            output['defer'] = {'action': 'handle_event', 'args': {'event': event, 'event_id': body.get('event_id', '')}}\n        print(json.dumps(output, ensure_ascii=False))\n    else:\n        print(json.dumps({'http_response': {'status': 200, 'body': {'ok': True, 'ignored': True}}}))\n    sys.exit(0)\nelif action == 'handle_event':\n    result = respond(args.get('event') or {}, args.get('event_id') or '')\nelif action == 'check_connection' or kind == 'watch':\n    check_connection()\nelif action == 'clear_logs':\n    writes['logs'] = []\nelif action == 'send_test':\n    prompt = args.get('prompt') or '안녕하세요! 슬랙봇 연결 테스트입니다. 한 줄로 인사해 주세요.'\n    answer = call_app('agent', 'ask', {'prompt': prompt, 'session_key': 'slack:test', 'system_prompt': storage.get('system_prompt') or '', 'agent_id': storage.get('agent_id') or ''})\n    reply = answer['reply']\n    channel = args.get('channel') or storage.get('test_channel') or ''\n    if channel and bot_token:\n        slack('chat.postMessage', {'channel': channel, 'text': reply})\n    logs.insert(0, {'id': 'test:' + str(time.time_ns()), 'time': now, 'channel': channel, 'user': '', 'prompt': prompt, 'reply': reply, 'status': '완료'})\n    writes.update({'logs': logs[:50], 'status': status})\n    status['total_replies'] = status.get('total_replies', 0) + 1\n    result = {'reply': reply}\nelif action == 'poll_now' or kind == 'schedule':\n    if bot_token:\n        if not status.get('bot_user_id'):\n            check_connection()\n        if status.get('bot_user_id'):\n            poll_state = read_file('poll_state.json', {})\n            channels = slack('conversations.list', {'types': 'im,public_channel,private_channel', 'limit': 30}).get('channels') or []\n            for item in channels:\n                channel = item.get('id') or ''\n                if not channel or not allowed(channel):\n                    continue\n                if not (item.get('is_im') or item.get('is_member') or allowed(channel, explicit=True)):\n                    continue\n                try:\n                    last = poll_state.get(channel)\n                    if last is None and kind == 'schedule':\n                        poll_state[channel] = str(time.time())\n                        continue\n                    last = last or '0'\n                    messages = slack('conversations.history', {'channel': channel, 'limit': 30}).get('messages') or []\n                    pending = []\n                    for event in messages:\n                        if float(event.get('ts') or 0) > float(last):\n                            pending.append(event)\n                        if event.get('reply_count') and float(event.get('latest_reply') or 0) > float(last):\n                            replies = slack('conversations.replies', {'channel': channel, 'ts': event['ts'], 'oldest': last, 'limit': 30}).get('messages') or []\n                            pending.extend(reply for reply in replies if float(reply.get('ts') or 0) > float(last) and reply.get('ts') != event['ts'])\n                    pending.sort(key=lambda event: float(event.get('ts') or 0))\n                    for event in pending:\n                        event['channel'] = channel\n                        if channel.startswith('D') or ('<@' + status['bot_user_id'] + '>') in (event.get('text') or ''):\n                            respond(event)\n                    timestamps = [event.get('ts') for event in pending if event.get('ts')]\n                    if timestamps:\n                        poll_state[channel] = max(timestamps, key=float)\n                    elif channel not in poll_state:\n                        poll_state[channel] = str(time.time())\n                except (OSError, ValueError, RuntimeError) as error:\n                    status['last_error'] = str(error)\n                    writes['status'] = status\n            write_file('poll_state.json', poll_state)\nprint(json.dumps({'result': result, 'set_storage': writes}, ensure_ascii=False))\n",
     "timeout_secs": 60,
     "calls": [
       "agent"
@@ -266,7 +266,9 @@
                 }
               }
             ]
-          },
+          }
+        ],
+        "end": [
           {
             "type": "button",
             "label": "지금 동기화",
@@ -278,6 +280,28 @@
                 }
               }
             ]
+          },
+          {
+            "type": "button",
+            "label": "로그 비우기",
+            "icon": "trash-2",
+            "on_click": [
+              {
+                "worker": {
+                  "action": "clear_logs"
+                }
+              },
+              {
+                "set_state": "selected_log",
+                "value": null
+              }
+            ],
+            "variant": "danger",
+            "confirm": {
+              "title": "대화 로그 비우기",
+              "body": "저장된 대화 로그를 모두 삭제할까요?",
+              "ok": "비우기"
+            }
           }
         ]
       },
@@ -321,31 +345,14 @@
               }
             ],
             "variant": "primary"
-          },
-          {
-            "type": "button",
-            "label": "로그 비우기",
-            "icon": "trash-2",
-            "on_click": [
-              {
-                "worker": {
-                  "action": "clear_logs"
-                }
-              },
-              {
-                "set_state": "selected_log",
-                "value": null
-              }
-            ],
-            "icon_only": true
           }
         ]
       },
       {
         "type": "metrics",
-        "columns": 4,
+        "columns": 2,
         "items": {
-          "expr": "[\n {\"label\":\"연결 상태\", \"value\":$storage.status.state, \"subtext\":$storage.status.team_name & \" · \" & $storage.status.bot_name, \"badge\":$storage.enabled ? \"활성\" : \"비활성\", \"featured\":true},\n {\"label\":\"누적 응답\", \"value\":$string($storage.status.total_replies), \"unit\":\"건\", \"subtext\":\"최근 확인 \" & $storage.status.last_checked_at},\n {\"label\":\"연결 에이전트\", \"value\":$storage.agent_id != \"\" ? $storage.agent_id : \"기본 에이전트\", \"subtext\":$storage.allowed_channels != \"\" ? (\"채널 \" & $storage.allowed_channels) : \"모든 DM · 멘션\"},\n {\"label\":\"웹훅 경로\", \"value\":$storage.status.webhook_path, \"subtext\":$storage.status.last_error != \"\" ? $storage.status.last_error : \"정상\"}\n]"
+          "expr": "[\n {\"label\":\"연결 상태\", \"value\":$storage.status.state, \"subtext\":$storage.status.last_error != \"\" ? $storage.status.last_error : (($storage.status.team_name != \"-\" and $storage.status.team_name != \"\" ? $storage.status.team_name & \" · \" & $storage.status.bot_name & \" · \" : \"\") & $storage.status.webhook_path), \"badge\":$storage.enabled ? \"활성\" : \"비활성\", \"featured\":true},\n {\"label\":\"누적 응답\", \"value\":$string($storage.status.total_replies), \"unit\":\"건\", \"subtext\":$storage.status.last_checked_at != \"-\" and $storage.status.last_checked_at != \"\" ? \"최근 확인 \" & ($contains($storage.status.last_checked_at, \"T\") ? $replace($substring($storage.status.last_checked_at, 5, 11), \"T\", \" \") : $storage.status.last_checked_at) : \"\"},\n {\"label\":\"연결 에이전트\", \"value\":$storage.agent_id != \"\" ? $storage.agent_id : \"기본 에이전트\", \"subtext\":$storage.allowed_channels != \"\" ? (\"채널 \" & $storage.allowed_channels) : \"모든 DM · 멘션\"}\n]"
         }
       },
       {
@@ -359,32 +366,23 @@
           {
             "type": "table",
             "rows": {
-              "expr": "$map($storage.logs, function($l) { {\"key\": $l.id, \"time\": $l.time, \"channel\": $l.channel, \"user\": $l.user, \"prompt\": $l.prompt, \"reply\": $l.reply, \"status\": $l.status} })"
+              "expr": "$map($storage.logs, function($l) { {\"key\": $l.id, \"time\": $contains($l.time, \"T\") ? $substring($l.time, 11, 5) : $l.time, \"prompt\": $l.prompt, \"status\": $l.status} })"
             },
             "columns": [
               {
                 "field": "time",
-                "label": "시각"
-              },
-              {
-                "field": "channel",
-                "label": "채널"
-              },
-              {
-                "field": "user",
-                "label": "사용자"
+                "label": "시각",
+                "width": "narrow"
               },
               {
                 "field": "prompt",
                 "label": "질문"
               },
               {
-                "field": "reply",
-                "label": "답변"
-              },
-              {
                 "field": "status",
-                "label": "상태"
+                "label": "상태",
+                "width": "narrow",
+                "format": "badge"
               }
             ],
             "selected": {
@@ -398,45 +396,21 @@
             "type": "properties",
             "fields": [
               {
-                "label": "시각",
+                "label": "시각 · 채널",
                 "value": {
-                  "expr": "$storage.logs[id = $state.selected_log].time"
-                }
-              },
-              {
-                "label": "채널",
-                "value": {
-                  "expr": "$storage.logs[id = $state.selected_log].channel"
-                }
-              },
-              {
-                "label": "사용자",
-                "value": {
-                  "expr": "$storage.logs[id = $state.selected_log].user"
+                  "expr": "($m := $storage.logs[id = $state.selected_log]; $l := $exists($m) ? $m[0] : $storage.logs[0]; $exists($l) ? ($contains($l.time, \"T\") ? $replace($substring($l.time, 5, 11), \"T\", \" \") : $l.time) & \" · \" & ($l.channel != \"\" ? $l.channel : \"테스트\") & ($l.user != \"\" ? \" (\" & $l.user & \")\" : \"\") : null)"
                 }
               },
               {
                 "label": "질문",
                 "value": {
-                  "expr": "$storage.logs[id = $state.selected_log].prompt"
+                  "expr": "($m := $storage.logs[id = $state.selected_log]; $l := $exists($m) ? $m[0] : $storage.logs[0]; $l.prompt)"
                 }
               },
               {
                 "label": "답변",
                 "value": {
-                  "expr": "$storage.logs[id = $state.selected_log].reply"
-                }
-              },
-              {
-                "label": "상태",
-                "value": {
-                  "expr": "$storage.logs[id = $state.selected_log].status"
-                }
-              },
-              {
-                "label": "시스템 프롬프트",
-                "value": {
-                  "expr": "$storage.system_prompt"
+                  "expr": "($m := $storage.logs[id = $state.selected_log]; $l := $exists($m) ? $m[0] : $storage.logs[0]; $l.reply)"
                 }
               }
             ]

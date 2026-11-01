@@ -269,7 +269,7 @@ async fn builtin_webhook_and_test_action_reach_agent_and_service() {
             messages.lock().unwrap().push(body);
         }
         if method == "conversations.list" {
-            return Json(json!({"ok":true,"channels":[{"id":"DTEST"}]}));
+            return Json(json!({"ok":true,"channels":[{"id":"DTEST","is_im":true}]}));
         }
         if method == "conversations.history" {
             return Json(
@@ -401,6 +401,162 @@ async fn builtin_webhook_and_test_action_reach_agent_and_service() {
             .content["total_replies"],
         2
     );
+    server.abort();
+}
+
+#[tokio::test]
+async fn worker_slackbot_poll_isolates_failures_and_parses_allowed_channels() {
+    use axum::extract::{Path, State};
+    use kaleidoscope_contract::worker::BuiltinRuntimeSpec;
+    use std::sync::{Arc, Mutex};
+
+    async fn mock(
+        State(visited): State<Arc<Mutex<Vec<String>>>>,
+        Path(method): Path<String>,
+        Json(body): Json<Value>,
+    ) -> Json<Value> {
+        match method.as_str() {
+            "conversations.list" => Json(json!({"ok":true,"channels":[
+                {"id":"CBAD","is_member":true},
+                {"id":"DGOOD","is_im":true},
+                {"id":"CEXPLICIT","is_member":false},
+                {"id":"CUNJOINED","is_member":false},
+                {"id":"DOUT","is_im":true}
+            ]})),
+            "conversations.history" => {
+                let channel = body["channel"].as_str().unwrap();
+                visited.lock().unwrap().push(channel.into());
+                match channel {
+                    "CBAD" => Json(json!({"ok":false,"error":"not_in_channel"})),
+                    "DGOOD" => Json(json!({"ok":true,"messages":[
+                        {"type":"message","user":"U1","ts":"2.0","text":"두 번째"}
+                    ]})),
+                    "CEXPLICIT" => Json(json!({"ok":true,"messages":[
+                        {"type":"message","user":"U1","ts":"3.0","text":"<@UBOT> 세 번째"}
+                    ]})),
+                    _ => Json(json!({"ok":true,"messages":[]})),
+                }
+            }
+            "auth.test" => Json(json!({"ok":true,"team":"team","user":"bot","user_id":"UBOT"})),
+            _ => Json(json!({"ok":true})),
+        }
+    }
+
+    let visited = Arc::new(Mutex::new(Vec::new()));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let mock_router = Router::new()
+        .route("/{method}", post(mock))
+        .with_state(visited.clone());
+    let server = tokio::spawn(async move { axum::serve(listener, mock_router).await.unwrap() });
+    let dir = tempfile::tempdir().unwrap();
+    let state = AppState::open(&dir.path().join("test.db"), "token".into()).unwrap();
+    let account = state.mcp_account_id().unwrap();
+    let specs = ["agent", "slackbot"]
+        .into_iter()
+        .map(|id| {
+            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../apps")
+                .join(format!("{id}.json"));
+            let app = parse_app_definition(&std::fs::read_to_string(path).unwrap()).unwrap();
+            BuiltinRuntimeSpec {
+                app_id: id.into(),
+                version: if id == "agent" { 3 } else { 1 },
+                storage: app.storage,
+                worker: app.worker,
+            }
+        })
+        .collect::<Vec<_>>();
+    state.register_builtin_specs(&specs).unwrap();
+    let agent = json!([{"id":"mock","name":"시험","command":"python3","args":["-c","print('응답')","{prompt}"],"env":{}}]);
+    state
+        .write_app_storage(&account, "agent", "agents", None, agent, None)
+        .unwrap();
+    state
+        .write_app_storage(
+            &account,
+            "slackbot",
+            "api_base_url",
+            None,
+            json!(format!("http://{address}")),
+            None,
+        )
+        .unwrap();
+    state
+        .write_app_storage(
+            &account,
+            "slackbot",
+            "allowed_channels",
+            None,
+            json!("CBAD\tDGOOD, CEXPLICIT"),
+            None,
+        )
+        .unwrap();
+    state
+        .set_app_secret(&account, "slackbot", "slack_bot_token", "bot-test")
+        .unwrap();
+
+    let reply = state
+        .invoke_worker(
+            &account,
+            "slackbot",
+            WorkerInvokeRequest {
+                action: "handle_event".into(),
+                args: Some(
+                    json!({"event":{"channel":"DGOOD","user":"U1","ts":"1.0","text":"첫 번째"}}),
+                ),
+                workspace_id: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(reply.result["reply"], "응답");
+
+    let poll = || WorkerInvokeRequest {
+        action: "poll_now".into(),
+        args: None,
+        workspace_id: None,
+    };
+    state
+        .invoke_worker(&account, "slackbot", poll())
+        .await
+        .unwrap();
+    assert_eq!(*visited.lock().unwrap(), vec!["CBAD", "DGOOD", "CEXPLICIT"]);
+    let status = state
+        .read_app_storage(&account, "slackbot", "status", None)
+        .unwrap()
+        .content;
+    assert_eq!(status["last_error"], "not_in_channel");
+    assert_eq!(status["total_replies"], 3);
+    let poll_path = dir
+        .path()
+        .join("worker-state")
+        .join(super::app_storage::bucket_id(&account, "slackbot"))
+        .join("slackbot/poll_state.json");
+    let poll_state: Value = serde_json::from_slice(&std::fs::read(poll_path).unwrap()).unwrap();
+    assert_eq!(poll_state["DGOOD"], "2.0");
+    assert_eq!(poll_state["CEXPLICIT"], "3.0");
+
+    let revision = state
+        .read_app_storage(&account, "slackbot", "allowed_channels", None)
+        .unwrap()
+        .revision;
+    state
+        .write_app_storage(
+            &account,
+            "slackbot",
+            "allowed_channels",
+            None,
+            json!(""),
+            revision,
+        )
+        .unwrap();
+    visited.lock().unwrap().clear();
+    state
+        .invoke_worker(&account, "slackbot", poll())
+        .await
+        .unwrap();
+    assert_eq!(*visited.lock().unwrap(), vec!["CBAD", "DGOOD", "DOUT"]);
     server.abort();
 }
 
