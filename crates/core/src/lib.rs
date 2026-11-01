@@ -854,6 +854,15 @@ impl Inner {
     }
 
     pub(crate) fn emit(self: &Arc<Self>, event: &CoreEvent) {
+        if matches!(event, CoreEvent::AppOpenRequested { .. }) {
+            self.state_events
+                .deliver_open(event, |event| self.notify(event));
+        } else {
+            self.notify(event);
+        }
+    }
+
+    fn notify(&self, event: &CoreEvent) {
         let listeners = self.listeners.lock().unwrap().clone();
         for listener in listeners {
             listener(event);
@@ -863,7 +872,7 @@ impl Inner {
     pub(crate) fn emit_state(self: &Arc<Self>, event: &state_events::StateEvent) {
         share::state_changed(self);
         self.layout_signal.notify();
-        self.state_events.deliver(event, |event| self.emit(event));
+        self.state_events.deliver(event, |event| self.notify(event));
         data_runtime::state_changed(self);
         conversation_stream::state_changed(self);
         local_agent::state_changed(self);

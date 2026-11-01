@@ -1,5 +1,6 @@
 //! 상태 스냅샷의 생성 순서와 화면 전달 순서를 맞춘다.
 use kaleidoscope_contract::{CoreEvent, ShellSnapshot};
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -29,7 +30,12 @@ pub(crate) struct StateEvents {
 struct Delivery {
     newest: u64,
     active: bool,
-    pending: Option<StateEvent>,
+    pending: VecDeque<PendingEvent>,
+}
+
+enum PendingEvent {
+    State(StateEvent),
+    Open(CoreEvent),
 }
 
 impl StateEvents {
@@ -48,22 +54,49 @@ impl StateEvents {
         }
         delivery.newest = event.sequence;
         if delivery.active {
-            delivery.pending = Some(event.clone());
+            if matches!(delivery.pending.back(), Some(PendingEvent::State(_))) {
+                delivery.pending.pop_back();
+            }
+            delivery
+                .pending
+                .push_back(PendingEvent::State(event.clone()));
             return;
         }
         delivery.active = true;
-        let mut current = event.clone();
+        drop(delivery);
+        notify(&event.event);
+        self.drain(&mut notify);
+    }
+
+    pub(crate) fn deliver_open(&self, event: &CoreEvent, mut notify: impl FnMut(&CoreEvent)) {
+        let mut delivery = self.delivery.lock().unwrap();
+        if delivery.active {
+            delivery
+                .pending
+                .push_back(PendingEvent::Open(event.clone()));
+            return;
+        }
+        delivery.active = true;
+        drop(delivery);
+        notify(event);
+        self.drain(&mut notify);
+    }
+
+    fn drain(&self, notify: &mut impl FnMut(&CoreEvent)) {
         loop {
-            drop(delivery);
-            notify(&current.event);
-            delivery = self.delivery.lock().unwrap();
-            match delivery.pending.take() {
-                Some(next) => current = next,
+            let mut delivery = self.delivery.lock().unwrap();
+            let event = match delivery.pending.pop_front() {
+                Some(event) => event,
                 None => {
                     delivery.active = false;
-                    break;
+                    return;
                 }
-            }
+            };
+            drop(delivery);
+            match event {
+                PendingEvent::State(event) => notify(&event.event),
+                PendingEvent::Open(event) => notify(&event),
+            };
         }
     }
 }

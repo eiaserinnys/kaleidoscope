@@ -89,6 +89,41 @@ fn state_listener_can_make_another_change_in_order() {
 }
 
 #[test]
+fn published_app_is_visible_before_its_open_request() {
+    let dir = TempDir::new().unwrap();
+    let core = Arc::new(open_core(
+        dir.path(),
+        vec![],
+        &Arc::new(FakeHost::default()),
+    ));
+    let target = Arc::downgrade(&core);
+    let app = registry_app(1, &test_definition(MD_EDITOR));
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let received = events.clone();
+    core.subscribe(Box::new(move |event| match event {
+        CoreEvent::StateChanged { snapshot } => {
+            if snapshot.shared.apps.iter().any(|item| item.id == app.app.id) {
+                received.lock().unwrap().push("상태");
+            } else if matches!(&snapshot.update, kaleidoscope_contract::UpdateStatus::Idle { current_version } if current_version == "게시") {
+                crate::registry_events::apply_event(
+                    &target.upgrade().unwrap().inner,
+                    0,
+                    DeviceEvent::AppPublished { app: app.clone(), open: true, workspace_id: None },
+                );
+            }
+        }
+        CoreEvent::AppOpenRequested { app_id, .. } if app_id == &app.app.id => {
+            received.lock().unwrap().push("열기");
+        }
+        _ => {}
+    }));
+    core.set_update_status(kaleidoscope_contract::UpdateStatus::Idle {
+        current_version: "게시".into(),
+    });
+    assert_eq!(*events.lock().unwrap(), vec!["상태", "열기"]);
+}
+
+#[test]
 fn app_binding_totals_count_each_evaluation_once() {
     let profiler = crate::profiler::Profiler::default();
     profiler.span("data.view", "화면", "example", "예제", 1.0, 2, 22, "");
