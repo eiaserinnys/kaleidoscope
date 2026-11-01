@@ -465,13 +465,13 @@
                           {
                             "label": "언어 · 라이선스",
                             "value": {
-                              "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; ($exists($r.language) and $r.language != null ? $r.language : '언어 미상') & ($exists($r.license.spdx_id) and $r.license.spdx_id != null ? ' · ' & $r.license.spdx_id : ''))"
+                              "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $exists($r.full_name) and $r.full_name != '' ? (($exists($r.language) and $r.language != null and $r.language != '' ? $r.language : '언어 미상') & ($exists($r.license.spdx_id) and $r.license.spdx_id != null and $r.license.spdx_id != '' ? ' · ' & $r.license.spdx_id : '')) : null)"
                             }
                           },
                           {
                             "label": "스타 · 포크 · 이슈",
                             "value": {
-                              "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $string($r.stargazers_count) & ' · ' & $string($r.forks_count) & ' · ' & $string($r.open_issues_count))"
+                              "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $exists($r.full_name) and $r.full_name != '' ? ($string($exists($r.stargazers_count) ? $r.stargazers_count : 0) & ' · ' & $string($exists($r.forks_count) ? $r.forks_count : 0) & ' · ' & $string($exists($r.open_issues_count) ? $r.open_issues_count : 0)) : null)"
                             }
                           },
                           {
@@ -483,7 +483,7 @@
                           {
                             "label": "최근 푸시",
                             "value": {
-                              "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $exists($r.pushed_at) and $r.pushed_at != null ? $replace($substring($r.pushed_at, 0, 16), 'T', ' ') : '—')"
+                              "expr": "($repos := $exists($lookup($data, 'github_repo').full_name) ? $append([$lookup($data, 'github_repo')], $data.github_search.items[full_name != $lookup($data, 'github_repo').full_name]) : $append([], $data.github_search.items); $m := $repos[$string(id) = $state.selected_repo]; $r := $exists($m) ? $m[0] : $repos[0]; $exists($r.full_name) and $r.full_name != '' ? ($exists($r.pushed_at) and $r.pushed_at != null and $r.pushed_at != '' ? $replace($substring($r.pushed_at, 0, 16), 'T', ' ') : '—') : null)"
                             }
                           }
                         ]
@@ -555,19 +555,19 @@
                           {
                             "label": "선택한 논문",
                             "value": {
-                              "expr": "($p := $exists($data.papers.results[$number($state.selected_paper)]) ? $data.papers.results[$number($state.selected_paper)] : $data.papers.results[0]; $authors := $map($p.authorships[[0..1]], function($a){$a.author.display_name}); $p.title & '\\n' & ($count($authors) > 0 ? $join($authors, ', ') & ($count($p.authorships) > 2 ? ' 외' : '') : '저자 미상') & ($exists($p.primary_location.source.display_name) ? ' · ' & $p.primary_location.source.display_name : '') & '\\n' & $string($p.publication_year) & ' · 인용 ' & $string($p.cited_by_count) & '회 · ' & ($p.open_access.is_oa ? 'OA' : '구독'))"
+                              "expr": "($papers := $lookup($data, 'papers').results; $p := $exists($papers[$number($state.selected_paper)]) ? $papers[$number($state.selected_paper)] : $papers[0]; $authors := $map($p.authorships[[0..1]], function($a){$a.author.display_name}); $year := $exists($p.publication_year) and $p.publication_year != null ? $string($p.publication_year) & ' · ' : ''; $cited := $exists($p.cited_by_count) and $p.cited_by_count != null ? $p.cited_by_count : 0; $exists($p.title) and $trim($p.title) != '' ? ($p.title & '\\n' & ($count($authors) > 0 ? $join($authors, ', ') & ($count($p.authorships) > 2 ? ' 외' : '') : '저자 미상') & ($exists($p.primary_location.source.display_name) and $trim($p.primary_location.source.display_name) != '' ? ' · ' & $p.primary_location.source.display_name : '') & '\\n' & $year & '인용 ' & $string($cited) & '회 · ' & ($p.open_access.is_oa ? 'OA' : '구독')) : null)"
                             }
                           },
                           {
                             "label": "영어 위키",
                             "value": {
-                              "expr": "($summary := $lookup($data, 'wiki_en_summary'); $result := $data.wiki_en_search.query.search[0]; $title := $exists($summary.title) ? $summary.title : $result.title; $description := $exists($summary.description) ? ' · ' & $summary.description : ''; $extract := $exists($summary.extract) ? $summary.extract : $replace($result.snippet, /<[^>]*>/g, ''); $title & $description & '\\n' & $extract)"
+                              "expr": "($summary := $lookup($data, 'wiki_en_summary'); $result := $data.wiki_en_search.query.search[0]; $title := $exists($summary.title) and $trim($summary.title) != '' ? $summary.title : $result.title; $description := $exists($summary.description) and $trim($summary.description) != '' ? ' · ' & $trim($summary.description) : ''; $extract := $exists($summary.extract) and $trim($summary.extract) != '' ? $summary.extract : ($exists($result.snippet) ? $replace($result.snippet, /<[^>]*>/g, '') : ''); $exists($title) and $trim($title) != '' ? ($title & $description & ($trim($extract) != '' ? '\\n' & $trim($extract) : '')) : null)"
                             }
                           },
                           {
                             "label": "한국어 위키",
                             "value": {
-                              "expr": "($summary := $lookup($data, 'wiki_ko_summary'); $result := $data.wiki_ko_search.query.search[0]; $title := $exists($summary.title) ? $summary.title : $result.title; $extract := $exists($summary.extract) ? $summary.extract : $replace($result.snippet, /<[^>]*>/g, ''); $title & '\\n' & $extract)"
+                              "expr": "($summary := $lookup($data, 'wiki_ko_summary'); $result := $data.wiki_ko_search.query.search[0]; $title := $exists($summary.title) and $trim($summary.title) != '' ? $summary.title : $result.title; $extract := $exists($summary.extract) and $trim($summary.extract) != '' ? $summary.extract : ($exists($result.snippet) ? $replace($result.snippet, /<[^>]*>/g, '') : ''); $exists($title) and $trim($title) != '' ? ($title & ($trim($extract) != '' ? '\\n' & $trim($extract) : '')) : null)"
                             }
                           },
                           {

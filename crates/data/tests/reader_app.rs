@@ -615,3 +615,66 @@ fn reader_tab_details_fall_back_to_search_results_when_detail_sources_fail() {
         assert!(value.to_string().contains(expected), "{pointer}: {value}");
     }
 }
+
+#[test]
+fn reader_empty_tab_properties_hide_null_values_and_empty_description() {
+    let (definition, app) = reader();
+    let empty_data = BTreeMap::from([
+        (
+            "stories".into(),
+            json!({"hits":[{"objectID":"123","title":"Rust"}]}),
+        ),
+        ("item".into(), json!({"children":[]})),
+        ("github_search".into(), json!({"items":[]})),
+        ("wiki_en_search".into(), json!({"query":{"search":[]}})),
+        ("wiki_ko_search".into(), json!({"query":{"search":[]}})),
+        ("papers".into(), json!({"results":[]})),
+    ]);
+    let empty = BTreeMap::new();
+    let statuses = BTreeMap::new();
+    let values = app.evaluate_with_data_meta(
+        &definition.state,
+        &empty_data,
+        &empty,
+        &empty,
+        &empty,
+        &statuses,
+        None,
+    );
+
+    for pointer in [
+        "/ui/children/2/children/1/tabs/1/child/children/1/child/fields/3/value",
+        "/ui/children/2/children/1/tabs/1/child/children/1/child/fields/4/value",
+        "/ui/children/2/children/1/tabs/1/child/children/1/child/fields/6/value",
+        "/ui/children/2/children/1/tabs/2/child/children/1/child/fields/0/value",
+        "/ui/children/2/children/1/tabs/2/child/children/1/child/fields/1/value",
+        "/ui/children/2/children/1/tabs/2/child/children/1/child/fields/2/value",
+    ] {
+        let BindingValue::Ready { value } = &values[pointer] else {
+            panic!("빈 상세 필드 바인딩: {pointer}: {:?}", values[pointer]);
+        };
+        assert_eq!(value, &serde_json::Value::Null, "{pointer}");
+    }
+
+    let mut described = empty_data;
+    described.insert(
+        "wiki_en_summary".into(),
+        json!({"title":"History of YouTube","description":"","extract":"A short history."}),
+    );
+    let described_values = app.evaluate_with_data_meta(
+        &definition.state,
+        &described,
+        &empty,
+        &empty,
+        &empty,
+        &statuses,
+        None,
+    );
+    let BindingValue::Ready { value } =
+        &described_values["/ui/children/2/children/1/tabs/2/child/children/1/child/fields/1/value"]
+    else {
+        panic!("영어 위키 설명 바인딩")
+    };
+    assert_eq!(value.as_str(), Some("History of YouTube\nA short history."));
+    assert!(!value.as_str().unwrap().contains(" · "));
+}
