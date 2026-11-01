@@ -20,6 +20,15 @@ test("작업 표시줄에서 창을 복원하고 최대화와 이전 크기로 �
   await expect(window).toBeHidden();
   await expect(page.locator(".ks-taskbar")).toHaveCount(1);
   await expect(taskbarItem).toHaveAttribute("data-state", "minimized");
+  await taskbarItem.click({ button: "right" });
+  const contextMenu = page.locator(".ks-menu");
+  await expect(contextMenu).toBeVisible();
+  const [taskbarBox, menuBox] = await Promise.all([taskbarItem.boundingBox(), contextMenu.boundingBox()]);
+  if (!taskbarBox || !menuBox) throw new Error("작업 표시줄 메뉴 위치를 확인하지 못했습니다");
+  expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(taskbarBox.y);
+  await page.screenshot({ path: testInfo.outputPath("taskbar-context-menu-1440x900.png") });
+  await page.keyboard.press("Escape");
+  await expect(contextMenu).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("taskbar-minimized-1440x900.png") });
 
   await taskbarItem.click();
@@ -65,4 +74,25 @@ test("작업 표시줄에서 창을 복원하고 최대화와 이전 크기로 �
   await taskbarItem.click();
   await expect(window).toBeVisible();
   await expect(taskbarItem).toHaveAttribute("data-state", "active");
+});
+
+test("작업 표시줄 창 항목은 공통 스크롤바와 탭 너비 토큰을 쓴다", async ({ page }) => {
+  await page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" }).click();
+  await page.getByRole("menuitem", { name: "계산기" }).click();
+
+  const taskbarItem = page.locator('.ks-taskbar-window[data-state="active"]').filter({ hasText: "계산기" });
+  await expect(taskbarItem).toBeVisible();
+  const taskbarStyles = await taskbarItem.evaluate((item) => {
+    const row = item.parentElement;
+    if (!row) throw new Error("작업 표시줄 창 목록을 찾지 못했습니다");
+    return {
+      maxWidth: getComputedStyle(item).maxWidth,
+      expectedMaxWidth: getComputedStyle(document.documentElement).getPropertyValue("--ks-desktop-tab-max-width").trim(),
+      scrollbarWidth: getComputedStyle(row).scrollbarWidth,
+      scrollbarDisplay: getComputedStyle(row, "::-webkit-scrollbar").display,
+    };
+  });
+  expect(taskbarStyles.scrollbarWidth).not.toBe("none");
+  expect(taskbarStyles.scrollbarDisplay).not.toBe("none");
+  expect(taskbarStyles.maxWidth).toBe(taskbarStyles.expectedMaxWidth);
 });

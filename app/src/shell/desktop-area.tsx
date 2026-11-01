@@ -39,7 +39,7 @@ export function DesktopArea({
 }: DesktopAreaProps) {
   const areaRef = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState({ width: 0, height: 0 });
-  const [windowMenu, setWindowMenu] = useState<{ anchor: HTMLElement; point: { x: number; y: number }; entries: MenuEntry[] } | null>(null);
+  const [windowMenu, setWindowMenu] = useState<{ anchor: HTMLElement; entries: MenuEntry[] } | null>(null);
 
   useEffect(() => {
     const element = areaRef.current;
@@ -120,7 +120,6 @@ export function DesktopArea({
                           event.preventDefault();
                           setWindowMenu({
                             anchor: event.currentTarget,
-                            point: { x: event.clientX, y: event.clientY },
                             entries: [
                               { id: "window-toggle", label: window.minimized ? "복원" : "최소화", onSelect: () => act(window.minimized ? "window.raise" : "window.minimize") },
                               { id: "window-size", label: window.maximized ? "이전 크기로 복원" : "최대화", onSelect: () => act(window.maximized ? "window.restore" : "window.maximize") },
@@ -143,7 +142,7 @@ export function DesktopArea({
           </section>
         );
       })}
-      {windowMenu ? <Menu anchor={windowMenu.anchor} anchorPoint={windowMenu.point} items={windowMenu.entries} onClose={() => setWindowMenu(null)} /> : null}
+      {windowMenu ? <Menu anchor={windowMenu.anchor} items={windowMenu.entries} onClose={() => setWindowMenu(null)} /> : null}
     </main>
   );
 }

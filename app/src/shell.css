@@ -185,7 +185,7 @@
 .ks-taskbar-item {
   display: inline-flex;
   min-width: 0;
-  max-width: 180px;
+  max-width: var(--ks-desktop-tab-max-width);
   height: var(--ks-control-height);
   flex: 0 0 auto;
   align-items: center;
@@ -252,11 +252,6 @@
   align-items: center;
   gap: var(--ks-space-1);
   overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.ks-taskbar-windows::-webkit-scrollbar {
-  display: none;
 }
 
 .ks-window-frame {
