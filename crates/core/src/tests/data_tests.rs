@@ -991,10 +991,11 @@ fn storage_binding_drops_unlinked_defaults_when_the_link_goes_offline() {
         device_name: "test-device".into(),
         reason: "offline".into(),
     };
-    let event = CoreEvent::StateChanged {
-        snapshot: crate::snapshot(&core.inner.state.lock().unwrap()),
+    let event = {
+        let state = core.inner.state.lock().unwrap();
+        core.inner.state_event_locked(&state)
     };
-    core.inner.emit(&event);
+    core.inner.emit_state(&event);
     wait_until(|| {
         matches!(
             crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"),

@@ -1,10 +1,10 @@
 //! 서버별 배치와 미전송 상태의 보존 및 명시적 이관.
 use crate::{
-    app_commands, error, link, snapshot,
+    app_commands, error, link,
     storage::{self, LinkFile},
     sync_state, CoreConfig, EmbeddedServerInfo, Inner,
 };
-use kaleidoscope_contract::{CoreError, CoreEvent, CoreReply, ErrorCode, LinkStatus, ServerMode};
+use kaleidoscope_contract::{CoreError, CoreReply, ErrorCode, LinkStatus, ServerMode};
 use sha2::{Digest, Sha256};
 use std::{
     path::PathBuf,
@@ -120,11 +120,9 @@ pub(crate) fn activate(
     *inner.link_file.lock().unwrap() = Some(file);
     inner.connections.lock().unwrap().clear();
     inner.conversation_snapshot_epoch.store(0, Ordering::SeqCst);
-    let event = CoreEvent::StateChanged {
-        snapshot: snapshot(&state),
-    };
+    let event = inner.state_event_locked(&state);
     drop(state);
-    inner.emit(&event);
+    inner.emit_state(&event);
     Ok(())
 }
 pub(crate) fn use_local(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {

@@ -95,14 +95,6 @@ pub(crate) fn act(
     let started = Instant::now();
     let mut pending = BTreeMap::new();
     let mut pending_steps = 0;
-    let mut action_state = {
-        let windows = inner.data_runtimes.windows.lock().unwrap();
-        windows
-            .get(window_id)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?
-            .state
-            .clone()
-    };
     for index in 0..len {
         let step = (|| -> Result<Step, CoreError> {
             let windows = inner.data_runtimes.windows.lock().unwrap();
@@ -112,6 +104,8 @@ pub(crate) fn act(
             if let Some(error) = runtime.action_storage_error(pointer, index) {
                 return Err(error);
             }
+            let mut action_state = runtime.state.clone();
+            action_state.extend(pending.clone());
             let (storage, storage_meta) = runtime.storage_values();
             runtime
                 .compiled
@@ -192,7 +186,8 @@ pub(crate) fn act(
                     let runtime = windows
                         .get(window_id)
                         .ok_or_else(|| error::make(ErrorCode::NotFound))?;
-                    let mut next = action_state.clone();
+                    let mut next = runtime.state.clone();
+                    next.extend(pending.clone());
                     next.insert(key.clone(), value.clone());
                     runtime.definition.state.contains_key(&key)
                         && serde_json::to_vec(&next).is_ok_and(|bytes| {
@@ -203,7 +198,6 @@ pub(crate) fn act(
                     let _ = flush_pending_state(inner, window_id, &mut pending, &mut pending_steps);
                     return Err(error::make(ErrorCode::InvalidRequest));
                 }
-                action_state.insert(key.clone(), value.clone());
                 pending.insert(key, value);
                 pending_steps += 1;
             }

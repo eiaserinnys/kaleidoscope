@@ -26,6 +26,7 @@ mod registry_client;
 mod registry_events;
 mod share;
 mod state_commands;
+mod state_events;
 mod storage;
 mod sync_state;
 mod web;
@@ -159,6 +160,7 @@ pub(crate) struct Inner {
     pub(crate) host: Arc<dyn Host>,
     pub(crate) pc_roots: Mutex<Vec<PcRoot>>,
     pub(crate) listeners: Mutex<Vec<Arc<dyn Fn(&CoreEvent) + Send + Sync>>>,
+    state_events: state_events::StateEvents,
     pub(crate) server_url: String,
     pub(crate) device_name: String,
     pub(crate) registry: Arc<dyn RegistryClient>,
@@ -316,6 +318,7 @@ impl Core {
             host,
             pc_roots: Mutex::new(Vec::new()),
             listeners: Mutex::new(Vec::new()),
+            state_events: state_events::StateEvents::default(),
             server_url: config.server_url,
             device_name: config.device_name,
             registry,
@@ -620,11 +623,9 @@ impl Core {
             return;
         }
         state.update = status;
-        let event = CoreEvent::StateChanged {
-            snapshot: snapshot(&state),
-        };
+        let event = self.inner.state_event_locked(&state);
         drop(state);
-        self.inner.emit(&event);
+        self.inner.emit_state(&event);
     }
 
     fn restart_for_update(&self) -> Result<CoreReply, CoreError> {
@@ -746,17 +747,11 @@ impl Core {
             }
         }
 
-        let event = CoreEvent::StateChanged {
-            snapshot: snapshot(&state),
-        };
+        let event = self.inner.state_event_locked(&state);
         drop(state);
         web::detach_removed(&self.inner);
-        self.inner.emit(&event);
-
-        let CoreEvent::StateChanged { snapshot } = event else {
-            unreachable!()
-        };
-        Ok((reply, snapshot))
+        self.inner.emit_state(&event);
+        Ok((reply, event.into_snapshot()))
     }
 
     fn pick_folder(&self, window_id: &str, permission: &str) -> Result<CoreReply, CoreError> {
@@ -802,11 +797,9 @@ impl Core {
             *state = before;
             return Err(error);
         }
-        let event = CoreEvent::StateChanged {
-            snapshot: snapshot(&state),
-        };
+        let event = self.inner.state_event_locked(&state);
         drop(state);
-        self.inner.emit(&event);
+        self.inner.emit_state(&event);
         data_runtime::grant_changed(&self.inner, window_id, permission);
 
         Ok(CoreReply::FilesPickFolder { grant: Some(grant) })
@@ -848,30 +841,32 @@ impl Core {
             state.device.pc_access.pop();
             return Err(err);
         }
-        let event = CoreEvent::StateChanged {
-            snapshot: snapshot(&state),
-        };
+        let event = self.inner.state_event_locked(&state);
         drop(state);
-        self.inner.emit(&event);
+        self.inner.emit_state(&event);
         Ok(CoreReply::FilesAllowPc { access })
     }
 }
 
 impl Inner {
+    pub(crate) fn state_event_locked(&self, state: &CoreState) -> state_events::StateEvent {
+        self.state_events.prepare(snapshot(state))
+    }
+
     pub(crate) fn emit(self: &Arc<Self>, event: &CoreEvent) {
-        if matches!(event, CoreEvent::StateChanged { .. }) {
-            share::state_changed(self);
-            self.layout_signal.notify();
-        }
         let listeners = self.listeners.lock().unwrap().clone();
         for listener in listeners {
             listener(event);
         }
-        if matches!(event, CoreEvent::StateChanged { .. }) {
-            data_runtime::state_changed(self);
-            conversation_stream::state_changed(self);
-            local_agent::state_changed(self);
-        }
+    }
+
+    pub(crate) fn emit_state(self: &Arc<Self>, event: &state_events::StateEvent) {
+        share::state_changed(self);
+        self.layout_signal.notify();
+        self.state_events.deliver(event, |event| self.emit(event));
+        data_runtime::state_changed(self);
+        conversation_stream::state_changed(self);
+        local_agent::state_changed(self);
     }
 }
 

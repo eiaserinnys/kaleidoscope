@@ -1,4 +1,4 @@
-use crate::{app_commands, error, snapshot, Core, CoreState, Inner};
+use crate::{app_commands, error, Core, CoreState, Inner};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use kaleidoscope_contract::{
     Block, CoreError, CoreEvent, CoreReply, CoreRequest, ErrorCode, WebPage,
@@ -144,16 +144,14 @@ impl Core {
                 }
             }
         }
-        let state_event = changed.then(|| CoreEvent::StateChanged {
-            snapshot: snapshot(&state),
-        });
+        let state_event = changed.then(|| self.inner.state_event_locked(&state));
         drop(state);
         self.inner.emit(&CoreEvent::WebUpdate {
             window_id: window_id.into(),
             page,
         });
         if let Some(event) = state_event {
-            self.inner.emit(&event);
+            self.inner.emit_state(&event);
         }
     }
 }

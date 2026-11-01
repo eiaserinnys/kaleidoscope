@@ -1192,6 +1192,7 @@ struct FakeRegistryClient {
     share_deletes: Mutex<Vec<String>>,
     share_put_replies: Mutex<VecDeque<Result<(), RegistryError>>>,
     share_delete_replies: Mutex<VecDeque<Result<(), RegistryError>>>,
+    share_delete_pause: Mutex<Option<mpsc::Receiver<()>>>,
     layout_change_pause: Mutex<Option<mpsc::Receiver<()>>>,
     open_calls: AtomicUsize,
     connection_requests: Mutex<Vec<kaleidoscope_contract::registry::ConnectionRequest>>,
@@ -1434,6 +1435,9 @@ impl RegistryClient for FakeRegistryClient {
         window_id: &str,
     ) -> Result<(), RegistryError> {
         self.share_deletes.lock().unwrap().push(window_id.into());
+        if let Some(pause) = self.share_delete_pause.lock().unwrap().take() {
+            let _ = pause.recv_timeout(Duration::from_secs(5));
+        }
         self.share_delete_replies
             .lock()
             .unwrap()
@@ -2840,9 +2844,11 @@ fn layout_report_sends_sanitized_initial_state_and_debounces_changes() {
     assert_eq!(client.layouts.lock().unwrap().len(), 2);
     assert_eq!(client.layouts.lock().unwrap()[1].windows[0].rect.x, 64);
 
-    core.inner.emit(&CoreEvent::StateChanged {
-        snapshot: snapshot(&core),
-    });
+    let event = {
+        let state = core.inner.state.lock().unwrap();
+        core.inner.state_event_locked(&state)
+    };
+    core.inner.emit_state(&event);
     thread::sleep(Duration::from_millis(1200));
     assert_eq!(client.layouts.lock().unwrap().len(), 2);
     core.handle(CoreRequest::LinkUnlink {}).unwrap();

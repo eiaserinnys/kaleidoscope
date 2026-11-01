@@ -161,7 +161,7 @@ impl Profiler {
             }
         }
         let categories: Vec<_> = groups.iter().map(|(name, rows)| { let values: Vec<_> = rows.iter().map(|s| s.ms).collect(); let (avg,p95,max,total)=stats(&values); json!({"key":name,"category":name,"label":label(name),"calls":rows.len(),"avg_ms":avg,"p95_ms":p95,"max_ms":max,"total_ms":total}) }).collect();
-        let apps: Vec<_> = app_groups.iter().map(|(id, rows)| { let values: Vec<_> = rows.iter().map(|s|s.ms).collect(); let (avg,_,max,total)=stats(&values); json!({"key":id,"app_id":id,"app_name":rows[0].app_name,"calls":rows.len(),"avg_ms":avg,"max_ms":max,"total_ms":total,"evaluated_bindings":rows.iter().map(|s|s.evaluated).sum::<usize>(),"skipped_bindings":rows.iter().map(|s|s.skipped).sum::<usize>()}) }).collect();
+        let apps: Vec<_> = app_groups.iter().map(|(id, rows)| { let values: Vec<_> = rows.iter().map(|s|s.ms).collect(); let (avg,_,max,total)=stats(&values); json!({"key":id,"app_id":id,"app_name":rows[0].app_name,"calls":rows.len(),"avg_ms":avg,"max_ms":max,"total_ms":total,"evaluated_bindings":rows.iter().filter(|s|s.category == "data.view").map(|s|s.evaluated).sum::<usize>(),"skipped_bindings":rows.iter().filter(|s|s.category == "data.view").map(|s|s.skipped).sum::<usize>()}) }).collect();
         let row = |s: &Span| json!({"key":s.id.to_string(),"id":s.id.to_string(),"category":s.category,"category_label":label(&s.category),"target":s.target,"app_id":s.app_id,"app_name":s.app_name,"duration_ms":s.ms,"bindings":format!("{} / {} 생략",s.evaluated,s.skipped),"detail":s.detail});
         let recent: Vec<_> = spans.iter().rev().map(row).collect();
         let mut slow = spans.clone();
