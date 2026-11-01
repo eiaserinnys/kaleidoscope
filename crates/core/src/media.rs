@@ -243,7 +243,7 @@ pub(crate) fn get(
                 None,
             )
         }
-        PermissionDecl::LocalAgent { .. } => {
+        PermissionDecl::LocalAgent { .. } | PermissionDecl::Profiler { .. } => {
             return Err(error::make(ErrorCode::PermissionDenied));
         }
     };

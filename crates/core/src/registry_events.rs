@@ -6,7 +6,6 @@ use kaleidoscope_contract::{CoreError, CoreEvent, LinkStatus};
 
 use crate::app_commands;
 use crate::link;
-use crate::storage;
 use crate::{snapshot, Inner};
 
 pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEvent) -> bool {
@@ -426,21 +425,11 @@ fn apply_change<T>(
     let sync_changed = before.sync != state.sync;
 
     if shared_changed || device_changed || sync_changed {
-        if let Err(error) = storage::save_changed_state(
-            &inner.data_dir,
-            &state.shared,
-            &state.device,
-            shared_changed,
-            device_changed,
-        ) {
+        if let Err(error) =
+            inner.save_state_locked(&state, shared_changed, device_changed, sync_changed)
+        {
             *state = before;
             return Err(error);
-        }
-        if sync_changed {
-            if let Err(error) = crate::sync_state::save(&inner.data_dir, &state.sync) {
-                *state = before;
-                return Err(error);
-            }
         }
     }
 

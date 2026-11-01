@@ -65,6 +65,7 @@ pub(crate) fn activate(
     crate::local_agent::server_changed(inner);
     crate::data_runtime::server_changed(inner);
     let mut state = inner.state.lock().unwrap();
+    inner.save_state_locked(&state, false, false, false)?;
     if !link::is_current(inner, generation) {
         return Err(error::make(ErrorCode::InvalidRequest));
     }
@@ -114,8 +115,7 @@ pub(crate) fn activate(
         device_name: file.device_name.clone(),
         reason: "연결하는 중".into(),
     };
-    storage::save_state(&inner.data_dir, &state.shared, &state.device)?;
-    sync_state::save(&inner.data_dir, &state.sync)?;
+    inner.save_state_locked(&state, true, true, true)?;
     storage::save_link(&inner.data_dir, &file)?;
     *inner.link_file.lock().unwrap() = Some(file);
     inner.connections.lock().unwrap().clear();
@@ -140,6 +140,10 @@ pub(crate) fn use_local(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
 }
 pub(crate) fn sync(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
     use kaleidoscope_contract::transfer::{TransferBundle, TransferResult, TRANSFER_PATH};
+    {
+        let state = inner.state.lock().unwrap();
+        inner.save_state_locked(&state, false, false, false)?;
+    }
     let local = inner
         .embedded_server
         .as_ref()

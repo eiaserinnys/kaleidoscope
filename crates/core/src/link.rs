@@ -156,6 +156,7 @@ pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
         let mut state = inner.state.lock().unwrap();
         inner.generation.fetch_add(1, Ordering::SeqCst);
         storage::remove_link(&inner.data_dir)?;
+        inner.flusher.clear_sync();
         crate::sync_state::remove(&inner.data_dir)?;
         *inner.link_file.lock().unwrap() = None;
         state.sync = Default::default();
@@ -440,6 +441,7 @@ pub(crate) fn token_rejected(inner: &Arc<Inner>, mut file: LinkFile) {
             if let Err(e) = storage::remove_link(&inner.data_dir) {
                 eprintln!("연결 파일 정리 실패: {}", e.message);
             }
+            inner.flusher.clear_sync();
             if let Err(e) = crate::sync_state::remove(&inner.data_dir) {
                 eprintln!("미전송 목록 정리 실패: {}", e.message);
             }

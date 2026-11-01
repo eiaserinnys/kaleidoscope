@@ -71,16 +71,7 @@ fn persist_shared_change(
         return Ok(false);
     }
     crate::sync_state::mark_local_changes(inner, &before.shared, state);
-    crate::storage::save_changed_state(
-        &inner.data_dir,
-        &state.shared,
-        &state.device,
-        before.shared != state.shared,
-        false,
-    )?;
-    if before.sync != state.sync {
-        crate::sync_state::save(&inner.data_dir, &state.sync)?;
-    }
+    inner.save_state_locked(state, true, false, before.sync != state.sync)?;
     Ok(true)
 }
 

@@ -1,7 +1,7 @@
 //! 창 수명과 실행기의 소유권을 연결한다.
 mod commands;
 use super::{context, PromptInput, WorkerHandle};
-use crate::{data_runtime, error, share, storage, Inner};
+use crate::{data_runtime, error, share, Inner};
 use base64::{engine::general_purpose::STANDARD, Engine};
 pub(crate) use commands::handle;
 use kaleidoscope_contract::{

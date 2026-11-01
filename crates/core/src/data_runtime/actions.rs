@@ -7,6 +7,26 @@ use kaleidoscope_contract::{
 };
 use kaleidoscope_data::{Env, Step};
 
+fn flush_pending_state(
+    inner: &Arc<Inner>,
+    window_id: &str,
+    pending: &mut BTreeMap<String, Value>,
+    steps: &mut usize,
+) -> Result<(), CoreError> {
+    if !pending.is_empty() {
+        crate::Core {
+            inner: Arc::clone(inner),
+            owner: false,
+        }
+        .set_state_entries(window_id, std::mem::take(pending))?;
+        if *steps > 1 {
+            inner.profiler.record_batched_steps(*steps - 1);
+        }
+        *steps = 0;
+    }
+    Ok(())
+}
+
 pub(crate) fn act(
     inner: &Arc<Inner>,
     window_id: &str,
@@ -72,8 +92,19 @@ pub(crate) fn act(
             .and_then(|runtime| runtime.compiled.actions_len(pointer))
             .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?
     };
+    let started = Instant::now();
+    let mut pending = BTreeMap::new();
+    let mut pending_steps = 0;
+    let mut action_state = {
+        let windows = inner.data_runtimes.windows.lock().unwrap();
+        windows
+            .get(window_id)
+            .ok_or_else(|| error::make(ErrorCode::NotFound))?
+            .state
+            .clone()
+    };
     for index in 0..len {
-        let step = {
+        let step = (|| -> Result<Step, CoreError> {
             let windows = inner.data_runtimes.windows.lock().unwrap();
             let runtime = windows
                 .get(window_id)
@@ -88,7 +119,7 @@ pub(crate) fn act(
                     pointer,
                     index,
                     &Env {
-                        state: &runtime.state,
+                        state: &action_state,
                         data: &runtime.data,
                         data_meta: &runtime.data_meta_values(),
                         storage: &storage,
@@ -97,8 +128,18 @@ pub(crate) fn act(
                         item: &item,
                     },
                 )
-                .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))?
+                .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))
+        })();
+        let step = match step {
+            Ok(step) => step,
+            Err(err) => {
+                let _ = flush_pending_state(inner, window_id, &mut pending, &mut pending_steps);
+                return Err(err);
+            }
         };
+        if !matches!(step, Step::SetState { .. }) {
+            flush_pending_state(inner, window_id, &mut pending, &mut pending_steps)?;
+        }
         match step {
             Step::Worker { action, args } => {
                 let (app, workspace, link) = {
@@ -146,11 +187,25 @@ pub(crate) fn act(
                     })?;
             }
             Step::SetState { key, value } => {
-                crate::Core {
-                    inner: Arc::clone(inner),
-                    owner: false,
+                let valid = {
+                    let windows = inner.data_runtimes.windows.lock().unwrap();
+                    let runtime = windows
+                        .get(window_id)
+                        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                    let mut next = action_state.clone();
+                    next.insert(key.clone(), value.clone());
+                    runtime.definition.state.contains_key(&key)
+                        && serde_json::to_vec(&next).is_ok_and(|bytes| {
+                            bytes.len() <= kaleidoscope_contract::WINDOW_STATE_MAX_BYTES
+                        })
+                };
+                if !valid {
+                    let _ = flush_pending_state(inner, window_id, &mut pending, &mut pending_steps);
+                    return Err(error::make(ErrorCode::InvalidRequest));
                 }
-                .set_state_key(window_id, key, value)?;
+                action_state.insert(key.clone(), value.clone());
+                pending.insert(key, value);
+                pending_steps += 1;
             }
             Step::SetStorage { entry, value } => {
                 let revision = {
@@ -197,6 +252,20 @@ pub(crate) fn act(
                 super::connection_changed(inner, &permission);
             }
         }
+    }
+    flush_pending_state(inner, window_id, &mut pending, &mut pending_steps)?;
+    let windows = inner.data_runtimes.windows.lock().unwrap();
+    if let Some(runtime) = windows.get(window_id) {
+        inner.profiler.span(
+            "data.act",
+            pointer,
+            &runtime.definition.id,
+            &runtime.definition.name,
+            started.elapsed().as_secs_f64() * 1000.0,
+            0,
+            0,
+            "",
+        );
     }
     Ok(CoreReply::DataAct {})
 }

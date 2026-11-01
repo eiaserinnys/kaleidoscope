@@ -1,4 +1,4 @@
-use crate::{app_commands, error, snapshot, storage, Core, CoreState, Inner};
+use crate::{app_commands, error, snapshot, Core, CoreState, Inner};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use kaleidoscope_contract::{
     Block, CoreError, CoreEvent, CoreReply, CoreRequest, ErrorCode, WebPage,
@@ -133,20 +133,9 @@ impl Core {
                 if !following {
                     crate::sync_state::mark_local_changes(&self.inner, &before.shared, &mut state);
                 }
-                let saved = storage::save_changed_state(
-                    &self.inner.data_dir,
-                    &state.shared,
-                    &state.device,
-                    true,
-                    false,
-                )
-                .and_then(|()| {
-                    if state.sync != before.sync {
-                        crate::sync_state::save(&self.inner.data_dir, &state.sync)
-                    } else {
-                        Ok(())
-                    }
-                });
+                let saved =
+                    self.inner
+                        .save_state_locked(&state, true, false, state.sync != before.sync);
                 if let Err(e) = saved {
                     *state = before;
                     eprintln!("웹 주소 저장 실패: {}", e.message);

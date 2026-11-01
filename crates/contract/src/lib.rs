@@ -258,6 +258,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("assets", 1),
     ("http", 1),
     ("worker", 1),
+    ("profiler", 1),
 ];
 
 /// 지원 범위를 알리지 않는 옛 쉘(블록 세트 3판 전)이 그릴 수 있는 블록 세트 판. 서버가 그런 기기에 보낼 앱을
@@ -838,6 +839,8 @@ pub enum PermissionDecl {
     },
     /// (모듈 `local_agent` 1판) 이 기기에서 선언한 ACP 에이전트 프로그램을 실행한다.
     LocalAgent { id: String, label: String },
+    /// 이 기기에서 코어 성능 기록을 조회하고 측정한다.
+    Profiler { id: String, label: String },
 }
 
 /// (모듈 `files` 2판) `files` 권한이 가리키는 범위.
@@ -904,6 +907,7 @@ impl PermissionDecl {
             PermissionDecl::Files { id, .. }
             | PermissionDecl::Connection { id, .. }
             | PermissionDecl::Http { id, .. }
+            | PermissionDecl::Profiler { id, .. }
             | PermissionDecl::LocalAgent { id, .. } => id,
         }
     }
@@ -915,6 +919,7 @@ impl PermissionDecl {
             PermissionDecl::Connection { .. } => "connection",
             PermissionDecl::Http { .. } => "http",
             PermissionDecl::LocalAgent { .. } => "local_agent",
+            PermissionDecl::Profiler { .. } => "profiler",
         }
     }
 
@@ -925,6 +930,7 @@ impl PermissionDecl {
             }
             // 로컬 에이전트 권한은 파일 접근 권한이 아니다. 기존 파일 전용 검사는 읽기 수준으로 취급한다.
             PermissionDecl::LocalAgent { .. } | PermissionDecl::Http { .. } => FileAccess::Read,
+            PermissionDecl::Profiler { .. } => FileAccess::Readwrite,
         }
     }
 }

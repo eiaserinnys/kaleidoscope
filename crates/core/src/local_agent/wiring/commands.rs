@@ -56,13 +56,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 spec_hash,
                 granted_at: crate::state_commands::timestamp(),
             });
-            if let Err(err) = storage::save_changed_state(
-                &inner.data_dir,
-                &state.shared,
-                &state.device,
-                false,
-                true,
-            ) {
+            if let Err(err) = inner.save_state_locked(&state, false, true, false) {
                 state.device.local_agent_access.pop();
                 return Err(err);
             }

@@ -186,6 +186,12 @@ impl McpServer {
                     path,
                     query,
                 } => {
+                    if definition.permissions.iter().any(|decl| matches!(decl, PermissionDecl::Profiler { id, .. } if id == &permission)) {
+                        statuses.insert(name.clone(), SourceStatus::Idle {});
+                        source_results.insert(name.clone(), json!({"state":"idle"}));
+                        notes.push(format!("기기에서만 받는 원천: {name}. data로 표본을 주면 계산합니다"));
+                        continue;
+                    }
                     if let Some(PermissionDecl::Http {
                         base_url, paths, ..
                     }) = definition
