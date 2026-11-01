@@ -81,12 +81,12 @@ current_version: number, created_at: string, updated_at: string, };
  *    - `id`와 권한 `id`는 소문자, 숫자, `-`로 1~64자. 권한 `id`는 겹치지 않는다. `name`은 비어 있지 않다.
  *    - 권한의 `module`은 `requires.modules`에 있어야 한다.
  *    - 블록이 가리키는 권한(`permission`)은 선언되어 있고 `files` 모듈이다.
- *    - `markdown_editor`가 가리키는 권한은 `readwrite`다.
+ *    - `markdown`이나 `code`의 편집 모드에서 파일 권한은 `readwrite`다.
  *    - 블록이 읽고 쓰는 상태 키(`state`, `set_state`)는 정의의 `state`에 선언되어 있다.
  *    - 정의에 직접 적은 경로(문자열 `path`)는 [`FileRef`]의 경로 규칙을 지킨다. 어기면 고른 폴더 밖을
  *      요구하는 정의로 보고 거부한다.
  *    - `split`의 `children`은 둘 이상이고, `sizes`가 있으면 개수가 같고 모두 0보다 크다.
- *    - `agent_chat`을 쓰면 `requires.modules`에 `agent`가 있다.
+ *    - `chat`의 제공자 모드를 쓰면 `requires.modules`에 `agent`가 있다. 로컬 세션 모드는 `local_agent`와 `files` 권한을 쓴다.
  *    - 쓴 블록마다 처음 생긴 판([`Block::introduced_in`]) 이상을 `requires.blocks`에 적는다.
  *      `opens`를 쓰면 `requires.blocks`가 3 이상이다.
  *    - `web_view`는 정의에 하나까지이고, 쓰면 `requires.modules`에 `web`이 있다. 정의에 직접 적은 주소는
@@ -103,8 +103,7 @@ current_version: number, created_at: string, updated_at: string, };
  *    - (4판) `connection` 권한을 쓰면 `requires.modules`에 `connection`이 있다. 연결 이름은 소문자, 숫자, `-` 1~64자다.
  *    - (4판) `toolbar`의 자식은 `input`, `select`, `toggle`, `button`, `text`뿐이다. `stack`의 `fill`은 자식 안의
  *      순서다. `tabs`와 `stack`에는 자식이 하나 이상 있다. `table`의 열은 하나 이상이고 `field`가 겹치지 않는다.
- *      `button`의 `icon`은 [`data::ICON_NAMES`]에 있다. `code_editor`의 권한은 `readwrite`다.
- *      `code_view`는 `value`와 `file` 가운데 꼭 하나를 쓴다.
+ *      `button`의 `icon`은 [`data::ICON_NAMES`]에 있다. `code`는 `value`와 `file` 가운데 꼭 하나를 쓴다.
  */
 export type AppDefinition = { 
 /**
@@ -232,15 +231,11 @@ export type Block = { "type": "split", direction: SplitDirection,
 /**
  * 자식마다의 상대 크기. 없으면 똑같이 나눈다.
  */
-sizes?: Array<number>, children: Array<Block>, } | { "type": "file_tree", root: FolderRef, 
+sizes?: Array<number>, children: Array<Block>, } | { "type": "tree", items?: Binding, root?: FolderRef, 
 /**
  * 보일 파일 확장자(점 없이, 소문자). 비어 있으면 모든 파일. 폴더는 늘 보인다.
  */
-extensions: Array<string>, 
-/**
- * 선택 표시에 쓸 상태 키.
- */
-selected: StateRef, on_select: SetState, } | { "type": "markdown_editor", file?: FileRef, document?: DocumentRef, } | { "type": "markdown_view", file?: FileRef, document?: DocumentRef, } | { "type": "html_view", document: DocumentRef, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "agent_chat", } | { "type": "agent_session", permission: string, root: FolderRef, agents: Binding, selected: StateRef, on_select: SetState, } | { "type": "web_view", 
+extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "markdown", file?: FileRef, document?: DocumentRef, value?: Binding, read_only?: boolean, } | { "type": "html_view", document?: DocumentRef, file?: FileRef, value?: Binding, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "chat", permission?: string, root?: FolderRef, agents?: Binding, selected?: StateRef, on_select?: SetState, } | { "type": "web_view", 
 /**
  * 열 주소. 상태에서 읽거나(`{ "state": "url" }`) 정의에 적는다(`"https://example.com"`).
  */
@@ -272,7 +267,7 @@ on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap,
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
-meta?: Binding, collapsible?: boolean, collapsed?: boolean, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: StateRef, on_select?: Actions, } | { "type": "properties", fields: Array<PropertyField>, } | { "type": "tree", items: Binding, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
+meta?: Binding, collapsible?: boolean, collapsed?: boolean, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: StateRef, on_select?: Actions, } | { "type": "properties", fields: Array<PropertyField>, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
 /**
  * (블록 세트 7판) 본문 문단(`body`가 배열일 때)을 같은 너비의 칸으로 나란히 놓는다. 창이 좁아 칸마다
  * 최소 너비를 지킬 수 없으면 위아래로 쌓는다. 예: 여러 문단 비교.
@@ -286,7 +281,7 @@ copy?: boolean,
 /**
  * (블록 세트 10판) 대댓글과 긴 항목의 접기·펴기를 켠다.
  */
-collapsible?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", value: Binding, format?: TextFormat, style?: TextStyle, } | { "type": "input", value: StateRef, on_change: Actions, kind?: InputKind, multiline?: boolean, placeholder?: string, on_submit?: Actions, } | { "type": "select", value: StateRef, on_change: Actions, options: Binding, style?: SelectStyle, placeholder?: string, } | { "type": "toggle", value: StateRef, on_change: Actions, label: string, } | { "type": "button", label: string, icon?: string, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code_editor", file: FileRef, language?: CodeLanguage, } | { "type": "code_view", value?: Binding, file?: FileRef, language?: CodeLanguage, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "keypad", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
+collapsible?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", value: Binding, format?: TextFormat, style?: TextStyle, } | { "type": "input", value: StateRef, on_change: Actions, kind?: InputKind, multiline?: boolean, placeholder?: string, on_submit?: Actions, } | { "type": "select", value: StateRef, on_change: Actions, options: Binding, style?: SelectStyle, placeholder?: string, } | { "type": "toggle", value: StateRef, on_change: Actions, label: string, } | { "type": "button", label: string, icon?: string, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code", value?: Binding, file?: FileRef, language?: CodeLanguage, read_only?: boolean, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "button_grid", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
 
 export type ButtonVariant = "default" | "primary" | "danger" | "ghost";
 

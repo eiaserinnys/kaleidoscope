@@ -186,7 +186,11 @@ pub(crate) fn import_app(
             }
             Ok(reply)
         }
-        LinkStatus::Connected { .. } | LinkStatus::Offline { mode: kaleidoscope_contract::ServerMode::Embedded, .. } => {
+        LinkStatus::Connected { .. }
+        | LinkStatus::Offline {
+            mode: kaleidoscope_contract::ServerMode::Embedded,
+            ..
+        } => {
             let Some(link_file) = link_file else {
                 return Err(server_error(NOT_CONNECTED_MESSAGE, Vec::new()));
             };
@@ -297,7 +301,9 @@ fn expired(expires_at: &str) -> bool {
 
 fn set_unlinked_if_current(inner: &Arc<Inner>, generation: u64) {
     if inner.embedded_server.is_some() {
-        if !is_current(inner, generation) { return; }
+        if !is_current(inner, generation) {
+            return;
+        }
         if let Err(e) = crate::server_switch::use_local(inner) {
             eprintln!("내 PC 서버 복귀 실패: {}", e.message);
         }

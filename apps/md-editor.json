@@ -14,14 +14,14 @@
     "sizes": [28, 72],
     "children": [
       {
-        "type": "file_tree",
+        "type": "tree",
         "root": { "permission": "docs" },
         "extensions": ["md"],
         "selected": { "state": "current_file" },
         "on_select": { "set_state": "current_file" }
       },
       {
-        "type": "markdown_editor",
+        "type": "markdown",
         "file": { "permission": "docs", "path": { "state": "current_file" } }
       }
     ]

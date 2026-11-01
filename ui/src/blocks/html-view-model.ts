@@ -6,6 +6,12 @@ export interface HtmlReportDocument { id: string; title: string; revisions: Html
 export interface HtmlSelection { selector?: string; selected_text: string; prefix?: string; suffix?: string }
 export interface HtmlElementSelection extends HtmlSelection { selector: string; tagName: string; text: string; styles: Record<"color" | "backgroundColor" | "margin" | "padding", string> }
 
+export function htmlText(html: string): string {
+  const body = new DOMParser().parseFromString(html, "text/html").body;
+  body.querySelectorAll("script, style, template, [hidden]").forEach((element) => element.remove());
+  return body.textContent || "";
+}
+
 export function reportDocuments(content: unknown): HtmlReportDocument[] {
   if (!content || typeof content !== "object" || !("documents" in content) || !Array.isArray(content.documents)) return [];
   return content.documents.filter((doc: unknown): doc is HtmlReportDocument => {
@@ -31,10 +37,10 @@ export function editedHtml(html: string, selected: HtmlElementSelection, previou
   return "<!doctype html>" + doc.documentElement.outerHTML;
 }
 
-export function shareHtmlReport(doc: HtmlReportDocument, revision: HtmlReportRevision, selected: HtmlSelection | null, text: string): string {
+export function shareHtmlReport(doc: HtmlReportDocument, revision: HtmlReportRevision, selected: HtmlSelection | null, text: string, appName = "시안과 리포트"): string {
   const latest = Math.max(...doc.revisions.map((item) => item.rev));
   const comments = (revision.comments ?? []).map((comment, index) => ({ comment, index })).filter(({ comment }) => comment.status !== "resolved");
-  const lines = [`[시안과 리포트: ${doc.title} (${doc.id}) - v${revision.rev}/${latest}]`];
+  const lines = [`[${appName}: ${doc.title} (${doc.id}) - v${revision.rev}/${latest}]`];
   if (selected) lines.push(`선택됨: ${selected.selector ?? ""} "${selected.selected_text}"`);
   if (comments.length) {
     lines.push(`미해결 코멘트 (${comments.length}건):`);

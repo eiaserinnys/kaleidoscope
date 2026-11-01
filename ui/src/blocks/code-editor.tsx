@@ -14,8 +14,8 @@ import { EditorConflict } from "./editor-conflict";
 import { codeHighlighting, codeLanguageForPath, languageExtension } from "./code-language";
 import { FileGrant } from "./file-grant";
 
-type Data = Extract<Block, { type: "code_editor" }>;
-export function CodeEditorBlock({ block, context }: { block: Data; context: BlockContext }) {
+export type CodeEditorBlockData = Extract<Block, { type: "code" }> & { file: NonNullable<Extract<Block, { type: "code" }>["file"]> };
+export function CodeEditorBlock({ block, context }: { block: CodeEditorBlockData; context: BlockContext }) {
   const path = resolveFilePath(block.file, context.window);
   const emptyShareRef = useRef<HTMLDivElement>(null);
   useShareDescriber(emptyShareRef, () => ({ text: "[코드 편집기]", visual: false }));
@@ -40,12 +40,12 @@ export function CodeEditorBlock({ block, context }: { block: Data; context: Bloc
     {state.error ? <Notice role="alert">{state.error}</Notice> : null}
     {state.conflict ? <EditorConflict session={session} /> : null}
     <div className="ks-editor-content">
-      <EditableCode key={`${path}:${state.lineSeparator}`} path={path} language={codeLanguageForPath(path, block.language)} text={state.text} session={session} />
+      <EditableCode key={`${path}:${state.lineSeparator}`} path={path} language={codeLanguageForPath(path, block.language)} text={state.text} session={session} wrap={!!block.wrap} />
       {state.status !== "saved" && !state.error && !state.conflict ? <span aria-label={state.status === "saving" ? "저장 중" : "저장 대기"} className="ks-editor-save-indicator" role="status" /> : null}
     </div>
   </div>;
 }
-function EditableCode({ path, language, text, session }: { path: string; language: ReturnType<typeof codeLanguageForPath>; text: string; session: FileEditorSession }) {
+function EditableCode({ path, language, text, session, wrap }: { path: string; language: ReturnType<typeof codeLanguageForPath>; text: string; session: FileEditorSession; wrap: boolean }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   useShareDescriber(host, () => describeEditor(view.current, path, "코드 편집기"));
@@ -54,6 +54,7 @@ function EditableCode({ path, language, text, session }: { path: string; languag
     const state = EditorState.create({ doc: text, extensions: [
       ...(text.includes("\r\n") ? [EditorState.lineSeparator.of("\r\n")] : []),
       languageExtension(language), codeHighlighting, lineNumbers(), highlightActiveLine(), highlightActiveLineGutter(), history(), search(),
+      ...(wrap ? [EditorView.lineWrapping] : []),
       keymap.of([{ key: "Mod-s", run: () => { void session.saveNow(); return true; } }, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
       EditorView.updateListener.of((update) => { if (update.docChanged) session.setText(update.state.sliceDoc()); }),
       EditorView.contentAttributes.of({ "aria-label": "코드 편집기" }),
@@ -61,7 +62,7 @@ function EditableCode({ path, language, text, session }: { path: string; languag
     const editor = new EditorView({ state, parent: host.current });
     view.current = editor;
     return () => { editor.destroy(); view.current = null; };
-  }, [path, language, session]);
+  }, [path, language, session, wrap]);
   useEffect(() => {
     const editor = view.current;
     if (!editor || editor.state.sliceDoc() === text) return;

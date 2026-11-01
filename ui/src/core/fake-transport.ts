@@ -18,6 +18,7 @@ import type {
   WebPage,
   VisibleView,
   StorageEntryDecl,
+  Block,
 } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { SHARE_TEXT_MAX_BYTES } from "../contract/limits";
@@ -68,6 +69,19 @@ export interface FakeTransport extends CoreTransport {
   getShareCalls(): Array<{ window_id: string; view: VisibleView }>;
   getCalls(): CoreRequest[];
   failNextStorageWrite(message: string): void;
+}
+
+type LocalAgentChat = Extract<Block, { type: "chat" }> & {
+  permission: string;
+  root: { permission: string };
+  agents: NonNullable<Extract<Block, { type: "chat" }>["agents"]>;
+  selected: NonNullable<Extract<Block, { type: "chat" }>["selected"]>;
+  on_select: { set_state: string };
+};
+
+function isLocalAgentChat(block: Block | undefined): block is LocalAgentChat {
+  return block?.type === "chat" && block.permission !== undefined && block.root !== undefined &&
+    block.agents !== undefined && block.selected !== undefined && block.on_select !== undefined;
 }
 
 export interface FakeWebViewSnapshot {
@@ -232,7 +246,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
 
   const updateLocalAgentSelection = (window: AppWindow) => {
     const block = definitionFor(window)?.ui;
-    if (block?.type !== "agent_session") return;
+    if (!isLocalAgentChat(block)) return;
     const current = localAgentFor(window.id);
     const selected = window.state[block.selected.state];
     if (current.selected === selected) return;
@@ -525,10 +539,10 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       case "conversation.attachment_open": return { op: "conversation.attachment_open" };
       case "local_agent.attach": {
         const window = findWindow(request.window_id);
-        if (definitionFor(window)?.ui.type !== "agent_session") return fail("invalid_request", "에이전트 창이 아닙니다");
+        if (!isLocalAgentChat(definitionFor(window)?.ui)) return fail("invalid_request", "에이전트 창이 아닙니다");
         const current = localAgentFor(request.window_id);
         const block = definitionFor(window)?.ui;
-        if (block?.type === "agent_session") {
+        if (isLocalAgentChat(block)) {
           const selected = window.state[block.selected.state];
           if (typeof selected === "string") current.selected = selected;
           const specs = localAgentSpecsFor(window);
@@ -899,7 +913,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         };
         emitState();
         const window = findWindow(request.window_id);
-        if (definitionFor(window)?.ui.type === "agent_session") {
+        if (isLocalAgentChat(definitionFor(window)?.ui)) {
           const current = localAgentFor(request.window_id);
           current.folder_name = grant.root_name;
           if (current.selected) {

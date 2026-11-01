@@ -64,12 +64,12 @@ pub(super) fn resolve(
             .ok_or_else(|| error::make(ErrorCode::NotFound))?;
     let mut found = None;
     data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
-        if let Block::AgentSession {
-            permission,
-            root,
-            agents,
-            selected,
-            ..
+        if let Block::Chat {
+            permission: Some(permission),
+            root: Some(root),
+            agents: Some(agents),
+            selected: Some(selected),
+            on_select: Some(_),
         } = block
         {
             found = Some((

@@ -72,7 +72,7 @@ const settingsDefinition: AppDefinition = {
     { id: "role", key: "role", kind: "md", default: "역할 지시", label: "역할 지시", description: "현재 대화에 적용", presentation: "settings" },
     { id: "model", key: "model/{workspace_id}", kind: "json", schema: { type: ["string", "null"] }, default: null, label: "모델", description: "현재 대화에 적용", presentation: "settings", choices: { expr: "$data.models" } },
   ] },
-  ui: harnessParams.has("settings-web") ? { type: "web_view", url: "https://example.com", address_bar: false } : harnessParams.has("settings-document") ? { type: "markdown_editor", document: { entry: "initial" } } : { type: "text", value: "앱 본문" },
+  ui: harnessParams.has("settings-web") ? { type: "web_view", url: "https://example.com", address_bar: false } : harnessParams.has("settings-document") ? { type: "markdown", document: { entry: "initial" } } : { type: "text", value: "앱 본문" },
 };
 if (harnessParams.get("app") === "empty-group") settingsDefinition.storage!.entries = settingsDefinition.storage!.entries.filter((entry) => !entry.key.includes("{workspace_id}"));
 const definitions = [mdEditorJson, htmlReportJson, webBrowserJson, explorerJson, agentJson, calculatorJson, weatherJson, marketJson, pasJson, ...(settingsPreview ? [settingsDefinition] : []), ...(shareScenario === "table" || shareScenario === "list" ? [shareDefinition] : [])] as AppDefinition[];

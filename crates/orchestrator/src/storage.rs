@@ -313,5 +313,7 @@ pub(super) fn random_token() -> String {
 }
 pub(super) fn random_user_code() -> String {
     let mut rng = rand::rng();
-    (0..6).map(|_| char::from(b'0' + rng.random_range(0..10))).collect()
+    (0..6)
+        .map(|_| char::from(b'0' + rng.random_range(0..10)))
+        .collect()
 }

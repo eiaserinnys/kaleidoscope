@@ -142,7 +142,11 @@ function DesktopWindow({
 
 function containsAgentChat(block: Block): boolean {
   switch (block.type) {
-    case "agent_chat": return true;
+    case "chat": return block.permission === undefined
+      && block.root === undefined
+      && block.agents === undefined
+      && block.selected === undefined
+      && block.on_select === undefined;
     case "split": case "stack": return block.children.some(containsAgentChat);
     case "tabs": return block.tabs.some((tab) => containsAgentChat(tab.child));
     case "toolbar": return [...block.start, ...(block.end ?? [])].some(containsAgentChat);

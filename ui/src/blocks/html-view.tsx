@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Block } from "../contract/contract";
+import type { Binding, Block, DocumentRef, FileRef } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { Badge } from "../components/badge";
 import { Button, Notice, StatusText } from "../components/primitives";
+import { DataState } from "../components/data-state";
 import { Select } from "../components/select-toggle";
 import { TextInput } from "../components/text-input";
 import { toCoreError } from "../core/core-transport";
 import { useShareDescriber } from "../share/visible";
+import { useBinding } from "../data/window-data";
 import type { BlockContext } from "./block-context";
+import { resolveFilePath } from "./file-path";
+import { FileGrant } from "./file-grant";
 import { htmlViewSource } from "./html-view-frame";
-import { editedHtml, reportDocuments, shareHtmlReport, type HtmlElementSelection, type HtmlReportComment, type HtmlReportDocument, type HtmlReportRevision, type HtmlSelection } from "./html-view-model";
+import { editedHtml, htmlText, reportDocuments, shareHtmlReport, type HtmlElementSelection, type HtmlReportComment, type HtmlReportDocument, type HtmlReportRevision, type HtmlSelection } from "./html-view-model";
 
 type HtmlViewData = Extract<Block, { type: "html_view" }>;
 const label: Record<HtmlReportComment["status"], string> = { needs_agent_review: "검토 요청", needs_user_reply: "답변 도착", resolved: "해결됨" };
@@ -20,7 +24,73 @@ function Field({ name, value, onEdit, onBegin, onCancel }: { name: string; value
   return <label className="ks-html-field"><span>{name}</span><TextInput aria-label={name} persistent value={value} onFocus={() => { baseline.current = value; onBegin?.(); }} onEdit={onEdit} onCommit={(next) => { baseline.current = next; onEdit(next); onBegin?.(); }} onCancel={() => { if (onCancel) onCancel(); else onEdit(baseline.current); }} /></label>;
 }
 
-export function HtmlViewBlock({ block, context }: { block: HtmlViewData; context: BlockContext }) {
+export function HtmlViewBlock({ block, context, pointer = "/ui" }: { block: HtmlViewData; context: BlockContext; pointer?: string }) {
+  if (block.value !== undefined) return <BoundHtmlViewBlock binding={block.value} pointer={pointer} context={context} />;
+  if (block.file !== undefined) return <FileHtmlViewBlock file={block.file} context={context} />;
+  if (block.document !== undefined) return <HtmlDocumentViewBlock block={{ ...block, document: block.document }} context={context} />;
+  return null;
+}
+
+function BoundHtmlViewBlock({ binding, pointer, context }: { binding: Binding; pointer: string; context: BlockContext }) {
+  const value = useBinding(`${pointer}/value`, binding);
+  const root = useRef<HTMLElement>(null);
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [visibleText, setVisibleText] = useState("");
+  const rawHtml = value.status === "ready" && typeof value.value === "string" ? value.value : "";
+  useLayoutEffect(() => { setVisibleText(""); }, [rawHtml]);
+  useLayoutEffect(() => {
+    const receive = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow || event.data?.type !== "ks-html-visible-text" || typeof event.data.text !== "string") return;
+      setVisibleText(event.data.text);
+    };
+    window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);
+  }, []);
+  const appName = context.definition.name || "HTML 보기";
+  useShareDescriber(root, () => ({ text: `[${appName}]\n\n${visibleText || htmlText(rawHtml)}`, visual: true }));
+  if (value.status !== "ready") return <DataState value={value} />;
+  if (typeof value.value !== "string") return <div className="ks-html-state"><Notice role="alert">HTML 값이 글이 아닙니다</Notice></div>;
+  return <section className="ks-html-view" ref={root}><div className="ks-html-content"><iframe ref={frame} title={appName} sandbox="allow-scripts" srcDoc={htmlViewSource(rawHtml)} /></div></section>;
+}
+
+function FileHtmlViewBlock({ file, context }: { file: FileRef; context: BlockContext }) {
+  const path = resolveFilePath(file, context.window);
+  const rootPath = context.snapshot.device.grants.find((grant) => grant.window_id === context.window.id && grant.permission === file.permission)?.root_path ?? null;
+  const [rawHtml, setRawHtml] = useState("");
+  const [visibleText, setVisibleText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const version = useRef(0);
+  const root = useRef<HTMLElement>(null);
+  const frame = useRef<HTMLIFrameElement>(null);
+  useLayoutEffect(() => { setVisibleText(""); }, [rawHtml]);
+  useLayoutEffect(() => {
+    const receive = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow || event.data?.type !== "ks-html-visible-text" || typeof event.data.text !== "string") return;
+      setVisibleText(event.data.text);
+    };
+    window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);
+  }, []);
+  const appName = context.definition.name || "HTML 보기";
+  useShareDescriber(root, () => ({ text: path ? `[파일 ${path}]\n\n${visibleText || htmlText(rawHtml)}` : `[${appName}]`, visual: true }));
+  const read = useCallback(async (initial = false) => {
+    const current = ++version.current;
+    if (!rootPath || path === null) { setRawHtml(""); setError(null); setLoading(false); return; }
+    if (initial) setLoading(true);
+    try {
+      const reply = await context.store.call({ op: "files.read", window_id: context.window.id, permission: file.permission, path });
+      if (reply.op === "files.read" && current === version.current) { setRawHtml(reply.text); setError(null); }
+    } catch (reason) { if (current === version.current) setError(toCoreError(reason).message); }
+    finally { if (current === version.current) setLoading(false); }
+  }, [context.store, context.window.id, file.permission, path, rootPath]);
+  useEffect(() => { void read(true); return () => { version.current++; }; }, [read]);
+  useEffect(() => { const refresh = () => void read(); window.addEventListener("focus", refresh); return () => window.removeEventListener("focus", refresh); }, [read]);
+  if (!rootPath) return <FileGrant context={context} permission={file.permission} />;
+  if (loading) return <div className="ks-html-state"><StatusText>불러오는 중</StatusText></div>;
+  if (error) return <div className="ks-html-state"><Notice role="alert">{error}</Notice></div>;
+  return <section className="ks-html-view" ref={root}><div className="ks-html-content"><iframe ref={frame} title={appName} sandbox="allow-scripts" srcDoc={htmlViewSource(rawHtml)} /></div></section>;
+}
+
+function HtmlDocumentViewBlock({ block, context }: { block: HtmlViewData & { document: DocumentRef }; context: BlockContext }) {
   const [documents, setDocuments] = useState<HtmlReportDocument[]>([]);
   const [revisionToken, setRevisionToken] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -100,7 +170,8 @@ export function HtmlViewBlock({ block, context }: { block: HtmlViewData; context
     };
     window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);
   }, [comments, sendFrame]);
-  useShareDescriber(root, () => ({ text: doc && revision ? shareHtmlReport(doc, revision, selection, visibleText || new DOMParser().parseFromString(revision.html, "text/html").body.textContent || "") : "[시안과 리포트]", visual: true }));
+  const appName = context.definition.name || "HTML 보기";
+  useShareDescriber(root, () => ({ text: doc && revision ? shareHtmlReport(doc, revision, selection, visibleText || htmlText(revision.html), appName) : `[${appName}]`, visual: true }));
 
   const save = async (next: HtmlReportDocument[]) => {
     setSaving(true);

@@ -189,13 +189,13 @@
     "direction": "column",
     "children": [
       {
-        "type": "markdown_editor",
+        "type": "markdown",
         "document": {
           "entry": "role"
         }
       },
       {
-        "type": "agent_chat"
+        "type": "chat"
       }
     ]
   }

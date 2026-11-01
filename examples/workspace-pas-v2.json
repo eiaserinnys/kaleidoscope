@@ -123,8 +123,8 @@
     "type": "stack",
     "direction": "column",
     "children": [
-      { "type": "markdown_editor", "document": { "entry": "role" } },
-      { "type": "agent_chat" }
+      { "type": "markdown", "document": { "entry": "role" } },
+      { "type": "chat" }
     ]
   }
 }

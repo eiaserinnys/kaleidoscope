@@ -15,7 +15,7 @@ import { Select } from "../components/select-toggle";
 import { Dialog } from "../components/dialog";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 
-type AgentChatBlockData = Extract<Block, { type: "agent_chat" }>;
+export type AgentChatBlockData = Extract<Block, { type: "chat" }>;
 
 export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlockData; context: BlockContext }) {
   const provider = context.definition.agent;
@@ -60,7 +60,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const [tool, setTool] = useState<string | null>(null);
   const [delta, setDelta] = useState("");
   const shareRef = useRef<HTMLElement>(null);
-  useShareDescriber(shareRef, () => ({ text: "[작업 PAS 대화]", visual: false }));
+  useShareDescriber(shareRef, () => ({ text: "[채팅]", visual: false }));
   const historyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const startRef = useRef<HTMLDivElement>(null);

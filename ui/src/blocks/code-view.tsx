@@ -15,17 +15,17 @@ import { resolveFilePath } from "./file-path";
 import { codeHighlighting, codeLanguageForPath, codeViewText, languageExtension } from "./code-language";
 import { FileGrant } from "./file-grant";
 
-type Data = Extract<Block, { type: "code_view" }>;
-export function CodeViewBlock({ block, context, pointer }: { block: Data; context: BlockContext; pointer: string }) {
+export type CodeViewBlockData = Extract<Block, { type: "code" }>;
+export function CodeViewBlock({ block, context, pointer }: { block: CodeViewBlockData; context: BlockContext; pointer: string }) {
   if (block.file) return <FileCodeView block={block} file={block.file} context={context} />;
   return <BoundCodeView block={block} pointer={pointer} />;
 }
-function BoundCodeView({ block, pointer }: { block: Data; pointer: string }) {
+function BoundCodeView({ block, pointer }: { block: CodeViewBlockData; pointer: string }) {
   const value = useBinding(`${pointer}/value`, block.value ?? null);
   if (value.status !== "ready") return <DataState value={value} />;
   return <ReadOnlyCode text={codeViewText(value.value)} language={codeLanguageForPath(null, block.language)} follow={!!block.follow} wrap={!!block.wrap} />;
 }
-function FileCodeView({ block, file, context }: { block: Data; file: FileRef; context: BlockContext }) {
+function FileCodeView({ block, file, context }: { block: CodeViewBlockData; file: FileRef; context: BlockContext }) {
   const path = resolveFilePath(file, context.window);
   const emptyShareRef = useRef<HTMLDivElement>(null);
   useShareDescriber(emptyShareRef, () => ({ text: "[코드 보기]", visual: false }));

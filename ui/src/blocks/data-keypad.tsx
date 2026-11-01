@@ -12,7 +12,7 @@ function isButton(value: unknown): value is KeypadButton {
   return isObject(value) && typeof value.key === "string" && value.key.length > 0 && typeof value.label === "string";
 }
 
-export function KeypadBlock({ block, context, pointer }: { block: Extract<Block, { type: "keypad" }>; context: BlockContext; pointer: string }) {
+export function DataKeypadBlock({ block, context, pointer }: { block: Extract<Block, { type: "button_grid" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/buttons`, block.buttons);
   if (value.status !== "ready") return <DataState value={value} />;
   const buttons = asArray(value.value).filter(isButton);
@@ -20,7 +20,7 @@ export function KeypadBlock({ block, context, pointer }: { block: Extract<Block,
   return <KeypadReady block={block} context={context} pointer={pointer} buttons={buttons} />;
 }
 
-function KeypadReady({ block, context, pointer, buttons }: { block: Extract<Block, { type: "keypad" }>; context: BlockContext; pointer: string; buttons: KeypadButton[] }) {
+function KeypadReady({ block, context, pointer, buttons }: { block: Extract<Block, { type: "button_grid" }>; context: BlockContext; pointer: string; buttons: KeypadButton[] }) {
   const data = useWindowData();
   const root = useRef<HTMLDivElement>(null);
   const pending = useRef<Promise<void>>(Promise.resolve());

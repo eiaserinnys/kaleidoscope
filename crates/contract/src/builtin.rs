@@ -25,7 +25,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "agent",
         name: "에이전트",
-        version: 1,
+        version: 2,
         updated_at: "2026-10-30T00:00:00Z",
         blocks: 8,
         modules: &[("files", 1), ("local_agent", 1), ("storage", 1)],
@@ -43,7 +43,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "md-editor",
         name: "마크다운 편집기",
-        version: 2,
+        version: 3,
         updated_at: "2026-10-30T00:00:00Z",
         blocks: 3,
         modules: &[("files", 1)],
@@ -70,7 +70,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "calculator",
         name: "계산기",
-        version: 1,
+        version: 2,
         updated_at: "2026-10-31T00:00:00Z",
         blocks: 9,
         modules: &[],

@@ -59,7 +59,9 @@ fn calculator_formula_uses_displayed_operator_symbols() {
     let mut state = definition.state;
     state.get_mut("calc").unwrap()["formula"] = json!("8 / 2 * 3 - 1 =");
     let values = app.evaluate(&state, &BTreeMap::new(), &BTreeMap::new());
-    let BindingValue::Ready { value } = &values["/ui/children/0/items"] else { panic!("표시식 계산 실패"); };
+    let BindingValue::Ready { value } = &values["/ui/children/0/items"] else {
+        panic!("표시식 계산 실패");
+    };
     assert_eq!(value[0]["label"], "8 ÷ 2 × 3 − 1 =");
 }
 
@@ -68,25 +70,56 @@ fn weather_city_selection_and_live_search_actions() {
     let definition = parse_app_definition(&app_file("weather.json")).unwrap();
     let app = CompiledApp::compile(&definition);
     let empty = BTreeMap::new();
-    let sources = BTreeMap::from([("places".into(), json!({"results": [
-        {"id": 1, "name": "서울특별시"}, {"id": 2, "name": "부산광역시"}, {"id": 3, "name": "성남시"}
-    ]}))]);
+    let sources = BTreeMap::from([(
+        "places".into(),
+        json!({"results": [
+            {"id": 1, "name": "서울특별시"}, {"id": 2, "name": "부산광역시"}, {"id": 3, "name": "성남시"}
+        ]}),
+    )]);
     for (id, expected) in [("1", "서울"), ("2", "부산"), ("3", "")] {
         let event = json!(id);
         let mut state = definition.state.clone();
         let mut current_sources = sources.clone();
         for index in 0..4 {
-            let env = Env { state: &state, data: &current_sources, data_meta: &empty, storage: &empty, storage_meta: &empty, event: &event, item: &Value::Null };
-            let Step::SetState { key, value } = app.action_step("/ui/children/1/children/0/on_select", index, &env).unwrap() else { panic!("도시 선택 동작이 필요합니다"); };
-            if key == "search" && value == "" { current_sources.remove("places"); }
+            let env = Env {
+                state: &state,
+                data: &current_sources,
+                data_meta: &empty,
+                storage: &empty,
+                storage_meta: &empty,
+                event: &event,
+                item: &Value::Null,
+            };
+            let Step::SetState { key, value } = app
+                .action_step("/ui/children/1/children/0/on_select", index, &env)
+                .unwrap()
+            else {
+                panic!("도시 선택 동작이 필요합니다");
+            };
+            if key == "search" && value == "" {
+                current_sources.remove("places");
+            }
             state.insert(key, value);
         }
         assert_eq!(state["city"], expected);
     }
     let event = json!("  Seoul  ");
-    let env = Env { state: &definition.state, data: &sources, data_meta: &empty, storage: &empty, storage_meta: &empty, event: &event, item: &Value::Null };
-    for pointer in ["/ui/children/0/start/1/on_change", "/ui/children/0/start/1/on_submit"] {
-        let Step::SetState { key, value } = app.action_step(pointer, 1, &env).unwrap() else { panic!("검색 동작이 필요합니다"); };
+    let env = Env {
+        state: &definition.state,
+        data: &sources,
+        data_meta: &empty,
+        storage: &empty,
+        storage_meta: &empty,
+        event: &event,
+        item: &Value::Null,
+    };
+    for pointer in [
+        "/ui/children/0/start/1/on_change",
+        "/ui/children/0/start/1/on_submit",
+    ] {
+        let Step::SetState { key, value } = app.action_step(pointer, 1, &env).unwrap() else {
+            panic!("검색 동작이 필요합니다");
+        };
         assert_eq!(key, "search");
         assert_eq!(value, "Seoul");
     }
@@ -142,20 +175,33 @@ fn weather_daily_forecast_shows_each_korean_weekday() {
     use kaleidoscope_contract::data::{BindingValue, SourceStatus};
     let definition = parse_app_definition(&app_file("weather.json")).unwrap();
     let app = CompiledApp::compile(&definition);
-    let sources = BTreeMap::from([("forecast".into(), json!({
-        "daily": {
-            "time":["2026-11-01","2026-11-02","2026-11-03","2026-11-04","2026-11-05","2026-11-06","2026-11-07","2026-11-08"],
-            "weather_code":[0,0,0,0,0,0,0,0],
-            "temperature_2m_min":[10,10,10,10,10,10,10,10],
-            "temperature_2m_max":[20,20,20,20,20,20,20,20],
-            "precipitation_probability_max":[0,0,0,0,0,0,0,0]
-        }
-    }))]);
-    let status = BTreeMap::from([("forecast".into(), SourceStatus::Ready { updated_at: "2026-11-01T00:00:00Z".into() })]);
+    let sources = BTreeMap::from([(
+        "forecast".into(),
+        json!({
+            "daily": {
+                "time":["2026-11-01","2026-11-02","2026-11-03","2026-11-04","2026-11-05","2026-11-06","2026-11-07","2026-11-08"],
+                "weather_code":[0,0,0,0,0,0,0,0],
+                "temperature_2m_min":[10,10,10,10,10,10,10,10],
+                "temperature_2m_max":[20,20,20,20,20,20,20,20],
+                "precipitation_probability_max":[0,0,0,0,0,0,0,0]
+            }
+        }),
+    )]);
+    let status = BTreeMap::from([(
+        "forecast".into(),
+        SourceStatus::Ready {
+            updated_at: "2026-11-01T00:00:00Z".into(),
+        },
+    )]);
     let values = app.evaluate(&definition.state, &sources, &status);
     let pointer = "/ui/children/1/children/1/children/2/items";
-    let BindingValue::Ready { value } = &values[pointer] else { panic!("일별 계산 실패: {:?}", values[pointer]); };
-    for (index, day) in ["월", "화", "수", "목", "금", "토", "일"].iter().enumerate() {
+    let BindingValue::Ready { value } = &values[pointer] else {
+        panic!("일별 계산 실패: {:?}", values[pointer]);
+    };
+    for (index, day) in ["월", "화", "수", "목", "금", "토", "일"]
+        .iter()
+        .enumerate()
+    {
         assert!(value[index + 1]["title"].as_str().unwrap().starts_with(day));
     }
 }

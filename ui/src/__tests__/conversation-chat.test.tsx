@@ -12,7 +12,7 @@ import type { ShellStore } from "../core/shell-store";
 import { makeTestSnapshot } from "./fixtures";
 
 const definition: AppDefinition = {
-  id: "provider-chat", name: "대화", requires: { blocks: 2, modules: { agent: 3 } }, permissions: [], state: {}, ui: { type: "agent_chat" },
+  id: "provider-chat", name: "대화", requires: { blocks: 2, modules: { agent: 3 } }, permissions: [], state: {}, ui: { type: "chat" },
   agent: { protocol: "conversation-v1", permission: "login", base_path: "api", namespace: "n", profile: "p", collection: "c", model_order: [], selected_model: "", title_template: "", initial_instruction_template: "", instructions_template: "", thread_entry: "thread" },
 };
 const thread: ConversationThread = { id: "thread-1", external: { namespace: "n", key: "k" }, title: "대화", model: { id: "m", label: "모델", group: { id: "node-a", label: "노드 A" } }, profile: { id: "profile-a", label: "서소영" }, created_at: "2026-10-30T00:00:00Z", archived: false };
@@ -36,7 +36,7 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
   const store = { call, getSnapshot: () => snapshot, getError: () => null, subscribe: () => () => {}, subscribeEvents: (fn: (event: CoreEvent) => void) => { listeners.add(fn); return () => listeners.delete(fn); }, ready: Promise.resolve(), dispose: () => {} } as unknown as ShellStore;
   const window = snapshot.shared.windows[0];
   const context = { store, snapshot, window, definition: appDefinition };
-  render(<WindowDataProvider store={store} appWindow={window} definition={appDefinition}><AgentChatBlock block={{ type: "agent_chat" }} context={context} /></WindowDataProvider>);
+  render(<WindowDataProvider store={store} appWindow={window} definition={appDefinition}><AgentChatBlock block={{ type: "chat" }} context={context} /></WindowDataProvider>);
   return { call, window, emit: (event: CoreEvent) => act(() => { listeners.forEach((fn) => fn(event)); }) };
 }
 const get = (value: ConversationThread | null = thread, profile = "profile-a"): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles, start: { profile, model: "m" } });

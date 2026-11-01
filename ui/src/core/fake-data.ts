@@ -20,8 +20,9 @@ function actionSlots(block: Block, pointer = "/ui"): Set<string> {
   const slots = new Set<string>();
   const add = (field: string, present = true) => { if (present) slots.add(`${pointer}/${field}`); };
   switch (block.type) {
-    case "keypad": add("on_press"); break;
-    case "map": case "chart": case "list": case "tree": case "table": case "feed": add("on_select", block.on_select !== undefined); break;
+    case "button_grid": add("on_press"); break;
+    case "tree": if (block.items !== undefined) add("on_select", block.on_select !== undefined); break;
+    case "map": case "chart": case "list": case "table": case "feed": add("on_select", block.on_select !== undefined); break;
     case "input": add("on_change"); add("on_submit", block.on_submit !== undefined); break;
     case "select": case "toggle": add("on_change"); break;
     case "button": add("on_click"); break;
@@ -37,16 +38,19 @@ function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]
   const add = (name: string, value: Binding | undefined) => { if (value !== undefined) slots.push([`${pointer}/${name}`, value]); };
   switch (block.type) {
     case "section": add("title", block.title); add("meta", block.meta); break;
-    case "list": case "tree": add("items", block.items); break;
+    case "list": add("items", block.items); break;
+    case "tree": if (block.items !== undefined) add("items", block.items); break;
     case "table": add("rows", block.rows); break;
     case "properties": block.fields.forEach((field, index) => add(`fields/${index}/value`, field.value)); break;
     case "feed": add("entries", block.entries); break;
-    case "text": case "code_view": add("value", block.value); break;
+    case "text": case "code": add("value", block.value); break;
+    case "markdown": case "html_view": add("value", block.value); break;
+    case "chat": add("agents", block.agents); break;
     case "select": add("options", block.options); break;
     case "button": add("disabled", block.disabled); add("confirm/body", block.confirm?.body); break;
     case "image": case "media": add("src", block.src); break;
     case "metrics": add("items", block.items); break;
-    case "keypad": add("buttons", block.buttons); break;
+    case "button_grid": add("buttons", block.buttons); break;
     case "chart": add("series", block.series); break;
     case "map": add("points", block.points); break;
   }

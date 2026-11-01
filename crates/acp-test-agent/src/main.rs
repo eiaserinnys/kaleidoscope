@@ -126,7 +126,15 @@ fn main() {
             }
             "session/prompt" => {
                 // 앱 제작 안내 대신 마지막 사용자 텍스트에서 시나리오를 고른다.
-                let text = value["params"]["prompt"].as_array().and_then(|blocks| blocks.iter().rev().find_map(|b| b.get("text").and_then(Value::as_str))).unwrap_or("");
+                let text = value["params"]["prompt"]
+                    .as_array()
+                    .and_then(|blocks| {
+                        blocks
+                            .iter()
+                            .rev()
+                            .find_map(|b| b.get("text").and_then(Value::as_str))
+                    })
+                    .unwrap_or("");
                 if text.contains("fail-turn") {
                     update(
                         json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"OLD"}}),

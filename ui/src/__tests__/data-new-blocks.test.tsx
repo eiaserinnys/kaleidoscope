@@ -83,7 +83,7 @@ it("dispatches keypad clicks and shortcuts once, ignoring text entry", async () 
   ];
   const { calls } = setup({ type: "stack", direction: "column", children: [
     { type: "input", value: { state: "text" }, on_change: { set_state: "text" }, placeholder: "입력" },
-    { type: "keypad", columns: 2, buttons, on_press: { set_state: "value" } },
+    { type: "button_grid", columns: 2, buttons, on_press: { set_state: "value" } },
   ] }, { text: "", value: null });
   const one = await screen.findByRole("button", { name: "1" });
   await userEvent.click(one);
@@ -136,7 +136,7 @@ it("calculates 1 + 2 = from keyboard input using the bundled calculator definiti
 });
 
 it("sends keypad shortcuts only to the active app window", async () => {
-  const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 9, modules: {} }, permissions: [], state: { value: null }, ui: { type: "keypad", columns: 1, buttons: [{ key: "1", label: "1", shortcut: "1" }], on_press: { set_state: "value" } } };
+  const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 9, modules: {} }, permissions: [], state: { value: null }, ui: { type: "button_grid", columns: 1, buttons: [{ key: "1", label: "1", shortcut: "1" }], on_press: { set_state: "value" } } };
   const seed = makeTestSeed({ definitions: [definition] });
   const first = seed.snapshot.shared.windows[0];
   first.state = { value: null };
@@ -185,6 +185,11 @@ it("hides a null list while retaining the empty state for an empty array", async
   expect(screen.queryByText("없음")).toBeNull();
   cleanup();
   setup({ type: "list", items: [] });
+  expect(await screen.findByText("없음")).toBeTruthy();
+});
+
+it("renders a null data tree as an empty tree", async () => {
+  setup({ type: "tree", items: null });
   expect(await screen.findByText("없음")).toBeTruthy();
 });
 

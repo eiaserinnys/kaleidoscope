@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { Block, TreeItem } from "../contract/contract";
+import type { Binding, Block, TreeItem } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { isBadge } from "../components/badge";
 import { ChevronRight, FileText } from "../components/icons";
@@ -9,6 +9,7 @@ import type { BlockContext } from "./block-context";
 import { Badges, NoItems, asArray, isObject } from "./data-view-common";
 
 type Node = { id: string; title: string; item?: TreeItem; children: Node[] };
+export type DataTreeBlockData = Extract<Block, { type: "tree" }> & { items: Binding };
 function valid(value: unknown, byPath: boolean): value is TreeItem {
   if (!isObject(value) || typeof value.key !== "string") return false;
   if (value.title != null && typeof value.title !== "string") return false;
@@ -48,12 +49,12 @@ function ancestors(nodes: Node[], key: unknown, parents: string[] = []): string[
   }
   return null;
 }
-export function TreeBlock({ block, context, pointer }: { block: Extract<Block, { type: "tree" }>; context: BlockContext; pointer: string }) {
+export function TreeBlock({ block, context, pointer }: { block: DataTreeBlockData; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/items`, block.items);
   if (value.status !== "ready") return <DataState value={value} />;
   return <TreeReady block={block} context={context} pointer={pointer} value={value.value} />;
 }
-function TreeReady({ block, context, pointer, value }: { block: Extract<Block, { type: "tree" }>; context: BlockContext; pointer: string; value: unknown }) {
+function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockData; context: BlockContext; pointer: string; value: unknown }) {
   const data = useWindowData();
   const nodes = useMemo(() => tree(value, block.by === "path"), [value, block.by]);
   const selected = block.selected ? context.window.state[block.selected.state] : null;

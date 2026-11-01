@@ -195,7 +195,8 @@
           "direction": "row",
           "children": [
             {
-              "type": "code_view",
+              "type": "code",
+              "read_only": true,
               "language": "json",
               "value": { "expr": "$string({\"tab\": $state.tab, \"item\": $state.item, \"count\": $state.count, \"lang\": $state.lang}, true)" }
             },
@@ -204,8 +205,8 @@
               "direction": "column",
               "sizes": [35, 65],
               "children": [
-                { "type": "file_tree", "root": { "permission": "notes" }, "extensions": ["json", "yaml", "yml", "toml"], "selected": { "state": "config" }, "on_select": { "set_state": "config" } },
-                { "type": "code_editor", "file": { "permission": "notes", "path": { "state": "config" } } }
+                { "type": "tree", "root": { "permission": "notes" }, "extensions": ["json", "yaml", "yml", "toml"], "selected": { "state": "config" }, "on_select": { "set_state": "config" } },
+                { "type": "code", "file": { "permission": "notes", "path": { "state": "config" } } }
               ]
             }
           ]

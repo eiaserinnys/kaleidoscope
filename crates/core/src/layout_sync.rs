@@ -38,16 +38,17 @@ fn is_active(inner: &Inner, generation: u64, epoch: u64) -> bool {
         && inner.link_file.lock().unwrap().is_some()
 }
 
-pub(crate) fn batch(shared: &SharedState, sync: &SyncState) -> (LayoutChanges, BTreeMap<EntityKey, u64>) {
+pub(crate) fn batch(
+    shared: &SharedState,
+    sync: &SyncState,
+) -> (LayoutChanges, BTreeMap<EntityKey, u64>) {
     let mut changes = LayoutChanges::default();
     for key in sync.pending.keys() {
         match key.kind {
-            EntityKind::Workspace => {
-                match shared.workspaces.iter().find(|v| v.id == key.id) {
-                    Some(value) => changes.workspaces.push(value.clone()),
-                    None => changes.deleted_workspaces.push(key.id.clone()),
-                }
-            }
+            EntityKind::Workspace => match shared.workspaces.iter().find(|v| v.id == key.id) {
+                Some(value) => changes.workspaces.push(value.clone()),
+                None => changes.deleted_workspaces.push(key.id.clone()),
+            },
             EntityKind::Desktop => match shared.desktops.iter().find(|v| v.id == key.id) {
                 Some(value) => changes.desktops.push(value.clone()),
                 None => changes.deleted_desktops.push(key.id.clone()),
