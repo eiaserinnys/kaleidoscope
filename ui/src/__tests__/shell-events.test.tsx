@@ -203,7 +203,13 @@ describe("shell server link control", () => {
     const spy = vi.spyOn(transport, "call");
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "내 PC 서버" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "원격 서버 URL" }), { target: { value: "https://remote.example" } });
+    const input = screen.getByRole("textbox", { name: "원격 서버 URL" });
+    const connect = screen.getByRole("button", { name: "원격 서버 연결" }) as HTMLButtonElement;
+    expect(connect.disabled).toBe(true);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(spy.mock.calls.some(([request]) => request.op === "link.start")).toBe(false);
+    fireEvent.change(input, { target: { value: "https://remote.example" } });
+    expect(connect.disabled).toBe(false);
     fireEvent.blur(screen.getByRole("textbox", { name: "원격 서버 URL" }));
     expect(spy.mock.calls.some(([request]) => request.op === "link.start")).toBe(false);
     fireEvent.keyDown(screen.getByRole("textbox", { name: "원격 서버 URL" }), { key: "Enter" });
@@ -239,6 +245,7 @@ describe("shell server link control", () => {
     expect(screen.getByText("원격 연결 거부됨")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "내 PC 앱과 데이터 가져오기" })).toBeNull();
     const input = screen.getByRole("textbox", { name: "원격 서버 URL" }) as HTMLInputElement;
+    expect((screen.getByRole("button", { name: "원격 서버 연결" }) as HTMLButtonElement).disabled).toBe(false);
     expect(input.value).toBe("https://revoked.example");
     expect(screen.getByRole("button", { name: "내 PC 서버로 전환" })).toBeTruthy();
     fireEvent.keyDown(input, { key: "Enter" });
