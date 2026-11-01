@@ -941,6 +941,7 @@ fn unavailable_storage_never_looks_like_a_null_default() {
     let (_, desktop) = active_ids(&core);
     let window = open_window(&core, &desktop, "storage-app");
     core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
         reason: "offline".into(),
@@ -981,6 +982,7 @@ fn storage_binding_drops_unlinked_defaults_when_the_link_goes_offline() {
     );
     *core.inner.link_file.lock().unwrap() = Some(connected_link_file());
     core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
         reason: "offline".into(),

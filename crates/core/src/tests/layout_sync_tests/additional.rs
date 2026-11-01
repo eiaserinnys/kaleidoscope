@@ -9,6 +9,7 @@ fn offline_changes_wait_for_snapshot_and_changed_during_send_stays_pending() {
     mark_connected(&core);
     let (id, _) = active_ids(&core);
     core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test".into(),
         reason: "끊김".into(),
@@ -154,7 +155,7 @@ fn snapshot_keeps_pending_deletion_and_server_order() {
 }
 
 #[test]
-fn unlink_and_revocation_remove_sync_file() {
+fn unlink_removes_sync_but_remote_revocation_preserves_it() {
     for revoked in [false, true] {
         let dir = TempDir::new().unwrap();
         let host = Arc::new(FakeHost::default());
@@ -174,7 +175,7 @@ fn unlink_and_revocation_remove_sync_file() {
         } else {
             core.handle(CoreRequest::LinkUnlink {}).unwrap();
         }
-        assert!(!dir.path().join("sync.json").exists());
-        assert!(core.inner.state.lock().unwrap().sync.pending.is_empty());
+        assert_eq!(dir.path().join("sync.json").exists(),revoked);
+        assert_eq!(core.inner.state.lock().unwrap().sync.pending.is_empty(),!revoked);
     }
 }

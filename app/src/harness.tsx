@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  Button,
   createFakeTransport,
   createShellStore,
   type FakeTransport,
@@ -131,19 +132,21 @@ const windows: AppWindow[] = settingsPreview ? [{ id: "settings-window", desktop
 
 function linkStatus(state: string | null): LinkStatus {
   switch (state) {
+    case "embedded-offline": return { state: "offline", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC", reason: "연결하는 중" };
+    case "embedded": return { state: "connected", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC" };
     case "pairing": return {
       state: "pairing",
       server_url: "https://kaleidoscope.example",
-      user_code: "K7PQ-4XMR",
+      user_code: "123456",
       expires_at: "2026-10-29T00:10:00Z",
     };
     case "connected": return {
-      state: "connected",
+      state: "connected", mode: "remote",
       server_url: "https://kaleidoscope.example",
       device_name: "Office PC",
     };
     case "offline": return {
-      state: "offline",
+      state: "offline", mode: "remote",
       server_url: "https://kaleidoscope.example",
       device_name: "Office PC",
       reason: "서버 응답 없음",
@@ -154,6 +157,7 @@ function linkStatus(state: string | null): LinkStatus {
 }
 
 const snapshot: ShellSnapshot = {
+  embedded_available: true,
   shared: {
     apps,
     app_versions: appVersions,
@@ -174,6 +178,17 @@ const snapshot: ShellSnapshot = {
       ? { state: "idle", current_version: "0.5.0" }
       : { state: "unavailable" },
 };
+
+if (harnessParams.has("empty-workspace")) {
+  snapshot.shared.workspaces = [];
+  snapshot.shared.desktops = [];
+  snapshot.shared.windows = [];
+  snapshot.device.active_workspace_id = null;
+  snapshot.device.active_desktop_ids = {};
+}
+if (harnessParams.has("transfer-skips")) {
+  snapshot.last_transfer = { imported: 3, skipped: ["app:sample-a", "value:sample-a/settings"] };
+}
 
 const files = shareScenario === "editor" ? { "README.md": Array.from({ length: 120 }, (_, i) => `줄 ${i + 1}`).join("\n") } : bottomMenuScenario
   ? Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`documents/z${String(index).padStart(2, "0")}.md`, `# File ${index}`]))
@@ -264,6 +279,13 @@ function Harness() {
     <>
       <Shell store={store} />
       <FakeWebViewLayer fakeTransport={transport} />
+      {harnessParams.has("server-controls") && <div className="ks-harness-settings-controls" data-ks-share-skip>
+        <Button onClick={() => transport.setLink(linkStatus("embedded"))}>내 PC 서버</Button>
+        <Button onClick={() => transport.setLink(linkStatus("pairing"))}>페어링 대기</Button>
+        <Button onClick={() => transport.setLink(linkStatus("connected"))}>원격 서버</Button>
+        <Button onClick={() => transport.setLink(linkStatus("offline"))}>원격 오프라인</Button>
+      </div>}
+
       {settingsPreview ? <div className="ks-harness-settings-controls" data-ks-share-skip>
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { void transport.call({ op: "storage.get", window_id: "settings-window", entry: "agent" }).then(({ result }) => transport.call({ op: "storage.write", window_id: "settings-window", entry: "agent", content: "다른 곳", expected_revision: result.revision })); }}>외부 변경</button>
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => transport.failNextStorageWrite("연결할 수 없습니다")}>통신 실패</button>

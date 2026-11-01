@@ -108,7 +108,7 @@ describe("markdown storage document", () => {
     expect(await session.saveNow()).toBe(false);
     expect(documentEditorSession(store, "editor-window", "role")).toBe(session);
     offline = false;
-    transport.setLink({ state: "connected", server_url: "https://example.com", device_name: "시험" });
+    transport.setLink({ state: "connected", mode: "remote", server_url: "https://example.com", device_name: "시험" });
     await vi.waitFor(() => expect(session.getSnapshot().dirty).toBe(false));
     expect((await original({ op: "storage.get", window_id: "editor-window", entry: "role" })).result.content).toBe("탭을 바꿔도 남는 초안");
     session.dispose();

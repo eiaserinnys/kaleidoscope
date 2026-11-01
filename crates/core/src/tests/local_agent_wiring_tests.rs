@@ -491,6 +491,7 @@ fn storage_defaults_only_apply_before_a_link() {
         ErrorCode::Unavailable
     );
     core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://example.test".into(),
         device_name: "test".into(),
         reason: "offline".into(),

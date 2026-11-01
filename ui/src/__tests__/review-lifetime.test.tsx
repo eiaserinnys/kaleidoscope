@@ -16,7 +16,7 @@ const item = (id: string, text: string): ConversationItem => ({ id, kind: "assis
 const models = [{ id: "m", label: "모델", available: true }, { id: "off", label: "불가", available: false, reason: "사용 불가" }];
 function setup(handler: (request: CoreRequest) => Promise<CoreReply>) {
   const snapshot = makeTestSnapshot({ definitions: [definition] });
-  snapshot.link = { state: "connected", server_url: "https://example.test", device_name: "시험" };
+  snapshot.link = { state: "connected", mode: "remote", server_url: "https://example.test", device_name: "시험" };
   const listeners = new Set<(event: CoreEvent) => void>();
   const call = vi.fn(async (request: CoreRequest): Promise<CoreReply> => {
     if (request.op === "data.attach") return { op: "data.attach", view: { values: {}, sources: {} } };

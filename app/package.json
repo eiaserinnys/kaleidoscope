@@ -7,7 +7,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "e2e": "playwright test --config e2e/playwright.config.ts",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "pnpm --dir ../ui test src/__tests__/shell-events.test.tsx"
   },
   "dependencies": {
     "@kaleidoscope/ui": "workspace:*",

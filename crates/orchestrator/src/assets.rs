@@ -52,7 +52,7 @@ fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(AssetMeta, Vec<u8>)> {
     ))
 }
 
-fn get_in(
+pub(super) fn get_in(
     db: &Connection,
     account: &str,
     id: &str,

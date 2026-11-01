@@ -34,6 +34,7 @@ impl UpdateHost for FakeHost {
 fn core(dir: &TempDir, host: Arc<FakeHost>) -> Core {
     Core::open(
         CoreConfig {
+            embedded_server: None,
             data_dir: dir.path().into(),
             seed_definitions: vec![],
             server_url: "http://127.0.0.1:4219".into(),

@@ -313,8 +313,5 @@ pub(super) fn random_token() -> String {
 }
 pub(super) fn random_user_code() -> String {
     let mut rng = rand::rng();
-    let code: String = (0..8)
-        .map(|_| USER_CODE_ALPHABET[rng.random_range(0..USER_CODE_ALPHABET.len())] as char)
-        .collect();
-    format!("{}-{}", &code[..4], &code[4..])
+    (0..6).map(|_| char::from(b'0' + rng.random_range(0..10))).collect()
 }

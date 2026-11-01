@@ -16,6 +16,7 @@ e2e = ["dep:base64"]
 tauri-build = "2"
 
 [dependencies]
+kaleidoscope-orchestrator = { path = "../../crates/orchestrator" }
 tauri = { version = "2", features = ["unstable"] }
 kaleidoscope-core = { path = "../../crates/core" }
 tauri-plugin-dialog = "2"

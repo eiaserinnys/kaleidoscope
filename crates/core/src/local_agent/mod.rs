@@ -1,13 +1,15 @@
 //! 창별 ACP 실행기의 C4 연결 경계.
 #![allow(dead_code)]
+mod context;
 mod process;
 mod prompt;
 mod record;
 mod updates;
-mod worker;
-mod context;
 mod wiring;
-pub(crate) use wiring::{data_changed, handle, shutdown, start_events, state_changed, LocalAgents};
+mod worker;
+pub(crate) use wiring::{
+    data_changed, handle, server_changed, shutdown, start_events, state_changed, LocalAgents,
+};
 
 use crate::error;
 use kaleidoscope_contract::{
@@ -111,6 +113,7 @@ impl WorkerHandle {
                 responders: HashMap::new(),
                 tools: vec![],
                 replay: false,
+                guide_sent: false,
             }),
             config,
             emit,

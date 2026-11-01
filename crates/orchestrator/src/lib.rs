@@ -45,7 +45,6 @@ fn test_definition(raw: &str) -> String {
     )
 }
 
-const USER_CODE_ALPHABET: &[u8] = b"23456789ABCDEFGHJKMNPQRSTVWXYZ";
 const EVENT_BUFFER: usize = 64;
 
 pub(crate) fn renders_on(supported: Option<&Supported>, requires: &Requires) -> bool {
@@ -572,6 +571,10 @@ pub fn router(state: AppState) -> Router {
     http::router(state)
 }
 
+mod embedded;
+mod transfer;
+pub use embedded::{load_or_create_token, EmbeddedConfig, EmbeddedServer};
+
 mod app_storage;
 mod app_storage_context;
 mod app_storage_http;
@@ -616,3 +619,7 @@ mod server_exclusion_tests;
 mod tests;
 #[cfg(test)]
 mod worker_tests;
+
+
+#[cfg(test)]
+mod transfer_tests;

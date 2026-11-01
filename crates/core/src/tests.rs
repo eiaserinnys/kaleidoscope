@@ -25,6 +25,7 @@ use crate::storage::LinkFile;
 use crate::{Core, CoreConfig, CoreError, Host};
 
 mod layout_sync_tests;
+mod server_switch_tests;
 mod pc_tests;
 
 const MD_EDITOR: &str = include_str!("../../../apps/md-editor.json");
@@ -150,6 +151,7 @@ fn external_links_only_open_http_or_https() {
 fn open_core(data_dir: &Path, definitions: Vec<String>, host: &Arc<FakeHost>) -> Core {
     Core::open(
         CoreConfig {
+            embedded_server: None,
             data_dir: data_dir.to_path_buf(),
             seed_definitions: definitions,
             server_url: "http://127.0.0.1:4219".into(),
@@ -444,6 +446,7 @@ fn 대화_삭제는_현재_snapshot과_미전송_없는_작업_정본에서만_�
     {
         let mut state = inner.state.lock().unwrap();
         state.link = LinkStatus::Connected {
+            mode: kaleidoscope_contract::ServerMode::Remote,
             server_url: "test".into(),
             device_name: "test".into(),
         };
@@ -608,6 +611,7 @@ fn shared_view_baselines_survive_core_restart() {
     let open = || {
         Core::open(
             CoreConfig {
+                embedded_server: None,
                 data_dir: data_dir.clone(),
                 seed_definitions: vec![test_definition(MD_EDITOR)],
                 server_url: "http://127.0.0.1:4219".into(),
@@ -940,6 +944,7 @@ fn conversation_capture_respects_visual_baseline() {
     let client = registry_client();
     let core = Core::open_with_client(
         CoreConfig {
+            embedded_server: None,
             data_dir: temp.path().join("data"),
             seed_definitions: vec![test_definition(MD_EDITOR), test_definition(WEB_BROWSER)],
             server_url: "http://127.0.0.1:4219".into(),
@@ -1362,6 +1367,7 @@ fn open_core_with_attachment_opener(
 ) -> Core {
     Core::open_with_client_and_opener(
         CoreConfig {
+            embedded_server: None,
             data_dir: data_dir.to_path_buf(),
             seed_definitions: definitions,
             server_url: "https://registry.test".into(),
@@ -1376,6 +1382,8 @@ fn open_core_with_attachment_opener(
 
 fn connected_link_file() -> LinkFile {
     LinkFile {
+        revoked: false,
+        mode: kaleidoscope_contract::ServerMode::Remote,
         format: 1,
         server_url: "https://registry.test".into(),
         device_id: "device-id".into(),
@@ -1388,6 +1396,7 @@ fn mark_connected(core: &Core) {
     let file = connected_link_file();
     *core.inner.link_file.lock().unwrap() = Some(file.clone());
     core.inner.state.lock().unwrap().link = LinkStatus::Connected {
+        mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: file.server_url,
         device_name: file.device_name,
     };
@@ -2129,7 +2138,9 @@ fn link_start_pairs_saves_token_privately_and_connects_after_snapshot() {
         let _ = tx.send(event.clone());
     }));
 
-    let reply = core.handle(CoreRequest::LinkStart {}).unwrap();
+    let reply = core
+        .handle(CoreRequest::LinkStart { server_url: None })
+        .unwrap();
     assert!(matches!(reply, CoreReply::LinkStart { user_code, .. } if user_code == "K7PQ-4XMR"));
     let mut observed = Vec::new();
     let deadline = Instant::now() + Duration::from_secs(2);
@@ -2374,6 +2385,7 @@ fn connected_import_uploads_and_preserves_server_validation_error() {
     assert_eq!(actual, expected);
 
     core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
         reason: "offline".into(),
@@ -2547,7 +2559,13 @@ fn saved_link_reconnects_and_unauthorized_stream_revokes_it() {
     let core = open_core_with_client(&data_dir, vec![], &host, Arc::clone(&client));
     wait_until(|| matches!(snapshot(&core).link, LinkStatus::Revoked { .. }));
     assert_eq!(client.open_calls.load(Ordering::SeqCst), 1);
-    assert!(!data_dir.join("link.json").exists());
+    assert!(crate::storage::load_link(&data_dir).unwrap().unwrap().revoked);
+    let remote_workspaces=snapshot(&core).shared.workspaces;
+    let restarted=Core::open_with_client(CoreConfig {data_dir:data_dir.clone(),seed_definitions:vec![],server_url:"https://registry.test".into(),device_name:"시험".into(),embedded_server:Some(crate::EmbeddedServerInfo {server_url:"http://127.0.0.1:54321".into(),device_id:"local-device".into(),token:"local".into()})},host,client).unwrap();
+    assert!(matches!(snapshot(&restarted).link,LinkStatus::Revoked {..}));
+    assert_eq!(snapshot(&restarted).shared.workspaces,remote_workspaces);
+    assert_eq!(crate::storage::load_link(&data_dir).unwrap().unwrap().mode,kaleidoscope_contract::ServerMode::Remote);
+    restarted.shutdown();
     assert!(!serde_json::to_string(&snapshot(&core))
         .unwrap()
         .contains("secret-device-token"));
@@ -2572,7 +2590,8 @@ fn cancel_and_unlink_clear_only_connection_state() {
     let data_dir = temp.path().join("data");
     let core = open_core_with_client(&data_dir, vec![test_definition(MD_EDITOR)], &host, client);
     let before = snapshot(&core).shared;
-    core.handle(CoreRequest::LinkStart {}).unwrap();
+    core.handle(CoreRequest::LinkStart { server_url: None })
+        .unwrap();
     core.handle(CoreRequest::LinkCancel {}).unwrap();
     assert!(matches!(snapshot(&core).link, LinkStatus::Unlinked {}));
 
@@ -2580,6 +2599,7 @@ fn cancel_and_unlink_clear_only_connection_state() {
     crate::storage::save_link(&data_dir, &file).unwrap();
     *core.inner.link_file.lock().unwrap() = Some(file.clone());
     core.inner.state.lock().unwrap().link = LinkStatus::Connected {
+        mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: file.server_url,
         device_name: file.device_name,
     };

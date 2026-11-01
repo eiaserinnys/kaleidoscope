@@ -1,12 +1,14 @@
 import type { MouseEvent, ReactNode } from "react";
 
 export interface ButtonProps {
+  className?: string,
   children: ReactNode;
   variant?: "default" | "emphasis";
   disabled?: boolean;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   type?: "button" | "submit";
   "aria-pressed"?: boolean;
+  "aria-expanded"?: boolean;
   "aria-label"?: string;
   "aria-invalid"?: boolean;
   "aria-describedby"?: string;
@@ -14,20 +16,23 @@ export interface ButtonProps {
 
 export function Button({
   children,
+  className,
   variant = "default",
   disabled = false,
   onClick,
   type = "button",
   "aria-pressed": pressed,
+  "aria-expanded": expanded,
   "aria-label": label,
   "aria-invalid": invalid,
   "aria-describedby": describedBy,
 }: ButtonProps) {
   return (
     <button
-      className={`ks-button ks-button-${variant}${pressed === true ? " is-selected" : ""}`}
+      className={`ks-button ks-button-${variant}${pressed === true ? " is-selected" : ""}${className ? ` ${className}` : ""}`}
       disabled={disabled}
       aria-pressed={pressed}
+      aria-expanded={expanded}
       aria-label={label}
       aria-invalid={invalid}
       aria-describedby={describedBy}

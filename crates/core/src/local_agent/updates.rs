@@ -44,6 +44,7 @@ pub(super) struct State {
     pub(super) responders: HashMap<String, PendingPermission>,
     pub(super) tools: Vec<(String, String)>,
     pub(super) replay: bool,
+    pub(super) guide_sent: bool,
 }
 pub(super) struct Shared {
     pub(super) state: Mutex<State>,

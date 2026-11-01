@@ -643,15 +643,20 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       }
       case "local_agent.attachment_open": return { op: "local_agent.attachment_open" };
       case "link.start": {
-        const userCode = "K7PQ-4XMR";
+        const userCode = "123456";
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
         snapshot = {
           ...snapshot,
-          link: { state: "pairing", server_url: "https://kaleidoscope.example", user_code: userCode, expires_at: expiresAt },
+          link: { state: "pairing", server_url: request.server_url || "https://kaleidoscope.example", user_code: userCode, expires_at: expiresAt },
         };
         emitState();
         return { op: "link.start", user_code: userCode, expires_at: expiresAt };
       }
+      case "link.use_local":
+        snapshot = { ...snapshot, link: { state: "connected", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC" } };
+        emitState();
+        return { op: "link.use_local" };
+      case "link.sync_local_to_remote": return { op: "link.sync_local_to_remote", result: { imported: 3, skipped: [] } };
       case "link.cancel": {
         if (snapshot.link.state === "pairing") {
           snapshot = { ...snapshot, link: { state: "unlinked" } };

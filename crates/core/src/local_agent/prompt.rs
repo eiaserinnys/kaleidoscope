@@ -114,8 +114,18 @@ pub(super) fn begin(
         let mut s = owner.state.lock().unwrap();
         let original = s.record.clone();
         let result = (|| {
-            let (blocks, attachments) =
+            let (mut blocks, attachments) =
                 prepare(&input, &mut s.record, &owner.config.record_dir, image)?;
+            if !s.guide_sent {
+                let mut guide = kaleidoscope_contract::APP_AUTHORING_GUIDE.to_string();
+                if let Some(mcp) = &owner.config.mcp {
+                    guide.push_str(&format!(
+                        "\n활성 MCP: {}. 인증과 작업 헤더는 세션 MCP 설정으로 제공됩니다.",
+                        mcp.url
+                    ));
+                }
+                blocks.insert(0, ContentBlock::Text(TextContent::new(guide)));
+            }
             let event = owner
                 .append(
                     &mut s,
@@ -135,6 +145,7 @@ pub(super) fn begin(
                 return Err(error);
             }
         };
+        s.guide_sent = true;
         s.seen.insert(input.request_id.clone());
         s.snapshot.phase = LocalAgentPhase::Responding;
         s.snapshot.activity.busy = true;

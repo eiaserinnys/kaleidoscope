@@ -283,3 +283,15 @@
 .ks-notice-details > span {
   display: block;
 }
+
+.shell-link-button { min-width: 0; max-width: var(--ks-workspace-label-max-width); gap: var(--ks-space-2); }
+.shell-link-button > .ks-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-server-dot { width: var(--ks-space-2); height: var(--ks-space-2); flex-shrink: 0; border-radius: var(--ks-radius-large); background: var(--ks-color-muted); }
+.shell-server-dot.is-connected { background: var(--ks-color-share); }
+.shell-server-dot.is-pairing, .shell-server-dot.is-offline { background: var(--ks-color-warning); }
+.shell-link-panel.ks-menu { position: absolute; top: calc(var(--ks-control-height) + 2 * var(--ks-space-2)); right: var(--ks-space-3); left: auto; display: flex; flex-direction: column; gap: var(--ks-space-3); padding: var(--ks-space-3); width: calc(2 * var(--ks-workspace-label-max-width)); max-width: calc(100% - 2 * var(--ks-space-3)); max-height: calc(100% - var(--ks-control-height) - 4 * var(--ks-space-3)); overflow-y: auto; }
+.shell-server-heading { font-size: var(--ks-type-title); }
+.shell-server-meta-group { display: flex; flex-direction: column; gap: var(--ks-space-1); }
+.shell-server-meta, .shell-server-skipped { font-size: var(--ks-type-meta); color: var(--ks-color-muted); overflow-wrap: anywhere; }
+.shell-server-skipped, .shell-server-skipped-list { margin-block-start: var(--ks-space-1); }
+.shell-server-skipped-list { display: flex; flex-direction: column; gap: var(--ks-space-1); }

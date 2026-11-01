@@ -3,16 +3,12 @@ import {
   Button,
   BUILTIN_APP_IDS,
   ChevronDown,
-  Cloud,
-  CloudOff,
   EmptyState,
   Import,
   IconButton,
   LayoutGrid,
   Menu,
-  OfflineCloud,
   Notice,
-  PairingCloud,
   Plus,
   TextInput,
   UpdateReady,
@@ -28,6 +24,7 @@ import {
   type ShellStore,
   type Workspace,
 } from "@kaleidoscope/ui";
+import { ServerPanel, serverLabel } from "./server-panel";
 import { DesktopArea } from "./desktop-area";
 import { importAppDefinition } from "./import-definition";
 import { makeNewWindowRect } from "./window-geometry";
@@ -99,12 +96,33 @@ export function Shell({ store }: { store: ShellStore }) {
     }
   }), [newWindowRect, runCommand, store]);
 
+  const openLinkMenu = (anchor: HTMLElement) => {
+    setMenu({ kind: "link", anchor });
+  };
+
+  const linkAnchor = menu?.kind === "link" ? menu.anchor : null;
+  const serverButton = snapshot ? (
+    <Button className="shell-link-button" onClick={(event) => openLinkMenu(event.currentTarget)} aria-label={serverLabel(snapshot)} aria-expanded={linkAnchor !== null}>
+      <span aria-hidden="true" className={`shell-server-dot is-${snapshot.link.state}`} />
+      <span className="ks-truncate">{serverLabel(snapshot)}</span>
+    </Button>
+  ) : null;
+  const serverPanel = snapshot && linkAnchor ? <ServerPanel snapshot={snapshot} anchor={linkAnchor} onClose={closeMenu} call={runCommand} /> : null;
+
   if (!snapshot) {
     return <main className="app-root"><EmptyState icon={<LayoutGrid size="empty" />} text="코어에 연결할 수 없습니다" /></main>;
   }
 
   if (!activeWorkspace || !activeDesktop) {
-    return <main className="app-root"><EmptyState icon={<LayoutGrid size="empty" />} text="코어에 연결할 수 없습니다" /></main>;
+    return <main className="app-root">
+      <header className="ks-shell-bar"><div className="ks-shell-actions">{serverButton}</div></header>
+      <EmptyState
+        icon={<LayoutGrid size="empty" />}
+        text={snapshot.link.state === "connected" ? "작업 없음" : "서버에 연결하는 중"}
+        action={snapshot.link.state === "connected" ? <Button onClick={() => void runCommand({ op: "workspace.create", name: "작업 1" })}>작업 만들기</Button> : undefined}
+      />
+      {serverPanel}
+    </main>;
   }
 
   const workspaces = snapshot.shared.workspaces;
@@ -195,9 +213,6 @@ export function Shell({ store }: { store: ShellStore }) {
     });
   };
 
-  const openLinkMenu = (anchor: HTMLElement) => {
-    setMenu({ kind: "link", anchor });
-  };
 
   const restartUpdate = async () => {
     closeMenu();
@@ -225,45 +240,6 @@ export function Shell({ store }: { store: ShellStore }) {
     });
   };
 
-  const linkMenuEntries = (anchor: HTMLElement): MenuEntry[] => {
-    const status = snapshot.link;
-    const command = (op: "link.start" | "link.cancel" | "link.unlink") => () => void runCommand({ op });
-    return status.state === "unlinked"
-      ? [{ id: "link-start", label: "서버에 연결", onSelect: () => void startLink(anchor) }]
-      : status.state === "pairing"
-        ? pairingMenuEntries(status.user_code)
-        : status.state === "connected"
-          ? [
-            { id: "link-connected", label: `${new URL(status.server_url).host} 연결됨`, disabled: true },
-            { id: "link-separator", type: "separator" },
-            { id: "link-unlink", label: "연결 끊기", danger: true, onSelect: command("link.unlink") },
-          ]
-          : status.state === "offline"
-            ? [
-              { id: "link-offline", label: "다시 연결하는 중", disabled: true },
-              { id: "link-separator", type: "separator" },
-              { id: "link-unlink", label: "연결 끊기", danger: true, onSelect: command("link.unlink") },
-            ]
-            : [{ id: "link-restart", label: "다시 연결", onSelect: () => void startLink(anchor) }];
-  };
-
-  const pairingMenuEntries = (userCode: string): MenuEntry[] => [
-    {
-      id: "link-copy-code",
-      label: `${userCode} 복사`,
-      onSelect: () => {
-        void navigator.clipboard.writeText(userCode).catch((reason: unknown) => setNotice(toCoreError(reason)));
-      },
-    },
-    { id: "link-separator", type: "separator" },
-    { id: "link-cancel", label: "연결 취소", onSelect: () => void runCommand({ op: "link.cancel" }) },
-  ];
-
-  const startLink = async (anchor: HTMLElement) => {
-    const reply = await runCommand({ op: "link.start" });
-    if (reply?.op === "link.start") setMenu({ kind: "link", anchor });
-  };
-
   const createDesktop = () => {
     const name = nextName("데스크톱", desktops.map((item) => item.name));
     void runCommand({ op: "desktop.create", workspace_id: activeWorkspace.id, name });
@@ -286,9 +262,6 @@ export function Shell({ store }: { store: ShellStore }) {
     }
   };
 
-  const menuItems = menu?.kind === "link" ? linkMenuEntries(menu.anchor) : menu?.entries ?? [];
-  // 연결 상태에 따라 메뉴 폭이 바뀌므로 기준 위치를 다시 계산한다.
-  const linkMenuKey = menuItems.map((entry) => entry.type === "separator" ? entry.id : `${entry.id}:${entry.label}`).join("|");
 
   return (
     <main className="app-root">
@@ -371,43 +344,7 @@ export function Shell({ store }: { store: ShellStore }) {
               <UpdateReady className="ks-link-icon-accent" />
             </IconButton>
           ) : null}
-          {snapshot.link.state === "connected" ? (
-            <IconButton
-              aria-label="연결됨"
-              onClick={(event) => openLinkMenu(event.currentTarget)}
-              title={`연결됨 · ${snapshot.link.device_name}`}
-            >
-              <Cloud />
-            </IconButton>
-          ) : snapshot.link.state === "pairing" ? (
-            <IconButton
-              aria-label={`연결 코드 ${snapshot.link.user_code}`}
-              onClick={(event) => openLinkMenu(event.currentTarget)}
-              title={`연결 코드 ${snapshot.link.user_code}`}
-            >
-              <PairingCloud className="ks-link-icon-accent" />
-            </IconButton>
-          ) : snapshot.link.state === "offline" ? (
-            <IconButton
-              aria-label="다시 연결하는 중"
-              onClick={(event) => openLinkMenu(event.currentTarget)}
-              title={`다시 연결하는 중 · ${snapshot.link.reason}`}
-            >
-              <OfflineCloud />
-            </IconButton>
-          ) : snapshot.link.state === "revoked" ? (
-            <IconButton
-              aria-label="연결이 끊겼습니다"
-              onClick={(event) => openLinkMenu(event.currentTarget)}
-              title="연결이 끊겼습니다"
-            >
-              <CloudOff />
-            </IconButton>
-          ) : (
-            <IconButton aria-label="서버에 연결" onClick={(event) => openLinkMenu(event.currentTarget)} title="서버에 연결">
-              <CloudOff />
-            </IconButton>
-          )}
+          {serverButton}
           <input
             accept=".json,application/json"
             aria-label="앱 정의 파일"
@@ -420,6 +357,7 @@ export function Shell({ store }: { store: ShellStore }) {
       </header>
 
       <DesktopArea
+        key={snapshot.link.state === "connected" || snapshot.link.state === "offline" ? snapshot.link.server_url : snapshot.link.state}
         activeDesktopId={activeDesktop.id}
         activeWorkspaceId={activeWorkspace.id}
         onAreaChange={reportArea}
@@ -430,13 +368,8 @@ export function Shell({ store }: { store: ShellStore }) {
         store={store}
       />
 
-      {menu ? (
-        <Menu
-          key={menu.kind === "link" ? linkMenuKey : "items"}
-          anchor={menu.anchor}
-          items={menuItems}
-          onClose={closeMenu}
-        />
+      {menu?.kind === "link" ? serverPanel : menu ? (
+        <Menu anchor={menu.anchor} items={menu.entries} onClose={closeMenu} />
       ) : null}
       {notice ? (
         <div className="ks-shell-notice-layer">

@@ -538,6 +538,11 @@ pub(crate) fn refresh(
     Ok(())
 }
 
+/// 다른 서버의 같은 창 id에 이전 원천과 저장값을 재사용하지 않는다.
+pub(crate) fn server_changed(inner: &Inner) {
+    inner.data_runtimes.windows.lock().unwrap().clear();
+}
+
 pub(crate) fn state_changed(inner: &Arc<Inner>) {
     let (pending, reloads) = {
         let state = inner.state.lock().unwrap();

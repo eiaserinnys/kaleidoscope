@@ -41,6 +41,17 @@ jobs:
           releaseBody: 'See the assets below to download this version.'
           prerelease: ${{ contains(github.ref_name, '-') }}
 
+      - name: 독립 서버 빌드와 릴리스 업로드
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cargo build --release -p kaleidoscope-orchestrator --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw '독립 서버 빌드 실패' }
+          Copy-Item target/x86_64-pc-windows-msvc/release/kaleidoscope-orchestrator.exe kaleidoscope-orchestrator-x86_64-pc-windows-msvc.exe
+          gh release upload '${{ github.ref_name }}' kaleidoscope-orchestrator-x86_64-pc-windows-msvc.exe --clobber
+          if ($LASTEXITCODE -ne 0) { throw '독립 서버 업로드 실패' }
+
       - name: 설치본과 서명 자산 확인
         shell: pwsh
         env:

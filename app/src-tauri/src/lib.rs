@@ -149,9 +149,28 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
+            let device_name = env::var("COMPUTERNAME")
+                .or_else(|_| env::var("HOSTNAME"))
+                .unwrap_or_else(|_| "kaleidoscope".into());
+            let embedded =
+                tauri::async_runtime::block_on(kaleidoscope_orchestrator::EmbeddedServer::start(
+                    kaleidoscope_orchestrator::EmbeddedConfig {
+                        db_path: data_dir.join("local-orchestrator.db"),
+                        token_path: data_dir.join("local-orchestrator.token"),
+                        device_name: device_name.clone(),
+                    },
+                ))
+                .map_err(std::io::Error::other)?;
+            let embedded_info = kaleidoscope_core::EmbeddedServerInfo {
+                server_url: embedded.server_url.clone(),
+                device_id: embedded.device_id.clone(),
+                token: embedded.token.clone(),
+            };
+            app.manage(embedded);
             let updater = Arc::new(updater::TauriUpdateHost::default());
             let core = match Core::open(
                 CoreConfig {
+                    embedded_server: Some(embedded_info),
                     data_dir,
                     seed_definitions: vec![],
                     server_url: SERVER_URL.into(),

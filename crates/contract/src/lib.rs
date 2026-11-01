@@ -182,6 +182,11 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+pub mod transfer;
+
+/// MCP와 로컬 에이전트가 공유하는 앱 제작 안내.
+pub const APP_AUTHORING_GUIDE: &str = include_str!("app_guide.txt");
+
 pub mod app_storage;
 pub mod assets;
 pub mod builtin;
@@ -520,6 +525,14 @@ impl Supported {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
 pub struct ShellSnapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub last_transfer: Option<transfer::TransferResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub transfer_error: Option<String>,
+    #[serde(default)]
+    pub embedded_available: bool,
     pub shared: SharedState,
     pub device: DeviceState,
     pub supported: Supported,
@@ -566,6 +579,16 @@ pub enum UpdateStatus {
 /// 흐름: `unlinked` → (`link.start`) `pairing` → (에이전트가 코드를 승인) `connected` ⇄ `offline`.
 /// 승인 전에 코드가 만료되거나 `link.cancel`이면 `unlinked`로 돌아간다. 서버가 기기 토큰을 거부하면
 /// `revoked`이고, 다시 `link.start`로 연결한다. `link.unlink`는 어느 상태에서든 `unlinked`로 간다.
+/// 현재 연결의 저장과 실행 위치. 옛 연결 파일은 원격으로 읽는다.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ServerMode {
+    Embedded,
+    #[default]
+    Remote,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "state", rename_all = "snake_case")]
 #[ts(export, export_to = "contract.ts")]
@@ -575,17 +598,21 @@ pub enum LinkStatus {
     /// 연결 코드를 받아 에이전트의 승인을 기다린다. 코어가 `interval_secs`마다 승인 여부를 묻는다.
     Pairing {
         server_url: String,
-        /// 사람이 읽고 에이전트에게 전하는 코드. 예: `K7PQ-4XMR`.
+        /// 사람이 읽고 에이전트에게 전하는 코드. 예: `123456`. 이전 서버가 주는 문자 코드도 그대로 표시한다.
         user_code: String,
         expires_at: String,
     },
     /// 연결했고 이벤트 스트림이 이어져 있다. 레지스트리의 앱이 캐시와 맞춰져 있다.
     Connected {
+        #[serde(default)]
+        mode: ServerMode,
         server_url: String,
         device_name: String,
     },
     /// 연결했지만 지금 서버에 닿지 않는다(시작 직후 포함). 코어가 다시 잇는다. 캐시의 앱은 그대로 쓴다.
     Offline {
+        #[serde(default)]
+        mode: ServerMode,
         server_url: String,
         device_name: String,
         /// 마지막으로 실패한 까닭. 사람이 읽는 한국어 한 줄.
@@ -1870,19 +1897,27 @@ pub enum CoreRequest {
     /// - `unlinked`: 위처럼 로컬에서 가져온다. 버전 번호는 로컬에서 센다.
     /// - `connected`: 오케스트레이터에 올리고(`registry` 모듈의 앱 올리기), 서버가 돌려준 앱과 버전을
     ///   위 규칙대로 캐시에 반영한 뒤 응답한다. 검사 실패는 서버의 오류를 그대로 돌려준다.
-    /// - `pairing`, `offline`, `revoked`: `server`로 거부한다(로컬과 레지스트리가 갈라지지 않게).
+    /// - `pairing`, 원격 `offline`, `revoked`: `server`로 거부한다. 내장 서버는 스트림 연결 전에도 HTTP로 가져온다.
     #[serde(rename = "app.import")]
     AppImport { definition_json: String },
 
     /// 오케스트레이터 연결을 시작한다. 서버에 연결 코드를 받아 `pairing`으로 가고, 응답에 코드를 준다.
-    /// 이미 `pairing`이면 진행 중인 것을 버리고 새로 받는다. `connected`, `offline`이면 `invalid_request`.
+    /// server_url을 생략하거나 비우면 호스트의 기본 원격 주소를 쓴다. 보관한 연결이 있으면 재사용한다.
     /// 서버에 닿지 않으면 `server`.
     #[serde(rename = "link.start")]
-    LinkStart {},
-    /// 진행 중인 연결 시도를 그만두고 `unlinked`로 간다. `pairing`이 아니면 아무것도 하지 않는다.
+    LinkStart {
+        #[serde(default)]
+        #[ts(optional)]
+        server_url: Option<String>,
+    },
+    /// 진행 중인 연결 시도를 그만두고 내장 서버로 복귀한다. 내장 서버가 없으면 `unlinked`로 간다.
+    #[serde(rename = "link.use_local")]
+    LinkUseLocal {},
+    #[serde(rename = "link.sync_local_to_remote")]
+    LinkSyncLocalToRemote {},
     #[serde(rename = "link.cancel")]
     LinkCancel {},
-    /// 이 기기의 연결 정보(`link.json`)를 지우고 `unlinked`로 간다. 캐시의 앱과 창은 그대로 둔다.
+    /// 내장 서버가 있으면 서버별 배치를 보존하고 내 PC 서버로 복귀한다. 없으면 연결 정보를 지운다.
     #[serde(rename = "link.unlink")]
     LinkUnlink {},
 
@@ -2309,6 +2344,10 @@ pub enum CoreReply {
         user_code: String,
         expires_at: String,
     },
+    #[serde(rename = "link.use_local")]
+    LinkUseLocal {},
+    #[serde(rename = "link.sync_local_to_remote")]
+    LinkSyncLocalToRemote { result: transfer::TransferResult },
     #[serde(rename = "link.cancel")]
     LinkCancel {},
     #[serde(rename = "link.unlink")]

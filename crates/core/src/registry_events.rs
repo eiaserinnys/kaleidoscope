@@ -28,6 +28,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 }
                 let epoch = inner.layout_connection_epoch.fetch_add(1, Ordering::SeqCst) + 1;
                 let status = LinkStatus::Connected {
+                    mode: link_file.as_ref().map(|l| l.mode).unwrap_or_default(),
                     server_url: link_file
                         .as_ref()
                         .map(|link| link.server_url.clone())

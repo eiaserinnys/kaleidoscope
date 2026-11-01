@@ -122,6 +122,8 @@ fn invalid_definitions_and_outside_paths_are_rejected_without_saving() {
 async fn pairing_start_pending_approve_consumes_token_once_and_expires() {
     let state = AppState::in_memory("secret");
     let start = state.start_pairing("my-pc".into()).await.unwrap();
+    assert_eq!(start.user_code.len(), 6);
+    assert!(start.user_code.bytes().all(|c| c.is_ascii_digit()));
     assert!(matches!(
         state.poll_pairing(&start.device_code).await.unwrap(),
         PairPollReply::Pending {}

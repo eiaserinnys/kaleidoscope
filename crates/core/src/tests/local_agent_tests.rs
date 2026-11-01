@@ -374,16 +374,19 @@ fn attachments_and_mcp_advertisement() {
             .iter()
             .find(|v| v["method"] == "session/prompt")
             .unwrap();
-        assert_eq!(prompt["params"]["prompt"][0]["text"], "context-only");
+        assert!(prompt["params"]["prompt"][0]["text"].as_str().unwrap().contains("upload_app"));
+        assert!(prompt["params"]["prompt"][0]["text"].as_str().unwrap().contains("http://localhost/mcp"));
+        assert!(!prompt["params"]["prompt"][0]["text"].as_str().unwrap().contains("secret-test-value"));
+        assert_eq!(prompt["params"]["prompt"][1]["text"], "context-only");
         assert_eq!(
-            prompt["params"]["prompt"][2]["type"],
+            prompt["params"]["prompt"][3]["type"],
             if scenario == "no_image" {
                 "resource_link"
             } else {
                 "image"
             }
         );
-        assert_eq!(prompt["params"]["prompt"][3]["type"], "resource_link");
+        assert_eq!(prompt["params"]["prompt"][4]["type"], "resource_link");
         let history = crate::local_agent::read_history(&dir.path().join("record"));
         assert_eq!(history[0].text, "hello");
         assert_eq!(history[0].attachments.len(), 2);

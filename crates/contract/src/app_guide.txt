@@ -1,0 +1,8 @@
+kaleidoscope 앱 제작 지침
+현재 작업의 데스크톱 쉘을 MCP 도구로 다룹니다. 개인 앱은 list_apps와 get_app으로 먼저 확인합니다. get_workspace로 현재 작업과 창을 확인합니다. workspace_id를 생략하면 MCP 연결의 작업을 사용합니다.
+앱 정의 JSON의 필드는 id, name, description, requires, permissions, state, sources, assets, storage, agent, worker, opens, ui입니다. version은 서버가 부여하며 앱 정의에 넣지 않습니다. upload_app의 입력 스키마가 정확한 형식과 최신 블록 필드의 정본입니다. 모르는 필드는 넣지 않습니다.
+requires.blocks는 사용하는 블록의 최소 지원 판이고 requires.modules는 사용하는 모듈별 판입니다. permissions에는 필요한 최소 권한만 선언합니다. 파일 경로는 사용자가 기기에서 고른 폴더 기준 상대 경로입니다. 다른 서비스의 주소나 데이터 모양은 앱 정의와 연결 설정에 두며 쉘 코드를 바꾸지 않습니다.
+ui는 type으로 구분하는 블록 트리입니다. 배치는 split, stack, tabs, toolbar, section을 쓰고 데이터는 list, table, tree, feed, properties, metrics, chart, 입력은 input, select, toggle, button, 문서는 markdown_editor, code_editor, html_view, 미디어는 image, media, web_view를 사용합니다. 지원 블록과 모듈의 전체 목록은 도구 스키마를 확인합니다.
+값은 리터럴, 상태 참조 {"state":"키"}, 식 {"expr":"JSONata 식"}입니다. 식에서 $state, $data, $storage, $data_meta를 읽고 동작에서는 $event, $item을 읽습니다. sources는 파일, 폴더, 연결 요청 또는 공개 HTTPS 원천을 선언합니다. 블록 이벤트에 set_state, refresh, call, set_storage 같은 동작을 연결합니다. actions라는 최상위 필드는 없습니다.
+storage.entries는 JSON 또는 Markdown 항목의 키, 스키마, 기본값을 선언합니다. 작업별 키에는 {workspace_id}를 씁니다. 읽기와 쓰기는 저장소 도구의 revision 규칙을 따릅니다. worker는 앱의 서버 실행과 주기 작업을 선언하며 시크릿 값은 앱 정의에 넣지 않습니다. opens는 파일 확장자, 폴더 권한과 경로 상태 키를 선언합니다.
+preview_app으로 실제 상태와 표본 데이터의 식을 먼저 계산합니다. 기기 전용 원천은 표본 data를 제공합니다. upload_app으로 정의를 등록하고 open_app으로 현재 작업에 띄운 뒤 get_workspace로 결과를 확인합니다. 기본 앱은 upload_app으로 수정하거나 삭제할 수 없습니다. 시험용 앱은 확인 뒤 정리합니다.
