@@ -1,3 +1,4 @@
+// 기존 통합 시험은 공통 장치와 픽스처를 공유하므로 이 변경에서 일괄 분리하지 않는다.
 use std::collections::BTreeMap;
 use std::collections::VecDeque;
 use std::fs;
@@ -26,6 +27,7 @@ use crate::{Core, CoreConfig, CoreError, Host};
 
 mod layout_sync_tests;
 mod pc_tests;
+mod profiler_concurrency_tests;
 mod profiler_tests;
 mod server_switch_tests;
 

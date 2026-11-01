@@ -1153,7 +1153,7 @@ mod freshness_tests {
         seed_request_cache(
             &mut runtime,
             &request,
-            json!({"hits":[{"objectID":"cached"}]}),
+            json!({"hits":[{"objectID":"cached","title":"캐시"}]}),
         );
         assert!(set_plan(
             &manager,
@@ -1162,6 +1162,7 @@ mod freshness_tests {
             SourcePlan::Idle
         ));
         assert!(!runtime.data.contains_key("stories"));
+        runtime.last = runtime.view();
 
         assert!(set_plan(&manager, &mut runtime, "stories", request));
         assert_eq!(runtime.data["stories"]["hits"][0]["objectID"], "cached");
@@ -1170,6 +1171,9 @@ mod freshness_tests {
             SourceStatus::Ready { .. }
         ));
         assert!(!should_prepare_after_plan(&runtime, "stories", true, true));
+        let selected = runtime.selected_for(&BTreeSet::new(), &BTreeSet::from(["stories".into()]));
+        let incremental = runtime.view_selected(&selected);
+        assert_eq!(incremental.values, runtime.view().values);
     }
 
     #[test]
