@@ -80,7 +80,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     const windows = page.getByTestId("app-window-md-editor");
     for (let index = 0; index < 4; index += 1) {
-      await page.getByRole("button", { name: "앱 열기" }).first().click();
+      await page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" }).click();
       await page.getByRole("menuitem", { name: "마크다운 편집기" }).click();
       await expect(windows).toHaveCount(index + 1);
     }
@@ -94,7 +94,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
       expect(rect.x - area.x).toBe(48 + 32 * index);
       expect(rect.y - area.y).toBe(48 + 32 * index);
       expect(rect.x + rect.width).toBeLessThanOrEqual(area.x + area.width - 12);
-      expect(rect.y + rect.height).toBeLessThanOrEqual(area.y + area.height - 12);
+      expect(rect.y + rect.height).toBeLessThanOrEqual(area.y + area.height - 64);
       rectangles.push({ x: rect.x - area.x, y: rect.y - area.y, width: rect.width, height: rect.height });
     }
     measurements[`cascade${width}`] = { area, rectangles };
@@ -106,7 +106,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   };
 
   await expect(page.getByText("열린 앱이 없습니다")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "앱 열기" }).first()).toBeVisible();
+  await expect(page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" })).toBeVisible();
   await captureCascade(960, 600);
   await captureCascade(1440, 900);
   await captureMatrix("empty-desktop");
@@ -179,7 +179,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   measurements.tabsWithOverflow = tenTabMetrics;
 
   await page.getByRole("button", { name: "데스크톱 2" }).click();
-  await page.getByRole("button", { name: "앱 열기" }).first().click();
+  await page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" }).click();
   const appMenu = page.getByRole("menu");
   const appMenuBounds = await appMenu.boundingBox();
   if (!appMenuBounds) throw new Error("앱 메뉴의 위치를 확인하지 못했습니다");
@@ -194,8 +194,8 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   expect(smallWindow.x - smallArea.x).toBe(48);
   expect(smallWindow.y - smallArea.y).toBe(48);
   expect(smallWindow.width).toBe(880);
-  expect(smallWindow.height).toBe(492);
-  expect(smallWindow.y + smallWindow.height).toBeLessThanOrEqual(smallArea.y + smallArea.height - 12);
+  expect(smallWindow.height).toBe(440);
+  expect(smallWindow.y + smallWindow.height).toBeLessThanOrEqual(smallArea.y + smallArea.height - 64);
   measurements.newWindowRect960 = { area: smallArea, window: smallWindow };
   await captureThemePair("small-window-empty-path-960");
   await expect(editorWindow.getByText("폴더를 먼저 선택하세요")).toHaveCount(0);
@@ -215,8 +215,8 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await page.mouse.move(resizeX, resizeTargetY);
   await page.mouse.up();
   const expectedResizedHeight = Math.min(
-    Math.round(492 + resizeTargetY - resizeStartY),
-    smallArea.height - 12 - 48,
+    Math.round(440 + resizeTargetY - resizeStartY),
+    smallArea.height - 64 - 48,
   );
   await expect(editorWindow).toHaveCSS("height", `${expectedResizedHeight}px`);
   const resizedBounds = await editorWindow.boundingBox();
@@ -233,7 +233,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await page.mouse.down();
   await page.mouse.move(bottomHandle.x + bottomHandle.width / 2, shrinkStartY + 160);
   await page.mouse.up();
-  await expect(editorWindow).toHaveCSS("height", "492px");
+  await expect(editorWindow).toHaveCSS("height", "440px");
   const shrunkBounds = await editorWindow.boundingBox();
   if (!shrunkBounds) throw new Error("하단 손잡이로 줄인 창의 위치를 확인하지 못했습니다");
   expect(shrunkBounds.y + shrunkBounds.height).toBeLessThanOrEqual(resizedArea.y + resizedArea.height);
@@ -247,10 +247,10 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await page.mouse.down();
   await page.mouse.move(tallHandle.x + tallHandle.width / 2, tallHandle.y + tallHandle.height / 2 + 208);
   await page.mouse.up();
-  await expect(editorWindow).toHaveCSS("height", "700px");
+  await expect(editorWindow).toHaveCSS("height", "648px");
   await captureMatrix("tall-window");
   await page.setViewportSize({ width: 960, height: 600 });
-  await expect(editorWindow).toHaveCSS("height", "528px");
+  await expect(editorWindow).toHaveCSS("height", "476px");
   const frameMetrics = await editorWindow.evaluate((element) => {
     const frame = element.querySelector(".ks-window-frame");
     if (!frame) throw new Error("창 틀을 찾지 못했습니다");
@@ -279,7 +279,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await page.mouse.move(handleX, handleY - 120);
   const titleBeforeRelease = await editorWindow.locator(".ks-window-titlebar").boundingBox();
   await page.mouse.up();
-  await expect(editorWindow).toHaveCSS("height", "408px");
+  await expect(editorWindow).toHaveCSS("height", "356px");
   const titleAfterRelease = await editorWindow.locator(".ks-window-titlebar").boundingBox();
   if (!titleBeforeRelease || !titleAfterRelease) throw new Error("창 제목 줄을 찾지 못했습니다");
   expect(titleAfterRelease.y - titleBeforeRelease.y).toBe(0);
@@ -396,7 +396,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
     editorBounds.x + editorBounds.width - 64,
     viewerBounds.x + viewerBounds.width + 8,
   );
-  await page.mouse.click(exposedTitleX, editorBounds.y + 16);
+  await page.mouse.click(exposedTitleX, editorBounds.y + 60);
   await expect.poll(async () => {
     const [editorZ, viewerZ] = await Promise.all([
       editorWindow.evaluate((element) => Number(getComputedStyle(element).zIndex)),
@@ -528,9 +528,9 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   expect(dividerGap).toBeLessThanOrEqual(0.5);
   await editor.click();
   const editorContent = editorWindow.locator(".ks-editor-content");
-  const focusBorderWidth = await editorContent.evaluate((element) => getComputedStyle(element, "::after").borderTopWidth);
-  expect(focusBorderWidth).toBe("2px");
-  measurements.dividerAndFocus = { dividerGap, focusBorderWidth, scrollTopAfterDrag };
+  const editorFocused = await editorContent.locator(".cm-editor").evaluate((element) => element.classList.contains("cm-focused"));
+  expect(editorFocused).toBe(true);
+  measurements.dividerAndFocus = { dividerGap, editorFocused, scrollTopAfterDrag };
   await captureThemePair("divider-focus-scrolled");
   await page.screenshot({
     path: testInfo.outputPath("divider-alignment-zoom.png"),
@@ -641,15 +641,18 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
     };
   };
   const max1440 = await windowGaps();
-  expect(max1440.gaps).toEqual({ left: 12, top: 12, right: 12, bottom: 12 });
+  expect(max1440.gaps).toEqual({ left: 12, top: 12, right: 12, bottom: 64 });
+  const maxTaskbar = await page.locator(".ks-taskbar:visible").boundingBox();
+  if (!maxTaskbar) throw new Error("작업 표시줄을 찾지 못했습니다");
+  expect(maxTaskbar.y - (max1440.window.y + max1440.window.height)).toBe(12);
   measurements.symmetricMax1440 = max1440;
   await captureThemePair("symmetric-max-1440");
 
   await page.setViewportSize({ width: 960, height: 600 });
   await expect(editorWindow).toHaveCSS("width", "936px");
-  await expect(editorWindow).toHaveCSS("height", "528px");
+  await expect(editorWindow).toHaveCSS("height", "476px");
   const fitted960 = await windowGaps();
-  expect(fitted960.gaps).toEqual({ left: 12, top: 12, right: 12, bottom: 12 });
+  expect(fitted960.gaps).toEqual({ left: 12, top: 12, right: 12, bottom: 64 });
   measurements.symmetricFitted960 = fitted960;
   await captureThemePair("symmetric-fitted-960");
 

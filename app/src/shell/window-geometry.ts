@@ -1,13 +1,15 @@
 import type { Rect } from "@kaleidoscope/ui";
 
 const RESIZE_CORNER_SIZE = 12;
+export const TASKBAR_HEIGHT = 40;
+const TASKBAR_RESERVED_BOTTOM = RESIZE_CORNER_SIZE + TASKBAR_HEIGHT + RESIZE_CORNER_SIZE;
 
 export function usableWindowArea(area: { width: number; height: number }) {
   return {
     x: RESIZE_CORNER_SIZE,
     y: RESIZE_CORNER_SIZE,
     width: Math.max(0, area.width - 2 * RESIZE_CORNER_SIZE),
-    height: Math.max(0, area.height - 2 * RESIZE_CORNER_SIZE),
+    height: Math.max(0, area.height - RESIZE_CORNER_SIZE - TASKBAR_RESERVED_BOTTOM),
   };
 }
 

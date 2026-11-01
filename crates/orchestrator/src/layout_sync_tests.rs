@@ -46,6 +46,8 @@ fn window(id: &str, desktop_id: &str, app_id: &str) -> AppWindow {
             height: 120,
         },
         z: 1,
+        minimized: false,
+        maximized: false,
         state: Default::default(),
         created_at: format!("{id}-created"),
         updated_at: format!("{id}-updated"),

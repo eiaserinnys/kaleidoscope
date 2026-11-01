@@ -540,6 +540,9 @@ pub(crate) fn capture_for_send(
                         &window.id == id
                             && Some(window.desktop_id.as_str()) == active_desktop.as_deref()
                     })?;
+                    if window.minimized {
+                        return None;
+                    }
                     let view = state.share.views.get(id)?;
                     if !view.visual {
                         return None;

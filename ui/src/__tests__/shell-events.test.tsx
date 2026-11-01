@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Shell } from "../../../app/src/shell/shell";
 import type { CoreEvent } from "../contract/contract";
@@ -31,6 +31,75 @@ if (!globalThis.ResizeObserver) {
 afterEach(() => cleanup());
 
 describe("shell core events", () => {
+  it("빈 데스크톱은 작업 표시줄을 숨기고 최소화된 창의 작업 표시줄은 유지한다", async () => {
+    const snapshot = makeTestSnapshot();
+    const window = snapshot.shared.windows[0];
+    snapshot.shared.windows = [];
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+
+    expect(document.querySelector(".ks-taskbar")).toBeNull();
+    transport.emit({ event: "state.changed", snapshot: { ...snapshot, shared: { ...snapshot.shared, windows: [window] } } });
+    await waitFor(() => expect(document.querySelector(".ks-taskbar")).not.toBeNull());
+
+    await transport.call({ op: "window.minimize", window_id: window.id });
+    await waitFor(() => expect(document.querySelector(".ks-taskbar")).not.toBeNull());
+    expect(document.querySelector(".ks-taskbar-window")?.getAttribute("data-state")).toBe("minimized");
+    store.dispose();
+  });
+
+  it("태스크바로 창을 올리고 최소화하며 우클릭 메뉴에서 최대화와 복원을 수행한다", async () => {
+    const transport = createFakeTransport(makeTestSeed());
+    const calls = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+
+    const editorItem = document.querySelector<HTMLButtonElement>('[data-window-id="editor-window"]');
+    const editorWindow = screen.getByTestId("app-window-md-editor");
+    if (!editorItem) throw new Error("편집기 태스크바 항목을 찾지 못했습니다");
+    const titlebarIcons = [...editorWindow.querySelectorAll<SVGElement>(".ks-window-title-actions svg")];
+    expect(titlebarIcons.map((icon) => icon.getAttribute("width"))).toEqual(titlebarIcons.map(() => "18"));
+    const minimizeIcon = within(editorWindow).getByRole("button", { name: "창 최소화" }).querySelector("svg");
+    expect(minimizeIcon?.classList.contains("lucide-minus")).toBe(true);
+    expect(editorItem.getAttribute("data-state")).toBe("inactive");
+    expect(document.querySelector('[data-window-id="viewer-window"]')?.getAttribute("data-state")).toBe("active");
+
+    fireEvent.click(editorItem);
+    await waitFor(() => expect(editorItem.getAttribute("data-state")).toBe("active"));
+    expect(calls).toHaveBeenCalledWith({ op: "window.raise", window_id: "editor-window" });
+
+    fireEvent.click(editorItem);
+    await waitFor(() => expect(editorWindow.getAttribute("hidden")).not.toBeNull());
+    expect(editorItem.getAttribute("data-state")).toBe("minimized");
+    expect(calls).toHaveBeenCalledWith({ op: "window.minimize", window_id: "editor-window" });
+
+    fireEvent.click(editorItem);
+    await waitFor(() => expect(editorWindow.getAttribute("hidden")).toBeNull());
+    expect(editorItem.getAttribute("data-state")).toBe("active");
+
+    fireEvent.contextMenu(editorItem);
+    const menu = screen.getByRole("menu");
+    expect(menu.getAttribute("role")).toBe("menu");
+    fireEvent.click(screen.getByRole("menuitem", { name: "최대화" }));
+    await waitFor(() => expect(editorWindow.getAttribute("data-maximized")).toBe("true"));
+    expect(editorWindow.querySelector(".ks-window-resize-east")).toBeNull();
+    expect(calls).toHaveBeenCalledWith({ op: "window.maximize", window_id: "editor-window" });
+
+    fireEvent.click(editorItem);
+    await waitFor(() => expect(editorWindow.getAttribute("hidden")).not.toBeNull());
+    fireEvent.click(editorItem);
+    await waitFor(() => expect(editorWindow.getAttribute("hidden")).toBeNull());
+    expect(editorWindow.getAttribute("data-maximized")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "이전 크기로 복원" }));
+    await waitFor(() => expect(editorWindow.getAttribute("data-maximized")).toBe("false"));
+    expect(calls).toHaveBeenCalledWith({ op: "window.restore", window_id: "editor-window" });
+    store.dispose();
+  });
+
   it("앱 열기 메뉴에서 기본 앱과 커스텀 앱을 각각 가나다순으로 열 수 있다", async () => {
     document.documentElement.style.setProperty("--ks-window-min-width", "360px");
     document.documentElement.style.setProperty("--ks-window-min-height", "240px");
@@ -112,7 +181,7 @@ describe("shell core events", () => {
       op: "window.open",
       desktop_id: "desktop-1",
       app_id: "md-viewer",
-      rect: { x: 80, y: 80, width: 868, height: 460 },
+      rect: { x: 80, y: 80, width: 868, height: 408 },
     }));
     store.dispose();
   });
@@ -173,7 +242,7 @@ describe("shell core events", () => {
       op: "window.open",
       desktop_id: "desktop-3",
       app_id: "md-viewer",
-      rect: { x: 48, y: 48, width: 880, height: 492 },
+      rect: { x: 48, y: 48, width: 880, height: 440 },
     }));
     expect(store.getSnapshot()?.device.active_workspace_id).toBe("workspace-1");
     expect(store.getSnapshot()?.device.active_desktop_ids["workspace-2"]).toBe("desktop-3");

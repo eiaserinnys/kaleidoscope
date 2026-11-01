@@ -210,6 +210,8 @@ async fn second_account_workspaces_connections_and_devices_are_hidden_from_mcp_p
                 height: 120,
             },
             z: 1,
+            minimized: false,
+            maximized: false,
             state: Default::default(),
             created_at: "created".into(),
             updated_at: "updated".into(),

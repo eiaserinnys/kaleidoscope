@@ -158,6 +158,102 @@
   overflow: visible;
 }
 
+.ks-window[hidden] {
+  display: none;
+}
+
+.ks-taskbar {
+  position: absolute;
+  z-index: 9000;
+  left: 50%;
+  bottom: var(--ks-space-3);
+  display: flex;
+  width: max-content;
+  max-width: calc(100% - var(--ks-space-6));
+  height: calc(var(--ks-control-height) + var(--ks-space-1) * 2);
+  align-items: center;
+  gap: var(--ks-space-1);
+  transform: translateX(-50%);
+  border: var(--ks-line-width) solid var(--ks-color-border);
+  border-radius: var(--ks-radius-large);
+  background: var(--ks-color-surface);
+  box-shadow: var(--ks-shadow-window);
+  padding: 0 var(--ks-space-1);
+  backdrop-filter: blur(var(--ks-space-3));
+}
+
+.ks-taskbar-item {
+  display: inline-flex;
+  min-width: 0;
+  max-width: var(--ks-desktop-tab-max-width);
+  height: var(--ks-control-height);
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--ks-space-2);
+  overflow: hidden;
+  border: var(--ks-line-width) solid transparent;
+  border-radius: var(--ks-radius-small);
+  background: transparent;
+  color: var(--ks-color-muted);
+  cursor: pointer;
+  font-family: var(--ks-font-family);
+  font-size: var(--ks-type-body);
+  font-weight: 500;
+  line-height: var(--ks-line-body);
+  padding: 0 var(--ks-space-3);
+}
+
+.ks-taskbar-item:focus-visible {
+  outline: none;
+  border-color: var(--ks-color-focus);
+}
+
+.ks-taskbar-item:hover {
+  background: var(--ks-color-hover);
+}
+
+.ks-taskbar-item[data-state="active"] {
+  border-color: var(--ks-color-border);
+  background: var(--ks-color-selection);
+  color: var(--ks-color-text);
+}
+
+.ks-taskbar-item[data-state="minimized"] {
+  color: var(--ks-color-muted);
+}
+
+.ks-taskbar-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ks-taskbar-window-dot {
+  width: var(--ks-space-2);
+  height: var(--ks-space-2);
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--ks-color-muted);
+}
+
+.ks-taskbar-item[data-state="active"] .ks-taskbar-window-dot {
+  background: var(--ks-color-accent);
+}
+
+.ks-taskbar-item[data-state="minimized"] .ks-taskbar-window-dot {
+  border: var(--ks-line-width) solid var(--ks-color-muted);
+  background: transparent;
+}
+
+.ks-taskbar-windows {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--ks-space-1);
+  overflow-x: auto;
+}
+
 .ks-window-frame {
   position: absolute;
   inset: 0;

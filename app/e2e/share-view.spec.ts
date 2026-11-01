@@ -110,7 +110,7 @@ test("웹 화면과 다른 데스크톱, 밝고 어두운 화면", async ({ page
   await capture(page, "share-dark-wide.png");
   const wideMetrics = await measureTitle(frame);
   for (const metrics of [narrowMetrics, wideMetrics]) {
-    expect(metrics.buttons).toHaveLength(2);
+    expect(metrics.buttons).toHaveLength(4);
     expect(Math.abs(metrics.buttons[0].centerDelta)).toBeLessThanOrEqual(1);
     expect(Math.abs(metrics.buttons[1].centerDelta)).toBeLessThanOrEqual(1);
     expect(metrics.buttons[0].width).toBe(metrics.buttons[1].width);

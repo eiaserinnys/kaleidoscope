@@ -207,6 +207,16 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     return window;
   };
 
+  const patchWindow = (windowId: string, patch: Partial<AppWindow>): AppWindow => {
+    const updated = { ...findWindow(windowId), ...patch, updated_at: new Date().toISOString() };
+    snapshot = {
+      ...snapshot,
+      shared: { ...snapshot.shared, windows: snapshot.shared.windows.map((item) => item.id === windowId ? updated : item) },
+    };
+    emitState();
+    return updated;
+  };
+
   const definitionFor = (window: AppWindow): AppDefinition | null => snapshot.shared.app_versions
     .find((version) => version.app_id === window.app_id && version.version === window.app_version)
     ?.definition ?? null;
@@ -389,16 +399,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
     const topZ = Math.max(0, ...snapshot.shared.windows
       .filter((item) => item.desktop_id === window.desktop_id)
       .map((item) => item.z));
-    const updated = { ...window, z: topZ + 1, updated_at: new Date().toISOString() };
-    snapshot = {
-      ...snapshot,
-      shared: {
-        ...snapshot.shared,
-        windows: snapshot.shared.windows.map((item) => item.id === windowId ? updated : item),
-      },
-    };
-    emitState();
-    return updated;
+    return patchWindow(windowId, { minimized: false, z: topZ + 1 });
   };
 
   async function callRequest(request: CoreRequest): Promise<CoreReply> {
@@ -701,11 +702,28 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       }
       case "window.raise":
         return { op: "window.raise", window: clone(raiseWindow(request.window_id)) };
+      case "window.minimize": {
+        const window = patchWindow(request.window_id, { minimized: true });
+        return { op: "window.minimize", window: clone(window) };
+      }
+      case "window.maximize": {
+        const window = findWindow(request.window_id);
+        const topZ = Math.max(0, ...snapshot.shared.windows.filter((item) => item.desktop_id === window.desktop_id).map((item) => item.z));
+        const updated = patchWindow(request.window_id, { maximized: true, minimized: false, z: topZ + 1 });
+        return { op: "window.maximize", window: clone(updated) };
+      }
+      case "window.restore": {
+        const window = findWindow(request.window_id);
+        const topZ = Math.max(0, ...snapshot.shared.windows.filter((item) => item.desktop_id === window.desktop_id).map((item) => item.z));
+        const updated = patchWindow(request.window_id, { maximized: false, minimized: false, z: topZ + 1 });
+        return { op: "window.restore", window: clone(updated) };
+      }
       case "window.set_rect": {
         const window = findWindow(request.window_id);
         const updated: AppWindow = {
           ...window,
           rect: clone(request.rect),
+          maximized: false,
           updated_at: new Date().toISOString(),
         };
         snapshot = {
@@ -780,6 +798,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
           opened = {
             ...existing,
             state,
+            minimized: false,
             z: topZ + 1,
             updated_at: new Date().toISOString(),
           };

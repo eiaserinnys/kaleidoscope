@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { IconButton, Notice, ScreenShare, Settings, X, useShareView, type ShellStore, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
+import { IconButton, Maximize2, Minus, Minimize2, Notice, ScreenShare, Settings, X, useShareView, type ShellStore, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
 
 export interface WindowFrameProps {
@@ -11,6 +11,9 @@ export interface WindowFrameProps {
   hasSettings?: boolean;
   store: ShellStore;
   onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
+  onMinimize: (windowId: string) => void;
+  onMaximize: (windowId: string) => void;
+  onRestore: (windowId: string) => void;
   window: AppWindow;
   children: ReactNode | ((settingsOpen: boolean, closeSettings: () => void, reportProblem: (message: string | null) => void, visited: boolean) => ReactNode);
 }
@@ -27,19 +30,21 @@ type Gesture = {
 const MIN_WIDTH = "--ks-window-min-width";
 const MIN_HEIGHT = "--ks-window-min-height";
 
-export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSettings, store, onCall, window: appWindow, children }: WindowFrameProps) {
+export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSettings, store, onCall, onMinimize, onMaximize, onRestore, window: appWindow, children }: WindowFrameProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsVisited, setSettingsVisited] = useState(false);
   const [settingsProblem, setSettingsProblem] = useState<string | null>(null);
   const settingsButton = useRef<HTMLSpanElement>(null);
   const closeSettings = () => { setSettingsOpen(false); requestAnimationFrame(() => settingsButton.current?.querySelector<HTMLButtonElement>("button")?.focus()); };
-  useShareView({ windowId: appWindow.id, root: contentRef, enabled: sharing && !settingsOpen, store });
+  const isMaximized = Boolean(appWindow.maximized);
+  const isMinimized = Boolean(appWindow.minimized);
+  useShareView({ windowId: appWindow.id, root: contentRef, enabled: sharing && !settingsOpen && !isMinimized, store });
   const titleRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const previewRef = useRef<Rect | null>(null);
   const [preview, setPreview] = useState<Rect | null>(null);
-  const displayRect = fitWindowRect(preview ?? appWindow.rect, area);
+  const displayRect = isMaximized ? usableWindowArea(area) : fitWindowRect(preview ?? appWindow.rect, area);
 
   useEffect(() => { if (!hasSettings) { setSettingsOpen(false); setSettingsProblem(null); } }, [hasSettings]);
 
@@ -135,7 +140,10 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
   return (
     <section
       className={`ks-window${preview ? " ks-window-gesturing" : ""}${sharing ? " ks-window-sharing" : ""}`}
+      data-maximized={isMaximized ? "true" : "false"}
+      data-minimized={isMinimized ? "true" : "false"}
       data-testid={`app-window-${appWindow.app_id}`}
+      hidden={isMinimized}
       onPointerDownCapture={() => {
         if (!isTop) void onCall({ op: "window.raise", window_id: appWindow.id });
       }}
@@ -155,7 +163,13 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
           className={`ks-window-titlebar${isTop ? " ks-window-titlebar-active" : ""}`}
           onPointerDown={(event) => {
             if (event.target instanceof Element && event.target.closest("button")) return;
+            if (isMaximized) return;
             beginGesture("move", event);
+          }}
+          onDoubleClick={(event) => {
+            if (event.target instanceof Element && event.target.closest("button")) return;
+            if (isMaximized) onRestore(appWindow.id);
+            else onMaximize(appWindow.id);
           }}
           ref={titleRef}
         >
@@ -163,6 +177,14 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
           <div className="ks-window-title-actions">
           {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} tone="share" pressed={sharing} onClick={() => void onCall({ op: "share.set", window_id: appWindow.id, on: !sharing })}><ScreenShare /></IconButton> : null}
           {hasSettings ? <span ref={settingsButton}><IconButton aria-label={settingsProblem ? `앱 설정: ${settingsProblem}` : "앱 설정"} pressed={settingsOpen} onClick={() => { if (settingsOpen) closeSettings(); else { setSettingsVisited(true); setSettingsOpen(true); } }}><Settings /></IconButton></span> : null}
+          <IconButton aria-label="창 최소화" title="창 최소화" onClick={() => onMinimize(appWindow.id)}><Minus /></IconButton>
+          <IconButton
+            aria-label={isMaximized ? "이전 크기로 복원" : "창 최대화"}
+            title={isMaximized ? "이전 크기로 복원" : "창 최대화"}
+            onClick={() => (isMaximized ? onRestore(appWindow.id) : onMaximize(appWindow.id))}
+          >
+            {isMaximized ? <Minimize2 /> : <Maximize2 />}
+          </IconButton>
           <IconButton
             aria-label="창 닫기"
             onClick={() => void onCall({ op: "window.close", window_id: appWindow.id })}
@@ -177,21 +199,21 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
           {settingsProblem && !settingsOpen ? <div className="ks-window-settings-notice" data-ks-share-skip><Notice role="alert" data-ks-overlay>{settingsProblem}</Notice></div> : null}
         </div>
       </div>
-      <div
+      {!isMaximized ? <div
         aria-hidden="true"
         className="ks-window-resize-east"
         onPointerDown={(event) => beginGesture("east", event)}
-      />
-      <div
+      /> : null}
+      {!isMaximized ? <div
         aria-hidden="true"
         className="ks-window-resize-south"
         onPointerDown={(event) => beginGesture("south", event)}
-      />
-      <div
+      /> : null}
+      {!isMaximized ? <div
         aria-hidden="true"
         className="ks-window-resize-corner"
         onPointerDown={(event) => beginGesture("corner", event)}
-      />
+      /> : null}
     </section>
   );
 }

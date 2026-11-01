@@ -1022,8 +1022,16 @@ fn conversation_capture_respects_visual_baseline() {
     assert_eq!(host.shell_captures.load(Ordering::SeqCst), 1);
     assert_eq!(host.web_captures.load(Ordering::SeqCst), 1);
     crate::share::mark_sent_visuals(&core.inner, "test", visuals);
-    let (second, _) = crate::share::capture_for_send(&core.inner, &workspace_id, "test", &[]);
-    assert!(second.is_empty());
+    *host.png.lock().unwrap() = test_png_with_blue(8, 8, 81);
+    core.handle(CoreRequest::WindowMinimize {
+        window_id: editor.clone(),
+    })
+    .unwrap();
+    let (after_minimize, _) =
+        crate::share::capture_for_send(&core.inner, &workspace_id, "test", &[]);
+    assert_eq!(after_minimize.len(), 1);
+    assert_eq!(host.shell_captures.load(Ordering::SeqCst), 1);
+    assert_eq!(host.web_captures.load(Ordering::SeqCst), 2);
 }
 
 fn active_ids(core: &Core) -> (String, String) {
@@ -1052,6 +1060,99 @@ fn open_window(core: &Core, desktop_id: &str, app_id: &str) -> String {
         CoreReply::WindowOpen { window } => window.id,
         reply => panic!("unexpected reply: {reply:?}"),
     }
+}
+
+#[test]
+fn window_minimize_maximize_restore_preserve_rect_and_clear_on_resize() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
+    let (_, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "md-editor");
+    let rect = Rect {
+        x: 31,
+        y: 42,
+        width: 700,
+        height: 500,
+    };
+    core.handle(CoreRequest::WindowSetRect {
+        window_id: window_id.clone(),
+        rect,
+    })
+    .unwrap();
+
+    let maximized = match core
+        .handle(CoreRequest::WindowMaximize {
+            window_id: window_id.clone(),
+        })
+        .unwrap()
+    {
+        CoreReply::WindowMaximize { window } => window,
+        reply => panic!("unexpected reply: {reply:?}"),
+    };
+    assert!(maximized.maximized && !maximized.minimized);
+    assert_eq!(maximized.rect, rect);
+
+    let minimized = match core
+        .handle(CoreRequest::WindowMinimize {
+            window_id: window_id.clone(),
+        })
+        .unwrap()
+    {
+        CoreReply::WindowMinimize { window } => window,
+        reply => panic!("unexpected reply: {reply:?}"),
+    };
+    assert!(minimized.minimized && minimized.maximized);
+    assert_eq!(minimized.rect, rect);
+
+    let raised = match core
+        .handle(CoreRequest::WindowRaise {
+            window_id: window_id.clone(),
+        })
+        .unwrap()
+    {
+        CoreReply::WindowRaise { window } => window,
+        reply => panic!("unexpected reply: {reply:?}"),
+    };
+    assert!(!raised.minimized && raised.maximized);
+
+    core.handle(CoreRequest::WindowMinimize {
+        window_id: window_id.clone(),
+    })
+    .unwrap();
+    let restored = match core
+        .handle(CoreRequest::WindowRestore {
+            window_id: window_id.clone(),
+        })
+        .unwrap()
+    {
+        CoreReply::WindowRestore { window } => window,
+        reply => panic!("unexpected reply: {reply:?}"),
+    };
+    assert!(!restored.minimized && !restored.maximized);
+    assert_eq!(restored.rect, rect);
+
+    let resized = Rect {
+        x: 10,
+        y: 10,
+        width: 600,
+        height: 400,
+    };
+    core.handle(CoreRequest::WindowMaximize {
+        window_id: window_id.clone(),
+    })
+    .unwrap();
+    let after_resize = match core
+        .handle(CoreRequest::WindowSetRect {
+            window_id,
+            rect: resized,
+        })
+        .unwrap()
+    {
+        CoreReply::WindowSetRect { window } => window,
+        reply => panic!("unexpected reply: {reply:?}"),
+    };
+    assert!(!after_resize.maximized);
+    assert_eq!(after_resize.rect, resized);
 }
 
 fn pick_folder(core: &Core, window_id: &str) -> CoreReply {

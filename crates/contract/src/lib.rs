@@ -385,6 +385,14 @@ pub struct AppWindow {
     pub rect: Rect,
     /// 겹침 순서. 클수록 위다. 데스크톱 안에서만 비교한다.
     pub z: u32,
+    /// 창이 화면에서 숨겨져 있다.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[ts(optional, as = "Option<bool>")]
+    pub minimized: bool,
+    /// 창이 데스크톱의 사용 가능 영역을 채운다. `rect`에는 이전 크기를 보존한다.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[ts(optional, as = "Option<bool>")]
+    pub maximized: bool,
     /// 창 상태. 키는 앱 정의의 `state`에 선언된 것뿐이다. 열린 파일 같은 것을 담는다.
     pub state: BTreeMap<String, JsonValue>,
     pub created_at: String,
@@ -2756,6 +2764,15 @@ pub enum CoreRequest {
     /// 창을 그 데스크톱 맨 위로 올린다.
     #[serde(rename = "window.raise")]
     WindowRaise { window_id: String },
+    /// 창을 숨기되 위치와 크기, 최대화 상태를 보존한다.
+    #[serde(rename = "window.minimize")]
+    WindowMinimize { window_id: String },
+    /// 창을 사용 가능 영역에 맞춘다.
+    #[serde(rename = "window.maximize")]
+    WindowMaximize { window_id: String },
+    /// 창을 보존된 위치와 크기로 복원한다.
+    #[serde(rename = "window.restore")]
+    WindowRestore { window_id: String },
     /// 창과 그 창의 고른 폴더를 지운다.
     #[serde(rename = "window.close")]
     WindowClose { window_id: String },
@@ -3209,6 +3226,12 @@ pub enum CoreReply {
     WindowSetRect { window: AppWindow },
     #[serde(rename = "window.raise")]
     WindowRaise { window: AppWindow },
+    #[serde(rename = "window.minimize")]
+    WindowMinimize { window: AppWindow },
+    #[serde(rename = "window.maximize")]
+    WindowMaximize { window: AppWindow },
+    #[serde(rename = "window.restore")]
+    WindowRestore { window: AppWindow },
     #[serde(rename = "window.close")]
     WindowClose {},
     #[serde(rename = "window.set_state")]
@@ -3922,6 +3945,82 @@ mod tests {
 
         let err = serde_json::from_str::<CoreRequest>(r#"{"op":"state.get","extra":1}"#);
         assert!(err.is_err(), "모르는 필드는 거부한다");
+    }
+
+    #[test]
+    fn window_minimize_maximize_restore_round_trip_and_legacy_defaults() {
+        for (op, request) in [
+            (
+                "window.minimize",
+                CoreRequest::WindowMinimize {
+                    window_id: "w".into(),
+                },
+            ),
+            (
+                "window.maximize",
+                CoreRequest::WindowMaximize {
+                    window_id: "w".into(),
+                },
+            ),
+            (
+                "window.restore",
+                CoreRequest::WindowRestore {
+                    window_id: "w".into(),
+                },
+            ),
+        ] {
+            let json = serde_json::to_value(&request).unwrap();
+            assert_eq!(json["op"], op);
+            assert_eq!(
+                serde_json::from_value::<CoreRequest>(json).unwrap(),
+                request
+            );
+        }
+
+        let legacy: AppWindow = serde_json::from_value(serde_json::json!({
+            "id":"w", "desktop_id":"d", "app_id":"a", "app_version":1,
+            "rect":{"x":0,"y":0,"width":10,"height":10}, "z":0,
+            "state":{}, "created_at":"created", "updated_at":"updated"
+        }))
+        .unwrap();
+        assert!(!legacy.minimized && !legacy.maximized);
+        let replies = [
+            (
+                "window.minimize",
+                CoreReply::WindowMinimize {
+                    window: AppWindow {
+                        minimized: true,
+                        ..legacy.clone()
+                    },
+                },
+            ),
+            (
+                "window.maximize",
+                CoreReply::WindowMaximize {
+                    window: AppWindow {
+                        maximized: true,
+                        ..legacy.clone()
+                    },
+                },
+            ),
+            (
+                "window.restore",
+                CoreReply::WindowRestore {
+                    window: legacy.clone(),
+                },
+            ),
+        ];
+        for (op, reply) in replies {
+            let json = serde_json::to_value(&reply).unwrap();
+            assert_eq!(json["op"], op);
+            assert!(
+                json["window"].get("minimized").is_none() || json["window"]["minimized"] == true
+            );
+            assert!(
+                json["window"].get("maximized").is_none() || json["window"]["maximized"] == true
+            );
+            assert_eq!(serde_json::from_value::<CoreReply>(json).unwrap(), reply);
+        }
     }
 
     #[test]
