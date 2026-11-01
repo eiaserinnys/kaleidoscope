@@ -232,7 +232,8 @@ pub const TAURI_EVENT: &str = "core-event";
 /// - 8판: 7판 + 기기 로컬 ACP 세션 모드의 `chat`.
 /// - 9판: 8판 + `metrics`, `button_grid`, `chart`(캔들 포함), 표의 등락률과 스파크라인.
 /// - 10판: 9판 + 세계 지도 `map`, 피드의 중첩 답글과 접기.
-pub const BLOCK_SET_VERSION: u32 = 10;
+/// - 11판: `sandbox`, `slider`, `color`와 `input.rows`.
+pub const BLOCK_SET_VERSION: u32 = 11;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -949,6 +950,54 @@ pub enum FileAccess {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub enum Block {
+    /// (11판) 선언한 HTML을 격리된 프레임에서 실행한다.
+    Sandbox {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        asset: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        file: Option<FileRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        document: Option<DocumentRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        value: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        title: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        height: Option<u16>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(optional, as = "Option<Vec<String>>")]
+        state_keys: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(optional, as = "Option<Vec<String>>")]
+        storage_entries: Vec<String>,
+    },
+    /// (11판) 수치 범위를 선택한다.
+    Slider {
+        value: StateRef,
+        on_change: Actions,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        label: Option<String>,
+        min: f64,
+        max: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        step: Option<f64>,
+    },
+    /// (11판) 색상을 선택한다.
+    Color {
+        value: StateRef,
+        on_change: Actions,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        label: Option<String>,
+    },
     /// 자식 블록을 나란히 놓는다. 경계를 끌어 크기를 바꿀 수 있다(바꾼 크기는 저장하지 않는다).
     Split {
         direction: SplitDirection,
@@ -1277,6 +1326,9 @@ pub enum Block {
         multiline: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
+        rows: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
         placeholder: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -1429,6 +1481,41 @@ where
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 enum RawBlock {
+    #[serde(alias = "interactive_html")]
+    Sandbox {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        asset: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        file: Option<FileRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        document: Option<DocumentRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        height: Option<u16>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        state_keys: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        storage_entries: Vec<String>,
+    },
+    Slider {
+        value: StateRef,
+        on_change: Actions,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+        min: f64,
+        max: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        step: Option<f64>,
+    },
+    Color {
+        value: StateRef,
+        on_change: Actions,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
     /// 자식 블록을 나란히 놓는다. 경계를 끌어 크기를 바꿀 수 있다(바꾼 크기는 저장하지 않는다).
     Split {
         direction: SplitDirection,
@@ -1703,6 +1790,20 @@ enum RawBlock {
         #[serde(default)]
         multiline: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        rows: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        placeholder: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_submit: Option<Actions>,
+    },
+    Textarea {
+        value: StateRef,
+        on_change: Actions,
+        #[serde(default)]
+        kind: InputKind,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rows: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         placeholder: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_submit: Option<Actions>,
@@ -1878,6 +1979,49 @@ enum RawBlock {
 impl From<RawBlock> for Block {
     fn from(raw: RawBlock) -> Self {
         match raw {
+            RawBlock::Sandbox {
+                asset,
+                file,
+                document,
+                value,
+                title,
+                height,
+                state_keys,
+                storage_entries,
+            } => Block::Sandbox {
+                asset,
+                file,
+                document,
+                value,
+                title,
+                height,
+                state_keys,
+                storage_entries,
+            },
+            RawBlock::Slider {
+                value,
+                on_change,
+                label,
+                min,
+                max,
+                step,
+            } => Block::Slider {
+                value,
+                on_change,
+                label,
+                min,
+                max,
+                step,
+            },
+            RawBlock::Color {
+                value,
+                on_change,
+                label,
+            } => Block::Color {
+                value,
+                on_change,
+                label,
+            },
             RawBlock::Split {
                 direction,
                 sizes,
@@ -2061,6 +2205,7 @@ impl From<RawBlock> for Block {
                 on_change,
                 kind,
                 multiline,
+                rows,
                 placeholder,
                 on_submit,
             } => Block::Input {
@@ -2068,6 +2213,23 @@ impl From<RawBlock> for Block {
                 on_change,
                 kind,
                 multiline,
+                rows,
+                placeholder,
+                on_submit,
+            },
+            RawBlock::Textarea {
+                value,
+                on_change,
+                kind,
+                rows,
+                placeholder,
+                on_submit,
+            } => Block::Input {
+                value,
+                on_change,
+                kind,
+                multiline: true,
+                rows,
                 placeholder,
                 on_submit,
             },
@@ -2270,6 +2432,7 @@ impl Block {
     /// 이 블록이 처음 생긴 블록 세트 판. 정의의 `requires.blocks`는 쓴 블록의 이 값 이상이어야 한다.
     pub fn introduced_in(&self) -> u32 {
         match self {
+            Block::Sandbox { .. } | Block::Slider { .. } | Block::Color { .. } => 11,
             Block::HtmlView { .. } => 6,
             Block::Split { .. } => 1,
             Block::Tree {
@@ -2333,6 +2496,9 @@ impl Block {
     /// JSON의 `type` 이름.
     pub fn type_name(&self) -> &'static str {
         match self {
+            Block::Sandbox { .. } => "sandbox",
+            Block::Slider { .. } => "slider",
+            Block::Color { .. } => "color",
             Block::Split { .. } => "split",
             Block::Tree { .. } => "tree",
             Block::Markdown { .. } => "markdown",
@@ -3171,6 +3337,10 @@ pub struct VisibleView {
     pub text: String,
     /// 이미지, 동영상, 그림판, 웹 화면처럼 글로 옮길 수 없는 것이 보이는가. 참이면 `conversation.send` 때 모습을 찍는다.
     pub visual: bool,
+    /// 화면에서 직접 제공하는 PNG 이미지의 base64 표현.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub image_base64: Option<String>,
     /// 창의 내용 영역(제목 줄 아래)이 쉘 화면(메인 웹뷰) 왼쪽 위 기준 어디에 있는가(CSS px). 모습을 찍을 때 쓴다.
     pub bounds: Rect,
 }

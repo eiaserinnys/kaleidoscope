@@ -24,6 +24,14 @@ it("보이는 블록과 인라인을 줄로 묶고 숨기거나 잘린 글을 �
   expect(result).toEqual({ text: "첫 문장\n다음 줄", visual: false });
 });
 
+it("보이는 캔버스의 PNG를 같이 보기 이미지로 옮긴다", () => {
+  document.body.innerHTML = '<div id="root"><canvas></canvas></div>';
+  const rect = { left: 0, top: 0, right: 100, bottom: 100, x: 0, y: 0, width: 100, height: 100, toJSON() {} };
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
+  vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,cG5n");
+  expect(describeVisible(document.getElementById("root")!)).toEqual({ text: "", visual: true, image_base64: "cG5n" });
+});
+
 it("가짜 코어는 같은 상태를 반복해도 이벤트를 보내지 않고 끈 창의 늦은 view를 무시한다", async () => {
   const { createFakeTransport } = await import("../core/fake-transport");
   const { makeTestSnapshot } = await import("./fixtures");

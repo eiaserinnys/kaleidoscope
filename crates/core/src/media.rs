@@ -98,6 +98,7 @@ pub(crate) fn get(
             if let Some((meta, bytes)) = crate::builtin::bundled_asset(&media.asset, version) {
                 return Ok(MediaData {
                     mime: match meta.format {
+                        kaleidoscope_contract::assets::AssetFormat::Html => "text/html",
                         kaleidoscope_contract::assets::AssetFormat::Svg => "image/svg+xml",
                         kaleidoscope_contract::assets::AssetFormat::Png => "image/png",
                         kaleidoscope_contract::assets::AssetFormat::Webp => "image/webp",

@@ -521,6 +521,7 @@ fn share_set_updates_snapshot_once_and_share_view_validates_size() {
     let oversized_view = || kaleidoscope_contract::VisibleView {
         text: "x".repeat(kaleidoscope_contract::SHARE_TEXT_MAX_BYTES + 1),
         visual: false,
+        image_base64: None,
         bounds: Rect {
             x: 0,
             y: 0,
@@ -577,6 +578,7 @@ fn shared_view_delivery_baselines_are_separate_for_each_app() {
         view: kaleidoscope_contract::VisibleView {
             text: "보이는 내용".into(),
             visual: false,
+            image_base64: None,
             bounds: Rect {
                 x: 0,
                 y: 0,
@@ -634,6 +636,7 @@ fn shared_view_baselines_survive_core_restart() {
         view: kaleidoscope_contract::VisibleView {
             text: "첫 화면".into(),
             visual: true,
+            image_base64: None,
             bounds: Rect {
                 x: 0,
                 y: 0,
@@ -683,6 +686,7 @@ fn shared_view_baselines_survive_core_restart() {
             view: kaleidoscope_contract::VisibleView {
                 text: "첫 화면".into(),
                 visual: true,
+                image_base64: None,
                 bounds: Rect {
                     x: 0,
                     y: 0,
@@ -708,6 +712,7 @@ fn shared_view_baselines_survive_core_restart() {
             view: kaleidoscope_contract::VisibleView {
                 text: "바뀐 화면".into(),
                 visual: true,
+                image_base64: None,
                 bounds: Rect {
                     x: 0,
                     y: 0,
@@ -803,6 +808,7 @@ fn share_view_uploads_once_and_unlink_clears_server_but_keeps_local_toggle() {
     let view = kaleidoscope_contract::VisibleView {
         text: "visible text".into(),
         visual: false,
+        image_base64: None,
         bounds: Rect {
             x: 0,
             y: 0,
@@ -873,6 +879,7 @@ fn share_offline_delete_replays_on_reconnect_and_closed_window_is_removed() {
     let view = kaleidoscope_contract::VisibleView {
         text: "latest".into(),
         visual: false,
+        image_base64: None,
         bounds: Rect {
             x: 0,
             y: 0,
@@ -934,6 +941,37 @@ fn share_offline_delete_replays_on_reconnect_and_closed_window_is_removed() {
 }
 
 #[test]
+fn shared_image_is_attached_without_a_web_host() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = seeded_core(temp.path(), &host);
+    let (workspace, desktop) = active_ids(&core);
+    let window_id = open_window(&core, &desktop, "test-md-editor");
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    let view = serde_json::from_value(json!({
+        "text": "그림", "visual": true,
+        "bounds": { "x": 0, "y": 0, "width": 4, "height": 4 },
+        "image_base64": STANDARD.encode(test_png(4, 4))
+    }))
+    .unwrap();
+    core.handle(CoreRequest::ShareView { window_id, view })
+        .unwrap();
+    let (attachments, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", &[]);
+    assert_eq!(attachments.len(), 1);
+    assert_eq!(attachments[0].name, "같이 보기 - 마크다운 편집기.png");
+    assert_eq!(attachments[0].mime, "image/png");
+    assert!(
+        image::load_from_memory(&STANDARD.decode(&attachments[0].data_base64).unwrap()).is_ok()
+    );
+}
+
+#[test]
 fn conversation_capture_respects_visual_baseline() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(CaptureTestHost {
@@ -969,6 +1007,7 @@ fn conversation_capture_respects_visual_baseline() {
             view: kaleidoscope_contract::VisibleView {
                 text: "[이미지: 화면]".into(),
                 visual: true,
+                image_base64: None,
                 bounds: Rect {
                     x: 1,
                     y: 1,
@@ -1008,6 +1047,7 @@ fn conversation_capture_respects_visual_baseline() {
         view: kaleidoscope_contract::VisibleView {
             text: "[이미지: 다른 데스크톱]".into(),
             visual: true,
+            image_base64: None,
             bounds: Rect {
                 x: 1,
                 y: 1,

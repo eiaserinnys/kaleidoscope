@@ -310,7 +310,11 @@ pub(crate) fn view(
         if !is_sharing(&state, window_id) {
             return Ok(CoreReply::ShareView {});
         }
-        if view.text.len() > SHARE_TEXT_MAX_BYTES {
+        if view.text.len() > SHARE_TEXT_MAX_BYTES
+            || view.image_base64.as_ref().is_some_and(|image| {
+                image.len() as u64 > ((AGENT_ATTACHMENT_MAX_BYTES + 2) / 3) * 4 * 2
+            })
+        {
             return Err(error::make(ErrorCode::InvalidRequest));
         }
         state.share.views.insert(window_id.to_owned(), view.clone());
@@ -573,6 +577,7 @@ pub(crate) fn capture_for_send(
                         view.bounds,
                         upload.app_name,
                         has_web,
+                        view.image_base64.clone(),
                         state
                             .shared
                             .desktops
@@ -601,47 +606,53 @@ pub(crate) fn capture_for_send(
     if total > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES {
         return (attachments, Vec::new());
     }
-    let Some(web) = inner.host.web() else {
-        return (attachments, Vec::new());
-    };
+    let web = inner.host.web();
     let mut sent = Vec::new();
-    for (id, bounds, app_name, has_web, previous_hash) in candidates {
+    for (id, bounds, app_name, has_web, image_base64, previous_hash) in candidates {
         if attachments.len() >= AGENT_ATTACHMENTS_MAX {
             break;
         }
-        let png = if has_web {
-            match web.capture(&id) {
-                Ok(Some(bytes)) => prepare_png(&bytes, None).or_else(|| {
-                    eprintln!("같이 보기 웹 화면 PNG를 처리하지 못했습니다.");
-                    None
-                }),
-                Ok(None) => {
-                    eprintln!("같이 보기 웹 화면 캡처가 비었습니다.");
-                    None
-                }
-                Err(error) => {
-                    eprintln!("같이 보기 모습 캡처 실패: {}", error.message);
-                    None
-                }
-            }
-        } else {
-            match web.capture_shell() {
-                Ok(Some((bytes, scale))) => {
-                    prepare_png(&bytes, Some((bounds, scale))).or_else(|| {
-                        eprintln!("같이 보기 쉘 PNG를 처리하지 못했습니다.");
+        let supplied = image_base64
+            .as_deref()
+            .filter(|image| !image.is_empty())
+            .and_then(|image| STANDARD.decode(image.trim()).ok())
+            .and_then(|bytes| prepare_png(&bytes, None));
+        let png = supplied.or_else(|| {
+            let web = web?;
+            if has_web {
+                match web.capture(&id) {
+                    Ok(Some(bytes)) => prepare_png(&bytes, None).or_else(|| {
+                        eprintln!("같이 보기 웹 화면 PNG를 처리하지 못했습니다.");
                         None
-                    })
+                    }),
+                    Ok(None) => {
+                        eprintln!("같이 보기 웹 화면 캡처가 비었습니다.");
+                        None
+                    }
+                    Err(error) => {
+                        eprintln!("같이 보기 모습 캡처 실패: {}", error.message);
+                        None
+                    }
                 }
-                Ok(None) => {
-                    eprintln!("같이 보기 쉘 캡처가 비었습니다.");
-                    None
-                }
-                Err(error) => {
-                    eprintln!("같이 보기 쉘 캡처 실패: {}", error.message);
-                    None
+            } else {
+                match web.capture_shell() {
+                    Ok(Some((bytes, scale))) => {
+                        prepare_png(&bytes, Some((bounds, scale))).or_else(|| {
+                            eprintln!("같이 보기 쉘 PNG를 처리하지 못했습니다.");
+                            None
+                        })
+                    }
+                    Ok(None) => {
+                        eprintln!("같이 보기 쉘 캡처가 비었습니다.");
+                        None
+                    }
+                    Err(error) => {
+                        eprintln!("같이 보기 쉘 캡처 실패: {}", error.message);
+                        None
+                    }
                 }
             }
-        };
+        });
         let Some((bytes, hash)) = png else { continue };
         if previous_hash.as_deref() == Some(hash.as_str()) {
             continue;

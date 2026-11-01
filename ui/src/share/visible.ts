@@ -1,7 +1,7 @@
 import { useLayoutEffect, type RefObject } from "react";
 import { SHARE_TEXT_CUT_MARK, SHARE_TEXT_MAX_BYTES } from "../contract/limits";
 
-type Description = { text: string; visual: boolean; continue?: boolean };
+type Description = { text: string; visual: boolean; image_base64?: string; continue?: boolean };
 const describers = new WeakMap<HTMLElement, () => Description>();
 
 export function useShareDescriber(ref: RefObject<HTMLElement | null>, describe: () => Description) {
@@ -48,10 +48,11 @@ const roles: Record<string, { label: string; selector: string; unit: string }> =
   feed: { label: "흐름", selector: 'article', unit: "개" },
 };
 
-export function describeVisible(root: HTMLElement): { text: string; visual: boolean } {
+export function describeVisible(root: HTMLElement): { text: string; visual: boolean; image_base64?: string } {
   const rootClip = visibleClip(root);
   let output = "";
   let visual = false;
+  let image_base64: string | undefined;
   const newline = () => { if (output && !output.endsWith("\n") && !output.endsWith("› ")) output += "\n"; };
   const append = (text: string, pre = false) => {
     if (pre) { output += text; return; }
@@ -92,6 +93,7 @@ export function describeVisible(root: HTMLElement): { text: string; visual: bool
     const description = describers.get(node)?.();
     if (description) {
       newline(); append(description.text, true); newline(); visual ||= description.visual;
+      image_base64 ||= description.image_base64;
       if (!description.continue) return;
     }
     const role = node.getAttribute("role") ?? "";
@@ -125,7 +127,16 @@ export function describeVisible(root: HTMLElement): { text: string; visual: bool
     } else if (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) {
       append(`[${node instanceof HTMLVideoElement ? "영상" : "소리"}: ${node.getAttribute("aria-label") || node.getAttribute("title") || node.currentSrc.split("/").pop() || ""}]`);
       if (node instanceof HTMLVideoElement) visual = true;
-    } else if (node instanceof HTMLCanvasElement) visual = true;
+    } else if (node instanceof HTMLCanvasElement) {
+      visual = true;
+      if (!image_base64) {
+        try {
+          const dataUrl = node.toDataURL("image/png");
+          const prefix = "data:image/png;base64,";
+          if (dataUrl.startsWith(prefix)) image_base64 = dataUrl.slice(prefix.length);
+        } catch { /* 캔버스 원본이 외부 출처일 수 있다. */ }
+      }
+    }
     else if (role === "row") {
       const cells = Array.from(node.children).filter((child) => ["cell", "gridcell", "columnheader", "rowheader"].includes(child.getAttribute("role") ?? ""));
       if (cells.length) cells.forEach((cell, index) => { if (index) append(" | ", true); walk(cell, childClip, true); });
@@ -134,5 +145,5 @@ export function describeVisible(root: HTMLElement): { text: string; visual: bool
     if (block && !inline) newline();
   };
   walk(root, rootClip);
-  return { text: limitShareText(output), visual };
+  return { text: limitShareText(output), visual, ...(image_base64 ? { image_base64 } : {}) };
 }

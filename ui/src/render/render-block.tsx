@@ -8,7 +8,7 @@ import { MarkdownViewBlock } from "../blocks/markdown-view";
 import { HtmlViewBlock } from "../blocks/html-view";
 import { SplitBlock } from "../blocks/split";
 import { StackBlock, TabsBlock, ToolbarBlock, SectionBlock, TextBlock } from "../blocks/data-layout";
-import { InputBlock, SelectBlock, ToggleBlock, ButtonBlock } from "../blocks/data-input";
+import { InputBlock, SelectBlock, ToggleBlock, ButtonBlock, SliderBlock, ColorBlock } from "../blocks/data-input";
 import { ListBlock } from "../blocks/data-list";
 import { TableBlock } from "../blocks/data-table";
 import { PropertiesBlock } from "../blocks/data-properties";
@@ -31,6 +31,7 @@ import { MetricsBlock } from "../blocks/data-metrics";
 import { DataKeypadBlock } from "../blocks/data-keypad";
 import { ChartBlock } from "../blocks/data-chart";
 import { MapBlock } from "../blocks/data-map";
+import { SandboxBlock } from "../blocks/sandbox";
 
 export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"): ReactNode {
   const normalized = normalizeBlock(block);
@@ -47,6 +48,8 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
         : <MarkdownEditorBlock block={normalized} context={context} />;
     case "html_view":
       return <HtmlViewBlock block={normalized} context={context} pointer={pointer} />;
+    case "sandbox":
+      return <SandboxBlock block={normalized} context={context} pointer={pointer} />;
     case "chat":
       return normalized.permission !== undefined || normalized.root !== undefined || normalized.agents !== undefined || normalized.selected !== undefined || normalized.on_select !== undefined
         ? <AgentSessionBlock block={normalized as AgentSessionBlockData} context={context} pointer={pointer} />
@@ -61,6 +64,8 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
     case "feed": return <FeedBlock block={normalized} context={context} pointer={pointer} />;
     case "text": return <TextBlock block={normalized} context={context} pointer={pointer} />;
     case "input": return <InputBlock block={normalized} context={context} pointer={pointer} />;
+    case "slider": return <SliderBlock block={normalized} context={context} pointer={pointer} />;
+    case "color": return <ColorBlock block={normalized} context={context} pointer={pointer} />;
     case "select": return <SelectBlock block={normalized} context={context} pointer={pointer} />;
     case "toggle": return <ToggleBlock block={normalized} context={context} pointer={pointer} />;
     case "button": return <ButtonBlock block={normalized} context={context} pointer={pointer} />;
@@ -87,6 +92,8 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
 export function normalizeBlock(block: Block): Block {
   const raw = block as unknown as Record<string, unknown>;
   const type = raw.type;
+  if (type === "interactive_html") return { ...raw, type: "sandbox" } as Block;
+  if (type === "textarea") return { ...raw, type: "input", multiline: true } as Block;
   if (type === "file_tree") return {
     type: "tree", root: raw.root as Extract<Block, { type: "tree" }>["root"], extensions: raw.extensions as string[],
     by: "children", selected: raw.selected as Extract<Block, { type: "tree" }>["selected"],

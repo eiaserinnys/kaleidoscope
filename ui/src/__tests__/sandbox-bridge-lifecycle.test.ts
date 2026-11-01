@@ -1,0 +1,30 @@
+import { expect, it, vi } from "vitest";
+import { sandboxSource } from "../blocks/sandbox-frame";
+
+it("저장본을 수락했을 때만 revision을 갱신하고 닫기 전에 저장을 기다린다", async () => {
+  vi.useFakeTimers();
+  const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: ["draft"], token: "시험" });
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
+  const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
+  const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  new Function(code)();
+  const api = (window as unknown as { kaleidoscope: { onStorageChange: (entry: string, listener: () => boolean) => () => void; setStorage: (entry: string, content: string) => Promise<unknown> } }).kaleidoscope;
+  const host = (data: object) => window.dispatchEvent(new MessageEvent("message", { source: window, data }));
+  const reject = api.onStorageChange("draft", () => false);
+  host({ type: "ks-sandbox-storage-sync", entry: "draft", content: "다른 문서", revision: "r2" });
+  expect(post.mock.calls.some(([value]) => value.type === "ks-sandbox-storage-applied")).toBe(false);
+  reject();
+  api.onStorageChange("draft", () => true);
+  host({ type: "ks-sandbox-storage-sync", entry: "draft", content: "다른 문서", revision: "r2" });
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-sandbox-storage-applied", entry: "draft", revision: "r2" }), "*");
+  window.addEventListener("pagehide", () => { void api.setStorage("draft", "마지막 편집"); }, { once: true });
+  host({ type: "ks-sandbox-flush", requestId: "close" });
+  const write = post.mock.calls.map(([value]) => value).find((value) => value.type === "ks-sandbox-storage-set");
+  expect(write.content).toBe("마지막 편집");
+  expect(post.mock.calls.some(([value]) => value.type === "ks-sandbox-flushed")).toBe(false);
+  host({ type: "ks-sandbox-storage-reply", requestId: write.requestId, content: "마지막 편집" });
+  await Promise.resolve(); await Promise.resolve();
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-sandbox-flushed", requestId: "close", ok: true }), "*");
+  vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+});

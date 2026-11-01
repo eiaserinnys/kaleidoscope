@@ -11,7 +11,7 @@
   },
   "app": {
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'sha256-Z+GZTb2mxn7BB3pUvOGrqUorfFwZv5mwKQAb0AG9CTk='; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; media-src 'self' blob:"
+      "csp": "default-src 'self'; frame-src 'self' data: blob:; script-src 'self' 'sha256-Z+GZTb2mxn7BB3pUvOGrqUorfFwZv5mwKQAb0AG9CTk=' 'unsafe-eval' data: blob:; style-src 'self' 'unsafe-inline' data: blob:; connect-src 'self' data: blob:; img-src 'self' data: blob:; font-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self' blob:"
     },
     "windows": [
       {

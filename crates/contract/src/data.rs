@@ -1008,6 +1008,13 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         };
     }
     match block {
+        Block::Sandbox {
+            value: Some(value), ..
+        } => bind!("value", value),
+        Block::Sandbox { value: None, .. } => {}
+        Block::Slider { on_change, .. } | Block::Color { on_change, .. } => {
+            act!("on_change", on_change)
+        }
         Block::Metrics { items, .. } => bind!("items", items),
         Block::ButtonGrid {
             buttons, on_press, ..

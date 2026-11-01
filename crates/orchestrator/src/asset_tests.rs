@@ -50,6 +50,21 @@ fn asset_versions_are_immutable_and_account_scoped() {
 }
 
 #[test]
+fn html_asset_round_trips_as_immutable_bytes() {
+    let state = AppState::in_memory("secret");
+    let html = "<!doctype html><script>document.body.textContent = '안녕'</script>";
+    let mut item = upload("page", html);
+    item.format = AssetFormat::Html;
+    let meta = state.upload_asset(&item).unwrap();
+    let account = state.mcp_account_id().unwrap();
+    let (read_meta, bytes) = state.get_asset(&account, "page", 1).unwrap().unwrap();
+    assert_eq!(meta, read_meta);
+    assert_eq!(read_meta.format, AssetFormat::Html);
+    assert_eq!(bytes, html.as_bytes());
+    assert_eq!(state.upload_asset(&item).unwrap(), meta);
+}
+
+#[test]
 fn missing_dependency_rolls_back_attached_upload() {
     let state = AppState::in_memory("secret");
     let item = upload("icon", "<svg/>");
