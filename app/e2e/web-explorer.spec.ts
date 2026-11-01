@@ -517,8 +517,9 @@ test("keeps the last file open menu inside a 720x600 viewport", async ({ page })
       }),
     };
   });
-  expect(placement.anchorBottom + (placement.menuBottom - placement.menuTop)).toBeGreaterThan(placement.height - placement.inset);
-  expect(placement.menuTop).toBeLessThan(placement.anchorTop);
+  const menuHeight = placement.menuBottom - placement.menuTop;
+  const fitsBelow = placement.anchorBottom + menuHeight <= placement.height - placement.inset;
+  expect(placement.menuTop).toBe(fitsBelow ? placement.anchorBottom : placement.anchorTop - menuHeight);
   expect(placement.menuTop).toBeGreaterThanOrEqual(placement.inset);
   expect(placement.menuBottom).toBeLessThanOrEqual(placement.height - placement.inset);
   expect(placement.menuLeft).toBeGreaterThanOrEqual(placement.inset);

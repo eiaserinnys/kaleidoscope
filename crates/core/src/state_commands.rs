@@ -328,6 +328,8 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 app_version: app.current_version,
                 rect,
                 z,
+                minimized: false,
+                maximized: false,
                 state: definition.state,
                 created_at: now.clone(),
                 updated_at: now,
@@ -348,6 +350,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .find(|window| window.id == window_id)
                 .ok_or_else(|| error::make(ErrorCode::NotFound))?;
             window.rect = rect;
+            window.maximized = false;
             window.updated_at = timestamp();
             Ok(CoreReply::WindowSetRect {
                 window: window.clone(),
@@ -377,8 +380,84 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .find(|window| window.id == window_id)
                 .unwrap();
             window.z = z;
+            window.minimized = false;
             window.updated_at = timestamp();
             Ok(CoreReply::WindowRaise {
+                window: window.clone(),
+            })
+        }
+        CoreRequest::WindowMinimize { window_id } => {
+            let window = state
+                .shared
+                .windows
+                .iter_mut()
+                .find(|window| window.id == window_id)
+                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            window.minimized = true;
+            window.updated_at = timestamp();
+            Ok(CoreReply::WindowMinimize {
+                window: window.clone(),
+            })
+        }
+        CoreRequest::WindowMaximize { window_id } => {
+            let desktop_id = state
+                .shared
+                .windows
+                .iter()
+                .find(|window| window.id == window_id)
+                .map(|window| window.desktop_id.clone())
+                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            let z = state
+                .shared
+                .windows
+                .iter()
+                .filter(|window| window.desktop_id == desktop_id)
+                .map(|window| window.z)
+                .max()
+                .unwrap_or(0)
+                .saturating_add(1);
+            let window = state
+                .shared
+                .windows
+                .iter_mut()
+                .find(|window| window.id == window_id)
+                .unwrap();
+            window.maximized = true;
+            window.minimized = false;
+            window.z = z;
+            window.updated_at = timestamp();
+            Ok(CoreReply::WindowMaximize {
+                window: window.clone(),
+            })
+        }
+        CoreRequest::WindowRestore { window_id } => {
+            let desktop_id = state
+                .shared
+                .windows
+                .iter()
+                .find(|window| window.id == window_id)
+                .map(|window| window.desktop_id.clone())
+                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            let z = state
+                .shared
+                .windows
+                .iter()
+                .filter(|window| window.desktop_id == desktop_id)
+                .map(|window| window.z)
+                .max()
+                .unwrap_or(0)
+                .saturating_add(1);
+            let window = state
+                .shared
+                .windows
+                .iter_mut()
+                .find(|window| window.id == window_id)
+                .unwrap();
+            window.maximized = false;
+            window.minimized = false;
+            window.z = z;
+            window.updated_at = timestamp();
+            Ok(CoreReply::WindowRestore {
                 window: window.clone(),
             })
         }

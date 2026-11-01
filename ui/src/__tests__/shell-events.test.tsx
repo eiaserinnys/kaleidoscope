@@ -31,6 +31,52 @@ if (!globalThis.ResizeObserver) {
 afterEach(() => cleanup());
 
 describe("shell core events", () => {
+  it("태스크바로 창을 올리고 최소화하며 우클릭 메뉴에서 최대화와 복원을 수행한다", async () => {
+    const transport = createFakeTransport(makeTestSeed());
+    const calls = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+
+    const editorItem = document.querySelector<HTMLButtonElement>('[data-window-id="editor-window"]');
+    const editorWindow = screen.getByTestId("app-window-md-editor");
+    if (!editorItem) throw new Error("편집기 태스크바 항목을 찾지 못했습니다");
+    expect(editorItem.getAttribute("data-state")).toBe("inactive");
+    expect(document.querySelector('[data-window-id="viewer-window"]')?.getAttribute("data-state")).toBe("active");
+
+    fireEvent.click(editorItem);
+    await waitFor(() => expect(editorItem.getAttribute("data-state")).toBe("active"));
+    expect(calls).toHaveBeenCalledWith({ op: "window.raise", window_id: "editor-window" });
+
+    fireEvent.click(editorItem);
+    await waitFor(() => expect(editorWindow.getAttribute("hidden")).not.toBeNull());
+    expect(editorItem.getAttribute("data-state")).toBe("minimized");
+    expect(calls).toHaveBeenCalledWith({ op: "window.minimize", window_id: "editor-window" });
+
+    fireEvent.click(editorItem);
+    await waitFor(() => expect(editorWindow.getAttribute("hidden")).toBeNull());
+    expect(editorItem.getAttribute("data-state")).toBe("active");
+
+    fireEvent.contextMenu(editorItem, { clientX: 123, clientY: 234 });
+    const menu = screen.getByRole("menu");
+    expect({ left: menu.style.left, top: menu.style.top }).toEqual({ left: "123px", top: "234px" });
+    fireEvent.click(screen.getByRole("menuitem", { name: "최대화" }));
+    await waitFor(() => expect(editorWindow.getAttribute("data-maximized")).toBe("true"));
+    expect(editorWindow.querySelector(".ks-window-resize-east")).toBeNull();
+    expect(calls).toHaveBeenCalledWith({ op: "window.maximize", window_id: "editor-window" });
+
+    fireEvent.click(editorItem);
+    await waitFor(() => expect(editorWindow.getAttribute("hidden")).not.toBeNull());
+    fireEvent.click(editorItem);
+    await waitFor(() => expect(editorWindow.getAttribute("hidden")).toBeNull());
+    expect(editorWindow.getAttribute("data-maximized")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "이전 크기로 복원" }));
+    await waitFor(() => expect(editorWindow.getAttribute("data-maximized")).toBe("false"));
+    expect(calls).toHaveBeenCalledWith({ op: "window.restore", window_id: "editor-window" });
+    store.dispose();
+  });
+
   it("앱 열기 메뉴에서 기본 앱과 커스텀 앱을 각각 가나다순으로 열 수 있다", async () => {
     document.documentElement.style.setProperty("--ks-window-min-width", "360px");
     document.documentElement.style.setProperty("--ks-window-min-height", "240px");
@@ -48,7 +94,7 @@ describe("shell core events", () => {
     render(<Shell store={store} />);
     await store.ready;
 
-    fireEvent.click(screen.getByRole("button", { name: "앱 열기" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "앱 열기" })[0]);
 
     const menu = screen.getByRole("menu");
     expect([...menu.querySelectorAll(".ks-menu-group-heading")].map((item) => item.textContent)).toEqual(["기본앱", "커스텀 앱"]);
@@ -70,7 +116,7 @@ describe("shell core events", () => {
     render(<Shell store={store} />);
     await store.ready;
 
-    fireEvent.click(screen.getByRole("button", { name: "앱 열기" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "앱 열기" })[0]);
 
     const menu = screen.getByRole("menu");
     expect([...menu.querySelectorAll(".ks-menu-group-heading")].map((item) => item.textContent)).toEqual(["기본앱"]);
@@ -112,7 +158,7 @@ describe("shell core events", () => {
       op: "window.open",
       desktop_id: "desktop-1",
       app_id: "md-viewer",
-      rect: { x: 80, y: 80, width: 868, height: 460 },
+      rect: { x: 80, y: 80, width: 868, height: 408 },
     }));
     store.dispose();
   });
@@ -173,7 +219,7 @@ describe("shell core events", () => {
       op: "window.open",
       desktop_id: "desktop-3",
       app_id: "md-viewer",
-      rect: { x: 48, y: 48, width: 880, height: 492 },
+      rect: { x: 48, y: 48, width: 880, height: 440 },
     }));
     expect(store.getSnapshot()?.device.active_workspace_id).toBe("workspace-1");
     expect(store.getSnapshot()?.device.active_desktop_ids["workspace-2"]).toBe("desktop-3");

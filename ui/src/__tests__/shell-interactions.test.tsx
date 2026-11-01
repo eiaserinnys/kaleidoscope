@@ -16,15 +16,50 @@ if (!window.PointerEvent) {
 }
 
 const frameStore = makeStore(makeTestSnapshot(), []);
+const frameActions = { onMinimize: () => {}, onMaximize: () => {}, onRestore: () => {} };
 
 describe("window dragging", () => {
+  it("titlebar double-click toggles size only outside buttons", () => {
+    const appWindow = makeTestSnapshot().shared.windows[0] as AppWindow;
+    const onMaximize = vi.fn();
+    const onRestore = vi.fn();
+    render(
+      <WindowFrame
+        {...frameActions}
+        onMaximize={onMaximize}
+        onRestore={onRestore}
+        sharing={false}
+        shareable
+        store={frameStore}
+        area={{ width: 960, height: 552 }}
+        appName="Markdown 편집기"
+        isTop
+        onCall={vi.fn() as ShellStore["call"]}
+        window={appWindow}
+      >
+        <div>content</div>
+      </WindowFrame>,
+    );
+
+    const maximizeIcon = screen.getByRole("button", { name: "창 최대화" }).querySelector("svg");
+    if (!maximizeIcon) throw new Error("최대화 아이콘을 찾지 못했습니다");
+    fireEvent.doubleClick(maximizeIcon);
+    expect(onMaximize).not.toHaveBeenCalled();
+
+    const titlebar = screen.getByText("Markdown 편집기").closest(".ks-window-titlebar");
+    if (!titlebar) throw new Error("창 제목 줄을 찾지 못했습니다");
+    fireEvent.doubleClick(titlebar);
+    expect(onMaximize).toHaveBeenCalledWith(appWindow.id);
+    expect(onRestore).not.toHaveBeenCalled();
+  });
+
   it("clamps only the drawn rectangle to a small desktop", () => {
     const appWindow = makeTestSnapshot().shared.windows[0] as AppWindow;
     appWindow.rect = { x: 48, y: 48, width: 1076, height: 700 };
     const savedRect = { ...appWindow.rect };
     const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window: appWindow });
     render(
-      <WindowFrame sharing={false} shareable store={frameStore}
+      <WindowFrame {...frameActions} sharing={false} shareable store={frameStore}
         area={{ width: 960, height: 552 }}
         appName="Markdown 편집기"
         isTop
@@ -39,7 +74,7 @@ describe("window dragging", () => {
     expect(frame.style.top).toBe("12px");
     expect(frame.style.left).toBe("12px");
     expect(frame.style.width).toBe("936px");
-    expect(frame.style.height).toBe("528px");
+    expect(frame.style.height).toBe("476px");
     expect(appWindow.rect).toEqual(savedRect);
     expect(onCall).not.toHaveBeenCalled();
   });
@@ -49,7 +84,7 @@ describe("window dragging", () => {
     appWindow.rect = { x: 48, y: 48, width: 1076, height: 700 };
     const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window: appWindow });
     render(
-      <WindowFrame sharing={false} shareable store={frameStore}
+      <WindowFrame {...frameActions} sharing={false} shareable store={frameStore}
         area={{ width: 960, height: 552 }}
         appName="Markdown 편집기"
         isTop
@@ -68,16 +103,16 @@ describe("window dragging", () => {
     expect(onCall).toHaveBeenCalledWith({
       op: "window.set_rect",
       window_id: appWindow.id,
-      rect: { x: 12, y: 12, width: 936, height: 408 },
+      rect: { x: 12, y: 12, width: 936, height: 356 },
     });
   });
 
   it("keeps a dragged window within the desktop bottom edge", () => {
     const appWindow = makeTestSnapshot().shared.windows[0] as AppWindow;
-    appWindow.rect = { x: 48, y: 0, width: 640, height: 480 };
+    appWindow.rect = { x: 48, y: 0, width: 640, height: 400 };
     const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window: appWindow });
     render(
-      <WindowFrame sharing={false} shareable store={frameStore}
+      <WindowFrame {...frameActions} sharing={false} shareable store={frameStore}
         area={{ width: 960, height: 552 }}
         appName="Markdown 편집기"
         isTop
@@ -97,16 +132,16 @@ describe("window dragging", () => {
     expect(onCall).toHaveBeenCalledWith({
       op: "window.set_rect",
       window_id: appWindow.id,
-      rect: { ...appWindow.rect, x: 48, y: 60 },
+      rect: { ...appWindow.rect, x: 48, y: 88 },
     });
   });
 
   it("limits a resized window height to the desktop bottom edge", () => {
     const appWindow = makeTestSnapshot().shared.windows[0] as AppWindow;
-    appWindow.rect = { x: 48, y: 0, width: 640, height: 480 };
+    appWindow.rect = { x: 48, y: 0, width: 640, height: 400 };
     const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window: appWindow });
     render(
-      <WindowFrame sharing={false} shareable store={frameStore}
+      <WindowFrame {...frameActions} sharing={false} shareable store={frameStore}
         area={{ width: 960, height: 552 }}
         appName="Markdown 편집기"
         isTop
@@ -125,7 +160,7 @@ describe("window dragging", () => {
     expect(onCall).toHaveBeenCalledWith({
       op: "window.set_rect",
       window_id: appWindow.id,
-      rect: { ...appWindow.rect, y: 12, height: 528 },
+      rect: { ...appWindow.rect, y: 12, height: 476 },
     });
   });
 
@@ -133,7 +168,7 @@ describe("window dragging", () => {
     const window = makeTestSnapshot().shared.windows[0] as AppWindow;
     const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window });
     const view = render(
-      <WindowFrame sharing={false} shareable store={frameStore}
+      <WindowFrame {...frameActions} sharing={false} shareable store={frameStore}
         area={{ width: 1000, height: 800 }}
         appName="Markdown 편집기"
         isTop
@@ -166,26 +201,26 @@ describe("window dragging", () => {
 
     const updated = { ...window, rect: { ...window.rect, x: 37, y: 42 } };
     view.rerender(
-      <WindowFrame sharing={false} shareable store={frameStore} area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={updated}>
+      <WindowFrame {...frameActions} sharing={false} shareable store={frameStore} area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={updated}>
         <div>content</div>
       </WindowFrame>,
     );
     view.rerender(
-      <WindowFrame sharing={false} shareable store={frameStore} area={{ width: 600, height: 400 }} appName="Markdown 편집기" isTop onCall={onCall} window={updated}>
+      <WindowFrame {...frameActions} sharing={false} shareable store={frameStore} area={{ width: 600, height: 400 }} appName="Markdown 편집기" isTop onCall={onCall} window={updated}>
         <div>content</div>
       </WindowFrame>,
     );
     expect(frame.style.left).toBe("12px");
     expect(frame.style.top).toBe("12px");
     expect(frame.style.width).toBe("576px");
-    expect(frame.style.height).toBe("376px");
+    expect(frame.style.height).toBe("324px");
   });
 
   it("restores the saved rectangle when saving a gesture fails", async () => {
     const appWindow = makeTestSnapshot().shared.windows[0] as AppWindow;
     const onCall = vi.fn().mockResolvedValue(undefined);
     render(
-      <WindowFrame sharing={false} shareable store={frameStore} area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={appWindow}>
+      <WindowFrame {...frameActions} sharing={false} shareable store={frameStore} area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={appWindow}>
         <div>content</div>
       </WindowFrame>,
     );
@@ -205,7 +240,7 @@ describe("window dragging", () => {
       return { op: request.op };
     });
     render(
-      <WindowFrame sharing={false} shareable store={frameStore}
+      <WindowFrame {...frameActions} sharing={false} shareable store={frameStore}
         area={{ width: 1000, height: 800 }}
         appName="Markdown 편집기"
         isTop
@@ -236,7 +271,7 @@ describe("window dragging", () => {
     appWindow.rect = { x: 48, y: 48, width: 640, height: 480 };
     const onCall = vi.fn().mockResolvedValue({ op: "window.set_rect", window: appWindow });
     render(
-      <WindowFrame sharing={false} shareable store={frameStore} area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={appWindow}>
+      <WindowFrame {...frameActions} sharing={false} shareable store={frameStore} area={{ width: 1000, height: 800 }} appName="Markdown 편집기" isTop onCall={onCall} window={appWindow}>
         <div>content</div>
       </WindowFrame>,
     );
@@ -297,25 +332,25 @@ describe("app definition import", () => {
       x: 48,
       y: 48,
       width: 880,
-      height: 492,
+      height: 440,
     });
     expect(makeNewWindowRect({ width: 960, height: 552 }, 1)).toEqual({
       x: 80,
       y: 80,
       width: 868,
-      height: 460,
+      height: 408,
     });
     expect(makeNewWindowRect({ width: 960, height: 552 }, 2)).toEqual({
       x: 112,
       y: 112,
       width: 836,
-      height: 428,
+      height: 376,
     });
     expect(makeNewWindowRect({ width: 960, height: 552 }, 3)).toEqual({
       x: 144,
       y: 144,
       width: 804,
-      height: 396,
+      height: 344,
     });
     expect(makeNewWindowRect({ width: 1440, height: 852 }, 0)).toEqual({
       x: 48,
@@ -333,26 +368,26 @@ describe("app definition import", () => {
 
   it("restarts the cascade when the next position would make a window too small", () => {
     expect(makeNewWindowRect({ width: 500, height: 300 }, 1)).toEqual({
-      x: 48, y: 48, width: 440, height: 240,
+      x: 12, y: 12, width: 476, height: 224,
     });
     expect(makeNewWindowRect({ width: 420, height: 700 }, 1)).toEqual({
-      x: 48, y: 48, width: 360, height: 600,
+      x: 48, y: 48, width: 360, height: 588,
     });
     expect(makeNewWindowRect({ width: 960, height: 552 }, 8)).toEqual({
-      x: 48, y: 48, width: 880, height: 492,
+      x: 48, y: 48, width: 880, height: 440,
     });
   });
 
   it("uses the whole usable area when the first position is too small", () => {
     expect(makeNewWindowRect({ width: 300, height: 200 }, 0)).toEqual({
-      x: 12, y: 12, width: 276, height: 176,
+      x: 12, y: 12, width: 276, height: 124,
     });
   });
 
   it("uses the configured minimum-size tokens for the restart decision", () => {
     document.documentElement.style.setProperty("--ks-window-min-height", "260px");
     expect(makeNewWindowRect({ width: 500, height: 300 }, 1)).toEqual({
-      x: 12, y: 12, width: 476, height: 276,
+      x: 12, y: 12, width: 476, height: 224,
     });
   });
 });

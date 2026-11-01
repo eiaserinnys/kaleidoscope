@@ -27,17 +27,20 @@ export type MenuEntry = MenuItem | MenuSeparator | MenuHeading;
 
 export interface MenuProps {
   anchor: HTMLElement;
+  anchorPoint?: { x: number; y: number };
   items: MenuEntry[];
   onClose: () => void;
 }
 
-export function Menu({ anchor, items, onClose }: MenuProps) {
+export function Menu({ anchor, anchorPoint, items, onClose }: MenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [position, setPosition] = useState({ left: 0, top: 0 });
 
   useLayoutEffect(() => {
-    const rect = anchor.getBoundingClientRect();
+    const rect = anchorPoint
+      ? { left: anchorPoint.x, top: anchorPoint.y, bottom: anchorPoint.y }
+      : anchor.getBoundingClientRect();
     const menu = menuRef.current;
     const menuWidth = menu?.getBoundingClientRect().width ?? 0;
     const viewportInset = menu
@@ -93,7 +96,7 @@ export function Menu({ anchor, items, onClose }: MenuProps) {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [anchor, onClose]);
+  }, [anchor, anchorPoint, onClose]);
 
   return createPortal(
     <div
