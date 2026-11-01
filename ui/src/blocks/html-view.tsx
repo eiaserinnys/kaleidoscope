@@ -34,24 +34,44 @@ export function HtmlViewBlock({ block, context, pointer = "/ui" }: { block: Html
 function BoundHtmlViewBlock({ binding, pointer, context }: { binding: Binding; pointer: string; context: BlockContext }) {
   const value = useBinding(`${pointer}/value`, binding);
   const root = useRef<HTMLElement>(null);
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [visibleText, setVisibleText] = useState("");
   const rawHtml = value.status === "ready" && typeof value.value === "string" ? value.value : "";
+  useLayoutEffect(() => { setVisibleText(""); }, [rawHtml]);
+  useLayoutEffect(() => {
+    const receive = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow || event.data?.type !== "ks-html-visible-text" || typeof event.data.text !== "string") return;
+      setVisibleText(event.data.text);
+    };
+    window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);
+  }, []);
   const appName = context.definition.name || "HTML 보기";
-  useShareDescriber(root, () => ({ text: `[${appName}]\n\n${htmlText(rawHtml)}`, visual: true }));
+  useShareDescriber(root, () => ({ text: `[${appName}]\n\n${visibleText || htmlText(rawHtml)}`, visual: true }));
   if (value.status !== "ready") return <DataState value={value} />;
   if (typeof value.value !== "string") return <div className="ks-html-state"><Notice role="alert">HTML 값이 글이 아닙니다</Notice></div>;
-  return <section className="ks-html-view" ref={root}><div className="ks-html-content"><iframe title={appName} sandbox="allow-scripts" srcDoc={htmlViewSource(rawHtml)} /></div></section>;
+  return <section className="ks-html-view" ref={root}><div className="ks-html-content"><iframe ref={frame} title={appName} sandbox="allow-scripts" srcDoc={htmlViewSource(rawHtml)} /></div></section>;
 }
 
 function FileHtmlViewBlock({ file, context }: { file: FileRef; context: BlockContext }) {
   const path = resolveFilePath(file, context.window);
   const rootPath = context.snapshot.device.grants.find((grant) => grant.window_id === context.window.id && grant.permission === file.permission)?.root_path ?? null;
   const [rawHtml, setRawHtml] = useState("");
+  const [visibleText, setVisibleText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const version = useRef(0);
-  const frame = useRef<HTMLElement>(null);
+  const root = useRef<HTMLElement>(null);
+  const frame = useRef<HTMLIFrameElement>(null);
+  useLayoutEffect(() => { setVisibleText(""); }, [rawHtml]);
+  useLayoutEffect(() => {
+    const receive = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow || event.data?.type !== "ks-html-visible-text" || typeof event.data.text !== "string") return;
+      setVisibleText(event.data.text);
+    };
+    window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);
+  }, []);
   const appName = context.definition.name || "HTML 보기";
-  useShareDescriber(frame, () => ({ text: path ? `[파일 ${path}]\n\n${htmlText(rawHtml)}` : `[${appName}]`, visual: true }));
+  useShareDescriber(root, () => ({ text: path ? `[파일 ${path}]\n\n${visibleText || htmlText(rawHtml)}` : `[${appName}]`, visual: true }));
   const read = useCallback(async (initial = false) => {
     const current = ++version.current;
     if (!rootPath || path === null) { setRawHtml(""); setError(null); setLoading(false); return; }
@@ -67,7 +87,7 @@ function FileHtmlViewBlock({ file, context }: { file: FileRef; context: BlockCon
   if (!rootPath) return <FileGrant context={context} permission={file.permission} />;
   if (loading) return <div className="ks-html-state"><StatusText>불러오는 중</StatusText></div>;
   if (error) return <div className="ks-html-state"><Notice role="alert">{error}</Notice></div>;
-  return <section className="ks-html-view" ref={frame}><div className="ks-html-content"><iframe title={appName} sandbox="allow-scripts" srcDoc={htmlViewSource(rawHtml)} /></div></section>;
+  return <section className="ks-html-view" ref={root}><div className="ks-html-content"><iframe ref={frame} title={appName} sandbox="allow-scripts" srcDoc={htmlViewSource(rawHtml)} /></div></section>;
 }
 
 function HtmlDocumentViewBlock({ block, context }: { block: HtmlViewData & { document: DocumentRef }; context: BlockContext }) {

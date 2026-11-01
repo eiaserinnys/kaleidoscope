@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import type { AppDefinition } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { createFakeTransport } from "../core/fake-transport";
@@ -10,10 +10,11 @@ import { makeTestSeed } from "./fixtures";
 import definition from "../../../apps/html-report.json";
 import { editedHtml, shareHtmlReport, type HtmlElementSelection } from "../blocks/html-view-model";
 import { htmlViewSource } from "../blocks/html-view-frame";
+import { describeVisible } from "../share/visible";
 import { createHash } from "node:crypto";
 import tauriConfig from "../../../app/src-tauri/tauri.conf.json";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 it("html_view의 value 바인딩을 격리된 HTML 프레임으로 표시한다", async () => {
   const html = "<h1>바인딩 미리보기</h1><script>window.secret = true</script>";
@@ -27,6 +28,24 @@ it("html_view의 value 바인딩을 격리된 HTML 프레임으로 표시한다"
   expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
   expect(frame.getAttribute("srcdoc")).toContain("바인딩 미리보기");
   expect(frame.getAttribute("srcdoc")).not.toContain("window.secret");
+});
+
+it("html_view의 같이 보기는 숨긴 글과 스크립트를 제외한다", async () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, right: 300, bottom: 200, x: 0, y: 0, width: 300, height: 200, toJSON() {} });
+  const html = "<p>보이는 글</p><p hidden>숨긴 글</p><script>비표시 코드</script>";
+  const app: AppDefinition = { id: "html-value", name: "미리보기", requires: { blocks: 6, modules: {} }, permissions: [], state: {}, ui: { type: "html_view", value: html } };
+  const seed = makeTestSeed({ definitions: [app] });
+  const { container } = render(<AppWindowContent store={createShellStore(createFakeTransport(seed))} windowId="viewer-window" />);
+  const frame = await screen.findByTitle("미리보기") as HTMLIFrameElement;
+  const root = container.querySelector<HTMLElement>(".ks-html-view");
+  if (!root) throw new Error("HTML 보기 컨테이너가 없습니다");
+  const sharedText = () => describeVisible(root).text;
+  expect(sharedText()).toContain("보이는 글");
+  expect(sharedText()).not.toContain("숨긴 글");
+  expect(sharedText()).not.toContain("비표시 코드");
+
+  act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, data: { type: "ks-html-visible-text", text: "iframe에 보이는 글" } })));
+  await waitFor(() => expect(sharedText()).toContain("iframe에 보이는 글"));
 });
 
 it("여러 직접 텍스트가 있는 요소의 문구를 바꾸되 안쪽 요소는 유지한다", () => {

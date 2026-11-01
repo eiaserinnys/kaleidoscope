@@ -7,7 +7,9 @@ export interface HtmlSelection { selector?: string; selected_text: string; prefi
 export interface HtmlElementSelection extends HtmlSelection { selector: string; tagName: string; text: string; styles: Record<"color" | "backgroundColor" | "margin" | "padding", string> }
 
 export function htmlText(html: string): string {
-  return new DOMParser().parseFromString(html, "text/html").body.textContent || "";
+  const body = new DOMParser().parseFromString(html, "text/html").body;
+  body.querySelectorAll("script, style, template, [hidden]").forEach((element) => element.remove());
+  return body.textContent || "";
 }
 
 export function reportDocuments(content: unknown): HtmlReportDocument[] {
