@@ -34,10 +34,24 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "agent",
         name: "에이전트",
-        version: 2,
+        version: 3,
         updated_at: "2026-10-30T00:00:00Z",
         blocks: 8,
-        modules: &[("files", 1), ("local_agent", 1), ("storage", 1)],
+        modules: &[
+            ("files", 1),
+            ("local_agent", 1),
+            ("storage", 1),
+            ("worker", 1),
+        ],
+        assets: &[],
+    },
+    BuiltinIdentity {
+        id: "slackbot",
+        name: "슬랙봇",
+        version: 1,
+        updated_at: "2026-11-01T00:00:00Z",
+        blocks: 9,
+        modules: &[("storage", 2), ("worker", 1)],
         assets: &[],
     },
     BuiltinIdentity {
@@ -131,87 +145,4 @@ pub fn is_builtin(id: &str) -> bool {
 }
 pub fn is_bundled_asset(id: &str, version: u32) -> bool {
     BUNDLED_ASSET_KEYS.contains(&(id, version))
-}
-
-/// 기본 앱이 원시 저장소 API에 공개하는 선언 항목.
-pub fn builtin_storage_entries(app_id: &str) -> Vec<crate::app_storage::StorageEntryDecl> {
-    use crate::app_storage::{
-        StorageEntryDecl, StorageKind, StoragePresentation, StorageValueSchema,
-    };
-
-    let (id, key, label, presentation, schema, default) = match app_id {
-        "agent" => (
-            "agents",
-            "settings/agents",
-            "에이전트",
-            StoragePresentation::Hidden,
-            serde_json::json!({
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string", "minLength": 1},
-                        "name": {"type": "string", "minLength": 1},
-                        "command": {"type": "string", "minLength": 1},
-                        "args": {"type": "array", "items": {"type": "string"}},
-                        "env": {"type": "object", "additionalProperties": {"type": "string"}},
-                        "auth_methods": {"type": "array", "items": {"type": "string"}}
-                    },
-                    "required": ["id", "name", "command", "args", "env"],
-                    "additionalProperties": false
-                }
-            }),
-            serde_json::json!([]),
-        ),
-        "html-report" => (
-            "reports",
-            "reports",
-            "시안과 리포트 문서",
-            StoragePresentation::Hidden,
-            serde_json::from_str(
-                r#"{
-                    "type":"object","required":["documents"],"properties":{"documents":{"type":"array","items":{
-                        "type":"object","required":["id","title","revisions"],"properties":{
-                            "id":{"type":"string"},"title":{"type":"string"},"revisions":{"type":"array","items":{
-                                "type":"object","required":["rev","html"],"properties":{
-                                    "rev":{"type":"number"},"title":{"type":"string"},"html":{"type":"string"},
-                                    "created_at":{"type":"string"},"note":{"type":"string"},"comments":{"type":"array","items":{
-                                        "type":"object","required":["id","selected_text","comment","status"],"properties":{
-                                            "id":{"type":"string"},"selected_text":{"type":"string"},"prefix":{"type":"string"},
-                                            "suffix":{"type":"string"},"selector":{"type":"string"},"comment":{"type":"string"},
-                                            "status":{"type":"string","enum":["needs_agent_review","needs_user_reply","resolved"]},
-                                            "created_at":{"type":"string"},"replies":{"type":"array","items":{
-                                                "type":"object","required":["id","body"],"properties":{
-                                                    "id":{"type":"string"},"author":{"type":"string"},
-                                                    "role":{"type":"string","enum":["user","agent"]},"body":{"type":"string"},
-                                                    "created_at":{"type":"string"}
-                                                }
-                                            }}
-                                        }
-                                    }}
-                                }
-                            }}
-                        }
-                    }}}
-                }"#,
-            )
-            .expect("기본 앱 저장소 스키마"),
-            serde_json::json!({"documents": []}),
-        ),
-        _ => return Vec::new(),
-    };
-
-    let schema: StorageValueSchema = serde_json::from_value(schema).expect("기본 저장소 스키마");
-    vec![StorageEntryDecl {
-        id: id.into(),
-        key: key.into(),
-        kind: StorageKind::Json,
-        schema: Some(schema),
-        default,
-        label: label.into(),
-        description: None,
-        presentation,
-        choices: None,
-        agent_context: None,
-    }]
 }

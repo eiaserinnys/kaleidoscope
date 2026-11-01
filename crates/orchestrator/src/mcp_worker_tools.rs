@@ -119,4 +119,23 @@ impl super::McpServer {
             },
         )
     }
+
+    #[tool(
+        description = "앱 워커의 최근 실행 기록을 조회합니다. 기록은 서버가 켜져 있는 동안 유지됩니다."
+    )]
+    async fn list_worker_runs(
+        &self,
+        Parameters(args): Parameters<AppArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Ok(
+            match self
+                .state
+                .mcp_account_id()
+                .and_then(|account| self.state.list_worker_runs(&account, &args.app_id))
+            {
+                Ok(runs) => json_result(json!({"runs": runs})),
+                Err(error) => json_error(error),
+            },
+        )
+    }
 }

@@ -480,7 +480,7 @@ export type EnsureThreadReply = { thread: ConversationThread, created: boolean, 
 
 export type EnsureThreadRequest = { title: string, selected_model: string, model_order: Array<string>, profile: string, collection: string, initial_instruction: string, instructions: string, };
 
-export type ErrorCode = "invalid_request" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "login_required" | "binding_conflict" | "io" | "server" | "unavailable" | "local_agent_failed";
+export type ErrorCode = "invalid_request" | "unauthorized" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "login_required" | "binding_conflict" | "io" | "server" | "unavailable" | "local_agent_failed";
 
 export type ExecutionConsent = { spec_hash: string, name: string, command: string, args: Array<string>, env: { [key in string]: string }, };
 
@@ -1117,13 +1117,31 @@ export type WorkerAction = { worker: WorkerCallSpec, };
 
 export type WorkerCallSpec = { action: string, args?: Binding, };
 
-export type WorkerDecl = { runtime: WorkerRuntime, code: string, timeout_secs?: number, schedule?: WorkerScheduleDecl, watch_entries?: Array<string>, actions?: Array<string>, secrets?: Array<WorkerSecretDecl>, };
+export type WorkerDecl = { runtime: WorkerRuntime, code: string, timeout_secs?: number, schedule?: WorkerScheduleDecl, 
+/**
+ * 외부 웹훅으로 워커를 실행하는 설정.
+ */
+webhook?: WorkerWebhookDecl, 
+/**
+ * 내부 호출을 허용할 다른 앱 id 목록.
+ */
+calls?: Array<string>, watch_entries?: Array<string>, actions?: Array<string>, secrets?: Array<WorkerSecretDecl>, };
 
 export type WorkerRuntime = "python3";
 
 export type WorkerScheduleDecl = { interval_secs: number, jitter_secs?: number, enabled_entry: string, };
 
 export type WorkerSecretDecl = { id: string, description?: string, };
+
+export type WorkerWebhookDecl = { 
+/**
+ * 웹훅을 켜는 전역 불리언 저장 항목. 기본값은 false여야 한다.
+ */
+enabled_entry?: string, 
+/**
+ * 호출 토큰을 담을 워커 시크릿. 선언하면 미설정 시 호출을 거부한다.
+ */
+token_secret?: string, };
 
 /**
  * 작업 주제 하나. 데스크톱 여러 장을 가진다.

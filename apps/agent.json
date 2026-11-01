@@ -3,50 +3,160 @@
   "name": "에이전트",
   "requires": {
     "blocks": 8,
-    "modules": { "local_agent": 1, "files": 1, "storage": 1 }
+    "modules": {
+      "local_agent": 1,
+      "files": 1,
+      "storage": 1,
+      "worker": 1
+    }
   },
   "permissions": [
-    { "module": "local_agent", "id": "run", "label": "에이전트 실행" },
-    { "module": "files", "id": "work", "access": "readwrite", "label": "작업 폴더" }
+    {
+      "module": "local_agent",
+      "id": "run",
+      "label": "에이전트 실행"
+    },
+    {
+      "module": "files",
+      "id": "work",
+      "access": "readwrite",
+      "label": "작업 폴더"
+    }
   ],
-  "state": { "agent_id": null },
+  "state": {
+    "agent_id": null
+  },
   "storage": {
-    "entries": [{
-      "id": "agents",
-      "key": "settings/agents",
-      "kind": "json",
-      "label": "에이전트",
-      "presentation": "hidden",
-      "schema": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "id": { "type": "string", "minLength": 1 },
-            "name": { "type": "string", "minLength": 1 },
-            "command": { "type": "string", "minLength": 1 },
-            "args": { "type": "array", "items": { "type": "string" } },
-            "env": { "type": "object", "additionalProperties": { "type": "string" } },
-            "auth_methods": { "type": "array", "items": { "type": "string" } }
+    "entries": [
+      {
+        "id": "agents",
+        "key": "settings/agents",
+        "kind": "json",
+        "label": "에이전트",
+        "presentation": "hidden",
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "command": {
+                "type": "string",
+                "minLength": 1
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "env": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "auth_methods": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "command",
+              "args",
+              "env"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "default": [
+          {
+            "id": "claude",
+            "name": "Claude Code",
+            "command": "npx",
+            "args": [
+              "-y",
+              "@agentclientprotocol/claude-agent-acp"
+            ],
+            "env": {}
           },
-          "required": ["id", "name", "command", "args", "env"],
-          "additionalProperties": false
-        }
-      },
-      "default": [
-        { "id": "claude", "name": "Claude Code", "command": "npx", "args": ["-y", "@agentclientprotocol/claude-agent-acp"], "env": {} },
-        { "id": "codex", "name": "Codex", "command": "npx", "args": ["-y", "@agentclientprotocol/codex-acp"], "env": {}, "auth_methods": ["chat-gpt"] },
-        { "id": "gemini", "name": "Gemini CLI", "command": "npx", "args": ["-y", "@google/gemini-cli", "--acp"], "env": {}, "auth_methods": ["oauth-personal"] },
-        { "id": "antigravity", "name": "Antigravity", "command": "agy", "args": ["acp"], "env": {}, "auth_methods": ["oauth-personal"] }
-      ]
-    }]
+          {
+            "id": "codex",
+            "name": "Codex",
+            "command": "npx",
+            "args": [
+              "-y",
+              "@agentclientprotocol/codex-acp"
+            ],
+            "env": {},
+            "auth_methods": [
+              "chat-gpt"
+            ]
+          },
+          {
+            "id": "gemini",
+            "name": "Gemini CLI",
+            "command": "npx",
+            "args": [
+              "-y",
+              "@google/gemini-cli",
+              "--acp"
+            ],
+            "env": {},
+            "auth_methods": [
+              "oauth-personal"
+            ]
+          },
+          {
+            "id": "antigravity",
+            "name": "Antigravity",
+            "command": "agy",
+            "args": [
+              "acp"
+            ],
+            "env": {},
+            "auth_methods": [
+              "oauth-personal"
+            ]
+          }
+        ]
+      }
+    ]
   },
   "ui": {
     "type": "chat",
     "permission": "run",
-    "root": { "permission": "work" },
-    "agents": { "expr": "$storage.agents" },
-    "selected": { "state": "agent_id" },
-    "on_select": { "set_state": "agent_id" }
+    "root": {
+      "permission": "work"
+    },
+    "agents": {
+      "expr": "$storage.agents"
+    },
+    "selected": {
+      "state": "agent_id"
+    },
+    "on_select": {
+      "set_state": "agent_id"
+    }
+  },
+  "worker": {
+    "runtime": "python3",
+    "code": "import json\nimport os\nimport pathlib\nimport queue\nimport shutil\nimport threading\nimport time\nimport subprocess\nimport sys\n\nrequest = json.load(sys.stdin)\ntrigger = request.get('trigger') or {}\nargs = trigger.get('args') or {}\nstate_dir = pathlib.Path(request['state_dir'])\nsessions_path = state_dir / 'sessions.json'\ntry:\n    sessions = json.loads(sessions_path.read_text(encoding='utf-8'))\nexcept FileNotFoundError:\n    sessions = {}\naction = trigger.get('action')\nif action == 'reset_session':\n    key = args.get('session_key')\n    if key:\n        sessions.pop(key, None)\n    else:\n        sessions = {}\n    sessions_path.write_text(json.dumps(sessions, ensure_ascii=False), encoding='utf-8')\n    print(json.dumps({'result': {'cleared': True}}))\n    sys.exit(0)\nif action != 'ask':\n    raise ValueError('알 수 없는 동작입니다')\nkey = args.get('session_key') or 'default'\nprompt = args.get('prompt') or ''\nparts = [args.get('system_prompt') or '']\nfor turn in sessions.get(key, [])[-6:]:\n    parts.extend(['사용자: ' + turn['prompt'], '응답: ' + turn['reply']])\nparts.append('사용자: ' + prompt)\ncomposed = '\\n\\n'.join(part for part in parts if part)\nspecs = request.get('storage', {}).get('agents') or []\nselected = args.get('agent_id') or ''\nspecs = sorted(specs, key=lambda item: item.get('id') != selected) if selected else specs\n\n\ndef acp(spec, cmd, env):\n    process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding='utf-8', cwd=state_dir, env=env, bufsize=1)\n    lines = queue.Queue()\n    def collect_lines():\n        for line in process.stdout:\n            lines.put(line)\n        lines.put(None)\n    threading.Thread(target=collect_lines, daemon=True).start()\n    deadline = time.monotonic() + 60\n    def send(message):\n        process.stdin.write(json.dumps(message, ensure_ascii=False) + '\\n')\n        process.stdin.flush()\n    def read_until(target, chunks):\n        while True:\n            try:\n                line = lines.get(timeout=max(0, deadline - time.monotonic()))\n            except queue.Empty as error:\n                raise RuntimeError('에이전트 응답 시간이 초과되었습니다') from error\n            if line is None:\n                raise RuntimeError('에이전트 응답이 끊겼습니다')\n            message = json.loads(line)\n            if 'id' in message and 'method' in message:\n                send({'jsonrpc': '2.0', 'id': message['id'], 'result': {'outcome': {'outcome': 'cancelled'}}})\n            elif message.get('method') == 'session/update':\n                update = message.get('params', {}).get('update', {})\n                content = update.get('content') or {}\n                if update.get('sessionUpdate') == 'agent_message_chunk' and content.get('text'):\n                    chunks.append(content['text'])\n            elif message.get('id') == target:\n                if 'error' in message:\n                    raise RuntimeError(str(message['error']))\n                return message.get('result') or {}\n    try:\n        send({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': 1}})\n        read_until(1, [])\n        send({'jsonrpc': '2.0', 'id': 2, 'method': 'session/new', 'params': {'cwd': str(state_dir), 'mcpServers': []}})\n        session_id = read_until(2, [])['sessionId']\n        send({'jsonrpc': '2.0', 'id': 3, 'method': 'session/prompt', 'params': {'sessionId': session_id, 'prompt': [{'type': 'text', 'text': composed}]}})\n        chunks = []\n        read_until(3, chunks)\n        return ''.join(chunks)\n    finally:\n        process.terminate()\n        try:\n            process.wait(timeout=2)\n        except subprocess.TimeoutExpired:\n            process.kill()\n            process.wait()\n\nerrors = []\nfor spec in specs:\n    try:\n        env = os.environ.copy()\n        env.update(spec.get('env') or {})\n        argv = spec.get('args') or []\n        command = shutil.which(spec['command'], path=env.get('PATH')) or spec['command']\n        if any('{prompt}' in item for item in argv):\n            cmd = [command] + [item.replace('{prompt}', composed) for item in argv]\n            reply = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', cwd=state_dir, env=env, timeout=60, check=True).stdout.strip()\n        else:\n            reply = acp(spec, [command] + argv, env).strip()\n        if not reply:\n            raise RuntimeError('빈 응답입니다')\n        turns = sessions.setdefault(key, [])\n        turns.append({'prompt': prompt, 'reply': reply})\n        sessions[key] = turns[-6:]\n        sessions_path.write_text(json.dumps(sessions, ensure_ascii=False), encoding='utf-8')\n        print(json.dumps({'result': {'reply': reply, 'agent_id': spec.get('id', ''), 'session_key': key}}, ensure_ascii=False))\n        break\n    except (OSError, ValueError, KeyError, subprocess.SubprocessError, RuntimeError) as error:\n        errors.append(str(error))\nelse:\n    raise RuntimeError('사용할 에이전트가 없습니다: ' + '; '.join(errors))\n",
+    "timeout_secs": 60,
+    "actions": [
+      "ask",
+      "reset_session"
+    ]
   }
 }

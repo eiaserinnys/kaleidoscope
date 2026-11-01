@@ -13,7 +13,7 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
             PRAGMA user_version=1;
             COMMIT;")?;
-    } else if version > 12 {
+    } else if version > 13 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 2 {
@@ -272,6 +272,9 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
     }
     if version < 12 {
         db.execute_batch("BEGIN IMMEDIATE; CREATE TABLE IF NOT EXISTS app_secrets (account_id TEXT NOT NULL REFERENCES accounts(id), app_id TEXT NOT NULL, secret_id TEXT NOT NULL, value TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (account_id, app_id, secret_id)); PRAGMA user_version=12; COMMIT;")?;
+    }
+    if version < 13 {
+        db.execute_batch("BEGIN IMMEDIATE; CREATE TABLE IF NOT EXISTS builtin_app_specs (app_id TEXT PRIMARY KEY, version INTEGER NOT NULL, storage_json TEXT, worker_json TEXT, updated_at TEXT NOT NULL); PRAGMA user_version=13; COMMIT;")?;
     }
     Ok(())
 }

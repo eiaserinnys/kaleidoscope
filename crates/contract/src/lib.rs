@@ -3706,6 +3706,8 @@ pub struct CoreError {
 pub enum ErrorCode {
     /// 명령 형식이 틀렸거나 지금 할 수 없는 명령(마지막 데스크톱 지우기, 선언되지 않은 상태 키 등).
     InvalidRequest,
+    /// 요청에 필요한 인증 정보가 없거나 맞지 않는다.
+    Unauthorized,
     /// 없는 워크스페이스, 데스크톱, 창, 앱, 파일.
     NotFound,
     /// 앱 정의가 형식이나 의미 검사에 걸렸다. 걸린 것은 `details`에.
@@ -3739,6 +3741,7 @@ impl ErrorCode {
     pub fn default_message(self) -> &'static str {
         match self {
             ErrorCode::InvalidRequest => "명령을 처리할 수 없습니다.",
+            ErrorCode::Unauthorized => "인증 정보가 올바르지 않습니다.",
             ErrorCode::NotFound => "요청한 항목을 찾을 수 없습니다.",
             ErrorCode::InvalidAppDefinition => "앱 정의가 유효하지 않습니다.",
             ErrorCode::UnsupportedApp => "앱이 지원되지 않는 블록이나 모듈 버전을 요구합니다.",

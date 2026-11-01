@@ -44,6 +44,22 @@ pub(super) fn send_storage_update(
     account_id: &str,
     update: StorageUpdate,
 ) {
+    if kaleidoscope_contract::builtin::is_builtin(app_id) {
+        if let StorageUpdate::Changed { changed } = &update {
+            state.send_event_for_account(
+                DeviceEvent::AppValueChanged {
+                    app_id: app_id.into(),
+                    bucket_id: changed.bucket_id.clone(),
+                    item: contract::AppValueMeta {
+                        key: changed.item.key.clone(),
+                        kind: changed.item.kind,
+                        revision: changed.item.revision.clone(),
+                    },
+                },
+                account_id,
+            );
+        }
+    }
     let event = match update {
         StorageUpdate::Snapshot { snapshot } => DeviceEvent::StorageSnapshot {
             app_id: app_id.into(),

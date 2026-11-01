@@ -224,6 +224,10 @@ async fn builtin_write_rejects_undeclared_fields_and_invalid_schema() {
         .unwrap();
     assert_eq!(written.is_error, Some(false));
     let _ = events.try_recv().unwrap();
+    assert!(matches!(
+        events.try_recv().unwrap().event,
+        DeviceEvent::StorageChanged { .. }
+    ));
     let before = state
         .read_app_value(&account, "html-report", "reports")
         .unwrap();

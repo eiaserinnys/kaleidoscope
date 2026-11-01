@@ -14,7 +14,7 @@ fn worker_declarations_are_validated() {
     assert!(parse_app_definition(&valid.to_string()).is_ok());
     let mut invalid = valid.clone();
     invalid["id"] = json!("explorer");
-    assert!(parse_app_definition(&invalid.to_string()).is_err());
+    assert!(parse_app_definition(&invalid.to_string()).is_ok());
     invalid = valid.clone();
     invalid["storage"]["entries"][0]["default"] = json!(true);
     assert!(parse_app_definition(&invalid.to_string()).is_err());
@@ -29,6 +29,31 @@ fn worker_declarations_are_validated() {
             parse_app_definition(&invalid.to_string()).is_err(),
             "{field}"
         );
+    }
+}
+
+#[test]
+fn webhook_and_interapp_targets_are_validated() {
+    let mut app = definition();
+    app["worker"]["webhook"] = json!({"enabled_entry":"enabled", "token_secret":"token"});
+    app["worker"]["calls"] = json!(["other-app"]);
+    assert!(parse_app_definition(&app.to_string()).is_ok());
+    for targets in [
+        json!(["worker-test"]),
+        json!(["other-app", "other-app"]),
+        json!(["wrong id"]),
+    ] {
+        let mut invalid = app.clone();
+        invalid["worker"]["calls"] = targets;
+        assert!(parse_app_definition(&invalid.to_string()).is_err());
+    }
+    for webhook in [
+        json!({"enabled_entry":"missing"}),
+        json!({"token_secret":"missing"}),
+    ] {
+        let mut invalid = app.clone();
+        invalid["worker"]["webhook"] = webhook;
+        assert!(parse_app_definition(&invalid.to_string()).is_err());
     }
 }
 

@@ -12,7 +12,9 @@ fn builtin_apps_are_listed_and_upload_is_rejected() {
     let state = AppState::in_memory("secret");
     let apps = state.list_apps().unwrap();
     for id in [
+        "profiler",
         "agent",
+        "slackbot",
         "explorer",
         "md-editor",
         "html-report",
@@ -25,7 +27,7 @@ fn builtin_apps_are_listed_and_upload_is_rejected() {
     ] {
         assert!(apps.iter().any(|app| app.id == id && app.builtin));
     }
-    assert_eq!(apps.len(), 11);
+    assert_eq!(apps.len(), 12);
     assert!(state.publish_app(EDITOR, "agent", false, None).is_err());
 }
 
@@ -66,7 +68,7 @@ fn migration_v8_adds_soft_delete_without_changing_existing_rows() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        12
+        13
     );
 }
 
@@ -968,7 +970,7 @@ fn migration_upgrades_v1_without_losing_devices() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 12);
+    assert_eq!(version, 13);
     assert_eq!(
         db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -1012,7 +1014,7 @@ fn migration_v7_removes_legacy_tables_and_preserves_other_data() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 12);
+    assert_eq!(version, 13);
     let old_tables: i64 = db.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('agents','agent_items')", [], |row| row.get(0)).unwrap();
     assert_eq!(old_tables, 0);
     let apps: i64 = db

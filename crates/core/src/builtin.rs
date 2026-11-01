@@ -10,6 +10,7 @@ use serde::Deserialize;
 const APPS: &[(&str, &str)] = &[
     ("profiler", include_str!("../../../apps/profiler.json")),
     ("agent", include_str!("../../../apps/agent.json")),
+    ("slackbot", include_str!("../../../apps/slackbot.json")),
     ("explorer", include_str!("../../../apps/explorer.json")),
     ("md-editor", include_str!("../../../apps/md-editor.json")),
     (
@@ -53,6 +54,24 @@ pub fn builtin_apps() -> Vec<RegistryApp> {
                     created_at: date,
                 },
             }
+        })
+        .collect()
+}
+
+pub fn builtin_runtime_specs() -> Vec<kaleidoscope_contract::worker::BuiltinRuntimeSpec> {
+    builtin_apps()
+        .into_iter()
+        .filter_map(|app| {
+            let definition = app.version.definition;
+            if definition.storage.is_none() && definition.worker.is_none() {
+                return None;
+            }
+            Some(kaleidoscope_contract::worker::BuiltinRuntimeSpec {
+                app_id: app.app.id,
+                version: app.version.version,
+                storage: definition.storage,
+                worker: definition.worker,
+            })
         })
         .collect()
 }
@@ -133,12 +152,23 @@ mod tests {
     #[test]
     fn identities_match_bundled_definitions() {
         let apps = builtin_apps();
+        let specs = builtin_runtime_specs();
         assert_eq!(apps.len(), BUILTIN_IDENTITIES.len());
         for identity in BUILTIN_IDENTITIES {
             let app = apps.iter().find(|app| app.app.id == identity.id).unwrap();
             assert_eq!(app.app.name, identity.name);
             assert_eq!(app.version.version, identity.version);
             assert_eq!(app.version.definition.requires.blocks, identity.blocks);
+            let definition = &app.version.definition;
+            let spec = specs.iter().find(|spec| spec.app_id == identity.id);
+            if definition.storage.is_some() || definition.worker.is_some() {
+                let spec = spec.expect("실행 선언");
+                assert_eq!(spec.version, identity.version);
+                assert_eq!(spec.storage, definition.storage);
+                assert_eq!(spec.worker, definition.worker);
+            } else {
+                assert!(spec.is_none());
+            }
             assert_eq!(
                 app.version.definition.requires.modules,
                 identity
@@ -159,47 +189,6 @@ mod tests {
             assert!(app.version.definition.assets.iter().all(|asset| {
                 kaleidoscope_contract::builtin::is_bundled_asset(&asset.id, asset.version)
             }));
-
-            let expected_entries = app
-                .version
-                .definition
-                .storage
-                .as_ref()
-                .map(|storage| storage.entries.as_slice())
-                .unwrap_or(&[]);
-            let contract_entries =
-                kaleidoscope_contract::builtin::builtin_storage_entries(identity.id);
-            assert_eq!(
-                contract_entries.len(),
-                expected_entries.len(),
-                "{}",
-                identity.id
-            );
-            for (contract_entry, expected_entry) in contract_entries.iter().zip(expected_entries) {
-                assert_eq!(contract_entry.id, expected_entry.id, "{}", identity.id);
-                assert_eq!(contract_entry.key, expected_entry.key, "{}", identity.id);
-                assert_eq!(contract_entry.kind, expected_entry.kind, "{}", identity.id);
-                assert_eq!(
-                    contract_entry.label, expected_entry.label,
-                    "{}",
-                    identity.id
-                );
-                assert_eq!(
-                    contract_entry.presentation, expected_entry.presentation,
-                    "{}",
-                    identity.id
-                );
-                assert_eq!(
-                    contract_entry.schema, expected_entry.schema,
-                    "{}",
-                    identity.id
-                );
-                kaleidoscope_contract::app_storage::validate_storage_content(
-                    contract_entry,
-                    &contract_entry.default,
-                )
-                .expect("기본 앱 저장소 기본값은 선언 스키마를 만족해야 합니다");
-            }
         }
     }
 

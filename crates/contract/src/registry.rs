@@ -758,3 +758,5 @@ mod tests {
         );
     }
 }
+/// 기기가 내장 앱의 실행 선언을 서버에 등록한다.
+pub const DEVICE_BUILTIN_SPECS_PATH: &str = "/api/device/builtin-specs";
