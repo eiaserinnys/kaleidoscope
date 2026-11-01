@@ -60,6 +60,42 @@ it("builds a path tree, opens its selected ancestors and supports keys", async (
   fireEvent.keyDown(document.activeElement!, { key: "Enter" });
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a" })));
 });
+it("selects data parents while toggling their children", async () => {
+  const parent = { key: "parent", title: "상위", children: [{ key: "child", title: "하위" }] };
+  const { calls } = setup({ type: "tree", by: "children", items: [parent], selected: { state: "choice" }, on_select: { set_state: "choice" } }, { choice: "parent" });
+  const row = await screen.findByRole("treeitem", { name: "상위" });
+  expect(row.getAttribute("aria-selected")).toBe("true");
+  expect(row.classList.contains("is-selected")).toBe(true);
+
+  fireEvent.click(row);
+  expect(row.getAttribute("aria-expanded")).toBe("true");
+  expect(await screen.findByRole("treeitem", { name: "하위" })).toBeTruthy();
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", pointer: "/ui/on_select", event: "parent", item: parent })));
+
+  fireEvent.click(row);
+  expect(row.getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByRole("treeitem", { name: "하위" })).toBeNull();
+  expect(row.getAttribute("aria-selected")).toBe("true");
+});
+it("opens ancestors when the selected data tree item changes", async () => {
+  const { transport } = setup({ type: "tree", by: "children", items: [{ key: "parent", title: "상위", children: [{ key: "child", title: "하위" }] }], selected: { state: "choice" } }, { choice: null });
+  expect(await screen.findByRole("treeitem", { name: "상위" })).toBeTruthy();
+  await act(async () => { await transport.call({ op: "window.set_state", window_id: "viewer-window", state: { choice: "child" } }); });
+  const child = await screen.findByRole("treeitem", { name: "하위" });
+  expect(child).toBeTruthy();
+});
+it("only toggles virtual path folders without selecting them", async () => {
+  const { calls } = setup({ type: "tree", by: "path", items: [{ key: "item", path: "폴더/항목" }], selected: { state: "choice" }, on_select: { set_state: "choice" } }, { choice: null });
+  const folder = await screen.findByRole("treeitem", { name: "폴더" });
+  fireEvent.click(folder);
+  expect(folder.getAttribute("aria-expanded")).toBe("true");
+  expect(folder.classList.contains("is-selected")).toBe(false);
+  expect(await screen.findByRole("treeitem", { name: "항목" })).toBeTruthy();
+  expect(calls.mock.calls.some(([request]) => request.op === "data.act")).toBe(false);
+  fireEvent.click(folder);
+  expect(folder.getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByRole("treeitem", { name: "항목" })).toBeNull();
+});
 it("preserves feed text selection without selecting an entry", async () => {
   const { calls } = setup({ type: "feed", entries: [{ key: "a", name: "이름", body: ["첫 줄", "둘째 줄"] }], on_select: { set_state: "choice" } }, { choice: null });
   const text = await screen.findByText("첫 줄");

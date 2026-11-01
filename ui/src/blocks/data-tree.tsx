@@ -60,9 +60,17 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
   const selected = block.selected ? context.window.state[block.selected.state] : null;
   const [expanded, setExpanded] = useState(() => new Set(ancestors(nodes, selected) ?? []));
   const [focus, setFocus] = useState<string | null>(null);
-  const initialized = useRef(false);
   const container = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (!initialized.current && nodes.length) { initialized.current = true; setExpanded(new Set(ancestors(nodes, selected) ?? [])); } }, [nodes, selected]);
+  useEffect(() => {
+    const path = ancestors(nodes, selected);
+    if (!path?.length) return;
+    setExpanded((old) => {
+      if (path.every((id) => old.has(id))) return old;
+      const next = new Set(old);
+      path.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [nodes, selected]);
   const visible: Array<{ node: Node; parent: string | null }> = [];
   const collect = (items: Node[], parent: string | null) => items.forEach((node) => { visible.push({ node, parent }); if (expanded.has(node.id)) collect(node.children, node.id); });
   collect(nodes, null);
@@ -72,7 +80,7 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
   useEffect(() => { if (focus !== null && focus !== entry) setFocus(entry); }, [focus, entry]);
   const move = (id: string) => { setFocus(id); const element = [...(container.current?.querySelectorAll<HTMLElement>('[role="treeitem"]') ?? [])].find((el) => el.dataset.treeId === id); element?.focus(); };
   const toggle = (id: string) => setExpanded((old) => { const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  const choose = (node: Node) => { if (node.children.length) toggle(node.id); else if (node.item && block.on_select) void data.act(`${pointer}/on_select`, node.item.key, node.item as unknown as JsonValue); };
+  const choose = (node: Node) => { if (node.children.length) toggle(node.id); if (node.item && block.on_select) void data.act(`${pointer}/on_select`, node.item.key, node.item as unknown as JsonValue); };
   const keyDown = (event: KeyboardEvent, node: Node, parent: string | null) => {
     const index = visible.findIndex((v) => v.node.id === node.id);
     if (event.key === "ArrowDown") move(visible[Math.min(index + 1, visible.length - 1)].node.id);
@@ -84,7 +92,7 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
     event.preventDefault();
   };
   const renderNodes = (items: Node[], parent: string | null): React.ReactNode => items.map((node) => {
-    const folder = node.children.length > 0; const open = expanded.has(node.id); const active = !folder && node.item?.key === selected;
+    const folder = node.children.length > 0; const open = expanded.has(node.id); const active = node.item !== undefined && node.item.key === selected;
     return <div className="ks-file-tree-entry" key={node.id}>
       <button className={`ks-row ks-file-tree-row${active ? " is-selected" : ""}`} role="treeitem" aria-setsize={visible.length} aria-posinset={visible.findIndex((item) => item.node.id === node.id) + 1} aria-expanded={folder ? open : undefined} aria-selected={active} data-tree-id={node.id} tabIndex={entry === node.id ? 0 : -1} onFocus={() => setFocus(node.id)} onKeyDown={(e) => keyDown(e, node, parent)} onClick={() => choose(node)} type="button">
         <span aria-hidden="true" className="ks-file-tree-icon">{folder ? <ChevronRight className={`ks-chevron${open ? " is-expanded" : ""}`} size="inline" /> : <FileText size="inline" />}</span>
