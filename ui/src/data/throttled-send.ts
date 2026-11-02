@@ -48,8 +48,8 @@ export function createThrottledSend<T>(send: (value: T) => void, intervalMs: num
   };
 
   const flush = () => {
-    // Keep the current cooldown so a release cannot create a second send inside the interval.
-    if (!hasPending || timer !== null) return;
+    if (!hasPending) return;
+    if (timer !== null) clearTimeout(timer);
     hasPending = false;
     send(pending);
     startCooldown();

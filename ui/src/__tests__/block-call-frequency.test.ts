@@ -37,21 +37,23 @@ describe("createThrottledSend", () => {
     expect(sent).toEqual([{ value: 0, at: 0 }, { value: 1, at: 100 }, { value: 3, at: 200 }]);
   });
 
-  it("keeps a pending value for the next allowed interval after flush", () => {
+  it("놓을 때 즉시 보내고 새 쿨다운을 지킨다", () => {
     vi.useFakeTimers();
     const send = vi.fn();
     const throttled = createThrottledSend(send, 100);
-
+    throttled.flush();
+    expect(send).not.toHaveBeenCalled();
     throttled.send("first");
+    vi.advanceTimersByTime(15);
     throttled.send("latest");
     throttled.flush();
-    expect(send.mock.calls).toEqual([["first"]]);
-    vi.advanceTimersByTime(99);
-    expect(send.mock.calls).toEqual([["first"]]);
-    vi.advanceTimersByTime(1);
-    vi.advanceTimersByTime(100);
-
     expect(send.mock.calls).toEqual([["first"], ["latest"]]);
+    throttled.flush();
+    throttled.send("next");
+    vi.advanceTimersByTime(99);
+    expect(send.mock.calls).toEqual([["first"], ["latest"]]);
+    vi.advanceTimersByTime(1);
+    expect(send.mock.calls).toEqual([["first"], ["latest"], ["next"]]);
   });
 });
 

@@ -116,6 +116,61 @@ describe("slider and color change dispatch", () => {
   });
 });
 
+describe.each([
+  { type: "slider", initial: 0, first: 25, last: 80, external: 40 },
+  { type: "color", initial: "#000000", first: "#112233", last: "#abcdef", external: "#445566" },
+] as const)("$type 지역 입력", ({ type, initial, first, last, external }) => {
+  function draw() {
+    const block = { type, min: 0, max: 100, value: initial, on_change: { set_state: "value" } } as Block;
+    return type === "slider"
+      ? <SliderBlock block={block as Extract<Block, { type: "slider" }>} pointer="/ui" context={context} />
+      : <ColorBlock block={block as Extract<Block, { type: "color" }>} pointer="/ui" context={context} />;
+  }
+  it("놓은 뒤 앞선 상태와 응답이 와도 마지막 표시를 지킨다", async () => {
+    const finishes: Array<(ok: boolean) => void> = [];
+    runtime.act.mockImplementation(() => new Promise<boolean>(resolve => { finishes.push(resolve); }));
+    runtime.bindings["/ui/value"] = initial;
+    const view = render(draw());
+    const input = view.container.querySelector("input")!;
+    fireEvent.pointerDown(input);
+    fireEvent.input(input, { target: { value: String(first) } });
+    fireEvent.input(input, { target: { value: String(last) } });
+    fireEvent.pointerUp(input);
+    runtime.bindings["/ui/value"] = first;
+    view.rerender(draw());
+    expect(input.value).toBe(String(last));
+    await act(async () => { finishes[0](true); });
+    expect(input.value).toBe(String(last));
+    expect(finishes).toHaveLength(2);
+    await act(async () => { finishes[1](true); });
+    expect(input.value).toBe(String(last));
+    runtime.bindings["/ui/value"] = last;
+    view.rerender(draw());
+    runtime.bindings["/ui/value"] = external;
+    view.rerender(draw());
+    expect(input.value).toBe(String(external));
+  });
+  it("전송 실패 시 현재 원천 값으로 돌아온다", async () => {
+    runtime.bindings["/ui/value"] = initial;
+    runtime.act.mockResolvedValue(false);
+    const view = render(draw());
+    const input = view.container.querySelector("input")!;
+    fireEvent.input(input, { target: { value: String(last) } });
+    await act(async () => {});
+    expect(input.value).toBe(String(initial));
+  });
+  it("언마운트 때 마지막 대기 값을 보낸다", async () => {
+    runtime.bindings["/ui/value"] = initial;
+    const view = render(draw());
+    const input = view.container.querySelector("input")!;
+    fireEvent.input(input, { target: { value: String(first) } });
+    fireEvent.input(input, { target: { value: String(last) } });
+    view.unmount();
+    await act(async () => {});
+    expect(runtime.calls.map((call: { event: unknown }) => call.event)).toEqual([first, last]);
+  });
+});
+
 describe("canvas pointer dispatch", () => {
   it("keeps the last pending move before pointer up while a move is in flight", async () => {
     const block = { type: "canvas", surface: "surface", on_pointer: { set_state: "pointer" } } as Extract<Block, { type: "canvas" }>;
