@@ -55,7 +55,7 @@ test("matches the new-file input row height to a file row", async ({ page }) => 
 });
 
 test("keeps the pending message and thinking indicator inside history when sending from the top", async ({ page }) => {
-  await page.setViewportSize({ width: 480, height: 360 });
+  await page.setViewportSize({ width: 480, height: 420 });
   await page.goto("/?preview=workspace-pas&pas=ready&send-delay=1500");
   await page.addStyleTag({ content: `
     .ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; }
