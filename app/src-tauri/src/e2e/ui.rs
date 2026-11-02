@@ -8,6 +8,27 @@ use driver::{
 };
 pub(super) use driver::{evaluate, wait_dom};
 
+pub(super) type TrackedWebEvents = Arc<Mutex<Vec<(String, WebPage)>>>;
+
+pub(super) fn track_web_events(core: &Core) -> Result<TrackedWebEvents, String> {
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let events_listener = events.clone();
+    core.subscribe(Box::new(move |event| {
+        if let CoreEvent::WebUpdate { window_id, page } = event {
+            events_listener.lock().unwrap().push((window_id, page));
+        }
+    }))?;
+    Ok(events)
+}
+
+pub(super) fn wait_for_web_page(
+    events: &TrackedWebEvents,
+    window_id: &str,
+    url: &str,
+) -> Result<WebPage, String> {
+    wait_web(events, window_id, url)
+}
+
 pub(super) fn observe(request: &CoreRequest) {
     driver::observe(request);
 }

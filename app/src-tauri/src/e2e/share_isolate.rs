@@ -85,6 +85,7 @@ pub(super) fn scenario(
     import_definition(core, agent_definition(out))?;
     let a_id = open_window(core, &desktop_id, A_ID, layout.a)?;
     let b_id = open_window(core, &desktop_id, B_ID, layout.b)?;
+    let web_events = ui::track_web_events(core)?;
     let web_id = open_window(core, &desktop_id, "web-browser", layout.web)?;
     call(
         core,
@@ -96,10 +97,10 @@ pub(super) fn scenario(
     // 웹 창이 가장 앞에 있을 때 먼저 화면과 페이지를 올린다.
     ui::wait_dom(
         app,
-        "return !!document.querySelector('[data-ks-web-surface]');",
+        "return !!document.querySelector('[data-testid=\"app-window-web-browser\"] [data-ks-web-surface]');",
         "web surface rendered",
     )?;
-    let web_page = wait_web_loaded(core, &web_id)?;
+    let web_page = ui::wait_for_web_page(&web_events, &web_id, "https://example.com/")?;
     record(
         log,
         "web.loaded",
