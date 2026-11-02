@@ -57,6 +57,32 @@ it("같은 이동 이벤트를 받은 두 창의 서로 다른 경로 상태 키
   store.dispose();
 });
 
+it("같은 창의 서로 다른 고정 문서를 각각 편집한다", async () => {
+  const seed = structuredClone(makeTestSeed());
+  const definition = seed.snapshot.shared.app_versions[0].definition;
+  definition.storage = { entries: [{ id: "docs", key: "documents", kind: "md", collection: true, default: "", label: "문서", presentation: "hidden" }] };
+  definition.ui = { type: "split", direction: "row", sizes: [50, 50], children: [
+    { type: "markdown", document: { entry: "docs", doc: "a.md" } },
+    { type: "markdown", document: { entry: "docs", doc: "b.md" } },
+  ] };
+  const transport = createFakeTransport(seed);
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation(async (request) => {
+    if (request.op === "storage.get") return { op: "storage.get", result: { kind: "md", content: `내용 ${request.doc}`, revision: "r1", exists: true } };
+    return original(request);
+  });
+  const store = createShellStore(transport);
+  const { container } = render(<AppWindowContent store={store} windowId="editor-window" />);
+  await waitFor(() => expect(container.querySelectorAll(".cm-content")).toHaveLength(2));
+  const editors = [...container.querySelectorAll(".cm-content")];
+  expect(editors[0].textContent).toContain("내용 a.md");
+  expect(editors[1].textContent).toContain("내용 b.md");
+  await act(async () => { transport.emit({ event: "storage.update", window_id: "editor-window", update: { kind: "moved", moved: { bucket_id: "bucket", entry_id: "docs", from_doc: "a.md", to_doc: "c.md", revision: "r1" } } }); });
+  expect(editors[0].textContent).toContain("내용 a.md");
+  expect(editors[1].textContent).toContain("내용 b.md");
+  store.dispose();
+});
+
 it.each(["file", "document"] as const)("%s 고정 경로의 첫 읽기 중 이동하면 새 주소를 열고 옛 응답은 버린다", async (kind) => {
   const seed = structuredClone(makeTestSeed({ grants: [grantFor("editor-window", "docs")] }));
   const definition = seed.snapshot.shared.app_versions[0].definition;

@@ -1,5 +1,6 @@
 import type { CoreError } from "../contract/contract";
 import { toCoreError, type CoreTransport } from "../core/core-transport";
+import type { ShellStore } from "../core/shell-store";
 
 export type EditorStatus = "saved" | "saving" | "unsaved";
 
@@ -57,8 +58,22 @@ export function createDocumentEditorTarget(transport: Pick<CoreTransport, "call"
 
 const activeSessions = new Set<FileEditorSession>();
 
-export type EditorResource = { kind: "file"; root: string } | { kind: "document"; entry: string };
-export type EditorAddress = { kind: "file"; root: string; path: string } | { kind: "document"; entry: string; doc: string };
+type DocumentResource = { kind: "document"; store: ShellStore; windowId: string; entry: string };
+export type EditorResource = { kind: "file"; root: string } | DocumentResource;
+export type EditorAddress = { kind: "file"; root: string; path: string } | (DocumentResource & { doc: string });
+
+function documentLocation(resource: DocumentResource): { appId: string; prefix: string } | null {
+  const snapshot = resource.store.getSnapshot();
+  if (!snapshot) return null;
+  const window = snapshot.shared.windows.find((item) => item.id === resource.windowId);
+  if (!window) return null;
+  const definition = snapshot.shared.app_versions.find((item) => item.app_id === window.app_id && item.version === window.app_version)?.definition;
+  const entry = definition?.storage?.entries.find((item) => item.id === resource.entry);
+  if (!entry) return null;
+  const workspace = snapshot.shared.desktops.find((item) => item.id === window.desktop_id)?.workspace_id;
+  if (entry.key.includes("{workspace_id}") && !workspace) return null;
+  return { appId: window.app_id, prefix: entry.key.replaceAll("{workspace_id}", workspace ?? "") };
+}
 
 export function pathWithin(path: string, prefix: string): boolean {
   return path === prefix || (prefix === "" ? true : path.startsWith(`${prefix}/`));
@@ -109,7 +124,12 @@ export class FileEditorSession {
     const path = this.snapshot.path;
     if (!this.resource || path === null || this.resource.kind !== address.kind) return false;
     if (address.kind === "file" && this.resource.kind === "file") return this.resource.root === address.root && pathWithin(path, address.path);
-    if (address.kind === "document" && this.resource.kind === "document") return this.resource.entry === address.entry && pathWithin(path, address.doc);
+    if (address.kind === "document" && this.resource.kind === "document") {
+      if (this.resource.store !== address.store) return false;
+      const current = documentLocation(this.resource);
+      const selected = documentLocation(address);
+      return !!current && !!selected && current.appId === selected.appId && current.prefix === selected.prefix && pathWithin(path, address.doc);
+    }
     return false;
   }
 

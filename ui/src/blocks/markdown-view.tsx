@@ -35,9 +35,10 @@ function DocumentMarkdownViewBlock({ document, context }: { document: DocumentRe
   const stateKey = typeof document.doc === "object" ? document.doc.state : null;
   const value = useWindowStateValue(context, stateKey);
   const collection = document.doc !== undefined;
+  const fixedDoc = typeof document.doc === "string" ? document.doc : undefined;
   const doc = typeof document.doc === "string" ? document.doc : typeof value === "string" ? value : null;
   const path = collection ? doc : entry;
-  const session = useMemo(() => documentEditorSession(context.store, context.window.id, entry, { context, collection, stateKey, readOnly: true }), [context, entry, collection, stateKey]);
+  const session = useMemo(() => documentEditorSession(context.store, context.window.id, entry, { context, collection, stateKey, fixedDoc, readOnly: true }), [context, entry, collection, stateKey, fixedDoc]);
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
   const shareRef = useRef<HTMLElement>(null);
   useShareDescriber(shareRef, () => ({ text: "[마크다운 보기]", visual: false, continue: true }));

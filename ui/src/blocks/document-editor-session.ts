@@ -10,6 +10,7 @@ interface DocumentOptions {
   context: BlockContext;
   collection: boolean;
   stateKey: string | null;
+  fixedDoc?: string;
   readOnly?: boolean;
 }
 
@@ -17,11 +18,12 @@ export function documentEditorSession(store: ShellStore, windowId: string, entry
   let byKey = sessions.get(store);
   if (!byKey) { byKey = new Map(); sessions.set(store, byKey); }
   const collection = options?.collection ?? false;
-  const key = JSON.stringify([windowId, entry, options?.stateKey ?? null, collection, options?.readOnly ?? false]);
+  const keyFor = (fixedDoc?: string) => JSON.stringify([windowId, entry, options?.stateKey ?? null, collection, options?.readOnly ?? false, fixedDoc ?? null]);
+  let key = keyFor(options?.fixedDoc);
   const existing = byKey.get(key);
   if (existing) return existing;
   const session = new FileEditorSession(createDocumentEditorTarget(store, windowId, entry, collection));
-  session.setResource({ kind: "document", entry });
+  session.setResource({ kind: "document", store, windowId, entry });
   byKey.set(key, session);
   const refresh = () => { void session.refreshOnFocus(); };
   const unsubscribeEvents = store.subscribeEvents((event) => {
@@ -32,6 +34,11 @@ export function documentEditorSession(store: ShellStore, windowId: string, entry
       if (session.getSnapshot().path !== from) return;
       const opening = !session.getSnapshot().loaded;
       session.retarget(from, to);
+      if (options?.fixedDoc !== undefined) {
+        byKey!.delete(key);
+        key = keyFor(to);
+        byKey!.set(key, session);
+      }
       if (opening && !options?.stateKey) void session.open(to);
       if (options?.stateKey && readWindowState(options.context)[options.stateKey] === from) void patchWindowState(options.context, { [options.stateKey]: to });
       return;

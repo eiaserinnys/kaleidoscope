@@ -27,18 +27,23 @@ describe("markdown storage document", () => {
   });
 
   it("scopes document flushes and returns false when the selected save fails", async () => {
+    const seed = structuredClone(makeTestSeed());
+    seed.snapshot.shared.app_versions[0].definition.storage = { entries: [{ id: "docs", key: "documents", kind: "md", collection: true, default: "", label: "문서", presentation: "hidden" }] };
+    const store = createShellStore(createFakeTransport(seed));
+    await store.ready;
     const target = { allowsMissingRevision: true, conflictMessage: "충돌", read: vi.fn(async () => ({ text: "원문", revision: "r1" })), write: vi.fn(async () => { throw { code: "server", message: "저장 실패", details: [] }; }) };
     const first = new FileEditorSession(target);
     const second = new FileEditorSession(target);
-    first.setResource({ kind: "document", entry: "docs" });
-    second.setResource({ kind: "document", entry: "docs" });
+    const resource = { kind: "document" as const, store, windowId: "editor-window", entry: "docs" };
+    first.setResource(resource);
+    second.setResource(resource);
     await first.open("folder/a.md"); await second.open("other/b.md");
     first.setText("첫 초안"); second.setText("둘째 초안");
-    expect(await flushEditors({ kind: "document", entry: "docs", doc: "folder" })).toBe(false);
+    expect(await flushEditors({ ...resource, doc: "folder" })).toBe(false);
     expect(target.write).toHaveBeenCalledTimes(1);
     expect(first.getSnapshot()).toMatchObject({ dirty: true, text: "첫 초안" });
     expect(second.getSnapshot()).toMatchObject({ dirty: true, text: "둘째 초안" });
-    first.dispose(); second.dispose();
+    first.dispose(); second.dispose(); store.dispose();
   });
 
   function setup() {

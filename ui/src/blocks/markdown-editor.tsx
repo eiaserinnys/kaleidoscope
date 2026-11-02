@@ -67,11 +67,12 @@ function DocumentMarkdownEditorBlock({ document, context }: { document: Document
   const stateKey = typeof document.doc === "object" ? document.doc.state : null;
   const value = useWindowStateValue(context, stateKey);
   const collection = document.doc !== undefined;
+  const fixedDoc = typeof document.doc === "string" ? document.doc : undefined;
   const doc = typeof document.doc === "string" ? document.doc : typeof value === "string" ? value : null;
   const path = collection ? doc : entry;
   const session = useMemo(
-    () => documentEditorSession(context.store, context.window.id, entry, { context, collection, stateKey }),
-    [context, entry, collection, stateKey],
+    () => documentEditorSession(context.store, context.window.id, entry, { context, collection, stateKey, fixedDoc }),
+    [context, entry, collection, stateKey, fixedDoc],
   );
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
   useEffect(() => { void session.open(path); }, [path, session]);
