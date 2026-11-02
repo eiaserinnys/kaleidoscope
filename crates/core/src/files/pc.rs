@@ -65,7 +65,7 @@ pub(super) fn pc_resolve(inner: &Inner, path: &str) -> Result<(PathBuf, PathBuf)
     let root = fs::canonicalize(root.path).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             kaleidoscope_contract::errors::FILE_PC_ROOT_NOT_FOUND()
-                .and_details(vec![format!("pc_root_id: {id}")])
+                .and_details(vec![format!("pc_root_id: {id}"), error.to_string()])
         } else {
             kaleidoscope_contract::errors::FILE_PATH_IO(path).and_details(vec![error.to_string()])
         }

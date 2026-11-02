@@ -10,7 +10,9 @@ use sha2::{Digest, Sha256};
 
 use crate::{CoreState, Inner};
 
+mod path;
 mod pc;
+pub(crate) use path::resolve_path;
 use pc::pc_roots;
 pub(crate) use pc::scope;
 
@@ -24,18 +26,6 @@ pub(crate) fn pc_access(
 
 pub(crate) fn pc_resolve(inner: &Inner, path: &str) -> Result<(PathBuf, PathBuf), CoreError> {
     pc::pc_resolve(inner, path)
-}
-
-pub(crate) fn operation_io_error(error: &std::io::Error, path: &str) -> CoreError {
-    #[cfg(windows)]
-    if matches!(error.raw_os_error(), Some(32 | 33)) {
-        return kaleidoscope_contract::errors::FILE_OPERATION_BUSY(path);
-    }
-    if error.kind() == std::io::ErrorKind::NotFound {
-        kaleidoscope_contract::errors::FILE_OPERATION_NOT_FOUND(path)
-    } else {
-        kaleidoscope_contract::errors::FILE_OPERATION_IO(path).and_details(vec![error.to_string()])
-    }
 }
 
 pub(crate) fn permission(
@@ -135,6 +125,7 @@ pub(crate) fn list(
     for entry in fs::read_dir(&directory).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             kaleidoscope_contract::errors::FILE_LIST_DIRECTORY_NOT_FOUND(dir)
+                .and_details(vec![error.to_string()])
         } else {
             kaleidoscope_contract::errors::FILE_LIST_DIRECTORY_IO(dir)
                 .and_details(vec![error.to_string()])
@@ -143,6 +134,7 @@ pub(crate) fn list(
         let entry = entry.map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {
                 kaleidoscope_contract::errors::FILE_LIST_ENTRY_NOT_FOUND(dir)
+                    .and_details(vec![error.to_string()])
             } else {
                 kaleidoscope_contract::errors::FILE_LIST_ENTRY_IO(dir)
                     .and_details(vec![error.to_string()])
@@ -226,6 +218,7 @@ pub(crate) fn read(
     let file = fs::File::open(&resolved).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             kaleidoscope_contract::errors::FILE_READ_NOT_FOUND(path)
+                .and_details(vec![error.to_string()])
         } else {
             kaleidoscope_contract::errors::FILE_READ_IO(path).and_details(vec![error.to_string()])
         }
@@ -236,6 +229,7 @@ pub(crate) fn read(
         .map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {
                 kaleidoscope_contract::errors::FILE_READ_NOT_FOUND(path)
+                    .and_details(vec![error.to_string()])
             } else {
                 kaleidoscope_contract::errors::FILE_READ_IO(path)
                     .and_details(vec![error.to_string()])
@@ -275,6 +269,7 @@ pub(crate) fn granted_root(
     let root = fs::canonicalize(&stored_root).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             kaleidoscope_contract::errors::FILE_ACCESS_ROOT_CHANGED(permission_id)
+                .and_details(vec![error.to_string()])
         } else {
             kaleidoscope_contract::errors::FILE_PATH_IO(&stored_root.display().to_string())
                 .and_details(vec![error.to_string()])
@@ -287,148 +282,6 @@ pub(crate) fn granted_root(
     }
     Ok(root)
 }
-
-pub(crate) fn resolve_path(
-    data_dir: &Path,
-    root: &Path,
-    relative: &str,
-    allow_root: bool,
-    allow_missing: bool,
-) -> Result<PathBuf, CoreError> {
-    if !valid_relative_path(relative, allow_root) {
-        return Err(kaleidoscope_contract::errors::FILE_PATH_OUTSIDE_ROOT(
-            relative,
-        ));
-    }
-    let candidate = if relative.is_empty() {
-        root.to_path_buf()
-    } else {
-        root.join(relative)
-    };
-    let (resolved, exists) = match fs::canonicalize(&candidate) {
-        Ok(canonical) => {
-            if canonical.starts_with(root) {
-                Ok((canonical, true))
-            } else {
-                Err(kaleidoscope_contract::errors::FILE_PATH_OUTSIDE_ROOT(
-                    relative,
-                ))
-            }
-        }
-        Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
-            ensure_missing_path_inside(root, &candidate)?;
-            Ok((candidate, false))
-        }
-        Err(io_error) => Err(operation_io_error(&io_error, relative)),
-    }?;
-    let actual = if exists {
-        resolved.clone()
-    } else {
-        let parent = resolved.parent().ok_or_else(|| {
-            kaleidoscope_contract::errors::FILE_PATH_NOT_FOUND(&resolved.display().to_string())
-        })?;
-        fs::canonicalize(parent)
-            .map_err(|error| {
-                if error.kind() == std::io::ErrorKind::NotFound {
-                    kaleidoscope_contract::errors::FILE_PATH_NOT_FOUND(relative)
-                } else {
-                    kaleidoscope_contract::errors::FILE_PATH_IO(&resolved.display().to_string())
-                        .and_details(vec![error.to_string()])
-                }
-            })?
-            .join(resolved.file_name().ok_or_else(|| {
-                kaleidoscope_contract::errors::FILE_PATH_NOT_FOUND(&resolved.display().to_string())
-            })?)
-    };
-    let protected = fs::canonicalize(data_dir).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::NotFound {
-            kaleidoscope_contract::errors::FILE_PATH_NOT_FOUND(&data_dir.display().to_string())
-        } else {
-            kaleidoscope_contract::errors::FILE_PATH_IO(&data_dir.display().to_string())
-                .and_details(vec![error.to_string()])
-        }
-    })?;
-    if actual.starts_with(protected) {
-        return Err(kaleidoscope_contract::errors::FILE_PATH_PROTECTED(
-            &actual.display().to_string(),
-        ));
-    }
-    if !exists && !allow_missing {
-        return Err(kaleidoscope_contract::errors::FILE_PATH_NOT_FOUND(relative));
-    }
-    Ok(resolved)
-}
-
-fn ensure_missing_path_inside(root: &Path, candidate: &Path) -> Result<(), CoreError> {
-    match fs::canonicalize(candidate) {
-        Ok(canonical) => {
-            if canonical.starts_with(root) {
-                Ok(())
-            } else {
-                Err(kaleidoscope_contract::errors::FILE_PATH_OUTSIDE_ROOT(
-                    &candidate.display().to_string(),
-                ))
-            }
-        }
-        Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
-            if let Ok(metadata) = fs::symlink_metadata(candidate) {
-                if metadata.file_type().is_symlink() {
-                    let target = fs::read_link(candidate).map_err(|error| {
-                        if error.kind() == std::io::ErrorKind::NotFound {
-                            kaleidoscope_contract::errors::FILE_PATH_NOT_FOUND(
-                                &candidate.display().to_string(),
-                            )
-                        } else {
-                            kaleidoscope_contract::errors::FILE_PATH_IO(
-                                &candidate.display().to_string(),
-                            )
-                            .and_details(vec![error.to_string()])
-                        }
-                    })?;
-                    let target = if target.is_absolute() {
-                        target
-                    } else {
-                        candidate
-                            .parent()
-                            .ok_or_else(|| {
-                                kaleidoscope_contract::errors::FILE_PATH_NOT_FOUND(
-                                    &candidate.display().to_string(),
-                                )
-                            })?
-                            .join(target)
-                    };
-                    return ensure_missing_path_inside(root, &target);
-                }
-            }
-            let parent = candidate.parent().ok_or_else(|| {
-                kaleidoscope_contract::errors::FILE_PATH_NOT_FOUND(&candidate.display().to_string())
-            })?;
-            let canonical_parent = fs::canonicalize(parent).map_err(|error| {
-                if error.kind() == std::io::ErrorKind::NotFound {
-                    kaleidoscope_contract::errors::FILE_PATH_NOT_FOUND(
-                        &candidate.display().to_string(),
-                    )
-                } else {
-                    kaleidoscope_contract::errors::FILE_PATH_IO(&candidate.display().to_string())
-                        .and_details(vec![error.to_string()])
-                }
-            })?;
-            if canonical_parent.starts_with(root) {
-                Ok(())
-            } else {
-                Err(kaleidoscope_contract::errors::FILE_PATH_OUTSIDE_ROOT(
-                    &candidate.display().to_string(),
-                ))
-            }
-        }
-        Err(io_error) => Err(operation_io_error(
-            &io_error,
-            &candidate.display().to_string(),
-        )),
-    }
-}
-
-use kaleidoscope_contract::validate::valid_relative_path;
 
 pub(crate) fn revision(bytes: &[u8]) -> String {
     let hash = Sha256::digest(bytes);
@@ -514,20 +367,22 @@ pub(crate) fn open(
                     format!("app_version: {}", app.current_version),
                 ])
             })?;
-    let opens = definition
-        .opens
-        .ok_or_else(|| {
-            kaleidoscope_contract::errors::FILE_OPEN_APP_CANNOT_OPEN()
-                .and_details(vec![format!("file_path: {path}")])
-        })?;
+    let opens = definition.opens.ok_or_else(|| {
+        kaleidoscope_contract::errors::FILE_OPEN_APP_CANNOT_OPEN()
+            .and_details(vec![format!("file_path: {path}")])
+    })?;
     let extension = Path::new(path)
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_lowercase();
     if !opens.extensions.contains(&extension) {
-        return Err(kaleidoscope_contract::errors::FILE_OPEN_APP_CANNOT_OPEN()
-            .and_details(vec![format!("file_path: {path}"), format!("extension: {extension}")]));
+        return Err(
+            kaleidoscope_contract::errors::FILE_OPEN_APP_CANNOT_OPEN().and_details(vec![
+                format!("file_path: {path}"),
+                format!("extension: {extension}"),
+            ]),
+        );
     }
     let reuse = state
         .shared

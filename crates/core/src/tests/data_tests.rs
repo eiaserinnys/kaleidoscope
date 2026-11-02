@@ -677,7 +677,7 @@ fn remote_asset_without_server_reports_media_load_error() {
 }
 
 #[test]
-fn missing_media_file_reports_registered_media_error() {
+fn missing_media_file_preserves_registered_file_error() {
     use kaleidoscope_contract::data::{MediaRef, ResourceMediaRef};
     let temp = TempDir::new().unwrap();
     let folder = TempDir::new().unwrap();
@@ -701,11 +701,12 @@ fn missing_media_file_reports_registered_media_error() {
         }),
         ErrorCode::NotFound,
     );
-    assert_eq!(error.id.as_deref(), Some("MEDIA_LOAD_FILE_PATH_NOT_FOUND"));
+    assert_eq!(error.id.as_deref(), Some("FILE_PATH_NOT_FOUND"));
     assert_eq!(
         error.message,
-        "미디어 파일을 찾지 못했습니다. 파일 이름: missing.png. 고른 폴더에서 위치를 확인하세요."
+        "경로 missing.png: 파일이나 상위 폴더를 찾을 수 없습니다. 경로가 올바른지 확인하세요."
     );
+    assert!(error.details.iter().any(|detail| !detail.is_empty()));
 }
 
 #[test]

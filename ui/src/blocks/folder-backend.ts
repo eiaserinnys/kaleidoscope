@@ -1,5 +1,5 @@
 import type { CoreError, CoreEvent, FileOpResult, FolderEntry } from "../contract/contract";
-import { SHELL_FILE_COPY_REPLY_INVALID, SHELL_FILE_LIST_REPLY_INVALID, SHELL_FILE_MOVE_REPLY_INVALID, SHELL_FILE_PATH_REPLY_INVALID, SHELL_FILE_REMOVE_REPLY_INVALID, SHELL_FILE_STORAGE_LIST_REPLY_INVALID, SHELL_FILE_STORAGE_REVISION_MISSING } from "../contract/shell-errors";
+import { SHELL_FILE_COPY_REPLY_INVALID, SHELL_FILE_LIST_REPLY_INVALID, SHELL_FILE_MOVE_REPLY_INVALID, SHELL_FILE_PATH_REPLY_INVALID, SHELL_FILE_REMOVE_REPLY_INVALID, SHELL_FILE_STORAGE_LIST_REPLY_INVALID, SHELL_FILE_STORAGE_RENAME_REVISION_MISSING, SHELL_FILE_STORAGE_REMOVE_REVISION_MISSING } from "../contract/shell-errors";
 import { toCoreError } from "../core/core-transport";
 import type { ShellStore } from "../core/shell-store";
 import type { EditorAddress } from "./file-editor-session";
@@ -222,7 +222,7 @@ export function createCollectionFolderBackend({
     actions.rename = async (item, name) => {
       const slash = item.path.lastIndexOf("/");
       const to = slash >= 0 ? `${item.path.slice(0, slash + 1)}${name}` : name;
-      if (!item.revision) throw SHELL_FILE_STORAGE_REVISION_MISSING();
+      if (!item.revision) throw SHELL_FILE_STORAGE_RENAME_REVISION_MISSING();
       await store.call({ op: "storage.move", window_id: windowId, entry, from: item.path, to, expected_revision: item.revision });
     };
     actions.permanentDelete = async (paths) => {
@@ -231,7 +231,7 @@ export function createCollectionFolderBackend({
       for (const path of paths) {
         const item = items.find((candidate) => candidate.path === path);
         if (!item?.revision) {
-          results.push({ path, error: SHELL_FILE_STORAGE_REVISION_MISSING() });
+          results.push({ path, error: SHELL_FILE_STORAGE_REMOVE_REVISION_MISSING() });
           continue;
         }
         try {

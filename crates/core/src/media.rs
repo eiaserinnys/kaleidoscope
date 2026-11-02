@@ -1,7 +1,7 @@
 //! 미디어 원본과 축소 결과의 메모리 캐시.
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, UNIX_EPOCH};
@@ -12,13 +12,15 @@ use crate::{
     files, Inner,
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
-use image::{GenericImageView, ImageEncoder};
 use kaleidoscope_contract::{
     data::{self, HttpMethod, MediaData, MediaRef},
     errors,
     registry::ConnectionAccept,
     CoreError, ErrorCode, PermissionDecl,
 };
+
+mod transform;
+use transform::{as_data, dimensions, host_from_url, mime_for_path, shrink};
 
 const CACHE_MAX: usize = 128 * 1024 * 1024;
 #[derive(Default)]
@@ -41,6 +43,9 @@ enum Source {
 }
 
 fn file_root_error(media: &str, error: CoreError) -> CoreError {
+    if error.id.is_some() {
+        return error;
+    }
     match error.code {
         ErrorCode::NotFound => errors::MEDIA_LOAD_FILE_ROOT_NOT_FOUND(media),
         ErrorCode::Io => errors::MEDIA_LOAD_FILE_ROOT_ACCESS_FAILED(media),
@@ -50,6 +55,9 @@ fn file_root_error(media: &str, error: CoreError) -> CoreError {
 }
 
 fn file_path_error(media: &str, error: CoreError) -> CoreError {
+    if error.id.is_some() {
+        return error;
+    }
     match error.code {
         ErrorCode::NotFound => errors::MEDIA_LOAD_FILE_PATH_NOT_FOUND(media),
         ErrorCode::PathOutsideRoot => errors::MEDIA_LOAD_FILE_PATH_OUTSIDE_ROOT(media),
@@ -432,96 +440,36 @@ pub(crate) fn get(
     Ok(as_data(&result))
 }
 
-fn dimensions(bytes: &[u8], mime: &str) -> (Option<u32>, Option<u32>) {
-    if raster(mime) {
-        if let Ok(image) = image::load_from_memory(bytes) {
-            let (w, h) = image.dimensions();
-            return (Some(w), Some(h));
-        }
-    }
-    (None, None)
-}
-fn raster(mime: &str) -> bool {
-    matches!(
-        mime.split(';').next().unwrap_or("").trim(),
-        "image/png" | "image/jpeg" | "image/webp" | "image/gif"
-    )
-}
-fn host_from_url(url: &str) -> String {
-    reqwest::Url::parse(url)
-        .ok()
-        .and_then(|url| url.host_str().map(str::to_owned))
-        .unwrap_or_else(|| "알 수 없는 서버".into())
-}
+#[cfg(test)]
+mod error_mapping_tests {
+    use super::*;
 
-fn shrink(entry: &Entry, max: u32, media: &str) -> Result<Entry, CoreError> {
-    if !raster(&entry.mime) {
-        return Ok(entry.clone());
+    #[test]
+    fn preserves_registered_file_root_error_and_details() {
+        let original = errors::FILE_ACCESS_ROOT_CHANGED("files").and_details(vec![
+            "The system cannot find the path specified (os error 3)".into(),
+        ]);
+        let original_id = original.id.clone();
+        let original_details = original.details.clone();
+
+        let mapped = file_root_error("media.png", original);
+
+        assert_eq!(mapped.id, original_id);
+        assert_eq!(mapped.code, ErrorCode::NotFound);
+        assert_eq!(mapped.details, original_details);
     }
-    let image = image::load_from_memory(&entry.bytes).map_err(|err| {
-        errors::MEDIA_RESIZE_IMAGE_DECODE_FAILED(media).and_details(vec![err.to_string()])
-    })?;
-    let (w, h) = image.dimensions();
-    let resized = if w.max(h) > max {
-        image.resize(max, max, image::imageops::FilterType::Lanczos3)
-    } else {
-        image
-    };
-    let (width, height) = resized.dimensions();
-    let rgba = resized.to_rgba8();
-    let transparent = rgba.pixels().any(|pixel| pixel[3] < 255);
-    let mut bytes = Vec::new();
-    let mime = if transparent {
-        resized
-            .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
-            .map_err(|err| {
-                errors::MEDIA_RESIZE_PNG_ENCODE_FAILED(media).and_details(vec![err.to_string()])
-            })?;
-        "image/png"
-    } else {
-        let rgb = resized.to_rgb8();
-        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 85)
-            .write_image(rgb.as_raw(), width, height, image::ExtendedColorType::Rgb8)
-            .map_err(|err| {
-                errors::MEDIA_RESIZE_JPEG_ENCODE_FAILED(media).and_details(vec![err.to_string()])
-            })?;
-        "image/jpeg"
-    };
-    Ok(Entry {
-        bytes: Arc::new(bytes),
-        mime: mime.into(),
-        width: Some(width),
-        height: Some(height),
-        used: Instant::now(),
-    })
-}
-fn as_data(entry: &Entry) -> MediaData {
-    MediaData {
-        mime: entry.mime.clone(),
-        data_base64: STANDARD.encode(&*entry.bytes),
-        width: entry.width,
-        height: entry.height,
-    }
-}
-fn mime_for_path(path: &str) -> &'static str {
-    match path
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_lowercase()
-        .as_str()
-    {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "webp" => "image/webp",
-        "gif" => "image/gif",
-        "svg" => "image/svg+xml",
-        "mp3" => "audio/mpeg",
-        "wav" => "audio/wav",
-        "ogg" => "audio/ogg",
-        "m4a" => "audio/mp4",
-        "mp4" => "video/mp4",
-        "webm" => "video/webm",
-        _ => "application/octet-stream",
+
+    #[test]
+    fn preserves_registered_file_path_error_and_details() {
+        let original = errors::FILE_PATH_IO("image.png")
+            .and_details(vec!["Permission denied (os error 13)".into()]);
+        let original_id = original.id.clone();
+        let original_details = original.details.clone();
+
+        let mapped = file_path_error("media.png", original);
+
+        assert_eq!(mapped.id, original_id);
+        assert_eq!(mapped.code, ErrorCode::Io);
+        assert_eq!(mapped.details, original_details);
     }
 }

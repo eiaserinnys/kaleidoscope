@@ -166,6 +166,7 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
     ));
     let error = mkdir(&core, &window, "notes").unwrap_err();
     assert_eq!(error.id.as_deref(), Some("FILE_CREATE_FOLDER_NAME_TAKEN"));
+    assert_eq!(error.code, ErrorCode::Conflict);
     assert_eq!(
         error.message,
         "폴더 이름 notes: 같은 이름의 항목이 있어 만들지 못했습니다. 다른 이름을 입력하세요."
@@ -203,11 +204,32 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
             expected_revision: Some("stale-revision".into()),
         })
         .unwrap_err();
-    assert_eq!(error.id.as_deref(), Some("FILE_SAVE_REVISION_CONFLICT"));
+    assert_eq!(error.id.as_deref(), Some("FILE_SAVE_REVISION_CHANGED"));
+    assert_eq!(error.code, ErrorCode::Conflict);
     assert_eq!(
         error.message,
-        "파일 renamed.txt: 읽은 뒤 바뀌거나 삭제되어 저장하지 못했습니다. 다시 불러오거나 덮어쓰기를 선택하세요."
+        "파일 renamed.txt: 처음 읽은 뒤 내용이 바뀌어 저장하지 못했습니다. 다시 불러온 뒤 수정하고 저장하거나 덮어쓰기를 선택하세요."
     );
+
+    fs::write(root.join("deleted-before-save.txt"), "remove me").unwrap();
+    let deleted_revision = crate::files::revision(b"remove me");
+    fs::remove_file(root.join("deleted-before-save.txt")).unwrap();
+    let error = core
+        .handle(CoreRequest::FilesWrite {
+            window_id: window.clone(),
+            permission: "docs".into(),
+            path: "deleted-before-save.txt".into(),
+            text: "restore me".into(),
+            expected_revision: Some(deleted_revision),
+        })
+        .unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("FILE_SAVE_FILE_DELETED"));
+    assert_eq!(error.code, ErrorCode::Conflict);
+    assert_eq!(
+        error.message,
+        "파일 deleted-before-save.txt: 처음 읽은 뒤 삭제되어 저장하지 못했습니다. 덮어쓰기를 선택해 파일을 다시 저장하세요."
+    );
+    assert!(error.details.iter().any(|detail| !detail.is_empty()));
 
     let error = core
         .handle(CoreRequest::FilesWrite {
@@ -219,6 +241,7 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
         })
         .unwrap_err();
     assert_eq!(error.id.as_deref(), Some("FILE_CREATE_FILE_NAME_TAKEN"));
+    assert_eq!(error.code, ErrorCode::Conflict);
     assert_eq!(
         error.message,
         "파일 이름 renamed.txt: 같은 이름의 항목이 있어 만들지 못했습니다. 다른 이름을 입력하세요."
@@ -344,6 +367,7 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
         &results[0],
         kaleidoscope_contract::FileOpResult::Error { error, .. }
             if error.id.as_deref() == Some("FILE_MOVE_NAME_TAKEN")
+                && error.code == ErrorCode::Conflict
                 && error.message == "대상 항목 notes/occupied.txt: 같은 이름이 있어 옮기지 못했습니다. 대상 이름을 바꾸거나 다른 폴더를 선택하세요."
     ));
     assert_eq!(
@@ -380,6 +404,30 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
             if text.starts_with(&root.to_string_lossy().into_owned())
                 && Path::new(&text) == root.join("notes")
     ));
+}
+
+#[test]
+fn missing_granted_folder_keeps_not_found_class_and_os_diagnostic() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("documents");
+    fs::create_dir(&root).unwrap();
+    let host = Arc::new(FakeHost::default());
+    let (core, window) = writable_core(&temp, &root, &host);
+    fs::remove_dir_all(&root).unwrap();
+
+    let error = core
+        .handle(CoreRequest::FilesList {
+            window_id: window,
+            permission: "docs".into(),
+            dir: String::new(),
+        })
+        .unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("FILE_ACCESS_ROOT_CHANGED"));
+    assert_eq!(error.code, ErrorCode::NotFound);
+    assert!(error
+        .details
+        .iter()
+        .any(|detail| detail.contains("No such file")));
 }
 
 #[test]
@@ -447,9 +495,7 @@ fn file_write_batches_skip_selected_descendants_and_keep_request_order() {
         result_paths(&results),
         ["copy-after.txt", "copy-source", "copy-before.txt"]
     );
-    assert!(root
-        .join("copy-dest/copy-source/note.txt")
-        .exists());
+    assert!(root.join("copy-dest/copy-source/note.txt").exists());
     assert!(!root.join("copy-dest/note.txt").exists());
 
     let CoreReply::FilesRemove { results } = core

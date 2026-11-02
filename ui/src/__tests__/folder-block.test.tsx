@@ -352,7 +352,7 @@ describe("folder block", () => {
       const original = transport.call.bind(transport);
       vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "files.remove"
         ? { op: "files.remove", results: [
-          { path: "a.md", error: { code: "trash_unavailable", message: "파일 a.md: 휴지통으로 보내지 못했습니다. 파일 관리자에서 파일을 확인하세요.", details: [], ...(registered ? { id: "FILE_REMOVE_TRASH_UNAVAILABLE" } : {}) } },
+          { path: "a.md", error: { code: "trash_unavailable", message: "파일 a.md: 휴지통으로 보내지 못했습니다. 이 항목을 지우려면 영구 삭제를 선택하세요.", details: [], ...(registered ? { id: "FILE_REMOVE_TRASH_UNAVAILABLE" } : {}) } },
           { path: "b.md", ok: {} },
         ] } : original(request));
     }, { "a.md": "a", "b.md": "b" });
@@ -372,7 +372,7 @@ describe("folder block", () => {
       vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "files.move"
         ? { op: "files.move", results: [
           { path: "a.md", error: { code: "conflict", message: "대상 항목 a.md: 같은 이름이 있어 옮기지 못했습니다. 대상 이름을 바꾸거나 다른 폴더를 선택하세요.", details: [], id: "FILE_MOVE_NAME_TAKEN" } },
-          { path: "b.md", error: { code: "io", message: "파일 b.md: 작업을 마치지 못했습니다. 파일 관리자에서 파일이 열리는지와 저장 공간을 확인하세요.", details: [], id: "FILE_OPERATION_IO" } },
+          { path: "b.md", error: { code: "io", message: "파일 b.md: 파일을 옮기지 못했습니다. 파일 위치와 접근 권한을 확인하세요.", details: [], id: "FILE_MOVE_APPLY_IO" } },
         ] } : original(request));
     }, { "a.md": "a", "b.md": "b", "target/.hidden": "x" });
     const a = await screen.findByRole("treeitem", { name: "a.md" });
@@ -386,9 +386,9 @@ describe("folder block", () => {
     expect(alert.textContent).not.toContain("a.md");
     fireEvent.click(within(alert).getByRole("button", { name: "펼치기" }));
     expect(alert.textContent).toContain("대상 항목 a.md: 같은 이름이 있어 옮기지 못했습니다. 대상 이름을 바꾸거나 다른 폴더를 선택하세요.");
-    expect(alert.textContent).toContain("파일 b.md: 작업을 마치지 못했습니다. 파일 관리자에서 파일이 열리는지와 저장 공간을 확인하세요.");
+    expect(alert.textContent).toContain("파일 b.md: 파일을 옮기지 못했습니다. 파일 위치와 접근 권한을 확인하세요.");
     expect(alert.textContent).toContain("FILE_MOVE_NAME_TAKEN");
-    expect(alert.textContent).toContain("FILE_OPERATION_IO");
+    expect(alert.textContent).toContain("FILE_MOVE_APPLY_IO");
     expect(alert.textContent).not.toContain("같은 이름이 있습니다");
   });
 

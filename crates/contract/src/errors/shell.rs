@@ -497,60 +497,67 @@ error_catalog! { ENTRIES;
         fix: "첨부 파일 수나 크기를 줄이세요"
     }
     SHELL_FILE_LIST_REPLY_INVALID() {
-        class: InvalidRequest,
+        class: Io,
         place: "파일 목록 응답 확인",
         cause: "코어 응답이 요청한 파일 목록과 다르다",
-        message: "파일 목록 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 불러오세요.",
-        fix: "쉘을 새 판으로 올리세요"
+        message: "파일 목록 응답이 쉘이 예상한 형식과 다릅니다. 파일 목록에서 새로 고침을 선택하세요.",
+        fix: "파일 목록에서 새로 고침을 선택하세요"
     }
     SHELL_FILE_PATH_REPLY_INVALID() {
-        class: InvalidRequest,
+        class: Io,
         place: "파일 경로 응답 확인",
         cause: "코어 응답이 요청한 파일 경로와 다르다",
         message: "파일 경로 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.",
         fix: "쉘을 새 판으로 올리세요"
     }
     SHELL_FILE_MOVE_REPLY_INVALID() {
-        class: InvalidRequest,
+        class: Io,
         place: "파일 이동 응답 확인",
         cause: "코어 응답이 요청한 파일 이동과 다르다",
         message: "파일 이동 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.",
         fix: "쉘을 새 판으로 올리세요"
     }
     SHELL_FILE_COPY_REPLY_INVALID() {
-        class: InvalidRequest,
+        class: Io,
         place: "파일 복사 응답 확인",
         cause: "코어 응답이 요청한 파일 복사와 다르다",
         message: "파일 복사 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.",
         fix: "쉘을 새 판으로 올리세요"
     }
     SHELL_FILE_REMOVE_REPLY_INVALID() {
-        class: InvalidRequest,
+        class: Io,
         place: "파일 삭제 응답 확인",
         cause: "코어 응답이 요청한 파일 삭제와 다르다",
         message: "파일 삭제 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.",
         fix: "쉘을 새 판으로 올리세요"
     }
     SHELL_FILE_STORAGE_LIST_REPLY_INVALID() {
-        class: InvalidRequest,
+        class: Io,
         place: "저장 문서 목록 응답 확인",
         cause: "코어 응답이 요청한 저장 문서 목록과 다르다",
-        message: "저장 문서 목록 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 불러오세요.",
+        message: "저장 문서 목록 응답이 쉘이 예상한 형식과 다릅니다. 저장 문서 목록에서 새로 고침을 선택하세요.",
+        fix: "저장 문서 목록에서 새로 고침을 선택하세요"
+    }
+    SHELL_FILE_STORAGE_RENAME_REVISION_MISSING() {
+        class: Io,
+        place: "저장 문서 이름 바꾸기 판 확인",
+        cause: "이름을 바꿀 저장 문서의 판 정보가 목록 응답에 없다",
+        message: "저장 문서 이름을 바꾸는 데 필요한 판 정보를 받지 못했습니다. 쉘을 새 판으로 올리세요.",
         fix: "쉘을 새 판으로 올리세요"
     }
-    SHELL_FILE_STORAGE_REVISION_MISSING() {
+    SHELL_FILE_STORAGE_REMOVE_REVISION_MISSING() {
         class: NotFound,
-        place: "저장 문서 판 확인",
-        cause: "목록에서 문서 판 정보를 받지 못했다",
-        message: "저장 문서의 판 정보를 받지 못했습니다. 목록을 새로 불러온 뒤 다시 시도하세요.",
-        fix: "문서 목록을 새로 불러오세요"
+        place: "저장 문서 삭제 판 확인",
+        cause: "삭제할 저장 문서의 판 정보를 찾지 못했다",
+        message: "삭제할 저장 문서 판 정보를 찾지 못했습니다. 저장 문서 목록에서 대상을 확인하세요.",
+        fix: "저장 문서 목록에서 대상을 확인하세요"
     }
     SHELL_FILE_MARKDOWN_STORAGE_INVALID(entry) {
-        class: InvalidRequest,
+        class: Io,
         place: "마크다운 저장 문서 읽기",
         cause: "저장 항목의 값이 마크다운 문서가 아니다",
-        message: "저장 항목 {entry}의 값이 마크다운 문서가 아닙니다. 앱 정의의 저장 형식을 확인하세요.",
-        fix: "앱 정의에서 저장 항목 형식을 확인하세요"
+        message: "저장 항목 {entry}: 값이 마크다운 문서가 아닙니다. 앱 정의 storage.entries에서 이 항목의 kind를 md로 고치세요.",
+        fix: "앱 정의 storage.entries의 kind를 md로 고치세요"
     }
     SHELL_FILE_EXTENSION_NOT_ALLOWED(name, extensions) {
         class: InvalidRequest,
@@ -567,7 +574,7 @@ error_catalog! { ENTRIES;
         fix: "편집기에 표시된 오류를 확인하세요"
     }
     SHELL_TREE_CONTROL_HEIGHT_MISSING() {
-        class: InvalidRequest,
+        class: Io,
         place: "트리 행 표시 설정 읽기",
         cause: "쉘 스타일에 트리 행 높이가 없다",
         message: "트리 행 높이 설정을 읽지 못했습니다. 쉘 스타일에서 행 높이를 설정하세요.",

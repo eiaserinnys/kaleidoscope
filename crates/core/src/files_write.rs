@@ -130,7 +130,14 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             inner
                 .attachment_opener
                 .reveal(Path::new(&text))
-                .map_err(|error| files::operation_io_error(&error, &path))?;
+                .map_err(|error| {
+                    ops::file_system_error(
+                        &error,
+                        || kaleidoscope_contract::errors::FILE_REVEAL_OPEN_NOT_FOUND(&path),
+                        || kaleidoscope_contract::errors::FILE_REVEAL_OPEN_BUSY(&path),
+                        || kaleidoscope_contract::errors::FILE_REVEAL_OPEN_IO(&path),
+                    )
+                })?;
             Ok(CoreReply::FilesReveal {})
         }
         (
