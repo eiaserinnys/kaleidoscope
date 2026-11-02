@@ -48,3 +48,20 @@ it("작업본에서 고아를 B로 옮긴 뒤 원래 순서로 돌아가도 A에
   await user.click(screen.getByRole("button", { name: "여기로 옮기기" }));
   expect(change).toHaveBeenCalledWith({ kind: "anchor", id: "orphan", anchor, anchor_rev: 1 });
 });
+
+it("빈 답글 입력에서 Esc를 누르면 카드를 닫고 대상 단추로 돌아간다", async () => {
+  const comment = { id: "one", rev: 1, status: "needs_agent_review" as const, anchor: { kind: "element", label: "button.cta" }, comment: "의견", created_at: "now", resolved_rev: null, replies: [] };
+  const model = {
+    selection: null, active: { name: "시안", rev: 1 }, dirty: false, saving: false,
+    comments: [comment], results: {}, activeComment: "one", reviewComments: [],
+    root: { current: null }, send: vi.fn(), setActiveComment: vi.fn(), openComment: vi.fn(), writeChange: vi.fn(),
+  } as unknown as ComponentProps<typeof CommentFace>["model"];
+  const user = userEvent.setup();
+  const { container } = render(<CommentFace model={model} />);
+  const reply = screen.getByRole("textbox", { name: "답글" });
+  const target = container.querySelector<HTMLButtonElement>(".ks-html-comment-target")!;
+  await user.click(reply);
+  await user.keyboard("{Escape}");
+  expect(model.setActiveComment).toHaveBeenCalledWith(null);
+  expect(document.activeElement).toBe(target);
+});
