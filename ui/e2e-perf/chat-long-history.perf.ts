@@ -193,14 +193,30 @@ test("긴 대화 성능 전후 측정", async ({ page, browserName }) => {
       }
       console.log(`단일 text update 완료: ${median(textSamples).toFixed(1)}ms`);
 
-      const streamBurst = await sampleBurst(page, 3000);
-      console.log(`3초 스트리밍 완료: ${streamBurst.chunks}개, ${streamBurst.longTaskMs.toFixed(1)}ms long task`);
+      const burstSamples = [];
+      for (let index = 0; index < repeats; index += 1) burstSamples.push(await sampleBurst(page, 3000));
+      const streamBurst = {
+        durationMs: median(burstSamples.map((sample) => sample.durationMs)),
+        longTaskMs: median(burstSamples.map((sample) => sample.longTaskMs)),
+        frames: median(burstSamples.map((sample) => sample.frames)),
+        chunks: median(burstSamples.map((sample) => sample.chunks)),
+        samples: burstSamples,
+      };
+      console.log(`3초 스트리밍 완료: ${repeats}회, 중앙값 ${streamBurst.chunks}개, ${streamBurst.longTaskMs.toFixed(1)}ms long task`);
       const snapshotSamples: number[] = [];
       for (let index = 0; index < repeats; index += 1) snapshotSamples.push(await sampleSnapshot(page));
       console.log(`snapshot 완료: ${median(snapshotSamples).toFixed(1)}ms`);
 
-      const scroll = await sampleScroll(page);
-      console.log(`스크롤 완료: p50 ${scroll.p50Ms.toFixed(1)}ms, p95 ${scroll.p95Ms.toFixed(1)}ms`);
+      const scrollSamples = [];
+      for (let index = 0; index < repeats; index += 1) scrollSamples.push(await sampleScroll(page));
+      const scroll = {
+        p50Ms: median(scrollSamples.map((sample) => sample.p50Ms)),
+        p95Ms: median(scrollSamples.map((sample) => sample.p95Ms)),
+        longTaskMs: median(scrollSamples.map((sample) => sample.longTaskMs)),
+        frames: median(scrollSamples.map((sample) => sample.frames)),
+        samples: scrollSamples,
+      };
+      console.log(`스크롤 완료: ${repeats}회, p50 ${scroll.p50Ms.toFixed(1)}ms, p95 ${scroll.p95Ms.toFixed(1)}ms`);
       const wheelSamples: number[] = [];
       for (let index = 0; index < repeats; index += 1) wheelSamples.push(await sampleWheel(page));
 
@@ -214,8 +230,17 @@ test("긴 대화 성능 전후 측정", async ({ page, browserName }) => {
         }, start));
       }
 
-      const busy = await sampleBusy(page);
-      console.log(`5초 busy 완료: ${busy.frames} frames, ${busy.longTaskMs.toFixed(1)}ms long task`);
+      const busySamples = [];
+      for (let index = 0; index < repeats; index += 1) busySamples.push(await sampleBusy(page));
+      const busy = {
+        durationMs: median(busySamples.map((sample) => sample.durationMs)),
+        longTaskMs: median(busySamples.map((sample) => sample.longTaskMs)),
+        frames: median(busySamples.map((sample) => sample.frames)),
+        frameBins: busySamples[0].frameBins.map((_, index) => median(busySamples.map((sample) => sample.frameBins[index]))),
+        longTaskBins: busySamples[0].longTaskBins.map((_, index) => median(busySamples.map((sample) => sample.longTaskBins[index]))),
+        samples: busySamples,
+      };
+      console.log(`5초 busy 완료: ${repeats}회, 중앙값 ${busy.frames} frames, ${busy.longTaskMs.toFixed(1)}ms long task`);
       const result = {
         history,
         cpuThrottle: throttle === 1 ? "none" : `${throttle}x`,
@@ -232,7 +257,20 @@ test("긴 대화 성능 전후 측정", async ({ page, browserName }) => {
         busy,
       };
       results.push(result);
-      console.log(JSON.stringify(result));
+      console.log(JSON.stringify({
+        history,
+        cpuThrottle: result.cpuThrottle,
+        openMs: result.openMs.median,
+        inputScriptMs: result.inputScriptMs.median,
+        inputNextPaintMs: result.inputNextPaintMs.median,
+        streamChunkNextPaintMs: result.streamChunkNextPaintMs.median,
+        streamBurst: { repeats, chunks: streamBurst.chunks, longTaskMs: streamBurst.longTaskMs, frames: streamBurst.frames },
+        snapshotNextPaintMs: result.snapshotNextPaintMs.median,
+        scroll: { repeats, p50Ms: scroll.p50Ms, p95Ms: scroll.p95Ms, longTaskMs: scroll.longTaskMs },
+        wheelNextPaintMs: result.wheelNextPaintMs.median,
+        resizeNextPaintMs: result.resizeNextPaintMs.median,
+        busy: { repeats, frames: busy.frames, longTaskMs: busy.longTaskMs },
+      }));
       await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
       await cdp.detach();
     }
@@ -252,5 +290,12 @@ test("긴 대화 성능 전후 측정", async ({ page, browserName }) => {
     scrollP50: (result.scroll as { p50Ms: number }).p50Ms.toFixed(2),
     scrollP95: (result.scroll as { p95Ms: number }).p95Ms.toFixed(2),
     openMs: (result.openMs as { median: number }).median.toFixed(2),
+    burstChunks: (result.streamBurst as { chunks: number }).chunks,
+    burstLongTaskMs: (result.streamBurst as { longTaskMs: number }).longTaskMs.toFixed(1),
+    scrollLongTaskMs: (result.scroll as { longTaskMs: number }).longTaskMs.toFixed(1),
+    wheelMs: (result.wheelNextPaintMs as { median: number }).median.toFixed(2),
+    resizeMs: (result.resizeNextPaintMs as { median: number }).median.toFixed(2),
+    busyFrames: (result.busy as { frames: number }).frames,
+    busyLongTaskMs: (result.busy as { longTaskMs: number }).longTaskMs.toFixed(1),
   })));
 });
