@@ -107,6 +107,14 @@ it("클라이언트에 내용 크기와 가시성, 종료를 전달한다", asyn
   await new Promise((resolve) => requestAnimationFrame(resolve));
   expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-surface", phase: "visibility", id: "tile", visible: true }), "*");
   post.mockClear();
+  runtime.surface({ phase: "attach", id: "tile", generation: 2, canvas: {} as OffscreenCanvas, css_width: 120, css_height: 80, dpr: 1, visible: true });
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-surface", phase: "attach", id: "tile", generation: 2 }), "*", expect.any(Array));
+  post.mockClear();
+  runtime.surface({ phase: "detach", id: "tile", generation: 1 });
+  expect(post).not.toHaveBeenCalled();
+  runtime.surface({ phase: "detach", id: "tile", generation: 2 });
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-surface", phase: "detach", id: "tile", generation: 2 }), "*");
+  post.mockClear();
   const beforeClose = flushSandboxes("window-1");
   expect(post.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ type: "ks-client-lifecycle", lifecycle: expect.objectContaining({ phase: "closing" }) }));
   expect(post.mock.calls[1]?.[0]).toEqual(expect.objectContaining({ type: "ks-sandbox-flush" }));
