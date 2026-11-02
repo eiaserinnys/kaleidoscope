@@ -19,7 +19,7 @@ shadow.innerHTML = `<style>
 :host { position: fixed; inset: 0; pointer-events: none; z-index: 2147483647; }
 .outline { position: fixed; box-sizing: border-box; border: var(--ks-line-width) solid var(--ks-color-accent); pointer-events: none; }
 .outline.selected { border-width: var(--ks-focus-width); }
-.label { position: absolute; left: 0; top: 0; transform: translateY(-100%); background: var(--ks-color-accent); color: var(--ks-color-accent-contrast); font: var(--ks-type-meta) var(--ks-font-family); padding: var(--ks-space-1) var(--ks-space-2); pointer-events: auto; }
+.label { position: absolute; left: 0; top: 0; transform: translateY(-100%); background: var(--ks-color-accent); color: var(--ks-color-accent-contrast); font: var(--ks-type-meta) var(--ks-font-family); padding: var(--ks-space-1) var(--ks-space-2); pointer-events: none; }
 .pin { position: fixed; transform: translate(-50%, -50%); min-width: var(--ks-space-5); height: var(--ks-space-5); border: 0; border-radius: var(--ks-radius-large); padding: 0 var(--ks-space-1); background: var(--ks-color-accent); color: var(--ks-color-accent-contrast); font: var(--ks-type-meta) var(--ks-font-family); cursor: pointer; pointer-events: auto; }
 </style><div id="layer"></div>`;
 const layer = shadow.querySelector("#layer")!;

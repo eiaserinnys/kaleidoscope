@@ -61,7 +61,8 @@ function Rail({ model }: { model: ReturnType<typeof useHtmlDocument> }) {
         <div className="ks-html-actions"><Button disabled={model.saving || !body.trim()} onClick={() => void submit(body)}>등록</Button></div>
       </div> : null}
       <Select segmented items={["전체", "미해결", "해결됨"]} value={filter} onChange={(value) => setFilter(String(value))} />
-      <Button disabled={!model.agentWindow || !model.comments.some((comment) => comment.status === "needs_agent_review")} onClick={() => void model.sendAgent()}>에이전트에게 보내기</Button>
+      <Button disabled={!model.agentWindow || !model.hasUnsentReview || model.sending} onClick={() => void model.sendAgent()}>에이전트에게 보내기</Button>
+      {model.sentReview ? <StatusText>보냈습니다</StatusText> : null}
       {orphaned.length ? <><StatusText>제자리 없음</StatusText>{orphaned.map(card)}</> : null}
       {rest.map(card)}
       {!shown.length ? <div className="ks-html-empty"><StatusText>커멘트가 없습니다</StatusText></div> : null}

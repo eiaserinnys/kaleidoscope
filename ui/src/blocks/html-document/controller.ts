@@ -14,6 +14,7 @@ import { anchorRevision, listRevisions, type Comment, type Thread, type ThreadCh
 type HtmlBlock = Extract<Block, { type: "html_view" }> & { document: DocumentRef };
 const nOf = (element: Element | null) => element ? Number(element.getAttribute("data-ks-n")) || null : null;
 const makeId = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
+const reviewSignature = (comment: Comment) => comment.replies.at(-1)?.id ?? "";
 
 export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const entry = block.document.entry; const windowId = context.window.id; const store = context.store;
@@ -28,6 +29,8 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const [results, setResults] = useState<Record<string, AnchorStatus>>({});
   const [text, setText] = useState(""); const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false); const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sentReviews, setSentReviews] = useState<Record<string, Record<string, string>>>({});
   const [mode, setMode] = useState<"select" | "view">("select");
   const [undo, setUndo] = useState<HtmlEdit[]>([]); const [redo, setRedo] = useState<HtmlEdit[]>([]);
   const [pendingChange, setPendingChange] = useState<{ name: string; rev: number } | null>(null);
@@ -43,10 +46,10 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const agentWindow = useShellSelector(store, (snapshot) => {
     if (!snapshot) return null;
     const workspace = snapshot.shared.desktops.find((desktop) => desktop.id === context.window.desktop_id)?.workspace_id;
-    return snapshot.shared.windows.find((item) => {
+    return snapshot.shared.windows.filter((item) => {
       if (snapshot.shared.desktops.find((desktop) => desktop.id === item.desktop_id)?.workspace_id !== workspace) return false;
       return Boolean(snapshot.shared.app_versions.find((app) => app.app_id === item.app_id && app.version === item.app_version)?.definition.agent);
-    })?.id ?? null;
+    }).sort((left, right) => right.z - left.z)[0]?.id ?? null;
   });
   const send = useCallback((message: ParentToFrame) => frame.current?.contentWindow?.postMessage(message, "*"), []);
   const patchState = useCallback((name: string, rev: number | null) => {
@@ -115,6 +118,9 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     void load(); return () => { readSequence.current++; };
   }, [active?.name, active?.rev, entry, refreshThread, store, windowId]);
   const comments = useMemo(() => active ? thread.comments.filter((comment) => comment.rev <= active.rev) : [], [thread, active]);
+  const reviewComments = comments.filter((comment) => comment.status === "needs_agent_review");
+  const hasUnsentReview = reviewComments.some((comment) => sentReviews[active?.name ?? ""]?.[comment.id] !== reviewSignature(comment));
+  const sentReview = reviewComments.length > 0 && !hasUnsentReview;
   const structuralEdits = undo.some((edit) => edit.kind === "insert" || edit.kind === "remove" || edit.kind === "move");
   const frameComments = useMemo(() => comments.map((comment, index) => ({ id: comment.id, anchor: comment.anchor, number: index + 1, sameRevision: anchorRevision(comment) === active?.rev && !structuralEdits })), [active?.rev, comments, structuralEdits]);
   useEffect(() => { send({ type: "ks-html-comments", comments: frameComments }); }, [frameComments, send]);
@@ -122,7 +128,16 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const writeChange = useCallback(async (change: ThreadChange) => {
     const current = activeRef.current; if (!current) return false;
     setSaving(true);
-    try { const result = await writeThreadChange(store, windowId, entry, current.name, change); if (activeRef.current?.name === current.name) setThread(result); setError(null); return true; }
+    try {
+      const result = await writeThreadChange(store, windowId, entry, current.name, change);
+      if (activeRef.current?.name === current.name) setThread(result);
+      if (change.kind === "status") setSentReviews((previous) => {
+        if (!previous[current.name] || !(change.id in previous[current.name])) return previous;
+        const remaining = { ...previous[current.name] }; delete remaining[change.id];
+        return { ...previous, [current.name]: remaining };
+      });
+      setError(null); return true;
+    }
     catch (reason) { setError(toCoreError(reason).message); return false; }
     finally { setSaving(false); }
   }, [entry, store, windowId]);
@@ -248,14 +263,22 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
       });
     }
     const open = comments.map((comment, index) => ({ comment, index })).filter(({ comment }) => comment.status !== "resolved");
-    if (open.length) { lines.push(`미해결 커멘트 ${open.length}건:`); open.forEach(({ comment, index }) => lines.push(`- ${comment.id} #${index + 1} [${comment.status === "needs_agent_review" ? "검토 요청" : "답변 도착"}] v${comment.rev}${anchorRevision(comment) !== comment.rev ? `, 앵커 v${anchorRevision(comment)}` : ""}, ${results[comment.id] === "orphan" ? "못 찾음" : "제자리"}: ${comment.anchor.label} "${comment.anchor.quote?.exact ?? comment.anchor.text}": ${comment.comment}`)); }
+    if (open.length) { lines.push(`미해결 커멘트 ${open.length}건:`); open.forEach(({ comment, index }) => lines.push(`- ${comment.id} #${index + 1} [${comment.status === "needs_agent_review" ? "검토 요청" : "답변 도착"}] v${comment.rev}${anchorRevision(comment) !== comment.rev ? `, 앵커 v${anchorRevision(comment)}` : ""}, ${results[comment.id] === "orphan" ? "못 찾음" : results[comment.id] === "moved" ? "옮겨 찾음" : "제자리"}: ${comment.anchor.label} "${comment.anchor.quote?.exact ?? comment.anchor.text}": ${comment.comment}`)); }
     if (includeText && text) lines.push(text);
     return lines.join("\n");
   }, [active, comments, context.definition.name, edits, entry, latest, results, selection, text]);
   const sendAgent = useCallback(async () => {
-    if (!agentWindow) return;
-    try { await store.call({ op: "conversation.send", window_id: agentWindow, request_id: crypto.randomUUID(), text: share(false), attachments: [] }); setError(null); }
+    if (!agentWindow || !active || !hasUnsentReview || sending) return;
+    const name = active.name;
+    const sent = Object.fromEntries(reviewComments.map((comment) => [comment.id, reviewSignature(comment)]));
+    setSending(true);
+    try {
+      await store.call({ op: "conversation.send", window_id: agentWindow, request_id: crypto.randomUUID(), text: share(false), attachments: [] });
+      setSentReviews((previous) => ({ ...previous, [name]: { ...previous[name], ...sent } }));
+      setError(null);
+    }
     catch (reason) { setError(toCoreError(reason).message); }
-  }, [agentWindow, share, store]);
-  return { active, docs, latest, thread, comments, selection, results, source, error, loaded, saving, mode, setMode, frame, root, dirty, undo, redo, edits, pendingChange, setPendingChange, choose, confirmChange, keyAction, record, editStyle, undoEdit, redoEdit, addComment, writeChange, saveRevision, send, share, sendAgent, agentWindow };
+    finally { setSending(false); }
+  }, [active, agentWindow, hasUnsentReview, reviewComments, sending, share, store]);
+  return { active, docs, latest, thread, comments, selection, results, source, error, loaded, saving, sending, sentReview, hasUnsentReview, mode, setMode, frame, root, dirty, undo, redo, edits, pendingChange, setPendingChange, choose, confirmChange, keyAction, record, editStyle, undoEdit, redoEdit, addComment, writeChange, saveRevision, send, share, sendAgent, agentWindow };
 }

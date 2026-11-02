@@ -65,6 +65,8 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   const agent = { id: "agent", name: "채팅", requires: { blocks: 1, modules: {} }, permissions: [], state: {}, agent: {}, ui: { type: "text", text: "" } } as unknown as AppDefinition;
   const seed = makeTestSeed({ definitions: [definition as AppDefinition, agent] });
   seed.snapshot.shared.windows[1].id = "agent-window";
+  seed.snapshot.shared.windows[1].z = 1;
+  seed.snapshot.shared.windows.push({ ...seed.snapshot.shared.windows[1], id: "top-agent-window", z: 2 });
   const base = createFakeTransport(seed);
   const files = new Map<string, { content: string; revision: string }>([["시안/r1.html", { content: "<h1>제목</h1>", revision: "html1" }]]);
   const sent: CoreRequest[] = []; let seq = 0;
@@ -106,8 +108,16 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   await user.click(screen.getByRole("button", { name: "에이전트에게 보내기" }));
   await waitFor(() => expect(sent).toHaveLength(1));
   const request = sent[0]; if (request.op !== "conversation.send") throw new Error("전송 명령 누락");
-  expect(request.window_id).toBe("agent-window"); expect(request.text).toContain("시안/thread.json"); expect(request.text).toContain("색을 바꿔 주세요");
+  expect(request.window_id).toBe("top-agent-window"); expect(request.text).toContain("시안/thread.json"); expect(request.text).toContain("색을 바꿔 주세요");
   expect(request.text).not.toContain("저장 안 한 수정");
+  expect(await screen.findByText("보냈습니다")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "에이전트에게 보내기" }) as HTMLButtonElement).disabled).toBe(true);
+  await user.type(screen.getByRole("textbox", { name: "커멘트" }), "글자를 키워 주세요");
+  await user.click(screen.getByRole("button", { name: "등록" }));
+  await waitFor(() => expect((screen.getByRole("button", { name: "에이전트에게 보내기" }) as HTMLButtonElement).disabled).toBe(false));
+  await user.click(screen.getByRole("button", { name: "에이전트에게 보내기" }));
+  await waitFor(() => expect(sent).toHaveLength(2));
+  expect((screen.getByRole("button", { name: "에이전트에게 보내기" }) as HTMLButtonElement).disabled).toBe(true);
   await user.click(screen.getByRole("button", { name: "요소 다듬기" }));
   await user.click(screen.getByRole("button", { name: "새 리비전으로 저장" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "리비전" }).textContent).toBe("v3"));
