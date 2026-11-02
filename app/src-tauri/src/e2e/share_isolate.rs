@@ -125,7 +125,11 @@ pub(super) fn scenario(
     )?;
     wait_agent_phase(core, &agent_window_id, LocalAgentPhase::Ready)?;
     ui::wait_dom(app, &format!("return !!document.querySelector('[data-testid=\\\"app-window-{A_ID}\\\"] iframe') && !!document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');"), "share windows rendered")?;
+    // 발신 창이 웹 창 위에 열리므로, 처음에는 웹 창을 앞으로 올려 이동을 끝낸다.
+    // 페이지가 열린 뒤 발신 창을 다시 앞에 두어 가림 처리를 시작한다.
+    raise(core, &web_id)?;
     let web_page = wait_web_loaded(core, &web_id)?;
+    raise(core, &agent_window_id)?;
     record(
         log,
         "web.loaded",
