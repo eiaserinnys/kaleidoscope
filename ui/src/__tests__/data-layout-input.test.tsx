@@ -224,8 +224,9 @@ it("keeps the latest failed draft when an earlier input request succeeds", async
   await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.query).toBe("Par"));
   fireEvent.change(input, { target: { value: "Paris" } });
   fireEvent.blur(input);
-  await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "Paris" })));
+  expect(input.value).toBe("Paris");
   await act(async () => { releaseFirst(); await first; });
+  await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "Paris" })));
   await act(async () => { releaseSecond(); await second; });
   await screen.findByText("전송 실패");
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });

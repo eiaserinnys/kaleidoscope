@@ -17,6 +17,12 @@ export function isWindowVisible(snapshot: ShellSnapshot | null | undefined, wind
     && snapshot.device.active_desktop_ids[desktop.workspace_id] === desktop.id;
 }
 
+export function isWindowTop(snapshot: ShellSnapshot | null | undefined, windowId: string): boolean {
+  if (!snapshot || !isWindowVisible(snapshot, windowId)) return false;
+  const current = snapshot.shared.windows.find((item) => item.id === windowId);
+  return !!current && !snapshot.shared.windows.some((item) => item.desktop_id === current.desktop_id && !item.minimized && item.z > current.z);
+}
+
 export function useWindowVisible(context: WindowStateTarget): boolean {
   return useShellSelector(context.store, (snapshot) => isWindowVisible(snapshot, context.window.id));
 }
