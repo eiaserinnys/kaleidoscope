@@ -8,6 +8,7 @@ vi.mock("../data/window-data", () => ({
   useBinding: (_pointer: string, value: unknown) => ({ status: "ready", value }),
 }));
 vi.mock("../share/visible", () => ({ useShareDescriber: () => {} }));
+vi.mock("../data/window-state", () => ({ useWindowVisible: () => true }));
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); runtime.act.mockClear(); });
 
@@ -16,6 +17,7 @@ const block = {
   tracks: [{ id: "track", label: "가사", items: [{ id: "line", label: "첫 줄", start: 1, end: 3, movable: true, resizable: true }] }],
   on_edit: { client: "edit" }, on_select: { client: "select" }, on_seek: { client: "seek" },
 };
+const context = { store: {} as never, window: { id: "window-1", app_id: "app", app_version: 1, desktop_id: "desktop" }, definition: {} as never };
 
 it("드래그 중 재렌더 뒤에도 프레임 단위 미리보기를 전달한다", () => {
   let next = 0;
@@ -25,7 +27,7 @@ it("드래그 중 재렌더 뒤에도 프레임 단위 미리보기를 전달한
   vi.stubGlobal("PointerEvent", MouseEvent);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ left: 0, width: 100 } as DOMRect);
   Object.defineProperty(HTMLElement.prototype, "setPointerCapture", { configurable: true, value: () => {} });
-  render(<TimelineBlock block={block} pointer="/ui" />);
+  render(<TimelineBlock block={block} pointer="/ui" context={context} />);
   const item = screen.getByText("첫 줄").parentElement!;
   fireEvent.pointerDown(item, { clientX: 10 });
   fireEvent.pointerMove(item, { clientX: 20 });
@@ -34,7 +36,7 @@ it("드래그 중 재렌더 뒤에도 프레임 단위 미리보기를 전달한
 });
 
 it("시간축과 구간을 키보드로 탐색하고 편집한다", () => {
-  render(<TimelineBlock block={block} pointer="/ui" />);
+  render(<TimelineBlock block={block} pointer="/ui" context={context} />);
   fireEvent.keyDown(screen.getByRole("slider", { name: "재생 위치" }), { key: "ArrowRight" });
   expect(runtime.act).toHaveBeenCalledWith("/ui/on_seek", expect.any(Number));
   const item = screen.getByText("첫 줄").parentElement!;
@@ -44,8 +46,8 @@ it("시간축과 구간을 키보드로 탐색하고 편집한다", () => {
 });
 
 it("오른쪽 끝에 있는 눈금만 끝 맞춤한다", () => {
-  const view = render(<TimelineBlock block={{ ...block, duration: 14.02 }} pointer="/ui" />);
+  const view = render(<TimelineBlock block={{ ...block, duration: 14.02 }} pointer="/ui" context={context} />);
   expect(screen.getByText("00:10.0").className).not.toContain("is-end");
-  view.rerender(<TimelineBlock block={{ ...block, duration: 10 }} pointer="/ui" />);
+  view.rerender(<TimelineBlock block={{ ...block, duration: 10 }} pointer="/ui" context={context} />);
   expect(screen.getByText("00:10.0").className).toContain("is-end");
 });
