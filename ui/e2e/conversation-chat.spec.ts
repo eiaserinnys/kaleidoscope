@@ -37,7 +37,7 @@ test("모델을 골라 시작", async ({ page }) => {
   await capture(page, "start");
   await chat.getByRole("button", { name: "모델" }).click();
   const menu = page.getByRole("menu");
-  await expect(menu.getByText("eiaserinnys")).toBeVisible();
+  await expect(chat.getByRole("button", { name: "실행 위치" })).toContainText("eiaserinnys");
   const blockedModel = menu.getByRole("menuitem", { name: /한도 거부 중/ });
   await expect(blockedModel).toBeDisabled();
   await expect(blockedModel).toContainText("풀림");
@@ -52,7 +52,7 @@ test("프로필과 다른 노드 모델 변경은 확인하고 답변 중에는 
   const chat = await open(page, "ready");
   await expect(chat.getByText("기존 기록")).toBeVisible();
   await chat.getByRole("button", { name: "프로필" }).click();
-  await chat.getByRole("menuitem", { name: "키키" }).click();
+  await page.getByRole("menuitem", { name: "키키" }).click();
   await expect(chat.getByRole("dialog")).toContainText("키키(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.");
   await capture(page, "profile-switch-confirm");
   await chat.getByRole("button", { name: "바꾸기" }).click();

@@ -673,6 +673,10 @@
 .ks-agent-chat-input {
   display: block;
   flex: 1 1 auto;
+  field-sizing: content;
+  height: auto;
+  max-height: calc(8lh + 2 * var(--ks-space-1) + 2 * var(--ks-line-width));
+  overflow-y: auto;
   font-family: inherit;
   padding: var(--ks-space-1) var(--ks-space-2);
   resize: none;

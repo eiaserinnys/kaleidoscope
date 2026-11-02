@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
+import { useRef, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
 import { AGENT_ATTACHMENTS_MAX, AGENT_ATTACHMENT_MAX_BYTES, AGENT_ATTACHMENTS_TOTAL_MAX_BYTES } from "../contract/limits";
 import { Square as SquareIcon } from "lucide-react";
 import { ArrowUp, ICON_SIZE, Paperclip, ScreenShare } from "../components/icons";
@@ -22,28 +22,6 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
   onError: (message: string | null) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
-
-  useLayoutEffect(() => {
-    const input = inputRef.current;
-    if (!input) return;
-    const style = getComputedStyle(input);
-    const lineHeight = Number.parseFloat(style.lineHeight);
-    const verticalPadding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
-    const border = Number.parseFloat(style.borderTopWidth) + Number.parseFloat(style.borderBottomWidth);
-    if (!Number.isFinite(lineHeight) || !Number.isFinite(verticalPadding + border)) {
-      input.style.height = "";
-      input.style.maxHeight = "";
-      input.style.overflowY = "hidden";
-      return;
-    }
-    const maxHeight = lineHeight * 8 + verticalPadding + border;
-    input.style.height = "auto";
-    const contentHeight = input.scrollHeight + border;
-    input.style.maxHeight = `${maxHeight}px`;
-    input.style.height = `${Math.min(contentHeight, maxHeight)}px`;
-    input.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
-  }, [draft]);
-
   const addAttachments = (newAttachments: DraftAttachment[]) => {
     onError(null);
     const accepted = [...attachments];
