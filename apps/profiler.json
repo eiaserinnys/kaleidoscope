@@ -197,6 +197,7 @@
                   "type": "stack",
                   "direction": "column",
                   "gap": "medium",
+                  "fill": 0,
                   "children": [
                     {
                       "type": "table",
