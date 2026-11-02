@@ -12,6 +12,20 @@ const textAnchor = (element: Element) => {
 };
 
 describe("리비전에서 커멘트 다시 찾기", () => {
+  it("짧은 인용 앞이나 뒤 한쪽 문맥만 바뀌면 유일한 인용을 옮겨 찾는다", () => {
+    const original = parse("<p>원래 앞 문맥 자동으로 뒤 문맥과 다음 문장</p>");
+    const p = original.querySelector("p")!;
+    const range = original.createRange();
+    const start = p.firstChild!.textContent!.indexOf("자동으로");
+    range.setStart(p.firstChild!, start); range.setEnd(p.firstChild!, start + "자동으로".length);
+    const anchor = createAnchor(p, range);
+    const inserted = parse("<p>원래 앞 문맥 새 낱말 자동으로 뒤 문맥과 다음 문장</p>");
+    const afterChanged = parse("<p>원래 앞 문맥 자동으로 뒤 문장이 교체됨</p>");
+    const bothChanged = parse("<p>전혀 다른 앞 자동으로 전혀 다른 뒤</p>");
+    expect(resolveAnchor(inserted, anchor).status).toBe("moved");
+    expect(resolveAnchor(afterChanged, anchor).status).toBe("moved");
+    expect(resolveAnchor(bothChanged, anchor).status).toBe("orphan");
+  });
   it("작업본에서 순서를 바꿔 B에 단 앵커는 원래 문서의 A에 붙지 않는다", () => {
     const original = parse("<main><p>첫 번째 문단 A입니다</p><p>두 번째 문단 B입니다</p></main>");
     const draft = parse("<main><p>첫 번째 문단 A입니다</p><p>두 번째 문단 B입니다</p></main>");

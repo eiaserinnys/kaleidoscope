@@ -81,16 +81,25 @@ export function hexColor(value: string): string | null {
   return `#${numbers.slice(0, 3).map((item) => Math.max(0, Math.min(255, Number(item))).toString(16).padStart(2, "0")).join("")}`;
 }
 
-type ColorProps = { label: string; prop: string; value: string; span?: string; readOnly?: string; focus: (prop: string) => void; commit: (prop: string, value: string) => void };
-export function ColorField({ label, prop, value, span = "", readOnly, focus, commit }: ColorProps) {
+type ColorProps = { label: string; prop: string; value: string; span?: string; readOnly?: string; focus: (prop: string) => void; preview: (prop: string, value: string) => void; commit: (prop: string, value: string) => void };
+export function ColorField({ label, prop, value, span = "", readOnly, focus, preview, commit }: ColorProps) {
   const textId = useId();
   const color = hexColor(value); const [draft, setDraft] = useState(color ?? "없음"); const [invalid, setInvalid] = useState(false);
   const cancelled = useRef(false); const initial = useRef(draft);
+  const swatch = useRef<HTMLInputElement>(null);
   useEffect(() => { const next = color ?? "없음"; setDraft(next); initial.current = next; }, [color]);
+  useEffect(() => { if (swatch.current) swatch.current.value = color ?? "#000000"; }, [color]);
+  useEffect(() => {
+    const input = swatch.current;
+    if (!input) return;
+    const change = () => { setDraft(input.value); commit(prop, input.value); };
+    input.addEventListener("change", change);
+    return () => input.removeEventListener("change", change);
+  }, [commit, prop]);
   const apply = (text: string) => {
     const next = text.trim() === "없음" ? "transparent" : text.trim();
     if (typeof CSS !== "undefined" && typeof CSS.supports === "function" && !CSS.supports(prop, next)) { setInvalid(true); setDraft(color ?? "없음"); return; }
     setInvalid(false); initial.current = text; commit(prop, next);
   };
-  return <label className={`ks-html-prop ${span}`} data-color={prop} htmlFor={textId}>{label ? <span className="ks-html-prop-label">{label}</span> : null}<input aria-label={`${label || "글자 색"} 선택`} className={`ks-html-swatch${!color || readOnly ? " is-empty" : ""}`} type="color" value={color ?? "#000000"} disabled={Boolean(readOnly)} onFocus={() => focus(prop)} onChange={(event) => { setDraft(event.target.value); commit(prop, event.target.value); }} /><input id={textId} aria-label={label || "글자 색"} aria-invalid={invalid || undefined} readOnly={Boolean(readOnly)} value={readOnly ?? draft} onFocus={() => { cancelled.current = false; initial.current = draft; focus(prop); }} onChange={(event) => setDraft(event.target.value)} onBlur={() => { if (!readOnly && !cancelled.current && draft !== initial.current) apply(draft); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); if (draft !== initial.current) apply(draft); event.currentTarget.blur(); } else if (event.key === "Escape") { event.stopPropagation(); cancelled.current = true; setDraft(color ?? "없음"); setInvalid(false); event.currentTarget.blur(); } }} /></label>;
+  return <label className={`ks-html-prop ${span}`} data-color={prop} htmlFor={textId}>{label ? <span className="ks-html-prop-label">{label}</span> : null}<input ref={swatch} aria-label={`${label || "글자 색"} 선택`} className={`ks-html-swatch${!color || readOnly ? " is-empty" : ""}`} type="color" defaultValue={color ?? "#000000"} disabled={Boolean(readOnly)} onFocus={() => focus(prop)} onInput={(event) => { const next = event.currentTarget.value; setDraft(next); preview(prop, next); }} /><input id={textId} aria-label={label || "글자 색"} aria-invalid={invalid || undefined} readOnly={Boolean(readOnly)} value={readOnly ?? draft} onFocus={() => { cancelled.current = false; initial.current = draft; focus(prop); }} onChange={(event) => setDraft(event.target.value)} onBlur={() => { if (!readOnly && !cancelled.current && draft !== initial.current) apply(draft); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); if (draft !== initial.current) apply(draft); event.currentTarget.blur(); } else if (event.key === "Escape") { event.stopPropagation(); cancelled.current = true; setDraft(color ?? "없음"); setInvalid(false); event.currentTarget.blur(); } }} /></label>;
 }

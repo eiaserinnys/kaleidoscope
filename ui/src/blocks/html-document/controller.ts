@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Block, DocumentRef } from "../../contract/contract";
+import type { Block, CoreError, DocumentRef } from "../../contract/contract";
 import type { JsonValue } from "../../contract/serde_json/JsonValue";
 import { useShellSelector } from "../../core/shell-store";
 import { toCoreError } from "../../core/core-transport";
@@ -13,6 +13,7 @@ import { anchorRevision, anchorRevisionFor, listRevisions, type Comment, type Th
 
 type HtmlBlock = Extract<Block, { type: "html_view" }> & { document: DocumentRef };
 type PendingRevision = { name: string; rev: number; change: Extract<ThreadChange, { kind: "revision" }> };
+type DisplayError = { value: CoreError; source: "state" | "list" | "thread" | "load" | "write" | "save" | "send" };
 export type HtmlFace = "comments" | "props" | null;
 const nOf = (element: Element | null) => element ? Number(element.getAttribute("data-ks-n")) || null : null;
 const makeId = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
@@ -29,14 +30,11 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const [source, setSource] = useState("");
   const [selection, setSelection] = useState<FrameSelection | null>(null);
   const [results, setResults] = useState<Record<string, AnchorStatus>>({});
-  const [text, setText] = useState(""); const [error, setError] = useState<string | null>(null);
-  const [threadError, setThreadError] = useState<string | null>(null);
-  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [text, setText] = useState(""); const [failure, setFailure] = useState<DisplayError | null>(null);
   const [loaded, setLoaded] = useState(false); const [saving, setSaving] = useState(false);
   const [savingRevision, setSavingRevision] = useState(false);
   const [pendingRevision, setPendingRevision] = useState<PendingRevision | null>(null);
   const [sending, setSending] = useState(false);
-  const [saveFailed, setSaveFailed] = useState(false);
   const [sentReviews, setSentReviews] = useState<Record<string, Record<string, string>>>({});
   const [mode, setMode] = useState<"select" | "view">("select");
   const [narrow, setNarrow] = useState(false);
@@ -89,21 +87,21 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     const changes: Record<string, JsonValue> = {};
     if (block.on_select_doc) changes[block.on_select_doc.set_state] = name;
     if (block.on_select_revision) changes[block.on_select_revision.set_state] = rev;
-    if (Object.keys(changes).length) void patchWindowState(context, changes).catch((reason) => setError(toCoreError(reason).message));
+    if (Object.keys(changes).length) void patchWindowState(context, changes).catch((reason) => setFailure({ value: toCoreError(reason), source: "state" }));
   }, [block.on_select_doc, block.on_select_revision, context.store, windowId]);
   const refreshList = useCallback(async () => {
     try {
       const reply = await store.call({ op: "storage.list", window_id: windowId, entry });
-      if (reply.op === "storage.list") { setDocs(listRevisions(reply.result.items.map((item) => item.doc))); if (!pendingRevisionRef.current) setError(null); }
-    } catch (reason) { setError(toCoreError(reason).message); }
+      if (reply.op === "storage.list") { setDocs(listRevisions(reply.result.items.map((item) => item.doc))); setFailure((previous) => previous?.source === "list" ? null : previous); }
+    } catch (reason) { setFailure({ value: toCoreError(reason), source: "list" }); }
     finally { setLoaded(true); }
   }, [entry, store, windowId]);
   const refreshThread = useCallback(async (name: string) => {
     try {
       const result = await readThread(store, windowId, entry, name);
-      if (activeRef.current?.name === name) { setThread(result.thread); setThreadError(null); }
+      if (activeRef.current?.name === name) { setThread(result.thread); setFailure((previous) => previous?.source === "thread" || previous?.source === "write" ? null : previous); }
     } catch (reason) {
-      if (activeRef.current?.name === name) setThreadError(toCoreError(reason).message);
+      if (activeRef.current?.name === name) setFailure({ value: toCoreError(reason), source: "thread" });
     }
   }, [entry, store, windowId]);
   useEffect(() => { if (visible) { void refreshList(); if (activeRef.current) void refreshThread(activeRef.current.name); } }, [visible, refreshList, refreshThread]);
@@ -117,11 +115,13 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   }), [entry, refreshList, refreshThread, store, visible, windowId]);
   useEffect(() => {
     if (lockedRef.current) return;
-    if (!docs.length) { setActive(null); return; }
-    const preferred = docs.find((item) => item.name === docState) ?? docs[0];
+    if (!docs.length) { if (!dirtyRef.current) setActive(null); return; }
+    const current = activeRef.current;
+    const preferred = docs.find((item) => item.name === docState) ?? docs.find((item) => item.name === current?.name) ?? docs[0];
     const newest = preferred.revisions.at(-1)!;
     const previous = latestRef.current;
-    const current = activeRef.current;
+    if (current && current.name !== preferred.name && dirtyRef.current) { setPendingChange({ name: preferred.name, rev: newest }); return; }
+    if (!docState) patchState(preferred.name, typeof revState === "number" ? revState : null);
     if (current && previous?.name === current.name && current.name === preferred.name && current.rev === previous.rev && newest > previous.rev && !dirtyRef.current && block.on_select_revision && revState != null) {
       patchState(preferred.name, null);
     }
@@ -136,7 +136,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   }, [docs, docState, revState, block.on_select_revision, patchState, locked]);
   useEffect(() => {
     const item = active; const sequence = ++readSequence.current;
-    setSelection(null); setActiveComment(null); setResults({}); setText(""); setUndo([]); setRedo([]); selectors.current.clear(); work.current = null; setSource(""); setSaveFailed(false);
+    setSelection(null); setActiveComment(null); setResults({}); setText(""); setUndo([]); setRedo([]); selectors.current.clear(); work.current = null; setSource(""); setFailure(null);
     if (!item) return;
     void refreshThread(item.name);
     const path = `${item.name}/r${item.rev}.html`;
@@ -150,8 +150,8 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
         }
         if (sequence !== readSequence.current) return;
         const doc = new DOMParser().parseFromString(html, "text/html"); numberElements(doc); work.current = doc;
-        setSource(htmlViewSource(doc.documentElement.outerHTML)); setError(null);
-      } catch (reason) { if (sequence === readSequence.current) setError(toCoreError(reason).message); }
+        setSource(htmlViewSource(doc.documentElement.outerHTML)); setFailure((previous) => previous?.source === "load" ? null : previous);
+      } catch (reason) { if (sequence === readSequence.current) setFailure({ value: toCoreError(reason), source: "load" }); }
     };
     void load(); return () => { readSequence.current++; };
   }, [active?.name, active?.rev, entry, refreshThread, store, windowId]);
@@ -174,9 +174,10 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
         const remaining = { ...previous[current.name] }; delete remaining[change.id];
         return { ...previous, [current.name]: remaining };
       });
-      setError(null); return true;
+      if (change.kind === "status" && change.status === "resolved") requestAnimationFrame(() => root.current?.focus());
+      setFailure(null); return true;
     }
-    catch (reason) { setError(toCoreError(reason).message); return false; }
+    catch (reason) { setFailure({ value: toCoreError(reason), source: "write" }); return false; }
     finally { setSaving(false); }
   }, [entry, store, windowId]);
   const flushEdits = useCallback(() => {
@@ -203,12 +204,14 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     dirtyRef.current = true;
     setUndo((previous) => [...previous, group]);
     setRedo([]);
-  }, [sendEdit]);
+    requestAnimationFrame(() => { flushEdits(); send({ type: "ks-html-refresh-selection" }); });
+  }, [flushEdits, send, sendEdit]);
   const undoEdit = useCallback(() => {
     const group = undoRef.current.at(-1); if (lockedRef.current || !group || !work.current) return;
     for (const edit of [...group].reverse()) { const inverse = invertEdit(edit); applyEdit(work.current, inverse); sendEdit(inverse); }
     flushEdits(); send({ type: "ks-html-refresh-selection" });
     dirtyRef.current = undoRef.current.length > 1;
+    if (!dirtyRef.current) setFailure((previous) => previous?.source === "save" ? null : previous);
     setUndo((items) => items.slice(0, -1)); setRedo((items) => [...items, group]);
   }, [flushEdits, send, sendEdit]);
   const redoEdit = useCallback(() => {
@@ -236,15 +239,13 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     group.push({ kind: "style", n: selection.n, prop, before, after: value });
     record(group);
     setSelection((current) => current ? { ...current, styles: { ...current.styles, ...Object.fromEntries(group.map((item) => item.kind === "style" ? [item.prop, item.after] : ["", ""])) } } : null);
-    requestAnimationFrame(() => { flushEdits(); send({ type: "ks-html-refresh-selection" }); });
-  }, [flushEdits, record, selection, send]);
+  }, [record, selection]);
   const editText = useCallback((value: string) => {
     const target = selection && work.current ? findNumber(work.current, selection.n) : null;
     if (lockedRef.current || !selection || !target || target.children.length || target.textContent === value) return;
     record({ kind: "text", n: selection.n, before: target.textContent ?? "", after: value });
     setSelection((current) => current ? { ...current, text: value } : null);
-    send({ type: "ks-html-refresh-selection" });
-  }, [record, selection, send]);
+  }, [record, selection]);
   const keyAction = useCallback((data: Extract<FrameToParent, { type: "ks-html-key" }>) => {
     if (lockedRef.current) return;
     if (data.ctrl && data.key.toLowerCase() === "z") { data.shift ? redoEdit() : undoEdit(); return; }
@@ -252,6 +253,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     if (data.key === "Escape") { send({ type: "ks-html-select-number", n: null }); return; }
     const doc = work.current; const target = selection && doc ? findNumber(doc, selection.n) : null;
     if (!doc || !target || !selection) return;
+    if (target === doc.body && ((data.key === "Enter" && data.shift) || data.key === "Tab" || data.key === "Delete" || data.key === "Backspace" || data.alt || data.ctrl)) return;
     let next: Element | null = null;
     if (data.key === "Enter") next = data.shift ? target.parentElement : target.firstElementChild;
     else if (data.key === "Tab") next = data.shift ? target.previousElementSibling : target.nextElementSibling;
@@ -260,6 +262,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     if (data.key === "Delete" || data.key === "Backspace") {
       record({ kind: "remove", n: selection.n, parent: parentN, next: nOf(target.nextElementSibling), html: target.outerHTML });
       send({ type: "ks-html-select-number", n: null });
+      frame.current?.focus();
     } else if (data.ctrl && data.key.toLowerCase() === "d") {
       const copy = target.cloneNode(true) as Element;
       let max = Math.max(...[...doc.querySelectorAll("[data-ks-n]")].map((el) => Number(el.getAttribute("data-ks-n"))));
@@ -275,7 +278,11 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const openComment = useCallback((id: string) => {
     setActiveComment(id); setFace("comments");
     send({ type: "ks-html-focus-comment", id });
-    requestAnimationFrame(() => [...(root.current?.querySelectorAll<HTMLElement>(".ks-html-comment") ?? [])].find((item) => item.id === `ks-html-comment-${id}`)?.scrollIntoView({ block: "nearest" }));
+    requestAnimationFrame(() => {
+      const card = [...(root.current?.querySelectorAll<HTMLElement>(".ks-html-comment") ?? [])].find((item) => item.id === `ks-html-comment-${id}`);
+      card?.scrollIntoView({ block: "nearest" });
+      card?.querySelector<HTMLButtonElement>(".ks-html-comment-target")?.focus();
+    });
   }, [send, setFace]);
   useEffect(() => {
     const receive = (event: MessageEvent<FrameToParent>) => {
@@ -316,7 +323,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const saveRevision = useCallback(async () => {
     const current = activeRef.current;
     const doc = work.current;
-    if (savingRevisionRef.current || !current || !doc || !latest) return;
+    if (savingRevisionRef.current || !current || !doc || !latest || (!undoRef.current.length && !pendingRevisionRef.current)) return;
     savingRevisionRef.current = true;
     lockedRef.current = true;
     setSavingRevision(true);
@@ -345,14 +352,10 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
       patchState(pending.name, pending.rev);
       await refreshList();
       await refreshThread(pending.name);
-      setError(null);
-      setErrorCode(null);
-      setSaveFailed(false);
+      setFailure(null);
     } catch (reason) {
       const failure = toCoreError(reason);
-      setError(failure.message);
-      setErrorCode(failure.code);
-      setSaveFailed(true);
+      setFailure({ value: failure, source: "save" });
     } finally {
       savingRevisionRef.current = false;
       lockedRef.current = pendingRevisionRef.current !== null;
@@ -387,10 +390,10 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     try {
       await store.call({ op: "conversation.send", window_id: agentWindow, request_id: crypto.randomUUID(), text: share(false), attachments: [] });
       setSentReviews((previous) => ({ ...previous, [name]: { ...previous[name], ...sent } }));
-      setError(null);
+      setFailure((previous) => previous?.source === "send" ? null : previous);
     }
-    catch (reason) { setError(toCoreError(reason).message); }
+    catch (reason) { setFailure({ value: toCoreError(reason), source: "send" }); }
     finally { setSending(false); }
   }, [active, agentWindow, hasUnsentReview, reviewComments, sending, share, store]);
-  return { active, docs, latest, thread, comments, selection, results, source, error: threadError ?? error, errorCode, saveFailed, loaded, saving: saving || savingRevision, locked, sending, sentReview, hasUnsentReview, reviewComments, mode, setMode, face, setFace, narrow, activeComment, setActiveComment, openComment, propertyGroups, setPropertyGroups, frame, root, dirty, undo, redo, edits, pendingChange, setPendingChange, choose, confirmChange, keyAction, record, previewStyle, editStyle, editText, undoEdit, redoEdit, addComment, writeChange, saveRevision, send, share, sendAgent, agentWindow };
+  return { active, docs, latest, thread, comments, selection, results, source, error: failure?.value ?? null, saveFailed: failure?.source === "save", loaded, saving: saving || savingRevision, locked, sending, sentReview, hasUnsentReview, reviewComments, mode, setMode, face, setFace, narrow, activeComment, setActiveComment, openComment, propertyGroups, setPropertyGroups, frame, root, dirty, undo, redo, edits, pendingChange, setPendingChange, choose, confirmChange, keyAction, record, previewStyle, editStyle, editText, undoEdit, redoEdit, addComment, writeChange, saveRevision, send, share, sendAgent, agentWindow };
 }

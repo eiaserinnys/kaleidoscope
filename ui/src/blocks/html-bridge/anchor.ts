@@ -83,7 +83,9 @@ export function resolveAnchor(doc: Document, anchor: HtmlAnchor, sameRevision = 
     const best = fullMatches.length === 1 ? fullMatches[0] : ranked[0];
     if (best.errors && 1 - best.errors / quote.exact.length < 0.8) return orphan();
     const fullContext = text.slice(Math.max(0, best.start - quote.prefix.length), best.start) === quote.prefix && text.slice(best.end, best.end + quote.suffix.length) === quote.suffix;
-    if (quote.exact.length < 12 && !fullContext) return orphan();
+    const prefixMatch = Boolean(quote.prefix) && text.slice(Math.max(0, best.start - quote.prefix.length), best.start) === quote.prefix;
+    const suffixMatch = Boolean(quote.suffix) && text.slice(best.end, best.end + quote.suffix.length) === quote.suffix;
+    if (quote.exact.length < 12 && !fullContext && !(matches.length === 1 && best.errors === 0 && (prefixMatch || suffixMatch))) return orphan();
     const range = makeRange(doc, best.start, best.end);
     if (!range) return orphan();
     const node = range.commonAncestorContainer;

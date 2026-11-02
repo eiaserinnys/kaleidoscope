@@ -40,7 +40,7 @@
 .ks-html-crumb { flex: 0 1 auto; min-width: 0; overflow: hidden; border: 0; border-radius: var(--ks-radius-small); padding: 0; background: transparent; color: inherit; cursor: pointer; font-size: inherit; line-height: inherit; text-overflow: ellipsis; white-space: nowrap; }
 .ks-html-crumb:hover { color: var(--ks-color-text); }
 .ks-html-target-name { grid-column: 1; min-width: 0; overflow: hidden; font-size: var(--ks-type-title); font-weight: 600; line-height: var(--ks-line-body); text-overflow: ellipsis; white-space: nowrap; }
-.ks-html-target-name.is-quote { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: var(--ks-type-body); font-weight: 400; overflow-wrap: anywhere; white-space: normal; }
+.ks-html-target-name.is-quote { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: var(--ks-type-body); font-weight: 400; white-space: normal; }
 .ks-html-compose { display: flex; min-width: 0; align-items: flex-end; gap: var(--ks-space-2); }
 .ks-html-compose > .ks-icon-button { margin-block-end: calc((var(--ks-control-height) - var(--ks-icon-button-size)) / 2); }
 
@@ -60,12 +60,12 @@
 .ks-html-comment-target { flex: 1 1 auto; min-width: 0; overflow: hidden; border: 0; border-radius: var(--ks-radius-small); padding: 0; background: transparent; color: var(--ks-color-muted); cursor: inherit; font-size: var(--ks-type-meta); line-height: var(--ks-line-body); text-align: start; text-overflow: ellipsis; white-space: nowrap; }
 .ks-html-comment-head > .ks-badge.is-accent { background: var(--ks-color-selection); color: var(--ks-color-accent); }
 .ks-html-comment-tools { display: flex; flex: 0 0 auto; gap: var(--ks-space-1); margin-block: calc((var(--ks-space-5) - var(--ks-icon-button-size)) / 2); }
-.ks-html-comment-text { grid-column: 2; min-width: 0; margin: 0; font-size: var(--ks-type-body); line-height: var(--ks-line-body); overflow-wrap: anywhere; }
+.ks-html-comment-text { grid-column: 2; min-width: 0; margin: 0; font-size: var(--ks-type-body); line-height: var(--ks-line-body); }
 .ks-html-comment:not(.is-active) .ks-html-comment-text { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .ks-html-comment-last { grid-column: 2; min-width: 0; overflow: hidden; color: var(--ks-color-muted); font-size: var(--ks-type-meta); line-height: var(--ks-line-body); text-overflow: ellipsis; white-space: nowrap; }
 .ks-html-reply { display: flex; grid-column: 2; flex-direction: column; min-width: 0; margin-block-start: var(--ks-space-1); }
 .ks-html-reply-role { color: var(--ks-color-muted); font-size: var(--ks-type-meta); line-height: var(--ks-line-body); }
-.ks-html-reply p { margin: 0; font-size: var(--ks-type-body); line-height: var(--ks-line-body); overflow-wrap: anywhere; }
+.ks-html-reply p { margin: 0; font-size: var(--ks-type-body); line-height: var(--ks-line-body); }
 .ks-html-comment > .ks-html-compose, .ks-html-comment > .ks-button { grid-column: 1 / -1; margin-block-start: var(--ks-space-1); }
 .ks-html-comment.is-resolved .ks-html-comment-text { color: var(--ks-color-muted); }
 
@@ -80,6 +80,7 @@
 .ks-html-fields > .is-6 { grid-column: span 6; }
 .ks-html-prop { display: flex; min-width: 0; height: var(--ks-control-height); align-items: center; gap: var(--ks-space-1); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface); color: var(--ks-color-text); padding-inline: var(--ks-space-2); }
 .ks-html-prop:focus-within { border-color: var(--ks-color-focus); outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: var(--ks-focus-offset); }
+.ks-html-prop:has([aria-invalid="true"]) { border-color: var(--ks-color-danger); }
 .ks-html-prop-label { flex: 0 0 auto; color: var(--ks-color-muted); font-size: var(--ks-type-meta); line-height: var(--ks-line-body); white-space: nowrap; }
 .ks-html-prop.is-number .ks-html-prop-label { cursor: ew-resize; touch-action: none; }
 .ks-html-prop input:not([type="color"]) { flex: 1 1 0; width: 0; min-width: 0; border: 0; outline: 0; padding: 0; background: transparent; color: inherit; font-family: inherit; font-size: var(--ks-type-body); font-variant-numeric: tabular-nums; line-height: var(--ks-line-body); text-align: end; }
@@ -96,7 +97,7 @@
 .ks-html-swatch-chip[aria-pressed="true"] { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: var(--ks-line-width); }
 .ks-html-align { display: flex; width: 100%; }
 .ks-html-align > .ks-button { flex: 1 1 0; width: auto; min-width: 0; }
-.ks-html-text { display: block; width: 100%; height: auto; field-sizing: content; max-height: calc(4lh + 2 * var(--ks-space-1) + 2 * var(--ks-line-width)); overflow-y: auto; overflow-wrap: anywhere; font-family: inherit; padding: var(--ks-space-1) var(--ks-space-2); resize: none; }
+.ks-html-text { display: block; width: 100%; height: auto; field-sizing: content; max-height: calc(4lh + 2 * var(--ks-space-1) + 2 * var(--ks-line-width)); overflow-y: auto; font-family: inherit; padding: var(--ks-space-1) var(--ks-space-2); resize: none; }
 
 /* 간격: DevTools 상자. 바깥이 점선, 안쪽이 실선, 숫자는 끌거나 고친다. */
 .ks-html-box, .ks-html-box-inner { display: grid; grid-template-columns: var(--ks-control-height) minmax(0, 1fr) var(--ks-control-height); align-items: center; justify-items: center; border-radius: var(--ks-radius-small); }
@@ -105,6 +106,7 @@
 .ks-html-box-core { grid-area: 2 / 2; width: 100%; color: var(--ks-color-muted); font-size: var(--ks-type-meta); font-variant-numeric: tabular-nums; line-height: var(--ks-line-body); text-align: center; white-space: nowrap; }
 .ks-html-box input { width: var(--ks-control-height); height: var(--ks-icon-button-size); border: 0; border-radius: var(--ks-radius-small); outline-offset: calc(-1 * var(--ks-focus-width)); padding: 0; background: transparent; color: var(--ks-color-text); cursor: ew-resize; font-family: inherit; font-size: var(--ks-type-body); font-variant-numeric: tabular-nums; line-height: var(--ks-line-body); text-align: center; }
 .ks-html-box input:focus { background: var(--ks-color-surface); cursor: text; }
+.ks-html-box input[aria-invalid="true"] { border: var(--ks-line-width) solid var(--ks-color-danger); }
 .ks-html-box input.is-top { grid-area: 1 / 2; }
 .ks-html-box input.is-left { grid-area: 2 / 1; }
 .ks-html-box input.is-right { grid-area: 2 / 3; }

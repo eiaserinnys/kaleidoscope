@@ -1,4 +1,4 @@
-import { useCallback, type KeyboardEvent } from "react";
+import { useCallback, type KeyboardEvent, type PointerEvent } from "react";
 import type { Block, DocumentRef } from "../../contract/contract";
 import { Dialog } from "../../components/dialog";
 import { FileCode } from "../../components/icons";
@@ -25,10 +25,15 @@ export function HtmlDocumentViewBlock({ block, context }: { block: HtmlBlock; co
     if (event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? model.redoEdit() : model.undoEdit(); }
     else if (event.key.toLowerCase() === "y") { event.preventDefault(); model.redoEdit(); }
   };
-  return <section className="ks-html-view" ref={model.root} onKeyDown={keyboard}>
-    {!model.loaded ? <div className="ks-html-state"><StatusText>불러오는 중</StatusText></div> : !model.active ? <div className="ks-html-state">{model.error ? <Notice role="alert">{model.error}</Notice> : <EmptyState icon={<FileCode size="empty" />} text="문서가 없습니다" />}</div> : <>
+  const focusSurface = (event: PointerEvent<HTMLElement>) => {
+    const target = event.target;
+    if (!(target instanceof Element) || target.closest("button, input, textarea, select, a, [role='button'], [contenteditable]")) return;
+    if (target === event.currentTarget || target.closest(".ks-html-header, .ks-html-rail")) event.currentTarget.focus({ preventScroll: true });
+  };
+  return <section className="ks-html-view" ref={model.root} tabIndex={-1} onKeyDown={keyboard} onPointerDown={focusSurface}>
+    {!model.loaded ? <div className="ks-html-state"><StatusText>불러오는 중</StatusText></div> : !model.active ? <div className="ks-html-state">{model.error ? <Notice role="alert" errorId={model.error.id}>{model.error.message}</Notice> : <EmptyState icon={<FileCode size="empty" />} text="문서가 없습니다" />}</div> : <>
       <HtmlHeader model={model} />
-      {model.error ? <div className="ks-html-notice"><Notice role="alert" actions={model.saveFailed ? [<Button key="retry" onClick={() => void model.saveRevision()}>다시 시도</Button>] : undefined}>{model.error}{model.errorCode ? <> <StatusText>{model.errorCode}</StatusText></> : null}</Notice></div> : null}
+      {model.error ? <div className="ks-html-notice"><Notice role="alert" errorId={model.error.id} actions={model.saveFailed ? [<Button key="retry" onClick={() => void model.saveRevision()}>다시 시도</Button>] : undefined}>{model.error.message}</Notice></div> : null}
       <div className="ks-html-content">
         {model.source ? <iframe ref={model.frame} title="HTML 보기" sandbox="allow-scripts" srcDoc={model.source} /> : <StatusText>불러오는 중</StatusText>}
         {model.face ? <aside className="ks-html-rail" inert={model.locked}>{model.face === "comments" ? <CommentFace model={model} /> : <PropertyFace model={model} />}</aside> : null}

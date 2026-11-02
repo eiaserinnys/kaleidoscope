@@ -179,6 +179,15 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   await user.type(screen.getByRole("textbox", { name: "배경" }), "red{Enter}");
   const root = container.querySelector<HTMLElement>(".ks-html-view")!;
   await waitFor(() => expect(describeVisible(root).text).toContain("저장 안 한 수정 1건"));
+  await act(async () => {
+    files.set("가나다/r1.html", { content: "<h1>새 문서</h1>", revision: "other" });
+    base.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "bucket", item: { entry_id: "drafts", key: "drafts/가나다/r1.html", kind: "md", revision: "other", exists: true } } } });
+  });
+  await user.click(screen.getByRole("button", { name: "문서", exact: true }));
+  expect(await screen.findByRole("menuitem", { name: "가나다" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "문서", exact: true }).textContent).toContain("시안");
+  expect(describeVisible(root).text).toContain("저장 안 한 수정 1건");
+  await user.keyboard("{Escape}");
   expect(describeVisible(root).text).toContain("고른 요소: h1");
   expect(describeVisible(root).text).toContain("미해결 커멘트 1건");
   await user.click(screen.getByRole("button", { name: "숨기기" }));

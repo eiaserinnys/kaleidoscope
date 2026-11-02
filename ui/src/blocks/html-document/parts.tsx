@@ -15,7 +15,7 @@ export function Target({ selection, choose }: { selection: FrameSelection; choos
   const shown = path.length > 2 ? path.slice(-2) : path;
   return <div className="ks-html-target">
     <nav className="ks-html-crumbs" aria-label="부모 경로">
-      {ancestors.length > 2 ? <><button type="button" className="ks-html-crumb" aria-label="전체 경로" onClick={(event) => setAnchor(event.currentTarget)}>…</button><span aria-hidden="true">›</span></> : null}
+      {path.length > 2 ? <><button type="button" className="ks-html-crumb" aria-label="전체 경로" onClick={(event) => setAnchor(event.currentTarget)}>…</button><span aria-hidden="true">›</span></> : null}
       {shown.map((item) => <Fragment key={item.n}><button type="button" className="ks-html-crumb" onClick={() => choose(item.n)}>{item.label}</button><span aria-hidden="true">›</span></Fragment>)}
     </nav>
     <div className={`ks-html-target-name${quote ? " is-quote" : ""}`}>{quote ? `“${selection.anchor.quote?.exact ?? ""}”` : selection.name ?? selection.anchor.label}</div>

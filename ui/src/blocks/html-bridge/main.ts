@@ -122,8 +122,10 @@ function selectionOf(element: Element, range?: Range): FrameSelection | null {
     styles: Object.fromEntries(styleNames.map((name) => [name, computed.getPropertyValue(name)])) };
 }
 function select(element: Element | null, range?: Range) {
+  if (element === document.documentElement) element = document.body;
   selected = element; pending = range?.cloneRange() ?? null;
-  if (range) hover = null;
+  hover = null;
+  document.documentElement.toggleAttribute("data-ks-pending", Boolean(range));
   if (!range) getSelection()?.removeAllRanges();
   schedule();
   send({ type: "ks-html-select", selection: element ? selectionOf(element, range) : null });
@@ -141,9 +143,14 @@ function startEdit(element: Element | null) {
 }
 document.addEventListener("pointermove", (event) => {
   if (locked || mode !== "select" || editing) return;
-  const target = event.target; const next = target instanceof Element && target.hasAttribute("data-ks-n") ? target : null;
+  const target = event.target; const next = target === document.documentElement ? document.body : target instanceof Element && target.hasAttribute("data-ks-n") ? target : null;
   if (next !== hover) { hover = next; schedule(); }
 }, true);
+document.documentElement.addEventListener("pointerleave", () => { if (hover) { hover = null; schedule(); } });
+const isPinEvent = (event: Event) => {
+  const first = event.composedPath()[0];
+  return first === host || (first instanceof Element && first.classList.contains("ks-o-pin"));
+};
 document.addEventListener("pointerdown", (event) => { if (locked) { event.preventDefault(); event.stopPropagation(); } }, true);
 document.addEventListener("mousedown", (event) => {
   if (locked) { event.preventDefault(); event.stopPropagation(); return; }
@@ -152,8 +159,8 @@ document.addEventListener("mousedown", (event) => {
   const current = getSelection();
   if (current?.rangeCount && event.target instanceof Node && !current.getRangeAt(0).intersectsNode(event.target)) current.removeAllRanges();
 }, true);
-document.addEventListener("mouseup", () => {
-  if (locked || mode !== "select" || editing) return;
+document.addEventListener("mouseup", (event) => {
+  if (locked || mode !== "select" || editing || event.detail >= 2) return;
   const current = getSelection(); if (!current || current.isCollapsed || !current.toString().trim() || !current.rangeCount) return;
   const range = current.getRangeAt(0); const node = range.commonAncestorContainer;
   const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
@@ -161,6 +168,16 @@ document.addEventListener("mouseup", () => {
 }, true);
 document.addEventListener("click", (event) => {
   if (locked) { event.preventDefault(); event.stopPropagation(); return; }
+  if (isPinEvent(event)) return;
+  if (mode === "view" && event.target instanceof Element) {
+    const link = event.target.closest("a");
+    if (link) {
+      event.preventDefault();
+      const href = link.getAttribute("data-ks-href") ?? link.getAttribute("href") ?? "";
+      if (href.startsWith("#")) document.getElementById(href.slice(1))?.scrollIntoView();
+      return;
+    }
+  }
   if (mode === "readonly") { if (event.target instanceof Element && event.target.closest("a")) event.preventDefault(); return; }
   if (mode !== "select" || editing) return;
   event.preventDefault(); event.stopPropagation();
@@ -171,6 +188,7 @@ document.addEventListener("dblclick", (event) => { if (!locked && mode === "sele
 document.addEventListener("focusout", (event) => { if (editing && event.target === editing.element) finishEdit(false); }, true);
 document.addEventListener("keydown", (event) => {
   if (locked) { event.preventDefault(); event.stopPropagation(); return; }
+  if (isPinEvent(event)) return;
   if (editing) {
     if (event.key === "Escape") { event.preventDefault(); finishEdit(true); }
     else if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); finishEdit(false); }
@@ -193,7 +211,11 @@ window.addEventListener("message", (event: MessageEvent<ParentToFrame>) => {
     locked = data.locked;
     if (locked) { finishEdit(true); hover = null; schedule(); }
   }
-  else if (data.type === "ks-html-select-number") select(data.n === null ? null : findNumber(document, data.n));
+  else if (data.type === "ks-html-select-number") {
+    const element = data.n === null ? null : findNumber(document, data.n);
+    if (element) element.scrollIntoView({ block: "nearest" });
+    select(element);
+  }
   else if (data.type === "ks-html-comments") { comments = data.comments; anchorsDirty = true; schedule(); }
   else if (data.type === "ks-html-theme") { for (const [name, value] of Object.entries(data.tokens)) document.documentElement.style.setProperty(name, value); schedule(); }
   else if (data.type === "ks-html-edit") {

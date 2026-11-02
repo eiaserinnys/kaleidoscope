@@ -11,7 +11,9 @@
 .ks-dialog-body,
 .ks-properties dd,
 .ks-feed-body,
-.ks-html-comment p {
+.ks-html-comment p,
+.ks-html-target-name.is-quote,
+.ks-html-text {
   overflow-wrap: anywhere;
   word-break: keep-all;
 }

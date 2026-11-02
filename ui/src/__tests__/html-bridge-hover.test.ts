@@ -3,6 +3,7 @@ import { expect, it, vi } from "vitest";
 it("프레임 호버는 부모 상태를 바꾸지 않고 Tab은 선택한 요소가 있을 때만 처리한다", async () => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   vi.stubGlobal("MutationObserver", class { observe() {} disconnect() {} });
+  Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
   if (!globalThis.CSS) vi.stubGlobal("CSS", {});
   document.body.innerHTML = '<button data-ks-n="1">대상</button><p data-ks-n="2">다음</p>';
   const send = vi.spyOn(window.parent, "postMessage").mockImplementation(() => {});
