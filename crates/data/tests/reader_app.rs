@@ -139,6 +139,32 @@ fn reader_evaluates_nested_discussion_bindings() {
 }
 
 #[test]
+fn reader_empty_search_leaves_section_header_blank() {
+    let (definition, app) = reader();
+    let mut state = definition.state.clone();
+    state.insert("query".into(), json!("zzqqxxnoresultszz"));
+    let data = BTreeMap::from([("stories".into(), json!({"hits":[]}))]);
+    let empty = BTreeMap::new();
+    let statuses = BTreeMap::<String, SourceStatus>::new();
+    let values = app.evaluate_with_data_meta(
+        &state,
+        &data,
+        &empty,
+        &empty,
+        &empty,
+        &statuses,
+        None,
+    );
+
+    for pointer in ["/ui/children/1/children/1/title", "/ui/children/1/children/1/meta"] {
+        let BindingValue::Ready { value } = &values[pointer] else {
+            panic!("빈 검색 머리 바인딩 결과: {pointer}: {:?}", values[pointer]);
+        };
+        assert!(value.is_null(), "{pointer}: {value}");
+    }
+}
+
+#[test]
 fn reader_limits_roots_and_replies_while_including_depth_four() {
     let (definition, app) = reader();
     let html_body = format!("<p>{}</p>", "답글 &amp; 본문 ".repeat(20));

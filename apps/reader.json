@@ -195,7 +195,7 @@
               "expr": "($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $s).title"
             },
             "meta": {
-              "expr": "($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; ($exists($s.author) ? $s.author : '익명') & ($exists($s.created_at) ? ' · ' & $replace($substring($s.created_at, 0, 16), 'T', ' ') : ''))"
+              "expr": "($hits := $data.stories.hits[title != null and title != '']; $m := $hits[$string(objectID) = $state.selected_story]; $s := $exists($m) ? $m[0] : $hits[0]; $exists($s) ? (($exists($s.author) ? $s.author : '익명') & ($exists($s.created_at) ? ' · ' & $replace($substring($s.created_at, 0, 16), 'T', ' ') : '')) : null)"
             },
             "child": {
               "type": "feed",

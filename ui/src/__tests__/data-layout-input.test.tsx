@@ -316,3 +316,15 @@ it("section의 null 메타는 글을 표시하지 않는다", async () => {
   await screen.findByText("내용");
   expect(view.container.querySelector(".ks-data-section-meta")).toBeNull();
 });
+
+it("section의 null 제목은 글을 표시하지 않는다", async () => {
+  const definition: AppDefinition = {
+    ...mdEditorDefinition, requires: { blocks: 4, modules: {} }, state: {},
+    ui: { type: "section", title: { expr: "null" }, meta: "정보", child: { type: "text", value: "내용" } },
+  };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
+  await screen.findByText("내용");
+  expect(view.container.querySelector(".ks-data-section-title")).toBeNull();
+  expect(view.container.querySelector(".ks-data-section-meta")?.textContent).toBe("정보");
+});

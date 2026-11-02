@@ -53,7 +53,7 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
   const meta = useBinding(`${pointer}/meta`, block.meta ?? null);
   const [collapsed, setCollapsed] = useState(Boolean(block.collapsed));
   // 머리 전체가 접기 단추다(빈 곳을 눌러도 접힌다). 상태 단추(로그인, 다시 받기)는 단추 밖 형제로 둔다.
-  const titleText = title.status === "ready" ? <span className="ks-data-section-title">{display(title.value)}</span> : null;
+  const titleText = title.status === "ready" && title.value !== null ? <span className="ks-data-section-title">{display(title.value)}</span> : null;
   const titleState = title.status !== "ready" ? <DataState value={title} compact /> : null;
   const metaText = block.meta !== undefined && meta.status === "ready" && meta.value !== null ? <span className="ks-data-section-meta">{display(meta.value)}</span> : null;
   const metaState = block.meta !== undefined && meta.status !== "ready" ? <div className="ks-data-section-meta"><DataState value={meta} compact /></div> : null;
