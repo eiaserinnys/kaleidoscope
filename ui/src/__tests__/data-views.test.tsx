@@ -1,8 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { AppDefinition, Block } from "../contract/contract";
+import type { AppDefinition, Block, Column } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
+import { TableView } from "../blocks/data-table";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
@@ -42,6 +43,36 @@ it("cycles table sort and exposes its direction", async () => {
   expect(header.getAttribute("aria-sort")).toBe("descending");
   fireEvent.click(button);
   expect(header.getAttribute("aria-sort")).toBe("none");
+});
+it("sizes narrow numeric and fill columns to their content", async () => {
+  setup({
+    type: "table",
+    rows: [{ key: "short", comments: 3, title: "짧은 이야기" }, { key: "long", comments: 12345678, title: "긴 이야기" }],
+    columns: [
+      { field: "comments", label: "댓글", width: "narrow", format: "number" },
+      { field: "title", label: "이야기" },
+    ],
+  });
+  const table = await screen.findByRole("table");
+  const columns = table.style.getPropertyValue("--ks-table-columns");
+  const longestValue = Array.from(new Intl.NumberFormat().format(12345678)).length;
+  expect(columns).toContain(`calc(${longestValue} * var(--ks-type-body) * 0.6 + 2 * var(--ks-space-2))`);
+  expect(columns).toContain("calc(2 * var(--ks-type-body) + 2 * var(--ks-space-2))");
+  expect(columns).toContain("minmax(calc(var(--ks-space-6) * 2), 1fr)");
+});
+it("does not measure column widths again when the same rows are rendered", () => {
+  let reads = 0;
+  const rows = Array.from({ length: 1000 }, (_, i) => ({
+    key: String(i),
+    get count() { if (i === 999) reads += 1; return i; },
+  }));
+  const columns: Column[] = [{ field: "count", label: "개수", format: "number", width: "narrow" }];
+  const choose = () => {};
+  const { rerender } = render(<TableView columns={columns} rows={rows} selected={null} onChoose={choose} />);
+  expect(reads).toBeGreaterThan(0);
+  const initialReads = reads;
+  rerender(<TableView columns={columns} rows={rows} selected="0" onChoose={choose} />);
+  expect(reads).toBe(initialReads);
 });
 it("omits empty properties and renders formatted values", async () => {
   setup({ type: "properties", fields: [{ label: "빈 값", value: null }, { label: "코드", value: "hello", format: "code" }, { label: "배지", value: "진행", format: "badge" }] });

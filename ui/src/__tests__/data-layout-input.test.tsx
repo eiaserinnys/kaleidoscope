@@ -286,23 +286,35 @@ it("restores focus to the opener after the confirmed action finishes", async () 
   expect(opener.disabled).toBe(false);
 });
 
-it("retries a section heading failure without collapsing the section", async () => {
+it("section 머리는 제목과 메타 원천 상태를 반복하지 않는다", async () => {
   const definition: AppDefinition = {
     ...mdEditorDefinition, requires: { blocks: 4, modules: {} }, state: {},
     sources: { broken: { kind: "request", permission: "remote", path: "/" } },
-    ui: { type: "section", title: { expr: "$data.broken.title" }, collapsible: true, child: { type: "text", value: "내용" } },
+    ui: {
+      type: "section",
+      title: { expr: "$data.broken.title" },
+      meta: { expr: "$data.broken.meta" },
+      collapsible: true,
+      child: { type: "text", value: { expr: "$data.broken.body" } },
+    },
   };
   const seed = makeTestSeed({ definitions: [definition] });
   seed.snapshot.shared.windows[0].state = {};
   const transport = createFakeTransport({ ...seed, data: { sources: { broken: { error: "받기 실패" } } } });
-  render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
-  const retry = await screen.findByRole("button", { name: "다시 받기" });
-  const toggle = document.querySelector<HTMLButtonElement>("button[aria-expanded]")!;
-  expect(toggle.getAttribute("aria-expanded")).toBe("true");
-  expect(toggle.contains(retry)).toBe(false);
-  await userEvent.click(retry);
-  expect(toggle.getAttribute("aria-expanded")).toBe("true");
-  expect(screen.getByText("내용")).toBeTruthy();
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
+  await screen.findAllByRole("button", { name: "다시 받기" });
+  const header = view.container.querySelector(".ks-data-section-header")!;
+  const expectHeaderWithoutSourceState = () => {
+    expect(header.querySelector(".ks-data-skeleton")).toBeNull();
+    expect(header.querySelector(".ks-data-state-compact")).toBeNull();
+  };
+  expectHeaderWithoutSourceState();
+
+  act(() => transport.emit({ event: "data.update", window_id: "editor-window", view: { sources: { broken: { state: "loading", has_value: false } }, values: {} } }));
+  expectHeaderWithoutSourceState();
+
+  act(() => transport.emit({ event: "data.update", window_id: "editor-window", view: { sources: { broken: { state: "failed", message: "다시 오류", has_value: false } }, values: {} } }));
+  expectHeaderWithoutSourceState();
 });
 
 
@@ -315,4 +327,16 @@ it("section의 null 메타는 글을 표시하지 않는다", async () => {
   const view = render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
   await screen.findByText("내용");
   expect(view.container.querySelector(".ks-data-section-meta")).toBeNull();
+});
+
+it("section의 null 제목은 글을 표시하지 않는다", async () => {
+  const definition: AppDefinition = {
+    ...mdEditorDefinition, requires: { blocks: 4, modules: {} }, state: {},
+    ui: { type: "section", title: { expr: "null" }, meta: "정보", child: { type: "text", value: "내용" } },
+  };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
+  await screen.findByText("내용");
+  expect(view.container.querySelector(".ks-data-section-title")).toBeNull();
+  expect(view.container.querySelector(".ks-data-section-meta")?.textContent).toBe("정보");
 });

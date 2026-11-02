@@ -27,7 +27,7 @@
 .ks-data-section-child > .ks-data-stack.is-column:not(:has(.ks-split, .ks-canvas, .ks-data-view, .ks-timeline, .ks-chart, .ks-map)) > .ks-data-stack-item.is-fill { flex: 0 0 auto; overflow: visible; }
 .ks-data-toolbar { display: flex; flex-wrap: wrap; min-width: 0; min-height: calc(var(--ks-control-height) + 2 * var(--ks-space-2)); align-items: center; gap: var(--ks-space-2); padding: var(--ks-space-2) var(--ks-space-3); border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
 .ks-data-toolbar-group { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; gap: var(--ks-space-2); }
-.ks-data-toolbar-group.is-start { flex: 1 1 0; min-width: 0; }
+.ks-data-toolbar-group.is-start { flex: 1 1 min-content; min-width: 0; }
 .ks-data-toolbar-group.is-end { flex: 0 0 auto; }
 .ks-data-toolbar-item { min-width: 0; }
 .ks-data-toolbar-item:not(.is-input) { flex: 0 0 auto; }
@@ -41,8 +41,11 @@
 .ks-data-section-child > .ks-data-stack.is-column:has(> .ks-data-stack-item.is-fill > .ks-data-view) { height: 100%; min-height: 100%; }
 .ks-data-section-child > .ks-data-stack.is-column > .ks-data-stack-item.is-fill:has(> .ks-data-view) { min-height: var(--ks-pane-min-size); }
 .ks-split-pane > .ks-data-section > .ks-data-section-child > .ks-data-stack { box-sizing: border-box; padding-inline: var(--ks-space-3); }
+.ks-split-pane > .ks-data-section > .ks-data-section-child > .ks-data-skeleton { box-sizing: border-box; padding: var(--ks-space-3); }
+.ks-split-pane > .ks-data-skeleton { box-sizing: border-box; padding: var(--ks-space-3); }
 .ks-data-section-child > .ks-data-stack > .ks-data-stack-item > .ks-data-section > .ks-data-section-header { width: 100%; margin-inline: 0; }
-.ks-data-section-header { display: flex; width: 100%; align-items: center; gap: var(--ks-space-2); }
+.ks-data-section-header { display: flex; flex-wrap: wrap; width: 100%; align-items: center; gap: var(--ks-space-2); row-gap: var(--ks-space-1); }
+.ks-data-section-header:empty { display: none; }
 .ks-data-stack-item > .ks-data-section > .ks-data-section-header:not(.ks-data-tab-panel *),
 .ks-split-pane > .ks-data-section > .ks-data-section-header:not(.ks-data-tab-panel *) { width: calc(100% - 2 * var(--ks-space-3)); margin-inline: var(--ks-space-3); padding-block-start: var(--ks-space-2); }
 .ks-data-section-child > .ks-chart, .ks-data-section-child > .ks-map { padding-block-start: var(--ks-space-2); }
@@ -90,11 +93,14 @@
   .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
 ) > .ks-data-toolbar { min-height: calc(var(--ks-control-height) + var(--ks-space-2)); }
 .ks-data-section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.ks-data-section-heading { display: flex; flex: 1 1 0; flex-wrap: wrap; min-width: 0; align-items: center; gap: var(--ks-space-2); row-gap: var(--ks-space-1); }
+.ks-data-section-toggle:has(> .ks-data-section-heading) { align-items: flex-start; }
+.ks-data-section-toggle:has(> .ks-data-section-heading) > svg { margin-block-start: var(--ks-space-1); }
 /* 머리 폭 전체를 차지하는 단추라 바깥 외곽선이 이웃 요소에 가려진다. 파일 트리의 접힌 단추처럼 안쪽에 그린다. */
 .ks-data-section-toggle { padding-block: var(--ks-space-1); border-radius: var(--ks-radius-small); }
 .ks-data-section-toggle:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
 .ks-data-section-title { font-size: var(--ks-type-title); font-weight: 600; }
-.ks-data-section-meta { font-size: var(--ks-type-meta); color: var(--ks-color-muted); }
+.ks-data-section-meta { font-size: var(--ks-type-meta); color: var(--ks-color-muted); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .ks-data-text { white-space: pre-wrap; overflow: auto; }
 .ks-data-text.is-body { font-size: var(--ks-type-body); }
 .ks-data-text.is-title { font-size: var(--ks-type-section); font-weight: 600; }
