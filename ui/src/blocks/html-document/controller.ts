@@ -9,7 +9,7 @@ import { htmlViewSource, htmlViewTokens, sanitizeFragment } from "../html-view-f
 import { applyEdit, findNumber, invertEdit, numberElements, serializeOriginal, type HtmlEdit } from "../html-bridge/edit";
 import type { AnchorStatus, FrameSelection, FrameToParent, ParentToFrame } from "../html-bridge/frame-protocol";
 import { emptyThread, readThread, writeThreadChange } from "./storage";
-import { anchorRevision, listRevisions, type Comment, type Thread, type ThreadChange } from "./thread";
+import { anchorRevision, anchorRevisionFor, listRevisions, type Comment, type Thread, type ThreadChange } from "./thread";
 
 type HtmlBlock = Extract<Block, { type: "html_view" }> & { document: DocumentRef };
 type PendingRevision = { name: string; rev: number; change: Extract<ThreadChange, { kind: "revision" }> };
@@ -304,7 +304,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   }, [frameComments, keyAction, mode, openComment, record, send, setFace]);
   const addComment = useCallback(async (body: string) => {
     const current = activeRef.current; if (!current || !selection || !body.trim()) return false;
-    const comment: Comment = { id: makeId("c"), rev: current.rev, anchor_rev: dirtyRef.current ? 0 : current.rev, status: "needs_agent_review", anchor: selection.anchor, comment: body.trim(), created_at: new Date().toISOString(), resolved_rev: null, replies: [] };
+    const comment: Comment = { id: makeId("c"), rev: current.rev, anchor_rev: anchorRevisionFor(current.rev, dirtyRef.current), status: "needs_agent_review", anchor: selection.anchor, comment: body.trim(), created_at: new Date().toISOString(), resolved_rev: null, replies: [] };
     return writeChange({ kind: "add", comment });
   }, [selection, writeChange]);
   const edits = useMemo(() => undo.flatMap((group) => group.map((edit) => {

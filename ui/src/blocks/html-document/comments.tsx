@@ -5,12 +5,12 @@ import { Button, EmptyState, IconButton, StatusText } from "../../components/pri
 import type { AnchorStatus } from "../html-bridge/frame-protocol";
 import type { useHtmlDocument } from "./controller";
 import { Compose, Group, Target } from "./parts";
-import type { Comment, ThreadChange } from "./thread";
+import { anchorRevisionFor, type Comment, type ThreadChange } from "./thread";
 
 type Model = ReturnType<typeof useHtmlDocument>;
 
-const CommentCard = memo(function CommentCard({ comment, index, status, active, selected, rev, saving, change, activate, deactivate, deleted }: {
-  comment: Comment; index: number; status: AnchorStatus | undefined; active: boolean; selected: Model["selection"]; rev: number; saving: boolean;
+const CommentCard = memo(function CommentCard({ comment, index, status, active, selected, rev, dirty, saving, change, activate, deactivate, deleted }: {
+  comment: Comment; index: number; status: AnchorStatus | undefined; active: boolean; selected: Model["selection"]; rev: number; dirty: boolean; saving: boolean;
   change: (value: ThreadChange) => Promise<boolean>; activate: (id: string) => void; deactivate: () => void; deleted: (id: string) => void;
 }) {
   const [menu, setMenu] = useState<HTMLElement | null>(null);
@@ -33,7 +33,7 @@ const CommentCard = memo(function CommentCard({ comment, index, status, active, 
     {!active && last ? <span className="ks-html-comment-last">{last.role === "agent" ? "에이전트" : "나"}: {last.body}</span> : null}
     {active ? <>
       {comment.replies.map((item) => <div key={item.id} className="ks-html-reply"><span className="ks-html-reply-role">{item.role === "agent" ? "에이전트" : "나"}</span><p>{item.body}</p></div>)}
-      {status === "orphan" ? <Button disabled={saving || !selected} onClick={(event) => { event.stopPropagation(); if (selected) void change({ kind: "anchor", id: comment.id, anchor: selected.anchor, anchor_rev: rev }); }}>여기로 옮기기</Button> : null}
+      {status === "orphan" ? <Button disabled={saving || !selected} onClick={(event) => { event.stopPropagation(); if (selected) void change({ kind: "anchor", id: comment.id, anchor: selected.anchor, anchor_rev: anchorRevisionFor(rev, dirty) }); }}>여기로 옮기기</Button> : null}
       <Compose label="답글" onSubmit={reply} onEscape={deactivate} />
     </> : null}
     {menu ? <Menu anchor={menu} onClose={closeMenu} items={[{ id: "delete", label: "삭제", danger: true, onSelect: () => { void change({ kind: "delete", id: comment.id }).then((ok) => { if (ok) deleted(comment.id); }); } }]} /> : null}
@@ -58,7 +58,7 @@ export function CommentFace({ model }: { model: Model }) {
   const orphans = indexed.filter(({ comment }) => comment.status !== "resolved" && model.results[comment.id] === "orphan");
   const unresolved = indexed.filter(({ comment }) => comment.status !== "resolved" && model.results[comment.id] !== "orphan");
   const resolved = indexed.filter(({ comment }) => comment.status === "resolved");
-  const card = ({ comment, index }: { comment: Comment; index: number }) => <CommentCard key={comment.id} comment={comment} index={index} status={model.results[comment.id]} active={model.activeComment === comment.id} selected={model.selection} rev={model.active!.rev} saving={model.saving} change={model.writeChange} activate={model.openComment} deactivate={deactivate} deleted={deleted} />;
+  const card = ({ comment, index }: { comment: Comment; index: number }) => <CommentCard key={comment.id} comment={comment} index={index} status={model.results[comment.id]} active={model.activeComment === comment.id} selected={model.selection} rev={model.active!.rev} dirty={model.dirty} saving={model.saving} change={model.writeChange} activate={model.openComment} deactivate={deactivate} deleted={deleted} />;
   return <>
     <div className="ks-html-rail-body">
       {model.selection ? <><Target selection={model.selection} choose={(n) => model.send({ type: "ks-html-select-number", n })} /><Compose label="커멘트" focus={model.selection.anchor.kind === "text"} onSubmit={model.addComment} onEscape={clear} /></> : null}

@@ -26,6 +26,7 @@ export function listRevisions(paths: string[]): { name: string; revisions: numbe
 }
 
 export function anchorRevision(comment: Comment): number { return comment.anchor_rev ?? comment.rev; }
+export function anchorRevisionFor(rev: number, dirty: boolean): number { return dirty ? 0 : rev; }
 
 export function applyThreadChange(thread: Thread, change: ThreadChange): Thread {
   if (change.kind === "revision") return { ...thread, revisions: { ...thread.revisions, [change.rev]: change.meta } };
