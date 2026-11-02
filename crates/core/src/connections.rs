@@ -293,16 +293,13 @@ fn oauth_request(
     token: &str,
     request: &ConnectionRequest,
 ) -> Result<ConnectionReply, RequestError> {
-    let client = reqwest::blocking::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(data::CONNECTION_TIMEOUT_SECS))
-        .build()
-        .map_err(server)?;
+    let client = crate::http_client::shared().map_err(|error| server(&error.message))?;
     let method = reqwest::Method::from_bytes(request.method.as_str().as_bytes()).map_err(server)?;
     let mut builder = client
         .request(method, format!("{}{}", info.base_url, request.path))
         .bearer_auth(token)
-        .query(&request.query);
+        .query(&request.query)
+        .timeout(Duration::from_secs(data::CONNECTION_TIMEOUT_SECS));
     if let Some(body) = &request.body {
         builder = builder.json(body);
     }

@@ -15,6 +15,9 @@ mod data_sources;
 mod error;
 mod files;
 mod files_write;
+mod http_client;
+#[cfg(test)]
+mod http_client_tests;
 mod layout_apply;
 mod layout_reporter;
 mod layout_sync;
