@@ -5,6 +5,8 @@ import type { FrameComment, FrameSelection, FrameToParent, ParentToFrame } from 
 
 const send = (message: FrameToParent) => parent.postMessage(message, "*");
 let mode: "select" | "view" | "readonly" = "readonly";
+let locked = false;
+let colors: string[] = [];
 let selected: Element | null = null;
 let hover: Element | null = null;
 let pending: Range | null = null;
@@ -87,7 +89,7 @@ function draw() {
     pinPositions.set(position, offset + 1);
     const pin = document.createElement("button"); pin.className = `ks-o-pin${result.status === "moved" ? " is-moved" : ""}${comment.active ? " is-active" : ""}`;
     pin.textContent = String(comment.number); pin.style.left = `${Math.max(gap, x - offset * (size + gap))}px`; pin.style.top = `${y}px`;
-    pin.addEventListener("click", (event) => { event.stopPropagation(); send({ type: "ks-html-select-comment", id: comment.id }); });
+    pin.addEventListener("click", (event) => { event.stopPropagation(); if (!locked) send({ type: "ks-html-select-comment", id: comment.id }); });
     layer.append(pin);
   }
   highlights(ranges, activeRanges);
@@ -116,7 +118,7 @@ function selectionOf(element: Element, range?: Range): FrameSelection | null {
   }
   return { n, anchor: createAnchor(element, range), name: elementName(element), ancestors, hasChildren: element.children.length > 0,
     text: element.children.length ? "" : element.textContent ?? "", first: !element.previousElementSibling, last: !element.nextElementSibling,
-    rect: { width: Math.round(rect.width), height: Math.round(rect.height) }, colors: documentColors(),
+    rect: { width: Math.round(rect.width), height: Math.round(rect.height) }, colors,
     styles: Object.fromEntries(styleNames.map((name) => [name, computed.getPropertyValue(name)])) };
 }
 function select(element: Element | null, range?: Range) {
@@ -138,33 +140,37 @@ function startEdit(element: Element | null) {
   finishEdit(false); editing = { element, before: element.textContent }; element.setAttribute("contenteditable", "plaintext-only"); element.focus();
 }
 document.addEventListener("pointermove", (event) => {
-  if (mode !== "select" || editing) return;
+  if (locked || mode !== "select" || editing) return;
   const target = event.target; const next = target instanceof Element && target.hasAttribute("data-ks-n") ? target : null;
   if (next !== hover) { hover = next; schedule(); }
 }, true);
+document.addEventListener("pointerdown", (event) => { if (locked) { event.preventDefault(); event.stopPropagation(); } }, true);
 document.addEventListener("mousedown", (event) => {
+  if (locked) { event.preventDefault(); event.stopPropagation(); return; }
   if (mode !== "select") return;
   if (editing && event.target !== editing.element) finishEdit(false);
   const current = getSelection();
   if (current?.rangeCount && event.target instanceof Node && !current.getRangeAt(0).intersectsNode(event.target)) current.removeAllRanges();
 }, true);
 document.addEventListener("mouseup", () => {
-  if (mode !== "select" || editing) return;
+  if (locked || mode !== "select" || editing) return;
   const current = getSelection(); if (!current || current.isCollapsed || !current.toString().trim() || !current.rangeCount) return;
   const range = current.getRangeAt(0); const node = range.commonAncestorContainer;
   const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
   if (element) select(element, range);
 }, true);
 document.addEventListener("click", (event) => {
+  if (locked) { event.preventDefault(); event.stopPropagation(); return; }
   if (mode === "readonly") { if (event.target instanceof Element && event.target.closest("a")) event.preventDefault(); return; }
   if (mode !== "select" || editing) return;
   event.preventDefault(); event.stopPropagation();
   if (getSelection()?.toString().trim()) return;
   if (event.target instanceof Element) select(event.target.closest("[data-ks-n]"));
 }, true);
-document.addEventListener("dblclick", (event) => { if (mode === "select" && event.target instanceof Element) { event.preventDefault(); startEdit(event.target); } }, true);
+document.addEventListener("dblclick", (event) => { if (!locked && mode === "select" && event.target instanceof Element) { event.preventDefault(); startEdit(event.target); } }, true);
 document.addEventListener("focusout", (event) => { if (editing && event.target === editing.element) finishEdit(false); }, true);
 document.addEventListener("keydown", (event) => {
+  if (locked) { event.preventDefault(); event.stopPropagation(); return; }
   if (editing) {
     if (event.key === "Escape") { event.preventDefault(); finishEdit(true); }
     else if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); finishEdit(false); }
@@ -182,12 +188,21 @@ window.addEventListener("message", (event: MessageEvent<ParentToFrame>) => {
   if (event.source !== parent || !event.data || typeof event.data !== "object") return;
   const data = event.data;
   if (data.type === "ks-html-mode") { mode = data.mode; hover = null; if (mode === "view") select(null); schedule(); }
+  else if (data.type === "ks-html-lock") {
+    locked = data.locked;
+    if (locked) { finishEdit(true); hover = null; schedule(); }
+  }
   else if (data.type === "ks-html-select-number") select(data.n === null ? null : findNumber(document, data.n));
   else if (data.type === "ks-html-comments") { comments = data.comments; anchorsDirty = true; schedule(); }
   else if (data.type === "ks-html-theme") { for (const [name, value] of Object.entries(data.tokens)) document.documentElement.style.setProperty(name, value); schedule(); }
-  else if (data.type === "ks-html-edit") { applyEdit(document, data.edit); if (data.edit.kind !== "style" || data.edit.prop === "display") visible(); schedule(); }
+  else if (data.type === "ks-html-edit") {
+    applyEdit(document, data.edit);
+    if (data.edit.kind === "style" && ["color", "background-color", "border-color"].includes(data.edit.prop)) colors = documentColors();
+    if (data.edit.kind !== "style" || data.edit.prop === "display") visible();
+    schedule();
+  }
   else if (data.type === "ks-html-refresh-selection") send({ type: "ks-html-select", selection: selected ? selectionOf(selected, pending ?? undefined) : null });
   else if (data.type === "ks-html-focus-comment") { const comment = comments.find((item) => item.id === data.id); if (comment) resolveAnchor(document, comment.anchor, comment.sameRevision).element?.scrollIntoView({ block: "center" }); }
 });
-const ready = () => { visible(); send({ type: "ks-html-ready" }); };
+const ready = () => { colors = documentColors(); visible(); send({ type: "ks-html-ready" }); };
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready, { once: true }); else ready();

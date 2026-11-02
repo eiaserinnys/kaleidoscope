@@ -10,7 +10,11 @@ type Model = ReturnType<typeof useHtmlDocument>;
 type Icon = ComponentType<{ size?: "inline" | "control" | "empty" | "tile" }>;
 const shadows: Record<string, string> = { "없음": "none", "작게": "0 1px 2px rgb(0 0 0 / 12%)", "보통": "0 4px 12px rgb(0 0 0 / 16%)", "크게": "0 12px 32px rgb(0 0 0 / 20%)" };
 const computedShadows: Record<string, string> = { "none": "없음", "rgba(0, 0, 0, 0.12) 0px 1px 2px 0px": "작게", "rgba(0, 0, 0, 0.16) 0px 4px 12px 0px": "보통", "rgba(0, 0, 0, 0.2) 0px 12px 32px 0px": "크게" };
-const numeric = (value: string | undefined, fallback = "0") => value && value !== "normal" && value !== "auto" ? value.replace(/px$/, "") : fallback;
+const numeric = (value: string | undefined, fallback = "0") => {
+  const text = value?.trim();
+  if (!text || text === "normal" || text === "auto") return fallback;
+  return /\s/.test(text) ? "혼합" : text.replace(/px$/, "");
+};
 
 function Alignment({ label, options, value, set }: { label: string; options: { label: string; value: string; icon: Icon }[]; value: string; set: (value: string) => void }) {
   return <div className="ks-data-segmented ks-html-align" role="group" aria-label={label}>{options.map((option) => <Button key={option.value} className="ks-html-icon" aria-label={option.label} title={option.label} aria-pressed={value === option.value} onClick={() => set(option.value)}><option.icon size="inline" /></Button>)}</div>;
@@ -36,7 +40,8 @@ export function PropertyFace({ model }: { model: Model }) {
   const group = (name: string, fallback: boolean, children: ReactNode) => <Group title={name} open={expanded(name, fallback)} onToggle={() => model.setPropertyGroups((previous) => ({ ...previous, [name]: !expanded(name, fallback) }))}>{children}</Group>;
   const value = (prop: string, fallback = "0") => numeric(styles[prop], fallback);
   const field = (labelText: string, prop: string, opts: { value?: string; step?: number; min?: number; max?: number; unit?: string; span?: string; box?: string } = {}) => <NumberField key={prop} label={labelText} prop={prop} value={opts.value ?? value(prop)} step={opts.step} min={opts.min} max={opts.max} unit={opts.unit} span={opts.span} box={opts.box} preview={model.previewStyle} commit={model.editStyle} />;
-  const color = (labelText: string, prop: string, span?: string, readOnly?: string) => <ColorField label={labelText} prop={prop} value={prop === "border-color" && (styles["border-style"] === "none" || Number.parseFloat(styles["border-width"] ?? "0") === 0) ? "transparent" : styles[prop] ?? ""} span={span} readOnly={readOnly} focus={setActiveColor} commit={model.editStyle} />;
+  const borderAbsent = (styles["border-style"] ?? "none").split(/\s+/).every((part) => part === "none") || (styles["border-width"] ?? "0").split(/\s+/).every((part) => Number.parseFloat(part) === 0);
+  const color = (labelText: string, prop: string, span?: string, readOnly?: string) => <ColorField label={labelText} prop={prop} value={prop === "border-color" && borderAbsent ? "transparent" : styles[prop] ?? ""} span={span} readOnly={readOnly} focus={setActiveColor} commit={model.editStyle} />;
   const swatches = (prop: string) => activeColor === prop ? <div className="ks-html-swatches is-6">{[...new Set((selection.colors ?? []).map(hexColor).filter((item): item is string => Boolean(item)))].map((item) => <button key={item} type="button" className="ks-html-swatch-chip" style={{ background: item }} aria-label={item} aria-pressed={hexColor(styles[prop] ?? "") === item} onMouseDown={(event) => event.preventDefault()} onClick={() => model.editStyle(prop, item)} />)}</div> : null;
   const action = (key: string, options: { ctrl?: boolean; alt?: boolean; shift?: boolean } = {}) => model.keyAction({ type: "ks-html-key", key, ctrl: false, alt: false, shift: false, ...options });
   const fontSize = Number.parseFloat(styles["font-size"] ?? "") || 16;

@@ -90,6 +90,7 @@
 .ks-html-swatch::-webkit-color-swatch-wrapper { padding: 0; }
 .ks-html-swatch::-webkit-color-swatch { border: 0; }
 .ks-html-swatch.is-empty { background: linear-gradient(to top right, transparent calc(50% - var(--ks-line-width)), var(--ks-color-muted) calc(50% - var(--ks-line-width)), var(--ks-color-muted) calc(50% + var(--ks-line-width)), transparent calc(50% + var(--ks-line-width))); }
+.ks-html-swatch.is-empty::-webkit-color-swatch { visibility: hidden; }
 .ks-html-swatches { display: flex; flex-wrap: wrap; gap: var(--ks-space-1); }
 .ks-html-swatch-chip { width: var(--ks-space-5); height: var(--ks-space-5); border: var(--ks-line-width) solid color-mix(in srgb, var(--ks-color-text) 24%, transparent); border-radius: var(--ks-radius-small); padding: 0; cursor: pointer; }
 .ks-html-swatch-chip[aria-pressed="true"] { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: var(--ks-line-width); }

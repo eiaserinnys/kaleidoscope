@@ -18,6 +18,7 @@ export function HtmlDocumentViewBlock({ block, context }: { block: HtmlBlock; co
   const host = model.root.current?.closest<HTMLElement>(".ks-data-window");
   const cancelChange = useCallback(() => model.setPendingChange(null), [model.setPendingChange]);
   const keyboard = (event: KeyboardEvent<HTMLElement>) => {
+    if (model.locked) { event.preventDefault(); return; }
     const target = event.target as HTMLElement;
     if (target.closest("input, textarea, [contenteditable='true']")) return;
     if (!event.ctrlKey) return;
@@ -30,7 +31,7 @@ export function HtmlDocumentViewBlock({ block, context }: { block: HtmlBlock; co
       {model.error ? <div className="ks-html-notice"><Notice role="alert" actions={model.saveFailed ? [<Button key="retry" onClick={() => void model.saveRevision()}>다시 시도</Button>] : undefined}>{model.error}{model.errorCode ? <> <StatusText>{model.errorCode}</StatusText></> : null}</Notice></div> : null}
       <div className="ks-html-content">
         {model.source ? <iframe ref={model.frame} title="HTML 보기" sandbox="allow-scripts" srcDoc={model.source} /> : <StatusText>불러오는 중</StatusText>}
-        {model.face ? <aside className="ks-html-rail">{model.face === "comments" ? <CommentFace model={model} /> : <PropertyFace model={model} />}</aside> : null}
+        {model.face ? <aside className="ks-html-rail" inert={model.locked}>{model.face === "comments" ? <CommentFace model={model} /> : <PropertyFace model={model} />}</aside> : null}
       </div>
       {model.pendingChange && host ? <Dialog host={host} title={`저장 안 한 변경 ${model.undo.length}건을 버릴까요?`} ok="버리기" danger onCancel={cancelChange} onConfirm={model.confirmChange} /> : null}
     </>}

@@ -10,10 +10,39 @@ import { grantFor, makeTestSeed } from "./fixtures";
 import definition from "../../../apps/html-report.json";
 import { describeVisible } from "../share/visible";
 import type { HtmlAnchor } from "../blocks/html-bridge/frame-protocol";
-import { writeThreadChange } from "../blocks/html-document/storage";
+import { readThread, writeThreadChange } from "../blocks/html-document/storage";
 import type { ShellStore } from "../core/shell-store";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+const testAnchor: HtmlAnchor = { kind: "element", selector: "h1", selector_stable: false, path: "body > h1", tag: "h1", text: "제목", attrs: { id: null, role: null, aria_label: null, alt: null, href: null, src_hash: null }, quote: null, label: "h1", heading: "", rect: { x: 0, y: 0, w: 10, h: 10, vw: 300 } };
+
+it("커멘트 문서가 없는 새 시안에서는 없는 문서를 읽지 않는다", async () => {
+  const call = vi.fn(async (request: CoreRequest) => {
+    if (request.op === "storage.list") return { op: "storage.list", result: { bucket_id: "bucket", items: [{ doc: "시안/r1.html", revision: "r1", updated_at: "now", byte_size: 1 }] } };
+    if (request.op === "storage.get") throw { code: "not_found", message: "없음", details: [] };
+    throw new Error("unexpected request");
+  });
+  const store = { call } as unknown as ShellStore;
+  const result = await readThread(store, "window", "drafts", "시안");
+  expect(result).toEqual({ thread: { revisions: {}, comments: [] }, revision: null });
+  expect(call.mock.calls.some(([request]) => request.op === "storage.get")).toBe(false);
+});
+
+it("커멘트 문서의 빠진 필드는 기본값으로 읽고 잘못된 구조는 거절한다", async () => {
+  let content = JSON.stringify({ comments: [{ id: "one", anchor: testAnchor, comment: "수정", created_at: "now", status: "unknown" }] });
+  const core = { call: vi.fn(async (request: CoreRequest) => {
+    if (request.op === "storage.list") return { op: "storage.list", result: { items: [{ doc: "시안/thread.json" }] } };
+    if (request.op === "storage.get") return { op: "storage.get", result: { content, revision: "r1" } };
+    throw new Error("unexpected request");
+  }) } as unknown as ShellStore;
+  const result = await readThread(core, "window", "drafts", "시안");
+  expect(result.thread.revisions).toEqual({});
+  expect(result.thread.comments[0]).toMatchObject({ rev: 1, status: "needs_agent_review", replies: [] });
+  content = "{}";
+  expect((await readThread(core, "window", "drafts", "시안")).thread).toEqual({ revisions: {}, comments: [] });
+  content = JSON.stringify({ comments: "잘못된 구조" });
+  await expect(readThread(core, "window", "drafts", "시안")).rejects.toThrow();
+});
 
 it("문서 머리 줄에서 고르기와 레일 면을 아이콘으로 바꾼다", async () => {
   const seed = makeTestSeed({ definitions: [definition as AppDefinition] });
@@ -69,7 +98,8 @@ it("파일 HTML을 읽기 전용 격리 프레임으로 표시한다", async () 
 it("스레드 CAS 충돌 때 최신 답글을 보존하며 같은 변경을 재적용한다", async () => {
   let reads = 0; let writes = 0; let saved = "";
   const core = { call: vi.fn(async (request: CoreRequest) => {
-    if (request.op === "storage.get") { reads++; return { op: "storage.get", result: { content: JSON.stringify({ revisions: {}, comments: reads === 1 ? [] : [{ id: "existing" }] }), revision: `r${reads}` } }; }
+    if (request.op === "storage.list") return { op: "storage.list", result: { items: [{ doc: "시안/thread.json" }] } };
+    if (request.op === "storage.get") { reads++; return { op: "storage.get", result: { content: JSON.stringify({ revisions: {}, comments: reads === 1 ? [] : [{ id: "existing", anchor: testAnchor, comment: "기존", created_at: "now" }] }), revision: `r${reads}` } }; }
     if (request.op === "storage.write") { writes++; if (writes === 1) throw { code: "conflict", message: "충돌", details: [] }; saved = String(request.content); return { op: "storage.write", revision: "r3" }; }
     throw new Error("unexpected request");
   }) } as unknown as ShellStore;
@@ -111,22 +141,39 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   seed.snapshot.shared.windows.push({ ...seed.snapshot.shared.windows[1], id: "other-desktop-agent", desktop_id: "other-desktop", z: 99 });
   const base = createFakeTransport(seed);
   const files = new Map<string, { content: string; revision: string }>([["시안/r1.html", { content: "<h1>제목</h1>", revision: "html1" }]]);
-  const sent: CoreRequest[] = []; let seq = 0;
+  const sent: CoreRequest[] = []; let seq = 0; let failMetadata = false; let htmlWrites = 0;
   const call = async (request: CoreRequest) => {
     if (request.op === "storage.list") return { op: "storage.list", result: { bucket_id: "bucket", items: [...files].map(([doc, value]) => ({ doc, revision: value.revision, updated_at: "now", byte_size: value.content.length })) } };
     if (request.op === "storage.get" && request.doc) { const item = files.get(request.doc); if (!item) throw { code: "not_found", message: "없음", details: [] }; return { op: "storage.get", result: { kind: "md", content: item.content, revision: item.revision, exists: true } }; }
-    if (request.op === "storage.write" && request.doc) { const current = files.get(request.doc); if ((request.expected_revision ?? null) !== (current?.revision ?? null)) throw { code: "conflict", message: "충돌", details: [] }; const revision = `rev${++seq}`; files.set(request.doc, { content: String(request.content), revision }); return { op: "storage.write", revision }; }
+    if (request.op === "storage.write" && request.doc) {
+      if (request.doc.endsWith(".html")) htmlWrites++;
+      if (request.doc.endsWith("thread.json") && failMetadata) { failMetadata = false; throw { code: "io", message: "메타 저장 오류", details: [] }; }
+      const current = files.get(request.doc); if ((request.expected_revision ?? null) !== (current?.revision ?? null)) throw { code: "conflict", message: "충돌", details: [] }; const revision = `rev${++seq}`; files.set(request.doc, { content: String(request.content), revision }); return { op: "storage.write", revision };
+    }
     if (request.op === "conversation.send") { sent.push(request); return { op: "conversation.send" }; }
     return base.call(request as never);
   };
   const transport: CoreTransport = { ...base, call: call as CoreTransport["call"] };
   const { container } = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   const iframe = await screen.findByTitle("HTML 보기") as HTMLIFrameElement;
-  const anchor: HtmlAnchor = { kind: "element", selector: "h1", selector_stable: false, path: "body > h1", tag: "h1", text: "제목", attrs: { id: null, role: null, aria_label: null, alt: null, href: null, src_hash: null }, quote: null, label: "h1", heading: "", rect: { x: 0, y: 0, w: 10, h: 10, vw: 300 } };
+  const post = vi.spyOn(iframe.contentWindow!, "postMessage");
+  const anchor = testAnchor;
   act(() => window.dispatchEvent(new MessageEvent("message", { source: iframe.contentWindow, data: { type: "ks-html-select", selection: { n: 4, anchor, styles: {} } } })));
   const user = userEvent.setup();
   await user.type(await screen.findByRole("textbox", { name: "커멘트" }), "색을 바꿔 주세요{Enter}");
   expect(await screen.findByText("색을 바꿔 주세요")).toBeTruthy();
+  const validThread = files.get("시안/thread.json")!;
+  await act(async () => {
+    files.set("시안/thread.json", { ...validThread, content: '{"comments":"잘못된 구조"}' });
+    base.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "bucket", item: { entry_id: "drafts", key: "drafts/시안/thread.json", kind: "md", revision: "bad", exists: true } } } });
+  });
+  expect((await screen.findByRole("alert")).textContent).toContain("커멘트 문서의 형식이 올바르지 않습니다");
+  expect(screen.getByText("색을 바꿔 주세요")).toBeTruthy();
+  await act(async () => {
+    files.set("시안/thread.json", validThread);
+    base.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "bucket", item: { entry_id: "drafts", key: "drafts/시안/thread.json", kind: "md", revision: validThread.revision, exists: true } } } });
+  });
+  await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   await user.click(screen.getByRole("button", { name: "속성" }));
   await user.clear(screen.getByRole("textbox", { name: "배경" }));
   await user.type(screen.getByRole("textbox", { name: "배경" }), "red{Enter}");
@@ -159,11 +206,22 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   expect((screen.getByRole("button", { name: "보냈습니다" }) as HTMLButtonElement).disabled).toBe(true);
   await user.type(screen.getByRole("textbox", { name: "커멘트" }), "글자를 키워 주세요{Enter}");
   await waitFor(() => expect((screen.getByRole("button", { name: "에이전트에게 보내기 2" }) as HTMLButtonElement).disabled).toBe(false));
+  const workingComment = JSON.parse(files.get("시안/thread.json")!.content).comments.find((item: { comment: string }) => item.comment === "글자를 키워 주세요");
+  expect(workingComment.anchor_rev).toBe(0);
+  await waitFor(() => expect(post.mock.calls.some(([message]) => message.type === "ks-html-comments" && message.comments.some((item: { id: string; sameRevision: boolean }) => item.id === workingComment.id && !item.sameRevision))).toBe(true));
   await user.click(screen.getByRole("button", { name: "에이전트에게 보내기 2" }));
   await waitFor(() => expect(sent).toHaveLength(2));
   expect((screen.getByRole("button", { name: "보냈습니다" }) as HTMLButtonElement).disabled).toBe(true);
+  failMetadata = true;
   await user.click(screen.getByRole("button", { name: "변경 1건 새 리비전으로 저장" }));
+  expect(await screen.findByText("메타 저장 오류")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "리비전" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "되돌리기" }) as HTMLButtonElement).disabled).toBe(true);
+  await user.click(screen.getByRole("button", { name: "다시 시도" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "리비전" }).textContent).toBe("v3"));
   const savedThread = JSON.parse(files.get("시안/thread.json")!.content);
   expect(savedThread.revisions["3"].title).toBe("직접 수정 1건");
+  expect(savedThread.revisions["3"].edits).toHaveLength(1);
+  expect(savedThread.comments.find((item: { comment: string }) => item.comment === "글자를 키워 주세요").anchor_rev).toBe(0);
+  expect(htmlWrites).toBe(1);
 });

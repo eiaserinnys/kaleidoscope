@@ -31,6 +31,7 @@ export type FrameToParent =
   | { type: "ks-html-text-edit"; n: number; before: string; after: string };
 export type ParentToFrame =
   | { type: "ks-html-mode"; mode: "select" | "view" }
+  | { type: "ks-html-lock"; locked: boolean }
   | { type: "ks-html-select-number"; n: number | null }
   | { type: "ks-html-comments"; comments: FrameComment[] }
   | { type: "ks-html-focus-comment"; id: string }

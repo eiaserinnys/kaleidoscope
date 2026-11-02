@@ -12,6 +12,16 @@ const textAnchor = (element: Element) => {
 };
 
 describe("리비전에서 커멘트 다시 찾기", () => {
+  it("작업본에서 순서를 바꿔 B에 단 앵커는 원래 문서의 A에 붙지 않는다", () => {
+    const original = parse("<main><p>첫 번째 문단 A입니다</p><p>두 번째 문단 B입니다</p></main>");
+    const draft = parse("<main><p>첫 번째 문단 A입니다</p><p>두 번째 문단 B입니다</p></main>");
+    const main = draft.querySelector("main")!;
+    main.prepend(main.lastElementChild!);
+    const anchor = createAnchor(main.firstElementChild!);
+    const result = resolveAnchor(original, anchor, false);
+    expect(result.element).toBe(original.querySelectorAll("p")[1]);
+    expect(result.element).not.toBe(original.querySelectorAll("p")[0]);
+  });
   it("앞 섹션이 생겨도 글과 요소를 같은 대상에 붙인다", () => {
     const old = parse(sample); const next = parse(sample);
     const element = old.querySelector(".cta")!; const paragraph = old.querySelector(".hero p")!;

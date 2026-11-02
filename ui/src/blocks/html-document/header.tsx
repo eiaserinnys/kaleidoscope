@@ -9,19 +9,20 @@ export function HtmlHeader({ model }: { model: Model }) {
   const active = model.active!;
   const revisions = model.docs.find((doc) => doc.name === active.name)?.revisions ?? [];
   const comments = model.comments.filter((comment) => comment.status !== "resolved").length;
+  const arrived = model.dirty && model.latest > active.rev;
   return <header className="ks-file-tree-header ks-html-header">
     <div className="ks-html-header-group is-docs">
-      <Select className="ks-html-doc" label="문서" groups={[{ options: model.docs.map((doc) => ({ value: doc.name, label: doc.name })) }]} value={active.name} onChange={(value) => { const doc = model.docs.find((item) => item.name === value); if (doc) model.choose(doc.name, doc.revisions.at(-1)!); }} />
-      <Select className="ks-html-rev" label="리비전" groups={[{ options: [...revisions].reverse().map((rev) => ({ value: rev, label: `v${rev}`, description: [model.thread.revisions[rev]?.title, model.thread.revisions[rev]?.note].filter((value, index, all) => value && all.indexOf(value) === index).join(", ") || undefined })) }]} value={active.rev} suffix={active.rev < model.latest ? `/ ${model.latest}` : undefined} onChange={(value) => model.choose(active.name, Number(value))} />
-      {model.dirty && model.latest > active.rev ? <Button className="ks-html-new-rev" aria-label={`v${model.latest} 도착, 이동`} onClick={() => model.choose(active.name, model.latest)}>v{model.latest} 도착</Button> : null}
+      <Select className="ks-html-doc" label="문서" disabled={model.locked} groups={[{ options: model.docs.map((doc) => ({ value: doc.name, label: doc.name })) }]} value={active.name} onChange={(value) => { const doc = model.docs.find((item) => item.name === value); if (doc) model.choose(doc.name, doc.revisions.at(-1)!); }} />
+      <Select className="ks-html-rev" label="리비전" disabled={model.locked} groups={[{ options: [...revisions].reverse().map((rev) => ({ value: rev, label: `v${rev}`, description: [model.thread.revisions[rev]?.title, model.thread.revisions[rev]?.note].filter((value, index, all) => value && all.indexOf(value) === index).join(", ") || undefined })) }]} value={active.rev} suffix={active.rev < model.latest && (!arrived || model.narrow) ? `/ ${model.latest}` : undefined} onChange={(value) => model.choose(active.name, Number(value))} />
+      {arrived && !model.narrow ? <Button className="ks-html-new-rev" disabled={model.locked} aria-label={`v${model.latest} 도착, 이동`} onClick={() => model.choose(active.name, model.latest)}>v{model.latest} 도착</Button> : null}
     </div>
     <div className="ks-data-segmented">
       <Button className="ks-html-icon" aria-label="고르기" title="고르기" aria-pressed={model.mode === "select"} onClick={() => model.setMode("select")}><MousePointer2 /></Button>
       <Button className="ks-html-icon" aria-label="보기" title="보기" aria-pressed={model.mode === "view"} onClick={() => model.setMode("view")}><Eye /></Button>
     </div>
     <div className="ks-data-segmented ks-html-header-edit">
-      <Button className="ks-html-icon" aria-label="되돌리기" title="되돌리기 Ctrl+Z" disabled={!model.undo.length} onClick={model.undoEdit}><Undo2 /></Button>
-      <Button className="ks-html-icon" aria-label="다시 실행" title="다시 실행 Ctrl+Shift+Z" disabled={!model.redo.length} onClick={model.redoEdit}><Redo2 /></Button>
+      <Button className="ks-html-icon" aria-label="되돌리기" title="되돌리기 Ctrl+Z" disabled={model.locked || !model.undo.length} onClick={model.undoEdit}><Undo2 /></Button>
+      <Button className="ks-html-icon" aria-label="다시 실행" title="다시 실행 Ctrl+Shift+Z" disabled={model.locked || !model.redo.length} onClick={model.redoEdit}><Redo2 /></Button>
     </div>
     {model.dirty ? <Button variant="emphasis" className="ks-html-save ks-html-header-save" aria-label={`변경 ${model.undo.length}건 새 리비전으로 저장`} disabled={model.saving} onClick={() => void model.saveRevision()}><span className="ks-html-save-label">저장 {model.undo.length}</span><span className="ks-html-save-icon"><Save /></span></Button> : null}
     <div className="ks-data-segmented ks-html-header-faces">

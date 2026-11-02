@@ -12,6 +12,7 @@ import { emptyThread, readThread, writeThreadChange } from "./storage";
 import { anchorRevision, listRevisions, type Comment, type Thread, type ThreadChange } from "./thread";
 
 type HtmlBlock = Extract<Block, { type: "html_view" }> & { document: DocumentRef };
+type PendingRevision = { name: string; rev: number; change: Extract<ThreadChange, { kind: "revision" }> };
 export type HtmlFace = "comments" | "props" | null;
 const nOf = (element: Element | null) => element ? Number(element.getAttribute("data-ks-n")) || null : null;
 const makeId = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
@@ -29,8 +30,11 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const [selection, setSelection] = useState<FrameSelection | null>(null);
   const [results, setResults] = useState<Record<string, AnchorStatus>>({});
   const [text, setText] = useState(""); const [error, setError] = useState<string | null>(null);
+  const [threadError, setThreadError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false); const [saving, setSaving] = useState(false);
+  const [savingRevision, setSavingRevision] = useState(false);
+  const [pendingRevision, setPendingRevision] = useState<PendingRevision | null>(null);
   const [sending, setSending] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const [sentReviews, setSentReviews] = useState<Record<string, Record<string, string>>>({});
@@ -50,6 +54,10 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const activeRef = useRef(active); activeRef.current = active;
   const threadRef = useRef(thread); threadRef.current = thread;
   const dirty = undo.length > 0; const dirtyRef = useRef(dirty); dirtyRef.current = dirty;
+  const savingRevisionRef = useRef(false);
+  const pendingRevisionRef = useRef<PendingRevision | null>(null);
+  const locked = savingRevision || pendingRevision !== null;
+  const lockedRef = useRef(locked); lockedRef.current = locked;
   const activeDoc = docs.find((item) => item.name === active?.name); const latest = activeDoc?.revisions.at(-1) ?? 0;
   const face = narrow ? narrowFace : wideFace;
   const setFace = useCallback((next: HtmlFace) => { if (narrow) setNarrowFace(next); else setWideFace(next); }, [narrow]);
@@ -86,13 +94,17 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const refreshList = useCallback(async () => {
     try {
       const reply = await store.call({ op: "storage.list", window_id: windowId, entry });
-      if (reply.op === "storage.list") { setDocs(listRevisions(reply.result.items.map((item) => item.doc))); setError(null); }
+      if (reply.op === "storage.list") { setDocs(listRevisions(reply.result.items.map((item) => item.doc))); if (!pendingRevisionRef.current) setError(null); }
     } catch (reason) { setError(toCoreError(reason).message); }
     finally { setLoaded(true); }
   }, [entry, store, windowId]);
   const refreshThread = useCallback(async (name: string) => {
-    try { const result = await readThread(store, windowId, entry, name); if (activeRef.current?.name === name) setThread(result.thread); }
-    catch (reason) { setError(toCoreError(reason).message); }
+    try {
+      const result = await readThread(store, windowId, entry, name);
+      if (activeRef.current?.name === name) { setThread(result.thread); setThreadError(null); }
+    } catch (reason) {
+      if (activeRef.current?.name === name) setThreadError(toCoreError(reason).message);
+    }
   }, [entry, store, windowId]);
   useEffect(() => { if (visible) { void refreshList(); if (activeRef.current) void refreshThread(activeRef.current.name); } }, [visible, refreshList, refreshThread]);
   useEffect(() => store.subscribeEvents((event) => {
@@ -104,6 +116,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     else if (/\/r[1-9]\d*\.html$/.test(key)) void refreshList();
   }), [entry, refreshList, refreshThread, store, visible, windowId]);
   useEffect(() => {
+    if (lockedRef.current) return;
     if (!docs.length) { setActive(null); return; }
     const preferred = docs.find((item) => item.name === docState) ?? docs[0];
     const newest = preferred.revisions.at(-1)!;
@@ -120,7 +133,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
       return current;
     });
     latestRef.current = { name: preferred.name, rev: newest };
-  }, [docs, docState, revState, block.on_select_revision, patchState]);
+  }, [docs, docState, revState, block.on_select_revision, patchState, locked]);
   useEffect(() => {
     const item = active; const sequence = ++readSequence.current;
     setSelection(null); setActiveComment(null); setResults({}); setText(""); setUndo([]); setRedo([]); selectors.current.clear(); work.current = null; setSource(""); setSaveFailed(false);
@@ -184,38 +197,41 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     send({ type: "ks-html-edit", edit: safe });
   }, [flushEdits, send]);
   const record = useCallback((value: HtmlEdit | HtmlEdit[]) => {
-    if (!work.current) return;
+    if (lockedRef.current || !work.current) return;
     const group = Array.isArray(value) ? value : [value];
     for (const edit of group) { applyEdit(work.current, edit); sendEdit(edit); }
+    dirtyRef.current = true;
     setUndo((previous) => [...previous, group]);
     setRedo([]);
   }, [sendEdit]);
   const undoEdit = useCallback(() => {
-    const group = undoRef.current.at(-1); if (!group || !work.current) return;
+    const group = undoRef.current.at(-1); if (lockedRef.current || !group || !work.current) return;
     for (const edit of [...group].reverse()) { const inverse = invertEdit(edit); applyEdit(work.current, inverse); sendEdit(inverse); }
     flushEdits(); send({ type: "ks-html-refresh-selection" });
+    dirtyRef.current = undoRef.current.length > 1;
     setUndo((items) => items.slice(0, -1)); setRedo((items) => [...items, group]);
   }, [flushEdits, send, sendEdit]);
   const redoEdit = useCallback(() => {
-    const group = redo.at(-1); if (!group || !work.current) return;
+    const group = redo.at(-1); if (lockedRef.current || !group || !work.current) return;
     for (const edit of group) { applyEdit(work.current, edit); sendEdit(edit); }
     flushEdits(); send({ type: "ks-html-refresh-selection" });
+    dirtyRef.current = true;
     setRedo((items) => items.slice(0, -1)); setUndo((items) => [...items, group]);
   }, [flushEdits, redo, send, sendEdit]);
   const previewStyle = useCallback((prop: string, value: string) => {
-    if (!selection || !work.current) return;
+    if (lockedRef.current || !selection || !work.current) return;
     const target = findNumber(work.current, selection.n);
     if (!(target instanceof HTMLElement)) return;
-    if (prop === "border-width" && selection.styles["border-style"] === "none") sendEdit({ kind: "style", n: selection.n, prop: "border-style", before: target.style.getPropertyValue("border-style"), after: Number.parseFloat(value) > 0 ? "solid" : target.style.getPropertyValue("border-style") });
+    if (prop === "border-width" && Number.parseFloat(value) > 0 && selection.styles["border-style"]?.split(/\s+/).includes("none")) sendEdit({ kind: "style", n: selection.n, prop: "border-style", before: target.style.getPropertyValue("border-style"), after: selection.styles["border-style"].split(/\s+/).map((part) => part === "none" ? "solid" : part).join(" ") });
     sendEdit({ kind: "style", n: selection.n, prop, before: target.style.getPropertyValue(prop), after: value });
   }, [selection, sendEdit]);
   const editStyle = useCallback((prop: string, value: string) => {
     const target = selection && work.current ? findNumber(work.current, selection.n) : null;
-    if (!(target instanceof HTMLElement) || !selection) return;
+    if (lockedRef.current || !(target instanceof HTMLElement) || !selection) return;
     const before = target.style.getPropertyValue(prop); if (before === value) return;
     const group: HtmlEdit[] = [];
-    if (prop === "border-width" && Number.parseFloat(value) > 0 && selection.styles["border-style"] === "none") {
-      group.push({ kind: "style", n: selection.n, prop: "border-style", before: target.style.getPropertyValue("border-style"), after: "solid" });
+    if (prop === "border-width" && Number.parseFloat(value) > 0 && selection.styles["border-style"]?.split(/\s+/).includes("none")) {
+      group.push({ kind: "style", n: selection.n, prop: "border-style", before: target.style.getPropertyValue("border-style"), after: selection.styles["border-style"].split(/\s+/).map((part) => part === "none" ? "solid" : part).join(" ") });
     }
     group.push({ kind: "style", n: selection.n, prop, before, after: value });
     record(group);
@@ -224,12 +240,13 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   }, [flushEdits, record, selection, send]);
   const editText = useCallback((value: string) => {
     const target = selection && work.current ? findNumber(work.current, selection.n) : null;
-    if (!selection || !target || target.children.length || target.textContent === value) return;
+    if (lockedRef.current || !selection || !target || target.children.length || target.textContent === value) return;
     record({ kind: "text", n: selection.n, before: target.textContent ?? "", after: value });
     setSelection((current) => current ? { ...current, text: value } : null);
     send({ type: "ks-html-refresh-selection" });
   }, [record, selection, send]);
   const keyAction = useCallback((data: Extract<FrameToParent, { type: "ks-html-key" }>) => {
+    if (lockedRef.current) return;
     if (data.ctrl && data.key.toLowerCase() === "z") { data.shift ? redoEdit() : undoEdit(); return; }
     if (data.ctrl && data.key.toLowerCase() === "y") { redoEdit(); return; }
     if (data.key === "Escape") { send({ type: "ks-html-select-number", n: null }); return; }
@@ -264,11 +281,22 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     const receive = (event: MessageEvent<FrameToParent>) => {
       if (event.source !== frame.current?.contentWindow || !event.data || typeof event.data !== "object") return;
       const data = event.data;
-      if (data.type === "ks-html-ready") { send({ type: "ks-html-mode", mode }); send({ type: "ks-html-comments", comments: frameComments }); }
+      if (data.type === "ks-html-ready") {
+        send({ type: "ks-html-mode", mode });
+        send({ type: "ks-html-comments", comments: frameComments });
+        send({ type: "ks-html-lock", locked: lockedRef.current });
+      }
       else if (data.type === "ks-html-visible-text") setText(data.text);
-      else if (data.type === "ks-html-select") { setSelection(data.selection); if (data.selection) { selectors.current.set(data.selection.n, data.selection.anchor.selector); if (data.selection.anchor.kind === "text") setFace("comments"); } }
+      else if (data.type === "ks-html-select") {
+        if (lockedRef.current) return;
+        setSelection(data.selection);
+        if (data.selection) {
+          selectors.current.set(data.selection.n, data.selection.anchor.selector);
+          if (data.selection.anchor.kind === "text") setFace("comments");
+        }
+      }
       else if (data.type === "ks-html-anchor-results") setResults(data.results);
-      else if (data.type === "ks-html-select-comment") openComment(data.id);
+      else if (data.type === "ks-html-select-comment" && !lockedRef.current) openComment(data.id);
       else if (data.type === "ks-html-key") keyAction(data);
       else if (data.type === "ks-html-text-edit") record({ kind: "text", n: data.n, before: data.before, after: data.after });
     };
@@ -276,7 +304,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   }, [frameComments, keyAction, mode, openComment, record, send, setFace]);
   const addComment = useCallback(async (body: string) => {
     const current = activeRef.current; if (!current || !selection || !body.trim()) return false;
-    const comment: Comment = { id: makeId("c"), rev: current.rev, anchor_rev: current.rev, status: "needs_agent_review", anchor: selection.anchor, comment: body.trim(), created_at: new Date().toISOString(), resolved_rev: null, replies: [] };
+    const comment: Comment = { id: makeId("c"), rev: current.rev, anchor_rev: dirtyRef.current ? 0 : current.rev, status: "needs_agent_review", anchor: selection.anchor, comment: body.trim(), created_at: new Date().toISOString(), resolved_rev: null, replies: [] };
     return writeChange({ kind: "add", comment });
   }, [selection, writeChange]);
   const edits = useMemo(() => undo.flatMap((group) => group.map((edit) => {
@@ -286,18 +314,53 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     return { selector, dom: edit.kind === "insert" && edit.source ? "duplicate" : edit.kind };
   })), [undo]);
   const saveRevision = useCallback(async () => {
-    const current = activeRef.current; const doc = work.current; if (!current || !doc || !latest) return;
-    const rev = latest + 1; const html = serializeOriginal(doc); const path = `${current.name}/r${rev}.html`;
-    setSaving(true);
+    const current = activeRef.current;
+    const doc = work.current;
+    if (savingRevisionRef.current || !current || !doc || !latest) return;
+    savingRevisionRef.current = true;
+    lockedRef.current = true;
+    setSavingRevision(true);
+    flushEdits();
+    send({ type: "ks-html-lock", locked: true });
     try {
-      await store.call({ op: "storage.write", window_id: windowId, entry, doc: path, content: html, expected_revision: null });
-      cache.current.set(path, html);
-      await writeThreadChange(store, windowId, entry, current.name, { kind: "revision", rev, meta: { title: `직접 수정 ${undo.length}건`, author: "user", base_rev: current.rev, edits } });
-      setUndo([]); setRedo([]); setActive({ name: current.name, rev }); patchState(current.name, rev); await refreshList(); await refreshThread(current.name); setError(null); setErrorCode(null); setSaveFailed(false);
-    } catch (reason) { const failure = toCoreError(reason); setError(failure.message); setErrorCode(failure.code); setSaveFailed(true); }
-    finally { setSaving(false); }
-  }, [edits, entry, latest, patchState, refreshList, refreshThread, store, undo.length, windowId]);
-  const choose = useCallback((name: string, rev: number) => { if (activeRef.current?.name === name && activeRef.current.rev === rev) return; if (dirtyRef.current) { setPendingChange({ name, rev }); return; } setActive({ name, rev }); patchState(name, rev); }, [patchState]);
+      let pending = pendingRevisionRef.current;
+      if (!pending) {
+        const rev = latest + 1;
+        const html = serializeOriginal(doc);
+        const path = `${current.name}/r${rev}.html`;
+        const change: PendingRevision["change"] = { kind: "revision", rev, meta: { title: `직접 수정 ${undo.length}건`, author: "user", base_rev: current.rev, edits } };
+        await store.call({ op: "storage.write", window_id: windowId, entry, doc: path, content: html, expected_revision: null });
+        cache.current.set(path, html);
+        pending = { name: current.name, rev, change };
+        pendingRevisionRef.current = pending;
+        setPendingRevision(pending);
+      }
+      await writeThreadChange(store, windowId, entry, pending.name, pending.change);
+      pendingRevisionRef.current = null;
+      setPendingRevision(null);
+      dirtyRef.current = false;
+      setUndo([]);
+      setRedo([]);
+      setActive({ name: pending.name, rev: pending.rev });
+      patchState(pending.name, pending.rev);
+      await refreshList();
+      await refreshThread(pending.name);
+      setError(null);
+      setErrorCode(null);
+      setSaveFailed(false);
+    } catch (reason) {
+      const failure = toCoreError(reason);
+      setError(failure.message);
+      setErrorCode(failure.code);
+      setSaveFailed(true);
+    } finally {
+      savingRevisionRef.current = false;
+      lockedRef.current = pendingRevisionRef.current !== null;
+      send({ type: "ks-html-lock", locked: lockedRef.current });
+      setSavingRevision(false);
+    }
+  }, [edits, entry, flushEdits, latest, patchState, refreshList, refreshThread, send, store, undo.length, windowId]);
+  const choose = useCallback((name: string, rev: number) => { if (lockedRef.current || (activeRef.current?.name === name && activeRef.current.rev === rev)) return; if (dirtyRef.current) { setPendingChange({ name, rev }); return; } setActive({ name, rev }); patchState(name, rev); }, [patchState]);
   const confirmChange = useCallback(() => { if (!pendingChange) return; setActive(pendingChange); patchState(pendingChange.name, pendingChange.rev); setPendingChange(null); }, [patchState, pendingChange]);
   const share = useCallback((includeText: boolean) => {
     if (!active) return `[${context.definition.name || "HTML 보기"}]`;
@@ -329,5 +392,5 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     catch (reason) { setError(toCoreError(reason).message); }
     finally { setSending(false); }
   }, [active, agentWindow, hasUnsentReview, reviewComments, sending, share, store]);
-  return { active, docs, latest, thread, comments, selection, results, source, error, errorCode, saveFailed, loaded, saving, sending, sentReview, hasUnsentReview, reviewComments, mode, setMode, face, setFace, narrow, activeComment, setActiveComment, openComment, propertyGroups, setPropertyGroups, frame, root, dirty, undo, redo, edits, pendingChange, setPendingChange, choose, confirmChange, keyAction, record, previewStyle, editStyle, editText, undoEdit, redoEdit, addComment, writeChange, saveRevision, send, share, sendAgent, agentWindow };
+  return { active, docs, latest, thread, comments, selection, results, source, error: threadError ?? error, errorCode, saveFailed, loaded, saving: saving || savingRevision, locked, sending, sentReview, hasUnsentReview, reviewComments, mode, setMode, face, setFace, narrow, activeComment, setActiveComment, openComment, propertyGroups, setPropertyGroups, frame, root, dirty, undo, redo, edits, pendingChange, setPendingChange, choose, confirmChange, keyAction, record, previewStyle, editStyle, editText, undoEdit, redoEdit, addComment, writeChange, saveRevision, send, share, sendAgent, agentWindow };
 }
