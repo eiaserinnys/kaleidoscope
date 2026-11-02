@@ -9,6 +9,7 @@ import { Group, Target } from "./parts";
 type Model = ReturnType<typeof useHtmlDocument>;
 type Icon = ComponentType<{ size?: "inline" | "control" | "empty" | "tile" }>;
 const shadows: Record<string, string> = { "없음": "none", "작게": "0 1px 2px rgb(0 0 0 / 12%)", "보통": "0 4px 12px rgb(0 0 0 / 16%)", "크게": "0 12px 32px rgb(0 0 0 / 20%)" };
+const computedShadows: Record<string, string> = { "none": "없음", "rgba(0, 0, 0, 0.12) 0px 1px 2px 0px": "작게", "rgba(0, 0, 0, 0.16) 0px 4px 12px 0px": "보통", "rgba(0, 0, 0, 0.2) 0px 12px 32px 0px": "크게" };
 const numeric = (value: string | undefined, fallback = "0") => value && value !== "normal" && value !== "auto" ? value.replace(/px$/, "") : fallback;
 
 function Alignment({ label, options, value, set }: { label: string; options: { label: string; value: string; icon: Icon }[]; value: string; set: (value: string) => void }) {
@@ -41,7 +42,7 @@ export function PropertyFace({ model }: { model: Model }) {
   const line = styles["line-height"] === "normal" ? "자동" : String(Number((Number.parseFloat(styles["line-height"] ?? "") / fontSize).toFixed(2)) || 0);
   const opacity = String(Math.round((Number.parseFloat(styles.opacity ?? "1") || 0) * 100));
   const backgroundImage = styles["background-image"] && styles["background-image"] !== "none" ? (styles["background-image"].includes("gradient(") ? "그라디언트" : "이미지") : undefined;
-  const shadow = Object.entries(shadows).find(([, css]) => css === styles["box-shadow"])?.[0] ?? "사용자 값";
+  const shadow = computedShadows[styles["box-shadow"] ?? ""] ?? Object.entries(shadows).find(([, css]) => css === styles["box-shadow"])?.[0] ?? "사용자 값";
   const textOptions = [{ label: "왼쪽", value: "left", icon: AlignLeft }, { label: "가운데", value: "center", icon: AlignCenter }, { label: "오른쪽", value: "right", icon: AlignRight }, { label: "양쪽", value: "justify", icon: AlignJustify }];
   const mainIcons = vertical ? [AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal, AlignVerticalSpaceBetween] : [AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignHorizontalSpaceBetween];
   const crossIcons = vertical ? [AlignStartVertical, AlignCenterVertical, AlignEndVertical] : [AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal];
