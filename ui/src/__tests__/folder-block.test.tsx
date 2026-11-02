@@ -99,6 +99,7 @@ function setup(definition: AppDefinition, configure?: (transport: ReturnType<typ
 
 describe("folder block", () => {
   it.each(["끝 행", "빈 공간 메뉴", "머리", "행 메뉴"])("%s에서 연 만들기는 취소 뒤 원래 입구로 돌아간다", async (entrance) => {
+    const user = userEvent.setup();
     const files = entrance === "머리" || entrance === "행 메뉴";
     const definition = files ? fileFolderDefinition("readwrite", false) : storageFolderDefinition(false);
     if (!files) (definition.ui as Extract<Block, { type: "folder" }>).header = false;
@@ -115,14 +116,15 @@ describe("folder block", () => {
     for (const cancel of ["Escape", "empty"]) {
       if (entrance.includes("메뉴")) {
         fireEvent.contextMenu(entrance === "빈 공간 메뉴" ? tree : origin());
-        fireEvent.click(await screen.findByRole("menuitem", { name: label }));
-      } else fireEvent.click(origin());
+        await user.click(await screen.findByRole("menuitem", { name: label }));
+      } else await user.click(origin());
       const input = await screen.findByRole("textbox", { name: `${label} 이름` });
-      if (cancel === "empty") fireEvent.change(input, { target: { value: "" } });
-      fireEvent.keyDown(input, { key: cancel === "empty" ? "Enter" : "Escape" });
+      await waitFor(() => expect(document.activeElement).toBe(input));
+      if (cancel === "empty") await user.clear(input);
+      await user.keyboard(cancel === "empty" ? "{Enter}" : "{Escape}");
       await waitFor(() => expect(document.activeElement).toBe(origin()));
     }
-    fireEvent.keyDown(origin(), { key: "Enter" });
+    await user.keyboard("{Enter}");
     if (entrance !== "머리" && entrance !== "행 메뉴") expect(await screen.findByRole("textbox", { name: `${label} 이름` })).toBeTruthy();
   });
 
