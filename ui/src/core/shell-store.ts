@@ -74,10 +74,9 @@ export function useShellSelector<T>(store: ShellStore, select: (snapshot: ShellS
 export function shareShellSnapshot(previous: ShellSnapshot | null, next: ShellSnapshot): ShellSnapshot {
   if (!previous) return next;
   const previousVersions = new Map(previous.shared.app_versions.map((item) => [`${item.app_id}\0${item.version}`, item]));
-  const versions = next.shared.app_versions.map((item) => {
-    const old = previousVersions.get(`${item.app_id}\0${item.version}`);
-    return old ? shareStructure(old, item) : item;
-  });
+  const versions = next.shared.app_versions.map((item) =>
+    previousVersions.get(`${item.app_id}\0${item.version}`) ?? item,
+  );
   const appVersions = versions.length === previous.shared.app_versions.length &&
     versions.every((item, index) => item === previous.shared.app_versions[index])
     ? previous.shared.app_versions

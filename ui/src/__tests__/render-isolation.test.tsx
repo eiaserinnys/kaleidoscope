@@ -6,7 +6,7 @@ import { Shell } from "../../../app/src/shell/shell";
 import type { AppDefinition, CoreEvent, ShellSnapshot } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { createFakeTransport } from "../core/fake-transport";
-import { createShellStore, shareStructure } from "../core/shell-store";
+import { createShellStore, shareShellSnapshot, shareStructure } from "../core/shell-store";
 import * as renderBlockModule from "../render/render-block";
 import { makeTestSeed, makeTestSnapshot } from "./fixtures";
 
@@ -269,6 +269,24 @@ describe("실제 Shell의 블록 렌더 격리", () => {
 });
 
 describe("shareStructure 참조 보존", () => {
+  it("불변 앱 판은 내용을 비교하지 않고 이전 객체를 유지하며 새 판은 새 객체를 쓴다", () => {
+    const previous = testSnapshot();
+    const oldVersion = previous.shared.app_versions[0];
+    const next = structuredClone(previous);
+    next.shared.app_versions[0].definition.name = "달라진 정의";
+
+    const sameVersion = shareShellSnapshot(previous, next).shared.app_versions[0];
+    expect(sameVersion).toBe(oldVersion);
+    expect(sameVersion.definition).toBe(oldVersion.definition);
+    expect(sameVersion.definition.name).toBe(oldVersion.definition.name);
+
+    const newVersion = structuredClone(next);
+    newVersion.shared.app_versions[0].version += 1;
+    const result = shareShellSnapshot(previous, newVersion).shared.app_versions[0];
+    expect(result).toBe(newVersion.shared.app_versions[0]);
+    expect(result.definition.name).toBe("달라진 정의");
+  });
+
   it("키가 추가되거나 삭제되어도 공통 자식 참조를 보존하고, 값이 같으면 이전 객체를 돌려준다", () => {
     const common = { nested: { value: 1 }, items: ["a", "b"] };
     type Structure = { common: typeof common; other: { enabled: boolean }; extra?: string; removed?: { value: number } };
