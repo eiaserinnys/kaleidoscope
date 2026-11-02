@@ -1,3 +1,4 @@
+/// <reference path="../iife.d.ts" />
 import bridgeSource from "./html-bridge/main.ts?iife";
 import { sourceHash } from "./html-bridge/identity";
 
