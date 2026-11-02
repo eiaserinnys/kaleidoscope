@@ -213,12 +213,22 @@ pub(super) fn send_prompt(
     phase: &str,
     log: &mut File,
 ) -> Result<Vec<PathBuf>, String> {
+    let window = app.get_window("main").ok_or("main window not found")?;
+    window.set_focus().map_err(|error| error.to_string())?;
+    let focus_before = ui::evaluate(app, &format!(
+        "const input=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');if(!input)return {{has_focus:false,active:false,selection:null}};input.focus();return {{has_focus:document.hasFocus(),active:document.activeElement===input,selection:[input.selectionStart,input.selectionEnd]}};"
+    ))?;
+    if focus_before["has_focus"] != json!(true) || focus_before["active"] != json!(true) {
+        return Err(format!(
+            "could not establish agent input focus before capture: {focus_before}"
+        ));
+    }
     set_phase(app, out, agent_window_id, phase)?;
     let start_count = count_images(image_dir)?;
     let started = Instant::now();
     let text_json = serde_json::to_string(text).map_err(|error| error.to_string())?;
     let result = ui::evaluate(app, &format!(
-        "const input=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');if(!input)return false;const setter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')?.set;setter.call(input,{text_json});input.dispatchEvent(new Event('input',{{bubbles:true}}));input.focus();input.dispatchEvent(new KeyboardEvent('keydown',{{key:'Enter',code:'Enter',bubbles:true,cancelable:true}}));return true;"
+        "const input=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');if(!input)return false;const setter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')?.set;setter.call(input,{text_json});input.dispatchEvent(new Event('input',{{bubbles:true}}));input.dispatchEvent(new KeyboardEvent('keydown',{{key:'Enter',code:'Enter',bubbles:true,cancelable:true}}));return true;"
     ))?;
     if result != json!(true) {
         return Err("could not submit through the agent input".into());
@@ -233,10 +243,16 @@ pub(super) fn send_prompt(
             "agent input focus changed during image capture: {focus}"
         ));
     }
+    if focus["selection"] != focus_before["selection"] {
+        return Err(format!(
+            "agent input selection changed during image capture: before={}, after={}",
+            focus_before["selection"], focus["selection"]
+        ));
+    }
     record(
         log,
         "share.send",
-        json!({"phase":phase,"text":text,"visual_count":expected_visuals,"elapsed_ms":started.elapsed().as_millis(),"focus":focus,"entered_through_input":true}),
+        json!({"phase":phase,"text":text,"visual_count":expected_visuals,"elapsed_ms":started.elapsed().as_millis(),"focus_before":focus_before,"focus_after":focus,"entered_through_input":true}),
     )?;
     Ok(images
         .into_iter()
