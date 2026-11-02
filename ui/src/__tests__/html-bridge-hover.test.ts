@@ -13,6 +13,9 @@ it("프레임 호버와 포인터 이동은 부모에게 상태를 보내지 않
   document.querySelector("p")!.dispatchEvent(new MouseEvent("pointermove", { bubbles: true }));
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   expect(send).not.toHaveBeenCalled();
+  window.dispatchEvent(new MessageEvent("message", { source: window.parent, data: { type: "ks-html-theme", tokens: { "--ks-color-accent": "#abcdef" } } }));
+  expect(document.documentElement.style.getPropertyValue("--ks-color-accent")).toBe("#abcdef");
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   send.mockRestore();
   vi.unstubAllGlobals();
 });

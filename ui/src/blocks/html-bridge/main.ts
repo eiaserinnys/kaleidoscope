@@ -190,6 +190,7 @@ window.addEventListener("message", (event: MessageEvent<ParentToFrame>) => {
   if (data.type === "ks-html-mode") { mode = data.mode; hover = null; if (mode === "view") select(null); schedule(); }
   else if (data.type === "ks-html-select-number") select(data.n === null ? null : findNumber(document, data.n));
   else if (data.type === "ks-html-comments") { comments = data.comments; anchorsDirty = true; schedule(); }
+  else if (data.type === "ks-html-theme") { for (const [name, value] of Object.entries(data.tokens)) document.documentElement.style.setProperty(name, value); schedule(); }
   else if (data.type === "ks-html-edit") { applyEdit(document, data.edit); if (data.edit.kind !== "style" || data.edit.prop === "display") visible(); schedule(); }
   else if (data.type === "ks-html-refresh-selection") send({ type: "ks-html-select", selection: selected ? selectionOf(selected, pending ?? undefined) : null });
   else if (data.type === "ks-html-focus-comment") { const comment = comments.find((item) => item.id === data.id); if (comment) resolveAnchor(document, comment.anchor, comment.sameRevision).element?.scrollIntoView({ block: "center" }); }

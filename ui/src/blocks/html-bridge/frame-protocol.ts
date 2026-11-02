@@ -34,5 +34,6 @@ export type ParentToFrame =
   | { type: "ks-html-select-number"; n: number | null }
   | { type: "ks-html-comments"; comments: FrameComment[] }
   | { type: "ks-html-focus-comment"; id: string }
+  | { type: "ks-html-theme"; tokens: Record<string, string> }
   | { type: "ks-html-refresh-selection" }
   | { type: "ks-html-edit"; edit: HtmlEdit };

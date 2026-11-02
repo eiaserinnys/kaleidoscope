@@ -25,6 +25,7 @@ function TextField({ value, change }: { value: string; change: (text: string) =>
 export function PropertyFace({ model }: { model: Model }) {
   const [activeColor, setActiveColor] = useState<string | null>(null);
   const displayBefore = useRef(new Map<number, string>());
+  const pointerDown = useRef(false);
   const selection = model.selection;
   if (!selection) return <div className="ks-html-rail-body"><div className="ks-html-rail-empty"><EmptyState icon={<MousePointer2 size="empty" />} text="요소를 고르세요" /></div></div>;
   const styles = selection.styles; const display = styles.display ?? "";
@@ -48,7 +49,8 @@ export function PropertyFace({ model }: { model: Model }) {
   const crossIcons = vertical ? [AlignStartVertical, AlignCenterVertical, AlignEndVertical] : [AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal];
   const mainOptions = ["flex-start", "center", "flex-end", "space-between"].map((item, index) => ({ label: ["주축 앞", "주축 가운데", "주축 뒤", "주축 양 끝"][index], value: item, icon: mainIcons[index] }));
   const crossOptions = ["flex-start", "center", "flex-end"].map((item, index) => ({ label: ["교차축 앞", "교차축 가운데", "교차축 뒤"][index], value: item, icon: crossIcons[index] }));
-  return <div className="ks-html-rail-body" onFocusCapture={(event) => { const target = event.target as HTMLElement; if (!target.closest("[data-color]") && !target.closest(".ks-html-swatches")) setActiveColor(null); }}>
+  const outsideColor = (target: HTMLElement) => !target.closest("[data-color], .ks-html-swatches");
+  return <div className="ks-html-rail-body" onPointerDownCapture={() => { pointerDown.current = true; }} onPointerUpCapture={() => { pointerDown.current = false; }} onPointerCancelCapture={() => { pointerDown.current = false; }} onClickCapture={(event) => { if (outsideColor(event.target as HTMLElement)) setActiveColor(null); }} onFocusCapture={(event) => { if (!pointerDown.current && outsideColor(event.target as HTMLElement)) setActiveColor(null); }} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { pointerDown.current = false; setActiveColor(null); } }}>
     <Target selection={selection} choose={(n) => model.send({ type: "ks-html-select-number", n })} />
     <div className="ks-html-actions" role="toolbar" aria-label="요소">
       <IconButton aria-label="위로 Alt+↑" disabled={body || selection.first} onClick={() => action("ArrowUp", { alt: true })}><ArrowUp /></IconButton>
