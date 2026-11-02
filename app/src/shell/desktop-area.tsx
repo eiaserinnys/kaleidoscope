@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppWindowContent,
   Button,
@@ -94,6 +94,12 @@ const DesktopCanvas = memo(function DesktopCanvas({
 }) {
   const desktop = useShellSelector(store, (snapshot) => snapshot?.shared.desktops.find((item) => item.id === desktopId));
   const windows = useShellSelector(store, (snapshot) => snapshot?.shared.windows.filter((window) => window.desktop_id === desktopId) ?? [], sameReferences);
+  const act = useCallback((windowId: string, op: CoreRequest["op"]) => {
+    setWindowMenu(null);
+    if (op === "window.raise" || op === "window.minimize" || op === "window.maximize" || op === "window.restore" || op === "window.close") {
+      void onCall({ op, window_id: windowId });
+    }
+  }, [onCall, setWindowMenu]);
   if (!desktop) return null;
 
   const active = desktop.id === activeDesktopId && desktop.workspace_id === activeWorkspaceId;
@@ -103,13 +109,6 @@ const DesktopCanvas = memo(function DesktopCanvas({
       (top, window) => !top || window.z > top.z ? window : top,
       undefined,
     )?.id ?? null;
-  const act = (windowId: string, op: CoreRequest["op"]) => {
-    setWindowMenu(null);
-    if (op === "window.raise" || op === "window.minimize" || op === "window.maximize" || op === "window.restore" || op === "window.close") {
-      void onCall({ op, window_id: windowId });
-    }
-  };
-
   return <section aria-hidden={!active} className="ks-desktop-canvas" hidden={!active}>
     {windows.length === 0 ? (
       <EmptyState

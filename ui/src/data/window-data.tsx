@@ -277,10 +277,12 @@ export function useBinding(pointer: string, binding: Binding): BindingValue {
   const stateKey = binding !== null && typeof binding === "object" && !Array.isArray(binding) && Object.keys(binding).length === 1 && "state" in binding && typeof binding.state === "string" ? binding.state : null;
   const stateValue = useWindowStateValue({ store: context.data.store, window: { id: context.data.windowId } }, stateKey);
   const value = useSyncExternalStore((listener) => context.data.subscribeValue(key, listener), () => context.data.getValue(key), () => loading);
+  const stateBinding = useMemo<BindingValue>(() => ({ status: "ready", value: (stateValue as JsonValue) ?? null }), [stateValue]);
+  const literalBinding = useMemo<BindingValue>(() => ({ status: "ready", value: binding as JsonValue }), [binding]);
   if (localName !== null) return value;
   if (binding !== null && typeof binding === "object" && !Array.isArray(binding)) {
-    if (stateKey !== null) return { status: "ready", value: stateValue as JsonValue ?? null };
+    if (stateKey !== null) return stateBinding;
     if (isExpression) return value;
   }
-  return { status: "ready", value: binding as JsonValue };
+  return literalBinding;
 }
