@@ -112,7 +112,10 @@ function testSnapshot(definitions: AppDefinition[] = [definition], firstState: R
   const first = snapshot.shared.windows[0];
   first.id = "window-a";
   const compound = { items: [1, 2], nested: { label: "stable" } };
-  first.state = { ...firstState, first: firstState.first ?? "a", second: firstState.second ?? "b", compound: firstState.compound ?? compound };
+  first.state = { ...firstState };
+  if (Object.hasOwn(definitions[0].state, "first")) first.state.first ??= "a";
+  if (Object.hasOwn(definitions[0].state, "second")) first.state.second ??= "b";
+  if (Object.hasOwn(definitions[0].state, "compound")) first.state.compound ??= compound;
   snapshot.shared.windows = [
     first,
     { ...first, id: "window-b", state: structuredClone(first.state), z: 2 },
