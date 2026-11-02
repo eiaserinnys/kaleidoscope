@@ -315,8 +315,10 @@
 .ks-timeline { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .ks-timeline-layout { display: flex; min-height: 0; overflow: hidden; }
 .ks-timeline-labels { flex: 0 0 clamp(calc(var(--ks-space-6) * 2), 22cqw, calc(var(--ks-space-6) * 4)); overflow: hidden; }
+.ks-timeline-layout.has-controls .ks-timeline-labels { flex-basis: clamp(calc(var(--ks-icon-button-size) * 3 + var(--ks-space-3) * 2 + var(--ks-space-1) * 2), 22cqw, calc(var(--ks-icon-button-size) * 3 + var(--ks-space-3) * 2 + var(--ks-space-2) * 2)); }
 .ks-timeline-labels > div, .ks-timeline-track, .ks-timeline-ruler { height: calc(var(--ks-control-height) * 1.25); }
 .ks-timeline-labels > div { display: flex; align-items: center; gap: var(--ks-space-1); padding: 0 var(--ks-space-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-timeline-ruler-label { gap: var(--ks-space-1); }
 .ks-timeline-ruler-label .ks-icon-button { flex: 0 0 auto; }
 .ks-timeline-labels > div > span { overflow: hidden; text-overflow: ellipsis; }
 .ks-timeline-scroll { overflow: auto; flex: 1; min-width: 0; padding-inline: var(--ks-space-2); }
@@ -328,6 +330,7 @@
 .ks-timeline-ruler span:first-child { padding-inline-start: var(--ks-space-2); }
 .ks-timeline-track { position: relative; border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
 .ks-timeline-item { position: absolute; top: var(--ks-space-1); bottom: var(--ks-space-1); overflow: hidden; display: flex; align-items: center; padding: 0 var(--ks-space-2); background: var(--ks-color-surface-raised); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); cursor: grab; }
+.ks-timeline-item.is-fixed { cursor: default; }
 .ks-timeline-item.is-accent, .ks-timeline-item.is-neutral.series-1 { background: color-mix(in srgb, var(--ks-color-accent) 25%, var(--ks-color-surface)); }
 .ks-timeline-item.is-success, .ks-timeline-item.is-neutral.series-2 { background: color-mix(in srgb, var(--ks-color-share) 25%, var(--ks-color-surface)); }
 .ks-timeline-item.is-warning, .ks-timeline-item.is-neutral.series-3 { background: color-mix(in srgb, var(--ks-color-warning) 25%, var(--ks-color-surface)); }

@@ -1177,7 +1177,7 @@ export type ThreadSnapshot = { cursor: string, busy: boolean, tool: string | nul
 
 export type TimelineEdit = { phase: EditPhase, kind: EditKind, id: string, track: string | null, start: number, end: number, };
 
-export type TimelineItem = { id: string, start: number, end: number, label?: string, tone?: Tone, series?: number, movable?: boolean, resizable?: boolean, };
+export type TimelineItem = { id: string, start: number, end: number, label?: string, tone?: Tone, series?: number, movable?: boolean, resizable?: boolean, resize_start_only?: boolean, };
 
 export type TimelineMarker = { id: string, time: number, label?: string, movable?: boolean, };
 

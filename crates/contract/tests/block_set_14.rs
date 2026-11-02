@@ -188,7 +188,7 @@ fn v14_block_fields_roundtrip() {
             {"type":"progress","value":0.5,"max":1,"label":{"message":"title"}},
             {"type":"repeat","items":[],"key":"id","layout":"grid","grid":{"columns":"auto"},"virtual":true,"follow_pause_ms":2500,"follow_key":"a","template":
                 {"type":"input","kind":"number","value":{"item":"start"},"min":0,"max":{"item":"end"},"step":0.01,"format":{"kind":"decimal","digits":2},"commit":"blur","focus":{"item":"focus"},"on_cancel":{"set_state":"language"},"on_change":{"set_state":"language"}}},
-            {"type":"timeline","duration":5,"position":0,"tracks":[],"viewport":{"state":"viewport"},"controls":true,"on_viewport":{"set_state":"viewport"}}
+            {"type":"timeline","duration":5,"position":0,"tracks":[{"id":"track","items":[{"id":"start-only","start":1,"end":2,"resizable":true,"resize_start_only":true}]}],"viewport":{"state":"viewport"},"controls":true,"on_viewport":{"set_state":"viewport"}}
         ]}),
     );
     app["state"]["viewport"] = json!({"start":0,"end":5});
