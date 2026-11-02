@@ -96,6 +96,25 @@ describe("Menu", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("closes a coordinate menu when its anchor row is clicked, but preserves button-anchored menus", () => {
+    const anchor = document.createElement("button");
+    const child = document.createElement("span");
+    anchor.append(child);
+    document.body.append(anchor);
+    const onClose = vi.fn();
+    const { unmount } = render(<Menu anchor={anchor} anchorPoint={{ x: 10, y: 10 }} items={[]} onClose={onClose} />);
+
+    fireEvent.pointerDown(child);
+    expect(onClose).toHaveBeenCalledOnce();
+
+    onClose.mockClear();
+    unmount();
+    render(<Menu anchor={anchor} items={[]} onClose={onClose} />);
+    fireEvent.pointerDown(child);
+    expect(onClose).not.toHaveBeenCalled();
+    anchor.remove();
+  });
+
   it("opens above the anchor when there is not enough space below", () => {
     expect(renderAt(550, 570, 120)).toBe(430);
   });

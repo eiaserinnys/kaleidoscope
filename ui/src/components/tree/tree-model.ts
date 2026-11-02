@@ -14,6 +14,7 @@ export interface TreeNode {
   interactiveContent?: boolean;
   data?: unknown;
   currentOnSelection?: boolean;
+  rowClassName?: string;
 }
 
 export interface TreeRowModel {

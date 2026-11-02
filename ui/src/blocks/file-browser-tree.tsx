@@ -1,17 +1,18 @@
-import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { FolderEntry } from "../contract/contract";
 import { toCoreError } from "../core/core-transport";
 import { Button, IconButton, StatusText } from "../components/primitives";
 import { FilePlus, FileText, FolderOpen, PanelLeftClose, PanelLeftOpen } from "../components/icons";
 import { TextInput } from "../components/text-input";
 import { TreeView } from "../components/tree/tree-view";
-import type { TreeActivation } from "../components/tree/tree-view";
+import type { TreeActivation, TreeFocusController } from "../components/tree/tree-view";
 import type { TreeNode, TreeRowModel } from "../components/tree/tree-model";
 import type { BlockContext } from "./block-context";
 import { SplitPaneContext } from "./split-pane-context";
-import { useWindowGrant, useWindowVisible } from "../data/window-state";
+import { patchWindowState, readWindowState, useWindowGrant, useWindowVisible } from "../data/window-state";
 import { useShellSelector } from "../core/shell-store";
-import { fileFolderCapabilities, type FolderBackend } from "./folder-backend";
+import { createFileFolderBackend, type FolderBackend } from "./folder-backend";
+import { useFolderActions } from "./folder-actions";
 
 interface CreatingFile {
   directory: string;
@@ -37,6 +38,10 @@ export interface FileBrowserTreeProps {
   onFileContextMenu?: (anchor: HTMLElement, path: string) => void;
   actionError?: string | null;
   onActionError?: (error: string | null) => void;
+  backend?: FolderBackend;
+  backendLabel?: string;
+  actionsEnabled?: boolean;
+  selectedStateKey?: string;
 }
 
 function extensionOf(name: string): string {
@@ -74,9 +79,14 @@ export function FileBrowserTree({
   onFileContextMenu,
   actionError: externalActionError,
   onActionError,
+  backend: providedBackend,
+  backendLabel,
+  actionsEnabled = false,
+  selectedStateKey,
 }: FileBrowserTreeProps) {
   const pane = useContext(SplitPaneContext);
   const treeRef = useRef<HTMLDivElement>(null);
+  const focusController = useRef<TreeFocusController | null>(null);
   const restoreToggleFocus = useRef(false);
   const { store, window } = context;
   const grant = useWindowGrant(context, permission) ?? null;
@@ -86,28 +96,21 @@ export function FileBrowserTree({
   )));
   const declaration = context.definition.permissions.find((item) => item.module === "files" && item.id === permission);
   const permissionAccess = declaration?.module === "files" ? declaration.access : undefined;
-  const identity = scope === "pc"
-    ? `pc:${window.app_id}:${permission}`
-    : grant ? `file:${grant.root_path}` : `file:${permission}`;
-  const backend = useMemo<FolderBackend>(() => ({
-    identity,
-    capabilities: fileFolderCapabilities(permissionAccess === "readwrite", scope, readOnly),
-    list: async (directory) => {
-      const reply = await store.call({ op: "files.list", window_id: window.id, permission, dir: directory });
-      if (reply.op !== "files.list") throw new Error("파일 목록 응답이 올바르지 않습니다");
-      return reply.entries.map((entry) => ({
-        name: entry.name,
-        path: entry.path,
-        kind: entry.kind,
-        ext: extensionOf(entry.name),
-        size: entry.size,
-        modified: entry.modified,
-      }));
-    },
-  }), [identity, permission, permissionAccess, readOnly, scope, store, window.id]);
-  const hasRoot = scope === "pc" ? pcAccess : grant !== null;
   const rootPath = scope === "pc" ? pcAccess ? "" : null : grant?.root_path ?? null;
-  const rootName = scope === "pc" ? permissionLabel : grant?.root_name ?? "";
+  const backend = useMemo(() => providedBackend ?? createFileFolderBackend({
+    store,
+    windowId: window.id,
+    permission,
+    appId: window.app_id,
+    rootPath: rootPath ?? "",
+    writable: permissionAccess === "readwrite",
+    scope,
+    readOnly,
+  }), [permission, permissionAccess, providedBackend, readOnly, rootPath, scope, store, window.id]);
+  const collection = backend.kind === "collection";
+  const activeRoot = collection ? "" : rootPath;
+  const hasRoot = collection || (scope === "pc" ? pcAccess : grant !== null);
+  const rootName = backendLabel ?? (scope === "pc" ? permissionLabel : grant?.root_name ?? "");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [entriesByDirectory, setEntriesByDirectory] = useState<Record<string, FolderEntry[]>>({});
   const entriesByDirectoryRef = useRef(entriesByDirectory);
@@ -116,7 +119,11 @@ export function FileBrowserTree({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [localActionError, setLocalActionError] = useState<string | null>(null);
   const [creating, setCreating] = useState<CreatingFile | null>(null);
-  const currentRoot = useRef<string | null>(rootPath);
+  const currentRoot = useRef<string>(`${backend.identity}\0${activeRoot ?? "<none>"}`);
+  const staleDirectories = useRef(new Set<string>());
+  const refreshPending = useRef(false);
+  const expandedRef = useRef(expanded);
+  expandedRef.current = expanded;
   const actionError = externalActionError ?? localActionError;
 
   const reportActionError = useCallback((error: string | null) => {
@@ -136,7 +143,7 @@ export function FileBrowserTree({
   };
 
   const loadDirectory = useCallback(async (directory: string) => {
-    if (rootPath === null) return;
+    if (activeRoot === null) return;
     setLoadingDirectories((current) => new Set(current).add(directory));
     setErrors((current) => {
       const next = { ...current };
@@ -145,15 +152,15 @@ export function FileBrowserTree({
     });
     try {
       const entries = await backend.list(directory);
-      if (currentRoot.current === rootPath) {
+      if (currentRoot.current === `${backend.identity}\0${activeRoot}`) {
         setEntriesByDirectory((current) => ({ ...current, [directory]: entries }));
       }
     } catch (error) {
-      if (currentRoot.current === rootPath) {
+      if (currentRoot.current === `${backend.identity}\0${activeRoot}`) {
         setErrors((current) => ({ ...current, [directory]: toCoreError(error).message }));
       }
     } finally {
-      if (currentRoot.current === rootPath) {
+      if (currentRoot.current === `${backend.identity}\0${activeRoot}`) {
         setLoadingDirectories((current) => {
           const next = new Set(current);
           next.delete(directory);
@@ -161,27 +168,46 @@ export function FileBrowserTree({
         });
       }
     }
-  }, [backend, rootPath]);
+  }, [activeRoot, backend]);
 
   useEffect(() => {
-    currentRoot.current = rootPath;
+    currentRoot.current = `${backend.identity}\0${activeRoot ?? "<none>"}`;
     setEntriesByDirectory({});
     setErrors({});
     setLoadingDirectories(new Set());
     reportActionError(null);
     setCreating(null);
-    if (rootPath !== null) {
+    staleDirectories.current.clear();
+    refreshPending.current = false;
+    if (activeRoot !== null) {
       setExpanded(new Set([""]));
       void loadDirectory("");
     } else {
       setExpanded(new Set());
     }
-  }, [rootPath, loadDirectory]);
+  }, [activeRoot, backend.identity, loadDirectory]);
 
   const refreshExpanded = useCallback(() => {
-    if (rootPath === null) return;
-    for (const directory of expanded) void loadDirectory(directory);
-  }, [expanded, loadDirectory, rootPath]);
+    if (activeRoot === null) return;
+    for (const directory of expanded) {
+      staleDirectories.current.delete(directory);
+      void loadDirectory(directory);
+    }
+    refreshPending.current = false;
+  }, [activeRoot, expanded, loadDirectory]);
+  const prepareDirectory = useCallback(async (directory: string) => {
+    if (activeRoot === null) return;
+    const directories = [""];
+    if (directory) {
+      const parts = directory.split("/");
+      for (let index = 0; index < parts.length; index += 1) directories.push(parts.slice(0, index + 1).join("/"));
+    }
+    setExpanded((current) => new Set([...current, ...directories]));
+    await Promise.all(directories.filter((item) => !Object.hasOwn(entriesByDirectoryRef.current, item) || staleDirectories.current.has(item)).map((item) => {
+      staleDirectories.current.delete(item);
+      return loadDirectory(item);
+    }));
+  }, [activeRoot, loadDirectory]);
   const wasWindowVisible = useRef(windowVisible);
 
   useEffect(() => {
@@ -189,7 +215,7 @@ export function FileBrowserTree({
       wasWindowVisible.current = false;
       return;
     }
-    if (!wasWindowVisible.current) {
+    if (!wasWindowVisible.current || refreshPending.current) {
       wasWindowVisible.current = true;
       refreshExpanded();
     }
@@ -197,8 +223,88 @@ export function FileBrowserTree({
     return () => globalThis.window.removeEventListener("focus", refreshExpanded);
   }, [refreshExpanded, windowVisible]);
 
+  useEffect(() => store.subscribeEvents((event) => {
+    if (!backend.matchesEvent(event)) return;
+    if (collection) {
+      if (event.event !== "storage.update" || event.update.kind === "snapshot") return;
+      const update = event.update;
+      if (selectedStateKey) {
+        const stored = readWindowState(context)[selectedStateKey];
+        const selected = typeof stored === "string" ? stored : null;
+        let next = selected;
+        if (update.kind === "moved" && next === update.moved.from_doc) next = update.moved.to_doc;
+        if (update.kind === "changed" && !update.changed.item.exists) {
+          const prefix = backend.prefix ? `${backend.prefix}/` : "";
+          const doc = update.changed.item.key.startsWith(prefix) ? update.changed.item.key.slice(prefix.length) : null;
+          if (doc !== null && next === doc) next = null;
+        }
+        if (next !== selected) void patchWindowState(context, { [selectedStateKey]: next });
+      }
+      if (!windowVisible) {
+        refreshPending.current = true;
+        staleDirectories.current.add("");
+      } else {
+        staleDirectories.current.delete("");
+        void loadDirectory("");
+      }
+      return;
+    }
+    if (event.event !== "files.changed") return;
+    const changes = event.changes;
+    const isUnder = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
+    const remap = (path: string, from: string, to: string) => isUnder(path, from) ? `${to}${path.slice(from.length)}` : path;
+    if (selectedStateKey) {
+      const stored = readWindowState(context)[selectedStateKey];
+      const selected = typeof stored === "string" ? stored : null;
+      let next = selected;
+      for (const change of changes) {
+        if (!change.from) continue;
+        if (change.to) next = next === null ? null : remap(next, change.from, change.to);
+        else if (next !== null && isUnder(next, change.from)) next = null;
+      }
+      if (next !== selected) void patchWindowState(context, { [selectedStateKey]: next });
+    }
+    const movedDirectories = changes.filter((change) => {
+      if (!change.from || !change.to) return false;
+      return Object.values(entriesByDirectoryRef.current).some((items) => items.some((item) => item.path === change.from && item.kind === "dir"));
+    });
+    for (const move of movedDirectories) {
+      if (!move.from || !move.to) continue;
+      setExpanded((current) => new Set([...current].map((path) => remap(path, move.from!, move.to!))));
+      setEntriesByDirectory((current) => {
+        const next = Object.fromEntries(Object.entries(current).map(([directory, entries]) => [
+          remap(directory, move.from!, move.to!),
+          entries.map((item) => ({ ...item, path: remap(item.path, move.from!, move.to!) })),
+        ]));
+        entriesByDirectoryRef.current = next;
+        return next;
+      });
+      staleDirectories.current = new Set([...staleDirectories.current].map((path) => remap(path, move.from!, move.to!)));
+    }
+    const parents = new Set<string>();
+    for (const change of changes) {
+      for (const path of [change.from, change.to]) {
+        if (path === undefined) continue;
+        const slash = path.lastIndexOf("/");
+        const parent = slash < 0 ? "" : path.slice(0, slash);
+        parents.add(parent);
+      }
+    }
+    if (!windowVisible) {
+      refreshPending.current = true;
+      for (const directory of parents) staleDirectories.current.add(directory);
+      return;
+    }
+    for (const directory of parents) {
+      if (expandedRef.current.has(directory)) {
+        staleDirectories.current.delete(directory);
+        void loadDirectory(directory);
+      } else staleDirectories.current.add(directory);
+    }
+  }), [backend, collection, context, loadDirectory, selectedStateKey, store, windowVisible]);
+
   useEffect(() => {
-    if (mode !== "folders" || !hasRoot || (scope === "folder" && !rootPath) || !selectedPath) return;
+    if (collection || mode !== "folders" || !hasRoot || (scope === "folder" && !rootPath) || !selectedPath) return;
     const parts = selectedPath.split("/");
     const ancestors = [""];
     for (let index = 0; index < parts.length - 1; index += 1) ancestors.push(parts.slice(0, index + 1).join("/"));
@@ -208,7 +314,7 @@ export function FileBrowserTree({
         if (!Object.hasOwn(entriesByDirectoryRef.current, directory)) await loadDirectory(directory);
       }
     })();
-  }, [hasRoot, loadDirectory, mode, rootPath, scope, selectedPath]);
+  }, [collection, hasRoot, loadDirectory, mode, rootPath, scope, selectedPath]);
 
   const pickFolder = async () => {
     reportActionError(null);
@@ -296,8 +402,34 @@ export function FileBrowserTree({
       if (open) next.add(path); else next.delete(path);
       return next;
     });
-    if (open && !Object.hasOwn(entriesByDirectory, path)) void loadDirectory(path);
+    if (open && (!Object.hasOwn(entriesByDirectory, path) || staleDirectories.current.has(path))) {
+      staleDirectories.current.delete(path);
+      void loadDirectory(path);
+    }
   }, [entriesByDirectory, loadDirectory]);
+
+  const refreshDirectory = useCallback((directory: string) => {
+    if (activeRoot === null) return;
+    staleDirectories.current.delete(directory);
+    void loadDirectory(directory);
+  }, [activeRoot, loadDirectory]);
+  const openItem = useCallback((item: FolderEntry) => {
+    if (item.kind === "dir" && !collection) setDirectoryExpanded(item.path, !expandedRef.current.has(item.path));
+    else void selectFile(item.path, item);
+  }, [collection, selectFile, setDirectoryExpanded]);
+  const isExpanded = useCallback((path: string) => expandedRef.current.has(path), []);
+  const actions = useFolderActions({
+    enabled: actionsEnabled,
+    store,
+    backend,
+    extensions,
+    host: () => treeRef.current?.closest<HTMLElement>(".ks-data-window") ?? treeRef.current,
+    refreshDirectory,
+    prepareDirectory,
+    openItem,
+    isExpanded,
+    getFocusController: () => focusController.current,
+  });
 
   const visible = useCallback((entry: FolderEntry) => mode === "folders" ? entry.kind === "dir" : entry.kind === "dir"
     || extensions.length === 0
@@ -332,17 +464,51 @@ export function FileBrowserTree({
         </div>,
       });
       for (const entry of (entriesByDirectory[directory] ?? []).filter(visible)) {
+        if (actionsEnabled && actions.inlineEdit?.kind === "rename" && actions.inlineEdit.path === entry.path) {
+          rows.push({
+            id: collection ? `doc:${entry.path}` : entry.path,
+            label: `이름 바꾸기 ${entry.name}`,
+            expandable: entry.kind === "dir",
+            selectable: false,
+            interactiveContent: true,
+            content: actions.inlineRow(directory, entry.path),
+            children: !collection && entry.kind === "dir" ? buildDirectory(entry.path) : [],
+          });
+          continue;
+        }
         const isDirectory = entry.kind === "dir";
+        const nodeId = collection ? `doc:${entry.path}` : entry.path;
         rows.push({
-          id: entry.path,
+          id: nodeId,
           label: entry.name,
           expandable: isDirectory,
-          selectable: mode === "folders" ? isDirectory : !isDirectory,
+          selectable: collection ? true : mode === "folders" ? isDirectory : !isDirectory,
           ariaSelectable: mode === "folders",
           currentOnSelection: true,
           leading: isDirectory ? undefined : fileIcon(entry),
           data: { entry, filePath: isDirectory ? undefined : entry.path, folderPath: mode === "folders" && isDirectory ? entry.path : undefined },
-          children: isDirectory ? buildDirectory(entry.path) : [],
+          rowClassName: actionsEnabled && actions.isCutPath(entry.path) ? "is-cut" : undefined,
+          children: !collection && isDirectory ? buildDirectory(entry.path) : [],
+        });
+      }
+      if (actionsEnabled && actions.inlineEdit?.kind !== "rename" && actions.inlineEdit?.directory === directory) {
+        rows.push({
+          id: `folder-edit:${directory}`,
+          label: actions.inlineEdit.initialName,
+          selectable: false,
+          interactiveContent: true,
+          content: actions.inlineRow(directory),
+        });
+      }
+      if (actionsEnabled && !collection && directory && expanded.has(directory) && Object.hasOwn(entriesByDirectory, directory)
+        && entriesByDirectory[directory].length === 0
+        && !(actions.inlineEdit && actions.inlineEdit.directory === directory)) {
+        rows.push({
+          id: `empty:${directory}`,
+          label: "비어 있음",
+          selectable: false,
+          data: { directoryPath: directory },
+          content: <div className="ks-file-tree-empty"><span aria-hidden="true" className="ks-file-tree-icon" /><span className="ks-view-meta">비어 있음</span></div>,
         });
       }
       return rows;
@@ -353,7 +519,7 @@ export function FileBrowserTree({
     });
     if (errors[""]) root.push({ id: "error:", label: errors[""], selectable: false, content: <FolderTreeError message={errors[""]} /> });
     return [...root, ...buildDirectory("")];
-  }, [commitCreate, creating, entriesByDirectory, errors, fileIcon, loadingDirectories, mode, visible]);
+  }, [actions, actionsEnabled, collection, commitCreate, creating, entriesByDirectory, errors, expanded, fileIcon, loadingDirectories, mode, visible]);
 
   const activate = useCallback((row: TreeRowModel, action: TreeActivation) => {
     const entry = (row.node.data as { entry?: FolderEntry } | undefined)?.entry;
@@ -369,12 +535,21 @@ export function FileBrowserTree({
     else void selectFile(entry.path, entry);
   }, [mode, onFileEnter, selectFile, selectFolder, selectedPath, setDirectoryExpanded]);
 
-  const contextMenu = useCallback((row: TreeRowModel, target: HTMLElement) => {
+  const contextMenu = useCallback((row: TreeRowModel | null, target: HTMLElement, point: { x: number; y: number }, focus: TreeFocusController) => {
+    if (actionsEnabled) {
+      actions.onContextMenu(row, target, point, focus);
+      return;
+    }
+    if (!row) return;
     const entry = (row.node.data as { entry?: FolderEntry } | undefined)?.entry;
     if (!entry || entry.kind === "dir" || !onFileContextMenu) return;
     void selectFile(entry.path, entry);
     onFileContextMenu(target, entry.path);
-  }, [onFileContextMenu, selectFile]);
+  }, [actions, actionsEnabled, onFileContextMenu, selectFile]);
+
+  const commandKeyDown = useCallback((row: TreeRowModel | null, event: KeyboardEvent<HTMLElement>, focus: TreeFocusController) => {
+    return actionsEnabled ? actions.commandKeyDown(row, event, focus) : false;
+  }, [actions, actionsEnabled]);
 
   const doubleClick = useCallback((row: TreeRowModel, target: HTMLElement) => {
     const entry = (row.node.data as { entry?: FolderEntry } | undefined)?.entry;
@@ -393,8 +568,9 @@ export function FileBrowserTree({
       ) : (
         <>
           <FolderTreeHeader label={rootName}>
-            {canCreate ? <IconButton aria-label="새 파일" onClick={() => void beginCreate()}><FilePlus /></IconButton> : null}
-            {scope === "folder" ? <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}><FolderOpen /></IconButton> : null}
+            {(canCreate || (actionsEnabled && backend.capabilities.createFile)) && !(collection && entriesByDirectory[""]?.length === 0)
+              ? <IconButton aria-label={collection ? "새 문서" : "새 파일"} onClick={() => actionsEnabled ? void actions.beginCreateFile("", focusController.current) : void beginCreate()}><FilePlus /></IconButton> : null}
+            {!collection && scope === "folder" ? <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}><FolderOpen /></IconButton> : null}
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
           </FolderTreeHeader>
           <TreeView
@@ -402,15 +578,24 @@ export function FileBrowserTree({
             expanded={expanded}
             label={mode === "folders" ? "폴더 목록" : "파일 목록"}
             nodes={nodes}
+            emptyContent={actionsEnabled && collection && backend.capabilities.createFile
+              ? <Button onClick={() => actions.beginCreateFile("", focusController.current)}>새 문서</Button>
+              : undefined}
             onActivate={activate}
-            onContextMenu={onFileContextMenu ? contextMenu : undefined}
+            onContextMenu={actionsEnabled || onFileContextMenu ? contextMenu : undefined}
+            onCommandKeyDown={actionsEnabled ? commandKeyDown : undefined}
             onDoubleClick={onFileDoubleClick ? doubleClick : undefined}
             onExpandedChange={setDirectoryExpanded}
-            selectedId={selectedPath}
+            onFocusController={(controller) => { focusController.current = controller; }}
+            menuTargetId={actions.menuTargetId}
+            selectedId={collection && selectedPath ? `doc:${selectedPath}` : selectedPath}
           />
           {actionError ? <FolderTreeError message={actionError} /> : null}
+          {actionsEnabled ? actions.noticeNode : null}
         </>
       )}
+      {actionsEnabled ? actions.menuElement : null}
+      {actionsEnabled ? actions.dialogElement : null}
     </div>
   );
 }

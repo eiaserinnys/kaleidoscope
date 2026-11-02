@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFakeTransport } from "../core/fake-transport";
-import { FileEditorSession, createDocumentEditorTarget, flushEditors } from "../blocks/file-editor-session";
+import { FileEditorSession, createDocumentEditorTarget, editorRevision, flushEditors } from "../blocks/file-editor-session";
 import { createMarkdownEditorState } from "../blocks/markdown-editor-state";
 import { documentEditorSession } from "../blocks/document-editor-session";
 import { createShellStore } from "../core/shell-store";
@@ -44,6 +44,29 @@ describe("markdown storage document", () => {
     expect(first.getSnapshot()).toMatchObject({ dirty: true, text: "첫 초안" });
     expect(second.getSnapshot()).toMatchObject({ dirty: true, text: "둘째 초안" });
     first.dispose(); second.dispose(); store.dispose();
+  });
+
+  it("exposes the revision after flushing the active document editor", async () => {
+    const seed = structuredClone(makeTestSeed());
+    seed.snapshot.shared.app_versions[0].definition.storage = { entries: [{ id: "docs", key: "documents", kind: "md", collection: true, default: "", label: "문서", presentation: "hidden" }] };
+    const store = createShellStore(createFakeTransport(seed));
+    await store.ready;
+    const resource = { kind: "document" as const, store, windowId: "editor-window", entry: "docs" };
+    const session = new FileEditorSession({
+      allowsMissingRevision: true,
+      conflictMessage: "충돌",
+      read: vi.fn(async () => ({ text: "원문", revision: "r1" })),
+      write: vi.fn(async () => "r2"),
+    });
+    session.setResource(resource);
+    await session.open("draft.md");
+    const address = { ...resource, doc: "draft.md" };
+    expect(editorRevision(address)).toBe("r1");
+    session.setText("저장된 초안");
+    expect(await flushEditors(address)).toBe(true);
+    expect(editorRevision(address)).toBe("r2");
+    session.dispose();
+    store.dispose();
   });
 
   function setup() {

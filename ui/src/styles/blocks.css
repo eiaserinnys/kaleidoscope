@@ -140,6 +140,10 @@
   background: var(--ks-color-selection);
 }
 
+.ks-file-tree-row.is-cut {
+  opacity: 0.56;
+}
+
 .ks-row:hover {
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
@@ -147,6 +151,17 @@
 .ks-file-tree-create-row {
   padding-block: 0;
   border-block-width: 0;
+}
+
+.ks-file-tree-create-row:hover { background-image: none; cursor: default; }
+
+.ks-file-tree-empty {
+  display: flex;
+  min-height: var(--ks-control-height);
+  align-items: center;
+  gap: var(--ks-space-2);
+  padding: var(--ks-space-1) var(--ks-space-2);
+  cursor: default;
 }
 
 .ks-file-tree-icon {
