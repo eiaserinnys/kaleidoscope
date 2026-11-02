@@ -1,3 +1,4 @@
+// 생성·이름 변경 회귀는 공용 폴더 하니스와 함께 검증하며 이번 보완에서는 테스트 분리로 충돌을 늘리지 않는다.
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
@@ -97,6 +98,73 @@ function setup(definition: AppDefinition, configure?: (transport: ReturnType<typ
 }
 
 describe("folder block", () => {
+  it.each(["머리", "우클릭"])("%s에서 만든 파일은 늦은 응답 뒤 열고 새 행에 포커스를 둔다", async (entrance) => {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const { store } = setup(fileFolderDefinition("readwrite", false), (transport) => {
+      const call = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => {
+        if (request.op === "files.write") await pending;
+        const reply = await call(request);
+        if (request.op === "files.write") transport.emit({ event: "files.changed", root: grantFor("viewer-window", "docs").root_path, changes: [{ to: request.path }] });
+        return reply;
+      });
+    }, { "guide.md": "# 안내" });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+    if (entrance === "머리") fireEvent.click(screen.getByRole("button", { name: "새 파일" }));
+    else {
+      fireEvent.contextMenu(guide);
+      fireEvent.click(await screen.findByRole("menuitem", { name: "새 파일" }));
+    }
+    const input = await screen.findByRole("textbox", { name: "새 파일 이름" });
+    fireEvent.change(input, { target: { value: "created" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(store.getSnapshot()?.shared.windows[0].state.selected).toBeNull();
+    await act(async () => release());
+    await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.selected).toBe("created.md"));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("treeitem", { name: "created.md" })));
+  });
+
+  it.each([0, 1])("머리 없는 문서 모음 %i개에서도 끝 행으로 만들고 문서를 연다", async (count) => {
+    let docs = count ? ["guide.md"] : [];
+    const definition = storageFolderDefinition(false);
+    (definition.ui as Extract<Block, { type: "folder" }>).header = false;
+    const { store } = setup(definition, (transport) => {
+      const call = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => {
+        if (request.op === "storage.list") return { op: "storage.list", result: { bucket_id: definition.id, items: docs.map((doc) => ({ doc, revision: "r1", updated_at: "", byte_size: 0 as unknown as bigint })) } };
+        if (request.op === "storage.write") docs = [...docs, request.doc!];
+        return call(request);
+      });
+    });
+    const create = await screen.findByRole("treeitem", { name: "새 문서" });
+    fireEvent.click(create);
+    const input = await screen.findByRole("textbox", { name: "새 문서 이름" });
+    expect(screen.queryByRole("treeitem", { name: "새 문서" })).toBeNull();
+    fireEvent.change(input, { target: { value: "문서" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.selected).toBe("문서.md"));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("treeitem", { name: "문서.md" })));
+  });
+
+  it.each([["md"], ["md", "markdown"]])("만들기와 이름 바꾸기는 허용 확장자를 구체적으로 안내한다: %j", async (...extensions) => {
+    const definition = fileFolderDefinition("readwrite", false);
+    (definition.ui as Extract<Block, { type: "folder" }>).extensions = extensions;
+    setup(definition, undefined, { "guide.md": "# 안내" });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+    const message = extensions.length === 1 ? "이름은 .md로 끝나야 합니다" : "이름은 .md, .markdown 가운데 하나로 끝나야 합니다";
+    fireEvent.click(screen.getByRole("button", { name: "새 파일" }));
+    let input = await screen.findByRole("textbox", { name: "새 파일 이름" });
+    fireEvent.change(input, { target: { value: "wrong.txt" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "새 파일 이름" }), { key: "Escape" });
+    fireEvent.keyDown(guide, { key: "F2" });
+    input = await screen.findByRole("textbox", { name: "이름 바꾸기" });
+    fireEvent.change(input, { target: { value: "without-extension" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
+  });
   it("이름 입력을 바깥 클릭으로 닫으면 누른 대상에 키보드 포커스를 남기고 Escape만 원래 행으로 돌린다", async () => {
     const user = userEvent.setup();
     setup(fileFolderDefinition("readwrite", false), undefined, { "a.md": "# a", "b.md": "# b", "notes/guide.md": "# 안내" });
@@ -285,13 +353,13 @@ describe("folder block", () => {
         : originalCall(request));
     });
 
-    const newDocument = await screen.findByRole("button", { name: "새 문서" });
+    const newDocument = await screen.findByRole("treeitem", { name: "새 문서" });
     fireEvent.click(newDocument);
     const input = await screen.findByRole("textbox", { name: "새 문서 이름" }) as HTMLInputElement;
     await waitFor(() => expect(input.selectionEnd).toBe("새 문서".length));
     fireEvent.change(input, { target: { value: "보고서.txt" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect((await screen.findByRole("alert")).textContent).toContain(".md 파일만 볼 수 있습니다.");
+    expect((await screen.findByRole("alert")).textContent).toBe("이름은 .md로 끝나야 합니다");
     expect(screen.getByRole("textbox", { name: "새 문서 이름" })).toBeTruthy();
   });
 
@@ -365,7 +433,7 @@ describe("folder block", () => {
     await screen.findByRole("tree", { name: "파일 목록" });
     expect(document.querySelector(".ks-file-tree-header")).toBeNull();
     expect(screen.queryByText("문서", { exact: true })).toBeNull();
-    expect(await screen.findByRole("button", { name: "새 문서" })).toBeTruthy();
+    expect(await screen.findByRole("treeitem", { name: "새 문서" })).toBeTruthy();
   });
 
   it("shows the collection header without a split pane by default", async () => {

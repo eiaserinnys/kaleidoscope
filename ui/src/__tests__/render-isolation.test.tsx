@@ -1,4 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
+import { TreeView } from "../components/tree/tree-view";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -147,8 +149,8 @@ if (!globalThis.ResizeObserver) {
     configurable: true,
     value: class {
       constructor(private readonly callback: ResizeObserverCallback) {}
-      observe() {
-        this.callback([{ contentRect: { width: 960, height: 552 } } as ResizeObserverEntry] as ResizeObserverEntry[], this as unknown as ResizeObserver);
+      observe(target: Element) {
+        this.callback([{ target, contentRect: { width: 960, height: 552 } } as ResizeObserverEntry] as ResizeObserverEntry[], this as unknown as ResizeObserver);
       }
       unobserve() {}
       disconnect() {}
@@ -234,6 +236,22 @@ afterEach(() => {
 });
 
 describe("실제 Shell의 블록 렌더 격리", () => {
+  it("트리 끝 액션을 갱신해도 기존 내용 행은 다시 그리지 않는다", () => {
+    let rendered = 0;
+    function Leading() { rendered += 1; return <span>내용 아이콘</span>; }
+    const nodes = [{ id: "file", label: "문서.md", leading: <Leading /> }];
+    function Harness() {
+      const [created, setCreated] = useState(false);
+      return <TreeView className="ks-file-tree-list" label="격리 트리" expanded={new Set()} nodes={nodes}
+        endAction={{ label: created ? "다음 문서" : "새 문서", onActivate: () => setCreated(true) }}
+        onActivate={() => {}} onExpandedChange={() => {}} />;
+    }
+    render(<Harness />);
+    const before = rendered;
+    fireEvent.click(screen.getByRole("treeitem", { name: "새 문서" }));
+    expect(screen.getByRole("treeitem", { name: "다음 문서" })).toBeTruthy();
+    expect(rendered).toBe(before);
+  });
   it("when 조건을 바꿀 때 자식만 마운트하고 다른 블록은 다시 그리지 않는다", async () => {
     const { store } = await setup([whenDefinition], { visible: false });
     expect(screen.queryByText("조건 자식")).toBeNull();

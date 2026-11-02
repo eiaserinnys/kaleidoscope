@@ -558,6 +558,10 @@ export function FileBrowserTree({
     if (entry?.kind === "file") onFileDoubleClick?.(target, entry.path);
   }, [onFileDoubleClick]);
 
+  const createLabel = collection ? "새 문서" : "새 파일";
+  const showHeaderCreate = header && (canCreate || (actionsEnabled && backend.capabilities.createFile))
+    && !(collection && entriesByDirectory[""]?.length === 0);
+
   return (
     <div className={`ks-file-tree${pane?.collapsed ? " is-collapsed" : ""}`} ref={treeRef}>
       {pane?.collapsed ? (
@@ -570,8 +574,8 @@ export function FileBrowserTree({
       ) : (
         <>
           {header ? <FolderTreeHeader label={rootName}>
-            {(canCreate || (actionsEnabled && backend.capabilities.createFile)) && !(collection && entriesByDirectory[""]?.length === 0)
-              ? <IconButton aria-label={collection ? "새 문서" : "새 파일"} onClick={() => actionsEnabled ? void actions.beginCreateFile("", focusController.current) : void beginCreate()}><FilePlus /></IconButton> : null}
+            {showHeaderCreate
+              ? <IconButton aria-label={createLabel} onClick={() => actionsEnabled ? void actions.beginCreateFile("", focusController.current) : void beginCreate()}><FilePlus /></IconButton> : null}
             {!collection && scope === "folder" ? <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}><FolderOpen /></IconButton> : null}
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
           </FolderTreeHeader> : null}
@@ -580,8 +584,8 @@ export function FileBrowserTree({
             expanded={expanded}
             label={mode === "folders" ? "폴더 목록" : "파일 목록"}
             nodes={nodes}
-            emptyContent={actionsEnabled && collection && backend.capabilities.createFile
-              ? <Button onClick={() => actions.beginCreateFile("", focusController.current)}>새 문서</Button>
+            endAction={actionsEnabled && backend.capabilities.createFile && !showHeaderCreate && !actions.inlineEdit
+              ? { label: createLabel, leading: <FilePlus size="inline" />, onActivate: () => void actions.beginCreateFile("", focusController.current) }
               : undefined}
             onActivate={activate}
             onContextMenu={actionsEnabled || onFileContextMenu ? contextMenu : undefined}

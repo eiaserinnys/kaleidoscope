@@ -68,7 +68,8 @@ function rowId(path: string, collection: boolean): string {
 }
 
 function allowedExtensionMessage(extensions: string[]): string {
-  return `${extensions.map((extension) => `.${extension}`).join(", ")} 파일만 볼 수 있습니다.`;
+  const endings = extensions.map((extension) => `.${extension}`).join(", ");
+  return `이름은 ${endings}${extensions.length > 1 ? " 가운데 하나" : ""}로 끝나야 합니다`;
 }
 
 export interface FolderInlineEdit {
@@ -258,6 +259,7 @@ export function useFolderActions({
       : current.kind === "directory" ? backend.actions.createDirectory
         : backend.actions.createFile;
     if (!action) return;
+    if (current.kind === "file" && extensions.length && !extensionOf(name)) name = `${name}.${extensions[0]}`;
     const isFile = current.kind === "file" || (current.kind === "rename" && current.item?.kind === "file");
     if (isFile && extensions.length && !extensions.some((extension) => extension.toLowerCase() === extensionOf(name))) {
       setInlineEdit((currentEdit) => currentEdit ? {
@@ -281,6 +283,7 @@ export function useFolderActions({
       const path = parent ? `${parent}/${name}` : name;
       setInlineEdit(null);
       setEditFocus(null);
+      if (current.kind === "file") openItem({ name, path, kind: "file", ext: extensionOf(name), size: 0, modified: "" });
       editFocus?.focus.row(rowId(path, backend.kind === "collection"), true);
     } catch (cause) {
       const error = toCoreError(cause);
@@ -293,7 +296,7 @@ export function useFolderActions({
     } finally {
       operationRunning.current = false;
     }
-  }, [backend.actions, backend.kind, editFocus, extensions, flushBefore, inlineEdit]);
+  }, [backend.actions, backend.kind, editFocus, extensions, flushBefore, inlineEdit, openItem]);
 
   const copyPath = useCallback(async (item: FolderItem, absolute: boolean) => {
     try {

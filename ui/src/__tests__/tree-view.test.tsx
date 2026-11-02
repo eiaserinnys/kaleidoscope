@@ -63,6 +63,26 @@ afterEach(() => {
 });
 
 describe("공용 가상 트리", () => {
+  it("끝 액션은 방향키와 Enter로 실행하며 선택과 항목 메뉴에서 제외한다", async () => {
+    const onActivate = vi.fn();
+    const action = vi.fn();
+    const menu = vi.fn();
+    render(<TreeView className="ks-file-tree-list" label="끝 행 트리" expanded={new Set()}
+      nodes={[{ id: "file", label: "문서.md" }]} selectedId="file"
+      endAction={{ label: "새 문서", onActivate: action }}
+      onActivate={onActivate} onContextMenu={menu} onExpandedChange={() => {}} />);
+    const file = screen.getByRole("treeitem", { name: "문서.md" });
+    fireEvent.keyDown(file, { key: "ArrowDown" });
+    const end = await screen.findByRole("treeitem", { name: "새 문서" });
+    await waitFor(() => expect(document.activeElement).toBe(end));
+    fireEvent.keyDown(end, { key: "Enter" });
+    expect(action).toHaveBeenCalledTimes(1);
+    expect(onActivate).not.toHaveBeenCalled();
+    expect(file.getAttribute("aria-selected")).toBe("true");
+    fireEvent.contextMenu(end);
+    expect(menu.mock.calls[0][0]).toBeNull();
+    expect(end.hasAttribute("data-menu-target")).toBe(false);
+  });
   it("목록 대기 중 다른 입력으로 옮긴 포커스를 빼앗지 않고 요청을 버린다", async () => {
     let focus: TreeFocusController | null = null;
     const props = {
