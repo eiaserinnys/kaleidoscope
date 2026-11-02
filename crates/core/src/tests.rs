@@ -2913,10 +2913,10 @@ fn connected_import_uploads_and_preserves_server_validation_error() {
         }),
         ErrorCode::Server,
     );
-    assert_eq!(error.id.as_deref(), Some("SERVER_CALL_NOT_CONNECTED"));
+    assert_eq!(error.id.as_deref(), Some("APP_IMPORT_SERVER_NOT_CONNECTED"));
     assert_eq!(
         error.message,
-        "kaleidoscope 서버에 연결되어 있지 않아 요청을 보낼 수 없습니다. 서버를 연결한 뒤 다시 시도하세요."
+        "kaleidoscope 서버에 연결되어 있지 않아 앱을 가져올 수 없습니다. 서버를 연결한 뒤 다시 시도하세요."
     );
 }
 

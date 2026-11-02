@@ -614,6 +614,44 @@ fn oauth_requires_login_and_media_is_resized_and_cached() {
 }
 
 #[test]
+fn remote_asset_without_server_reports_media_load_error() {
+    use kaleidoscope_contract::data::{AssetMediaRef, MediaRef};
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let definition = json!({
+        "id":"remote-media-app",
+        "name":"원격 미디어",
+        "requires":{"blocks":4,"modules":{"assets":1}},
+        "permissions":[],
+        "state":{},
+        "assets":[{"id":"remote-image","version":1}],
+        "ui":{"type":"media","kind":"audio","src":{"asset":"remote-image"}}
+    })
+    .to_string();
+    let core = open_core(temp.path(), vec![definition], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "remote-media-app");
+
+    let error = expect_error(
+        core.handle(CoreRequest::DataMedia {
+            window_id: window,
+            media: MediaRef::Asset(AssetMediaRef {
+                asset: "remote-image".into(),
+                version: None,
+                crop: None,
+            }),
+            max_px: None,
+        }),
+        ErrorCode::Server,
+    );
+    assert_eq!(error.id.as_deref(), Some("MEDIA_LOAD_SERVER_NOT_CONNECTED"));
+    assert_eq!(
+        error.message,
+        "kaleidoscope 서버에 연결되어 있지 않아 미디어를 불러올 수 없습니다. 서버를 연결한 뒤 다시 시도하세요."
+    );
+}
+
+#[test]
 fn explicit_null_and_absent_action_value_are_distinct() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());

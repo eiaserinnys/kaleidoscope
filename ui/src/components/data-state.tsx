@@ -30,7 +30,7 @@ export function DataState({ value, compact = false, onRetry, onLogin }: { value:
         .catch((reason: unknown) => setError(toCoreError(reason).message));
     };
     return <div className={compact ? "ks-data-state-compact" : "ks-data-state"}>
-      <EmptyState icon={<FolderOpen size={compact ? "inline" : "empty"} />} text={<>{error ?? value.message}{value.id ? <> <ErrorId id={value.id} /></> : null}</>} action={<Button onClick={pick}>폴더 선택</Button>} />
+      <EmptyState icon={<FolderOpen size={compact ? "inline" : "empty"} />} text={error ?? "폴더를 선택해 주세요"} action={<Button onClick={pick}>폴더 선택</Button>} />
     </div>;
   }
   const failureText = error ?? (value.status === "failed" ? <>{value.message}{value.id ? <> <ErrorId id={value.id} /></> : null}</> : "로그인이 필요합니다");

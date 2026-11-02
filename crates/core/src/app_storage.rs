@@ -367,9 +367,8 @@ fn write_with_doc(
                 "문서 이름이 올바르지 않습니다.",
             ));
         }
-        contract::validate_storage_content(decl, &content).map_err(|message| {
-            kaleidoscope_contract::errors::STORAGE_WRITE_SCHEMA_MISMATCH(&decl.key)
-                .and_details(vec![message])
+        contract::validate_storage_content(decl, &content).map_err(|reason| {
+            kaleidoscope_contract::errors::STORAGE_WRITE_SCHEMA_MISMATCH(&decl.key, reason)
         })?;
         let request = StorageWriteRequest {
             content,
@@ -415,9 +414,8 @@ fn write_with_doc(
         ));
     }
     if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
-        contract::validate_storage_content(decl, &content).map_err(|message| {
-            kaleidoscope_contract::errors::STORAGE_WRITE_SCHEMA_MISMATCH(&decl.key)
-                .and_details(vec![message])
+        contract::validate_storage_content(decl, &content).map_err(|reason| {
+            kaleidoscope_contract::errors::STORAGE_WRITE_SCHEMA_MISMATCH(&decl.key, reason)
         })?;
         let key = decl.key.replace("{workspace_id}", &ctx.workspace);
         let request = contract::AppValueWrite {

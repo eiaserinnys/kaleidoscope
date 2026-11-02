@@ -124,13 +124,7 @@ fn root(
     permission: &str,
 ) -> Result<std::path::PathBuf, CoreError> {
     let state = inner.state.lock().unwrap();
-    files::granted_root(&state, window, permission, false).map_err(|err| {
-        if err.code == ErrorCode::NotGranted && err.id.is_none() {
-            error::with_message(ErrorCode::NotGranted, "이 기기에서 폴더를 골라야 합니다")
-        } else {
-            err
-        }
-    })
+    files::granted_root(&state, window, permission, false)
 }
 
 fn decode(bytes: Vec<u8>, format: SourceFormat) -> Result<Value, CoreError> {

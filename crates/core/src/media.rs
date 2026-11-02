@@ -123,7 +123,7 @@ pub(crate) fn get(
                 .lock()
                 .unwrap()
                 .clone()
-                .ok_or_else(|| kaleidoscope_contract::errors::SERVER_CALL_NOT_CONNECTED())?;
+                .ok_or_else(|| kaleidoscope_contract::errors::MEDIA_LOAD_SERVER_NOT_CONNECTED())?;
             use sha2::{Digest, Sha256};
             let namespace = format!(
                 "{:x}",
@@ -138,7 +138,7 @@ pub(crate) fn get(
                     inner.state.lock().unwrap().link,
                     kaleidoscope_contract::LinkStatus::Connected { .. }
                 ) {
-                    return Err(kaleidoscope_contract::errors::SERVER_CALL_NOT_CONNECTED());
+                    return Err(kaleidoscope_contract::errors::MEDIA_LOAD_SERVER_NOT_CONNECTED());
                 }
                 let download = inner
                     .registry

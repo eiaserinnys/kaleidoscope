@@ -118,6 +118,27 @@ fn messages_do_not_use_generic_or_disallowed_phrases() {
 }
 
 #[test]
+fn storage_schema_mismatch_message_includes_validation_reason() {
+    let error = errors::STORAGE_WRITE_SCHEMA_MISMATCH(
+        "settings.theme",
+        "JSON path /color: expected string",
+    );
+    assert_eq!(error.id.as_deref(), Some("STORAGE_WRITE_SCHEMA_MISMATCH"));
+    assert_eq!(
+        error.message,
+        "저장 항목 settings.theme의 값이 앱이 선언한 형식과 다릅니다: JSON path /color: expected string"
+    );
+    assert!(error.details.is_empty());
+}
+
+#[test]
+fn disconnected_server_codes_distinguish_app_import_and_media_loading() {
+    let entries = errors::all().map(|entry| entry.id).collect::<HashSet<_>>();
+    assert!(entries.contains("APP_IMPORT_SERVER_NOT_CONNECTED"));
+    assert!(entries.contains("MEDIA_LOAD_SERVER_NOT_CONNECTED"));
+}
+
+#[test]
 fn codes_are_used_outside_catalog_and_shell_types_are_generated() {
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .ancestors()

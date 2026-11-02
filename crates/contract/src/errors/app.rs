@@ -27,4 +27,11 @@ error_catalog! { ENTRIES;
         message: "앱 정의가 이 쉘보다 새 기능을 요구합니다. 쉘을 업데이트한 뒤 다시 올리세요.",
         fix: "쉘을 업데이트하거나 앱 정의의 요구 판을 낮추세요"
     }
+    APP_IMPORT_SERVER_NOT_CONNECTED() {
+        class: Server,
+        place: "쉘의 앱 가져오기",
+        cause: "서버 연결이 완료되지 않아 앱 가져오기 요청을 보낼 수 없다",
+        message: "kaleidoscope 서버에 연결되어 있지 않아 앱을 가져올 수 없습니다. 서버를 연결한 뒤 다시 시도하세요.",
+        fix: "쉘의 「서버 연결」에서 서버를 연결하세요"
+    }
 }

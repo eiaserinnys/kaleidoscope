@@ -192,7 +192,7 @@ pub(crate) fn import_app(
             ..
         } => {
             let Some(link_file) = link_file else {
-                return Err(kaleidoscope_contract::errors::SERVER_CALL_NOT_CONNECTED());
+                return Err(kaleidoscope_contract::errors::APP_IMPORT_SERVER_NOT_CONNECTED());
             };
             let received = inner.registry.upload(
                 &link_file.server_url,
@@ -226,7 +226,7 @@ pub(crate) fn import_app(
             Ok(reply)
         }
         LinkStatus::Pairing { .. } | LinkStatus::Offline { .. } | LinkStatus::Revoked { .. } => {
-            Err(kaleidoscope_contract::errors::SERVER_CALL_NOT_CONNECTED())
+            Err(kaleidoscope_contract::errors::APP_IMPORT_SERVER_NOT_CONNECTED())
         }
     }
 }

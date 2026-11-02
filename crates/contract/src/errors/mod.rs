@@ -3,6 +3,9 @@
 //! 공용 검사 함수가 만든 오류는 그 검사가 장소이고, 어느 명령에서 불렀는지는 문구에 쓴다.
 //! 문구에는 대상과 값, 실패한 이유, 사용자가 할 일을 담는다. 상류 상태 코드와 호스트는
 //! `details`에 넣고, 토큰과 URL 쿼리 키는 가린다.
+//! 대부분의 화면은 `details`를 그리지 않으므로, 사용자가 고치는 데 필요한 값은 문구에 넣는다.
+
+#![allow(ambiguous_glob_reexports, unused_imports)]
 
 #[derive(Clone, Copy, Debug)]
 pub struct ErrorEntry {
@@ -65,17 +68,22 @@ pub mod storage;
 pub mod web;
 pub mod worker;
 
-pub use app::{
-    APP_DEFINITION_CHECK_FAILED, APP_DEFINITION_FORMAT_INVALID, APP_DEFINITION_JSON_INVALID,
-    APP_DEFINITION_REQUIRES_NEWER_SHELL,
-};
-pub use file::{
-    FILE_ACCESS_FOLDER_NOT_CHOSEN, FILE_ACCESS_PERMISSION_UNDECLARED,
-    FILE_WRITE_READ_ONLY_PERMISSION,
-};
-pub use server::SERVER_CALL_NOT_CONNECTED;
-pub use shell::SHELL_CALL_UNEXPECTED_FAILURE;
-pub use storage::STORAGE_WRITE_SCHEMA_MISMATCH;
+pub use agent::*;
+pub use app::*;
+pub use asset::*;
+pub use conn::*;
+pub use conv::*;
+pub use data::*;
+pub use desk::*;
+pub use file::*;
+pub use mcp::*;
+pub use media::*;
+pub use server::*;
+pub use share::*;
+pub use shell::*;
+pub use storage::*;
+pub use web::*;
+pub use worker::*;
 
 pub const AREAS: &[(&str, &[ErrorEntry])] = &[
     ("APP", app::ENTRIES),
