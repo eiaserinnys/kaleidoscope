@@ -87,7 +87,24 @@ pub(super) fn scenario(core: &Core, folder: &Path, log: &mut File) -> Result<(),
         reply => return Err(format!("unexpected absolute path response: {reply:?}")),
     }
     rename(core, &window_id, "case.txt", "CASE.txt")?;
-    record(log, "files-write.case-only-rename", json!({"passed": true}))?;
+    let actual_names = fs::read_dir(folder)
+        .map_err(|error| error.to_string())?
+        .map(|entry| entry.map(|entry| entry.file_name()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    if !actual_names
+        .iter()
+        .any(|name| name.to_string_lossy() == "CASE.txt")
+    {
+        return Err(format!(
+            "case-only rename did not update the on-disk name: {actual_names:?}"
+        ));
+    }
+    record(
+        log,
+        "files-write.case-only-rename",
+        json!({"passed": true, "actual_name": "CASE.txt"}),
+    )?;
 
     write_file(core, &window_id, "locked.txt")?;
     #[cfg(windows)]

@@ -97,7 +97,11 @@ pub(super) fn rename(
     if path_exists(&target)? && fs::canonicalize(&target).ok() != Some(source.clone()) {
         return Err(error::make(ErrorCode::Conflict));
     }
-    fs::rename(&source, &target).map_err(|error| io_error(&error))?;
+    let destination = target
+        .parent()
+        .ok_or_else(|| error::make(ErrorCode::PathOutsideRoot))?
+        .join(name);
+    fs::rename(&source, &destination).map_err(|error| io_error(&error))?;
     Ok(FileChange {
         from: Some(path.into()),
         to: Some(to),
@@ -110,13 +114,14 @@ pub(super) fn move_paths(
     paths: &[String],
     destination: &str,
 ) -> Vec<FileOpResult> {
+    let paths = selected_roots(paths);
     let destination_path = match destination_dir(inner, root, destination) {
         Ok(path) => path,
         Err(error) => {
             return paths
                 .iter()
                 .map(|path| FileOpResult::Error {
-                    path: path.clone(),
+                    path: (*path).to_string(),
                     error: error.clone(),
                 })
                 .collect()
@@ -174,13 +179,14 @@ pub(super) fn copy_paths(
     paths: &[String],
     destination: &str,
 ) -> Vec<FileOpResult> {
+    let paths = selected_roots(paths);
     let destination_path = match destination_dir(inner, root, destination) {
         Ok(path) => path,
         Err(error) => {
             return paths
                 .iter()
                 .map(|path| FileOpResult::Error {
-                    path: path.clone(),
+                    path: (*path).to_string(),
                     error: error.clone(),
                 })
                 .collect()
@@ -206,6 +212,7 @@ fn copy_one(
         return Err(error::make(ErrorCode::PermissionDenied));
     }
     let source = resolve_mutation_path(inner, root, path)?;
+    protect_data_ancestor(inner, &source)?;
     let source_is_dir = fs::metadata(&source)
         .map_err(|error| io_error(&error))?
         .is_dir();
@@ -232,6 +239,7 @@ pub(super) fn remove_paths(
     paths: &[String],
     permanent: bool,
 ) -> Vec<FileOpResult> {
+    let paths = selected_roots(paths);
     paths
         .iter()
         .map(|path| {
@@ -406,6 +414,27 @@ fn join_relative(parent: &str, name: &str) -> String {
     } else {
         format!("{parent}/{name}")
     }
+}
+
+fn selected_roots(paths: &[String]) -> Vec<&str> {
+    paths
+        .iter()
+        .enumerate()
+        .filter_map(|(index, path)| {
+            let selected_ancestor = paths.iter().enumerate().any(|(other_index, ancestor)| {
+                index != other_index && is_descendant_path(path, ancestor)
+            });
+            (!selected_ancestor).then_some(path.as_str())
+        })
+        .collect()
+}
+
+fn is_descendant_path(path: &str, ancestor: &str) -> bool {
+    if ancestor.is_empty() {
+        return !path.is_empty();
+    }
+    path.strip_prefix(ancestor)
+        .is_some_and(|suffix| suffix.starts_with('/'))
 }
 
 pub(super) fn successful_changes(results: &[FileOpResult]) -> Vec<FileChange> {

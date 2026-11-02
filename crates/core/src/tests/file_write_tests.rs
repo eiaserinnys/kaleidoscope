@@ -309,6 +309,109 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
 }
 
 #[test]
+fn file_write_batches_skip_selected_descendants_and_keep_request_order() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("documents");
+    fs::create_dir_all(root.join("move-source")).unwrap();
+    fs::create_dir(root.join("move-dest")).unwrap();
+    fs::write(root.join("move-source/note.txt"), "move").unwrap();
+    fs::write(root.join("move-after.txt"), "after").unwrap();
+    fs::write(root.join("move-before.txt"), "before").unwrap();
+    fs::create_dir_all(root.join("copy-source")).unwrap();
+    fs::create_dir(root.join("copy-dest")).unwrap();
+    fs::write(root.join("copy-source/note.txt"), "copy").unwrap();
+    fs::write(root.join("copy-after.txt"), "after").unwrap();
+    fs::write(root.join("copy-before.txt"), "before").unwrap();
+    fs::create_dir_all(root.join("remove-source")).unwrap();
+    fs::write(root.join("remove-source/note.txt"), "remove").unwrap();
+    fs::write(root.join("remove-after.txt"), "after").unwrap();
+    fs::write(root.join("remove-before.txt"), "before").unwrap();
+
+    let host = Arc::new(FakeHost::default());
+    let (core, window) = writable_core(&temp, &root, &host);
+
+    let CoreReply::FilesMove { results } = core
+        .handle(CoreRequest::FilesMove {
+            window_id: window.clone(),
+            permission: "docs".into(),
+            paths: vec![
+                "move-source/note.txt".into(),
+                "move-after.txt".into(),
+                "move-source".into(),
+                "move-before.txt".into(),
+            ],
+            destination: "move-dest".into(),
+        })
+        .unwrap()
+    else {
+        panic!("unexpected move response")
+    };
+    assert_eq!(
+        result_paths(&results),
+        ["move-after.txt", "move-source", "move-before.txt"]
+    );
+    assert!(root.join("move-dest/move-source/note.txt").exists());
+    assert!(!root.join("move-dest/note.txt").exists());
+
+    let CoreReply::FilesCopy { results } = core
+        .handle(CoreRequest::FilesCopy {
+            window_id: window.clone(),
+            permission: "docs".into(),
+            paths: vec![
+                "copy-source/note.txt".into(),
+                "copy-after.txt".into(),
+                "copy-source".into(),
+                "copy-before.txt".into(),
+            ],
+            destination: "copy-dest".into(),
+        })
+        .unwrap()
+    else {
+        panic!("unexpected copy response")
+    };
+    assert_eq!(
+        result_paths(&results),
+        ["copy-after.txt", "copy-source", "copy-before.txt"]
+    );
+    assert!(root
+        .join("copy-dest/copy-source - 복사본/note.txt")
+        .exists());
+    assert!(!root.join("copy-dest/note.txt").exists());
+
+    let CoreReply::FilesRemove { results } = core
+        .handle(CoreRequest::FilesRemove {
+            window_id: window,
+            permission: "docs".into(),
+            paths: vec![
+                "remove-source/note.txt".into(),
+                "remove-after.txt".into(),
+                "remove-source".into(),
+                "remove-before.txt".into(),
+            ],
+            permanent: true,
+        })
+        .unwrap()
+    else {
+        panic!("unexpected remove response")
+    };
+    assert_eq!(
+        result_paths(&results),
+        ["remove-after.txt", "remove-source", "remove-before.txt"]
+    );
+    assert!(!root.join("remove-source").exists());
+}
+
+fn result_paths(results: &[kaleidoscope_contract::FileOpResult]) -> Vec<&str> {
+    results
+        .iter()
+        .map(|result| match result {
+            kaleidoscope_contract::FileOpResult::Ok { path, .. }
+            | kaleidoscope_contract::FileOpResult::Error { path, .. } => path.as_str(),
+        })
+        .collect()
+}
+
+#[test]
 fn file_write_commands_reject_read_pc_roots_and_protected_ancestors() {
     let temp = TempDir::new().unwrap();
     let root = temp.path().join("documents");
@@ -386,6 +489,54 @@ fn file_write_commands_reject_read_pc_roots_and_protected_ancestors() {
         kaleidoscope_contract::FileOpResult::Error { error, .. }
             if error.code == ErrorCode::PathOutsideRoot
     ));
+}
+
+#[test]
+fn file_write_copy_rejects_an_ancestor_containing_the_core_data_directory() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("documents");
+    fs::create_dir(&root).unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(root.clone()));
+    let core_data = temp.path().join("protected/data");
+    let core = seeded_core(&core_data, &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "test-md-editor");
+    core.handle(CoreRequest::FilesPickFolder {
+        window_id: window.clone(),
+        permission: "docs".into(),
+    })
+    .unwrap();
+    fs::create_dir_all(core_data.join("private")).unwrap();
+    core.inner
+        .state
+        .lock()
+        .unwrap()
+        .device
+        .grants
+        .iter_mut()
+        .find(|grant| grant.window_id == window && grant.permission == "docs")
+        .unwrap()
+        .root_path = temp.path().to_string_lossy().to_string();
+
+    let CoreReply::FilesCopy { results } = core
+        .handle(CoreRequest::FilesCopy {
+            window_id: window,
+            permission: "docs".into(),
+            paths: vec!["protected".into()],
+            destination: String::new(),
+        })
+        .unwrap()
+    else {
+        panic!("unexpected copy response")
+    };
+    assert!(matches!(
+        results.as_slice(),
+        [kaleidoscope_contract::FileOpResult::Error { error, .. }]
+            if error.code == ErrorCode::PermissionDenied
+    ));
+    assert!(!temp.path().join("protected - 복사본").exists());
+    assert!(core_data.exists());
 }
 
 #[test]
