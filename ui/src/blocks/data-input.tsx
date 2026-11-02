@@ -56,6 +56,7 @@ export function InputBlock({ block, pointer }: Props<"input">) {
   const edited = useRef(false);
   const previousFocus = useRef<JsonValue | typeof uninitializedFocus>(uninitializedFocus);
   const customSpinbutton = block.kind === "number" && (block.format?.kind === "decimal" || block.focus !== undefined);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   useEffect(() => {
     if (focus.status !== "ready") return;
     if (previousFocus.current === uninitializedFocus) { previousFocus.current = focus.value; return; }
