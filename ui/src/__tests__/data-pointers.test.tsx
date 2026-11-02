@@ -47,7 +47,7 @@ it("클라이언트가 발행한 행과 선택은 코어 동작 없이 표에 �
     return <><button onClick={() => data.publishClient({ rows: [{ key: "a", title: "계산된 행" }], selected: "a" })}>계산</button>
       <TableBlock block={definition.ui as Extract<AppDefinition["ui"], { type: "table" }>} context={context} pointer="/ui" /></>;
   }
-  render(<windowData.WindowDataProvider store={store} appWindow={appWindow} definition={definition}><Harness /></windowData.WindowDataProvider>);
+  render(<windowData.WindowDataProvider store={store} windowId={appWindow.id} definition={definition}><Harness /></windowData.WindowDataProvider>);
   await userEvent.click(screen.getByRole("button", { name: "계산" }));
   expect(await screen.findByText("계산된 행")).toBeTruthy();
   expect(transport.getCalls().filter((call) => call.op === "data.act" || call.op === "window.set_state")).toHaveLength(0);
@@ -146,7 +146,7 @@ it("only rerenders the subscriber of the changed data pointer", async () => {
     const value = windowData.useBinding(`/ui/${name}`, { expr: `$state.${name}` });
     return <span>{value.status === "ready" ? String(value.value) : "대기"}</span>;
   }
-  render(<windowData.WindowDataProvider store={store} appWindow={window} definition={definition}><Value name="a" /><Value name="b" /></windowData.WindowDataProvider>);
+  render(<windowData.WindowDataProvider store={store} windowId={window.id} definition={definition}><Value name="a" /><Value name="b" /></windowData.WindowDataProvider>);
   await waitFor(() => expect(renders.a).toBeGreaterThan(0));
   const before = { ...renders };
   act(() => transport.emit({ event: "data.update", window_id: window.id, view: { sources: {}, values: { "/ui/a": { status: "ready", value: "바뀐 A" } } } }));

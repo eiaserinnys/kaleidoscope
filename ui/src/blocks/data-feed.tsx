@@ -10,6 +10,7 @@ import { MarkdownText } from "./markdown-text";
 import { Badges, GroupHeading, NoItems, VirtualSurface, asArray, asBadges, groups, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
 import { IconButton } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
+import { useWindowStateValue } from "../data/window-state";
 
 function asFeedEntry(value: unknown): FeedEntry | null {
   if (!isObject(value) || typeof value.key !== "string" || !(typeof value.body === "string" || (Array.isArray(value.body) && value.body.every((part) => typeof part === "string")))) return null;
@@ -118,7 +119,8 @@ function FeedReady({ block, context, pointer, value }: { block: Extract<Block, {
       </IconButton>
     </span>;
   };
-  const selected = block.selected ? context.window.state[block.selected.state] : null;
+  const selectedValue = useWindowStateValue(context, block.selected?.state ?? null);
+  const selected = block.selected ? selectedValue : null;
   const rowOf = (index: number) => entryRows[index] ?? 0;
   const roving = useRoving(items, selected, scroll, virtual, rowOf);
   if (block.on_select && items.length) keepRovingRow(virtual, rowOf(roving.focus));

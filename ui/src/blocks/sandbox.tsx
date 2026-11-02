@@ -11,6 +11,8 @@ import { FileGrant } from "./file-grant";
 import { resolveFilePath } from "./file-path";
 import { sandboxSource } from "./sandbox-frame";
 import { registerSandboxFlush } from "./sandbox-flush";
+import { patchWindowState, useWindowGrant, useWindowStateValue } from "../data/window-state";
+import { useShellSelector } from "../core/shell-store";
 
 type SandboxData = Extract<Block, { type: "sandbox" }>;
 
@@ -22,8 +24,10 @@ export function SandboxBlock({ block, context, pointer }: { block: SandboxData; 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const permission = block.file?.permission;
-  const path = block.file ? resolveFilePath(block.file, context.window) : null;
-  const grant = permission ? context.snapshot.device.grants.find((item) => item.window_id === context.window.id && item.permission === permission)?.root_path : null;
+  const fileState = useWindowStateValue(context, block.file && typeof block.file.path !== "string" ? block.file.path.state : null);
+  const path = block.file ? resolveFilePath(block.file, fileState) : null;
+  const grantValue = useWindowGrant(context, permission ?? "");
+  const grant = permission ? grantValue?.root_path : null;
   const read = useCallback(async () => {
     try {
       let text = "";
@@ -64,6 +68,11 @@ export function SandboxBlock({ block, context, pointer }: { block: SandboxData; 
   return <SandboxFrame block={block} context={context} rawHtml={rawHtml} />;
 }
 
+function sameState(left: Record<string, JsonValue>, right: Record<string, JsonValue>): boolean {
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every((key) => Object.is(left[key], right[key]));
+}
+
 function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context: BlockContext; rawHtml: string }) {
   const dataRuntime = useWindowData();
   const root = useRef<HTMLElement>(null);
@@ -82,16 +91,18 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
   const storageEntries = block.storage_entries ?? [];
   const stateSignature = JSON.stringify(stateKeys);
   const storageSignature = JSON.stringify(storageEntries);
+  const state = useShellSelector(context.store, (snapshot) => {
+    const current = snapshot?.shared.windows.find((item) => item.id === context.window.id)?.state;
+    return Object.fromEntries(stateKeys.filter((key) => current && key in current).map((key) => [key, current![key]]));
+  }, sameState);
   const source = useMemo(() => {
     const token = crypto.randomUUID();
-    const state = Object.fromEntries(stateKeys.filter((key) => key in context.window.state).map((key) => [key, context.window.state[key]]));
     return { token, html: sandboxSource(rawHtml, { token, state, stateKeys, storageEntries }) };
   // 창 상태가 바뀌어도 프레임을 다시 시작하지 않는다.
   }, [rawHtml, stateSignature, storageSignature, sequence]);
   const send = useCallback((data: object) => {
     if (active.current && currentToken.current === source.token) frame.current?.contentWindow?.postMessage(data, "*");
   }, [source.token]);
-  const state = Object.fromEntries(stateKeys.filter((key) => key in context.window.state).map((key) => [key, context.window.state[key]]));
   const stateJson = JSON.stringify(state);
   useEffect(() => { send({ type: "ks-sandbox-state-sync", state: JSON.parse(stateJson) }); }, [stateJson, send]);
   useLayoutEffect(() => {
@@ -147,8 +158,7 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
         delete pendingRevisions.current[data.entry];
       } else if (data.type === "ks-sandbox-state-set" && data.patch && typeof data.patch === "object") {
         const patch = Object.fromEntries(Object.entries(data.patch).filter(([key]) => stateKeys.includes(key))) as Record<string, JsonValue>;
-        const current = context.store.getSnapshot()?.shared.windows.find((item) => item.id === context.window.id)?.state ?? context.window.state;
-        void context.store.call({ op: "window.set_state", window_id: context.window.id, state: { ...current, ...patch } }).catch((reason) => console.error("창 상태 변경 실패", reason));
+        void patchWindowState(context, patch).catch((reason) => console.error("창 상태 변경 실패", reason));
       } else if ((data.type === "ks-sandbox-storage-get" || data.type === "ks-sandbox-storage-set") && typeof data.entry === "string" && storageEntries.includes(data.entry)) {
         const entry = data.entry, requestId = data.requestId;
         const run = async () => {
@@ -176,7 +186,7 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
       }
     };
     window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);
-  }, [context.store, context.window, dataRuntime, getStorage, send, source.token, stateJson, stateSignature, storageSignature]);
+  }, [context.store, context.window.id, dataRuntime, getStorage, send, source.token, stateJson, stateSignature, storageSignature]);
   const appName = context.definition.name || "샌드박스";
   useShareDescriber(root, () => ({ text: `[${appName}]\n\n${share.text}`.trim(), visual: true, ...(share.image ? { image_base64: share.image } : {}) }));
   return <section className="ks-sandbox" ref={root} data-share-seq={share.sequence}>

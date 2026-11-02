@@ -9,6 +9,7 @@ import { useShareDescriber } from "../share/visible";
 import type { BlockContext } from "./block-context";
 import { asArray, isObject, NoItems } from "./data-view-common";
 import { WORLD_LAND } from "./world-land";
+import { useWindowStateValue } from "../data/window-state";
 
 type MapBlockType = Extract<Block, { type: "map" }>;
 type Point = MapPoint & { [key: string]: JsonValue | undefined };
@@ -102,7 +103,8 @@ function MapReady({ block, context, pointer, value }: { block: MapBlockType; con
   const data = useWindowData();
   const root = useRef<HTMLDivElement>(null);
   const points = useMemo(() => normalize(value), [value]);
-  const selectedKey = block.selected ? context.window.state[block.selected.state] : undefined;
+  const selectedValue = useWindowStateValue(context, block.selected?.state ?? null);
+  const selectedKey = block.selected ? selectedValue : undefined;
   const selectedIndex = selectedKey == null ? -1 : points.findIndex((point) => point.key === String(selectedKey));
   const [index, setIndex] = useState(Math.max(0, selectedIndex));
   useEffect(() => { setIndex(Math.max(0, selectedIndex)); }, [selectedIndex, selectedKey, points]);

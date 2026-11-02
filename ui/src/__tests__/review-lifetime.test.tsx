@@ -26,8 +26,8 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>) {
   const store = { call, getSnapshot: () => snapshot, getError: () => null, subscribe: () => () => {}, subscribeEvents: (fn: (event: CoreEvent) => void) => { listeners.add(fn); return () => listeners.delete(fn); }, ready: Promise.resolve(), dispose: () => {} } as unknown as ShellStore;
   const window = snapshot.shared.windows[0];
   const context = { store, snapshot, window, definition };
-  const view = render(<WindowDataProvider store={store} appWindow={window} definition={definition}><AgentChatBlock block={{ type: "chat" }} context={context} /></WindowDataProvider>);
-  return { call, window, rerender: () => view.rerender(<WindowDataProvider store={store} appWindow={window} definition={definition}><AgentChatBlock block={{ type: "chat" }} context={{ ...context, definition: structuredClone(definition) }} /></WindowDataProvider>), emit: (event: CoreEvent) => act(() => { listeners.forEach((fn) => fn(event)); }) };
+  const view = render(<WindowDataProvider store={store} windowId={window.id} definition={definition}><AgentChatBlock block={{ type: "chat" }} context={context} /></WindowDataProvider>);
+  return { call, window, rerender: () => view.rerender(<WindowDataProvider store={store} windowId={window.id} definition={definition}><AgentChatBlock block={{ type: "chat" }} context={{ ...context, definition: structuredClone(definition) }} /></WindowDataProvider>), emit: (event: CoreEvent) => act(() => { listeners.forEach((fn) => fn(event)); }) };
 }
 const get = (value: ConversationThread | null = thread): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles: [], start: { profile: "", model: null } });
 beforeEach(() => { vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null as unknown as CanvasRenderingContext2D); });

@@ -8,11 +8,12 @@ import type { BlockContext } from "./block-context";
 import { isHttpAddress, normalizeWebAddress } from "./web-address";
 import { useShareDescriber } from "../share/visible";
 import { registerWebSurface, type WebSurfaceState } from "./web-surface-layer";
+import { useWindowStateValue } from "../data/window-state";
 
 type WebViewBlockData = Extract<Block, { type: "web_view" }>;
 
-function resolveAddress(block: WebViewBlockData, context: BlockContext): string | null {
-  const value = typeof block.url === "string" ? block.url : context.window.state[block.url.state];
+function resolveAddress(block: WebViewBlockData, stateValue: unknown): string | null {
+  const value = typeof block.url === "string" ? block.url : stateValue;
   return typeof value === "string" ? value : null;
 }
 
@@ -27,7 +28,8 @@ function pageHeading(page: WebPage | null): string {
 }
 
 export function WebViewBlock({ block, context }: { block: WebViewBlockData; context: BlockContext }) {
-  const address = resolveAddress(block, context);
+  const stateUrl = useWindowStateValue(context, typeof block.url === "string" ? null : block.url.state);
+  const address = resolveAddress(block, stateUrl);
   const validAddress = isHttpAddress(address) ? address : null;
   const windowId = context.window.id;
   const store = context.store;

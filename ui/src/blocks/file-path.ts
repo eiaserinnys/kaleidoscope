@@ -1,7 +1,6 @@
-import type { AppWindow, FileRef } from "../contract/contract";
+import type { FileRef } from "../contract/contract";
 
-export function resolveFilePath(file: FileRef, window: AppWindow): string | null {
+export function resolveFilePath(file: FileRef, stateValue: unknown): string | null {
   if (typeof file.path === "string") return file.path;
-  const value = window.state[file.path.state];
-  return typeof value === "string" ? value : null;
+  return typeof stateValue === "string" ? stateValue : null;
 }

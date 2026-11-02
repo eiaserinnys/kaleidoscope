@@ -5,7 +5,7 @@ import { DataState } from "../components/data-state";
 import { Button, EmptyState, Notice, StatusText } from "../components/primitives";
 import { MessageSquare } from "../components/icons";
 import { toCoreError } from "../core/core-transport";
-import type { BlockContext } from "./block-context";
+import type { LegacyBlockContext as BlockContext } from "./block-context";
 import { useShareDescriber } from "../share/visible";
 import { flushShareViews } from "../share/share-view";
 import { HistoryAttachmentView, ImagePreview, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
