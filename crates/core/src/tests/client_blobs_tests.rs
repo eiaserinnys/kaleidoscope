@@ -45,7 +45,15 @@ fn device_blob_persists_and_is_scoped_to_app_and_server() {
     assert!(put(&core, &one, "other/key", vec![1]).is_err());
     let file = open(&core, &one, "cache/image.bin").unwrap();
     assert_eq!(core.client_read_file(&one, &file.id).unwrap(), bytes);
-    let CoreReply::ClientBlobList { keys } = core.handle(CoreRequest::ClientBlobList { window_id: one.clone(), prefix: "cache/".into() }).unwrap() else { panic!("blob.list") };
+    let CoreReply::ClientBlobList { keys } = core
+        .handle(CoreRequest::ClientBlobList {
+            window_id: one.clone(),
+            prefix: "cache/".into(),
+        })
+        .unwrap()
+    else {
+        panic!("blob.list")
+    };
     assert_eq!(keys, vec!["cache/image.bin"]);
     core.shutdown();
     drop(core);
@@ -54,7 +62,12 @@ fn device_blob_persists_and_is_scoped_to_app_and_server() {
     let one = open_window(&reopened, &desktop, "blob-one");
     let file = open(&reopened, &one, "cache/image.bin").unwrap();
     assert_eq!(reopened.client_read_file(&one, &file.id).unwrap(), bytes);
-    reopened.handle(CoreRequest::ClientBlobRemove { window_id: one.clone(), key: "cache/image.bin".into() }).unwrap();
+    reopened
+        .handle(CoreRequest::ClientBlobRemove {
+            window_id: one.clone(),
+            key: "cache/image.bin".into(),
+        })
+        .unwrap();
     assert!(open(&reopened, &one, "cache/image.bin").is_none());
     reopened.shutdown();
 }
@@ -63,17 +76,37 @@ fn device_blob_persists_and_is_scoped_to_app_and_server() {
 fn switching_servers_selects_that_servers_blob_files() {
     use kaleidoscope_contract::ServerMode;
     let temp = TempDir::new().unwrap();
-    let core = open_core(temp.path(), vec![definition("blob-one")], &Arc::new(FakeHost::default()));
+    let core = open_core(
+        temp.path(),
+        vec![definition("blob-one")],
+        &Arc::new(FakeHost::default()),
+    );
     let (_, desktop) = active_ids(&core);
     let one = open_window(&core, &desktop, "blob-one");
     put(&core, &one, "cache/item", b"local".to_vec()).unwrap();
     let shared = core.inner.state.lock().unwrap().shared.clone();
-    let remote = LinkFile { revoked: false, format: 1, mode: ServerMode::Remote, server_url: "https://remote.example".into(), device_id: "device".into(), device_name: "시험".into(), token: "token".into() };
+    let remote = LinkFile {
+        revoked: false,
+        format: 1,
+        mode: ServerMode::Remote,
+        server_url: "https://remote.example".into(),
+        device_id: "device".into(),
+        device_name: "시험".into(),
+        token: "token".into(),
+    };
     crate::server_switch::activate(&core.inner, remote, 0).unwrap();
     core.inner.state.lock().unwrap().shared = shared.clone();
     assert!(open(&core, &one, "cache/item").is_none());
     put(&core, &one, "cache/item", b"remote".to_vec()).unwrap();
-    let local = LinkFile { revoked: false, format: 1, mode: ServerMode::Embedded, server_url: "http://127.0.0.1:1".into(), device_id: "local".into(), device_name: "시험".into(), token: "token".into() };
+    let local = LinkFile {
+        revoked: false,
+        format: 1,
+        mode: ServerMode::Embedded,
+        server_url: "http://127.0.0.1:1".into(),
+        device_id: "local".into(),
+        device_name: "시험".into(),
+        token: "token".into(),
+    };
     crate::server_switch::activate(&core.inner, local, 0).unwrap();
     core.inner.state.lock().unwrap().shared = shared;
     let file = open(&core, &one, "cache/item").unwrap();
@@ -101,5 +134,61 @@ fn public_bytes_require_declared_permission_and_allowed_path() {
             })
             .is_err());
     }
+    core.shutdown();
+}
+
+#[test]
+fn picked_file_can_be_saved_without_exposing_its_path() {
+    struct PickHost(PathBuf);
+    impl Host for PickHost {
+        fn pick_folder(&self) -> Option<PathBuf> {
+            None
+        }
+        fn pick_files(
+            &self,
+            _: &[kaleidoscope_contract::data::FileAccept],
+            _: bool,
+        ) -> Option<Vec<PathBuf>> {
+            Some(vec![self.0.clone()])
+        }
+    }
+    let temp = TempDir::new().unwrap();
+    let input = temp.path().join("input.bin");
+    let bytes = vec![42; 25 * 1024 * 1024];
+    fs::write(&input, &bytes).unwrap();
+    let core = Core::open(
+        CoreConfig {
+            data_dir: temp.path().join("data"),
+            seed_definitions: vec![definition("picked-file")],
+            server_url: "http://127.0.0.1:4219".into(),
+            device_name: "시험".into(),
+            embedded_server: None,
+        },
+        Arc::new(PickHost(input)),
+    )
+    .unwrap();
+    let (_, desktop) = active_ids(&core);
+    let one = open_window(&core, &desktop, "picked-file");
+    let other = open_window(&core, &desktop, "picked-file");
+    let CoreReply::FilesPick { files, .. } = core
+        .handle(CoreRequest::FilesPick {
+            window_id: one.clone(),
+            accept: vec![],
+            multiple: false,
+        })
+        .unwrap()
+    else {
+        panic!("files.pick")
+    };
+    let request = |window: &str| CoreRequest::ClientBlobPut {
+        window_id: window.into(),
+        key: "cache/upload.bin".into(),
+        file_id: Some(files[0].id.clone()),
+        bytes: None,
+    };
+    assert!(core.handle(request(&other)).is_err());
+    core.handle(request(&one)).unwrap();
+    let file = open(&core, &one, "cache/upload.bin").unwrap();
+    assert_eq!(core.client_read_file(&one, &file.id).unwrap(), bytes);
     core.shutdown();
 }

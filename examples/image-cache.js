@@ -4,6 +4,10 @@
   let surface = null, picture = null;
   const draw = () => {
     if (!surface || !picture) return;
+    const width = Math.max(1, Math.round(surface.cssWidth * surface.dpr));
+    const height = Math.max(1, Math.round(surface.cssHeight * surface.dpr));
+    if (surface.canvas.width !== width) surface.canvas.width = width;
+    if (surface.canvas.height !== height) surface.canvas.height = height;
     const context = surface.canvas.getContext('2d');
     context.clearRect(0, 0, surface.canvas.width, surface.canvas.height);
     context.drawImage(picture, 0, 0, surface.canvas.width, surface.canvas.height);
