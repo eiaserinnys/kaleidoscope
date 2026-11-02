@@ -39,6 +39,27 @@ it("스레드 CAS 충돌 때 최신 답글을 보존하며 같은 변경을 재�
   expect(JSON.parse(saved).comments.map((item: { id: string }) => item.id)).toEqual(["existing", "new"]);
 });
 
+it("최신 리비전을 따라간 창은 다시 열 때도 최신을 본다", async () => {
+  const seed = makeTestSeed({ definitions: [definition as AppDefinition] });
+  seed.snapshot.shared.windows[0].state = { selected_doc: "시안", selected_revision: 1 };
+  const base = createFakeTransport(seed);
+  const files = new Map([["시안/r1.html", "<h1>첫 판</h1>"]]);
+  const call = async (request: CoreRequest) => {
+    if (request.op === "storage.list") return { op: "storage.list", result: { bucket_id: "bucket", items: [...files].map(([doc, content]) => ({ doc, revision: doc, updated_at: "now", byte_size: content.length })) } };
+    if (request.op === "storage.get" && request.doc) { const content = files.get(request.doc); if (content === undefined) throw { code: "not_found", message: "없음", details: [] }; return { op: "storage.get", result: { kind: "md", content, revision: request.doc, exists: true } }; }
+    return base.call(request as never);
+  };
+  const store = createShellStore({ ...base, call: call as CoreTransport["call"] });
+  render(<AppWindowContent store={store} windowId="viewer-window" />);
+  expect((await screen.findByRole("button", { name: "리비전" })).textContent).toContain("v1");
+  await act(async () => {
+    files.set("시안/r2.html", "<h1>둘째 판</h1>");
+    base.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "bucket", item: { entry_id: "drafts", key: "drafts/시안/r2.html", kind: "md", revision: "r2", exists: true } } } });
+  });
+  await waitFor(() => expect(screen.getByRole("button", { name: "리비전" }).textContent).toContain("v2"));
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.selected_revision).toBeNull());
+});
+
 it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보낸다", async () => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, right: 300, bottom: 200, x: 0, y: 0, width: 300, height: 200, toJSON() {} });
   const agent = { id: "agent", name: "채팅", requires: { blocks: 1, modules: {} }, permissions: [], state: {}, agent: {}, ui: { type: "text", text: "" } } as unknown as AppDefinition;

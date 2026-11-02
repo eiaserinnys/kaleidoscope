@@ -80,6 +80,10 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     const preferred = docs.find((item) => item.name === docState) ?? docs[0];
     const newest = preferred.revisions.at(-1)!;
     const previous = latestRef.current;
+    const current = activeRef.current;
+    if (current && previous?.name === current.name && current.name === preferred.name && current.rev === previous.rev && newest > previous.rev && !dirtyRef.current && block.on_select_revision && revState != null) {
+      patchState(preferred.name, null);
+    }
     setActive((current) => {
       if (!current || current.name !== preferred.name) {
         const requested = Number(revState); return { name: preferred.name, rev: preferred.revisions.includes(requested) ? requested : newest };
@@ -88,7 +92,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
       return current;
     });
     latestRef.current = { name: preferred.name, rev: newest };
-  }, [docs, docState, revState]);
+  }, [docs, docState, revState, block.on_select_revision, patchState]);
   useEffect(() => {
     const item = active; const sequence = ++readSequence.current;
     setSelection(null); setResults({}); setText(""); setUndo([]); setRedo([]); selectors.current.clear(); work.current = null; setSource("");
