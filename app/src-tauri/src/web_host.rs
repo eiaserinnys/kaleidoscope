@@ -322,7 +322,7 @@ impl WebHost for TauriWebHost {
         });
         let after = crate::freeze_cover::flush();
         before
-            .and(destroy.map_err(|error| error.to_string()))
+            .and(destroy.map_err(|error| format!("{error:?}")))
             .and(after)
             .map_err(fail)
     }
