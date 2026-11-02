@@ -12,6 +12,8 @@ function bridgeSource(init: SandboxInit): string {
     let state = { ...config.state }, nextRequest = 0, shareText = '', shareImage = '', shareCanvas = null, explicitText = false;
     const stateListeners = new Set(), storageListeners = new Map(), pending = new Map(), pendingWrites = new Set();
     const send = (type, body = {}, transfer) => transfer ? parent.postMessage({ token, type, ...body }, '*', transfer) : parent.postMessage({ token, type, ...body }, '*');
+    const lifecycleListeners = new Set(), pendingLifecycle = new Set();
+    let lifecycle = null;
     const inputListeners = new Set(), handlers = new Map(), surfaceListeners = new Map(), surfaces = new Map();
     let inputs = config.inputs || {};
     const clientRequest = (type, body = {}, transfer) => new Promise((resolve, reject) => {
@@ -68,6 +70,7 @@ function bridgeSource(init: SandboxInit): string {
       },
       onStorageChange(entry, listener) { const set = storageListeners.get(entry) || new Set(); set.add(listener); storageListeners.set(entry, set); return () => set.delete(listener); },
       get inputs() { return inputs; },
+      onLifecycle(listener) { lifecycleListeners.add(listener); if (lifecycle) listener(lifecycle); return () => lifecycleListeners.delete(listener); },
       onInputs(listener) { inputListeners.add(listener); return () => inputListeners.delete(listener); },
       publish(patch) { send('ks-client-publish', { patch }); },
       handle(name, listener) { handlers.set(name, listener); },
@@ -95,6 +98,13 @@ function bridgeSource(init: SandboxInit): string {
     window.addEventListener('message', event => {
       if (event.source !== parent || !event.data) return;
       const data = event.data;
+      if (data.type === 'ks-client-lifecycle') {
+        lifecycle = data.lifecycle;
+        lifecycleListeners.forEach(fn => {
+          const task = Promise.resolve().then(() => fn(lifecycle));
+          pendingLifecycle.add(task); task.then(() => pendingLifecycle.delete(task), () => pendingLifecycle.delete(task));
+        });
+      }
       if (data.type === 'ks-client-inputs') { inputs = data.inputs; inputListeners.forEach(fn => fn(inputs, data.changed)); }
       if (data.type === 'ks-client-action') { const handler = handlers.get(data.name); if (handler) Promise.resolve().then(() => handler(data.context)).catch(error => send('ks-client-notice', { message: String(error), error: true })); }
       if (data.type === 'ks-client-ping') send('ks-client-pong');
@@ -126,7 +136,7 @@ function bridgeSource(init: SandboxInit): string {
       if (data.type === 'ks-sandbox-request-share') report();
       if (data.type === 'ks-sandbox-flush') {
         window.dispatchEvent(new Event('pagehide'));
-        Promise.all([...pendingWrites]).then(() => send('ks-sandbox-flushed', { requestId: data.requestId, ok: true }), () => send('ks-sandbox-flushed', { requestId: data.requestId, ok: false }));
+        Promise.all([...pendingLifecycle]).then(() => Promise.all([...pendingWrites])).then(() => send('ks-sandbox-flushed', { requestId: data.requestId, ok: true }), () => send('ks-sandbox-flushed', { requestId: data.requestId, ok: false }));
       }
     });
     document.addEventListener('click', event => {

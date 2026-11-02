@@ -96,7 +96,7 @@ it("confirms before acting and escape cancels", async () => {
   expect(spy.mock.calls.some(([request]) => request.op === "data.act")).toBe(false);
   await user.click(screen.getByRole("button", { name: "확인" }));
   await user.click(screen.getByRole("dialog").querySelectorAll("button")[1]);
-  await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "data.act", window_id: "editor-window", pointer: "/ui/children/4/on_click", event: null }));
+  await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "data.act", window_id: "editor-window", pointer: "/ui/children/4/on_click", event: null, modifiers: { shift: false, alt: false, ctrl: false, meta: false } }));
 });
 
 it("applies a data update only to the named window and pointer", async () => {

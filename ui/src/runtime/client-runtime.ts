@@ -1,4 +1,4 @@
-import type { AppDefinition, Binding, BindingValue, ClientActionContext, PickFilesSpec, SaveFileSpec } from "../contract/contract";
+import type { AppDefinition, Binding, BindingValue, ClientActionContext, ClientLifecycle, EventModifiers, PickFilesSpec, SaveFileSpec } from "../contract/contract";
 import type { ItemScope } from "../data/item-scope";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { CLIENT_PING_TIMEOUT_SECS } from "../contract/limits";
@@ -43,6 +43,11 @@ export class ClientRuntime {
   private stopping?: Promise<void>;
   private shareText = "";
   private shareImage = "";
+  private observer?: ResizeObserver;
+  private lifecycleFrame: number | null = null;
+  private lastLifecycle = "";
+  private closingNotified = false;
+  private host: HTMLElement | null = null;
   private snapshots = new Map<string, (image: string) => void>();
 
   constructor(private store: ShellStore, private data: WindowData, private definition: AppDefinition, private client: Client) {}
@@ -84,13 +89,17 @@ export class ClientRuntime {
         }
       });
       container.append(frame);
-      this.unregister = registerSandboxFlush(this.data.windowId, this.flush);
+      this.unregister = registerSandboxFlush(this.data.windowId, this.prepareClose);
       this.unsubscribeVisibility = this.store.subscribe(this.syncPingVisibility);
       this.syncPingVisibility();
+      this.observeHost(this.data.clientHost);
+      window.addEventListener("focus", this.scheduleLifecycle);
+      window.addEventListener("blur", this.scheduleLifecycle);
     } catch (error) { if (!this.stopped) this.data.failClient(toCoreError(error).message); }
   }
 
   private syncPingVisibility = () => {
+    this.scheduleLifecycle();
     const visible = isWindowVisible(this.store.getSnapshot(), this.data.windowId);
     if (visible === this.pingVisible) return;
     this.pingVisible = visible;
@@ -106,6 +115,35 @@ export class ClientRuntime {
       this.send({ type: "ks-client-ping" });
     }, CLIENT_PING_TIMEOUT_SECS * 500);
   };
+
+  observeHost(host: HTMLElement | null) {
+    this.observer?.disconnect();
+    this.host = host;
+    if (host && typeof ResizeObserver !== "undefined") {
+      this.observer = new ResizeObserver(this.scheduleLifecycle);
+      this.observer.observe(host);
+    }
+    this.scheduleLifecycle();
+  }
+
+  scheduleLifecycle = () => {
+    if (!this.ready || this.lifecycleFrame !== null) return;
+    this.lifecycleFrame = requestAnimationFrame(() => { this.lifecycleFrame = null; this.sendLifecycle("change"); });
+  };
+
+  private sendLifecycle(phase: ClientLifecycle["phase"]) {
+    if (!this.ready) return;
+    const snapshot = this.store.getSnapshot();
+    const current = snapshot?.shared.windows.find((item) => item.id === this.data.windowId);
+    const visible = isWindowVisible(snapshot, this.data.windowId) && !this.data.clientDormant;
+    const focused = visible && document.hasFocus() && !!current && !snapshot?.shared.windows.some((item) => item.desktop_id === current.desktop_id && !item.minimized && item.z > current.z);
+    const rect = this.host?.getBoundingClientRect();
+    const lifecycle: ClientLifecycle = { visible, focused, viewport: { width: rect?.width ?? 0, height: rect?.height ?? 0, coarse_pointer: window.matchMedia?.("(pointer: coarse)").matches ?? false }, phase };
+    const signature = JSON.stringify({ visible, focused, viewport: lifecycle.viewport });
+    if (phase === "change" && signature === this.lastLifecycle) return;
+    this.lastLifecycle = signature;
+    this.send({ type: "ks-client-lifecycle", lifecycle });
+  }
 
   private state() {
     const state = this.store.getSnapshot()?.shared.windows.find((window) => window.id === this.data.windowId)?.state ?? {};
@@ -137,9 +175,9 @@ export class ClientRuntime {
     this.send({ type: "ks-sandbox-state-sync", state: this.state() });
   }
 
-  action(name: string, event: JsonValue, item?: JsonValue, args?: JsonValue, scope?: ItemScope) {
+  action(name: string, event: JsonValue, item?: JsonValue, args?: JsonValue, scope?: ItemScope, modifiers?: EventModifiers) {
     if (!this.client.actions.includes(name) || !this.frame) return false;
-    const context: ClientActionContext = { event, ...(item === undefined ? {} : { item }), ...(args === undefined ? {} : { args }), ...(scope ? { parent_item: scope.parent_item, key: scope.key, index: scope.index } : {}) };
+    const context: ClientActionContext = { event, ...(item === undefined ? {} : { item }), ...(args === undefined ? {} : { args }), ...(scope ? { parent_item: scope.parent_item, key: scope.key, index: scope.index } : {}), ...(modifiers === undefined ? {} : { modifiers }) };
     this.send({ type: "ks-client-action", name, context });
     return true;
   }
@@ -206,7 +244,7 @@ export class ClientRuntime {
   private receive = (event: MessageEvent) => {
     if (!this.token || event.source !== this.frame?.contentWindow || event.origin !== "null" || event.data?.token !== this.token) return;
     const message = event.data;
-    if (message.type === "ks-sandbox-ready") { this.ready = true; this.lastPong = Date.now(); this.sync(); for (const id of this.surfaces.keys()) this.sendSurface(id); for (const entry of this.client.storage_entries) void this.syncStorage(entry); }
+    if (message.type === "ks-sandbox-ready") { this.ready = true; this.lastPong = Date.now(); this.sendLifecycle("ready"); this.sync(); for (const id of this.surfaces.keys()) this.sendSurface(id); for (const entry of this.client.storage_entries) void this.syncStorage(entry); }
     else if (message.type === "ks-client-pong") this.lastPong = Date.now();
     else if (message.type === "ks-sandbox-storage-applied" && this.client.storage_entries.includes(message.entry) && this.pendingRevisions[message.entry] === message.revision) {
       this.revisions[message.entry] = message.revision; delete this.pendingRevisions[message.entry];
@@ -277,6 +315,24 @@ export class ClientRuntime {
     }
   };
 
+  private beginClosing() {
+    if (this.ready && !this.closingNotified) {
+      this.closingNotified = true;
+      this.sendLifecycle("closing");
+    }
+  }
+
+  private prepareClose = async () => {
+    this.beginClosing();
+    const ok = await this.flush();
+    if (!ok && this.closingNotified) {
+      this.closingNotified = false;
+      this.lastLifecycle = "";
+      this.sendLifecycle("change");
+    }
+    return ok;
+  };
+
   flush = () => {
     if (!this.ready || !this.frame) return Promise.resolve(true);
     return new Promise<boolean>((resolve) => {
@@ -310,6 +366,7 @@ export class ClientRuntime {
     if (windows?.get(this.data.windowId) === this) windows.delete(this.data.windowId);
     for (const finish of this.snapshots.values()) finish("");
     this.snapshots.clear();
+    this.beginClosing();
     await this.flush();
     await this.files.dispose().catch((error) => this.data.setNotice(toCoreError(error).message));
     if (this.store.nativeFiles) await this.store.call({ op: "client.release", window_id: this.data.windowId }).catch((error) => this.data.setNotice(toCoreError(error).message));
@@ -318,6 +375,10 @@ export class ClientRuntime {
     this.unsubscribeVisibility?.();
     if (this.ping) clearInterval(this.ping);
     if (this.patchFrame !== null) cancelAnimationFrame(this.patchFrame);
+    if (this.lifecycleFrame !== null) cancelAnimationFrame(this.lifecycleFrame);
+    this.observer?.disconnect();
+    window.removeEventListener("focus", this.scheduleLifecycle);
+    window.removeEventListener("blur", this.scheduleLifecycle);
     window.removeEventListener("message", this.receive);
     const container = this.frame?.parentElement;
     this.frame?.remove();

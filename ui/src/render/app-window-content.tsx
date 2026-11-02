@@ -1,12 +1,13 @@
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo } from "react";
 import { AppSettings } from "../settings/app-settings";
-import { WindowDataProvider } from "../data/window-data";
+import { WindowDataProvider, useWindowData, useDormant } from "../data/window-data";
 import { ClientShareSignal, WindowNotice } from "../data/window-notice";
 import type { BlockContext, WindowIdentity } from "../blocks/block-context";
 import { Notice, StatusText } from "../components/primitives";
 import type { ShellStore } from "../core/shell-store";
 import type { Rect } from "../contract/contract";
 import { useShellSelector } from "../core/shell-store";
+import { registerAppShortcuts } from "../runtime/shortcuts";
 import { renderBlock } from "./render-block";
 
 export const AppWindowContent = memo(function AppWindowContent({
@@ -49,15 +50,36 @@ export const AppWindowContent = memo(function AppWindowContent({
   const hasSettings = version.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false;
   if (version.definition.requires.blocks < 4 && !hasSettings && !version.definition.agent) return <div className="ks-app-window-content" data-ks-app-id={window.app_id}>{renderBlock(version.definition.ui, context)}</div>;
   return <WindowDataProvider store={store} windowId={window.id} definition={version.definition}>
-    <div className="ks-app-window-content ks-data-window" data-ks-app-id={window.app_id}>
-      <ClientShareSignal />
-      <div className="ks-data-window-body" hidden={settingsOpen} inert={settingsOpen || undefined}>{renderBlock(version.definition.ui, context)}</div>
-      {hasSettings && settingsVisited ? <AppSettings key={window.app_version} context={context} open={settingsOpen} onClose={onSettingsClose} onProblem={onSettingsProblem} /> : null}
-      <div className="ks-data-window-notice"><WindowNotice /></div>
-    </div>
+    <WindowBody context={context} settingsOpen={settingsOpen} settingsVisited={settingsVisited} onSettingsClose={onSettingsClose} onSettingsProblem={onSettingsProblem} />
   </WindowDataProvider>;
 });
 
 function sameWindowIdentity(left: WindowIdentity | null, right: WindowIdentity | null) {
   return left === right || Boolean(left && right && left.id === right.id && left.app_id === right.app_id && left.app_version === right.app_version && left.desktop_id === right.desktop_id);
+}
+
+function AppShortcuts({ context, active }: { context: BlockContext; active: boolean }) {
+  const data = useWindowData();
+  useEffect(() => {
+    const shortcuts = context.definition.shortcuts;
+    if (!active || !shortcuts?.length) return;
+    return registerAppShortcuts(context, shortcuts, (index, modifiers) => { void data.act(`/shortcuts/${index}/action`, null, undefined, modifiers); });
+  }, [active, context, data]);
+  return null;
+}
+
+function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, onSettingsProblem }: {
+  context: BlockContext; settingsOpen: boolean; settingsVisited: boolean; onSettingsClose: () => void; onSettingsProblem?: (message: string | null) => void;
+}) {
+  const data = useWindowData();
+  const hasSettings = context.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false;
+  useDormant("/ui", settingsOpen);
+  useEffect(() => { data.setClientDormant(settingsOpen); }, [data, settingsOpen]);
+  return <div ref={data.setClientHost} className="ks-app-window-content ks-data-window" data-ks-app-id={context.window.app_id}>
+    <ClientShareSignal />
+    <AppShortcuts context={context} active={!settingsOpen} />
+    <div className="ks-data-window-body" hidden={settingsOpen} inert={settingsOpen || undefined}>{renderBlock(context.definition.ui, context)}</div>
+    {hasSettings && settingsVisited ? <AppSettings key={context.window.app_version} context={context} open={settingsOpen} onClose={onSettingsClose} onProblem={onSettingsProblem} /> : null}
+    <div className="ks-data-window-notice"><WindowNotice /></div>
+  </div>;
 }

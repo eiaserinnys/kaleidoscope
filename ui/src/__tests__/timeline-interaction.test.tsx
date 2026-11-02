@@ -30,9 +30,11 @@ it("드래그 중 재렌더 뒤에도 프레임 단위 미리보기를 전달한
   render(<TimelineBlock block={block} pointer="/ui" context={context} />);
   const item = screen.getByText("첫 줄").parentElement!;
   fireEvent.pointerDown(item, { clientX: 10 });
-  fireEvent.pointerMove(item, { clientX: 20 });
+  fireEvent.pointerMove(item, { clientX: 20, shiftKey: true });
   act(() => { for (const [id, callback] of [...frames]) { frames.delete(id); callback(0); } });
-  expect(runtime.act).toHaveBeenCalledWith("/ui/on_edit", expect.objectContaining({ phase: "preview", id: "line" }));
+  expect(runtime.act).toHaveBeenCalledWith("/ui/on_edit", expect.objectContaining({ phase: "preview", id: "line" }), undefined, { shift: true, alt: false, ctrl: false, meta: false });
+  fireEvent.keyDown(document, { key: "Escape", shiftKey: true });
+  expect(runtime.act).toHaveBeenCalledWith("/ui/on_edit", expect.objectContaining({ phase: "cancel", id: "line" }), undefined, { shift: true, alt: false, ctrl: false, meta: false });
 });
 
 it("시간축과 구간을 키보드로 탐색하고 편집한다", () => {
@@ -41,8 +43,8 @@ it("시간축과 구간을 키보드로 탐색하고 편집한다", () => {
   expect(runtime.act).toHaveBeenCalledWith("/ui/on_seek", expect.any(Number));
   const item = screen.getByText("첫 줄").parentElement!;
   expect(item.tabIndex).toBe(0);
-  fireEvent.keyDown(item, { key: "ArrowRight" });
-  expect(runtime.act).toHaveBeenCalledWith("/ui/on_edit", expect.objectContaining({ phase: "commit", kind: "move" }));
+  fireEvent.keyDown(item, { key: "ArrowRight", shiftKey: true });
+  expect(runtime.act).toHaveBeenCalledWith("/ui/on_edit", expect.objectContaining({ phase: "commit", kind: "move" }), undefined, { shift: true, alt: false, ctrl: false, meta: false });
 });
 
 it("오른쪽 끝에 있는 눈금만 끝 맞춤한다", () => {

@@ -600,6 +600,7 @@ impl Core {
                     &pointer,
                     event,
                     serde_json::Value::Null,
+                    None,
                 )?;
                 Ok(CoreReply::ClientCommand {})
             }
@@ -676,8 +677,8 @@ impl Core {
                 pointer,
                 event,
                 item,
-                modifiers: _,
-            } => data_runtime::act(&self.inner, &window_id, &pointer, event, item),
+                modifiers,
+            } => data_runtime::act(&self.inner, &window_id, &pointer, event, item, modifiers),
             CoreRequest::DataRefresh { window_id, sources } => {
                 data_runtime::refresh(&self.inner, &window_id, &sources, false, true)?;
                 Ok(CoreReply::DataRefresh {})

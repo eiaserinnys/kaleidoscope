@@ -47,3 +47,10 @@ it("자동 숫자로 정규화된 값이 이전과 같아도 흐린 입력 초�
   fireEvent.blur(field);
   await vi.waitFor(() => expect(field.value).toBe(""));
 });
+
+it("수정 키를 눌러 단추를 누르면 동작에 그대로 전한다", () => {
+  const button = { type: "button", label: "선택", on_click: { client: "select" } };
+  render(<ButtonBlock block={button as never} context={{} as never} pointer="/button" />);
+  fireEvent.click(screen.getByRole("button", { name: "선택" }), { shiftKey: true });
+  expect(runtime.act).toHaveBeenCalledWith("/button/on_click", null, undefined, { shift: true, alt: false, ctrl: false, meta: false });
+});
