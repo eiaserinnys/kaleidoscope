@@ -40,6 +40,8 @@ struct CaptureTestHost {
     png: Mutex<Vec<u8>>,
     web_captures: AtomicUsize,
     shell_captures: AtomicUsize,
+    freeze_calls: AtomicUsize,
+    unfreeze_calls: AtomicUsize,
 }
 
 impl Host for CaptureTestHost {
@@ -77,6 +79,14 @@ impl crate::WebHost for CaptureTestHost {
         Ok(Some((self.png.lock().unwrap().clone(), 1.0)))
     }
     fn detach(&self, _: &str) -> Result<(), CoreError> {
+        Ok(())
+    }
+    fn freeze(&self) -> Result<bool, CoreError> {
+        self.freeze_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(true)
+    }
+    fn unfreeze(&self) -> Result<(), CoreError> {
+        self.unfreeze_calls.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 }
@@ -527,6 +537,7 @@ fn share_set_updates_snapshot_once_and_share_view_validates_size() {
     let oversized_view = || kaleidoscope_contract::VisibleView {
         text: "x".repeat(kaleidoscope_contract::SHARE_TEXT_MAX_BYTES + 1),
         visual: false,
+        occluded: false,
         image_base64: None,
         bounds: Rect {
             x: 0,
@@ -584,6 +595,7 @@ fn shared_view_delivery_baselines_are_separate_for_each_app() {
         view: kaleidoscope_contract::VisibleView {
             text: "보이는 내용".into(),
             visual: false,
+            occluded: false,
             image_base64: None,
             bounds: Rect {
                 x: 0,
@@ -615,6 +627,8 @@ fn shared_view_baselines_survive_core_restart() {
         png: Mutex::new(test_png(8, 8)),
         web_captures: AtomicUsize::new(0),
         shell_captures: AtomicUsize::new(0),
+        freeze_calls: AtomicUsize::new(0),
+        unfreeze_calls: AtomicUsize::new(0),
     });
     let open = || {
         Core::open(
@@ -642,6 +656,7 @@ fn shared_view_baselines_survive_core_restart() {
         view: kaleidoscope_contract::VisibleView {
             text: "첫 화면".into(),
             visual: true,
+            occluded: false,
             image_base64: None,
             bounds: Rect {
                 x: 0,
@@ -692,6 +707,7 @@ fn shared_view_baselines_survive_core_restart() {
             view: kaleidoscope_contract::VisibleView {
                 text: "첫 화면".into(),
                 visual: true,
+                occluded: false,
                 image_base64: None,
                 bounds: Rect {
                     x: 0,
@@ -718,6 +734,7 @@ fn shared_view_baselines_survive_core_restart() {
             view: kaleidoscope_contract::VisibleView {
                 text: "바뀐 화면".into(),
                 visual: true,
+                occluded: false,
                 image_base64: None,
                 bounds: Rect {
                     x: 0,
@@ -814,6 +831,7 @@ fn share_view_uploads_once_and_unlink_clears_server_but_keeps_local_toggle() {
     let view = kaleidoscope_contract::VisibleView {
         text: "visible text".into(),
         visual: false,
+        occluded: false,
         image_base64: None,
         bounds: Rect {
             x: 0,
@@ -885,6 +903,7 @@ fn share_offline_delete_replays_on_reconnect_and_closed_window_is_removed() {
     let view = kaleidoscope_contract::VisibleView {
         text: "latest".into(),
         visual: false,
+        occluded: false,
         image_base64: None,
         bounds: Rect {
             x: 0,
@@ -994,6 +1013,7 @@ fn shared_image_accepts_only_png_within_ten_mebibytes() {
     let make_view = |encoded: String| kaleidoscope_contract::VisibleView {
         text: "그림".into(),
         visual: true,
+        occluded: false,
         image_base64: Some(encoded),
         bounds: Rect {
             x: 0,
@@ -1049,6 +1069,8 @@ fn shared_image_falls_back_when_native_capture_is_unavailable() {
         png: Mutex::new(Vec::new()),
         web_captures: AtomicUsize::new(0),
         shell_captures: AtomicUsize::new(0),
+        freeze_calls: AtomicUsize::new(0),
+        unfreeze_calls: AtomicUsize::new(0),
     });
     let core = Core::open_with_client(
         CoreConfig {
@@ -1072,6 +1094,7 @@ fn shared_image_falls_back_when_native_capture_is_unavailable() {
     let view = kaleidoscope_contract::VisibleView {
         text: "그림".into(),
         visual: true,
+        occluded: false,
         image_base64: Some(STANDARD.encode(test_png_with_blue(4, 4, 17))),
         bounds: Rect {
             x: 0,
@@ -1092,6 +1115,163 @@ fn shared_image_falls_back_when_native_capture_is_unavailable() {
 }
 
 #[test]
+fn occluded_share_uses_isolated_capture_once_even_when_minimized() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(CaptureTestHost {
+        png: Mutex::new(test_png_with_blue(8, 8, 29)),
+        web_captures: AtomicUsize::new(0),
+        shell_captures: AtomicUsize::new(0),
+        freeze_calls: AtomicUsize::new(0),
+        unfreeze_calls: AtomicUsize::new(0),
+    });
+    let core = Core::open_with_client(
+        CoreConfig {
+            embedded_server: None,
+            data_dir: temp.path().join("data"),
+            seed_definitions: vec![test_definition(MD_EDITOR)],
+            server_url: "http://127.0.0.1:4219".into(),
+            device_name: "test-device".into(),
+        },
+        host.clone(),
+        registry_client(),
+    )
+    .unwrap();
+    let (workspace, desktop) = active_ids(&core);
+    let window_id = open_window(&core, &desktop, "test-md-editor");
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    core.handle(CoreRequest::WindowMinimize {
+        window_id: window_id.clone(),
+    })
+    .unwrap();
+    core.handle(CoreRequest::ShareView {
+        window_id: window_id.clone(),
+        view: kaleidoscope_contract::VisibleView {
+            text: "가려진 창".into(),
+            visual: true,
+            occluded: true,
+            image_base64: None,
+            bounds: Rect {
+                x: 0,
+                y: 0,
+                width: 4,
+                height: 4,
+            },
+        },
+    })
+    .unwrap();
+    assert!(matches!(
+        core.handle(CoreRequest::ShareCapture {
+            window_id: window_id.clone(),
+        })
+        .unwrap(),
+        CoreReply::ShareCapture { captured: true }
+    ));
+    assert_eq!(host.shell_captures.load(Ordering::SeqCst), 1);
+    assert_eq!(core.inner.isolated_captures.lock().unwrap().len(), 1);
+
+    assert_eq!(
+        core.handle(CoreRequest::ShareFreeze {}).unwrap(),
+        CoreReply::ShareFreeze { frozen: true }
+    );
+    assert!(core.inner.isolated_captures.lock().unwrap().is_empty());
+    core.handle(CoreRequest::ShareCapture {
+        window_id: window_id.clone(),
+    })
+    .unwrap();
+    assert_eq!(core.inner.isolated_captures.lock().unwrap().len(), 1);
+
+    let (attachments, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", &[]);
+    assert_eq!(attachments.len(), 1);
+    let image = image::load_from_memory(&STANDARD.decode(&attachments[0].data_base64).unwrap())
+        .unwrap()
+        .to_rgba8();
+    assert_eq!(image.get_pixel(0, 0).0[2], 29);
+    assert!(core.inner.isolated_captures.lock().unwrap().is_empty());
+
+    let (second, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", &[]);
+    assert!(second.is_empty());
+    assert_eq!(host.shell_captures.load(Ordering::SeqCst), 2);
+    assert_eq!(host.freeze_calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn occluded_share_skips_native_capture_and_uses_view_image() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(CaptureTestHost {
+        png: Mutex::new(Vec::new()),
+        web_captures: AtomicUsize::new(0),
+        shell_captures: AtomicUsize::new(0),
+        freeze_calls: AtomicUsize::new(0),
+        unfreeze_calls: AtomicUsize::new(0),
+    });
+    let core = Core::open_with_client(
+        CoreConfig {
+            embedded_server: None,
+            data_dir: temp.path().join("data"),
+            seed_definitions: vec![test_definition(MD_EDITOR)],
+            server_url: "http://127.0.0.1:4219".into(),
+            device_name: "test-device".into(),
+        },
+        host.clone(),
+        registry_client(),
+    )
+    .unwrap();
+    let (workspace, desktop) = active_ids(&core);
+    let window_id = open_window(&core, &desktop, "test-md-editor");
+    core.handle(CoreRequest::ShareSet {
+        window_id: window_id.clone(),
+        on: true,
+    })
+    .unwrap();
+    core.handle(CoreRequest::ShareView {
+        window_id,
+        view: kaleidoscope_contract::VisibleView {
+            text: "가려진 창".into(),
+            visual: true,
+            occluded: true,
+            image_base64: Some(STANDARD.encode(test_png_with_blue(4, 4, 41))),
+            bounds: Rect {
+                x: 0,
+                y: 0,
+                width: 4,
+                height: 4,
+            },
+        },
+    })
+    .unwrap();
+    let (attachments, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", &[]);
+    assert_eq!(host.shell_captures.load(Ordering::SeqCst), 0);
+    assert_eq!(attachments.len(), 1);
+    let image = image::load_from_memory(&STANDARD.decode(&attachments[0].data_base64).unwrap())
+        .unwrap()
+        .to_rgba8();
+    assert_eq!(image.get_pixel(0, 0).0[2], 41);
+}
+
+#[test]
+fn share_freeze_without_native_host_returns_false() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(temp.path(), vec![], &host);
+    assert_eq!(
+        core.handle(CoreRequest::ShareFreeze {}).unwrap(),
+        CoreReply::ShareFreeze { frozen: false }
+    );
+    assert_eq!(
+        core.handle(CoreRequest::ShareUnfreeze {}).unwrap(),
+        CoreReply::ShareUnfreeze {}
+    );
+}
+
+#[test]
 fn conversation_capture_respects_visual_baseline() {
     use base64::{engine::general_purpose::STANDARD, Engine};
     let temp = TempDir::new().unwrap();
@@ -1099,6 +1279,8 @@ fn conversation_capture_respects_visual_baseline() {
         png: Mutex::new(test_png(8, 8)),
         web_captures: AtomicUsize::new(0),
         shell_captures: AtomicUsize::new(0),
+        freeze_calls: AtomicUsize::new(0),
+        unfreeze_calls: AtomicUsize::new(0),
     });
     let client = registry_client();
     let core = Core::open_with_client(
@@ -1128,6 +1310,7 @@ fn conversation_capture_respects_visual_baseline() {
             view: kaleidoscope_contract::VisibleView {
                 text: "[이미지: 화면]".into(),
                 visual: true,
+                occluded: false,
                 image_base64: Some(STANDARD.encode(test_png_with_blue(4, 4, 17))),
                 bounds: Rect {
                     x: 1,
@@ -1168,6 +1351,7 @@ fn conversation_capture_respects_visual_baseline() {
         view: kaleidoscope_contract::VisibleView {
             text: "[이미지: 다른 데스크톱]".into(),
             visual: true,
+            occluded: false,
             image_base64: None,
             bounds: Rect {
                 x: 1,
@@ -1192,6 +1376,22 @@ fn conversation_capture_respects_visual_baseline() {
     *host.png.lock().unwrap() = test_png_with_blue(8, 8, 81);
     core.handle(CoreRequest::WindowMinimize {
         window_id: editor.clone(),
+    })
+    .unwrap();
+    core.handle(CoreRequest::ShareView {
+        window_id: editor,
+        view: kaleidoscope_contract::VisibleView {
+            text: "[이미지: 화면]".into(),
+            visual: true,
+            occluded: true,
+            image_base64: None,
+            bounds: Rect {
+                x: 1,
+                y: 1,
+                width: 4,
+                height: 4,
+            },
+        },
     })
     .unwrap();
     let (after_minimize, _) =

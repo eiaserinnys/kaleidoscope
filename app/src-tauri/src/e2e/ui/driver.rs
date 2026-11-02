@@ -2,6 +2,7 @@ use super::*;
 use std::sync::Mutex;
 
 static UI_REQUESTS: Mutex<Vec<CoreRequest>> = Mutex::new(Vec::new());
+static UI_CAPTURE_DURATIONS: Mutex<Vec<(String, u128)>> = Mutex::new(Vec::new());
 
 pub(super) type WebEvents = Arc<Mutex<Vec<(String, WebPage)>>>;
 
@@ -16,8 +17,21 @@ pub(super) fn observe(request: &CoreRequest) {
             | CoreRequest::FilesAllowPc { .. }
             | CoreRequest::FilesOpen { .. }
             | CoreRequest::WindowRaise { .. }
+            | CoreRequest::ShareView { .. }
+            | CoreRequest::ShareFreeze { .. }
+            | CoreRequest::ShareCapture { .. }
+            | CoreRequest::ShareUnfreeze { .. }
     ) {
         UI_REQUESTS.lock().unwrap().push(request.clone());
+    }
+}
+
+pub(super) fn complete(request: &CoreRequest, elapsed_ms: u128) {
+    if let CoreRequest::ShareCapture { window_id } = request {
+        UI_CAPTURE_DURATIONS
+            .lock()
+            .unwrap()
+            .push((window_id.clone(), elapsed_ms));
     }
 }
 
@@ -29,6 +43,35 @@ fn has_place(requests: &[CoreRequest], window_id: &str, visible: bool) -> bool {
 
 pub(super) fn request_mark() -> usize {
     UI_REQUESTS.lock().unwrap().len()
+}
+
+pub(super) fn requests_since(mark: usize) -> Vec<CoreRequest> {
+    UI_REQUESTS.lock().unwrap()[mark..].to_vec()
+}
+
+pub(super) fn capture_duration_mark() -> usize {
+    UI_CAPTURE_DURATIONS.lock().unwrap().len()
+}
+
+pub(super) fn capture_durations_since(mark: usize) -> Vec<(String, u128)> {
+    UI_CAPTURE_DURATIONS.lock().unwrap()[mark..].to_vec()
+}
+
+pub(super) fn latest_share_view(
+    window_id: &str,
+) -> Option<kaleidoscope_core::kaleidoscope_contract::VisibleView> {
+    UI_REQUESTS
+        .lock()
+        .unwrap()
+        .iter()
+        .rev()
+        .find_map(|request| match request {
+            CoreRequest::ShareView {
+                window_id: id,
+                view,
+            } if id == window_id => Some(view.clone()),
+            _ => None,
+        })
 }
 
 pub(super) fn wait_until(

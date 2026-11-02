@@ -21,6 +21,11 @@ use kaleidoscope_contract::conversation::{ConversationItem, ConversationItemKind
 const SHARE_IMAGE_MAX_BYTES: u64 = 10 * 1024 * 1024;
 const SHARE_IMAGE_MAX_BASE64_BYTES: u64 = ((SHARE_IMAGE_MAX_BYTES + 2) / 3) * 4;
 
+pub(crate) struct IsolatedCapture {
+    bytes: Vec<u8>,
+    crop: Option<(kaleidoscope_contract::Rect, f64)>,
+}
+
 #[derive(Clone, Default, PartialEq)]
 pub(crate) struct ShareState {
     pub(crate) active_shares: HashSet<String>,
@@ -326,6 +331,85 @@ pub(crate) fn view(
     Ok(CoreReply::ShareView {})
 }
 
+pub(crate) fn freeze(inner: &Inner) -> CoreReply {
+    inner.isolated_captures.lock().unwrap().clear();
+    let frozen = match inner.host.web().map(|web| web.freeze()) {
+        Some(Ok(frozen)) => frozen,
+        Some(Err(error)) => {
+            eprintln!("같이 보기 화면 고정 실패: {}", error.message);
+            false
+        }
+        None => false,
+    };
+    CoreReply::ShareFreeze { frozen }
+}
+
+pub(crate) fn capture(inner: &Inner, window_id: &str) -> Result<CoreReply, CoreError> {
+    let (bounds, has_web) = {
+        let state = inner.state.lock().unwrap();
+        let view = state.share.views.get(window_id);
+        if !is_sharing(&state, window_id) || !view.is_some_and(|view| view.visual) {
+            return Ok(CoreReply::ShareCapture { captured: false });
+        }
+        let view = view.unwrap();
+        let Some(has_web) = window_has_web(&state, window_id) else {
+            return Ok(CoreReply::ShareCapture { captured: false });
+        };
+        (view.bounds, has_web)
+    };
+    let Some(web) = inner.host.web() else {
+        return Ok(CoreReply::ShareCapture { captured: false });
+    };
+    let (bytes, crop) = if has_web {
+        let Some(bytes) = web.capture(window_id)? else {
+            return Ok(CoreReply::ShareCapture { captured: false });
+        };
+        (bytes, None)
+    } else {
+        let Some((bytes, scale)) = web.capture_shell()? else {
+            return Ok(CoreReply::ShareCapture { captured: false });
+        };
+        (bytes, Some((bounds, scale)))
+    };
+    inner
+        .isolated_captures
+        .lock()
+        .unwrap()
+        .insert(window_id.to_owned(), IsolatedCapture { bytes, crop });
+    Ok(CoreReply::ShareCapture { captured: true })
+}
+
+pub(crate) fn unfreeze(inner: &Inner) -> CoreReply {
+    if let Some(web) = inner.host.web() {
+        if let Err(error) = web.unfreeze() {
+            eprintln!("같이 보기 화면 고정 해제 실패: {}", error.message);
+        }
+    }
+    CoreReply::ShareUnfreeze {}
+}
+
+fn window_has_web(state: &CoreState, window_id: &str) -> Option<bool> {
+    let window = state
+        .shared
+        .windows
+        .iter()
+        .find(|window| window.id == window_id)?;
+    let app = state
+        .shared
+        .apps
+        .iter()
+        .find(|app| app.id == window.app_id)?;
+    let definition =
+        crate::app_commands::definition_for(&state.shared, &app.id, app.current_version)?;
+    let mut has_web = false;
+    kaleidoscope_contract::data::walk_blocks(&definition.ui, "", &mut |_, child| {
+        if matches!(child, kaleidoscope_contract::Block::WebView { .. }) {
+            has_web = true;
+        }
+    });
+    Some(has_web)
+}
+
 fn connected(inner: &Inner, state: &CoreState) -> bool {
     matches!(state.link, LinkStatus::Connected { .. }) && inner.link_file.lock().unwrap().is_some()
 }
@@ -534,39 +618,18 @@ pub(crate) fn capture_for_send(
                         &window.id == id
                             && Some(window.desktop_id.as_str()) == active_desktop.as_deref()
                     })?;
-                    if window.minimized {
-                        return None;
-                    }
                     let view = state.share.views.get(id)?;
                     if !view.visual {
                         return None;
                     }
-                    let app = state
-                        .shared
-                        .apps
-                        .iter()
-                        .find(|app| app.id == window.app_id)?;
-                    let definition = crate::app_commands::definition_for(
-                        &state.shared,
-                        &app.id,
-                        app.current_version,
-                    )?;
-                    let mut has_web = false;
-                    kaleidoscope_contract::data::walk_blocks(
-                        &definition.ui,
-                        "",
-                        &mut |_, child| {
-                            if matches!(child, kaleidoscope_contract::Block::WebView { .. }) {
-                                has_web = true;
-                            }
-                        },
-                    );
+                    let has_web = window_has_web(&state, id)?;
                     let upload = share_upload(&state, id, view)?;
                     Some((
                         id.clone(),
                         view.bounds,
                         upload.app_name,
                         has_web,
+                        view.occluded,
                         view.image_base64.clone(),
                         state
                             .shared
@@ -598,12 +661,18 @@ pub(crate) fn capture_for_send(
     }
     let web = inner.host.web();
     let mut sent = Vec::new();
-    for (id, bounds, app_name, has_web, image_base64, previous_hash) in candidates {
+    for (id, bounds, app_name, has_web, occluded, image_base64, previous_hash) in candidates {
         if attachments.len() >= AGENT_ATTACHMENTS_MAX {
             break;
         }
-        let png = web
-            .and_then(|web| {
+        let isolated = inner.isolated_captures.lock().unwrap().remove(&id);
+        let png = if let Some(capture) = isolated {
+            prepare_png(&capture.bytes, capture.crop).or_else(|| {
+                eprintln!("같이 보기 격리 PNG를 처리하지 못했습니다.");
+                None
+            })
+        } else if !occluded {
+            web.and_then(|web| {
                 if has_web {
                     match web.capture(&id) {
                         Ok(Some(bytes)) => prepare_png(&bytes, None).or_else(|| {
@@ -637,19 +706,22 @@ pub(crate) fn capture_for_send(
                     }
                 }
             })
-            .or_else(|| {
-                image_base64
-                    .as_deref()
-                    .filter(|image| {
-                        !image.is_empty() && image.len() as u64 <= SHARE_IMAGE_MAX_BASE64_BYTES
-                    })
-                    .and_then(|image| STANDARD.decode(image.trim()).ok())
-                    .filter(|bytes| {
-                        bytes.len() as u64 <= SHARE_IMAGE_MAX_BYTES
-                            && bytes.starts_with(b"\x89PNG\r\n\x1a\n")
-                    })
-                    .and_then(|bytes| prepare_png(&bytes, None))
-            });
+        } else {
+            None
+        }
+        .or_else(|| {
+            image_base64
+                .as_deref()
+                .filter(|image| {
+                    !image.is_empty() && image.len() as u64 <= SHARE_IMAGE_MAX_BASE64_BYTES
+                })
+                .and_then(|image| STANDARD.decode(image.trim()).ok())
+                .filter(|bytes| {
+                    bytes.len() as u64 <= SHARE_IMAGE_MAX_BYTES
+                        && bytes.starts_with(b"\x89PNG\r\n\x1a\n")
+                })
+                .and_then(|bytes| prepare_png(&bytes, None))
+        });
         let Some((bytes, hash)) = png else { continue };
         if previous_hash.as_deref() == Some(hash.as_str()) {
             continue;

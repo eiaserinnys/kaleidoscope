@@ -7,7 +7,7 @@ import { MessageSquare } from "../components/icons";
 import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
 import { useShareDescriber } from "../share/visible";
-import { flushShareViews } from "../share/share-view";
+import { prepareShareForSend } from "../share/share-view";
 import { HistoryAttachmentView, ImagePreview, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
 import { ChatComposer } from "./chat-composer";
 import { ChatHistory } from "./chat-history";
@@ -396,7 +396,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     if (returnFocus) inputRef.current?.focus();
     try {
       const uploads = await Promise.all(submittedAttachments.map(readUpload));
-      await flushShareViews();
+      await prepareShareForSend(context.store);
       await context.store.call({ op: "conversation.send", window_id: windowId, request_id: requestId, text, attachments: uploads });
       retryDraft.current = null;
     } catch (reason) {

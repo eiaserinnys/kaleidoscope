@@ -50,6 +50,6 @@ it("가짜 코어는 같은 상태를 반복해도 이벤트를 보내지 않고
   expect(desktopSharing).toEqual([windowId]);
   await fake.call({ op: "share.set", window_id: windowId, on: false });
   expect(desktopSharing).toEqual([]);
-  await fake.call({ op: "share.view", window_id: windowId, view: { text: "늦은 글", visual: false, bounds: { x: 0, y: 0, width: 100, height: 100 } } });
+  await fake.call({ op: "share.view", window_id: windowId, view: { text: "늦은 글", visual: false, occluded: false, bounds: { x: 0, y: 0, width: 100, height: 100 } } });
   expect(fake.getShareCalls()).toEqual([]);
 });

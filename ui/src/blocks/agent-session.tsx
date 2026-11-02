@@ -7,7 +7,7 @@ import { toCoreError } from "../core/core-transport";
 import { useBinding } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { useShareDescriber } from "../share/visible";
-import { flushShareViews } from "../share/share-view";
+import { prepareShareForSend } from "../share/share-view";
 import { HistoryAttachmentView, ImagePreview, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
 import { ChatComposer } from "./chat-composer";
 import { ChatHistory } from "./chat-history";
@@ -121,7 +121,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
     if (returnFocus) inputRef.current.focus();
     try {
       const uploads = await Promise.all(submittedAttachments.map(readUpload));
-      await flushShareViews();
+      await prepareShareForSend(context.store);
       const reply = await context.store.call(withLatestGeneration({
         op: "local_agent.send", window_id: windowId, generation: snapshot.generation,
         request_id: requestId, text, attachments: uploads,

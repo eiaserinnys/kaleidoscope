@@ -35,7 +35,8 @@
 //! 생겼다. 있던 블록에 필드를 더한 첫 판이다(규칙은 [`BLOCK_SET_VERSION`]). `files.list`의 [`FileEntry`]에 크기와
 //! 바뀐 시각이 붙었다.
 //!
-//! 9판에서 바뀐 것(창 같이 보기, 카드 #814): 창마다 켜는 「같이 보기」. `share.set`과 `share.view` 명령,
+//! 9판에서 바뀐 것(창 같이 보기, 카드 #814): 창마다 켜는 「같이 보기」. `share.set`, `share.view`, `share.freeze`,
+//! `share.capture`, `share.unfreeze` 명령,
 //! [`Desktop::sharing`]과 [`Desktop::last_sent_context`], 화면이 옮긴 보이는 글 [`VisibleView`], `conversation.send`가
 //! 같이 보는 창의 모습을 첨부로 붙이는 규칙. 켠 창과 대화별 전송 기준은 데스크톱 속성으로 저장·동기화하고,
 //! 현재 보이는 글만 코어 메모리에 둔다. 블록 세트와 모듈 판은 그대로다(앱 정의가 쓰는 것이 아니라 쉘의 기능이다).
@@ -156,7 +157,9 @@
 //! - 켜고 끄는 상태는 창이 속한 [`Desktop::sharing`]에 저장하고 다른 기기와 동기화한다.
 //!   마지막으로 보낸 대화별 컨텍스트는 [`Desktop::last_sent_context`]에 저장한다.
 //!   창이 없어지면(창 닫기, 데스크톱과 워크스페이스 지우기, 다른 기기에서 지운 것을 받은 때) 코어가 끈다.
-//! - 화면은 켜진 창에 보이는 부분을 글로 옮겨([`VisibleView`]) 바뀔 때마다 `share.view`로 코어에 준다. 앱마다
+//! - 화면은 켜진 창에 보이는 부분을 글로 옮겨([`VisibleView`]) 바뀔 때마다 `share.view`로 코어에 준다. 보내기 직전
+//!   화면에 온전히 보이지 않는 시각 창은 `share.freeze`로 메인 화면을 고정하고 다른 창을 숨긴 뒤 `share.capture`로
+//!   별도 캡처한다. 마친 뒤 `share.unfreeze`로 화면 고정을 푼다. 앱마다
 //!   요약하지 않고, 쉘이 블록 종류와 접근성 정보(ARIA 역할과 이름)로 옮긴다. 스크롤 밖이나 다른 데스크톱처럼
 //!   보이지 않는 부분은 옮기지 않는다.
 //! - 코어는 연결되어 있으면 그 글을 서버에 올려 조회할 수 있게 한다. 대화 전송 시 코어가 지난번과 달라진
@@ -3484,6 +3487,17 @@ pub enum CoreRequest {
         window_id: String,
         view: VisibleView,
     },
+    /// 같이 보기 이미지 전송을 위해 Windows 화면을 고정한다. 다른 플랫폼이나 네이티브 호스트가 없는 쉘은
+    /// `frozen: false`로 응답한다. 실패는 이미지 없는 전송으로 이어지고 화면은 5초 안에 자동으로 원상 복구된다.
+    #[serde(rename = "share.freeze")]
+    ShareFreeze {},
+    /// 숨은 창을 잠시 드러내 격리 캡처를 코어 메모리에 저장한다. 웹 화면이 있으면 그 자식 웹뷰만 캡처하고,
+    /// 아니면 쉘 화면에서 창 영역을 자른다. 캡처 실패는 `captured: false`이며 화면은 이후에도 복원된다.
+    #[serde(rename = "share.capture")]
+    ShareCapture { window_id: String },
+    /// `share.freeze`로 고정한 화면을 해제한다. 호스트가 없거나 해제에 실패해도 명령은 성공한다.
+    #[serde(rename = "share.unfreeze")]
+    ShareUnfreeze {},
 
     /// (계약 20판) 기기 로컬 에이전트 창 명령. 자세한 응답과 세대 규칙은 [`local_agent`]에 있다.
     #[serde(rename = "local_agent.attach")]
@@ -3573,6 +3587,11 @@ pub struct VisibleView {
     pub text: String,
     /// 이미지, 동영상, 그림판, 웹 화면처럼 글로 옮길 수 없는 것이 보이는가. 참이면 `conversation.send` 때 모습을 찍는다.
     pub visual: bool,
+    /// 이 창이 쉘 화면에서 온전히 보이지 않는가. 다른 창이나 오버레이와 겹치거나 최소화됐으면 참이다. 참인 창의
+    /// 이미지는 `share.freeze`와 `share.capture`로 그 창만 드러낸 뒤 얻는다. 오래된 화면 호출의 JSON에는 이 필드가
+    /// 없어도 된다.
+    #[serde(default)]
+    pub occluded: bool,
     /// 화면에서 직접 제공하는 PNG 이미지의 base64 표현.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -3809,6 +3828,12 @@ pub enum CoreReply {
     ShareSet {},
     #[serde(rename = "share.view")]
     ShareView {},
+    #[serde(rename = "share.freeze")]
+    ShareFreeze { frozen: bool },
+    #[serde(rename = "share.capture")]
+    ShareCapture { captured: bool },
+    #[serde(rename = "share.unfreeze")]
+    ShareUnfreeze {},
     /// 설치를 시작했지만 쉘이 스스로 끝나지 않는 플랫폼에서만 온다(Windows는 응답 전에 끝난다).
     #[serde(rename = "update.restart")]
     UpdateRestart {},
@@ -4240,7 +4265,35 @@ mod tests {
             serde_json::to_string(&CoreReply::ShareSet {}).unwrap(),
             r#"{"op":"share.set"}"#
         );
+        assert_eq!(
+            serde_json::from_str::<CoreRequest>(r#"{"op":"share.freeze"}"#).unwrap(),
+            CoreRequest::ShareFreeze {}
+        );
+        assert_eq!(
+            serde_json::from_str::<CoreRequest>(r#"{"op":"share.capture","window_id":"w1"}"#)
+                .unwrap(),
+            CoreRequest::ShareCapture {
+                window_id: "w1".into()
+            }
+        );
+        assert_eq!(
+            serde_json::from_str::<CoreRequest>(r#"{"op":"share.unfreeze"}"#).unwrap(),
+            CoreRequest::ShareUnfreeze {}
+        );
+        assert_eq!(
+            serde_json::to_string(&CoreReply::ShareFreeze { frozen: true }).unwrap(),
+            r#"{"op":"share.freeze","frozen":true}"#
+        );
         assert!(SHARE_TEXT_CUT_MARK.len() < SHARE_TEXT_MAX_BYTES);
+    }
+
+    #[test]
+    fn visible_view_occlusion_defaults_for_existing_clients() {
+        let view: VisibleView = serde_json::from_str(
+            r#"{"text":"view","visual":false,"bounds":{"x":0,"y":0,"width":1,"height":1}}"#,
+        )
+        .unwrap();
+        assert!(!view.occluded);
     }
 
     #[test]

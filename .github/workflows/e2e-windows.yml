@@ -10,10 +10,12 @@ on:
     paths:
       - '.github/workflows/e2e-windows.yml'
       - 'app/e2e-windows/**'
+      - 'app/src/**'
       - 'app/src-tauri/**'
       - 'crates/acp-test-agent/**'
       - 'crates/core/**'
       - 'crates/contract/**'
+      - 'ui/src/**'
       - 'Cargo.lock'
 
 jobs:
@@ -150,6 +152,53 @@ jobs:
             $data = @{ pids = $pids; remaining = $alive; passed = $true } | ConvertTo-Json -Compress
             Add-Content -Encoding utf8 $eventPath "{`"step`":`"local-agent.shell-exit-processes`",`"data`":$data}"
           } finally { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
+      - name: 같이 보기 격리 캡처 시나리오
+        shell: pwsh
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-share-isolate-appdata'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-share-isolate-localappdata'
+          $env:KALEIDOSCOPE_E2E_OUT = Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/share-isolate'
+          $env:KALEIDOSCOPE_E2E_PICK_FOLDER = Join-Path $env:RUNNER_TEMP 'ks share isolate work'
+          $env:KALEIDOSCOPE_E2E_AGENT_BIN = Join-Path $env:RUNNER_TEMP 'ks share isolate bin'
+          $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-share-isolate-webview'
+          New-Item -ItemType Directory -Force $env:APPDATA, $env:LOCALAPPDATA, $env:KALEIDOSCOPE_E2E_OUT, $env:KALEIDOSCOPE_E2E_PICK_FOLDER, $env:KALEIDOSCOPE_E2E_AGENT_BIN | Out-Null
+          Copy-Item (Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-acp-test-agent.exe') (Join-Path $env:KALEIDOSCOPE_E2E_AGENT_BIN 'kaleidoscope-acp-test-agent.exe')
+          @('@echo off', '"%~dp0kaleidoscope-acp-test-agent.exe" %*') | Set-Content -Encoding Ascii (Join-Path $env:KALEIDOSCOPE_E2E_AGENT_BIN 'fake-agent.cmd')
+          $env:PATH = "$env:KALEIDOSCOPE_E2E_AGENT_BIN;$env:PATH"
+          $recorderPath = Join-Path $env:GITHUB_WORKSPACE 'app/e2e-windows/freeze-record.ps1'
+          $recorder = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $recorderPath, $env:KALEIDOSCOPE_E2E_OUT) -WindowStyle Hidden -PassThru
+          $appPath = Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe'
+          $app = Start-Process -FilePath $appPath -ArgumentList @('--e2e-scenario=share-isolate', "--e2e-out=$env:KALEIDOSCOPE_E2E_OUT") -PassThru
+          try {
+            $deadline = (Get-Date).AddMinutes(10)
+            while ((Get-Date) -lt $deadline) {
+              $app.Refresh()
+              if ($app.HasExited) { break }
+              Start-Sleep -Milliseconds 200
+            }
+            $app.Refresh()
+            if (-not $app.HasExited) { throw '같이 보기 격리 캡처 E2E 시간 초과' }
+            if ($app.ExitCode -ne 0) { throw "같이 보기 격리 캡처 E2E 실패: $($app.ExitCode)" }
+            if (-not $recorder.WaitForExit(15000)) { throw '화면 녹화 프로세스가 끝나지 않음' }
+            if ($recorder.ExitCode -ne 0) { throw "화면 녹화 실패: $($recorder.ExitCode)" }
+            $eventPath = Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl'
+            $events = Get-Content $eventPath | ForEach-Object { $_ | ConvertFrom-Json }
+            foreach ($step in @('share.image', 'share.scroll-position', 'share.scroll-restored', 'share.scroll-top', 'share.minimized-text', 'web.capture-duration', 'web.hidden-after-send', 'share.two-captures', 'share.no-target-freeze', 'share.watchdog', 'screen.recording', 'complete')) {
+              if (-not ($events | Where-Object { $_.step -eq $step })) { throw "같이 보기 격리 캡처 단계 로그 누락: $step" }
+            }
+            $sends = @($events | Where-Object { $_.step -eq 'share.send' })
+            if ($sends.Count -ne 7) { throw "실제 입력 전송 수가 잘못됨: $($sends.Count)" }
+            $images = @(Get-ChildItem (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'share-isolate-images') -Filter '*.b64')
+            if ($images.Count -ne 8) { throw "에이전트가 받은 이미지 수가 잘못됨: $($images.Count)" }
+            $frames = Import-Csv (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'screen-frames.csv')
+            if ($frames.Count -lt 8) { throw "화면 프레임이 부족함: $($frames.Count)" }
+            $measuredPhases = @('a-covered-by-b', 'a-covered-by-agent', 'a-minimized', 'web-covered', 'web-minimized', 'both-covered', 'a-visible')
+            $changed = @($frames | Where-Object { $_.phase -in $measuredPhases -and [int]$_.protected_pixels -ne 0 })
+            if ($changed.Count -gt 0) { throw "보호 화면 영역이 바뀐 프레임 수: $($changed.Count)" }
+          } finally {
+            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+            Stop-Process -Id $recorder.Id -Force -ErrorAction SilentlyContinue
+          }
       - name: 캡처와 로그 보존
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

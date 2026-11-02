@@ -43,6 +43,7 @@ fn main() {
     }
     let mut authenticated = false;
     let mut pending = Value::Null;
+    let mut image_count = 0usize;
     for line in io::stdin().lock().lines() {
         let value: Value = match line.ok().and_then(|s| serde_json::from_str(&s).ok()) {
             Some(v) => v,
@@ -126,8 +127,8 @@ fn main() {
             }
             "session/prompt" => {
                 // 앱 제작 안내 대신 마지막 사용자 텍스트에서 시나리오를 고른다.
-                let text = value["params"]["prompt"]
-                    .as_array()
+                let blocks = value["params"]["prompt"].as_array();
+                let text = blocks
                     .and_then(|blocks| {
                         blocks
                             .iter()
@@ -135,6 +136,42 @@ fn main() {
                             .find_map(|b| b.get("text").and_then(Value::as_str))
                     })
                     .unwrap_or("");
+                if scenario.contains("share") {
+                    if let Ok(directory) = std::env::var("KALEIDOSCOPE_E2E_IMAGE_DIR") {
+                        let directory = std::path::PathBuf::from(directory);
+                        std::fs::create_dir_all(&directory).unwrap();
+                        let mut saved = Vec::new();
+                        let mut text_blocks = Vec::new();
+                        for block in blocks.into_iter().flatten() {
+                            if let Some(text) = block.get("text").and_then(Value::as_str) {
+                                text_blocks.push(text.to_owned());
+                            }
+                            if block.get("type").and_then(Value::as_str) != Some("image") {
+                                continue;
+                            }
+                            let data = block
+                                .get("data")
+                                .and_then(Value::as_str)
+                                .ok_or("ACP image block has no base64 data")
+                                .unwrap();
+                            let name = format!("{:04}.b64", image_count + 1);
+                            std::fs::write(directory.join(&name), data).unwrap();
+                            image_count += 1;
+                            saved.push(name);
+                        }
+                        let mut prompts = std::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(directory.join("prompts.jsonl"))
+                            .unwrap();
+                        writeln!(
+                            prompts,
+                            "{}",
+                            json!({"text_blocks": text_blocks, "images": saved})
+                        )
+                        .unwrap();
+                    }
+                }
                 if text.contains("fail-turn") {
                     update(
                         json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"OLD"}}),

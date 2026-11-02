@@ -6,6 +6,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 public class FreezeRecorder {
  [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
  [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
@@ -15,41 +16,70 @@ public class FreezeRecorder {
   using(var b=new Bitmap(width,height,PixelFormat.Format32bppArgb)) {
    using(var g=Graphics.FromImage(b)) g.CopyFromScreen(0,0,0,0,b.Size);
    var d=b.LockBits(new Rectangle(0,0,width,height),ImageLockMode.ReadOnly,PixelFormat.Format32bppArgb);
-   var v=new byte[width*height*4]; Marshal.Copy(d.Scan0,v,0,v.Length);b.UnlockBits(d);
-   if(!String.IsNullOrEmpty(path))b.Save(path,ImageFormat.Png); return v;
+   var v=new byte[width*height*4]; Marshal.Copy(d.Scan0,v,0,v.Length); b.UnlockBits(d);
+   if(!String.IsNullOrEmpty(path)) b.Save(path,ImageFormat.Png); return v;
   }
  }
- public static int Diff(byte[] a,byte[] b) {int n=0;for(int i=0;i<a.Length;i+=4)if(a[i]!=b[i]||a[i+1]!=b[i+1]||a[i+2]!=b[i+2])n++;return n;}
- public static int ProtectedDiff(byte[] a,byte[] b) {
-  int n=0,w=GetSystemMetrics(0);
-  for(int y=31;y<720;y++)for(int x=8;x<w;x++) {
-   if(x>=24 && x<215 && y>=115 && y<150)continue;
-   int i=(y*w+x)*4;if(a[i]!=b[i]||a[i+1]!=b[i+1]||a[i+2]!=b[i+2])n++;
-  }return n;
+ public static int Diff(byte[] a,byte[] b) { int n=0; for(int i=0;i<a.Length;i+=4) if(a[i]!=b[i]||a[i+1]!=b[i+1]||a[i+2]!=b[i+2]) n++; return n; }
+ static int Read(string json,string name) {
+  var m=Regex.Match(json,"\\\""+name+"\\\":(-?[0-9]+)");
+  if(!m.Success) throw new Exception("protected region is missing "+name);
+  return Int32.Parse(m.Groups[1].Value,System.Globalization.CultureInfo.InvariantCulture);
  }
- public static void Record(string directory) {
-  ShowWindow(GetConsoleWindow(),0);
-  var deadline=DateTime.UtcNow.AddSeconds(90);
-  while(!System.IO.File.Exists(System.IO.Path.Combine(directory,"record.request"))) {
-   if(DateTime.UtcNow>deadline)throw new Exception("record.request timeout");
-   System.Threading.Thread.Sleep(20);
+ public static int ProtectedDiff(byte[] a,byte[] b,string path) {
+  int width=GetSystemMetrics(0),height=GetSystemMetrics(1);
+  string json=System.IO.File.ReadAllText(path);
+  int left=Math.Max(0,Read(json,"client_x")),top=Math.Max(0,Read(json,"client_y"));
+  int right=Math.Min(width,left+Read(json,"client_width")),bottom=Math.Min(height,top+Read(json,"client_height"));
+  int ex=Read(json,"exclude_x"),ey=Read(json,"exclude_y"),er=ex+Read(json,"exclude_width"),eb=ey+Read(json,"exclude_height");
+  int n=0;
+  for(int y=top;y<bottom;y++) for(int x=left;x<right;x++) {
+   if(x>=ex&&x<er&&y>=ey&&y<eb) continue;
+   int i=(y*width+x)*4; if(a[i]!=b[i]||a[i+1]!=b[i+1]||a[i+2]!=b[i+2]) n++;
   }
-  var baseline=Frame(System.IO.Path.Combine(directory,"screen-baseline.png"));
-  var clock=System.Diagnostics.Stopwatch.StartNew();
-  var rows=new System.Collections.Generic.List<string>();rows.Add("index,ms,different_pixels,protected_pixels,phase");
-  System.IO.File.WriteAllText(System.IO.Path.Combine(directory,"record.ready"),"");
-  int index=0;
-  while(!System.IO.File.Exists(System.IO.Path.Combine(directory,"record.stop")) && clock.Elapsed.TotalSeconds<60) {
-   double ms=clock.Elapsed.TotalMilliseconds;
-   var frame=Frame(null);int diff=Diff(baseline,frame);int protectedDiff=ProtectedDiff(baseline,frame);
-   string phase=System.IO.File.ReadAllText(System.IO.Path.Combine(directory,"record.phase"));
-   rows.Add(String.Format(System.Globalization.CultureInfo.InvariantCulture,"{0},{1:F3},{2},{3},{4}",index,ms,diff,protectedDiff,phase));
-   if(diff>1000 && index%10==0)Frame(System.IO.Path.Combine(directory,"changed-"+index+".png"));
-   index++;
-  }
-  System.IO.File.WriteAllLines(System.IO.Path.Combine(directory,"screen-frames.csv"),rows);
+  return n;
  }
-
+ public static void HideConsole() { ShowWindow(GetConsoleWindow(),0); }
 }
 '@
-[FreezeRecorder]::Record($Out)
+
+[FreezeRecorder]::HideConsole()
+$deadline = (Get-Date).AddSeconds(90)
+while (-not (Test-Path (Join-Path $Out 'record.request'))) {
+  if ((Get-Date) -gt $deadline) { throw 'record.request timeout' }
+  Start-Sleep -Milliseconds 20
+}
+
+$phasePath = Join-Path $Out 'record.phase'
+$protectedPath = Join-Path $Out 'protected.json'
+$phase = (Get-Content -Raw $phasePath).Trim()
+$baseline = [FreezeRecorder]::Frame((Join-Path $Out "phase-$phase-baseline.png"))
+$clock = [System.Diagnostics.Stopwatch]::StartNew()
+$rows = [System.Collections.Generic.List[string]]::new()
+$rows.Add('index,ms,different_pixels,protected_pixels,phase')
+[System.IO.File]::WriteAllText((Join-Path $Out 'record.ready'), '')
+[System.IO.File]::WriteAllText((Join-Path $Out "phase-$phase.ready"), '')
+$index = 0
+$phaseSamples = @{}
+while (-not (Test-Path (Join-Path $Out 'record.stop')) -and $clock.Elapsed.TotalSeconds -lt 90) {
+  $nextPhase = (Get-Content -Raw $phasePath).Trim()
+  if ($nextPhase -ne $phase) {
+    [FreezeRecorder]::Frame((Join-Path $Out "phase-$phase-final.png")) | Out-Null
+    $phase = $nextPhase
+    $baseline = [FreezeRecorder]::Frame((Join-Path $Out "phase-$phase-baseline.png"))
+    [System.IO.File]::WriteAllText((Join-Path $Out "phase-$phase.ready"), '')
+  }
+  $frame = [FreezeRecorder]::Frame($null)
+  $diff = [FreezeRecorder]::Diff($baseline, $frame)
+  $protected = [FreezeRecorder]::ProtectedDiff($baseline, $frame, $protectedPath)
+  $ms = $clock.Elapsed.TotalMilliseconds
+  $rows.Add([string]::Format([Globalization.CultureInfo]::InvariantCulture,'{0},{1:F3},{2},{3},{4}',$index,$ms,$diff,$protected,$phase))
+  if (-not $phaseSamples.ContainsKey($phase)) { $phaseSamples[$phase] = 0 }
+  $phaseSamples[$phase]++
+  $index++
+  Start-Sleep -Milliseconds 15
+}
+if (-not (Test-Path (Join-Path $Out 'record.stop'))) { throw 'record.stop timeout' }
+[FreezeRecorder]::Frame((Join-Path $Out "phase-$phase-final.png")) | Out-Null
+[System.IO.File]::WriteAllLines((Join-Path $Out 'screen-frames.csv'), $rows)
+$phaseSamples | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $Out 'screen-phase-samples.json')

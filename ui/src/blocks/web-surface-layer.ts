@@ -96,26 +96,9 @@ function readSurfaces() {
 
 function updateSurface(surface: RegisteredSurface) {
   const { element } = surface;
-  const rendered = element.isConnected && element.getClientRects().length > 0;
-  const rect = rendered ? element.getBoundingClientRect() : null;
-  const bounds = rect ? roundedRect(rect) : null;
-  const ownWindow = element.closest<HTMLElement>(".ks-window");
-  const siblings = ownWindow?.parentElement
-    ? [...ownWindow.parentElement.querySelectorAll<HTMLElement>(".ks-window")].filter((item) => item !== ownWindow)
-    : [];
-  const overlays = [...document.querySelectorAll<HTMLElement>("[data-ks-overlay]")]
-    .map((item) => ({ visible: isRendered(item), bounds: item.getBoundingClientRect() }))
-    .map(({ visible, bounds: itemBounds }) => ({ visible, bounds: roundedRect(itemBounds) }));
-  const windows = siblings.map((item) => ({
-    visible: isRendered(item),
-    bounds: roundedRect(item.getBoundingClientRect()),
-    zIndex: Number.parseFloat(getComputedStyle(item).zIndex) || 0,
-  }));
-  const ownZIndex = ownWindow ? Number.parseFloat(getComputedStyle(ownWindow).zIndex) || 0 : 0;
-  const kind = bounds
-    ? evaluateWebSurface({ visible: rendered, bounds, ownZIndex, overlays, windows })
-    : "hidden";
-
+  const probe = probeSurface(element);
+  const bounds = probe?.bounds ?? null;
+  const kind = probe ? evaluateWebSurface(probe) : "hidden";
   if (kind === "hidden") {
     if (surface.kind !== "hidden") {
       surface.kind = "hidden";
@@ -145,6 +128,27 @@ function updateSurface(surface: RegisteredSurface) {
   void captureThenHide(surface, generation);
 }
 
+function probeSurface(element: HTMLElement): WebSurfaceProbe | null {
+  const rendered = isRendered(element);
+  const rect = rendered ? element.getBoundingClientRect() : null;
+  const bounds = rect ? roundedRect(rect) : null;
+  if (!bounds) return null;
+  const ownWindow = element.closest<HTMLElement>(".ks-window");
+  const siblings = ownWindow?.parentElement
+    ? [...ownWindow.parentElement.querySelectorAll<HTMLElement>(".ks-window")].filter((item) => item !== ownWindow)
+    : [];
+  const overlays = [...document.querySelectorAll<HTMLElement>("[data-ks-overlay]")]
+    .map((item) => ({ visible: isRendered(item), bounds: item.getBoundingClientRect() }))
+    .map(({ visible, bounds: itemBounds }) => ({ visible, bounds: roundedRect(itemBounds) }));
+  const windows = siblings.map((item) => ({
+    visible: isRendered(item),
+    bounds: roundedRect(item.getBoundingClientRect()),
+    zIndex: Number.parseFloat(getComputedStyle(item).zIndex) || 0,
+  }));
+  const ownZIndex = ownWindow ? Number.parseFloat(getComputedStyle(ownWindow).zIndex) || 0 : 0;
+  return { visible: true, bounds, ownZIndex, overlays, windows };
+}
+
 async function captureThenHide(surface: RegisteredSurface, generation: number) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const timeoutReply = new Promise<null>((resolve) => {
@@ -167,9 +171,32 @@ function callPlace(surface: RegisteredSurface, bounds: Rect | null) {
 }
 
 function isRendered(element: HTMLElement): boolean {
-  if (!element.isConnected || element.getClientRects().length === 0) return false;
+  if (!element.isConnected || element.getClientRects().length === 0
+    || element.closest('[data-minimized="true"]')) return false;
   const style = getComputedStyle(element);
   return style.display !== "none" && style.visibility !== "hidden";
+}
+
+export function isFullyVisible(element: HTMLElement): boolean {
+  const probe = probeSurface(element);
+  return probe !== null && evaluateWebSurface(probe) === "live";
+}
+
+export async function revealWebSurface(windowId: string, store: ShellStore): Promise<() => Promise<void>> {
+  const surface = [...surfaces].find((item) => item.windowId === windowId && item.store === store);
+  if (!surface || surface.kind === "live" || surface.element.getClientRects().length === 0) {
+    return async () => undefined;
+  }
+  const bounds = roundedRect(surface.element.getBoundingClientRect());
+  try {
+    const reply = await store.call({ op: "web.place", window_id: windowId, bounds });
+    if (reply.op !== "web.place") return async () => undefined;
+  } catch {
+    return async () => undefined;
+  }
+  return () => store.call({ op: "web.place", window_id: windowId, bounds: null })
+    .then(() => undefined)
+    .catch(() => undefined);
 }
 
 function roundedRect(rect: DOMRect): Rect {
