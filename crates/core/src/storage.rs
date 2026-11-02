@@ -5,9 +5,7 @@ use chrono::Utc;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use uuid::Uuid;
 
-use kaleidoscope_contract::{CoreError, DeviceState, SharedState};
-
-use crate::error;
+use kaleidoscope_contract::{errors, CoreError, DeviceState, SharedState};
 
 const FORMAT: u32 = 1;
 
@@ -65,7 +63,7 @@ pub(crate) fn load_link(data_dir: &Path) -> Result<Option<LinkFile>, CoreError> 
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error::io_error(&error)),
+        Err(_) => return Err(errors::DESK_LOCAL_LINK_READ_FAILED()),
     };
 
     match serde_json::from_slice::<LinkFile>(&bytes) {
@@ -85,7 +83,7 @@ pub(crate) fn remove_link(data_dir: &Path) -> Result<(), CoreError> {
     match fs::remove_file(data_dir.join("link.json")) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error::io_error(&error)),
+        Err(_) => Err(errors::DESK_LOCAL_LINK_REMOVE_FAILED()),
     }
 }
 
@@ -96,14 +94,16 @@ pub(crate) fn load_file<T: DeserializeOwned + Default>(
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(T::default()),
-        Err(error) => return Err(error::io_error(&error)),
+        Err(error) => {
+            return Err(errors::DESK_LOCAL_STATE_READ_FAILED().and_details(vec![error.to_string()]));
+        }
     };
 
     match serde_json::from_slice(&bytes) {
         Ok(value) => Ok(value),
         Err(_) => {
             let broken_path = broken_path(path, file_name);
-            fs::rename(path, broken_path).map_err(|error| error::io_error(&error))?;
+            fs::rename(path, broken_path).map_err(recovery_rename_error)?;
             Ok(T::default())
         }
     }
@@ -116,7 +116,7 @@ fn broken_path(path: &Path, file_name: &str) -> PathBuf {
 
 fn move_broken_if_present(path: &Path, file_name: &str) -> Result<(), CoreError> {
     if path.exists() {
-        fs::rename(path, broken_path(path, file_name)).map_err(|error| error::io_error(&error))?;
+        fs::rename(path, broken_path(path, file_name)).map_err(recovery_rename_error)?;
     }
     Ok(())
 }
@@ -167,19 +167,41 @@ fn save_device(data_dir: &Path, device: &DeviceState) -> Result<(), CoreError> {
 }
 
 pub(crate) fn save_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), CoreError> {
-    let bytes = serde_json::to_vec_pretty(value)
-        .map_err(|_| error::make(kaleidoscope_contract::ErrorCode::Io))?;
+    let bytes = serde_json::to_vec_pretty(value).map_err(|error| {
+        errors::DESK_LOCAL_STATE_SERIALIZE_FAILED().and_details(vec![error.to_string()])
+    })?;
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("state.json");
     let temp_path = path.with_file_name(format!(".{file_name}.tmp-{}", Uuid::new_v4()));
-    fs::write(&temp_path, bytes).map_err(|error| error::io_error(&error))?;
+    fs::write(&temp_path, bytes).map_err(|error| {
+        let mapped = if error.kind() == std::io::ErrorKind::NotFound {
+            errors::DESK_LOCAL_STATE_TEMP_WRITE_NOT_FOUND()
+        } else {
+            errors::DESK_LOCAL_STATE_TEMP_WRITE_FAILED()
+        };
+        mapped.and_details(vec![error.to_string()])
+    })?;
     if let Err(error) = fs::rename(&temp_path, path) {
         let _ = fs::remove_file(&temp_path);
-        return Err(error::io_error(&error));
+        let mapped = if error.kind() == std::io::ErrorKind::NotFound {
+            errors::DESK_LOCAL_STATE_REPLACE_NOT_FOUND()
+        } else {
+            errors::DESK_LOCAL_STATE_REPLACE_FAILED()
+        };
+        return Err(mapped.and_details(vec![error.to_string()]));
     }
     Ok(())
+}
+
+fn recovery_rename_error(error: std::io::Error) -> CoreError {
+    let mapped = if error.kind() == std::io::ErrorKind::NotFound {
+        errors::DESK_LOCAL_STATE_RECOVERY_RENAME_NOT_FOUND()
+    } else {
+        errors::DESK_LOCAL_STATE_RECOVERY_RENAME_FAILED()
+    };
+    mapped.and_details(vec![error.to_string()])
 }
 
 #[derive(Default)]

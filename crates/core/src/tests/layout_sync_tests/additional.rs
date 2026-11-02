@@ -1,6 +1,73 @@
 use super::*;
 
 #[test]
+fn sync_state_save_errors_keep_the_failed_stage() {
+    let temp = TempDir::new().unwrap();
+    let missing = temp.path().join("missing");
+    let temp_write_error =
+        crate::sync_state::save(&missing, &crate::sync_state::SyncState::default()).unwrap_err();
+    assert_eq!(
+        temp_write_error.id.as_deref(),
+        Some("SERVER_LAYOUT_SYNC_STATE_TEMP_WRITE_NOT_FOUND")
+    );
+    assert!(!temp_write_error.details.is_empty());
+
+    let data_dir = temp.path().join("replace-fails");
+    let target = data_dir.join("sync.json");
+    std::fs::create_dir_all(&target).unwrap();
+    std::fs::write(target.join("existing"), "keep").unwrap();
+    let replace_error =
+        crate::sync_state::save(&data_dir, &crate::sync_state::SyncState::default()).unwrap_err();
+    assert_eq!(
+        replace_error.id.as_deref(),
+        Some("SERVER_LAYOUT_SYNC_STATE_REPLACE_FAILED")
+    );
+    assert!(!replace_error.details.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_state_temp_write_permission_failure_has_its_own_code() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = TempDir::new().unwrap();
+    let data_dir = temp.path().join("readonly");
+    std::fs::create_dir(&data_dir).unwrap();
+    std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+
+    let error =
+        crate::sync_state::save(&data_dir, &crate::sync_state::SyncState::default()).unwrap_err();
+
+    std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(
+        error.id.as_deref(),
+        Some("SERVER_LAYOUT_SYNC_STATE_TEMP_WRITE_FAILED")
+    );
+    assert!(!error.details.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_state_corrupt_file_recovery_keeps_rename_error() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = TempDir::new().unwrap();
+    let data_dir = temp.path().join("readonly");
+    std::fs::create_dir(&data_dir).unwrap();
+    std::fs::write(data_dir.join("sync.json"), "{").unwrap();
+    std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+
+    let error = crate::sync_state::load(&data_dir, None).unwrap_err();
+
+    std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(
+        error.id.as_deref(),
+        Some("SERVER_LAYOUT_SYNC_STATE_RECOVERY_RENAME_FAILED")
+    );
+    assert!(!error.details.is_empty());
+}
+
+#[test]
 fn offline_changes_wait_for_snapshot_and_changed_during_send_stays_pending() {
     let dir = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());

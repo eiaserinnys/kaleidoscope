@@ -52,7 +52,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Condvar, Mutex};
 
 use kaleidoscope_contract::{
-    CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, ErrorCode, Grant, LinkStatus,
+    errors, CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, Grant, LinkStatus,
     PcRootKind, Rect, SharedState, ShellSnapshot, UpdateStatus, WebHistoryAction, WebPage,
 };
 use registry_client::{HttpRegistryClient, RegistryClient};
@@ -291,7 +291,13 @@ impl Core {
         attachment_opener: Arc<dyn AttachmentOpener>,
     ) -> Result<Core, CoreError> {
         let started = std::time::Instant::now();
-        fs::create_dir_all(&config.data_dir).map_err(|error| error::io_error(&error))?;
+        fs::create_dir_all(&config.data_dir).map_err(|error| {
+            if error.kind() == io::ErrorKind::NotFound {
+                errors::DESK_DATA_DIRECTORY_CREATE_NOT_FOUND()
+            } else {
+                errors::DESK_DATA_DIRECTORY_CREATE_FAILED()
+            }
+        })?;
 
         let link_file = server_switch::startup_link(&config)?;
         let link = link_file.as_ref().map_or(LinkStatus::Unlinked {}, |file| {
@@ -485,12 +491,8 @@ impl Core {
                     path: String,
                     query: std::collections::BTreeMap<String, serde_json::Value>,
                 }
-                let request: Request = serde_json::from_slice(body).map_err(|_| {
-                    error::with_message(
-                        ErrorCode::InvalidRequest,
-                        "공개 HTTPS 요청 형식이 올바르지 않습니다.",
-                    )
-                })?;
+                let request: Request = serde_json::from_slice(body)
+                    .map_err(|_| errors::DESK_CLIENT_BINARY_REQUEST_INVALID())?;
                 let (bytes, mime) = client_http::read(
                     &self.inner,
                     window,
@@ -504,7 +506,7 @@ impl Core {
                 result.extend_from_slice(&bytes);
                 Ok(result)
             }
-            _ => Err(error::make(ErrorCode::InvalidRequest)),
+            _ => Err(errors::DESK_CLIENT_BINARY_OPERATION_UNKNOWN(operation)),
         }
     }
 
@@ -730,9 +732,12 @@ impl Core {
             | CoreRequest::WebDetach { .. }) => web::handle(&self.inner, request),
             CoreRequest::ExternalOpen { window_id, url } => {
                 let parsed =
-                    url::Url::parse(&url).map_err(|_| error::make(ErrorCode::InvalidRequest))?;
-                if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
-                    return Err(error::make(ErrorCode::InvalidRequest));
+                    url::Url::parse(&url).map_err(|_| errors::DESK_EXTERNAL_OPEN_URL_INVALID())?;
+                if !matches!(parsed.scheme(), "http" | "https") {
+                    return Err(errors::DESK_EXTERNAL_OPEN_SCHEME_UNSUPPORTED());
+                }
+                if parsed.host_str().is_none() {
+                    return Err(errors::DESK_EXTERNAL_OPEN_URL_INVALID());
                 }
                 if let Some(window_id) = window_id {
                     if !self
@@ -745,13 +750,16 @@ impl Core {
                         .iter()
                         .any(|window| window.id == window_id)
                     {
-                        return Err(error::make(ErrorCode::NotFound));
+                        return Err(errors::DESK_EXTERNAL_OPEN_WINDOW_NOT_FOUND(&window_id));
                     }
                 }
-                self.inner
-                    .host
-                    .open_url(&url)
-                    .map_err(|err| error::io_error(&err))?;
+                self.inner.host.open_url(&url).map_err(|error| {
+                    if error.kind() == io::ErrorKind::NotFound {
+                        errors::DESK_EXTERNAL_OPEN_HANDLER_NOT_FOUND()
+                    } else {
+                        errors::DESK_EXTERNAL_OPEN_FAILED()
+                    }
+                })?;
                 Ok(CoreReply::ExternalOpen {})
             }
             CoreRequest::ShareSet { window_id, on } => share::set(&self.inner, &window_id, on),
@@ -830,28 +838,27 @@ impl Core {
     }
 
     fn restart_for_update(&self) -> Result<CoreReply, CoreError> {
-        use kaleidoscope_contract::ErrorCode;
         self.flush_storage()?;
         let (current_version, version) = match self.inner.state.lock().unwrap().update.clone() {
-            UpdateStatus::Unavailable {} => return Err(error::make(ErrorCode::Unavailable)),
+            UpdateStatus::Unavailable {} => return Err(errors::DESK_UPDATE_STATUS_UNAVAILABLE()),
             UpdateStatus::Ready {
                 current_version,
                 version,
             } => (current_version, version),
-            _ => return Err(error::make(ErrorCode::InvalidRequest)),
+            _ => return Err(errors::DESK_UPDATE_RESTART_NOT_READY()),
         };
         let updater = self
             .inner
             .host
             .updater()
-            .ok_or_else(|| error::make(ErrorCode::Unavailable))?;
+            .ok_or_else(|| errors::DESK_UPDATE_INSTALLER_UNAVAILABLE())?;
         if let Err(reason) = updater.install() {
             self.set_update_status(UpdateStatus::Failed {
                 current_version,
                 version: Some(version),
                 reason: reason.clone(),
             });
-            return Err(error::with_message(ErrorCode::Io, &reason));
+            return Err(errors::DESK_UPDATE_INSTALL_FAILED());
         }
         Ok(CoreReply::UpdateRestart {})
     }
@@ -891,7 +898,7 @@ impl Core {
                 .windows
                 .iter()
                 .find(|window| window.id == window_id)
-                .ok_or_else(|| error::make(kaleidoscope_contract::ErrorCode::NotFound))?
+                .ok_or_else(|| errors::DESK_WINDOW_STATE_WINDOW_NOT_FOUND(window_id))?
                 .state
                 .clone();
             next.extend(entries);
@@ -961,18 +968,22 @@ impl Core {
             files::permission(&state, window_id, permission, false)?;
             if files::scope(&state, window_id, permission)? == kaleidoscope_contract::FilesScope::Pc
             {
-                return Err(error::make(
-                    kaleidoscope_contract::ErrorCode::InvalidRequest,
-                ));
+                return Err(errors::DESK_FOLDER_PICK_PC_SCOPE_INVALID());
             }
         }
 
         let Some(selected_path) = self.inner.host.pick_folder() else {
             return Ok(CoreReply::FilesPickFolder { grant: None });
         };
-        let root_path = fs::canonicalize(selected_path).map_err(|error| error::io_error(&error))?;
+        let root_path = fs::canonicalize(selected_path).map_err(|error| {
+            if error.kind() == io::ErrorKind::NotFound {
+                errors::DESK_FOLDER_PICK_PATH_NOT_FOUND()
+            } else {
+                errors::DESK_FOLDER_PICK_PATH_READ_FAILED()
+            }
+        })?;
         if !root_path.is_dir() {
-            return Err(error::make(kaleidoscope_contract::ErrorCode::Io));
+            return Err(errors::DESK_FOLDER_PICK_NOT_DIRECTORY());
         }
         let root_name = root_path
             .file_name()
@@ -1007,20 +1018,30 @@ impl Core {
     }
 
     fn allow_pc(&self, window_id: &str, permission: &str) -> Result<CoreReply, CoreError> {
-        use kaleidoscope_contract::{ErrorCode, FilesScope, PcAccess};
+        use kaleidoscope_contract::{FilesScope, PcAccess};
         let mut state = self.inner.state.lock().unwrap();
         let window = state
             .shared
             .windows
             .iter()
             .find(|w| w.id == window_id)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(|| errors::DESK_PC_ACCESS_WINDOW_NOT_FOUND(window_id))?;
         let app_id = window.app_id.clone();
-        let definition = app_commands::definition_for(&state.shared, &app_id, window.app_version)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        let app_version = window.app_version;
+        let app_name = state
+            .shared
+            .apps
+            .iter()
+            .find(|app| app.id == app_id)
+            .map(|app| app.name.as_str())
+            .unwrap_or(app_id.as_str());
+        let definition = app_commands::definition_for(&state.shared, &app_id, app_version)
+            .ok_or_else(|| {
+                errors::DESK_PC_ACCESS_APP_VERSION_NOT_FOUND(app_name, &app_id, app_version)
+            })?;
         if !definition.permissions.iter().any(|p| matches!(p,
             kaleidoscope_contract::PermissionDecl::Files { id, scope: FilesScope::Pc, .. } if id == permission)) {
-            return Err(error::make(ErrorCode::InvalidRequest));
+            return Err(errors::DESK_PC_ACCESS_PERMISSION_UNDECLARED(permission));
         }
         if let Some(access) = state
             .device

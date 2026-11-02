@@ -77,7 +77,11 @@ fn restart_requires_ready_and_reports_install_failure() {
     *host.failure.lock().unwrap() = Some("설치 실패".into());
     let error = core.handle(CoreRequest::UpdateRestart {}).unwrap_err();
     assert_eq!(error.code, ErrorCode::Io);
-    assert!(error.message.contains("설치 실패"));
+    assert_eq!(error.id.as_deref(), Some("DESK_UPDATE_INSTALL_FAILED"));
+    assert_eq!(
+        error.message,
+        "업데이트를 설치하지 못했습니다. 네트워크와 설치 권한을 확인한 뒤 다시 시도하세요."
+    );
     match core.handle(CoreRequest::StateGet {}).unwrap() {
         CoreReply::StateGet { snapshot } => assert_eq!(
             snapshot.update,
