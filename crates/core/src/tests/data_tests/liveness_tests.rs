@@ -267,7 +267,7 @@ fn 다른_데스크톱과_최대화_뒤에서는_쉬고_재개와_재열기에�
 }
 
 #[test]
-fn 숨겨진_창의_강제_갱신도_상류_이후_요청을_마친다() {
+fn 숨겨진_창의_강제_갱신은_상류만_받고_보일_때_종속_원천을_받는다() {
     use kaleidoscope_contract::registry::ConnectionKind;
     let definition = json!({"id":"force-dependency","name":"강제 의존 시험","requires":{"blocks":4,"modules":{"connection":1}},
         "permissions":[{"module":"connection","id":"api","connection":"example","access":"read","label":"API"}],"state":{},
@@ -294,6 +294,18 @@ fn 숨겨진_창의_강제_갱신도_상류_이후_요청을_마친다() {
         sources: vec!["downstream".into()],
     })
     .unwrap();
+    wait_until(|| {
+        let CoreReply::DataAttach { view } = core
+            .handle(serde_json::from_value(json!({"op":"data.attach","window_id":window})).unwrap())
+            .unwrap()
+        else {
+            return false;
+        };
+        matches!(view.sources["upstream"], SourceStatus::Ready { .. })
+    });
+    thread::sleep(Duration::from_millis(200));
+    assert_eq!(client.connection_requests.lock().unwrap().len(), 1);
+    core.set_shell_visible(true);
     wait_until(|| client.connection_requests.lock().unwrap().len() == 2);
     let requests = client.connection_requests.lock().unwrap();
     assert_eq!(requests[0].path, "/old");
@@ -301,6 +313,72 @@ fn 숨겨진_창의_강제_갱신도_상류_이후_요청을_마친다() {
     assert_eq!(
         requests[1].query.get("id").map(String::as_str),
         Some("ready")
+    );
+}
+
+#[test]
+fn 보이는_상류의_강제_갱신은_숨긴_탭의_종속_원천을_부르지_않는다() {
+    use kaleidoscope_contract::registry::ConnectionKind;
+    let definition = json!({"id":"hidden-dependency","name":"숨긴 종속 시험","requires":{"blocks":4,"modules":{"connection":1}},
+        "permissions":[{"module":"connection","id":"api","connection":"example","access":"read","label":"API"}],"state":{},
+        "sources":{"upstream":{"kind":"request","permission":"api","path":"/old"},
+                   "downstream":{"kind":"request","permission":"api","path":"/new","query":{"id":{"expr":"$data.upstream.id"}}}},
+        "ui":{"type":"stack","direction":"column","children":[{"type":"text","value":{"expr":"$data.upstream.id"}},{"type":"text","value":{"expr":"$data.downstream.value"}}]}}).to_string();
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    client.connection_replies.lock().unwrap().extend([
+        ("/old".into(), response(200, json!({"id":"first"}))),
+        ("/new".into(), response(200, json!({"value":"done"}))),
+    ]);
+    let core = open_core_with_client(temp.path(), vec![definition], &host, client.clone());
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "hidden-dependency");
+    mark_connected(&core);
+    *core.inner.connections.lock().unwrap() = vec![info(ConnectionKind::Relay)];
+    core.handle(
+        serde_json::from_value(
+            json!({"op":"data.attach","window_id":window,"dormant":["/ui/children/1"]}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    wait_until(|| {
+        crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/value")
+            == Some(BindingValue::Ready {
+                value: json!("first"),
+            })
+    });
+    client
+        .connection_replies
+        .lock()
+        .unwrap()
+        .insert("/old".into(), response(200, json!({"id":"second"})));
+    core.handle(CoreRequest::DataRefresh {
+        window_id: window.clone(),
+        sources: vec!["upstream".into()],
+    })
+    .unwrap();
+    wait_until(|| {
+        crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/value")
+            == Some(BindingValue::Ready {
+                value: json!("second"),
+            })
+    });
+    thread::sleep(Duration::from_millis(200));
+    assert_eq!(client.connection_requests.lock().unwrap().len(), 2);
+    core.handle(
+        serde_json::from_value(json!({"op":"data.dormant","window_id":window,"dormant":[]}))
+            .unwrap(),
+    )
+    .unwrap();
+    wait_until(|| client.connection_requests.lock().unwrap().len() == 3);
+    assert_eq!(
+        client.connection_requests.lock().unwrap()[2]
+            .query
+            .get("id")
+            .map(String::as_str),
+        Some("second")
     );
 }
 
@@ -345,4 +423,3 @@ fn 최소화된_창의_주기_요청은_멈추고_복원하면_기한_지난_값
         .unwrap();
     wait_until(|| client.connection_requests.lock().unwrap().len() == 2);
 }
-

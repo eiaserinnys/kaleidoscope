@@ -707,7 +707,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                         cached.fetched_instant.elapsed() < job.ttl
                             && source_times.is_some_and(|(started, retry_state)| {
                                 (!job.force
-                                        || started.is_some_and(|at| cached.fetched_instant > at))
+                                    || started.is_some_and(|at| cached.fetched_instant > at))
                                     && retry_state.is_none_or(|previous| {
                                         previous.is_none_or(|at| cached.fetched_instant > at)
                                     })
@@ -847,20 +847,10 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                         if changed || runtime.sources[&name].status != old_status {
                             changed_sources.insert(name.clone());
                         }
-                        let forced_follow_up = job.force
-                            && changed
-                            && liveness::deps_ready(runtime, &name)
-                            && !runtime.sources[&name].in_flight;
-                        if forced_follow_up
-                            || should_prepare_after_plan(runtime, &name, changed, false)
-                        {
-                            if let Some(next) = prepare(
-                                &inner.data_runtimes,
-                                runtime,
-                                &job.window,
-                                &name,
-                                forced_follow_up,
-                            ) {
+                        if should_prepare_after_plan(runtime, &name, changed, false) {
+                            if let Some(next) =
+                                prepare(&inner.data_runtimes, runtime, &job.window, &name, false)
+                            {
                                 follow_up.push(next);
                             }
                         }
