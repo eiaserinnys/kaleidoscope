@@ -108,7 +108,7 @@
             "child": {
               "type": "stack",
               "direction": "column",
-              "fill": 2,
+              "fill": 3,
               "children": [
                 {
                   "type": "anchor",
