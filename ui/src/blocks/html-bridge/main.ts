@@ -154,12 +154,12 @@ const isPinEvent = (event: Event) => {
 document.addEventListener("pointerdown", (event) => { if (locked) { event.preventDefault(); event.stopPropagation(); } }, true);
 document.addEventListener("mousedown", (event) => {
   if (locked) { event.preventDefault(); event.stopPropagation(); return; }
-  if (mode !== "select") return;
+  if (mode !== "select" || isPinEvent(event)) return;
+  document.documentElement.removeAttribute("data-ks-pending");
   if (editing && event.target !== editing.element) finishEdit(false);
   const current = getSelection();
   if (current?.rangeCount && event.target instanceof Node && !current.getRangeAt(0).intersectsNode(event.target)) {
     current.removeAllRanges();
-    document.documentElement.removeAttribute("data-ks-pending");
   }
 }, true);
 document.addEventListener("mouseup", (event) => {

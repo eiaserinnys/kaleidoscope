@@ -38,6 +38,19 @@ it("프레임 호버는 부모 상태를 바꾸지 않고 Tab은 선택한 요�
   expect(document.documentElement.hasAttribute("data-ks-pending")).toBe(true);
   document.querySelector("button")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
   expect(document.documentElement.hasAttribute("data-ks-pending")).toBe(false);
+  const heading = document.createElement("h1");
+  heading.setAttribute("data-ks-n", "3"); heading.textContent = "같은 제목 다음 구절";
+  document.body.append(heading);
+  for (const element of [paragraph, heading]) {
+    const first = document.createRange(); first.selectNodeContents(element.firstChild!);
+    getSelection()!.removeAllRanges(); getSelection()!.addRange(first);
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    expect(document.documentElement.hasAttribute("data-ks-pending")).toBe(true);
+    element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect.soft(document.documentElement.hasAttribute("data-ks-pending")).toBe(false);
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    expect(document.documentElement.hasAttribute("data-ks-pending")).toBe(true);
+  }
   send.mockClear();
   window.dispatchEvent(new MessageEvent("message", { source: window.parent, data: { type: "ks-html-lock", locked: true } }));
   document.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
