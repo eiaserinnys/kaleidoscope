@@ -33,6 +33,7 @@ import { MapBlock } from "../blocks/data-map";
 import { SandboxBlock } from "../blocks/sandbox";
 import { CanvasBlock } from "../blocks/canvas";
 import { TimelineBlock } from "../blocks/timeline";
+import { ProgressBlock } from "../blocks/progress";
 import { WhenBlock } from "../blocks/conditional";
 import { DialogBlock } from "../blocks/dialog";
 import { AnchorBlock } from "../blocks/anchor";
@@ -59,7 +60,7 @@ function BlockContent({ block: normalized, context, pointer }: { block: Block; c
   useBlockRenderProbe();
   switch (normalized.type) {
     case "repeat": return <RepeatBlock block={normalized} context={context} pointer={pointer} />;
-    case "progress": return null;
+    case "progress": return <ProgressBlock block={normalized} pointer={pointer} />;
     case "when": return <WhenBlock block={normalized} context={context} pointer={pointer} />;
     case "dialog": return <DialogBlock block={normalized} context={context} pointer={pointer} />;
     case "anchor": return <AnchorBlock block={normalized} context={context} pointer={pointer} />;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import type { Actions, Block, Clock, EventModifiers } from "../contract/contract";
+import type { Actions, Block, EventModifiers } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { IconButton } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
@@ -9,7 +9,10 @@ import { useWindowVisible } from "../data/window-state";
 import { createSerialSend } from "../data/throttled-send";
 import { useShareDescriber } from "../share/visible";
 import { eventModifiers } from "../runtime/shortcuts";
+import { clockPosition, isClock } from "../data/clock";
 import type { BlockContext } from "./block-context";
+
+export { clockPosition } from "../data/clock";
 
 type Snap = { points?: number[]; step?: number; threshold_px?: number };
 type Item = { id: string; start: number; end: number; label?: string; tone?: string; series?: number; movable?: boolean; resizable?: boolean };
@@ -18,10 +21,6 @@ type Marker = { id: string; time: number; label?: string; movable?: boolean };
 type Edit = { phase: "preview" | "commit" | "cancel"; kind: "move" | "resize_start" | "resize_end" | "move_marker"; id: string; track: string | null; start: number; end: number };
 type Gesture = { pointerId: number; x: number; width: number; original: Edit; current: Edit };
 type TimelineData = Extract<Block, { type: "timeline" }>;
-
-export function clockPosition(clock: Clock, now: number): number {
-  return Math.max(0, Math.min(clock.duration, clock.position + (clock.running ? (now - clock.sampled_at) / 1000 * clock.rate : 0)));
-}
 
 export function snapTime(time: number, snap: Snap | null, pixelsPerSecond: number, disabled: boolean): number {
   if (!snap || disabled || pixelsPerSecond <= 0) return time;
@@ -68,7 +67,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   const selected = selection.status === "ready" && selection.value && typeof selection.value === "object" && !Array.isArray(selection.value) && Array.isArray(selection.value.ids) ? selection.value.ids : [];
   const snapValue = snap.status === "ready" && snap.value && typeof snap.value === "object" && !Array.isArray(snap.value) ? snap.value as Snap : null;
   const rawPosition = position.status === "ready" ? position.value : 0;
-  const clock = rawPosition && typeof rawPosition === "object" && !Array.isArray(rawPosition) && typeof rawPosition.position === "number" && typeof rawPosition.sampled_at === "number" && typeof rawPosition.rate === "number" && typeof rawPosition.running === "boolean" && typeof rawPosition.duration === "number" ? rawPosition as Clock : null;
+  const clock = isClock(rawPosition) ? rawPosition : null;
   useEffect(() => {
     if (!visible) return;
     let frame = 0;

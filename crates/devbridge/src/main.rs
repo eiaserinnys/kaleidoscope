@@ -34,6 +34,10 @@ impl Host for DevHost {
         env::var_os("KALEIDOSCOPE_DEV_PICK").map(PathBuf::from)
     }
 
+    fn pick_save_file(&self, _: &str, _: &str) -> Option<PathBuf> {
+        env::var_os("KALEIDOSCOPE_DEV_PICK_SAVE_FILE").map(PathBuf::from)
+    }
+
     fn pc_roots(&self) -> Vec<PcRoot> {
         let Some(value) = env::var_os("KALEIDOSCOPE_DEV_PC_ROOTS") else {
             return Vec::new();

@@ -1,5 +1,6 @@
 use super::*;
 use kaleidoscope_contract::{
+    errors,
     registry::{ConnectionInfo, ConnectionKind, DeviceEvent},
     validate::valid_request_path,
     PermissionDecl,
@@ -49,16 +50,16 @@ impl AppState {
             }
         });
         if headers.values().any(|value| value.contains("${env:")) {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(errors::CONN_SETTING_HEADER_REFERENCE());
         }
         let mut header_names: Vec<_> = headers.keys().cloned().collect();
         header_names.sort();
-        let header_json = serde_json::to_string(&headers)
-            .map_err(|_| server_error("연결을 저장할 수 없습니다."))?;
+        let header_json =
+            serde_json::to_string(&headers).map_err(|_| errors::CONN_SETTING_SERIALIZE_FAILED())?;
         let description = input.description.unwrap_or_default();
         let paths = input.paths.unwrap_or_default();
-        let paths_json = serde_json::to_string(&paths)
-            .map_err(|_| server_error("연결을 저장할 수 없습니다."))?;
+        let paths_json =
+            serde_json::to_string(&paths).map_err(|_| errors::CONN_SETTING_SERIALIZE_FAILED())?;
         let info = ConnectionInfo {
             name: input.name,
             kind: input.kind,
@@ -150,9 +151,9 @@ impl AppState {
             |(kind, base_url, writable, paths, headers, issuer, scopes, resource, description)| {
                 let kind = parse_kind(&kind)?;
                 let paths = serde_json::from_str(&paths)
-                    .map_err(|_| server_error("연결 경로 설정을 읽을 수 없습니다."))?;
+                    .map_err(|_| errors::CONN_SETTING_PATHS_INVALID())?;
                 let headers = serde_json::from_str(&headers)
-                    .map_err(|_| server_error("연결 헤더 설정을 읽을 수 없습니다."))?;
+                    .map_err(|_| errors::CONN_SETTING_HEADERS_INVALID())?;
                 Ok(ConnectionRecord {
                     info: ConnectionInfo {
                         name: name.into(),
@@ -213,13 +214,13 @@ impl AppState {
                     base_url,
                     writable,
                     paths: serde_json::from_str(&paths)
-                        .map_err(|_| server_error("연결 경로 설정을 읽을 수 없습니다."))?,
+                        .map_err(|_| errors::CONN_SETTING_LIST_PATHS_INVALID())?,
                     issuer,
                     scopes,
                     resource,
                 },
                 headers: serde_json::from_str(&headers)
-                    .map_err(|_| server_error("연결 헤더 설정을 읽을 수 없습니다."))?,
+                    .map_err(|_| errors::CONN_SETTING_LIST_HEADERS_INVALID())?,
                 description,
             })
         })
@@ -287,36 +288,42 @@ impl AppState {
 }
 
 fn validate_registration(input: &ConnectionRegistration) -> Result<(), CoreError> {
-    if !valid_connection_name(&input.name)
-        || !valid_base_url(&input.base_url)
-        || input
-            .paths
-            .as_ref()
-            .is_some_and(|paths| paths.iter().any(|path| !valid_request_path(path)))
+    if !valid_connection_name(&input.name) {
+        return Err(errors::CONN_SETTING_NAME_INVALID());
+    }
+    if !valid_base_url(&input.base_url) {
+        return Err(errors::CONN_SETTING_URL_INVALID());
+    }
+    if input
+        .paths
+        .as_ref()
+        .is_some_and(|paths| paths.iter().any(|path| !valid_request_path(path)))
     {
-        return Err(CoreError::new(ErrorCode::InvalidRequest));
+        return Err(errors::CONN_SETTING_PATH_INVALID());
     }
     match input.kind {
         ConnectionKind::Relay
             if input.issuer.is_some() || input.scopes.is_some() || input.resource.is_some() =>
         {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(errors::CONN_SETTING_RELAY_OAUTH_FIELDS_INVALID());
         }
         ConnectionKind::Oauth if input.headers.is_some() => {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(errors::CONN_SETTING_OAUTH_HEADERS_INVALID());
         }
         _ => {}
     }
     if let Some(headers) = &input.headers {
         for (name, value) in headers {
             let name = HeaderName::from_bytes(name.as_bytes())
-                .map_err(|_| CoreError::new(ErrorCode::InvalidRequest))?;
+                .map_err(|_| errors::CONN_SETTING_HEADER_NAME_INVALID())?;
             if matches!(
                 name.as_str(),
                 "host" | "content-length" | "connection" | "transfer-encoding"
-            ) || HeaderValue::from_str(value).is_err()
-            {
-                return Err(CoreError::new(ErrorCode::InvalidRequest));
+            ) {
+                return Err(errors::CONN_SETTING_HEADER_RESERVED());
+            }
+            if HeaderValue::from_str(value).is_err() {
+                return Err(errors::CONN_SETTING_HEADER_VALUE_INVALID());
             }
         }
     }
@@ -347,6 +354,6 @@ fn parse_kind(value: &str) -> Result<ConnectionKind, CoreError> {
     match value {
         "relay" => Ok(ConnectionKind::Relay),
         "oauth" => Ok(ConnectionKind::Oauth),
-        _ => Err(server_error("연결 종류를 읽을 수 없습니다.")),
+        _ => Err(errors::CONN_SETTING_KIND_INVALID()),
     }
 }

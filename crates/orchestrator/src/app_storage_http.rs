@@ -31,7 +31,10 @@ fn storage_error_response(error: CoreError) -> Response {
             .map(str::to_string);
         return (
             StatusCode::CONFLICT,
-            Json(contract::StorageConflict { current_revision }),
+            Json(contract::StorageConflict {
+                current_revision,
+                error: Some(error),
+            }),
         )
             .into_response();
     }
@@ -156,7 +159,9 @@ pub(super) async fn device_collection_read(
         Err(error) => return super::http::error_response(status_for(&error), error),
     };
     let Some(doc) = query.doc.as_deref() else {
-        return storage_error_response(CoreError::new(ErrorCode::InvalidRequest));
+        return storage_error_response(
+            kaleidoscope_contract::errors::STORAGE_HTTP_DOCUMENT_READ_REQUIRED(),
+        );
     };
     match state.read_app_storage_document(
         &account_id,
@@ -182,7 +187,9 @@ pub(super) async fn device_collection_write(
         Err(error) => return super::http::error_response(status_for(&error), error),
     };
     let Some(doc) = query.doc.as_deref() else {
-        return storage_error_response(CoreError::new(ErrorCode::InvalidRequest));
+        return storage_error_response(
+            kaleidoscope_contract::errors::STORAGE_HTTP_DOCUMENT_WRITE_REQUIRED(),
+        );
     };
     match state.write_app_storage_document(
         &account_id,
@@ -213,10 +220,14 @@ pub(super) async fn device_collection_reset(
         Err(error) => return super::http::error_response(status_for(&error), error),
     };
     let Some(doc) = query.doc.as_deref() else {
-        return storage_error_response(CoreError::new(ErrorCode::InvalidRequest));
+        return storage_error_response(
+            kaleidoscope_contract::errors::STORAGE_HTTP_DOCUMENT_RESET_REQUIRED(),
+        );
     };
     let Some(expected_revision) = request.expected_revision.0 else {
-        return storage_error_response(CoreError::new(ErrorCode::InvalidRequest));
+        return storage_error_response(
+            kaleidoscope_contract::errors::STORAGE_HTTP_REVISION_REQUIRED(),
+        );
     };
     match state.reset_app_storage_document(
         &account_id,

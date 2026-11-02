@@ -451,10 +451,11 @@ async fn builtin_write_rejects_undeclared_fields_and_invalid_schema() {
     let details =
         serde_json::from_str::<CoreError>(&invalid_mcp.content[0].as_text().unwrap().text).unwrap();
     assert_eq!(details.code, ErrorCode::InvalidRequest);
+    assert_eq!(details.id.as_deref(), Some("STORAGE_WRITE_SCHEMA_MISMATCH"));
     assert!(details
-        .details
-        .iter()
-        .any(|detail| detail == "값 전체에 선언되지 않은 필드가 있습니다: kind."));
+        .message
+        .contains("값 전체에 선언되지 않은 필드가 있습니다: kind."));
+    assert!(details.details.is_empty());
 
     let invalid_http = state.write_app_value(
         &account,
@@ -466,10 +467,14 @@ async fn builtin_write_rejects_undeclared_fields_and_invalid_schema() {
         None,
     ).unwrap_err();
     assert_eq!(invalid_http.code, ErrorCode::InvalidRequest);
+    assert_eq!(
+        invalid_http.id.as_deref(),
+        Some("STORAGE_WRITE_SCHEMA_MISMATCH")
+    );
     assert!(invalid_http
-        .details
-        .iter()
-        .any(|detail| detail == "/documents/0/revisions/0에 선언되지 않은 필드가 있습니다: revision."));
+        .message
+        .contains("/documents/0/revisions/0에 선언되지 않은 필드가 있습니다: revision."));
+    assert!(invalid_http.details.is_empty());
     assert!(events.try_recv().is_err());
     let after = state
         .read_app_value(&account, "html-report", "reports")

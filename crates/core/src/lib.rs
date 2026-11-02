@@ -642,6 +642,15 @@ impl Core {
                     client_files::pick(&self.inner, &window_id, &accept, multiple)?;
                 Ok(CoreReply::FilesPick { cancelled, files })
             }
+            CoreRequest::FilesSavePrompt {
+                window_id,
+                suggested_name,
+                mime,
+            } => {
+                let file_id =
+                    client_files::save_prompt(&self.inner, &window_id, &suggested_name, &mime)?;
+                Ok(CoreReply::FilesSavePrompt { file_id })
+            }
             CoreRequest::ExportBegin {
                 window_id,
                 suggested_name,

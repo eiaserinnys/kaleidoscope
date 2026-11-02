@@ -1,11 +1,11 @@
 //! 대화 명령을 창의 제공자와 저장소에 연결한다.
-use crate::{conversation_context::Context, error, Inner};
-use base64::{engine::general_purpose::STANDARD, Engine};
+use crate::{Inner, conversation_context::Context};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use kaleidoscope_contract::{
+    CoreError, CoreReply, CoreRequest,
     conversation::{
         ConversationModel, ConversationProfile, ModelsReply, ProfilesReply, ThreadItemsReply,
     },
-    CoreError, CoreReply, CoreRequest, ErrorCode,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -20,7 +20,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
         | CoreRequest::ConversationSend { window_id, .. }
         | CoreRequest::ConversationAttachment { window_id, .. }
         | CoreRequest::ConversationAttachmentOpen { window_id, .. } => window_id,
-        _ => return Err(error::make(ErrorCode::InvalidRequest)),
+        _ => return Err(kaleidoscope_contract::errors::CONV_CONVERSATION_REQUEST_INVALID()),
     }
     .clone();
     let is_open = matches!(&request, CoreRequest::ConversationAttachmentOpen { .. });
@@ -53,7 +53,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 .get("profile")
                 .and_then(Value::as_str)
                 .filter(|profile| !profile.trim().is_empty())
-                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?
+                .ok_or_else(|| kaleidoscope_contract::errors::CONV_CONVERSATION_PROFILE_MISSING())?
                 .to_string();
             let profile = profile
                 .as_deref()
@@ -70,7 +70,9 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             )?;
             let model_order: Vec<String> =
                 serde_json::from_value(config.get("model_order").cloned().unwrap_or_default())
-                    .map_err(|_| error::make(ErrorCode::InvalidRequest))?;
+                    .map_err(|_| {
+                        kaleidoscope_contract::errors::CONV_SELECTION_MODEL_ORDER_INVALID()
+                    })?;
             let selected_model = config.get("selected_model").and_then(Value::as_str);
             let start_model = selected_model
                 .filter(|selected| {
@@ -116,9 +118,11 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             })
         }
         CoreRequest::ConversationHistory { before, .. } => {
-            let thread = ctx
-                .thread(inner, &namespace)?
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            let thread = ctx.thread(inner, &namespace)?.ok_or_else(|| {
+                kaleidoscope_contract::errors::CONV_CONVERSATION_THREAD_NOT_FOUND(
+                    &ctx.workspace.name,
+                )
+            })?;
             let items = history(&ctx, &thread.id, Some(&before))?;
             Ok(CoreReply::ConversationHistory {
                 items: items.items,
@@ -168,9 +172,11 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             attachment_id,
             ..
         } => {
-            let thread = ctx
-                .thread(inner, &namespace)?
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            let thread = ctx.thread(inner, &namespace)?.ok_or_else(|| {
+                kaleidoscope_contract::errors::CONV_CONVERSATION_ATTACHMENT_THREAD_NOT_FOUND(
+                    &ctx.workspace.name,
+                )
+            })?;
             let path = ctx.client.path(&[
                 "threads",
                 &thread.id,
@@ -187,15 +193,24 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                     Sha256::digest(format!("{item_id}\0{attachment_id}").as_bytes())
                 );
                 let dir = inner.data_dir.join("attachments").join(key);
-                std::fs::create_dir_all(&dir).map_err(|e| error::io_error(&e))?;
+                std::fs::create_dir_all(&dir).map_err(|e| {
+                    kaleidoscope_contract::errors::CONV_CONVERSATION_ATTACHMENT_WRITE_FAILED(&name)
+                        .and_details(vec![e.to_string()])
+                })?;
                 let path = dir.join(&name);
-                std::fs::write(&path, bytes).map_err(|e| error::io_error(&e))?;
+                std::fs::write(&path, bytes).map_err(|e| {
+                    kaleidoscope_contract::errors::CONV_CONVERSATION_ATTACHMENT_WRITE_FAILED(&name)
+                        .and_details(vec![e.to_string()])
+                })?;
                 if crate::attachment::should_reveal(&name) {
                     inner.attachment_opener.reveal(&path)
                 } else {
                     inner.attachment_opener.open(&path)
                 }
-                .map_err(|e| error::io_error(&e))?;
+                .map_err(|e| {
+                    kaleidoscope_contract::errors::CONV_CONVERSATION_ATTACHMENT_OPEN_FAILED(&name)
+                        .and_details(vec![e.to_string()])
+                })?;
                 return Ok(CoreReply::ConversationAttachmentOpen {});
             }
             Ok(CoreReply::ConversationAttachment {
@@ -204,7 +219,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 data_base64: STANDARD.encode(bytes),
             })
         }
-        _ => Err(error::make(ErrorCode::Unavailable)),
+        _ => Err(kaleidoscope_contract::errors::CONV_CONVERSATION_FEATURE_UNAVAILABLE()),
     }
 }
 
@@ -243,7 +258,7 @@ fn get_resources(
                         &query,
                         None::<&Value>,
                     )?
-                    .ok_or_else(|| error::make(ErrorCode::NotFound))
+                    .ok_or_else(kaleidoscope_contract::errors::CONV_CONVERSATION_MODELS_MISSING)
             });
             let profiles = scope.spawn(move || {
                 profiles_client
@@ -253,7 +268,7 @@ fn get_resources(
                         &BTreeMap::new(),
                         None::<&Value>,
                     )?
-                    .ok_or_else(|| error::make(ErrorCode::NotFound))
+                    .ok_or_else(kaleidoscope_contract::errors::CONV_CONVERSATION_PROFILES_MISSING)
             });
             let items = scope.spawn(move || match thread_id {
                 Some(id) => history_client(&items_client, &id, None),
@@ -291,7 +306,7 @@ fn history_client(
             &query,
             None::<&Value>,
         )?
-        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        .ok_or_else(|| kaleidoscope_contract::errors::CONV_CONVERSATION_HISTORY_NOT_FOUND(id))?;
     for item in &mut reply.items {
         crate::share::strip_legacy_share_from_item(item);
     }
@@ -307,8 +322,8 @@ mod tests {
         io::{BufRead, BufReader, Write},
         net::TcpListener,
         sync::{
-            atomic::{AtomicUsize, Ordering},
             Arc,
+            atomic::{AtomicUsize, Ordering},
         },
         thread,
         time::{Duration, Instant},
@@ -394,6 +409,7 @@ mod tests {
                 scopes: None,
                 resource: None,
             },
+            workspace_name: "작업".into(),
             base_path: "/v1".into(),
             logins,
             profiler: Profiler::default(),
@@ -412,11 +428,13 @@ mod tests {
         assert!(peak.load(Ordering::SeqCst) > 1);
         let spans = client.profiler.snapshot("network");
         assert_eq!(spans["recent_spans"].as_array().unwrap().len(), 3);
-        assert!(spans["recent_spans"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|span| span["target"] == "GET /threads/{id}/items"));
+        assert!(
+            spans["recent_spans"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|span| span["target"] == "GET /threads/{id}/items")
+        );
         assert_eq!(spans["categories"][0]["label"], "네트워크 요청");
     }
 }

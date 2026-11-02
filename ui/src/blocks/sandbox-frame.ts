@@ -1,4 +1,6 @@
-type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string; inputs?: Record<string, unknown> };
+import type { ClientCapability } from "../contract/contract";
+
+type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string; inputs?: Record<string, unknown>; capabilities?: ClientCapability[]; actions?: string[] };
 
 const encodeScript = (source: string) => `data:text/javascript;charset=utf-8;base64,${btoa(Array.from(new TextEncoder().encode(source), (byte) => String.fromCharCode(byte)).join(""))}`;
 const csp = "default-src 'none'; script-src data: blob: 'unsafe-eval'; style-src 'unsafe-inline' data: blob:; img-src data: blob:; font-src data: blob:; media-src data: blob:; worker-src blob:; connect-src data: blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';";
@@ -15,6 +17,7 @@ function bridgeSource(init: SandboxInit): string {
     const lifecycleListeners = new Set(), pendingLifecycle = new Set();
     let lifecycle = null;
     const inputListeners = new Set(), handlers = new Map(), surfaceListeners = new Map(), surfaces = new Map();
+    let activeActions = 0;
     let inputs = config.inputs || {};
     const clientRequest = (type, body = {}, transfer) => new Promise((resolve, reject) => {
       const requestId = String(++nextRequest); pending.set(requestId, { resolve, reject });
@@ -85,6 +88,27 @@ function bridgeSource(init: SandboxInit): string {
         write(sink, offset, bytes) { return clientRequest('ks-client-file-write', { sink, offset, bytes }, [bytes]); },
         close(sink) { return clientRequest('ks-client-file-close', { sink }); },
         abort(sink) { return clientRequest('ks-client-file-abort', { sink }); },
+        save_prompt({ suggested_name, mime }) {
+          if (!activeActions) return Promise.reject(new Error('파일 저장 창은 클라이언트 동작 안에서 열어야 합니다'));
+          return clientRequest('ks-client-save-prompt', { suggested_name, mime });
+        },
+      },
+      host: {
+        can_share(file_id) {
+          if (!config.capabilities?.includes('share')) return Promise.reject(new Error('앱에 share capability가 선언되지 않았습니다'));
+          if (!activeActions) return Promise.reject(new Error('host API는 클라이언트 동작 안에서 호출해야 합니다'));
+          return clientRequest('ks-client-can-share', { file_id });
+        },
+        share(file_id, title) {
+          if (!config.capabilities?.includes('share')) return Promise.reject(new Error('앱에 share capability가 선언되지 않았습니다'));
+          if (!activeActions) return Promise.reject(new Error('host API는 클라이언트 동작 안에서 호출해야 합니다'));
+          return clientRequest('ks-client-share', { file_id, title });
+        },
+        keep_awake(enabled) {
+          if (!config.capabilities?.includes('keep_awake')) return Promise.reject(new Error('앱에 keep_awake capability가 선언되지 않았습니다'));
+          if (!activeActions) return Promise.reject(new Error('host API는 클라이언트 동작 안에서 호출해야 합니다'));
+          return clientRequest('ks-client-keep-awake', { enabled });
+        },
       },
       assets: { bytes(id) { return clientRequest('ks-client-asset-bytes', { id }); } },
       http: { read({ permission, path, query = {} }) { return clientRequest('ks-client-http-read', { permission, path, query }); } },
@@ -113,7 +137,7 @@ function bridgeSource(init: SandboxInit): string {
         });
       }
       if (data.type === 'ks-client-inputs') { inputs = data.inputs; inputListeners.forEach(fn => fn(inputs, data.changed)); }
-      if (data.type === 'ks-client-action') { const handler = handlers.get(data.name); if (handler) Promise.resolve().then(() => handler(data.context)).catch(error => send('ks-client-notice', { message: String(error), error: true })); }
+      if (data.type === 'ks-client-action' && config.actions?.includes(data.name)) { const handler = handlers.get(data.name); if (handler) { activeActions += 1; Promise.resolve().then(() => handler(data.context)).catch(error => send('ks-client-notice', { message: String(error), error: true })).finally(() => { activeActions -= 1; }); } }
       if (data.type === 'ks-client-ping') send('ks-client-pong');
       if (data.type === 'ks-client-reply') { const job = pending.get(data.requestId); if (job) { pending.delete(data.requestId); data.error ? job.reject(new Error(data.error)) : job.resolve(data.result); } }
       if (data.type === 'ks-client-surface') {
