@@ -45,6 +45,7 @@ export class WindowData {
   private shareListeners = new Set<() => void>();
   private shareSequence = 0;
   private dormantPointers = new Set<string>();
+  private dormantScheduled = false;
   private restarting = false;
   private surfaceGeneration = 0;
   private surfaces = new Map<string, { id: string; generation: number; canvas: OffscreenCanvas; css_width: number; css_height: number; dpr: number }>();
@@ -130,7 +131,7 @@ export class WindowData {
     this.ready = enqueue(this.store, this.windowId, async () => {
       if (!this.active || mount !== this.mounts) return;
       try {
-        const reply = await this.store.call({ op: "data.attach", window_id: this.windowId });
+        const reply = await this.store.call({ op: "data.attach", window_id: this.windowId, dormant: [...this.dormantPointers] });
         if (!this.active || mount !== this.mounts) return;
         this.merge(reply.view);
         this.initialized = true;
@@ -162,8 +163,20 @@ export class WindowData {
   syncClient = () => this.runtime?.sync();
 
   setDormant = (pointer: string, dormant: boolean) => {
+    if (this.dormantPointers.has(pointer) === dormant) return;
     if (dormant) this.dormantPointers.add(pointer);
     else this.dormantPointers.delete(pointer);
+    if (!this.active || this.dormantScheduled) return;
+    this.dormantScheduled = true;
+    const mount = this.mounts;
+    queueMicrotask(() => {
+      this.dormantScheduled = false;
+      void this.ready.then(async () => {
+        if (!this.active || mount !== this.mounts || !this.initialized) return;
+        try { await this.store.call({ op: "data.dormant", window_id: this.windowId, dormant: [...this.dormantPointers] }); }
+        catch (error) { if (this.active && mount === this.mounts) this.setNotice(toCoreError(error).message); }
+      });
+    });
   };
 
   attachSurface = (id: string, canvas: OffscreenCanvas, css_width: number, css_height: number, dpr: number) => {

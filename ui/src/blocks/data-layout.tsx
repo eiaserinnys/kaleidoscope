@@ -39,7 +39,7 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
   </div>{block.tabs.map((_, tabIndex) => <DormantPointer
     dormant={tabIndex !== index}
     key={tabIndex}
-    pointer={`${pointer}/tabs/${tabIndex}/child`}
+    pointer={`${pointer}/tabs/${tabIndex}`}
   />)}<div className="ks-data-tab-panel" role="tabpanel">{renderBlock(block.tabs[index].child, context, `${pointer}/tabs/${index}/child`)}</div></div>;
 }
 
