@@ -241,6 +241,22 @@ describe("folder block", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(message);
   });
 
+  it("뿌리에 놓은 뒤 현재 행 대신 목록에 포커스를 둔다", async () => {
+    setup(fileFolderDefinition("readwrite", false), (transport) => {
+      const original = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "files.move"
+        ? { op: "files.move", results: request.paths.map((path) => ({ path, ok: { from: path, to: "a.md" } })) }
+        : original(request));
+    }, { "notes/a.md": "a", "readme.md": "r" });
+    fireEvent.click(await screen.findByRole("treeitem", { name: "notes" }));
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    act(() => a.focus());
+    const data = new Map<string, string>();
+    const dataTransfer = { setData: (key: string, value: string) => data.set(key, value), getData: (key: string) => data.get(key) ?? "", effectAllowed: "", dropEffect: "" };
+    fireEvent.dragStart(a, { dataTransfer }); fireEvent.drop(screen.getByRole("treeitem", { name: "readme.md" }), { dataTransfer });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("tree")));
+  });
+
   it("포커스 행을 선택에서 빼도 Delete와 잘라내기는 남은 선택을 쓴다", async () => {
     setup(fileFolderDefinition("readwrite", false), undefined, { "a.md": "a", "b.md": "b", "notes/n.md": "n" });
     const a = await screen.findByRole("treeitem", { name: "a.md" });

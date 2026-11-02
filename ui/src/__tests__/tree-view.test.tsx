@@ -121,6 +121,20 @@ describe("공용 가상 트리", () => {
     expect(end.hasAttribute("data-menu-target")).toBe(false);
   });
 
+  it("끝 행은 Ctrl+A와 Shift+End 범위에서 제외한다", async () => {
+    const selected = vi.fn();
+    render(<TreeView className="ks-file-tree-list" expanded={new Set()} label="끝 행 선택"
+      nodes={[{ id: "a", label: "a" }, { id: "b", label: "b" }]}
+      endAction={{ label: "새 문서", onActivate: vi.fn() }} selection={[]} onSelectionChange={selected}
+      onActivate={() => {}} onExpandedChange={() => {}} />);
+    const a = await screen.findByRole("treeitem", { name: "a" });
+    fireEvent.keyDown(a, { key: "a", ctrlKey: true });
+    expect(selected).toHaveBeenLastCalledWith(["a", "b"]);
+    fireEvent.click(a);
+    fireEvent.keyDown(a, { key: "End", shiftKey: true });
+    expect(selected).toHaveBeenLastCalledWith(["a", "b"]);
+  });
+
   it("화면 밖 목적지가 overscan에 남아도 가리킨 행에 놓기 표시를 옮긴다", async () => {
     const drag = { enabled: true, targetId: "dir-0", hoveredId: "item-0-5", valid: true,
       onStart: vi.fn(), onOver: vi.fn(), onDrop: vi.fn(), onEnd: vi.fn(), onLeave: vi.fn() };
