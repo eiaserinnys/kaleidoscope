@@ -1,8 +1,13 @@
 import bridgeSource from "./html-bridge/main.ts?iife";
+import { sourceHash } from "./html-bridge/identity";
 
 export function sanitizeHtml(root: Document | DocumentFragment): void {
   root.querySelectorAll("script, iframe, frame, object, embed, base, meta[http-equiv]").forEach((element) => element.remove());
   root.querySelectorAll("*").forEach((element) => {
+    const srcHash = sourceHash(element.getAttribute("src"));
+    const href = element.getAttribute("href");
+    if (srcHash) element.setAttribute("data-ks-src-hash", srcHash);
+    if (href) element.setAttribute("data-ks-href", href);
     for (const attr of Array.from(element.attributes)) {
       const name = attr.name.toLowerCase();
       const value = attr.value.replace(/[\u0000-\u0020]+/g, "").toLowerCase();

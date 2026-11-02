@@ -16,7 +16,7 @@ export interface HtmlAnchor {
 }
 export type AnchorStatus = "exact" | "moved" | "orphan";
 export interface FrameSelection { n: number; anchor: HtmlAnchor; styles: Record<string, string> }
-export interface FrameComment { id: string; anchor: HtmlAnchor; number: number }
+export interface FrameComment { id: string; anchor: HtmlAnchor; number: number; sameRevision: boolean }
 export type FrameToParent =
   | { type: "ks-html-ready" }
   | { type: "ks-html-visible-text"; text: string }
@@ -27,6 +27,7 @@ export type FrameToParent =
   | { type: "ks-html-text-edit"; n: number; before: string; after: string };
 export type ParentToFrame =
   | { type: "ks-html-mode"; mode: "select" | "view" }
+  | { type: "ks-html-select-number"; n: number | null }
   | { type: "ks-html-comments"; comments: FrameComment[] }
   | { type: "ks-html-focus-comment"; id: string }
   | { type: "ks-html-edit"; edit: HtmlEdit };

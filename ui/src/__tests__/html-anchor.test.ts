@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import sample from "./fixtures/html-report-sample.html?raw";
 import { createAnchor, resolveAnchor } from "../blocks/html-bridge/anchor";
 
 const parse = (html: string) => new DOMParser().parseFromString(html, "text/html");
+beforeAll(() => { if (!globalThis.CSS) vi.stubGlobal("CSS", { escape: (value: string) => value.replace(/([^a-zA-Z0-9_-])/g, "\\$1") }); });
 const textAnchor = (element: Element) => {
   const node = element.firstChild!;
   const range = element.ownerDocument.createRange();
@@ -60,5 +61,6 @@ describe("리비전에서 커멘트 다시 찾기", () => {
     const next = parse('<main><section><img src="data:image/png;base64,YQ=="></section><section><div></div></section></main>');
     expect(resolveAnchor(next, image).element).toBe(next.querySelector("img"));
     expect(resolveAnchor(next, blank).status).toBe("orphan");
+    expect(resolveAnchor(old, blank, true).element).toBe(old.querySelector("div"));
   });
 });
