@@ -9,8 +9,7 @@ pub(super) struct PreparedAsset {
 }
 
 pub(super) fn prepare(upload: &AssetUpload) -> Result<PreparedAsset, CoreError> {
-    let bytes = kaleidoscope_data::asset_validation::validate_upload(upload)
-        .map_err(|message| CoreError::with_details(ErrorCode::InvalidRequest, vec![message]))?;
+    let bytes = kaleidoscope_data::asset_validation::validate_upload(upload)?;
     Ok(PreparedAsset {
         upload: upload.clone(),
         bytes,
@@ -87,7 +86,12 @@ pub(super) fn insert(
         {
             return Ok(existing);
         }
-        return Err(CoreError::new(ErrorCode::Conflict));
+        return Err(
+            kaleidoscope_contract::errors::ASSET_REGISTER_VERSION_CONFLICT(
+                &upload.id,
+                upload.version,
+            ),
+        );
     }
     let meta = AssetMeta {
         id: upload.id.clone(),
@@ -113,13 +117,12 @@ pub(super) fn verify_dependencies(
         if !kaleidoscope_contract::builtin::is_bundled_asset(&asset.id, asset.version)
             && get_in(tx, account, &asset.id, asset.version)?.is_none()
         {
-            return Err(CoreError::with_details(
-                ErrorCode::InvalidAppDefinition,
-                vec![format!(
-                    "등록되지 않은 자산입니다: {} 판 {}",
-                    asset.id, asset.version
-                )],
-            ));
+            return Err(
+                kaleidoscope_contract::errors::ASSET_APP_DEPENDENCY_NOT_FOUND(
+                    &asset.id,
+                    asset.version,
+                ),
+            );
         }
     }
     Ok(())
@@ -132,11 +135,21 @@ pub(super) fn verify_client_entry(
 ) -> Result<(), CoreError> {
     if let Some(client) = &definition.client {
         let asset = get_in(db, account, &client.entry.id, client.entry.version)?;
-        if !asset.is_some_and(|(meta, _)| meta.format == AssetFormat::Javascript) {
-            return Err(CoreError::with_details(
-                ErrorCode::InvalidAppDefinition,
-                vec!["클라이언트 진입 자산은 javascript 형식이어야 합니다".into()],
-            ));
+        let Some((meta, _)) = asset else {
+            return Err(
+                kaleidoscope_contract::errors::ASSET_APP_CLIENT_ENTRY_NOT_FOUND(
+                    &client.entry.id,
+                    client.entry.version,
+                ),
+            );
+        };
+        if meta.format != AssetFormat::Javascript {
+            return Err(
+                kaleidoscope_contract::errors::ASSET_APP_CLIENT_ENTRY_FORMAT_INVALID(
+                    &client.entry.id,
+                    client.entry.version,
+                ),
+            );
         }
     }
     Ok(())
@@ -208,9 +221,10 @@ pub(super) async fn device_get(
             )
                 .into_response()
         }
-        Ok(None) => {
-            super::http::error_response(StatusCode::NOT_FOUND, CoreError::new(ErrorCode::NotFound))
-        }
+        Ok(None) => super::http::error_response(
+            StatusCode::NOT_FOUND,
+            kaleidoscope_contract::errors::ASSET_DOWNLOAD_NOT_FOUND(&id, version),
+        ),
         Err(error) => super::http::error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
     }
 }

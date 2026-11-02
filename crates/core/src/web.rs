@@ -1,8 +1,6 @@
-use crate::{app_commands, error, Core, CoreState, Inner};
+use crate::{app_commands, Core, CoreState, Inner};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use kaleidoscope_contract::{
-    Block, CoreError, CoreEvent, CoreReply, CoreRequest, ErrorCode, WebPage,
-};
+use kaleidoscope_contract::{errors, Block, CoreError, CoreEvent, CoreReply, CoreRequest, WebPage};
 use std::time::{Duration, Instant};
 
 pub(crate) const WEB_FOLLOW_SECS: u64 = 10;
@@ -25,16 +23,16 @@ pub(crate) fn window_web(state: &CoreState, id: &str) -> Result<Option<String>, 
         .windows
         .iter()
         .find(|w| w.id == id)
-        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        .ok_or_else(|| errors::WEB_REQUEST_WINDOW_NOT_FOUND(id))?;
     let app = state
         .shared
         .apps
         .iter()
         .find(|a| a.id == window.app_id)
-        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        .ok_or_else(|| errors::WEB_REQUEST_APP_NOT_FOUND(id))?;
     let definition = app_commands::definition_for(&state.shared, &app.id, app.current_version)
-        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
-    web_block(&definition.ui).ok_or_else(|| error::make(ErrorCode::InvalidRequest))
+        .ok_or_else(|| errors::WEB_REQUEST_DEFINITION_NOT_FOUND(id))?;
+    web_block(&definition.ui).ok_or_else(|| errors::WEB_REQUEST_BLOCK_MISSING(id))
 }
 
 pub(crate) fn handle(inner: &Inner, request: CoreRequest) -> Result<CoreReply, CoreError> {
@@ -58,15 +56,23 @@ pub(crate) fn handle(inner: &Inner, request: CoreRequest) -> Result<CoreReply, C
         _ => unreachable!(),
     };
     window_web(&inner.state.lock().unwrap(), window_id)?;
-    if let CoreRequest::WebAttach { url, .. } | CoreRequest::WebNavigate { url, .. } = &request {
-        if !kaleidoscope_contract::validate::valid_web_url(url) {
-            return Err(error::make(ErrorCode::InvalidRequest));
+    match &request {
+        CoreRequest::WebAttach { url, .. }
+            if !kaleidoscope_contract::validate::valid_web_url(url) =>
+        {
+            return Err(errors::WEB_ATTACH_URL_INVALID(window_id));
         }
+        CoreRequest::WebNavigate { url, .. }
+            if !kaleidoscope_contract::validate::valid_web_url(url) =>
+        {
+            return Err(errors::WEB_NAVIGATE_URL_INVALID(window_id));
+        }
+        _ => {}
     }
     let web = inner
         .host
         .web()
-        .ok_or_else(|| error::make(ErrorCode::Unavailable))?;
+        .ok_or_else(|| errors::WEB_REQUEST_HOST_UNAVAILABLE(window_id))?;
     match request {
         CoreRequest::WebAttach { window_id, url } => {
             let inserted = inner.web_attached.lock().unwrap().insert(window_id.clone());
