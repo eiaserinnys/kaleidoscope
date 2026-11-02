@@ -5,7 +5,7 @@ import { Folder, FolderOpen, MessageSquare } from "../components/icons";
 import { Select, Toggle } from "../components/select-toggle";
 import { toCoreError } from "../core/core-transport";
 import { useBinding } from "../data/window-data";
-import type { BlockContext } from "./block-context";
+import type { LegacyBlockContext as BlockContext } from "./block-context";
 import { useShareDescriber } from "../share/visible";
 import { flushShareViews } from "../share/share-view";
 import { HistoryAttachmentView, ImagePreview, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";

@@ -10,6 +10,7 @@ import { FileEditorSession, type FileEditorSnapshot } from "./file-editor-sessio
 import { documentEditorSession } from "./document-editor-session";
 import { EditorConflict } from "./editor-conflict";
 import { createMarkdownEditorState } from "./markdown-editor-state";
+import { useWindowGrant, useWindowStateValue } from "../data/window-state";
 
 type MarkdownEditorBlockData = Extract<Block, { type: "markdown" }>;
 type FileMarkdownEditorBlockData = MarkdownEditorBlockData & { file: FileRef };
@@ -21,12 +22,11 @@ export function MarkdownEditorBlock({ block, context }: { block: MarkdownEditorB
 }
 
 function FileMarkdownEditorBlock({ block, context }: { block: FileMarkdownEditorBlockData; context: BlockContext }) {
-  const path = resolveFilePath(block.file, context.window);
+  const stateValue = useWindowStateValue(context, typeof block.file.path === "string" ? null : block.file.path.state);
+  const path = resolveFilePath(block.file, stateValue);
   const emptyShareRef = useRef<HTMLDivElement>(null);
   useShareDescriber(emptyShareRef, () => ({ text: "[마크다운 편집기]", visual: false }));
-  const grantRoot = context.snapshot.device.grants.find(
-    (item) => item.window_id === context.window.id && item.permission === block.file.permission,
-  )?.root_path ?? null;
+  const grantRoot = useWindowGrant(context, block.file.permission)?.root_path ?? null;
   const hasGrant = grantRoot !== null;
   const session = useMemo(
     () => new FileEditorSession(context.store, context.window.id, block.file.permission),

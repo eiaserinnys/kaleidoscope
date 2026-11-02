@@ -1,11 +1,12 @@
 import { useRef, useState, type KeyboardEvent } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
-import { useBinding } from "../data/window-data";
+import { useBinding, useDormant } from "../data/window-data";
 import { DataState } from "../components/data-state";
 import { ChevronDown, ChevronRight } from "../components/icons";
 import { MarkdownText } from "./markdown-text";
 import { renderBlock } from "../render/render-block";
+import { patchWindowState, useWindowStateValue } from "../data/window-state";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 
@@ -20,11 +21,12 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
   const [local, setLocal] = useState(0);
   const [focused, setFocused] = useState(0);
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
-  const value = block.selected ? context.window.state[block.selected.state] : local;
+  const selected = useWindowStateValue(context, block.selected?.state ?? null);
+  const value = block.selected ? selected : local;
   const index = typeof value === "number" && value >= 0 && value < block.tabs.length ? value : 0;
   const select = (next: number) => {
     if (!block.selected) setLocal(next);
-    if (block.on_change) void context.store.call({ op: "window.set_state", window_id: context.window.id, state: { ...context.window.state, [block.on_change.set_state]: next } });
+    if (block.on_change) void patchWindowState(context, { [block.on_change.set_state]: next });
   };
   const keyDown = (event: KeyboardEvent<HTMLButtonElement>, current: number) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -34,7 +36,11 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
   };
   return <div className="ks-data-tabs"><div className="ks-data-tab-list" role="tablist">
     {block.tabs.map((tab, n) => <button className={`ks-button ks-button-default${n === index ? " is-selected" : ""}`} role="tab" aria-selected={n === index} tabIndex={n === focused ? 0 : -1} key={n} ref={(element) => { refs.current[n] = element; }} onFocus={() => setFocused(n)} onKeyDown={(event) => keyDown(event, n)} onClick={() => select(n)}>{tab.label}</button>)}
-  </div><div className="ks-data-tab-panel" role="tabpanel">{renderBlock(block.tabs[index].child, context, `${pointer}/tabs/${index}/child`)}</div></div>;
+  </div>{block.tabs.map((_, tabIndex) => <DormantPointer
+    dormant={tabIndex !== index}
+    key={tabIndex}
+    pointer={`${pointer}/tabs/${tabIndex}`}
+  />)}<div className="ks-data-tab-panel" role="tabpanel">{renderBlock(block.tabs[index].child, context, `${pointer}/tabs/${index}/child`)}</div></div>;
 }
 
 export function ToolbarBlock({ block, context, pointer }: Props<"toolbar">) {
@@ -63,11 +69,17 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
       {titleState}
       {metaState}
     </div>
+    <DormantPointer dormant={collapsed} pointer={`${pointer}/child`} />
     {!collapsed ? <div className="ks-data-section-child">{renderBlock(block.child, context, `${pointer}/child`)}</div> : null}
   </section>;
 }
 
 export function display(value: unknown): string { return typeof value === "string" ? value : JSON.stringify(value, null, 2) ?? "null"; }
+
+function DormantPointer({ pointer, dormant }: { pointer: string; dormant: boolean }) {
+  useDormant(pointer, dormant);
+  return null;
+}
 
 export function TextBlock({ block, pointer }: Props<"text">) {
   const value = useBinding(`${pointer}/value`, block.value);

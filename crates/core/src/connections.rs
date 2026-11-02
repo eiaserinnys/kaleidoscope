@@ -24,6 +24,7 @@ pub(crate) trait LoginStore: Send + Sync {
 pub(crate) enum RequestError {
     Core(CoreError),
     Login(String),
+    RateLimited { retry_after: Option<u64> },
 }
 impl From<CoreError> for RequestError {
     fn from(error: CoreError) -> Self {
@@ -96,6 +97,7 @@ pub(crate) fn request(
             .map_err(server)?;
         let mut reply = ConnectionReply {
             status: response.status,
+            rate_limit: response.rate_limit,
             mime: response.mime,
             json: None,
             text: None,
@@ -306,6 +308,7 @@ fn oauth_request(
     }
     let mut response = builder.send().map_err(server)?;
     let status = response.status().as_u16();
+    let rate_limit = kaleidoscope_data::rate_limit::rate_limit(status, response.headers());
     let mime = response
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
@@ -326,6 +329,7 @@ fn oauth_request(
     }
     let mut reply = ConnectionReply {
         status,
+        rate_limit,
         mime,
         json: None,
         text: None,
@@ -357,4 +361,44 @@ pub(crate) fn response_error(reply: &ConnectionReply) -> CoreError {
         ErrorCode::Server,
         &format!("HTTP {}: {}", reply.status, excerpt),
     )
+}
+
+#[cfg(test)]
+mod rate_limit_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    #[test]
+    fn oauth_response_preserves_rate_limit_hint() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 4096];
+            stream.read(&mut request).unwrap();
+            stream.write_all(b"HTTP/1.1 429 Too Many Requests\r\nRetry-After: 7\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").unwrap();
+        });
+        let info = ConnectionInfo {
+            name: "test".into(),
+            kind: ConnectionKind::Oauth,
+            base_url: format!("http://{address}"),
+            writable: false,
+            paths: vec![],
+            issuer: None,
+            scopes: None,
+            resource: None,
+        };
+        let request = ConnectionRequest {
+            app_id: "test".into(),
+            method: HttpMethod::Get,
+            path: "/items".into(),
+            query: Default::default(),
+            body: None,
+            accept: ConnectionAccept::Json,
+        };
+        let reply = oauth_request(&info, "token", &request).unwrap();
+        assert_eq!(reply.rate_limit.unwrap().retry_after_secs, Some(7));
+        server.join().unwrap();
+    }
 }

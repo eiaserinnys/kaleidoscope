@@ -14,6 +14,7 @@ import { resolveFilePath } from "./file-path";
 import { FileGrant } from "./file-grant";
 import { htmlViewSource } from "./html-view-frame";
 import { editedHtml, htmlText, reportDocuments, shareHtmlReport, type HtmlElementSelection, type HtmlReportComment, type HtmlReportDocument, type HtmlReportRevision, type HtmlSelection } from "./html-view-model";
+import { patchWindowState, useWindowGrant, useWindowStateValue } from "../data/window-state";
 
 type HtmlViewData = Extract<Block, { type: "html_view" }>;
 const label: Record<HtmlReportComment["status"], string> = { needs_agent_review: "검토 요청", needs_user_reply: "답변 도착", resolved: "해결됨" };
@@ -53,8 +54,9 @@ function BoundHtmlViewBlock({ binding, pointer, context }: { binding: Binding; p
 }
 
 function FileHtmlViewBlock({ file, context }: { file: FileRef; context: BlockContext }) {
-  const path = resolveFilePath(file, context.window);
-  const rootPath = context.snapshot.device.grants.find((grant) => grant.window_id === context.window.id && grant.permission === file.permission)?.root_path ?? null;
+  const stateValue = useWindowStateValue(context, typeof file.path === "string" ? null : file.path.state);
+  const path = resolveFilePath(file, stateValue);
+  const rootPath = useWindowGrant(context, file.permission)?.root_path ?? null;
   const [rawHtml, setRawHtml] = useState("");
   const [visibleText, setVisibleText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -132,18 +134,18 @@ function HtmlDocumentViewBlock({ block, context }: { block: HtmlViewData & { doc
     return () => { readSeq.current++; unsubscribe(); };
   }, [read, context.store, context.window.id, block.document.entry]);
 
-  const state = context.window.state;
-  const doc = documents.find((item) => item.id === (block.selected_doc ? state[block.selected_doc.state] : null)) ?? documents[0];
+  const selectedDoc = useWindowStateValue(context, block.selected_doc?.state ?? null);
+  const doc = documents.find((item) => item.id === (block.selected_doc ? selectedDoc : null)) ?? documents[0];
   const latest = doc?.revisions.reduce<HtmlReportRevision | undefined>((best, item) => !best || item.rev > best.rev ? item : best, undefined);
-  const selectedValue = block.selected_revision ? state[block.selected_revision.state] : null;
+  const selectedState = useWindowStateValue(context, block.selected_revision?.state ?? null);
+  const selectedValue = block.selected_revision ? selectedState : null;
   const revision = doc?.revisions.find((item) => selectedValue !== null && selectedValue !== undefined && String(item.rev) === String(selectedValue)) ?? latest;
   const comments = revision?.comments ?? [];
   const source = useMemo(() => revision ? htmlViewSource(frameRestore?.html ?? revision.html) : "", [revision?.html, frameRestore?.html]);
 
   const setWindowState = useCallback((changes: Record<string, JsonValue>) => {
-    const current = context.store.getSnapshot()?.shared.windows.find((item) => item.id === context.window.id)?.state ?? context.window.state;
-    void context.store.call({ op: "window.set_state", window_id: context.window.id, state: { ...current, ...changes } }).catch((reason) => setError(toCoreError(reason).message));
-  }, [context.store, context.window]);
+    void patchWindowState(context, changes).catch((reason) => setError(toCoreError(reason).message));
+  }, [context.store, context.window.id]);
 
   useEffect(() => {
     if (!doc || !latest) return;

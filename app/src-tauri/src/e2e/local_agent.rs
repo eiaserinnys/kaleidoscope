@@ -172,6 +172,7 @@ fn open_and_run(
         core,
         CoreRequest::DataAttach {
             window_id: window_id.clone(),
+            dormant: vec![],
         },
     )?;
     let state = BTreeMap::from([("agent_id".into(), json!(AGENT_ID))]);

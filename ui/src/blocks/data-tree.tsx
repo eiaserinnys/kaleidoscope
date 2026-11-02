@@ -7,6 +7,7 @@ import { DataState } from "../components/data-state";
 import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { Badges, NoItems, asArray, isObject } from "./data-view-common";
+import { useWindowStateValue } from "../data/window-state";
 
 type Node = { id: string; title: string; item?: TreeItem; children: Node[] };
 export type DataTreeBlockData = Extract<Block, { type: "tree" }> & { items: Binding };
@@ -57,7 +58,8 @@ export function TreeBlock({ block, context, pointer }: { block: DataTreeBlockDat
 function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockData; context: BlockContext; pointer: string; value: unknown }) {
   const data = useWindowData();
   const nodes = useMemo(() => tree(value, block.by === "path"), [value, block.by]);
-  const selected = block.selected ? context.window.state[block.selected.state] : null;
+  const selectedValue = useWindowStateValue(context, block.selected?.state ?? null);
+  const selected = block.selected ? selectedValue : null;
   const [expanded, setExpanded] = useState(() => new Set(ancestors(nodes, selected) ?? []));
   const [focus, setFocus] = useState<string | null>(null);
   const container = useRef<HTMLDivElement>(null);

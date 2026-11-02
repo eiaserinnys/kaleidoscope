@@ -181,6 +181,7 @@ impl AppState {
                 )
             })?;
             let status = response.status().as_u16();
+            let rate_limit = kaleidoscope_data::rate_limit::rate_limit(status, response.headers());
             let mime = response
                 .headers()
                 .get(reqwest::header::CONTENT_TYPE)
@@ -228,6 +229,7 @@ impl AppState {
             Ok((
                 ConnectionReply {
                     status,
+                    rate_limit,
                     mime,
                     json,
                     text,

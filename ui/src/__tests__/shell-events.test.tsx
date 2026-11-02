@@ -127,7 +127,33 @@ describe("shell core events", () => {
       "가나가 커스텀", "가나가 커스텀", "가나다 커스텀",
     ]);
     fireEvent.click(screen.getByRole("menu").querySelectorAll('[role="menuitem"]')[7]);
-    await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "window.open", app_id: "custom-a" })));
+    await waitFor(() => expect(calls).toHaveBeenCalledWith({
+      op: "window.open",
+      desktop_id: "desktop-1",
+      app_id: "custom-a",
+      rect: { x: 112, y: 112, width: 836, height: 376 },
+    }));
+    const openedWindow = {
+      ...snapshot.shared.windows[0],
+      id: "custom-a-window",
+      app_id: "custom-a",
+      z: Math.max(...snapshot.shared.windows.map((window) => window.z)) + 1,
+    };
+    transport.emit({
+      event: "state.changed",
+      snapshot: {
+        ...snapshot,
+        shared: { ...snapshot.shared, windows: [...snapshot.shared.windows, openedWindow] },
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "앱 열기" }));
+    fireEvent.click(screen.getByRole("menu").querySelectorAll('[role="menuitem"]')[8]);
+    await waitFor(() => expect(calls).toHaveBeenCalledWith({
+      op: "window.open",
+      desktop_id: "desktop-1",
+      app_id: "custom-b",
+      rect: { x: 144, y: 144, width: 804, height: 344 },
+    }));
     store.dispose();
   });
 

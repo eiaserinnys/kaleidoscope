@@ -52,6 +52,7 @@ fn literal_agent_binding_reaches_execution_consent() {
     let window = open_window(&core, &desktop, "test-agent-literal");
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     core.handle(CoreRequest::WindowSetState {
@@ -106,6 +107,7 @@ fn literal_binding_change_restarts_worker_and_requires_new_consent() {
     let window = open_window(&core, &desktop, "literal-binding-agent");
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     select(&core, &window, "test-agent");
@@ -159,6 +161,7 @@ fn state_binding_null_stops_worker_and_returns_to_agent_choice() {
     let window = open_window(&core, &desktop, "state-binding-agent");
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     core.handle(CoreRequest::WindowSetState {
@@ -225,6 +228,7 @@ fn local_agent_window_lifecycle_and_generation() {
     let window = open_window(&core, &desktop, "test-agent");
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     assert_eq!(attach(&core, &window).phase, LocalAgentPhase::ChoosingAgent);

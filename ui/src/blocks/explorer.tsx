@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { App, AppDefinition, Block, ExplorerView } from "../contract/contract";
+import type { App, AppDefinition, Block, ExplorerView, ShellSnapshot } from "../contract/contract";
 import { Menu, type MenuEntry } from "../components/menu";
 import { Button, EmptyState } from "../components/primitives";
 import { Monitor } from "../components/icons";
@@ -8,6 +8,8 @@ import type { BlockContext } from "./block-context";
 import { FileBrowserTree } from "./file-browser-tree";
 import { SplitPanes } from "./split";
 import { ExplorerContent } from "./explorer-content";
+import { patchWindowState, useWindowGrant, useWindowStateValue } from "../data/window-state";
+import { useShellSelector } from "../core/shell-store";
 
 type ExplorerBlockData = Extract<Block, { type: "explorer" }>;
 
@@ -16,7 +18,7 @@ interface OpenableApp {
   name: string;
 }
 
-export function findAppsForExtension(snapshot: BlockContext["snapshot"], extension: string): OpenableApp[] {
+export function findAppsForExtension(snapshot: ShellSnapshot, extension: string): OpenableApp[] {
   const normalized = extension.toLowerCase();
   return snapshot.shared.apps
     .flatMap((app: App) => {
@@ -28,7 +30,7 @@ export function findAppsForExtension(snapshot: BlockContext["snapshot"], extensi
     .sort((left, right) => left.name.localeCompare(right.name, "ko") || left.id.localeCompare(right.id));
 }
 
-function currentDefinition(versions: BlockContext["snapshot"]["shared"]["app_versions"], app: App): AppDefinition | undefined {
+function currentDefinition(versions: ShellSnapshot["shared"]["app_versions"], app: App): AppDefinition | undefined {
   return versions.find((version) => version.app_id === app.id && version.version === app.current_version)?.definition;
 }
 
@@ -52,25 +54,21 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
   );
   const permissionLabel = filesPermission?.module === "files" ? filesPermission.label : permission;
   const scope = filesPermission?.module === "files" && filesPermission.scope === "pc" ? "pc" : "folder";
-  const grant = context.snapshot.device.grants.find(
-    (item) => item.window_id === context.window.id && item.permission === permission,
-  ) ?? null;
-  const pcAccess = scope === "pc" && context.snapshot.device.pc_access.some(
+  const grant = useWindowGrant(context, permission) ?? null;
+  const pcAccess = useShellSelector(context.store, (snapshot) => scope === "pc" && Boolean(snapshot?.device.pc_access.some(
     (item) => item.app_id === context.window.app_id && item.permission === permission,
-  );
+  )));
   const rootPath = scope === "pc" ? pcAccess ? "" : null : grant?.root_path ?? null;
   const [localFolder, setLocalFolder] = useState("");
   const [localView, setLocalView] = useState<ExplorerView>("icons");
   const [actionError, setActionError] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ anchor: HTMLElement; entries: MenuEntry[] } | null>(null);
   const previousRoot = useRef(rootPath);
-  const windowStateRef = useRef(context.window.state);
-  windowStateRef.current = context.window.state;
-  const folderValue = block.folder ? context.window.state[block.folder.state] : undefined;
+  const folderValue = useWindowStateValue(context, block.folder?.state ?? null);
   const folder = block.folder
     ? validFolderPath(folderValue) ? folderValue : ""
     : localFolder;
-  const viewValue = block.view ? context.window.state[block.view.state] : undefined;
+  const viewValue = useWindowStateValue(context, block.view?.state ?? null);
   const view: ExplorerView = block.view
     ? viewValue === "details" ? "details" : "icons"
     : localView;
@@ -81,11 +79,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
     setMenu(null);
     if (!block.on_folder) return;
     try {
-      await context.store.call({
-        op: "window.set_state",
-        window_id: context.window.id,
-        state: { ...windowStateRef.current, [block.on_folder.set_state]: path },
-      });
+      await patchWindowState(context, { [block.on_folder.set_state]: path });
     } catch (error) {
       setActionError(toCoreError(error).message);
     }
@@ -95,11 +89,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
     setLocalView(next);
     if (!block.on_view) return;
     try {
-      await context.store.call({
-        op: "window.set_state",
-        window_id: context.window.id,
-        state: { ...windowStateRef.current, [block.on_view.set_state]: next },
-      });
+      await patchWindowState(context, { [block.on_view.set_state]: next });
     } catch (error) {
       setActionError(toCoreError(error).message);
     }
@@ -126,7 +116,10 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
     if (block.folder && folderValue !== undefined && folderValue !== folder) void navigate("");
   }, [block.folder, block.on_folder, folder, folderValue]);
 
-  const appsFor = (path: string) => findAppsForExtension(context.snapshot, fileExtension(path));
+  const appsFor = (path: string) => {
+    const snapshot = context.store.getSnapshot();
+    return snapshot ? findAppsForExtension(snapshot, fileExtension(path)) : [];
+  };
   const openWith = async (path: string, app: OpenableApp) => {
     setActionError(null);
     try {

@@ -225,7 +225,7 @@ pub(crate) fn act(
                 )?;
                 super::storage::written(inner, window_id, &entry, value, revision);
             }
-            Step::Refresh { names } => refresh(inner, window_id, &names, true)?,
+            Step::Refresh { names } => refresh(inner, window_id, &names, true, true)?,
             Step::Call {
                 permission,
                 method,
@@ -246,6 +246,7 @@ pub(crate) fn act(
                 .map_err(|err| match err {
                     RequestError::Core(err) => err,
                     RequestError::Login(_) => error::make(ErrorCode::NotGranted),
+                    RequestError::RateLimited { .. } => error::make(ErrorCode::Unavailable),
                 })?;
                 if !(200..300).contains(&reply.status) {
                     return Err(connections::response_error(&reply));

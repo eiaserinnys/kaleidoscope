@@ -218,7 +218,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 23;
+pub const CONTRACT_VERSION: u32 = 24;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -3400,7 +3400,18 @@ pub enum CoreRequest {
     /// 이어 둔 동안만 `refresh_secs`와 포커스 때 다시 받기가 돈다. 받은 값은 창이 닫히거나 앱의 새 버전으로 옮길
     /// 때까지 코어가 들고 있어, 다른 데스크톱에 갔다 와도 다시 받지 않는다.
     #[serde(rename = "data.attach")]
-    DataAttach { window_id: String },
+    DataAttach {
+        window_id: String,
+        #[serde(default)]
+        #[ts(optional, as = "Option<Vec<String>>")]
+        dormant: Vec<String>,
+    },
+    /// 화면에서 쉬고 있는 블록 자리의 목록을 바꾼다.
+    #[serde(rename = "data.dormant")]
+    DataDormant {
+        window_id: String,
+        dormant: Vec<String>,
+    },
     /// 창의 데이터 잇기를 놓는다. 블록이 화면에서 빠질 때 부른다. 이어 둔 화면이 하나도 없으면 다시 받기를 멈춘다.
     #[serde(rename = "data.detach")]
     DataDetach { window_id: String },
@@ -3782,6 +3793,8 @@ pub enum CoreReply {
 
     #[serde(rename = "data.attach")]
     DataAttach { view: data::DataView },
+    #[serde(rename = "data.dormant")]
+    DataDormant {},
     #[serde(rename = "data.detach")]
     DataDetach {},
     #[serde(rename = "data.act")]

@@ -40,10 +40,12 @@ function KeypadReady({ block, context, pointer, buttons }: { block: Extract<Bloc
       if (event.key === "Enter" && focusedButton && (!element.contains(focusedButton) || !pointerFocus.current)) return;
       const overlays = document.querySelectorAll('[role="dialog"], [role="menu"], dialog[open]');
       if ([...overlays].some((overlay) => !overlay.closest('[hidden], [inert], [aria-hidden="true"]'))) return;
-      const desktop = context.snapshot.shared.desktops.find((item) => item.id === context.window.desktop_id);
-      if (desktop && (context.snapshot.device.active_workspace_id !== desktop.workspace_id || context.snapshot.device.active_desktop_ids[desktop.workspace_id] !== desktop.id)) return;
-      const windows = context.snapshot.shared.windows.filter((item) => item.desktop_id === context.window.desktop_id);
-      if (windows.some((item) => item.z > context.window.z)) return;
+      const snapshot = context.store.getSnapshot();
+      const desktop = snapshot?.shared.desktops.find((item) => item.id === context.window.desktop_id);
+      if (desktop && (snapshot?.device.active_workspace_id !== desktop.workspace_id || snapshot?.device.active_desktop_ids[desktop.workspace_id] !== desktop.id)) return;
+      const currentWindow = snapshot?.shared.windows.find((item) => item.id === context.window.id);
+      const windows = snapshot?.shared.windows.filter((item) => item.desktop_id === context.window.desktop_id) ?? [];
+      if (currentWindow && windows.some((item) => item.z > currentWindow.z)) return;
       const enabledButtons = buttons.filter((item) => !item.disabled);
       const directButton = enabledButtons.find((item) => item.shortcut === event.key);
       const button = directButton ?? (event.key.length === 1
@@ -68,7 +70,7 @@ function KeypadReady({ block, context, pointer, buttons }: { block: Extract<Bloc
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [buttons, context.snapshot, context.window, data, pointer]);
+  }, [buttons, context.store, context.window.id, context.window.desktop_id, data, pointer]);
   return <div ref={root} className="ks-keypad" onPointerDownCapture={() => { pointerFocus.current = true; }} style={{ "--ks-keypad-columns": block.columns } as CSSProperties}>
     {buttons.map((button) => <div key={button.key} className={`ks-keypad-cell is-${button.variant ?? "default"}`} data-key={button.key} data-shortcut={button.shortcut} style={{ "--ks-keypad-span": button.span ?? 1 } as CSSProperties}>
       <Button variant={button.variant === "primary" ? "emphasis" : "default"} disabled={button.disabled} onClick={() => press(button)}>

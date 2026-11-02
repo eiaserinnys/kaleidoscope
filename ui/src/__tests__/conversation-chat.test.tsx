@@ -49,7 +49,7 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
   const store = { call, getSnapshot: () => snapshot, getError: () => null, subscribe: () => () => {}, subscribeEvents: (fn: (event: CoreEvent) => void) => { listeners.add(fn); return () => listeners.delete(fn); }, ready: Promise.resolve(), dispose: () => {} } as unknown as ShellStore;
   const window = snapshot.shared.windows[0];
   const context = { store, snapshot, window, definition: appDefinition };
-  const view = render(<WindowDataProvider store={store} appWindow={window} definition={appDefinition}><AgentChatBlock block={{ type: "chat" }} context={context} /></WindowDataProvider>);
+  const view = render(<WindowDataProvider store={store} windowId={window.id} definition={appDefinition}><AgentChatBlock block={{ type: "chat" }} context={context} /></WindowDataProvider>);
   return {
     call,
     window,
@@ -57,7 +57,7 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
     rerenderSnapshot: () => {
       const nextWindow = { ...window, state: { ...window.state, changed_by_other_window: true } };
       const nextSnapshot = { ...snapshot, shared: { ...snapshot.shared } };
-      view.rerender(<WindowDataProvider store={store} appWindow={nextWindow} definition={appDefinition}><AgentChatBlock block={{ type: "chat" }} context={{ ...context, snapshot: nextSnapshot, window: nextWindow }} /></WindowDataProvider>);
+      view.rerender(<WindowDataProvider store={store} windowId={nextWindow.id} definition={appDefinition}><AgentChatBlock block={{ type: "chat" }} context={{ ...context, snapshot: nextSnapshot, window: nextWindow }} /></WindowDataProvider>);
     },
   };
 }

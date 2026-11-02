@@ -9,6 +9,7 @@ import { useShareDescriber } from "../share/visible";
 import { MarkdownText } from "./markdown-text";
 import { createDocumentEditorTarget } from "./file-editor-session";
 import { useBinding } from "../data/window-data";
+import { useWindowGrant, useWindowStateValue } from "../data/window-state";
 
 type MarkdownViewBlockData = Extract<Block, { type: "markdown" }>;
 type FileMarkdownViewBlockData = MarkdownViewBlockData & { file: FileRef };
@@ -62,10 +63,9 @@ function DocumentMarkdownViewBlock({ entry, context }: { entry: string; context:
 }
 
 function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBlockData; context: BlockContext }) {
-  const path = resolveFilePath(block.file, context.window);
-  const grantRoot = context.snapshot.device.grants.find(
-    (item) => item.window_id === context.window.id && item.permission === block.file.permission,
-  )?.root_path ?? null;
+  const stateValue = useWindowStateValue(context, typeof block.file.path === "string" ? null : block.file.path.state);
+  const path = resolveFilePath(block.file, stateValue);
+  const grantRoot = useWindowGrant(context, block.file.permission)?.root_path ?? null;
   const grant = grantRoot !== null;
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);

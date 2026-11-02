@@ -2,6 +2,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 pub mod asset_validation;
 pub mod public_http;
+pub mod rate_limit;
 pub mod share;
 
 use jsonata_core::{

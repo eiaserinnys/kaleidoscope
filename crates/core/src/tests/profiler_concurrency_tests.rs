@@ -151,6 +151,7 @@ fn action_uses_current_state_after_a_waiting_call() {
     client.connection_replies.lock().unwrap().insert(
         "/old".into(),
         kaleidoscope_contract::registry::ConnectionReply {
+            rate_limit: None,
             status: 200,
             mime: "application/json".into(),
             json: Some(json!({})),
@@ -185,6 +186,7 @@ fn action_uses_current_state_after_a_waiting_call() {
     let window = open_window(&core, &desktop, "action-wait");
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     let (release, pause) = mpsc::channel();

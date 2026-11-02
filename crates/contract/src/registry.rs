@@ -539,9 +539,19 @@ pub enum ConnectionAccept {
 }
 
 /// `relay` 연결 중계 응답. 원천의 응답 상태와 본문.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RateLimitHint {
+    /// 원천이 알린 대기 시간(초). 없으면 코어가 지수 대기한다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_after_secs: Option<u64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConnectionReply {
     pub status: u16,
+    /// 원천이 요청 한도를 알렸다. 없으면 한도 응답이 아니다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rate_limit: Option<RateLimitHint>,
     /// 원천의 `content-type`(없으면 빈 문자열).
     pub mime: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

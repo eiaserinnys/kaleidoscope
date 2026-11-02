@@ -44,7 +44,7 @@ export {
   type FakeTransportSeed,
   type FakeWebViewSnapshot,
 } from "./core/fake-transport";
-export { createShellStore, useShellSnapshot, type ShellStore } from "./core/shell-store";
+export { createShellStore, useShellSelector, type ShellStore } from "./core/shell-store";
 export { flushEditors } from "./blocks/file-editor-session";
 export { flushSandboxes } from "./blocks/sandbox-flush";
 export { toCoreError } from "./core/core-transport";

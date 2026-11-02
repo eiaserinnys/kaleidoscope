@@ -92,6 +92,11 @@ pub(crate) fn fetch(
                 None,
                 accept,
             )?;
+            if let Some(hint) = response.rate_limit.as_ref() {
+                return Err(RequestError::RateLimited {
+                    retry_after: hint.retry_after_secs,
+                });
+            }
             if !(200..300).contains(&response.status) {
                 return Err(connections::response_error(&response).into());
             }
