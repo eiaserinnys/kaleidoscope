@@ -155,100 +155,107 @@ pub(super) fn scenario(
         thread::sleep(Duration::from_millis(20));
     }
     ui(app,"window.spikeHide=(e,v)=>{e.style[window.spikeMode]=v?(window.spikeMode==='opacity'?'0':'hidden'):'';};return true;")?;
-    for mode in ["visibility", "opacity"] {
-        ui(app, &format!("window.spikeMode='{mode}';return true;"))?;
-        for flushes in [0, 1] {
-            for count in [1, 2] {
-                for wait in [1, 2] {
-                    let tag = format!("c{count}-f{wait}-d{flushes}-{mode}");
-                    fs::write(out.join("record.phase"), tag.as_bytes())
-                        .map_err(|e| e.to_string())?;
-                    let total = Instant::now();
-                    record(log,"focus.before",ui(app,"const i=document.querySelector('#spikeInput');i.focus();i.value='selection';i.setSelectionRange(2,5);window.spikeFocused=document.activeElement;return {active:document.activeElement?.id,selection:[i.selectionStart,i.selectionEnd]};")?)?;
-                    let before = on_ui(app, |_| native::foreground())?;
-                    let start = Instant::now();
-                    on_ui(app, move |hwnd| {
-                        native::begin_with_flush(hwnd, 5000, flushes)
-                    })??;
-                    let freeze = start.elapsed().as_millis();
-                    let start = Instant::now();
-                    let hidden=ui(app,"window.spikeHide(document.querySelector('#spikeB'),true);window.spikeA.hidden=false;return window.spikeRaf;")?;
-                    let hide_ms = start.elapsed().as_millis();
-                    let mut shots = Vec::new();
-                    for index in 0..count {
-                        ui(app, &format!("window.spikeHide(window.spikeA,{});window.spikeHide(window.spikeC,{});return true;",index!=0,index==0))?;
-                        let state = frames(app, wait)?;
-                        let ms = capture(app, out, &format!("{tag}-{index}"))?;
-                        shots.push(json!({"state":state,"capture_ms":ms}));
-                    }
-                    let start = Instant::now();
-                    ui(
+    let retained_only = setting("RETAINED_ONLY").is_some();
+    if !retained_only {
+        for mode in ["visibility", "opacity"] {
+            ui(app, &format!("window.spikeMode='{mode}';return true;"))?;
+            for flushes in [0, 1] {
+                for count in [1, 2] {
+                    for wait in [1, 2] {
+                        let tag = format!("c{count}-f{wait}-d{flushes}-{mode}");
+                        fs::write(out.join("record.phase"), tag.as_bytes())
+                            .map_err(|e| e.to_string())?;
+                        let total = Instant::now();
+                        record(log,"focus.before",ui(app,"const i=document.querySelector('#spikeInput');i.focus();i.value='selection';i.setSelectionRange(2,5);window.spikeFocused=document.activeElement;return {active:document.activeElement?.id,selection:[i.selectionStart,i.selectionEnd]};")?)?;
+                        let before = on_ui(app, |_| native::foreground())?;
+                        let start = Instant::now();
+                        on_ui(app, move |hwnd| {
+                            native::begin_with_flush(hwnd, 5000, flushes)
+                        })??;
+                        let freeze = start.elapsed().as_millis();
+                        let start = Instant::now();
+                        let hidden=ui(app,"window.spikeHide(document.querySelector('#spikeB'),true);window.spikeA.hidden=false;return window.spikeRaf;")?;
+                        let hide_ms = start.elapsed().as_millis();
+                        let mut shots = Vec::new();
+                        for index in 0..count {
+                            ui(app, &format!("window.spikeHide(window.spikeA,{});window.spikeHide(window.spikeC,{});return true;",index!=0,index==0))?;
+                            let state = frames(app, wait)?;
+                            let ms = capture(app, out, &format!("{tag}-{index}"))?;
+                            shots.push(json!({"state":state,"capture_ms":ms}));
+                        }
+                        let start = Instant::now();
+                        ui(
                 app,
                 "window.spikeHide(document.querySelector('#spikeB'),false);window.spikeHide(window.spikeA,false);window.spikeHide(window.spikeC,false);return true;",
             )?;
-                    let restored = frames(app, wait)?;
-                    record(log,"focus.restored",ui(app,"const before=document.activeElement?.id;window.spikeFocused.focus({preventScroll:true});return {before,after:document.activeElement?.id,selection:[window.spikeFocused.selectionStart,window.spikeFocused.selectionEnd]};")?)?;
-                    let restore_ms = start.elapsed().as_millis();
-                    let start = Instant::now();
-                    on_ui(app, move |_| {
-                        for _ in 0..flushes {
+                        let restored = frames(app, wait)?;
+                        record(log,"focus.restored",ui(app,"const before=document.activeElement?.id;window.spikeFocused.focus({preventScroll:true});return {before,after:document.activeElement?.id,selection:[window.spikeFocused.selectionStart,window.spikeFocused.selectionEnd]};")?)?;
+                        let restore_ms = start.elapsed().as_millis();
+                        let start = Instant::now();
+                        on_ui(app, move |_| {
+                            for _ in 0..flushes {
+                                native::flush();
+                            }
+                            native::end();
                             native::flush();
-                        }
-                        native::end();
-                        native::flush();
-                    })?;
-                    record(
-                        log,
-                        "freeze.measure",
-                        json!({"tag":tag,"count":count,"wait":wait,"dwm_flushes":flushes,"hide_mode":mode,"wall_ms":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis(),"native_parts_us":on_ui(app, |_| native::parts())?,"freeze_ms":freeze,"hide_ms":hide_ms,"raf_before":hidden,"captures":shots,"restore":restored,"restore_ms":restore_ms,"unfreeze_ms":start.elapsed().as_millis(),"total_ms":total.elapsed().as_millis(),"foreground_kept":before==on_ui(app,|_|native::foreground())?}),
-                    )?;
-                    thread::sleep(Duration::from_millis(300));
+                        })?;
+                        record(
+                            log,
+                            "freeze.measure",
+                            json!({"tag":tag,"count":count,"wait":wait,"dwm_flushes":flushes,"hide_mode":mode,"wall_ms":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis(),"native_parts_us":on_ui(app, |_| native::parts())?,"freeze_ms":freeze,"hide_ms":hide_ms,"raf_before":hidden,"captures":shots,"restore":restored,"restore_ms":restore_ms,"unfreeze_ms":start.elapsed().as_millis(),"total_ms":total.elapsed().as_millis(),"foreground_kept":before==on_ui(app,|_|native::foreground())?}),
+                        )?;
+                        thread::sleep(Duration::from_millis(300));
+                    }
                 }
             }
         }
-    }
-    fs::write(out.join("record.phase"), b"minimized").map_err(|e| e.to_string())?;
-    on_ui(app, |h| native::begin(h, 5000))??;
-    ui(
+        fs::write(out.join("record.phase"), b"minimized").map_err(|e| e.to_string())?;
+        on_ui(app, |h| native::begin(h, 5000))??;
+        ui(
         app,
         "window.spikeHide(document.querySelector('#spikeB'),true);window.spikeHide(window.spikeC,true);return true;",
     )?;
-    frames(app, 2)?;
-    capture(app, out, "minimized-reference")?;
-    record(log,"minimized.before",ui(app,"const s=window.spikeA.querySelector('.cm-scroller');return {scroll:s.scrollTop,width:s.clientWidth,height:s.clientHeight,lines:window.spikeA.querySelectorAll('.cm-line').length,webgl:!!window.spikeGL};")?)?;
-    ui(
+        frames(app, 2)?;
+        capture(app, out, "minimized-reference")?;
+        record(log,"minimized.before",ui(app,"const s=window.spikeA.querySelector('.cm-scroller');return {scroll:s.scrollTop,width:s.clientWidth,height:s.clientHeight,lines:window.spikeA.querySelectorAll('.cm-line').length,webgl:!!window.spikeGL};")?)?;
+        ui(
         app,
         "window.spikeHide(document.querySelector('#spikeB'),false);window.spikeHide(window.spikeA,false);window.spikeHide(window.spikeC,false);return true;",
     )?;
-    frames(app, 2)?;
-    on_ui(app, |_| {
-        native::flush();
-        native::end();
-    })?;
-    // DOM hidden 최소화 후 iframe 재등장을 프레임마다 측정한다.
-    ui(app, "window.spikeA.hidden=true;return true;")?;
-    frames(app, 2)?;
-    on_ui(app, |h| native::begin(h, 5000))??;
-    ui(app,"window.spikeHide(document.querySelector('#spikeB'),true);window.spikeA.hidden=false;window.spikeHide(window.spikeC,true);return true;")?;
-    for n in 1..=3 {
-        let state = frames(app, 1)?;
-        let ms = capture(app, out, &format!("minimized-frame-{n}"))?;
-        record(
-            log,
-            "minimized",
-            json!({"frame":n,"state":state,"capture_ms":ms,"editor":ui(app,"const s=window.spikeA.querySelector('.cm-scroller');return {scroll:s.scrollTop,width:s.clientWidth,height:s.clientHeight,lines:window.spikeA.querySelectorAll('.cm-line').length};")?}),
-        )?;
+        frames(app, 2)?;
+        on_ui(app, |_| {
+            native::flush();
+            native::end();
+        })?;
+        // DOM hidden 최소화 후 iframe 재등장을 프레임마다 측정한다.
+        ui(app, "window.spikeA.hidden=true;return true;")?;
+        frames(app, 2)?;
+        on_ui(app, |h| native::begin(h, 5000))??;
+        ui(app,"window.spikeHide(document.querySelector('#spikeB'),true);window.spikeA.hidden=false;window.spikeHide(window.spikeC,true);return true;")?;
+        for n in 1..=3 {
+            let state = frames(app, 1)?;
+            let ms = capture(app, out, &format!("minimized-frame-{n}"))?;
+            record(
+                log,
+                "minimized",
+                json!({"frame":n,"state":state,"capture_ms":ms,"editor":ui(app,"const s=window.spikeA.querySelector('.cm-scroller');return {scroll:s.scrollTop,width:s.clientWidth,height:s.clientHeight,lines:window.spikeA.querySelectorAll('.cm-line').length};")?}),
+            )?;
+        }
+        ui(app,"window.spikeA.hidden=true;window.spikeHide(document.querySelector('#spikeB'),false);window.spikeHide(window.spikeA,false);window.spikeHide(window.spikeC,false);return true;")?;
+        frames(app, 2)?;
+        on_ui(app, |_| {
+            native::flush();
+            native::end();
+        })?;
     }
-    ui(app,"window.spikeA.hidden=true;window.spikeHide(document.querySelector('#spikeB'),false);window.spikeHide(window.spikeA,false);window.spikeHide(window.spikeC,false);return true;")?;
-    frames(app, 2)?;
-    on_ui(app, |_| {
-        native::flush();
-        native::end();
-    })?;
     fs::write(out.join("record.phase"), b"retained").map_err(|e| e.to_string())?;
+    ui(app, "window.spikeMode='opacity';return true;")?;
     // hidden의 display:none 대신 레이아웃을 유지한 최소화 대안을 같은 iframe에서 비교한다.
     on_ui(app, |h| native::begin(h, 5000))??;
-    ui(app,"window.spikeHide(document.querySelector('#spikeB'),true);window.spikeA.hidden=false;window.spikeA.style.setProperty('display','flex','important');window.spikeA.style.visibility='';window.spikeA.style.opacity='1';window.spikeC.style.opacity='0';window.spikeA.querySelector('iframe').contentWindow.postMessage({type:'ks-html-focus-comment',id:'bottom',comments:[{id:'bottom',selector:'#bottom'}]},'*');return true;")?;
+    ui(app,"window.spikeHide(document.querySelector('#spikeB'),true);window.spikeA.hidden=false;window.spikeA.style.setProperty('display','flex','important');window.spikeA.style.visibility='';window.spikeA.style.opacity='1';window.spikeC.style.opacity='0';return true;")?;
+    frames(app, 2)?;
+    thread::sleep(Duration::from_millis(500));
+    ui(app,"window.spikeA.querySelector('iframe').contentWindow.postMessage({type:'ks-html-focus-comment',id:'bottom',comments:[{id:'bottom',selector:'#bottom'}]},'*');return true;")?;
     thread::sleep(Duration::from_millis(1800));
     capture(app, out, "retained-reference")?;
     ui(
@@ -267,6 +274,10 @@ pub(super) fn scenario(
         native::flush();
         native::end();
     })?;
+    if retained_only {
+        fs::write(out.join("record.stop"), b"").map_err(|e| e.to_string())?;
+        return record(log, "complete", json!({"ok":true,"retained_only":true}));
+    }
     fs::write(out.join("record.phase"), b"timer").map_err(|e| e.to_string())?;
     let t = Instant::now();
     on_ui(app, |h| native::begin(h, 700))??;
