@@ -23,6 +23,7 @@ struct Output {
     target: PathBuf,
     temp: PathBuf,
     file: File,
+    retain_on_commit: bool,
 }
 #[derive(Default)]
 pub(crate) struct ClientFiles {
@@ -177,6 +178,25 @@ pub(crate) fn begin(
     name: &str,
     mime: &str,
 ) -> Result<Option<String>, CoreError> {
+    begin_with_retention(inner, window, name, mime, false)
+}
+
+pub(crate) fn save_prompt(
+    inner: &Inner,
+    window: &str,
+    name: &str,
+    mime: &str,
+) -> Result<Option<String>, CoreError> {
+    begin_with_retention(inner, window, name, mime, true)
+}
+
+fn begin_with_retention(
+    inner: &Inner,
+    window: &str,
+    name: &str,
+    mime: &str,
+    retain_on_commit: bool,
+) -> Result<Option<String>, CoreError> {
     require_client(inner, window)?;
     let Some(target) = inner.host.pick_save_file(name, mime) else {
         return Ok(None);
@@ -198,6 +218,7 @@ pub(crate) fn begin(
             target,
             temp,
             file,
+            retain_on_commit,
         },
     );
     Ok(Some(id))
@@ -228,6 +249,10 @@ pub(crate) fn finish(inner: &Inner, window: &str, id: &str, commit: bool) -> Res
         return Err(error::make(ErrorCode::PermissionDenied));
     }
     let mut output = outputs.remove(id).unwrap();
+    let input = output.retain_on_commit.then(|| Input {
+        window: output.window.clone(),
+        path: output.target.clone(),
+    });
     if commit {
         if let Err(error) = output.file.flush() {
             drop(output.file);
@@ -243,6 +268,17 @@ pub(crate) fn finish(inner: &Inner, window: &str, id: &str, commit: bool) -> Res
         }
     } else {
         fs::remove_file(&output.temp).map_err(|error| error::io_error(&error))?;
+    }
+    drop(outputs);
+    if commit {
+        if let Some(input) = input {
+            inner
+                .client_files
+                .inputs
+                .lock()
+                .unwrap()
+                .insert(id.to_owned(), input);
+        }
     }
     Ok(())
 }

@@ -39,6 +39,41 @@ it("HTTP와 기기 보관 요청은 바이트를 전송 목록에 담는다", ()
   vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
 });
 
+it("host 기능과 저장 대화상자는 capability와 선언 액션 안에서 프레임 요청으로 전달된다", async () => {
+  vi.useFakeTimers();
+  const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험", capabilities: ["share", "keep_awake"] });
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
+  const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
+  const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  new Function(code)();
+  const sdk = (window as any).kaleidoscope;
+  const pending: Promise<unknown>[] = [];
+  sdk.handle("save-and-share", () => {
+    pending.push(sdk.host.can_share("file-1").catch(() => undefined));
+    pending.push(sdk.host.share("file-1", "메모").catch(() => undefined));
+    pending.push(sdk.host.keep_awake(true).catch(() => undefined));
+    pending.push(sdk.files.save_prompt({ suggested_name: "메모.txt", mime: "text/plain" }).catch(() => undefined));
+  });
+  window.dispatchEvent(new MessageEvent("message", { source: window, data: { type: "ks-client-action", name: "save-and-share", context: {} } }));
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  const requests = post.mock.calls.map(([value]) => value).filter((value) => value.type.startsWith("ks-client-") && value.type !== "ks-client-publish");
+  expect(requests).toEqual(expect.arrayContaining([
+    expect.objectContaining({ type: "ks-client-can-share", file_id: "file-1" }),
+    expect.objectContaining({ type: "ks-client-share", file_id: "file-1", title: "메모" }),
+    expect.objectContaining({ type: "ks-client-keep-awake", enabled: true }),
+    expect.objectContaining({ type: "ks-client-save-prompt", suggested_name: "메모.txt", mime: "text/plain" }),
+  ]));
+  await expect(sdk.host.can_share("file-1")).rejects.toThrow("클라이언트 동작");
+  await expect(sdk.files.save_prompt({ suggested_name: "메모.txt", mime: "text/plain" })).rejects.toThrow("클라이언트 동작");
+  expect(pending).toHaveLength(4);
+  vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+});
+
 it("표면 가시 변화를 알리고 이전 세대의 detach는 새 표면을 지우지 않는다", () => {
   vi.useFakeTimers();
   const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험" });

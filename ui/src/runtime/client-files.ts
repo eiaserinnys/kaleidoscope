@@ -3,7 +3,7 @@ import { CLIENT_PICK_FILE_MAX_BYTES } from "../contract/limits";
 
 const FILE_LIMIT = CLIENT_PICK_FILE_MAX_BYTES;
 const BLOB_LIMIT = 64 * 1024 * 1024;
-type Sink = { name: string; mime: string; stream?: FileSystemWritableFileStream; bytes?: Uint8Array<ArrayBuffer> };
+type Sink = { name: string; mime: string; stream?: FileSystemWritableFileStream; handle?: FileSystemFileHandle; bytes?: Uint8Array<ArrayBuffer>; retainOnClose?: boolean };
 type PickerWindow = Window & { showSaveFilePicker?: (options: { suggestedName: string; types?: { description: string; accept: Record<string, string[]> }[] }) => Promise<FileSystemFileHandle> };
 
 export class BrowserFiles {
@@ -34,19 +34,22 @@ export class BrowserFiles {
     return file.arrayBuffer();
   }
 
-  async save(name: string, mime: string): Promise<{ cancelled: boolean; sink?: string }> {
+  async save(name: string, mime: string, retainOnClose = false): Promise<{ cancelled: boolean; sink?: string }> {
     const picker = (window as PickerWindow).showSaveFilePicker;
     let stream: FileSystemWritableFileStream | undefined;
+    let handle: FileSystemFileHandle | undefined;
     if (picker) {
       const extension = name.match(/\.[a-z0-9]{1,10}$/i)?.[0];
       const options = { suggestedName: name, ...(extension ? { types: [{ description: mime, accept: { [mime]: [extension] } }] } : {}) };
-      try { stream = await (await picker(options)).createWritable(); }
+      try { handle = await picker(options); stream = await handle.createWritable(); }
       catch (error) { if (error instanceof DOMException && error.name === "AbortError") return { cancelled: true }; throw error; }
     }
     const id = crypto.randomUUID();
-    this.sinks.set(id, { name, mime, stream, bytes: stream ? undefined : new Uint8Array(0) });
+    this.sinks.set(id, { name, mime, stream, handle, bytes: stream ? undefined : new Uint8Array(0), retainOnClose });
     return { cancelled: false, sink: id };
   }
+
+  savePrompt(name: string, mime: string) { return this.save(name, mime, true); }
 
   async write(id: string, offset: number, data: ArrayBuffer) {
     const sink = this.sinks.get(id);
@@ -66,6 +69,12 @@ export class BrowserFiles {
       const url = URL.createObjectURL(new Blob([sink.bytes!], { type: sink.mime }));
       const link = document.createElement("a"); link.href = url; link.download = sink.name; link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    if (sink.retainOnClose) {
+      const file = sink.handle
+        ? await sink.handle.getFile()
+        : new File([sink.bytes!.slice().buffer], sink.name, { type: sink.mime });
+      this.files.set(id, file);
     }
     this.sinks.delete(id);
   }
