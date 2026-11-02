@@ -104,13 +104,6 @@ error_catalog! { ENTRIES;
         message: "이 환경은 캔버스 화면을 연결할 수 없습니다. 지원되는 쉘에서 다시 여세요.",
         fix: "지원되는 쉘에서 앱을 여세요"
     }
-    SHELL_CANVAS_DUPLICATE_SURFACE(id) {
-        class: InvalidRequest,
-        place: "창의 캔버스 표면 등록",
-        cause: "같은 창에서 이미 사용 중인 표면 이름을 다시 사용했다",
-        message: "중복 표면 이름 {id}: 이 창에서 이미 사용 중입니다. 캔버스마다 다른 이름을 지정하세요.",
-        fix: "캔버스마다 유일한 이름을 지정하세요"
-    }
     SHELL_MARKDOWN_VALUE_NOT_TEXT() {
         class: InvalidRequest,
         place: "마크다운 보기 값 확인",

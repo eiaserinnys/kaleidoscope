@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import type { AppDefinition, Binding, BindingValue, CoreError, DataView, EventModifiers, PickFilesSpec, SaveFileSpec, ShellSnapshot, SourceStatus } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
+import * as shellErrors from "../contract/shell-errors";
 import { CLIENT_OUTPUT_MAX_BYTES } from "../contract/limits";
 import { toCoreError } from "../core/core-transport";
 import { shareStructure, useShellSelector, type ShellStore } from "../core/shell-store";
@@ -83,8 +84,8 @@ export class WindowData {
     for (const [name, value] of Object.entries(patch)) {
       if (!Object.hasOwn(this.definition.client?.outputs ?? {}, name)) continue;
       let encoded: string | undefined;
-      try { encoded = JSON.stringify(value); } catch { this.setNotice(`클라이언트 출력을 읽을 수 없습니다: ${name}`); continue; }
-      if (encoded === undefined || new TextEncoder().encode(encoded).byteLength > CLIENT_OUTPUT_MAX_BYTES) { this.setNotice(`클라이언트 출력이 올바르지 않거나 너무 큽니다: ${name}`); continue; }
+      try { encoded = JSON.stringify(value); } catch { this.setNotice(shellErrors.SHELL_CLIENT_OUTPUT_SERIALIZE_FAILED({ name })); continue; }
+      if (encoded === undefined || new TextEncoder().encode(encoded).byteLength > CLIENT_OUTPUT_MAX_BYTES) { this.setNotice(shellErrors.SHELL_CLIENT_OUTPUT_TOO_LARGE({ name, limit: "64MiB" })); continue; }
       const previous = this.clientValues[name];
       if (previous?.status === "ready" && JSON.stringify(previous.value) === encoded) continue;
       this.clientValues[name] = { status: "ready", value: previous?.status === "ready" ? shareStructure(previous.value, value) : value };
@@ -106,7 +107,7 @@ export class WindowData {
   };
   setStatus = (message: string) => { this.notice = message; this.noticeId = null; this.noticeRole = "status"; this.noticeListeners.forEach((listener) => listener()); };
   getClientFailed = () => this.clientFailed;
-  failClient = (message: string) => { this.clientFailed = true; this.setNotice(message); };
+  failClient = (problem: CoreError | string) => { this.clientFailed = true; this.setNotice(problem); };
   subscribeClient = (listener: () => void) => { this.clientListeners.add(listener); return () => this.clientListeners.delete(listener); };
   getClientGeneration = () => this.clientGeneration;
   subscribeMedia = (listener: () => void) => { this.mediaListeners.add(listener); return () => this.mediaListeners.delete(listener); };
@@ -377,7 +378,7 @@ export function useOptionalWindowData(): WindowData | null {
 
 export function useWindowData(): WindowData {
   const value = useOptionalWindowData();
-  if (!value) throw new Error("창 데이터가 연결되지 않았습니다");
+  if (!value) throw shellErrors.SHELL_WINDOW_DATA_CONTEXT_MISSING();
   return value;
 }
 
@@ -398,7 +399,7 @@ export function useBinding(pointer: string, binding: Binding): BindingValue {
   useBlockRenderProbe();
   const scope = useItemScope();
   const context = useContext(DataContext);
-  if (!context) throw new Error("창 데이터가 연결되지 않았습니다");
+  if (!context) throw shellErrors.SHELL_CLIENT_BINDING_DATA_CONTEXT_MISSING();
   const localName = binding !== null && typeof binding === "object" && !Array.isArray(binding) && Object.keys(binding).length === 1 && "client" in binding && typeof binding.client === "string" ? binding.client : null;
   const isExpression = binding !== null && typeof binding === "object" && !Array.isArray(binding) && Object.keys(binding).length === 1 && "expr" in binding && typeof binding.expr === "string";
   const messageName = binding !== null && typeof binding === "object" && !Array.isArray(binding) && Object.keys(binding).length === 1 && "message" in binding && typeof binding.message === "string" ? binding.message : null;

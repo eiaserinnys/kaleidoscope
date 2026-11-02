@@ -168,11 +168,11 @@ it("머리 없는 탭은 선택된 내용만 보이고 패널 이름을 제공�
   store.dispose();
 });
 
-it("크기 제한을 넘은 출력만 거부하고 다른 출력은 반영한다", () => {
+it("잘못된 클라이언트 출력은 원인별 코드와 읽기 쉬운 크기로 알리고 다른 출력은 반영한다", () => {
   const definition: AppDefinition = {
     id: "client-output-limit", name: "출력 시험", requires: { blocks: 12, modules: { assets: 1, client: 1 } }, permissions: [], state: {},
     assets: [{ id: "script", version: 1 }],
-    client: { runtime: "javascript", entry: { id: "script", version: 1 }, inputs: {}, outputs: { large: { default: "이전" }, small: { default: 0 } }, actions: [], commands: {}, state_keys: [], storage_entries: [] },
+    client: { runtime: "javascript", entry: { id: "script", version: 1 }, inputs: {}, outputs: { large: { default: "이전" }, small: { default: 0 }, broken: { default: null } }, actions: [], commands: {}, state_keys: [], storage_entries: [] },
     ui: { type: "text", value: { client: "small" } },
   };
   const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
@@ -180,7 +180,12 @@ it("크기 제한을 넘은 출력만 거부하고 다른 출력은 반영한다
   data.publishClient({ large: "가".repeat(400_000), small: 1 });
   expect(data.getValue("@client/large")).toEqual({ status: "ready", value: "이전" });
   expect(data.getValue("@client/small")).toEqual({ status: "ready", value: 1 });
-  expect(data.getNotice()).toContain("large");
+  expect(data.getNoticeId()).toBe("SHELL_CLIENT_OUTPUT_TOO_LARGE");
+  expect(data.getNotice()).toContain("64MiB");
+  const circular: Record<string, unknown> = {};
+  circular.self = circular;
+  data.publishClient({ broken: circular as never });
+  expect(data.getNoticeId()).toBe("SHELL_CLIENT_OUTPUT_SERIALIZE_FAILED");
   store.dispose();
 });
 
