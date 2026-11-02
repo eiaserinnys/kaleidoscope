@@ -62,6 +62,16 @@ export class BrowserFiles {
     sink.bytes!.set(new Uint8Array(data), offset);
   }
 
+  async truncate(id: string, size: number) {
+    const sink = this.sinks.get(id);
+    if (!sink || !Number.isSafeInteger(size) || size < 0) throw new Error("출력 대상을 찾을 수 없습니다");
+    if (sink.stream) { await sink.stream.truncate(size); return; }
+    if (size > BLOB_LIMIT) throw new Error("이 브라우저는 64MiB보다 큰 파일을 저장할 수 없습니다");
+    const next = new Uint8Array(size);
+    next.set(sink.bytes!.subarray(0, size));
+    sink.bytes = next;
+  }
+
   async close(id: string) {
     const sink = this.sinks.get(id); if (!sink) throw new Error("출력 대상을 찾을 수 없습니다");
     if (sink.stream) await sink.stream.close();

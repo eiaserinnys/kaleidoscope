@@ -243,6 +243,28 @@ pub(crate) fn write(
         .map_err(|error| error::io_error(&error))
 }
 
+pub(crate) fn truncate(inner: &Inner, window: &str, id: &str, size: u64) -> Result<(), CoreError> {
+    let mut outputs = inner.client_files.outputs.lock().unwrap();
+    let output = outputs
+        .get_mut(id)
+        .filter(|output| output.window == window)
+        .ok_or_else(|| error::make(ErrorCode::PermissionDenied))?;
+    let position = output
+        .file
+        .stream_position()
+        .map_err(|error| error::io_error(&error))?;
+    output
+        .file
+        .set_len(size)
+        .and_then(|_| {
+            output
+                .file
+                .seek(SeekFrom::Start(position.min(size)))
+                .map(|_| ())
+        })
+        .map_err(|error| error::io_error(&error))
+}
+
 pub(crate) fn finish(inner: &Inner, window: &str, id: &str, commit: bool) -> Result<(), CoreError> {
     let mut outputs = inner.client_files.outputs.lock().unwrap();
     if outputs.get(id).is_none_or(|output| output.window != window) {

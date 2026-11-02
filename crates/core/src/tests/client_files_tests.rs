@@ -80,13 +80,27 @@ fn picked_files_and_offset_exports_are_scoped_and_abort_preserves_destination() 
     };
     core.client_write_export(&window, &sink, 2, b"cd").unwrap();
     core.client_write_export(&window, &sink, 0, b"ab").unwrap();
+    assert!(core
+        .handle(CoreRequest::ExportTruncate {
+            window_id: "other".into(),
+            sink_id: sink.clone(),
+            size: 0
+        })
+        .is_err());
+    core.handle(CoreRequest::ExportTruncate {
+        window_id: window.clone(),
+        sink_id: sink.clone(),
+        size: 0,
+    })
+    .unwrap();
+    core.client_write_export(&window, &sink, 0, b"xy").unwrap();
     assert_eq!(fs::read(&output).unwrap(), "이전".as_bytes());
     core.handle(CoreRequest::ExportClose {
         window_id: window.clone(),
         sink_id: sink,
     })
     .unwrap();
-    assert_eq!(fs::read(&output).unwrap(), b"abcd");
+    assert_eq!(fs::read(&output).unwrap(), b"xy");
     let CoreReply::ExportBegin {
         sink_id: Some(sink),
         ..
@@ -107,7 +121,7 @@ fn picked_files_and_offset_exports_are_scoped_and_abort_preserves_destination() 
         sink_id: sink,
     })
     .unwrap();
-    assert_eq!(fs::read(&output).unwrap(), b"abcd");
+    assert_eq!(fs::read(&output).unwrap(), b"xy");
     assert_eq!(
         fs::read_dir(temp.path())
             .unwrap()
@@ -131,7 +145,7 @@ fn picked_files_and_offset_exports_are_scoped_and_abort_preserves_destination() 
     };
     core.client_write_export(&window, &file_id, 0, b"shared output")
         .unwrap();
-    assert_eq!(fs::read(&output).unwrap(), b"abcd");
+    assert_eq!(fs::read(&output).unwrap(), b"xy");
     core.handle(CoreRequest::ExportClose {
         window_id: window.clone(),
         sink_id: file_id.clone(),

@@ -3677,6 +3677,13 @@ pub enum CoreRequest {
         suggested_name: String,
         mime: String,
     },
+    #[serde(rename = "export.truncate")]
+    ExportTruncate {
+        window_id: String,
+        sink_id: String,
+        #[ts(type = "number")]
+        size: u64,
+    },
     #[serde(rename = "export.close")]
     ExportClose { window_id: String, sink_id: String },
     #[serde(rename = "export.abort")]
@@ -4566,6 +4573,8 @@ pub enum CoreReply {
         cancelled: bool,
         sink_id: Option<String>,
     },
+    #[serde(rename = "export.truncate")]
+    ExportTruncate {},
     #[serde(rename = "export.close")]
     ExportClose {},
     #[serde(rename = "export.abort")]

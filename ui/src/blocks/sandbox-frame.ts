@@ -86,6 +86,7 @@ function bridgeSource(init: SandboxInit): string {
       files: {
         read(id) { return clientRequest('ks-client-file-read', { id }); },
         write(sink, offset, bytes) { return clientRequest('ks-client-file-write', { sink, offset, bytes }, [bytes]); },
+        truncate(sink, size) { return clientRequest('ks-client-file-truncate', { sink, size }); },
         close(sink) { return clientRequest('ks-client-file-close', { sink }); },
         abort(sink) { return clientRequest('ks-client-file-abort', { sink }); },
         save_prompt({ suggested_name, mime }) {
