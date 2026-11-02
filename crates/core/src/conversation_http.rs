@@ -520,7 +520,7 @@ mod tests {
         let error = client.provider_error_or_status(&serde_json::to_vec(&body).unwrap(), 503);
 
         assert_eq!(error.id.as_deref(), Some("CONV_SEND_PROVIDER_UNAVAILABLE"));
-        assert!(error.message.contains("작업 kaleidoscope"));
+        assert!(error.message.contains("‘kaleidoscope’"));
         assert!(error.message.contains("시험용 제공자 오류"));
         assert!(!error.message.contains("provider"));
     }

@@ -353,84 +353,84 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "대화 메시지 접수 확인",
         cause: "제공자가 메시지를 접수하지 않았다",
-        message: "작업 {workspace}의 대화 제공자가 메시지를 접수하지 않았습니다. 보관 초안에서 다시 보내세요.",
+        message: "‘{workspace}’의 대화 제공자가 메시지를 접수하지 않았습니다. 보관 초안에서 다시 보내세요.",
         fix: "보관 초안에서 메시지를 다시 보내세요"
     }
     CONV_SEND_PROVIDER_ERROR_MISSING(workspace) {
         class: Server,
         place: "대화 메시지 전송",
         cause: "제공자 실패 응답에 원인 설명이 없다",
-        message: "작업 {workspace}의 대화 제공자가 메시지를 거부했지만 이유를 보내지 않았습니다. 제공자 상태를 확인하세요.",
+        message: "‘{workspace}’의 대화 제공자가 메시지를 거부했지만 이유를 보내지 않았습니다. 제공자 상태를 확인하세요.",
         fix: "제공자 상태를 확인하세요"
     }
     CONV_SEND_PROVIDER_INVALID_REQUEST(workspace, reason) {
         class: InvalidRequest,
         place: "대화 메시지 전송",
         cause: "제공자가 메시지 내용을 요청 형식에 맞지 않는다고 거부했다",
-        message: "작업 {workspace}의 대화 제공자가 메시지를 받지 않았습니다: {reason}. 글과 첨부를 확인해 다시 보내세요.",
+        message: "‘{workspace}’의 대화 제공자가 메시지를 받지 않았습니다: {reason}. 글과 첨부를 확인해 다시 보내세요.",
         fix: "글과 첨부를 확인해 다시 보내세요"
     }
     CONV_SEND_PROVIDER_LOGIN_REQUIRED(workspace, reason) {
         class: LoginRequired,
         place: "대화 메시지 전송",
         cause: "제공자가 로그인을 요구했다",
-        message: "작업 {workspace}의 대화 제공자 로그인이 필요합니다: {reason}. 제공자에 로그인한 뒤 다시 보내세요.",
+        message: "‘{workspace}’의 대화 제공자 로그인이 필요합니다: {reason}. 제공자에 로그인한 뒤 다시 보내세요.",
         fix: "대화 제공자에 로그인하세요"
     }
     CONV_SEND_PROVIDER_FORBIDDEN(workspace, reason) {
         class: PermissionDenied,
         place: "대화 메시지 전송",
         cause: "제공자가 현재 계정의 권한을 거부했다",
-        message: "작업 {workspace}의 대화 제공자가 계정 권한을 거부했습니다: {reason}. 계정 권한을 확인하세요.",
+        message: "‘{workspace}’의 대화 제공자가 계정 권한을 거부했습니다: {reason}. 계정 권한을 확인하세요.",
         fix: "대화 제공자 계정의 권한을 확인하세요"
     }
     CONV_SEND_PROVIDER_NOT_FOUND(workspace, reason) {
         class: NotFound,
         place: "대화 메시지 전송",
         cause: "제공자가 연결된 대화를 찾지 못했다",
-        message: "작업 {workspace}의 대화 제공자가 연결된 대화를 찾지 못했습니다: {reason}. 대화를 다시 불러오세요.",
+        message: "‘{workspace}’의 대화 제공자가 연결된 대화를 찾지 못했습니다: {reason}. 대화를 다시 불러오세요.",
         fix: "대화를 다시 불러오세요"
     }
     CONV_SEND_PROVIDER_CONFLICT(workspace, reason) {
         class: Conflict,
         place: "대화 메시지 전송",
         cause: "제공자가 메시지 상태 충돌로 거부했다",
-        message: "작업 {workspace}의 대화 제공자가 현재 상태에서 메시지를 받지 않았습니다: {reason}. 대화를 새로고침한 뒤 다시 보내세요.",
+        message: "‘{workspace}’의 대화 제공자가 현재 상태에서 메시지를 받지 않았습니다: {reason}. 대화를 새로고침한 뒤 다시 보내세요.",
         fix: "대화를 새로고침한 뒤 다시 보내세요"
     }
     CONV_SEND_PROVIDER_ATTACHMENT_LIMIT(workspace, reason) {
         class: InvalidRequest,
         place: "대화 메시지 전송",
         cause: "제공자가 첨부 한도를 넘었다고 거부했다",
-        message: "작업 {workspace}의 대화 제공자가 첨부 한도를 초과했습니다: {reason}. 첨부 수나 크기를 줄이세요.",
+        message: "‘{workspace}’의 대화 제공자가 첨부 한도를 초과했습니다: {reason}. 첨부 수나 크기를 줄이세요.",
         fix: "첨부 수나 크기를 줄이세요"
     }
     CONV_SEND_PROVIDER_MODEL_UNAVAILABLE(workspace, reason) {
         class: Unavailable,
         place: "대화 메시지 전송",
         cause: "제공자가 선택한 모델을 사용할 수 없다고 했다",
-        message: "작업 {workspace}의 대화 모델을 사용할 수 없습니다: {reason}. 사용 가능한 모델을 선택하세요.",
+        message: "‘{workspace}’에서 선택한 대화 모델을 사용할 수 없습니다: {reason}. 사용 가능한 모델을 선택하세요.",
         fix: "사용 가능한 대화 모델을 선택하세요"
     }
     CONV_SEND_PROVIDER_UNAVAILABLE(workspace, reason) {
         class: Server,
         place: "대화 메시지 전송",
         cause: "제공자가 요청을 처리할 수 없다고 했다",
-        message: "작업 {workspace}의 대화 제공자가 요청을 처리하지 못했습니다: {reason}. 잠시 뒤 다시 보내세요.",
+        message: "‘{workspace}’의 대화 제공자가 요청을 처리하지 못했습니다: {reason}. 잠시 뒤 다시 보내세요.",
         fix: "잠시 뒤 다시 보내세요"
     }
     CONV_SEND_PROVIDER_PENDING(workspace, reason) {
         class: Server,
         place: "대화 메시지 전송",
         cause: "제공자가 메시지 처리가 끝나지 않았다고 했다",
-        message: "작업 {workspace}의 대화 제공자가 아직 메시지를 처리하고 있습니다: {reason}. 잠시 뒤 대화를 새로고침하세요.",
+        message: "‘{workspace}’의 대화 제공자가 아직 메시지를 처리하고 있습니다: {reason}. 잠시 뒤 대화를 새로고침하세요.",
         fix: "잠시 뒤 대화를 새로고침하세요"
     }
     CONV_SEND_PENDING_TIMEOUT(workspace) {
         class: Server,
         place: "대화 응답 대기",
         cause: "제공자가 계속 pending으로 응답해 제한 시간 안에 끝나지 않았다",
-        message: "작업 {workspace}의 대화 제공자가 제한 시간 안에 처리를 끝내지 않았습니다. 잠시 뒤 대화를 다시 불러오세요.",
+        message: "‘{workspace}’의 대화 제공자가 제한 시간 안에 처리를 끝내지 않았습니다. 잠시 뒤 대화를 다시 불러오세요.",
         fix: "잠시 뒤 대화를 다시 불러오세요"
     }
     CONV_HTTP_PROVIDER_UNAVAILABLE(provider) {
