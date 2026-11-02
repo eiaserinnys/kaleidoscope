@@ -312,7 +312,7 @@ describe("folder block", () => {
     expect(screen.getByRole("tree").hasAttribute("aria-multiselectable")).toBe(false);
   });
 
-  it.each(["재시도", "Escape", "닫기"])("실패 알림을 %s로 지우고 선택을 보존한다", async (dismiss) => {
+  it.each(["재시도", "Escape", "닫기", "Enter", "펼친 뒤 Escape"])("실패 알림을 %s로 지우고 선택을 보존한다", async (dismiss) => {
     let failed = true;
     setup(fileFolderDefinition("readwrite", false), (transport) => {
       const original = transport.call.bind(transport);
@@ -333,10 +333,18 @@ describe("folder block", () => {
     const alert = await screen.findByRole("alert");
     if (dismiss === "재시도") { failed = false; drop(); }
     else if (dismiss === "Escape") fireEvent.keyDown(target, { key: "Escape" });
-    else fireEvent.click(within(alert).getByRole("button", { name: "닫기" }));
+    else if (dismiss === "펼친 뒤 Escape") {
+      const details = within(alert).getByRole("button", { name: "펼치기" });
+      await userEvent.click(details);
+      fireEvent.keyDown(details, { key: "Escape" });
+    } else if (dismiss === "Enter") {
+      act(() => within(alert).getByRole("button", { name: "닫기" }).focus());
+      await userEvent.keyboard("{Enter}");
+    } else await userEvent.click(within(alert).getByRole("button", { name: "닫기" }));
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(a.getAttribute("aria-selected")).toBe("true");
     expect(b.getAttribute("aria-selected")).toBe("true");
+    if (["닫기", "Enter", "펼친 뒤 Escape"].includes(dismiss)) expect(screen.getByRole("tree").contains(document.activeElement)).toBe(true);
   });
 
   it.each([false, true, "같은 원인"])("묶음 중 한 건 실패는 개수와 경로를 보이고 코어 식별자를 보존한다 (%s)", async (registered) => {

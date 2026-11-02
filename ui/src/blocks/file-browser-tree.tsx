@@ -449,7 +449,7 @@ export function FileBrowserTree({
     transfer: actions.transferPaths,
     expand: setDirectoryExpanded,
     focusDestination: (path) => {
-      if (path) focusController.current?.row(path);
+      if (path) focusController.current?.visibleRow(path);
       else focusController.current?.afterDelete([null]);
     },
   });

@@ -98,6 +98,7 @@ export function Notice({
   actions,
   details,
   errorId,
+  onDismiss,
   role = "status",
   "data-ks-overlay": overlay,
 }: {
@@ -105,11 +106,17 @@ export function Notice({
   actions?: [ReactNode] | [ReactNode, ReactNode];
   details?: ReactNode;
   errorId?: string | null;
+  onDismiss?: () => void;
   role?: "alert" | "status";
   "data-ks-overlay"?: boolean;
 }) {
   return (
-    <div className="ks-notice" data-ks-overlay={overlay || undefined} role={role}>
+    <div className="ks-notice" data-ks-overlay={overlay || undefined} role={role} onKeyDown={onDismiss ? (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      onDismiss();
+    } : undefined}>
       <span className="ks-notice-message">{children}{errorId ? <> <ErrorId id={errorId} /></> : null}</span>
       {actions ? <span className="ks-notice-actions">{actions}</span> : null}
       {details ? <div className="ks-notice-details">{details}</div> : null}

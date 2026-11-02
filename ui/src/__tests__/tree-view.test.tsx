@@ -63,6 +63,30 @@ afterEach(() => {
 });
 
 describe("공용 가상 트리", () => {
+  it.each([null, "row-40"])("화면 안 포커스 요청은 스크롤 없이 행 또는 목록으로 돌아온다 (%s)", async (target) => {
+    let focus!: TreeFocusController;
+    render(<><input aria-label="바깥 입력" /><TreeView className="ks-file-tree-list" expanded={new Set()} label="포커스 복귀"
+      nodes={Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, label: `행 ${index}` }))}
+      onActivate={() => {}} onExpandedChange={() => {}} onFocusController={(value) => { focus = value; }} /></>);
+    const first = await screen.findByRole("treeitem", { name: "행 0" });
+    act(() => first.focus());
+    const tree = screen.getByRole("tree");
+    tree.scrollTop = 1200; fireEvent.scroll(tree);
+    const visible = await screen.findByRole("treeitem", { name: "행 40" });
+    act(() => screen.getByRole("textbox").focus());
+    act(() => focus.visibleRow(target));
+    await waitFor(() => expect(document.activeElement).toBe(target ? visible : tree));
+    expect(tree.scrollTop).toBe(1200);
+  });
+
+  it("빈 목록의 화면 안 포커스 요청은 목록 칸으로 돌아온다", async () => {
+    let focus!: TreeFocusController;
+    render(<TreeView className="ks-file-tree-list" expanded={new Set()} label="빈 복귀" nodes={[]}
+      onActivate={() => {}} onExpandedChange={() => {}} onFocusController={(value) => { focus = value; }} />);
+    act(() => focus.visibleRow(null));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("tree")));
+  });
+
   it("row(null)은 현재 행으로 돌아가고 마지막 행 삭제의 null은 목록으로 돌아간다", async () => {
     let focus!: TreeFocusController;
     const props = { className: "ks-file-tree-list", label: "복귀 구분", expanded: new Set<string>(),

@@ -61,6 +61,7 @@ export interface TreeActivation {
 
 export interface TreeFocusController {
   row: (id: string | null, waitForRow?: boolean, select?: boolean) => void;
+  visibleRow: (id: string | null) => void;
   rows: (ids: readonly string[]) => TreeRowModel[];
   deletionTargets: (row: TreeRowModel, ids?: readonly string[]) => Array<string | null>;
   afterDelete: (targets: Array<string | null>) => void;
@@ -131,6 +132,11 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
   const interactiveIndex = flat.findIndex((row) => row.node.interactiveContent);
   const itemKey = useCallback((index: number) => flat[index].id, [flat]);
   const { virtual } = useVirtualRows(flat.length, token, scrollRef, false, itemKey);
+  const isRowVisible = useCallback((id: string | null | undefined) => {
+    const row = virtual.getVirtualItems().find((item) => flat[item.index].id === id);
+    const offset = virtual.scrollOffset ?? 0;
+    return !!row && row.end > offset && row.start < offset + (virtual.scrollRect?.height ?? 0);
+  }, [flat, virtual]);
   const focusIndex = effectiveFocus === null ? -1 : flat.findIndex((row) => row.id === effectiveFocus);
   keepRovingRow(virtual, focusIndex, interactiveIndex);
 
@@ -161,7 +167,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     for (let i = origin; i !== end + step; i += step) ids.push(selectableRows[i].id);
     onSelectionChange?.(ids);
   }, []);
-  const [focusRequest, setFocusRequest] = useState<{ targets: Array<string | null>; waitForTarget: boolean; select?: boolean; currentOnNull: boolean; token: number } | null>(null);
+  const [focusRequest, setFocusRequest] = useState<{ targets: Array<string | null>; waitForTarget: boolean; select?: boolean; currentOnNull: boolean; visibleOnly?: boolean; token: number } | null>(null);
   const focusRequestToken = useRef(0);
   const treeRowsRef = useRef(treeRows);
   treeRowsRef.current = treeRows;
@@ -169,6 +175,10 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     row: (id, waitForRow = false, select = false) => {
       focusRequestToken.current += 1;
       setFocusRequest({ targets: [id], waitForTarget: waitForRow, select, currentOnNull: id === null, token: focusRequestToken.current });
+    },
+    visibleRow: (id) => {
+      focusRequestToken.current += 1;
+      setFocusRequest({ targets: [id], waitForTarget: false, currentOnNull: id === null, visibleOnly: true, token: focusRequestToken.current });
     },
     rows: (ids) => ids.flatMap((id) => treeRowsRef.current.find((row) => row.id === id) ?? []),
     deletionTargets: (row, ids = [row.id]) => {
@@ -277,6 +287,18 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     if (!request) return;
     const found = request.targets.find((id) => id === null || treeRows.some((row) => row.id === id));
     const target = found === null && request.currentOnNull ? effectiveFocus : found;
+    if (request.visibleOnly) {
+      const visible = isRowVisible(target);
+      const element = visible
+        ? Array.from(scrollRef.current?.querySelectorAll<HTMLElement>("[data-tree-row]") ?? [])
+          .find((row) => row.dataset.treeRow === target)?.querySelector<HTMLElement>("[role=treeitem]")
+        : scrollRef.current;
+      if (visible && target) setFocusId(target);
+      element?.focus({ preventScroll: true });
+      setPendingFocus(null);
+      setFocusRequest(null);
+      return;
+    }
     if (target === undefined && request.waitForTarget) return;
     if (target === null || target === undefined) {
       scrollRef.current?.focus();
@@ -296,7 +318,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     virtual.scrollToIndex(flat.indexOf(row), { align: "auto" });
     setPendingFocus(target);
     setFocusRequest(null);
-  }, [effectiveFocus, flat, focusRequest, treeRows, virtual]);
+  }, [effectiveFocus, flat, focusRequest, isRowVisible, treeRows, virtual]);
 
   useEffect(() => {
     if (!pendingFocus) return;
@@ -314,10 +336,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
   });
 
   const virtualRows = virtual.getVirtualItems();
-  const dropDestination = virtualRows.find((item) => flat[item.index].id === drag?.targetId);
-  const scrollOffset = virtual.scrollOffset ?? 0;
-  const destinationVisible = dropDestination && dropDestination.end > scrollOffset
-    && dropDestination.start < scrollOffset + (virtual.scrollRect?.height ?? 0);
+  const destinationVisible = isRowVisible(drag?.targetId);
   const dropTargetId = drag?.targetId === "" || destinationVisible ? drag?.targetId : drag?.hoveredId ?? drag?.targetId;
 
   const dragRow = (target: EventTarget | null): TreeRowModel | null | undefined => {

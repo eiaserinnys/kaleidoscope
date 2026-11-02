@@ -495,8 +495,12 @@ export function useFolderActions({
     onConfirm={confirmDialog}
   /> : null;
 
-  const closeNotice = <Button key="close" onClick={() => setNotice(null)}>닫기</Button>;
-  const noticeNode = notice ? <Notice role="alert" errorId={notice.errorId} details={noticeExpanded && notice.failures ? notice.failures.map((failure) => <div key={failure.path}>{failure.path}{notice.mixed ? `: ${failure.message}` : ""}</div>) : undefined} actions={notice.failures ? [<Button key="details" onClick={() => setNoticeExpanded((current) => !current)}>{noticeExpanded ? "접기" : "펼치기"}</Button>, closeNotice] : notice.allowPermanent ? [<Button key="permanent" onClick={() => {
+  const dismissNotice = () => {
+    setNotice(null);
+    getFocusController()?.visibleRow(null);
+  };
+  const closeNotice = <Button key="close" onClick={dismissNotice}>닫기</Button>;
+  const noticeNode = notice ? <Notice role="alert" onDismiss={dismissNotice} errorId={notice.errorId} details={noticeExpanded && notice.failures ? notice.failures.map((failure) => <div key={failure.path}>{failure.path}{notice.mixed ? `: ${failure.message}` : ""}</div>) : undefined} actions={notice.failures ? [<Button key="details" onClick={() => setNoticeExpanded((current) => !current)}>{noticeExpanded ? "접기" : "펼치기"}</Button>, closeNotice] : notice.allowPermanent ? [<Button key="permanent" onClick={() => {
     const item = notice.allowPermanent!;
     const row = notice.row;
     const focus = notice.focus;
