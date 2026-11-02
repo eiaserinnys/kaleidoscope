@@ -229,7 +229,11 @@ fn copy_one(
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| error::make(ErrorCode::InvalidName))?;
-    let target_name = copy_name(&source, name, destination_path)?;
+    let target_name = if path_exists(&destination_path.join(name))? {
+        copy_name(&source, name, destination_path)?
+    } else {
+        name.to_owned()
+    };
     let to = join_relative(destination, &target_name);
     let target = files::resolve_path(&inner.data_dir, root, &to, false, true)?;
     copy_entry(&source, &target)?;

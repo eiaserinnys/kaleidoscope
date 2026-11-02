@@ -7,6 +7,9 @@ export interface TreeRowProps {
   index: number;
   start: number;
   selected: boolean;
+  multiSelected?: boolean;
+  dropState?: "valid" | "invalid";
+  draggable?: boolean;
   focused: boolean;
   menuTarget?: boolean;
   measure: (element: Element | null) => void;
@@ -17,12 +20,13 @@ export interface TreeRowProps {
   onDoubleClick?: (row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => void;
 }
 
-function TreeRowView({ row, index, start, selected, focused, menuTarget = false, measure, onFocus, onKeyDown, onActivate, onContextMenu, onDoubleClick }: TreeRowProps) {
+function TreeRowView({ row, index, start, selected, multiSelected, dropState, draggable, focused, menuTarget = false, measure, onFocus, onKeyDown, onActivate, onContextMenu, onDoubleClick }: TreeRowProps) {
   const { node } = row;
   return <div
     className="ks-tree-virtual-row"
     data-index={index}
     data-tree-row={row.id}
+    data-drop-state={node.content !== undefined ? dropState : undefined}
     data-menu-target={menuTarget && node.content !== undefined ? "" : undefined}
     ref={measure}
     style={{
@@ -42,9 +46,11 @@ function TreeRowView({ row, index, start, selected, focused, menuTarget = false,
       aria-expanded={row.hasChildren ? row.expanded : undefined}
       aria-level={row.depth + 1}
       aria-posinset={row.position}
-      aria-selected={node.ariaSelectable === false ? undefined : selected}
+      aria-selected={multiSelected !== undefined ? multiSelected : node.ariaSelectable === false ? undefined : selected}
       aria-setsize={row.setSize}
-      className={`ks-row ks-file-tree-row${selected ? " is-selected" : ""}${node.rowClassName ? ` ${node.rowClassName}` : ""}`}
+      className={`ks-row ks-file-tree-row${multiSelected === undefined ? selected ? " is-selected" : "" : `${multiSelected ? " is-selected" : ""}${selected ? " is-open-file" : ""}`}${node.rowClassName ? ` ${node.rowClassName}` : ""}`}
+      data-drop-state={dropState}
+      draggable={draggable || undefined}
       data-menu-target={menuTarget && node.content === undefined ? "" : undefined}
       data-index={index}
       data-tree-id={row.id}

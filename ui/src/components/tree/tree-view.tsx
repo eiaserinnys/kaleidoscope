@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { isValidElement } from "react";
 import { keepRovingRow, useVirtualRows, VirtualSurface } from "../../blocks/data-view-common";
 import type { TreeNode, TreeRowModel } from "./tree-model";
@@ -60,8 +60,9 @@ export interface TreeActivation {
 }
 
 export interface TreeFocusController {
-  row: (id: string | null, waitForRow?: boolean) => void;
-  deletionTargets: (row: TreeRowModel) => Array<string | null>;
+  row: (id: string | null, waitForRow?: boolean, select?: boolean) => void;
+  rows: (ids: readonly string[]) => TreeRowModel[];
+  deletionTargets: (row: TreeRowModel, ids?: readonly string[]) => Array<string | null>;
   afterDelete: (targets: Array<string | null>) => void;
 }
 
@@ -80,11 +81,24 @@ export interface TreeViewProps {
   onDoubleClick?: (row: TreeRowModel, target: HTMLElement) => void;
   menuTargetId?: string | null;
   onFocusController?: (focus: TreeFocusController) => void;
+  selection?: readonly string[];
+  onSelectionChange?: (ids: string[]) => void;
+  drag?: {
+    enabled: boolean;
+    targetId: string | null;
+    hoveredId?: string | null;
+    valid: boolean;
+    onStart: (row: TreeRowModel, event: DragEvent<HTMLElement>) => void;
+    onOver: (row: TreeRowModel | null, event: DragEvent<HTMLElement>) => void;
+    onDrop: (row: TreeRowModel | null, event: DragEvent<HTMLElement>) => void;
+    onEnd: () => void;
+    onLeave: (event: DragEvent<HTMLElement>) => void;
+  };
 }
 
 export const END_ACTION_ID = "tree:end-action";
 
-export function TreeView({ nodes, expanded, selectedId, label, className, emptyContent, endAction, onExpandedChange, onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, menuTargetId, onFocusController }: TreeViewProps) {
+export function TreeView({ nodes, expanded, selectedId, label, className, emptyContent, endAction, onExpandedChange, onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, menuTargetId, onFocusController, selection, onSelectionChange, drag }: TreeViewProps) {
   const previousRows = useRef(new Map<string, TreeRowModel>());
   const flat = useMemo(() => {
     const nextRows = new Map<string, TreeRowModel>();
@@ -102,18 +116,21 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     return stable;
   }, [nodes, expanded, endAction]);
   const treeRows = useMemo(() => flat.filter((row) => row.node.content === undefined), [flat]);
+  const selectableRows = useMemo(() => treeRows.filter((row) => row.id !== "tree:end-action"), [treeRows]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const seenInteractiveRows = useRef(new Set<string>());
   const [pendingInteractiveFocus, setPendingInteractiveFocus] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [pendingFocus, setPendingFocus] = useState<string | null>(null);
+  const selectionAnchor = useRef<string | null>(null);
   const selectedRow = treeRows.find((row) => row.node.selectable !== false && row.node.id === selectedId);
   const preferredFocus = selectedRow?.id ?? treeRows[0]?.id ?? null;
   const effectiveFocus = treeRows.some((row) => row.id === focusId) ? focusId : preferredFocus;
   const token = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ks-control-height"));
   if (!Number.isFinite(token) || token <= 0) throw new Error("트리 행 높이 토큰 --ks-control-height을 읽을 수 없습니다");
   const interactiveIndex = flat.findIndex((row) => row.node.interactiveContent);
-  const { virtual } = useVirtualRows(flat.length, token, scrollRef);
+  const itemKey = useCallback((index: number) => flat[index].id, [flat]);
+  const { virtual } = useVirtualRows(flat.length, token, scrollRef, false, itemKey);
   const focusIndex = effectiveFocus === null ? -1 : flat.findIndex((row) => row.id === effectiveFocus);
   keepRovingRow(virtual, focusIndex, interactiveIndex);
 
@@ -125,23 +142,50 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     virtual.scrollToIndex(flat.indexOf(next), { align: "auto" });
   }, [flat, treeRows, virtual]);
 
-  const handlers = useRef({ onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, expanded, moveFocus, endAction });
-  handlers.current = { onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, expanded, moveFocus, endAction };
-  const [focusRequest, setFocusRequest] = useState<{ targets: Array<string | null>; waitForTarget: boolean; currentOnNull: boolean; token: number } | null>(null);
+  const handlers = useRef({ onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, selectableRows, expanded, moveFocus, endAction, selection, onSelectionChange });
+  handlers.current = { onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, selectableRows, expanded, moveFocus, endAction, selection, onSelectionChange };
+  useEffect(() => {
+    if (!selection || !onSelectionChange) return;
+    const visible = new Set(selectableRows.map((row) => row.id));
+    const next = selection.filter((id) => visible.has(id));
+    if (next.length !== selection.length) onSelectionChange(next);
+  }, [selection, selectableRows, onSelectionChange]);
+  const selectRange = useCallback((id: string) => {
+    const { selectableRows, onSelectionChange } = handlers.current;
+    const start = selectableRows.findIndex((row) => row.id === selectionAnchor.current);
+    const end = selectableRows.findIndex((row) => row.id === id);
+    if (end < 0) return;
+    const origin = start < 0 ? end : start;
+    const step = origin <= end ? 1 : -1;
+    const ids: string[] = [];
+    for (let i = origin; i !== end + step; i += step) ids.push(selectableRows[i].id);
+    onSelectionChange?.(ids);
+  }, []);
+  const [focusRequest, setFocusRequest] = useState<{ targets: Array<string | null>; waitForTarget: boolean; select?: boolean; currentOnNull: boolean; token: number } | null>(null);
   const focusRequestToken = useRef(0);
   const treeRowsRef = useRef(treeRows);
   treeRowsRef.current = treeRows;
   const focus = useMemo<TreeFocusController>(() => ({
-    row: (id, waitForRow = false) => {
+    row: (id, waitForRow = false, select = false) => {
       focusRequestToken.current += 1;
-      setFocusRequest({ targets: [id], waitForTarget: waitForRow, currentOnNull: id === null, token: focusRequestToken.current });
+      setFocusRequest({ targets: [id], waitForTarget: waitForRow, select, currentOnNull: id === null, token: focusRequestToken.current });
     },
-    deletionTargets: (row) => {
+    rows: (ids) => ids.flatMap((id) => treeRowsRef.current.find((row) => row.id === id) ?? []),
+    deletionTargets: (row, ids = [row.id]) => {
       const currentRows = treeRowsRef.current;
       const index = currentRows.findIndex((candidate) => candidate.id === row.id);
-      const next = currentRows.slice(index + 1).find((candidate) => candidate.depth <= row.depth);
-      const previous = currentRows.slice(0, index).reverse().find((candidate) => candidate.depth <= row.depth);
-      return [...new Set([next?.id, previous?.id, row.parentId].filter((id): id is string => id !== undefined && id !== null)), null];
+      const excluded = (candidate: TreeRowModel) => {
+        let current: TreeRowModel | undefined = candidate;
+        while (current) {
+          if (ids.includes(current.id)) return true;
+          current = currentRows.find((item) => item.id === current?.parentId);
+        }
+        return false;
+      };
+      const next = currentRows.slice(index + 1).find((candidate) => candidate.depth <= row.depth && !excluded(candidate));
+      const previous = currentRows.slice(0, index).reverse().find((candidate) => candidate.depth <= row.depth && !excluded(candidate));
+      const parent = currentRows.find((candidate) => candidate.id === row.parentId);
+      return [...new Set([!excluded(row) ? row.id : undefined, next?.id, previous?.id, parent && !excluded(parent) ? parent.id : undefined].filter((id): id is string => id !== undefined && id !== null)), null];
     },
     afterDelete: (targets) => {
       focusRequestToken.current += 1;
@@ -153,10 +197,22 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
   const onFocus = useCallback((id: string) => setFocusId(id), []);
   const activate = useCallback((row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => {
     if (row.id === END_ACTION_ID) { handlers.current.endAction?.onActivate(); return; }
+    const { selection, onSelectionChange } = handlers.current;
+    if (selection && onSelectionChange) {
+      if (event.shiftKey) { selectRange(row.id); return; }
+      if (event.ctrlKey) {
+        selectionAnchor.current = row.id;
+        onSelectionChange(selection.includes(row.id) ? selection.filter((id) => id !== row.id) : [...selection, row.id]);
+        return;
+      }
+      selectionAnchor.current = row.id;
+      onSelectionChange([row.id]);
+    }
     handlers.current.onActivate(row, { source: "click", target: event.currentTarget, detail: event.detail });
-  }, []);
+  }, [selectRange]);
   const contextMenu = useCallback((row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => {
     if (!handlers.current.onContextMenu) return;
+    if (handlers.current.selection && !handlers.current.selection.includes(row.id)) selectionAnchor.current = row.id;
     event.preventDefault();
     event.stopPropagation();
     handlers.current.onContextMenu(row.id === END_ACTION_ID ? null : row, event.currentTarget, { x: event.clientX, y: event.clientY }, focus);
@@ -178,19 +234,29 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     const { treeRows, expanded, moveFocus } = handlers.current;
     const index = treeRows.findIndex((item) => item.id === row.id);
     if (index < 0) return;
-    if (event.key === "ArrowDown") moveFocus(index + 1);
-    else if (event.key === "ArrowUp") moveFocus(index - 1);
+    const move = (nextIndex: number) => {
+      const next = treeRows[Math.max(0, Math.min(treeRows.length - 1, nextIndex))];
+      if (handlers.current.onSelectionChange && next) {
+        if (event.shiftKey) { selectionAnchor.current ??= row.id; selectRange(next.id === "tree:end-action" ? handlers.current.selectableRows.at(-1)?.id ?? row.id : next.id); }
+        else if (next.id !== "tree:end-action") { selectionAnchor.current = next.id; handlers.current.onSelectionChange([next.id]); }
+      }
+      moveFocus(nextIndex);
+    };
+    if (event.ctrlKey && event.key.toLowerCase() === "a" && handlers.current.onSelectionChange) {
+      handlers.current.onSelectionChange(handlers.current.selectableRows.map((item) => item.id));
+    } else if (event.key === "Home" || event.key === "End") move(event.key === "Home" ? 0 : treeRows.length - 1);
+    else if (event.key === "ArrowDown" || event.key === "ArrowUp") move(index + (event.key === "ArrowDown" ? 1 : -1));
     else if (event.key === "ArrowRight" && row.hasChildren) {
       if (!expanded.has(row.id)) handlers.current.onExpandedChange(row.id, true);
       else {
         const child = treeRows[index + 1];
-        if (child?.parentId === row.id) moveFocus(index + 1);
+        if (child?.parentId === row.id) move(index + 1);
       }
     } else if (event.key === "ArrowLeft") {
       if (row.expanded) handlers.current.onExpandedChange(row.id, false);
       else if (row.parentId) {
         const parentIndex = treeRows.findIndex((item) => item.id === row.parentId);
-        if (parentIndex >= 0) moveFocus(parentIndex);
+        if (parentIndex >= 0) move(parentIndex);
       }
     } else if (event.key === "Enter") {
       if (row.id === END_ACTION_ID) handlers.current.endAction?.onActivate();
@@ -204,7 +270,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     }
     event.preventDefault();
     event.stopPropagation();
-  }, [focus]);
+  }, [focus, selectRange]);
 
   useEffect(() => {
     const request = focusRequest;
@@ -226,6 +292,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
       return;
     }
     setFocusId(target);
+    if (request.select) handlers.current.onSelectionChange?.([target]);
     virtual.scrollToIndex(flat.indexOf(row), { align: "auto" });
     setPendingFocus(target);
     setFocusRequest(null);
@@ -247,6 +314,20 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
   });
 
   const virtualRows = virtual.getVirtualItems();
+  const dropDestination = virtualRows.find((item) => flat[item.index].id === drag?.targetId);
+  const scrollOffset = virtual.scrollOffset ?? 0;
+  const destinationVisible = dropDestination && dropDestination.end > scrollOffset
+    && dropDestination.start < scrollOffset + (virtual.scrollRect?.height ?? 0);
+  const dropTargetId = drag?.targetId === "" || destinationVisible ? drag?.targetId : drag?.hoveredId ?? drag?.targetId;
+
+  const dragRow = (target: EventTarget | null): TreeRowModel | null | undefined => {
+    const id = target instanceof Element ? target.closest<HTMLElement>("[data-tree-id]")?.dataset.treeId : undefined;
+    if (id) return treeRows.find((row) => row.id === id);
+    const rowId = target instanceof Element ? target.closest<HTMLElement>("[data-tree-row]")?.dataset.treeRow : undefined;
+    if (!rowId) return null;
+    const row = flat.find((candidate) => candidate.id === rowId);
+    return (row?.node.data as { directoryPath?: string } | undefined)?.directoryPath ? row : undefined;
+  };
   useEffect(() => {
     const interactive = flat.filter((row) => row.node.interactiveContent);
     const currentIds = new Set(interactive.map((row) => row.id));
@@ -294,11 +375,18 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     className={className}
     ref={scrollRef}
     role="tree"
+    aria-multiselectable={selection ? true : undefined}
+    data-drop-state={drag?.targetId === "" ? drag.valid ? "valid" : "invalid" : undefined}
+    onDragStart={drag?.enabled ? (event) => { const row = dragRow(event.target); if (row) drag.onStart(row, event); } : undefined}
+    onDragOver={drag?.enabled ? (event) => { const row = dragRow(event.target); if (row !== undefined) drag.onOver(row, event); } : undefined}
+    onDrop={drag?.enabled ? (event) => { const row = dragRow(event.target); if (row !== undefined) drag.onDrop(row, event); } : undefined}
+    onDragEnd={drag?.enabled ? drag.onEnd : undefined}
+    onDragLeave={drag?.enabled ? drag.onLeave : undefined}
     tabIndex={treeRows.length ? -1 : 0}
     onClick={(event) => {
       if (!(event.target instanceof Element)) { scrollRef.current?.focus(); return; }
       if (event.target.closest("button, input, textarea, select, [contenteditable='true']")) return;
-      if (!event.target.closest("[data-tree-id]")) scrollRef.current?.focus();
+      if (!event.target.closest("[data-tree-id]")) { selectionAnchor.current = null; handlers.current.onSelectionChange?.([]); scrollRef.current?.focus(); }
     }}
     onContextMenu={(event) => {
       if (!handlers.current.onContextMenu) return;
@@ -312,8 +400,17 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     }}
     onKeyDown={(event) => {
       if (event.target !== event.currentTarget) return;
-      if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(event.key) && effectiveFocus !== null) {
-        moveFocus(treeRows.findIndex((row) => row.id === effectiveFocus));
+      if (event.ctrlKey && event.key.toLowerCase() === "a" && handlers.current.onSelectionChange) {
+        handlers.current.onSelectionChange(handlers.current.selectableRows.map((row) => row.id));
+        event.preventDefault(); event.stopPropagation();
+      } else if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) && effectiveFocus !== null) {
+        const index = event.key === "Home" ? 0 : event.key === "End" ? treeRows.length - 1 : treeRows.findIndex((row) => row.id === effectiveFocus);
+        const target = treeRows[index];
+        if (handlers.current.onSelectionChange) {
+          if (event.shiftKey) { selectionAnchor.current ??= effectiveFocus; selectRange(target.id === "tree:end-action" ? handlers.current.selectableRows.at(-1)?.id ?? effectiveFocus : target.id); }
+          else if (target.id !== "tree:end-action") { selectionAnchor.current = target.id; handlers.current.onSelectionChange([target.id]); }
+        }
+        moveFocus(index);
         event.preventDefault();
         event.stopPropagation();
       } else if (handlers.current.onCommandKeyDown?.(null, event, focus)) {
@@ -338,6 +435,9 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
           onFocus={onFocus}
           onKeyDown={keyDown}
           menuTarget={menuTargetId === row.id}
+          multiSelected={selection ? selection.includes(row.id) : undefined}
+          draggable={drag?.enabled && row.node.content === undefined}
+          dropState={dropTargetId === row.id ? drag?.valid ? "valid" : "invalid" : undefined}
           row={row}
           selected={row.node.selectable !== false && row.node.id === selectedId}
         />;

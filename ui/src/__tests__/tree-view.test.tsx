@@ -120,6 +120,52 @@ describe("공용 가상 트리", () => {
     expect(menu.mock.calls[0][0]).toBeNull();
     expect(end.hasAttribute("data-menu-target")).toBe(false);
   });
+
+  it("화면 밖 목적지가 overscan에 남아도 가리킨 행에 놓기 표시를 옮긴다", async () => {
+    const drag = { enabled: true, targetId: "dir-0", hoveredId: "item-0-5", valid: true,
+      onStart: vi.fn(), onOver: vi.fn(), onDrop: vi.fn(), onEnd: vi.fn(), onLeave: vi.fn() };
+    render(<TreeView className="ks-file-tree-list" expanded={expanded} label="놓기 트리" nodes={treeNodes}
+      onActivate={() => {}} onExpandedChange={() => {}} drag={drag} />);
+    const parent = await screen.findByRole("treeitem", { name: "folder-0" });
+    expect(parent.getAttribute("data-drop-state")).toBe("valid");
+    const tree = screen.getByRole("tree");
+    tree.scrollTop = 96; fireEvent.scroll(tree);
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: "item-0-5" }).getAttribute("data-drop-state")).toBe("valid"));
+    expect(parent.isConnected).toBe(true);
+    expect(parent.hasAttribute("data-drop-state")).toBe(false);
+  });
+
+  it("묶음 삭제 포커스 후보는 선택한 행과 그 자손을 건너뛴다", () => {
+    let focus: TreeFocusController | null = null;
+    const nodes: TreeNode[] = [
+      { id: "a", label: "a", children: [{ id: "child", label: "child" }] },
+      { id: "b", label: "b" }, { id: "c", label: "c" }, { id: "remaining", label: "remaining" },
+    ];
+    render(<TreeView className="ks-file-tree-list" expanded={new Set(["a"])} label="삭제 트리" nodes={nodes}
+      onActivate={() => {}} onExpandedChange={() => {}} onFocusController={(controller) => { focus = controller; }} />);
+    const row = focus!.rows(["b"])[0];
+    const candidates = focus!.deletionTargets(row, ["a", "b", "c"]);
+    expect(candidates).toEqual(["remaining", null]);
+  });
+
+  it("이름 바꾼 행이 나타나면 새 행 하나를 고른다", async () => {
+    let focus: TreeFocusController | null = null;
+    const onSelectionChange = vi.fn();
+    const props = { className: "ks-file-tree-list", expanded: new Set<string>(), label: "이름 트리", onActivate: () => {}, onExpandedChange: () => {}, selection: [], onSelectionChange, onFocusController: (controller: TreeFocusController) => { focus = controller; } };
+    const { rerender } = render(<TreeView {...props} nodes={[{ id: "old", label: "old" }]} />);
+    act(() => focus!.row("new", true, true));
+    rerender(<TreeView {...props} nodes={[{ id: "new", label: "new" }]} />);
+    await waitFor(() => expect(onSelectionChange).toHaveBeenCalledWith(["new"]));
+  });
+
+  it("접히거나 사라진 행은 선택에서 제거한다", async () => {
+    const onSelectionChange = vi.fn();
+    const props = { className: "ks-file-tree-list", expanded: new Set<string>(), label: "선택 트리", onActivate: () => {}, onExpandedChange: () => {}, selection: ["a", "b"], onSelectionChange };
+    const { rerender } = render(<TreeView {...props} nodes={[{ id: "a", label: "a" }, { id: "b", label: "b" }]} />);
+    expect(onSelectionChange).not.toHaveBeenCalled();
+    rerender(<TreeView {...props} nodes={[{ id: "a", label: "a" }]} />);
+    await waitFor(() => expect(onSelectionChange).toHaveBeenCalledWith(["a"]));
+  });
   it("목록 대기 중 다른 입력으로 옮긴 포커스를 빼앗지 않고 요청을 버린다", async () => {
     let focus: TreeFocusController | null = null;
     const props = {

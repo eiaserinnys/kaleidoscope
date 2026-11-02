@@ -12,7 +12,18 @@ import { createShellStore, shareShellSnapshot, shareStructure } from "../core/sh
 import * as windowData from "../data/window-data";
 import { TimelineBlock } from "../blocks/timeline";
 import * as renderBlockModule from "../render/render-block";
-import { makeTestSeed, makeTestSnapshot } from "./fixtures";
+import { grantFor, makeTestSeed, makeTestSnapshot } from "./fixtures";
+import { AppWindowContent } from "../render/app-window-content";
+
+const rowRenders = vi.hoisted(() => new Map<string, number>());
+vi.mock("../components/tree/tree-row", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../components/tree/tree-row")>();
+  const { memo } = await import("react");
+  return { ...actual, TreeRow: memo(function ObservedRow(props: Parameters<typeof actual.TreeRow>[0]) {
+    rowRenders.set(props.row.id, (rowRenders.get(props.row.id) ?? 0) + 1);
+    return <actual.TreeRow {...props} />;
+  }) };
+});
 
 const fallbackProbe = vi.hoisted(() => ({
   current: null as null | ((windowId: string, pointer: string, type: string) => void),
@@ -150,7 +161,8 @@ if (!globalThis.ResizeObserver) {
     value: class {
       constructor(private readonly callback: ResizeObserverCallback) {}
       observe(target: Element) {
-        this.callback([{ target, contentRect: { width: 960, height: 552 } } as ResizeObserverEntry] as ResizeObserverEntry[], this as unknown as ResizeObserver);
+        const height = target.hasAttribute("data-tree-row") ? 32 : 552;
+        this.callback([{ target, contentRect: { width: 960, height } } as ResizeObserverEntry] as ResizeObserverEntry[], this as unknown as ResizeObserver);
       }
       unobserve() {}
       disconnect() {}
@@ -230,6 +242,7 @@ async function setState(store: ReturnType<typeof createShellStore>, windowId: st
 
 afterEach(() => {
   cleanup();
+  rowRenders.clear();
   const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;
   if (probe) probe.current = null;
   fallbackProbe.current = null;
@@ -251,6 +264,41 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     fireEvent.click(screen.getByRole("treeitem", { name: "새 문서" }));
     expect(screen.getByRole("treeitem", { name: "다음 문서" })).toBeTruthy();
     expect(rendered).toBe(before);
+  });
+
+  it("폴더 선택과 끌기 대상 변경은 무관한 행을 다시 그리지 않는다", async () => {
+    const folder: AppDefinition = {
+      id: "folder-isolation", name: "폴더 격리", requires: { blocks: 13, modules: { files: 3 } },
+      permissions: [{ module: "files", id: "docs", access: "readwrite", label: "문서" }],
+      state: { selected: null },
+      ui: { type: "folder", root: { permission: "docs" }, selected: { state: "selected" }, on_select: { set_state: "selected" } },
+    };
+    const seed = makeTestSeed({ definitions: [folder], grants: [grantFor("viewer-window", "docs")], files: { "a.md": "a", "b.md": "b", "z.md": "z", "target/inside.md": "x" } });
+    seed.snapshot.shared.windows[0].state = { selected: null };
+    const store = createShellStore(createFakeTransport(seed));
+    render(<AppWindowContent store={store} windowId="viewer-window" />);
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const b = screen.getByRole("treeitem", { name: "b.md" });
+    const target = screen.getByRole("treeitem", { name: "target" });
+    rowRenders.clear();
+    fireEvent.click(a, { ctrlKey: true });
+    expect(rowRenders.get("a.md")).toBe(1);
+    expect(rowRenders.get("z.md") ?? 0).toBe(0);
+    rowRenders.clear();
+    fireEvent.click(b, { ctrlKey: true });
+    expect(rowRenders.get("b.md")).toBe(1);
+    expect(rowRenders.get("a.md") ?? 0).toBe(0);
+    expect(rowRenders.get("z.md") ?? 0).toBe(0);
+    const values = new Map<string, string>();
+    const dataTransfer = { setData: (type: string, data: string) => values.set(type, data), getData: (type: string) => values.get(type) ?? "", effectAllowed: "", dropEffect: "" };
+    fireEvent.dragStart(a, { dataTransfer });
+    rowRenders.clear();
+    fireEvent.dragOver(target, { dataTransfer });
+    expect(rowRenders.get("target")).toBe(1);
+    expect(rowRenders.get("a.md") ?? 0).toBe(0);
+    expect(rowRenders.get("z.md") ?? 0).toBe(0);
+    fireEvent.dragEnd(a, { dataTransfer });
+    store.dispose();
   });
   it("when 조건을 바꿀 때 자식만 마운트하고 다른 블록은 다시 그리지 않는다", async () => {
     const { store } = await setup([whenDefinition], { visible: false });

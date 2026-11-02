@@ -96,12 +96,14 @@ export function EmptyState({
 export function Notice({
   children,
   actions,
+  details,
   errorId,
   role = "status",
   "data-ks-overlay": overlay,
 }: {
   children: ReactNode;
   actions?: [ReactNode] | [ReactNode, ReactNode];
+  details?: ReactNode;
   errorId?: string | null;
   role?: "alert" | "status";
   "data-ks-overlay"?: boolean;
@@ -110,6 +112,7 @@ export function Notice({
     <div className="ks-notice" data-ks-overlay={overlay || undefined} role={role}>
       <span className="ks-notice-message">{children}{errorId ? <> <ErrorId id={errorId} /></> : null}</span>
       {actions ? <span className="ks-notice-actions">{actions}</span> : null}
+      {details ? <div className="ks-notice-details">{details}</div> : null}
     </div>
   );
 }

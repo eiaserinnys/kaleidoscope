@@ -15,6 +15,8 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
 mod files_write;
+#[cfg(windows)]
+mod folder_drag;
 mod local_agent;
 #[cfg(windows)]
 mod share_isolate;
@@ -492,7 +494,9 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
                 ScenarioKind::Update => update::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::LocalAgent => local_agent::scenario(&core, &out, &mut log),
                 ScenarioKind::FilesWrite => match setting("PICK_FOLDER") {
-                    Some(folder) => files_write::scenario(&core, &PathBuf::from(folder), &mut log),
+                    Some(folder) => {
+                        files_write::scenario(&app, &core, &PathBuf::from(folder), &mut log)
+                    }
                     None => Err("files-write test folder is missing".into()),
                 },
             } {

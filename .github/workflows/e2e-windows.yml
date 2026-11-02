@@ -170,12 +170,15 @@ jobs:
             }
             $app.Refresh()
             if (-not $app.HasExited) { throw '파일 쓰기 E2E 시간 초과' }
-            if ($app.ExitCode -ne 0) { throw "파일 쓰기 E2E 실패: $($app.ExitCode)" }
             $eventPath = Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl'
             $events = Get-Content $eventPath | ForEach-Object { $_ | ConvertFrom-Json }
-            foreach ($step in @('files-write.case-only-rename', 'files-write.file-busy-recovery', 'files-write.trash', 'files-write.reveal', 'complete')) {
-              if (-not ($events | Where-Object { $_.step -eq $step })) { throw "파일 쓰기 단계 로그 누락: $step" }
+            $failures = @()
+            if ($app.ExitCode -ne 0) { $failures += "파일 쓰기 E2E 실패: $($app.ExitCode)" }
+            foreach ($step in @('files-write.external-drop-guard', 'files-write.case-only-rename', 'files-write.file-busy-recovery', 'files-write.trash', 'files-write.reveal', 'files-write.drag', 'complete')) {
+              $check = $events | Where-Object { $_.step -eq $step } | Select-Object -Last 1
+              if (-not $check -or $check.data.passed -eq $false) { $failures += "파일 쓰기 단계 실패 또는 누락: $step" }
             }
+            if ($failures.Count -gt 0) { throw ($failures -join '; ') }
           } finally { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
       - name: 같이 보기 격리 캡처 시나리오
         shell: pwsh

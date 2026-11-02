@@ -426,7 +426,7 @@ fn file_write_batches_skip_selected_descendants_and_keep_request_order() {
         ["copy-after.txt", "copy-source", "copy-before.txt"]
     );
     assert!(root
-        .join("copy-dest/copy-source - 복사본/note.txt")
+        .join("copy-dest/copy-source/note.txt")
         .exists());
     assert!(!root.join("copy-dest/note.txt").exists());
 
