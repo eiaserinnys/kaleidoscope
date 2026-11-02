@@ -53,7 +53,7 @@ fn save(db: &Connection, spec: &BuiltinRuntimeSpec) -> Result<(), CoreError> {
             kaleidoscope_contract::errors::APP_BUILTIN_SPEC_WORKER_SERIALIZE_FAILED(&spec.app_id)
                 .and_details(vec![e.to_string()])
         })?;
-    db.execute("INSERT INTO builtin_app_specs(app_id,version,storage_json,worker_json,updated_at) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(app_id) DO UPDATE SET version=excluded.version,storage_json=excluded.storage_json,worker_json=excluded.worker_json,updated_at=excluded.updated_at WHERE excluded.version >= builtin_app_specs.version", params![spec.app_id, spec.version, storage, worker, timestamp()]).map_err(db_error)?;
+    db.execute("INSERT INTO builtin_app_specs(app_id,version,storage_json,worker_json,updated_at) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(app_id) DO UPDATE SET version=excluded.version,storage_json=excluded.storage_json,worker_json=excluded.worker_json,updated_at=excluded.updated_at WHERE excluded.version >= builtin_app_specs.version", params![spec.app_id, spec.version, storage, worker, timestamp()]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_BUILTIN_SPEC_SAVE_DATABASE_FAILED()))?;
     Ok(())
 }
 
@@ -63,11 +63,21 @@ impl AppState {
             definition(spec)?;
         }
         let db = self.lock_db()?;
-        let tx = db.unchecked_transaction().map_err(db_error)?;
+        let tx = db.unchecked_transaction().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::SERVER_BUILTIN_SPEC_SAVE_DATABASE_FAILED(),
+            )
+        })?;
         for spec in specs {
             save(&tx, spec)?;
         }
-        tx.commit().map_err(db_error)
+        tx.commit().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::SERVER_BUILTIN_SPEC_SAVE_DATABASE_FAILED(),
+            )
+        })
     }
 
     pub(super) fn builtin_entry(
@@ -185,7 +195,12 @@ pub(super) fn load_definition(
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()
-        .map_err(db_error)?;
+        .map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::SERVER_BUILTIN_SPEC_LOAD_DATABASE_FAILED(app_id),
+            )
+        })?;
     if let Some((version, storage, worker)) = row {
         let storage: Option<kaleidoscope_contract::app_storage::StorageDecl> = storage
             .map(|raw| {
@@ -235,6 +250,7 @@ pub(super) fn load_definition(
         let raw = std::fs::read_to_string(&path).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 kaleidoscope_contract::errors::APP_BUILTIN_SPEC_FILE_READ_NOT_FOUND(app_id)
+                    .and_details(vec![e.to_string()])
             } else {
                 kaleidoscope_contract::errors::APP_BUILTIN_SPEC_FILE_READ_FAILED(app_id)
                     .and_details(vec![e.to_string()])

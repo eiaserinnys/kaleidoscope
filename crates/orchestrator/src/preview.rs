@@ -565,7 +565,7 @@ fn preview_window_state(
     let raw: Option<String> = db.query_row(
         "SELECT v.data FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.id=?1 AND w.account_id=?2",
         params![window_id, account], |row| row.get(0)
-    ).optional().map_err(db_error)?;
+    ).optional().map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_PREVIEW_WINDOW_STATE_DATABASE_FAILED(window_id)))?;
     raw.map(|raw| {
         serde_json::from_str::<kaleidoscope_contract::AppWindow>(&raw)
             .map(|window| window.state)
@@ -592,7 +592,7 @@ fn preview_storage(
         let canonical: Option<(String, String)> = db.query_row(
             "SELECT d.workspace_id,v.app_id FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.id=?1 AND w.account_id=?2",
             params![window, account], |row| Ok((row.get(0)?,row.get(1)?))
-        ).optional().map_err(db_error)?;
+        ).optional().map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_PREVIEW_WINDOW_LOOKUP_DATABASE_FAILED(window)))?;
         drop(db);
         let found = if canonical.is_some() {
             canonical
@@ -641,7 +641,7 @@ fn preview_storage(
     let workspace = workspace.or(window_workspace.as_deref());
     let db = state.lock_db()?;
     if let Some(workspace) = workspace {
-        let owns: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?1 AND account_id=?2) OR EXISTS(SELECT 1 FROM legacy_workspace_owners o WHERE o.workspace_id=?1 AND o.account_id=?2 AND NOT EXISTS(SELECT 1 FROM workspaces w WHERE w.id=o.workspace_id))", params![workspace, account], |row| row.get(0)).map_err(db_error)?;
+        let owns: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?1 AND account_id=?2) OR EXISTS(SELECT 1 FROM legacy_workspace_owners o WHERE o.workspace_id=?1 AND o.account_id=?2 AND NOT EXISTS(SELECT 1 FROM workspaces w WHERE w.id=o.workspace_id))", params![workspace, account], |row| row.get(0)).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_PREVIEW_WORKSPACE_ACCESS_DATABASE_FAILED(&definition.id)))?;
         if !owns {
             return Err(kaleidoscope_contract::errors::APP_PREVIEW_WORKSPACE_NOT_FOUND(workspace));
         }
@@ -674,7 +674,14 @@ fn preview_storage(
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_PREVIEW_STORAGE_DATABASE_FAILED(
+                        &definition.id,
+                    ),
+                )
+            })?;
         let value = if let Some((kind, raw)) = item {
             let expected_kind = serde_json::to_value(entry.kind).map_err(|e| {
                 kaleidoscope_contract::errors::APP_PREVIEW_STORAGE_KIND_SERIALIZE_FAILED(
@@ -689,8 +696,11 @@ fn preview_storage(
                 ));
             }
             let value: Value = serde_json::from_str(&raw).map_err(|e| {
-                kaleidoscope_contract::errors::STORAGE_STORED_SERIALIZATION_FAILED(&entry.key)
-                    .and_details(vec![e.to_string()])
+                kaleidoscope_contract::errors::APP_PREVIEW_STORAGE_VALUE_JSON_INVALID(
+                    &definition.id,
+                    &entry.key,
+                )
+                .and_details(vec![e.to_string()])
             })?;
             kaleidoscope_contract::app_storage::validate_storage_content(entry, &value).map_err(
                 |error| {

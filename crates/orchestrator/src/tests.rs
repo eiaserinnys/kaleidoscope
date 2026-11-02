@@ -31,6 +31,21 @@ fn builtin_apps_are_listed_and_upload_is_rejected() {
     assert!(state.publish_app(EDITOR, "agent", false, None).is_err());
 }
 
+#[test]
+fn app_list_database_error_has_operation_specific_code_and_details() {
+    let state = AppState::in_memory("secret");
+    state
+        .lock_db()
+        .unwrap()
+        .execute_batch("DROP TABLE apps")
+        .unwrap();
+
+    let error = state.current_apps().unwrap_err();
+
+    assert_eq!(error.id.as_deref(), Some("SERVER_APP_LIST_DATABASE_FAILED"));
+    assert!(!error.details.is_empty());
+}
+
 #[tokio::test]
 async fn device_upload_rejects_builtin_id() {
     let state = AppState::in_memory("secret");

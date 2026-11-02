@@ -253,7 +253,12 @@ impl AppState {
                 [],
                 |row| row.get(0),
             )
-            .map_err(db_error)
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_MCP_ACCOUNT_LOOKUP_DATABASE_FAILED(),
+                )
+            })
     }
 
     fn mcp_device_ids(&self) -> HashSet<String> {
@@ -281,7 +286,12 @@ impl AppState {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(db_error)?
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_DEVICE_ACCOUNT_LOOKUP_DATABASE_FAILED(),
+                )
+            })?
             .ok_or_else(|| {
                 kaleidoscope_contract::errors::SERVER_DEVICE_ACCOUNT_NOT_FOUND(device_id)
             })
@@ -306,7 +316,7 @@ impl AppState {
                 params![device_id, workspace_id],
                 |row| row.get(0),
             )
-            .map_err(db_error)?;
+            .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_DEVICE_WORKSPACE_ACCESS_DATABASE_FAILED()))?;
         Ok(owned)
     }
 
@@ -316,7 +326,7 @@ impl AppState {
             "SELECT EXISTS(SELECT 1 FROM workspaces w JOIN mcp_principal p ON p.account_id=w.account_id WHERE p.id=1 AND w.id=?1)",
             [workspace_id],
             |row| row.get(0),
-        ).map_err(db_error)
+        ).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_MCP_WORKSPACE_ACCESS_DATABASE_FAILED()))
     }
 
     fn device_can_render_app(&self, device_id: &str, definition: &AppDefinition) -> bool {
@@ -363,7 +373,12 @@ impl AppState {
             .collect();
         let placeholders = vec!["?"; builtin_ids.len()].join(",");
         let query = format!("SELECT a.id,a.name,a.current_version,a.created_at,a.updated_at,v.definition,v.created_at FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.deleted_at IS NULL AND a.id NOT IN ({placeholders}) ORDER BY a.id");
-        let mut stmt = db.prepare(&query).map_err(db_error)?;
+        let mut stmt = db.prepare(&query).map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::SERVER_APP_LIST_DATABASE_FAILED(),
+            )
+        })?;
         let rows = stmt
             .query_map(rusqlite::params_from_iter(builtin_ids), |row| {
                 Ok((
@@ -376,7 +391,12 @@ impl AppState {
                     row.get::<_, String>(6)?,
                 ))
             })
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_LIST_DATABASE_FAILED(),
+                )
+            })?;
         let mut apps = Vec::new();
         for row in rows {
             let (
@@ -387,7 +407,12 @@ impl AppState {
                 updated_at,
                 raw_definition,
                 version_created_at,
-            ) = row.map_err(db_error)?;
+            ) = row.map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_LIST_DATABASE_FAILED(),
+                )
+            })?;
             let definition = serde_json::from_str(&raw_definition).map_err(|error| {
                 kaleidoscope_contract::errors::SERVER_APP_LIST_DEFINITION_JSON_INVALID(&id)
                     .and_details(vec![error.to_string()])
@@ -423,7 +448,7 @@ impl AppState {
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
             )
             .optional()
-            .map_err(db_error)?;
+            .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_LOOKUP_DATABASE_FAILED(app_id)))?;
         let Some((id, name, current_version, created_at, updated_at)) = current else {
             return Ok(None);
         };
@@ -435,7 +460,12 @@ impl AppState {
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .optional()
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_LOOKUP_DATABASE_FAILED(&id),
+                )
+            })?;
         let Some((definition, version_created_at)) = found else {
             return Ok(None);
         };
@@ -464,13 +494,28 @@ impl AppState {
         let db = self.lock_db()?;
         let mut stmt = db
             .prepare("SELECT id FROM apps WHERE deleted_at IS NOT NULL ORDER BY id")
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_LIST_DATABASE_FAILED(),
+                )
+            })?;
         let rows = stmt
             .query_map([], |row| row.get::<_, String>(0))
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_LIST_DATABASE_FAILED(),
+                )
+            })?;
         let ids = rows
             .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_LIST_DATABASE_FAILED(),
+                )
+            })?;
         Ok(ids
             .into_iter()
             .filter(|id| !kaleidoscope_contract::builtin::is_builtin(id))
@@ -518,7 +563,12 @@ impl AppState {
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .optional()
-            .map_err(db_error)
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_DEVICE_AUTH_DATABASE_FAILED(),
+                )
+            })
     }
 
     fn touch_device(&self, id: &str) -> Result<(), CoreError> {
@@ -527,7 +577,12 @@ impl AppState {
                 "UPDATE devices SET last_seen_at=?2 WHERE id=?1 AND revoked_at IS NULL",
                 params![id, timestamp()],
             )
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_DEVICE_LAST_SEEN_DATABASE_FAILED(),
+                )
+            })?;
         Ok(())
     }
 
@@ -554,8 +609,13 @@ impl AppState {
                 [],
                 |row| row.get(0),
             )
-            .map_err(db_error)?;
-        let mut stmt = db.prepare("SELECT id,name,created_at,last_seen_at,revoked_at FROM devices WHERE account_id=?1 ORDER BY created_at,id").map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_DEVICE_LIST_DATABASE_FAILED(),
+                )
+            })?;
+        let mut stmt = db.prepare("SELECT id,name,created_at,last_seen_at,revoked_at FROM devices WHERE account_id=?1 ORDER BY created_at,id").map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_DEVICE_LIST_DATABASE_FAILED()))?;
         let connected = self.0.connections.lock().map_err(|_| {
             kaleidoscope_contract::errors::SERVER_DEVICE_LIST_CONNECTION_STATE_LOCK_FAILED()
         })?;
@@ -572,8 +632,18 @@ impl AppState {
                     revoked: revoked.is_some(),
                 })
             })
-            .map_err(db_error)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_DEVICE_LIST_DATABASE_FAILED(),
+                )
+            })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::SERVER_DEVICE_LIST_DATABASE_FAILED(),
+            )
+        })
     }
 
     fn revoke_device(&self, id: &str) -> Result<bool, CoreError> {
@@ -585,17 +655,22 @@ impl AppState {
                     [],
                     |row| row.get(0),
                 )
-                .map_err(db_error)?;
+                .map_err(|error| {
+                    db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::SERVER_DEVICE_REVOKE_DATABASE_FAILED(),
+                    )
+                })?;
             let changed = db
                 .execute(
                     "UPDATE devices SET revoked_at=COALESCE(revoked_at,?3) WHERE id=?1 AND account_id=?2",
                     params![id, account_id, timestamp()],
                 )
-                .map_err(db_error)?;
+                .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_DEVICE_REVOKE_DATABASE_FAILED()))?;
             // 지운 기기의 배치 보고는 지운다(저장소 판 올림과 같은 규칙). 남겨 두면 작업 조회가 그 기기를
             // 「가장 최근에 그 작업을 본 기기」로 골라 에이전트가 끊긴 시험 쉘의 화면을 읽는다.
             db.execute("DELETE FROM device_layouts WHERE device_id=?1 AND EXISTS(SELECT 1 FROM devices WHERE id=?1 AND account_id=?2)", params![id, account_id])
-                .map_err(db_error)?;
+                .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_DEVICE_REVOKE_DATABASE_FAILED()))?;
             changed
         };
         self.refresh_device_workspaces()?;

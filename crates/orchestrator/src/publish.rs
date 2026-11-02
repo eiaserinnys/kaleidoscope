@@ -87,7 +87,14 @@ impl AppState {
             open && workspace_accessible && (preferred_device.is_none() || open_target.is_some());
         let result = {
             let mut db = self.lock_db()?;
-            let tx = db.transaction().map_err(db_error)?;
+            let tx = db.transaction().map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
+                        &definition.id,
+                    ),
+                )
+            })?;
             for asset in &prepared {
                 super::assets::insert(&tx, &account_id, asset)?;
             }
@@ -96,7 +103,7 @@ impl AppState {
             let current: Option<(u32, String, String, Option<String>)> = tx.query_row(
                 "SELECT a.current_version, v.definition, a.created_at, a.deleted_at FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.id=?1",
                 [&definition.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-            ).optional().map_err(db_error)?;
+            ).optional().map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(&definition.id)))?;
             let revived = current
                 .as_ref()
                 .is_some_and(|(_, _, _, deleted)| deleted.is_some());
@@ -124,18 +131,39 @@ impl AppState {
                         &definition,
                     )?;
                     let version = current_version + 1;
-                    save_version(&tx, &definition, version, &now, created_by).map_err(db_error)?;
+                    save_version(&tx, &definition, version, &now, created_by).map_err(|error| {
+                        db_error_with(
+                            error,
+                            kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
+                                &definition.id,
+                            ),
+                        )
+                    })?;
                     tx.execute(
                         "UPDATE apps SET name=?2,current_version=?3,updated_at=?4 WHERE id=?1",
                         params![definition.id, definition.name, version, now],
                     )
-                    .map_err(db_error)?;
+                    .map_err(|error| {
+                        db_error_with(
+                            error,
+                            kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
+                                &definition.id,
+                            ),
+                        )
+                    })?;
                     migrated_windows = move_app_windows(&tx, &definition, version, &now)?;
                     (version, created_at, false)
                 }
             } else {
-                tx.execute("INSERT INTO apps(id,name,current_version,created_at,updated_at) VALUES(?1,?2,1,?3,?3)", params![definition.id, definition.name, now]).map_err(db_error)?;
-                save_version(&tx, &definition, 1, &now, created_by).map_err(db_error)?;
+                tx.execute("INSERT INTO apps(id,name,current_version,created_at,updated_at) VALUES(?1,?2,1,?3,?3)", params![definition.id, definition.name, now]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(&definition.id)))?;
+                save_version(&tx, &definition, 1, &now, created_by).map_err(|error| {
+                    db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
+                            &definition.id,
+                        ),
+                    )
+                })?;
                 (1, now.clone(), false)
             };
             if revived {
@@ -143,9 +171,23 @@ impl AppState {
                     "UPDATE apps SET deleted_at=NULL WHERE id=?1",
                     [&definition.id],
                 )
-                .map_err(db_error)?;
+                .map_err(|error| {
+                    db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
+                            &definition.id,
+                        ),
+                    )
+                })?;
             }
-            tx.commit().map_err(db_error)?;
+            tx.commit().map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
+                        &definition.id,
+                    ),
+                )
+            })?;
             drop(db);
             let app = App {
                 id: definition.id.clone(),
@@ -209,7 +251,7 @@ impl AppState {
                             "SELECT w.account_id FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.id=?1",
                             [&window.id],
                             |row| row.get(0),
-                        ).map_err(db_error)?;
+                        ).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(&result.0.app.id)))?;
                         accounts.entry(account_id).or_default().push(window.clone());
                     }
                 }
@@ -311,7 +353,12 @@ impl AppState {
     ) -> Result<Option<OpenTarget>, CoreError> {
         let account_id = self.mcp_account_id()?;
         let mut db = self.lock_db()?;
-        let tx = db.transaction().map_err(db_error)?;
+        let tx = db.transaction().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::SERVER_APP_OPEN_TARGET_DATABASE_FAILED(),
+            )
+        })?;
         if let Some(workspace_id) = workspace_id {
             let exists: bool = tx
                 .query_row(
@@ -319,9 +366,19 @@ impl AppState {
                     params![workspace_id, account_id],
                     |r| r.get(0),
                 )
-                .map_err(db_error)?;
+                .map_err(|error| {
+                    db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::SERVER_APP_OPEN_TARGET_DATABASE_FAILED(),
+                    )
+                })?;
             if !exists {
-                tx.commit().map_err(db_error)?;
+                tx.commit().map_err(|error| {
+                    db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::SERVER_APP_OPEN_TARGET_DATABASE_FAILED(),
+                    )
+                })?;
                 return Ok(None);
             }
         }
@@ -347,14 +404,19 @@ impl AppState {
                 {
                     continue;
                 }
-                let row: Option<(String, Option<String>)> = tx.query_row("SELECT name,last_active_at FROM devices WHERE id=?1 AND account_id=?2 AND revoked_at IS NULL", params![id, account_id], |r| Ok((r.get(0)?,r.get(1)?))).optional().map_err(db_error)?;
+                let row: Option<(String, Option<String>)> = tx.query_row("SELECT name,last_active_at FROM devices WHERE id=?1 AND account_id=?2 AND revoked_at IS NULL", params![id, account_id], |r| Ok((r.get(0)?,r.get(1)?))).optional().map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_OPEN_TARGET_DATABASE_FAILED()))?;
                 if let Some((name, active)) = row {
                     values.push((id.clone(), name, active.unwrap_or_default()));
                 }
             }
             values
         };
-        tx.commit().map_err(db_error)?;
+        tx.commit().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::SERVER_APP_OPEN_TARGET_DATABASE_FAILED(),
+            )
+        })?;
         let mut candidates = candidates;
         candidates.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
         Ok(candidates
@@ -368,7 +430,12 @@ impl AppState {
             .query_row("SELECT updated_at FROM apps WHERE id=?1", [id], |r| {
                 r.get(0)
             })
-            .map_err(db_error)
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(id),
+                )
+            })
     }
     fn version_created_at(&self, id: &str, version: u32) -> Result<String, CoreError> {
         self.lock_db()?
@@ -377,7 +444,12 @@ impl AppState {
                 params![id, version],
                 |r| r.get(0),
             )
-            .map_err(db_error)
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(id),
+                )
+            })
     }
 
     pub(crate) fn open_sent_to(
@@ -484,14 +556,35 @@ fn move_app_windows(
     let rows = {
         let mut statement = tx
             .prepare("SELECT id,data FROM windows WHERE app_id=?1 ORDER BY created_at,id")
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
+                        &definition.id,
+                    ),
+                )
+            })?;
         let rows = statement
             .query_map([&definition.id], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })
-            .map_err(db_error)?
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
+                        &definition.id,
+                    ),
+                )
+            })?
             .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
+                        &definition.id,
+                    ),
+                )
+            })?;
         rows
     };
     let mut moved = Vec::with_capacity(rows.len());
@@ -510,7 +603,14 @@ fn move_app_windows(
             .and_details(vec![error.to_string()])
         })?;
         tx.execute("UPDATE windows SET data=?2 WHERE id=?1", params![id, data])
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
+                        &definition.id,
+                    ),
+                )
+            })?;
         moved.push(window);
     }
     Ok(moved)

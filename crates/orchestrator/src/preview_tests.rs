@@ -652,6 +652,52 @@ async fn preview_reads_saved_storage_values_and_bucket_id() {
 }
 
 #[tokio::test]
+async fn preview_reports_invalid_saved_storage_json_with_preview_error_code() {
+    let state = AppState::in_memory("secret");
+    let mut definition = definition();
+    definition["requires"]["blocks"] = json!(6);
+    definition["requires"]["modules"]["storage"] = json!(1);
+    definition["storage"] = json!({"entries":[{"id":"title","key":"settings/title","kind":"json","schema":{"type":"string"},"default":"default","label":"제목","presentation":"hidden"}]});
+    definition["sources"] = json!({});
+    definition["ui"] = json!({"type":"text","value":{"expr":"$storage.title"}});
+    state
+        .publish_app(&definition.to_string(), "agent", false, None)
+        .unwrap();
+    let account = state.mcp_account_id().unwrap();
+    state
+        .write_app_storage(
+            &account,
+            "preview-test",
+            "title",
+            None,
+            json!("saved"),
+            None,
+        )
+        .unwrap();
+    state
+        .lock_db()
+        .unwrap()
+        .execute(
+            "UPDATE app_storage_items SET content='{' WHERE key='settings/title'",
+            [],
+        )
+        .unwrap();
+
+    let server = McpServer::new(state);
+    let mut input = args(definition);
+    input.definition = None;
+    input.app_id = Some("preview-test".into());
+    let error = result_value(server.preview_app_result(input).await.unwrap());
+
+    assert_eq!(error["id"], "APP_PREVIEW_STORAGE_VALUE_JSON_INVALID");
+    assert!(error["message"]
+        .as_str()
+        .unwrap()
+        .contains("settings/title"));
+    assert!(!error["details"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn preview_uses_window_or_explicit_workspace_storage() {
     let state = AppState::in_memory("secret");
     let mut definition = definition();
@@ -685,10 +731,19 @@ async fn preview_uses_window_or_explicit_workspace_storage() {
     input.workspace_id = Some("w1".into());
     let value = result_value(server.preview_app_result(input).await.unwrap());
     assert_eq!(value["values"][0]["value"], "\"저장값\"");
-    let mut input = args(definition);
+    let mut input = args(definition.clone());
     input.window_id = Some("win1".into());
     let value = result_value(server.preview_app_result(input).await.unwrap());
     assert_eq!(value["values"][0]["value"], "\"저장값\"");
+
+    let mut input = args(definition.clone());
+    input.workspace_id = Some("w2".into());
+    input.window_id = Some("win1".into());
+    let error = result_value(server.preview_app_result(input).await.unwrap());
+    assert_eq!(error["id"], "APP_PREVIEW_WORKSPACE_WINDOW_MISMATCH");
+    assert!(error["message"].as_str().unwrap().contains("작업 ID w2"));
+    assert!(error["message"].as_str().unwrap().contains("작업 ID w1"));
+    assert!(!error["message"].as_str().unwrap().contains("window_id"));
 }
 
 #[tokio::test]

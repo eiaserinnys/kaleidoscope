@@ -35,12 +35,32 @@ impl AppState {
             sql: &str,
             account: &str,
         ) -> Result<Vec<T>, CoreError> {
-            let mut stmt = db.prepare(sql).map_err(db_error)?;
+            let mut stmt = db.prepare(sql).map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_TRANSFER_EXPORT_DATABASE_FAILED(table),
+                )
+            })?;
             let rows = stmt
                 .query_map([account], |r| r.get::<_, String>(0))
-                .map_err(db_error)?;
+                .map_err(|error| {
+                    db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::SERVER_TRANSFER_EXPORT_DATABASE_FAILED(
+                            table,
+                        ),
+                    )
+                })?;
             rows.map(|r| {
-                serde_json::from_str(&r.map_err(db_error)?).map_err(|error| {
+                serde_json::from_str(&r.map_err(|error| {
+                    db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::SERVER_TRANSFER_EXPORT_DATABASE_FAILED(
+                            table,
+                        ),
+                    )
+                })?)
+                .map_err(|error| {
                     kaleidoscope_contract::errors::SERVER_TRANSFER_EXPORT_LAYOUT_JSON_INVALID(table)
                         .and_details(vec![error.to_string()])
                 })
@@ -55,7 +75,7 @@ impl AppState {
         )?;
         bundle.layout.desktops = rows(&db, "데스크톱", "SELECT d.data FROM desktops d JOIN workspaces w ON d.workspace_id=w.id WHERE w.account_id=?1", account)?;
         bundle.layout.windows = rows(&db, "창", "SELECT n.data FROM windows n JOIN desktops d ON n.desktop_id=d.id JOIN workspaces w ON d.workspace_id=w.id WHERE w.account_id=?1", account)?;
-        let mut stmt = db.prepare("SELECT b.app_id,i.key,i.kind,i.content,i.workspace_id FROM app_storage_items i JOIN app_storage_buckets b ON i.bucket_id=b.id WHERE b.account_id=?1").map_err(db_error)?;
+        let mut stmt = db.prepare("SELECT b.app_id,i.key,i.kind,i.content,i.workspace_id FROM app_storage_items i JOIN app_storage_buckets b ON i.bucket_id=b.id WHERE b.account_id=?1").map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_EXPORT_DATABASE_FAILED("저장값")))?;
         let rows = stmt
             .query_map([account], |r| {
                 Ok((
@@ -66,9 +86,19 @@ impl AppState {
                     r.get::<_, Option<String>>(4)?,
                 ))
             })
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_TRANSFER_EXPORT_DATABASE_FAILED("저장값"),
+                )
+            })?;
         for row in rows {
-            let (app_id, key, kind, content, workspace_id) = row.map_err(db_error)?;
+            let (app_id, key, kind, content, workspace_id) = row.map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_TRANSFER_EXPORT_DATABASE_FAILED("저장값"),
+                )
+            })?;
             if !kaleidoscope_contract::builtin::is_builtin(&app_id)
                 && !bundle.apps.iter().any(|app| app.id == app_id)
             {
@@ -113,7 +143,12 @@ impl AppState {
         let mut result = TransferResult::default();
         let mut blocked_apps = HashSet::new();
         let mut db = self.lock_db()?;
-        let tx = db.transaction().map_err(db_error)?;
+        let tx = db.transaction().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED(),
+            )
+        })?;
         // 자산, 앱, 배치, 저장값 순서이며 충돌 외 오류는 트랜잭션 전체를 되돌린다.
         for asset in bundle.assets {
             let label = format!("asset:{}/{}", asset.id, asset.version);
@@ -153,13 +188,18 @@ impl AppState {
                     [&definition.id],
                     |r| r.get(0),
                 )
-                .map_err(db_error)?;
+                .map_err(|error| {
+                    db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED(),
+                    )
+                })?;
             if deleted {
                 result.skipped.push(format!("app:{}", definition.id));
                 blocked_apps.insert(definition.id);
                 continue;
             }
-            let exists: Option<String> = tx.query_row("SELECT v.definition FROM apps a JOIN app_versions v ON a.id=v.app_id AND a.current_version=v.version WHERE a.id=?1", [&definition.id], |r| r.get(0)).optional().map_err(db_error)?;
+            let exists: Option<String> = tx.query_row("SELECT v.definition FROM apps a JOIN app_versions v ON a.id=v.app_id AND a.current_version=v.version WHERE a.id=?1", [&definition.id], |r| r.get(0)).optional().map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED()))?;
             if let Some(raw) = exists {
                 if serde_json::from_str::<AppDefinition>(&raw).ok().as_ref() != Some(&definition) {
                     result.skipped.push(format!("app:{}", definition.id));
@@ -179,8 +219,13 @@ impl AppState {
             assets::verify_dependencies(&tx, account, &definition.assets)?;
             assets::verify_client_entry(&tx, account, &definition)?;
             let now = timestamp();
-            tx.execute("INSERT INTO apps(id,name,current_version,created_at,updated_at) VALUES(?1,?2,1,?3,?3)",params![definition.id,definition.name,now]).map_err(db_error)?;
-            save_version(&tx, &definition, 1, &now, "transfer").map_err(db_error)?;
+            tx.execute("INSERT INTO apps(id,name,current_version,created_at,updated_at) VALUES(?1,?2,1,?3,?3)",params![definition.id,definition.name,now]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED()))?;
+            save_version(&tx, &definition, 1, &now, "transfer").map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED(),
+                )
+            })?;
             result.imported += 1;
         }
         for workspace in bundle.layout.workspaces {
@@ -203,7 +248,12 @@ impl AppState {
                     params![desktop.workspace_id, account],
                     |r| r.get(0),
                 )
-                .map_err(db_error)?;
+                .map_err(|error| {
+                    db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED(),
+                    )
+                })?;
             if !owns {
                 result.skipped.push(format!("desktop:{}", desktop.id));
                 continue;
@@ -221,7 +271,7 @@ impl AppState {
             )?;
         }
         for mut window in bundle.layout.windows {
-            let owns: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM desktops d JOIN workspaces w ON d.workspace_id=w.id WHERE d.id=?1 AND w.account_id=?2)",params![window.desktop_id,account],|r|r.get(0)).map_err(db_error)?;
+            let owns: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM desktops d JOIN workspaces w ON d.workspace_id=w.id WHERE d.id=?1 AND w.account_id=?2)",params![window.desktop_id,account],|r|r.get(0)).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED()))?;
             if !owns || blocked_apps.contains(&window.app_id) {
                 result.skipped.push(format!("window:{}", window.id));
                 continue;
@@ -234,7 +284,12 @@ impl AppState {
                         |r| r.get(0),
                     )
                     .optional()
-                    .map_err(db_error)?;
+                    .map_err(|error| {
+                        db_error_with(
+                            error,
+                            kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED(),
+                        )
+                    })?;
                 let Some(version) = version else {
                     result.skipped.push(format!("window:{}", window.id));
                     continue;
@@ -318,7 +373,7 @@ impl AppState {
                     }
                 }
             } else {
-                let raw: Option<String> = tx.query_row("SELECT v.definition FROM apps a JOIN app_versions v ON a.id=v.app_id AND a.current_version=v.version WHERE a.id=?1 AND a.deleted_at IS NULL",[&item.app_id],|r|r.get(0)).optional().map_err(db_error)?;
+                let raw: Option<String> = tx.query_row("SELECT v.definition FROM apps a JOIN app_versions v ON a.id=v.app_id AND a.current_version=v.version WHERE a.id=?1 AND a.deleted_at IS NULL",[&item.app_id],|r|r.get(0)).optional().map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED()))?;
                 let raw = raw.ok_or_else(|| {
                     kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_APP_NOT_FOUND(
                         &item.app_id,
@@ -377,11 +432,16 @@ impl AppState {
                         .and_details(vec![reason])
                     }
                 })?;
-            tx.execute("INSERT INTO app_storage_buckets(id,account_id,app_id) VALUES(?1,?2,?3) ON CONFLICT DO NOTHING",params![bucket,account,item.app_id]).map_err(db_error)?;
-            tx.execute("INSERT INTO app_storage_items(bucket_id,key,kind,content,revision,updated_at,workspace_id) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![bucket,item.key,serde_json::to_value(item.kind).unwrap().as_str().unwrap(),serde_json::to_string(&item.content).unwrap(),revision,timestamp(),item.workspace_id]).map_err(db_error)?;
+            tx.execute("INSERT INTO app_storage_buckets(id,account_id,app_id) VALUES(?1,?2,?3) ON CONFLICT DO NOTHING",params![bucket,account,item.app_id]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED()))?;
+            tx.execute("INSERT INTO app_storage_items(bucket_id,key,kind,content,revision,updated_at,workspace_id) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![bucket,item.key,serde_json::to_value(item.kind).unwrap().as_str().unwrap(),serde_json::to_string(&item.content).unwrap(),revision,timestamp(),item.workspace_id]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED()))?;
             result.imported += 1;
         }
-        tx.commit().map_err(db_error)?;
+        tx.commit().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED(),
+            )
+        })?;
         drop(db);
         for app in self.current_apps()? {
             self.send_event_for_account(
@@ -401,7 +461,12 @@ impl AppState {
                 |r| r.get::<_, String>(0),
             )
             .optional()
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED(),
+                )
+            })?;
         if let Some(device) = device {
             self.send_event_for_account(self.layout_snapshot(&device)?, account);
         }
@@ -441,7 +506,12 @@ fn insert_layout(
             |r| r.get(0),
         )
         .optional()
-        .map_err(db_error)?;
+        .map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED(),
+            )
+        })?;
     if let Some(prior) = prior {
         if prior != data {
             result.skipped.push(format!("{table}:{id}"));
@@ -462,7 +532,12 @@ fn insert_layout(
             params![id, parent, app, data, created],
         ),
     }
-    .map_err(db_error)?;
+    .map_err(|error| {
+        db_error_with(
+            error,
+            kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED(),
+        )
+    })?;
     result.imported += 1;
     Ok(())
 }

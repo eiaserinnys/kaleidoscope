@@ -298,13 +298,8 @@ pub(super) fn db_error(error: rusqlite::Error) -> CoreError {
     kaleidoscope_contract::errors::SERVER_DATABASE_OPERATION_FAILED()
         .and_details(vec![error.to_string()])
 }
-pub(super) fn server_error(message: &str) -> CoreError {
-    CoreError {
-        id: None,
-        code: ErrorCode::Server,
-        message: message.to_string(),
-        details: vec![],
-    }
+pub(super) fn db_error_with(error: rusqlite::Error, response: CoreError) -> CoreError {
+    response.and_details(vec![error.to_string()])
 }
 pub(super) fn sha256_hex(bytes: &[u8]) -> String {
     Sha256::digest(bytes)

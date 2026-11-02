@@ -6,6 +6,146 @@ error_catalog! { ENTRIES;
         message: "서버 데이터베이스 작업을 마치지 못했습니다. 서버 저장소 상태를 확인하세요.",
         fix: "서버 저장소 상태를 확인하세요"
     }
+    SERVER_MCP_ACCOUNT_LOOKUP_DATABASE_FAILED() {
+        class: Server,
+        place: "MCP 계정 조회",
+        cause: "MCP 계정 조회 SQL이 실패했다",
+        message: "MCP 계정 정보를 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_DEVICE_ACCOUNT_LOOKUP_DATABASE_FAILED() {
+        class: Server,
+        place: "기기 계정 조회",
+        cause: "기기 계정 조회 SQL이 실패했다",
+        message: "연결 기기의 계정 정보를 서버 저장소에서 읽지 못했습니다. 기기 등록 상태를 확인하세요.",
+        fix: "기기 등록 상태를 확인하세요"
+    }
+    SERVER_DEVICE_WORKSPACE_ACCESS_DATABASE_FAILED() {
+        class: Server,
+        place: "기기 작업 접근 확인",
+        cause: "기기가 작업에 속하는지 확인하는 SQL이 실패했다",
+        message: "기기의 작업 접근 권한을 서버 저장소에서 확인하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_MCP_WORKSPACE_ACCESS_DATABASE_FAILED() {
+        class: Server,
+        place: "MCP 작업 접근 확인",
+        cause: "MCP 계정이 작업에 속하는지 확인하는 SQL이 실패했다",
+        message: "MCP 계정의 작업 접근 권한을 서버 저장소에서 확인하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_APP_LIST_DATABASE_FAILED() {
+        class: Server,
+        place: "앱 목록 조회",
+        cause: "앱 목록 조회 SQL이 실패했다",
+        message: "앱 목록을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_APP_LOOKUP_DATABASE_FAILED(app_id) {
+        class: Server,
+        place: "앱 조회",
+        cause: "앱과 버전 조회 SQL이 실패했다",
+        message: "앱 ID {app_id}: 앱 정보를 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_DEVICE_AUTH_DATABASE_FAILED() {
+        class: Server,
+        place: "기기 인증 조회",
+        cause: "기기 인증 조회 SQL이 실패했다",
+        message: "기기 인증 정보를 서버 저장소에서 확인하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_DEVICE_LAST_SEEN_DATABASE_FAILED() {
+        class: Server,
+        place: "기기 마지막 접속 시각 저장",
+        cause: "기기 마지막 접속 시각 갱신 SQL이 실패했다",
+        message: "기기의 마지막 접속 시각을 저장하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_DEVICE_LIST_DATABASE_FAILED() {
+        class: Server,
+        place: "연결 기기 목록 조회",
+        cause: "연결 기기 목록 조회 SQL이 실패했다",
+        message: "연결 기기 목록을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_DEVICE_REVOKE_DATABASE_FAILED() {
+        class: Server,
+        place: "기기 연결 해제",
+        cause: "기기 연결 해제 SQL이 실패했다",
+        message: "기기 연결을 해제하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_APP_PREVIEW_WINDOW_STATE_DATABASE_FAILED(window_id) {
+        class: Server,
+        place: "미리 볼 창 상태 조회",
+        cause: "창 상태 조회 SQL이 실패했다",
+        message: "창 ID {window_id}: 미리 볼 상태를 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_APP_PREVIEW_WINDOW_LOOKUP_DATABASE_FAILED(window_id) {
+        class: Server,
+        place: "앱 미리 보기 창 조회",
+        cause: "미리 볼 창 조회 SQL이 실패했다",
+        message: "창 ID {window_id}: 미리 보기 정보를 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_APP_PREVIEW_WORKSPACE_ACCESS_DATABASE_FAILED(app_id) {
+        class: Server,
+        place: "앱 미리 보기 작업 접근 확인",
+        cause: "앱 미리 보기에 필요한 작업 접근 조회 SQL이 실패했다",
+        message: "앱 ID {app_id}의 미리 보기 작업 접근 권한을 서버 저장소에서 확인하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_APP_PREVIEW_STORAGE_DATABASE_FAILED(app_id) {
+        class: Server,
+        place: "앱 미리 보기 저장값 조회",
+        cause: "미리 볼 앱 저장값 조회 SQL이 실패했다",
+        message: "앱 ID {app_id}의 저장값을 미리 보기 위해 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_BUILTIN_SPEC_SAVE_DATABASE_FAILED() {
+        class: Server,
+        place: "기본 앱 실행 설정 저장",
+        cause: "기본 앱 실행 설정 저장 SQL이 실패했다",
+        message: "기본 앱 실행 설정을 서버 저장소에 저장하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_BUILTIN_SPEC_LOAD_DATABASE_FAILED(app_id) {
+        class: Server,
+        place: "기본 앱 실행 설정 조회",
+        cause: "기본 앱 실행 설정 조회 SQL이 실패했다",
+        message: "기본 앱 ID {app_id}의 실행 설정을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_TRANSFER_EXPORT_DATABASE_FAILED(subject) {
+        class: Server,
+        place: "서버 자료 내보내기",
+        cause: "자료 내보내기 SQL이 실패했다",
+        message: "자료를 내보내는 중 {subject} 정보를 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_TRANSFER_IMPORT_DATABASE_FAILED() {
+        class: Server,
+        place: "서버 자료 가져오기",
+        cause: "자료 가져오기 SQL이 실패했다",
+        message: "서버 자료를 가져오지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_APP_PUBLISH_DATABASE_FAILED(app_id) {
+        class: Server,
+        place: "앱 게시",
+        cause: "앱 게시 SQL이 실패했다",
+        message: "앱 ID {app_id}: 앱을 서버에 게시하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_APP_OPEN_TARGET_DATABASE_FAILED() {
+        class: Server,
+        place: "앱을 열 기기 조회",
+        cause: "앱을 열 기기 조회 SQL이 실패했다",
+        message: "앱을 열 기기 정보를 서버 저장소에서 조회하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
     SERVER_DATABASE_LOCK_FAILED() {
         class: Server,
         place: "서버 데이터베이스 접근",

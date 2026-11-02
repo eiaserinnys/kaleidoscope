@@ -27,6 +27,13 @@ error_catalog! { ENTRIES;
         message: "앱 ID {app_id}, 저장 항목 {key}: 종류를 읽지 못했습니다. 서버 상태를 확인하세요.",
         fix: "서버 상태를 확인하세요"
     }
+    APP_PREVIEW_STORAGE_VALUE_JSON_INVALID(app_id, key) {
+        class: Server,
+        place: "앱 미리 보기 저장값 JSON 읽기",
+        cause: "저장된 앱 값이 올바른 JSON이 아니다",
+        message: "앱 ID {app_id}, 저장 항목 {key}: 저장된 값을 JSON으로 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
     APP_PREVIEW_ARGUMENTS_INVALID() {
         class: InvalidRequest,
         place: "앱 미리 보기 요청 확인",
@@ -62,12 +69,12 @@ error_catalog! { ENTRIES;
         message: "창 ID {window_id}: 앱 ID {app_id}에 속하지 않습니다. 해당 앱의 창 ID를 지정하세요.",
         fix: "해당 앱의 창 ID를 지정하세요"
     }
-    APP_PREVIEW_WORKSPACE_WINDOW_MISMATCH(workspace_id, window_id) {
+    APP_PREVIEW_WORKSPACE_WINDOW_MISMATCH(workspace_id, window_workspace_id) {
         class: InvalidRequest,
         place: "앱 미리 보기 작업 확인",
         cause: "지정한 작업이 창에 연결된 작업과 다르다",
-        message: "작업 ID {workspace_id}: 창 ID {window_id}에 연결된 작업과 다릅니다. 창의 작업을 지정하거나 window_id를 빼세요.",
-        fix: "창의 작업을 지정하거나 window_id를 빼세요"
+        message: "요청한 작업 ID {workspace_id}와 창에 연결된 작업 ID {window_workspace_id}가 다릅니다. 창에 연결된 작업 ID를 지정하세요.",
+        fix: "창에 연결된 작업 ID를 지정하세요"
     }
     APP_PREVIEW_WORKSPACE_NOT_FOUND(workspace_id) {
         class: NotFound,
