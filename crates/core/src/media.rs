@@ -41,9 +41,6 @@ enum Source {
 }
 
 fn file_root_error(media: &str, error: CoreError) -> CoreError {
-    if error.id.is_some() {
-        return error;
-    }
     match error.code {
         ErrorCode::NotFound => errors::MEDIA_LOAD_FILE_ROOT_NOT_FOUND(media),
         ErrorCode::Io => errors::MEDIA_LOAD_FILE_ROOT_ACCESS_FAILED(media),
@@ -53,9 +50,6 @@ fn file_root_error(media: &str, error: CoreError) -> CoreError {
 }
 
 fn file_path_error(media: &str, error: CoreError) -> CoreError {
-    if error.id.is_some() {
-        return error;
-    }
     match error.code {
         ErrorCode::NotFound => errors::MEDIA_LOAD_FILE_PATH_NOT_FOUND(media),
         ErrorCode::PathOutsideRoot => errors::MEDIA_LOAD_FILE_PATH_OUTSIDE_ROOT(media),

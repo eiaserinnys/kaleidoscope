@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { App, AppDefinition, Block, ExplorerView, ShellSnapshot } from "../contract/contract";
+import type { App, AppDefinition, Block, CoreError, ExplorerView, ShellSnapshot } from "../contract/contract";
 import { Menu, type MenuEntry } from "../components/menu";
-import { Button, EmptyState } from "../components/primitives";
+import { Button, EmptyState, ErrorId } from "../components/primitives";
 import { Monitor } from "../components/icons";
 import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
@@ -61,7 +61,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
   const rootPath = scope === "pc" ? pcAccess ? "" : null : grant?.root_path ?? null;
   const [localFolder, setLocalFolder] = useState("");
   const [localView, setLocalView] = useState<ExplorerView>("icons");
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<CoreError | null>(null);
   const [menu, setMenu] = useState<{ anchor: HTMLElement; entries: MenuEntry[] } | null>(null);
   const previousRoot = useRef(rootPath);
   const folderValue = useWindowStateValue(context, block.folder?.state ?? null);
@@ -81,7 +81,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
     try {
       await patchWindowState(context, { [block.on_folder.set_state]: path });
     } catch (error) {
-      setActionError(toCoreError(error).message);
+      setActionError(toCoreError(error));
     }
   };
 
@@ -91,7 +91,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
     try {
       await patchWindowState(context, { [block.on_view.set_state]: next });
     } catch (error) {
-      setActionError(toCoreError(error).message);
+      setActionError(toCoreError(error));
     }
   };
 
@@ -100,7 +100,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
     try {
       await context.store.call({ op: "files.allow_pc", window_id: context.window.id, permission });
     } catch (error) {
-      setActionError(toCoreError(error).message);
+      setActionError(toCoreError(error));
     }
   };
 
@@ -132,7 +132,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
         rect: context.newWindowRect?.(),
       });
     } catch (error) {
-      setActionError(toCoreError(error).message);
+      setActionError(toCoreError(error));
     }
   };
   const openMenu = (anchor: HTMLElement, path: string, apps = appsFor(path)) => {
@@ -163,7 +163,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
   if (scope === "pc" && rootPath === null) return <div className={`ks-explorer-empty${actionError ? " has-error" : ""}`}>
     <EmptyState icon={<Monitor size="empty" />} action={<>
       <Button onClick={() => void allowPc()}>이 PC의 파일 읽기 허용</Button>
-      {actionError ? <span className="ks-inline-error" role="alert">{actionError}</span> : null}
+      {actionError ? <span className="ks-inline-error" role="alert">{actionError.message}{actionError.id ? <> <ErrorId id={actionError.id} /></> : null}</span> : null}
     </>} />
   </div>;
 

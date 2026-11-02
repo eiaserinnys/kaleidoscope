@@ -496,4 +496,60 @@ error_catalog! { ENTRIES;
         message: "첨부 파일 합계 허용 크기는 {limit}입니다. 파일 수나 크기를 줄이세요.",
         fix: "첨부 파일 수나 크기를 줄이세요"
     }
+    SHELL_FILE_LIST_REPLY_INVALID() {
+        class: InvalidRequest,
+        place: "파일 목록 응답 확인",
+        cause: "코어 응답이 요청한 파일 목록과 다르다",
+        message: "파일 목록 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 불러오세요.",
+        fix: "쉘을 새 판으로 올리세요"
+    }
+    SHELL_FILE_PATH_REPLY_INVALID() {
+        class: InvalidRequest,
+        place: "파일 경로 응답 확인",
+        cause: "코어 응답이 요청한 파일 경로와 다르다",
+        message: "파일 경로 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.",
+        fix: "쉘을 새 판으로 올리세요"
+    }
+    SHELL_FILE_MOVE_REPLY_INVALID() {
+        class: InvalidRequest,
+        place: "파일 이동 응답 확인",
+        cause: "코어 응답이 요청한 파일 이동과 다르다",
+        message: "파일 이동 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.",
+        fix: "쉘을 새 판으로 올리세요"
+    }
+    SHELL_FILE_COPY_REPLY_INVALID() {
+        class: InvalidRequest,
+        place: "파일 복사 응답 확인",
+        cause: "코어 응답이 요청한 파일 복사와 다르다",
+        message: "파일 복사 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.",
+        fix: "쉘을 새 판으로 올리세요"
+    }
+    SHELL_FILE_REMOVE_REPLY_INVALID() {
+        class: InvalidRequest,
+        place: "파일 삭제 응답 확인",
+        cause: "코어 응답이 요청한 파일 삭제와 다르다",
+        message: "파일 삭제 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.",
+        fix: "쉘을 새 판으로 올리세요"
+    }
+    SHELL_FILE_STORAGE_LIST_REPLY_INVALID() {
+        class: InvalidRequest,
+        place: "저장 문서 목록 응답 확인",
+        cause: "코어 응답이 요청한 저장 문서 목록과 다르다",
+        message: "저장 문서 목록 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 불러오세요.",
+        fix: "쉘을 새 판으로 올리세요"
+    }
+    SHELL_FILE_STORAGE_REVISION_MISSING() {
+        class: NotFound,
+        place: "저장 문서 판 확인",
+        cause: "목록에서 문서 판 정보를 받지 못했다",
+        message: "저장 문서의 판 정보를 받지 못했습니다. 목록을 새로 불러온 뒤 다시 시도하세요.",
+        fix: "문서 목록을 새로 불러오세요"
+    }
+    SHELL_FILE_MARKDOWN_STORAGE_INVALID(entry) {
+        class: InvalidRequest,
+        place: "마크다운 저장 문서 읽기",
+        cause: "저장 항목의 값이 마크다운 문서가 아니다",
+        message: "저장 항목 {entry}의 값이 마크다운 문서가 아닙니다. 앱 정의의 저장 형식을 확인하세요.",
+        fix: "앱 정의에서 저장 항목 형식을 확인하세요"
+    }
 }

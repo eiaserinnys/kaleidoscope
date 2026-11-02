@@ -274,7 +274,7 @@ describe("markdown editor file session", () => {
     session.setText("보존할 초안");
     session.removed();
     await session.overwrite();
-    expect(session.getSnapshot()).toMatchObject({ path: "notes/note.md", text: "보존할 초안", dirty: true, error: "상위 폴더가 없습니다" });
+    expect(session.getSnapshot()).toMatchObject({ path: "notes/note.md", text: "보존할 초안", dirty: true, error: { message: "상위 폴더가 없습니다" } });
     expect(await session.saveNow()).toBe(false);
     session.dispose();
   });

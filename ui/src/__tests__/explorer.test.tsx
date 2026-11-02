@@ -90,11 +90,13 @@ describe("explorer block", () => {
   it("keeps the PC access screen and shows the core error below the action when access fails", async () => {
     const { calls, originalCall } = setup({ scope: "pc" });
     calls.mockImplementation((request) => request.op === "files.allow_pc"
-      ? Promise.reject({ code: "permission_denied", message: "허용할 수 없습니다", details: [] })
+      ? Promise.reject({ id: "FILE_PC_ACCESS_NOT_GRANTED", code: "not_granted", message: "허용할 수 없습니다", details: [] })
       : originalCall(request));
     fireEvent.click(await screen.findByRole("button", { name: "이 PC의 파일 읽기 허용" }));
 
-    expect((await screen.findByRole("alert")).textContent).toBe("허용할 수 없습니다");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("허용할 수 없습니다");
+    expect(alert.textContent).toContain("FILE_PC_ACCESS_NOT_GRANTED");
     expect(screen.queryByRole("tree", { name: "폴더 목록" })).toBeNull();
     expect(screen.getByRole("button", { name: "이 PC의 파일 읽기 허용" })).toBeTruthy();
   });
