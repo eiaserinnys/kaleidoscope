@@ -274,11 +274,6 @@
 
 .ks-window-title-actions { display: flex; }
 
-.ks-window-gesturing,
-.ks-window-gesturing * {
-  user-select: none;
-}
-
 .ks-window-titlebar {
   display: flex;
   height: var(--ks-control-height);
@@ -290,7 +285,6 @@
   background: var(--ks-color-surface-raised);
   padding: 0 var(--ks-space-1) 0 var(--ks-space-3);
   touch-action: none;
-  user-select: none;
 }
 
 .ks-window-titlebar-active .ks-window-title {

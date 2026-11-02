@@ -19,7 +19,14 @@ textarea,
 .ks-feed-entry,
 .ks-metric-value,
 .ks-notice-message,
-.ks-html-comment {
+.ks-html-comment,
+.ks-empty-state-text,
+.ks-inline-error,
+.ks-unknown-block,
+.ks-agent-session-command,
+.ks-agent-session-env,
+.ks-metric-subvalue,
+.ks-html-selector {
   user-select: text;
 }
 
@@ -31,6 +38,7 @@ label,
 summary,
 .ks-table-row.is-activatable .ks-table-cell,
 .ks-image-frame img,
-.ks-data-toolbar .ks-data-text {
+.ks-data-toolbar .ks-data-text,
+.ks-data-toolbar .ks-data-text * {
   user-select: none;
 }

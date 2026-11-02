@@ -40,7 +40,10 @@ const shellSelectionApp: AppDefinition = {
   id: "shell-selection-test", name: "선택 간격 시험", requires: { blocks: 10, modules: {} }, permissions: [],
   state: { note: "선택 가능한 입력 내용", enabled: false },
   ui: { type: "stack", direction: "column", gap: "none", children: [
-    { type: "toolbar", start: [{ type: "text", value: "카드 제목" }], end: [{ type: "text", value: "889" }] },
+    { type: "toolbar", start: [
+      { type: "text", value: "카드 제목" },
+      { type: "text", value: "**툴바 글자**", format: "markdown", style: "body" },
+    ], end: [{ type: "text", value: "889" }] },
     { type: "tabs", tabs: [
       { label: "요약", child: { type: "stack", direction: "column", gap: "medium", children: [
         { type: "properties", fields: [{ label: "상태", value: "대기 중" }] },

@@ -44,17 +44,42 @@
 .ks-data-tab-panel .ks-properties { padding-inline: 0; padding-block: var(--ks-space-2) var(--ks-space-3); }
 .ks-data-tab-panel .ks-feed-entry:not(.ks-feed-entry-nested) { padding-inline: 0; }
 .ks-data-tab-panel .ks-feed-entry-nested { padding-inline-end: 0; }
+.ks-data-tab-panel .ks-data-toolbar,
+.ks-data-tab-panel .ks-data-tree,
+.ks-data-tab-panel .ks-view-group,
+.ks-data-tab-panel .ks-data-stack-item > .ks-data-text { padding-inline: 0; }
 .ks-data-tab-panel .ks-data-section-child > .ks-properties-container > .ks-properties { padding-block-start: var(--ks-space-1); }
-.ks-data-tab-panel > .ks-data-section:first-child > .ks-data-section-header,
-.ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-data-section > .ks-data-section-header,
-.ks-data-tab-panel > .ks-split > .ks-split-row > .ks-split-pane > .ks-data-section > .ks-data-section-header,
-.ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split > .ks-split-row > .ks-split-pane > .ks-data-section > .ks-data-section-header { padding-block-start: 0; }
-.ks-data-tab-panel > .ks-properties-container > .ks-properties,
-.ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-properties-container > .ks-properties { padding-block-start: 0; }
-.ks-data-tab-panel > :is(.ks-feed, .ks-markdown-view, .ks-metrics, .ks-chart, .ks-map, .ks-data-tree, .ks-keypad),
-.ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > :is(.ks-feed, .ks-markdown-view, .ks-metrics, .ks-chart, .ks-map, .ks-data-tree, .ks-keypad) { padding-block-start: 0; }
-.ks-data-tab-panel > .ks-code-view .cm-content,
-.ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-code-view .cm-content { padding-block-start: 0; }
+/* 탭과 첫 내용 사이 간격은 탭 줄이 소유한다. 패널의 첫 내용은 위 여백을 더하지 않는다. */
+:is(
+  .ks-data-tab-panel,
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
+  .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
+) > .ks-data-section > .ks-data-section-header,
+:is(
+  .ks-data-tab-panel,
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
+  .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
+) > .ks-properties-container > .ks-properties,
+:is(
+  .ks-data-tab-panel,
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
+  .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
+) > :is(.ks-feed, .ks-markdown-view, .ks-metrics, .ks-chart, .ks-map, .ks-data-tree, .ks-keypad, .ks-data-toolbar),
+:is(
+  .ks-data-tab-panel,
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
+  .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
+) > .ks-code-view .cm-content { padding-block-start: 0; }
+:is(
+  .ks-data-tab-panel,
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
+  .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
+) > .ks-data-toolbar { min-height: calc(var(--ks-control-height) + var(--ks-space-2)); }
 .ks-data-section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 /* 머리 폭 전체를 차지하는 단추라 바깥 외곽선이 이웃 요소에 가려진다. 파일 트리의 접힌 단추처럼 안쪽에 그린다. */
 .ks-data-section-toggle { padding-block: var(--ks-space-1); border-radius: var(--ks-radius-small); }
