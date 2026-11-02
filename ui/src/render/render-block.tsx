@@ -33,6 +33,10 @@ import { MapBlock } from "../blocks/data-map";
 import { SandboxBlock } from "../blocks/sandbox";
 import { CanvasBlock } from "../blocks/canvas";
 import { TimelineBlock } from "../blocks/timeline";
+import { WhenBlock } from "../blocks/conditional";
+import { DialogBlock } from "../blocks/dialog";
+import { AnchorBlock } from "../blocks/anchor";
+import { TourBlock } from "../blocks/tour";
 import { BlockRenderContext, useBlockRenderProbe } from "./render-probe";
 
 export { renderProbe } from "./render-probe";
@@ -51,7 +55,11 @@ const BlockNode = memo(function BlockNode({ block, context, pointer }: { block: 
 function BlockContent({ block: normalized, context, pointer }: { block: Block; context: BlockContext; pointer: string }) {
   useBlockRenderProbe();
   switch (normalized.type) {
-    case "repeat": case "when": case "dialog": case "tour": case "anchor": case "progress": return null;
+    case "repeat": case "progress": return null;
+    case "when": return <WhenBlock block={normalized} context={context} pointer={pointer} />;
+    case "dialog": return <DialogBlock block={normalized} context={context} pointer={pointer} />;
+    case "anchor": return <AnchorBlock block={normalized} context={context} pointer={pointer} />;
+    case "tour": return <TourBlock block={normalized} context={context} pointer={pointer} />;
     case "canvas": return <CanvasBlock block={normalized} pointer={pointer} />;
     case "timeline": return <TimelineBlock block={normalized} pointer={pointer} context={context} />;
     case "split":

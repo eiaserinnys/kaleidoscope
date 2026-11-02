@@ -274,6 +274,12 @@
 .ks-dialog-title { font-size: var(--ks-type-title); font-weight: 600; }
 .ks-dialog-body { margin-top: var(--ks-space-2); white-space: pre-wrap; }
 .ks-dialog-actions { display: flex; justify-content: flex-end; gap: var(--ks-space-2); margin-top: var(--ks-space-4); }
+.ks-tour-overlay { position: absolute; inset: var(--ks-space-3); z-index: 2; pointer-events: none; }
+.ks-tour-spotlight { position: absolute; z-index: 0; border-radius: var(--ks-radius-small); outline: var(--ks-focus-width) solid var(--ks-color-accent); box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--ks-color-text) 35%, transparent); pointer-events: none; }
+.ks-tour-card { position: absolute; z-index: 1; display: flex; width: min(100%, var(--ks-window-min-width)); max-height: 100%; flex-direction: column; gap: var(--ks-space-2); overflow: auto; padding: var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-large); background: var(--ks-color-surface); box-shadow: var(--ks-shadow-popover); color: var(--ks-color-text); pointer-events: auto; }
+.ks-tour-title { margin: 0; font-size: var(--ks-type-title); font-weight: 600; }
+.ks-tour-body { white-space: pre-wrap; }
+.ks-tour-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--ks-space-2); }
 .ks-client-frames { position: fixed; left: 0; top: 0; width: 2px; height: 2px; opacity: 0; pointer-events: none; }
 .ks-client-frames iframe { width: 2px; height: 2px; border: 0; }
 @container ks-data-window (max-width: 560px) {
