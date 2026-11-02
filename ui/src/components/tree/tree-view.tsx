@@ -82,7 +82,7 @@ export interface TreeViewProps {
   onFocusController?: (focus: TreeFocusController) => void;
 }
 
-const END_ACTION_ID = "tree:end-action";
+export const END_ACTION_ID = "tree:end-action";
 
 export function TreeView({ nodes, expanded, selectedId, label, className, emptyContent, endAction, onExpandedChange, onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, menuTargetId, onFocusController }: TreeViewProps) {
   const previousRows = useRef(new Map<string, TreeRowModel>());

@@ -4,7 +4,7 @@ import { toCoreError } from "../core/core-transport";
 import { Button, IconButton, StatusText } from "../components/primitives";
 import { FilePlus, FileText, FolderOpen, PanelLeftClose, PanelLeftOpen } from "../components/icons";
 import { TextInput } from "../components/text-input";
-import { TreeView } from "../components/tree/tree-view";
+import { END_ACTION_ID, TreeView } from "../components/tree/tree-view";
 import type { TreeActivation, TreeFocusController } from "../components/tree/tree-view";
 import type { TreeNode, TreeRowModel } from "../components/tree/tree-model";
 import type { BlockContext } from "./block-context";
@@ -420,6 +420,11 @@ export function FileBrowserTree({
     else void selectFile(item.path, item);
   }, [collection, selectFile, setDirectoryExpanded]);
   const isExpanded = useCallback((path: string) => expandedRef.current.has(path), []);
+  const createLabel = collection ? "새 문서" : "새 파일";
+  const showHeaderCreate = header && (canCreate || (actionsEnabled && backend.capabilities.createFile))
+    && !(collection && entriesByDirectory[""]?.length === 0);
+  const createCancelFocusId = actionsEnabled && backend.capabilities.createFile && !showHeaderCreate
+    && Object.hasOwn(entriesByDirectory, "") ? END_ACTION_ID : null;
   const actions = useFolderActions({
     enabled: actionsEnabled,
     store,
@@ -431,6 +436,7 @@ export function FileBrowserTree({
     openItem,
     isExpanded,
     getFocusController: () => focusController.current,
+    createCancelFocusId,
   });
 
   const visible = useCallback((entry: FolderEntry) => mode === "folders" ? entry.kind === "dir" : entry.kind === "dir"
@@ -558,10 +564,6 @@ export function FileBrowserTree({
     if (entry?.kind === "file") onFileDoubleClick?.(target, entry.path);
   }, [onFileDoubleClick]);
 
-  const createLabel = collection ? "새 문서" : "새 파일";
-  const showHeaderCreate = header && (canCreate || (actionsEnabled && backend.capabilities.createFile))
-    && !(collection && entriesByDirectory[""]?.length === 0);
-
   return (
     <div className={`ks-file-tree${pane?.collapsed ? " is-collapsed" : ""}`} ref={treeRef}>
       {pane?.collapsed ? (
@@ -575,7 +577,7 @@ export function FileBrowserTree({
         <>
           {header ? <FolderTreeHeader label={rootName}>
             {showHeaderCreate
-              ? <IconButton aria-label={createLabel} onClick={() => actionsEnabled ? void actions.beginCreateFile("", focusController.current) : void beginCreate()}><FilePlus /></IconButton> : null}
+              ? <IconButton aria-label={createLabel} onClick={(event) => actionsEnabled ? void actions.beginCreateFile("", focusController.current, event.currentTarget) : void beginCreate()}><FilePlus /></IconButton> : null}
             {!collection && scope === "folder" ? <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}><FolderOpen /></IconButton> : null}
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
           </FolderTreeHeader> : null}
@@ -584,8 +586,8 @@ export function FileBrowserTree({
             expanded={expanded}
             label={mode === "folders" ? "폴더 목록" : "파일 목록"}
             nodes={nodes}
-            endAction={actionsEnabled && backend.capabilities.createFile && !showHeaderCreate && !actions.inlineEdit
-              ? { label: createLabel, leading: <FilePlus size="inline" />, onActivate: () => void actions.beginCreateFile("", focusController.current) }
+            endAction={createCancelFocusId && !actions.inlineEdit
+              ? { label: createLabel, leading: <FilePlus size="inline" />, onActivate: () => void actions.beginCreateFile("", focusController.current, END_ACTION_ID) }
               : undefined}
             onActivate={activate}
             onContextMenu={actionsEnabled || onFileContextMenu ? contextMenu : undefined}

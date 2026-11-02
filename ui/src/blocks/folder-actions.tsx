@@ -122,6 +122,7 @@ export function useFolderActions({
   openItem,
   isExpanded,
   getFocusController,
+  createCancelFocusId,
 }: {
   enabled: boolean;
   store: ShellStore;
@@ -133,6 +134,7 @@ export function useFolderActions({
   openItem: (item: FolderItem) => void;
   isExpanded: (path: string) => boolean;
   getFocusController: () => TreeFocusController | null;
+  createCancelFocusId: string | null;
 }) {
   const [clipboard, setLocalClipboard] = useState<ShellClipboard | null>(() => getClipboard(store));
   const [inlineEdit, setInlineEdit] = useState<FolderInlineEdit | null>(null);
@@ -159,7 +161,7 @@ export function useFolderActions({
     setMenuState({ anchor, point, item, row, parent: destinationFor(row, item, backend.kind === "collection"), focus, targetId: row?.id ?? null });
   }, [backend.kind]);
 
-  const beginEdit = useCallback(async (kind: FolderInlineEdit["kind"], item: FolderItem | null, directory: string, focus: TreeFocusController, cancelFocusId?: string | null) => {
+  const beginEdit = useCallback(async (kind: FolderInlineEdit["kind"], item: FolderItem | null, directory: string, focus: TreeFocusController, cancelFocusId?: string | HTMLElement | null) => {
     const editDirectory = backend.kind === "collection" ? "" : kind === "rename" && item ? parentOfItem(item) : directory;
     await prepareDirectory(editDirectory);
     setMenuState(null);
@@ -184,13 +186,15 @@ export function useFolderActions({
     });
   }, [backend.kind, extensions, prepareDirectory]);
 
-  const [editFocus, setEditFocus] = useState<{ focus: TreeFocusController; cancelId: string | null } | null>(null);
+  const [editFocus, setEditFocus] = useState<{ focus: TreeFocusController; cancelId: string | HTMLElement | null } | null>(null);
 
   const cancelInline = useCallback((reason?: TextInputCancelReason) => {
     const current = editFocus;
     setInlineEdit(null);
     setEditFocus(null);
-    if (reason !== "blur") current?.focus.row(current.cancelId);
+    if (reason === "blur" || !current) return;
+    if (current.cancelId instanceof HTMLElement) current.cancelId.focus();
+    else current.focus.row(current.cancelId, current.cancelId !== null);
   }, [editFocus]);
 
   const operationFailed = useCallback((message: string, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>) => {
@@ -342,16 +346,16 @@ export function useFolderActions({
     }
   }, [backend.actions.copy, operationFailed, reportResults]);
 
-  const beginCreateFile = useCallback((directory = "", focus?: TreeFocusController | null) => {
+  const beginCreateFile = useCallback((directory = "", focus?: TreeFocusController | null, cancelFocusId?: string | HTMLElement | null) => {
     const controller = focus ?? getFocusController();
     if (!controller) return;
-    void beginEdit("file", null, directory, controller);
+    void beginEdit("file", null, directory, controller, cancelFocusId);
   }, [beginEdit, getFocusController]);
 
   const menuItems = useMemo((): MenuEntry[] => {
     if (!menuState) return [];
     const { item, parent, row, focus } = menuState;
-    const restoreId = row?.node.content === undefined ? menuState.targetId : row?.parentId ?? null;
+    const restoreId = row ? row.node.content === undefined ? menuState.targetId : row.parentId : createCancelFocusId;
     const capabilities = backend.capabilities;
     const items: MenuEntry[] = [];
     if (item) items.push({
@@ -379,7 +383,7 @@ export function useFolderActions({
     items.push({ id: "refresh", label: "새로 고침", shortcut: "F5", onSelect: () => refreshDirectory(parent) });
     if (item && capabilities.properties) items.push({ id: "properties", label: "속성", onSelect: () => setDialog({ action: "properties", item, row: row!, focus, focusTargets: focus.deletionTargets(row!) }) });
     return items;
-  }, [backend.actions, backend.capabilities, backend.identity, backend.kind, beginEdit, clipboard, copyPath, createDuplicate, executePaste, isExpanded, menuState, openItem, operationFailed, refreshDirectory, store]);
+  }, [backend.actions, backend.capabilities, backend.identity, backend.kind, beginEdit, clipboard, copyPath, createCancelFocusId, createDuplicate, executePaste, isExpanded, menuState, openItem, operationFailed, refreshDirectory, store]);
 
   const commandKeyDown = useCallback((row: TreeRowModel | null, event: KeyboardEvent<HTMLElement>, focus: TreeFocusController): boolean => {
     const target = itemFromRow(row);

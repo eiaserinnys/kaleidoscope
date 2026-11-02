@@ -98,6 +98,54 @@ function setup(definition: AppDefinition, configure?: (transport: ReturnType<typ
 }
 
 describe("folder block", () => {
+  it.each(["끝 행", "빈 공간 메뉴", "머리", "행 메뉴"])("%s에서 연 만들기는 취소 뒤 원래 입구로 돌아간다", async (entrance) => {
+    const files = entrance === "머리" || entrance === "행 메뉴";
+    const definition = files ? fileFolderDefinition("readwrite", false) : storageFolderDefinition(false);
+    if (!files) (definition.ui as Extract<Block, { type: "folder" }>).header = false;
+    setup(definition, files ? undefined : (transport) => {
+      const call = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "storage.list"
+        ? { op: "storage.list", result: { bucket_id: definition.id, items: [] } } : call(request));
+    }, { "guide.md": "# 안내" });
+    const tree = await screen.findByRole("tree");
+    const label = files ? "새 파일" : "새 문서";
+    await screen.findByRole(files ? "button" : "treeitem", { name: label });
+    const origin = () => entrance === "머리" ? screen.getByRole("button", { name: label })
+      : screen.getByRole("treeitem", { name: entrance === "행 메뉴" ? "guide.md" : label });
+    for (const cancel of ["Escape", "empty"]) {
+      if (entrance.includes("메뉴")) {
+        fireEvent.contextMenu(entrance === "빈 공간 메뉴" ? tree : origin());
+        fireEvent.click(await screen.findByRole("menuitem", { name: label }));
+      } else fireEvent.click(origin());
+      const input = await screen.findByRole("textbox", { name: `${label} 이름` });
+      if (cancel === "empty") fireEvent.change(input, { target: { value: "" } });
+      fireEvent.keyDown(input, { key: cancel === "empty" ? "Enter" : "Escape" });
+      await waitFor(() => expect(document.activeElement).toBe(origin()));
+    }
+    fireEvent.keyDown(origin(), { key: "Enter" });
+    if (entrance !== "머리" && entrance !== "행 메뉴") expect(await screen.findByRole("textbox", { name: `${label} 이름` })).toBeTruthy();
+  });
+
+  it.each([0, 40])("목록 %i개를 받기 전에는 끝 행을 먼저 보이지 않는다", async (count) => {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const definition = storageFolderDefinition(false);
+    (definition.ui as Extract<Block, { type: "folder" }>).header = false;
+    setup(definition, (transport) => {
+      const call = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => {
+        if (request.op !== "storage.list") return call(request);
+        await pending;
+        return { op: "storage.list", result: { bucket_id: definition.id, items: Array.from({ length: count }, (_, i) => ({ doc: `${i}.md`, revision: "r1", updated_at: "", byte_size: 0 as unknown as bigint })) } };
+      });
+    });
+    await screen.findByText("불러오는 중");
+    expect(screen.queryByRole("treeitem", { name: "새 문서" })).toBeNull();
+    await act(async () => release());
+    const tree = screen.getByRole("tree");
+    fireEvent.scroll(tree, { target: { scrollTop: count * 32 } });
+    expect(await screen.findAllByRole("treeitem", { name: "새 문서" })).toHaveLength(1);
+  });
   it.each(["머리", "우클릭"])("%s에서 만든 파일은 늦은 응답 뒤 열고 새 행에 포커스를 둔다", async (entrance) => {
     let release!: () => void;
     const pending = new Promise<void>((resolve) => { release = resolve; });

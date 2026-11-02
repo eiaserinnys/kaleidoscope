@@ -2,7 +2,7 @@ import { memo, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TreeView } from "../components/tree/tree-view";
+import { END_ACTION_ID, TreeView } from "../components/tree/tree-view";
 import type { TreeFocusController } from "../components/tree/tree-view";
 import type { TreeNode, TreeRowModel } from "../components/tree/tree-model";
 
@@ -63,6 +63,25 @@ afterEach(() => {
 });
 
 describe("공용 가상 트리", () => {
+  it("입력 중 숨었던 끝 행은 취소 뒤 복귀 요청을 받아 Enter를 처리한다", async () => {
+    let focus!: TreeFocusController;
+    function CancelHarness() {
+      const [editing, setEditing] = useState(false);
+      return <TreeView className="ks-file-tree-list" label="복귀 트리" expanded={new Set()}
+        nodes={editing ? [{ id: "edit", label: "입력", interactiveContent: true, content: <input aria-label="새 이름" onKeyDown={(event) => {
+          if (event.key === "Escape") { setEditing(false); focus.row(END_ACTION_ID, true); }
+        }} /> }] : []}
+        endAction={editing ? undefined : { label: "새 문서", onActivate: () => setEditing(true) }}
+        onActivate={() => {}} onExpandedChange={() => {}} onFocusController={(value) => { focus = value; }} />;
+    }
+    render(<CancelHarness />);
+    fireEvent.click(screen.getByRole("treeitem", { name: "새 문서" }));
+    fireEvent.keyDown(await screen.findByRole("textbox", { name: "새 이름" }), { key: "Escape" });
+    const end = await screen.findByRole("treeitem", { name: "새 문서" });
+    await waitFor(() => expect(document.activeElement).toBe(end));
+    fireEvent.keyDown(end, { key: "Enter" });
+    expect(await screen.findByRole("textbox", { name: "새 이름" })).toBeTruthy();
+  });
   it("끝 액션은 방향키와 Enter로 실행하며 선택과 항목 메뉴에서 제외한다", async () => {
     const onActivate = vi.fn();
     const action = vi.fn();
