@@ -23,7 +23,7 @@
 .ks-data-tab-panel { padding-inline: var(--ks-space-3); }
 .ks-data-tab-list .ks-button { flex: 0 0 auto; font-size: var(--ks-type-meta); white-space: nowrap; }
 .ks-data-tab-panel { flex: 1 1 auto; min-height: 0; overflow: auto; padding-block-end: var(--ks-space-3); }
-@container (max-width: 150px) { .ks-data-tab-list .ks-button { padding-inline: var(--ks-space-2); } }
+@container (max-width: 150px) { .ks-data-tab-header:has(> .ks-file-tree-collapse) .ks-data-tab-list .ks-button { padding-inline: var(--ks-space-2); } }
 .ks-data-tabs.is-collapsed > .ks-file-tree-expand { display: grid; width: var(--ks-icon-button-size); height: var(--ks-icon-button-size); flex: 0 0 var(--ks-icon-button-size); place-items: center; }
 .ks-data-tab-panel:has(> .ks-file-tree),
 .ks-data-tab-panel:has(> .ks-file-tree-ungranted),

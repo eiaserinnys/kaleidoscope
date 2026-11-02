@@ -57,7 +57,7 @@ function storageFolderDefinition(readOnly = true): AppDefinition {
 }
 
 function storageFolderTabsDefinition(): AppDefinition {
-  const definition = storageFolderDefinition();
+  const definition = storageFolderDefinition(false);
   (definition.ui as Extract<Block, { type: "folder" }> & { header: boolean }).header = false;
   definition.ui = {
     type: "tabs",
@@ -362,9 +362,10 @@ describe("folder block", () => {
       });
     });
 
-    await screen.findByRole("tree", { name: "문서" });
+    await screen.findByRole("tree", { name: "파일 목록" });
     expect(document.querySelector(".ks-file-tree-header")).toBeNull();
     expect(screen.queryByText("문서", { exact: true })).toBeNull();
+    expect(await screen.findByRole("button", { name: "새 문서" })).toBeTruthy();
   });
 
   it("shows the collection header without a split pane by default", async () => {
@@ -374,7 +375,7 @@ describe("folder block", () => {
         ? { op: "storage.list", result: { bucket_id: "folder-storage-test", items: [] } }
         : originalCall(request));
     });
-    await screen.findByRole("tree", { name: "문서" });
+    await screen.findByRole("tree", { name: "파일 목록" });
     expect(document.querySelector(".ks-file-tree-header")?.textContent).toContain("문서");
   });
 
@@ -398,7 +399,7 @@ describe("folder block", () => {
         ? { op: "storage.list", result: { bucket_id: "folder-storage-test", items: [] } }
         : originalCall(request));
     });
-    await screen.findByRole("tree", { name: "문서" });
+    await screen.findByRole("tree", { name: "파일 목록" });
     expect(screen.getAllByRole("button", { name: "목록 접기" })).toHaveLength(1);
     expect(document.querySelector(".ks-file-tree .ks-file-tree-collapse button")).toBe(screen.getByRole("button", { name: "목록 접기" }));
     fireEvent.click(screen.getByRole("button", { name: "목록 접기" }));
