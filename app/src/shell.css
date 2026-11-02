@@ -158,8 +158,18 @@
   overflow: visible;
 }
 
-.ks-window[hidden] {
-  display: none;
+.ks-window[data-minimized="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+:root[data-share-isolating] .ks-window:not([data-share-target]),
+:root[data-share-isolating] [data-ks-overlay] {
+  opacity: 0 !important;
+}
+
+:root[data-share-isolating] .ks-window[data-share-target] {
+  opacity: 1 !important;
 }
 
 .ks-taskbar {

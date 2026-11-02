@@ -64,5 +64,5 @@ export type {
   TransferResult,
   Workspace,
 } from "./contract/contract";
-export { useShareView } from "./share/share-view";
+export { prepareShareForSend, useShareView } from "./share/share-view";
 export { installShellDragGuard } from "./shell-drag-guard";

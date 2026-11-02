@@ -10,7 +10,7 @@ name = "kaleidoscope_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
-e2e = ["dep:base64"]
+e2e = ["dep:base64", "dep:image"]
 
 [build-dependencies]
 tauri-build = "2"
@@ -23,6 +23,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-updater = "2"
 tokio = { version = "1", features = ["time"] }
 base64 = { version = "0.22", optional = true }
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 serde_json = { workspace = true }
 dirs = "7"
 
@@ -31,4 +32,4 @@ serde_json = "1"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39.1"
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_Storage_FileSystem", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_Storage_FileSystem", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
