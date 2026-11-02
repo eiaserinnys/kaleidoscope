@@ -1,5 +1,20 @@
 use super::*;
 
+pub(super) fn call_budget_warnings(definition: &AppDefinition) -> Vec<String> {
+    kaleidoscope_contract::data::call_budget(definition)
+        .into_iter()
+        .filter(|budget| {
+            budget.default_per_minute > kaleidoscope_contract::data::CALL_BUDGET_PER_MINUTE
+        })
+        .map(|budget| {
+            format!(
+                "{}: 기본 화면에서 분당 {:.1}회 호출합니다. 묶음 요청을 찾거나 refresh_secs를 늘리십시오(기준 분당 6회).",
+                budget.host, budget.default_per_minute
+            )
+        })
+        .collect()
+}
+
 fn app_schema(generator: &mut SchemaGenerator) -> Schema {
     generator.subschema_for::<AppDefinition>()
 }
@@ -226,11 +241,15 @@ impl McpServer {
                         &row.version.definition.assets,
                     ),
                 );
+                let mut warnings = call_budget_warnings(&row.version.definition);
                 if !missing_connections.is_empty() {
-                    value["warnings"] = json!([format!(
+                    warnings.push(format!(
                         "서버에 없는 연결: {}. set_connection으로 등록하세요",
                         missing_connections.join(", ")
-                    )]);
+                    ));
+                }
+                if !warnings.is_empty() {
+                    value["warnings"] = json!(warnings);
                 }
                 Ok(json_result(value))
             }

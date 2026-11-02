@@ -289,7 +289,7 @@ async fn builtin_webhook_and_test_action_reach_agent_and_service() {
     let state = AppState::open(&dir.path().join("test.db"), "token".into()).unwrap();
     let account = state.mcp_account_id().unwrap();
     let mut specs = Vec::new();
-    for (id, version) in [("agent", 3), ("slackbot", 1)] {
+    for (id, version) in [("agent", 3), ("slackbot", 2)] {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../apps")
             .join(format!("{id}.json"));
@@ -461,7 +461,7 @@ async fn worker_slackbot_poll_isolates_failures_and_parses_allowed_channels() {
             let app = parse_app_definition(&std::fs::read_to_string(path).unwrap()).unwrap();
             BuiltinRuntimeSpec {
                 app_id: id.into(),
-                version: if id == "agent" { 3 } else { 1 },
+                version: if id == "agent" { 3 } else { 2 },
                 storage: app.storage,
                 worker: app.worker,
             }
@@ -561,6 +561,103 @@ async fn worker_slackbot_poll_isolates_failures_and_parses_allowed_channels() {
 }
 
 #[tokio::test]
+async fn worker_slackbot_stops_polling_until_retry_after_after_http_429() {
+    use axum::{
+        extract::{Path, State},
+        http::{header, StatusCode},
+        response::IntoResponse,
+        routing::post,
+        Json, Router,
+    };
+    use kaleidoscope_contract::worker::BuiltinRuntimeSpec;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
+    async fn rate_limited(
+        State(calls): State<Arc<AtomicUsize>>,
+        Path(_method): Path<String>,
+    ) -> axum::response::Response {
+        calls.fetch_add(1, Ordering::SeqCst);
+        (
+            StatusCode::TOO_MANY_REQUESTS,
+            [(header::RETRY_AFTER, "120")],
+            Json(json!({"ok": false, "error": "ratelimited"})),
+        )
+            .into_response()
+    }
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let mock_router = Router::new()
+        .route("/{method}", post(rate_limited))
+        .with_state(calls.clone());
+    let server = tokio::spawn(async move { axum::serve(listener, mock_router).await.unwrap() });
+    let dir = tempfile::tempdir().unwrap();
+    let state = AppState::open(&dir.path().join("test.db"), "token".into()).unwrap();
+    let account = state.mcp_account_id().unwrap();
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/slackbot.json");
+    let app = parse_app_definition(&std::fs::read_to_string(path).unwrap()).unwrap();
+    state
+        .register_builtin_specs(&[BuiltinRuntimeSpec {
+            app_id: "slackbot".into(),
+            version: 2,
+            storage: app.storage,
+            worker: app.worker,
+        }])
+        .unwrap();
+    state
+        .write_app_storage(
+            &account,
+            "slackbot",
+            "api_base_url",
+            None,
+            json!(format!("http://{address}")),
+            None,
+        )
+        .unwrap();
+    let mut status = state
+        .read_app_storage(&account, "slackbot", "status", None)
+        .unwrap()
+        .content;
+    status["bot_user_id"] = json!("UBOT");
+    state
+        .write_app_storage(&account, "slackbot", "status", None, status, None)
+        .unwrap();
+    state
+        .set_app_secret(&account, "slackbot", "slack_bot_token", "bot-test")
+        .unwrap();
+
+    let poll = || WorkerInvokeRequest {
+        action: "poll_now".into(),
+        args: None,
+        workspace_id: None,
+    };
+    state
+        .invoke_worker(&account, "slackbot", poll())
+        .await
+        .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+    let poll_path = dir
+        .path()
+        .join("worker-state")
+        .join(super::app_storage::bucket_id(&account, "slackbot"))
+        .join("slackbot/poll_state.json");
+    let poll_state: Value = serde_json::from_slice(&std::fs::read(&poll_path).unwrap()).unwrap();
+    assert!(poll_state["retry_at"].as_i64().unwrap() > chrono::Utc::now().timestamp() + 60);
+
+    state
+        .invoke_worker(&account, "slackbot", poll())
+        .await
+        .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    server.abort();
+}
+
+#[tokio::test]
 async fn builtin_runtime_registration_requires_device_and_valid_declarations() {
     use kaleidoscope_contract::worker::BuiltinRuntimeSpec;
     let state = AppState::in_memory("test");
@@ -570,7 +667,7 @@ async fn builtin_runtime_registration_requires_device_and_valid_declarations() {
     let app = parse_app_definition(&std::fs::read_to_string(path).unwrap()).unwrap();
     let spec = BuiltinRuntimeSpec {
         app_id: app.id,
-        version: 1,
+        version: 2,
         storage: app.storage,
         worker: app.worker,
     };

@@ -492,6 +492,43 @@ async fn upload_warns_about_connection_names_missing_from_the_server() {
 }
 
 #[tokio::test]
+async fn upload_warns_when_a_host_exceeds_the_default_screen_call_budget() {
+    let server = McpServer::new(AppState::in_memory("secret"));
+    let definition = json!({
+        "id": "over-budget-upload",
+        "name": "예산 초과 시험",
+        "requires": {"blocks": 4, "modules": {"http": 1}},
+        "permissions": [{"module":"http", "id":"public", "label":"공개 API", "base_url":"https://api.example.test", "paths":["/first", "/second"]}],
+        "state": {},
+        "sources": {
+            "first": {"kind":"request", "permission":"public", "path":"/first", "refresh_secs":10},
+            "second": {"kind":"request", "permission":"public", "path":"/second", "refresh_secs":10}
+        },
+        "ui": {"type":"stack", "direction":"column", "children":[
+            {"type":"text", "value":{"expr":"$data.first"}},
+            {"type":"text", "value":{"expr":"$data.second"}}
+        ]}
+    });
+    let result = server
+        .upload_app(Parameters(UploadArgs {
+            asset_uploads: None,
+            definition,
+            open: false,
+            workspace_id: None,
+        }))
+        .await
+        .unwrap();
+    let result_json = serde_json::to_value(result).unwrap();
+    let value: Value =
+        serde_json::from_str(result_json["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(value["app_id"], "over-budget-upload");
+    assert!(value["warnings"].as_array().unwrap().iter().any(|warning| {
+        warning.as_str().unwrap()
+            == "api.example.test: 기본 화면에서 분당 12.0회 호출합니다. 묶음 요청을 찾거나 refresh_secs를 늘리십시오(기준 분당 6회)."
+    }));
+}
+
+#[tokio::test]
 async fn connection_rejects_environment_references() {
     let server = McpServer::new(AppState::in_memory("secret"));
     let result = server
