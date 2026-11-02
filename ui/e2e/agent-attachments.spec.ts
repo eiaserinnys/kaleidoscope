@@ -66,7 +66,8 @@ for (const { width, theme } of [{ width: 360, theme: "dark" }, { width: 720, the
     if (evidence) await page.screenshot({ path: `${evidence}/${width}-${theme}-history.png` });
 
     await picker.setInputFiles(Array.from({ length: 11 }, (_, i) => ({ name: `긴 이름을 가진 첨부 파일 ${i}.txt`, mimeType: "text/plain", buffer: Buffer.from("x") })));
-    await expect(chat.getByRole("alert")).toContainText("첨부는 한 번에 10개까지입니다");
+    await expect(chat.getByRole("alert")).toContainText("한 번에 첨부할 수 있는 파일은 10개까지입니다");
+    await expect(chat.getByRole("alert")).toContainText("SHELL_CHAT_ATTACHMENT_COUNT_EXCEEDED");
     const boxes = await chat.locator(".ks-agent-attachment-chip").evaluateAll((elements) => elements.filter((e) => e.closest(".ks-agent-attachment-list")).map((e) => ({ top: e.getBoundingClientRect().top, right: e.getBoundingClientRect().right, parentRight: e.parentElement!.getBoundingClientRect().right })));
     expect(new Set(boxes.map((box) => box.top)).size).toBeGreaterThan(1);
     expect(boxes.every((box) => box.right <= box.parentRight + 1)).toBe(true);

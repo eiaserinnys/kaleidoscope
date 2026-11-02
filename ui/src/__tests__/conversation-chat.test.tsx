@@ -72,7 +72,7 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
 }
 const get = (value: ConversationThread | null = thread, profile = "profile-a"): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles, start: { profile, model: "m" } });
 const error = (code: CoreError["code"]): CoreError => code === "binding_conflict"
-  ? { id: "CONV_CONTEXT_SAVED_BINDING_MISMATCH", code, message: "작업 workspace: 저장된 대화 연결 정보가 현재 설정과 맞지 않습니다. 에이전트에게 이 오류 코드를 전하세요.", details: [] }
+  ? { id: "CONV_CONTEXT_SAVED_BINDING_MISMATCH", code, message: "workspace: 저장된 대화 연결 정보가 현재 설정과 맞지 않습니다. 에이전트에게 이 오류 코드를 전하세요.", details: [] }
   : code === "login_required"
     ? { id: "CONV_STREAM_LOGIN_REQUIRED", code, message: "대화 제공자 연결 test: 로그인이 필요합니다. 로그인한 뒤 대화를 다시 여세요.", details: [] }
     : { code, message: "실패", details: [] };

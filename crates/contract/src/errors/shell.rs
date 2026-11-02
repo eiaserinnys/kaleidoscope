@@ -66,7 +66,7 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "쉘 이진 IPC 작업 실행",
         cause: "백그라운드 이진 작업이 중단되었다",
-        message: "쉘 이진 작업이 중단되어 요청을 마치지 못했습니다. 다시 시도하세요.",
+        message: "파일 작업이 중단되어 요청을 마치지 못했습니다. 다시 시도하세요.",
         fix: "요청을 다시 시도하세요"
     }
     SHELL_CONVERSATION_ATTACHMENT_REPLY_INVALID() {
@@ -156,7 +156,7 @@ error_catalog! { ENTRIES;
     SHELL_HTML_COMMENT_THREAD_REPLY_INVALID() {
         class: Io,
         place: "HTML 문서 커멘트 읽기",
-        cause: "코멘트 읽기 명령이 다른 종류의 응답을 받았다",
+        cause: "커멘트 읽기 명령이 다른 종류의 응답을 받았다",
         message: "HTML 문서의 커멘트를 읽지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
         fix: "쉘을 업데이트하고 다시 시도하세요"
     }
@@ -416,8 +416,8 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱 파일 내보내기 쓰기",
         cause: "브라우저 임시 파일 크기가 64MiB를 넘었다",
-        message: "이 브라우저에서는 64MiB보다 큰 파일을 내보낼 수 없습니다. 64MiB 이하로 나누어 저장하세요.",
-        fix: "파일을 64MiB 이하로 나누어 저장하세요"
+        message: "이 브라우저에서는 64MB보다 큰 파일을 내보낼 수 없습니다. 64MB 이하로 나누어 저장하세요.",
+        fix: "파일을 64MB 이하로 나누어 저장하세요"
     }
     SHELL_CLIENT_FILE_TRUNCATE_TARGET_MISSING() {
         class: Io,
@@ -437,8 +437,8 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱 파일 내보내기 크기 변경",
         cause: "브라우저 임시 파일 크기가 64MiB를 넘었다",
-        message: "이 브라우저에서는 64MiB보다 큰 파일을 내보낼 수 없습니다. 64MiB 이하로 나누어 저장하세요.",
-        fix: "파일을 64MiB 이하로 나누어 저장하세요"
+        message: "이 브라우저에서는 64MB보다 큰 파일을 내보낼 수 없습니다. 64MB 이하로 나누어 저장하세요.",
+        fix: "파일을 64MB 이하로 나누어 저장하세요"
     }
     SHELL_CLIENT_FILE_CLOSE_TARGET_MISSING() {
         class: Io,

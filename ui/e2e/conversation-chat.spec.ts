@@ -97,7 +97,7 @@ test("로그인 뒤 시작 판의 첫 조작에 포커스를 둔다", async ({ p
 
 test("묶음 충돌은 시작이나 입력을 보이지 않는다", async ({ page }) => {
   const chat = await open(page, "conflict");
-  await expect(chat.getByRole("alert")).toContainText("저장된 대화와 제공자의 대화가 다릅니다");
+  await expect(chat.getByRole("alert")).toContainText("대화 연결이 충돌합니다");
   await capture(page, "conflict");
   await expect(chat.getByRole("button", { name: "시작" })).toHaveCount(0);
   await expect(chat.getByRole("textbox", { name: "메시지" })).toHaveCount(0);

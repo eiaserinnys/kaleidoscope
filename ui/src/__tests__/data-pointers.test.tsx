@@ -181,7 +181,9 @@ it("잘못된 클라이언트 출력은 원인별 코드와 읽기 쉬운 크기
   expect(data.getValue("@client/large")).toEqual({ status: "ready", value: "이전" });
   expect(data.getValue("@client/small")).toEqual({ status: "ready", value: 1 });
   expect(data.getNoticeId()).toBe("SHELL_CLIENT_OUTPUT_TOO_LARGE");
-  expect(data.getNotice()).toContain("64MiB");
+  expect(data.getNotice()).toContain("1MB");
+  data.publishClient({ broken: undefined as never });
+  expect(data.getNoticeId()).toBe("SHELL_CLIENT_OUTPUT_SERIALIZE_FAILED");
   const circular: Record<string, unknown> = {};
   circular.self = circular;
   data.publishClient({ broken: circular as never });

@@ -336,10 +336,12 @@ impl Context {
                 })
                 .map_err(|e| {
                     if e.code == ErrorCode::Conflict {
-                        kaleidoscope_contract::errors::CONV_CONTEXT_ADOPTION_CONFLICT(
-                            &self.workspace.id,
-                            id,
-                        )
+                        let mut error =
+                            kaleidoscope_contract::errors::CONV_CONTEXT_ADOPTION_CONFLICT(
+                                &self.workspace.name,
+                            );
+                        error.details.push(format!("제공자 대화 ID: {id}"));
+                        error
                     } else {
                         e
                     }

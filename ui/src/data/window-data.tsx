@@ -85,7 +85,8 @@ export class WindowData {
       if (!Object.hasOwn(this.definition.client?.outputs ?? {}, name)) continue;
       let encoded: string | undefined;
       try { encoded = JSON.stringify(value); } catch { this.setNotice(shellErrors.SHELL_CLIENT_OUTPUT_SERIALIZE_FAILED({ name })); continue; }
-      if (encoded === undefined || new TextEncoder().encode(encoded).byteLength > CLIENT_OUTPUT_MAX_BYTES) { this.setNotice(shellErrors.SHELL_CLIENT_OUTPUT_TOO_LARGE({ name, limit: "64MiB" })); continue; }
+      if (encoded === undefined) { this.setNotice(shellErrors.SHELL_CLIENT_OUTPUT_SERIALIZE_FAILED({ name })); continue; }
+      if (new TextEncoder().encode(encoded).byteLength > CLIENT_OUTPUT_MAX_BYTES) { this.setNotice(shellErrors.SHELL_CLIENT_OUTPUT_TOO_LARGE({ name, limit: "1MB" })); continue; }
       const previous = this.clientValues[name];
       if (previous?.status === "ready" && JSON.stringify(previous.value) === encoded) continue;
       this.clientValues[name] = { status: "ready", value: previous?.status === "ready" ? shareStructure(previous.value, value) : value };
@@ -99,15 +100,15 @@ export class WindowData {
   getNotice = () => this.notice;
   getNoticeId = () => this.noticeId;
   getNoticeRole = () => this.noticeRole;
-  setNotice = (problem: CoreError | string | null) => {
-    this.notice = typeof problem === "string" || problem === null ? problem : problem.message;
-    this.noticeId = typeof problem === "string" || problem === null ? null : problem.id ?? null;
+  setNotice = (problem: CoreError | null) => {
+    this.notice = problem?.message ?? null;
+    this.noticeId = problem?.id ?? null;
     this.noticeRole = "alert";
     this.noticeListeners.forEach((listener) => listener());
   };
   setStatus = (message: string) => { this.notice = message; this.noticeId = null; this.noticeRole = "status"; this.noticeListeners.forEach((listener) => listener()); };
   getClientFailed = () => this.clientFailed;
-  failClient = (problem: CoreError | string) => { this.clientFailed = true; this.setNotice(problem); };
+  failClient = (problem: CoreError) => { this.clientFailed = true; this.setNotice(problem); };
   subscribeClient = (listener: () => void) => { this.clientListeners.add(listener); return () => this.clientListeners.delete(listener); };
   getClientGeneration = () => this.clientGeneration;
   subscribeMedia = (listener: () => void) => { this.mediaListeners.add(listener); return () => this.mediaListeners.delete(listener); };

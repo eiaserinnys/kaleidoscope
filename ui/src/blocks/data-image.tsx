@@ -5,7 +5,7 @@ import { useMedia } from "../data/use-media";
 import { DataState } from "../components/data-state";
 import { DataIcon } from "../components/data-icons";
 import { cropStyle, isMedia } from "../components/media-thumbnail";
-import { EmptyState, IconButton } from "../components/primitives";
+import { Button, EmptyState, ErrorId, IconButton } from "../components/primitives";
 
 type Data = Extract<Block, { type: "image" }>;
 export function imageRequestSize(width: number, height: number, ratio: number, zoom: number): number {
@@ -66,7 +66,9 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   return <div className={`ks-image-view${zoomable ? " is-zoomable" : ""}`} ref={host} tabIndex={zoomable && media ? 0 : undefined} onKeyDown={onKeyDown} onPointerDown={down} onPointerMove={move} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }} onDoubleClick={() => { if (zoomable) adjust(1); }}>
     {!media ? <EmptyState icon={<DataIcon name="image" size="empty" />} />
       : result.status === "loading" ? <DataState value={{ status: "loading" }} />
-      : result.status === "failed" ? <DataState value={{ status: "failed", id: result.error.id, message: result.error.message, retry: [] }} compact={size.height <= 160} onRetry={result.retry} />
+      : result.status === "failed" ? size.width < 258
+        ? <div className="ks-empty-state"><span className="ks-empty-state-text"><span title={result.error.message}>이미지를 불러오지 못했습니다</span>{result.error.id ? <> <ErrorId id={result.error.id} /></> : null}</span><span className="ks-empty-state-action"><Button onClick={result.retry}>다시 받기</Button></span></div>
+        : <DataState value={{ status: "failed", id: result.error.id, message: result.error.message, retry: [] }} compact={size.height <= 160} onRetry={result.retry} />
       : <div className="ks-image-frame" style={{ width: sourceWidth * factor, height: sourceHeight * factor, transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})` }}><img alt="" src={result.url} style={cropStyle(crop)} onLoad={(event) => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} draggable={false} /></div>}
     {zoomable && media && result.status === "ready" ? <div className="ks-image-controls" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
       <IconButton aria-label="축소" onClick={() => adjust(scale * 0.8)} disabled={scale <= 1}><DataIcon name="zoom-out" /></IconButton>
