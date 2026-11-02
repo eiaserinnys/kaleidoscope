@@ -321,7 +321,10 @@ impl WebHost for TauriWebHost {
             Ok(())
         });
         let after = crate::freeze_cover::flush();
-        before.and(destroy).and(after).map_err(fail)
+        before
+            .and(destroy.map_err(|error| error.to_string()))
+            .and(after)
+            .map_err(fail)
     }
     fn detach(&self, id: &str) -> Result<(), CoreError> {
         self.pages.lock().unwrap().remove(id);
