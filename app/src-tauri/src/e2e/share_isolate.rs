@@ -85,7 +85,7 @@ pub(super) fn scenario(
     import_definition(core, agent_definition(out))?;
     let a_id = open_window(core, &desktop_id, A_ID, layout.a)?;
     let b_id = open_window(core, &desktop_id, B_ID, layout.b)?;
-    let web_events = ui::track_web_events(core)?;
+    let web_events = ui::track_web_events(core);
     let web_id = open_window(core, &desktop_id, "web-browser", layout.web)?;
     call(
         core,
