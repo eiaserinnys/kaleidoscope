@@ -93,6 +93,10 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   await waitFor(() => expect(describeVisible(root).text).toContain("저장 안 한 수정 1건"));
   expect(describeVisible(root).text).toContain("고른 요소: h1");
   expect(describeVisible(root).text).toContain("미해결 커멘트 1건");
+  await user.click(screen.getByRole("button", { name: "숨기기" }));
+  await waitFor(() => expect(describeVisible(root).text).toContain("display"));
+  await user.click(screen.getByRole("button", { name: "되돌리기" }));
+  await waitFor(() => expect(describeVisible(root).text).not.toContain("display"));
   await act(async () => {
     files.set("시안/r2.html", { content: "<h1>새 판</h1>", revision: "html2" });
     base.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "bucket", item: { entry_id: "drafts", key: "drafts/시안/r2.html", kind: "md", revision: "html2", exists: true } } } });

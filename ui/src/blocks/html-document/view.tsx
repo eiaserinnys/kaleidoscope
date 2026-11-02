@@ -67,7 +67,7 @@ function Rail({ model }: { model: ReturnType<typeof useHtmlDocument> }) {
       {rest.map(card)}
       {!shown.length ? <div className="ks-html-empty"><StatusText>커멘트가 없습니다</StatusText></div> : null}
     </> : <div className="ks-html-inspector">
-      <div className="ks-html-actions"><Button disabled={!model.undo.length} onClick={model.undoEdit}>되돌리기</Button><Button disabled={!model.redo.length} onClick={model.redoEdit}>다시 실행</Button><Button disabled={!model.selection} onClick={() => key("d", { ctrl: true })}>복제</Button><Button disabled={!model.selection} onClick={() => key("Delete")}>삭제</Button></div>
+      <div className="ks-html-actions"><Button disabled={!model.undo.length} onClick={model.undoEdit}>되돌리기</Button><Button disabled={!model.redo.length} onClick={model.redoEdit}>다시 실행</Button><Button disabled={!model.selection} onClick={() => model.editStyle("display", "none")}>숨기기</Button><Button disabled={!model.selection} onClick={() => key("d", { ctrl: true })}>복제</Button><Button disabled={!model.selection} onClick={() => key("Delete")}>삭제</Button></div>
       {model.selection ? <><code className="ks-html-selector">{model.selection.anchor.selector}</code>
       <div className="ks-html-actions"><Button onClick={() => key("ArrowUp", { alt: true })}>위로</Button><Button onClick={() => key("ArrowDown", { alt: true })}>아래로</Button></div>
       {([
