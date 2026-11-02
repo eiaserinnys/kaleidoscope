@@ -15,8 +15,12 @@ export interface HtmlAnchor {
   rect: { x: number; y: number; w: number; h: number; vw: number };
 }
 export type AnchorStatus = "exact" | "moved" | "orphan";
-export interface FrameSelection { n: number; anchor: HtmlAnchor; styles: Record<string, string> }
-export interface FrameComment { id: string; anchor: HtmlAnchor; number: number; sameRevision: boolean }
+export interface FrameSelection {
+  n: number; anchor: HtmlAnchor; styles: Record<string, string>;
+  name: string; ancestors: { n: number; label: string }[]; hasChildren: boolean;
+  text: string; first: boolean; last: boolean; rect: { width: number; height: number }; colors: string[];
+}
+export interface FrameComment { id: string; anchor: HtmlAnchor; number: number; sameRevision: boolean; resolved: boolean; active: boolean }
 export type FrameToParent =
   | { type: "ks-html-ready" }
   | { type: "ks-html-visible-text"; text: string }
@@ -30,4 +34,5 @@ export type ParentToFrame =
   | { type: "ks-html-select-number"; n: number | null }
   | { type: "ks-html-comments"; comments: FrameComment[] }
   | { type: "ks-html-focus-comment"; id: string }
+  | { type: "ks-html-refresh-selection" }
   | { type: "ks-html-edit"; edit: HtmlEdit };

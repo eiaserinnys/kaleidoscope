@@ -12,6 +12,7 @@ import { emptyThread, readThread, writeThreadChange } from "./storage";
 import { anchorRevision, listRevisions, type Comment, type Thread, type ThreadChange } from "./thread";
 
 type HtmlBlock = Extract<Block, { type: "html_view" }> & { document: DocumentRef };
+export type HtmlFace = "comments" | "props" | null;
 const nOf = (element: Element | null) => element ? Number(element.getAttribute("data-ks-n")) || null : null;
 const makeId = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 const reviewSignature = (comment: Comment) => comment.replies.at(-1)?.id ?? "";
@@ -28,11 +29,18 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const [selection, setSelection] = useState<FrameSelection | null>(null);
   const [results, setResults] = useState<Record<string, AnchorStatus>>({});
   const [text, setText] = useState(""); const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false); const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [sentReviews, setSentReviews] = useState<Record<string, Record<string, string>>>({});
   const [mode, setMode] = useState<"select" | "view">("select");
-  const [undo, setUndo] = useState<HtmlEdit[]>([]); const [redo, setRedo] = useState<HtmlEdit[]>([]);
+  const [narrow, setNarrow] = useState(false);
+  const [wideFace, setWideFace] = useState<HtmlFace>("comments");
+  const [narrowFace, setNarrowFace] = useState<HtmlFace>(null);
+  const [activeComment, setActiveComment] = useState<string | null>(null);
+  const [propertyGroups, setPropertyGroups] = useState<Record<string, boolean>>({});
+  const [undo, setUndo] = useState<HtmlEdit[][]>([]); const [redo, setRedo] = useState<HtmlEdit[][]>([]);
   const [pendingChange, setPendingChange] = useState<{ name: string; rev: number } | null>(null);
   const frame = useRef<HTMLIFrameElement>(null); const root = useRef<HTMLElement>(null);
   const work = useRef<Document | null>(null); const cache = useRef(new Map<string, string>());
@@ -43,6 +51,15 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const threadRef = useRef(thread); threadRef.current = thread;
   const dirty = undo.length > 0; const dirtyRef = useRef(dirty); dirtyRef.current = dirty;
   const activeDoc = docs.find((item) => item.name === active?.name); const latest = activeDoc?.revisions.at(-1) ?? 0;
+  const face = narrow ? narrowFace : wideFace;
+  const setFace = useCallback((next: HtmlFace) => { if (narrow) setNarrowFace(next); else setWideFace(next); }, [narrow]);
+  useEffect(() => {
+    const element = root.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([item]) => { if (item.contentRect.width > 0) setNarrow(item.contentRect.width <= 560); });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const agentWindow = useShellSelector(store, (snapshot) => {
     if (!snapshot) return null;
     const workspace = snapshot.shared.desktops.find((desktop) => desktop.id === context.window.desktop_id)?.workspace_id;
@@ -98,7 +115,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   }, [docs, docState, revState, block.on_select_revision, patchState]);
   useEffect(() => {
     const item = active; const sequence = ++readSequence.current;
-    setSelection(null); setResults({}); setText(""); setUndo([]); setRedo([]); selectors.current.clear(); work.current = null; setSource("");
+    setSelection(null); setActiveComment(null); setResults({}); setText(""); setUndo([]); setRedo([]); selectors.current.clear(); work.current = null; setSource(""); setSaveFailed(false);
     if (!item) return;
     void refreshThread(item.name);
     const path = `${item.name}/r${item.rev}.html`;
@@ -121,8 +138,8 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const reviewComments = comments.filter((comment) => comment.status === "needs_agent_review");
   const hasUnsentReview = reviewComments.some((comment) => sentReviews[active?.name ?? ""]?.[comment.id] !== reviewSignature(comment));
   const sentReview = reviewComments.length > 0 && !hasUnsentReview;
-  const structuralEdits = undo.some((edit) => edit.kind === "insert" || edit.kind === "remove" || edit.kind === "move");
-  const frameComments = useMemo(() => comments.map((comment, index) => ({ id: comment.id, anchor: comment.anchor, number: index + 1, sameRevision: anchorRevision(comment) === active?.rev && !structuralEdits })), [active?.rev, comments, structuralEdits]);
+  const structuralEdits = undo.some((group) => group.some((edit) => edit.kind === "insert" || edit.kind === "remove" || edit.kind === "move"));
+  const frameComments = useMemo(() => comments.map((comment, index) => ({ id: comment.id, anchor: comment.anchor, number: index + 1, sameRevision: anchorRevision(comment) === active?.rev && !structuralEdits, resolved: comment.status === "resolved", active: comment.id === activeComment })), [active?.rev, activeComment, comments, structuralEdits]);
   useEffect(() => { send({ type: "ks-html-comments", comments: frameComments }); }, [frameComments, send]);
   useEffect(() => { send({ type: "ks-html-mode", mode }); }, [mode, send]);
   const writeChange = useCallback(async (change: ThreadChange) => {
@@ -158,33 +175,52 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     const safe = edit.kind === "insert" ? { ...edit, html: sanitizeFragment(edit.html) } : edit;
     send({ type: "ks-html-edit", edit: safe });
   }, [flushEdits, send]);
-  const record = useCallback((edit: HtmlEdit) => {
+  const record = useCallback((value: HtmlEdit | HtmlEdit[]) => {
     if (!work.current) return;
-    applyEdit(work.current, edit); sendEdit(edit);
-    setUndo((previous) => {
-      const last = previous.at(-1);
-      if (last && edit.kind === "style" && last.kind === "style" && last.n === edit.n && last.prop === edit.prop) return [...previous.slice(0, -1), { ...edit, before: last.before }];
-      if (last && edit.kind === "text" && last.kind === "text" && last.n === edit.n) return [...previous.slice(0, -1), { ...edit, before: last.before }];
-      return [...previous, edit];
-    });
+    const group = Array.isArray(value) ? value : [value];
+    for (const edit of group) { applyEdit(work.current, edit); sendEdit(edit); }
+    setUndo((previous) => [...previous, group]);
     setRedo([]);
   }, [sendEdit]);
   const undoEdit = useCallback(() => {
-    const edit = undoRef.current.at(-1); if (!edit || !work.current) return;
-    const inverse = invertEdit(edit); applyEdit(work.current, inverse); sendEdit(inverse);
-    setUndo((items) => items.slice(0, -1)); setRedo((items) => [...items, edit]);
-  }, [sendEdit]);
+    const group = undoRef.current.at(-1); if (!group || !work.current) return;
+    for (const edit of [...group].reverse()) { const inverse = invertEdit(edit); applyEdit(work.current, inverse); sendEdit(inverse); }
+    flushEdits(); send({ type: "ks-html-refresh-selection" });
+    setUndo((items) => items.slice(0, -1)); setRedo((items) => [...items, group]);
+  }, [flushEdits, send, sendEdit]);
   const redoEdit = useCallback(() => {
-    const edit = redo.at(-1); if (!edit || !work.current) return;
-    applyEdit(work.current, edit); sendEdit(edit); setRedo((items) => items.slice(0, -1)); setUndo((items) => [...items, edit]);
-  }, [redo, sendEdit]);
+    const group = redo.at(-1); if (!group || !work.current) return;
+    for (const edit of group) { applyEdit(work.current, edit); sendEdit(edit); }
+    flushEdits(); send({ type: "ks-html-refresh-selection" });
+    setRedo((items) => items.slice(0, -1)); setUndo((items) => [...items, group]);
+  }, [flushEdits, redo, send, sendEdit]);
+  const previewStyle = useCallback((prop: string, value: string) => {
+    if (!selection || !work.current) return;
+    const target = findNumber(work.current, selection.n);
+    if (!(target instanceof HTMLElement)) return;
+    if (prop === "border-width" && selection.styles["border-style"] === "none") sendEdit({ kind: "style", n: selection.n, prop: "border-style", before: target.style.getPropertyValue("border-style"), after: Number.parseFloat(value) > 0 ? "solid" : target.style.getPropertyValue("border-style") });
+    sendEdit({ kind: "style", n: selection.n, prop, before: target.style.getPropertyValue(prop), after: value });
+  }, [selection, sendEdit]);
   const editStyle = useCallback((prop: string, value: string) => {
     const target = selection && work.current ? findNumber(work.current, selection.n) : null;
     if (!(target instanceof HTMLElement) || !selection) return;
     const before = target.style.getPropertyValue(prop); if (before === value) return;
-    record({ kind: "style", n: selection.n, prop, before, after: value });
-    setSelection((current) => current ? { ...current, styles: { ...current.styles, [prop]: value } } : null);
-  }, [record, selection]);
+    const group: HtmlEdit[] = [];
+    if (prop === "border-width" && Number.parseFloat(value) > 0 && selection.styles["border-style"] === "none") {
+      group.push({ kind: "style", n: selection.n, prop: "border-style", before: target.style.getPropertyValue("border-style"), after: "solid" });
+    }
+    group.push({ kind: "style", n: selection.n, prop, before, after: value });
+    record(group);
+    setSelection((current) => current ? { ...current, styles: { ...current.styles, ...Object.fromEntries(group.map((item) => item.kind === "style" ? [item.prop, item.after] : ["", ""])) } } : null);
+    requestAnimationFrame(() => { flushEdits(); send({ type: "ks-html-refresh-selection" }); });
+  }, [flushEdits, record, selection, send]);
+  const editText = useCallback((value: string) => {
+    const target = selection && work.current ? findNumber(work.current, selection.n) : null;
+    if (!selection || !target || target.children.length || target.textContent === value) return;
+    record({ kind: "text", n: selection.n, before: target.textContent ?? "", after: value });
+    setSelection((current) => current ? { ...current, text: value } : null);
+    send({ type: "ks-html-refresh-selection" });
+  }, [record, selection, send]);
   const keyAction = useCallback((data: Extract<FrameToParent, { type: "ks-html-key" }>) => {
     if (data.ctrl && data.key.toLowerCase() === "z") { data.shift ? redoEdit() : undoEdit(); return; }
     if (data.ctrl && data.key.toLowerCase() === "y") { redoEdit(); return; }
@@ -211,43 +247,48 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
       record({ kind: "move", n: selection.n, parent: parentN, next_before: before, next_after: after });
     }
   }, [record, redoEdit, selection, send, undoEdit]);
+  const openComment = useCallback((id: string) => {
+    setActiveComment(id); setFace("comments");
+    send({ type: "ks-html-focus-comment", id });
+    requestAnimationFrame(() => [...(root.current?.querySelectorAll<HTMLElement>(".ks-html-comment") ?? [])].find((item) => item.id === `ks-html-comment-${id}`)?.scrollIntoView({ block: "nearest" }));
+  }, [send, setFace]);
   useEffect(() => {
     const receive = (event: MessageEvent<FrameToParent>) => {
       if (event.source !== frame.current?.contentWindow || !event.data || typeof event.data !== "object") return;
       const data = event.data;
       if (data.type === "ks-html-ready") { send({ type: "ks-html-mode", mode }); send({ type: "ks-html-comments", comments: frameComments }); }
       else if (data.type === "ks-html-visible-text") setText(data.text);
-      else if (data.type === "ks-html-select") { setSelection(data.selection); if (data.selection) selectors.current.set(data.selection.n, data.selection.anchor.selector); }
+      else if (data.type === "ks-html-select") { setSelection(data.selection); if (data.selection) { selectors.current.set(data.selection.n, data.selection.anchor.selector); if (data.selection.anchor.kind === "text") setFace("comments"); } }
       else if (data.type === "ks-html-anchor-results") setResults(data.results);
-      else if (data.type === "ks-html-select-comment") document.getElementById(`ks-html-comment-${data.id}`)?.scrollIntoView({ block: "nearest" });
+      else if (data.type === "ks-html-select-comment") openComment(data.id);
       else if (data.type === "ks-html-key") keyAction(data);
       else if (data.type === "ks-html-text-edit") record({ kind: "text", n: data.n, before: data.before, after: data.after });
     };
     window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);
-  }, [frameComments, keyAction, mode, record, send]);
+  }, [frameComments, keyAction, mode, openComment, record, send, setFace]);
   const addComment = useCallback(async (body: string) => {
     const current = activeRef.current; if (!current || !selection || !body.trim()) return false;
     const comment: Comment = { id: makeId("c"), rev: current.rev, anchor_rev: current.rev, status: "needs_agent_review", anchor: selection.anchor, comment: body.trim(), created_at: new Date().toISOString(), resolved_rev: null, replies: [] };
     return writeChange({ kind: "add", comment });
   }, [selection, writeChange]);
-  const edits = useMemo(() => undo.map((edit) => {
+  const edits = useMemo(() => undo.flatMap((group) => group.map((edit) => {
     const selector = selectors.current.get(edit.kind === "insert" && edit.source ? edit.source : edit.n) ?? `[data-ks-n="${edit.n}"]`;
     if (edit.kind === "style") return { selector, prop: edit.prop, before: edit.before, after: edit.after };
     if (edit.kind === "text") return { selector, text: { before: edit.before, after: edit.after } };
     return { selector, dom: edit.kind === "insert" && edit.source ? "duplicate" : edit.kind };
-  }), [undo]);
-  const saveRevision = useCallback(async (note: string) => {
+  })), [undo]);
+  const saveRevision = useCallback(async () => {
     const current = activeRef.current; const doc = work.current; if (!current || !doc || !latest) return;
     const rev = latest + 1; const html = serializeOriginal(doc); const path = `${current.name}/r${rev}.html`;
     setSaving(true);
     try {
       await store.call({ op: "storage.write", window_id: windowId, entry, doc: path, content: html, expected_revision: null });
       cache.current.set(path, html);
-      await writeThreadChange(store, windowId, entry, current.name, { kind: "revision", rev, meta: { ...(note.trim() ? { title: note.trim(), note: note.trim() } : {}), author: "user", base_rev: current.rev, edits } });
-      setUndo([]); setRedo([]); setActive({ name: current.name, rev }); patchState(current.name, rev); await refreshList(); await refreshThread(current.name); setError(null);
-    } catch (reason) { setError(toCoreError(reason).message); }
+      await writeThreadChange(store, windowId, entry, current.name, { kind: "revision", rev, meta: { title: `직접 수정 ${undo.length}건`, author: "user", base_rev: current.rev, edits } });
+      setUndo([]); setRedo([]); setActive({ name: current.name, rev }); patchState(current.name, rev); await refreshList(); await refreshThread(current.name); setError(null); setErrorCode(null); setSaveFailed(false);
+    } catch (reason) { const failure = toCoreError(reason); setError(failure.message); setErrorCode(failure.code); setSaveFailed(true); }
     finally { setSaving(false); }
-  }, [edits, entry, latest, patchState, refreshList, refreshThread, store, windowId]);
+  }, [edits, entry, latest, patchState, refreshList, refreshThread, store, undo.length, windowId]);
   const choose = useCallback((name: string, rev: number) => { if (activeRef.current?.name === name && activeRef.current.rev === rev) return; if (dirtyRef.current) { setPendingChange({ name, rev }); return; } setActive({ name, rev }); patchState(name, rev); }, [patchState]);
   const confirmChange = useCallback(() => { if (!pendingChange) return; setActive(pendingChange); patchState(pendingChange.name, pendingChange.rev); setPendingChange(null); }, [patchState, pendingChange]);
   const share = useCallback((includeText: boolean) => {
@@ -280,5 +321,5 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     catch (reason) { setError(toCoreError(reason).message); }
     finally { setSending(false); }
   }, [active, agentWindow, hasUnsentReview, reviewComments, sending, share, store]);
-  return { active, docs, latest, thread, comments, selection, results, source, error, loaded, saving, sending, sentReview, hasUnsentReview, mode, setMode, frame, root, dirty, undo, redo, edits, pendingChange, setPendingChange, choose, confirmChange, keyAction, record, editStyle, undoEdit, redoEdit, addComment, writeChange, saveRevision, send, share, sendAgent, agentWindow };
+  return { active, docs, latest, thread, comments, selection, results, source, error, errorCode, saveFailed, loaded, saving, sending, sentReview, hasUnsentReview, reviewComments, mode, setMode, face, setFace, narrow, activeComment, setActiveComment, openComment, propertyGroups, setPropertyGroups, frame, root, dirty, undo, redo, edits, pendingChange, setPendingChange, choose, confirmChange, keyAction, record, previewStyle, editStyle, editText, undoEdit, redoEdit, addComment, writeChange, saveRevision, send, share, sendAgent, agentWindow };
 }

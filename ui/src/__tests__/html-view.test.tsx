@@ -15,6 +15,22 @@ import type { ShellStore } from "../core/shell-store";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+it("문서 머리 줄에서 고르기와 레일 면을 아이콘으로 바꾼다", async () => {
+  const seed = makeTestSeed({ definitions: [definition as AppDefinition] });
+  const base = createFakeTransport(seed);
+  const call = async (request: CoreRequest) => {
+    if (request.op === "storage.list") return { op: "storage.list", result: { bucket_id: "bucket", items: [{ doc: "시안/r1.html", revision: "r1", updated_at: "now", byte_size: 1 }] } };
+    if (request.op === "storage.get" && request.doc === "시안/r1.html") return { op: "storage.get", result: { kind: "md", content: "<p>시안</p>", revision: "r1", exists: true } };
+    if (request.op === "storage.get") throw { code: "not_found", message: "없음", details: [] };
+    return base.call(request as never);
+  };
+  render(<AppWindowContent store={createShellStore({ ...base, call: call as CoreTransport["call"] })} windowId="viewer-window" />);
+  expect((await screen.findByRole("button", { name: "고르기" })).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByRole("button", { name: "속성" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "요소 다듬기" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /에이전트에게 보내기/ })).toBeNull();
+});
+
 it("값 HTML은 스크립트를 정화한 격리 프레임으로 표시한다", async () => {
   const html = "<h1>바인딩 미리보기</h1><script>window.secret = true</script>";
   const app: AppDefinition = { id: "html-value", name: "미리보기", requires: { blocks: 6, modules: {} }, permissions: [], state: {}, ui: { type: "html_view", value: html } };
@@ -109,12 +125,11 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   const anchor: HtmlAnchor = { kind: "element", selector: "h1", selector_stable: false, path: "body > h1", tag: "h1", text: "제목", attrs: { id: null, role: null, aria_label: null, alt: null, href: null, src_hash: null }, quote: null, label: "h1", heading: "", rect: { x: 0, y: 0, w: 10, h: 10, vw: 300 } };
   act(() => window.dispatchEvent(new MessageEvent("message", { source: iframe.contentWindow, data: { type: "ks-html-select", selection: { n: 4, anchor, styles: {} } } })));
   const user = userEvent.setup();
-  await user.type(await screen.findByRole("textbox", { name: "커멘트" }), "색을 바꿔 주세요");
-  await user.click(screen.getByRole("button", { name: "등록" }));
+  await user.type(await screen.findByRole("textbox", { name: "커멘트" }), "색을 바꿔 주세요{Enter}");
   expect(await screen.findByText("색을 바꿔 주세요")).toBeTruthy();
-  await user.click(screen.getByRole("button", { name: "요소 다듬기" }));
-  await user.clear(screen.getByLabelText("배경 색"));
-  await user.type(screen.getByLabelText("배경 색"), "red");
+  await user.click(screen.getByRole("button", { name: "속성" }));
+  await user.clear(screen.getByRole("textbox", { name: "배경" }));
+  await user.type(screen.getByRole("textbox", { name: "배경" }), "red{Enter}");
   const root = container.querySelector<HTMLElement>(".ks-html-view")!;
   await waitFor(() => expect(describeVisible(root).text).toContain("저장 안 한 수정 1건"));
   expect(describeVisible(root).text).toContain("고른 요소: h1");
@@ -127,30 +142,28 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
     files.set("시안/r2.html", { content: "<h1>새 판</h1>", revision: "html2" });
     base.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "bucket", item: { entry_id: "drafts", key: "drafts/시안/r2.html", kind: "md", revision: "html2", exists: true } } } });
   });
-  expect(await screen.findByText("새 리비전 v2이 도착했습니다")).toBeTruthy();
+  expect(await screen.findByRole("button", { name: "v2 도착, 이동" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "리비전" }).textContent).toContain("v1");
   await user.click(screen.getByRole("button", { name: "리비전" }));
   await user.click(screen.getByRole("menuitem", { name: "v2" }));
   const dialog = await screen.findByRole("dialog");
   await user.click(within(dialog).getByRole("button", { name: "취소" }));
   expect(screen.getByRole("button", { name: "리비전" }).textContent).toContain("v1");
-  await user.click(screen.getByRole("button", { name: "커멘트" }));
-  await user.click(screen.getByRole("button", { name: "에이전트에게 보내기" }));
+  await user.click(screen.getByRole("button", { name: "커멘트 1건" }));
+  await user.click(screen.getByRole("button", { name: "에이전트에게 보내기 1" }));
   await waitFor(() => expect(sent).toHaveLength(1));
   const request = sent[0]; if (request.op !== "conversation.send") throw new Error("전송 명령 누락");
   expect(request.window_id).toBe("top-agent-window"); expect(request.text).toContain("시안/thread.json"); expect(request.text).toContain("색을 바꿔 주세요");
   expect(request.text).not.toContain("저장 안 한 수정");
   expect(await screen.findByText("보냈습니다")).toBeTruthy();
-  expect((screen.getByRole("button", { name: "에이전트에게 보내기" }) as HTMLButtonElement).disabled).toBe(true);
-  await user.type(screen.getByRole("textbox", { name: "커멘트" }), "글자를 키워 주세요");
-  await user.click(screen.getByRole("button", { name: "등록" }));
-  await waitFor(() => expect((screen.getByRole("button", { name: "에이전트에게 보내기" }) as HTMLButtonElement).disabled).toBe(false));
-  await user.click(screen.getByRole("button", { name: "에이전트에게 보내기" }));
+  expect((screen.getByRole("button", { name: "보냈습니다" }) as HTMLButtonElement).disabled).toBe(true);
+  await user.type(screen.getByRole("textbox", { name: "커멘트" }), "글자를 키워 주세요{Enter}");
+  await waitFor(() => expect((screen.getByRole("button", { name: "에이전트에게 보내기 2" }) as HTMLButtonElement).disabled).toBe(false));
+  await user.click(screen.getByRole("button", { name: "에이전트에게 보내기 2" }));
   await waitFor(() => expect(sent).toHaveLength(2));
-  expect((screen.getByRole("button", { name: "에이전트에게 보내기" }) as HTMLButtonElement).disabled).toBe(true);
-  await user.click(screen.getByRole("button", { name: "요소 다듬기" }));
-  await user.click(screen.getByRole("button", { name: "새 리비전으로 저장" }));
+  expect((screen.getByRole("button", { name: "보냈습니다" }) as HTMLButtonElement).disabled).toBe(true);
+  await user.click(screen.getByRole("button", { name: "변경 1건 새 리비전으로 저장" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "리비전" }).textContent).toBe("v3"));
   const savedThread = JSON.parse(files.get("시안/thread.json")!.content);
-  expect(savedThread.revisions["3"].title).toBeUndefined();
+  expect(savedThread.revisions["3"].title).toBe("직접 수정 1건");
 });

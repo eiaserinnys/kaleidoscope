@@ -36,9 +36,11 @@ export function htmlViewSource(html: string): string {
   const style = doc.createElement("style");
   style.dataset.ksInjected = "";
   const tokens = getComputedStyle(document.documentElement);
-  const names = ["--ks-color-accent", "--ks-color-accent-contrast", "--ks-color-selection", "--ks-color-text", "--ks-color-focus", "--ks-color-scroll-thumb", "--ks-type-meta", "--ks-font-family", "--ks-space-1", "--ks-space-2", "--ks-space-4", "--ks-space-5", "--ks-line-width", "--ks-focus-width", "--ks-focus-offset", "--ks-radius-small", "--ks-radius-large"];
+  const names = ["--ks-color-accent", "--ks-color-accent-contrast", "--ks-color-selection", "--ks-color-text", "--ks-color-focus", "--ks-color-scroll-thumb", "--ks-color-warning", "--ks-type-meta", "--ks-line-body", "--ks-font-family", "--ks-space-1", "--ks-space-2", "--ks-space-4", "--ks-space-5", "--ks-line-width", "--ks-focus-width", "--ks-focus-offset", "--ks-radius-small", "--ks-radius-large"];
   style.textContent = `:root{${names.map((name) => `${name}:${tokens.getPropertyValue(name)};`).join("")}}` +
-    "*::-webkit-scrollbar{width:var(--ks-space-2);height:var(--ks-space-2)}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:var(--ks-color-scroll-thumb);border-radius:var(--ks-radius-large);border:calc(var(--ks-line-width) * 2) solid transparent;background-clip:padding-box}*::-webkit-scrollbar-button{display:none}*:focus-visible{outline:var(--ks-focus-width) solid var(--ks-color-focus);outline-offset:var(--ks-focus-offset)}::highlight(ks-html-comments){background:var(--ks-color-selection);color:var(--ks-color-text)}";
+    "*::-webkit-scrollbar{width:var(--ks-space-2);height:var(--ks-space-2)}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:var(--ks-color-scroll-thumb);border-radius:var(--ks-radius-large);border:calc(var(--ks-line-width) * 2) solid transparent;background-clip:padding-box}*::-webkit-scrollbar-button{display:none}*:focus-visible{outline:var(--ks-focus-width) solid var(--ks-color-focus);outline-offset:var(--ks-focus-offset)}" +
+    "::highlight(ks-comment){background-color:color-mix(in srgb,color-mix(in srgb,var(--ks-color-accent),var(--ks-color-accent-contrast)) 40%,transparent);text-decoration:underline solid var(--ks-color-accent) var(--ks-focus-width)}" +
+    "::highlight(ks-comment-active),::highlight(ks-pending){background-color:color-mix(in srgb,color-mix(in srgb,var(--ks-color-accent),var(--ks-color-accent-contrast)) 72%,transparent);text-decoration:underline solid var(--ks-color-accent) var(--ks-focus-width)}";
   const script = doc.createElement("script");
   script.dataset.ksInjected = "";
   script.setAttribute("nonce", nonce);
