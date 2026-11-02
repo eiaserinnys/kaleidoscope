@@ -148,7 +148,12 @@ async fn run() -> Result<(), String> {
         ]);
     let app = Router::new()
         .route("/core", post(post_core))
-        .route("/bytes", post(post_core_bytes))
+        .route(
+            "/bytes",
+            post(post_core_bytes).layer(DefaultBodyLimit::max(
+                kaleidoscope_contract::client::CLIENT_PICK_FILE_MAX_BYTES as usize,
+            )),
+        )
         .layer(DefaultBodyLimit::max(
             kaleidoscope_contract::CONVERSATION_SEND_BODY_MAX_BYTES,
         ))
@@ -242,6 +247,9 @@ async fn post_core_bytes(
         return StatusCode::BAD_REQUEST.into_response();
     };
     let offset = get("x-ks-offset").and_then(|value| value.parse::<u64>().ok());
+    let handle = percent_encoding::percent_decode_str(&handle)
+        .decode_utf8_lossy()
+        .into_owned();
     let core = state.core.clone();
     let result = tokio::task::spawn_blocking(move || match operation.as_str() {
         "files.read_bytes" => core.client_read_file(&window, &handle),
@@ -253,6 +261,9 @@ async fn post_core_bytes(
                 &body,
             )
             .map(|()| Vec::new()),
+        "client.http_read" | "client.blob_put" => {
+            core.client_binary(&operation, &window, &handle, &body)
+        }
         _ => Err(CoreError::new(ErrorCode::InvalidRequest)),
     })
     .await;

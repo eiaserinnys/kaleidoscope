@@ -40,6 +40,7 @@ export class ClientRuntime {
   private previousInputs: Record<string, string> = {};
   private surfaces = new Map<string, { message: Record<string, unknown>; sent: boolean }>();
   private files = new BrowserFiles();
+  private blobFiles = new Set<string>();
   private stopping?: Promise<void>;
   private shareText = "";
   private shareImage = "";
@@ -301,8 +302,39 @@ export class ClientRuntime {
           const bytes = Uint8Array.from(atob(reply.media.data_base64), (char) => char.charCodeAt(0)).buffer;
           this.reply(message.requestId, bytes, undefined, [bytes]);
         }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+    } else if (message.type === "ks-client-http-read") {
+      const task = async () => {
+        if (!this.store.bytes) throw new Error("공개 바이트를 읽을 코어 전송 경로가 없습니다.");
+        const body = new TextEncoder().encode(JSON.stringify({ permission: message.permission, path: message.path, query: message.query ?? {} })).buffer;
+        const response = await this.store.bytes({ op: "client.http_read", window_id: this.data.windowId, handle: "" }, body);
+        const length = new DataView(response).getUint32(0);
+        const mime = new TextDecoder().decode(response.slice(4, 4 + length));
+        const bytes = response.slice(4 + length);
+        this.reply(message.requestId, { bytes, mime }, undefined, [bytes]);
+      };
+      void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+    } else if (message.type === "ks-client-blob-put") {
+      const task = async () => {
+        if ((typeof message.fileId === "string") === (message.bytes instanceof ArrayBuffer)) throw new Error("저장할 파일 또는 바이트 하나를 지정하세요.");
+        if (typeof message.fileId === "string" && this.store.nativeFiles) {
+          await this.store.call({ op: "client.blob_put", window_id: this.data.windowId, key: message.key, file_id: message.fileId });
+        } else {
+          if (!this.store.bytes) throw new Error("바이너리를 저장할 코어 전송 경로가 없습니다.");
+          const bytes = typeof message.fileId === "string" ? await (this.blobFiles.has(message.fileId) ? this.store.bytes({ op: "files.read_bytes", window_id: this.data.windowId, handle: message.fileId }) : this.files.read(message.fileId)) : message.bytes;
+          if (!(bytes instanceof ArrayBuffer)) throw new Error("저장할 파일 또는 바이트가 필요합니다.");
+          await this.store.bytes({ op: "client.blob_put", window_id: this.data.windowId, handle: message.key }, bytes);
+        }
+        this.reply(message.requestId, null);
+      };
+      void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+    } else if (message.type === "ks-client-blob-open") {
+      void this.store.call({ op: "client.blob_open", window_id: this.data.windowId, key: message.key }).then(({ file }) => { if (file) this.blobFiles.add(file.id); this.reply(message.requestId, file); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+    } else if (message.type === "ks-client-blob-remove") {
+      void this.store.call({ op: "client.blob_remove", window_id: this.data.windowId, key: message.key }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+    } else if (message.type === "ks-client-blob-list") {
+      void this.store.call({ op: "client.blob_list", window_id: this.data.windowId, prefix: message.prefix }).then(({ keys }) => this.reply(message.requestId, keys)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
     } else if (message.type === "ks-client-file-read") {
-      const result = this.store.nativeFiles && this.store.bytes ? this.store.bytes({ op: "files.read_bytes", window_id: this.data.windowId, handle: message.id }) : this.files.read(message.id);
+      const result = (this.store.nativeFiles || this.blobFiles.has(message.id)) && this.store.bytes ? this.store.bytes({ op: "files.read_bytes", window_id: this.data.windowId, handle: message.id }) : this.files.read(message.id);
       void result.then((bytes) => this.reply(message.requestId, bytes, undefined, [bytes])).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
     } else if (message.type === "ks-client-file-write") {
       const result = this.store.nativeFiles && this.store.bytes ? this.store.bytes({ op: "export.write", window_id: this.data.windowId, handle: message.sink, offset: message.offset }, message.bytes) : this.files.write(message.sink, message.offset, message.bytes);
@@ -369,7 +401,7 @@ export class ClientRuntime {
     this.beginClosing();
     await this.flush();
     await this.files.dispose().catch((error) => this.data.setNotice(toCoreError(error).message));
-    if (this.store.nativeFiles) await this.store.call({ op: "client.release", window_id: this.data.windowId }).catch((error) => this.data.setNotice(toCoreError(error).message));
+    if (this.store.nativeFiles || this.blobFiles.size) await this.store.call({ op: "client.release", window_id: this.data.windowId }).catch((error) => this.data.setNotice(toCoreError(error).message));
     this.unregister?.();
     this.unsubscribeStorage?.();
     this.unsubscribeVisibility?.();

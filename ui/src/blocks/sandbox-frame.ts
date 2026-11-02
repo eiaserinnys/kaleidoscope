@@ -87,6 +87,13 @@ function bridgeSource(init: SandboxInit): string {
         abort(sink) { return clientRequest('ks-client-file-abort', { sink }); },
       },
       assets: { bytes(id) { return clientRequest('ks-client-asset-bytes', { id }); } },
+      http: { read({ permission, path, query = {} }) { return clientRequest('ks-client-http-read', { permission, path, query }); } },
+      blobs: {
+        put({ key, file_id, bytes }) { return clientRequest('ks-client-blob-put', { key, fileId: file_id, bytes }, bytes instanceof ArrayBuffer ? [bytes] : undefined); },
+        open({ key }) { return clientRequest('ks-client-blob-open', { key }); },
+        remove({ key }) { return clientRequest('ks-client-blob-remove', { key }); },
+        list({ prefix }) { return clientRequest('ks-client-blob-list', { prefix }); },
+      },
       notice(message) { send('ks-client-notice', { message }); },
       reportShare(payload = {}) {
         if (typeof payload.text === 'string') { explicitText = true; shareText = payload.text; }

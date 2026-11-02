@@ -58,7 +58,9 @@ use kaleidoscope_contract::{
 use registry_client::{HttpRegistryClient, RegistryClient};
 
 pub use kaleidoscope_contract;
+mod client_blobs;
 mod client_files;
+mod client_http;
 
 /// 쉘 PNG에서 창이 보이는 자리를 잘라 같이 보기 첨부용 PNG로 만든다.
 pub fn crop_share_capture_png(bytes: &[u8], bounds: Rect, scale_factor: f64) -> Option<Vec<u8>> {
@@ -463,6 +465,49 @@ impl Core {
         client_files::read(&self.inner, window_id, handle)
     }
 
+    /// 클라이언트의 공개 바이트와 기기 보관 바이트를 이진 경로로 운반한다.
+    pub fn client_binary(
+        &self,
+        operation: &str,
+        window: &str,
+        handle: &str,
+        body: &[u8],
+    ) -> Result<Vec<u8>, CoreError> {
+        match operation {
+            "client.blob_put" => {
+                client_blobs::put(&self.inner, window, handle, None, Some(body))?;
+                Ok(Vec::new())
+            }
+            "client.http_read" => {
+                #[derive(serde::Deserialize)]
+                struct Request {
+                    permission: String,
+                    path: String,
+                    query: std::collections::BTreeMap<String, serde_json::Value>,
+                }
+                let request: Request = serde_json::from_slice(body).map_err(|_| {
+                    error::with_message(
+                        ErrorCode::InvalidRequest,
+                        "공개 HTTPS 요청 형식이 올바르지 않습니다.",
+                    )
+                })?;
+                let (bytes, mime) = client_http::read(
+                    &self.inner,
+                    window,
+                    &request.permission,
+                    &request.path,
+                    request.query,
+                )?;
+                let mut result = Vec::with_capacity(4 + mime.len() + bytes.len());
+                result.extend_from_slice(&(mime.len() as u32).to_be_bytes());
+                result.extend_from_slice(mime.as_bytes());
+                result.extend_from_slice(&bytes);
+                Ok(result)
+            }
+            _ => Err(error::make(ErrorCode::InvalidRequest)),
+        }
+    }
+
     /// 사용자가 고른 출력의 지정 위치에 원시 바이트를 쓴다.
     pub fn client_write_export(
         &self,
@@ -491,6 +536,41 @@ impl Core {
             CoreRequest::LinkSyncLocalToRemote {} => server_switch::sync(&self.inner),
             CoreRequest::LinkCancel {} => link::cancel(&self.inner),
             CoreRequest::LinkUnlink {} => link::unlink(&self.inner),
+            CoreRequest::ClientHttpRead {
+                window_id,
+                permission,
+                path,
+                query,
+            } => {
+                let (bytes, mime) =
+                    client_http::read(&self.inner, &window_id, &permission, &path, query)?;
+                Ok(CoreReply::ClientHttpRead { bytes, mime })
+            }
+            CoreRequest::ClientBlobPut {
+                window_id,
+                key,
+                file_id,
+                bytes,
+            } => {
+                client_blobs::put(
+                    &self.inner,
+                    &window_id,
+                    &key,
+                    file_id.as_deref(),
+                    bytes.as_deref(),
+                )?;
+                Ok(CoreReply::ClientBlobPut {})
+            }
+            CoreRequest::ClientBlobOpen { window_id, key } => Ok(CoreReply::ClientBlobOpen {
+                file: client_blobs::open(&self.inner, &window_id, &key)?,
+            }),
+            CoreRequest::ClientBlobRemove { window_id, key } => {
+                client_blobs::remove(&self.inner, &window_id, &key)?;
+                Ok(CoreReply::ClientBlobRemove {})
+            }
+            CoreRequest::ClientBlobList { window_id, prefix } => Ok(CoreReply::ClientBlobList {
+                keys: client_blobs::list(&self.inner, &window_id, &prefix)?,
+            }),
             request @ (CoreRequest::ConversationApplyStatus { .. }
             | CoreRequest::ConversationApplyRetry { .. }) => {
                 conversation_reconcile::handle(&self.inner, request)
