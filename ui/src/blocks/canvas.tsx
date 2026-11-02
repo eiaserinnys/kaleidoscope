@@ -1,6 +1,7 @@
-import { useEffect, useRef, useSyncExternalStore, type CSSProperties, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore, type CSSProperties, type PointerEvent } from "react";
 import type { Block } from "../contract/contract";
 import { useBinding, useWindowData } from "../data/window-data";
+import { createSerialSend } from "../data/throttled-send";
 import { useShareDescriber } from "../share/visible";
 
 type Rect = { x: number; y: number; width: number; height: number };
@@ -27,13 +28,24 @@ export function surfaceDpr(width: number, height: number, dpr: number) {
 export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointer: string }) {
   const data = useWindowData();
   const generation = useSyncExternalStore(data.subscribeClient, data.getClientGeneration, data.getClientGeneration);
+  const serialSend = useMemo(() => createSerialSend((value: Record<string, string | number | boolean>) => data.act(`${pointer}/on_pointer`, value)), [data, pointer]);
   const root = useRef<HTMLDivElement>(null);
   const rect = useRef<Rect>({ x: 0, y: 0, width: 0, height: 0 });
   const ratio = useBinding(`${pointer}/aspect_ratio`, block.aspect_ratio ?? null);
   const aspect = ratio.status === "ready" && typeof ratio.value === "number" && Number.isFinite(ratio.value) && ratio.value > 0 ? ratio.value : undefined;
+  const moveFrame = useRef<number | null>(null);
+  const pendingMove = useRef<Record<string, string | number | boolean> | null>(null);
   const description = useBinding(`${pointer}/description`, block.description ?? null);
   const text = description.status === "ready" && typeof description.value === "string" ? description.value : "";
   useShareDescriber(root, () => ({ text, visual: true }));
+  const flushMove = () => {
+    if (moveFrame.current !== null) cancelAnimationFrame(moveFrame.current);
+    moveFrame.current = null;
+    const pending = pendingMove.current;
+    pendingMove.current = null;
+    if (pending) serialSend(pending, { coalesce: true });
+  };
+  useEffect(() => () => flushMove(), [data, pointer, serialSend]);
   useEffect(() => {
     const host = root.current;
     if (!host) return;
@@ -68,7 +80,14 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     if (phase === "down") event.currentTarget.setPointerCapture(event.pointerId);
     const x = Math.max(0, Math.min(1, (event.clientX - bounds.left - rect.current.x) / rect.current.width));
     const y = Math.max(0, Math.min(1, (event.clientY - bounds.top - rect.current.y) / rect.current.height));
-    void data.act(`${pointer}/on_pointer`, { phase, pointer_id: event.pointerId, x, y, buttons: event.buttons, shift: event.shiftKey, alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey });
+    const value = { phase, pointer_id: event.pointerId, x, y, buttons: event.buttons, shift: event.shiftKey, alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey };
+    if (phase === "move") {
+      pendingMove.current = value;
+      if (moveFrame.current === null) moveFrame.current = requestAnimationFrame(flushMove);
+      return;
+    }
+    flushMove();
+    serialSend(value, { coalesce: false });
   };
   return <div ref={root} className="ks-canvas" role="img" aria-label={text || "캔버스"} style={{ "--ks-canvas-ratio": aspect ? Math.max(aspect, 1) : undefined } as CSSProperties}
     onPointerDown={(event) => pointerEvent("down", event)} onPointerMove={(event) => pointerEvent("move", event)}

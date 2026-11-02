@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Actions, Block, Clock } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { IconButton } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
 import { DataState } from "../components/data-state";
 import { useBinding, useWindowData } from "../data/window-data";
+import { useWindowVisible } from "../data/window-state";
+import { createSerialSend } from "../data/throttled-send";
 import { useShareDescriber } from "../share/visible";
+import type { BlockContext } from "./block-context";
 
 type Snap = { points?: number[]; step?: number; threshold_px?: number };
 type Item = { id: string; start: number; end: number; label?: string; tone?: string; series?: number; movable?: boolean; resizable?: boolean };
@@ -42,8 +45,10 @@ function isClientAction(actions: Actions | undefined): boolean {
   return !!action && typeof action === "object" && "client" in action;
 }
 
-export function TimelineBlock({ block, pointer }: { block: TimelineData; pointer: string }) {
+export function TimelineBlock({ block, pointer, context }: { block: TimelineData; pointer: string; context: BlockContext }) {
   const data = useWindowData();
+  const visible = useWindowVisible(context);
+  const serialSeek = useMemo(() => createSerialSend((value: number) => data.act(`${pointer}/on_seek`, value)), [data, pointer]);
   const duration = useBinding(`${pointer}/duration`, block.duration);
   const position = useBinding(`${pointer}/position`, block.position);
   const tracks = useBinding(`${pointer}/tracks`, block.tracks);
@@ -53,6 +58,7 @@ export function TimelineBlock({ block, pointer }: { block: TimelineData; pointer
   const snap = useBinding(`${pointer}/snap`, block.snap ?? null);
   const root = useRef<HTMLDivElement>(null), body = useRef<HTMLDivElement>(null), playhead = useRef<HTMLDivElement>(null), ruler = useRef<HTMLDivElement>(null), scroll = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null), previewFrame = useRef<number | null>(null), pendingPreview = useRef<Edit | null>(null);
+  const seekFrame = useRef<number | null>(null), pendingSeek = useRef<number | null>(null);
   const [zoom, setZoom] = useState(1), [preview, setPreview] = useState<Edit | null>(null);
   const seconds = duration.status === "ready" && typeof duration.value === "number" && Number.isFinite(duration.value) ? Math.max(0, duration.value) : 0;
   const trackData = tracks.status === "ready" && Array.isArray(tracks.value) ? tracks.value.filter((v): v is unknown & Track => !!v && typeof v === "object" && !Array.isArray(v) && typeof v.id === "string" && Array.isArray(v.items)) : [];
@@ -63,6 +69,7 @@ export function TimelineBlock({ block, pointer }: { block: TimelineData; pointer
   const rawPosition = position.status === "ready" ? position.value : 0;
   const clock = rawPosition && typeof rawPosition === "object" && !Array.isArray(rawPosition) && typeof rawPosition.position === "number" && typeof rawPosition.sampled_at === "number" && typeof rawPosition.rate === "number" && typeof rawPosition.running === "boolean" && typeof rawPosition.duration === "number" ? rawPosition as Clock : null;
   useEffect(() => {
+    if (!visible) return;
     let frame = 0;
     const draw = () => {
       const time = clock ? clockPosition(clock, performance.timeOrigin + performance.now()) : typeof rawPosition === "number" ? rawPosition : 0;
@@ -78,7 +85,7 @@ export function TimelineBlock({ block, pointer }: { block: TimelineData; pointer
       if (clock?.running) frame = requestAnimationFrame(draw);
     };
     draw(); return () => cancelAnimationFrame(frame);
-  }, [clock, rawPosition, seconds]);
+  }, [clock, rawPosition, seconds, visible]);
   useShareDescriber(root, () => ({ text: `[시간축] ${clock ? clockPosition(clock, performance.timeOrigin + performance.now()).toFixed(1) : typeof rawPosition === "number" ? rawPosition.toFixed(1) : "0"} / ${seconds.toFixed(1)}초\n${trackData.map((track) => `${track.label ?? track.id}: ${track.items.length}개`).join("\n")}`, visual: false }));
 
   const dispatch = (edit: Edit) => { if (block.on_edit) void data.act(`${pointer}/on_edit`, edit as unknown as JsonValue); };
@@ -120,10 +127,11 @@ export function TimelineBlock({ block, pointer }: { block: TimelineData; pointer
       if (previewFrame.current === null) previewFrame.current = requestAnimationFrame(() => { previewFrame.current = null; if (pendingPreview.current) dispatch(pendingPreview.current); pendingPreview.current = null; });
     }
   };
-  const seek = (event: PointerEvent<HTMLElement>) => {
+  const seekValue = (event: PointerEvent<HTMLElement>) => {
     if (!block.on_seek || !body.current || seconds <= 0) return;
     const bounds = body.current.getBoundingClientRect();
-    void data.act(`${pointer}/on_seek`, Math.max(0, Math.min(seconds, (event.clientX - bounds.left) / bounds.width * seconds)));
+    if (!bounds.width) return;
+    return Math.max(0, Math.min(seconds, (event.clientX - bounds.left) / bounds.width * seconds));
   };
   const keyEdit = (event: KeyboardEvent<HTMLElement>, edit: Edit, editable: boolean) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -136,6 +144,33 @@ export function TimelineBlock({ block, pointer }: { block: TimelineData; pointer
     const start = Math.max(0, Math.min(seconds - length, edit.start + delta));
     dispatch({ ...edit, phase: "commit", start, end: start + length });
   };
+  const flushSeek = () => {
+    if (seekFrame.current !== null) cancelAnimationFrame(seekFrame.current);
+    seekFrame.current = null;
+    const value = pendingSeek.current;
+    pendingSeek.current = null;
+    if (value !== null) serialSeek(value, { coalesce: true });
+  };
+  const seek = (event: PointerEvent<HTMLElement>, immediate = false) => {
+    const value = seekValue(event);
+    if (value === undefined || value === null) return;
+    if (immediate) { flushSeek(); serialSeek(value, { coalesce: false }); return; }
+    pendingSeek.current = value;
+    if (seekFrame.current !== null) return;
+    seekFrame.current = requestAnimationFrame(() => {
+      seekFrame.current = null;
+      const latest = pendingSeek.current;
+      pendingSeek.current = null;
+      if (latest !== null) serialSeek(latest, { coalesce: true });
+    });
+  };
+  useEffect(() => () => {
+    if (seekFrame.current !== null) cancelAnimationFrame(seekFrame.current);
+    seekFrame.current = null;
+    const latest = pendingSeek.current;
+    pendingSeek.current = null;
+    if (latest !== null) serialSeek(latest, { coalesce: true });
+  }, [serialSeek]);
   if (duration.status !== "ready") return <DataState value={duration} />;
   if (tracks.status !== "ready") return <DataState value={tracks} />;
   const percent = (value: number) => `${seconds ? value / seconds * 100 : 0}%`;
@@ -145,7 +180,7 @@ export function TimelineBlock({ block, pointer }: { block: TimelineData; pointer
   return <div className="ks-timeline" ref={root}>
     <div className="ks-timeline-layout"><div className="ks-timeline-labels"><div className="ks-timeline-ruler-label"><IconButton aria-label="축소" disabled={zoom <= 1} onClick={() => setZoom((value) => Math.max(1, value / 2))}><DataIcon name="minus" size="inline" /></IconButton><IconButton aria-label="확대" disabled={zoom >= 32} onClick={() => setZoom((value) => Math.min(32, value * 2))}><DataIcon name="plus" size="inline" /></IconButton></div>{trackData.map((track) => <div key={track.id}><span>{track.label ?? track.id}</span>{track.locked ? <DataIcon name="lock" size="inline" /> : null}</div>)}</div>
       <div className="ks-timeline-scroll" ref={scroll}><div className="ks-timeline-body" ref={body} style={{ width: `${zoom * 100}%` }}>
-        <div className="ks-timeline-ruler" ref={ruler} role="slider" aria-label="재생 위치" aria-valuemin={0} aria-valuemax={Math.round(seconds * 100) / 100} aria-valuenow={Math.round(currentTime * 100) / 100} tabIndex={block.on_seek ? 0 : -1} onKeyDown={(event) => { if (!block.on_seek || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return; event.preventDefault(); const increment = event.shiftKey ? 0.1 : snapValue?.step && snapValue.step > 0 ? snapValue.step : 1; void data.act(`${pointer}/on_seek`, Math.max(0, Math.min(seconds, currentTime + (event.key === "ArrowRight" ? increment : -increment)))); }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); seek(event); }} onPointerMove={(event) => { if (event.buttons) seek(event); }}>
+        <div className="ks-timeline-ruler" ref={ruler} role="slider" aria-label="재생 위치" aria-valuemin={0} aria-valuemax={Math.round(seconds * 100) / 100} aria-valuenow={Math.round(currentTime * 100) / 100} tabIndex={block.on_seek ? 0 : -1} onKeyDown={(event) => { if (!block.on_seek || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return; event.preventDefault(); const increment = event.shiftKey ? 0.1 : snapValue?.step && snapValue.step > 0 ? snapValue.step : 1; void data.act(`${pointer}/on_seek`, Math.max(0, Math.min(seconds, currentTime + (event.key === "ArrowRight" ? increment : -increment)))); }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); seek(event, true); }} onPointerMove={(event) => { if (event.buttons) seek(event); }} onPointerUp={(event) => seek(event, true)} onPointerCancel={() => flushSeek()}>
           {rulerTicks.map((tick) => <span key={tick} className={seconds > 0 && tick / seconds >= 0.96 ? "is-end" : undefined} style={{ left: percent(tick) }}>{rulerTime(tick)}</span>)}
         </div>
         {tickData.map((tick, index) => <span key={index} className="ks-timeline-tick" style={{ left: percent(tick) }} />)}

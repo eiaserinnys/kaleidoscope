@@ -304,3 +304,15 @@ it("retries a section heading failure without collapsing the section", async () 
   expect(toggle.getAttribute("aria-expanded")).toBe("true");
   expect(screen.getByText("내용")).toBeTruthy();
 });
+
+
+it("section의 null 메타는 글을 표시하지 않는다", async () => {
+  const definition: AppDefinition = {
+    ...mdEditorDefinition, requires: { blocks: 4, modules: {} }, state: {},
+    ui: { type: "section", title: "제목", meta: { expr: "null" }, child: { type: "text", value: "내용" } },
+  };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
+  await screen.findByText("내용");
+  expect(view.container.querySelector(".ks-data-section-meta")).toBeNull();
+});

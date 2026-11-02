@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { Block, SelectOption } from "../contract/contract";
 import { ICON_NAMES } from "../contract/limits";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -12,6 +12,7 @@ import { Select, Toggle } from "../components/select-toggle";
 import { Button, IconButton } from "../components/primitives";
 import { display } from "./data-layout";
 import { asArray } from "./data-view-common";
+import { createSerialSend, createThrottledSend } from "../data/throttled-send";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 const bindingName = (value: unknown, fallback: string) => {
@@ -90,32 +91,58 @@ function validGroup(value: unknown): value is { name: string; options: unknown[]
   return typeof value === "object" && value !== null && "name" in value && typeof value.name === "string" && "options" in value && Array.isArray(value.options);
 }
 
-export function SliderBlock({ block, pointer }: Props<"slider">) {
+function useLocalDraft<T extends JsonValue>(current: T, pointer: string) {
   const data = useWindowData();
+  const [draft, setDraft] = useState(current);
+  const holding = useRef(false);
+  const inFlight = useRef(0);
+  const latest = useRef(current);
+  latest.current = current;
+  const serialSend = useMemo(() => createSerialSend(async (next: T) => {
+    inFlight.current += 1;
+    try {
+      if (!await data.act(`${pointer}/on_change`, next)) setDraft(latest.current);
+    } finally {
+      inFlight.current -= 1;
+    }
+  }), [data, pointer]);
+  const throttled = useMemo(() => createThrottledSend((next: T) => serialSend(next, { coalesce: true }), 100), [serialSend]);
+  useEffect(() => () => throttled.flush(), [throttled]);
+  useEffect(() => {
+    if (!holding.current && inFlight.current === 0) setDraft(current);
+  }, [current]);
+  const change = (next: T) => { setDraft(next); throttled.send(next); };
+  const finish = () => { throttled.flush(); holding.current = false; };
+  return { draft, change, finish, holding };
+}
+
+export function SliderBlock({ block, pointer }: Props<"slider">) {
   const value = useBinding(`${pointer}/value`, block.value);
   const raw = Number((value.status === "ready" ? value.value : null) ?? block.min);
   const current = Number.isFinite(raw) ? raw : block.min;
-  const [draft, setDraft] = useState(current);
-  useEffect(() => { setDraft(current); }, [current]);
+  const { draft, change, finish, holding } = useLocalDraft(current, pointer);
   return <label className="ks-field ks-slider-field">
     {block.label ? <span className="ks-field-label" data-ks-share-skip="">{block.label}</span> : null}
     <input type="range" className="ks-slider" aria-label={block.label ?? bindingName(block.value, "슬라이더")} min={block.min} max={block.max} step={block.step ?? 1} value={draft}
-      onChange={(event) => { const next = Number(event.currentTarget.value); setDraft(next); void data.act(`${pointer}/on_change`, next); }} />
+      onPointerDown={() => { holding.current = true; }} onPointerUp={finish} onPointerCancel={finish} onBlur={finish}
+      onKeyDown={() => { holding.current = true; }} onKeyUp={finish}
+      onChange={(event) => { const next = Number(event.currentTarget.value); change(next); if (event.nativeEvent.type === "change") finish(); }} />
     <span className="ks-slider-value" data-ks-share-skip="">{draft}</span>
   </label>;
 }
 
 export function ColorBlock({ block, pointer }: Props<"color">) {
-  const data = useWindowData();
   const bound = useBinding(`${pointer}/value`, block.value);
   const disabled = useBinding(`${pointer}/disabled`, block.disabled ?? false);
   const value = bound.status === "ready" ? bound.value : null;
-  const color = typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "#000000";
+  const current = typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "#000000";
   const unavailable = disabled.status !== "ready" || Boolean(disabled.value);
+  const { draft: color, change, finish, holding } = useLocalDraft(current, pointer);
   return <label className={`ks-field ks-color-field${unavailable ? " is-disabled" : ""}`}>
     {block.label ? <span className="ks-field-label" data-ks-share-skip="">{block.label}</span> : null}
     <span className="ks-color-control"><input className="ks-color-input" type="color" aria-label={block.label ?? bindingName(block.value, "색상")} value={color} disabled={unavailable}
-      onChange={(event) => { void data.act(`${pointer}/on_change`, event.currentTarget.value.toLowerCase()); }} /><span className="ks-color-code" data-ks-share-skip="">{color}</span></span>
+      onPointerDown={() => { holding.current = true; }} onPointerUp={finish} onPointerCancel={finish} onBlur={finish} onKeyDown={() => { holding.current = true; }} onKeyUp={finish}
+      onChange={(event) => { change(event.currentTarget.value.toLowerCase()); if (event.nativeEvent.type === "change") finish(); }} /><span className="ks-color-code" data-ks-share-skip="">{color}</span></span>
   </label>;
 }
 export function SelectBlock({ block, pointer }: Props<"select">) {
