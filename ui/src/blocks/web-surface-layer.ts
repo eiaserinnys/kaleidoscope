@@ -60,6 +60,7 @@ interface RegisteredSurface {
   bounds: Rect | null;
   generation: number;
   active: boolean;
+  placeQueue: Promise<void>;
 }
 
 export interface WebSurfaceRegistration {
@@ -77,7 +78,7 @@ export function registerWebSurface(
   onState: (state: WebSurfaceState) => void,
   active = true,
 ): WebSurfaceRegistration {
-  const surface: RegisteredSurface = { element, windowId, store, onState, kind: null, bounds: null, generation: 0, active };
+  const surface: RegisteredSurface = { element, windowId, store, onState, kind: null, bounds: null, generation: 0, active, placeQueue: Promise.resolve() };
   surfaces.add(surface);
   if (active) scheduleFrame();
   else hideSurface(surface);
@@ -191,7 +192,12 @@ async function captureThenHide(surface: RegisteredSurface, generation: number) {
 }
 
 function callPlace(surface: RegisteredSurface, bounds: Rect | null) {
-  return surface.store.call({ op: "web.place", window_id: surface.windowId, bounds }).catch(() => undefined);
+  surface.placeQueue = surface.placeQueue
+    .catch(() => undefined)
+    .then(() => surface.store.call({ op: "web.place", window_id: surface.windowId, bounds }))
+    .then(() => undefined)
+    .catch(() => undefined);
+  return surface.placeQueue;
 }
 
 function isRendered(element: HTMLElement): boolean {

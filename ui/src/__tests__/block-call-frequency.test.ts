@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createThrottledSend } from "../data/throttled-send";
+import { createSerialSend, createThrottledSend } from "../data/throttled-send";
 import { isWindowVisible } from "../data/window-state";
 import { makeTestSnapshot } from "./fixtures";
 
@@ -19,7 +19,25 @@ describe("createThrottledSend", () => {
     expect(send.mock.calls).toEqual([[0], [9]]);
   });
 
-  it("flushes a pending value immediately and does not send it twice", () => {
+  it("keeps the interval after a trailing send during continuous input", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const sent: Array<{ value: number; at: number }> = [];
+    const throttled = createThrottledSend((value: number) => sent.push({ value, at: Date.now() }), 100);
+
+    throttled.send(0);
+    vi.advanceTimersByTime(50);
+    throttled.send(1);
+    vi.advanceTimersByTime(50);
+    throttled.send(2);
+    vi.advanceTimersByTime(50);
+    throttled.send(3);
+    vi.advanceTimersByTime(50);
+
+    expect(sent).toEqual([{ value: 0, at: 0 }, { value: 1, at: 100 }, { value: 3, at: 200 }]);
+  });
+
+  it("keeps a pending value for the next allowed interval after flush", () => {
     vi.useFakeTimers();
     const send = vi.fn();
     const throttled = createThrottledSend(send, 100);
@@ -27,9 +45,57 @@ describe("createThrottledSend", () => {
     throttled.send("first");
     throttled.send("latest");
     throttled.flush();
+    expect(send.mock.calls).toEqual([["first"]]);
+    vi.advanceTimersByTime(99);
+    expect(send.mock.calls).toEqual([["first"]]);
+    vi.advanceTimersByTime(1);
     vi.advanceTimersByTime(100);
 
     expect(send.mock.calls).toEqual([["first"], ["latest"]]);
+  });
+});
+
+describe("createSerialSend", () => {
+  it("waits for the active send and keeps only the latest pending value", async () => {
+    let finishFirst!: () => void;
+    let startLatest!: () => void;
+    const firstPending = new Promise<void>((resolve) => { finishFirst = resolve; });
+    const latestStarted = new Promise<void>((resolve) => { startLatest = resolve; });
+    const send = vi.fn((value: string) => {
+      if (value === "first") return firstPending;
+      if (value === "latest") startLatest();
+      return Promise.resolve();
+    });
+    const serial = createSerialSend(send);
+
+    serial("first");
+    serial("old");
+    serial("latest");
+    expect(send.mock.calls).toEqual([["first"]]);
+
+    finishFirst();
+    await latestStarted;
+    expect(send.mock.calls).toEqual([["first"], ["latest"]]);
+  });
+
+  it("continues with the next value after a send rejects", async () => {
+    let rejectFirst!: (error: Error) => void;
+    let startNext!: () => void;
+    const firstPending = new Promise<void>((_resolve, reject) => { rejectFirst = reject; });
+    const nextStarted = new Promise<void>((resolve) => { startNext = resolve; });
+    const send = vi.fn((value: string) => {
+      if (value === "first") return firstPending;
+      startNext();
+      return Promise.resolve();
+    });
+    const serial = createSerialSend(send);
+
+    serial("first");
+    serial("next");
+    rejectFirst(new Error("expected test rejection"));
+
+    await nextStarted;
+    expect(send.mock.calls).toEqual([["first"], ["next"]]);
   });
 });
 

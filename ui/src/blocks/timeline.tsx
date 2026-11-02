@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Actions, Block, Clock } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { IconButton } from "../components/primitives";
@@ -6,6 +6,7 @@ import { DataIcon } from "../components/data-icons";
 import { DataState } from "../components/data-state";
 import { useBinding, useWindowData } from "../data/window-data";
 import { useWindowVisible } from "../data/window-state";
+import { createSerialSend } from "../data/throttled-send";
 import { useShareDescriber } from "../share/visible";
 import type { BlockContext } from "./block-context";
 
@@ -47,6 +48,7 @@ function isClientAction(actions: Actions | undefined): boolean {
 export function TimelineBlock({ block, pointer, context }: { block: TimelineData; pointer: string; context: BlockContext }) {
   const data = useWindowData();
   const visible = useWindowVisible(context);
+  const serialSeek = useMemo(() => createSerialSend((value: number) => data.act(`${pointer}/on_seek`, value)), [data, pointer]);
   const duration = useBinding(`${pointer}/duration`, block.duration);
   const position = useBinding(`${pointer}/position`, block.position);
   const tracks = useBinding(`${pointer}/tracks`, block.tracks);
@@ -147,7 +149,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     seekFrame.current = null;
     const value = event ? seekValue(event) : pendingSeek.current;
     pendingSeek.current = null;
-    if (value !== null && value !== undefined) void data.act(`${pointer}/on_seek`, value);
+    if (value !== null && value !== undefined) serialSeek(value);
   };
   const seek = (event: PointerEvent<HTMLElement>, immediate = false) => {
     const value = seekValue(event);
@@ -159,10 +161,16 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
       seekFrame.current = null;
       const latest = pendingSeek.current;
       pendingSeek.current = null;
-      if (latest !== null) void data.act(`${pointer}/on_seek`, latest);
+      if (latest !== null) serialSeek(latest);
     });
   };
-  useEffect(() => () => { if (seekFrame.current !== null) cancelAnimationFrame(seekFrame.current); }, []);
+  useEffect(() => () => {
+    if (seekFrame.current !== null) cancelAnimationFrame(seekFrame.current);
+    seekFrame.current = null;
+    const latest = pendingSeek.current;
+    pendingSeek.current = null;
+    if (latest !== null) serialSeek(latest);
+  }, [serialSeek]);
   if (duration.status !== "ready") return <DataState value={duration} />;
   if (tracks.status !== "ready") return <DataState value={tracks} />;
   const percent = (value: number) => `${seconds ? value / seconds * 100 : 0}%`;
