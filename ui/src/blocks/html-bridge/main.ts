@@ -1,5 +1,5 @@
 import overlayCss from "./overlay.css?raw";
-import { createAnchor, resolveAnchor } from "./anchor";
+import { createAnchor, elementName, resolveAnchor } from "./anchor";
 import { applyEdit, findNumber } from "./edit";
 import type { FrameComment, FrameSelection, FrameToParent, ParentToFrame } from "./frame-protocol";
 
@@ -38,12 +38,6 @@ function updateObservation(active: boolean) {
   else { resize.disconnect(); mutation.disconnect(); }
 }
 function token(name: string, fallback: number) { return Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || fallback; }
-function elementName(element: Element, maxClasses = 2) {
-  const tag = element.tagName.toLowerCase();
-  if (element.id) return `${tag}#${element.id}`;
-  const classes = [...element.classList].slice(0, maxClasses);
-  return tag + classes.map((item) => `.${item}`).join("");
-}
 function box(element: Element | null, kind: "is-hover" | "is-selected", labels: HTMLElement[]) {
   if (!element || !element.isConnected) return;
   const rect = element.getBoundingClientRect();

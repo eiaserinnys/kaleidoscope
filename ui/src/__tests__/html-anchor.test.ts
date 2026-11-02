@@ -16,6 +16,7 @@ describe("리비전에서 커멘트 다시 찾기", () => {
     const old = parse(sample); const next = parse(sample);
     const element = old.querySelector(".cta")!; const paragraph = old.querySelector(".hero p")!;
     const button = createAnchor(element); const text = textAnchor(paragraph);
+    expect(button.label).toBe("button.cta");
     next.body.prepend(next.createElement("section"));
     expect(resolveAnchor(next, button).element).toBe(next.querySelector(".cta"));
     expect(resolveAnchor(next, text).element).toBe(next.querySelector(".hero p"));

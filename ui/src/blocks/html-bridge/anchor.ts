@@ -8,6 +8,12 @@ const orphan = (): ResolvedAnchor => ({ status: "orphan", element: null });
 const textOf = (element: Element) => (element.textContent ?? "").trim().slice(0, 200);
 const numText = (element: Element) => element.tagName.toLowerCase();
 
+export function elementName(element: Element, maxClasses = 2): string {
+  const tag = numText(element);
+  if (element.id) return `${tag}#${element.id}`;
+  return tag + [...element.classList].slice(0, maxClasses).map((item) => `.${item}`).join("");
+}
+
 function attrs(element: Element): HtmlAnchor["attrs"] {
   return { id: element.getAttribute("id"), role: element.getAttribute("role"), aria_label: element.getAttribute("aria-label"), alt: element.getAttribute("alt"), href: element.getAttribute("href") ?? element.getAttribute("data-ks-href"), src_hash: sourceHash(element.getAttribute("src")) ?? element.getAttribute("data-ks-src-hash") };
 }
@@ -53,7 +59,7 @@ export function createAnchor(element: Element, range?: Range): HtmlAnchor {
   const position = range ? offsets(doc.body, range) : undefined;
   const quote = position ? { exact: range!.toString(), prefix: body.slice(Math.max(0, position.start - 32), position.start), suffix: body.slice(position.end, position.end + 32) } : null;
   const heading = element.closest("section, article, main")?.querySelector("h1,h2,h3,h4,h5,h6")?.textContent?.trim() ?? "";
-  return { kind: range ? "text" : "element", selector, selector_stable, path: pathOf(element), tag: numText(element), text: textOf(element), attrs: attrs(element), quote, ...(position ? { position } : {}), label: selector, heading, rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height, vw: doc.defaultView?.innerWidth ?? 0 } };
+  return { kind: range ? "text" : "element", selector, selector_stable, path: pathOf(element), tag: numText(element), text: textOf(element), attrs: attrs(element), quote, ...(position ? { position } : {}), label: elementName(element), heading, rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height, vw: doc.defaultView?.innerWidth ?? 0 } };
 }
 
 function contextScore(text: string, start: number, end: number, anchor: HtmlAnchor): number {
