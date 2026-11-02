@@ -181,6 +181,28 @@ describe("markdown editor file session", () => {
     session.dispose();
   });
 
+  it("retries a save at the new path when the old in-flight write fails after a move", async () => {
+    vi.useFakeTimers();
+    let failOld!: (reason: unknown) => void;
+    const target = {
+      allowsMissingRevision: false,
+      conflictMessage: "충돌",
+      read: vi.fn(async () => ({ text: "원문", revision: "r1" })),
+      write: vi.fn().mockImplementationOnce(() => new Promise<string>((_resolve, reject) => { failOld = reject; })).mockResolvedValue("r2"),
+    };
+    const session = new FileEditorSession(target);
+    await session.open("old.md");
+    session.setText("초안");
+    const saving = session.saveNow();
+    session.retarget("old.md", "new.md");
+    failOld({ code: "not_found", message: "이전 경로가 없습니다", details: [] });
+    expect(await saving).toBe(false);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(target.write).toHaveBeenLastCalledWith("new.md", "초안", "r1");
+    expect(session.getSnapshot()).toMatchObject({ path: "new.md", text: "초안", dirty: false });
+    session.dispose();
+  });
+
   it("clears a clean deletion and retains a dirty deletion for explicit recreation", async () => {
     const target = { allowsMissingRevision: false, conflictMessage: "충돌", read: vi.fn(async () => ({ text: "원문", revision: "r1" })), write: vi.fn(async () => "r2") };
     const clean = new FileEditorSession(target);

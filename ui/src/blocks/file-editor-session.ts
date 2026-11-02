@@ -58,7 +58,7 @@ export function createDocumentEditorTarget(transport: Pick<CoreTransport, "call"
 const activeSessions = new Set<FileEditorSession>();
 
 export type EditorResource = { kind: "file"; root: string } | { kind: "document"; entry: string };
-export type EditorAddress = (EditorResource & { path: string }) | { kind: "document"; entry: string; doc: string };
+export type EditorAddress = { kind: "file"; root: string; path: string } | { kind: "document"; entry: string; doc: string };
 
 export function pathWithin(path: string, prefix: string): boolean {
   return path === prefix || (prefix === "" ? true : path.startsWith(`${prefix}/`));
@@ -109,7 +109,7 @@ export class FileEditorSession {
     const path = this.snapshot.path;
     if (!this.resource || path === null || this.resource.kind !== address.kind) return false;
     if (address.kind === "file" && this.resource.kind === "file") return this.resource.root === address.root && pathWithin(path, address.path);
-    if (address.kind === "document" && this.resource.kind === "document") return this.resource.entry === address.entry && pathWithin(path, "doc" in address ? address.doc : address.path);
+    if (address.kind === "document" && this.resource.kind === "document") return this.resource.entry === address.entry && pathWithin(path, address.doc);
     return false;
   }
 
@@ -263,6 +263,11 @@ export class FileEditorSession {
       return await this.saved(path, text, revision);
     } catch (error) {
       if (this.deleted) return false;
+      if (this.snapshot.path !== path) {
+        this.update({ status: "unsaved", error: null });
+        this.scheduleSave();
+        return false;
+      }
       const coreError = toCoreError(error);
       if (this.target.allowsMissingRevision) {
         try {

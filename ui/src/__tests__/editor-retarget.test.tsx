@@ -31,6 +31,32 @@ it.each(["markdown", "code"] as const)("%s 파일 이동 이벤트는 상태와 
   store.dispose();
 });
 
+it("같은 이동 이벤트를 받은 두 창의 서로 다른 경로 상태 키가 모두 따라간다", async () => {
+  const seed = structuredClone(makeTestSeed({ grants: [grantFor("editor-window", "docs"), grantFor("second-window", "docs")], files: { "old/note.md": "문서" } }));
+  const definition = seed.snapshot.shared.app_versions[0].definition;
+  definition.state = { first: null, second: null };
+  definition.ui = { type: "split", direction: "row", sizes: [50, 50], children: [
+    { type: "markdown", file: { permission: "docs", path: { state: "first" } } },
+    { type: "markdown", file: { permission: "docs", path: { state: "second" } } },
+  ] };
+  const firstWindow = seed.snapshot.shared.windows[0];
+  firstWindow.state = { first: "old/note.md", second: "old/note.md" };
+  seed.snapshot.shared.windows.push({ ...structuredClone(firstWindow), id: "second-window" });
+  const transport = createFakeTransport(seed);
+  const call = vi.spyOn(transport, "call");
+  const store = createShellStore(transport);
+  const { container } = render(<><AppWindowContent store={store} windowId="editor-window" /><AppWindowContent store={store} windowId="second-window" /></>);
+  await waitFor(() => expect(container.querySelectorAll(".cm-editor")).toHaveLength(4));
+  await act(async () => { transport.emit({ event: "files.changed", root: "/fake/docs", changes: [{ from: "old", to: "new" }] }); });
+  await waitFor(() => {
+    for (const id of ["editor-window", "second-window"]) {
+      expect(store.getSnapshot()?.shared.windows.find((item) => item.id === id)?.state).toEqual({ first: "new/note.md", second: "new/note.md" });
+    }
+  });
+  expect(call.mock.calls.filter(([request]) => request.op === "window.set_state")).toHaveLength(2);
+  store.dispose();
+});
+
 it("문서 모음 선택이 null이면 요청하지 않고 선택된 doc으로 읽고 이동을 따라간다", async () => {
   const seed = structuredClone(makeTestSeed());
   const def = seed.snapshot.shared.app_versions[0].definition;
