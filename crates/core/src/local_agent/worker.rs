@@ -1,6 +1,5 @@
 //! ACP 연결과 세션 하나를 소유하는 워커.
 use super::{process::Process, prompt, updates, Command, Shared};
-use crate::error;
 use agent_client_protocol::{
     schema::{
         v1::{self as acp},
@@ -10,22 +9,23 @@ use agent_client_protocol::{
 };
 use kaleidoscope_contract::{
     conversation::{ConversationEvent, ConversationItemKind},
+    errors,
     local_agent::{AgentControlValue, AgentFailure, AuthChoice, LocalAgentPhase, LocalAgentUpdate},
-    ErrorCode,
+    CoreError,
 };
 use serde_json::Value;
 use std::{collections::VecDeque, sync::Arc};
 use tokio::sync::mpsc;
 
 type AcpResult<T> = Result<T, agent_client_protocol::Error>;
-fn fail(owner: &Shared, reason: &str) {
+fn fail(owner: &Shared, failure: CoreError) {
     let mut s = owner.state.lock().unwrap();
     s.snapshot.phase = LocalAgentPhase::Failed;
     s.snapshot.failure = Some(AgentFailure {
-        id: None,
-        code: ErrorCode::LocalAgentFailed,
+        id: failure.id,
+        code: failure.code,
         command: Some(owner.config.spec.command.clone()),
-        message: format!("{}: {reason}", owner.config.spec.command),
+        message: failure.message,
     });
     s.snapshot.activity.busy = false;
     s.snapshot.activity.tool = None;
@@ -311,10 +311,14 @@ async fn session_loop(
                     }
                     Err(e) => {
                         let mut s = owner.state.lock().unwrap();
+                        let failure = errors::AGENT_LOGIN_AUTHENTICATE_FAILED(
+                            &owner.config.spec.name,
+                            e.message,
+                        );
                         s.snapshot.failure = Some(AgentFailure {
-                            id: None,
-                            code: ErrorCode::LoginRequired,
-                            message: e.message,
+                            id: failure.id,
+                            code: failure.code,
+                            message: failure.message,
                             command: Some(owner.config.spec.command.clone()),
                         });
                         drop(s);
@@ -344,7 +348,7 @@ async fn session_loop(
                     s.snapshot.phase,
                     LocalAgentPhase::Ready | LocalAgentPhase::Responding
                 ) {
-                    let _ = reply.send(Err(error::make(ErrorCode::InvalidRequest)));
+                    let _ = reply.send(Err(errors::AGENT_PROMPT_SEND_NOT_READY()));
                 } else if s.seen.contains(&input.request_id) {
                     let queued = s.snapshot.queued.iter().any(|q| q.id == input.request_id);
                     let _ = reply.send(Ok(queued));
@@ -383,7 +387,7 @@ async fn session_loop(
                                     false
                                 })
                         }
-                        None => Err(error::make(ErrorCode::InvalidRequest)),
+                        None => Err(errors::AGENT_PERMISSION_RESPONSE_NOT_FOUND()),
                     };
                     let _ = reply.send(result);
                 }
@@ -476,20 +480,50 @@ pub(super) async fn run(owner: Arc<Shared>, mut rx: mpsc::UnboundedReceiver<Comm
                         .cloned()
                         .collect::<Vec<_>>()
                         .join(" · ");
-                    fail(&owner, &format!("{e} {tail}"));
+                    let reason = if tail.is_empty() {
+                        e.message
+                    } else {
+                        format!("{} {tail}", e.message)
+                    };
+                    fail(
+                        &owner,
+                        errors::AGENT_ACP_PROTOCOL_FAILED(&owner.config.spec.name, reason),
+                    );
                 } else {
                     phase(&owner, LocalAgentPhase::Ended);
                     return;
                 }
             }
-            Err(e) => fail(&owner, &e.to_string()),
+            Err(e)
+                if matches!(
+                    e.get_ref()
+                        .and_then(|source| source.downcast_ref::<which::Error>()),
+                    Some(which::Error::CannotFindBinaryPath)
+                ) =>
+            {
+                fail(
+                    &owner,
+                    errors::AGENT_START_COMMAND_NOT_FOUND(
+                        &owner.config.spec.command,
+                        e.to_string(),
+                    ),
+                )
+            }
+            Err(e) => fail(
+                &owner,
+                errors::AGENT_START_PROCESS_FAILED(
+                    &owner.config.spec.name,
+                    &owner.config.spec.command,
+                    e.to_string(),
+                ),
+            ),
         }
         // 실패 시 자동 재전송이나 재시작 없이 명시적 retry를 기다린다.
         loop {
             match rx.recv().await {
                 Some(Command::Retry) => break,
                 Some(Command::Send(_, reply)) => {
-                    let _ = reply.send(Err(error::make(ErrorCode::LocalAgentFailed)));
+                    let _ = reply.send(Err(errors::AGENT_PROMPT_QUEUE_UNAVAILABLE()));
                 }
                 Some(Command::Shutdown) | None => {
                     phase(&owner, LocalAgentPhase::Ended);

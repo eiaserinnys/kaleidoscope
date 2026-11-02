@@ -1,13 +1,12 @@
 //! 전송 크기 검사와 ACP 입력 구성.
 use super::{record::Record, Command, PromptInput, Shared};
-use crate::error;
 use agent_client_protocol::schema::v1::{
     self as acp, ContentBlock, ImageContent, ResourceLink, TextContent,
 };
 use agent_client_protocol::{Agent, ConnectionTo};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::{
-    conversation::ConversationAttachment, CoreError, ErrorCode, AGENT_ATTACHMENTS_MAX,
+    conversation::ConversationAttachment, errors, CoreError, AGENT_ATTACHMENTS_MAX,
     AGENT_ATTACHMENTS_TOTAL_MAX_BYTES, AGENT_ATTACHMENT_MAX_BYTES, CONVERSATION_MESSAGE_MAX_CHARS,
 };
 use kaleidoscope_contract::{
@@ -18,26 +17,40 @@ use std::path::Path;
 use std::sync::Arc;
 
 pub(super) fn validate(input: &PromptInput) -> Result<(), CoreError> {
-    if input.request_id.is_empty()
-        || (input.text.trim().is_empty() && input.uploads.is_empty())
-        || input.text.chars().count() > CONVERSATION_MESSAGE_MAX_CHARS
-        || input.uploads.len() > AGENT_ATTACHMENTS_MAX
-    {
-        return Err(error::make(ErrorCode::InvalidRequest));
+    if input.request_id.is_empty() {
+        return Err(errors::AGENT_PROMPT_REQUEST_ID_MISSING());
+    }
+    if input.text.trim().is_empty() && input.uploads.is_empty() {
+        return Err(errors::AGENT_PROMPT_CONTENT_EMPTY());
+    }
+    if input.text.chars().count() > CONVERSATION_MESSAGE_MAX_CHARS {
+        return Err(errors::AGENT_PROMPT_TEXT_TOO_LONG(
+            CONVERSATION_MESSAGE_MAX_CHARS,
+        ));
+    }
+    if input.uploads.len() > AGENT_ATTACHMENTS_MAX {
+        return Err(errors::AGENT_PROMPT_TOO_MANY_ATTACHMENTS(
+            AGENT_ATTACHMENTS_MAX,
+        ));
     }
     let mut total = 0u64;
     for upload in &input.uploads {
         if upload.name.trim().is_empty() {
-            return Err(error::make(ErrorCode::InvalidRequest));
+            return Err(errors::AGENT_PROMPT_ATTACHMENT_NAME_EMPTY());
         }
         let bytes = STANDARD
             .decode(&upload.data_base64)
-            .map_err(|_| error::make(ErrorCode::InvalidRequest))?;
+            .map_err(|_| errors::AGENT_PROMPT_ATTACHMENT_ENCODING_INVALID())?;
         total += bytes.len() as u64;
-        if bytes.len() as u64 > AGENT_ATTACHMENT_MAX_BYTES
-            || total > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES
-        {
-            return Err(error::make(ErrorCode::InvalidRequest));
+        if bytes.len() as u64 > AGENT_ATTACHMENT_MAX_BYTES {
+            return Err(errors::AGENT_PROMPT_ATTACHMENT_TOO_LARGE(
+                AGENT_ATTACHMENT_MAX_BYTES,
+            ));
+        }
+        if total > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES {
+            return Err(errors::AGENT_PROMPT_ATTACHMENTS_TOTAL_TOO_LARGE(
+                AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
+            ));
         }
     }
     Ok(())
@@ -71,7 +84,7 @@ pub(super) fn prepare(
         let visual = attachments.len() >= input.uploads.len();
         let bytes = STANDARD
             .decode(&upload.data_base64)
-            .map_err(|_| error::make(ErrorCode::InvalidRequest))?;
+            .map_err(|_| errors::AGENT_PROMPT_ATTACHMENT_DECODE_FAILED())?;
         if visual {
             if count >= AGENT_ATTACHMENTS_MAX
                 || bytes.len() as u64 > AGENT_ATTACHMENT_MAX_BYTES
@@ -93,7 +106,7 @@ pub(super) fn prepare(
             )));
         } else {
             let uri = url::Url::from_file_path(path)
-                .map_err(|_| error::make(ErrorCode::Io))?
+                .map_err(|_| errors::AGENT_PROMPT_ATTACHMENT_PATH_INVALID())?
                 .to_string();
             blocks.push(ContentBlock::ResourceLink(
                 ResourceLink::new(upload.name.clone(), uri).mime_type(upload.mime.clone()),
@@ -134,7 +147,7 @@ pub(super) fn begin(
                     input.text.clone(),
                     attachments,
                 )
-                .map_err(|e| error::with_message(ErrorCode::Io, &e.to_string()))?;
+                .map_err(|e| errors::AGENT_PROMPT_RECORD_APPEND_FAILED(e.to_string()))?;
             Ok::<_, CoreError>((blocks, event))
         })();
         let (blocks, event) = match result {

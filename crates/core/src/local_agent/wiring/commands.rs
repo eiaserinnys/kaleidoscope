@@ -15,13 +15,9 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             let windows = inner.local_agents.windows.lock().unwrap();
             let c = windows
                 .get(&window_id)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
-            let ctx = context::resolve(inner, &window_id, &c.generation)?.ok_or_else(|| {
-                error::with_message(
-                    ErrorCode::InvalidRequest,
-                    "에이전트 대화창 설정을 찾을 수 없습니다.",
-                )
-            })?;
+                .ok_or_else(|| errors::AGENT_ATTACH_CONTROLLER_NOT_FOUND(&window_id))?;
+            let ctx = context::resolve(inner, &window_id, &c.generation)?
+                .ok_or_else(|| errors::AGENT_ATTACH_CONTEXT_INVALID())?;
             Ok(CoreReply::LocalAgentAttach {
                 snapshot: merged(&ctx, c.worker.as_ref(), c.snapshot.as_ref()),
             })
@@ -42,12 +38,8 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             window_id,
             spec_hash,
         } => {
-            let ctx = context::resolve(inner, &window_id, "")?.ok_or_else(|| {
-                error::with_message(
-                    ErrorCode::InvalidRequest,
-                    "에이전트 대화창 설정을 찾을 수 없습니다.",
-                )
-            })?;
+            let ctx = context::resolve(inner, &window_id, "")?
+                .ok_or_else(|| errors::AGENT_ALLOW_CONTEXT_INVALID())?;
             if ctx.snapshot.phase != LocalAgentPhase::AwaitingPermission
                 || ctx
                     .snapshot
@@ -55,10 +47,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                     .as_ref()
                     .is_none_or(|e| e.spec_hash != spec_hash)
             {
-                return Err(error::with_message(
-                    ErrorCode::InvalidRequest,
-                    "현재 에이전트 실행 요청을 확인할 수 없습니다.",
-                ));
+                return Err(errors::AGENT_ALLOW_REQUEST_STALE());
             }
             let mut state = inner.state.lock().unwrap();
             state.device.local_agent_access.push(LocalAgentAccess {
@@ -144,12 +133,8 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
         } => {
             let _guard = inner.local_agents.gate.lock().unwrap();
             let worker = worker(inner, &window_id, &generation)?;
-            let ctx = context::resolve(inner, &window_id, &generation)?.ok_or_else(|| {
-                error::with_message(
-                    ErrorCode::InvalidRequest,
-                    "에이전트 대화창 설정을 찾을 수 없습니다.",
-                )
-            })?;
+            let ctx = context::resolve(inner, &window_id, &generation)?
+                .ok_or_else(|| errors::AGENT_SEND_CONTEXT_INVALID())?;
             let key = format!("local-agent:{window_id}");
             let (all, visuals_sent) =
                 share::capture_for_send(inner, &ctx.workspace, &key, &attachments);
@@ -178,12 +163,8 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             item_id,
             attachment_id,
         } => {
-            context::resolve(inner, &window_id, "")?.ok_or_else(|| {
-                error::with_message(
-                    ErrorCode::InvalidRequest,
-                    "에이전트 대화창 설정을 찾을 수 없습니다.",
-                )
-            })?;
+            context::resolve(inner, &window_id, "")?
+                .ok_or_else(|| errors::AGENT_ATTACHMENT_CONTEXT_INVALID())?;
             let (mime, bytes, _) = super::super::attachment_bytes(
                 &context::record_dir(inner, &window_id),
                 &item_id,
@@ -200,26 +181,46 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 .find(|item| item.id == item_id)
                 .and_then(|item| item.attachments.iter().find(|a| a.id == attachment_id))
                 .map(|a| crate::attachment::safe_attachment_name(&a.name))
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| {
+                    errors::AGENT_ATTACHMENT_HISTORY_MISSING(&item_id, &attachment_id)
+                })?;
             let dir = inner.data_dir.join("attachments").join(format!(
                 "{:x}",
                 sha2::Sha256::digest(format!("{item_id}\0{attachment_id}").as_bytes())
             ));
-            std::fs::create_dir_all(&dir).map_err(|e| error::io_error(&e))?;
+            std::fs::create_dir_all(&dir).map_err(|e| {
+                let reason = e.to_string();
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    errors::AGENT_ATTACHMENT_OPEN_DIR_NOT_FOUND(reason)
+                } else {
+                    errors::AGENT_ATTACHMENT_OPEN_DIR_FAILED(reason)
+                }
+            })?;
             let path = dir.join(&name);
-            std::fs::write(&path, bytes).map_err(|e| error::io_error(&e))?;
+            std::fs::write(&path, bytes).map_err(|e| {
+                let reason = e.to_string();
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    errors::AGENT_ATTACHMENT_OPEN_WRITE_NOT_FOUND(reason)
+                } else {
+                    errors::AGENT_ATTACHMENT_OPEN_WRITE_FAILED(reason)
+                }
+            })?;
             if crate::attachment::should_reveal(&name) {
                 inner.attachment_opener.reveal(&path)
             } else {
                 inner.attachment_opener.open(&path)
             }
-            .map_err(|e| error::io_error(&e))?;
+            .map_err(|e| {
+                let reason = e.to_string();
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    errors::AGENT_ATTACHMENT_OPEN_NOT_FOUND(reason)
+                } else {
+                    errors::AGENT_ATTACHMENT_OPEN_FAILED(reason)
+                }
+            })?;
             Ok(CoreReply::LocalAgentAttachmentOpen {})
         }
-        _ => Err(error::with_message(
-            ErrorCode::InvalidRequest,
-            "에이전트 명령이 올바르지 않습니다.",
-        )),
+        _ => Err(errors::AGENT_COMMAND_UNKNOWN()),
     }
 }
 use sha2::Digest;

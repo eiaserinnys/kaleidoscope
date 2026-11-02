@@ -11,13 +11,13 @@ pub(crate) use wiring::{
     data_changed, handle, server_changed, shutdown, start_events, state_changed, LocalAgents,
 };
 
-use crate::error;
 use kaleidoscope_contract::{
     conversation::{ConversationItemKind, ConversationUpload},
+    errors,
     local_agent::{
         AgentControlValue, AgentSpec, LocalAgentPhase, LocalAgentSnapshot, LocalAgentUpdate,
     },
-    CoreError, ErrorCode,
+    CoreError,
 };
 #[allow(unused_imports)]
 pub(crate) use record::{attachment_bytes, delete_record, read_history};
@@ -139,27 +139,27 @@ impl WorkerHandle {
         prompt::validate(&input)?;
         let phase = self.shared.state.lock().unwrap().snapshot.phase;
         if !matches!(phase, LocalAgentPhase::Ready | LocalAgentPhase::Responding) {
-            return Err(error::make(ErrorCode::InvalidRequest));
+            return Err(errors::AGENT_PROMPT_SEND_PHASE_INVALID());
         }
         let (reply, result) = std::sync::mpsc::sync_channel(1);
         self.shared
             .tx
             .send(Command::Send(input, reply))
-            .map_err(|_| error::make(ErrorCode::LocalAgentFailed))?;
+            .map_err(|_| errors::AGENT_PROMPT_SEND_CHANNEL_CLOSED())?;
         result
             .recv()
-            .map_err(|_| error::make(ErrorCode::LocalAgentFailed))?
+            .map_err(|_| errors::AGENT_PROMPT_SEND_REPLY_CLOSED())?
     }
     pub fn cancel(&self) {
         let _ = self.shared.tx.send(Command::Cancel);
     }
     pub fn answer_permission(&self, id: &str, option: &str) -> Result<(), CoreError> {
         if updates::answer(&self.shared, id, Some(option))
-            .map_err(|e| error::with_message(ErrorCode::Io, &e.to_string()))?
+            .map_err(|e| errors::AGENT_PERMISSION_REPLY_SAVE_FAILED(e.to_string()))?
         {
             Ok(())
         } else {
-            Err(error::make(ErrorCode::InvalidRequest))
+            Err(errors::AGENT_PERMISSION_REPLY_NOT_FOUND())
         }
     }
     pub fn configure(&self, id: &str, value: AgentControlValue) -> Result<(), CoreError> {
@@ -171,35 +171,35 @@ impl WorkerHandle {
                 .iter()
                 .any(|c| c.id == id && updates::accepts(c, &value))
         {
-            return Err(error::make(ErrorCode::InvalidRequest));
+            return Err(errors::AGENT_CONTROL_UPDATE_UNAVAILABLE());
         }
         drop(s);
         self.shared
             .tx
             .send(Command::Configure(id.into(), value))
-            .map_err(|_| error::make(ErrorCode::LocalAgentFailed))
+            .map_err(|_| errors::AGENT_CONTROL_UPDATE_CHANNEL_CLOSED())
     }
     pub fn authenticate(&self, id: &str) -> Result<(), CoreError> {
         let s = self.shared.state.lock().unwrap();
         if s.snapshot.phase != LocalAgentPhase::LoginRequired
             || !s.snapshot.auth_methods.iter().any(|m| m.id == id)
         {
-            return Err(error::make(ErrorCode::InvalidRequest));
+            return Err(errors::AGENT_AUTHENTICATE_UNAVAILABLE());
         }
         drop(s);
         self.shared
             .tx
             .send(Command::Authenticate(id.into()))
-            .map_err(|_| error::make(ErrorCode::LocalAgentFailed))
+            .map_err(|_| errors::AGENT_AUTHENTICATE_CHANNEL_CLOSED())
     }
     pub fn retry(&self) -> Result<(), CoreError> {
         if self.snapshot().phase != LocalAgentPhase::Failed {
-            return Err(error::make(ErrorCode::InvalidRequest));
+            return Err(errors::AGENT_RETRY_UNAVAILABLE());
         }
         self.shared
             .tx
             .send(Command::Retry)
-            .map_err(|_| error::make(ErrorCode::LocalAgentFailed))
+            .map_err(|_| errors::AGENT_RETRY_CHANNEL_CLOSED())
     }
     pub fn shutdown(mut self) {
         self.stop();

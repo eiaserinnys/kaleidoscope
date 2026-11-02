@@ -1,12 +1,13 @@
 //! 창 수명과 실행기의 소유권을 연결한다.
 mod commands;
 use super::{context, PromptInput, WorkerHandle};
-use crate::{data_runtime, error, share, Inner};
+use crate::{data_runtime, share, Inner};
 use base64::{engine::general_purpose::STANDARD, Engine};
 pub(crate) use commands::handle;
 use kaleidoscope_contract::{
+    errors,
     local_agent::{LocalAgentAccess, LocalAgentPhase, LocalAgentSnapshot, LocalAgentUpdate},
-    CoreError, CoreEvent, CoreReply, CoreRequest, ErrorCode,
+    CoreError, CoreEvent, CoreReply, CoreRequest,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -324,11 +325,11 @@ fn worker(inner: &Inner, window: &str, generation: &str) -> Result<Worker, CoreE
     let windows = inner.local_agents.windows.lock().unwrap();
     let c = windows
         .get(window)
-        .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+        .ok_or_else(|| errors::AGENT_REQUEST_CONTROLLER_MISSING(window))?;
     if c.generation != generation {
-        return Err(error::make(ErrorCode::InvalidRequest));
+        return Err(errors::AGENT_REQUEST_GENERATION_STALE(window));
     }
     c.worker
         .clone()
-        .ok_or_else(|| error::make(ErrorCode::InvalidRequest))
+        .ok_or_else(|| errors::AGENT_REQUEST_WORKER_MISSING(window))
 }

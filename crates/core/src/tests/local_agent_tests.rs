@@ -98,7 +98,9 @@ fn missing_command_fails() {
     let path = dir.path().join(format!("agent{}", std::env::consts::EXE_SUFFIX));
     cfg.spec.command = path.to_string_lossy().into_owned();
     let worker = WorkerHandle::start(cfg, Arc::new(|_| {})); wait(&worker, LocalAgentPhase::Failed);
-    assert!(worker.snapshot().failure.unwrap().message.contains("agent"));
+    let failure = worker.snapshot().failure.unwrap();
+    assert_eq!(failure.id.as_deref(), Some("AGENT_START_COMMAND_NOT_FOUND"));
+    assert!(failure.message.contains("agent"));
     std::fs::copy(agent_binary(), path).unwrap(); worker.retry().unwrap(); wait(&worker, LocalAgentPhase::Ready);
     assert!(worker.retry().is_err());
 }
@@ -323,7 +325,11 @@ fn bad_protocol_and_early_exit_fail_without_restart() {
         let worker = WorkerHandle::start(config(dir.path(), scenario), Arc::new(|_| {}));
         wait(&worker, LocalAgentPhase::Failed);
         let failure = worker.snapshot().failure.unwrap();
-        assert!(failure.message.contains(&failure.command.unwrap()));
+        assert_eq!(failure.id.as_deref(), Some("AGENT_ACP_PROTOCOL_FAILED"));
+        assert_eq!(
+            failure.command.as_deref(),
+            Some(agent_binary().to_str().unwrap())
+        );
         if scenario == "invalid" {
             assert!(failure.message.contains("JSON"));
         }
