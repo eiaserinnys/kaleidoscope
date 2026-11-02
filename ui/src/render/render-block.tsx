@@ -51,6 +51,7 @@ const BlockNode = memo(function BlockNode({ block, context, pointer }: { block: 
 function BlockContent({ block: normalized, context, pointer }: { block: Block; context: BlockContext; pointer: string }) {
   useBlockRenderProbe();
   switch (normalized.type) {
+    case "repeat": case "when": case "dialog": case "tour": case "anchor": case "progress": return null;
     case "canvas": return <CanvasBlock block={normalized} pointer={pointer} />;
     case "timeline": return <TimelineBlock block={normalized} pointer={pointer} context={context} />;
     case "split":

@@ -258,7 +258,7 @@ pub const CONTRACT_VERSION: u32 = 25;
 /// - 11판: `sandbox`, `slider`, `color`와 `input.rows`.
 /// - 12판: 창 단위 클라이언트 로직과 `canvas`, `timeline`.
 /// - 13판: 파일 또는 저장소 문서 모음을 뿌리로 하는 읽기 전용 `folder`.
-pub const BLOCK_SET_VERSION: u32 = 13;
+pub const BLOCK_SET_VERSION: u32 = 14;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -283,10 +283,10 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("storage", 3),
     ("local_agent", 1),
     ("assets", 1),
-    ("http", 1),
+    ("http", 2),
     ("worker", 1),
     ("profiler", 1),
-    ("client", 1),
+    ("client", 2),
 ];
 
 /// 지원 범위를 알리지 않는 옛 쉘(블록 세트 3판 전)이 그릴 수 있는 블록 세트 판. 서버가 그런 기기에 보낼 앱을
@@ -742,8 +742,108 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub client: Option<client::ClientDecl>,
+    /// 앱의 창 단축키.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub shortcuts: Option<Vec<Shortcut>>,
+    /// 언어별 메시지 사전.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub messages: Option<BTreeMap<String, BTreeMap<String, String>>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub locale: Option<StateRef>,
     /// 창 안을 채우는 블록 트리의 뿌리.
     pub ui: Block,
+}
+
+/// 앱 창에 등록하는 키 조합.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct Shortcut {
+    pub code: String,
+    #[serde(default)]
+    pub modifiers: Vec<ShortcutModifier>,
+    pub action: Actions,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ShortcutModifier {
+    Shift,
+    Alt,
+    Ctrl,
+    Meta,
+    Primary,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum RepeatLayout {
+    Row,
+    #[default]
+    Column,
+    Grid,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum RepeatColumns {
+    Count(u32),
+    Auto(RepeatAuto),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct RepeatGrid {
+    pub columns: RepeatColumns,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum RepeatAuto {
+    Auto,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct TourStep {
+    pub key: String,
+    pub target: String,
+    pub title: Binding,
+    pub body: Binding,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum InputCommit {
+    #[default]
+    Debounce,
+    Blur,
+    Submit,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct InputFormat {
+    pub kind: InputFormatKind,
+    pub digits: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum InputFormatKind {
+    Decimal,
 }
 
 /// 앱이 여는 파일의 선언. 예: `{ "extensions": ["md"], "permission": "docs", "state": "current_file" }`.
@@ -999,9 +1099,57 @@ pub enum FileAccess {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub enum Block {
+    Repeat {
+        items: Binding,
+        key: String,
+        #[serde(default)]
+        #[ts(optional, as = "Option<RepeatLayout>")]
+        layout: RepeatLayout,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        grid: Option<RepeatGrid>,
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        r#virtual: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        follow_key: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        follow_pause_ms: Option<u32>,
+        template: Box<Block>,
+    },
+    When {
+        value: Binding,
+        child: Box<Block>,
+    },
+    Dialog {
+        open: Binding,
+        title: Binding,
+        child: Box<Block>,
+        on_close: Actions,
+    },
+    Tour {
+        open: Binding,
+        step: Binding,
+        steps: Vec<TourStep>,
+        on_step: Actions,
+        on_close: Actions,
+    },
+    Anchor {
+        id: String,
+        child: Box<Block>,
+    },
+    Progress {
+        value: Binding,
+        max: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        label: Option<Binding>,
+    },
     /// (12판) 클라이언트가 그리는 픽셀 표면.
     Canvas {
-        surface: String,
+        surface: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         aspect_ratio: Option<Binding>,
@@ -1017,6 +1165,15 @@ pub enum Block {
     },
     /// (12판) 구간과 마커를 표시하고 시간축 편집 의도를 전달한다.
     Timeline {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        viewport: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_viewport: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        controls: Option<bool>,
         duration: Binding,
         position: Binding,
         tracks: Binding,
@@ -1301,6 +1458,9 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         fill: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        wrap: Option<bool>,
         children: Vec<Block>,
     },
     /// (4판) 탭. 고른 탭의 자식만 그린다. `selected`를 주면 고른 탭의 순서(0부터)를 창 상태에서 읽고 바꿀 때
@@ -1335,6 +1495,9 @@ pub enum Block {
         #[serde(default)]
         #[ts(optional, as = "Option<bool>")]
         collapsed: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        actions: Option<Vec<Block>>,
         child: Box<Block>,
     },
 
@@ -1375,7 +1538,9 @@ pub enum Block {
         on_select: Option<Actions>,
     },
     /// (4판) 속성 이름과 값의 목록(상세 보기). 값이 null이거나 빈 글이면 그 줄을 뺀다. 값을 고르고 복사할 수 있다.
-    Properties { fields: Vec<PropertyField> },
+    Properties {
+        fields: Vec<PropertyField>,
+    },
     /// (4판) 흐름. 대화 기록, 대사, 로그처럼 이름과 본문이 이어지는 것. `entries`는 [`data::FeedEntry`] 배열이고,
     /// `grouped`면 [`data::Group`]`<FeedEntry>` 배열이다(묶음 머리에 제목과 부가 정보). 본문은 줄바꿈을 지키고
     /// 글을 고르고 복사할 수 있다. `format`이 `markdown`이면 본문을 마크다운으로 그린다(HTML은 그리지 않는다).
@@ -1417,10 +1582,16 @@ pub enum Block {
     /// (4판) 글. 값이 문자열이 아니면 JSON으로 보인다. `format`이 `markdown`이면 마크다운으로 그린다(HTML은
     /// 그리지 않는다). 글을 고르고 복사할 수 있다. 넘치면 그 칸 안에서 스크롤한다.
     Text {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_click: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_double_click: Option<Actions>,
         value: Binding,
         #[serde(default)]
-        #[ts(optional, as = "Option<TextFormat>")]
-        format: TextFormat,
+        #[ts(optional, as = "Option<DisplayTextFormat>")]
+        format: DisplayTextFormat,
         #[serde(default)]
         #[ts(optional, as = "Option<TextStyle>")]
         style: TextStyle,
@@ -1432,6 +1603,27 @@ pub enum Block {
     /// 돋보기, 글이 있으면 끝에 지우기 단추가 붙는다. `multiline`이면 한 줄로 시작해 글을 따라 자란다(최대 8줄).
     /// Enter는 `on_submit`이 있으면 그것을 부른다(`multiline`에서는 Ctrl+Enter). 한글 조합 중의 Enter는 보내지 않는다.
     Input {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        min: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        max: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        step: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        format: Option<InputFormat>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        commit: Option<InputCommit>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        focus: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_cancel: Option<Actions>,
         value: Binding,
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1479,6 +1671,9 @@ pub enum Block {
     /// 한 줄이 보인다. `confirm`이 있으면 확인 대화상자에서 확인했을 때만 돈다. `icon_only`면 아이콘만 보이고
     /// `label`은 도움말과 읽어 주기에 쓴다. `disabled`가 참이면 누를 수 없다.
     Button {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pressed: Option<Binding>,
         label: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -1603,8 +1798,50 @@ where
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 enum RawBlock {
+    Repeat {
+        items: Binding,
+        key: String,
+        #[serde(default)]
+        layout: RepeatLayout,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        grid: Option<RepeatGrid>,
+        #[serde(default)]
+        r#virtual: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        follow_key: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        follow_pause_ms: Option<u32>,
+        template: Box<Block>,
+    },
+    When {
+        value: Binding,
+        child: Box<Block>,
+    },
+    Dialog {
+        open: Binding,
+        title: Binding,
+        child: Box<Block>,
+        on_close: Actions,
+    },
+    Tour {
+        open: Binding,
+        step: Binding,
+        steps: Vec<TourStep>,
+        on_step: Actions,
+        on_close: Actions,
+    },
+    Anchor {
+        id: String,
+        child: Box<Block>,
+    },
+    Progress {
+        value: Binding,
+        max: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<Binding>,
+    },
     Canvas {
-        surface: String,
+        surface: Binding,
         #[serde(default)]
         aspect_ratio: Option<Binding>,
         #[serde(default)]
@@ -1615,6 +1852,12 @@ enum RawBlock {
         on_pointer: Option<Actions>,
     },
     Timeline {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        viewport: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_viewport: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        controls: Option<bool>,
         duration: Binding,
         position: Binding,
         tracks: Binding,
@@ -1842,6 +2085,8 @@ enum RawBlock {
         gap: Gap,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         fill: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        wrap: Option<bool>,
         children: Vec<Block>,
     },
     /// (4판) 탭. 고른 탭의 자식만 그린다. `selected`를 주면 고른 탭의 순서(0부터)를 창 상태에서 읽고 바꿀 때
@@ -1870,6 +2115,8 @@ enum RawBlock {
         collapsible: bool,
         #[serde(default)]
         collapsed: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actions: Option<Vec<Block>>,
         child: Box<Block>,
     },
 
@@ -1903,7 +2150,9 @@ enum RawBlock {
         on_select: Option<Actions>,
     },
     /// (4판) 속성 이름과 값의 목록(상세 보기). 값이 null이거나 빈 글이면 그 줄을 뺀다. 값을 고르고 복사할 수 있다.
-    Properties { fields: Vec<PropertyField> },
+    Properties {
+        fields: Vec<PropertyField>,
+    },
     /// (4판) 흐름. 대화 기록, 대사, 로그처럼 이름과 본문이 이어지는 것. `entries`는 [`data::FeedEntry`] 배열이고,
     /// `grouped`면 [`data::Group`]`<FeedEntry>` 배열이다(묶음 머리에 제목과 부가 정보). 본문은 줄바꿈을 지키고
     /// 글을 고르고 복사할 수 있다. `format`이 `markdown`이면 본문을 마크다운으로 그린다(HTML은 그리지 않는다).
@@ -1937,9 +2186,13 @@ enum RawBlock {
     /// (4판) 글. 값이 문자열이 아니면 JSON으로 보인다. `format`이 `markdown`이면 마크다운으로 그린다(HTML은
     /// 그리지 않는다). 글을 고르고 복사할 수 있다. 넘치면 그 칸 안에서 스크롤한다.
     Text {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_click: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_double_click: Option<Actions>,
         value: Binding,
         #[serde(default)]
-        format: TextFormat,
+        format: DisplayTextFormat,
         #[serde(default)]
         style: TextStyle,
     },
@@ -1950,6 +2203,20 @@ enum RawBlock {
     /// 돋보기, 글이 있으면 끝에 지우기 단추가 붙는다. `multiline`이면 한 줄로 시작해 글을 따라 자란다(최대 8줄).
     /// Enter는 `on_submit`이 있으면 그것을 부른다(`multiline`에서는 Ctrl+Enter). 한글 조합 중의 Enter는 보내지 않는다.
     Input {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        min: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        step: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        format: Option<InputFormat>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        commit: Option<InputCommit>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        focus: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_cancel: Option<Actions>,
         value: Binding,
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2002,6 +2269,8 @@ enum RawBlock {
     /// 한 줄이 보인다. `confirm`이 있으면 확인 대화상자에서 확인했을 때만 돈다. `icon_only`면 아이콘만 보이고
     /// `label`은 도움말과 읽어 주기에 쓴다. `disabled`가 참이면 누를 수 없다.
     Button {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pressed: Option<Binding>,
         label: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         icon: Option<Binding>,
@@ -2152,6 +2421,52 @@ enum RawBlock {
 impl From<RawBlock> for Block {
     fn from(raw: RawBlock) -> Self {
         match raw {
+            RawBlock::Repeat {
+                items,
+                key,
+                layout,
+                grid,
+                r#virtual,
+                follow_key,
+                follow_pause_ms,
+                template,
+            } => Block::Repeat {
+                items,
+                key,
+                layout,
+                grid,
+                r#virtual,
+                follow_key,
+                follow_pause_ms,
+                template,
+            },
+            RawBlock::When { value, child } => Block::When { value, child },
+            RawBlock::Dialog {
+                open,
+                title,
+                child,
+                on_close,
+            } => Block::Dialog {
+                open,
+                title,
+                child,
+                on_close,
+            },
+            RawBlock::Tour {
+                open,
+                step,
+                steps,
+                on_step,
+                on_close,
+            } => Block::Tour {
+                open,
+                step,
+                steps,
+                on_step,
+                on_close,
+            },
+            RawBlock::Anchor { id, child } => Block::Anchor { id, child },
+            RawBlock::Progress { value, max, label } => Block::Progress { value, max, label },
             RawBlock::Canvas {
                 surface,
                 aspect_ratio,
@@ -2166,6 +2481,9 @@ impl From<RawBlock> for Block {
                 on_pointer,
             },
             RawBlock::Timeline {
+                viewport,
+                on_viewport,
+                controls,
                 duration,
                 position,
                 tracks,
@@ -2178,6 +2496,9 @@ impl From<RawBlock> for Block {
                 on_select,
                 on_edit,
             } => Block::Timeline {
+                viewport,
+                on_viewport,
+                controls,
                 duration,
                 position,
                 tracks,
@@ -2339,11 +2660,13 @@ impl From<RawBlock> for Block {
                 direction,
                 gap,
                 fill,
+                wrap,
                 children,
             } => Block::Stack {
                 direction,
                 gap,
                 fill,
+                wrap,
                 children,
             },
             RawBlock::Tabs {
@@ -2361,12 +2684,14 @@ impl From<RawBlock> for Block {
                 meta,
                 collapsible,
                 collapsed,
+                actions,
                 child,
             } => Block::Section {
                 title,
                 meta,
                 collapsible,
                 collapsed,
+                actions,
                 child,
             },
             RawBlock::List {
@@ -2418,15 +2743,26 @@ impl From<RawBlock> for Block {
                 on_select,
             },
             RawBlock::Text {
+                on_click,
+                on_double_click,
                 value,
                 format,
                 style,
             } => Block::Text {
+                on_click,
+                on_double_click,
                 value,
                 format,
                 style,
             },
             RawBlock::Input {
+                min,
+                max,
+                step,
+                format,
+                commit,
+                focus,
+                on_cancel,
                 value,
                 on_change,
                 label,
@@ -2436,6 +2772,13 @@ impl From<RawBlock> for Block {
                 placeholder,
                 on_submit,
             } => Block::Input {
+                min,
+                max,
+                step,
+                format,
+                commit,
+                focus,
+                on_cancel,
                 value,
                 on_change,
                 label,
@@ -2454,6 +2797,13 @@ impl From<RawBlock> for Block {
                 placeholder,
                 on_submit,
             } => Block::Input {
+                min: None,
+                max: None,
+                step: None,
+                format: None,
+                commit: None,
+                focus: None,
+                on_cancel: None,
                 value,
                 on_change,
                 label,
@@ -2488,6 +2838,7 @@ impl From<RawBlock> for Block {
                 label,
             },
             RawBlock::Button {
+                pressed,
                 label,
                 icon,
                 icon_only,
@@ -2496,6 +2847,7 @@ impl From<RawBlock> for Block {
                 confirm,
                 disabled,
             } => Block::Button {
+                pressed,
                 label,
                 icon,
                 icon_only,
@@ -2664,6 +3016,12 @@ impl Block {
     /// 이 블록이 처음 생긴 블록 세트 판. 정의의 `requires.blocks`는 쓴 블록의 이 값 이상이어야 한다.
     pub fn introduced_in(&self) -> u32 {
         match self {
+            Block::Repeat { .. }
+            | Block::When { .. }
+            | Block::Dialog { .. }
+            | Block::Tour { .. }
+            | Block::Anchor { .. }
+            | Block::Progress { .. } => 14,
             Block::Canvas { .. } | Block::Timeline { .. } => 12,
             Block::Sandbox { .. } | Block::Slider { .. } | Block::Color { .. } => 11,
             Block::Folder { .. } => 13,
@@ -2730,6 +3088,12 @@ impl Block {
     /// JSON의 `type` 이름.
     pub fn type_name(&self) -> &'static str {
         match self {
+            Block::Repeat { .. } => "repeat",
+            Block::When { .. } => "when",
+            Block::Dialog { .. } => "dialog",
+            Block::Tour { .. } => "tour",
+            Block::Anchor { .. } => "anchor",
+            Block::Progress { .. } => "progress",
             Block::Canvas { .. } => "canvas",
             Block::Timeline { .. } => "timeline",
             Block::Sandbox { .. } => "sandbox",
@@ -2928,6 +3292,16 @@ pub enum TextFormat {
     Markdown,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum DisplayTextFormat {
+    #[default]
+    Plain,
+    Markdown,
+    Time,
+}
+
 /// 글의 크기와 결. 쉘의 글자 토큰 가운데 하나다.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -2970,6 +3344,7 @@ pub enum ButtonVariant {
     Danger,
     /// 테두리 없는 가벼운 단추.
     Ghost,
+    Chip,
 }
 
 /// 단추를 누른 뒤 묻는 확인 대화상자. `ok`가 없으면 단추의 `label`을 쓴다.
@@ -3090,12 +3465,12 @@ impl<'de> Deserialize<'de> for FolderRoot {
             <D::Error as serde::de::Error>::custom("folder root는 객체여야 합니다")
         })?;
         match (object.len(), object.get("permission"), object.get("entry")) {
-            (1, Some(serde_json::Value::String(permission)), None) => {
-                Ok(Self::Files { permission: permission.clone() })
-            }
-            (1, None, Some(serde_json::Value::String(entry))) => {
-                Ok(Self::Collection { entry: entry.clone() })
-            }
+            (1, Some(serde_json::Value::String(permission)), None) => Ok(Self::Files {
+                permission: permission.clone(),
+            }),
+            (1, None, Some(serde_json::Value::String(entry))) => Ok(Self::Collection {
+                entry: entry.clone(),
+            }),
             _ => Err(<D::Error as serde::de::Error>::custom(
                 "folder root는 permission 또는 entry 하나만 가져야 합니다",
             )),
@@ -3249,6 +3624,37 @@ pub enum CoreRequest {
     /// 내장 서버가 있으면 서버별 배치를 보존하고 내 PC 서버로 복귀한다. 없으면 연결 정보를 지운다.
     #[serde(rename = "link.unlink")]
     LinkUnlink {},
+
+    #[serde(rename = "client.http_read")]
+    ClientHttpRead {
+        window_id: String,
+        permission: String,
+        path: String,
+        query: BTreeMap<String, JsonValue>,
+    },
+    #[serde(rename = "client.blob_put")]
+    ClientBlobPut {
+        window_id: String,
+        key: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        file_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        bytes: Option<Vec<u8>>,
+    },
+    #[serde(rename = "client.blob_open")]
+    ClientBlobOpen { window_id: String, key: String },
+    #[serde(rename = "client.blob_remove")]
+    ClientBlobRemove { window_id: String, key: String },
+    #[serde(rename = "client.blob_list")]
+    ClientBlobList { window_id: String, prefix: String },
+    #[serde(rename = "files.save_prompt")]
+    FilesSavePrompt {
+        window_id: String,
+        suggested_name: String,
+        mime: String,
+    },
 
     /// 이 기기의 폴더 고르기 창을 띄워 창의 권한 하나에 폴더를 준다. 이미 있으면 바꾼다.
     /// 사용자가 취소하면 `grant`가 null이다.
@@ -3575,6 +3981,9 @@ pub enum CoreRequest {
         #[serde(default)]
         #[ts(optional, as = "Option<JsonValue>")]
         item: JsonValue,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        modifiers: Option<client::EventModifiers>,
     },
     /// 원천을 다시 받는다(값의 `retry`, 창 아래 오류 줄의 다시 받기). 빈 배열이면 모든 원천이다. 받기를 시작하면
     /// 바로 응답하고, 결과는 `data.update`로 온다. 모르는 원천 이름은 넘긴다.
@@ -4129,6 +4538,18 @@ pub enum ConversationApplyStatus {
 #[serde(tag = "op")]
 #[ts(export, export_to = "contract.ts")]
 pub enum CoreReply {
+    #[serde(rename = "client.http_read")]
+    ClientHttpRead { bytes: Vec<u8>, mime: String },
+    #[serde(rename = "client.blob_put")]
+    ClientBlobPut {},
+    #[serde(rename = "client.blob_open")]
+    ClientBlobOpen { file: Option<client::ClientFile> },
+    #[serde(rename = "client.blob_remove")]
+    ClientBlobRemove {},
+    #[serde(rename = "client.blob_list")]
+    ClientBlobList { keys: Vec<String> },
+    #[serde(rename = "files.save_prompt")]
+    FilesSavePrompt { file_id: Option<String> },
     #[serde(rename = "state.get")]
     StateGet { snapshot: ShellSnapshot },
     #[serde(rename = "profiler.report")]
@@ -4703,7 +5124,10 @@ mod tests {
     #[test]
     fn folder_contract_keeps_legacy_tree_wire_and_uses_block_set_thirteen() {
         assert!(
-            serde_json::from_value::<FolderRoot>(serde_json::json!({"permission":"docs","entry":"documents"})).is_err(),
+            serde_json::from_value::<FolderRoot>(
+                serde_json::json!({"permission":"docs","entry":"documents"})
+            )
+            .is_err(),
             "파일 권한과 저장소 뿌리를 한 값에 함께 두면 거부한다",
         );
 
@@ -4731,10 +5155,9 @@ mod tests {
         assert_eq!(legacy_tree_root.introduced_in(), 1);
         assert_eq!(legacy_tree_root, legacy_file_tree);
 
-        let data_tree: Block = serde_json::from_str(
-            r#"{"type":"tree","items":{"state":"items"},"by":"children"}"#,
-        )
-        .expect("데이터 tree 역직렬화");
+        let data_tree: Block =
+            serde_json::from_str(r#"{"type":"tree","items":{"state":"items"},"by":"children"}"#)
+                .expect("데이터 tree 역직렬화");
         assert_eq!(data_tree.introduced_in(), 4);
         assert_eq!(data_tree.type_name(), "tree");
 
@@ -4776,14 +5199,21 @@ mod tests {
         let file_app = validate::parse_app_definition(&definition(13, file_root.clone(), false))
             .expect("blocks 13 파일 뿌리");
         assert_eq!(file_app.ui.introduced_in(), 13);
-        assert!(data::ui_actions(&file_app).iter().any(|(pointer, _)| pointer == "/ui/on_select"));
+        assert!(data::ui_actions(&file_app)
+            .iter()
+            .any(|(pointer, _)| pointer == "/ui/on_select"));
 
         let docs_root = serde_json::json!({"entry":"documents"});
         let docs_app = validate::parse_app_definition(&definition(13, docs_root, false))
             .expect("blocks 13 문서 모음 뿌리");
         assert_eq!(docs_app.ui.type_name(), "folder");
         assert!(validate::parse_app_definition(&definition(13, file_root, true)).is_err());
-        assert!(validate::parse_app_definition(&definition(13, serde_json::json!({"entry":"missing"}), false)).is_err());
+        assert!(validate::parse_app_definition(&definition(
+            13,
+            serde_json::json!({"entry":"missing"}),
+            false
+        ))
+        .is_err());
         let not_collection = definition(13, serde_json::json!({"entry":"documents"}), false)
             .replace("\"collection\":true", "\"collection\":false");
         assert!(validate::parse_app_definition(&not_collection).is_err());
@@ -4796,7 +5226,10 @@ mod tests {
 
     #[test]
     fn folder_schema_hides_legacy_tree_root_from_public_block_contract() {
-        fn find_variant<'a>(value: &'a serde_json::Value, name: &str) -> Option<&'a serde_json::Value> {
+        fn find_variant<'a>(
+            value: &'a serde_json::Value,
+            name: &str,
+        ) -> Option<&'a serde_json::Value> {
             if value
                 .get("properties")
                 .and_then(|properties| properties.get("type"))
@@ -4807,8 +5240,12 @@ mod tests {
                 return Some(value);
             }
             match value {
-                serde_json::Value::Object(object) => object.values().find_map(|child| find_variant(child, name)),
-                serde_json::Value::Array(array) => array.iter().find_map(|child| find_variant(child, name)),
+                serde_json::Value::Object(object) => {
+                    object.values().find_map(|child| find_variant(child, name))
+                }
+                serde_json::Value::Array(array) => {
+                    array.iter().find_map(|child| find_variant(child, name))
+                }
                 _ => None,
             }
         }
@@ -4824,7 +5261,10 @@ mod tests {
             .nth(1)
             .expect("생성된 TypeScript tree variant");
         let tree = tree.split("} | ").next().expect("tree variant 끝");
-        assert!(!tree.contains("root"), "공개 TypeScript tree에서 root를 숨긴다");
+        assert!(
+            !tree.contains("root"),
+            "공개 TypeScript tree에서 root를 숨긴다"
+        );
         assert!(typescript.contains("{ \"type\": \"folder\", root: FolderRoot"));
     }
 
@@ -5990,7 +6430,8 @@ mod tests {
                 window_id: "w".into(),
                 pointer: "/ui/on_click".into(),
                 event: JsonValue::Null,
-                item: JsonValue::Null
+                item: JsonValue::Null,
+                modifiers: None,
             }
         );
         let media: CoreRequest = serde_json::from_str(
