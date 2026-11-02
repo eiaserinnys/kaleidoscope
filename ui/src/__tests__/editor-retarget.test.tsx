@@ -57,6 +57,40 @@ it("같은 이동 이벤트를 받은 두 창의 서로 다른 경로 상태 키
   store.dispose();
 });
 
+it.each(["file", "document"] as const)("%s 고정 경로의 첫 읽기 중 이동하면 새 주소를 열고 옛 응답은 버린다", async (kind) => {
+  const seed = structuredClone(makeTestSeed({ grants: [grantFor("editor-window", "docs")] }));
+  const definition = seed.snapshot.shared.app_versions[0].definition;
+  definition.ui = kind === "file"
+    ? { type: "markdown", file: { permission: "docs", path: "old.md" } }
+    : { type: "markdown", document: { entry: "docs", doc: "old.md" } };
+  if (kind === "document") definition.storage = { entries: [{ id: "docs", key: "documents", kind: "md", collection: true, default: "", label: "문서", presentation: "hidden" }] };
+  const transport = createFakeTransport(seed);
+  const original = transport.call.bind(transport);
+  let finishOld!: (value: never) => void;
+  const call = vi.spyOn(transport, "call").mockImplementation(async (request) => {
+    const doc = request.op === "files.read" ? request.path : request.op === "storage.get" ? request.doc : null;
+    if (doc === "old.md") return new Promise((resolve) => { finishOld = resolve as (value: never) => void; });
+    if (doc === "new.md") return request.op === "files.read"
+      ? { op: "files.read", path: "new.md", text: "새 주소의 글", revision: "r1" }
+      : { op: "storage.get", result: { kind: "md", content: "새 주소의 글", revision: "r1", exists: true } };
+    return original(request);
+  });
+  const store = createShellStore(transport);
+  const { container } = render(<AppWindowContent store={store} windowId="editor-window" />);
+  await waitFor(() => expect(finishOld).toBeTypeOf("function"));
+  await act(async () => {
+    if (kind === "file") transport.emit({ event: "files.changed", root: "/fake/docs", changes: [{ from: "old.md", to: "new.md" }] });
+    else transport.emit({ event: "storage.update", window_id: "editor-window", update: { kind: "moved", moved: { bucket_id: "bucket", entry_id: "docs", from_doc: "old.md", to_doc: "new.md", revision: "r1" } } });
+  });
+  await waitFor(() => expect(container.querySelector(".cm-content")?.textContent).toContain("새 주소의 글"));
+  await act(async () => finishOld((kind === "file"
+    ? { op: "files.read", path: "old.md", text: "오래된 글", revision: "old" }
+    : { op: "storage.get", result: { kind: "md", content: "오래된 글", revision: "old", exists: true } }) as never));
+  expect(container.querySelector(".cm-content")?.textContent).toContain("새 주소의 글");
+  expect(call).toHaveBeenCalledWith(expect.objectContaining(kind === "file" ? { op: "files.read", path: "new.md" } : { op: "storage.get", doc: "new.md" }));
+  store.dispose();
+});
+
 it("문서 모음 선택이 null이면 요청하지 않고 선택된 doc으로 읽고 이동을 따라간다", async () => {
   const seed = structuredClone(makeTestSeed());
   const def = seed.snapshot.shared.app_versions[0].definition;

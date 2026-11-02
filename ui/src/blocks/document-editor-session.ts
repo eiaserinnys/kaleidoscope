@@ -30,7 +30,9 @@ export function documentEditorSession(store: ShellStore, windowId: string, entry
     if (update.kind === "moved" && update.moved.entry_id === entry && collection) {
       const { from_doc: from, to_doc: to } = update.moved;
       if (session.getSnapshot().path !== from) return;
+      const opening = !session.getSnapshot().loaded;
       session.retarget(from, to);
+      if (opening && !options?.stateKey) void session.open(to);
       if (options?.stateKey && readWindowState(options.context)[options.stateKey] === from) void patchWindowState(options.context, { [options.stateKey]: to });
       return;
     }

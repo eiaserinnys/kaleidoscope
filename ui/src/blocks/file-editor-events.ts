@@ -14,7 +14,9 @@ export function useFileEditorEvents(session: FileEditorSession, context: BlockCo
         const path = session.getSnapshot().path;
         if (!change.from || path === null || !pathWithin(path, change.from)) continue;
         if (change.to) {
+          const opening = !session.getSnapshot().loaded;
           const next = session.retarget(change.from, change.to);
+          if (next !== null && opening && !stateKey) void session.open(next);
           if (next !== null && stateKey && readWindowState(context)[stateKey] === path) void patchWindowState(context, { [stateKey]: next });
         } else {
           const dirty = session.getSnapshot().dirty;
