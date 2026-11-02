@@ -8,7 +8,17 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function mockDownload() {
+  if (!URL.createObjectURL) URL.createObjectURL = () => "";
+  if (!URL.revokeObjectURL) URL.revokeObjectURL = () => undefined;
+  const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:시험");
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  return { create, click };
+}
+
 it("출력 대상을 비운 뒤 다시 쓴 내용만 저장한다", async () => {
+  mockDownload();
   vi.stubGlobal("File", NodeFile);
   const fallback = new BrowserFiles();
   const blobSink = (await fallback.savePrompt("버퍼.bin", "application/octet-stream")).sink!;
@@ -40,11 +50,7 @@ it("출력 대상을 비운 뒤 다시 쓴 내용만 저장한다", async () => 
 });
 
 it("브라우저 출력은 오프셋 쓰기를 보존하고 취소한 출력은 내려받지 않는다", async () => {
-  if (!URL.createObjectURL) URL.createObjectURL = () => "";
-  if (!URL.revokeObjectURL) URL.revokeObjectURL = () => undefined;
-  const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:시험");
-  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
-  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  const { create, click } = mockDownload();
   const files = new BrowserFiles();
   const first = await files.save("결과.bin", "application/octet-stream");
   expect(first.cancelled).toBe(false);
