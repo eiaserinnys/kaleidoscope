@@ -94,6 +94,39 @@ describe("대화 제공자 화면", () => {
     await screen.findByRole("textbox", { name: "메시지" });
     expect(state.call).toHaveBeenCalledWith({ op: "conversation.create", window_id: state.window.id, model: "m2", profile: "profile-a" });
   });
+  it("실행 위치가 하나면 칸을 숨기고 모델 메뉴에서 바로 모델을 고른다", async () => {
+    let created = false;
+    const singlePlaceModels = models.filter((model) => model.group?.id === "node-a");
+    const state = setup(async (request) => {
+      if (request.op === "conversation.get") return { ...get(created ? thread : null), models: singlePlaceModels, start: { profile: "profile-a", model: "m" } };
+      if (request.op === "conversation.create") { created = true; return { op: "conversation.create", thread }; }
+      throw new Error(request.op);
+    });
+    await screen.findByRole("button", { name: "모델" });
+    expect(screen.queryByRole("button", { name: "실행 위치" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "모델" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "모델 같은 노드" }));
+    expect(screen.getByRole("button", { name: "모델" }).textContent).toContain("모델 같은 노드");
+    fireEvent.click(screen.getByRole("button", { name: "시작" }));
+    await screen.findByRole("textbox", { name: "메시지" });
+    expect(state.call).toHaveBeenCalledWith({ op: "conversation.create", window_id: state.window.id, model: "m-same", profile: "profile-a" });
+  });
+  it("모두 막힌 실행 위치는 사유를 보이고 눌러도 선택을 바꾸지 않는다", async () => {
+    const blockedModel = { id: "blocked", label: "막힌 모델", available: false, reason: "한도 거부 중", reason_code: "limit_rejected", resets_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), group: { id: "node-c", label: "노드 C" } };
+    const state = setup(async (request) => {
+      if (request.op === "conversation.get") return { ...get(), models: [...models, blockedModel] };
+      throw new Error(request.op);
+    });
+    await screen.findByText("기록");
+    fireEvent.click(screen.getByRole("button", { name: "실행 위치" }));
+    const blockedPlace = screen.getByRole("menuitem", { name: /노드 C/ }) as HTMLButtonElement;
+    expect(blockedPlace.disabled).toBe(true);
+    expect(screen.getByText(/한도 거부 중/)).toBeTruthy();
+    fireEvent.click(blockedPlace);
+    expect(screen.getByRole("button", { name: "실행 위치" }).textContent).toContain("노드 A");
+    expect(screen.getByRole("button", { name: "모델" }).textContent).toContain("모델");
+    expect(state.call).not.toHaveBeenCalledWith(expect.objectContaining({ op: "conversation.switch", model: "blocked" }));
+  });
   it("시작 프로필을 바꾸면 그 프로필의 모델을 다시 받고 선택값으로 생성한다", async () => {
     let created = false;
     const state = setup(async (request) => {
@@ -114,6 +147,37 @@ describe("대화 제공자 화면", () => {
     fireEvent.click(screen.getByRole("button", { name: "시작" }));
     await screen.findByRole("textbox", { name: "메시지" });
     expect(state.call).toHaveBeenCalledWith({ op: "conversation.create", window_id: state.window.id, model: "m2", profile: "profile-b" });
+  });
+  it("프로필을 바꿔도 실행 위치가 남아 있으면 같은 이름 모델을 유지한다", async () => {
+    let created = false;
+    const nextProfileModels = [
+      { id: "start-b", label: "기본 모델", available: true, group: { id: "node-a", label: "노드 A" } },
+      { id: "m2-profile-b", label: "모델 2", available: true, group: { id: "node-b", label: "노드 B" } },
+    ];
+    const state = setup(async (request) => {
+      if (request.op === "conversation.get") {
+        if (created) return get(thread);
+        const profile = request.profile ?? "profile-a";
+        return profile === "profile-b"
+          ? { ...get(null, profile), models: nextProfileModels, start: { profile, model: "start-b" } }
+          : get(null, profile);
+      }
+      if (request.op === "conversation.create") { created = true; return { op: "conversation.create", thread }; }
+      throw new Error(request.op);
+    });
+    await screen.findByRole("button", { name: "프로필" });
+    fireEvent.click(screen.getByRole("button", { name: "실행 위치" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "노드 B" }));
+    expect(screen.getByRole("button", { name: "모델" }).textContent).toContain("모델 2");
+    fireEvent.click(screen.getByRole("button", { name: "프로필" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "키키" }));
+    await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "conversation.get", window_id: state.window.id, profile: "profile-b" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "실행 위치" }).textContent).toContain("노드 B"));
+    expect(screen.getByRole("button", { name: "모델" }).textContent).toContain("모델 2");
+    fireEvent.click(screen.getByRole("button", { name: "시작" }));
+    await screen.findByRole("textbox", { name: "메시지" });
+    expect(state.call).toHaveBeenCalledWith({ op: "conversation.create", window_id: state.window.id, model: "m2-profile-b", profile: "profile-b" });
+    expect(state.call).not.toHaveBeenCalledWith({ op: "conversation.create", window_id: state.window.id, model: "start-b", profile: "profile-b" });
   });
   it("생성 응답 전에 온 진행문을 조회 뒤에도 보인다", async () => {
     let finishCreate!: (value: CoreReply) => void;

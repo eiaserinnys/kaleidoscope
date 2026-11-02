@@ -332,19 +332,21 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         disabled={selectorsDisabled || (agent ? !thread?.profile : visibleProfiles.length === 0)}
         onChange={selectProfile}
       />
-      <Select
-        groups={[{ options: places.map((place) => ({
-          value: place.id,
-          label: place.label,
-          disabled: !place.available,
-          description: place.available ? undefined : modelAvailabilityDescription(place.models[0]),
-        })) }]}
-        value={currentPlaceId}
-        label="실행 위치"
-        placeholder="실행 위치 선택"
-        disabled={selectorsDisabled}
-        onChange={selectPlace}
-      />
+      {places.length >= 2 ? (
+        <Select
+          groups={[{ options: places.map((place) => ({
+            value: place.id,
+            label: place.label,
+            disabled: !place.available,
+            description: place.available ? undefined : modelAvailabilityDescription(place.models[0]),
+          })) }]}
+          value={currentPlaceId}
+          label="실행 위치"
+          placeholder="실행 위치 선택"
+          disabled={selectorsDisabled}
+          onChange={selectPlace}
+        />
+      ) : null}
       <Select
         groups={[{ options: modelOptions }]}
         value={agent ? thread?.model.id : selectedPreset}
