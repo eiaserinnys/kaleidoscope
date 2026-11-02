@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import type { Actions, Block, EventModifiers } from "../contract/contract";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
+import type { Actions, Block, EventModifiers, TimelineViewport } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { IconButton } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
@@ -15,7 +15,7 @@ import type { BlockContext } from "./block-context";
 export { clockPosition } from "../data/clock";
 
 type Snap = { points?: number[]; step?: number; threshold_px?: number };
-type Item = { id: string; start: number; end: number; label?: string; tone?: string; series?: number; movable?: boolean; resizable?: boolean };
+type Item = { id: string; start: number; end: number; label?: string; tone?: string; series?: number; movable?: boolean; resizable?: boolean; resize_start_only?: boolean };
 type Track = { id: string; label?: string; locked?: boolean; items: Item[]; waveform?: { peaks: number[]; start?: number; end?: number } };
 type Marker = { id: string; time: number; label?: string; movable?: boolean };
 type Edit = { phase: "preview" | "commit" | "cancel"; kind: "move" | "resize_start" | "resize_end" | "move_marker"; id: string; track: string | null; start: number; end: number };
@@ -40,6 +40,33 @@ export function rulerTime(seconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${(seconds - minutes * 60).toFixed(1).padStart(4, "0")}`;
 }
 
+function readViewport(value: unknown): TimelineViewport | null {
+  if (!value || typeof value !== "object" || Array.isArray(value) || !("start" in value) || !("end" in value)) return null;
+  const { start, end } = value as { start: unknown; end: unknown };
+  return typeof start === "number" && Number.isFinite(start) && typeof end === "number" && Number.isFinite(end) && end > start ? { start, end } : null;
+}
+
+function clampViewport(value: TimelineViewport, duration: number): TimelineViewport {
+  if (duration <= 0) return { start: 0, end: 0 };
+  const span = Math.max(Math.min(2, duration), Math.min(duration, value.end - value.start));
+  const start = Math.max(0, Math.min(duration - span, value.start));
+  return { start, end: start + span };
+}
+
+function sameViewport(left: TimelineViewport | null, right: TimelineViewport | null): boolean {
+  return left === right || (!!left && !!right && left.start === right.start && left.end === right.end);
+}
+
+function zoomViewport(viewport: TimelineViewport, duration: number, factor: number, fraction: number, anchorTime: number): TimelineViewport {
+  if (duration <= 0) return { start: 0, end: 0 };
+  const currentSpan = viewport.end - viewport.start;
+  const maxZoom = Math.max(1, duration / 2);
+  const zoom = Math.max(1, Math.min(maxZoom, duration / currentSpan * factor));
+  const nextSpan = duration / zoom;
+  const start = Math.max(0, Math.min(duration - nextSpan, anchorTime - fraction * nextSpan));
+  return { start, end: start + nextSpan };
+}
+
 function isClientAction(actions: Actions | undefined): boolean {
   const action = Array.isArray(actions) ? actions.length === 1 ? actions[0] : null : actions;
   return !!action && typeof action === "object" && "client" in action;
@@ -56,10 +83,12 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   const ticks = useBinding(`${pointer}/ticks`, block.ticks ?? []);
   const selection = useBinding(`${pointer}/selection`, block.selection ?? null);
   const snap = useBinding(`${pointer}/snap`, block.snap ?? null);
+  const viewportBinding = useBinding(`${pointer}/viewport`, block.viewport ?? null);
   const root = useRef<HTMLDivElement>(null), body = useRef<HTMLDivElement>(null), playhead = useRef<HTMLDivElement>(null), ruler = useRef<HTMLDivElement>(null), scroll = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null), previewFrame = useRef<number | null>(null), pendingPreview = useRef<{ edit: Edit; modifiers: EventModifiers } | null>(null);
   const seekFrame = useRef<number | null>(null), pendingSeek = useRef<number | null>(null);
-  const [zoom, setZoom] = useState(1), [preview, setPreview] = useState<Edit | null>(null);
+  const viewportFrame = useRef<number | null>(null), pendingViewport = useRef<TimelineViewport | null>(null);
+  const [localViewport, setLocalViewport] = useState<TimelineViewport | null>(null), [draftViewport, setDraftViewport] = useState<TimelineViewport | null>(null), [preview, setPreview] = useState<Edit | null>(null);
   const seconds = duration.status === "ready" && typeof duration.value === "number" && Number.isFinite(duration.value) ? Math.max(0, duration.value) : 0;
   const trackData = tracks.status === "ready" && Array.isArray(tracks.value) ? tracks.value.filter((v): v is unknown & Track => !!v && typeof v === "object" && !Array.isArray(v) && typeof v.id === "string" && Array.isArray(v.items)) : [];
   const markerData = markers.status === "ready" && Array.isArray(markers.value) ? markers.value.filter((v): v is unknown & Marker => !!v && typeof v === "object" && !Array.isArray(v) && typeof v.id === "string" && typeof v.time === "number") : [];
@@ -68,6 +97,70 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   const snapValue = snap.status === "ready" && snap.value && typeof snap.value === "object" && !Array.isArray(snap.value) ? snap.value as Snap : null;
   const rawPosition = position.status === "ready" ? position.value : 0;
   const clock = isClock(rawPosition) ? rawPosition : null;
+  const hasViewportBinding = block.viewport !== undefined;
+  const boundViewport = hasViewportBinding && viewportBinding.status === "ready" ? readViewport(viewportBinding.value) : null;
+  const latestBoundViewport = useRef<TimelineViewport | null>(boundViewport);
+  latestBoundViewport.current = boundViewport;
+  const fullViewport: TimelineViewport = { start: 0, end: seconds };
+  const requestedViewport = hasViewportBinding ? draftViewport ?? boundViewport ?? fullViewport : localViewport ?? fullViewport;
+  const viewportRange = clampViewport(requestedViewport, seconds);
+  const currentViewport = useRef(viewportRange);
+  currentViewport.current = viewportRange;
+  const draftViewportRef = useRef<TimelineViewport | null>(draftViewport);
+  draftViewportRef.current = draftViewport;
+  const viewportSpan = Math.max(0.001, viewportRange.end - viewportRange.start);
+  const zoom = seconds > 0 ? seconds / viewportSpan : 1;
+  const maxZoom = Math.max(1, seconds / 2);
+  const canChangeViewport = !hasViewportBinding || !!block.on_viewport;
+  const sendViewport = useMemo(() => createSerialSend(async (next: TimelineViewport) => {
+    const accepted = await data.act(`${pointer}/on_viewport`, next);
+    if (!accepted && sameViewport(draftViewportRef.current, next)) {
+      const fallback = latestBoundViewport.current ?? fullViewport;
+      draftViewportRef.current = null;
+      currentViewport.current = clampViewport(fallback, seconds);
+      setDraftViewport(null);
+    }
+  }), [data, fullViewport.end, pointer, seconds]);
+  const flushViewport = () => {
+    if (viewportFrame.current !== null) cancelAnimationFrame(viewportFrame.current);
+    viewportFrame.current = null;
+    const next = pendingViewport.current;
+    pendingViewport.current = null;
+    if (!next) return;
+    sendViewport(next, { coalesce: true });
+  };
+  const changeViewport = (next: TimelineViewport) => {
+    const normalized = clampViewport(next, seconds);
+    if (!hasViewportBinding) {
+      if (sameViewport(currentViewport.current, normalized)) return;
+      currentViewport.current = normalized;
+      setLocalViewport(normalized);
+      return;
+    }
+    if (!block.on_viewport) return;
+    if (sameViewport(pendingViewport.current ?? currentViewport.current, normalized)) return;
+    currentViewport.current = normalized;
+    draftViewportRef.current = normalized;
+    setDraftViewport(normalized);
+    pendingViewport.current = normalized;
+    if (viewportFrame.current === null) viewportFrame.current = requestAnimationFrame(flushViewport);
+  };
+  useEffect(() => {
+    if (!hasViewportBinding || !draftViewport || !sameViewport(boundViewport, draftViewport)) return;
+    draftViewportRef.current = null;
+    setDraftViewport(null);
+  }, [boundViewport?.start, boundViewport?.end, draftViewport, hasViewportBinding]);
+  useEffect(() => () => {
+    if (viewportFrame.current !== null) cancelAnimationFrame(viewportFrame.current);
+    viewportFrame.current = null;
+    pendingViewport.current = null;
+  }, []);
+  useLayoutEffect(() => {
+    const scroller = scroll.current, content = body.current;
+    if (!scroller || !content || seconds <= 0) return;
+    const contentWidth = content.getBoundingClientRect().width;
+    if (contentWidth > 0) scroller.scrollLeft = viewportRange.start / seconds * contentWidth;
+  }, [seconds, viewportRange.start, viewportRange.end, visible]);
   useEffect(() => {
     if (!visible) return;
     let frame = 0;
@@ -177,9 +270,37 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   const step = rulerStep(seconds, zoom);
   const rulerTicks = Array.from({ length: Math.floor(seconds / step) + 1 }, (_, index) => index * step);
   const currentTime = clock ? clockPosition(clock, performance.timeOrigin + performance.now()) : typeof rawPosition === "number" ? rawPosition : 0;
+  const zoomBy = (factor: number, pointerFraction?: number) => {
+    if (!canChangeViewport || seconds <= 0) return;
+    const current = currentViewport.current;
+    const span = current.end - current.start;
+    const fraction = pointerFraction ?? (currentTime - current.start) / span;
+    const anchorTime = pointerFraction === undefined ? currentTime : current.start + fraction * span;
+    changeViewport(zoomViewport(current, seconds, factor, fraction, anchorTime));
+  };
+  const onWheel = (event: WheelEvent<HTMLDivElement>) => {
+    if (!canChangeViewport || seconds <= 0) return;
+    event.preventDefault();
+    const bounds = scroll.current?.getBoundingClientRect();
+    const styles = scroll.current ? getComputedStyle(scroll.current) : null;
+    const paddingLeft = Number.parseFloat(styles?.paddingLeft ?? "") || 0;
+    const paddingRight = Number.parseFloat(styles?.paddingRight ?? "") || 0;
+    const width = Math.max(1, (scroll.current?.clientWidth || bounds?.width || 1) - paddingLeft - paddingRight);
+    const fraction = Math.max(0, Math.min(1, (event.clientX - (bounds?.left ?? 0) - (scroll.current?.clientLeft ?? 0) - paddingLeft) / width));
+    if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+      const delta = event.shiftKey ? event.deltaY : event.deltaX;
+      const current = currentViewport.current;
+      const span = current.end - current.start;
+      changeViewport(clampViewport({ start: current.start + delta / width * span, end: current.end + delta / width * span }, seconds));
+    } else {
+      zoomBy(Math.exp(-event.deltaY * (event.ctrlKey ? 0.01 : 0.0025)), fraction);
+    }
+  };
+  const showControls = block.controls !== false;
+  const bodyWidth = seconds > 0 ? `${seconds / viewportSpan * 100}%` : "100%";
   return <div className="ks-timeline" ref={root}>
-    <div className="ks-timeline-layout"><div className="ks-timeline-labels"><div className="ks-timeline-ruler-label"><IconButton aria-label="축소" disabled={zoom <= 1} onClick={() => setZoom((value) => Math.max(1, value / 2))}><DataIcon name="minus" size="inline" /></IconButton><IconButton aria-label="확대" disabled={zoom >= 32} onClick={() => setZoom((value) => Math.min(32, value * 2))}><DataIcon name="plus" size="inline" /></IconButton></div>{trackData.map((track) => <div key={track.id}><span>{track.label ?? track.id}</span>{track.locked ? <DataIcon name="lock" size="inline" /> : null}</div>)}</div>
-      <div className="ks-timeline-scroll" ref={scroll}><div className="ks-timeline-body" ref={body} style={{ width: `${zoom * 100}%` }}>
+    <div className={`ks-timeline-layout${block.controls === true ? " has-controls" : ""}`}><div className="ks-timeline-labels"><div className="ks-timeline-ruler-label">{showControls ? <><IconButton aria-label="축소" disabled={!canChangeViewport || zoom <= 1} onClick={() => zoomBy(1 / 1.6)}><DataIcon name="minus" size="inline" /></IconButton><IconButton aria-label="확대" disabled={!canChangeViewport || zoom >= maxZoom} onClick={() => zoomBy(1.6)}><DataIcon name="plus" size="inline" /></IconButton>{block.controls === true ? <IconButton aria-label="전체 맞춤" disabled={!canChangeViewport || (viewportRange.start === 0 && viewportRange.end === seconds)} onClick={() => changeViewport({ start: 0, end: seconds })}><DataIcon name="maximize-2" size="inline" /></IconButton> : null}</> : null}</div>{trackData.map((track) => <div key={track.id}><span>{track.label ?? track.id}</span>{track.locked ? <DataIcon name="lock" size="inline" /> : null}</div>)}</div>
+      <div className="ks-timeline-scroll" ref={scroll} onWheel={onWheel}><div className="ks-timeline-body" ref={body} style={{ width: bodyWidth }}>
         <div className="ks-timeline-ruler" ref={ruler} role="slider" aria-label="재생 위치" aria-valuemin={0} aria-valuemax={Math.round(seconds * 100) / 100} aria-valuenow={Math.round(currentTime * 100) / 100} tabIndex={block.on_seek ? 0 : -1} onKeyDown={(event) => { if (!block.on_seek || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return; event.preventDefault(); const increment = event.shiftKey ? 0.1 : snapValue?.step && snapValue.step > 0 ? snapValue.step : 1; void data.act(`${pointer}/on_seek`, Math.max(0, Math.min(seconds, currentTime + (event.key === "ArrowRight" ? increment : -increment)))); }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); seek(event, true); }} onPointerMove={(event) => { if (event.buttons) seek(event); }} onPointerUp={(event) => seek(event, true)} onPointerCancel={() => flushSeek()}>
           {rulerTicks.map((tick) => <span key={tick} className={seconds > 0 && tick / seconds >= 0.96 ? "is-end" : undefined} style={{ left: percent(tick) }}>{rulerTime(tick)}</span>)}
         </div>
@@ -190,10 +311,12 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
             const shown = preview?.id === item.id ? preview : item;
             const edit: Edit = { phase: "preview", kind: "move", id: item.id, track: track.id, start: item.start, end: item.end };
             const handlers = { onPointerMove: move, onPointerUp: (event: PointerEvent<HTMLElement>) => finish("commit", eventModifiers(event)), onPointerCancel: (event: PointerEvent<HTMLElement>) => finish("cancel", eventModifiers(event)) };
-            return <div key={item.id} role="button" tabIndex={0} className={`ks-timeline-item is-${item.tone ?? "neutral"} series-${(item.series ?? 0) % 4}${selected.includes(item.id) ? " is-selected" : ""}${preview?.id === item.id ? " is-dragging" : ""}`} style={{ left: percent(shown.start), width: percent(shown.end - shown.start) }} onKeyDown={(event) => keyEdit(event, edit, !!item.movable && !track.locked)} onPointerDown={(event) => begin(event, edit, !!item.movable && !track.locked)} {...handlers}>
-              {item.resizable && !track.locked && !block.read_only ? <span className="ks-timeline-handle is-start" onPointerDown={(event) => begin(event, { ...edit, kind: "resize_start" }, true)} {...handlers} /> : null}
+            const canResizeStart = !!(item.resize_start_only || item.resizable) && !track.locked && !block.read_only;
+            const canResizeEnd = !!item.resizable && !item.resize_start_only && !track.locked && !block.read_only;
+            return <div key={item.id} role="button" tabIndex={0} className={`ks-timeline-item is-${item.tone ?? "neutral"} series-${(item.series ?? 0) % 4}${!item.movable || track.locked || block.read_only ? " is-fixed" : ""}${selected.includes(item.id) ? " is-selected" : ""}${preview?.id === item.id ? " is-dragging" : ""}`} style={{ left: percent(shown.start), width: percent(shown.end - shown.start) }} onKeyDown={(event) => keyEdit(event, edit, !!item.movable && !track.locked)} onPointerDown={(event) => begin(event, edit, !!item.movable && !track.locked)} {...handlers}>
+              {canResizeStart ? <span className="ks-timeline-handle is-start" onPointerDown={(event) => begin(event, { ...edit, kind: "resize_start" }, true)} {...handlers} /> : null}
               <span>{item.label ?? item.id}</span>
-              {item.resizable && !track.locked && !block.read_only ? <span className="ks-timeline-handle is-end" onPointerDown={(event) => begin(event, { ...edit, kind: "resize_end" }, true)} {...handlers} /> : null}
+              {canResizeEnd ? <span className="ks-timeline-handle is-end" onPointerDown={(event) => begin(event, { ...edit, kind: "resize_end" }, true)} {...handlers} /> : null}
             </div>;
           })}
         </div>)}

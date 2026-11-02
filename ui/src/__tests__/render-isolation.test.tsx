@@ -3,10 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Shell } from "../../../app/src/shell/shell";
-import type { AppDefinition, CoreEvent, ShellSnapshot } from "../contract/contract";
+import type { AppDefinition, CoreEvent, CoreReply, ShellSnapshot } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore, shareShellSnapshot, shareStructure } from "../core/shell-store";
+import * as windowData from "../data/window-data";
+import { TimelineBlock } from "../blocks/timeline";
 import * as renderBlockModule from "../render/render-block";
 import { makeTestSeed, makeTestSnapshot } from "./fixtures";
 
@@ -373,6 +375,54 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     await setState(store, "window-canvas", "rows", changed);
     await settleRenders();
     expect(countFor("window-canvas", "/ui/template")).toBe(1);
+    store.dispose();
+  });
+
+  it("timeline viewport 조작은 코어를 부르지 않고 형제 블록을 다시 그리지 않는다", async () => {
+    const timeline = {
+      type: "timeline" as const, duration: 100, position: 0, tracks: [],
+      viewport: { client: "viewport" }, controls: true, on_viewport: { client: "set_viewport" },
+    };
+    const definition: AppDefinition = {
+      id: "timeline-isolation", name: "시간축 격리", requires: { blocks: 14, modules: { assets: 1, client: 1 } },
+      permissions: [], state: {}, assets: [{ id: "script", version: 1 }],
+      client: {
+        runtime: "javascript", entry: { id: "script", version: 1 }, inputs: {},
+        outputs: { viewport: { default: { start: 10, end: 50 } } }, actions: ["set_viewport"],
+        commands: {}, state_keys: [], storage_entries: [],
+      },
+      ui: { type: "stack", direction: "column", children: [timeline, { type: "text", value: "다른 블록" }] },
+    };
+    const seed = makeTestSeed({ definitions: [definition] });
+    const appWindow = seed.snapshot.shared.windows[0];
+    const transport = createFakeTransport(seed);
+    const call = transport.call.bind(transport);
+    vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "data.media"
+      ? { op: "data.media", media: { mime: "text/javascript", data_base64: btoa(""), width: null, height: null } } as CoreReply
+      : call(request));
+    const store = createShellStore(transport);
+    const context = { store, window: appWindow, definition };
+    const siblingRender = vi.fn();
+    function Sibling() { siblingRender(); return <span>다른 블록</span>; }
+    render(<windowData.WindowDataProvider store={store} windowId={appWindow.id} definition={definition}>
+      <TimelineBlock block={timeline} pointer="/ui/children/0" context={context} />
+      <Sibling />
+    </windowData.WindowDataProvider>);
+    await waitFor(() => expect(document.querySelector(".ks-client-frames iframe")).not.toBeNull());
+
+    const frame = document.querySelector(".ks-client-frames iframe") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    const scroll = document.querySelector(".ks-timeline-scroll")!;
+    const siblingRendersBefore = siblingRender.mock.calls.length;
+    const coreCallsBefore = transport.getCalls().length;
+    fireEvent.wheel(scroll, { deltaY: -100, clientX: 200 });
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "ks-client-action", name: "set_viewport",
+    }), "*"));
+    await settleRenders();
+
+    expect(siblingRender).toHaveBeenCalledTimes(siblingRendersBefore);
+    expect(transport.getCalls().slice(coreCallsBefore)).toEqual([]);
     store.dispose();
   });
 

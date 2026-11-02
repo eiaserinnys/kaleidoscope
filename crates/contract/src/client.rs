@@ -166,6 +166,9 @@ pub struct TimelineItem {
     #[serde(default)]
     #[ts(optional, as = "Option<bool>")]
     pub resizable: bool,
+    #[serde(default)]
+    #[ts(optional, as = "Option<bool>")]
+    pub resize_start_only: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
