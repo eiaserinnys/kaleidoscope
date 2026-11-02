@@ -1,0 +1,188 @@
+{
+  "id": "input-layout-progress",
+  "name": "입력과 진행 상태",
+  "description": "입력, 재생 표시, 배치와 진행 상태를 확인합니다.",
+  "requires": { "blocks": 14, "modules": {} },
+  "permissions": [],
+  "state": {
+    "clock": { "position": 10, "sampled_at": 0, "rate": 1, "running": true, "duration": 120 },
+    "amount": 1.25,
+    "rows": [
+      { "id": "first", "label": "첫째", "value": 1.25 },
+      { "id": "second", "label": "둘째", "value": 2.5 }
+    ],
+    "focus_signal": 0,
+    "name": "선택할 이름",
+    "cancelled": false,
+    "chip_pressed": true,
+    "runs": 0,
+    "progress": 4,
+    "unknown_progress": null,
+    "scrub_value": 0,
+    "clicked": false,
+    "double_clicked": false
+  },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "gap": "small",
+    "children": [
+      {
+        "type": "section",
+        "title": "재생 줄",
+        "meta": "Clock 보간",
+        "collapsible": true,
+        "actions": [
+          {
+            "type": "button",
+            "label": "재생 상태",
+            "variant": "chip",
+            "pressed": { "expr": "$state.clock.running" },
+            "on_click": [{
+              "set_state": "clock",
+              "value": {
+                "expr": "($now := $millis(); $position := $state.clock.position + ($state.clock.running ? (($now - $state.clock.sampled_at) / 1000 * $state.clock.rate) : 0); $merge([$state.clock, {'position': $position, 'sampled_at': $now, 'running': $not($state.clock.running)}]))"
+              }
+            }]
+          }
+        ],
+        "child": {
+          "type": "stack",
+          "direction": "row",
+          "wrap": true,
+          "gap": "small",
+          "children": [
+            {
+              "type": "text",
+              "value": { "state": "clock" },
+              "format": "time",
+              "on_click": [{ "set_state": "clicked", "value": true }],
+              "on_double_click": [{ "set_state": "double_clicked", "value": true }]
+            },
+            {
+              "type": "slider",
+              "value": { "state": "clock" },
+              "on_change": [{
+                "set_state": "clock",
+                "value": {
+                  "expr": "($now := $millis(); $merge([$state.clock, {'position': $event, 'sampled_at': $now, 'running': false}]))"
+                }
+              }],
+              "label": "위치",
+              "min": 0,
+              "max": 120,
+              "step": 0.01
+            }
+          ]
+        }
+      },
+      {
+        "type": "section",
+        "title": "수치 표",
+        "child": {
+          "type": "repeat",
+          "items": { "state": "rows" },
+          "key": "id",
+          "layout": "column",
+          "virtual": false,
+          "template": {
+            "type": "stack",
+            "direction": "row",
+            "gap": "small",
+            "children": [
+              { "type": "text", "value": { "item": "label" } },
+              {
+                "type": "input",
+                "kind": "number",
+                "value": { "item": "value" },
+                "min": 0,
+                "max": 10,
+                "step": 0.25,
+                "format": { "kind": "decimal", "digits": 2 },
+                "commit": "blur",
+                "on_change": [{
+                  "set_state": "rows",
+                  "value": {
+                    "expr": "$append([], $map($state.rows, function($row) { $row.id = $item.id ? $merge([$row, {'value': $event}]) : $row }))"
+                  }
+                }]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "section",
+        "title": "입력 동작",
+        "collapsible": true,
+        "actions": [
+          { "type": "button", "label": "이름 선택", "on_click": [{ "set_state": "focus_signal", "value": { "expr": "$state.focus_signal + 1" } }] }
+        ],
+        "child": {
+          "type": "stack",
+          "direction": "column",
+          "gap": "small",
+          "children": [
+            {
+              "type": "input",
+              "kind": "number",
+              "label": "수량 입력",
+              "value": { "state": "amount" },
+              "min": 0,
+              "max": 10,
+              "step": 0.05,
+              "format": { "kind": "decimal", "digits": 2 },
+              "commit": "submit",
+              "on_change": { "set_state": "amount" },
+              "on_cancel": [{ "set_state": "cancelled", "value": true }]
+            },
+            {
+              "type": "input",
+              "kind": "text",
+              "label": "이름",
+              "value": { "state": "name" },
+              "focus": { "state": "focus_signal" },
+              "commit": "submit",
+              "on_change": { "set_state": "name" }
+            }
+          ]
+        }
+      },
+      {
+        "type": "section",
+        "title": "진행 상태",
+        "child": {
+          "type": "stack",
+          "direction": "column",
+          "gap": "small",
+          "children": [
+            { "type": "progress", "value": { "state": "progress" }, "max": 10, "label": "처리" },
+            { "type": "progress", "value": { "state": "unknown_progress" }, "max": 1, "label": "대기" },
+            { "type": "button", "variant": "chip", "label": "반복", "pressed": { "state": "chip_pressed" }, "on_click": [{ "set_state": "chip_pressed", "value": { "expr": "$not($state.chip_pressed)" } }] },
+            { "type": "button", "label": "한 번 실행", "on_click": [{ "set_state": "runs", "value": { "expr": "$state.runs + 1" } }] }
+          ]
+        }
+      },
+      {
+        "type": "section",
+        "title": "줄바꿈",
+        "child": {
+          "type": "stack",
+          "direction": "row",
+          "wrap": true,
+          "gap": "small",
+          "children": [
+            { "type": "text", "value": "줄 바꿈 확인 항목 하나" },
+            { "type": "text", "value": "줄 바꿈 확인 항목 둘" },
+            { "type": "text", "value": "줄 바꿈 확인 항목 셋" },
+            { "type": "text", "value": "줄 바꿈 확인 항목 넷" },
+            { "type": "text", "value": "줄 바꿈 확인 항목 다섯" },
+            { "type": "text", "value": "줄 바꿈 확인 항목 여섯" },
+            { "type": "text", "value": "줄 바꿈 확인 항목 일곱" },
+            { "type": "text", "value": "줄 바꿈 확인 항목 여덟" }
+          ]
+        }
+      }
+    ]
+  }
+}

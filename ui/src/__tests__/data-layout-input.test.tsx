@@ -126,6 +126,23 @@ it("keeps an input draft while focused and sends only after the debounce", async
   await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "data.act", window_id: "editor-window", pointer: "/ui/children/1/on_change", event: "초안" }));
 });
 
+it("cancels a pending debounced input change when the input unmounts", async () => {
+  const { spy } = setup();
+  const input = await screen.findByPlaceholderText("입력");
+  vi.useFakeTimers();
+  try {
+    fireEvent.change(input, { target: { value: "폐기할 초안" } });
+    expect(spy.mock.calls.some(([request]) => request.op === "data.act" && request.pointer.endsWith("/on_change"))).toBe(false);
+
+    cleanup();
+    await act(async () => { await vi.advanceTimersByTimeAsync(301); });
+
+    expect(spy.mock.calls.some(([request]) => request.op === "data.act" && request.pointer.endsWith("/on_change"))).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("does not overwrite a changed value when an untouched focused input blurs", async () => {
   const { store, spy } = setup();
   const input = await screen.findByPlaceholderText("입력") as HTMLInputElement;
@@ -224,8 +241,9 @@ it("keeps the latest failed draft when an earlier input request succeeds", async
   await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.query).toBe("Par"));
   fireEvent.change(input, { target: { value: "Paris" } });
   fireEvent.blur(input);
-  await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "Paris" })));
+  expect(input.value).toBe("Paris");
   await act(async () => { releaseFirst(); await first; });
+  await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "Paris" })));
   await act(async () => { releaseSecond(); await second; });
   await screen.findByText("전송 실패");
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
