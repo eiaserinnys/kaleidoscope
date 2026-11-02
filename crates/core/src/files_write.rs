@@ -196,13 +196,11 @@ fn authorize(
         } => {
             let resolved = ops::readable_path(inner, state, window_id, permission, path)?;
             let text = if files::scope(state, window_id, permission)? == FilesScope::Pc {
-                resolved.to_string_lossy().into_owned()
+                display_path(&resolved.to_string_lossy())
             } else {
                 let grant_root = grant_root_path(state, window_id, permission)?;
-                PathBuf::from(grant_root)
-                    .join(path)
-                    .to_string_lossy()
-                    .into_owned()
+                let path = PathBuf::from(grant_root).join(path);
+                display_path(&path.to_string_lossy())
             };
             Ok(Authorization::DisplayPath(text))
         }
@@ -238,4 +236,19 @@ fn grant_root_path(state: &CoreState, window: &str, permission: &str) -> Result<
         .find(|grant| grant.window_id == window && grant.permission == permission)
         .map(|grant| grant.root_path.clone())
         .ok_or_else(|| error::make(ErrorCode::NotGranted))
+}
+
+fn display_path(path: &str) -> String {
+    #[cfg(windows)]
+    {
+        let path = path.strip_prefix(r"\\?\").unwrap_or(path);
+        if let Some(path) = path.strip_prefix("UNC\\") {
+            return format!("\\\\{path}");
+        }
+        path.to_string()
+    }
+    #[cfg(not(windows))]
+    {
+        path.to_string()
+    }
 }

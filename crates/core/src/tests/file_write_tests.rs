@@ -232,8 +232,8 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
         })
         .unwrap(),
         CoreReply::FilesPath { text }
-            if text.starts_with(&grant_root)
-                && Path::new(&text) == PathBuf::from(&grant_root).join("notes")
+            if text.starts_with(&root.to_string_lossy().into_owned())
+                && Path::new(&text) == root.join("notes")
     ));
 }
 
