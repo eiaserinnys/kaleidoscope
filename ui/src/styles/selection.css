@@ -1,0 +1,36 @@
+/* 쉘의 글자 선택 규칙 정본. 기본은 선택 안 됨이고 읽고 복사할 내용만 연다. 새 내용 블록을 만들면 여기에 더한다. */
+html,
+body {
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable],
+.cm-editor,
+.ks-markdown-text,
+.ks-markdown-view,
+.ks-agent-chat-user,
+.ks-agent-chat-assistant,
+.ks-agent-chat-notice,
+.ks-table-cell,
+.ks-data-text,
+.ks-properties dd,
+.ks-feed-entry,
+.ks-metric-value,
+.ks-notice-message,
+.ks-html-comment {
+  user-select: text;
+}
+
+button,
+[role="button"],
+[role="tab"],
+[role="menuitem"],
+label,
+summary,
+.ks-table-row.is-activatable .ks-table-cell,
+.ks-image-frame img,
+.ks-data-toolbar .ks-data-text {
+  user-select: none;
+}

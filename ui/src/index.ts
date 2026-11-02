@@ -65,3 +65,4 @@ export type {
   Workspace,
 } from "./contract/contract";
 export { useShareView } from "./share/share-view";
+export { installShellDragGuard } from "./shell-drag-guard";
