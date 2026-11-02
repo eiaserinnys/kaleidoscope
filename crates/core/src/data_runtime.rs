@@ -1,10 +1,11 @@
 //! 창별 원천과 식 결과. 입출력은 잠금 밖에서 수행하고 세대가 같은 결과만 반영한다.
 // 기존 창별 원천 수명 경로가 이미 500줄을 넘는다. 별도 수명 리팩터링은 이 변경에 섞지 않는다.
 mod actions;
+mod liveness;
 mod storage;
 pub(crate) use actions::{act, layout_errors};
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -30,6 +31,10 @@ use crate::{app_commands, connections::RequestError, data_sources, error, Inner}
 
 pub(crate) struct DataRuntimes {
     windows: Mutex<BTreeMap<String, Runtime>>,
+    request_cache: Mutex<Vec<(RequestCacheKey, CachedRequest)>>,
+    flights: Mutex<Vec<(RequestCacheKey, Arc<Mutex<()>>)>>,
+    gates: Mutex<BTreeMap<String, Gate>>,
+    pub(crate) shell_visible: AtomicBool,
     next_generation: AtomicU64,
     events: mpsc::Sender<(String, u32, DataView)>,
     receiver: Mutex<Option<mpsc::Receiver<(String, u32, DataView)>>>,
@@ -39,6 +44,10 @@ impl Default for DataRuntimes {
         let (events, receiver) = mpsc::channel();
         Self {
             windows: Mutex::new(BTreeMap::new()),
+            request_cache: Mutex::new(Vec::new()),
+            flights: Mutex::new(Vec::new()),
+            gates: Mutex::new(BTreeMap::new()),
+            shell_visible: AtomicBool::new(true),
             next_generation: AtomicU64::new(0),
             events,
             receiver: Mutex::new(Some(receiver)),
@@ -54,7 +63,8 @@ struct Runtime {
     state: BTreeMap<String, Value>,
     sources: BTreeMap<String, Source>,
     data: BTreeMap<String, Value>,
-    request_cache: Vec<(RequestCacheKey, CachedRequest)>,
+    dormant: Vec<String>,
+    visible: bool,
     storage: BTreeMap<String, storage::Slot>,
     storage_meta: storage::MetaSlot,
     attached: usize,
@@ -63,6 +73,7 @@ struct Runtime {
 }
 #[derive(Clone, PartialEq, Eq)]
 struct RequestCacheKey {
+    app_id: String,
     permission: String,
     path: String,
     query: BTreeMap<String, String>,
@@ -84,6 +95,16 @@ struct Source {
     last_success_at: Option<chrono::DateTime<chrono::Utc>>,
     last_success_instant: Option<Instant>,
     retrying_after_failure: bool,
+    waiting: Option<chrono::DateTime<chrono::Utc>>,
+}
+struct Gate {
+    until: chrono::DateTime<chrono::Utc>,
+    failures: u32,
+}
+fn backoff_seconds(failures: u32) -> u64 {
+    30u64
+        .saturating_mul(1u64 << failures.saturating_sub(1).min(5))
+        .min(600)
 }
 struct Job {
     window: String,
@@ -91,6 +112,10 @@ struct Job {
     plan: SourcePlan,
     format: SourceFormat,
     generation: u64,
+    key: Option<RequestCacheKey>,
+    gate: Option<String>,
+    ttl: Duration,
+    force: bool,
 }
 
 impl Runtime {
@@ -117,6 +142,7 @@ impl Runtime {
                         last_success_at: None,
                         last_success_instant: None,
                         retrying_after_failure: false,
+                        waiting: None,
                     },
                 )
             })
@@ -130,7 +156,8 @@ impl Runtime {
             state,
             sources,
             data: BTreeMap::new(),
-            request_cache: Vec::new(),
+            dormant: Vec::new(),
+            visible: true,
             storage,
             storage_meta,
             attached: 0,
@@ -142,7 +169,7 @@ impl Runtime {
         self.sources
             .iter()
             .map(|(name, source)| {
-                let (state, message) = match &source.status {
+                let (state, mut message) = match &source.status {
                     SourceStatus::Idle {} => (SourceState::Idle, None),
                     SourceStatus::Loading { .. } => (SourceState::Loading, None),
                     SourceStatus::Ready { .. } => (SourceState::Ready, None),
@@ -151,6 +178,12 @@ impl Runtime {
                     }
                     SourceStatus::LoginRequired { .. } => (SourceState::LoginRequired, None),
                 };
+                if let Some(until) = source.waiting {
+                    message = Some(format!(
+                        "요청 한도로 {}에 다시 받습니다",
+                        until.with_timezone(&chrono::Local).format("%H:%M")
+                    ));
+                }
                 let expired = source
                     .last_success_instant
                     .zip(self.definition.sources[name].refresh_secs())
@@ -415,7 +448,11 @@ fn source_format(source: &SourceDecl) -> SourceFormat {
     }
 }
 
-fn request_cache_key(plan: &SourcePlan, format: SourceFormat) -> Option<RequestCacheKey> {
+fn request_cache_key(
+    app_id: &str,
+    plan: &SourcePlan,
+    format: SourceFormat,
+) -> Option<RequestCacheKey> {
     let SourcePlan::Request {
         permission,
         path,
@@ -425,6 +462,7 @@ fn request_cache_key(plan: &SourcePlan, format: SourceFormat) -> Option<RequestC
         return None;
     };
     Some(RequestCacheKey {
+        app_id: app_id.into(),
         permission: permission.clone(),
         path: path.clone(),
         query: query.clone(),
@@ -432,33 +470,31 @@ fn request_cache_key(plan: &SourcePlan, format: SourceFormat) -> Option<RequestC
     })
 }
 
-fn request_cache_get(runtime: &Runtime, key: &RequestCacheKey) -> Option<CachedRequest> {
-    runtime
+fn request_cache_get(manager: &DataRuntimes, key: &RequestCacheKey) -> Option<CachedRequest> {
+    manager
         .request_cache
+        .lock()
+        .unwrap()
         .iter()
         .find(|(cached_key, _)| cached_key == key)
         .map(|(_, cached)| cached.clone())
 }
 
-fn request_cache_store(runtime: &mut Runtime, key: RequestCacheKey, cached: CachedRequest) {
-    if let Some((_, existing)) = runtime
-        .request_cache
-        .iter_mut()
-        .find(|(cached_key, _)| cached_key == &key)
-    {
+fn request_cache_store(manager: &DataRuntimes, key: RequestCacheKey, cached: CachedRequest) {
+    let mut cache = manager.request_cache.lock().unwrap();
+    if let Some((_, existing)) = cache.iter_mut().find(|(cached_key, _)| cached_key == &key) {
         *existing = cached;
         return;
     }
-    runtime.request_cache.push((key, cached));
-    if runtime.request_cache.len() > 128 {
-        if let Some(oldest) = runtime
-            .request_cache
+    cache.push((key, cached));
+    if cache.len() > 256 {
+        if let Some(oldest) = cache
             .iter()
             .enumerate()
             .min_by_key(|(_, (_, cached))| cached.fetched_instant)
             .map(|(index, _)| index)
         {
-            runtime.request_cache.remove(oldest);
+            cache.remove(oldest);
         }
     }
 }
@@ -473,11 +509,14 @@ fn restored_ready(runtime: &Runtime, name: &str) -> bool {
 
 fn should_prepare_after_plan(
     runtime: &Runtime,
+    live: &BTreeSet<String>,
     name: &str,
     changed: bool,
     fetch_missing: bool,
 ) -> bool {
     (changed || (fetch_missing && !runtime.data.contains_key(name)))
+        && liveness::source_live(runtime, live, name)
+        && liveness::deps_ready(runtime, name)
         && !runtime.sources[name].in_flight
         && !restored_ready(runtime, name)
 }
@@ -491,14 +530,15 @@ fn set_plan(manager: &DataRuntimes, runtime: &mut Runtime, name: &str, plan: Sou
         .refresh_secs()
         .map(|seconds| Duration::from_secs(seconds.into()))
         .unwrap_or(Duration::from_secs(300));
-    let cache_hit = request_cache_key(&plan, format)
-        .and_then(|key| request_cache_get(runtime, &key))
+    let cache_hit = request_cache_key(&runtime.definition.id, &plan, format)
+        .and_then(|key| request_cache_get(manager, &key))
         .filter(|cached| Instant::now().saturating_duration_since(cached.fetched_instant) < ttl);
     let source = runtime.sources.get_mut(name).unwrap();
     source.generation = manager.next_generation.fetch_add(1, Ordering::SeqCst) + 1;
     source.in_flight = false;
     source.last_fetched = None;
     source.retrying_after_failure = false;
+    source.waiting = None;
     if let Some(cached) = cache_hit {
         runtime.data.insert(name.to_owned(), cached.value);
         source.last_fetched = Some(cached.fetched_instant);
@@ -525,11 +565,62 @@ fn set_plan(manager: &DataRuntimes, runtime: &mut Runtime, name: &str, plan: Sou
     true
 }
 
-fn prepare(manager: &DataRuntimes, runtime: &mut Runtime, window: &str, name: &str) -> Option<Job> {
+fn gate_key(runtime: &Runtime, name: &str) -> Option<String> {
+    let permission = runtime.definition.sources[name].permission();
+    runtime
+        .definition
+        .permissions
+        .iter()
+        .find_map(|decl| match decl {
+            kaleidoscope_contract::PermissionDecl::Http { id, base_url, .. }
+                if id == permission =>
+            {
+                url::Url::parse(base_url)
+                    .ok()?
+                    .host_str()
+                    .map(str::to_owned)
+            }
+            kaleidoscope_contract::PermissionDecl::Connection { id, connection, .. }
+                if id == permission =>
+            {
+                Some(connection.clone())
+            }
+            _ => None,
+        })
+}
+
+fn prepare(
+    manager: &DataRuntimes,
+    runtime: &mut Runtime,
+    window: &str,
+    name: &str,
+    force: bool,
+) -> Option<Job> {
+    let gate = gate_key(runtime, name);
+    let until = gate
+        .as_ref()
+        .and_then(|key| {
+            manager
+                .gates
+                .lock()
+                .unwrap()
+                .get(key)
+                .map(|gate| gate.until)
+        })
+        .filter(|until| *until > chrono::Utc::now());
     let source = runtime.sources.get_mut(name)?;
-    if matches!(source.plan, SourcePlan::Idle | SourcePlan::Invalid(_)) {
+    if source.in_flight || matches!(source.plan, SourcePlan::Idle | SourcePlan::Invalid(_)) {
         return None;
     }
+    if let Some(until) = until {
+        source.waiting = Some(until);
+        source.retrying_after_failure = true;
+        source.status = SourceStatus::Loading {
+            has_value: runtime.data.contains_key(name),
+        };
+        return None;
+    }
+    source.waiting = None;
     source.retrying_after_failure |= matches!(
         source.status,
         SourceStatus::Failed { .. } | SourceStatus::LoginRequired { .. }
@@ -546,6 +637,19 @@ fn prepare(manager: &DataRuntimes, runtime: &mut Runtime, window: &str, name: &s
         plan: source.plan.clone(),
         format: source_format(&runtime.definition.sources[name]),
         generation: source.generation,
+        key: request_cache_key(
+            &runtime.definition.id,
+            &source.plan,
+            source_format(&runtime.definition.sources[name]),
+        ),
+        gate,
+        ttl: Duration::from_secs(
+            runtime.definition.sources[name]
+                .refresh_secs()
+                .map(u64::from)
+                .unwrap_or(300),
+        ),
+        force,
     })
 }
 
@@ -556,7 +660,93 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
             let inner = Arc::clone(inner);
             thread::spawn(move || {
                 let started = Instant::now();
-                let result = data_sources::fetch(&inner, &job.window, &job.plan, job.format);
+                let flight = job.key.as_ref().map(|key| {
+                    let mut flights = inner.data_runtimes.flights.lock().unwrap();
+                    if let Some((_, flight)) = flights.iter().find(|(existing, _)| existing == key)
+                    {
+                        return Arc::clone(flight);
+                    }
+                    let flight = Arc::new(Mutex::new(()));
+                    flights.push((key.clone(), Arc::clone(&flight)));
+                    flight
+                });
+                let _flight_guard = flight.as_ref().map(|flight| flight.lock().unwrap());
+                let blocked = job
+                    .gate
+                    .as_ref()
+                    .and_then(|key| {
+                        inner
+                            .data_runtimes
+                            .gates
+                            .lock()
+                            .unwrap()
+                            .get(key)
+                            .map(|gate| gate.until)
+                    })
+                    .filter(|until| *until > chrono::Utc::now());
+                let source_times = inner
+                    .data_runtimes
+                    .windows
+                    .lock()
+                    .unwrap()
+                    .get(&job.window)
+                    .and_then(|runtime| runtime.sources.get(&job.name))
+                    .filter(|source| source.generation == job.generation)
+                    .map(|source| {
+                        (
+                            source.last_fetched,
+                            source
+                                .retrying_after_failure
+                                .then_some(source.last_success_instant),
+                        )
+                    });
+                let cached = job
+                    .key
+                    .as_ref()
+                    .and_then(|key| request_cache_get(&inner.data_runtimes, key))
+                    .filter(|cached| {
+                        cached.fetched_instant.elapsed() < job.ttl
+                            && source_times.is_some_and(|(started, retry_state)| {
+                                (!job.force
+                                    || started.is_some_and(|at| cached.fetched_instant > at))
+                                    && retry_state.is_none_or(|previous| {
+                                        previous.is_none_or(|at| cached.fetched_instant > at)
+                                    })
+                            })
+                    });
+                let fetched = blocked.is_none() && cached.is_none();
+                let result = if blocked.is_some() {
+                    Err(RequestError::RateLimited { retry_after: None })
+                } else if let Some(cached) = &cached {
+                    Ok(cached.value.clone())
+                } else {
+                    data_sources::fetch(&inner, &job.window, &job.plan, job.format)
+                };
+                let wait_until = match (&job.gate, &result, blocked) {
+                    (_, _, Some(until)) => Some(until),
+                    (Some(key), Err(RequestError::RateLimited { retry_after }), None) => {
+                        let mut gates = inner.data_runtimes.gates.lock().unwrap();
+                        let failures = gates
+                            .get(key)
+                            .map_or(1, |gate| gate.failures.saturating_add(1));
+                        let seconds = retry_after.unwrap_or_else(|| backoff_seconds(failures));
+                        let until = chrono::Utc::now()
+                            + chrono::Duration::seconds(seconds.min(i64::MAX as u64) as i64);
+                        gates.insert(key.clone(), Gate { until, failures });
+                        Some(until)
+                    }
+                    (Some(key), Ok(_), None) if fetched => {
+                        let mut gates = inner.data_runtimes.gates.lock().unwrap();
+                        if gates
+                            .get(key)
+                            .is_some_and(|gate| gate.until <= chrono::Utc::now())
+                        {
+                            gates.remove(key);
+                        }
+                        None
+                    }
+                    _ => None,
+                };
                 let mut follow_up = Vec::new();
                 {
                     let state = inner.state.lock().unwrap();
@@ -564,16 +754,18 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                     let Some(runtime) = windows.get_mut(&job.window) else {
                         return;
                     };
-                    inner.profiler.span(
-                        "data.source",
-                        &job.name,
-                        &runtime.definition.id,
-                        &runtime.definition.name,
-                        started.elapsed().as_secs_f64() * 1000.0,
-                        0,
-                        0,
-                        "",
-                    );
+                    if fetched {
+                        inner.profiler.span(
+                            "data.source",
+                            &job.name,
+                            &runtime.definition.id,
+                            &runtime.definition.name,
+                            started.elapsed().as_secs_f64() * 1000.0,
+                            0,
+                            0,
+                            "",
+                        );
+                    }
                     if !state.shared.windows.iter().any(|window| {
                         window.id == job.window
                             && window.app_version == runtime.version
@@ -581,10 +773,10 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                     }) {
                         return;
                     }
-                    let cache_key = request_cache_key(&job.plan, job.format);
+                    let cache_key = job.key.clone();
                     let fallback_cache = cache_key
                         .as_ref()
-                        .and_then(|key| request_cache_get(runtime, key));
+                        .and_then(|key| request_cache_get(&inner.data_runtimes, key));
                     let Some(source) = runtime.sources.get_mut(&job.name) else {
                         return;
                     };
@@ -594,19 +786,28 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                     source.in_flight = false;
                     match result {
                         Ok(value) => {
-                            let fetched_at = chrono::Utc::now();
-                            let fetched_instant = Instant::now();
-                            let updated_at = crate::state_commands::timestamp();
+                            let fetched_at = cached
+                                .as_ref()
+                                .map_or_else(chrono::Utc::now, |c| c.fetched_at);
+                            let fetched_instant = cached
+                                .as_ref()
+                                .map_or_else(Instant::now, |c| c.fetched_instant);
+                            let updated_at = cached
+                                .as_ref()
+                                .and_then(|c| c.updated_at.clone())
+                                .unwrap_or_else(crate::state_commands::timestamp);
                             runtime.data.insert(job.name.clone(), value.clone());
+                            source.last_fetched = Some(fetched_instant);
                             source.last_success_at = Some(fetched_at);
                             source.last_success_instant = Some(fetched_instant);
                             source.retrying_after_failure = false;
+                            source.waiting = None;
                             source.status = SourceStatus::Ready {
                                 updated_at: updated_at.clone(),
                             };
                             if let Some(key) = cache_key.clone() {
                                 request_cache_store(
-                                    runtime,
+                                    &inner.data_runtimes,
                                     key,
                                     CachedRequest {
                                         value,
@@ -619,6 +820,13 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                         }
                         Err(RequestError::Login(permission)) => {
                             source.status = SourceStatus::LoginRequired { permission }
+                        }
+                        Err(RequestError::RateLimited { .. }) => {
+                            source.waiting = wait_until;
+                            source.retrying_after_failure = true;
+                            source.status = SourceStatus::Loading {
+                                has_value: runtime.data.contains_key(&job.name),
+                            };
                         }
                         Err(RequestError::Core(err)) => {
                             if !runtime.data.contains_key(&job.name) {
@@ -635,6 +843,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                         }
                     }
                     let mut changed_sources = BTreeSet::from([job.name.clone()]);
+                    let live = liveness::live_sources(runtime);
                     for name in runtime.compiled.source_order().to_vec() {
                         if name == job.name {
                             continue;
@@ -646,9 +855,9 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                         if changed || runtime.sources[&name].status != old_status {
                             changed_sources.insert(name.clone());
                         }
-                        if should_prepare_after_plan(runtime, &name, changed, false) {
+                        if should_prepare_after_plan(runtime, &live, &name, changed, false) {
                             if let Some(next) =
-                                prepare(&inner.data_runtimes, runtime, &job.window, &name)
+                                prepare(&inner.data_runtimes, runtime, &job.window, &name, false)
                             {
                                 follow_up.push(next);
                             }
@@ -664,10 +873,18 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                         ));
                     }
                 }
+                drop(_flight_guard);
+                if let (Some(key), Some(flight)) = (&job.key, &flight) {
+                    let mut flights = inner.data_runtimes.flights.lock().unwrap();
+                    if Arc::strong_count(flight) == 2 {
+                        flights.retain(|(existing, _)| existing != key);
+                    }
+                }
                 let handles = jobs(&inner, follow_up);
+                let due = run_due(&inner, Some(&job.window));
                 crate::local_agent::data_changed(&inner, &job.window);
                 inner.layout_signal.notify();
-                for handle in handles {
+                for handle in handles.into_iter().chain(due) {
                     let _ = handle.join();
                 }
             })
@@ -675,7 +892,11 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
         .collect()
 }
 
-pub(crate) fn attach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, CoreError> {
+pub(crate) fn attach(
+    inner: &Arc<Inner>,
+    window_id: &str,
+    dormant: Option<Vec<String>>,
+) -> Result<CoreReply, CoreError> {
     let (view, pending, start_storage) = {
         let state = inner.state.lock().unwrap();
         let window = state
@@ -709,16 +930,25 @@ pub(crate) fn attach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, C
             )
         });
         let already_attached = runtime.attached > 0;
+        runtime.visible = liveness::visible(
+            &state,
+            window_id,
+            inner.data_runtimes.shell_visible.load(Ordering::SeqCst),
+        );
+        if let Some(dormant) = dormant {
+            runtime.dormant = dormant;
+        }
         runtime.state = window.state.clone();
         runtime.attached += 1;
         let names = runtime.compiled.source_order().to_vec();
+        let live = liveness::live_sources(runtime);
         let mut pending = Vec::new();
         for name in names {
             let plan = runtime.plan_source(&name);
             let changed = set_plan(&inner.data_runtimes, runtime, &name, plan);
             runtime.apply_source_storage_status(&name);
-            if should_prepare_after_plan(runtime, &name, changed, true) {
-                if let Some(job) = prepare(&inner.data_runtimes, runtime, window_id, &name) {
+            if should_prepare_after_plan(runtime, &live, &name, changed, true) {
+                if let Some(job) = prepare(&inner.data_runtimes, runtime, window_id, &name, false) {
                     pending.push(job);
                 }
             }
@@ -740,6 +970,22 @@ pub(crate) fn attach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, C
     Ok(CoreReply::DataAttach { view })
 }
 
+pub(crate) fn dormant(
+    inner: &Arc<Inner>,
+    window_id: &str,
+    dormant: Vec<String>,
+) -> Result<CoreReply, CoreError> {
+    {
+        let mut windows = inner.data_runtimes.windows.lock().unwrap();
+        windows
+            .get_mut(window_id)
+            .ok_or_else(|| error::make(ErrorCode::NotFound))?
+            .dormant = dormant;
+    }
+    run_due(inner, Some(window_id));
+    Ok(CoreReply::DataDormant {})
+}
+
 pub(crate) fn detach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, CoreError> {
     let mut windows = inner.data_runtimes.windows.lock().unwrap();
     if let Some(runtime) = windows.get_mut(window_id) {
@@ -755,6 +1001,7 @@ pub(crate) fn refresh(
     window_id: &str,
     names: &[String],
     wait: bool,
+    force: bool,
 ) -> Result<(), CoreError> {
     let pending = {
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
@@ -789,7 +1036,13 @@ pub(crate) fn refresh(
             .collect();
         let pending = names
             .iter()
-            .filter_map(|name| prepare(&inner.data_runtimes, runtime, window_id, name))
+            .filter_map(|name| {
+                if liveness::deps_ready(runtime, name) {
+                    prepare(&inner.data_runtimes, runtime, window_id, name, force)
+                } else {
+                    None
+                }
+            })
             .collect();
         for name in runtime.compiled.source_order().to_vec() {
             runtime.apply_source_storage_status(&name);
@@ -815,6 +1068,8 @@ pub(crate) fn refresh(
 /// 다른 서버의 같은 창 id에 이전 원천과 저장값을 재사용하지 않는다.
 pub(crate) fn server_changed(inner: &Inner) {
     inner.data_runtimes.windows.lock().unwrap().clear();
+    inner.data_runtimes.request_cache.lock().unwrap().clear();
+    inner.data_runtimes.gates.lock().unwrap().clear();
 }
 
 pub(crate) fn state_changed(inner: &Arc<Inner>) {
@@ -835,6 +1090,11 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
         let mut pending = Vec::new();
         let mut reloads = Vec::new();
         for (id, runtime) in windows.iter_mut() {
+            runtime.visible = liveness::visible(
+                &state,
+                id,
+                inner.data_runtimes.shell_visible.load(Ordering::SeqCst),
+            );
             if runtime.using_defaults != using_defaults {
                 runtime.using_defaults = using_defaults;
                 if runtime.attached > 0 {
@@ -860,6 +1120,7 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                 .collect();
             runtime.state = window.state.clone();
             let names = runtime.compiled.source_order().to_vec();
+            let live = liveness::live_sources(runtime);
             let mut changed_sources = BTreeSet::new();
             for name in names {
                 let source = &runtime.definition.sources[&name];
@@ -891,8 +1152,8 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                 if changed || runtime.sources[&name].status != old_status {
                     changed_sources.insert(name.clone());
                 }
-                if should_prepare_after_plan(runtime, &name, changed, false) {
-                    if let Some(job) = prepare(&inner.data_runtimes, runtime, id, &name) {
+                if should_prepare_after_plan(runtime, &live, &name, changed, false) {
+                    if let Some(job) = prepare(&inner.data_runtimes, runtime, id, &name, false) {
                         pending.push(job);
                     }
                 }
@@ -926,6 +1187,7 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
     for id in reloads {
         storage::load(inner, &id, None);
     }
+    run_due(inner, None);
     inner.layout_signal.notify();
 }
 
@@ -946,7 +1208,7 @@ pub(crate) fn grant_changed(inner: &Arc<Inner>, window: &str, permission: &str) 
             .unwrap_or_default()
     };
     if !names.is_empty() {
-        let _ = refresh(inner, window, &names, false);
+        let _ = refresh(inner, window, &names, false, true);
     }
 }
 
@@ -965,9 +1227,14 @@ pub(crate) fn connections_changed(inner: &Arc<Inner>, changed: &[String]) {
                     _ => None,
                 })
                 .collect();
-            runtime
+            inner
+                .data_runtimes
                 .request_cache
-                .retain(|(key, _)| !permissions.contains(&key.permission));
+                .lock()
+                .unwrap()
+                .retain(|(key, _)| {
+                    key.app_id != runtime.definition.id || !permissions.contains(&key.permission)
+                });
         }
         windows.iter().filter_map(|(id, runtime)| {
             let names: Vec<_> = runtime.sources.iter().filter_map(|(name, source)| {
@@ -983,16 +1250,17 @@ pub(crate) fn connections_changed(inner: &Arc<Inner>, changed: &[String]) {
         }).collect()
     };
     for (window, names) in retries {
-        let _ = refresh(inner, &window, &names, false);
+        let _ = refresh(inner, &window, &names, false, true);
     }
 }
 
 pub(crate) fn connection_changed(inner: &Inner, permission: &str) {
-    for runtime in inner.data_runtimes.windows.lock().unwrap().values_mut() {
-        runtime
-            .request_cache
-            .retain(|(key, _)| key.permission != permission);
-    }
+    inner
+        .data_runtimes
+        .request_cache
+        .lock()
+        .unwrap()
+        .retain(|(key, _)| key.permission != permission);
 }
 
 pub(crate) fn refresh_login_required(inner: &Arc<Inner>, connection: &str) {
@@ -1021,8 +1289,84 @@ pub(crate) fn refresh_login_required(inner: &Arc<Inner>, connection: &str) {
             .collect()
     };
     for (window, names) in retries {
-        let _ = refresh(inner, &window, &names, false);
+        let _ = refresh(inner, &window, &names, false, true);
     }
+}
+
+pub(crate) fn set_shell_visible(inner: &Arc<Inner>, visible: bool) {
+    if inner
+        .data_runtimes
+        .shell_visible
+        .swap(visible, Ordering::SeqCst)
+        != visible
+    {
+        let state = inner.state.lock().unwrap();
+        for (id, runtime) in inner.data_runtimes.windows.lock().unwrap().iter_mut() {
+            runtime.visible = liveness::visible(&state, id, visible);
+        }
+        drop(state);
+        run_due(inner, None);
+    }
+}
+
+fn run_due(inner: &Arc<Inner>, only_window: Option<&str>) -> Vec<JoinHandle<()>> {
+    let pending = {
+        let mut windows = inner.data_runtimes.windows.lock().unwrap();
+        let mut pending = Vec::new();
+        for (window, runtime) in windows
+            .iter_mut()
+            .filter(|(id, _)| only_window.is_none_or(|wanted| wanted == id.as_str()))
+        {
+            let names = runtime.compiled.source_order().to_vec();
+            let live = liveness::live_sources(runtime);
+            for name in names {
+                let source = &runtime.sources[&name];
+                let due = runtime.attached > 0
+                    && runtime.visible
+                    && live.contains(&name)
+                    && liveness::deps_ready(runtime, &name)
+                    && !source.in_flight
+                    && !matches!(source.plan, SourcePlan::Idle | SourcePlan::Invalid(_))
+                    && source
+                        .waiting
+                        .is_none_or(|until| until <= chrono::Utc::now())
+                    && match (
+                        source.last_fetched,
+                        runtime.definition.sources[&name].refresh_secs(),
+                    ) {
+                        (None, _) => true,
+                        (_, _) if source.waiting.is_some() => true,
+                        (Some(at), Some(secs)) => at.elapsed() >= Duration::from_secs(secs.into()),
+                        (Some(_), None) => false,
+                    };
+                if due {
+                    if let Some(job) = prepare(&inner.data_runtimes, runtime, window, &name, false)
+                    {
+                        pending.push(job);
+                    }
+                }
+            }
+            let meta = runtime.source_meta();
+            let changed: BTreeSet<_> = meta
+                .iter()
+                .filter(|(name, value)| runtime.last.source_meta.get(*name) != Some(*value))
+                .map(|(name, _)| name.clone())
+                .collect();
+            if !changed.is_empty() {
+                let selected = runtime.selected_for(&BTreeSet::new(), &changed);
+                let next = runtime.view_selected(&selected);
+                if let Some(delta) = runtime.diff_view(next).filter(|_| runtime.attached > 0) {
+                    let _ =
+                        inner
+                            .data_runtimes
+                            .events
+                            .send((window.clone(), runtime.version, delta));
+                }
+            }
+        }
+        pending
+    };
+    jobs(inner, pending)
 }
 
 pub(crate) fn start_timer(inner: Weak<Inner>) {
@@ -1058,40 +1402,7 @@ pub(crate) fn start_timer(inner: Weak<Inner>) {
         let Some(inner) = inner.upgrade() else {
             return;
         };
-        let due: Vec<_> = {
-            let mut windows = inner.data_runtimes.windows.lock().unwrap();
-            windows
-                .iter_mut()
-                .filter(|(_, runtime)| runtime.attached > 0)
-                .filter_map(|(window, runtime)| {
-                    if runtime.source_meta() != runtime.last.source_meta {
-                        if let Some(delta) = runtime.diff() {
-                            let _ = inner.data_runtimes.events.send((
-                                window.clone(),
-                                runtime.version,
-                                delta,
-                            ));
-                        }
-                    }
-                    let names: Vec<_> = runtime
-                        .sources
-                        .iter()
-                        .filter_map(|(name, source)| {
-                            let secs = runtime.definition.sources[name].refresh_secs()?;
-                            (!source.in_flight
-                                && source.last_fetched.is_some_and(|t| {
-                                    t.elapsed() >= Duration::from_secs(secs.into())
-                                }))
-                            .then_some(name.clone())
-                        })
-                        .collect();
-                    (!names.is_empty()).then_some((window.clone(), names))
-                })
-                .collect()
-        };
-        for (window, names) in due {
-            let _ = refresh(&inner, &window, &names, false);
-        }
+        run_due(&inner, None);
     });
 }
 
@@ -1100,6 +1411,14 @@ mod freshness_tests {
     use super::*;
     use kaleidoscope_contract::validate::parse_app_definition;
     use serde_json::json;
+
+    #[test]
+    fn 한도_기본_대기는_두_배씩_늘고_600초에서_멈춘다() {
+        assert_eq!(
+            (1..=7).map(backoff_seconds).collect::<Vec<_>>(),
+            vec![30, 60, 120, 240, 480, 600, 600]
+        );
+    }
 
     fn request_plan() -> SourcePlan {
         SourcePlan::Request {
@@ -1120,12 +1439,17 @@ mod freshness_tests {
         )
     }
 
-    fn seed_request_cache(runtime: &mut Runtime, plan: &SourcePlan, value: Value) {
-        let key = request_cache_key(plan, SourceFormat::Json).unwrap();
+    fn seed_request_cache(
+        manager: &DataRuntimes,
+        runtime: &Runtime,
+        plan: &SourcePlan,
+        value: Value,
+    ) {
+        let key = request_cache_key(&runtime.definition.id, plan, SourceFormat::Json).unwrap();
         let fetched_at = chrono::Utc::now();
         let fetched_instant = Instant::now();
         request_cache_store(
-            runtime,
+            manager,
             key,
             CachedRequest {
                 value,
@@ -1163,7 +1487,7 @@ mod freshness_tests {
         let meta = &runtime.source_meta()["item"];
         assert!(meta.stale && meta.updated_at.is_some());
         assert_eq!(runtime.data["item"]["value"], 1);
-        prepare(&manager, &mut runtime, "window", "item");
+        prepare(&manager, &mut runtime, "window", "item", false);
         assert!(runtime.source_meta()["item"].stale);
         let next = SourcePlan::File {
             permission: "file".into(),
@@ -1182,7 +1506,8 @@ mod freshness_tests {
         let request = request_plan();
         assert!(set_plan(&manager, &mut runtime, "stories", request.clone()));
         seed_request_cache(
-            &mut runtime,
+            &manager,
+            &runtime,
             &request,
             json!({"hits":[{"objectID":"cached","title":"캐시"}]}),
         );
@@ -1201,7 +1526,13 @@ mod freshness_tests {
             runtime.sources["stories"].status,
             SourceStatus::Ready { .. }
         ));
-        assert!(!should_prepare_after_plan(&runtime, "stories", true, true));
+        assert!(!should_prepare_after_plan(
+            &runtime,
+            &liveness::live_sources(&runtime),
+            "stories",
+            true,
+            true
+        ));
         let selected = runtime.selected_for(&BTreeSet::new(), &BTreeSet::from(["stories".into()]));
         let incremental = runtime.view_selected(&selected);
         assert_eq!(incremental.values, runtime.view().values);
@@ -1213,7 +1544,7 @@ mod freshness_tests {
         let mut runtime = request_runtime();
         let request = request_plan();
         assert!(set_plan(&manager, &mut runtime, "stories", request.clone()));
-        seed_request_cache(&mut runtime, &request, json!({"cached":true}));
+        seed_request_cache(&manager, &runtime, &request, json!({"cached":true}));
         runtime
             .data
             .insert("stories".into(), json!({"cached":true}));
@@ -1221,7 +1552,7 @@ mod freshness_tests {
             updated_at: crate::state_commands::timestamp(),
         };
 
-        let job = prepare(&manager, &mut runtime, "window", "stories").unwrap();
+        let job = prepare(&manager, &mut runtime, "window", "stories", true).unwrap();
         assert_eq!(job.plan, request);
         assert!(matches!(
             runtime.sources["stories"].status,

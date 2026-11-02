@@ -245,6 +245,17 @@ impl Drop for Core {
 }
 
 impl Core {
+    /// 쉘의 최소화 상태를 데이터 원천 실행에 반영한다.
+    pub fn set_shell_visible(&self, visible: bool) {
+        data_runtime::set_shell_visible(&self.inner, visible);
+    }
+
+    pub fn shell_visible(&self) -> bool {
+        self.inner
+            .data_runtimes
+            .shell_visible
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
     pub fn open(config: CoreConfig, host: Arc<dyn Host>) -> Result<Core, CoreError> {
         let registry = Arc::new(HttpRegistryClient::new());
         Self::open_with_client(config, host, registry)
@@ -414,7 +425,7 @@ impl Core {
             CoreRequest::WindowMaximize { window_id } => ("window.maximize", Some(window_id)),
             CoreRequest::WindowRestore { window_id } => ("window.restore", Some(window_id)),
             CoreRequest::DataAct { window_id, .. } => ("data.act", Some(window_id)),
-            CoreRequest::DataAttach { window_id } => ("data.attach", Some(window_id)),
+            CoreRequest::DataAttach { window_id, .. } => ("data.attach", Some(window_id)),
             CoreRequest::DataRefresh { window_id, .. } => ("data.refresh", Some(window_id)),
             _ => ("명령", None),
         };
@@ -649,7 +660,12 @@ impl Core {
                 share::view(&self.inner, &window_id, view)
             }
             CoreRequest::UpdateRestart {} => self.restart_for_update(),
-            CoreRequest::DataAttach { window_id } => data_runtime::attach(&self.inner, &window_id),
+            CoreRequest::DataAttach { window_id, dormant } => {
+                data_runtime::attach(&self.inner, &window_id, Some(dormant))
+            }
+            CoreRequest::DataDormant { window_id, dormant } => {
+                data_runtime::dormant(&self.inner, &window_id, dormant)
+            }
             CoreRequest::DataDetach { window_id } => data_runtime::detach(&self.inner, &window_id),
             CoreRequest::DataAct {
                 window_id,
@@ -658,7 +674,7 @@ impl Core {
                 item,
             } => data_runtime::act(&self.inner, &window_id, &pointer, event, item),
             CoreRequest::DataRefresh { window_id, sources } => {
-                data_runtime::refresh(&self.inner, &window_id, &sources, false)?;
+                data_runtime::refresh(&self.inner, &window_id, &sources, false, true)?;
                 Ok(CoreReply::DataRefresh {})
             }
             CoreRequest::DataMedia {

@@ -305,6 +305,16 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![core, core_bytes])
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Resized(_)) {
+                if let (Some(core), Ok(minimized)) = (
+                    window.app_handle().try_state::<Arc<Core>>(),
+                    window.is_minimized(),
+                ) {
+                    core.set_shell_visible(!minimized);
+                }
+            }
+        })
         .build(tauri::generate_context!())
         .expect("error while building kaleidoscope application")
         .run(|app, event| {

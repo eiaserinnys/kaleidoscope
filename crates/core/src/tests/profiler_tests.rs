@@ -21,6 +21,7 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
     let calculator = open_window(&core, &desktop, "calculator");
     core.handle(CoreRequest::DataAttach {
         window_id: calculator.clone(),
+        dormant: vec![],
     })
     .unwrap();
     core.handle(CoreRequest::DataAct {
@@ -45,6 +46,7 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
     .unwrap();
     core.handle(CoreRequest::DataAttach {
         window_id: profiler.clone(),
+        dormant: vec![],
     })
     .unwrap();
     core.handle(CoreRequest::DataAct {
@@ -240,6 +242,7 @@ fn action_preserves_completed_state_when_later_step_fails() {
     let window = open_window(&core, &desktop, "failure-test");
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     assert!(core
@@ -311,6 +314,7 @@ fn responsiveness_benchmark_compares_legacy_and_optimized_paths() {
     let window = open_window(&core, &desktop, "speed-test");
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     let mut values = app.state.clone();
