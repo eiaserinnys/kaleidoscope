@@ -19,7 +19,7 @@
   client.handle("set_viewport", ({ event }) => {
     viewport.start = event.start;
     viewport.end = event.end;
-    publish(`보이는 구간 ${Math.round(event.start)}–${Math.round(event.end)}초`);
+    client.publish({ viewport });
   });
   client.handle("edit", ({ event, modifiers }) => {
     if (event.phase === "cancel") {
