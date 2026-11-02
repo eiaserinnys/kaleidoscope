@@ -19,7 +19,7 @@ use crate::Inner;
 pub(crate) fn registry_error_to_core(error: RegistryError, message: &str) -> CoreError {
     match error {
         RegistryError::Validation(error) => error,
-        RegistryError::Failure(detail) => CoreError {
+        RegistryError::Failure { detail, .. } => CoreError {
             id: None,
             code: ErrorCode::Server,
             message: message.into(),
@@ -85,7 +85,10 @@ pub(crate) fn start(
         .map_err(|error| {
             let host = url.host_str().unwrap_or("알 수 없는 서버");
             match error {
-                RegistryError::Validation(error) => error,
+                RegistryError::Validation(mut error) => {
+                    error.code = ErrorCode::Server;
+                    error
+                }
                 RegistryError::Unauthorized => {
                     let mut error = errors::CONN_LINK_START_REJECTED(host);
                     error.details = vec![format!("HTTP 401; host={host}")];
@@ -96,13 +99,18 @@ pub(crate) fn start(
                     error.details = vec![format!("HTTP 404; host={host}")];
                     error
                 }
-                RegistryError::Failure(detail) if detail.starts_with("요청 전송 실패:") => {
-                    let mut error = errors::CONN_LINK_START_UNREACHABLE(host);
-                    error.details = vec![detail];
-                    error
-                }
-                RegistryError::Failure(detail) => {
-                    let mut error = errors::CONN_LINK_START_REJECTED(host);
+                RegistryError::Failure { stage, detail } => {
+                    let mut error = match stage {
+                        crate::registry_client::FailureStage::Send => {
+                            errors::CONN_LINK_START_UNREACHABLE(host)
+                        }
+                        crate::registry_client::FailureStage::Status => {
+                            errors::CONN_LINK_START_REJECTED(host)
+                        }
+                        crate::registry_client::FailureStage::Read => {
+                            errors::CONN_LINK_START_RESPONSE_READ_FAILED(host)
+                        }
+                    };
                     error.details = vec![detail];
                     error
                 }
@@ -231,14 +239,18 @@ pub(crate) fn import_app(
                 Err(RegistryError::NotFound) => {
                     return Err(errors::CONN_LINK_IMPORT_NOT_FOUND(&host));
                 }
-                Err(RegistryError::Failure(detail)) if detail.starts_with("요청 전송 실패:") =>
-                {
-                    let mut error = errors::CONN_LINK_IMPORT_UNREACHABLE(&host);
-                    error.details = vec![detail];
-                    return Err(error);
-                }
-                Err(RegistryError::Failure(detail)) => {
-                    let mut error = errors::CONN_LINK_IMPORT_REJECTED(&host);
+                Err(RegistryError::Failure { stage, detail }) => {
+                    let mut error = match stage {
+                        crate::registry_client::FailureStage::Send => {
+                            errors::CONN_LINK_IMPORT_UNREACHABLE(&host)
+                        }
+                        crate::registry_client::FailureStage::Status => {
+                            errors::CONN_LINK_IMPORT_REJECTED(&host)
+                        }
+                        crate::registry_client::FailureStage::Read => {
+                            errors::CONN_LINK_IMPORT_RESPONSE_READ_FAILED(&host)
+                        }
+                    };
                     error.details = vec![detail];
                     return Err(error);
                 }
@@ -521,7 +533,7 @@ fn emit_state(inner: &Arc<Inner>) {
 
 fn registry_failure_line(error: RegistryError) -> String {
     match error {
-        RegistryError::Failure(message) => one_line(&message),
+        RegistryError::Failure { detail, .. } => one_line(&detail),
         RegistryError::Unauthorized => "기기 연결이 거부되었습니다".into(),
         RegistryError::NotFound => "연결 정보를 찾을 수 없습니다".into(),
         RegistryError::Validation(error) => one_line(&error.message),

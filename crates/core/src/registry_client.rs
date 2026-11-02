@@ -19,11 +19,17 @@ use kaleidoscope_contract::{errors, CoreError};
 
 fn raw_app_value_item_url(url: &str, app: &str, key: &str) -> Result<reqwest::Url, RegistryError> {
     let base = format!("{}/api/device/app-values/{app}/", url.trim_end_matches('/'));
-    let mut address = reqwest::Url::parse(&base)
-        .map_err(|_| RegistryError::Failure("앱 저장소 서버 주소가 올바르지 않습니다".into()))?;
+    let mut address = reqwest::Url::parse(&base).map_err(|_| {
+        RegistryError::failure(
+            FailureStage::Send,
+            "앱 저장소 서버 주소가 올바르지 않습니다",
+        )
+    })?;
     address
         .path_segments_mut()
-        .map_err(|_| RegistryError::Failure("앱 저장소 주소를 만들 수 없습니다.".into()))?
+        .map_err(|_| {
+            RegistryError::failure(FailureStage::Send, "앱 저장소 주소를 만들 수 없습니다.")
+        })?
         .pop_if_empty()
         .extend(key.split('/'));
     Ok(address)
@@ -34,7 +40,23 @@ pub(crate) enum RegistryError {
     Unauthorized,
     NotFound,
     Validation(CoreError),
-    Failure(String),
+    Failure { stage: FailureStage, detail: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FailureStage {
+    Send,
+    Status,
+    Read,
+}
+
+impl RegistryError {
+    pub(crate) fn failure(stage: FailureStage, detail: impl Into<String>) -> Self {
+        Self::Failure {
+            stage,
+            detail: detail.into(),
+        }
+    }
 }
 
 pub(crate) struct AssetDownload {
@@ -51,7 +73,10 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         _app: &str,
         _request: &kaleidoscope_contract::worker::WorkerInvokeRequest,
     ) -> Result<kaleidoscope_contract::worker::WorkerInvokeReply, RegistryError> {
-        Err(RegistryError::Failure("worker unavailable".into()))
+        Err(RegistryError::failure(
+            FailureStage::Send,
+            "worker unavailable",
+        ))
     }
     fn values_list(
         &self,
@@ -138,7 +163,10 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         _id: &str,
         _version: u32,
     ) -> Result<AssetDownload, RegistryError> {
-        Err(RegistryError::Failure("asset unavailable".into()))
+        Err(RegistryError::failure(
+            FailureStage::Send,
+            "asset unavailable",
+        ))
     }
     fn storage_list(
         &self,
@@ -147,7 +175,10 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         _app: &str,
         _workspace: &str,
     ) -> Result<StorageListReply, RegistryError> {
-        Err(RegistryError::Failure("storage unavailable".into()))
+        Err(RegistryError::failure(
+            FailureStage::Send,
+            "storage unavailable",
+        ))
     }
     fn storage_get(
         &self,
@@ -157,7 +188,10 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         _entry: &str,
         _workspace: &str,
     ) -> Result<StorageReadReply, RegistryError> {
-        Err(RegistryError::Failure("storage unavailable".into()))
+        Err(RegistryError::failure(
+            FailureStage::Send,
+            "storage unavailable",
+        ))
     }
     fn storage_write(
         &self,
@@ -168,7 +202,10 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         _workspace: &str,
         _request: &StorageWriteRequest,
     ) -> Result<StorageWriteReply, RegistryError> {
-        Err(RegistryError::Failure("storage unavailable".into()))
+        Err(RegistryError::failure(
+            FailureStage::Send,
+            "storage unavailable",
+        ))
     }
     fn storage_reset(
         &self,
@@ -179,7 +216,10 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         _workspace: &str,
         _request: &StorageResetRequest,
     ) -> Result<StorageResetReply, RegistryError> {
-        Err(RegistryError::Failure("storage unavailable".into()))
+        Err(RegistryError::failure(
+            FailureStage::Send,
+            "storage unavailable",
+        ))
     }
     fn storage_collection_list(
         &self,
@@ -189,7 +229,10 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         _entry: &str,
         _workspace: &str,
     ) -> Result<CollectionListReply, RegistryError> {
-        Err(RegistryError::Failure("storage unavailable".into()))
+        Err(RegistryError::failure(
+            FailureStage::Send,
+            "storage unavailable",
+        ))
     }
     fn storage_document_get(
         &self,
@@ -200,7 +243,10 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         _doc: &str,
         _workspace: &str,
     ) -> Result<StorageReadReply, RegistryError> {
-        Err(RegistryError::Failure("storage unavailable".into()))
+        Err(RegistryError::failure(
+            FailureStage::Send,
+            "storage unavailable",
+        ))
     }
     fn storage_document_write(
         &self,
@@ -212,7 +258,10 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         _workspace: &str,
         _request: &StorageWriteRequest,
     ) -> Result<StorageWriteReply, RegistryError> {
-        Err(RegistryError::Failure("storage unavailable".into()))
+        Err(RegistryError::failure(
+            FailureStage::Send,
+            "storage unavailable",
+        ))
     }
     fn storage_document_reset(
         &self,
@@ -224,7 +273,10 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         _workspace: &str,
         _request: &StorageResetRequest,
     ) -> Result<StorageResetReply, RegistryError> {
-        Err(RegistryError::Failure("storage unavailable".into()))
+        Err(RegistryError::failure(
+            FailureStage::Send,
+            "storage unavailable",
+        ))
     }
     fn storage_document_move(
         &self,
@@ -235,7 +287,10 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         _workspace: &str,
         _request: &CollectionMove,
     ) -> Result<CollectionMoveReply, RegistryError> {
-        Err(RegistryError::Failure("storage unavailable".into()))
+        Err(RegistryError::failure(
+            FailureStage::Send,
+            "storage unavailable",
+        ))
     }
     fn connection_request(
         &self,
@@ -319,7 +374,7 @@ impl HttpRegistryClient {
                     .connect_timeout(Duration::from_secs(10))
                     .timeout(Duration::from_secs(15))
                     .build()
-                    .map_err(|error| RegistryError::Failure(error.to_string()))
+                    .map_err(|error| RegistryError::failure(FailureStage::Send, error.to_string()))
             })
             .as_ref()
             .map_err(Clone::clone)
@@ -334,7 +389,7 @@ impl HttpRegistryClient {
                         kaleidoscope_contract::registry::STREAM_IDLE_TIMEOUT_SECS,
                     ))
                     .build()
-                    .map_err(|error| RegistryError::Failure(error.to_string()))
+                    .map_err(|error| RegistryError::failure(FailureStage::Send, error.to_string()))
             })
             .as_ref()
             .map_err(Clone::clone)
@@ -548,11 +603,14 @@ impl RegistryClient for HttpRegistryClient {
             .send()
             .map_err(request_failure)?;
         if !response.status().is_success() {
-            return Err(RegistryError::Failure(format!(
-                "HTTP {}; host={}",
-                response.status(),
-                response_host(&response)
-            )));
+            return Err(RegistryError::failure(
+                FailureStage::Status,
+                format!(
+                    "HTTP {}; host={}",
+                    response.status(),
+                    response_host(&response)
+                ),
+            ));
         }
         let hash = response
             .headers()
@@ -560,7 +618,7 @@ impl RegistryClient for HttpRegistryClient {
             .and_then(|value| value.to_str().ok())
             .map(|value| value.trim_matches('"').to_owned())
             .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
-            .ok_or_else(|| RegistryError::Failure("자산 해시가 없습니다".into()))?;
+            .ok_or_else(|| RegistryError::failure(FailureStage::Read, "자산 해시가 없습니다"))?;
         let mime = response
             .headers()
             .get(reqwest::header::CONTENT_TYPE)
@@ -574,14 +632,18 @@ impl RegistryClient for HttpRegistryClient {
             .take(kaleidoscope_contract::data::MEDIA_MAX_BYTES + 1)
             .read_to_end(&mut bytes)
             .map_err(|error| {
-                RegistryError::Failure(format!("자산 응답을 읽지 못했습니다: {error}; host={host}"))
+                RegistryError::failure(
+                    FailureStage::Read,
+                    format!("자산 응답을 읽지 못했습니다: {error}; host={host}"),
+                )
             })?;
         if bytes.len() as u64 > kaleidoscope_contract::data::MEDIA_MAX_BYTES
             || size.is_some_and(|size| size != bytes.len() as u64)
             || format!("{:x}", Sha256::digest(&bytes)) != hash
         {
-            return Err(RegistryError::Failure(
-                "자산 크기 또는 해시가 올바르지 않습니다".into(),
+            return Err(RegistryError::failure(
+                FailureStage::Read,
+                "자산 크기 또는 해시가 올바르지 않습니다",
             ));
         }
         Ok(AssetDownload {
@@ -978,8 +1040,8 @@ fn storage_success_json<T: serde::de::DeserializeOwned>(
     }
     let body = response.bytes().unwrap_or_default();
     if status.as_u16() == 409 {
-        let conflict: StorageConflict =
-            serde_json::from_slice(&body).map_err(|e| RegistryError::Failure(e.to_string()))?;
+        let conflict: StorageConflict = serde_json::from_slice(&body)
+            .map_err(|e| RegistryError::failure(FailureStage::Read, e.to_string()))?;
         let current_revision = format!(
             "current_revision={}",
             conflict.current_revision.as_deref().unwrap_or("null")
@@ -1022,9 +1084,10 @@ fn check_status(status: reqwest::StatusCode, body: &[u8], host: &str) -> Result<
                 error.details.push(format!("HTTP {status}; host={host}"));
                 Err(RegistryError::Validation(error))
             }
-            Err(_) => Err(RegistryError::Failure(format!(
-                "서버 검사 오류를 읽을 수 없습니다; HTTP {status}; host={host}"
-            ))),
+            Err(_) => Err(RegistryError::failure(
+                FailureStage::Read,
+                format!("서버 검사 오류를 읽을 수 없습니다; HTTP {status}; host={host}"),
+            )),
         },
         _ => Err(status_failure(status, host)),
     }
@@ -1036,10 +1099,10 @@ fn request_failure(error: reqwest::Error) -> RegistryError {
         .and_then(reqwest::Url::host_str)
         .unwrap_or("알 수 없는 서버")
         .to_owned();
-    RegistryError::Failure(format!(
-        "요청 전송 실패: {}; host={host}",
-        error.without_url()
-    ))
+    RegistryError::failure(
+        FailureStage::Send,
+        format!("요청 전송 실패: {}; host={host}", error.without_url()),
+    )
 }
 
 fn response_read_failure(error: reqwest::Error) -> RegistryError {
@@ -1048,10 +1111,13 @@ fn response_read_failure(error: reqwest::Error) -> RegistryError {
         .and_then(reqwest::Url::host_str)
         .unwrap_or("알 수 없는 서버")
         .to_owned();
-    RegistryError::Failure(format!(
-        "서버 응답을 읽지 못했습니다: {}; host={host}",
-        error.without_url()
-    ))
+    RegistryError::failure(
+        FailureStage::Read,
+        format!(
+            "서버 응답을 읽지 못했습니다: {}; host={host}",
+            error.without_url()
+        ),
+    )
 }
 
 fn response_host(response: &reqwest::blocking::Response) -> String {
@@ -1063,7 +1129,7 @@ fn response_host(response: &reqwest::blocking::Response) -> String {
 }
 
 fn status_failure(status: reqwest::StatusCode, host: &str) -> RegistryError {
-    RegistryError::Failure(format!("HTTP {status}; host={host}"))
+    RegistryError::failure(FailureStage::Status, format!("HTTP {status}; host={host}"))
 }
 
 pub(crate) fn parse_event_line(line: &str) -> Option<DeviceEvent> {

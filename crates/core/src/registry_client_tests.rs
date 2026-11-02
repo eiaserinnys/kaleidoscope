@@ -141,6 +141,31 @@ fn storage_write_conflict_preserves_server_error_and_adds_current_revision() {
 }
 
 #[test]
+fn request_failure_does_not_expose_url_query_keys() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    drop(listener);
+    let url = format!("http://{address}/api?api_key=secret-query-key");
+    let error = reqwest::blocking::Client::new()
+        .get(url)
+        .send()
+        .unwrap_err();
+
+    let error = request_failure(error);
+
+    match error {
+        RegistryError::Failure {
+            stage: crate::registry_client::FailureStage::Send,
+            detail,
+        } => {
+            assert!(!detail.contains("api_key"));
+            assert!(!detail.contains("secret-query-key"));
+        }
+        error => panic!("unexpected registry error: {error:?}"),
+    }
+}
+
+#[test]
 fn events_send_supported_header() {
     let server = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = server.local_addr().unwrap();
@@ -256,6 +281,7 @@ fn layout_changes_posts_and_classifies_responses() {
     assert!(matches!(result, Err(RegistryError::Validation(error))
             if error.code == expected_error.code
                 && error.id.as_deref() == expected_error.id.as_deref()
+                && error.message == expected_error.message
                 && error.details.iter().any(|detail| detail.contains("HTTP 400"))));
     worker.join().unwrap();
     let (url, worker) = server("401 Unauthorized", "{}".into());
@@ -267,7 +293,10 @@ fn layout_changes_posts_and_classifies_responses() {
     let (url, worker) = server("404 Not Found", "{}".into());
     assert!(matches!(
         HttpRegistryClient::new().push_layout_changes(&url, "token", &changes),
-        Err(RegistryError::Failure(_))
+        Err(RegistryError::Failure {
+            stage: crate::registry_client::FailureStage::Status,
+            ..
+        })
     ));
     worker.join().unwrap();
 }

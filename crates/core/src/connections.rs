@@ -153,7 +153,8 @@ pub(crate) fn request(
                         .and_then(|url| url.host_str().map(str::to_owned))
                         .unwrap_or_else(|| "알 수 없는 서버".into());
                     match err {
-                        crate::registry_client::RegistryError::Validation(error) => {
+                        crate::registry_client::RegistryError::Validation(mut error) => {
+                            error.code = kaleidoscope_contract::ErrorCode::Server;
                             RequestError::Core(error)
                         }
                         crate::registry_client::RegistryError::Unauthorized => {
@@ -166,16 +167,21 @@ pub(crate) fn request(
                             error.details = vec![format!("HTTP 404; host={host}")];
                             RequestError::Core(error)
                         }
-                        crate::registry_client::RegistryError::Failure(detail)
-                            if detail.starts_with("요청 전송 실패:") =>
-                        {
-                            let mut error =
-                                errors::CONN_REQUEST_RELAY_UNREACHABLE(&connection, &host);
-                            error.details = vec![detail];
-                            RequestError::Core(error)
-                        }
-                        crate::registry_client::RegistryError::Failure(detail) => {
-                            let mut error = errors::CONN_REQUEST_RELAY_REJECTED(&connection, &host);
+                        crate::registry_client::RegistryError::Failure { stage, detail } => {
+                            let mut error = match stage {
+                                crate::registry_client::FailureStage::Send => {
+                                    errors::CONN_REQUEST_RELAY_UNREACHABLE(&connection, &host)
+                                }
+                                crate::registry_client::FailureStage::Status => {
+                                    errors::CONN_REQUEST_RELAY_REJECTED(&connection, &host)
+                                }
+                                crate::registry_client::FailureStage::Read => {
+                                    errors::CONN_REQUEST_RELAY_RESPONSE_READ_FAILED(
+                                        &connection,
+                                        &host,
+                                    )
+                                }
+                            };
                             error.details = vec![detail];
                             RequestError::Core(error)
                         }

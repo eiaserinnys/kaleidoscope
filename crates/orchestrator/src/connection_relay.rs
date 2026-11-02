@@ -153,7 +153,7 @@ impl AppState {
             let header_name = HeaderName::from_bytes(name.as_bytes()).map_err(|_| {
                 (
                     StatusCode::BAD_GATEWAY,
-                    errors::CONN_RELAY_HEADER_INVALID(&connection_name),
+                    errors::CONN_RELAY_HEADER_NAME_INVALID(&connection_name),
                 )
             })?;
             if value.contains("${env:") {
@@ -168,7 +168,7 @@ impl AppState {
             let header_value = HeaderValue::from_str(value).map_err(|_| {
                 (
                     StatusCode::BAD_GATEWAY,
-                    errors::CONN_RELAY_HEADER_INVALID(&connection_name),
+                    errors::CONN_RELAY_HEADER_VALUE_INVALID(&connection_name),
                 )
             })?;
             outgoing = outgoing.header(header_name, header_value);

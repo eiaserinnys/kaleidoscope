@@ -878,8 +878,10 @@ fn source_safety_failed_refresh_keeps_value_and_reports_error_in_layout() {
                 Some(SourceStatus::Failed {
                     has_value: true,
                     id,
+                    message,
                     ..
                 }) if id.as_deref() == Some("CONN_REQUEST_SERVER_RESPONSE_FAILED")
+                    && message == "원격 연결 요청이 실패했습니다. 연결 설정과 서버 상태를 확인하세요."
             ) {
                 assert!(!view.values.contains_key("/ui/children/0/items"));
                 failed = true;

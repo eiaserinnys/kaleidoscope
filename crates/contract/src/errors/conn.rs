@@ -10,35 +10,49 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "서버 연결 시작",
         cause: "연결 요청을 서버에 보내지 못했다",
-        message: "kaleidoscope 서버 {host}에 연결할 수 없습니다. 서버 주소와 네트워크를 확인한 뒤 다시 시도하세요.",
+        message: "kaleidoscope 서버({host})에 연결할 수 없습니다. 서버 주소와 네트워크를 확인한 뒤 다시 시도하세요.",
         fix: "서버 주소와 네트워크 연결을 확인하세요"
     }
     CONN_LINK_START_REJECTED(host) {
         class: Server,
         place: "서버 연결 시작",
         cause: "서버가 연결 시작 요청을 실패로 응답했다",
-        message: "kaleidoscope 서버 {host}가 연결 요청을 처리하지 못했습니다. 잠시 뒤 다시 시도하세요.",
+        message: "kaleidoscope 서버({host})가 연결 요청을 처리하지 못했습니다. 잠시 뒤 다시 시도하세요.",
+        fix: "서버 상태를 확인한 뒤 다시 시도하세요"
+    }
+    CONN_LINK_START_RESPONSE_READ_FAILED(host) {
+        class: Server,
+        place: "서버 연결 시작 응답 읽기",
+        cause: "연결 시작 응답을 읽거나 해석하지 못했다",
+        message: "kaleidoscope 서버({host})의 연결 응답을 읽지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
         fix: "서버 상태를 확인한 뒤 다시 시도하세요"
     }
     CONN_LINK_IMPORT_UNREACHABLE(host) {
         class: Server,
         place: "연결된 서버에서 앱 가져오기",
         cause: "앱 가져오기 요청을 서버에 보내지 못했다",
-        message: "kaleidoscope 서버 {host}에 연결할 수 없어 앱을 가져오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도하세요.",
+        message: "kaleidoscope 서버({host})에 연결할 수 없어 앱을 가져오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도하세요.",
         fix: "서버 연결 상태를 확인하세요"
     }
     CONN_LINK_IMPORT_REJECTED(host) {
         class: Server,
         place: "연결된 서버에서 앱 가져오기",
         cause: "서버가 앱 가져오기 요청을 실패로 응답했다",
-        message: "kaleidoscope 서버 {host}가 앱 가져오기 요청을 처리하지 못했습니다. 앱과 서버 상태를 확인한 뒤 다시 시도하세요.",
+        message: "kaleidoscope 서버({host})가 앱 가져오기 요청을 처리하지 못했습니다. 앱과 서버 상태를 확인한 뒤 다시 시도하세요.",
         fix: "앱 정의와 서버 상태를 확인하세요"
+    }
+    CONN_LINK_IMPORT_RESPONSE_READ_FAILED(host) {
+        class: Server,
+        place: "연결된 서버의 앱 가져오기 응답 읽기",
+        cause: "앱 가져오기 응답을 읽거나 해석하지 못했다",
+        message: "kaleidoscope 서버({host})의 앱 응답을 읽지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
+        fix: "서버 상태를 확인한 뒤 다시 시도하세요"
     }
     CONN_LINK_IMPORT_UNAUTHORIZED(host) {
         class: Server,
         place: "연결된 서버에서 앱 가져오기",
         cause: "서버가 기기 인증을 거부했다",
-        message: "kaleidoscope 서버 {host}가 이 기기의 인증을 거부했습니다. 기기를 다시 연결한 뒤 앱을 가져오세요.",
+        message: "kaleidoscope 서버({host})가 이 기기의 인증을 거부했습니다. 기기를 다시 연결한 뒤 앱을 가져오세요.",
         fix: "기기를 다시 연결하세요"
     }
     CONN_LINK_IMPORT_NOT_FOUND(host) {
@@ -101,8 +115,15 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "연결 요청 중계",
         cause: "서버가 연결 요청을 실패로 응답했다",
-        message: "연결 {connection}의 서버 {host}가 요청을 처리하지 못했습니다. 연결 설정과 서버 상태를 확인하세요.",
+        message: "연결 {connection}의 서버({host})가 요청을 처리하지 못했습니다. 연결 설정과 서버 상태를 확인하세요.",
         fix: "연결 설정과 서버 상태를 확인하세요"
+    }
+    CONN_REQUEST_RELAY_RESPONSE_READ_FAILED(connection, host) {
+        class: Server,
+        place: "연결 요청 중계 응답 읽기",
+        cause: "연결 요청 응답을 읽거나 해석하지 못했다",
+        message: "연결 {connection}의 서버({host}) 응답을 읽지 못했습니다. 연결 상태를 확인한 뒤 다시 시도하세요.",
+        fix: "연결 상태를 확인한 뒤 다시 시도하세요"
     }
     CONN_REQUEST_OAUTH_CLIENT_FAILED(connection) {
         class: Server,
@@ -112,7 +133,7 @@ error_catalog! { ENTRIES;
         fix: "잠시 뒤 다시 시도하세요"
     }
     CONN_REQUEST_OAUTH_METHOD_INVALID(connection) {
-        class: InvalidRequest,
+        class: Server,
         place: "OAuth 연결 요청 준비",
         cause: "요청 방식이 HTTP 방식으로 올바르지 않다",
         message: "연결 {connection} 요청의 방식이 올바르지 않습니다. 앱 요청을 확인한 뒤 다시 시도하세요.",
@@ -192,7 +213,7 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "연결 로그인 서버 확인",
         cause: "OAuth 서버 확인 요청이 실패로 응답했다",
-        message: "연결 {connection}의 OAuth 서버 {host}가 서버 정보를 제공하지 않았습니다. 서버 주소와 상태를 확인하세요.",
+        message: "연결 {connection}의 OAuth 서버({host})가 서버 정보를 제공하지 않았습니다. 서버 주소와 상태를 확인하세요.",
         fix: "OAuth 서버 주소와 상태를 확인하세요"
     }
     CONN_LOGIN_OAUTH_METADATA_INVALID(connection, host) {
@@ -255,14 +276,14 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "연결 로그인 등록",
         cause: "OAuth 서버가 클라이언트 등록을 거부했다",
-        message: "연결 {connection}의 OAuth 서버 {host}가 클라이언트 등록을 거부했습니다. 서버 설정을 확인하세요.",
+        message: "연결 {connection}의 OAuth 서버({host})가 클라이언트 등록을 거부했습니다. 서버 설정을 확인하세요.",
         fix: "OAuth 서버의 클라이언트 등록 설정을 확인하세요"
     }
     CONN_LOGIN_CLIENT_REGISTER_RESPONSE_INVALID(connection, host) {
         class: Server,
         place: "연결 로그인 등록",
         cause: "OAuth 클라이언트 등록 응답에 클라이언트 식별자가 없다",
-        message: "연결 {connection}의 OAuth 서버 {host}가 올바르지 않은 등록 결과를 보냈습니다. 서버 설정을 확인하세요.",
+        message: "연결 {connection}의 OAuth 서버({host})가 올바르지 않은 등록 결과를 보냈습니다. 서버 설정을 확인하세요.",
         fix: "OAuth 서버의 등록 응답을 확인하세요"
     }
     CONN_LOGIN_CODE_EXCHANGE_UNREACHABLE(connection, host) {
@@ -276,7 +297,7 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "연결 로그인 코드 교환",
         cause: "OAuth 서버가 로그인 코드 교환을 거부했다",
-        message: "연결 {connection}의 OAuth 서버 {host}가 로그인을 완료하지 못했습니다. 다시 로그인하세요.",
+        message: "연결 {connection}의 OAuth 서버({host})가 로그인을 완료하지 못했습니다. 다시 로그인하세요.",
         fix: "다시 로그인하세요"
     }
     CONN_LOGIN_CODE_EXCHANGE_RESPONSE_INVALID(connection, host) {
@@ -325,7 +346,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "연결 로그인",
         cause: "같은 연결의 로그인이 이미 진행 중이다",
-        message: "연결 {connection}은 이미 로그인 중입니다. 진행 중인 로그인이 끝난 뒤 다시 시도하세요.",
+        message: "연결({connection})은 이미 로그인 중입니다. 진행 중인 로그인이 끝난 뒤 다시 시도하세요.",
         fix: "진행 중인 로그인 창에서 인증을 마치세요"
     }
     CONN_AUTHORIZE_WINDOW_NOT_FOUND() {
@@ -374,7 +395,7 @@ error_catalog! { ENTRIES;
         class: PermissionDenied,
         place: "연결 권한 확인",
         cause: "연결이 쓰기를 허용하지 않는다",
-        message: "연결 {connection}은 쓰기를 허용하지 않습니다. 읽기 요청을 사용하세요.",
+        message: "연결({connection})은 쓰기를 허용하지 않습니다. 읽기 요청을 사용하세요.",
         fix: "읽기 요청을 사용하세요"
     }
     CONN_RELAY_PERMISSION_MISSING(connection) {
@@ -399,7 +420,7 @@ error_catalog! { ENTRIES;
         fix: "앱 저장소 서버 상태를 확인하세요"
     }
     CONN_RELAY_CONNECTION_NOT_FOUND(connection) {
-        class: NotFound,
+        class: Server,
         place: "연결 중계 설정 조회",
         cause: "요청한 연결 설정이 없다",
         message: "연결 {connection} 설정을 찾지 못했습니다. 연결을 설정한 뒤 다시 시도하세요.",
@@ -409,14 +430,14 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "연결 중계 설정 확인",
         cause: "요청한 연결이 중계 방식이 아니다",
-        message: "연결 {connection}은 서버 중계를 사용하지 않습니다. 올바른 연결을 선택하세요.",
+        message: "연결({connection})은 서버 중계를 사용하지 않습니다. 올바른 연결을 선택하세요.",
         fix: "서버 중계 연결을 선택하세요"
     }
     CONN_RELAY_WRITE_DENIED(connection) {
         class: PermissionDenied,
         place: "연결 중계 권한 확인",
         cause: "앱 또는 연결이 쓰기를 허용하지 않는다",
-        message: "연결 {connection}은 쓰기를 허용하지 않습니다. 읽기 요청을 사용하세요.",
+        message: "연결({connection})은 쓰기를 허용하지 않습니다. 읽기 요청을 사용하세요.",
         fix: "읽기 요청을 사용하세요"
     }
     CONN_RELAY_PATH_INVALID(connection) {
@@ -440,12 +461,19 @@ error_catalog! { ENTRIES;
         message: "연결 {connection} 요청을 준비하지 못했습니다. 연결 설정을 확인한 뒤 다시 시도하세요.",
         fix: "연결 설정을 확인하세요"
     }
-    CONN_RELAY_HEADER_INVALID(connection) {
+    CONN_RELAY_HEADER_NAME_INVALID(connection) {
         class: Server,
-        place: "연결 중계 헤더 읽기",
-        cause: "연결 헤더 이름이나 값이 올바르지 않다",
-        message: "연결 {connection}의 헤더 설정이 올바르지 않습니다. 헤더 이름과 값을 확인하세요.",
-        fix: "연결 헤더 이름과 값을 확인하세요"
+        place: "연결 중계 헤더 이름 읽기",
+        cause: "연결 헤더 이름이 올바르지 않다",
+        message: "연결 {connection}의 헤더 이름이 올바르지 않습니다. 연결 헤더 설정을 고치세요.",
+        fix: "연결 헤더 이름을 고치세요"
+    }
+    CONN_RELAY_HEADER_VALUE_INVALID(connection) {
+        class: Server,
+        place: "연결 중계 헤더 값 읽기",
+        cause: "연결 헤더 값 형식이 올바르지 않다",
+        message: "연결 {connection}의 헤더 값 형식이 올바르지 않습니다. 연결 헤더 설정을 고치세요.",
+        fix: "연결 헤더 값을 고치세요"
     }
     CONN_RELAY_ENV_HEADER_UNSUPPORTED(connection) {
         class: Server,
@@ -536,6 +564,20 @@ error_catalog! { ENTRIES;
         place: "연결 헤더 설정 읽기",
         cause: "저장된 연결 헤더를 읽지 못했다",
         message: "연결 헤더 설정을 읽지 못했습니다. 연결 헤더를 다시 저장하세요.",
+        fix: "연결 헤더를 다시 저장하세요"
+    }
+    CONN_SETTING_LIST_PATHS_INVALID() {
+        class: Server,
+        place: "연결 목록의 경로 설정 읽기",
+        cause: "목록에 든 연결의 허용 경로를 읽지 못했다",
+        message: "연결 목록의 허용 경로 설정을 읽지 못했습니다. 연결 설정을 다시 저장하세요.",
+        fix: "연결 허용 경로를 다시 저장하세요"
+    }
+    CONN_SETTING_LIST_HEADERS_INVALID() {
+        class: Server,
+        place: "연결 목록의 헤더 설정 읽기",
+        cause: "목록에 든 연결의 헤더를 읽지 못했다",
+        message: "연결 목록의 헤더 설정을 읽지 못했습니다. 연결 설정을 다시 저장하세요.",
         fix: "연결 헤더를 다시 저장하세요"
     }
     CONN_SETTING_KIND_INVALID() {

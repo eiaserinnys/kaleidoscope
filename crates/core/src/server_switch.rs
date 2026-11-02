@@ -156,7 +156,7 @@ pub(crate) fn sync(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
     let local = inner
         .embedded_server
         .as_ref()
-        .ok_or_else(errors::SERVER_SWITCH_LOCAL_UNAVAILABLE)?;
+        .ok_or_else(errors::SERVER_SYNC_LOCAL_UNAVAILABLE)?;
     let generation = inner.generation.load(Ordering::SeqCst);
     let remote = inner
         .link_file
@@ -194,15 +194,18 @@ pub(crate) fn sync(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
                         error.details = vec![format!("HTTP 404; host={host}")];
                         error
                     }
-                    crate::registry_client::RegistryError::Failure(detail)
-                        if detail.starts_with("요청 전송 실패:") =>
-                    {
-                        let mut error = errors::SERVER_SYNC_LAYOUT_UNREACHABLE(&host);
-                        error.details = vec![detail];
-                        error
-                    }
-                    crate::registry_client::RegistryError::Failure(detail) => {
-                        let mut error = errors::SERVER_SYNC_LAYOUT_REJECTED(&host);
+                    crate::registry_client::RegistryError::Failure { stage, detail } => {
+                        let mut error = match stage {
+                            crate::registry_client::FailureStage::Send => {
+                                errors::SERVER_SYNC_LAYOUT_UNREACHABLE(&host)
+                            }
+                            crate::registry_client::FailureStage::Status => {
+                                errors::SERVER_SYNC_LAYOUT_REJECTED(&host)
+                            }
+                            crate::registry_client::FailureStage::Read => {
+                                errors::SERVER_SYNC_LAYOUT_RESPONSE_READ_FAILED(&host)
+                            }
+                        };
                         error.details = vec![detail];
                         error
                     }
@@ -230,7 +233,7 @@ pub(crate) fn sync(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
                 .ok()
                 .and_then(|url| url.host_str().map(str::to_owned))
                 .unwrap_or_else(|| "알 수 없는 서버".into());
-            let mut error = errors::SERVER_SYNC_UNREACHABLE(&host);
+            let mut error = errors::SERVER_SYNC_LOCAL_READ_UNREACHABLE(&host);
             error.details = vec![format!("{}; host={host}", detail.without_url())];
             error
         })?;
@@ -245,7 +248,7 @@ pub(crate) fn sync(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
             .url()
             .and_then(|url| url.host_str())
             .unwrap_or("알 수 없는 서버");
-        let mut error = errors::SERVER_SYNC_REJECTED(host);
+        let mut error = errors::SERVER_SYNC_LOCAL_READ_REJECTED(host);
         error.details = vec![format!(
             "HTTP {}; host={host}",
             detail

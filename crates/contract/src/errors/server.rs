@@ -20,6 +20,13 @@ error_catalog! { ENTRIES;
         message: "내 PC 서버를 사용할 수 없습니다. 내장 서버가 설정된 기기에서 다시 시도하세요.",
         fix: "내장 서버 설정을 확인하세요"
     }
+    SERVER_SYNC_LOCAL_UNAVAILABLE() {
+        class: Unavailable,
+        place: "자료 이관",
+        cause: "자료를 읽을 내 PC 서버가 설정되어 있지 않다",
+        message: "자료를 읽을 내 PC 서버를 사용할 수 없습니다. 내장 서버가 설정된 기기에서 다시 시도하세요.",
+        fix: "내장 서버 설정을 확인하세요"
+    }
     SERVER_SYNC_REMOTE_NOT_SELECTED() {
         class: InvalidRequest,
         place: "서버 간 자료 이관",
@@ -38,8 +45,15 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "내 PC 배치 동기화",
         cause: "내 PC 서버가 배치 변경 요청을 실패로 응답했다",
-        message: "내 PC 서버 {host}가 배치 변경을 처리하지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
+        message: "내 PC 서버({host})가 배치 변경을 처리하지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
         fix: "내 PC 서버 상태를 확인하세요"
+    }
+    SERVER_SYNC_LAYOUT_RESPONSE_READ_FAILED(host) {
+        class: Server,
+        place: "내 PC 배치 동기화 응답 읽기",
+        cause: "배치 동기화 응답을 읽거나 해석하지 못했다",
+        message: "내 PC 서버({host})의 배치 응답을 읽지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
+        fix: "서버 상태를 확인한 뒤 다시 시도하세요"
     }
     SERVER_SYNC_CLIENT_FAILED() {
         class: Server,
@@ -55,11 +69,25 @@ error_catalog! { ENTRIES;
         message: "서버 {host}에 자료 이관 요청을 보내지 못했습니다. 서버와 네트워크를 확인하세요.",
         fix: "서버 주소와 네트워크 연결을 확인하세요"
     }
+    SERVER_SYNC_LOCAL_READ_UNREACHABLE(host) {
+        class: Server,
+        place: "내 PC 서버에서 자료 읽기",
+        cause: "자료 읽기 요청을 내 PC 서버에 보내지 못했다",
+        message: "내 PC 서버({host})에서 자료를 읽지 못했습니다. 서버와 네트워크를 확인한 뒤 다시 시도하세요.",
+        fix: "내 PC 서버와 네트워크 연결을 확인하세요"
+    }
+    SERVER_SYNC_LOCAL_READ_REJECTED(host) {
+        class: Server,
+        place: "내 PC 서버에서 자료 읽기",
+        cause: "내 PC 서버가 자료 읽기 요청을 실패로 응답했다",
+        message: "내 PC 서버({host})가 자료 읽기 요청을 처리하지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
+        fix: "내 PC 서버 상태를 확인하세요"
+    }
     SERVER_SYNC_REJECTED(host) {
         class: Server,
         place: "서버 간 자료 이관 응답",
         cause: "서버가 자료 이관 요청을 실패로 응답했다",
-        message: "서버 {host}가 자료 이관 요청을 처리하지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
+        message: "서버({host})가 자료 이관 요청을 처리하지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
         fix: "서버 상태를 확인하세요"
     }
     SERVER_SYNC_RESPONSE_INVALID(host) {

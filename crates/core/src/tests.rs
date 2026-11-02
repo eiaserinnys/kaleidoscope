@@ -179,6 +179,53 @@ fn open_core(data_dir: &Path, definitions: Vec<String>, host: &Arc<FakeHost>) ->
     .unwrap()
 }
 
+#[test]
+fn link_start_reads_http_200_body_as_response_read_failure() {
+    use std::io::Write;
+    use std::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let worker = thread::spawn(move || {
+        let (mut connection, _) = listener.accept().unwrap();
+        let mut reader = std::io::BufReader::new(connection.try_clone().unwrap());
+        let mut line = String::new();
+        loop {
+            line.clear();
+            reader.read_line(&mut line).unwrap();
+            if line == "\r\n" {
+                break;
+            }
+        }
+        connection
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\n{}")
+            .unwrap();
+    });
+    let temp = TempDir::new().unwrap();
+    let core = Core::open(
+        CoreConfig {
+            embedded_server: None,
+            data_dir: temp.path().to_path_buf(),
+            seed_definitions: vec![],
+            server_url: format!("http://{address}"),
+            device_name: "test-device".into(),
+        },
+        Arc::new(FakeHost::default()),
+    )
+    .unwrap();
+
+    let error = core
+        .handle(CoreRequest::LinkStart { server_url: None })
+        .unwrap_err();
+
+    assert_eq!(
+        error.id.as_deref(),
+        Some("CONN_LINK_START_RESPONSE_READ_FAILED")
+    );
+    assert_ne!(error.id.as_deref(), Some("CONN_LINK_START_REJECTED"));
+    worker.join().unwrap();
+}
+
 fn test_definition(raw: &str) -> String {
     let definition: Value = serde_json::from_str(raw).unwrap();
     let id = definition["id"].as_str().unwrap();
@@ -1680,7 +1727,12 @@ impl RegistryClient for FakeRegistryClient {
             .lock()
             .unwrap()
             .pop_front()
-            .unwrap_or_else(|| Err(RegistryError::Failure("unexpected layout change".into())))
+            .unwrap_or_else(|| {
+                Err(RegistryError::failure(
+                    crate::registry_client::FailureStage::Send,
+                    "unexpected layout change",
+                ))
+            })
     }
     fn connection_request(
         &self,
@@ -1709,18 +1761,24 @@ impl RegistryClient for FakeRegistryClient {
             .unwrap()
             .get(&request.path)
             .cloned()
-            .ok_or_else(|| RegistryError::Failure("unexpected connection request".into()))
+            .ok_or_else(|| {
+                RegistryError::failure(
+                    crate::registry_client::FailureStage::Send,
+                    "unexpected connection request",
+                )
+            })
     }
     fn pair_start(
         &self,
         _server_url: &str,
         _request: &PairStartRequest,
     ) -> Result<PairStartReply, RegistryError> {
-        self.pair_start
-            .lock()
-            .unwrap()
-            .take()
-            .unwrap_or_else(|| Err(RegistryError::Failure("unexpected pair/start".into())))
+        self.pair_start.lock().unwrap().take().unwrap_or_else(|| {
+            Err(RegistryError::failure(
+                crate::registry_client::FailureStage::Send,
+                "unexpected pair/start",
+            ))
+        })
     }
 
     fn pair_poll(
@@ -1742,11 +1800,12 @@ impl RegistryClient for FakeRegistryClient {
         request: &DeviceUploadRequest,
     ) -> Result<RegistryApp, RegistryError> {
         self.upload_requests.lock().unwrap().push(request.clone());
-        self.uploads
-            .lock()
-            .unwrap()
-            .pop_front()
-            .unwrap_or_else(|| Err(RegistryError::Failure("unexpected upload".into())))
+        self.uploads.lock().unwrap().pop_front().unwrap_or_else(|| {
+            Err(RegistryError::failure(
+                crate::registry_client::FailureStage::Send,
+                "unexpected upload",
+            ))
+        })
     }
 
     fn open_events(
@@ -1766,7 +1825,10 @@ impl RegistryClient for FakeRegistryClient {
                 Ok(Box::new(Cursor::new(body)))
             }
             Some(Err(error)) => Err(error),
-            None => Err(RegistryError::Failure("no stream configured".into())),
+            None => Err(RegistryError::failure(
+                crate::registry_client::FailureStage::Send,
+                "no stream configured",
+            )),
         }
     }
 

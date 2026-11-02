@@ -214,13 +214,13 @@ impl AppState {
                     base_url,
                     writable,
                     paths: serde_json::from_str(&paths)
-                        .map_err(|_| errors::CONN_SETTING_PATHS_INVALID())?,
+                        .map_err(|_| errors::CONN_SETTING_LIST_PATHS_INVALID())?,
                     issuer,
                     scopes,
                     resource,
                 },
                 headers: serde_json::from_str(&headers)
-                    .map_err(|_| errors::CONN_SETTING_HEADERS_INVALID())?,
+                    .map_err(|_| errors::CONN_SETTING_LIST_HEADERS_INVALID())?,
                 description,
             })
         })
