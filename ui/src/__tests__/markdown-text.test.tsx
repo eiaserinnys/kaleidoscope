@@ -17,3 +17,14 @@ it("인라인 코드는 줄 span을 만들지 않는다", () => {
   const { container } = render(<MarkdownText>{"inline `code`"}</MarkdownText>);
   expect(container.querySelector(".ks-code-line")).toBeNull();
 });
+
+it("들여쓰기와 첫 글자를 묶고 원문의 공백과 유니코드 글자를 보존한다", () => {
+  const code = "  first\n\t😀tail\n   \nplain";
+  const { container } = render(<MarkdownText>{`\`\`\`text\n${code}\n\`\`\``}</MarkdownText>);
+  const pre = container.querySelector("pre")!;
+  const lines = [...pre.querySelectorAll(".ks-code-line")];
+  expect([...pre.querySelectorAll(".ks-code-indent")].map((span) => span.textContent)).toEqual(["  f", "\t😀"]);
+  expect(lines[2].querySelector(".ks-code-indent")).toBeNull();
+  expect(lines[3].querySelector(".ks-code-indent")).toBeNull();
+  expect(pre.textContent).toBe(code);
+});

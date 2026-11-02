@@ -60,17 +60,19 @@ test("대화 글은 1100과 360 폭 안에서 줄바꿈하고 코드 들여쓰�
       const hanging = await pre.locator(".ks-code-line").evaluateAll((elements) => {
         const line = elements.find((element) => element.textContent?.includes("두 번째 단계도"));
         if (!line) return null;
-        const text = line.firstChild;
-        if (!text || text.nodeType !== Node.TEXT_NODE) return null;
-        const content = text.textContent ?? "";
         const starts = new Map<number, number>();
-        for (let index = 0; index < content.length; index += 1) {
-          if (/\s/.test(content[index])) continue;
-          const range = document.createRange();
-          range.setStart(text, index);
-          range.setEnd(text, index + 1);
-          const rect = range.getBoundingClientRect();
-          if (rect.width) starts.set(Math.round(rect.top), Math.min(starts.get(Math.round(rect.top)) ?? Infinity, rect.left));
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+          const text = walker.currentNode;
+          const content = text.textContent ?? "";
+          for (let index = 0; index < content.length; index += 1) {
+            if (/\s/.test(content[index])) continue;
+            const range = document.createRange();
+            range.setStart(text, index);
+            range.setEnd(text, index + 1);
+            const rect = range.getBoundingClientRect();
+            if (rect.width) starts.set(Math.round(rect.top), Math.min(starts.get(Math.round(rect.top)) ?? Infinity, rect.left));
+          }
         }
         return [...starts.values()];
       });
@@ -88,6 +90,75 @@ test("대화 글은 1100과 360 폭 안에서 줄바꿈하고 코드 들여쓰�
     });
     const copiedCode = await page.evaluate(() => window.getSelection()?.toString());
     expect(copiedCode).toBe(originalCode);
+  }
+});
+
+async function emitFence(page: Page, width: number, code: string) {
+  const { history } = await openChat(page, width);
+  await page.evaluate((text) => {
+    (window as Window & { conversationHarness: { emitText(text: string): void } }).conversationHarness.emitText(text);
+  }, `\`\`\`text\n${code}\n\`\`\``);
+  const pre = history.locator(".ks-agent-chat-assistant").last().locator("pre");
+  await expect(pre).toBeVisible();
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  return pre;
+}
+
+test("1100 폭의 짧은 들여쓰기 펜스는 각 줄이 한 행이다", async ({ page }) => {
+  const pre = await emitFence(page, 1100, "root:\n  child:\n    - 손자\n      leaf: 1");
+  const heights = await pre.locator(".ks-code-line").evaluateAll((lines) => lines.map((line) => line.getBoundingClientRect().height));
+  expect(heights).toHaveLength(4);
+  for (const height of heights) expect(height).toBeCloseTo(heights[0], 0);
+});
+
+test("360 폭의 12·16·20칸 들여쓰기는 첫 글자 위치를 보존한다", async ({ page }) => {
+  const indents = [12, 16, 20];
+  const pre = await emitFence(page, 360, indents.map((count) => `${" ".repeat(count)}leaf: 1`).join("\n"));
+  const offsets = await pre.evaluate((element) => {
+    const code = element.querySelector("code")!;
+    const probe = document.createElement("span");
+    probe.textContent = "0";
+    code.append(probe);
+    const charWidth = probe.getBoundingClientRect().width;
+    probe.remove();
+    const style = getComputedStyle(element);
+    const start = element.getBoundingClientRect().left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    return [...code.querySelectorAll(".ks-code-line")].map((line) => {
+      const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const text = walker.currentNode;
+        const index = text.textContent!.search(/\S/u);
+        if (index < 0) continue;
+        const range = document.createRange();
+        range.setStart(text, index);
+        range.setEnd(text, index + 1);
+        return { left: range.getBoundingClientRect().left - start, charWidth };
+      }
+      throw new Error("첫 글자가 없습니다");
+    });
+  });
+  for (const [index, offset] of offsets.entries()) {
+    expect(Math.abs(offset.left - indents[index] * offset.charWidth)).toBeLessThanOrEqual(1.5);
+  }
+});
+
+test("360·560 폭의 들여쓴 긴 토큰은 첫 행부터 글자가 나온다", async ({ page }) => {
+  for (const width of [360, 560]) {
+    const pre = await emitFence(page, width, `        ${"x".repeat(70)}`);
+    const topGap = await pre.locator(".ks-code-line").evaluate((line) => {
+      const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const text = walker.currentNode;
+        const index = text.textContent!.search(/\S/u);
+        if (index < 0) continue;
+        const range = document.createRange();
+        range.setStart(text, index);
+        range.setEnd(text, index + 1);
+        return range.getBoundingClientRect().top - line.getBoundingClientRect().top;
+      }
+      throw new Error("첫 글자가 없습니다");
+    });
+    expect(topGap).toBeLessThan(10);
   }
 });
 

@@ -21,7 +21,10 @@ const MarkdownPre: NonNullable<Components["pre"]> = ({ node, children: _children
       else break;
     }
     const style = columns ? { "--ks-code-indent": `${columns}ch` } as CSSProperties : undefined;
-    return <span className="ks-code-line" key={index} style={style}>{line}</span>;
+    const indent = line.match(/^[ \t]+[^\s]/u)?.[0];
+    return <span className="ks-code-line" key={index} style={style}>{indent
+      ? <><span className="ks-code-indent">{indent}</span>{line.slice(indent.length)}</>
+      : line}</span>;
   })}</code></pre>;
 };
 

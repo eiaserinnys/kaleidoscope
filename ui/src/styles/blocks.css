@@ -512,10 +512,15 @@
 }
 
 .ks-code-line {
-  --ks-code-hang: min(var(--ks-code-indent, 0ch), 50%);
   display: block;
-  padding-inline-start: var(--ks-code-hang);
-  text-indent: calc(-1 * var(--ks-code-hang));
+  padding-inline-start: min(var(--ks-code-indent, 0ch), 50%);
+  /* text-indent의 %는 패딩을 뺀 줄 자신의 폭이 기준이다. 들여쓰기가 한도에 걸리면 그 폭의 100%가 위 패딩과 같다. */
+  text-indent: calc(-1 * min(var(--ks-code-indent, 0ch), 100%));
+}
+
+/* 들여쓰기 뒤가 줄바꿈 지점이면 공백만 한 줄을 차지해 원문에 없는 빈 줄로 보인다. 첫 글자까지 묶어 끊기지 않게 한다. */
+.ks-code-indent {
+  white-space: pre;
 }
 
 .ks-markdown-text pre code {
