@@ -25,6 +25,28 @@ pub(super) fn setup(code: &str) -> (AppState, String) {
     (state, account)
 }
 
+fn assert_database_error(
+    error: kaleidoscope_contract::CoreError,
+    id: &str,
+    detail: Option<&str>,
+) {
+    assert_eq!(error.id.as_deref(), Some(id));
+    assert_eq!(error.code, kaleidoscope_contract::ErrorCode::Server);
+    assert!(!error.details.is_empty());
+    if let Some(detail) = detail {
+        assert!(error.details.iter().any(|value| value.contains(detail)));
+    }
+}
+
+async fn webhook_error(
+    response: axum::response::Response,
+) -> (axum::http::StatusCode, kaleidoscope_contract::CoreError) {
+    use http_body_util::BodyExt;
+    let status = response.status();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    (status, serde_json::from_slice(&body).unwrap())
+}
+
 #[tokio::test]
 async fn webhook_requires_configured_token_and_enabled_entry() {
     let (state, account) = setup(CODE);
@@ -45,12 +67,45 @@ async fn webhook_requires_configured_token_and_enabled_entry() {
             .unwrap()
     };
     let response = router(state.clone()).oneshot(request()).await.unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let (status, missing_secret_error) = webhook_error(response).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(missing_secret_error.code, ErrorCode::Unauthorized);
+    assert_eq!(
+        missing_secret_error.id.as_deref(),
+        Some("WORKER_WEBHOOK_TOKEN_INVALID")
+    );
+    assert!(!missing_secret_error.message.contains("시크릿"));
+    state
+        .lock_db()
+        .unwrap()
+        .execute(
+            "INSERT INTO app_secrets(account_id,app_id,secret_id,value,updated_at) VALUES(?1,?2,'token','','now')",
+            params![account, "worker-test"],
+        )
+        .unwrap();
+    let response = router(state.clone()).oneshot(request()).await.unwrap();
+    let (status, empty_secret_error) = webhook_error(response).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(empty_secret_error, missing_secret_error);
     state
         .set_app_secret(&account, "worker-test", "token", "test-token")
         .unwrap();
-    let response = router(state.clone()).oneshot(request()).await.unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/webhooks/worker-test/wrong-token")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let (status, invalid_token_error) = webhook_error(response).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(invalid_token_error, missing_secret_error);
+    assert!(!invalid_token_error.message.contains("test-token"));
+    assert!(!invalid_token_error.message.contains("wrong-token"));
     let response = router(state)
         .oneshot(
             Request::builder()
@@ -63,6 +118,86 @@ async fn webhook_requires_configured_token_and_enabled_entry() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[test]
+fn worker_secret_database_operations_have_specific_ids_and_sql_details() {
+    let (state, account) = setup(CODE);
+    state
+        .lock_db()
+        .unwrap()
+        .execute_batch("DROP TABLE app_secrets")
+        .unwrap();
+
+    assert_database_error(
+        state
+            .set_app_secret(&account, "worker-test", "token", "value")
+            .unwrap_err(),
+        "WORKER_SECRET_SAVE_DATABASE_FAILED",
+        Some("app_secrets"),
+    );
+    assert_database_error(
+        state
+            .list_app_secrets(&account, "worker-test")
+            .unwrap_err(),
+        "WORKER_SECRET_LIST_DATABASE_FAILED",
+        Some("app_secrets"),
+    );
+    assert_database_error(
+        state
+            .delete_app_secret(&account, "worker-test", "token")
+            .unwrap_err(),
+        "WORKER_SECRET_DELETE_DATABASE_FAILED",
+        Some("app_secrets"),
+    );
+}
+
+#[tokio::test]
+async fn worker_run_database_failures_have_specific_ids_and_sql_details() {
+    let (state, account) = setup(CODE);
+    state.lock_db().unwrap().execute_batch("BEGIN").unwrap();
+    let workspace_error = state
+        .invoke_worker(
+            &account,
+            "worker-test",
+            WorkerInvokeRequest {
+                action: "run".into(),
+                workspace_id: Some("workspace".into()),
+                args: None,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_database_error(
+        workspace_error,
+        "WORKER_RUN_WORKSPACE_CHECK_DATABASE_FAILED",
+        None,
+    );
+    let _ = state.lock_db().unwrap().execute_batch("ROLLBACK");
+
+    let (state, account) = setup(CODE);
+    state
+        .lock_db()
+        .unwrap()
+        .execute_batch("DROP TABLE app_secrets")
+        .unwrap();
+    let secret_error = state
+        .invoke_worker(
+            &account,
+            "worker-test",
+            WorkerInvokeRequest {
+                action: "run".into(),
+                workspace_id: None,
+                args: None,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_database_error(
+        secret_error,
+        "WORKER_RUN_SECRET_READ_DATABASE_FAILED",
+        Some("app_secrets"),
+    );
 }
 
 #[tokio::test]

@@ -79,6 +79,34 @@ async fn delete_app_closes_windows_and_resurrection_republishes() {
 }
 
 #[tokio::test]
+async fn delete_app_database_error_has_registered_id_and_sql_detail() {
+    let state = AppState::in_memory("secret");
+    let (app, _) = state.publish_app(LEGACY_APP, "test", false, None).unwrap();
+    state
+        .lock_db()
+        .unwrap()
+        .execute_batch(
+            "CREATE TRIGGER fail_app_delete BEFORE UPDATE OF deleted_at ON apps BEGIN SELECT RAISE(ABORT, 'delete_app test error'); END;",
+        )
+        .unwrap();
+
+    let result = McpServer::new(state)
+        .delete_app(Parameters(DeleteAppArgs { app_id: app.app.id }))
+        .await
+        .unwrap();
+    let result = serde_json::to_value(result).unwrap();
+    let error: CoreError =
+        serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+
+    assert_eq!(error.id.as_deref(), Some("MCP_DELETE_APP_DATABASE_FAILED"));
+    assert_eq!(error.code, ErrorCode::Server);
+    assert!(error
+        .details
+        .iter()
+        .any(|detail| detail.contains("delete_app test error")));
+}
+
+#[tokio::test]
 async fn open_counts_connected_devices_with_the_requested_workspace() {
     use kaleidoscope_contract::Supported;
     let state = AppState::in_memory("secret");

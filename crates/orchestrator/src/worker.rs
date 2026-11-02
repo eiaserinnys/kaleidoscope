@@ -1,8 +1,8 @@
 //! 앱별 서버 워커 실행, 시크릿과 주기 트리거.
 use super::*;
 use kaleidoscope_contract::worker::{
-    WorkerDecl, WorkerInvokeReply, WorkerInvokeRequest, WorkerStatus, WORKER_SECRET_MAX_BYTES,
-    WORKER_TIMEOUT_DEFAULT_SECS,
+    WORKER_SECRET_MAX_BYTES, WORKER_TIMEOUT_DEFAULT_SECS, WorkerDecl, WorkerInvokeReply,
+    WorkerInvokeRequest, WorkerStatus,
 };
 use std::{collections::BTreeMap, time::Instant};
 
@@ -29,12 +29,12 @@ impl AppState {
         let definition = {
             let db = self.lock_db()?;
             super::app_storage::current_definition(&db, app_id)?
-                .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?
+                .ok_or_else(|| kaleidoscope_contract::errors::WORKER_APP_NOT_FOUND(app_id))?
         };
         let worker = definition
             .worker
             .clone()
-            .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?;
+            .ok_or_else(|| kaleidoscope_contract::errors::WORKER_DEFINITION_MISSING(app_id))?;
         Ok((definition, worker))
     }
 
@@ -46,15 +46,39 @@ impl AppState {
         value: &str,
     ) -> Result<Value, CoreError> {
         let (_, worker) = self.worker_definition(app_id)?;
-        if !worker.secrets.iter().any(|s| s.id == secret_id)
-            || value.is_empty()
-            || value.len() > WORKER_SECRET_MAX_BYTES
-            || value.contains("${env:")
-        {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+        if !worker.secrets.iter().any(|s| s.id == secret_id) {
+            return Err(kaleidoscope_contract::errors::WORKER_SECRET_NOT_DECLARED(
+                app_id, secret_id,
+            ));
+        }
+        if value.is_empty() {
+            return Err(kaleidoscope_contract::errors::WORKER_SECRET_EMPTY(
+                app_id, secret_id,
+            ));
+        }
+        if value.len() > WORKER_SECRET_MAX_BYTES {
+            return Err(kaleidoscope_contract::errors::WORKER_SECRET_TOO_LARGE(
+                app_id,
+                secret_id,
+                WORKER_SECRET_MAX_BYTES,
+            ));
+        }
+        if value.contains("${env:") {
+            return Err(
+                kaleidoscope_contract::errors::WORKER_SECRET_ENV_REFERENCE_FORBIDDEN(
+                    app_id, secret_id,
+                ),
+            );
         }
         let now = timestamp();
-        self.lock_db()?.execute("INSERT INTO app_secrets(account_id,app_id,secret_id,value,updated_at) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(account_id,app_id,secret_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at", params![account_id, app_id, secret_id, value, now]).map_err(db_error)?;
+        self.lock_db()?
+            .execute("INSERT INTO app_secrets(account_id,app_id,secret_id,value,updated_at) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(account_id,app_id,secret_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at", params![account_id, app_id, secret_id, value, now])
+            .map_err(|error| {
+                kaleidoscope_contract::errors::WORKER_SECRET_SAVE_DATABASE_FAILED(
+                    app_id, secret_id,
+                )
+                .and_details(vec![error.to_string()])
+            })?;
         Ok(json!({"app_id":app_id,"secret_id":secret_id,"configured":true,"updated_at":now}))
     }
 
@@ -63,7 +87,15 @@ impl AppState {
         let db = self.lock_db()?;
         let mut result = Vec::new();
         for secret in worker.secrets {
-            let updated_at: Option<String> = db.query_row("SELECT updated_at FROM app_secrets WHERE account_id=?1 AND app_id=?2 AND secret_id=?3", params![account_id, app_id, secret.id], |row| row.get(0)).optional().map_err(db_error)?;
+            let updated_at: Option<String> = db
+                .query_row("SELECT updated_at FROM app_secrets WHERE account_id=?1 AND app_id=?2 AND secret_id=?3", params![account_id, app_id, secret.id], |row| row.get(0))
+                .optional()
+                .map_err(|error| {
+                    kaleidoscope_contract::errors::WORKER_SECRET_LIST_DATABASE_FAILED(
+                        app_id, &secret.id,
+                    )
+                    .and_details(vec![error.to_string()])
+                })?;
             result.push(json!({"id":secret.id,"description":secret.description,"configured":updated_at.is_some(),"updated_at":updated_at}));
         }
         Ok(json!({"app_id":app_id,"secrets":result}))
@@ -81,7 +113,12 @@ impl AppState {
                 "DELETE FROM app_secrets WHERE account_id=?1 AND app_id=?2 AND secret_id=?3",
                 params![account_id, app_id, secret_id],
             )
-            .map_err(db_error)?
+            .map_err(|error| {
+                kaleidoscope_contract::errors::WORKER_SECRET_DELETE_DATABASE_FAILED(
+                    app_id, secret_id,
+                )
+                .and_details(vec![error.to_string()])
+            })?
             > 0)
     }
 
@@ -137,7 +174,10 @@ impl AppState {
     ) -> Result<WorkerInvokeReply, CoreError> {
         let (_, worker) = self.worker_definition(app_id)?;
         if !worker.actions.contains(&req.action) {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(kaleidoscope_contract::errors::WORKER_ACTION_NOT_DECLARED(
+                app_id,
+                &req.action,
+            ));
         }
         let trigger = json!({"kind":"action","action":req.action,"args":req.args,"workspace_id":req.workspace_id});
         self.run_worker(
@@ -213,7 +253,7 @@ impl AppState {
             let _guard = if let Some(deadline) = parent_deadline {
                 tokio::time::timeout_at(deadline, lock.lock())
                     .await
-                    .map_err(|_| server_error("워커 호출 대기 시간이 초과되었습니다"))?
+                    .map_err(|_| kaleidoscope_contract::errors::WORKER_RUN_WAIT_TIMEOUT(app_id))?
             } else {
                 lock.lock().await
             };
@@ -312,7 +352,10 @@ impl AppState {
         let (definition, worker) = self.worker_definition(app_id)?;
         if workspace_id.is_some() {
             let db = self.lock_db()?;
-            let tx = db.unchecked_transaction().map_err(db_error)?;
+            let tx = db.unchecked_transaction().map_err(|error| {
+                kaleidoscope_contract::errors::WORKER_RUN_WORKSPACE_CHECK_DATABASE_FAILED(app_id)
+                    .and_details(vec![error.to_string()])
+            })?;
             super::app_storage::check_workspace_owner(&tx, account_id, workspace_id)?;
         }
         let mut storage = BTreeMap::new();
@@ -328,7 +371,15 @@ impl AppState {
         {
             let db = self.lock_db()?;
             for secret in &worker.secrets {
-                let value: Option<String> = db.query_row("SELECT value FROM app_secrets WHERE account_id=?1 AND app_id=?2 AND secret_id=?3", params![account_id, app_id, secret.id], |row| row.get(0)).optional().map_err(db_error)?;
+                let value: Option<String> = db
+                    .query_row("SELECT value FROM app_secrets WHERE account_id=?1 AND app_id=?2 AND secret_id=?3", params![account_id, app_id, secret.id], |row| row.get(0))
+                    .optional()
+                    .map_err(|error| {
+                        kaleidoscope_contract::errors::WORKER_RUN_SECRET_READ_DATABASE_FAILED(
+                            app_id, &secret.id,
+                        )
+                        .and_details(vec![error.to_string()])
+                    })?;
                 if let Some(value) = value {
                     secrets.insert(secret.id.clone(), value);
                 }
@@ -342,15 +393,26 @@ impl AppState {
         let state_dir = root
             .join(super::app_storage::bucket_id(account_id, app_id))
             .join(app_id);
-        std::fs::create_dir_all(&state_dir)
-            .map_err(|e| server_error(&format!("워커 폴더를 만들 수 없습니다: {e}")))?;
-        let input = serde_json::to_vec(&json!({"app_id":app_id,"trigger":trigger,"storage":storage,"storage_revisions":revisions,"secrets":secrets,"state_dir":state_dir,"now":timestamp()})).map_err(|e| server_error(&e.to_string()))?;
-        let code_dir = tempfile::tempdir().map_err(|e| server_error(&e.to_string()))?;
+        std::fs::create_dir_all(&state_dir).map_err(|e| {
+            kaleidoscope_contract::errors::WORKER_STATE_DIR_CREATE_FAILED(app_id)
+                .and_details(vec![e.to_string()])
+        })?;
+        let input = serde_json::to_vec(&json!({"app_id":app_id,"trigger":trigger,"storage":storage,"storage_revisions":revisions,"secrets":secrets,"state_dir":state_dir,"now":timestamp()})).map_err(|e| {
+            kaleidoscope_contract::errors::WORKER_INPUT_SERIALIZE_FAILED(app_id)
+                .and_details(vec![e.to_string()])
+        })?;
+        let code_dir = tempfile::tempdir().map_err(|e| {
+            kaleidoscope_contract::errors::WORKER_CODE_DIR_CREATE_FAILED(app_id)
+                .and_details(vec![e.to_string()])
+        })?;
         std::fs::write(
             code_dir.path().join("kaleidoscope_worker.py"),
             include_str!("kaleidoscope_worker.py"),
         )
-        .map_err(|e| server_error(&e.to_string()))?;
+        .map_err(|e| {
+            kaleidoscope_contract::errors::WORKER_CODE_FILE_WRITE_FAILED(app_id)
+                .and_details(vec![e.to_string()])
+        })?;
         let (bridge_url, bridge_token, _bridge) = super::worker_bridge::start(
             self.clone(),
             account_id,
@@ -371,10 +433,10 @@ impl AppState {
         )
         .await?;
         if !output.status.success() {
-            return Err(server_error(&format!(
-                "워커 실행 실패: {}",
-                String::from_utf8_lossy(&output.stderr)
-            )));
+            return Err(kaleidoscope_contract::errors::WORKER_OUTPUT_STATUS_FAILED(
+                app_id,
+                String::from_utf8_lossy(&output.stderr),
+            ));
         }
         let stdout = String::from_utf8_lossy(&output.stdout);
         let output: Value = serde_json::from_str(&stdout)
@@ -387,15 +449,18 @@ impl AppState {
                         .unwrap_or(""),
                 )
             })
-            .map_err(|e| server_error(&format!("워커 출력을 읽을 수 없습니다: {e}")))?;
+            .map_err(|error| {
+                kaleidoscope_contract::errors::WORKER_OUTPUT_PARSE_FAILED(app_id)
+                    .and_details(vec![error.to_string()])
+            })?;
         let object = output
             .as_object()
-            .ok_or_else(|| server_error("워커 출력은 JSON 객체여야 합니다"))?;
+            .ok_or_else(|| kaleidoscope_contract::errors::WORKER_OUTPUT_NOT_OBJECT(app_id))?;
         let mut updated_entries = Vec::new();
         if let Some(writes) = object.get("set_storage") {
-            let writes = writes
-                .as_object()
-                .ok_or_else(|| server_error("set_storage는 객체여야 합니다"))?;
+            let writes = writes.as_object().ok_or_else(|| {
+                kaleidoscope_contract::errors::WORKER_OUTPUT_STORAGE_NOT_OBJECT(app_id)
+            })?;
             for (entry, value) in writes {
                 let (reply, account, update) = self.write_app_storage(
                     account_id,

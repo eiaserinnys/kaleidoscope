@@ -41,10 +41,14 @@ pub(super) async fn start(
 ) -> Result<(String, String, BridgeTask), CoreError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
-        .map_err(|e| server_error(&e.to_string()))?;
-    let address = listener
-        .local_addr()
-        .map_err(|e| server_error(&e.to_string()))?;
+        .map_err(|error| {
+            kaleidoscope_contract::errors::WORKER_BRIDGE_BIND_FAILED()
+                .and_details(vec![error.to_string()])
+        })?;
+    let address = listener.local_addr().map_err(|error| {
+        kaleidoscope_contract::errors::WORKER_BRIDGE_ADDRESS_FAILED()
+            .and_details(vec![error.to_string()])
+    })?;
     let token = random_token();
     let bridge = Bridge {
         state,
@@ -75,15 +79,27 @@ async fn handle(
         .and_then(|v| v.strip_prefix("Bearer "))
         .unwrap_or("");
     if !bool::from(provided.as_bytes().ct_eq(bridge.token.as_bytes())) {
-        return StatusCode::UNAUTHORIZED.into_response();
+        return super::http::error_response(
+            StatusCode::UNAUTHORIZED,
+            kaleidoscope_contract::errors::WORKER_BRIDGE_TOKEN_INVALID(),
+        );
     }
-    if !bridge.calls.contains(&request.app_id)
-        || bridge.chain.contains(&request.app_id)
-        || bridge.chain.len() >= 4
-    {
+    if !bridge.calls.contains(&request.app_id) {
         return super::http::error_response(
             StatusCode::BAD_REQUEST,
-            CoreError::new(ErrorCode::InvalidRequest),
+            kaleidoscope_contract::errors::WORKER_BRIDGE_APP_UNDECLARED(&request.app_id),
+        );
+    }
+    if bridge.chain.contains(&request.app_id) {
+        return super::http::error_response(
+            StatusCode::BAD_REQUEST,
+            kaleidoscope_contract::errors::WORKER_BRIDGE_APP_RECURSIVE(&request.app_id),
+        );
+    }
+    if bridge.chain.len() >= 4 {
+        return super::http::error_response(
+            StatusCode::BAD_REQUEST,
+            kaleidoscope_contract::errors::WORKER_BRIDGE_CALL_DEPTH_EXCEEDED(&request.app_id),
         );
     }
     let workspace = request
@@ -96,7 +112,9 @@ async fn handle(
                 .state
                 .read_app_storage(&bridge.account, &request.app_id, &entry, workspace)
                 .map(|value| value.content),
-            None => Err(CoreError::new(ErrorCode::InvalidRequest)),
+            None => Err(
+                kaleidoscope_contract::errors::WORKER_BRIDGE_READ_ENTRY_REQUIRED(&request.app_id),
+            ),
         },
         "call" => match request.action {
             Some(action) => {
@@ -119,9 +137,13 @@ async fn handle(
                     .await
                     .map(|reply| reply.result)
             }
-            None => Err(CoreError::new(ErrorCode::InvalidRequest)),
+            None => Err(
+                kaleidoscope_contract::errors::WORKER_BRIDGE_CALL_ACTION_REQUIRED(&request.app_id),
+            ),
         },
-        _ => Err(CoreError::new(ErrorCode::InvalidRequest)),
+        kind => Err(kaleidoscope_contract::errors::WORKER_BRIDGE_KIND_UNKNOWN(
+            kind,
+        )),
     };
     match result {
         Ok(value) => Json(json!({"result":value})).into_response(),
