@@ -134,8 +134,8 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
     for pointer in [
         "/ui/children/2/tabs/0/child/rows",
         "/ui/children/2/tabs/1/child/children/0/series",
-        "/ui/children/2/tabs/1/child/children/1/rows",
-        "/ui/children/2/tabs/1/child/children/2/rows",
+        "/ui/children/2/tabs/1/child/children/1/children/0/rows",
+        "/ui/children/2/tabs/1/child/children/1/children/1/rows",
         "/ui/children/2/tabs/2/child/rows",
         "/ui/children/2/tabs/3/child/rows",
         "/ui/children/2/tabs/4/child/rows",
@@ -196,6 +196,22 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
     .unwrap();
     assert_eq!(cleared["summary"]["total_spans"], 0);
     assert!(cleared["recent_spans"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn app_statistics_exclude_network_and_ui_frame_spans() {
+    let profiler = crate::profiler::Profiler::default();
+    profiler.span("command", "send", "workspace-pas", "작업 PAS", 5.0, 0, 0, "");
+    profiler.span("network", "conversation.send", "workspace-pas", "작업 PAS", 40.0, 0, 0, "");
+    profiler.span("ui.frame", "event handler", "workspace-pas", "작업 PAS", 70.0, 0, 0, "");
+    profiler.span("ui.frame", "렌더링", "", "", 80.0, 0, 0, "");
+
+    let apps = profiler.snapshot("all")["apps"].as_array().unwrap().clone();
+
+    assert_eq!(apps.len(), 1);
+    assert_eq!(apps[0]["app_id"], "workspace-pas");
+    assert_eq!(apps[0]["calls"], 1);
+    assert_eq!(apps[0]["total_ms"], json!(5.0));
 }
 
 #[test]

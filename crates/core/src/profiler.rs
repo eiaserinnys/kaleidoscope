@@ -224,6 +224,9 @@ impl Profiler {
         let mut app_groups: BTreeMap<String, Vec<&Span>> = BTreeMap::new();
         for &s in &spans {
             groups.entry(s.category.clone()).or_default().push(s);
+            if matches!(s.category.as_str(), "ui.frame" | "network") {
+                continue;
+            }
             let app_id = if s.app_id.is_empty() {
                 "core"
             } else {

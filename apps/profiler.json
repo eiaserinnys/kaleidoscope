@@ -163,21 +163,16 @@
             "child": {
               "type": "table",
               "rows": {
-                "expr": "$data.profile.inputs"
+                "expr": "$data.profile.inputs.$merge([$, {\"event_label\": $lookup({\"keydown\":\"키 누름\",\"beforeinput\":\"입력 전\",\"input\":\"입력\",\"compositionstart\":\"조합 시작\",\"compositionupdate\":\"조합 중\",\"compositionend\":\"조합 끝\",\"pointerdown\":\"포인터 누름\"}, event) & ($lowercase(target) = \"textarea\" ? \"\" : \" (\" & $lowercase(target) & \")\"), \"wait\": $round(wait_p95_ms), \"processing\": $round(processing_p95_ms), \"paint\": $round(paint_p95_ms), \"total\": $round(total_p95_ms)}])"
               },
               "columns": [
-                { "label": "이벤트", "field": "event", "width": "narrow", "format": "text" },
-                { "label": "위치", "field": "target", "width": "narrow", "format": "text" },
+                { "label": "이벤트", "field": "event_label", "width": "fill", "format": "text" },
                 { "label": "상태", "field": "state_label", "width": "narrow", "format": "text" },
-                { "label": "횟수", "field": "calls", "width": "narrow", "format": "number" },
-                { "label": "입력 대기 평균(ms)", "field": "wait_avg_ms", "width": "narrow", "format": "number" },
-                { "label": "입력 대기 P95(ms)", "field": "wait_p95_ms", "width": "narrow", "format": "number" },
-                { "label": "처리 평균(ms)", "field": "processing_avg_ms", "width": "narrow", "format": "number" },
-                { "label": "처리 P95(ms)", "field": "processing_p95_ms", "width": "narrow", "format": "number" },
-                { "label": "표시 평균(ms)", "field": "paint_avg_ms", "width": "narrow", "format": "number" },
-                { "label": "표시 P95(ms)", "field": "paint_p95_ms", "width": "narrow", "format": "number" },
-                { "label": "전체 P95(ms)", "field": "total_p95_ms", "width": "narrow", "format": "number" },
-                { "label": "전체 최대(ms)", "field": "total_max_ms", "width": "narrow", "format": "number" }
+                { "label": "대기 P95(ms)", "field": "wait", "width": "narrow", "format": "number" },
+                { "label": "처리 P95(ms)", "field": "processing", "width": "narrow", "format": "number" },
+                { "label": "표시 P95(ms)", "field": "paint", "width": "narrow", "format": "number" },
+                { "label": "전체 P95(ms)", "field": "total", "width": "narrow", "format": "number" },
+                { "label": "횟수", "field": "calls", "width": "narrow", "format": "number" }
               ]
             }
           },
@@ -199,61 +194,68 @@
                   }
                 },
                 {
-                  "type": "table",
-                  "rows": {
-                    "expr": "$data.profile.categories"
-                  },
-                  "columns": [
+                  "type": "stack",
+                  "direction": "column",
+                  "gap": "medium",
+                  "children": [
                     {
-                      "label": "구간",
-                      "field": "label",
-                      "width": "fill",
-                      "format": "text"
+                      "type": "table",
+                      "rows": {
+                        "expr": "$data.profile.categories"
+                      },
+                      "columns": [
+                        {
+                          "label": "구간",
+                          "field": "label",
+                          "width": "fill",
+                          "format": "text"
+                        },
+                        {
+                          "label": "호출",
+                          "field": "calls",
+                          "width": "narrow",
+                          "format": "number"
+                        },
+                        {
+                          "label": "평균(ms)",
+                          "field": "avg_ms",
+                          "width": "narrow",
+                          "format": "number"
+                        },
+                        {
+                          "label": "P95(ms)",
+                          "field": "p95_ms",
+                          "width": "narrow",
+                          "format": "number"
+                        },
+                        {
+                          "label": "최대(ms)",
+                          "field": "max_ms",
+                          "width": "narrow",
+                          "format": "number"
+                        },
+                        {
+                          "label": "합계(ms)",
+                          "field": "total_ms",
+                          "width": "narrow",
+                          "format": "number"
+                        }
+                      ]
                     },
                     {
-                      "label": "호출",
-                      "field": "calls",
-                      "width": "narrow",
-                      "format": "number"
-                    },
-                    {
-                      "label": "평균(ms)",
-                      "field": "avg_ms",
-                      "width": "narrow",
-                      "format": "number"
-                    },
-                    {
-                      "label": "P95(ms)",
-                      "field": "p95_ms",
-                      "width": "narrow",
-                      "format": "number"
-                    },
-                    {
-                      "label": "최대(ms)",
-                      "field": "max_ms",
-                      "width": "narrow",
-                      "format": "number"
-                    },
-                    {
-                      "label": "합계(ms)",
-                      "field": "total_ms",
-                      "width": "narrow",
-                      "format": "number"
+                      "type": "table",
+                      "rows": {
+                        "expr": "$data.profile.targets"
+                      },
+                      "columns": [
+                        { "label": "대상", "field": "target", "width": "fill", "format": "text" },
+                        { "label": "호출", "field": "calls", "width": "narrow", "format": "number" },
+                        { "label": "평균(ms)", "field": "avg_ms", "width": "narrow", "format": "number" },
+                        { "label": "P95(ms)", "field": "p95_ms", "width": "narrow", "format": "number" },
+                        { "label": "최대(ms)", "field": "max_ms", "width": "narrow", "format": "number" },
+                        { "label": "합계(ms)", "field": "total_ms", "width": "narrow", "format": "number" }
+                      ]
                     }
-                  ]
-                },
-                {
-                  "type": "table",
-                  "rows": {
-                    "expr": "$data.profile.targets"
-                  },
-                  "columns": [
-                    { "label": "대상", "field": "target", "width": "fill", "format": "text" },
-                    { "label": "호출", "field": "calls", "width": "narrow", "format": "number" },
-                    { "label": "평균(ms)", "field": "avg_ms", "width": "narrow", "format": "number" },
-                    { "label": "P95(ms)", "field": "p95_ms", "width": "narrow", "format": "number" },
-                    { "label": "최대(ms)", "field": "max_ms", "width": "narrow", "format": "number" },
-                    { "label": "합계(ms)", "field": "total_ms", "width": "narrow", "format": "number" }
                   ]
                 }
               ]
