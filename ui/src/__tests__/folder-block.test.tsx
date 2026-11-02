@@ -189,6 +189,34 @@ describe("folder block", () => {
     await waitFor(() => expect(guide.className).not.toContain("is-cut"));
   });
 
+  it("복사 뒤 Escape를 눌러도 붙여넣기를 유지한다", async () => {
+    const { call } = setup(fileFolderDefinition("readwrite", false));
+    const notes = await screen.findByRole("treeitem", { name: "notes" });
+    fireEvent.keyDown(notes, { key: "c", ctrlKey: true });
+    fireEvent.keyDown(notes, { key: "Escape" });
+    fireEvent.keyDown(notes, { key: "v", ctrlKey: true });
+    await waitFor(() => expect(call).toHaveBeenCalledWith({
+      op: "files.copy", window_id: "viewer-window", permission: "docs", paths: ["notes"], destination: "notes",
+    }));
+  });
+
+  it("하위 경로 문서의 이름 입력을 루트 행에 표시하고 원래 부모에 옮긴다", async () => {
+    const { call } = setup(storageFolderDefinition(false), (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "storage.list"
+        ? { op: "storage.list", result: { bucket_id: "folder-storage-test", items: [{ doc: "notes/guide.md", revision: "rev-1", updated_at: "2026-11-02T00:00:00Z", byte_size: 7 as unknown as bigint }] } }
+        : originalCall(request));
+    });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+    fireEvent.keyDown(guide, { key: "F2" });
+    const input = await screen.findByRole("textbox", { name: "이름 바꾸기" });
+    fireEvent.change(input, { target: { value: "renamed.md" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(call).toHaveBeenCalledWith({
+      op: "storage.move", window_id: "viewer-window", entry: "documents", from: "notes/guide.md", to: "notes/renamed.md", expected_revision: "rev-1",
+    }));
+  });
+
   it("shows a writable server collection's empty action and uses extension-aware document naming", async () => {
     setup(storageFolderDefinition(false), (transport) => {
       const originalCall = transport.call.bind(transport);

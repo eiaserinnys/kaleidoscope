@@ -63,6 +63,32 @@ afterEach(() => {
 });
 
 describe("공용 가상 트리", () => {
+  it("아직 없는 행의 포커스 요청을 행이 나타날 때까지 유지한다", async () => {
+    let focus: TreeFocusController | null = null;
+    const props = {
+      className: "ks-file-tree-list", expanded: new Set<string>(), label: "대기 트리",
+      onActivate: () => {}, onExpandedChange: () => {},
+      onFocusController: (controller: TreeFocusController) => { focus = controller; },
+    };
+    const { rerender } = render(<TreeView {...props} nodes={[{ id: "old", label: "기존" }]} />);
+    act(() => focus!.row("new", true));
+    rerender(<TreeView {...props} nodes={[{ id: "old", label: "기존" }, { id: "new", label: "새 행" }]} />);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("treeitem", { name: "새 행" })));
+  });
+
+  it("트리 바탕에서 방향키를 누르면 현재 행이나 첫 행으로 들어간다", async () => {
+    render(<TreeView className="ks-file-tree-list" expanded={new Set()} label="방향키 트리"
+      nodes={[{ id: "first", label: "첫 행" }, { id: "second", label: "둘째 행" }]}
+      onActivate={() => {}} onExpandedChange={() => {}} />);
+    const tree = screen.getByRole("tree", { name: "방향키 트리" });
+    fireEvent.click(tree);
+    fireEvent.keyDown(tree, { key: "ArrowDown" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("treeitem", { name: "첫 행" })));
+    act(() => screen.getByRole("treeitem", { name: "둘째 행" }).focus());
+    fireEvent.click(tree);
+    fireEvent.keyDown(tree, { key: "ArrowUp" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("treeitem", { name: "둘째 행" })));
+  });
   it("빈 트리에 Tab으로 들어오고 빈 공간 클릭 뒤 root 단축키를 처리한다", () => {
     const onCommandKeyDown = vi.fn((_row: TreeRowModel | null, _event: KeyboardEvent<HTMLElement>, _focus: TreeFocusController) => true);
     const { rerender } = render(<div style={{ height: "480px" }}><TreeView

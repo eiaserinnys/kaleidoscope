@@ -159,7 +159,7 @@ export function useFolderActions({
   }, [backend.kind]);
 
   const beginEdit = useCallback(async (kind: FolderInlineEdit["kind"], item: FolderItem | null, directory: string, focus: TreeFocusController, cancelFocusId?: string | null) => {
-    const editDirectory = kind === "rename" && item ? parentOfItem(item) : directory;
+    const editDirectory = backend.kind === "collection" ? "" : kind === "rename" && item ? parentOfItem(item) : directory;
     await prepareDirectory(editDirectory);
     setMenuState(null);
     setNotice(null);
@@ -398,7 +398,7 @@ export function useFolderActions({
       setDialog({ action: "permanent", item: target, row: row!, focus, focusTargets: focus.deletionTargets(row!) });
       return true;
     }
-    if (key === "Escape" && clipboard?.root === backend.identity) {
+    if (key === "Escape" && clipboard?.root === backend.identity && clipboard.mode === "cut") {
       setClipboard(store, null);
       return true;
     }

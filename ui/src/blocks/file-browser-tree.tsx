@@ -568,7 +568,8 @@ export function FileBrowserTree({
       ) : (
         <>
           <FolderTreeHeader label={rootName}>
-            {(canCreate || (actionsEnabled && backend.capabilities.createFile)) ? <IconButton aria-label="새 파일" onClick={() => actionsEnabled ? void actions.beginCreateFile("", focusController.current) : void beginCreate()}><FilePlus /></IconButton> : null}
+            {(canCreate || (actionsEnabled && backend.capabilities.createFile)) && !(collection && entriesByDirectory[""]?.length === 0)
+              ? <IconButton aria-label={collection ? "새 문서" : "새 파일"} onClick={() => actionsEnabled ? void actions.beginCreateFile("", focusController.current) : void beginCreate()}><FilePlus /></IconButton> : null}
             {!collection && scope === "folder" ? <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}><FolderOpen /></IconButton> : null}
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
           </FolderTreeHeader>

@@ -201,6 +201,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     const request = focusRequest;
     if (!request) return;
     const target = request.targets.find((id) => id === null || treeRows.some((row) => row.id === id));
+    if (target === undefined && request.waitForTarget) return;
     if (target === null || target === undefined) {
       scrollRef.current?.focus();
       setFocusRequest(null);
@@ -250,6 +251,18 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     input.focus();
     setPendingInteractiveFocus(null);
   }, [pendingInteractiveFocus, virtualRows]);
+
+  useLayoutEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll || interactiveIndex < 0) return;
+    const row = Array.from(scroll.querySelectorAll<HTMLElement>("[data-tree-row]"))
+      .find((element) => element.dataset.treeRow === flat[interactiveIndex].id);
+    if (!row) return;
+    virtual.measureElement(row);
+    const padding = Number.parseFloat(getComputedStyle(scroll).paddingBottom) || 0;
+    const overflow = row.getBoundingClientRect().bottom + padding - scroll.getBoundingClientRect().bottom;
+    if (overflow > 0) scroll.scrollTop += overflow;
+  }, [flat, interactiveIndex, virtual, virtualRows]);
   return <div
     aria-label={label}
     aria-rowcount={treeRows.length}
@@ -273,8 +286,12 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
       handlers.current.onContextMenu(row?.node.content === undefined || rowData?.directoryPath ? row ?? null : null, event.currentTarget, { x: event.clientX, y: event.clientY }, focus);
     }}
     onKeyDown={(event) => {
-      if (!handlers.current.onCommandKeyDown || event.target !== event.currentTarget) return;
-      if (handlers.current.onCommandKeyDown(null, event, focus)) {
+      if (event.target !== event.currentTarget) return;
+      if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(event.key) && effectiveFocus !== null) {
+        moveFocus(treeRows.findIndex((row) => row.id === effectiveFocus));
+        event.preventDefault();
+        event.stopPropagation();
+      } else if (handlers.current.onCommandKeyDown?.(null, event, focus)) {
         event.preventDefault();
         event.stopPropagation();
       }
