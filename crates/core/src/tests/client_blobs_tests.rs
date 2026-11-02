@@ -41,8 +41,16 @@ fn device_blob_persists_and_is_scoped_to_app_and_server() {
     let bytes = vec![73; 25 * 1024 * 1024];
     put(&core, &one, "cache/image.bin", bytes.clone()).unwrap();
     assert!(open(&core, &two, "cache/image.bin").is_none());
-    assert!(put(&core, &one, "cache/../secret", vec![1]).is_err());
-    assert!(put(&core, &one, "other/key", vec![1]).is_err());
+    assert_eq!(
+        put(&core, &one, "cache/../secret", vec![1])
+            .unwrap_err()
+            .code,
+        ErrorCode::InvalidRequest
+    );
+    assert_eq!(
+        put(&core, &one, "other/key", vec![1]).unwrap_err().code,
+        ErrorCode::PermissionDenied
+    );
     let file = open(&core, &one, "cache/image.bin").unwrap();
     assert_eq!(core.client_read_file(&one, &file.id).unwrap(), bytes);
     let CoreReply::ClientBlobList { keys } = core

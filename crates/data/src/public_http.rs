@@ -85,7 +85,7 @@ pub fn get(
         .get(address)
         .query(query)
         .send()
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| error.without_url().to_string())?;
     read_response(response, limit)
 }
 

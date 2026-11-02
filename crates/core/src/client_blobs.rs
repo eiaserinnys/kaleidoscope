@@ -30,7 +30,7 @@ fn location(inner: &Inner, window: &str, key: &str) -> Result<(PathBuf, PathBuf)
         .ok_or_else(|| {
             error::with_message(
                 ErrorCode::PermissionDenied,
-                "이 앱에 기기 보관 권한이 없습니다.",
+                &format!("앱 {}에 기기 보관이 선언되지 않았습니다. 앱 정의에 device_storage를 추가하세요.", window.app_id),
             )
         })?;
     if key.is_empty()
@@ -39,11 +39,18 @@ fn location(inner: &Inner, window: &str, key: &str) -> Result<(PathBuf, PathBuf)
             .components()
             .all(|c| matches!(c, Component::Normal(_)))
         || key.split('/').any(|part| part == "." || part == "..")
-        || !prefixes.iter().any(|prefix| key.starts_with(prefix))
     {
         return Err(error::with_message(
+            ErrorCode::InvalidRequest,
+            &format!(
+                "보관 키 {key}가 올바르지 않습니다. 상대 경로를 쓰고 .과 .. 경로 조각을 없애세요."
+            ),
+        ));
+    }
+    if !prefixes.iter().any(|prefix| key.starts_with(prefix)) {
+        return Err(error::with_message(
             ErrorCode::PermissionDenied,
-            "보관 키가 선언된 접두어 밖이거나 올바르지 않습니다.",
+            &format!("보관 키 {key}는 앱 {}의 허용 접두어 밖입니다. 앱 정의의 device_storage.prefixes를 확인하세요.", window.app_id),
         ));
     }
     let root = server_switch::active_archive(inner)
@@ -93,7 +100,7 @@ pub(crate) fn put(
         if size > CLIENT_PICK_FILE_MAX_BYTES {
             return Err(error::with_message(
                 ErrorCode::InvalidRequest,
-                "보관할 파일이 512MiB를 넘습니다.",
+                &format!("보관 키 {key}에 쓸 파일이 512MiB를 넘습니다. 더 작은 파일을 선택하세요."),
             ));
         }
         output.flush().map_err(|e| error::io_error(&e))?;

@@ -30,7 +30,7 @@ pub(crate) fn read(
         {
             return Err(error::with_message(
                 ErrorCode::PermissionDenied,
-                "클라이언트에 선언되지 않은 HTTP 권한입니다.",
+                &format!("HTTP 권한 {permission}이 클라이언트에 선언되지 않았습니다. 앱 정의의 client.http_permissions를 확인하세요."),
             ));
         }
         match definition.permissions.iter().find(|p| p.id() == permission) {
@@ -40,7 +40,7 @@ pub(crate) fn read(
             _ => {
                 return Err(error::with_message(
                     ErrorCode::PermissionDenied,
-                    "앱에 선언되지 않은 HTTP 권한입니다.",
+                    &format!("HTTP 권한 {permission}이 앱에 선언되지 않았습니다. 앱 정의의 permissions를 확인하세요."),
                 ))
             }
         }
@@ -56,19 +56,28 @@ pub(crate) fn read(
     let response =
         kaleidoscope_data::public_http::get(&base, &paths, path, &query, data::SOURCE_MAX_BYTES)
             .map_err(|e| {
-                error::with_message(
+                let mut error = error::with_message(
                     ErrorCode::Server,
-                    &format!("공개 HTTPS 경로 {path}를 읽지 못했습니다: {e}"),
-                )
+                    &format!(
+                "공개 HTTPS 경로 {path}를 읽지 못했습니다: {e}. 앱의 권한과 주소를 확인하세요."
+            ),
+                );
+                error.details = vec![format!("호스트: {base}")];
+                error
             })?;
     if !(200..300).contains(&response.status) {
-        return Err(error::with_message(
+        let mut error = error::with_message(
             ErrorCode::Server,
             &format!(
-                "공개 HTTPS 경로 {path}가 상태 {}을 반환했습니다.",
+                "공개 HTTPS 경로 {path}가 상태 {}을 반환했습니다. 주소를 확인하거나 나중에 다시 시도하세요.",
                 response.status
             ),
-        ));
+        );
+        error.details = vec![
+            format!("호스트: {base}"),
+            format!("HTTP 상태: {}", response.status),
+        ];
+        return Err(error);
     }
     Ok((response.bytes, response.mime))
 }
