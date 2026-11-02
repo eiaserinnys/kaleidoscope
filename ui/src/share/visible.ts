@@ -106,9 +106,11 @@ export function describeVisible(root: HTMLElement): { text: string; visual: bool
         return itemStyle.display !== "none" && itemStyle.visibility !== "hidden" && overlaps(row.getBoundingClientRect(), visibleClip(row));
       });
       const indexed = items.filter((item) => !(group.label === "표" && item.querySelector('[role="columnheader"]')));
-      const position = (item: HTMLElement) => Number(item.getAttribute("aria-rowindex") ?? item.getAttribute("aria-posinset") ?? (item.dataset.index === undefined ? 0 : Number(item.dataset.index) + 1));
+      const position = (item: HTMLElement) => Number(role === "tree" && item.dataset.index !== undefined
+        ? Number(item.dataset.index) + 1
+        : item.getAttribute("aria-rowindex") ?? item.getAttribute("aria-posinset") ?? (item.dataset.index === undefined ? 0 : Number(item.dataset.index) + 1));
       const positions = indexed.map(position).filter(Boolean);
-      const total = Number(node.getAttribute("aria-rowcount") ?? indexed[0]?.getAttribute("aria-setsize") ?? indexed.length);
+      const total = Number((role === "tree" ? node.getAttribute("aria-rowcount") : null) ?? indexed[0]?.getAttribute("aria-setsize") ?? indexed.length);
       if (positions.length) { newline(); append(`[${group.label}, 전체 ${total}${group.unit} 중 ${Math.min(...positions)}~${Math.max(...positions)}번째]`); newline(); }
       else { newline(); append(`[${group.label}, 전체 ${total}${group.unit}]`); newline(); }
     }

@@ -103,8 +103,8 @@ describe("explorer block", () => {
     setup({ scope: "pc" });
     fireEvent.click(await screen.findByRole("button", { name: "이 PC의 파일 읽기 허용" }));
     const tree = await screen.findByRole("tree", { name: "폴더 목록" });
-    fireEvent.click(await within(tree).findByRole("button", { name: "문서" }));
-    fireEvent.click(await within(tree).findByRole("button", { name: "notes" }));
+    fireEvent.click(await within(tree).findByRole("treeitem", { name: "문서" }));
+    fireEvent.click(await within(tree).findByRole("treeitem", { name: "notes" }));
 
     expect(await screen.findByRole("option", { name: "a.md" })).toBeTruthy();
     const breadcrumb = screen.getByRole("navigation", { name: "경로" });
@@ -143,8 +143,8 @@ describe("explorer block", () => {
     expect(within(table).getByRole("row", { name: /로컬 디스크 \(C:\)/ }).textContent).toContain("드라이브");
 
     const tree = screen.getByRole("tree", { name: "폴더 목록" });
-    fireEvent.click(within(tree).getByRole("button", { name: "문서" }));
-    fireEvent.click(await within(tree).findByRole("button", { name: "notes" }));
+    fireEvent.click(within(tree).getByRole("treeitem", { name: "문서" }));
+    fireEvent.click(await within(tree).findByRole("treeitem", { name: "notes" }));
     const fileRow = await within(await screen.findByRole("table", { name: "폴더 내용" })).findByRole("row", { name: /a\.md/ });
     fireEvent.click(fileRow);
     fireEvent.doubleClick(fileRow);
@@ -174,7 +174,7 @@ describe("explorer block", () => {
   it("shows folder navigation beside the current folder contents", async () => {
     setup();
     const folders = await screen.findByRole("tree", { name: "폴더 목록" });
-    fireEvent.click(within(folders).getByRole("button", { name: "notes" }));
+    fireEvent.click(within(folders).getByRole("treeitem", { name: "notes" }));
     expect(await screen.findByRole("option", { name: /a\.md/ })).toBeTruthy();
     expect(screen.getByRole("option", { name: /b\.md/ })).toBeTruthy();
     expect(screen.queryByRole("option", { name: /readme\.txt/ })).toBeNull();
@@ -200,7 +200,7 @@ describe("explorer block", () => {
   it("opens a file on double click and writes folder navigation through its declared state key", async () => {
     const { calls } = setup({ folder: "", view: "icons" });
     const folders = await screen.findByRole("tree", { name: "폴더 목록" });
-    fireEvent.click(within(folders).getByRole("button", { name: "notes" }));
+    fireEvent.click(within(folders).getByRole("treeitem", { name: "notes" }));
     await waitFor(() => expect(calls).toHaveBeenCalledWith({
       op: "window.set_state", window_id: "viewer-window", state: { folder: "notes", view: "icons" },
     }));
@@ -212,7 +212,7 @@ describe("explorer block", () => {
   it("keeps the two-pane explorer for older definitions without persisting its local navigation", async () => {
     const { calls } = setup({ legacy: true });
     const folders = await screen.findByRole("tree", { name: "폴더 목록" });
-    fireEvent.click(within(folders).getByRole("button", { name: "notes" }));
+    fireEvent.click(within(folders).getByRole("treeitem", { name: "notes" }));
     expect(await screen.findByRole("option", { name: /a\.md/ })).toBeTruthy();
     expect(calls).not.toHaveBeenCalledWith(expect.objectContaining({ op: "window.set_state" }));
   });

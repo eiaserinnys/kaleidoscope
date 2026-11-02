@@ -114,6 +114,7 @@ pub const ICON_NAMES: &[&str] = &[
     "info",
     "link",
     "list-filter",
+    "list-tree",
     "lock",
     "lock-open",
     "log-in",
@@ -1016,6 +1017,7 @@ pub struct FolderEntry {
     /// 확장자(점 없이, 소문자). 없으면 빈 문자열.
     pub ext: String,
     /// 파일 크기(바이트). 폴더는 0.
+    #[ts(type = "number")]
     pub size: u64,
     /// 마지막으로 바뀐 시각(RFC 3339 UTC).
     pub modified: String,
@@ -1415,6 +1417,10 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
         }
         Block::Tree { items: None, .. } => {}
+        Block::Folder {
+            on_select: Some(on_select),
+            ..
+        } => act!("on_select", on_select),
         Block::Table {
             rows,
             selected,
@@ -1509,6 +1515,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         | Block::HtmlView { value: None, .. }
         | Block::WebView { .. }
         | Block::Explorer { .. }
+        | Block::Folder { on_select: None, .. }
         | Block::Stack { .. }
         | Block::Tabs { .. }
         | Block::Toolbar { .. } => {}
