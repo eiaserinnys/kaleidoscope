@@ -1,4 +1,5 @@
 use super::*;
+use kaleidoscope_contract::errors;
 
 impl AppState {
     async fn clear_expired_pairings(&self) {
@@ -18,10 +19,7 @@ impl AppState {
         if !(1..=100).contains(&device_name.chars().count()) {
             return Err((
                 StatusCode::BAD_REQUEST,
-                CoreError::with_details(
-                    ErrorCode::InvalidRequest,
-                    vec!["기기 이름은 1~100자여야 합니다".into()],
-                ),
+                errors::CONN_PAIR_START_NAME_INVALID(),
             ));
         }
         self.clear_expired_pairings().await;
@@ -31,7 +29,7 @@ impl AppState {
         {
             return Err((
                 StatusCode::TOO_MANY_REQUESTS,
-                server_error("승인 대기 중인 연결이 너무 많습니다."),
+                errors::CONN_PAIR_START_LIMIT_REACHED(),
             ));
         }
         let (device_code, user_code) = loop {
@@ -69,7 +67,7 @@ impl AppState {
         let Some(pairing) = pairings.get(device_code).cloned() else {
             return Err((
                 StatusCode::NOT_FOUND,
-                server_error("연결 코드가 없거나 만료되었습니다."),
+                errors::CONN_PAIR_POLL_CODE_NOT_FOUND(),
             ));
         };
         if let Some((device_id, token)) = pairing.approved {
@@ -92,9 +90,7 @@ impl AppState {
             .find(|(_, p)| p.user_code.replace('-', "") == normalized)
             .map(|(k, v)| (k.clone(), v.clone()))
         else {
-            return Err(server_error(
-                "코드가 없거나 만료되었습니다. 쉘에서 연결을 다시 시작하게 하세요.",
-            ));
+            return Err(errors::CONN_PAIR_APPROVE_CODE_NOT_FOUND());
         };
         let id = Uuid::new_v4().to_string();
         let token = random_token();

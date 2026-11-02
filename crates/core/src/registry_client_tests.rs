@@ -1,4 +1,5 @@
 use super::*;
+use kaleidoscope_contract::ErrorCode;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 
@@ -246,11 +247,16 @@ fn layout_changes_posts_and_classifies_responses() {
     let request = worker.join().unwrap();
     assert!(request.starts_with(&format!("POST {DEVICE_LAYOUT_CHANGES_PATH} ")));
     assert!(request.contains("\"deleted_windows\":[\"window\"]"));
-    let error = CoreError::new(kaleidoscope_contract::ErrorCode::InvalidRequest);
-    let (url, worker) = server("400 Bad Request", serde_json::to_string(&error).unwrap());
-    assert!(
-        matches!(HttpRegistryClient::new().push_layout_changes(&url, "token", &changes), Err(RegistryError::Validation(e)) if e == error)
+    let expected_error = CoreError::new(ErrorCode::InvalidRequest);
+    let (url, worker) = server(
+        "400 Bad Request",
+        serde_json::to_string(&expected_error).unwrap(),
     );
+    let result = HttpRegistryClient::new().push_layout_changes(&url, "token", &changes);
+    assert!(matches!(result, Err(RegistryError::Validation(error))
+            if error.code == expected_error.code
+                && error.id.as_deref() == expected_error.id.as_deref()
+                && error.details.iter().any(|detail| detail.contains("HTTP 400"))));
     worker.join().unwrap();
     let (url, worker) = server("401 Unauthorized", "{}".into());
     assert!(matches!(

@@ -520,7 +520,11 @@ fn late_source_results_are_discarded_and_calls_are_ordered() {
         })
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::Server);
-    assert!(err.message.contains("500"));
+    assert_eq!(
+        err.id.as_deref(),
+        Some("CONN_REQUEST_SERVER_RESPONSE_FAILED")
+    );
+    assert!(err.details.iter().any(|detail| detail.contains("HTTP 500")));
     assert_eq!(
         snapshot(&core)
             .shared
@@ -719,7 +723,7 @@ fn failed_relay_has_retry_and_read_permission_rejects_post() {
     while Instant::now() < deadline {
         if let Ok(CoreEvent::DataUpdate { view, .. }) = rx.recv_timeout(Duration::from_millis(100))
         {
-            if matches!(view.values.get("/ui/children/0/items"),Some(BindingValue::Failed{message,retry,..}) if message.contains("500") && retry == &vec!["items".to_owned()])
+            if matches!(view.values.get("/ui/children/0/items"),Some(BindingValue::Failed{id,retry,..}) if id.as_deref() == Some("CONN_REQUEST_SERVER_RESPONSE_FAILED") && retry == &vec!["items".to_owned()])
             {
                 failed = true;
                 break;
@@ -873,8 +877,9 @@ fn source_safety_failed_refresh_keeps_value_and_reports_error_in_layout() {
                 view.sources.get("items"),
                 Some(SourceStatus::Failed {
                     has_value: true,
+                    id,
                     ..
-                })
+                }) if id.as_deref() == Some("CONN_REQUEST_SERVER_RESPONSE_FAILED")
             ) {
                 assert!(!view.values.contains_key("/ui/children/0/items"));
                 failed = true;
@@ -896,9 +901,9 @@ fn source_safety_failed_refresh_keeps_value_and_reports_error_in_layout() {
         matches!(view.values.get("/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == &json!([{"key":"cached"}]))
     );
     let errors = crate::data_runtime::layout_errors(&core.inner);
-    assert!(errors.iter().any(|entry| entry.window_id == window
-        && entry.pointer == "/sources/items"
-        && entry.message.contains("500")));
+    assert!(errors
+        .iter()
+        .any(|entry| entry.window_id == window && entry.pointer == "/sources/items"));
 }
 
 #[cfg(unix)]

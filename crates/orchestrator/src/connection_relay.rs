@@ -4,6 +4,7 @@ use axum::extract::{rejection::JsonRejection, Extension, Path, State};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::{
     data::{HttpMethod, CONNECTION_TIMEOUT_SECS, MEDIA_MAX_BYTES, SOURCE_MAX_BYTES},
+    errors,
     registry::{ConnectionAccept, ConnectionKind, ConnectionReply, ConnectionRequest},
     validate::valid_request_path,
     FileAccess, PermissionDecl,
@@ -41,7 +42,7 @@ impl AppState {
         let Some(access) = access else {
             return Err((
                 StatusCode::FORBIDDEN,
-                CoreError::new(ErrorCode::PermissionDenied),
+                errors::CONN_RELAY_PERMISSION_MISSING(name),
             ));
         };
         self.request_with_access(connection, request, access)
@@ -73,13 +74,13 @@ impl AppState {
             .ok_or_else(|| {
                 (
                     StatusCode::NOT_FOUND,
-                    server_error("연결을 찾을 수 없습니다."),
+                    errors::CONN_RELAY_CONNECTION_NOT_FOUND(name),
                 )
             })?;
         if connection.info.kind != ConnectionKind::Relay {
             return Err((
                 StatusCode::BAD_REQUEST,
-                CoreError::new(ErrorCode::InvalidRequest),
+                errors::CONN_RELAY_INVALID_KIND(name),
             ));
         }
         Ok(connection)
@@ -96,7 +97,7 @@ impl AppState {
         {
             return Err((
                 StatusCode::FORBIDDEN,
-                CoreError::new(ErrorCode::PermissionDenied),
+                errors::CONN_RELAY_WRITE_DENIED(&connection.info.name),
             ));
         }
         if !valid_request_path(&request.path)
@@ -109,7 +110,7 @@ impl AppState {
         {
             return Err((
                 StatusCode::BAD_REQUEST,
-                CoreError::new(ErrorCode::InvalidRequest),
+                errors::CONN_RELAY_PATH_INVALID(&connection.info.name),
             ));
         }
 
@@ -117,7 +118,7 @@ impl AppState {
             .map_err(|_| {
                 (
                     StatusCode::BAD_GATEWAY,
-                    server_error("원천 주소를 만들 수 없습니다."),
+                    errors::CONN_RELAY_URL_INVALID(&connection.info.name),
                 )
             })?;
         {
@@ -129,10 +130,13 @@ impl AppState {
         let method = Method::from_bytes(request.method.as_str().as_bytes()).map_err(|_| {
             (
                 StatusCode::BAD_REQUEST,
-                CoreError::new(ErrorCode::InvalidRequest),
+                errors::CONN_REQUEST_RELAY_METHOD_INVALID(&connection.info.name),
             )
         })?;
         let accept = request.accept;
+        let connection_name = connection.info.name.clone();
+        let host = url.host_str().unwrap_or("알 수 없는 서버").to_owned();
+        let timeout_host = host.clone();
         let body_present = request.body.is_some();
         let body = request.body;
         let client = reqwest::Client::builder()
@@ -141,7 +145,7 @@ impl AppState {
             .map_err(|_| {
                 (
                     StatusCode::BAD_GATEWAY,
-                    server_error("원천 요청을 준비할 수 없습니다."),
+                    errors::CONN_RELAY_CLIENT_FAILED(&connection_name),
                 )
             })?;
         let mut outgoing = client.request(method, url);
@@ -149,13 +153,13 @@ impl AppState {
             let header_name = HeaderName::from_bytes(name.as_bytes()).map_err(|_| {
                 (
                     StatusCode::BAD_GATEWAY,
-                    server_error("연결 헤더 설정을 읽을 수 없습니다."),
+                    errors::CONN_RELAY_HEADER_INVALID(&connection_name),
                 )
             })?;
             if value.contains("${env:") {
                 return Err((
                     StatusCode::BAD_GATEWAY,
-                    server_error("연결 헤더에 환경변수 참조를 사용할 수 없습니다."),
+                    errors::CONN_RELAY_ENV_HEADER_UNSUPPORTED(&connection_name),
                 ));
             }
             if body_present && header_name == reqwest::header::CONTENT_TYPE {
@@ -164,7 +168,7 @@ impl AppState {
             let header_value = HeaderValue::from_str(value).map_err(|_| {
                 (
                     StatusCode::BAD_GATEWAY,
-                    server_error("연결 헤더 설정을 읽을 수 없습니다."),
+                    errors::CONN_RELAY_HEADER_INVALID(&connection_name),
                 )
             })?;
             outgoing = outgoing.header(header_name, header_value);
@@ -174,11 +178,10 @@ impl AppState {
         }
 
         let future = async move {
-            let response = outgoing.send().await.map_err(|_| {
-                (
-                    StatusCode::BAD_GATEWAY,
-                    server_error("원천에 닿지 못했습니다."),
-                )
+            let response = outgoing.send().await.map_err(|detail| {
+                let mut error = errors::CONN_RELAY_UNREACHABLE(&connection_name, &host);
+                error.details = vec![format!("{}; host={host}", detail.without_url())];
+                (StatusCode::BAD_GATEWAY, error)
             })?;
             let status = response.status().as_u16();
             let rate_limit = kaleidoscope_data::rate_limit::rate_limit(status, response.headers());
@@ -195,16 +198,15 @@ impl AppState {
             } as usize;
             let mut response = response;
             let mut bytes = Vec::new();
-            while let Some(chunk) = response.chunk().await.map_err(|_| {
-                (
-                    StatusCode::BAD_GATEWAY,
-                    server_error("원천 응답을 읽지 못했습니다."),
-                )
+            while let Some(chunk) = response.chunk().await.map_err(|detail| {
+                let mut error = errors::CONN_RELAY_RESPONSE_READ_FAILED(&connection_name, &host);
+                error.details = vec![format!("{}; host={host}", detail.without_url())];
+                (StatusCode::BAD_GATEWAY, error)
             })? {
                 if bytes.len().saturating_add(chunk.len()) > max_bytes {
                     return Err((
                         StatusCode::PAYLOAD_TOO_LARGE,
-                        CoreError::new(ErrorCode::InvalidRequest),
+                        errors::CONN_RELAY_RESPONSE_TOO_LARGE(&connection_name),
                     ));
                 }
                 bytes.extend_from_slice(&chunk);
@@ -242,7 +244,7 @@ impl AppState {
             Ok(result) => result,
             Err(_) => Err((
                 StatusCode::GATEWAY_TIMEOUT,
-                server_error("원천 요청 시간이 지났습니다."),
+                errors::CONN_RELAY_TIMEOUT(&connection.info.name, &timeout_host),
             )),
         }
     }
@@ -261,7 +263,7 @@ pub(super) async fn device_request(
             } else {
                 StatusCode::BAD_REQUEST
             };
-            return http::error_response(status, CoreError::new(ErrorCode::InvalidRequest));
+            return http::error_response(status, errors::CONN_RELAY_REQUEST_BODY_INVALID());
         }
     };
     match state.relay_request(&device.0, &name, request).await {
