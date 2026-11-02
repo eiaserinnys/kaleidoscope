@@ -14,6 +14,7 @@ import { ChatHistory } from "./chat-history";
 import { Select } from "../components/select-toggle";
 import { Dialog } from "../components/dialog";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
+import { executionPlaces, keepStartModel, pickModel, placeIdOf } from "./agent-chat-places";
 
 export type AgentChatBlockData = Extract<Block, { type: "chat" }>;
 
@@ -224,7 +225,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     items,
   });
 
-  const loadModelChoices = async (profile: string) => {
+  const loadModelChoices = async (profile: string, previous: ConversationModel | undefined) => {
     setLoadingChoices(true);
     setLoadError(null);
     try {
@@ -232,7 +233,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       if (reply.op !== "conversation.get") return;
       setModels(reply.models);
       setProfiles(reply.profiles);
-      if (!reply.thread) setSelectedPreset(reply.start.model ?? "");
+      if (!reply.thread) setSelectedPreset(keepStartModel(reply.models, reply.start.model, previous) ?? "");
     } catch (reason) {
       const error = toCoreError(reason);
       if (!handleError(error)) setLoadError(error.message);
@@ -266,9 +267,10 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     const profile = profiles.find((item) => item.id === value);
     if (!profile?.available) return;
     if (!agent) {
+      const previous = models.find((item) => item.id === selectedPreset);
       setSelectedProfile(value);
       setSelectedPreset("");
-      void loadModelChoices(value);
+      void loadModelChoices(value, previous);
       return;
     }
     if (!thread?.profile || thread.profile.id === value) return;
@@ -281,10 +283,6 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     if (!model?.available) return;
     if (!agent) { setSelectedPreset(value); return; }
     if (!thread || thread.model.id === value) return;
-    if (thread.model.group?.id !== model.group?.id) {
-      setPendingSwitch({ model: value, label: model.label });
-      return;
-    }
     void switchConversation({ model: value });
   };
 
@@ -297,20 +295,32 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     disabled: !profile.available,
     description: !profile.available ? profile.reason ?? "쓸 수 없음" : undefined,
   })) }];
-  const modelGroups = models.reduce<Array<{ name?: string; options: Array<{ value: string; label: string; disabled?: boolean; description?: string }> }>>((groups, model) => {
-    const name = model.group?.label;
-    let group = groups.find((item) => item.name === name);
-    if (!group) { group = { ...(name ? { name } : {}), options: [] }; groups.push(group); }
-    group.options.push({
-      value: model.id,
-      label: model.label,
-      disabled: !model.available,
-      description: !model.available ? modelAvailabilityDescription(model) : undefined,
-    });
-    return groups;
-  }, []);
-  const selectedStartProfile = profiles.find((item) => item.id === selectedProfile);
+  const visibleModels = thread && !models.some((item) => item.id === thread.model.id)
+    ? [...models, { ...thread.model, available: true }]
+    : models;
+  const places = executionPlaces(visibleModels);
   const selectedStartModel = models.find((item) => item.id === selectedPreset);
+  const currentPlaceId = agent && thread ? placeIdOf(thread.model)
+    : selectedStartModel ? placeIdOf(selectedStartModel)
+    : places.find((place) => place.available)?.id;
+  const currentPlace = places.find((place) => place.id === currentPlaceId);
+  const modelOptions = currentPlace?.models.map((model) => ({
+    value: model.id,
+    label: model.label,
+    disabled: !model.available,
+    description: !model.available ? modelAvailabilityDescription(model) : undefined,
+  })) ?? [];
+  const selectPlace = (value: JsonValue) => {
+    if (typeof value !== "string" || busy || switching) return;
+    const place = places.find((item) => item.id === value);
+    if (!place?.available) return;
+    const model = pickModel(place, (agent ? thread?.model : selectedStartModel)?.label);
+    if (!model) return;
+    if (!agent) { setSelectedPreset(model.id); return; }
+    if (!thread || placeIdOf(thread.model) === value) return;
+    setPendingSwitch({ model: model.id, label: `${place.label}의 ${model.label}` });
+  };
+  const selectedStartProfile = profiles.find((item) => item.id === selectedProfile);
   const selectorsDisabled = busy || switching || loadingChoices;
   const selectorRow = (
     <div className="ks-file-tree-header ks-web-toolbar ks-agent-chat-toolbar">
@@ -323,11 +333,24 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         onChange={selectProfile}
       />
       <Select
-        groups={modelGroups}
+        groups={[{ options: places.map((place) => ({
+          value: place.id,
+          label: place.label,
+          disabled: !place.available,
+          description: place.available ? undefined : modelAvailabilityDescription(place.models[0]),
+        })) }]}
+        value={currentPlaceId}
+        label="실행 위치"
+        placeholder="실행 위치 선택"
+        disabled={selectorsDisabled}
+        onChange={selectPlace}
+      />
+      <Select
+        groups={[{ options: modelOptions }]}
         value={agent ? thread?.model.id : selectedPreset}
         label="모델"
         placeholder="모델 선택"
-        disabled={selectorsDisabled || modelGroups.length === 0}
+        disabled={selectorsDisabled || modelOptions.length === 0}
         onChange={selectModel}
       />
       {agent && busy ? <span className="ks-agent-chat-change-hint">답변이 끝난 뒤 바꿀 수 있습니다</span> : null}
