@@ -1,4 +1,4 @@
-import type { AppDefinition, Binding, BindingValue, PickFilesSpec, SaveFileSpec } from "../contract/contract";
+import type { AppDefinition, Binding, BindingValue, ClientActionContext, PickFilesSpec, SaveFileSpec } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { CLIENT_PING_TIMEOUT_SECS } from "../contract/limits";
 import type { ShellStore } from "../core/shell-store";
@@ -138,7 +138,8 @@ export class ClientRuntime {
 
   action(name: string, event: JsonValue, item?: JsonValue, args?: JsonValue) {
     if (!this.client.actions.includes(name) || !this.frame) return false;
-    this.send({ type: "ks-client-action", name, context: { event, ...(item === undefined ? {} : { item }), ...(args === undefined ? {} : { args }) } });
+    const context: ClientActionContext = { event, ...(item === undefined ? {} : { item }), ...(args === undefined ? {} : { args }) };
+    this.send({ type: "ks-client-action", name, context });
     return true;
   }
 

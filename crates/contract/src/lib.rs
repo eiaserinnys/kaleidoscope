@@ -3981,6 +3981,9 @@ pub enum CoreRequest {
         #[serde(default)]
         #[ts(optional, as = "Option<JsonValue>")]
         item: JsonValue,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        modifiers: Option<client::EventModifiers>,
     },
     /// 원천을 다시 받는다(값의 `retry`, 창 아래 오류 줄의 다시 받기). 빈 배열이면 모든 원천이다. 받기를 시작하면
     /// 바로 응답하고, 결과는 `data.update`로 온다. 모르는 원천 이름은 넘긴다.
@@ -6425,7 +6428,8 @@ mod tests {
                 window_id: "w".into(),
                 pointer: "/ui/on_click".into(),
                 event: JsonValue::Null,
-                item: JsonValue::Null
+                item: JsonValue::Null,
+                modifiers: None,
             }
         );
         let media: CoreRequest = serde_json::from_str(

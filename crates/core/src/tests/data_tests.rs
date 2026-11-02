@@ -516,6 +516,7 @@ fn late_source_results_are_discarded_and_calls_are_ordered() {
             pointer: "/ui/children/0/on_select".into(),
             event: json!("event"),
             item: json!({"key":"picked"}),
+            modifiers: None,
         })
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::Server);
@@ -629,6 +630,7 @@ fn explicit_null_and_absent_action_value_are_distinct() {
         pointer: "/ui/children/1/on_click".into(),
         event: json!("event"),
         item: Value::Null,
+        modifiers: None,
     })
     .unwrap();
     assert_eq!(
@@ -640,6 +642,7 @@ fn explicit_null_and_absent_action_value_are_distinct() {
         pointer: "/ui/children/2/on_click".into(),
         event: json!("event"),
         item: Value::Null,
+        modifiers: None,
     })
     .unwrap();
     assert_eq!(
@@ -706,6 +709,7 @@ fn failed_relay_has_retry_and_read_permission_rejects_post() {
             pointer: "/ui/children/0/on_select".into(),
             event: json!("x"),
             item: json!({"key":"x"}),
+            modifiers: None,
         })
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::PermissionDenied);
@@ -940,6 +944,7 @@ fn concurrent_actions_preserve_both_state_keys() {
                         pointer: format!("/ui/children/{index}/on_click"),
                         event: json!("set"),
                         item: Value::Null,
+                        modifiers: None,
                     })
                     .unwrap();
                 })
@@ -1266,6 +1271,7 @@ fn storage_actions_and_remote_change_replan_file_source() {
         pointer: "/ui/children/2/on_click".into(),
         event: Value::Null,
         item: Value::Null,
+        modifiers: None,
     })
     .unwrap();
     let current = snapshot(&core);
@@ -1317,6 +1323,7 @@ fn storage_actions_and_remote_change_replan_file_source() {
             pointer: "/ui/children/2/on_click".into(),
             event: Value::Null,
             item: Value::Null,
+            modifiers: None,
         })
         .unwrap_err();
     assert_eq!(error.code, ErrorCode::Conflict);

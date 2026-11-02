@@ -59,6 +59,7 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
         pointer: "/ui/children/1/on_press".into(),
         event: json!("1"),
         item: Value::Null,
+        modifiers: None,
     })
     .unwrap();
     let mut calc_state = snapshot(&core)
@@ -84,6 +85,7 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
         pointer: "/ui/children/0/end/0/on_click".into(),
         event: Value::Null,
         item: Value::Null,
+        modifiers: None,
     })
     .unwrap();
     let reply = crate::connections::request(
@@ -180,6 +182,7 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
         pointer: "/ui/children/0/end/2/on_click".into(),
         event: Value::Null,
         item: Value::Null,
+        modifiers: None,
     })
     .unwrap();
     let cleared = crate::connections::request(
@@ -468,7 +471,8 @@ fn action_preserves_completed_state_when_later_step_fails() {
             window_id: window.clone(),
             pointer: "/ui/on_click".into(),
             event: Value::Null,
-            item: Value::Null
+            item: Value::Null,
+            modifiers: None,
         })
         .is_err());
     let state = snapshot(&core)
@@ -551,6 +555,7 @@ fn responsiveness_benchmark_compares_legacy_and_optimized_paths() {
             pointer: "/ui/children/24/on_click".into(),
             event: Value::Null,
             item: Value::Null,
+            modifiers: None,
         })
         .unwrap();
     }
