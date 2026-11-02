@@ -28,6 +28,16 @@ it("프레임 호버는 부모 상태를 바꾸지 않고 Tab은 선택한 요�
   window.dispatchEvent(new MessageEvent("message", { source: window.parent, data: { type: "ks-html-theme", tokens: { "--ks-color-accent": "#abcdef" } } }));
   expect(document.documentElement.style.getPropertyValue("--ks-color-accent")).toBe("#abcdef");
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  const paragraph = document.querySelector("p")!;
+  paragraph.innerHTML = '다음 <b>굵은</b> 문장';
+  const range = document.createRange(); range.selectNodeContents(paragraph.firstChild!);
+  getSelection()!.addRange(range);
+  send.mockClear();
+  paragraph.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, detail: 2 }));
+  expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-html-select", selection: expect.objectContaining({ anchor: expect.objectContaining({ kind: "text" }) }) }), "*");
+  expect(document.documentElement.hasAttribute("data-ks-pending")).toBe(true);
+  document.querySelector("button")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  expect(document.documentElement.hasAttribute("data-ks-pending")).toBe(false);
   send.mockClear();
   window.dispatchEvent(new MessageEvent("message", { source: window.parent, data: { type: "ks-html-lock", locked: true } }));
   document.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));

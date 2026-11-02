@@ -157,10 +157,14 @@ document.addEventListener("mousedown", (event) => {
   if (mode !== "select") return;
   if (editing && event.target !== editing.element) finishEdit(false);
   const current = getSelection();
-  if (current?.rangeCount && event.target instanceof Node && !current.getRangeAt(0).intersectsNode(event.target)) current.removeAllRanges();
+  if (current?.rangeCount && event.target instanceof Node && !current.getRangeAt(0).intersectsNode(event.target)) {
+    current.removeAllRanges();
+    document.documentElement.removeAttribute("data-ks-pending");
+  }
 }, true);
 document.addEventListener("mouseup", (event) => {
-  if (locked || mode !== "select" || editing || event.detail >= 2) return;
+  if (locked || mode !== "select" || editing) return;
+  if (event.detail >= 2 && event.target instanceof HTMLElement && !event.target.children.length && event.target.textContent?.trim()) return;
   const current = getSelection(); if (!current || current.isCollapsed || !current.toString().trim() || !current.rangeCount) return;
   const range = current.getRangeAt(0); const node = range.commonAncestorContainer;
   const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;

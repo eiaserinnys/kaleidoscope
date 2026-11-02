@@ -95,6 +95,13 @@ it("파일 HTML을 읽기 전용 격리 프레임으로 표시한다", async () 
   expect(frame.srcdoc).not.toContain("window.secret");
 });
 
+it("깨진 스레드는 문서 이름과 복구 방법을 담은 코어 오류를 반환한다", async () => {
+  const core = { call: vi.fn(async (request: CoreRequest) => request.op === "storage.list"
+    ? { op: "storage.list", result: { items: [{ doc: "시안/thread.json" }] } }
+    : { op: "storage.get", result: { content: "{", revision: "bad" } }) } as unknown as ShellStore;
+  await expect(readThread(core, "window", "drafts", "시안")).rejects.toMatchObject({ code: "invalid_request", id: "SHELL_THREAD_READ_INVALID", message: "문서 시안의 thread.json 형식이 올바르지 않습니다. 파일을 고쳐 다시 저장하세요." });
+});
+
 it("스레드 CAS 충돌 때 최신 답글을 보존하며 같은 변경을 재적용한다", async () => {
   let reads = 0; let writes = 0; let saved = "";
   const core = { call: vi.fn(async (request: CoreRequest) => {
@@ -167,7 +174,7 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
     files.set("시안/thread.json", { ...validThread, content: '{"comments":"잘못된 구조"}' });
     base.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "bucket", item: { entry_id: "drafts", key: "drafts/시안/thread.json", kind: "md", revision: "bad", exists: true } } } });
   });
-  expect((await screen.findByRole("alert")).textContent).toContain("커멘트 문서의 형식이 올바르지 않습니다");
+  expect((await screen.findByRole("alert")).textContent).toContain("문서 시안의 thread.json 형식이 올바르지 않습니다");
   expect(screen.getByText("색을 바꿔 주세요")).toBeTruthy();
   await act(async () => {
     files.set("시안/thread.json", validThread);

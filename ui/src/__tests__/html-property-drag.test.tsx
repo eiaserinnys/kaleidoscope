@@ -4,6 +4,19 @@ import { ColorField, NumberField } from "../blocks/html-document/fields";
 
 afterEach(cleanup);
 
+it("거부한 숫자와 간격과 색 입력은 다음 입력에서 표시를 지운다", () => {
+  vi.stubGlobal("CSS", { supports: (_prop: string, value: string) => value !== "zzz" });
+  render(<><NumberField label="불투명" prop="opacity" value="100" max={100} preview={vi.fn()} commit={vi.fn()} /><NumberField label="안쪽 위" prop="padding-top" value="0" min={0} box="is-top" preview={vi.fn()} commit={vi.fn()} /><ColorField label="배경" prop="background-color" value="#ffffff" focus={vi.fn()} preview={vi.fn()} commit={vi.fn()} /></>);
+  for (const [name, bad, next] of [["불투명", "140", "90"], ["안쪽 위", "-1", "2"], ["배경", "zzz", "#eeeeee"]]) {
+    const input = screen.getByRole("textbox", { name });
+    fireEvent.focus(input); fireEvent.change(input, { target: { value: bad } }); fireEvent.keyDown(input, { key: "Enter" });
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    fireEvent.change(input, { target: { value: next } });
+    expect(input.hasAttribute("aria-invalid")).toBe(false);
+  }
+  vi.unstubAllGlobals();
+});
+
 it("숫자를 끄는 동안 부모를 갱신하지 않고 놓을 때 한 번 확정한다", () => {
   const preview = vi.fn(); const commit = vi.fn(); let parentRenders = 0;
   function Parent() { parentRenders++; return <NumberField label="크기" prop="font-size" value="10" min={1} preview={preview} commit={commit} />; }
