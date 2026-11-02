@@ -270,10 +270,8 @@ export class WindowData {
   };
 
   attachSurface = (id: string, canvas: OffscreenCanvas, css_width: number, css_height: number, dpr: number, visible: boolean) => {
-    if (this.surfaces.has(id)) {
-      this.setNotice(`표면 "${id}"이 이 창에 이미 있습니다. 각 캔버스에 서로 다른 표면 이름을 지정하세요. [SHELL_CANVAS_DUPLICATE_SURFACE]`);
-      return undefined;
-    }
+    const previous = this.surfaces.get(id);
+    if (previous) this.runtime?.surface({ phase: "detach", id, generation: previous.generation });
     const surface = { id, generation: ++this.surfaceGeneration, canvas, css_width, css_height, dpr, visible };
     this.surfaces.set(id, surface); this.runtime?.surface({ phase: "attach", ...surface });
     return surface.generation;
