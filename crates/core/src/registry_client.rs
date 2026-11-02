@@ -1164,6 +1164,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn raw_app_value_item_url_removes_empty_base_path_segment() {
+        let address = raw_app_value_item_url(
+            "http://127.0.0.1:4219/",
+            "md-editor",
+            "documents/a.md",
+        )
+        .unwrap();
+
+        assert_eq!(
+            address.as_str(),
+            "http://127.0.0.1:4219/api/device/app-values/md-editor/documents/a.md"
+        );
+    }
+
+    #[test]
     fn regression_successful_event_stream_status_is_accepted() {
         assert!(check_status(reqwest::StatusCode::OK, &[], "registry.example").is_ok());
     }

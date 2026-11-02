@@ -1,3 +1,4 @@
+// 생성·이름 변경 회귀는 공용 폴더 하니스와 함께 검증하며 이번 보완에서는 테스트 분리로 충돌을 늘리지 않는다.
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
@@ -56,13 +57,37 @@ function storageFolderDefinition(readOnly = true): AppDefinition {
   };
 }
 
+function storageFolderTabsDefinition(): AppDefinition {
+  const definition = storageFolderDefinition(false);
+  definition.requires.blocks = 15;
+  (definition.ui as Extract<Block, { type: "folder" }> & { header: boolean }).header = false;
+  definition.ui = {
+    type: "tabs",
+    tabs: [
+      { label: "서버", child: definition.ui },
+      { label: "다른 탭", child: { type: "text", value: "다른 탭 내용" } },
+    ],
+  };
+  return definition;
+}
+
+function storageFolderSplitDefinition(): AppDefinition {
+  const definition = storageFolderDefinition();
+  definition.ui = {
+    type: "split",
+    direction: "row",
+    children: [definition.ui, { type: "text", value: "다른 패널" }],
+  };
+  return definition;
+}
+
 function setup(definition: AppDefinition, configure?: (transport: ReturnType<typeof createFakeTransport>) => void, files: Record<string, string> = { "notes/guide.md": "# Guide", "skip.txt": "skip" }) {
   const seed = makeTestSeed({
     definitions: [definition],
     grants: definition.id === "folder-files-test" ? [grantFor("viewer-window", "docs")] : [],
     files,
   });
-  seed.snapshot.supported = { blocks: 13, modules: { files: 2, storage: 3 } };
+  seed.snapshot.supported = { blocks: 15, modules: { files: 2, storage: 3 } };
   seed.snapshot.shared.windows[0].state = { selected: null };
   const transport = createFakeTransport(seed);
   if (configure) configure(transport);
@@ -74,6 +99,147 @@ function setup(definition: AppDefinition, configure?: (transport: ReturnType<typ
 }
 
 describe("folder block", () => {
+  it("내 폴더 빈 공간 메뉴의 네 취소 경로는 현재 행과 Enter 동작을 유지한다", async () => {
+    const user = userEvent.setup();
+    const { call } = setup(fileFolderDefinition("readwrite", false), undefined, { "guide.md": "# 안내" });
+    const row = await screen.findByRole("treeitem", { name: "guide.md" });
+    await user.click(row);
+    expect(screen.queryByRole("treeitem", { name: "새 파일" })).toBeNull();
+    for (const label of ["새 파일", "새 폴더"]) {
+      for (const cancel of ["Escape", "empty"]) {
+        fireEvent.contextMenu(screen.getByRole("tree"));
+        await user.click(await screen.findByRole("menuitem", { name: label }));
+        const input = await screen.findByRole("textbox", { name: `${label} 이름` });
+        await waitFor(() => expect(document.activeElement).toBe(input));
+        if (cancel === "empty") await user.clear(input);
+        await user.keyboard(cancel === "empty" ? "{Enter}" : "{Escape}");
+        await waitFor(() => expect(document.activeElement).toBe(row));
+        const before = call.mock.calls.filter(([request]) => request.op === "data.act").length;
+        await user.keyboard("{Enter}");
+        await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "data.act").length).toBeGreaterThan(before));
+      }
+    }
+  });
+  it.each(["끝 행", "빈 공간 메뉴", "머리", "행 메뉴"])("%s에서 연 만들기는 취소 뒤 원래 입구로 돌아간다", async (entrance) => {
+    const user = userEvent.setup();
+    const files = entrance === "머리" || entrance === "행 메뉴";
+    const definition = files ? fileFolderDefinition("readwrite", false) : storageFolderDefinition(false);
+    if (!files) definition.requires.blocks = 15;
+    if (!files) (definition.ui as Extract<Block, { type: "folder" }>).header = false;
+    setup(definition, files ? undefined : (transport) => {
+      const call = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "storage.list"
+        ? { op: "storage.list", result: { bucket_id: definition.id, items: [] } } : call(request));
+    }, { "guide.md": "# 안내" });
+    const tree = await screen.findByRole("tree");
+    const label = files ? "새 파일" : "새 문서";
+    await screen.findByRole(files ? "button" : "treeitem", { name: label });
+    const origin = () => entrance === "머리" ? screen.getByRole("button", { name: label })
+      : screen.getByRole("treeitem", { name: entrance === "행 메뉴" ? "guide.md" : label });
+    for (const cancel of ["Escape", "empty"]) {
+      if (entrance.includes("메뉴")) {
+        fireEvent.contextMenu(entrance === "빈 공간 메뉴" ? tree : origin());
+        await user.click(await screen.findByRole("menuitem", { name: label }));
+      } else await user.click(origin());
+      const input = await screen.findByRole("textbox", { name: `${label} 이름` });
+      await waitFor(() => expect(document.activeElement).toBe(input));
+      if (cancel === "empty") await user.clear(input);
+      await user.keyboard(cancel === "empty" ? "{Enter}" : "{Escape}");
+      await waitFor(() => expect(document.activeElement).toBe(origin()));
+    }
+    await user.keyboard("{Enter}");
+    if (entrance !== "머리" && entrance !== "행 메뉴") expect(await screen.findByRole("textbox", { name: `${label} 이름` })).toBeTruthy();
+  });
+
+  it.each([0, 40])("목록 %i개를 받기 전에는 끝 행을 먼저 보이지 않는다", async (count) => {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const definition = storageFolderDefinition(false);
+    definition.requires.blocks = 15;
+    (definition.ui as Extract<Block, { type: "folder" }>).header = false;
+    setup(definition, (transport) => {
+      const call = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => {
+        if (request.op !== "storage.list") return call(request);
+        await pending;
+        return { op: "storage.list", result: { bucket_id: definition.id, items: Array.from({ length: count }, (_, i) => ({ doc: `${i}.md`, revision: "r1", updated_at: "", byte_size: 0 as unknown as bigint })) } };
+      });
+    });
+    await screen.findByText("불러오는 중");
+    expect(screen.queryByRole("treeitem", { name: "새 문서" })).toBeNull();
+    await act(async () => release());
+    const tree = screen.getByRole("tree");
+    fireEvent.scroll(tree, { target: { scrollTop: count * 32 } });
+    expect(await screen.findAllByRole("treeitem", { name: "새 문서" })).toHaveLength(1);
+  });
+  it.each(["머리", "우클릭"])("%s에서 만든 파일은 늦은 응답 뒤 열고 새 행에 포커스를 둔다", async (entrance) => {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const { store } = setup(fileFolderDefinition("readwrite", false), (transport) => {
+      const call = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => {
+        if (request.op === "files.write") await pending;
+        const reply = await call(request);
+        if (request.op === "files.write") transport.emit({ event: "files.changed", root: grantFor("viewer-window", "docs").root_path, changes: [{ to: request.path }] });
+        return reply;
+      });
+    }, { "guide.md": "# 안내" });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+    if (entrance === "머리") fireEvent.click(screen.getByRole("button", { name: "새 파일" }));
+    else {
+      fireEvent.contextMenu(guide);
+      fireEvent.click(await screen.findByRole("menuitem", { name: "새 파일" }));
+    }
+    const input = await screen.findByRole("textbox", { name: "새 파일 이름" });
+    fireEvent.change(input, { target: { value: "created" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(store.getSnapshot()?.shared.windows[0].state.selected).toBeNull();
+    await act(async () => release());
+    await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.selected).toBe("created.md"));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("treeitem", { name: "created.md" })));
+  });
+
+  it.each([0, 1])("머리 없는 문서 모음 %i개에서도 끝 행으로 만들고 문서를 연다", async (count) => {
+    let docs = count ? ["guide.md"] : [];
+    const definition = storageFolderDefinition(false);
+    definition.requires.blocks = 15;
+    (definition.ui as Extract<Block, { type: "folder" }>).header = false;
+    const { store } = setup(definition, (transport) => {
+      const call = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => {
+        if (request.op === "storage.list") return { op: "storage.list", result: { bucket_id: definition.id, items: docs.map((doc) => ({ doc, revision: "r1", updated_at: "", byte_size: 0 as unknown as bigint })) } };
+        if (request.op === "storage.write") docs = [...docs, request.doc!];
+        return call(request);
+      });
+    });
+    const create = await screen.findByRole("treeitem", { name: "새 문서" });
+    fireEvent.click(create);
+    const input = await screen.findByRole("textbox", { name: "새 문서 이름" });
+    expect(screen.queryByRole("treeitem", { name: "새 문서" })).toBeNull();
+    fireEvent.change(input, { target: { value: "문서" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.selected).toBe("문서.md"));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("treeitem", { name: "문서.md" })));
+  });
+
+  it.each([["md"], ["md", "markdown"]])("만들기와 이름 바꾸기는 허용 확장자를 구체적으로 안내한다: %j", async (...extensions) => {
+    const definition = fileFolderDefinition("readwrite", false);
+    (definition.ui as Extract<Block, { type: "folder" }>).extensions = extensions;
+    setup(definition, undefined, { "guide.md": "# 안내" });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+    const message = extensions.length === 1 ? "이름은 .md로 끝나야 합니다" : "이름은 .md, .markdown 가운데 하나로 끝나야 합니다";
+    fireEvent.click(screen.getByRole("button", { name: "새 파일" }));
+    let input = await screen.findByRole("textbox", { name: "새 파일 이름" });
+    fireEvent.change(input, { target: { value: "wrong.txt" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "새 파일 이름" }), { key: "Escape" });
+    fireEvent.keyDown(guide, { key: "F2" });
+    input = await screen.findByRole("textbox", { name: "이름 바꾸기" });
+    fireEvent.change(input, { target: { value: "without-extension" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
+  });
   it("이름 입력을 바깥 클릭으로 닫으면 누른 대상에 키보드 포커스를 남기고 Escape만 원래 행으로 돌린다", async () => {
     const user = userEvent.setup();
     setup(fileFolderDefinition("readwrite", false), undefined, { "a.md": "# a", "b.md": "# b", "notes/guide.md": "# 안내" });
@@ -142,7 +308,7 @@ describe("folder block", () => {
   });
 
   it("lists and selects flat documents from a declared storage collection", async () => {
-    const { store, call } = setup(storageFolderDefinition(), (transport) => {
+    const { store, call } = setup(storageFolderSplitDefinition(), (transport) => {
       const originalCall = transport.call.bind(transport);
       vi.spyOn(transport, "call").mockImplementation(async (request) => {
         if (request.op === "storage.list") {
@@ -165,6 +331,7 @@ describe("folder block", () => {
       if (!row) throw new Error("저장소 문서 행이 나타나지 않았습니다");
       return row;
     });
+    expect(document.querySelector(".ks-file-tree-header")).toBeTruthy();
     expect(guide.getAttribute("aria-level")).toBe("1");
     expect(call).toHaveBeenCalledWith({ op: "storage.list", window_id: "viewer-window", entry: "documents" });
     fireEvent.click(guide);
@@ -261,13 +428,13 @@ describe("folder block", () => {
         : originalCall(request));
     });
 
-    const newDocument = await screen.findByRole("button", { name: "새 문서" });
+    const newDocument = await screen.findByRole("treeitem", { name: "새 문서" });
     fireEvent.click(newDocument);
     const input = await screen.findByRole("textbox", { name: "새 문서 이름" }) as HTMLInputElement;
     await waitFor(() => expect(input.selectionEnd).toBe("새 문서".length));
     fireEvent.change(input, { target: { value: "보고서.txt" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect((await screen.findByRole("alert")).textContent).toContain(".md 파일만 볼 수 있습니다.");
+    expect((await screen.findByRole("alert")).textContent).toBe("이름은 .md로 끝나야 합니다");
     expect(screen.getByRole("textbox", { name: "새 문서 이름" })).toBeTruthy();
   });
 
@@ -325,6 +492,63 @@ describe("folder block", () => {
     const label = await screen.findByText("비어 있음");
     expect(label.closest(".ks-row")).toBeNull();
     expect(label.closest("[data-tree-row]")?.getAttribute("data-tree-row")).toBe("empty:empty");
+  });
+
+  it("does not repeat the collection label inside a tab panel", async () => {
+    setup(storageFolderTabsDefinition(), (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => {
+        if (request.op === "storage.list") {
+          return { op: "storage.list", result: { bucket_id: "folder-storage-test", items: [] } };
+        }
+        return originalCall(request);
+      });
+    });
+
+    await screen.findByRole("tree", { name: "파일 목록" });
+    expect(document.querySelector(".ks-file-tree-header")).toBeNull();
+    expect(screen.queryByText("문서", { exact: true })).toBeNull();
+    expect(await screen.findByRole("treeitem", { name: "새 문서" })).toBeTruthy();
+  });
+
+  it("shows the collection header without a split pane by default", async () => {
+    setup(storageFolderDefinition(), (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "storage.list"
+        ? { op: "storage.list", result: { bucket_id: "folder-storage-test", items: [] } }
+        : originalCall(request));
+    });
+    await screen.findByRole("tree", { name: "파일 목록" });
+    expect(document.querySelector(".ks-file-tree-header")?.textContent).toContain("문서");
+  });
+
+  it("hides the file-root header when explicitly disabled", async () => {
+    const definition = fileFolderDefinition();
+    definition.requires.blocks = 15;
+    (definition.ui as Extract<Block, { type: "folder" }> & { header: boolean }).header = false;
+    setup(definition);
+    await screen.findByRole("tree");
+    expect(document.querySelector(".ks-file-tree-header")).toBeNull();
+  });
+
+  it.each([true, false])("ordinary tabs preserve the child folder collapse control (header=%s)", async (header) => {
+    const definition = storageFolderDefinition();
+    definition.requires.blocks = 15;
+    definition.ui = { type: "split", direction: "row", children: [
+      { type: "tabs", header, tabs: [{ label: "문서 탭", child: definition.ui }] },
+      { type: "text", value: "다른 패널" },
+    ] };
+    setup(definition, (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "storage.list"
+        ? { op: "storage.list", result: { bucket_id: "folder-storage-test", items: [] } }
+        : originalCall(request));
+    });
+    await screen.findByRole("tree", { name: "파일 목록" });
+    expect(screen.getAllByRole("button", { name: "목록 접기" })).toHaveLength(1);
+    expect(document.querySelector(".ks-file-tree .ks-file-tree-collapse button")).toBe(screen.getByRole("button", { name: "목록 접기" }));
+    fireEvent.click(screen.getByRole("button", { name: "목록 접기" }));
+    expect(screen.getByRole("button", { name: "목록 펼치기" })).toBeTruthy();
   });
 
   it("refreshes a visible collection on matching storage changes and defers hidden updates", async () => {

@@ -66,10 +66,10 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "md-editor",
         name: "마크다운 편집기",
-        version: 3,
-        updated_at: "2026-10-30T00:00:00Z",
-        blocks: 3,
-        modules: &[("files", 1)],
+        version: 4,
+        updated_at: "2026-11-02T00:00:00Z",
+        blocks: 15,
+        modules: &[("files", 3), ("storage", 3)],
         assets: &[],
     },
     BuiltinIdentity {

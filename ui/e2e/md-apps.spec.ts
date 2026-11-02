@@ -6,6 +6,8 @@ test("opens, edits and autosaves a markdown file", async ({ page }) => {
   await page.goto("/");
   const editor = page.getByTestId("app-window-md-editor");
 
+  await expect(editor.getByRole("tab", { name: "서버" })).toHaveAttribute("aria-selected", "true");
+  await editor.getByRole("tab", { name: "내 폴더" }).click();
   await editor.getByRole("button", { name: "문서 폴더 고르기" }).click();
   await editor.getByRole("treeitem", { name: "README.md" }).click();
 
@@ -40,6 +42,8 @@ test("captures empty and opened views at both sizes and color schemes", async ({
       });
 
       const editor = page.getByTestId("app-window-md-editor");
+      await expect(editor.getByRole("tab", { name: "서버" })).toHaveAttribute("aria-selected", "true");
+      await editor.getByRole("tab", { name: "내 폴더" }).click();
       await editor.getByRole("button", { name: "문서 폴더 고르기" }).click();
       await editor.getByRole("treeitem", { name: "Kaleidoscope.md" }).click();
       await expect(editor.locator(".cm-content")).toContainText("kaleidoscope 작업 메모");

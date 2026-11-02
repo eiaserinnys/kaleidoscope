@@ -449,7 +449,11 @@ fn snapshot_from_empty_server_uploads_all_local_entities_and_migrates_remote_win
     }
     core.inner.state.lock().unwrap().sync.pending.clear();
     let mut received = snapshot(&core).shared.windows[0].clone();
-    received.app_version = 99;
+    received.app_version = 3;
+    received.state.clear();
+    received
+        .state
+        .insert("current_file".into(), json!("notes/a.md"));
     received.state.insert("obsolete".into(), json!("value"));
     crate::registry_events::apply_event(
         &core.inner,
@@ -473,6 +477,17 @@ fn snapshot_from_empty_server_uploads_all_local_entities_and_migrates_remote_win
             .current_version
     );
     assert!(!after.shared.windows[0].state.contains_key("obsolete"));
+    assert_eq!(
+        after.shared.windows[0]
+            .state
+            .get("source")
+            .and_then(Value::as_f64),
+        Some(1.0)
+    );
+    assert_eq!(
+        after.shared.windows[0].state.get("current_file"),
+        Some(&json!("notes/a.md"))
+    );
     assert!(!is_pending(
         &core,
         crate::sync_state::EntityKind::Window,

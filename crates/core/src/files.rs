@@ -475,6 +475,9 @@ pub(crate) fn open(
             path.into()
         }),
     );
+    for (key, value) in opens.set_state {
+        window.state.insert(key, value);
+    }
     window.updated_at = crate::state_commands::timestamp();
     Ok(CoreReply::FilesOpen {
         window: window.clone(),

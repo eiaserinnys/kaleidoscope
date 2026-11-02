@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 test("creates a markdown file and cancels without writing", async ({ page }) => {
   await page.goto("/");
   const editor = page.getByTestId("app-window-md-editor");
+  await editor.getByRole("tab", { name: "내 폴더" }).click();
   await editor.getByRole("button", { name: "문서 폴더 고르기" }).click();
   await expect(editor.getByRole("button", { name: "새 파일" })).toBeVisible();
 
@@ -40,6 +41,7 @@ test("creates a markdown file and cancels without writing", async ({ page }) => 
 test("matches the new-file input row height to a file row", async ({ page }) => {
   await page.goto("/?preview=md-editor");
   const editor = page.getByTestId("app-window-md-editor");
+  await editor.getByRole("tab", { name: "내 폴더" }).click();
   await editor.getByRole("button", { name: "문서 폴더 고르기" }).click();
   const fileRow = editor.getByRole("treeitem", { name: "README.md" });
   await expect(fileRow).toBeVisible();

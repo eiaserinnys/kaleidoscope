@@ -72,6 +72,7 @@ export interface TreeViewProps {
   label: string;
   className: string;
   emptyContent?: ReactNode;
+  endAction?: { label: string; leading?: ReactNode; onActivate: () => void };
   onExpandedChange: (id: string, expanded: boolean) => void;
   onActivate: (row: TreeRowModel, activation: TreeActivation) => void;
   onContextMenu?: (row: TreeRowModel | null, target: HTMLElement, point: { x: number; y: number }, focus: TreeFocusController) => void;
@@ -81,11 +82,17 @@ export interface TreeViewProps {
   onFocusController?: (focus: TreeFocusController) => void;
 }
 
-export function TreeView({ nodes, expanded, selectedId, label, className, emptyContent, onExpandedChange, onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, menuTargetId, onFocusController }: TreeViewProps) {
+export const END_ACTION_ID = "tree:end-action";
+
+export function TreeView({ nodes, expanded, selectedId, label, className, emptyContent, endAction, onExpandedChange, onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, menuTargetId, onFocusController }: TreeViewProps) {
   const previousRows = useRef(new Map<string, TreeRowModel>());
   const flat = useMemo(() => {
     const nextRows = new Map<string, TreeRowModel>();
-    const stable = flattenTreeModel(nodes, expanded).map((row) => {
+    const allNodes: TreeNode[] = endAction ? [...nodes, {
+      id: END_ACTION_ID, label: endAction.label, leading: endAction.leading,
+      selectable: false, ariaSelectable: false, rowClassName: "ks-tree-end-action",
+    }] : nodes;
+    const stable = flattenTreeModel(allNodes, expanded).map((row) => {
       const previous = previousRows.current.get(row.id);
       const result = previous && sameRow(previous, row) ? previous : row;
       nextRows.set(row.id, result);
@@ -93,7 +100,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     });
     previousRows.current = nextRows;
     return stable;
-  }, [nodes, expanded]);
+  }, [nodes, expanded, endAction]);
   const treeRows = useMemo(() => flat.filter((row) => row.node.content === undefined), [flat]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const seenInteractiveRows = useRef(new Set<string>());
@@ -118,16 +125,16 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     virtual.scrollToIndex(flat.indexOf(next), { align: "auto" });
   }, [flat, treeRows, virtual]);
 
-  const handlers = useRef({ onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, expanded, moveFocus });
-  handlers.current = { onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, expanded, moveFocus };
-  const [focusRequest, setFocusRequest] = useState<{ targets: Array<string | null>; waitForTarget: boolean; token: number } | null>(null);
+  const handlers = useRef({ onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, expanded, moveFocus, endAction });
+  handlers.current = { onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, expanded, moveFocus, endAction };
+  const [focusRequest, setFocusRequest] = useState<{ targets: Array<string | null>; waitForTarget: boolean; currentOnNull: boolean; token: number } | null>(null);
   const focusRequestToken = useRef(0);
   const treeRowsRef = useRef(treeRows);
   treeRowsRef.current = treeRows;
   const focus = useMemo<TreeFocusController>(() => ({
     row: (id, waitForRow = false) => {
       focusRequestToken.current += 1;
-      setFocusRequest({ targets: [id], waitForTarget: waitForRow, token: focusRequestToken.current });
+      setFocusRequest({ targets: [id], waitForTarget: waitForRow, currentOnNull: id === null, token: focusRequestToken.current });
     },
     deletionTargets: (row) => {
       const currentRows = treeRowsRef.current;
@@ -138,20 +145,21 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     },
     afterDelete: (targets) => {
       focusRequestToken.current += 1;
-      setFocusRequest({ targets, waitForTarget: false, token: focusRequestToken.current });
+      setFocusRequest({ targets, waitForTarget: false, currentOnNull: false, token: focusRequestToken.current });
     },
   }), []);
   useLayoutEffect(() => onFocusController?.(focus), [focus, onFocusController]);
 
   const onFocus = useCallback((id: string) => setFocusId(id), []);
   const activate = useCallback((row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => {
+    if (row.id === END_ACTION_ID) { handlers.current.endAction?.onActivate(); return; }
     handlers.current.onActivate(row, { source: "click", target: event.currentTarget, detail: event.detail });
   }, []);
   const contextMenu = useCallback((row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => {
     if (!handlers.current.onContextMenu) return;
     event.preventDefault();
     event.stopPropagation();
-    handlers.current.onContextMenu(row, event.currentTarget, { x: event.clientX, y: event.clientY }, focus);
+    handlers.current.onContextMenu(row.id === END_ACTION_ID ? null : row, event.currentTarget, { x: event.clientX, y: event.clientY }, focus);
   }, [focus]);
   const doubleClick = useCallback((row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => handlers.current.onDoubleClick?.(row, event.currentTarget), []);
 
@@ -185,9 +193,10 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
         if (parentIndex >= 0) moveFocus(parentIndex);
       }
     } else if (event.key === "Enter") {
-      handlers.current.onActivate(row, { source: "enter", target: event.currentTarget });
+      if (row.id === END_ACTION_ID) handlers.current.endAction?.onActivate();
+      else handlers.current.onActivate(row, { source: "enter", target: event.currentTarget });
     } else {
-      if (handlers.current.onCommandKeyDown?.(row, event, focus)) {
+      if (handlers.current.onCommandKeyDown?.(row.id === END_ACTION_ID ? null : row, event, focus)) {
         event.preventDefault();
         event.stopPropagation();
       }
@@ -200,7 +209,8 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
   useEffect(() => {
     const request = focusRequest;
     if (!request) return;
-    const target = request.targets.find((id) => id === null || treeRows.some((row) => row.id === id));
+    const found = request.targets.find((id) => id === null || treeRows.some((row) => row.id === id));
+    const target = found === null && request.currentOnNull ? effectiveFocus : found;
     if (target === undefined && request.waitForTarget) return;
     if (target === null || target === undefined) {
       scrollRef.current?.focus();
@@ -219,7 +229,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     virtual.scrollToIndex(flat.indexOf(row), { align: "auto" });
     setPendingFocus(target);
     setFocusRequest(null);
-  }, [flat, focusRequest, treeRows, virtual]);
+  }, [effectiveFocus, flat, focusRequest, treeRows, virtual]);
 
   useEffect(() => {
     if (!pendingFocus) return;

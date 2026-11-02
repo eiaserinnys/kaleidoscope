@@ -57,6 +57,7 @@ export function FolderBlock({ block, context, pointer }: { block: FolderBlockDat
       item.module === "files" && item.id === permission && item.access === "readwrite")}
     context={context}
     extensions={block.extensions ?? []}
+    header={block.header}
     mode="files"
     onSelect={onFileSelect}
     permission={permission}
@@ -103,6 +104,7 @@ function CollectionFolder({ block, context, onSelect, selected }: {
     canCreate={false}
     context={context}
     extensions={block.extensions ?? []}
+    header={block.header}
     mode="files"
     onSelect={onDocumentSelect}
     permission={entry}

@@ -123,6 +123,10 @@ assets?: Array<AssetDep>, permissions: Array<PermissionDecl>,
  */
 state: { [key in string]: JsonValue }, 
 /**
+ * (15판) 앱 판을 올려 기존 창을 옮길 때, 옛 상태에 없는 키의 값을 계산하는 JSONata 식.
+ */
+state_migrate?: { [key in string]: string }, 
+/**
  * (블록 세트 3판) 이 앱이 여는 파일. 탐색기(`explorer` 블록)에서 이 확장자의 파일을 열면 이 앱의 창이
  * 뜬다. 규칙은 `files.open`에 있다.
  */
@@ -260,7 +264,11 @@ sizes?: Array<number>, children: Array<Block>, } | { "type": "tree", items?: Bin
 /**
  * 보일 파일 확장자(점 없이, 소문자). 비어 있으면 모든 파일. 폴더는 늘 보인다.
  */
-extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "folder", root: FolderRoot, extensions?: Array<string>, selected?: StateRef, on_select?: Actions, read_only?: boolean, } | { "type": "markdown", file?: FileRef, document?: DocumentRef, value?: Binding, read_only?: boolean, } | { "type": "html_view", document?: DocumentRef, file?: FileRef, value?: Binding, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "chat", permission?: string, root?: FolderRef, agents?: Binding, selected?: StateRef, on_select?: SetState, } | { "type": "web_view", 
+extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "folder", root: FolderRoot, 
+/**
+ * (15판) 거짓이면 폴더 머리 줄을 숨긴다.
+ */
+header?: boolean, extensions?: Array<string>, selected?: StateRef, on_select?: Actions, read_only?: boolean, } | { "type": "markdown", file?: FileRef, document?: DocumentRef, value?: Binding, read_only?: boolean, } | { "type": "html_view", document?: DocumentRef, file?: FileRef, value?: Binding, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "chat", permission?: string, root?: FolderRef, agents?: Binding, selected?: StateRef, on_select?: SetState, } | { "type": "web_view", 
 /**
  * 열 주소. 상태에서 읽거나(`{ "state": "url" }`) 정의에 적는다(`"https://example.com"`).
  */
@@ -288,7 +296,11 @@ view?: StateRef,
 /**
  * (5판) 보기 방식을 바꾸면 그 값을 쓸 상태 키.
  */
-on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, wrap?: boolean, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, selected?: StateRef, on_change?: SetState, } | { "type": "toolbar", start: Array<Block>, end?: Array<Block>, } | { "type": "section", title: Binding, 
+on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, wrap?: boolean, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, header?: boolean, keep_mounted?: boolean, 
+/**
+ * (15판) 참이면 분할 칸의 접기와 펼치기를 탭이 맡는다.
+ */
+collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": "toolbar", start: Array<Block>, end?: Array<Block>, } | { "type": "section", title: Binding, 
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
@@ -848,7 +860,11 @@ permission: string,
 /**
  * 연 파일의 경로(그 폴더 기준 상대 경로)를 쓸 상태 키. 블록은 이 키로 그 파일을 연다.
  */
-state: string, };
+state: string, 
+/**
+ * (15판) 파일을 열 때 경로와 함께 창 상태에 쓸 값.
+ */
+set_state?: { [key in string]: JsonValue }, };
 
 export type ParentItemRef = { parent_item: string, };
 

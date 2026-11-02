@@ -144,6 +144,8 @@
   opacity: 0.56;
 }
 
+.ks-tree-end-action { color: var(--ks-color-muted); }
+
 .ks-row:hover {
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }

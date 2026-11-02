@@ -219,6 +219,16 @@ fn pc_open_grants_parent_and_reuses_editor_then_revokes_on_version_change() {
     let (_, desktop) = active_ids(&core);
     let explorer = open_window(&core, &desktop, "test-explorer");
     let editor = open_window(&core, &desktop, "test-md-editor");
+    assert_eq!(
+        snapshot(&core)
+            .shared
+            .windows
+            .iter()
+            .find(|window| window.id == editor)
+            .unwrap()
+            .state["source"],
+        json!(0)
+    );
     expect_error(
         core.handle(CoreRequest::FilesAllowPc {
             window_id: editor,
@@ -247,6 +257,7 @@ fn pc_open_grants_parent_and_reuses_editor_then_revokes_on_version_change() {
         panic!()
     };
     assert_eq!(window.state["current_file"], json!("a.md"));
+    assert_eq!(window.state["source"], json!(1));
     let grant = snapshot(&core)
         .device
         .grants
@@ -263,6 +274,7 @@ fn pc_open_grants_parent_and_reuses_editor_then_revokes_on_version_change() {
     };
     assert_eq!(reused.id, window.id);
     assert_eq!(reused.state["current_file"], json!("b.md"));
+    assert_eq!(reused.state["source"], json!(1));
     import(&core, &pc_explorer());
     assert_eq!(snapshot(&core).device.pc_access.len(), 1);
     let mut folder_definition: Value = serde_json::from_str(&pc_explorer()).unwrap();

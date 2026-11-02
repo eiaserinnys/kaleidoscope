@@ -8,8 +8,10 @@ import type {
   ShellSnapshot,
 } from "../contract/contract";
 import mdEditorJson from "../../../apps/md-editor.json";
+import mdEditorV3Json from "../../../crates/core/src/tests/fixtures/md-editor-v3.json";
 
 export const mdEditorDefinition = mdEditorJson as AppDefinition;
+export const mdEditorV3Definition = mdEditorV3Json as AppDefinition;
 export const mdViewerDefinition: AppDefinition = {
   id: "md-viewer", name: "마크다운 보기", requires: { blocks: 1, modules: { files: 1 } },
   permissions: [{ module: "files", id: "docs", access: "read", label: "읽을 폴더" }],
@@ -32,7 +34,8 @@ export function makeTestSnapshot(options: {
   grants?: Grant[];
   definitions?: AppDefinition[];
 } = {}): ShellSnapshot {
-  const definitions = options.definitions ?? [mdEditorDefinition, mdViewerDefinition];
+  // Renderer fixtures keep testing the v3 local-file view; md-apps E2E covers the v4 server default.
+  const definitions = options.definitions ?? [mdEditorV3Definition, mdViewerDefinition];
   const apps: App[] = definitions.map((definition) => ({
     id: definition.id,
     name: definition.name,
@@ -54,6 +57,7 @@ export function makeTestSnapshot(options: {
     rect: { x: 0, y: 0, width: 640, height: 480 },
     z: definition.id === "md-editor" ? 1 : 2,
     state: {
+      ...definition.state,
       ...(definition.id === "md-editor" ? { current_file: options.editorPath ?? null } : {}),
       ...(definition.id === "md-viewer" ? { current_file: options.viewerPath ?? null } : {}),
     },

@@ -20,9 +20,10 @@ if (!globalThis.ResizeObserver) {
     configurable: true,
     value: class {
       constructor(private readonly callback: ResizeObserverCallback) {}
-      observe() {
-        this.callback([{ contentRect: { width: 960, height: 552 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
+      observe(target: Element) {
+        this.callback([{ target, contentRect: { width: 960, height: 552 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
       }
+      unobserve() {}
       disconnect() {}
     },
   });

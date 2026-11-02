@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -10,6 +11,8 @@ import { AppWindowContent } from "../render/app-window-content";
 import { mockVirtualLayout } from "./virtual-layout";
 import { makeTestSeed } from "./fixtures";
 import { TableBlock } from "../blocks/data-table";
+import { TabsBlock } from "../blocks/data-layout";
+import { SplitPaneContext } from "../blocks/split-pane-context";
 
 beforeEach(mockVirtualLayout);
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -51,6 +54,117 @@ it("탭의 쉬는 포인터를 붙일 때 보내고 전환마다 한 번 갱신�
     { op: "data.dormant", window_id: "viewer-window", dormant: ["/ui/tabs/2", "/ui/tabs/1"] },
   ]));
   expect(screen.getByText("첫째 내용")).toBeTruthy();
+  store.dispose();
+});
+
+it("방문한 탭은 숨겨 유지해 접힘 상태를 이어 간다", async () => {
+  const definition: AppDefinition = {
+    id: "kept-tabs", name: "탭 유지 시험", requires: { blocks: 15, modules: {} }, permissions: [],
+    state: { selected: 0 },
+    ui: { type: "tabs", keep_mounted: true, selected: { state: "selected" }, on_change: { set_state: "selected" }, tabs: [
+      { label: "폴더", child: { type: "section", title: "폴더 상태", collapsible: true, child: { type: "text", value: "폴더 내용" } } },
+      { label: "다른 탭", child: { type: "text", value: "다른 내용" } },
+    ] },
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { selected: 0 };
+  const transport = createFakeTransport(seed);
+  const store = createShellStore(transport);
+  render(<AppWindowContent store={store} windowId="viewer-window" />);
+
+  const folderToggle = await screen.findByRole("button", { name: "폴더 상태" });
+  await userEvent.click(folderToggle);
+  expect(folderToggle.getAttribute("aria-expanded")).toBe("false");
+  await userEvent.click(screen.getByRole("tab", { name: "다른 탭" }));
+  const hiddenPanel = document.querySelector<HTMLElement>('[role="tabpanel"][hidden]');
+  expect(hiddenPanel?.hasAttribute("inert")).toBe(true);
+  expect(hiddenPanel?.querySelector('[aria-expanded="false"]')).toBeTruthy();
+
+  await userEvent.click(screen.getByRole("tab", { name: "폴더" }));
+  expect(screen.getByRole("button", { name: "폴더 상태" }).getAttribute("aria-expanded")).toBe("false");
+  store.dispose();
+});
+
+it("탭이 분할 칸 접기를 맡고 접힌 패널을 유지하며 반대쪽 단추로 포커스를 옮긴다", async () => {
+  const definition: AppDefinition = {
+    id: "collapsed-tabs", name: "접힌 탭 시험", requires: { blocks: 15, modules: {} }, permissions: [],
+    state: { selected: 0 },
+    ui: { type: "tabs", collapsible: true, selected: { state: "selected" }, tabs: [
+      { label: "서버", child: { type: "text", value: "서버 내용" } },
+      { label: "내 폴더", child: { type: "text", value: "폴더 내용" } },
+    ] },
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { selected: 0 };
+  const store = createShellStore(createFakeTransport(seed));
+  const context = {
+    store,
+    snapshot: seed.snapshot,
+    window: seed.snapshot.shared.windows[0],
+    definition,
+  };
+  function CollapsibleTabs() {
+    const [collapsed, setCollapsed] = useState(false);
+    return <SplitPaneContext.Provider value={{ collapsed, toggle: () => setCollapsed((value) => !value) }}>
+      <TabsBlock block={definition.ui as Extract<AppDefinition["ui"], { type: "tabs" }>} context={context} pointer="/ui" />
+    </SplitPaneContext.Provider>;
+  }
+  render(<windowData.WindowDataProvider store={store} windowId={context.window.id} definition={definition}>
+    <CollapsibleTabs />
+  </windowData.WindowDataProvider>);
+
+  expect(screen.getByRole("tablist")).toBeTruthy();
+  const panel = document.querySelector<HTMLElement>('[role="tabpanel"]');
+  expect(panel?.hidden).toBe(false);
+  await userEvent.click(screen.getByRole("button", { name: "목록 접기" }));
+  expect(screen.queryByRole("tablist")).toBeNull();
+  expect(panel?.hidden).toBe(true);
+  expect(panel?.textContent).toContain("서버 내용");
+  await userEvent.click(screen.getByRole("button", { name: "목록 펼치기" }));
+  expect(panel?.hidden).toBe(false);
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "목록 접기" }));
+  store.dispose();
+});
+
+it("머리 없는 탭은 분할 칸 접기 단추를 그리지 않는다", () => {
+  const definition: AppDefinition = {
+    id: "headless-split-tabs", name: "머리 없는 분할 탭", requires: { blocks: 15, modules: {} }, permissions: [], state: {},
+    ui: { type: "tabs", header: false, tabs: [
+      { label: "내용", child: { type: "text", value: "내용" } },
+    ] },
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  const store = createShellStore(createFakeTransport(seed));
+  const context = { store, snapshot: seed.snapshot, window: seed.snapshot.shared.windows[0], definition };
+  render(<windowData.WindowDataProvider store={store} windowId={context.window.id} definition={definition}>
+    <SplitPaneContext.Provider value={{ collapsed: false, toggle: () => undefined }}>
+      <TabsBlock block={definition.ui as Extract<AppDefinition["ui"], { type: "tabs" }>} context={context} pointer="/ui" />
+    </SplitPaneContext.Provider>
+  </windowData.WindowDataProvider>);
+  expect(screen.queryByRole("button", { name: "목록 접기" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "목록 펼치기" })).toBeNull();
+  store.dispose();
+});
+
+it("머리 없는 탭은 선택된 내용만 보이고 패널 이름을 제공한다", async () => {
+  const definition: AppDefinition = {
+    id: "headless-tabs", name: "머리 없는 탭 시험", requires: { blocks: 15, modules: {} }, permissions: [],
+    state: { selected: 1 },
+    ui: { type: "tabs", header: false, selected: { state: "selected" }, tabs: [
+      { label: "서버", child: { type: "text", value: "서버 내용" } },
+      { label: "내 폴더", child: { type: "text", value: "폴더 내용" } },
+    ] },
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { selected: 1 };
+  const transport = createFakeTransport(seed);
+  const store = createShellStore(transport);
+  render(<AppWindowContent store={store} windowId="viewer-window" />);
+
+  expect(screen.queryByRole("tablist")).toBeNull();
+  expect(await screen.findByRole("tabpanel", { name: "내 폴더" })).toBeTruthy();
+  expect(await screen.findByText("폴더 내용")).toBeTruthy();
+  expect(screen.queryByText("서버 내용")).toBeNull();
   store.dispose();
 });
 
