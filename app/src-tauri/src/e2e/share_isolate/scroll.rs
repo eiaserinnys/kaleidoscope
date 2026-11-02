@@ -33,22 +33,41 @@ fn scroll_html_frame(
     let x = position.x + (bounds["x"].as_f64().ok_or("frame x missing")? * scale).round() as i32;
     let y = position.y + (bounds["y"].as_f64().ok_or("frame y missing")? * scale).round() as i32;
     window.set_focus().map_err(|error| error.to_string())?;
-    native_input::click_and_key(x, y, key)?;
-    thread::sleep(Duration::from_millis(250));
+    native_input::click(x, y)?;
+    let focus_result = ui::wait_dom(app, &format!(
+        "const frame=document.querySelector('[data-testid=\\\"app-window-{A_ID}\\\"] iframe');return !!frame && document.hasFocus() && document.activeElement===frame;"
+    ), "HTML frame input focus");
+    let focus = ui::evaluate(app, &format!(
+        "const frame=document.querySelector('[data-testid=\\\"app-window-{A_ID}\\\"] iframe');return {{has_focus:document.hasFocus(),active:document.activeElement===frame,active_tag:document.activeElement?.tagName}};"
+    ))?;
+    record(
+        log,
+        "share.scroll-focus",
+        json!({"window_id":window_id,"focus":focus}),
+    )?;
+    focus_result?;
+    native_input::press_key(key)?;
+    let deadline = Instant::now() + Duration::from_secs(5);
     let view = ui::latest_share_view(window_id).ok_or("share.view is missing before scrolling")?;
-    let image = capture::shell_capture(app)?;
-    let cropped = crop_share_capture_png(&image.0, view.bounds, image.1)
-        .ok_or("could not crop the scrolled HTML frame")?;
-    let stats = capture::png_stats(&cropped)?;
-    let expected_pixels = match expected_color {
-        "red" => stats.red,
-        _ => stats.green,
+    let expected_pixels = loop {
+        let image = capture::shell_capture(app)?;
+        let cropped = crop_share_capture_png(&image.0, view.bounds, image.1)
+            .ok_or("could not crop the scrolled HTML frame")?;
+        let stats = capture::png_stats(&cropped)?;
+        let count = match expected_color {
+            "red" => stats.red,
+            _ => stats.green,
+        };
+        if count != 0 {
+            break count;
+        }
+        if Instant::now() >= deadline {
+            return Err(format!(
+                "HTML frame did not scroll to its {expected_color} region: {stats:?}"
+            ));
+        }
+        thread::sleep(Duration::from_millis(100));
     };
-    if expected_pixels == 0 {
-        return Err(format!(
-            "HTML frame did not scroll to its {expected_color} region: {stats:?}"
-        ));
-    }
     record(
         log,
         step,

@@ -302,9 +302,11 @@ pub(super) fn scenario(
         share(core, &web_id, true)?;
         restore(core, &web_id)?;
         minimize(core, &a_id)?;
+        let hide_mark = ui::web_place_mark();
         set_agent_rect(app, core, &agent_window_id, web_over)?;
         raise(core, &agent_window_id)?;
         wait_share_view(&web_id, true, None)?;
+        ui::wait_web_hidden(&web_id, hide_mark)?;
         let web_started = Instant::now();
         let web_capture_mark = ui::capture_duration_mark();
         let web_request_mark = ui::mark_requests();

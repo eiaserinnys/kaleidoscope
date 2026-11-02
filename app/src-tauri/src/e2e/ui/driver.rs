@@ -2,6 +2,7 @@ use super::*;
 use std::sync::Mutex;
 
 static UI_REQUESTS: Mutex<Vec<CoreRequest>> = Mutex::new(Vec::new());
+static UI_PLACES_COMPLETED: Mutex<Vec<(String, bool)>> = Mutex::new(Vec::new());
 static UI_CAPTURE_DURATIONS: Mutex<Vec<(String, u128)>> = Mutex::new(Vec::new());
 
 pub(super) type WebEvents = Arc<Mutex<Vec<(String, WebPage)>>>;
@@ -27,12 +28,33 @@ pub(super) fn observe(request: &CoreRequest) {
 }
 
 pub(super) fn complete(request: &CoreRequest, elapsed_ms: u128) {
+    if let CoreRequest::WebPlace { window_id, bounds } = request {
+        UI_PLACES_COMPLETED
+            .lock()
+            .unwrap()
+            .push((window_id.clone(), bounds.is_some()));
+    }
     if let CoreRequest::ShareCapture { window_id } = request {
         UI_CAPTURE_DURATIONS
             .lock()
             .unwrap()
             .push((window_id.clone(), elapsed_ms));
     }
+}
+
+pub(crate) fn web_place_mark() -> usize {
+    UI_PLACES_COMPLETED.lock().unwrap().len()
+}
+
+pub(crate) fn wait_web_hidden(window_id: &str, mark: usize) -> Result<(), String> {
+    wait_until("web child hidden", || {
+        let places = UI_PLACES_COMPLETED.lock().unwrap();
+        Ok(places[mark..]
+            .iter()
+            .rev()
+            .find(|(id, _)| id == window_id)
+            .is_some_and(|(_, visible)| !visible))
+    })
 }
 
 fn has_place(requests: &[CoreRequest], window_id: &str, visible: bool) -> bool {

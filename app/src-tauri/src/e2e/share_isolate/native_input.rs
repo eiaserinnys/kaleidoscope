@@ -42,8 +42,7 @@ pub(super) fn click(x: i32, y: i32) -> Result<(), String> {
     Ok(())
 }
 
-pub(super) fn click_and_key(x: i32, y: i32, key: u16) -> Result<(), String> {
-    click(x, y)?;
+pub(super) fn press_key(key: u16) -> Result<(), String> {
     unsafe {
         let key = [
             INPUT {
