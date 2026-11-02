@@ -328,14 +328,8 @@ fn reconcile_app(
                 None => break,
             }
         }
-        if !expected.is_empty() {
-            let workspace = contexts
-                .first()
-                .map(|ctx| ctx.workspace.name.as_str())
-                .unwrap_or("현재 작업");
-            return Err(
-                kaleidoscope_contract::errors::CONV_RECONCILE_BOUND_THREAD_MISSING(workspace),
-            );
+        if let Some(thread) = expected.iter().next() {
+            return Err(kaleidoscope_contract::errors::CONV_RECONCILE_BOUND_THREAD_MISSING(thread));
         }
     }
     Ok(())

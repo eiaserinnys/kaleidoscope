@@ -308,8 +308,9 @@ impl Context {
             || value.get("connection").and_then(Value::as_str) != Some(&self.client.info.name)
         {
             return Err(
-                kaleidoscope_contract::errors::CONV_CONTEXT_THREAD_BINDING_CONFLICT(
-                    &self.workspace.name,
+                kaleidoscope_contract::errors::CONV_CONTEXT_SAVED_BINDING_MISMATCH(
+                    &self.workspace.id,
+                    id,
                 ),
             );
         }
@@ -336,8 +337,9 @@ impl Context {
                 })
                 .map_err(|e| {
                     if e.code == ErrorCode::Conflict {
-                        kaleidoscope_contract::errors::CONV_CONTEXT_THREAD_BINDING_CONFLICT(
-                            &self.workspace.name,
+                        kaleidoscope_contract::errors::CONV_CONTEXT_ADOPTION_CONFLICT(
+                            &self.workspace.id,
+                            id,
                         )
                     } else {
                         e
@@ -347,8 +349,9 @@ impl Context {
         };
         if thread.id != id {
             return Err(
-                kaleidoscope_contract::errors::CONV_CONTEXT_THREAD_BINDING_CONFLICT(
-                    &self.workspace.name,
+                kaleidoscope_contract::errors::CONV_CONTEXT_ADOPTED_THREAD_MISMATCH(
+                    id,
+                    &thread.id,
                 ),
             );
         }

@@ -88,11 +88,13 @@ impl Context {
             ("instructions_template", &p.instructions_template),
         ];
         let v = self.values(inner, &bindings)?;
+        if model.is_empty() {
+            return Err(kaleidoscope_contract::errors::CONV_SELECTION_MODEL_EMPTY());
+        }
         let models: Vec<String> =
             serde_json::from_value(v.get("model_order").cloned().unwrap_or_default())
                 .map_err(|_| kaleidoscope_contract::errors::CONV_SELECTION_MODEL_ORDER_INVALID())?;
-        if model.is_empty()
-            || models.is_empty()
+        if models.is_empty()
             || models.iter().any(String::is_empty)
             || models.iter().collect::<BTreeSet<_>>().len() != models.len()
         {
@@ -182,13 +184,16 @@ impl Context {
             )?;
             let updated = updated
                 .ok_or_else(|| {
-                    kaleidoscope_contract::errors::CONV_SELECTION_MODEL_NOT_FOUND(model)
+                    kaleidoscope_contract::errors::CONV_SELECTION_MODEL_UPDATE_TARGET_MISSING(
+                        &thread.id,
+                    )
                 })?
                 .thread;
             if updated.id != thread.id {
                 return Err(
-                    kaleidoscope_contract::errors::CONV_SELECTION_THREAD_MISMATCH(
-                        &self.workspace.name,
+                    kaleidoscope_contract::errors::CONV_SELECTION_MODEL_PATCH_THREAD_MISMATCH(
+                        &thread.id,
+                        &updated.id,
                     ),
                 );
             }
@@ -224,7 +229,10 @@ impl Context {
             })?;
         if reply.thread.id != thread.id {
             return Err(
-                kaleidoscope_contract::errors::CONV_SELECTION_THREAD_MISMATCH(&self.workspace.name),
+                kaleidoscope_contract::errors::CONV_SELECTION_PROFILE_SWITCH_THREAD_MISMATCH(
+                    &thread.id,
+                    &reply.thread.id,
+                ),
             );
         }
         Ok((reply.thread, reply.notices))

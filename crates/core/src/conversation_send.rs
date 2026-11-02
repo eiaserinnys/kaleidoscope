@@ -48,12 +48,23 @@ pub(crate) fn send(
     text: String,
     uploads: Vec<ConversationUpload>,
 ) -> Result<CoreReply, CoreError> {
-    if id.is_empty()
-        || (text.trim().is_empty() && uploads.is_empty())
-        || text.chars().count() > CONVERSATION_MESSAGE_MAX_CHARS
-        || uploads.len() > AGENT_ATTACHMENTS_MAX
-    {
-        return Err(kaleidoscope_contract::errors::CONV_SEND_REQUEST_INVALID());
+    if id.is_empty() {
+        return Err(kaleidoscope_contract::errors::CONV_SEND_REQUEST_ID_MISSING());
+    }
+    if text.trim().is_empty() && uploads.is_empty() {
+        return Err(kaleidoscope_contract::errors::CONV_SEND_MESSAGE_EMPTY());
+    }
+    if text.chars().count() > CONVERSATION_MESSAGE_MAX_CHARS {
+        return Err(kaleidoscope_contract::errors::CONV_SEND_MESSAGE_TOO_LONG(
+            CONVERSATION_MESSAGE_MAX_CHARS,
+        ));
+    }
+    if uploads.len() > AGENT_ATTACHMENTS_MAX {
+        return Err(
+            kaleidoscope_contract::errors::CONV_SEND_ATTACHMENT_COUNT_EXCEEDED(
+                AGENT_ATTACHMENTS_MAX,
+            ),
+        );
     }
     let mut total = 0;
     for upload in &uploads {
@@ -113,9 +124,11 @@ pub(crate) fn send(
             let previous = read(&path)?;
             if previous.user_text != pending.user_text
                 || previous.user_uploads != pending.user_uploads
-                || previous.failed_reason.is_some()
             {
-                return Err(kaleidoscope_contract::errors::CONV_SEND_REQUEST_ID_CONFLICT());
+                return Err(kaleidoscope_contract::errors::CONV_SEND_REQUEST_ID_CONTENT_MISMATCH());
+            }
+            if previous.failed_reason.is_some() {
+                return Err(kaleidoscope_contract::errors::CONV_SEND_PREVIOUS_REQUEST_FAILED());
             }
             pending = previous;
         } else {
@@ -447,42 +460,42 @@ mod tests {
     };
 
     #[test]
-    fn provider_error_codes_map_to_distinct_registered_conversation_errors() {
+    fn receipt_provider_errors_keep_distinct_codes_and_match_main_server_classification() {
         let cases = [
             (
                 ConversationErrorCode::InvalidRequest,
                 "CONV_SEND_PROVIDER_INVALID_REQUEST",
-                ErrorCode::InvalidRequest,
+                ErrorCode::Server,
             ),
             (
                 ConversationErrorCode::LoginRequired,
                 "CONV_SEND_PROVIDER_LOGIN_REQUIRED",
-                ErrorCode::LoginRequired,
+                ErrorCode::Server,
             ),
             (
                 ConversationErrorCode::Forbidden,
                 "CONV_SEND_PROVIDER_FORBIDDEN",
-                ErrorCode::PermissionDenied,
+                ErrorCode::Server,
             ),
             (
                 ConversationErrorCode::NotFound,
                 "CONV_SEND_PROVIDER_NOT_FOUND",
-                ErrorCode::NotFound,
+                ErrorCode::Server,
             ),
             (
                 ConversationErrorCode::Conflict,
                 "CONV_SEND_PROVIDER_CONFLICT",
-                ErrorCode::Conflict,
+                ErrorCode::Server,
             ),
             (
                 ConversationErrorCode::AttachmentLimit,
                 "CONV_SEND_PROVIDER_ATTACHMENT_LIMIT",
-                ErrorCode::InvalidRequest,
+                ErrorCode::Server,
             ),
             (
                 ConversationErrorCode::ModelUnavailable,
                 "CONV_SEND_PROVIDER_MODEL_UNAVAILABLE",
-                ErrorCode::Unavailable,
+                ErrorCode::Server,
             ),
             (
                 ConversationErrorCode::Unavailable,

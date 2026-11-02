@@ -48,9 +48,16 @@ impl Client {
             .ok_or_else(|| {
                 kaleidoscope_contract::errors::CONV_HTTP_PROVIDER_UNAVAILABLE(connection)
             })?;
-        if info.kind != ConnectionKind::Oauth || !info.writable {
+        if info.kind != ConnectionKind::Oauth {
             return Err(
-                kaleidoscope_contract::errors::CONV_CONTEXT_CONNECTION_NOT_WRITABLE(connection),
+                kaleidoscope_contract::errors::CONV_HTTP_RESTORE_CONNECTION_NOT_OAUTH(connection),
+            );
+        }
+        if !info.writable {
+            return Err(
+                kaleidoscope_contract::errors::CONV_HTTP_RESTORE_CONNECTION_NOT_WRITABLE(
+                    connection,
+                ),
             );
         }
         Ok(Self {
@@ -95,7 +102,9 @@ impl Client {
         self.logins
             .token(&self.info.name)
             .map(|_| ())
-            .ok_or_else(|| kaleidoscope_contract::errors::CONV_HTTP_LOGIN_REQUIRED(&self.info.name))
+            .ok_or_else(|| {
+                kaleidoscope_contract::errors::CONV_HTTP_LOGIN_INFO_MISSING(&self.info.name)
+            })
     }
 
     pub fn path(&self, segments: &[&str]) -> Result<String, CoreError> {
@@ -336,7 +345,7 @@ impl Client {
             request.send().map_err(|error| self.request_failed(error))
         };
         let token = self.logins.token(&self.info.name).ok_or_else(|| {
-            kaleidoscope_contract::errors::CONV_HTTP_LOGIN_REQUIRED(&self.info.name)
+            kaleidoscope_contract::errors::CONV_HTTP_LOGIN_INFO_MISSING(&self.info.name)
         })?;
         let reply = send(&token)?;
         if reply.status() != reqwest::StatusCode::UNAUTHORIZED {
@@ -346,14 +355,14 @@ impl Client {
             .logins
             .refresh(&self.info.name, &token)
             .ok_or_else(|| {
-                kaleidoscope_contract::errors::CONV_HTTP_LOGIN_REQUIRED(&self.info.name)
+                kaleidoscope_contract::errors::CONV_HTTP_LOGIN_REFRESH_FAILED(&self.info.name)
             })?;
         let reply = send(&refreshed)?;
         if reply.status() == reqwest::StatusCode::UNAUTHORIZED {
             self.logins.invalidate(&self.info.name, &refreshed);
-            return Err(kaleidoscope_contract::errors::CONV_HTTP_LOGIN_REQUIRED(
-                &self.info.name,
-            ));
+            return Err(
+                kaleidoscope_contract::errors::CONV_HTTP_LOGIN_REFRESH_REJECTED(&self.info.name),
+            );
         }
         Ok(reply)
     }
@@ -407,27 +416,57 @@ impl Client {
     }
 
     fn provider_error_or_status(&self, body: &[u8], status: u16) -> CoreError {
-        if let Ok(envelope) = serde_json::from_slice::<ConversationErrorEnvelope>(body) {
-            return crate::conversation_send::provider_error(envelope.error, &self.workspace_name)
-                .and_details(vec![
-                    format!("HTTP 상태: {status}"),
-                    format!("호스트: {}", self.host()),
-                ]);
-        }
+        let (provider_code, reason) =
+            match serde_json::from_slice::<ConversationErrorEnvelope>(body) {
+                Ok(envelope) => {
+                    let provider_code = match envelope.error.code {
+                        ConversationErrorCode::InvalidRequest => "invalid_request",
+                        ConversationErrorCode::LoginRequired => "login_required",
+                        ConversationErrorCode::Forbidden => "forbidden",
+                        ConversationErrorCode::NotFound => "not_found",
+                        ConversationErrorCode::Conflict => "conflict",
+                        ConversationErrorCode::AttachmentLimit => "attachment_limit",
+                        ConversationErrorCode::ModelUnavailable => "model_unavailable",
+                        ConversationErrorCode::Unavailable => "unavailable",
+                        ConversationErrorCode::Pending => "pending",
+                    };
+                    let reason = if envelope.error.message.trim().is_empty() {
+                        "제공자가 추가 설명을 보내지 않았습니다".to_string()
+                    } else {
+                        envelope.error.message
+                    };
+                    (Some(provider_code), reason)
+                }
+                Err(_) => (None, "제공자가 추가 설명을 보내지 않았습니다".to_string()),
+            };
         let error = match status {
-            401 => kaleidoscope_contract::errors::CONV_HTTP_STATUS_LOGIN_REQUIRED(&self.info.name),
-            403 => kaleidoscope_contract::errors::CONV_HTTP_STATUS_FORBIDDEN(&self.info.name),
-            404 => kaleidoscope_contract::errors::CONV_HTTP_STATUS_NOT_FOUND(&self.info.name),
-            409 => kaleidoscope_contract::errors::CONV_HTTP_STATUS_CONFLICT(&self.info.name),
-            400 | 413 | 422 => {
-                kaleidoscope_contract::errors::CONV_HTTP_STATUS_INVALID_REQUEST(&self.info.name)
+            401 => kaleidoscope_contract::errors::CONV_HTTP_STATUS_LOGIN_REQUIRED(
+                &self.info.name,
+                &reason,
+            ),
+            403 => {
+                kaleidoscope_contract::errors::CONV_HTTP_STATUS_FORBIDDEN(&self.info.name, &reason)
             }
-            _ => kaleidoscope_contract::errors::CONV_HTTP_STATUS_SERVER(&self.info.name),
+            404 => {
+                kaleidoscope_contract::errors::CONV_HTTP_STATUS_NOT_FOUND(&self.info.name, &reason)
+            }
+            409 => {
+                kaleidoscope_contract::errors::CONV_HTTP_STATUS_CONFLICT(&self.info.name, &reason)
+            }
+            400 | 413 | 422 => kaleidoscope_contract::errors::CONV_HTTP_STATUS_INVALID_REQUEST(
+                &self.info.name,
+                &reason,
+            ),
+            _ => kaleidoscope_contract::errors::CONV_HTTP_STATUS_SERVER(&self.info.name, &reason),
         };
-        error.and_details(vec![
+        let mut details = vec![
             format!("HTTP 상태: {status}"),
             format!("호스트: {}", self.host()),
-        ])
+        ];
+        if let Some(provider_code) = provider_code {
+            details.push(format!("provider_code={provider_code}"));
+        }
+        error.and_details(details)
     }
 }
 
@@ -435,7 +474,10 @@ impl Client {
 mod tests {
     use super::Client;
     use crate::{logins::LoginEntry, profiler::Profiler};
-    use kaleidoscope_contract::registry::{ConnectionInfo, ConnectionKind};
+    use kaleidoscope_contract::{
+        registry::{ConnectionInfo, ConnectionKind},
+        ErrorCode,
+    };
     use std::{collections::BTreeMap, net::TcpListener, sync::Arc};
 
     #[test]
@@ -494,12 +536,12 @@ mod tests {
     }
 
     #[test]
-    fn provider_error_uses_the_workspace_name_in_its_message() {
+    fn http_error_envelopes_match_main_status_classification() {
         let temp = tempfile::tempdir().unwrap();
         let logins = Arc::new(crate::logins::Logins::open(temp.path()).unwrap());
         let client = Client {
             info: ConnectionInfo {
-                name: "provider".into(),
+                name: "연결 A".into(),
                 kind: ConnectionKind::Oauth,
                 base_url: "https://provider.example".into(),
                 writable: true,
@@ -514,14 +556,50 @@ mod tests {
             profiler: Profiler::default(),
         };
         let body = serde_json::json!({
-            "error": {"code": "unavailable", "message": "시험용 제공자 오류"}
+            "error": {"code": "forbidden", "message": "시험용 제공자 사유"}
         });
+        let body = serde_json::to_vec(&body).unwrap();
+        // These expected classes mirror main's former Client::status mapping.
+        let cases = [
+            (
+                401,
+                "CONV_HTTP_STATUS_LOGIN_REQUIRED",
+                ErrorCode::LoginRequired,
+            ),
+            (
+                403,
+                "CONV_HTTP_STATUS_FORBIDDEN",
+                ErrorCode::PermissionDenied,
+            ),
+            (404, "CONV_HTTP_STATUS_NOT_FOUND", ErrorCode::NotFound),
+            (409, "CONV_HTTP_STATUS_CONFLICT", ErrorCode::Conflict),
+            (
+                400,
+                "CONV_HTTP_STATUS_INVALID_REQUEST",
+                ErrorCode::InvalidRequest,
+            ),
+            (
+                413,
+                "CONV_HTTP_STATUS_INVALID_REQUEST",
+                ErrorCode::InvalidRequest,
+            ),
+            (
+                422,
+                "CONV_HTTP_STATUS_INVALID_REQUEST",
+                ErrorCode::InvalidRequest,
+            ),
+            (503, "CONV_HTTP_STATUS_SERVER", ErrorCode::Server),
+        ];
 
-        let error = client.provider_error_or_status(&serde_json::to_vec(&body).unwrap(), 503);
-
-        assert_eq!(error.id.as_deref(), Some("CONV_SEND_PROVIDER_UNAVAILABLE"));
-        assert!(error.message.contains("‘kaleidoscope’"));
-        assert!(error.message.contains("시험용 제공자 오류"));
-        assert!(!error.message.contains("provider"));
+        for (status, expected_id, main_class) in cases {
+            let error = client.provider_error_or_status(&body, status);
+            assert_eq!(error.id.as_deref(), Some(expected_id));
+            assert_eq!(error.code, main_class, "HTTP status {status}");
+            assert!(error.message.contains("시험용 제공자 사유"));
+            assert!(!error.message.contains("forbidden"));
+            let details = &error.details;
+            assert!(details.contains(&format!("HTTP 상태: {status}")));
+            assert!(details.contains(&"provider_code=forbidden".to_string()));
+        }
     }
 }
