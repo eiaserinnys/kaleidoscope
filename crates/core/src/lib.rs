@@ -662,6 +662,14 @@ impl Core {
                     sink_id,
                 })
             }
+            CoreRequest::ExportTruncate {
+                window_id,
+                sink_id,
+                size,
+            } => {
+                client_files::truncate(&self.inner, &window_id, &sink_id, size)?;
+                Ok(CoreReply::ExportTruncate {})
+            }
             CoreRequest::ExportClose { window_id, sink_id } => {
                 client_files::finish(&self.inner, &window_id, &sink_id, true)?;
                 Ok(CoreReply::ExportClose {})

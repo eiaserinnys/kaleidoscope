@@ -397,6 +397,12 @@ export class ClientRuntime {
     } else if (message.type === "ks-client-file-write") {
       const result = this.store.nativeFiles && this.store.bytes ? this.store.bytes({ op: "export.write", window_id: this.data.windowId, handle: message.sink, offset: message.offset }, message.bytes) : this.files.write(message.sink, message.offset, message.bytes);
       void result.then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+    } else if (message.type === "ks-client-file-truncate") {
+      if (!Number.isSafeInteger(message.size) || message.size < 0) { this.reply(message.requestId, undefined, "파일 크기가 올바르지 않습니다"); return; }
+      const result = this.store.nativeFiles
+        ? this.store.call({ op: "export.truncate", window_id: this.data.windowId, sink_id: message.sink, size: message.size })
+        : this.files.truncate(message.sink, message.size);
+      void result.then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
     } else if (message.type === "ks-client-file-close" || message.type === "ks-client-file-abort") {
       const result = this.store.nativeFiles
         ? this.store.call({ op: message.type === "ks-client-file-close" ? "export.close" : "export.abort", window_id: this.data.windowId, sink_id: message.sink })
