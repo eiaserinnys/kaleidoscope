@@ -709,6 +709,43 @@ fn missing_media_file_reports_registered_media_error() {
 }
 
 #[test]
+fn rejected_public_media_path_omits_query_secrets_from_message() {
+    use kaleidoscope_contract::data::{MediaRef, ResourceMediaRef};
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let definition = json!({
+        "id":"public-media-app",
+        "name":"공개 미디어",
+        "requires":{"blocks":4,"modules":{"http":1}},
+        "permissions":[{"module":"http","id":"public","label":"공개","base_url":"https://example.com","paths":["/allowed/"]}],
+        "state":{},
+        "ui":{"type":"text","value":"시험"}
+    })
+    .to_string();
+    let core = open_core(temp.path(), vec![definition], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "public-media-app");
+
+    let error = expect_error(
+        core.handle(CoreRequest::DataMedia {
+            window_id: window,
+            media: MediaRef::Resource(ResourceMediaRef {
+                permission: "public".into(),
+                path: "/outside?token=secret-value".into(),
+                query: BTreeMap::new(),
+                crop: None,
+            }),
+            max_px: None,
+        }),
+        ErrorCode::PermissionDenied,
+    );
+    assert_eq!(error.id.as_deref(), Some("MEDIA_LOAD_HTTP_PATH_FORBIDDEN"));
+    assert!(error.message.contains("/outside"));
+    assert!(!error.message.contains("token"));
+    assert!(!error.message.contains("secret-value"));
+}
+
+#[test]
 fn explicit_null_and_absent_action_value_are_distinct() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());

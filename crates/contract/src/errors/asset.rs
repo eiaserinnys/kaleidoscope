@@ -188,6 +188,83 @@ error_catalog! { ENTRIES;
         message: "같은 자산 ID와 판에 다른 내용이 이미 등록되어 있습니다. 자산 ID: {asset}. 판: {version}. 새 판을 사용하세요.",
         fix: "새 자산 버전을 등록하세요"
     }
+    ASSET_REGISTER_TRANSACTION_BEGIN_FAILED(asset) {
+        class: Server,
+        place: "자산 등록 트랜잭션 시작",
+        cause: "자산 등록을 위한 데이터베이스 트랜잭션을 열지 못했다",
+        message: "미디어 자산 등록을 시작하지 못했습니다. 자산 ID: {asset}. 잠시 뒤 다시 올리세요.",
+        fix: "잠시 뒤 자산을 다시 올리세요"
+    }
+    ASSET_REGISTER_TRANSACTION_COMMIT_FAILED(asset) {
+        class: Server,
+        place: "자산 등록 트랜잭션 저장",
+        cause: "자산 등록 트랜잭션을 저장하지 못했다",
+        message: "미디어 자산 등록을 저장하지 못했습니다. 자산 ID: {asset}. 자산 목록을 확인한 뒤 다시 올리세요.",
+        fix: "자산 목록을 확인한 뒤 다시 올리세요"
+    }
+    ASSET_REGISTER_EXISTING_LOOKUP_FAILED(asset, version) {
+        class: Server,
+        place: "자산 등록 중 기존 판 조회",
+        cause: "같은 자산 판이 등록되어 있는지 확인하지 못했다",
+        message: "같은 자산 ID와 판의 기존 등록을 확인하지 못했습니다. 자산 ID: {asset}. 판: {version}. 잠시 뒤 다시 올리세요.",
+        fix: "잠시 뒤 자산을 다시 올리세요"
+    }
+    ASSET_REGISTER_INSERT_FAILED(asset, version) {
+        class: Server,
+        place: "자산 버전 데이터 저장",
+        cause: "미디어 자산 데이터를 데이터베이스에 넣지 못했다",
+        message: "미디어 자산 데이터를 저장하지 못했습니다. 자산 ID: {asset}. 판: {version}. 잠시 뒤 다시 올리세요.",
+        fix: "잠시 뒤 자산을 다시 올리세요"
+    }
+    ASSET_LIST_PREPARE_FAILED() {
+        class: Server,
+        place: "자산 목록 조회 준비",
+        cause: "자산 목록 조회를 준비하지 못했다",
+        message: "자산 목록 조회를 준비하지 못했습니다. 잠시 뒤 다시 불러오세요.",
+        fix: "잠시 뒤 자산 목록을 다시 불러오세요"
+    }
+    ASSET_LIST_QUERY_FAILED() {
+        class: Server,
+        place: "자산 목록 조회 실행",
+        cause: "데이터베이스에서 자산 목록을 가져오지 못했다",
+        message: "데이터베이스에서 자산 목록을 가져오지 못했습니다. 잠시 뒤 다시 불러오세요.",
+        fix: "잠시 뒤 자산 목록을 다시 불러오세요"
+    }
+    ASSET_LIST_ROW_READ_FAILED() {
+        class: Server,
+        place: "자산 목록 항목 읽기",
+        cause: "데이터베이스에서 자산 목록 항목을 읽지 못했다",
+        message: "자산 목록 항목을 읽지 못했습니다. 잠시 뒤 다시 불러오세요.",
+        fix: "잠시 뒤 자산 목록을 다시 불러오세요"
+    }
+    ASSET_APP_DEPENDENCY_LOOKUP_FAILED(asset, version) {
+        class: Server,
+        place: "앱 등록 중 자산 의존성 조회",
+        cause: "앱이 참조하는 자산 판을 데이터베이스에서 확인하지 못했다",
+        message: "앱이 참조하는 자산을 확인하지 못했습니다. 자산 ID: {asset}. 판: {version}. 잠시 뒤 앱을 다시 올리세요.",
+        fix: "잠시 뒤 앱을 다시 올리세요"
+    }
+    ASSET_APP_CLIENT_ENTRY_LOOKUP_FAILED(asset, version) {
+        class: Server,
+        place: "앱 등록 중 클라이언트 진입 자산 조회",
+        cause: "클라이언트 진입 자산 판을 데이터베이스에서 확인하지 못했다",
+        message: "앱 클라이언트 진입 자산을 확인하지 못했습니다. 자산 ID: {asset}. 판: {version}. 잠시 뒤 앱을 다시 올리세요.",
+        fix: "잠시 뒤 앱을 다시 올리세요"
+    }
+    ASSET_DOWNLOAD_LOOKUP_FAILED(asset, version) {
+        class: Server,
+        place: "기기의 자산 다운로드 항목 조회",
+        cause: "다운로드할 자산 판을 데이터베이스에서 읽지 못했다",
+        message: "다운로드할 자산을 읽지 못했습니다. 자산 ID: {asset}. 판: {version}. 잠시 뒤 다시 요청하세요.",
+        fix: "잠시 뒤 자산을 다시 요청하세요"
+    }
+    ASSET_TRANSFER_LOOKUP_FAILED(asset, version) {
+        class: Server,
+        place: "가져올 자산의 기존 판 조회",
+        cause: "자산을 가져오기 전에 기존 판을 확인하지 못했다",
+        message: "가져올 자산의 기존 등록을 확인하지 못했습니다. 자산 ID: {asset}. 판: {version}. 잠시 뒤 다시 가져오세요.",
+        fix: "잠시 뒤 자산을 다시 가져오세요"
+    }
     ASSET_APP_DEPENDENCY_NOT_FOUND(asset, version) {
         class: InvalidAppDefinition,
         place: "앱 정의의 자산 의존성 확인",

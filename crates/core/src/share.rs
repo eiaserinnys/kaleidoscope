@@ -238,6 +238,9 @@ fn window_name(state: &CoreState, window_id: &str) -> String {
 }
 
 fn capture_error(window: &str, error: CoreError) -> CoreError {
+    if error.id.is_some() {
+        return error;
+    }
     match error.code {
         ErrorCode::NotFound => {
             errors::SHARE_CAPTURE_WINDOW_NOT_FOUND(window).and_details(error.details)

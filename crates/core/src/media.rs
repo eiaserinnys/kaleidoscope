@@ -180,9 +180,25 @@ pub(crate) fn get(
                 let download = inner
                     .registry
                     .asset_get(&link.server_url, &link.token, &media.asset, version)
-                    .map_err(|detail| {
-                        errors::MEDIA_LOAD_ASSET_DOWNLOAD_FAILED(&media.asset)
-                            .and_details(vec![format!("{detail:?}")])
+                    .map_err(|failure| match failure {
+                        crate::registry_client::RegistryError::Failure { stage, detail } => {
+                            let error = match stage {
+                                crate::registry_client::FailureStage::Send => {
+                                    errors::MEDIA_LOAD_ASSET_DOWNLOAD_SEND_FAILED(&media.asset)
+                                }
+                                crate::registry_client::FailureStage::Status => {
+                                    errors::MEDIA_LOAD_ASSET_DOWNLOAD_STATUS_REJECTED(&media.asset)
+                                }
+                                crate::registry_client::FailureStage::Read => {
+                                    errors::MEDIA_LOAD_ASSET_DOWNLOAD_RESPONSE_READ_FAILED(
+                                        &media.asset,
+                                    )
+                                }
+                            };
+                            error.and_details(vec![detail])
+                        }
+                        failure => errors::MEDIA_LOAD_ASSET_DOWNLOAD_FAILED(&media.asset)
+                            .and_details(vec![format!("{failure:?}")]),
                     })?;
                 if format!("{:x}", Sha256::digest(&download.bytes)) != download.sha256 {
                     return Err(errors::MEDIA_LOAD_ASSET_HASH_MISMATCH(&media.asset));
@@ -242,8 +258,12 @@ pub(crate) fn get(
             let modified = metadata
                 .modified()
                 .map_err(|err| {
-                    errors::MEDIA_LOAD_FILE_MODIFIED_TIME_FAILED(&media.path)
-                        .and_details(vec![err.to_string()])
+                    let error = if err.kind() == std::io::ErrorKind::NotFound {
+                        errors::MEDIA_LOAD_FILE_MODIFIED_TIME_NOT_FOUND(&media.path)
+                    } else {
+                        errors::MEDIA_LOAD_FILE_MODIFIED_TIME_FAILED(&media.path)
+                    };
+                    error.and_details(vec![err.to_string()])
                 })?
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
@@ -284,7 +304,11 @@ pub(crate) fn get(
             base_url, paths, ..
         } => {
             if !kaleidoscope_contract::validate::allowed_public_http_path(&paths, &media.path) {
-                return Err(errors::MEDIA_LOAD_HTTP_PATH_FORBIDDEN(&media.path));
+                let display_path = media
+                    .path
+                    .split_once('?')
+                    .map_or(media.path.as_str(), |(path, _)| path);
+                return Err(errors::MEDIA_LOAD_HTTP_PATH_FORBIDDEN(display_path));
             }
             (
                 format!(
@@ -352,15 +376,15 @@ pub(crate) fn get(
                     };
                     errors::MEDIA_LOAD_CONNECTION_LOGIN_REQUIRED(&target, connection)
                 }
-                RequestError::RateLimited { .. } => {
-                    let (connection, host) = match &source {
-                        Source::Connection { name, host } => (name.as_str(), host.as_str()),
-                        Source::Http { host } => ("공개 HTTP", host.as_str()),
-                        Source::File(_) => ("연결", "알 수 없는 서버"),
-                    };
-                    errors::MEDIA_LOAD_CONNECTION_RATE_LIMITED(&target, connection)
-                        .and_details(vec![format!("HTTP 429; host={host}")])
-                }
+                RequestError::RateLimited { .. } => match &source {
+                    Source::Connection { name, host } => {
+                        errors::MEDIA_LOAD_CONNECTION_RATE_LIMITED(&target, name)
+                            .and_details(vec![format!("HTTP 429; host={host}")])
+                    }
+                    Source::Http { host } => errors::MEDIA_LOAD_HTTP_RATE_LIMITED(&target)
+                        .and_details(vec![format!("HTTP 429; host={host}")]),
+                    Source::File(_) => unreachable!(),
+                },
             })?;
             if !(200..300).contains(&reply.status) {
                 let (error, host) = match &source {

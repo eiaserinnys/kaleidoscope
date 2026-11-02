@@ -101,7 +101,13 @@ impl AppState {
         // 자산, 앱, 배치, 저장값 순서이며 충돌 외 오류는 트랜잭션 전체를 되돌린다.
         for asset in bundle.assets {
             let label = format!("asset:{}/{}", asset.id, asset.version);
-            let existed = assets::get_in(&tx, account, &asset.id, asset.version)?.is_some();
+            let existed = assets::get_in(&tx, account, &asset.id, asset.version, || {
+                kaleidoscope_contract::errors::ASSET_TRANSFER_LOOKUP_FAILED(
+                    &asset.id,
+                    asset.version,
+                )
+            })?
+            .is_some();
             let prepared = assets::prepare(&asset)?;
             match assets::insert(&tx, account, &prepared) {
                 Ok(_) => result.imported += u32::from(!existed),

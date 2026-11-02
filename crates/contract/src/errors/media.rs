@@ -48,6 +48,27 @@ error_catalog! { ENTRIES;
         message: "미디어 자산을 서버에서 받지 못했습니다. 자산 ID: {asset}. 서버 연결과 자산 등록 상태를 확인한 뒤 다시 시도하세요.",
         fix: "서버 연결과 자산 등록 상태를 확인하세요"
     }
+    MEDIA_LOAD_ASSET_DOWNLOAD_SEND_FAILED(asset) {
+        class: Server,
+        place: "앱 창의 미디어 자산 다운로드 요청 전송",
+        cause: "서버에 자산 다운로드 요청을 보내지 못했다",
+        message: "미디어 자산 다운로드 요청을 서버에 보내지 못했습니다. 자산 ID: {asset}. 서버 연결을 확인한 뒤 다시 시도하세요.",
+        fix: "서버 연결을 확인하세요"
+    }
+    MEDIA_LOAD_ASSET_DOWNLOAD_STATUS_REJECTED(asset) {
+        class: Server,
+        place: "앱 창의 미디어 자산 다운로드 응답 확인",
+        cause: "서버가 미디어 자산 다운로드 요청을 거절했다",
+        message: "서버가 미디어 자산 다운로드 요청을 거절했습니다. 자산 ID: {asset}. 서버에 등록된 자산 상태를 확인하세요.",
+        fix: "서버에 등록된 자산 상태를 확인하세요"
+    }
+    MEDIA_LOAD_ASSET_DOWNLOAD_RESPONSE_READ_FAILED(asset) {
+        class: Server,
+        place: "앱 창의 미디어 자산 다운로드 응답 읽기",
+        cause: "서버 응답에서 자산 데이터를 읽지 못했다",
+        message: "서버 응답에서 미디어 자산을 읽지 못했습니다. 자산 ID: {asset}. 다시 시도하고 문제가 계속되면 서버 상태를 확인하세요.",
+        fix: "다시 시도한 뒤 서버 상태를 확인하세요"
+    }
     MEDIA_LOAD_ASSET_HASH_MISMATCH(asset) {
         class: Server,
         place: "앱 창의 미디어 자산 무결성 확인",
@@ -75,6 +96,13 @@ error_catalog! { ENTRIES;
         cause: "요청 경로가 공개 HTTP 권한의 허용 목록에 없다",
         message: "미디어 {media} 경로가 앱의 공개 HTTP 허용 목록에 없어 불러오지 못했습니다. 앱 정의의 허용 경로를 고치세요.",
         fix: "앱 정의에 미디어 경로를 허용하세요"
+    }
+    MEDIA_LOAD_HTTP_RATE_LIMITED(media) {
+        class: Unavailable,
+        place: "앱 창의 공개 HTTP 미디어 요청",
+        cause: "공개 HTTP 서버가 요청 횟수 제한을 적용했다",
+        message: "공개 주소의 미디어 요청이 잠시 제한됐습니다. 대상 미디어: {media}. 잠시 뒤 다시 시도하세요.",
+        fix: "잠시 기다린 뒤 다시 시도하세요"
     }
     MEDIA_LOAD_SOURCE_UNSUPPORTED(media) {
         class: PermissionDenied,
@@ -158,6 +186,13 @@ error_catalog! { ENTRIES;
         place: "앱 창의 파일 미디어 변경 시각 확인",
         cause: "파일의 수정 시각을 읽지 못했다",
         message: "미디어 파일의 수정 시각을 확인하지 못했습니다. 파일 이름: {media}. 파일을 다시 선택하세요.",
+        fix: "파일을 다시 선택하세요"
+    }
+    MEDIA_LOAD_FILE_MODIFIED_TIME_NOT_FOUND(media) {
+        class: NotFound,
+        place: "앱 창의 파일 미디어 변경 시각 확인",
+        cause: "수정 시각을 확인하는 동안 파일이 없어졌다",
+        message: "미디어 파일이 사라져 수정 시각을 확인하지 못했습니다. 파일 이름: {media}. 파일을 다시 선택하세요.",
         fix: "파일을 다시 선택하세요"
     }
     MEDIA_LOAD_FILE_OPEN_NOT_FOUND(media) {
