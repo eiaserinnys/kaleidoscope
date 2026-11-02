@@ -552,12 +552,65 @@ async fn preview_reports_failed_source_and_binding_retry_for_non_2xx() {
     let value = result_value(server.preview_app_result(args(definition())).await.unwrap());
 
     assert_eq!(value["sources"]["cards"]["state"], "failed");
-    assert!(value["sources"]["cards"]["message"]
-        .as_str()
-        .unwrap()
+    assert_eq!(
+        value["sources"]["cards"]["id"],
+        "DATA_PREVIEW_RELAY_STATUS_FAILED"
+    );
+    assert_eq!(value["values"][0]["id"], "DATA_PREVIEW_RELAY_STATUS_FAILED");
+    assert!(value["sources"]["cards"]["details"]
+        .to_string()
         .contains("500"));
     assert_eq!(value["values"][0]["status"], "failed");
     assert_eq!(value["values"][0]["retry"], json!(["cards"]));
+    server_task.abort();
+}
+
+#[tokio::test]
+async fn preview_reports_missing_connection_in_source_and_binding() {
+    let server = McpServer::new(AppState::in_memory("secret"));
+    let value = result_value(server.preview_app_result(args(definition())).await.unwrap());
+    assert_eq!(
+        value["sources"]["cards"]["id"],
+        "DATA_PREVIEW_CONNECTION_NOT_FOUND"
+    );
+    assert_eq!(
+        value["values"][0]["id"],
+        "DATA_PREVIEW_CONNECTION_NOT_FOUND"
+    );
+}
+
+#[tokio::test]
+async fn preview_labels_expression_evaluation_failure() {
+    let server = McpServer::new(AppState::in_memory("secret"));
+    let mut definition = definition();
+    definition["ui"]["children"][0]["value"]["expr"] = json!("$sqrt('wrong')");
+    let value = result_value(server.preview_app_result(args(definition)).await.unwrap());
+    assert_eq!(value["values"][0]["status"], "failed");
+    assert_eq!(value["values"][0]["id"], "DATA_BINDING_EXPR_FAILED");
+}
+
+#[tokio::test]
+async fn preview_redacts_request_secrets_from_upstream_error() {
+    let (url, server_task) = fake_origin(500, "token-secret query%2Fkey query%2Fvalue").await;
+    let state = AppState::in_memory("secret");
+    add_relay(&state, &url);
+    state
+        .lock_db()
+        .unwrap()
+        .execute(
+            "UPDATE connections SET headers=?1 WHERE name='board'",
+            [r#"{"authorization":"Bearer token-secret"}"#],
+        )
+        .unwrap();
+    let server = McpServer::new(state);
+    let mut definition = definition();
+    definition["sources"]["cards"]["query"] = json!({"query/key":"query/value"});
+    let value = result_value(server.preview_app_result(args(definition)).await.unwrap());
+    let detail = value["sources"]["cards"]["details"].to_string();
+    assert!(!detail.contains("token-secret"));
+    assert!(!detail.contains("query%2Fkey"));
+    assert!(!detail.contains("query%2Fvalue"));
+    assert!(detail.contains("host="));
     server_task.abort();
 }
 
@@ -741,8 +794,8 @@ async fn preview_uses_window_or_explicit_workspace_storage() {
     input.window_id = Some("win1".into());
     let error = result_value(server.preview_app_result(input).await.unwrap());
     assert_eq!(error["id"], "APP_PREVIEW_WORKSPACE_WINDOW_MISMATCH");
-    assert!(error["message"].as_str().unwrap().contains("작업 ID w2"));
-    assert!(error["message"].as_str().unwrap().contains("작업 ID w1"));
+    assert!(error["message"].as_str().unwrap().contains("작업 ID: w2"));
+    assert!(error["message"].as_str().unwrap().contains("작업 ID: w1"));
     assert!(!error["message"].as_str().unwrap().contains("window_id"));
 }
 

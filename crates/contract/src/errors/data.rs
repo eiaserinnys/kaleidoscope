@@ -1,4 +1,67 @@
 error_catalog! { ENTRIES;
+    DATA_PREVIEW_PUBLIC_REQUEST_FAILED(source) {
+        class: Server,
+        place: "미리 보기 공개 원천 요청",
+        cause: "공개 원천 요청 또는 응답 읽기에 실패했다",
+        message: "원천 {source}: 미리 보기에서 공개 원천을 읽지 못했습니다. 원천 주소와 서버 상태를 확인하세요.",
+        fix: "원천 주소와 서버 상태를 확인하세요"
+    }
+    DATA_PREVIEW_PUBLIC_STATUS_FAILED(source) {
+        class: Server,
+        place: "미리 보기 공개 원천 응답",
+        cause: "공개 원천 서버가 성공이 아닌 상태를 응답했다",
+        message: "원천 {source}: 미리 보기에서 서버가 성공 응답을 보내지 않았습니다. 원천 서버 상태를 확인하세요.",
+        fix: "원천 서버 상태를 확인하세요"
+    }
+    DATA_PREVIEW_PUBLIC_JSON_INVALID(source) {
+        class: Io,
+        place: "미리 보기 공개 원천 JSON 해석",
+        cause: "공개 원천 응답이 JSON 형식이 아니다",
+        message: "원천 {source}: 미리 보기 응답이 JSON 형식이 아닙니다. 원천 응답 형식을 확인하세요.",
+        fix: "원천 응답 형식을 확인하세요"
+    }
+    DATA_PREVIEW_PUBLIC_TEXT_INVALID(source) {
+        class: Io,
+        place: "미리 보기 공개 원천 텍스트 해석",
+        cause: "공개 원천 응답이 UTF-8 텍스트가 아니다",
+        message: "원천 {source}: 미리 보기 응답이 UTF-8 텍스트가 아닙니다. 원천 응답 형식을 확인하세요.",
+        fix: "원천 응답 형식을 확인하세요"
+    }
+    DATA_PREVIEW_PERMISSION_NOT_FOUND(permission) {
+        class: InvalidRequest,
+        place: "미리 보기 원천 권한 확인",
+        cause: "원천에 지정한 권한 선언을 찾지 못했다",
+        message: "원천 권한 {permission}: 앱 정의에서 찾지 못했습니다. 앱 정의의 권한 선언을 고치세요.",
+        fix: "앱 정의의 권한 선언을 고치세요"
+    }
+    DATA_PREVIEW_CONNECTION_NOT_FOUND(connection) {
+        class: NotFound,
+        place: "미리 보기 원천 연결 조회",
+        cause: "서버에 원천 연결이 등록되지 않았다",
+        message: "연결 {connection}: 서버에 등록되지 않아 원천을 미리 볼 수 없습니다. 연결 설정을 확인하세요.",
+        fix: "연결 설정을 확인하세요"
+    }
+    DATA_PREVIEW_RELAY_STATUS_FAILED(source) {
+        class: Server,
+        place: "미리 보기 연결 원천 응답",
+        cause: "연결된 서버가 성공이 아닌 상태를 응답했다",
+        message: "원천 {source}: 미리 보기에서 서버가 성공 응답을 보내지 않았습니다. 연결과 서버 상태를 확인하세요.",
+        fix: "연결과 서버 상태를 확인하세요"
+    }
+    DATA_PREVIEW_RELAY_JSON_INVALID(source) {
+        class: Io,
+        place: "미리 보기 연결 원천 JSON 해석",
+        cause: "연결된 서버의 응답이 JSON 형식이 아니다",
+        message: "원천 {source}: 미리 보기 응답이 JSON 형식이 아닙니다. 원천 응답 형식을 확인하세요.",
+        fix: "원천 응답 형식을 확인하세요"
+    }
+    DATA_PREVIEW_BINDING_RESULT_MISSING(pointer) {
+        class: InvalidRequest,
+        place: "미리 보기 바인딩 결과 조회",
+        cause: "계산한 바인딩 결과가 없다",
+        message: "바인딩 경로 {pointer}: 미리 보기 계산 결과가 없습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "에이전트에게 이 오류 코드를 전하세요"
+    }
     DATA_SOURCE_PLAN_INVALID(source, reason) {
         class: InvalidRequest,
         place: "데이터 원천 계획 검사",
