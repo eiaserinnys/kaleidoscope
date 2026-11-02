@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { Block, SelectOption } from "../contract/contract";
 import { ICON_NAMES } from "../contract/limits";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -12,6 +12,7 @@ import { Select, Toggle } from "../components/select-toggle";
 import { Button, IconButton } from "../components/primitives";
 import { display } from "./data-layout";
 import { asArray } from "./data-view-common";
+import { createSerialSend, createThrottledSend } from "../data/throttled-send";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 const bindingName = (value: unknown, fallback: string) => {
@@ -96,11 +97,18 @@ export function SliderBlock({ block, pointer }: Props<"slider">) {
   const raw = Number((value.status === "ready" ? value.value : null) ?? block.min);
   const current = Number.isFinite(raw) ? raw : block.min;
   const [draft, setDraft] = useState(current);
-  useEffect(() => { setDraft(current); }, [current]);
+  const dragging = useRef(false);
+  const serialSend = useMemo(() => createSerialSend((next: number) => data.act(`${pointer}/on_change`, next)), [data, pointer]);
+  const throttled = useMemo(() => createThrottledSend((next: number) => serialSend(next, { coalesce: true }), 100), [serialSend]);
+  useEffect(() => () => throttled.flush(), [throttled]);
+  useEffect(() => { if (!dragging.current) setDraft(current); }, [current]);
+  const finish = () => { throttled.flush(); dragging.current = false; };
   return <label className="ks-field ks-slider-field">
     {block.label ? <span className="ks-field-label" data-ks-share-skip="">{block.label}</span> : null}
     <input type="range" className="ks-slider" aria-label={block.label ?? bindingName(block.value, "슬라이더")} min={block.min} max={block.max} step={block.step ?? 1} value={draft}
-      onChange={(event) => { const next = Number(event.currentTarget.value); setDraft(next); void data.act(`${pointer}/on_change`, next); }} />
+      onPointerDown={() => { dragging.current = true; }} onPointerUp={finish} onPointerCancel={finish} onBlur={finish}
+      onKeyDown={() => { dragging.current = true; }} onKeyUp={finish}
+      onChange={(event) => { const next = Number(event.currentTarget.value); setDraft(next); throttled.send(next); if (event.nativeEvent.type === "change") finish(); }} />
     <span className="ks-slider-value" data-ks-share-skip="">{draft}</span>
   </label>;
 }
@@ -110,12 +118,26 @@ export function ColorBlock({ block, pointer }: Props<"color">) {
   const bound = useBinding(`${pointer}/value`, block.value);
   const disabled = useBinding(`${pointer}/disabled`, block.disabled ?? false);
   const value = bound.status === "ready" ? bound.value : null;
-  const color = typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "#000000";
+  const current = typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "#000000";
   const unavailable = disabled.status !== "ready" || Boolean(disabled.value);
+  const [color, setColor] = useState(current);
+  const dragging = useRef(false);
+  const serialSend = useMemo(() => createSerialSend((next: string) => data.act(`${pointer}/on_change`, next)), [data, pointer]);
+  const throttled = useMemo(() => createThrottledSend((next: string) => serialSend(next, { coalesce: true }), 100), [serialSend]);
+  useEffect(() => () => throttled.flush(), [throttled]);
+  useEffect(() => { if (!dragging.current) setColor(current); }, [current]);
+  const change = (next: string, nativeType: string) => {
+    const normalized = next.toLowerCase();
+    setColor(normalized);
+    throttled.send(normalized);
+    if (nativeType === "change") { throttled.flush(); dragging.current = false; }
+  };
+  const finish = () => { throttled.flush(); dragging.current = false; };
   return <label className={`ks-field ks-color-field${unavailable ? " is-disabled" : ""}`}>
     {block.label ? <span className="ks-field-label" data-ks-share-skip="">{block.label}</span> : null}
     <span className="ks-color-control"><input className="ks-color-input" type="color" aria-label={block.label ?? bindingName(block.value, "색상")} value={color} disabled={unavailable}
-      onChange={(event) => { void data.act(`${pointer}/on_change`, event.currentTarget.value.toLowerCase()); }} /><span className="ks-color-code" data-ks-share-skip="">{color}</span></span>
+      onPointerDown={() => { dragging.current = true; }} onPointerUp={finish} onPointerCancel={finish} onBlur={finish} onKeyDown={() => { dragging.current = true; }} onKeyUp={finish}
+      onChange={(event) => change(event.currentTarget.value, event.nativeEvent.type)} /><span className="ks-color-code" data-ks-share-skip="">{color}</span></span>
   </label>;
 }
 export function SelectBlock({ block, pointer }: Props<"select">) {

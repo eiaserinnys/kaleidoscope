@@ -7,8 +7,8 @@ import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
 import { isHttpAddress, normalizeWebAddress } from "./web-address";
 import { useShareDescriber } from "../share/visible";
-import { registerWebSurface, type WebSurfaceState } from "./web-surface-layer";
-import { useWindowStateValue } from "../data/window-state";
+import { registerWebSurface, type WebSurfaceRegistration, type WebSurfaceState } from "./web-surface-layer";
+import { useWindowStateValue, useWindowVisible } from "../data/window-state";
 
 type WebViewBlockData = Extract<Block, { type: "web_view" }>;
 
@@ -28,12 +28,16 @@ function pageHeading(page: WebPage | null): string {
 }
 
 export function WebViewBlock({ block, context }: { block: WebViewBlockData; context: BlockContext }) {
+  const visible = useWindowVisible(context);
   const stateUrl = useWindowStateValue(context, typeof block.url === "string" ? null : block.url.state);
   const address = resolveAddress(block, stateUrl);
   const validAddress = isHttpAddress(address) ? address : null;
   const windowId = context.window.id;
   const store = context.store;
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const surfaceRegistration = useRef<WebSurfaceRegistration | null>(null);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const shareRef = useRef<HTMLDivElement>(null);
   const attached = useRef(false);
   const attaching = useRef(false);
@@ -145,8 +149,12 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
   useEffect(() => {
     const element = surfaceRef.current;
     if (!element || !webReady) return;
-    return registerWebSurface(element, windowId, store, setSurface);
+    const registration = registerWebSurface(element, windowId, store, setSurface, visibleRef.current);
+    surfaceRegistration.current = registration;
+    return () => { registration.unregister(); surfaceRegistration.current = null; };
   }, [store, webReady, windowId]);
+
+  useEffect(() => { surfaceRegistration.current?.setActive(visible); }, [visible]);
 
   const navigate = (value: string) => {
     setEditingAddress(false);
