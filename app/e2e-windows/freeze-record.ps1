@@ -6,11 +6,13 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 public class FreezeRecorder {
+ [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
  public static byte[] Frame(string path) {
-  using(var b=new Bitmap(800,600,PixelFormat.Format32bppArgb)) {
+  int width=GetSystemMetrics(0),height=GetSystemMetrics(1);
+  using(var b=new Bitmap(width,height,PixelFormat.Format32bppArgb)) {
    using(var g=Graphics.FromImage(b)) g.CopyFromScreen(0,0,0,0,b.Size);
-   var d=b.LockBits(new Rectangle(0,0,800,600),ImageLockMode.ReadOnly,PixelFormat.Format32bppArgb);
-   var v=new byte[800*600*4]; Marshal.Copy(d.Scan0,v,0,v.Length);b.UnlockBits(d);
+   var d=b.LockBits(new Rectangle(0,0,width,height),ImageLockMode.ReadOnly,PixelFormat.Format32bppArgb);
+   var v=new byte[width*height*4]; Marshal.Copy(d.Scan0,v,0,v.Length);b.UnlockBits(d);
    if(path!=null)b.Save(path,ImageFormat.Png); return v;
   }
  }

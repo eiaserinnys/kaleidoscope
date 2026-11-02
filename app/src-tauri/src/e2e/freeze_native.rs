@@ -183,3 +183,19 @@ pub fn begin(owner: Handle, timeout_ms: u32) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[link(name = "user32")]
+extern "system" {
+    fn SetCursorPos(x: i32, y: i32) -> i32;
+    fn mouse_event(flags: u32, x: u32, y: u32, data: u32, extra: usize);
+}
+/// 실제 입력 주입으로 레이어드 창의 클릭 통과를 확인한다.
+pub fn click(owner: isize) {
+    unsafe {
+        let mut p = Point { x: 50, y: 100 };
+        ClientToScreen(owner, &mut p);
+        SetCursorPos(p.x, p.y);
+        mouse_event(2, 0, 0, 0, 0);
+        mouse_event(4, 0, 0, 0, 0);
+    }
+}
