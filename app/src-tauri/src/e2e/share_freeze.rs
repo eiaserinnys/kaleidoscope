@@ -80,7 +80,10 @@ pub(super) fn scenario(
         .get(&workspace)
         .ok_or("데스크톱 없음")?
         .clone();
-    let def = json!({"id":"spike-html","name":"정지 화면 시험","requires":{"blocks":10,"modules":{}},"permissions":[],"state":{},"ui":{"type":"html_view","value":"<html><body style='margin:0;background:rgb(17,153,51);height:1800px'>IFRAME GREEN</body></html>"}});
+    let code = (1..=200)
+        .map(|i| format!("line {i}: const value = {i};\n"))
+        .collect::<String>();
+    let def = json!({"id":"spike-html","name":"정지 화면 시험","requires":{"blocks":10,"modules":{}},"permissions":[],"state":{},"ui":{"type":"split","direction":"row","sizes":[50,50],"children":[{"type":"html_view","value":"<html><body style='margin:0;background:rgb(17,153,51)'><div style='height:700px'>IFRAME TOP</div><div id='bottom' style='height:700px;background:rgb(51,119,170)'>IFRAME BOTTOM</div></body></html>"},{"type":"code","value":code}]}});
     call(
         core,
         CoreRequest::AppImport {
@@ -106,6 +109,11 @@ pub(super) fn scenario(
         r#"window.spikeRaf=0;function tick(){window.spikeRaf++;requestAnimationFrame(tick);}requestAnimationFrame(tick);const a=document.querySelector('[data-testid="app-window-spike-html"]');window.spikeA=a; const b=document.createElement('div'); b.id='spikeB';b.style='position:fixed;left:20px;top:90px;width:680px;height:470px;background:rgb(221,34,102);z-index:999999'; const i=document.createElement('input');i.id='spikeInput';b.append(i); document.body.append(b);i.focus();return {iframe:!!a.querySelector('iframe'),focus:document.hasFocus(),raf:window.spikeRaf};"#,
     )?;
     frames(app, 2)?;
+    ui(
+        app,
+        r#"const a=window.spikeA;const sc=a.querySelector('.cm-scroller');if(!sc)throw new Error('CodeMirror 없음');sc.scrollTop=450;window.spikeScroll=sc.scrollTop;const frame=a.querySelector('iframe');frame.contentWindow.postMessage({type:'ks-html-focus-comment',id:'bottom',comments:[{id:'bottom',selector:'#bottom'}]},'*');const canvas=document.createElement('canvas');canvas.width=100;canvas.height=100;canvas.style='position:absolute;left:180px;top:100px;width:100px;height:100px;z-index:5';a.append(canvas);window.spikeGL=canvas.getContext('webgl');if(window.spikeGL){const gl=window.spikeGL;function draw(){gl.clearColor(0.2,0.3333333,0.8666667,1);gl.clear(gl.COLOR_BUFFER_BIT);requestAnimationFrame(draw);}draw();}return {scroll:window.spikeScroll,webgl:!!window.spikeGL};"#,
+    )?;
+    thread::sleep(Duration::from_millis(1800));
     fs::write(out.join("record.request"), b"").map_err(|e| e.to_string())?;
     let deadline = Instant::now() + Duration::from_secs(30);
     while !out.join("record.ready").exists() {
@@ -147,11 +155,28 @@ pub(super) fn scenario(
             record(
                 log,
                 "freeze.measure",
-                json!({"tag":tag,"count":count,"wait":wait,"freeze_ms":freeze,"hide_ms":hide_ms,"raf_before":hidden,"captures":shots,"restore":restored,"restore_ms":restore_ms,"unfreeze_ms":start.elapsed().as_millis(),"total_ms":total.elapsed().as_millis(),"foreground_kept":before==on_ui(app,|_|native::foreground())?}),
+                json!({"tag":tag,"count":count,"wait":wait,"wall_ms":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis(),"freeze_ms":freeze,"hide_ms":hide_ms,"raf_before":hidden,"captures":shots,"restore":restored,"restore_ms":restore_ms,"unfreeze_ms":start.elapsed().as_millis(),"total_ms":total.elapsed().as_millis(),"foreground_kept":before==on_ui(app,|_|native::foreground())?}),
             )?;
             thread::sleep(Duration::from_millis(300));
         }
     }
+    on_ui(app, |h| native::begin(h, 5000))??;
+    ui(
+        app,
+        "document.querySelector('#spikeB').style.visibility='hidden';return true;",
+    )?;
+    frames(app, 2)?;
+    capture(app, out, "minimized-reference")?;
+    record(log,"minimized.before",ui(app,"const s=window.spikeA.querySelector('.cm-scroller');return {scroll:s.scrollTop,width:s.clientWidth,height:s.clientHeight,lines:window.spikeA.querySelectorAll('.cm-line').length,webgl:!!window.spikeGL};")?)?;
+    ui(
+        app,
+        "document.querySelector('#spikeB').style.visibility='';return true;",
+    )?;
+    frames(app, 2)?;
+    on_ui(app, |_| {
+        native::flush();
+        native::end();
+    })?;
     // DOM hidden 최소화 후 iframe 재등장을 프레임마다 측정한다.
     ui(app, "window.spikeA.hidden=true;return true;")?;
     frames(app, 2)?;
@@ -163,7 +188,7 @@ pub(super) fn scenario(
         record(
             log,
             "minimized",
-            json!({"frame":n,"state":state,"capture_ms":ms}),
+            json!({"frame":n,"state":state,"capture_ms":ms,"editor":ui(app,"const s=window.spikeA.querySelector('.cm-scroller');return {scroll:s.scrollTop,width:s.clientWidth,height:s.clientHeight,lines:window.spikeA.querySelectorAll('.cm-line').length};")?}),
         )?;
     }
     ui(app,"window.spikeA.hidden=true;document.querySelector('#spikeB').style.visibility='';return true;")?;
