@@ -238,6 +238,7 @@ test("마크다운 편집기의 표와 긴 코드 줄이 창 폭에 맞는다", 
   await page.goto("/?preview=md-editor");
   await page.addStyleTag({ content: ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }" });
   const app = page.getByTestId("app-window-md-editor");
+  await app.getByRole("tab", { name: "내 폴더" }).click();
   await app.getByRole("button", { name: "문서 폴더 고르기" }).click();
   await expect(app.getByRole("treeitem", { name: "Kaleidoscope.md" })).toBeVisible();
   await app.getByRole("treeitem", { name: "Kaleidoscope.md" }).click();

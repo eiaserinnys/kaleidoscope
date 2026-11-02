@@ -1078,6 +1078,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         }
         const revision = `fake-revision-${revisionNumber++}`;
         files.set(path, { text: request.text, revision });
+        emit({ event: "files.changed", root: grant.root_path, changes: [{ to: request.path }] });
         for (const listener of fileListeners) listener();
         return { op: "files.write", path: request.path, revision };
       }

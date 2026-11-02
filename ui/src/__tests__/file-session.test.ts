@@ -182,6 +182,19 @@ function createSession(files: Record<string, string>) {
 }
 
 describe("markdown editor file session", () => {
+  it("가짜 코어가 파일을 쓰면 실제 코어처럼 변경 이벤트를 보낸다", async () => {
+    const { transport, session } = createSession({});
+    const listener = vi.fn();
+    const unsubscribe = transport.subscribe(listener);
+    await transport.call({ op: "files.write", window_id: "editor-window", permission: "docs", path: "새 문서.md", text: "" });
+    expect(listener).toHaveBeenCalledWith({
+      event: "files.changed", root: grantFor("editor-window", "docs").root_path,
+      changes: [{ to: "새 문서.md" }],
+    });
+    unsubscribe();
+    session.dispose();
+  });
+
   it("retargets a dirty descendant without reloading and saves to the new path", async () => {
     const target = { allowsMissingRevision: false, conflictMessage: "충돌", read: vi.fn(async () => ({ text: "원문", revision: "r1" })), write: vi.fn(async () => "r2") };
     const session = new FileEditorSession(target);
