@@ -59,7 +59,11 @@ pub(crate) fn fetch_named(
             file.take(data::SOURCE_MAX_BYTES + 1)
                 .read_to_end(&mut bytes)
                 .map_err(|err| {
-                    let mut error = errors::DATA_SOURCE_FILE_READ_FAILED(source, source_path);
+                    let mut error = if err.kind() == std::io::ErrorKind::NotFound {
+                        errors::DATA_SOURCE_FILE_READ_NOT_FOUND(source, source_path)
+                    } else {
+                        errors::DATA_SOURCE_FILE_READ_FAILED(source, source_path)
+                    };
                     error.details = vec![err.to_string()];
                     error
                 })?;

@@ -39,7 +39,7 @@ pub(crate) fn act(
         let windows = inner.data_runtimes.windows.lock().unwrap();
         let runtime = windows
             .get(window_id)
-            .ok_or_else(|| errors::DATA_ACT_ACTION_WINDOW_MISSING(window_id))?;
+            .ok_or_else(|| errors::DATA_ACT_ACTION_WINDOW_NOT_FOUND(window_id))?;
         let mut button_grid = None;
         data::walk_blocks(
             &runtime.definition.ui,
@@ -148,7 +148,7 @@ pub(crate) fn act(
                         modifiers: modifiers.as_ref(),
                     },
                 )
-                .map_err(|reason| errors::DATA_ACT_STEP_INVALID(pointer).and_details(vec![reason]))
+                .map_err(|reason| errors::DATA_ACT_STEP_INVALID(pointer, &reason))
         })();
         let step = match step {
             Ok(step) => step,
@@ -216,7 +216,7 @@ pub(crate) fn act(
                     let windows = inner.data_runtimes.windows.lock().unwrap();
                     let runtime = windows
                         .get(window_id)
-                        .ok_or_else(|| errors::DATA_ACT_WINDOW_NOT_FOUND(window_id))?;
+                        .ok_or_else(|| errors::DATA_ACT_STATE_WINDOW_NOT_FOUND(window_id))?;
                     let mut next = runtime.state.clone();
                     next.extend(pending.clone());
                     next.insert(key.clone(), value.clone());
@@ -248,7 +248,7 @@ pub(crate) fn act(
                     let windows = inner.data_runtimes.windows.lock().unwrap();
                     windows
                         .get(window_id)
-                        .ok_or_else(|| errors::DATA_ACT_WINDOW_NOT_FOUND(window_id))?
+                        .ok_or_else(|| errors::DATA_ACT_STORAGE_WINDOW_NOT_FOUND(window_id))?
                         .revision(&entry)?
                 };
                 let revision = crate::app_storage::write(

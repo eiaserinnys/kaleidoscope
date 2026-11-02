@@ -2,6 +2,27 @@ use super::*;
 use kaleidoscope_contract::data::{BindingValue, SourceStatus};
 
 #[test]
+fn data_action_missing_window_uses_not_found_code() {
+    let dir = TempDir::new().unwrap();
+    let core = open_core(dir.path(), vec![], &Arc::new(FakeHost::default()));
+    let error = core
+        .handle(CoreRequest::DataAct {
+            window_id: "missing-window".into(),
+            pointer: "/ui/on_click".into(),
+            event: Value::Null,
+            item: Value::Null,
+            modifiers: None,
+        })
+        .unwrap_err();
+
+    assert_eq!(
+        error.id.as_deref(),
+        Some("DATA_ACT_ACTION_WINDOW_NOT_FOUND")
+    );
+    assert_eq!(error.code, ErrorCode::NotFound);
+}
+
+#[test]
 fn client_inputs_include_state_literal_and_expression_and_follow_state() {
     let temp = TempDir::new().unwrap();
     let definition = json!({"id":"client-inputs","name":"입력 시험","requires":{"blocks":12,"modules":{"assets":1,"client":1}},

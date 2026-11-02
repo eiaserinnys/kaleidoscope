@@ -27,6 +27,13 @@ error_catalog! { ENTRIES;
         message: "원천 {source}의 파일 경로는 {path}입니다. 파일 내용을 읽지 못했습니다. 파일 상태와 권한을 확인하세요.",
         fix: "파일 상태와 권한을 확인하세요"
     }
+    DATA_SOURCE_FILE_READ_NOT_FOUND(source, path) {
+        class: NotFound,
+        place: "파일 원천 읽기",
+        cause: "읽는 중 원천 파일이 사라졌다",
+        message: "원천 {source}의 파일 경로는 {path}입니다. 읽는 중 파일을 찾지 못했습니다. 파일 위치와 상태를 확인하세요.",
+        fix: "파일 위치와 상태를 확인하세요"
+    }
     DATA_SOURCE_FILE_TOO_LARGE(source, path) {
         class: Io,
         place: "파일 원천 읽기",
@@ -104,6 +111,20 @@ error_catalog! { ENTRIES;
         message: "창 식별자 {window}: 앱 동작을 실행할 창을 찾지 못했습니다. 창을 다시 연 뒤 시도하세요.",
         fix: "앱 창을 다시 여세요"
     }
+    DATA_ACT_STATE_WINDOW_NOT_FOUND(window) {
+        class: NotFound,
+        place: "앱 동작 상태 변경",
+        cause: "상태를 바꾸려는 앱 창이 없다",
+        message: "창 식별자 {window}: 상태를 바꿀 앱 창을 찾지 못했습니다. 창을 다시 열고 동작을 실행하세요.",
+        fix: "앱 창을 다시 열고 동작을 실행하세요"
+    }
+    DATA_ACT_STORAGE_WINDOW_NOT_FOUND(window) {
+        class: NotFound,
+        place: "앱 동작 저장 항목 쓰기",
+        cause: "저장 항목을 쓰려는 앱 창이 없다",
+        message: "창 식별자 {window}: 저장 항목을 쓸 앱 창을 찾지 못했습니다. 창을 다시 열고 동작을 실행하세요.",
+        fix: "앱 창을 다시 열고 동작을 실행하세요"
+    }
     DATA_ACT_BUTTON_GRID_EXPR_NOT_READY(pointer) {
         class: InvalidRequest,
         place: "단추 묶음 동작 실행",
@@ -156,9 +177,16 @@ error_catalog! { ENTRIES;
     DATA_ACT_ACTION_WINDOW_MISSING(window) {
         class: InvalidRequest,
         place: "앱 동작 조회",
-        cause: "동작 조회를 요청한 앱 창이 없다",
-        message: "창 식별자 {window}: 실행할 동작이 없어 요청을 처리하지 못했습니다. 창을 다시 열고 동작을 시도하세요.",
-        fix: "앱 창을 다시 여세요"
+        cause: "동작을 조회하는 사이 앱 창이 사라졌다",
+        message: "창 식별자 {window}: 동작을 조회하는 중 창이 사라졌습니다. 창을 다시 연 뒤 동작을 시도하세요.",
+        fix: "앱 창을 다시 열고 동작을 시도하세요"
+    }
+    DATA_ACT_ACTION_WINDOW_NOT_FOUND(window) {
+        class: NotFound,
+        place: "앱 동작 요청 확인",
+        cause: "동작 요청을 받은 앱 창이 없다",
+        message: "창 식별자 {window}: 동작 요청을 받은 앱 창이 없습니다. 창을 다시 열고 동작을 시도하세요.",
+        fix: "앱 창을 다시 열고 동작을 시도하세요"
     }
     DATA_ACT_BUTTON_GRID_SERIALIZE_FAILED(pointer) {
         class: InvalidRequest,
@@ -167,12 +195,12 @@ error_catalog! { ENTRIES;
         message: "단추 묶음 {pointer}의 선택값을 전달하지 못했습니다. 단추 목록 항목을 확인하세요.",
         fix: "단추 목록 항목을 확인하세요"
     }
-    DATA_ACT_STEP_INVALID(pointer) {
+    DATA_ACT_STEP_INVALID(pointer, reason) {
         class: InvalidRequest,
-        place: "앱 동작 식 계산",
-        cause: "동작 위치의 JSONata 식을 계산할 수 없다",
-        message: "동작 경로 {pointer}의 JSONata 식을 계산하지 못했습니다. 해당 동작의 식과 입력값을 확인하세요.",
-        fix: "해당 동작의 식을 고치세요"
+        place: "앱 동작 계산과 검사",
+        cause: "동작 단계의 계산이나 검증이 실패했다",
+        message: "동작 경로 {pointer}: 계산 또는 검증에 실패했습니다. 원인: {reason}. 동작 설정과 입력값을 확인하세요.",
+        fix: "해당 동작의 설정과 입력값을 확인하세요"
     }
     DATA_ACT_WORKER_WINDOW_NOT_FOUND(window, action) {
         class: NotFound,
@@ -306,6 +334,13 @@ error_catalog! { ENTRIES;
         cause: "요청한 프로파일러 경로를 지원하지 않는다",
         message: "프로파일러 경로 {path}: 지원하지 않는 주소입니다. 지원되는 경로를 사용하세요.",
         fix: "프로파일러 앱의 지원 경로를 사용하세요"
+    }
+    DATA_PROFILER_METHOD_NOT_ALLOWED(path, method, allowed) {
+        class: InvalidRequest,
+        place: "프로파일러 요청 메서드 검사",
+        cause: "지원하는 경로에 허용되지 않은 메서드로 요청했다",
+        message: "프로파일러 경로 {path}: {method} 메서드로 처리할 수 없습니다. {allowed} 메서드로 요청하세요.",
+        fix: "프로파일러 경로에 지원되는 메서드를 사용하세요"
     }
     DATA_PROFILER_TEMP_DIR_NOT_FOUND() {
         class: NotFound,

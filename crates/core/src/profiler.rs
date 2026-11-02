@@ -451,6 +451,20 @@ pub(crate) fn request(
         (HttpMethod::Get, "/snapshot") => {}
         (HttpMethod::Post, "/clear") => inner.profiler.clear(),
         (HttpMethod::Post, "/benchmark") => benchmark(inner)?,
+        (method, "/snapshot") => {
+            return Err(errors::DATA_PROFILER_METHOD_NOT_ALLOWED(
+                path,
+                method.as_str(),
+                HttpMethod::Get.as_str(),
+            ));
+        }
+        (method, "/clear" | "/benchmark") => {
+            return Err(errors::DATA_PROFILER_METHOD_NOT_ALLOWED(
+                path,
+                method.as_str(),
+                HttpMethod::Post.as_str(),
+            ));
+        }
         _ => return Err(errors::DATA_PROFILER_ROUTE_NOT_FOUND(path)),
     }
     Ok(ConnectionReply {
