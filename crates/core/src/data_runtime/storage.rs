@@ -291,7 +291,7 @@ fn replan_source(
     let changed = set_plan(manager, runtime, name, plan);
     runtime.apply_source_storage_status(name);
     let job = if should_prepare_after_plan(runtime, name, changed, false) {
-        prepare(manager, runtime, id, name)
+        prepare(manager, runtime, id, name, false)
     } else {
         None
     };
@@ -347,6 +347,7 @@ mod freshness_tests {
     fn storage_replan_restores_cached_request_without_preparing_a_job() {
         let manager = DataRuntimes::default();
         let mut runtime = runtime();
+        runtime.attached = 1;
         set_route(&mut runtime, "one");
         let first = runtime.plan_source("item");
         let SourcePlan::Request { path, .. } = &first else {
@@ -359,8 +360,8 @@ mod freshness_tests {
         let fetched_at = chrono::Utc::now();
         let fetched_instant = Instant::now();
         request_cache_store(
-            &mut runtime,
-            request_cache_key(&first, SourceFormat::Json).unwrap(),
+            &manager,
+            request_cache_key(&runtime.definition.id, &first, SourceFormat::Json).unwrap(),
             CachedRequest {
                 value: cached_value.clone(),
                 fetched_at: fetched_at.clone(),

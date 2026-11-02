@@ -344,6 +344,7 @@ pub(crate) fn request(
     }
     Ok(ConnectionReply {
         status: 200,
+        rate_limit: None,
         mime: "application/json".into(),
         json: Some(
             inner
@@ -407,6 +408,7 @@ fn benchmark(inner: &std::sync::Arc<crate::Inner>) -> Result<(), kaleidoscope_co
         };
         core.handle(CoreRequest::DataAttach {
             window_id: window.id.clone(),
+            dormant: vec![],
         })?;
         let mut state = window.state;
         for index in 0..20 {

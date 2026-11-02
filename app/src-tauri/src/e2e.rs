@@ -172,6 +172,21 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
     record(log, "start", json!({}))?;
     // 메인 웹뷰가 초기 상태를 읽어 창을 그릴 시간을 준다.
     thread::sleep(Duration::from_secs(3));
+    let main = app.get_window("main").ok_or("main window missing")?;
+    main.minimize().map_err(|error| error.to_string())?;
+    let until = Instant::now() + Duration::from_secs(5);
+    while core.shell_visible() && Instant::now() < until {
+        thread::sleep(Duration::from_millis(20));
+    }
+    if core.shell_visible() {
+        return Err("최소화 뒤 코어가 보이는 상태입니다".into());
+    }
+    record(
+        log,
+        "shell.minimized",
+        json!({"visible": core.shell_visible()}),
+    )?;
+    main.unminimize().map_err(|error| error.to_string())?;
     let snapshot = match call(core, CoreRequest::StateGet {})? {
         CoreReply::StateGet { snapshot } => snapshot,
         reply => return Err(format!("unexpected state response: {reply:?}")),

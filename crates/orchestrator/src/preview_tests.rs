@@ -466,3 +466,36 @@ async fn stored_environment_reference_is_not_sent_to_the_origin() {
     assert_eq!(error.0, StatusCode::BAD_GATEWAY);
     assert!(error.1.message.contains("환경변수 참조"));
 }
+
+#[tokio::test]
+async fn relay_preserves_403_rate_limit_without_retry_time() {
+    let app = Router::new().fallback(any(|| async {
+        (
+            StatusCode::FORBIDDEN,
+            [("x-ratelimit-remaining", "0")],
+            "한도",
+        )
+    }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let state = AppState::in_memory("secret");
+    add_relay(&state, &format!("http://{address}"));
+    let request = ConnectionRequest {
+        app_id: "test".into(),
+        method: HttpMethod::Get,
+        path: "/items".into(),
+        query: Default::default(),
+        body: None,
+        accept: ConnectionAccept::Json,
+    };
+    let (reply, _) = state
+        .relay_preview_request("board", request, FileAccess::Read)
+        .await
+        .unwrap();
+    let wire = serde_json::to_vec(&reply).unwrap();
+    let received: kaleidoscope_contract::registry::ConnectionReply =
+        serde_json::from_slice(&wire).unwrap();
+    assert_eq!(received.rate_limit.unwrap().retry_after_secs, None);
+    server.abort();
+}

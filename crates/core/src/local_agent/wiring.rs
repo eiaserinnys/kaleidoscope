@@ -156,7 +156,7 @@ fn reconcile(inner: &Arc<Inner>, window: &str) {
         return;
     }
     if current_version != Some(version) {
-        if data_runtime::attach(inner, window).is_err() {
+        if data_runtime::attach(inner, window, None).is_err() {
             return;
         }
         if let Some(c) = inner.local_agents.windows.lock().unwrap().get_mut(window) {

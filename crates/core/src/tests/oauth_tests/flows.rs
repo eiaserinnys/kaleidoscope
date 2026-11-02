@@ -113,6 +113,7 @@ fn login_registers_persists_and_oauth_source_uses_bearer_token() {
     }));
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);

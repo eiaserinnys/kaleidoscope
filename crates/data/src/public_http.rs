@@ -11,6 +11,7 @@ use kaleidoscope_contract::{
 
 pub struct PublicResponse {
     pub status: u16,
+    pub rate_limit: Option<kaleidoscope_contract::registry::RateLimitHint>,
     pub mime: String,
     pub bytes: Vec<u8>,
 }
@@ -80,12 +81,20 @@ pub fn get(
         .build()
         .map_err(|error| error.to_string())?;
     let address = format!("{}{}", base_url.trim_end_matches('/'), path);
-    let mut response = client
+    let response = client
         .get(address)
         .query(query)
         .send()
         .map_err(|error| error.to_string())?;
+    read_response(response, limit)
+}
+
+fn read_response(
+    mut response: reqwest::blocking::Response,
+    limit: u64,
+) -> Result<PublicResponse, String> {
     let status = response.status().as_u16();
+    let rate_limit = crate::rate_limit::rate_limit(status, response.headers());
     let mime = response
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
@@ -102,6 +111,7 @@ pub fn get(
     }
     Ok(PublicResponse {
         status,
+        rate_limit,
         mime,
         bytes,
     })
@@ -109,7 +119,7 @@ pub fn get(
 
 #[cfg(test)]
 mod tests {
-    use super::client_builder;
+    use super::{client_builder, read_response};
     use std::io::{Read, Write};
     use std::net::TcpListener;
 
@@ -138,5 +148,27 @@ mod tests {
             "user-agent: kaleidoscope/{}",
             env!("CARGO_PKG_VERSION")
         )));
+    }
+
+    #[test]
+    fn public_response_preserves_rate_limit_hint() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 4096];
+            stream.read(&mut request).unwrap();
+            stream.write_all(b"HTTP/1.1 429 Too Many Requests\r\nRetry-After: 7\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").unwrap();
+        });
+        let response = client_builder()
+            .no_proxy()
+            .build()
+            .unwrap()
+            .get(format!("http://{address}/"))
+            .send()
+            .unwrap();
+        let response = read_response(response, 1024).unwrap();
+        assert_eq!(response.rate_limit.unwrap().retry_after_secs, Some(7));
+        server.join().unwrap();
     }
 }

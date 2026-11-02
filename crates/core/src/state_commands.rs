@@ -573,6 +573,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::WebCapture { .. }
         | CoreRequest::WebDetach { .. }
         | CoreRequest::DataAttach { .. }
+        | CoreRequest::DataDormant { .. }
         | CoreRequest::DataDetach { .. }
         | CoreRequest::DataAct { .. }
         | CoreRequest::DataRefresh { .. }

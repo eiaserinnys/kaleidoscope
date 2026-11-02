@@ -15,6 +15,7 @@ fn client_inputs_include_state_literal_and_expression_and_follow_state() {
     let CoreReply::DataAttach { view } = core
         .handle(CoreRequest::DataAttach {
             window_id: window.clone(),
+            dormant: vec![],
         })
         .unwrap()
     else {
@@ -77,6 +78,7 @@ fn source_pipeline_fetches_in_order_and_replans_when_state_changes() {
     pick_folder(&core, &window);
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     wait_until(|| {
@@ -99,7 +101,7 @@ fn source_pipeline_fetches_in_order_and_replans_when_state_changes() {
     fs::write(folder.path().join("other.json"), r#"{"next":"f.json"}"#).unwrap();
     fs::write(folder.path().join("f.json"), r#"{"next":"g.json"}"#).unwrap();
     fs::write(folder.path().join("g.json"), r#"{"result":"새 값"}"#).unwrap();
-    crate::data_runtime::refresh(&core.inner, &window, &["z".into()], true).unwrap();
+    crate::data_runtime::refresh(&core.inner, &window, &["z".into()], true, true).unwrap();
     assert_eq!(
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"),
         Some(BindingValue::Ready {
@@ -122,7 +124,7 @@ fn source_pipeline_fetches_in_order_and_replans_when_state_changes() {
         let _ = sender.send(event.clone());
     }));
     fs::write(folder.path().join("missing.json"), r#"{"next":"f.json"}"#).unwrap();
-    crate::data_runtime::refresh(&core.inner, &window, &["a".into()], true).unwrap();
+    crate::data_runtime::refresh(&core.inner, &window, &["a".into()], true, true).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut loading = false;
     while Instant::now() < deadline {
@@ -327,6 +329,7 @@ fn attach_fetches_and_state_change_sends_only_changed_values() {
     let reply = core
         .handle(CoreRequest::DataAttach {
             window_id: window.clone(),
+            dormant: vec![],
         })
         .unwrap();
     assert!(
@@ -418,6 +421,7 @@ fn info(
 fn response(status: u16, body: Value) -> kaleidoscope_contract::registry::ConnectionReply {
     kaleidoscope_contract::registry::ConnectionReply {
         status,
+        rate_limit: None,
         mime: "application/json".into(),
         json: Some(body),
         text: None,
@@ -464,6 +468,7 @@ fn late_source_results_are_discarded_and_calls_are_ordered() {
     }));
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     wait_until(|| !client.connection_requests.lock().unwrap().is_empty());
@@ -549,8 +554,11 @@ fn oauth_requires_login_and_media_is_resized_and_cached() {
     core.subscribe(Box::new(move |event| {
         let _ = tx.send(event.clone());
     }));
-    core.handle(CoreRequest::DataAttach { window_id: window })
-        .unwrap();
+    core.handle(CoreRequest::DataAttach {
+        window_id: window,
+        dormant: vec![],
+    })
+    .unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut login = false;
     while Instant::now() < deadline {
@@ -613,6 +621,7 @@ fn explicit_null_and_absent_action_value_are_distinct() {
     let window = open_window(&core, &desktop, "connection-app");
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     core.handle(CoreRequest::DataAct {
@@ -661,6 +670,7 @@ fn failed_relay_has_retry_and_read_permission_rejects_post() {
     }));
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -730,6 +740,7 @@ fn closing_window_discards_pending_fetch() {
     }));
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     wait_until(|| !client.connection_requests.lock().unwrap().is_empty());
@@ -744,7 +755,10 @@ fn closing_window_discards_pending_fetch() {
         Ok(CoreEvent::DataUpdate { .. })
     ));
     assert!(matches!(
-        core.handle(CoreRequest::DataAttach { window_id: window }),
+        core.handle(CoreRequest::DataAttach {
+            window_id: window,
+            dormant: vec![]
+        }),
         Err(CoreError {
             code: ErrorCode::NotFound,
             ..
@@ -779,6 +793,7 @@ fn source_safety_failed_refresh_keeps_value_and_reports_error_in_layout() {
     }));
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -828,6 +843,7 @@ fn source_safety_failed_refresh_keeps_value_and_reports_error_in_layout() {
     let CoreReply::DataAttach { view } = core
         .handle(CoreRequest::DataAttach {
             window_id: window.clone(),
+            dormant: vec![],
         })
         .unwrap()
     else {
@@ -902,6 +918,7 @@ fn concurrent_actions_preserve_both_state_keys() {
     let window = open_window(&core, &desktop, "state-app");
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     for _ in 0..20 {
@@ -960,6 +977,7 @@ fn reattach_during_version_notification_uses_new_definition() {
     let window = open_window(&core, &desktop, "versioned");
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     let (sender, receiver) = mpsc::channel();
@@ -975,6 +993,7 @@ fn reattach_during_version_notification_uses_new_definition() {
             {
                 let reply = target.upgrade().unwrap().handle(CoreRequest::DataAttach {
                     window_id: window_for_listener.clone(),
+                    dormant: vec![],
                 });
                 let _ = sender.send(reply);
             }
@@ -1014,6 +1033,7 @@ fn reattach_during_state_notification_uses_new_state() {
     let window = open_window(&core, &desktop, "state-view");
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     let (sender, receiver) = mpsc::channel();
@@ -1029,6 +1049,7 @@ fn reattach_during_state_notification_uses_new_state() {
             {
                 let reply = target.upgrade().unwrap().handle(CoreRequest::DataAttach {
                     window_id: window_for_listener.clone(),
+                    dormant: vec![],
                 });
                 let _ = sender.send(reply);
             }
@@ -1075,6 +1096,7 @@ fn path_change_failed_fetch_clears_prior_value() {
     }));
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -1114,7 +1136,10 @@ fn path_change_failed_fetch_clears_prior_value() {
         }
     }
     let CoreReply::DataAttach { view } = core
-        .handle(CoreRequest::DataAttach { window_id: window })
+        .handle(CoreRequest::DataAttach {
+            window_id: window,
+            dormant: vec![],
+        })
         .unwrap()
     else {
         panic!("data.attach");
@@ -1147,12 +1172,14 @@ fn unavailable_storage_never_looks_like_a_null_default() {
     };
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     wait_until(|| {
         let view = core
             .handle(CoreRequest::DataAttach {
                 window_id: window.clone(),
+                dormant: vec![],
             })
             .unwrap();
         matches!(view, CoreReply::DataAttach { view } if matches!(view.values.get("/ui/value"), Some(BindingValue::Failed { .. })))
@@ -1174,6 +1201,7 @@ fn storage_binding_drops_unlinked_defaults_when_the_link_goes_offline() {
     let window = open_window(&core, &desktop, "storage-transition");
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     wait_until(
@@ -1227,10 +1255,11 @@ fn storage_actions_and_remote_change_replan_file_source() {
     mark_connected(&core);
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     wait_until(
-        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() }).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("One") })),
+        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() , dormant: vec![]}).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("One") })),
     );
     core.handle(CoreRequest::DataAct {
         window_id: window.clone(),
@@ -1251,7 +1280,7 @@ fn storage_actions_and_remote_change_replan_file_source() {
         "two.json"
     );
     wait_until(
-        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() }).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("Two") })),
+        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() , dormant: vec![]}).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("Two") })),
     );
     assert_eq!(*registry.storage_workspace.lock().unwrap(), workspace);
     let revision = "remote-revision".to_string();
@@ -1274,7 +1303,7 @@ fn storage_actions_and_remote_change_replan_file_source() {
         },
     );
     wait_until(
-        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() }).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("One") })),
+        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() , dormant: vec![]}).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("One") })),
     );
     core.handle(CoreRequest::WindowSetState {
         window_id: window.clone(),
@@ -1343,6 +1372,7 @@ fn storage_change_recalculates_source_metadata_bindings() {
     }));
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
+        dormant: vec![],
     })
     .unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -1439,3 +1469,6 @@ fn folder_and_file_sources_must_protect_data_dir() {
         matches!(crate::data_sources::fetch(&core.inner, &window, &plan, SourceFormat::Json), Err(crate::connections::RequestError::Core(error)) if error.code == ErrorCode::PermissionDenied)
     );
 }
+
+mod liveness_tests;
+mod rate_limit_tests;
