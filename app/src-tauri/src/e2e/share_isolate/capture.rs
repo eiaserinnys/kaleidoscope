@@ -1,5 +1,5 @@
 use super::*;
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use base64::engine::general_purpose::STANDARD;
 
 #[derive(Debug, Default)]
 pub(super) struct PixelStats {
