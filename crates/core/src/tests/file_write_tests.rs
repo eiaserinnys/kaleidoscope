@@ -94,6 +94,39 @@ fn mkdir(core: &Core, window: &str, name: &str) -> Result<CoreReply, CoreError> 
 }
 
 #[test]
+fn copy_reports_source_in_reply_but_emits_only_created_destination() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("documents");
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join("note.txt"), "hello").unwrap();
+    let host = Arc::new(FakeHost::default());
+    let (core, window) = writable_core(&temp, &root, &host);
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        let _ = tx.send(event.clone());
+    }));
+    let CoreReply::FilesCopy { results } = core
+        .handle(CoreRequest::FilesCopy {
+            window_id: window,
+            permission: "docs".into(),
+            paths: vec!["note.txt".into()],
+            destination: String::new(),
+        })
+        .unwrap()
+    else {
+        panic!("unexpected reply")
+    };
+    assert!(
+        matches!(&results[0], kaleidoscope_contract::FileOpResult::Ok { ok, .. }
+        if ok.from.as_deref() == Some("note.txt") && ok.to.as_deref() == Some("note - 복사본.txt"))
+    );
+    assert!(matches!(rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+    CoreEvent::FilesChanged { changes, .. } if changes == vec![kaleidoscope_contract::FileChange {
+        from: None, to: Some("note - 복사본.txt".into()),
+    }]));
+}
+
+#[test]
 fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
     let temp = TempDir::new().unwrap();
     let root = temp.path().join("documents");

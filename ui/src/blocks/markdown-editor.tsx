@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useShareDescriber } from "../share/visible";
 import { describeEditor } from "../share/editor";
 import { EditorView } from "@codemirror/view";
-import type { Block, FileRef } from "../contract/contract";
+import type { Block, DocumentRef, FileRef } from "../contract/contract";
 import { Notice, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
@@ -11,12 +11,13 @@ import { documentEditorSession } from "./document-editor-session";
 import { EditorConflict } from "./editor-conflict";
 import { createMarkdownEditorState } from "./markdown-editor-state";
 import { useWindowGrant, useWindowStateValue } from "../data/window-state";
+import { useFileEditorEvents } from "./file-editor-events";
 
 type MarkdownEditorBlockData = Extract<Block, { type: "markdown" }>;
 type FileMarkdownEditorBlockData = MarkdownEditorBlockData & { file: FileRef };
 
 export function MarkdownEditorBlock({ block, context }: { block: MarkdownEditorBlockData; context: BlockContext }) {
-  if (block.document) return <DocumentMarkdownEditorBlock entry={block.document.entry} context={context} />;
+  if (block.document) return <DocumentMarkdownEditorBlock document={block.document} context={context} />;
   if (!block.file) return null;
   return <FileMarkdownEditorBlock block={{ ...block, file: block.file }} context={context} />;
 }
@@ -33,6 +34,7 @@ function FileMarkdownEditorBlock({ block, context }: { block: FileMarkdownEditor
     [block.file.permission, context.store, context.window.id],
   );
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
+  useFileEditorEvents(session, context, block.file, grantRoot);
   const previousRoot = useRef(grantRoot);
 
   useEffect(() => {
@@ -57,17 +59,25 @@ function FileMarkdownEditorBlock({ block, context }: { block: FileMarkdownEditor
 
   if (!hasGrant) return null;
   if (path === null) return <div className="ks-markdown-editor" ref={emptyShareRef} />;
-  return <EditorContent path={path} session={session} state={state} />;
+  return <EditorContent path={state.path ?? path} session={session} state={state} />;
 }
 
-function DocumentMarkdownEditorBlock({ entry, context }: { entry: string; context: BlockContext }) {
+function DocumentMarkdownEditorBlock({ document, context }: { document: DocumentRef; context: BlockContext }) {
+  const { entry } = document;
+  const stateKey = typeof document.doc === "object" ? document.doc.state : null;
+  const value = useWindowStateValue(context, stateKey);
+  const collection = document.doc !== undefined;
+  const fixedDoc = typeof document.doc === "string" ? document.doc : undefined;
+  const doc = typeof document.doc === "string" ? document.doc : typeof value === "string" ? value : null;
+  const path = collection ? doc : entry;
   const session = useMemo(
-    () => documentEditorSession(context.store, context.window.id, entry),
-    [context.store, context.window.id, entry],
+    () => documentEditorSession(context.store, context.window.id, entry, { context, collection, stateKey, fixedDoc }),
+    [context, entry, collection, stateKey, fixedDoc],
   );
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
-  useEffect(() => { void session.open(entry); }, [entry, session]);
-  return <EditorContent path={entry} session={session} state={state} />;
+  useEffect(() => { void session.open(path); }, [path, session]);
+  if (path === null) return <div className="ks-markdown-editor" />;
+  return <EditorContent path={state.path ?? path} session={session} state={state} />;
 }
 
 function EditorContent({ path, session, state }: { path: string; session: FileEditorSession; state: FileEditorSnapshot }) {
@@ -84,8 +94,9 @@ function EditorContent({ path, session, state }: { path: string; session: FileEd
       {state.conflict ? <EditorConflict session={session} /> : null}
       <div className="ks-editor-content">
         <CodeEditor
-          key={`${path}:${state.lineSeparator}`}
+          key={`${state.contentIdentity}:${state.lineSeparator}`}
           path={path}
+          contentIdentity={state.contentIdentity}
           session={session}
           text={state.text}
         />
@@ -102,7 +113,7 @@ function EditorContent({ path, session, state }: { path: string; session: FileEd
   );
 }
 
-function CodeEditor({ path, session, text }: { path: string; session: FileEditorSession; text: string }) {
+function CodeEditor({ path, contentIdentity, session, text }: { path: string; contentIdentity: number; session: FileEditorSession; text: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   useShareDescriber(hostRef, () => describeEditor(viewRef.current, path, "마크다운 편집기"));
@@ -120,7 +131,7 @@ function CodeEditor({ path, session, text }: { path: string; session: FileEditor
       view.destroy();
       viewRef.current = null;
     };
-  }, [path, session]);
+  }, [contentIdentity, session]);
 
   useEffect(() => {
     const view = viewRef.current;

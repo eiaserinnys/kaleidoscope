@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFakeTransport } from "../core/fake-transport";
-import { FileEditorSession, createDocumentEditorTarget } from "../blocks/file-editor-session";
+import { FileEditorSession, createDocumentEditorTarget, flushEditors } from "../blocks/file-editor-session";
 import { createMarkdownEditorState } from "../blocks/markdown-editor-state";
 import { documentEditorSession } from "../blocks/document-editor-session";
 import { createShellStore } from "../core/shell-store";
@@ -12,6 +12,40 @@ afterEach(() => {
 });
 
 describe("markdown storage document", () => {
+  it("reads and writes a collection document at its current address", async () => {
+    const call = vi.fn(async (request: { op: string }) => request.op === "storage.get"
+      ? { op: "storage.get", result: { kind: "md", content: "원문", revision: "r1", exists: true } }
+      : { op: "storage.write", revision: "r2" });
+    const session = new FileEditorSession(createDocumentEditorTarget({ call } as never, "editor-window", "docs", true));
+    await session.open("a.md");
+    session.setText("초안");
+    session.retarget("a.md", "b.md");
+    expect(await session.saveNow()).toBe(true);
+    expect(call).toHaveBeenCalledWith(expect.objectContaining({ op: "storage.get", doc: "a.md" }));
+    expect(call).toHaveBeenCalledWith(expect.objectContaining({ op: "storage.write", doc: "b.md", expected_revision: "r1", content: "초안" }));
+    session.dispose();
+  });
+
+  it("scopes document flushes and returns false when the selected save fails", async () => {
+    const seed = structuredClone(makeTestSeed());
+    seed.snapshot.shared.app_versions[0].definition.storage = { entries: [{ id: "docs", key: "documents", kind: "md", collection: true, default: "", label: "문서", presentation: "hidden" }] };
+    const store = createShellStore(createFakeTransport(seed));
+    await store.ready;
+    const target = { allowsMissingRevision: true, conflictMessage: "충돌", read: vi.fn(async () => ({ text: "원문", revision: "r1" })), write: vi.fn(async () => { throw { code: "server", message: "저장 실패", details: [] }; }) };
+    const first = new FileEditorSession(target);
+    const second = new FileEditorSession(target);
+    const resource = { kind: "document" as const, store, windowId: "editor-window", entry: "docs" };
+    first.setResource(resource);
+    second.setResource(resource);
+    await first.open("folder/a.md"); await second.open("other/b.md");
+    first.setText("첫 초안"); second.setText("둘째 초안");
+    expect(await flushEditors({ ...resource, doc: "folder" })).toBe(false);
+    expect(target.write).toHaveBeenCalledTimes(1);
+    expect(first.getSnapshot()).toMatchObject({ dirty: true, text: "첫 초안" });
+    expect(second.getSnapshot()).toMatchObject({ dirty: true, text: "둘째 초안" });
+    first.dispose(); second.dispose(); store.dispose();
+  });
+
   function setup() {
     const seed = structuredClone(makeTestSeed());
     const definition = seed.snapshot.shared.app_versions.find((v) => v.app_id === "md-editor")!.definition;
@@ -125,6 +159,115 @@ function createSession(files: Record<string, string>) {
 }
 
 describe("markdown editor file session", () => {
+  it("retargets a dirty descendant without reloading and saves to the new path", async () => {
+    const target = { allowsMissingRevision: false, conflictMessage: "충돌", read: vi.fn(async () => ({ text: "원문", revision: "r1" })), write: vi.fn(async () => "r2") };
+    const session = new FileEditorSession(target);
+    await session.open("old/note.md");
+    const identity = session.getSnapshot().contentIdentity;
+    session.setText("초안");
+    session.retarget("old", "new");
+    await session.open("new/note.md");
+    expect(session.getSnapshot()).toMatchObject({ path: "new/note.md", text: "초안", revision: "r1", contentIdentity: identity });
+    expect(target.read).toHaveBeenCalledTimes(1);
+    expect(await session.saveNow()).toBe(true);
+    expect(target.write).toHaveBeenCalledWith("new/note.md", "초안", "r1");
+    session.dispose();
+  });
+
+  it("ignores an old in-flight read after a retarget", async () => {
+    let finish!: (value: { text: string; revision: string }) => void;
+    const target = { allowsMissingRevision: false, conflictMessage: "충돌", read: vi.fn(() => new Promise<{ text: string; revision: string }>((resolve) => { finish = resolve; })), write: vi.fn(async () => "r2") };
+    const session = new FileEditorSession(target);
+    const opening = session.open("old.md");
+    session.retarget("old.md", "new.md");
+    finish({ text: "오래된 응답", revision: "old" });
+    await opening;
+    expect(session.getSnapshot()).not.toMatchObject({ path: "new.md", text: "오래된 응답" });
+    session.dispose();
+  });
+
+  it("retries a save at the new path when the old in-flight write fails after a move", async () => {
+    vi.useFakeTimers();
+    let failOld!: (reason: unknown) => void;
+    const target = {
+      allowsMissingRevision: false,
+      conflictMessage: "충돌",
+      read: vi.fn(async () => ({ text: "원문", revision: "r1" })),
+      write: vi.fn().mockImplementationOnce(() => new Promise<string>((_resolve, reject) => { failOld = reject; })).mockResolvedValue("r2"),
+    };
+    const session = new FileEditorSession(target);
+    await session.open("old.md");
+    session.setText("초안");
+    const saving = session.saveNow();
+    session.retarget("old.md", "new.md");
+    failOld({ code: "not_found", message: "이전 경로가 없습니다", details: [] });
+    expect(await saving).toBe(false);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(target.write).toHaveBeenLastCalledWith("new.md", "초안", "r1");
+    expect(session.getSnapshot()).toMatchObject({ path: "new.md", text: "초안", dirty: false });
+    session.dispose();
+  });
+
+  it("clears a clean deletion and retains a dirty deletion for explicit recreation", async () => {
+    const target = { allowsMissingRevision: false, conflictMessage: "충돌", read: vi.fn(async () => ({ text: "원문", revision: "r1" })), write: vi.fn(async () => "r2") };
+    const clean = new FileEditorSession(target);
+    await clean.open("clean.md");
+    clean.removed();
+    expect(clean.getSnapshot()).toMatchObject({ path: null, text: "", dirty: false });
+    const dirty = new FileEditorSession(target);
+    await dirty.open("draft.md");
+    dirty.setText("초안");
+    dirty.removed();
+    expect(dirty.getSnapshot()).toMatchObject({ path: "draft.md", text: "초안", dirty: true, conflict: { code: "conflict" } });
+    expect(await dirty.saveNow()).toBe(false);
+    await dirty.overwrite();
+    expect(target.write).toHaveBeenCalledWith("draft.md", "초안", null);
+    clean.dispose(); dirty.dispose();
+  });
+
+  it("does not let an earlier save response erase a deletion conflict", async () => {
+    let finish!: (revision: string) => void;
+    const target = { allowsMissingRevision: false, conflictMessage: "충돌", read: vi.fn(async () => ({ text: "원문", revision: "r1" })), write: vi.fn(() => new Promise<string>((resolve) => { finish = resolve; })) };
+    const session = new FileEditorSession(target);
+    await session.open("note.md");
+    session.setText("초안");
+    const saving = session.saveNow();
+    session.removed();
+    finish("r2");
+    expect(await saving).toBe(false);
+    expect(session.getSnapshot()).toMatchObject({ text: "초안", dirty: true, conflict: { code: "conflict" } });
+    session.dispose();
+  });
+
+  it("keeps the draft and shows the save error when the deleted parent cannot be recreated", async () => {
+    const target = {
+      allowsMissingRevision: false,
+      conflictMessage: "충돌",
+      read: vi.fn(async () => ({ text: "원문", revision: "r1" })),
+      write: vi.fn(async () => { throw { code: "io", message: "상위 폴더가 없습니다", details: [] }; }),
+    };
+    const session = new FileEditorSession(target);
+    await session.open("notes/note.md");
+    session.setText("보존할 초안");
+    session.removed();
+    await session.overwrite();
+    expect(session.getSnapshot()).toMatchObject({ path: "notes/note.md", text: "보존할 초안", dirty: true, error: "상위 폴더가 없습니다" });
+    expect(await session.saveNow()).toBe(false);
+    session.dispose();
+  });
+
+  it("flushes only sessions under the requested resource address", async () => {
+    const { transport, session: first } = createSession({ "a/one.md": "one", "b/two.md": "two" });
+    const second = new FileEditorSession(transport, "editor-window", "docs");
+    first.setResource({ kind: "file", root: "/fake/docs" });
+    second.setResource({ kind: "file", root: "/fake/docs" });
+    await first.open("a/one.md"); await second.open("b/two.md");
+    first.setText("바뀜 1"); second.setText("바뀜 2");
+    expect(await flushEditors({ kind: "file", root: "/fake/docs", path: "a" })).toBe(true);
+    expect(first.getSnapshot().dirty).toBe(false);
+    expect(second.getSnapshot().dirty).toBe(true);
+    first.dispose(); second.dispose();
+  });
   it("reads the file when its path changes", async () => {
     const { session } = createSession({ "README.md": "# One", "notes/next.md": "# Two" });
 

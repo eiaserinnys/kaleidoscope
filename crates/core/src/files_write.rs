@@ -98,7 +98,14 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             Authorization::Write { root, grant_root },
         ) => {
             let results = ops::copy_paths(inner, &root, &paths, &destination);
-            emit_changes(inner, grant_root, ops::successful_changes(&results));
+            let changes = ops::successful_changes(&results)
+                .into_iter()
+                .map(|change| FileChange {
+                    from: None,
+                    to: change.to,
+                })
+                .collect();
+            emit_changes(inner, grant_root, changes);
             Ok(CoreReply::FilesCopy { results })
         }
         (

@@ -1,10 +1,12 @@
 import type { CoreError } from "../contract/contract";
 import { toCoreError, type CoreTransport } from "../core/core-transport";
+import type { ShellStore } from "../core/shell-store";
 
 export type EditorStatus = "saved" | "saving" | "unsaved";
 
 export interface FileEditorSnapshot {
   path: string | null;
+  contentIdentity: number;
   text: string;
   revision: string | null;
   status: EditorStatus;
@@ -32,24 +34,23 @@ export function createFileEditorTarget(transport: Pick<CoreTransport, "call">, w
       return { text: reply.text, revision: reply.revision };
     },
     async write(path, text, revision) {
-      if (revision === null) throw new Error("파일 revision이 없습니다");
-      const reply = await transport.call({ op: "files.write", window_id: windowId, permission, path, text, expected_revision: revision });
+      const reply = await transport.call({ op: "files.write", window_id: windowId, permission, path, text, ...(revision === null ? {} : { expected_revision: revision }) });
       return reply.revision;
     },
   };
 }
 
-export function createDocumentEditorTarget(transport: Pick<CoreTransport, "call">, windowId: string, entry: string): EditorTarget {
+export function createDocumentEditorTarget(transport: Pick<CoreTransport, "call">, windowId: string, entry: string, collection = false): EditorTarget {
   return {
     allowsMissingRevision: true,
     conflictMessage: "다른 곳에서 바뀌었습니다",
-    async read() {
-      const { result } = await transport.call({ op: "storage.get", window_id: windowId, entry });
+    async read(path) {
+      const { result } = await transport.call({ op: "storage.get", window_id: windowId, entry, ...(collection ? { doc: path } : {}) });
       if (result.kind !== "md" || typeof result.content !== "string") throw new Error("마크다운 문서가 아닙니다");
       return { text: result.content, revision: result.revision };
     },
-    async write(_path, text, revision) {
-      const reply = await transport.call({ op: "storage.write", window_id: windowId, entry, content: text, expected_revision: revision });
+    async write(path, text, revision) {
+      const reply = await transport.call({ op: "storage.write", window_id: windowId, entry, ...(collection ? { doc: path } : {}), content: text, expected_revision: revision });
       return reply.revision;
     },
   };
@@ -57,14 +58,36 @@ export function createDocumentEditorTarget(transport: Pick<CoreTransport, "call"
 
 const activeSessions = new Set<FileEditorSession>();
 
-export async function flushEditors(): Promise<boolean> {
-  const results = await Promise.all([...activeSessions].map((session) => session.saveNow()));
+type DocumentResource = { kind: "document"; store: ShellStore; windowId: string; entry: string };
+export type EditorResource = { kind: "file"; root: string } | DocumentResource;
+export type EditorAddress = { kind: "file"; root: string; path: string } | (DocumentResource & { doc: string });
+
+function documentLocation(resource: DocumentResource): { appId: string; prefix: string } | null {
+  const snapshot = resource.store.getSnapshot();
+  if (!snapshot) return null;
+  const window = snapshot.shared.windows.find((item) => item.id === resource.windowId);
+  if (!window) return null;
+  const definition = snapshot.shared.app_versions.find((item) => item.app_id === window.app_id && item.version === window.app_version)?.definition;
+  const entry = definition?.storage?.entries.find((item) => item.id === resource.entry);
+  if (!entry) return null;
+  const workspace = snapshot.shared.desktops.find((item) => item.id === window.desktop_id)?.workspace_id;
+  if (entry.key.includes("{workspace_id}") && !workspace) return null;
+  return { appId: window.app_id, prefix: entry.key.replaceAll("{workspace_id}", workspace ?? "") };
+}
+
+export function pathWithin(path: string, prefix: string): boolean {
+  return path === prefix || (prefix === "" ? true : path.startsWith(`${prefix}/`));
+}
+
+export async function flushEditors(address?: EditorAddress): Promise<boolean> {
+  const results = await Promise.all([...activeSessions].filter((session) => !address || session.matches(address)).map((session) => session.saveNow()));
   return results.every(Boolean);
 }
 
 export class FileEditorSession {
   private snapshot: FileEditorSnapshot = {
     path: null,
+    contentIdentity: 0,
     text: "",
     revision: null,
     status: "saved",
@@ -80,6 +103,8 @@ export class FileEditorSession {
   private pendingPath: string | null | undefined;
   private readVersion = 0;
   private opened = false;
+  private deleted = false;
+  private resource: EditorResource | null = null;
   private readonly target: EditorTarget;
 
   constructor(target: EditorTarget);
@@ -91,6 +116,39 @@ export class FileEditorSession {
 
   get conflictMessage(): string {
     return this.target.conflictMessage;
+  }
+
+  setResource(resource: EditorResource | null) { this.resource = resource; }
+
+  matches(address: EditorAddress): boolean {
+    const path = this.snapshot.path;
+    if (!this.resource || path === null || this.resource.kind !== address.kind) return false;
+    if (address.kind === "file" && this.resource.kind === "file") return this.resource.root === address.root && pathWithin(path, address.path);
+    if (address.kind === "document" && this.resource.kind === "document") {
+      if (this.resource.store !== address.store) return false;
+      const current = documentLocation(this.resource);
+      const selected = documentLocation(address);
+      return !!current && !!selected && current.appId === selected.appId && current.prefix === selected.prefix && pathWithin(path, address.doc);
+    }
+    return false;
+  }
+
+  retarget(from: string, to: string): string | null {
+    const path = this.snapshot.path;
+    if (path === null || !pathWithin(path, from)) return null;
+    const next = to + path.slice(from.length);
+    ++this.readVersion;
+    if (typeof this.pendingPath === "string" && pathWithin(this.pendingPath, from)) this.pendingPath = to + this.pendingPath.slice(from.length);
+    this.update({ path: next });
+    return next;
+  }
+
+  removed() {
+    ++this.readVersion;
+    this.clearTimer();
+    if (!this.snapshot.dirty) { void this.load(null); return; }
+    this.deleted = true;
+    this.update({ status: "unsaved", conflict: { code: "conflict", message: "문서가 삭제되었습니다", details: [] }, error: null });
   }
 
   getSnapshot = (): FileEditorSnapshot => this.snapshot;
@@ -134,10 +192,13 @@ export class FileEditorSession {
     this.clearTimer();
     const version = ++this.readVersion;
     this.opened = false;
+    this.deleted = false;
+    const contentIdentity = this.snapshot.contentIdentity + (path !== this.snapshot.path ? 1 : 0);
     if (path === null) {
       this.pendingPath = undefined;
       this.update({
         path: null,
+        contentIdentity,
         text: "",
         revision: null,
         status: "saved",
@@ -152,6 +213,7 @@ export class FileEditorSession {
 
     this.update({
       path,
+      contentIdentity,
       text: "",
       revision: null,
       status: "saved",
@@ -199,6 +261,7 @@ export class FileEditorSession {
   async saveNow(): Promise<boolean> {
     this.clearTimer();
     if (!this.snapshot.dirty) return true;
+    if (this.deleted) return false;
     if (!this.opened || this.snapshot.path === null || (this.snapshot.revision === null && !this.target.allowsMissingRevision)) return false;
     if (this.savePromise) return this.savePromise;
 
@@ -219,6 +282,12 @@ export class FileEditorSession {
       const revision = await this.target.write(path, text, expectedRevision);
       return await this.saved(path, text, revision);
     } catch (error) {
+      if (this.deleted) return false;
+      if (this.snapshot.path !== path) {
+        this.update({ status: "unsaved", error: null });
+        this.scheduleSave();
+        return false;
+      }
       const coreError = toCoreError(error);
       if (this.target.allowsMissingRevision) {
         try {
@@ -238,6 +307,7 @@ export class FileEditorSession {
   }
 
   private async saved(path: string, text: string, revision: string): Promise<boolean> {
+    if (this.deleted) return false;
     const unchanged = this.snapshot.path === path && this.snapshot.text === text;
     this.update({
       revision,
@@ -280,7 +350,7 @@ export class FileEditorSession {
       });
       await this.followPendingPath();
     } catch (error) {
-      this.update({ status: "unsaved", error: toCoreError(error).message });
+      if (this.snapshot.path === path) this.update({ status: "unsaved", error: toCoreError(error).message });
     }
   }
 
@@ -289,12 +359,21 @@ export class FileEditorSession {
     if (path === null || this.snapshot.conflict === null) return;
     this.clearTimer();
     try {
+      if (this.deleted) {
+        if (this.savePromise) await this.savePromise;
+        const text = this.snapshot.text;
+        this.deleted = false;
+        const saved = await this.write(path, text, null);
+        if (!saved) this.deleted = true;
+        return;
+      }
       const latest = await this.target.read(path);
       if (this.snapshot.path !== path) return;
       this.update({ revision: latest.revision });
       const text = this.snapshot.text;
       await this.write(path, text, latest.revision);
     } catch (error) {
+      if (this.snapshot.path !== path) return;
       const coreError = toCoreError(error);
       if (coreError.code === "conflict") this.update({ status: "unsaved", conflict: coreError, error: null });
       else this.update({ status: "unsaved", error: coreError.message });
