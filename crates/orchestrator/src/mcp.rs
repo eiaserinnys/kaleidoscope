@@ -329,20 +329,31 @@ impl McpServer {
                         "UPDATE apps SET deleted_at=?2 WHERE id=?1 AND deleted_at IS NULL",
                         params![args.app_id, timestamp()],
                     )
-                    .map_err(db_error)?;
+                    .map_err(|error| {
+                        kaleidoscope_contract::errors::MCP_DELETE_APP_DATABASE_FAILED(&args.app_id)
+                            .and_details(vec![error.to_string()])
+                    })?;
                 if updated == 0 {
                     return Err(kaleidoscope_contract::errors::MCP_DELETE_APP_NOT_FOUND(
                         &args.app_id,
                     ));
                 }
-                let mut statement = db.prepare("SELECT v.id FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.app_id=?1 AND w.account_id=?2").map_err(db_error)?;
+                let mut statement = db.prepare("SELECT v.id FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.app_id=?1 AND w.account_id=?2").map_err(|error| {
+                    kaleidoscope_contract::errors::MCP_DELETE_APP_DATABASE_FAILED(&args.app_id)
+                        .and_details(vec![error.to_string()])
+                })?;
                 let ids = statement
                     .query_map(params![args.app_id, account_id], |row| {
                         row.get::<_, String>(0)
                     })
-                    .map_err(db_error)?;
-                ids.collect::<rusqlite::Result<Vec<_>>>()
-                    .map_err(db_error)?
+                    .map_err(|error| {
+                        kaleidoscope_contract::errors::MCP_DELETE_APP_DATABASE_FAILED(&args.app_id)
+                            .and_details(vec![error.to_string()])
+                    })?;
+                ids.collect::<rusqlite::Result<Vec<_>>>().map_err(|error| {
+                    kaleidoscope_contract::errors::MCP_DELETE_APP_DATABASE_FAILED(&args.app_id)
+                        .and_details(vec![error.to_string()])
+                })?
             };
             let (_, changed) = self.state.apply_layout_changes(
                 None,

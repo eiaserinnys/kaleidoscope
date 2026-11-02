@@ -96,20 +96,20 @@ async fn invoke_inner(
         let custom = headers
             .get("x-kaleidoscope-webhook-token")
             .and_then(|v| v.to_str().ok());
-        let valid = stored
-            .as_deref()
-            .filter(|s| !s.is_empty())
-            .is_some_and(|expected| {
-                [
-                    token.as_deref(),
-                    query.get("token").map(String::as_str),
-                    auth,
-                    custom,
-                ]
-                .into_iter()
-                .flatten()
-                .any(|provided| bool::from(provided.as_bytes().ct_eq(expected.as_bytes())))
-            });
+        let Some(expected) = stored.as_deref().filter(|value| !value.is_empty()) else {
+            return Err(
+                kaleidoscope_contract::errors::WORKER_WEBHOOK_SECRET_NOT_CONFIGURED(&app, &secret),
+            );
+        };
+        let valid = [
+            token.as_deref(),
+            query.get("token").map(String::as_str),
+            auth,
+            custom,
+        ]
+        .into_iter()
+        .flatten()
+        .any(|provided| bool::from(provided.as_bytes().ct_eq(expected.as_bytes())));
         if !valid {
             return Err(kaleidoscope_contract::errors::WORKER_WEBHOOK_TOKEN_INVALID(
                 &app,

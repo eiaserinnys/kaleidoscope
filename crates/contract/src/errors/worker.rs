@@ -41,6 +41,41 @@ error_catalog! { ENTRIES;
         message: "앱 ID {app_id}의 시크릿 {secret_id}: 환경변수 참조는 저장할 수 없습니다. 실제 값을 입력해 다시 저장하세요.",
         fix: "환경변수 참조 대신 실제 시크릿 값을 입력하세요"
     }
+    WORKER_SECRET_SAVE_DATABASE_FAILED(app_id, secret_id) {
+        class: Server,
+        place: "워커 시크릿 저장",
+        cause: "시크릿 값을 데이터베이스에 저장하지 못했다",
+        message: "앱 ID {app_id}의 시크릿 {secret_id}: 데이터베이스에 저장하지 못했습니다. 잠시 뒤 다시 저장하세요.",
+        fix: "데이터베이스 상태를 확인하고 다시 저장하세요"
+    }
+    WORKER_SECRET_LIST_DATABASE_FAILED(app_id, secret_id) {
+        class: Server,
+        place: "워커 시크릿 설정 조회",
+        cause: "시크릿 설정을 데이터베이스에서 읽지 못했다",
+        message: "앱 ID {app_id}의 시크릿 {secret_id}: 설정을 데이터베이스에서 읽지 못했습니다. 잠시 뒤 다시 조회하세요.",
+        fix: "데이터베이스 상태를 확인하고 다시 조회하세요"
+    }
+    WORKER_SECRET_DELETE_DATABASE_FAILED(app_id, secret_id) {
+        class: Server,
+        place: "워커 시크릿 삭제",
+        cause: "시크릿 설정을 데이터베이스에서 지우지 못했다",
+        message: "앱 ID {app_id}의 시크릿 {secret_id}: 설정을 지우지 못했습니다. 잠시 뒤 다시 삭제하세요.",
+        fix: "데이터베이스 상태를 확인하고 다시 삭제하세요"
+    }
+    WORKER_RUN_WORKSPACE_CHECK_DATABASE_FAILED(app_id) {
+        class: Server,
+        place: "워커 실행 전 작업 확인",
+        cause: "작업 소유자를 확인할 데이터베이스 트랜잭션을 시작하지 못했다",
+        message: "앱 ID {app_id}: 워커 실행에 필요한 작업 정보를 확인하지 못했습니다. 잠시 뒤 다시 실행하세요.",
+        fix: "데이터베이스 상태를 확인하고 워커를 다시 실행하세요"
+    }
+    WORKER_RUN_SECRET_READ_DATABASE_FAILED(app_id, secret_id) {
+        class: Server,
+        place: "워커 실행 시크릿 조회",
+        cause: "실행할 워커의 시크릿 설정을 데이터베이스에서 읽지 못했다",
+        message: "앱 ID {app_id}의 시크릿 {secret_id}: 워커 실행에 필요한 설정을 읽지 못했습니다. 잠시 뒤 다시 실행하세요.",
+        fix: "데이터베이스 상태를 확인하고 워커를 다시 실행하세요"
+    }
     WORKER_ACTION_NOT_DECLARED(app_id, action) {
         class: InvalidRequest,
         place: "워커 동작 호출",
@@ -167,12 +202,19 @@ error_catalog! { ENTRIES;
         message: "앱 ID {app_id}: 웹훅이 꺼져 있어 요청을 처리하지 않았습니다. 앱 저장소에서 사용 항목을 켜세요.",
         fix: "웹훅 사용 항목을 true로 저장하세요"
     }
+    WORKER_WEBHOOK_SECRET_NOT_CONFIGURED(app_id, secret_id) {
+        class: Unauthorized,
+        place: "워커 웹훅 시크릿 설정 확인",
+        cause: "웹훅이 사용할 시크릿 값이 서버에 저장되지 않았거나 비어 있다",
+        message: "앱 ID {app_id}의 웹훅 시크릿 {secret_id}: 서버에 값이 설정되지 않았습니다. 워커 시크릿 설정에 값을 저장한 뒤 다시 요청하세요.",
+        fix: "워커 시크릿 설정에 값을 저장하세요"
+    }
     WORKER_WEBHOOK_TOKEN_INVALID(app_id) {
         class: Unauthorized,
         place: "워커 웹훅 인증",
-        cause: "요청에 설정된 시크릿과 일치하는 인증값이 없다",
-        message: "앱 ID {app_id}: 웹훅 인증에 실패했습니다. 설정된 토큰으로 다시 요청하세요.",
-        fix: "설정된 웹훅 토큰을 사용하세요"
+        cause: "요청에 포함된 인증값이 서버에 저장된 시크릿과 일치하지 않는다",
+        message: "앱 ID {app_id}: 웹훅 인증값이 저장된 시크릿과 맞지 않습니다. 저장된 시크릿에 맞는 인증값으로 다시 요청하세요.",
+        fix: "요청 인증값을 서버에 저장된 웹훅 시크릿과 맞추세요"
     }
     WORKER_WEBHOOK_BODY_ENCODING_INVALID(app_id) {
         class: InvalidRequest,
@@ -199,7 +241,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "웹훅 응답 상태 확인",
         cause: "워커가 반환한 HTTP 상태가 유효하지 않다",
-        message: "앱 ID {app_id}: 워커가 유효하지 않은 웹훅 응답 상태를 반환했습니다. 100에서 599 사이의 상태를 지정하세요.",
+        message: "앱 ID {app_id}: 워커가 유효하지 않은 웹훅 응답 상태를 반환했습니다. 100에서 999 사이의 상태를 지정하세요.",
         fix: "유효한 HTTP 상태 코드를 지정하세요"
     }
     WORKER_WEBHOOK_HEADER_NAME_INVALID(app_id) {

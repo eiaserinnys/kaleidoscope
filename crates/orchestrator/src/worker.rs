@@ -71,7 +71,14 @@ impl AppState {
             );
         }
         let now = timestamp();
-        self.lock_db()?.execute("INSERT INTO app_secrets(account_id,app_id,secret_id,value,updated_at) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(account_id,app_id,secret_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at", params![account_id, app_id, secret_id, value, now]).map_err(db_error)?;
+        self.lock_db()?
+            .execute("INSERT INTO app_secrets(account_id,app_id,secret_id,value,updated_at) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(account_id,app_id,secret_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at", params![account_id, app_id, secret_id, value, now])
+            .map_err(|error| {
+                kaleidoscope_contract::errors::WORKER_SECRET_SAVE_DATABASE_FAILED(
+                    app_id, secret_id,
+                )
+                .and_details(vec![error.to_string()])
+            })?;
         Ok(json!({"app_id":app_id,"secret_id":secret_id,"configured":true,"updated_at":now}))
     }
 
@@ -80,7 +87,15 @@ impl AppState {
         let db = self.lock_db()?;
         let mut result = Vec::new();
         for secret in worker.secrets {
-            let updated_at: Option<String> = db.query_row("SELECT updated_at FROM app_secrets WHERE account_id=?1 AND app_id=?2 AND secret_id=?3", params![account_id, app_id, secret.id], |row| row.get(0)).optional().map_err(db_error)?;
+            let updated_at: Option<String> = db
+                .query_row("SELECT updated_at FROM app_secrets WHERE account_id=?1 AND app_id=?2 AND secret_id=?3", params![account_id, app_id, secret.id], |row| row.get(0))
+                .optional()
+                .map_err(|error| {
+                    kaleidoscope_contract::errors::WORKER_SECRET_LIST_DATABASE_FAILED(
+                        app_id, &secret.id,
+                    )
+                    .and_details(vec![error.to_string()])
+                })?;
             result.push(json!({"id":secret.id,"description":secret.description,"configured":updated_at.is_some(),"updated_at":updated_at}));
         }
         Ok(json!({"app_id":app_id,"secrets":result}))
@@ -98,7 +113,12 @@ impl AppState {
                 "DELETE FROM app_secrets WHERE account_id=?1 AND app_id=?2 AND secret_id=?3",
                 params![account_id, app_id, secret_id],
             )
-            .map_err(db_error)?
+            .map_err(|error| {
+                kaleidoscope_contract::errors::WORKER_SECRET_DELETE_DATABASE_FAILED(
+                    app_id, secret_id,
+                )
+                .and_details(vec![error.to_string()])
+            })?
             > 0)
     }
 
@@ -332,7 +352,10 @@ impl AppState {
         let (definition, worker) = self.worker_definition(app_id)?;
         if workspace_id.is_some() {
             let db = self.lock_db()?;
-            let tx = db.unchecked_transaction().map_err(db_error)?;
+            let tx = db.unchecked_transaction().map_err(|error| {
+                kaleidoscope_contract::errors::WORKER_RUN_WORKSPACE_CHECK_DATABASE_FAILED(app_id)
+                    .and_details(vec![error.to_string()])
+            })?;
             super::app_storage::check_workspace_owner(&tx, account_id, workspace_id)?;
         }
         let mut storage = BTreeMap::new();
@@ -348,7 +371,15 @@ impl AppState {
         {
             let db = self.lock_db()?;
             for secret in &worker.secrets {
-                let value: Option<String> = db.query_row("SELECT value FROM app_secrets WHERE account_id=?1 AND app_id=?2 AND secret_id=?3", params![account_id, app_id, secret.id], |row| row.get(0)).optional().map_err(db_error)?;
+                let value: Option<String> = db
+                    .query_row("SELECT value FROM app_secrets WHERE account_id=?1 AND app_id=?2 AND secret_id=?3", params![account_id, app_id, secret.id], |row| row.get(0))
+                    .optional()
+                    .map_err(|error| {
+                        kaleidoscope_contract::errors::WORKER_RUN_SECRET_READ_DATABASE_FAILED(
+                            app_id, &secret.id,
+                        )
+                        .and_details(vec![error.to_string()])
+                    })?;
                 if let Some(value) = value {
                     secrets.insert(secret.id.clone(), value);
                 }

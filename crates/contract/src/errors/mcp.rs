@@ -27,6 +27,13 @@ error_catalog! { ENTRIES;
         message: "앱 ID {app_id}: 삭제할 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 삭제하세요.",
         fix: "현재 계정의 앱 ID를 확인하세요"
     }
+    MCP_DELETE_APP_DATABASE_FAILED(app_id) {
+        class: Server,
+        place: "delete_app 데이터베이스 처리",
+        cause: "앱 삭제 상태를 기록하거나 연결된 창을 읽지 못했다",
+        message: "앱 ID {app_id}: 데이터베이스 오류로 삭제 처리에 실패했습니다. 잠시 뒤 다시 삭제하세요.",
+        fix: "데이터베이스 상태를 확인하고 다시 삭제하세요"
+    }
     MCP_GET_APP_VERSION_NOT_FOUND(app_id, version) {
         class: NotFound,
         place: "get_app 기본 앱 판 조회",
