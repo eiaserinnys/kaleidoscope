@@ -23,16 +23,24 @@ pub(crate) fn window_web(state: &CoreState, id: &str) -> Result<Option<String>, 
         .windows
         .iter()
         .find(|w| w.id == id)
-        .ok_or_else(|| errors::WEB_REQUEST_WINDOW_NOT_FOUND(id))?;
+        .ok_or_else(|| {
+            errors::WEB_REQUEST_WINDOW_NOT_FOUND().and_details(vec![format!("창 ID: {id}")])
+        })?;
     let app = state
         .shared
         .apps
         .iter()
         .find(|a| a.id == window.app_id)
-        .ok_or_else(|| errors::WEB_REQUEST_APP_NOT_FOUND(id))?;
+        .ok_or_else(|| {
+            errors::WEB_REQUEST_APP_NOT_FOUND().and_details(vec![format!("창 ID: {id}")])
+        })?;
     let definition = app_commands::definition_for(&state.shared, &app.id, app.current_version)
-        .ok_or_else(|| errors::WEB_REQUEST_DEFINITION_NOT_FOUND(id))?;
-    web_block(&definition.ui).ok_or_else(|| errors::WEB_REQUEST_BLOCK_MISSING(id))
+        .ok_or_else(|| {
+            errors::WEB_REQUEST_DEFINITION_NOT_FOUND().and_details(vec![format!("창 ID: {id}")])
+        })?;
+    web_block(&definition.ui).ok_or_else(|| {
+        errors::WEB_REQUEST_BLOCK_MISSING().and_details(vec![format!("창 ID: {id}")])
+    })
 }
 
 pub(crate) fn handle(inner: &Inner, request: CoreRequest) -> Result<CoreReply, CoreError> {
@@ -60,19 +68,22 @@ pub(crate) fn handle(inner: &Inner, request: CoreRequest) -> Result<CoreReply, C
         CoreRequest::WebAttach { url, .. }
             if !kaleidoscope_contract::validate::valid_web_url(url) =>
         {
-            return Err(errors::WEB_ATTACH_URL_INVALID(window_id));
+            return Err(
+                errors::WEB_ATTACH_URL_INVALID().and_details(vec![format!("창 ID: {window_id}")])
+            );
         }
         CoreRequest::WebNavigate { url, .. }
             if !kaleidoscope_contract::validate::valid_web_url(url) =>
         {
-            return Err(errors::WEB_NAVIGATE_URL_INVALID(window_id));
+            return Err(
+                errors::WEB_NAVIGATE_URL_INVALID().and_details(vec![format!("창 ID: {window_id}")])
+            );
         }
         _ => {}
     }
-    let web = inner
-        .host
-        .web()
-        .ok_or_else(|| errors::WEB_REQUEST_HOST_UNAVAILABLE(window_id))?;
+    let web = inner.host.web().ok_or_else(|| {
+        errors::WEB_REQUEST_HOST_UNAVAILABLE().and_details(vec![format!("창 ID: {window_id}")])
+    })?;
     match request {
         CoreRequest::WebAttach { window_id, url } => {
             let inserted = inner.web_attached.lock().unwrap().insert(window_id.clone());

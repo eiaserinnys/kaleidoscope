@@ -1,16 +1,16 @@
 //! 창의 앱, 작업, 저장소와 제공자 연결을 하나의 대화 문맥으로 묶는다.
-use crate::{Inner, app_commands, app_storage, conversation_http::Client};
+use crate::{app_commands, app_storage, conversation_http::Client, Inner};
 use kaleidoscope_contract::{
-    AgentProvider, AppDefinition, CoreError, ErrorCode, Workspace,
     app_storage::StorageReadReply,
     conversation::{
         AdoptThreadRequest, ConversationThread, EnsureThreadReply, ModelsReply, ThreadByKeyReply,
     },
     data::{self, Binding},
+    AgentProvider, AppDefinition, CoreError, ErrorCode, Workspace,
 };
 use kaleidoscope_data::{CompiledApp, Env};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -309,8 +309,7 @@ impl Context {
         {
             return Err(
                 kaleidoscope_contract::errors::CONV_CONTEXT_SAVED_BINDING_MISMATCH(
-                    &self.workspace.id,
-                    id,
+                    &self.workspace.name,
                 ),
             );
         }
@@ -349,10 +348,7 @@ impl Context {
         };
         if thread.id != id {
             return Err(
-                kaleidoscope_contract::errors::CONV_CONTEXT_ADOPTED_THREAD_MISMATCH(
-                    id,
-                    &thread.id,
-                ),
+                kaleidoscope_contract::errors::CONV_CONTEXT_ADOPTED_THREAD_MISMATCH(id, &thread.id),
             );
         }
         Ok(Some(thread))

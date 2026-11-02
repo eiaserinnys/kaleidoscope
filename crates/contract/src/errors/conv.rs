@@ -97,12 +97,12 @@ error_catalog! { ENTRIES;
         message: "저장된 대화 연결에 제공자 대화 식별자가 없습니다. 대화 설정을 확인하고 다시 연결하세요.",
         fix: "저장된 대화 연결을 다시 설정하세요"
     }
-    CONV_CONTEXT_SAVED_BINDING_MISMATCH(workspace_id, thread) {
+    CONV_CONTEXT_SAVED_BINDING_MISMATCH(workspace) {
         class: BindingConflict,
         place: "저장된 대화 연결 확인",
         cause: "저장된 대화 연결의 작업 정보가 현재 설정과 다르다",
-        message: "작업 ID {workspace_id}의 저장된 대화 {thread}: 연결 정보가 현재 작업과 맞지 않습니다. 대화 연결 설정을 확인하세요.",
-        fix: "저장된 대화 연결 설정을 확인하세요"
+        message: "작업 {workspace}: 저장된 대화 연결 정보가 현재 설정과 맞지 않습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "에이전트에게 이 오류 코드를 전하세요"
     }
     CONV_CONTEXT_ADOPTION_CONFLICT(workspace_id, thread) {
         class: BindingConflict,

@@ -21,7 +21,7 @@ export class BrowserFiles {
       input.addEventListener("change", () => {
         const selected = Array.from(input.files ?? []); input.remove();
         const oversized = selected.find((file) => file.size > FILE_LIMIT);
-        if (oversized) { reject(shellErrors.SHELL_CLIENT_FILE_PICK_TOO_LARGE({ name: oversized.name, max_bytes: String(FILE_LIMIT) })); return; }
+        if (oversized) { reject(shellErrors.SHELL_CLIENT_FILE_PICK_TOO_LARGE({ name: oversized.name, limit: "512MB" })); return; }
         const files = selected.map((file) => { const id = crypto.randomUUID(); this.files.set(id, file); return { id, name: file.name, size: file.size, mime: file.type || "application/octet-stream" }; });
         resolve({ cancelled: !files.length, files });
       }, { once: true });
@@ -31,8 +31,8 @@ export class BrowserFiles {
 
   async read(id: string): Promise<ArrayBuffer> {
     const file = this.files.get(id);
-    if (!file) throw shellErrors.SHELL_CLIENT_FILE_NOT_FOUND({ file_id: id });
-    if (file.size > FILE_LIMIT) throw shellErrors.SHELL_CLIENT_FILE_READ_TOO_LARGE({ name: file.name, max_bytes: String(FILE_LIMIT) });
+    if (!file) throw { ...shellErrors.SHELL_CLIENT_FILE_NOT_FOUND(), details: [id] };
+    if (file.size > FILE_LIMIT) throw shellErrors.SHELL_CLIENT_FILE_READ_TOO_LARGE({ name: file.name, limit: "512MB" });
     return file.arrayBuffer();
   }
 

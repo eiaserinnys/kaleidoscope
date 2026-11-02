@@ -30,8 +30,8 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
     let total = accepted.reduce((sum, item) => sum + item.file.size, 0);
     for (const attachment of newAttachments) {
       if (accepted.length >= AGENT_ATTACHMENTS_MAX) { onError(shellErrors.SHELL_CHAT_ATTACHMENT_COUNT_EXCEEDED({ limit: String(AGENT_ATTACHMENTS_MAX) })); break; }
-      if (attachment.file.size > AGENT_ATTACHMENT_MAX_BYTES) { onError(shellErrors.SHELL_CHAT_ATTACHMENT_TOO_LARGE({ name: attachment.name, max_bytes: String(AGENT_ATTACHMENT_MAX_BYTES) })); continue; }
-      if (total + attachment.file.size > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES) { onError(shellErrors.SHELL_CHAT_ATTACHMENT_TOTAL_TOO_LARGE({ max_bytes: String(AGENT_ATTACHMENTS_TOTAL_MAX_BYTES) })); continue; }
+      if (attachment.file.size > AGENT_ATTACHMENT_MAX_BYTES) { onError(shellErrors.SHELL_CHAT_ATTACHMENT_TOO_LARGE({ name: attachment.name, limit: "20MB" })); continue; }
+      if (total + attachment.file.size > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES) { onError(shellErrors.SHELL_CHAT_ATTACHMENT_TOTAL_TOO_LARGE({ limit: "30MB" })); continue; }
       accepted.push(attachment);
       total += attachment.file.size;
     }

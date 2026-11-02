@@ -1,45 +1,45 @@
 error_catalog! { ENTRIES;
     SHELL_THREAD_READ_INVALID(name) {
         class: InvalidRequest,
-        place: "HTML 문서 커멘트 읽기",
-        cause: "thread.json을 JSON으로 읽을 수 없거나 커멘트 문서 구조가 올바르지 않다",
-        message: "문서 {name}의 thread.json 형식이 올바르지 않습니다. 파일을 고쳐 다시 저장하세요.",
-        fix: "thread.json 파일을 고쳐 다시 저장하세요"
+        place: "HTML 문서 커멘트 기록 읽기",
+        cause: "저장된 커멘트 기록을 읽을 수 없다",
+        message: "문서 {name}의 커멘트 기록을 읽지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "에이전트에게 이 오류 코드를 전하세요"
     }
     SHELL_CALL_UNEXPECTED_FAILURE(reason) {
         class: Io,
         place: "쉘 코어 호출 응답 처리",
         cause: "호출에서 코어 오류 형식이 아닌 예외가 발생했다",
-        message: "쉘에서 예상하지 못한 오류가 났습니다: {reason}",
-        fix: "표시된 원인을 확인하고 다시 시도하세요"
+        message: "쉘에서 예상하지 못한 오류가 났습니다. 다시 시도하세요. 원인: {reason}",
+        fix: "다시 시도하세요"
     }
     SHELL_IPC_OPERATION_HEADER_INVALID() {
         class: InvalidRequest,
-        place: "쉘 이진 요청 종류 확인",
+        place: "쉘 파일 전송 요청 처리",
         cause: "요청 종류 정보가 없거나 올바른 문자열이 아니다",
-        message: "쉘 이진 요청 종류를 읽지 못했습니다. 요청을 다시 보내세요.",
-        fix: "쉘 요청을 다시 보내세요"
+        message: "파일을 주고받지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
+        fix: "쉘을 업데이트한 뒤 다시 시도하세요"
     }
     SHELL_IPC_WINDOW_HEADER_INVALID() {
         class: InvalidRequest,
-        place: "쉘 이진 요청 창 정보 확인",
+        place: "쉘 파일 전송 창 확인",
         cause: "창 정보가 없거나 올바른 문자열이 아니다",
-        message: "쉘 이진 요청의 창 정보를 읽지 못했습니다. 요청을 다시 보내세요.",
-        fix: "쉘 요청을 다시 보내세요"
+        message: "파일을 주고받을 창을 확인하지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
+        fix: "쉘을 업데이트한 뒤 다시 시도하세요"
     }
     SHELL_IPC_HANDLE_HEADER_INVALID() {
         class: InvalidRequest,
-        place: "쉘 이진 요청 대상 정보 확인",
+        place: "쉘 파일 전송 대상 확인",
         cause: "요청 대상 정보가 없거나 올바른 문자열이 아니다",
-        message: "쉘 이진 요청의 대상 정보를 읽지 못했습니다. 요청을 다시 보내세요.",
-        fix: "쉘 요청을 다시 보내세요"
+        message: "주고받을 파일을 확인하지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
+        fix: "쉘을 업데이트한 뒤 다시 시도하세요"
     }
     SHELL_IPC_BODY_INVALID() {
         class: InvalidRequest,
-        place: "쉘 이진 IPC 본문 확인",
+        place: "쉘 파일 내용 전송",
         cause: "요청 본문이 raw 이진 데이터가 아니다",
-        message: "쉘 이진 요청의 본문이 올바른 형식이 아닙니다. 이진 데이터를 다시 보내세요.",
-        fix: "raw 이진 본문을 보내세요"
+        message: "파일 내용을 주고받지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
+        fix: "쉘을 업데이트한 뒤 다시 시도하세요"
     }
     SHELL_IPC_EXPORT_OFFSET_INVALID() {
         class: InvalidRequest,
@@ -50,10 +50,10 @@ error_catalog! { ENTRIES;
     }
     SHELL_IPC_OPERATION_UNSUPPORTED() {
         class: InvalidRequest,
-        place: "쉘 이진 요청 종류 확인",
+        place: "쉘 파일 전송 작업 처리",
         cause: "요청 종류가 지원되는 이진 작업이 아니다",
-        message: "쉘에서 지원하지 않는 이진 작업입니다. 파일 읽기, 내보내기, HTTP 읽기 또는 Blob 저장을 사용하세요.",
-        fix: "지원되는 이진 작업을 사용하세요"
+        message: "요청한 파일 작업을 처리하지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
+        fix: "쉘을 업데이트한 뒤 다시 시도하세요"
     }
     SHELL_IPC_CORE_TASK_INTERRUPTED() {
         class: Io,
@@ -155,38 +155,38 @@ error_catalog! { ENTRIES;
     }
     SHELL_HTML_COMMENT_LIST_REPLY_INVALID() {
         class: Io,
-        place: "HTML 문서 코멘트 목록 읽기",
+        place: "HTML 문서 커멘트 목록 읽기",
         cause: "목록 명령이 다른 종류의 응답을 받았다",
-        message: "HTML 문서의 코멘트 목록을 읽지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
+        message: "HTML 문서의 커멘트 목록을 읽지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
         fix: "쉘을 업데이트하고 다시 시도하세요"
     }
     SHELL_HTML_COMMENT_THREAD_REPLY_INVALID() {
         class: Io,
-        place: "HTML 문서 코멘트 읽기",
+        place: "HTML 문서 커멘트 읽기",
         cause: "코멘트 읽기 명령이 다른 종류의 응답을 받았다",
-        message: "HTML 문서의 코멘트를 읽지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
+        message: "HTML 문서의 커멘트를 읽지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
         fix: "쉘을 업데이트하고 다시 시도하세요"
     }
     SHELL_HTML_COMMENT_SAVE_CONFLICT() {
         class: Conflict,
-        place: "HTML 문서 코멘트 저장",
+        place: "HTML 문서 커멘트 저장",
         cause: "세 번 다시 저장해도 다른 창의 변경과 충돌한다",
-        message: "HTML 문서 코멘트를 저장하는 동안 다른 창에서 내용이 바뀌었습니다. 문서를 다시 불러온 뒤 저장하세요.",
-        fix: "문서를 다시 불러온 뒤 코멘트를 저장하세요"
+        message: "HTML 문서 커멘트가 다른 창의 변경과 충돌해 저장되지 않았습니다. 잠시 뒤 다시 저장하세요.",
+        fix: "잠시 뒤 다시 저장하세요"
     }
     SHELL_APP_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "앱 창 내용 표시",
         cause: "표시할 창이 현재 상태에 없다",
-        message: "앱 창이 사라져 내용을 표시할 수 없습니다. 창 목록을 다시 불러오세요.",
-        fix: "창 목록을 다시 불러오세요"
+        message: "앱 창이 사라져 내용을 표시할 수 없습니다. 이 창을 닫고 앱을 다시 여세요.",
+        fix: "이 창을 닫고 앱을 다시 여세요"
     }
     SHELL_APP_VERSION_NOT_FOUND() {
         class: NotFound,
         place: "앱 창 정의 읽기",
         cause: "창이 참조하는 앱 정의를 찾을 수 없다",
-        message: "앱 정의를 찾을 수 없어 창을 표시하지 못했습니다. 앱 목록을 다시 불러오세요.",
-        fix: "앱 목록을 다시 불러오세요"
+        message: "앱 정의를 찾을 수 없어 창을 표시하지 못했습니다. 이 창을 닫고 앱을 다시 여세요.",
+        fix: "이 창을 닫고 앱을 다시 여세요"
     }
     SHELL_WINDOW_DATA_CONTEXT_MISSING() {
         class: Io,
@@ -195,12 +195,12 @@ error_catalog! { ENTRIES;
         message: "창 데이터가 연결되지 않아 화면을 그릴 수 없습니다. 쉘을 다시 열어 보세요.",
         fix: "쉘을 다시 열어 보세요"
     }
-    SHELL_CLIENT_DATA_CONTEXT_MISSING() {
+    SHELL_CLIENT_BINDING_DATA_CONTEXT_MISSING() {
         class: Io,
-        place: "창 클라이언트 데이터 접근",
-        cause: "창 데이터 연결 없이 클라이언트 동작을 요청했다",
-        message: "창 데이터가 연결되지 않아 앱 동작을 실행할 수 없습니다. 쉘을 다시 열어 보세요.",
-        fix: "쉘을 다시 열어 보세요"
+        place: "화면 값 데이터 연결 읽기",
+        cause: "화면 값에 연결된 데이터 문맥이 없다",
+        message: "화면 값의 데이터 연결을 찾지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "에이전트에게 이 오류 코드를 전하세요"
     }
     SHELL_MEDIA_PLAYBACK_UNSUPPORTED() {
         class: Io,
@@ -227,15 +227,15 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱 클라이언트 프레임 감시",
         cause: "앱 프레임이 처음 열린 뒤 다른 문서로 이동했다",
-        message: "앱 실행 화면이 예상과 다르게 바뀌어 실행을 멈췄습니다. 쉘을 다시 열어 보세요.",
-        fix: "쉘을 다시 열어 앱을 실행하세요"
+        message: "앱 실행 화면이 예상과 다르게 바뀌어 실행을 멈췄습니다. 다시 시작을 누르세요.",
+        fix: "다시 시작을 누르세요"
     }
     SHELL_CLIENT_UNRESPONSIVE() {
         class: Io,
         place: "앱 클라이언트 응답 확인",
         cause: "앱 프레임이 제한 시간 안에 응답하지 않았다",
-        message: "앱이 응답하지 않아 실행을 멈췄습니다. 앱을 다시 열어 보세요.",
-        fix: "앱을 다시 열어 보세요"
+        message: "앱이 응답하지 않아 실행을 멈췄습니다. 다시 시작을 누르세요.",
+        fix: "다시 시작을 누르세요"
     }
     SHELL_CLIENT_COMMAND_UNDECLARED(name) {
         class: InvalidRequest,
@@ -248,8 +248,8 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱 파일 저장 대화상자 열기",
         cause: "파일 이름이나 형식이 문자열이 아니다",
-        message: "파일 저장에 필요한 이름이나 형식이 올바르지 않습니다. 파일 이름과 형식을 다시 지정하세요.",
-        fix: "파일 이름과 형식을 다시 지정하세요"
+        message: "앱 파일 저장에 필요한 이름이나 형식이 올바르지 않습니다. 앱 코드를 고치세요.",
+        fix: "앱 코드를 고치세요"
     }
     SHELL_CLIENT_SAVE_PROMPT_REPLY_INVALID() {
         class: Io,
@@ -262,63 +262,63 @@ error_catalog! { ENTRIES;
         class: PermissionDenied,
         place: "앱 호스트 파일 공유 가능 여부 확인",
         cause: "앱 정의에 share capability가 없다",
-        message: "앱 정의에 share capability가 없어 파일을 공유할 수 없습니다. 앱 정의에 권한을 추가하세요.",
+        message: "앱 정의에 share capability가 없어 파일을 공유할 수 없습니다. 앱 정의의 capabilities에 share를 추가하세요.",
         fix: "앱 정의의 capabilities에 share를 추가하세요"
     }
     SHELL_CLIENT_CAN_SHARE_ACTION_REQUIRED() {
         class: InvalidRequest,
         place: "앱 파일 공유 가능 여부 확인",
-        cause: "클라이언트 동작 밖에서 공유 가능 여부를 확인했다",
-        message: "파일 공유 가능 여부는 앱 동작 중에만 확인할 수 있습니다. 앱 동작에서 다시 요청하세요.",
-        fix: "앱 동작 안에서 파일 공유 가능 여부를 확인하세요"
+        cause: "앱 동작 밖에서 공유 가능 여부를 확인했다",
+        message: "파일 공유 가능 여부 확인은 앱 동작 안에서 해야 합니다. 앱 코드를 고치세요.",
+        fix: "앱 코드를 고치세요"
     }
     SHELL_CLIENT_SHARE_CAPABILITY_UNDECLARED() {
         class: PermissionDenied,
         place: "앱 호스트 파일 공유",
         cause: "앱 정의에 share capability가 없다",
-        message: "앱 정의에 share capability가 없어 파일을 공유할 수 없습니다. 앱 정의에 권한을 추가하세요.",
+        message: "앱 정의에 share capability가 없어 파일을 공유할 수 없습니다. 앱 정의의 capabilities에 share를 추가하세요.",
         fix: "앱 정의의 capabilities에 share를 추가하세요"
     }
     SHELL_CLIENT_SHARE_ACTION_REQUIRED() {
         class: InvalidRequest,
         place: "앱 파일 공유",
-        cause: "클라이언트 동작 밖에서 파일 공유를 요청했다",
-        message: "파일 공유는 앱 동작 중에만 할 수 있습니다. 앱 동작에서 다시 요청하세요.",
-        fix: "앱 동작 안에서 파일을 공유하세요"
+        cause: "앱 동작 밖에서 파일 공유를 요청했다",
+        message: "파일 공유는 앱 동작 안에서 요청해야 합니다. 앱 코드를 고치세요.",
+        fix: "앱 코드를 고치세요"
     }
     SHELL_CLIENT_KEEP_AWAKE_CAPABILITY_UNDECLARED() {
         class: PermissionDenied,
         place: "앱 호스트 화면 켜짐 유지",
         cause: "앱 정의에 keep_awake capability가 없다",
-        message: "앱 정의에 keep_awake capability가 없어 화면을 켜 둘 수 없습니다. 앱 정의에 capability를 추가하세요.",
+        message: "앱 정의에 keep_awake capability가 없어 화면을 켜 둘 수 없습니다. 앱 정의의 capabilities에 keep_awake를 추가하세요.",
         fix: "앱 정의의 capabilities에 keep_awake를 추가하세요"
     }
     SHELL_CLIENT_KEEP_AWAKE_ACTION_REQUIRED() {
         class: InvalidRequest,
         place: "화면 켜짐 유지",
-        cause: "클라이언트 동작 밖에서 화면 켜짐 유지를 요청했다",
-        message: "화면 켜짐 유지는 앱 동작 중에만 바꿀 수 있습니다. 앱 동작에서 다시 요청하세요.",
-        fix: "앱 동작 안에서 화면 켜짐 유지를 바꾸세요"
+        cause: "앱 동작 밖에서 화면 켜짐 유지를 요청했다",
+        message: "화면 켜짐 유지 요청은 앱 동작 안에서 해야 합니다. 앱 코드를 고치세요.",
+        fix: "앱 코드를 고치세요"
     }
     SHELL_CLIENT_FRAME_CAN_SHARE_CAPABILITY_UNDECLARED() {
         class: PermissionDenied,
         place: "앱 프레임 파일 공유 가능 여부 확인",
         cause: "앱 정의에 share capability가 없다",
-        message: "앱 정의에 share capability가 없어 파일을 공유할 수 없습니다. 앱 정의에 권한을 추가하세요.",
+        message: "앱 정의에 share capability가 없어 파일을 공유할 수 없습니다. 앱 정의의 capabilities에 share를 추가하세요.",
         fix: "앱 정의의 capabilities에 share를 추가하세요"
     }
     SHELL_CLIENT_FRAME_SHARE_CAPABILITY_UNDECLARED() {
         class: PermissionDenied,
         place: "앱 프레임 파일 공유",
         cause: "앱 정의에 share capability가 없다",
-        message: "앱 정의에 share capability가 없어 파일을 공유할 수 없습니다. 앱 정의에 권한을 추가하세요.",
+        message: "앱 정의에 share capability가 없어 파일을 공유할 수 없습니다. 앱 정의의 capabilities에 share를 추가하세요.",
         fix: "앱 정의의 capabilities에 share를 추가하세요"
     }
     SHELL_CLIENT_FRAME_KEEP_AWAKE_CAPABILITY_UNDECLARED() {
         class: PermissionDenied,
         place: "앱 프레임 화면 켜짐 유지",
         cause: "앱 정의에 keep_awake capability가 없다",
-        message: "앱 정의에 keep_awake capability가 없어 화면을 켜 둘 수 없습니다. 앱 정의에 capability를 추가하세요.",
+        message: "앱 정의에 keep_awake capability가 없어 화면을 켜 둘 수 없습니다. 앱 정의의 capabilities에 keep_awake를 추가하세요.",
         fix: "앱 정의의 capabilities에 keep_awake를 추가하세요"
     }
     SHELL_CLIENT_ASSET_UNDECLARED(asset_id) {
@@ -339,8 +339,8 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱 저장 항목에 파일 쓰기",
         cause: "파일과 바이트를 모두 주거나 둘 다 주지 않았다",
-        message: "파일 또는 바이트 하나를 지정해야 합니다. 둘 중 하나만 골라 다시 저장하세요.",
-        fix: "파일 또는 바이트 하나만 지정하세요"
+        message: "앱 파일 쓰기 요청에는 파일 또는 파일 내용 하나만 지정해야 합니다. 앱 코드를 고치세요.",
+        fix: "앱 코드를 고치세요"
     }
     SHELL_CLIENT_BLOB_TRANSPORT_UNAVAILABLE() {
         class: Io,
@@ -360,49 +360,49 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "앱 파일 내보내기 크기 확인",
         cause: "파일 크기가 0 이상의 정수가 아니다",
-        message: "파일 크기 {size}바이트가 올바르지 않습니다. 앱에서 파일 크기를 다시 지정하세요.",
-        fix: "앱에서 0 이상의 정수 크기를 지정하세요"
+        message: "앱이 넘긴 파일 크기 {size}: 0 이상의 정수가 아닙니다. 앱 코드를 고치세요.",
+        fix: "앱 코드를 고치세요"
     }
     SHELL_CLIENT_OUTPUT_SERIALIZE_FAILED(name) {
         class: InvalidRequest,
         place: "앱 클라이언트 출력 JSON 변환",
         cause: "출력값을 JSON으로 바꿀 수 없다",
-        message: "앱 출력 {name}: JSON으로 읽을 수 없습니다. 출력값을 JSON으로 바꾼 뒤 다시 보내세요.",
-        fix: "앱 출력값을 JSON으로 바꾸세요"
+        message: "앱 출력 {name}: JSON으로 바꿀 수 없습니다. 앱 코드를 고치세요.",
+        fix: "앱 코드를 고치세요"
     }
-    SHELL_CLIENT_OUTPUT_TOO_LARGE(name, max_bytes) {
+    SHELL_CLIENT_OUTPUT_TOO_LARGE(name, limit) {
         class: InvalidRequest,
         place: "앱 클라이언트 출력 크기 확인",
         cause: "출력 JSON이 허용 크기를 넘었다",
-        message: "앱 출력 {name}: {max_bytes}바이트를 넘어 전달하지 못했습니다. 출력 크기를 줄이세요.",
+        message: "앱 출력 {name}: 허용 크기는 {limit}입니다. 출력 크기를 줄이세요.",
         fix: "앱 출력 크기를 줄이세요"
     }
     SHELL_CLIENT_ACTION_FAILED(reason) {
         class: Io,
         place: "앱 클라이언트 동작 실행",
         cause: "앱 클라이언트 동작에서 예외가 발생했다",
-        message: "앱 동작을 끝내지 못했습니다: {reason}. 앱의 클라이언트 코드를 확인하세요.",
-        fix: "표시된 원인을 확인하고 앱 클라이언트 코드를 고치세요"
+        message: "앱 동작을 끝내지 못했습니다. 앱 코드를 확인하세요. 원인: {reason}",
+        fix: "앱 코드를 확인하세요"
     }
-    SHELL_CLIENT_FILE_PICK_TOO_LARGE(name, max_bytes) {
+    SHELL_CLIENT_FILE_PICK_TOO_LARGE(name, limit) {
         class: Io,
         place: "앱에 파일 전달",
         cause: "고른 파일이 앱 전달 한도를 넘었다",
-        message: "파일 크기 초과: {name}. 앱에 전달할 수 있는 크기는 {max_bytes}바이트까지입니다. 더 작은 파일을 선택하세요.",
+        message: "파일 크기 초과: {name}. 앱에 전달할 수 있는 크기 제한은 {limit}입니다. 더 작은 파일을 선택하세요.",
         fix: "더 작은 파일을 선택하세요"
     }
-    SHELL_CLIENT_FILE_NOT_FOUND(file_id) {
+    SHELL_CLIENT_FILE_NOT_FOUND() {
         class: Io,
         place: "앱이 고른 파일 읽기",
         cause: "현재 앱 창에서 파일을 찾을 수 없다",
-        message: "파일 식별자 {file_id}: 이 앱 창에서 찾을 수 없습니다. 파일을 다시 고르세요.",
+        message: "고른 파일을 이 앱 창에서 찾을 수 없습니다. 파일을 다시 고르세요.",
         fix: "파일을 다시 고르세요"
     }
-    SHELL_CLIENT_FILE_READ_TOO_LARGE(name, max_bytes) {
+    SHELL_CLIENT_FILE_READ_TOO_LARGE(name, limit) {
         class: Io,
         place: "앱이 고른 파일 읽기",
         cause: "파일 크기가 앱 전달 한도를 넘었다",
-        message: "파일 크기 초과: {name}. 앱에 전달할 수 있는 크기는 {max_bytes}바이트까지입니다. 더 작은 파일을 선택하세요.",
+        message: "파일 크기 초과: {name}. 앱에 전달할 수 있는 크기 제한은 {limit}입니다. 더 작은 파일을 선택하세요.",
         fix: "더 작은 파일을 선택하세요"
     }
     SHELL_CLIENT_FILE_WRITE_TARGET_MISSING() {
@@ -416,14 +416,14 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱 파일 내보내기 쓰기",
         cause: "파일을 쓸 위치가 0 이상의 정수가 아니다",
-        message: "파일 쓰기 위치 {offset}: 올바른 0 이상의 정수가 아닙니다. 앱에서 위치를 다시 지정하세요.",
-        fix: "앱에서 0 이상의 정수 위치를 지정하세요"
+        message: "앱이 넘긴 파일 쓰기 위치 {offset}: 0 이상의 정수가 아닙니다. 앱 코드를 고치세요.",
+        fix: "앱 코드를 고치세요"
     }
     SHELL_CLIENT_FILE_WRITE_TOO_LARGE() {
         class: Io,
         place: "앱 파일 내보내기 쓰기",
         cause: "브라우저 임시 파일 크기가 64MiB를 넘었다",
-        message: "이 브라우저에서는 64MiB보다 큰 파일을 내보낼 수 없습니다. 작은 파일로 나누어 저장하세요.",
+        message: "이 브라우저에서는 64MiB보다 큰 파일을 내보낼 수 없습니다. 64MiB 이하로 나누어 저장하세요.",
         fix: "파일을 64MiB 이하로 나누어 저장하세요"
     }
     SHELL_CLIENT_FILE_TRUNCATE_TARGET_MISSING() {
@@ -437,14 +437,14 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱 파일 내보내기 크기 변경",
         cause: "새 파일 크기가 0 이상의 정수가 아니다",
-        message: "새 파일 크기 {size}바이트가 올바르지 않습니다. 앱에서 다시 지정하세요.",
-        fix: "앱에서 0 이상의 정수 크기를 지정하세요"
+        message: "앱이 넘긴 새 파일 크기 {size}: 0 이상의 정수가 아닙니다. 앱 코드를 고치세요.",
+        fix: "앱 코드를 고치세요"
     }
     SHELL_CLIENT_FILE_TRUNCATE_TOO_LARGE() {
         class: Io,
         place: "앱 파일 내보내기 크기 변경",
         cause: "브라우저 임시 파일 크기가 64MiB를 넘었다",
-        message: "이 브라우저에서는 64MiB보다 큰 파일을 내보낼 수 없습니다. 작은 파일로 나누어 저장하세요.",
+        message: "이 브라우저에서는 64MiB보다 큰 파일을 내보낼 수 없습니다. 64MiB 이하로 나누어 저장하세요.",
         fix: "파일을 64MiB 이하로 나누어 저장하세요"
     }
     SHELL_CLIENT_FILE_CLOSE_TARGET_MISSING() {
@@ -458,8 +458,8 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱 파일 내보내기 취소",
         cause: "취소할 파일 내보내기 대상을 찾을 수 없다",
-        message: "취소할 파일 내보내기 대상을 찾을 수 없습니다. 파일을 다시 선택하세요.",
-        fix: "필요하면 파일을 다시 선택하세요"
+        message: "파일 내보내기가 이미 끝나 취소할 대상이 없습니다. 추가 조치는 필요하지 않습니다.",
+        fix: "추가 조치는 필요하지 않습니다"
     }
     SHELL_CLIENT_STORAGE_ENTRY_UNDECLARED(entry) {
         class: PermissionDenied,
@@ -471,9 +471,9 @@ error_catalog! { ENTRIES;
     SHELL_CLIENT_SAVE_PROMPT_ACTION_REQUIRED() {
         class: InvalidRequest,
         place: "앱 파일 저장 대화상자 열기",
-        cause: "클라이언트 동작 밖에서 파일 저장 대화상자를 열었다",
-        message: "파일 저장 대화상자는 앱 동작 중에만 열 수 있습니다. 앱 동작에서 다시 요청하세요.",
-        fix: "앱 동작 안에서 파일 저장을 요청하세요"
+        cause: "앱 동작 밖에서 파일 저장 대화상자를 열었다",
+        message: "파일 저장 대화상자는 앱 동작 안에서 열어야 합니다. 앱 코드를 고치세요.",
+        fix: "앱 코드를 고치세요"
     }
     SHELL_WINDOW_GEOMETRY_TOKEN_INVALID() {
         class: Io,
@@ -489,18 +489,18 @@ error_catalog! { ENTRIES;
         message: "한 번에 첨부할 수 있는 파일은 {limit}개까지입니다. 파일 수를 줄이세요.",
         fix: "첨부 파일 수를 줄이세요"
     }
-    SHELL_CHAT_ATTACHMENT_TOO_LARGE(name, max_bytes) {
+    SHELL_CHAT_ATTACHMENT_TOO_LARGE(name, limit) {
         class: InvalidRequest,
         place: "대화 첨부 추가",
         cause: "고른 첨부 파일이 크기 제한을 넘었다",
-        message: "첨부 파일 크기 초과: {name}. 보낼 수 있는 크기는 {max_bytes}바이트까지입니다. 작은 파일을 고르세요.",
-        fix: "작은 파일을 고르세요"
+        message: "첨부 파일 크기 초과: {name}. 허용 크기는 {limit}입니다. 더 작은 파일을 고르세요.",
+        fix: "더 작은 파일을 고르세요"
     }
-    SHELL_CHAT_ATTACHMENT_TOTAL_TOO_LARGE(max_bytes) {
+    SHELL_CHAT_ATTACHMENT_TOTAL_TOO_LARGE(limit) {
         class: InvalidRequest,
         place: "대화 첨부 추가",
         cause: "첨부 파일의 합계가 크기 제한을 넘었다",
-        message: "첨부 파일 합계는 {max_bytes}바이트까지입니다. 파일 수나 크기를 줄이세요.",
+        message: "첨부 파일 합계 허용 크기는 {limit}입니다. 파일 수나 크기를 줄이세요.",
         fix: "첨부 파일 수나 크기를 줄이세요"
     }
 }

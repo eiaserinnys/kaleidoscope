@@ -61,6 +61,7 @@ fn stream_auth_failure_reports_and_successful_login_reconnects() {
         &event,
         CoreEvent::ConversationError { error, .. }
             if error.id.as_deref() == Some("CONV_STREAM_LOGIN_REQUIRED")
+                && error.code == kaleidoscope_contract::ErrorCode::LoginRequired
     ));
     fixture.state.lock().unwrap().stream_status = 200;
     login(&core, &window).unwrap();
