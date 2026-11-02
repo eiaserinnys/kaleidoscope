@@ -352,6 +352,30 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("반복 캔버스 한 행을 다시 마운트해도 다른 행은 다시 그리지 않는다", async () => {
+    const rows = Array.from({ length: 10 }, (_, index) => ({ id: String(index), surface: `tile-${index}` }));
+    const repeat: AppDefinition = { id: "canvas-isolation", name: "표면 격리", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { rows }, ui: { type: "repeat", key: "id", items: { state: "rows" }, layout: "grid", virtual: false, template: { type: "canvas", surface: { item: "surface" } } } };
+    const snapshot = makeTestSnapshot({ definitions: [repeat] });
+    snapshot.shared.windows[0].id = "window-canvas"; snapshot.shared.windows[0].state = { rows };
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    renderBlockModule.renderProbe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
+    render(<Shell store={store} />); await store.ready;
+    await waitFor(() => expect(document.querySelectorAll('[data-testid="app-window-canvas-isolation"] .ks-canvas')).toHaveLength(10));
+    await settleRenders(); calls.length = 0;
+    const changed = rows.map((row, index) => index === 5 ? { ...row, surface: "new-tile" } : row);
+    await setState(store, "window-canvas", "rows", changed);
+    await settleRenders();
+    expect(countFor("window-canvas", "/ui/template")).toBe(1);
+    calls.length = 0;
+    await setState(store, "window-canvas", "rows", changed.filter((row) => row.id !== "5"));
+    await settleRenders();
+    await setState(store, "window-canvas", "rows", changed);
+    await settleRenders();
+    expect(countFor("window-canvas", "/ui/template")).toBe(1);
+    store.dispose();
+  });
+
   it("창을 올리거나 옮기거나 크기를 바꿔도 블록은 다시 그리지 않는다", async () => {
     const { store } = await setup();
     await store.call({ op: "window.raise", window_id: "window-a" });

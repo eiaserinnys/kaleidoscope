@@ -5,11 +5,40 @@ import { CanvasBlock } from "../blocks/canvas";
 
 const data = vi.hoisted(() => ({
   subscribeClient: () => () => {}, getClientGeneration: () => 0,
-  attachSurface: vi.fn(() => 1), detachSurface: vi.fn(), resizeSurface: vi.fn(), setNotice: vi.fn(), act: vi.fn(),
+  attachSurface: vi.fn(() => 1), detachSurface: vi.fn(), resizeSurface: vi.fn(), setSurfaceVisible: vi.fn(), setNotice: vi.fn(), act: vi.fn(),
+  itemSurface: "first",
 }));
-vi.mock("../data/window-data", () => ({ useWindowData: () => data, useBinding: (_pointer: string, value: unknown) => ({ status: "ready", value }) }));
+vi.mock("../data/window-data", () => ({ useWindowData: () => data, useBinding: (_pointer: string, value: unknown) => ({ status: "ready", value: value && typeof value === "object" && "item" in value ? data.itemSurface : value }) }));
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+it("항목의 표면이 바뀌면 이전 세대를 떼고 새 요소에 붙이며 교차 상태를 전달한다", () => {
+  vi.clearAllMocks(); data.itemSurface = "first";
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 320, height: 180 } as DOMRect);
+  const transfer = vi.fn(() => ({}));
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  let intersect: IntersectionObserverCallback = () => {};
+  vi.stubGlobal("IntersectionObserver", class { constructor(callback: IntersectionObserverCallback) { intersect = callback; } observe() {} disconnect() {} });
+  const original = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "transferControlToOffscreen");
+  Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", { configurable: true, value: transfer });
+  try {
+    const block = { type: "canvas", surface: { item: "surface" } } as const;
+    const view = render(<CanvasBlock block={block} pointer="/ui/template" />);
+    const first = view.container.querySelector("canvas");
+    expect(data.attachSurface).toHaveBeenCalledWith("first", expect.anything(), 320, 180, expect.any(Number), false);
+    act(() => intersect([{ isIntersecting: true } as IntersectionObserverEntry], null as unknown as IntersectionObserver));
+    expect(data.setSurfaceVisible).toHaveBeenCalledWith("first", 1, true);
+    data.itemSurface = "second";
+    view.rerender(<CanvasBlock block={block} pointer="/ui/template" />);
+    expect(data.detachSurface).toHaveBeenCalledWith("first", 1);
+    expect(view.container.querySelector("canvas")).not.toBe(first);
+    expect(data.attachSurface).toHaveBeenCalledWith("second", expect.anything(), 320, 180, expect.any(Number), false);
+  } finally {
+    if (original) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", original);
+    else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
+    vi.unstubAllGlobals();
+  }
+});
 
 it("개발 모드에서 다시 붙을 때 이전에 전송한 캔버스를 재사용하지 않는다", () => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 320, height: 180 } as DOMRect);
