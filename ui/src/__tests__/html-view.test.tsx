@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import type { AppDefinition, CoreRequest } from "../contract/contract";
@@ -91,6 +91,17 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   await waitFor(() => expect(describeVisible(root).text).toContain("저장 안 한 수정 1건"));
   expect(describeVisible(root).text).toContain("고른 요소: h1");
   expect(describeVisible(root).text).toContain("미해결 커멘트 1건");
+  await act(async () => {
+    files.set("시안/r2.html", { content: "<h1>새 판</h1>", revision: "html2" });
+    base.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "bucket", item: { entry_id: "drafts", key: "drafts/시안/r2.html", kind: "md", revision: "html2", exists: true } } } });
+  });
+  expect(await screen.findByText("새 리비전 v2이 도착했습니다")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "리비전" }).textContent).toContain("v1");
+  await user.click(screen.getByRole("button", { name: "리비전" }));
+  await user.click(screen.getByRole("menuitem", { name: "v2" }));
+  const dialog = await screen.findByRole("dialog");
+  await user.click(within(dialog).getByRole("button", { name: "취소" }));
+  expect(screen.getByRole("button", { name: "리비전" }).textContent).toContain("v1");
   await user.click(screen.getByRole("button", { name: "커멘트" }));
   await user.click(screen.getByRole("button", { name: "에이전트에게 보내기" }));
   await waitFor(() => expect(sent).toHaveLength(1));
