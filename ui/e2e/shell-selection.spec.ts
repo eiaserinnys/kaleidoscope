@@ -236,12 +236,8 @@ test("분할 탭의 첫 내용 간격과 패널 가로 시작선을 맞춘다", 
 
   await page.goto("/?preview=reader");
   const reader = page.getByTestId("app-window-reader");
-  const readerTab = reader.getByRole("tab", { name: "오픈소스 저장소" });
-  await readerTab.click();
-  const readerTabBox = await box(readerTab);
-  const readerFirstHeader = reader.locator(".ks-data-tab-panel > .ks-split-row > .ks-split-pane:first-child .ks-data-section-header").first();
-  const readerHeaderBox = await box(readerFirstHeader);
-  expectWithinOnePixel(readerHeaderBox.y, readerTabBox.y + readerTabBox.height + 8);
+  await expect(reader.locator(".ks-data-tab-list")).toHaveCount(0);
+  await expect(reader.locator(".ks-metric-label")).toHaveCount(0);
   await capture(page, "reader-wide");
 
   await page.goto("/?preview=shell-selection-test");
