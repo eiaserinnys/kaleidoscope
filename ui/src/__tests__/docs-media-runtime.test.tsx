@@ -43,6 +43,30 @@ it("code 편집기의 wrap 설정을 CodeMirror에 적용한다", async () => {
   rendered.unmount();
 });
 
+it("code 편집기는 wrap을 생략하면 줄바꿈하고 false면 끈다", async () => {
+  for (const [wrap, expected] of [[undefined, true], [false, false]] as const) {
+    const block: Block = { type: "code", file: { permission: "docs", path: "long.txt" }, ...(wrap === undefined ? {} : { wrap }) };
+    const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "readwrite", label: "문서" }], state: {}, ui: block };
+    const seed = makeTestSeed({ definitions: [definition], grants: [grantFor("viewer-window", "docs")], files: { "long.txt": "long line" } });
+    const rendered = render(<AppWindowContent store={createShellStore(createFakeTransport(seed))} windowId="viewer-window" />);
+    const content = await screen.findByRole("textbox", { name: "코드 편집기" });
+    expect(content.classList.contains("cm-lineWrapping")).toBe(expected);
+    rendered.unmount();
+  }
+});
+
+it("code 보기는 wrap을 생략하면 줄바꿈하고 false면 끈다", async () => {
+  for (const [wrap, expected] of [[undefined, true], [false, false]] as const) {
+    const block: Block = { type: "code", value: { expr: "$state.log" }, ...(wrap === undefined ? {} : { wrap }) };
+    const rendered = setup(block);
+    const { transport } = rendered;
+    act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/value": { status: "ready", value: "long line" } } } }));
+    const content = await rendered.findByRole("textbox", { name: "코드 보기" });
+    expect(content.classList.contains("cm-lineWrapping")).toBe(expected);
+    rendered.unmount();
+  }
+});
+
 it("code는 값을 읽기만 하며 변경 시 위치를 지킨다", async () => {
   const { transport } = setup({ type: "code", value: { expr: "$state.log" }, follow: true });
   act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/value": { status: "ready", value: "처음" } } } }));

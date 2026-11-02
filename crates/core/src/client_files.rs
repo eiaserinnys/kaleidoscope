@@ -126,6 +126,51 @@ pub(crate) fn read(inner: &Inner, window: &str, id: &str) -> Result<Vec<u8>, Cor
     Ok(bytes)
 }
 
+pub(crate) fn input_path(inner: &Inner, window: &str, id: &str) -> Result<PathBuf, CoreError> {
+    inner
+        .client_files
+        .inputs
+        .lock()
+        .unwrap()
+        .get(id)
+        .filter(|input| input.window == window)
+        .map(|input| input.path.clone())
+        .ok_or_else(|| error::make(ErrorCode::PermissionDenied))
+}
+
+pub(crate) fn register(
+    inner: &Inner,
+    window: &str,
+    path: PathBuf,
+) -> Result<ClientFile, CoreError> {
+    let metadata = fs::metadata(&path).map_err(|e| error::io_error(&e))?;
+    if !metadata.is_file() || metadata.len() > CLIENT_PICK_FILE_MAX_BYTES {
+        return Err(error::make(ErrorCode::InvalidRequest));
+    }
+    let name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?
+        .to_owned();
+    let mime = mime_guess::from_path(&path)
+        .first_or_octet_stream()
+        .to_string();
+    let id = Uuid::new_v4().to_string();
+    inner.client_files.inputs.lock().unwrap().insert(
+        id.clone(),
+        Input {
+            window: window.into(),
+            path,
+        },
+    );
+    Ok(ClientFile {
+        id,
+        name,
+        size: metadata.len(),
+        mime,
+    })
+}
+
 pub(crate) fn begin(
     inner: &Inner,
     window: &str,

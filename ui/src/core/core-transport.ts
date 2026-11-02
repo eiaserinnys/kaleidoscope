@@ -2,7 +2,7 @@ import type { CoreError, CoreEvent, CoreReply, CoreRequest } from "../contract/c
 
 export type RequestFor<K extends CoreRequest["op"]> = Extract<CoreRequest, { op: K }>;
 export type ReplyFor<K extends CoreRequest["op"]> = Extract<CoreReply, { op: K }>;
-export type CoreBytesRequest = { op: "files.read_bytes" | "export.write"; window_id: string; handle: string; offset?: number };
+export type CoreBytesRequest = { op: "files.read_bytes" | "export.write" | "client.http_read" | "client.blob_put"; window_id: string; handle: string; offset?: number };
 
 export interface CoreTransport {
   call<K extends CoreRequest["op"]>(request: RequestFor<K>): Promise<ReplyFor<K>>;

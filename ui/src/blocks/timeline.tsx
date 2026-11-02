@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import type { Actions, Block, Clock } from "../contract/contract";
+import type { Actions, Block, Clock, EventModifiers } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { IconButton } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
@@ -8,6 +8,7 @@ import { useBinding, useWindowData } from "../data/window-data";
 import { useWindowVisible } from "../data/window-state";
 import { createSerialSend } from "../data/throttled-send";
 import { useShareDescriber } from "../share/visible";
+import { eventModifiers } from "../runtime/shortcuts";
 import type { BlockContext } from "./block-context";
 
 type Snap = { points?: number[]; step?: number; threshold_px?: number };
@@ -57,7 +58,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   const selection = useBinding(`${pointer}/selection`, block.selection ?? null);
   const snap = useBinding(`${pointer}/snap`, block.snap ?? null);
   const root = useRef<HTMLDivElement>(null), body = useRef<HTMLDivElement>(null), playhead = useRef<HTMLDivElement>(null), ruler = useRef<HTMLDivElement>(null), scroll = useRef<HTMLDivElement>(null);
-  const gesture = useRef<Gesture | null>(null), previewFrame = useRef<number | null>(null), pendingPreview = useRef<Edit | null>(null);
+  const gesture = useRef<Gesture | null>(null), previewFrame = useRef<number | null>(null), pendingPreview = useRef<{ edit: Edit; modifiers: EventModifiers } | null>(null);
   const seekFrame = useRef<number | null>(null), pendingSeek = useRef<number | null>(null);
   const [zoom, setZoom] = useState(1), [preview, setPreview] = useState<Edit | null>(null);
   const seconds = duration.status === "ready" && typeof duration.value === "number" && Number.isFinite(duration.value) ? Math.max(0, duration.value) : 0;
@@ -88,20 +89,20 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   }, [clock, rawPosition, seconds, visible]);
   useShareDescriber(root, () => ({ text: `[시간축] ${clock ? clockPosition(clock, performance.timeOrigin + performance.now()).toFixed(1) : typeof rawPosition === "number" ? rawPosition.toFixed(1) : "0"} / ${seconds.toFixed(1)}초\n${trackData.map((track) => `${track.label ?? track.id}: ${track.items.length}개`).join("\n")}`, visual: false }));
 
-  const dispatch = (edit: Edit) => { if (block.on_edit) void data.act(`${pointer}/on_edit`, edit as unknown as JsonValue); };
-  const finish = (phase: "commit" | "cancel") => {
+  const dispatch = (edit: Edit, modifiers: EventModifiers) => { if (block.on_edit) void data.act(`${pointer}/on_edit`, edit as unknown as JsonValue, undefined, modifiers); };
+  const finish = (phase: "commit" | "cancel", modifiers: EventModifiers) => {
     const current = gesture.current; if (!current) return;
     if (previewFrame.current !== null) cancelAnimationFrame(previewFrame.current);
     previewFrame.current = null; pendingPreview.current = null;
-    dispatch({ ...(phase === "cancel" ? current.original : current.current), phase });
+    dispatch({ ...(phase === "cancel" ? current.original : current.current), phase }, modifiers);
     gesture.current = null; setPreview(null);
   };
   const finishRef = useRef(finish);
   finishRef.current = finish;
   useEffect(() => {
-    const key = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape" && gesture.current) { event.preventDefault(); finishRef.current("cancel"); } };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
+    const key = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape" && gesture.current) { event.preventDefault(); finishRef.current("cancel", eventModifiers(event)); } };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
   }, []);
   useEffect(() => () => { if (previewFrame.current !== null) cancelAnimationFrame(previewFrame.current); previewFrame.current = null; }, []);
   const begin = (event: PointerEvent<HTMLElement>, edit: Edit, editable: boolean) => {
@@ -123,8 +124,8 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     current.current = { ...initial, phase: "preview", start, end };
     setPreview(current.current);
     if (isClientAction(block.on_edit)) {
-      pendingPreview.current = current.current;
-      if (previewFrame.current === null) previewFrame.current = requestAnimationFrame(() => { previewFrame.current = null; if (pendingPreview.current) dispatch(pendingPreview.current); pendingPreview.current = null; });
+      pendingPreview.current = { edit: current.current, modifiers: eventModifiers(event) };
+      if (previewFrame.current === null) previewFrame.current = requestAnimationFrame(() => { previewFrame.current = null; if (pendingPreview.current) dispatch(pendingPreview.current.edit, pendingPreview.current.modifiers); pendingPreview.current = null; });
     }
   };
   const seekValue = (event: PointerEvent<HTMLElement>) => {
@@ -142,7 +143,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     const delta = (event.key === "ArrowLeft" ? -1 : 1) * (event.shiftKey ? 0.1 : snapValue?.step && snapValue.step > 0 ? snapValue.step : 1);
     const length = edit.end - edit.start;
     const start = Math.max(0, Math.min(seconds - length, edit.start + delta));
-    dispatch({ ...edit, phase: "commit", start, end: start + length });
+    dispatch({ ...edit, phase: "commit", start, end: start + length }, eventModifiers(event));
   };
   const flushSeek = () => {
     if (seekFrame.current !== null) cancelAnimationFrame(seekFrame.current);
@@ -189,7 +190,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
           {track.items.filter((item) => typeof item.id === "string" && Number.isFinite(item.start) && Number.isFinite(item.end)).map((item) => {
             const shown = preview?.id === item.id ? preview : item;
             const edit: Edit = { phase: "preview", kind: "move", id: item.id, track: track.id, start: item.start, end: item.end };
-            const handlers = { onPointerMove: move, onPointerUp: () => finish("commit"), onPointerCancel: () => finish("cancel") };
+            const handlers = { onPointerMove: move, onPointerUp: (event: PointerEvent<HTMLElement>) => finish("commit", eventModifiers(event)), onPointerCancel: (event: PointerEvent<HTMLElement>) => finish("cancel", eventModifiers(event)) };
             return <div key={item.id} role="button" tabIndex={0} className={`ks-timeline-item is-${item.tone ?? "neutral"} series-${(item.series ?? 0) % 4}${selected.includes(item.id) ? " is-selected" : ""}${preview?.id === item.id ? " is-dragging" : ""}`} style={{ left: percent(shown.start), width: percent(shown.end - shown.start) }} onKeyDown={(event) => keyEdit(event, edit, !!item.movable && !track.locked)} onPointerDown={(event) => begin(event, edit, !!item.movable && !track.locked)} {...handlers}>
               {item.resizable && !track.locked && !block.read_only ? <span className="ks-timeline-handle is-start" onPointerDown={(event) => begin(event, { ...edit, kind: "resize_start" }, true)} {...handlers} /> : null}
               <span>{item.label ?? item.id}</span>
@@ -197,7 +198,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
             </div>;
           })}
         </div>)}
-        {markerData.map((marker) => { const time = preview?.id === marker.id ? preview.start : marker.time; const edit: Edit = { phase: "preview", kind: "move_marker", id: marker.id, track: null, start: marker.time, end: marker.time }; return <button key={marker.id} type="button" className="ks-timeline-marker" title={marker.label ?? marker.id} aria-label={marker.label ?? marker.id} style={{ left: percent(time) }} onKeyDown={(event) => keyEdit(event, edit, !!marker.movable)} onPointerDown={(event) => begin(event, edit, !!marker.movable)} onPointerMove={move} onPointerUp={() => finish("commit")} onPointerCancel={() => finish("cancel")} />; })}
+        {markerData.map((marker) => { const time = preview?.id === marker.id ? preview.start : marker.time; const edit: Edit = { phase: "preview", kind: "move_marker", id: marker.id, track: null, start: marker.time, end: marker.time }; return <button key={marker.id} type="button" className="ks-timeline-marker" title={marker.label ?? marker.id} aria-label={marker.label ?? marker.id} style={{ left: percent(time) }} onKeyDown={(event) => keyEdit(event, edit, !!marker.movable)} onPointerDown={(event) => begin(event, edit, !!marker.movable)} onPointerMove={move} onPointerUp={(event) => finish("commit", eventModifiers(event))} onPointerCancel={(event) => finish("cancel", eventModifiers(event))} />; })}
         <div className="ks-timeline-playhead" ref={playhead} />
       </div></div></div>
   </div>;

@@ -1,0 +1,26 @@
+{
+  "id": "image-cache",
+  "name": "그림 보관 예제",
+  "description": "공개 이미지를 받아 이 기기에 보관합니다.",
+  "requires": { "blocks": 14, "modules": { "assets": 1, "client": 2, "http": 2 } },
+  "permissions": [{ "module": "http", "id": "image", "label": "공개 이미지", "base_url": "https://www.google.com", "paths": ["/images/branding/"] }],
+  "state": {},
+  "assets": [{ "id": "image-cache", "version": 1 }],
+  "client": {
+    "runtime": "javascript", "entry": { "id": "image-cache", "version": 1 },
+    "outputs": { "status": { "default": "보관된 그림 없음" } },
+    "actions": ["download", "restore", "remove", "upload", "restore_upload"] ,
+    "http_permissions": ["image"], "device_storage": { "prefixes": ["cache/"] }
+  },
+  "ui": { "type": "stack", "direction": "column", "children": [
+    { "type": "toolbar", "start": [
+      { "type": "button", "label": "그림 받기", "on_click": { "client": "download" } },
+      { "type": "button", "label": "보관 그림 열기", "on_click": { "client": "restore" } },
+      { "type": "button", "label": "파일 보관", "on_click": { "pick_files": { "accept": [{ "mime": "application/octet-stream", "extensions": ["bin"] }], "client": "upload" } } },
+      { "type": "button", "label": "보관 파일 확인", "on_click": { "client": "restore_upload" } },
+      { "type": "button", "label": "지우기", "on_click": { "client": "remove" } }
+    ] },
+    { "type": "text", "value": { "client": "status" } },
+    { "type": "canvas", "surface": "picture", "aspect_ratio": 2.95 }
+  ] }
+}

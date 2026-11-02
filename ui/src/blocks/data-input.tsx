@@ -1,3 +1,4 @@
+import { eventModifiers } from "../runtime/shortcuts";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { Block, SelectOption } from "../contract/contract";
 import { ICON_NAMES } from "../contract/limits";
@@ -178,8 +179,9 @@ export function ButtonBlock({ block, pointer }: Props<"button">) {
   const [busy, setBusy] = useState(false);
   const opener = useRef<HTMLSpanElement>(null);
   const restoreAfterAction = useRef(false);
+  const confirmModifiers = useRef<ReturnType<typeof eventModifiers> | undefined>(undefined);
   const close = useCallback(() => setConfirm(false), []);
-  const run = async (restore: boolean) => { restoreAfterAction.current = restore; setConfirm(false); setBusy(true); await data.act(`${pointer}/on_click`, null); setBusy(false); };
+  const run = async (restore: boolean, modifiers?: ReturnType<typeof eventModifiers>) => { restoreAfterAction.current = restore; setConfirm(false); setBusy(true); await data.act(`${pointer}/on_click`, null, undefined, modifiers); setBusy(false); };
   const unavailable = disabled.status !== "ready" || Boolean(disabled.value);
   useLayoutEffect(() => {
     if (!busy && !unavailable && restoreAfterAction.current) {
@@ -192,8 +194,8 @@ export function ButtonBlock({ block, pointer }: Props<"button">) {
   const contents = <>{(ICON_NAMES as readonly string[]).includes(iconText) ? <DataIcon name={iconText} /> : null}{!block.icon_only ? labelText : null}</>;
   const host = opener.current?.closest<HTMLElement>(".ks-data-window");
   return <span ref={opener} className={`ks-data-button is-${block.variant ?? "default"}`}>{block.icon_only
-    ? <IconButton aria-label={labelText} disabled={busy || unavailable} onClick={() => block.confirm ? setConfirm(true) : void run(false)}>{contents}</IconButton>
-    : <Button variant={block.variant === "primary" ? "emphasis" : "default"} disabled={busy || unavailable} onClick={() => block.confirm ? setConfirm(true) : void run(false)}>{contents}</Button>}
-    {confirm && block.confirm && host ? <Dialog host={host} title={block.confirm.title} ok={block.confirm.ok ?? labelText} danger={block.variant === "danger"} onCancel={close} onConfirm={() => void run(true)} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} /> : null}
+    ? <IconButton aria-label={labelText} disabled={busy || unavailable} onClick={(event) => { const modifiers = eventModifiers(event); if (block.confirm) { confirmModifiers.current = modifiers; setConfirm(true); } else void run(false, modifiers); }}>{contents}</IconButton>
+    : <Button variant={block.variant === "primary" ? "emphasis" : "default"} disabled={busy || unavailable} onClick={(event) => { const modifiers = eventModifiers(event); if (block.confirm) { confirmModifiers.current = modifiers; setConfirm(true); } else void run(false, modifiers); }}>{contents}</Button>}
+    {confirm && block.confirm && host ? <Dialog host={host} title={block.confirm.title} ok={block.confirm.ok ?? labelText} danger={block.variant === "danger"} onCancel={close} onConfirm={() => void run(true, confirmModifiers.current)} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} /> : null}
   </span>;
 }

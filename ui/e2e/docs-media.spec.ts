@@ -37,10 +37,19 @@ test("코드 편집의 저장과 충돌, 큰 로그의 스크롤을 확인한다
   await expect(page.getByRole("textbox", { name: "코드 보기" })).toContainText("마지막");
   await expect.poll(() => scroll.evaluate((node) => node.scrollHeight - node.clientHeight - node.scrollTop)).toBeLessThan(3);
   await scroll.evaluate((node) => { node.scrollTop = 100; });
+  // 줄바꿈하는 코드 보기는 잰 적 없는 줄의 높이를 추정해, 옮긴 직후 scrollTop이 보정된다. 자리 잡은 뒤의 값과 읽던 줄을 기준으로 삼는다.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const readingLine = () => scroll.evaluate((node) => {
+    const top = node.getBoundingClientRect().top;
+    return [...node.querySelectorAll(".cm-line")].find((line) => line.getBoundingClientRect().bottom > top + 1)?.textContent;
+  });
+  const settledTop = await scroll.evaluate((node) => node.scrollTop);
+  const reading = await readingLine();
   const oldHeight = await scroll.evaluate((node) => node.scrollHeight);
   await page.evaluate(() => (window as any).__ksSetLog(`${Array.from({ length: 20000 }, (_, i) => `줄 ${i}`).join("\n")}\n마지막\n추가`));
   await expect.poll(() => scroll.evaluate((node) => node.scrollHeight)).toBeGreaterThan(oldHeight);
-  await expect.poll(() => scroll.evaluate((node) => node.scrollTop)).toBe(100);
+  await expect.poll(() => scroll.evaluate((node) => node.scrollTop)).toBe(settledTop);
+  expect(await readingLine()).toBe(reading);
 });
 
 test("이미지 확대와 이동, 소리 재생과 위치 조절", async ({ page }, info) => {

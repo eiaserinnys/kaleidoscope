@@ -2264,13 +2264,14 @@ dependencies = [
 
 [[package]]
 name = "kaleidoscope-app"
-version = "0.6.11"
+version = "0.6.12"
 dependencies = [
  "base64 0.22.1",
  "dirs",
  "image",
  "kaleidoscope-core",
  "kaleidoscope-orchestrator",
+ "percent-encoding",
  "serde_json",
  "tauri",
  "tauri-build",
@@ -2347,6 +2348,7 @@ dependencies = [
  "kaleidoscope-contract",
  "kaleidoscope-core",
  "kaleidoscope-orchestrator",
+ "percent-encoding",
  "rusqlite",
  "serde_json",
  "tempfile",

@@ -49,6 +49,12 @@ fn archive(inner: &Inner, file: &LinkFile) -> PathBuf {
     };
     inner.data_dir.join("server-states").join(key)
 }
+pub(crate) fn active_archive(inner: &Inner) -> PathBuf {
+    match inner.link_file.lock().unwrap().as_ref() {
+        Some(file) => archive(inner, file),
+        None => inner.data_dir.join("server-states").join("local"),
+    }
+}
 pub(crate) fn saved_remote(inner: &Inner, url: &str) -> Result<Option<LinkFile>, CoreError> {
     let key = format!("{:x}", Sha256::digest(url.trim_end_matches('/').as_bytes()));
     storage::load_link(&inner.data_dir.join("server-states").join(key))
@@ -64,6 +70,7 @@ pub(crate) fn activate(
     }
     crate::local_agent::server_changed(inner);
     crate::data_runtime::server_changed(inner);
+    crate::client_files::release_all(inner);
     let mut state = inner.state.lock().unwrap();
     inner.save_state_locked(&state, false, false, false)?;
     if !link::is_current(inner, generation) {

@@ -72,6 +72,7 @@ pub struct Env<'a> {
     pub storage_meta: &'a BTreeMap<String, Value>,
     pub event: &'a Value,
     pub item: &'a Value,
+    pub modifiers: Option<&'a kaleidoscope_contract::client::EventModifiers>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -430,7 +431,8 @@ impl CompiledApp {
             Some(env.event),
             Some(env.item),
         )
-        .with_data_meta(env.data_meta);
+        .with_data_meta(env.data_meta)
+        .with_modifiers(env.modifiers);
         match actions {
             Actions::One(set) if index == 0 => Ok(Step::SetState {
                 key: set.set_state.clone(),
@@ -599,6 +601,9 @@ impl CompiledApp {
         if let Some(item) = &vars.item {
             context.bind("item".into(), item.clone());
         }
+        if let Some(modifiers) = &vars.modifiers {
+            context.bind("modifiers".into(), modifiers.clone());
+        }
         let mut evaluator = Evaluator::with_options(
             context,
             EvaluatorOptions {
@@ -630,6 +635,7 @@ struct Variables {
     storage_meta: JValue,
     event: Option<JValue>,
     item: Option<JValue>,
+    modifiers: Option<JValue>,
 }
 impl Variables {
     fn new(
@@ -650,7 +656,21 @@ impl Variables {
             ),
             event: event.cloned().map(JValue::from),
             item: item.cloned().map(JValue::from),
+            modifiers: None,
         }
+    }
+
+    fn with_modifiers(
+        mut self,
+        modifiers: Option<&kaleidoscope_contract::client::EventModifiers>,
+    ) -> Self {
+        let value = modifiers
+            .map(|value| serde_json::to_value(value).expect("JSON 수정 키"))
+            .unwrap_or_else(
+                || serde_json::json!({"shift": false, "alt": false, "ctrl": false, "meta": false}),
+            );
+        self.modifiers = Some(JValue::from(value));
+        self
     }
 
     fn with_data_meta(mut self, meta: &BTreeMap<String, Value>) -> Self {

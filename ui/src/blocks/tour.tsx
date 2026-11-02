@@ -1,9 +1,10 @@
-import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import type { Block, TourStep } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useWindowData } from "../data/window-data";
 import { Button } from "../components/primitives";
+import { registerTourShortcuts } from "../runtime/shortcuts";
 import { getAnchorElement, subscribeAnchor } from "./anchor-registry";
 
 export type TourBlockData = Extract<Block, { type: "tour" }>;
@@ -111,6 +112,15 @@ export function TourBlock({ block, context, pointer }: { block: TourBlockData; c
       document.removeEventListener("scroll", reposition, true);
     };
   }, [host, isOpen, reposition, step, target, titleText, bodyText]);
+
+  useEffect(() => {
+    if (!isOpen || !step) return;
+    return registerTourShortcuts(context, {
+      previous: () => { const previous = block.steps[index - 1]; if (previous) void moveTourStep(data, pointer, previous.key); },
+      next: () => { const next = block.steps[index + 1]; if (next) void moveTourStep(data, pointer, next.key); else void closeTour(data, pointer, "completed"); },
+      close: () => { void closeTour(data, pointer, "skipped"); },
+    });
+  }, [isOpen, step, target, host, context, block.steps, index, data, pointer]);
 
   if (!isOpen || !step || !target || !host) return null;
   const isLast = index === block.steps.length - 1;

@@ -1,4 +1,4 @@
-import type { AppDefinition, Binding, BindingValue, ClientActionContext, PickFilesSpec, SaveFileSpec } from "../contract/contract";
+import type { AppDefinition, Binding, BindingValue, ClientActionContext, ClientLifecycle, EventModifiers, PickFilesSpec, SaveFileSpec } from "../contract/contract";
 import type { ItemScope } from "../data/item-scope";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { CLIENT_PING_TIMEOUT_SECS } from "../contract/limits";
@@ -40,9 +40,15 @@ export class ClientRuntime {
   private previousInputs: Record<string, string> = {};
   private surfaces = new Map<string, { message: Record<string, unknown>; sent: boolean }>();
   private files = new BrowserFiles();
+  private blobFiles = new Set<string>();
   private stopping?: Promise<void>;
   private shareText = "";
   private shareImage = "";
+  private observer?: ResizeObserver;
+  private lifecycleFrame: number | null = null;
+  private lastLifecycle = "";
+  private closingNotified = false;
+  private host: HTMLElement | null = null;
   private snapshots = new Map<string, (image: string) => void>();
 
   constructor(private store: ShellStore, private data: WindowData, private definition: AppDefinition, private client: Client) {}
@@ -84,13 +90,17 @@ export class ClientRuntime {
         }
       });
       container.append(frame);
-      this.unregister = registerSandboxFlush(this.data.windowId, this.flush);
+      this.unregister = registerSandboxFlush(this.data.windowId, this.prepareClose);
       this.unsubscribeVisibility = this.store.subscribe(this.syncPingVisibility);
       this.syncPingVisibility();
+      this.observeHost(this.data.clientHost);
+      window.addEventListener("focus", this.scheduleLifecycle);
+      window.addEventListener("blur", this.scheduleLifecycle);
     } catch (error) { if (!this.stopped) this.data.failClient(toCoreError(error).message); }
   }
 
   private syncPingVisibility = () => {
+    this.scheduleLifecycle();
     const visible = isWindowVisible(this.store.getSnapshot(), this.data.windowId);
     if (visible === this.pingVisible) return;
     this.pingVisible = visible;
@@ -106,6 +116,35 @@ export class ClientRuntime {
       this.send({ type: "ks-client-ping" });
     }, CLIENT_PING_TIMEOUT_SECS * 500);
   };
+
+  observeHost(host: HTMLElement | null) {
+    this.observer?.disconnect();
+    this.host = host;
+    if (host && typeof ResizeObserver !== "undefined") {
+      this.observer = new ResizeObserver(this.scheduleLifecycle);
+      this.observer.observe(host);
+    }
+    this.scheduleLifecycle();
+  }
+
+  scheduleLifecycle = () => {
+    if (!this.ready || this.lifecycleFrame !== null) return;
+    this.lifecycleFrame = requestAnimationFrame(() => { this.lifecycleFrame = null; this.sendLifecycle("change"); });
+  };
+
+  private sendLifecycle(phase: ClientLifecycle["phase"]) {
+    if (!this.ready) return;
+    const snapshot = this.store.getSnapshot();
+    const current = snapshot?.shared.windows.find((item) => item.id === this.data.windowId);
+    const visible = isWindowVisible(snapshot, this.data.windowId) && !this.data.clientDormant;
+    const focused = visible && document.hasFocus() && !!current && !snapshot?.shared.windows.some((item) => item.desktop_id === current.desktop_id && !item.minimized && item.z > current.z);
+    const rect = this.host?.getBoundingClientRect();
+    const lifecycle: ClientLifecycle = { visible, focused, viewport: { width: rect?.width ?? 0, height: rect?.height ?? 0, coarse_pointer: window.matchMedia?.("(pointer: coarse)").matches ?? false }, phase };
+    const signature = JSON.stringify({ visible, focused, viewport: lifecycle.viewport });
+    if (phase === "change" && signature === this.lastLifecycle) return;
+    this.lastLifecycle = signature;
+    this.send({ type: "ks-client-lifecycle", lifecycle });
+  }
 
   private state() {
     const state = this.store.getSnapshot()?.shared.windows.find((window) => window.id === this.data.windowId)?.state ?? {};
@@ -137,9 +176,9 @@ export class ClientRuntime {
     this.send({ type: "ks-sandbox-state-sync", state: this.state() });
   }
 
-  action(name: string, event: JsonValue, item?: JsonValue, args?: JsonValue, scope?: ItemScope) {
+  action(name: string, event: JsonValue, item?: JsonValue, args?: JsonValue, scope?: ItemScope, modifiers?: EventModifiers) {
     if (!this.client.actions.includes(name) || !this.frame) return false;
-    const context: ClientActionContext = { event, ...(item === undefined ? {} : { item }), ...(args === undefined ? {} : { args }), ...(scope ? { parent_item: scope.parent_item, key: scope.key, index: scope.index } : {}) };
+    const context: ClientActionContext = { event, ...(item === undefined ? {} : { item }), ...(args === undefined ? {} : { args }), ...(scope ? { parent_item: scope.parent_item, key: scope.key, index: scope.index } : {}), ...(modifiers === undefined ? {} : { modifiers }) };
     this.send({ type: "ks-client-action", name, context });
     return true;
   }
@@ -206,7 +245,7 @@ export class ClientRuntime {
   private receive = (event: MessageEvent) => {
     if (!this.token || event.source !== this.frame?.contentWindow || event.origin !== "null" || event.data?.token !== this.token) return;
     const message = event.data;
-    if (message.type === "ks-sandbox-ready") { this.ready = true; this.lastPong = Date.now(); this.sync(); for (const id of this.surfaces.keys()) this.sendSurface(id); for (const entry of this.client.storage_entries) void this.syncStorage(entry); }
+    if (message.type === "ks-sandbox-ready") { this.ready = true; this.lastPong = Date.now(); this.sendLifecycle("ready"); this.sync(); for (const id of this.surfaces.keys()) this.sendSurface(id); for (const entry of this.client.storage_entries) void this.syncStorage(entry); }
     else if (message.type === "ks-client-pong") this.lastPong = Date.now();
     else if (message.type === "ks-sandbox-storage-applied" && this.client.storage_entries.includes(message.entry) && this.pendingRevisions[message.entry] === message.revision) {
       this.revisions[message.entry] = message.revision; delete this.pendingRevisions[message.entry];
@@ -263,8 +302,39 @@ export class ClientRuntime {
           const bytes = Uint8Array.from(atob(reply.media.data_base64), (char) => char.charCodeAt(0)).buffer;
           this.reply(message.requestId, bytes, undefined, [bytes]);
         }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+    } else if (message.type === "ks-client-http-read") {
+      const task = async () => {
+        if (!this.store.bytes) throw new Error("공개 바이트를 읽을 코어 전송 경로가 없습니다.");
+        const body = new TextEncoder().encode(JSON.stringify({ permission: message.permission, path: message.path, query: message.query ?? {} })).buffer;
+        const response = await this.store.bytes({ op: "client.http_read", window_id: this.data.windowId, handle: "" }, body);
+        const length = new DataView(response).getUint32(0);
+        const mime = new TextDecoder().decode(response.slice(4, 4 + length));
+        const bytes = response.slice(4 + length);
+        this.reply(message.requestId, { bytes, mime }, undefined, [bytes]);
+      };
+      void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+    } else if (message.type === "ks-client-blob-put") {
+      const task = async () => {
+        if ((typeof message.fileId === "string") === (message.bytes instanceof ArrayBuffer)) throw new Error("저장할 파일 또는 바이트 하나를 지정하세요.");
+        if (typeof message.fileId === "string" && this.store.nativeFiles) {
+          await this.store.call({ op: "client.blob_put", window_id: this.data.windowId, key: message.key, file_id: message.fileId });
+        } else {
+          if (!this.store.bytes) throw new Error("바이너리를 저장할 코어 전송 경로가 없습니다.");
+          const bytes = typeof message.fileId === "string" ? await (this.blobFiles.has(message.fileId) ? this.store.bytes({ op: "files.read_bytes", window_id: this.data.windowId, handle: message.fileId }) : this.files.read(message.fileId)) : message.bytes;
+          if (!(bytes instanceof ArrayBuffer)) throw new Error("저장할 파일 또는 바이트가 필요합니다.");
+          await this.store.bytes({ op: "client.blob_put", window_id: this.data.windowId, handle: message.key }, bytes);
+        }
+        this.reply(message.requestId, null);
+      };
+      void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+    } else if (message.type === "ks-client-blob-open") {
+      void this.store.call({ op: "client.blob_open", window_id: this.data.windowId, key: message.key }).then(({ file }) => { if (file) this.blobFiles.add(file.id); this.reply(message.requestId, file); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+    } else if (message.type === "ks-client-blob-remove") {
+      void this.store.call({ op: "client.blob_remove", window_id: this.data.windowId, key: message.key }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+    } else if (message.type === "ks-client-blob-list") {
+      void this.store.call({ op: "client.blob_list", window_id: this.data.windowId, prefix: message.prefix }).then(({ keys }) => this.reply(message.requestId, keys)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
     } else if (message.type === "ks-client-file-read") {
-      const result = this.store.nativeFiles && this.store.bytes ? this.store.bytes({ op: "files.read_bytes", window_id: this.data.windowId, handle: message.id }) : this.files.read(message.id);
+      const result = (this.store.nativeFiles || this.blobFiles.has(message.id)) && this.store.bytes ? this.store.bytes({ op: "files.read_bytes", window_id: this.data.windowId, handle: message.id }) : this.files.read(message.id);
       void result.then((bytes) => this.reply(message.requestId, bytes, undefined, [bytes])).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
     } else if (message.type === "ks-client-file-write") {
       const result = this.store.nativeFiles && this.store.bytes ? this.store.bytes({ op: "export.write", window_id: this.data.windowId, handle: message.sink, offset: message.offset }, message.bytes) : this.files.write(message.sink, message.offset, message.bytes);
@@ -275,6 +345,24 @@ export class ClientRuntime {
         : message.type === "ks-client-file-close" ? this.files.close(message.sink) : this.files.abort(message.sink);
       void result.then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
     }
+  };
+
+  private beginClosing() {
+    if (this.ready && !this.closingNotified) {
+      this.closingNotified = true;
+      this.sendLifecycle("closing");
+    }
+  }
+
+  private prepareClose = async () => {
+    this.beginClosing();
+    const ok = await this.flush();
+    if (!ok && this.closingNotified) {
+      this.closingNotified = false;
+      this.lastLifecycle = "";
+      this.sendLifecycle("change");
+    }
+    return ok;
   };
 
   flush = () => {
@@ -310,14 +398,19 @@ export class ClientRuntime {
     if (windows?.get(this.data.windowId) === this) windows.delete(this.data.windowId);
     for (const finish of this.snapshots.values()) finish("");
     this.snapshots.clear();
+    this.beginClosing();
     await this.flush();
     await this.files.dispose().catch((error) => this.data.setNotice(toCoreError(error).message));
-    if (this.store.nativeFiles) await this.store.call({ op: "client.release", window_id: this.data.windowId }).catch((error) => this.data.setNotice(toCoreError(error).message));
+    if (this.store.nativeFiles || this.blobFiles.size) await this.store.call({ op: "client.release", window_id: this.data.windowId }).catch((error) => this.data.setNotice(toCoreError(error).message));
     this.unregister?.();
     this.unsubscribeStorage?.();
     this.unsubscribeVisibility?.();
     if (this.ping) clearInterval(this.ping);
     if (this.patchFrame !== null) cancelAnimationFrame(this.patchFrame);
+    if (this.lifecycleFrame !== null) cancelAnimationFrame(this.lifecycleFrame);
+    this.observer?.disconnect();
+    window.removeEventListener("focus", this.scheduleLifecycle);
+    window.removeEventListener("blur", this.scheduleLifecycle);
     window.removeEventListener("message", this.receive);
     const container = this.frame?.parentElement;
     this.frame?.remove();

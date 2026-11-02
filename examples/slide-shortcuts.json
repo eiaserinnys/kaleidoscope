@@ -1,0 +1,37 @@
+{
+  "id": "slide-shortcuts",
+  "name": "슬라이드 단축키 예제",
+  "description": "단축키와 창 상태를 확인합니다.",
+  "requires": { "blocks": 14, "modules": { "assets": 1, "client": 2 } },
+  "permissions": [],
+  "state": { "note": "" },
+  "assets": [{ "id": "slide-shortcuts", "version": 1 }],
+  "client": {
+    "runtime": "javascript",
+    "entry": { "id": "slide-shortcuts", "version": 1 },
+    "inputs": {},
+    "outputs": { "result": { "default": "준비" }, "lifecycle": { "default": "대기" } },
+    "actions": ["space", "enter", "tab", "backspace", "escape", "left", "right", "shift_left", "shift_right", "reset", "undo", "redo", "click"],
+    "commands": {}, "state_keys": [], "storage_entries": []
+  },
+  "shortcuts": [
+    { "code": "Space", "modifiers": [], "action": { "client": "space" } },
+    { "code": "Enter", "modifiers": [], "action": { "client": "enter" } },
+    { "code": "Tab", "modifiers": [], "action": { "client": "tab" } },
+    { "code": "Backspace", "modifiers": [], "action": { "client": "backspace" } },
+    { "code": "Escape", "modifiers": [], "action": { "client": "escape" } },
+    { "code": "ArrowLeft", "modifiers": [], "action": { "client": "left" } },
+    { "code": "ArrowRight", "modifiers": [], "action": { "client": "right" } },
+    { "code": "ArrowLeft", "modifiers": ["shift"], "action": { "client": "shift_left" } },
+    { "code": "ArrowRight", "modifiers": ["shift"], "action": { "client": "shift_right" } },
+    { "code": "KeyR", "modifiers": [], "action": { "client": "reset" } },
+    { "code": "KeyZ", "modifiers": ["primary"], "action": { "client": "undo" } },
+    { "code": "KeyY", "modifiers": ["primary"], "action": { "client": "redo" } }
+  ],
+  "ui": { "type": "stack", "direction": "column", "children": [
+    { "type": "text", "value": { "client": "result" } },
+    { "type": "text", "value": { "client": "lifecycle" } },
+    { "type": "input", "placeholder": "메모", "value": { "state": "note" }, "on_change": { "set_state": "note" } },
+    { "type": "button", "label": "선택", "on_click": { "client": "click" } }
+  ] }
+}

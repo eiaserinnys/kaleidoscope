@@ -24,7 +24,6 @@ it("저장본을 수락했을 때만 revision을 갱신하고 닫기 전에 저�
   expect(write.content).toBe("마지막 편집");
   expect(post.mock.calls.some(([value]) => value.type === "ks-sandbox-flushed")).toBe(false);
   host({ type: "ks-sandbox-storage-reply", requestId: write.requestId, content: "마지막 편집" });
-  await Promise.resolve(); await Promise.resolve();
-  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-sandbox-flushed", requestId: "close", ok: true }), "*");
+  await vi.waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-sandbox-flushed", requestId: "close", ok: true }), "*"));
   vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
 });
