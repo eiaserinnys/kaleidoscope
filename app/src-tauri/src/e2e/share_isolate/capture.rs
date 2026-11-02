@@ -215,27 +215,45 @@ pub(super) fn send_prompt(
 ) -> Result<Vec<PathBuf>, String> {
     let window = app.get_window("main").ok_or("main window not found")?;
     window.set_focus().map_err(|error| error.to_string())?;
-    let input_point = ui::evaluate(app, &format!(
-        "const input=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');if(!input)return null;const r=input.getBoundingClientRect();return {{x:r.left+r.width/2,y:r.top+r.height/2}};"
+    let points = ui::evaluate(app, &format!(
+        "const e=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"]');const input=e?.querySelector('textarea[aria-label=\\\"메시지\\\"]');const title=e?.querySelector('.ks-window-title');if(!input||!title)return null;const center=e=>{{const r=e.getBoundingClientRect();return {{x:r.left+r.width/2,y:r.top+r.height/2}};}};const p=center(input);const hit=document.elementFromPoint(p.x,p.y);return {{input:p,title:center(title),hit:{{tag:hit?.tagName??null,className:typeof hit?.className==='string'?hit.className:'',ariaLabel:hit?.getAttribute('aria-label')}}}};"
     ))?;
     let position = window.inner_position().map_err(|error| error.to_string())?;
     let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let title_x = position.x
+        + (points["title"]["x"]
+            .as_f64()
+            .ok_or("agent title x is missing")?
+            * scale)
+            .round() as i32;
+    let title_y = position.y
+        + (points["title"]["y"]
+            .as_f64()
+            .ok_or("agent title y is missing")?
+            * scale)
+            .round() as i32;
     let input_x = position.x
-        + (input_point["x"]
+        + (points["input"]["x"]
             .as_f64()
             .ok_or("agent input x is missing")?
             * scale)
             .round() as i32;
     let input_y = position.y
-        + (input_point["y"]
+        + (points["input"]["y"]
             .as_f64()
             .ok_or("agent input y is missing")?
             * scale)
             .round() as i32;
+    native_input::click(title_x, title_y)?;
     native_input::click(input_x, input_y)?;
     let focus_before = ui::evaluate(app, &format!(
         "const input=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');if(!input)return {{has_focus:false,active:false,selection:null}};return {{has_focus:document.hasFocus(),active:document.activeElement===input,selection:[input.selectionStart,input.selectionEnd]}};"
     ))?;
+    record(
+        log,
+        "agent.input-focus",
+        json!({"title_screen":[title_x,title_y],"input_screen":[input_x,input_y],"scale":scale,"hit":points["hit"],"focus":focus_before}),
+    )?;
     if focus_before["has_focus"] != json!(true) || focus_before["active"] != json!(true) {
         return Err(format!(
             "could not establish agent input focus before capture: {focus_before}"
