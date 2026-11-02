@@ -28,7 +28,11 @@ impl AppState {
                         .items
                         .iter()
                         .find(|item| item.entry_id == entry.id && item.key == key)
-                        .ok_or_else(|| server_error("저장소 선언 metadata가 없습니다."))?;
+                        .ok_or_else(|| {
+                            kaleidoscope_contract::errors::STORAGE_CONTEXT_METADATA_MISSING(
+                                &entry.id,
+                            )
+                        })?;
                     result.push(json!({"app_id":app.app.id,"entry_id":entry.id,"key":key,"kind":entry.kind,"revision":metadata.revision}));
                 }
             }

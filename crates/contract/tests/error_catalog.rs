@@ -217,7 +217,7 @@ fn storage_validation_reasons_identify_value_and_fixable_cause() {
         (
             json!({"type":"string"}),
             json!("a".repeat(kaleidoscope_contract::app_storage::STORAGE_JSON_MAX_BYTES)),
-            "json 항목이 1048576바이트를 넘습니다.",
+            "STORAGE_WRITE_JSON_TOO_LARGE",
         ),
     ];
     for (schema, value, expected) in cases {
@@ -226,10 +226,13 @@ fn storage_validation_reasons_identify_value_and_fixable_cause() {
             "label":"값", "presentation":"hidden"
         }))
         .unwrap();
-        assert_eq!(
-            validate_storage_content(&entry, &value).unwrap_err(),
-            expected
-        );
+        let error = validate_storage_content(&entry, &value).unwrap_err();
+        if expected == "STORAGE_WRITE_JSON_TOO_LARGE" {
+            assert_eq!(error.id.as_deref(), Some(expected));
+        } else {
+            assert_eq!(error.id.as_deref(), Some("STORAGE_WRITE_SCHEMA_MISMATCH"));
+            assert!(error.message.contains(expected), "{}", error.message);
+        }
     }
 }
 

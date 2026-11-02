@@ -7,45 +7,45 @@ use kaleidoscope_contract::app_storage::{
 
 fn validate(app_id: &str, key: &str) -> Result<(), CoreError> {
     if !kaleidoscope_contract::builtin::is_builtin(app_id) {
-        return Err(invalid("기본 앱을 찾을 수 없습니다."));
+        return Err(kaleidoscope_contract::errors::STORAGE_APP_VALUE_APP_NOT_BUILTIN(app_id));
     }
     if !contract::valid_concrete_storage_key(key) {
-        return Err(invalid("앱 저장소 키가 올바르지 않습니다."));
+        return Err(kaleidoscope_contract::errors::STORAGE_APP_VALUE_KEY_INVALID(key));
     }
     Ok(())
 }
 
-fn invalid(message: &str) -> CoreError {
-    CoreError {
-        message: message.into(),
-        ..CoreError::new(ErrorCode::InvalidRequest)
+fn content_size(key: &str, kind: StorageKind, content: &Value) -> Result<(), CoreError> {
+    match kind {
+        StorageKind::Json => {
+            let bytes = serde_json::to_vec(content).map_err(|error| {
+                kaleidoscope_contract::errors::STORAGE_APP_VALUE_JSON_SERIALIZATION_FAILED(key)
+                    .and_details(vec![error.to_string()])
+            })?;
+            if bytes.len() > contract::STORAGE_JSON_MAX_BYTES {
+                return Err(
+                    kaleidoscope_contract::errors::STORAGE_APP_VALUE_JSON_TOO_LARGE(
+                        key,
+                        contract::STORAGE_JSON_MAX_BYTES,
+                    ),
+                );
+            }
+        }
+        StorageKind::Md => {
+            let Some(text) = content.as_str() else {
+                return Err(kaleidoscope_contract::errors::STORAGE_APP_VALUE_MD_NOT_STRING(key));
+            };
+            if text.len() > contract::STORAGE_MD_MAX_BYTES {
+                return Err(
+                    kaleidoscope_contract::errors::STORAGE_APP_VALUE_MD_TOO_LARGE(
+                        key,
+                        contract::STORAGE_MD_MAX_BYTES,
+                    ),
+                );
+            }
+        }
     }
-}
-
-fn content_size(kind: StorageKind, content: &Value) -> Result<(), CoreError> {
-    let valid = match kind {
-        StorageKind::Json => serde_json::to_vec(content)
-            .is_ok_and(|bytes| bytes.len() <= contract::STORAGE_JSON_MAX_BYTES),
-        StorageKind::Md => content
-            .as_str()
-            .is_some_and(|text| text.len() <= contract::STORAGE_MD_MAX_BYTES),
-    };
-    if valid {
-        Ok(())
-    } else {
-        Err(invalid(
-            "앱 저장소 내용의 형식이나 크기가 올바르지 않습니다.",
-        ))
-    }
-}
-
-fn conflict(revision: Option<&str>) -> CoreError {
-    CoreError {
-        id: None,
-        code: ErrorCode::Conflict,
-        message: "저장 항목이 다른 곳에서 바뀌었습니다.".into(),
-        details: vec![format!("current_revision={}", revision.unwrap_or("null"))],
-    }
+    Ok(())
 }
 
 impl AppState {
@@ -97,7 +97,11 @@ impl AppState {
                 let kind = match kind.as_str() {
                     "json" => StorageKind::Json,
                     "md" => StorageKind::Md,
-                    _ => return Err(server_error("저장 항목 kind가 올바르지 않습니다")),
+                    _ => {
+                        return Err(kaleidoscope_contract::errors::STORAGE_VALUES_KIND_UNKNOWN(
+                            &key, &kind,
+                        ))
+                    }
                 };
                 Ok((
                     app_id,
@@ -117,7 +121,7 @@ impl AppState {
         app_id: &str,
     ) -> Result<AppValueList, CoreError> {
         if !kaleidoscope_contract::builtin::is_builtin(app_id) {
-            return Err(invalid("기본 앱을 찾을 수 없습니다."));
+            return Err(kaleidoscope_contract::errors::STORAGE_APP_VALUE_APP_NOT_BUILTIN(app_id));
         }
         let id = super::app_storage::bucket_id(account, app_id);
         let db = self.lock_db()?;
@@ -141,7 +145,11 @@ impl AppState {
                 let kind = match kind.as_str() {
                     "json" => StorageKind::Json,
                     "md" => StorageKind::Md,
-                    _ => return Err(server_error("저장 항목 kind가 올바르지 않습니다")),
+                    _ => {
+                        return Err(kaleidoscope_contract::errors::STORAGE_VALUES_KIND_UNKNOWN(
+                            &key, &kind,
+                        ))
+                    }
                 };
                 Ok(AppValueMeta {
                     key,
@@ -235,10 +243,10 @@ impl AppState {
         workspace: Option<&str>,
     ) -> Result<String, CoreError> {
         validate(app_id, key)?;
-        content_size(kind, &content)?;
+        content_size(key, kind, &content)?;
         if let Ok((entry, prefix, doc)) = self.builtin_collection_for_key(app_id, key, workspace) {
             if kind != entry.kind {
-                return Err(invalid("앱 저장소 항목의 종류가 올바르지 않습니다."));
+                return Err(kaleidoscope_contract::errors::STORAGE_APP_VALUE_KIND_MISMATCH(key));
             }
             let (reply, account, update) = super::collection_storage::write(
                 self, account, app_id, &entry, &prefix, &doc, workspace, content, expected,
@@ -247,18 +255,25 @@ impl AppState {
             return Ok(reply.revision);
         }
         let (entry, resolved) = self.builtin_entry(app_id, key, workspace)?;
-        if resolved != key || kind != entry.kind {
-            return Err(invalid("앱 저장소 키나 항목의 종류가 올바르지 않습니다."));
+        if resolved != key {
+            return Err(kaleidoscope_contract::errors::STORAGE_APP_VALUE_KEY_INVALID(key));
         }
-        contract::validate_storage_content(&entry, &content).map_err(|detail| CoreError {
-            details: vec![detail],
-            ..invalid("앱 저장소 내용이 선언된 형식과 맞지 않습니다.")
-        })?;
-        if workspace.is_some_and(|workspace| !key.split('/').any(|segment| segment == workspace)) {
-            return Err(invalid("앱 저장소 키가 작업과 일치하지 않습니다."));
+        if kind != entry.kind {
+            return Err(kaleidoscope_contract::errors::STORAGE_APP_VALUE_KIND_MISMATCH(key));
+        }
+        contract::validate_storage_content(&entry, &content)?;
+        if let Some(workspace_id) = workspace {
+            if !key.split('/').any(|segment| segment == workspace_id) {
+                return Err(
+                    kaleidoscope_contract::errors::STORAGE_APP_VALUE_WORKSPACE_MISMATCH(
+                        key,
+                        workspace_id,
+                    ),
+                );
+            }
         }
         let revision = contract::storage_revision(kind, &content)
-            .map_err(|_| invalid("앱 저장소 내용을 읽을 수 없습니다."))?;
+            .map_err(|_| kaleidoscope_contract::errors::STORAGE_APP_VALUE_REVISION_FAILED(key))?;
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(db_error)?;
         super::app_storage::check_workspace_owner(&tx, account, workspace)?;
@@ -266,7 +281,11 @@ impl AppState {
         let previous = super::app_storage::load_item(&tx, &id, key)?;
         let current = previous.as_ref().map(|(_, _, revision)| revision.as_str());
         if current != expected.as_deref() {
-            return Err(conflict(current));
+            return Err(
+                kaleidoscope_contract::errors::STORAGE_APP_VALUE_WRITE_CONFLICT(key).and_details(
+                    vec![format!("current_revision={}", current.unwrap_or("null"))],
+                ),
+            );
         }
         tx.execute("INSERT INTO app_storage_buckets(id,account_id,app_id) VALUES(?1,?2,?3) ON CONFLICT(account_id,app_id) DO NOTHING", params![id,account,app_id]).map_err(db_error)?;
         let kind_name = match kind {
@@ -274,7 +293,7 @@ impl AppState {
             StorageKind::Md => "md",
         };
         tx.execute("INSERT INTO app_storage_items(bucket_id,key,kind,content,revision,updated_at,workspace_id) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(bucket_id,key) DO UPDATE SET kind=excluded.kind,content=excluded.content,revision=excluded.revision,updated_at=excluded.updated_at,workspace_id=excluded.workspace_id",
-            params![id,key,kind_name,serde_json::to_string(&content).map_err(|error| server_error(&error.to_string()))?,revision,timestamp(),workspace]).map_err(db_error)?;
+            params![id,key,kind_name,serde_json::to_string(&content).map_err(|error| kaleidoscope_contract::errors::STORAGE_APP_VALUE_SERIALIZATION_FAILED(key).and_details(vec![error.to_string()]))?,revision,timestamp(),workspace]).map_err(db_error)?;
         tx.commit().map_err(db_error)?;
         drop(db);
         self.send_event_for_account(
@@ -340,7 +359,7 @@ impl AppState {
         }
         let (entry, resolved) = self.builtin_entry(app_id, key, workspace)?;
         if resolved != key {
-            return Err(invalid("앱 저장소 키가 올바르지 않습니다."));
+            return Err(kaleidoscope_contract::errors::STORAGE_APP_VALUE_KEY_INVALID(key));
         }
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(db_error)?;
@@ -349,7 +368,11 @@ impl AppState {
         let old = super::app_storage::load_item(&tx, &id, key)?;
         let current = old.as_ref().map(|(_, _, revision)| revision.as_str());
         if current != expected.as_deref() {
-            return Err(conflict(current));
+            return Err(
+                kaleidoscope_contract::errors::STORAGE_APP_VALUE_RESET_CONFLICT(key).and_details(
+                    vec![format!("current_revision={}", current.unwrap_or("null"))],
+                ),
+            );
         }
         tx.execute(
             "DELETE FROM app_storage_items WHERE bucket_id=?1 AND key=?2",
@@ -403,7 +426,9 @@ pub(super) fn move_collection(
     workspace: Option<&str>,
 ) -> Result<contract::CollectionMoveReply, CoreError> {
     if request.operation != "move" {
-        return Err(invalid("저장 문서 이동 요청이 올바르지 않습니다."));
+        return Err(
+            kaleidoscope_contract::errors::STORAGE_MOVE_OPERATION_INVALID(&request.operation),
+        );
     }
     validate(app_id, &request.from_key)?;
     validate(app_id, &request.to_key)?;
@@ -412,7 +437,12 @@ pub(super) fn move_collection(
     let (target_entry, target_prefix, to_doc) =
         state.builtin_collection_for_key(app_id, &request.to_key, workspace)?;
     if entry.id != target_entry.id || prefix != target_prefix {
-        return Err(invalid("같은 문서 모음 안에서만 이동할 수 있습니다."));
+        return Err(
+            kaleidoscope_contract::errors::STORAGE_MOVE_COLLECTION_MISMATCH(
+                &request.from_key,
+                &request.to_key,
+            ),
+        );
     }
     let request = contract::CollectionMove {
         from: from_doc,
@@ -462,12 +492,12 @@ pub(super) async fn list(
             state
                 .list_app_value_collection(&account, &app_id, prefix, query.workspace_id.as_deref())
                 .map(|items| {
-                    serde_json::to_value(items).map_err(|_| CoreError::new(ErrorCode::Server))
+                    serde_json::to_value(items).map_err(|_| kaleidoscope_contract::errors::STORAGE_VALUES_RESPONSE_SERIALIZATION_FAILED())
                 })
                 .and_then(|value| value)
         } else {
             state.list_app_values(&account, &app_id).and_then(|items| {
-                serde_json::to_value(items).map_err(|_| CoreError::new(ErrorCode::Server))
+                serde_json::to_value(items).map_err(|_| kaleidoscope_contract::errors::STORAGE_VALUES_RESPONSE_SERIALIZATION_FAILED())
             })
         }
     }) {

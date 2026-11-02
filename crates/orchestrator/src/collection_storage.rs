@@ -59,13 +59,15 @@ pub(super) fn list(
 
 fn collection_key(prefix: &str, doc: &str) -> Result<String, CoreError> {
     if !contract::valid_collection_doc(doc) {
-        return Err(CoreError::new(ErrorCode::InvalidRequest));
+        return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_INVALID(doc));
     }
     let key = format!("{prefix}/{doc}");
     if contract::collection_key_matches(prefix, &key) {
         Ok(key)
     } else {
-        Err(CoreError::new(ErrorCode::InvalidRequest))
+        Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_KEY_INVALID(
+            doc,
+        ))
     }
 }
 
@@ -79,8 +81,7 @@ pub(super) fn read(
     let key = collection_key(prefix, doc)?;
     match super::app_storage::load_item(db, bucket_id, &key)? {
         Some((kind, content, revision)) if kind == entry.kind => {
-            contract::validate_storage_content(entry, &content)
-                .map_err(|_| CoreError::new(ErrorCode::InvalidRequest))?;
+            contract::validate_storage_content(entry, &content)?;
             Ok(contract::StorageReadReply {
                 kind,
                 content,
@@ -88,8 +89,10 @@ pub(super) fn read(
                 exists: true,
             })
         }
-        Some(_) => Err(server_error("저장 항목 kind가 선언과 다릅니다.")),
-        None => Err(CoreError::new(ErrorCode::NotFound)),
+        Some(_) => Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_KIND_MISMATCH(doc)),
+        None => Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_NOT_FOUND(
+            doc,
+        )),
     }
 }
 
@@ -105,8 +108,7 @@ pub(super) fn write(
     expected_revision: Option<String>,
 ) -> Result<(contract::StorageWriteReply, String, contract::StorageUpdate), CoreError> {
     let key = collection_key(prefix, doc)?;
-    contract::validate_storage_content(entry, &content)
-        .map_err(|error| CoreError::with_details(ErrorCode::InvalidRequest, vec![error]))?;
+    contract::validate_storage_content(entry, &content)?;
     let mut db = state.lock_db()?;
     let tx = db.transaction().map_err(db_error)?;
     super::app_storage::check_workspace_owner(&tx, account_id, workspace_id)?;
@@ -114,10 +116,14 @@ pub(super) fn write(
     let old = super::app_storage::load_item(&tx, &bucket, &key)?;
     let current = old.as_ref().map(|(_, _, revision)| revision.clone());
     if current != expected_revision {
-        return Err(conflict(current.as_deref()));
+        return Err(
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_WRITE_CONFLICT(doc).and_details(vec![
+                format!("current_revision={}", current.as_deref().unwrap_or("null")),
+            ]),
+        );
     }
     let revision = contract::storage_revision(entry.kind, &content)
-        .map_err(|_| CoreError::new(ErrorCode::InvalidRequest))?;
+        .map_err(|_| kaleidoscope_contract::errors::STORAGE_DOCUMENT_SERIALIZATION_FAILED(doc))?;
     tx.execute(
         "INSERT INTO app_storage_buckets(id,account_id,app_id) VALUES(?1,?2,?3) ON CONFLICT(account_id,app_id) DO NOTHING",
         params![bucket, account_id, app_id],
@@ -125,7 +131,7 @@ pub(super) fn write(
     .map_err(db_error)?;
     tx.execute(
         "INSERT INTO app_storage_items(bucket_id,key,kind,content,revision,updated_at,workspace_id) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(bucket_id,key) DO UPDATE SET kind=excluded.kind,content=excluded.content,revision=excluded.revision,updated_at=excluded.updated_at,workspace_id=excluded.workspace_id",
-        params![bucket,key,kind_name(entry.kind),serde_json::to_string(&content).map_err(|error|server_error(&error.to_string()))?,revision,timestamp(),workspace_id],
+        params![bucket,key,kind_name(entry.kind),serde_json::to_string(&content).map_err(|error|kaleidoscope_contract::errors::STORAGE_DOCUMENT_SERIALIZATION_FAILED(doc).and_details(vec![error.to_string()]))?,revision,timestamp(),workspace_id],
     )
     .map_err(db_error)?;
     tx.commit().map_err(db_error)?;
@@ -166,7 +172,11 @@ pub(super) fn reset(
     let old = super::app_storage::load_item(&tx, &bucket, &key)?;
     let current = old.as_ref().map(|(_, _, revision)| revision.clone());
     if current != expected_revision {
-        return Err(conflict(current.as_deref()));
+        return Err(
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_RESET_CONFLICT(doc).and_details(vec![
+                format!("current_revision={}", current.as_deref().unwrap_or("null")),
+            ]),
+        );
     }
     tx.execute(
         "DELETE FROM app_storage_items WHERE bucket_id=?1 AND key=?2",
@@ -219,16 +229,21 @@ pub(super) fn move_document(
     let bucket = super::app_storage::bucket_id(account_id, app_id);
     let source = super::app_storage::load_item(&tx, &bucket, &from_key)?;
     let Some((kind, _content, revision)) = source else {
-        return Err(CoreError::new(ErrorCode::NotFound));
+        return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_NOT_FOUND(
+            &request.from,
+        ));
     };
     if revision != request.expected_revision {
-        return Err(conflict(Some(&revision)));
+        return Err(
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_CONFLICT(&request.from)
+                .and_details(vec![format!("current_revision={revision}")]),
+        );
     }
     if kind != entry.kind {
-        return Err(server_error("저장 항목 kind가 선언과 다릅니다."));
+        return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_KIND_MISMATCH(&request.from));
     }
     if super::app_storage::load_item(&tx, &bucket, &to_key)?.is_some() {
-        return Err(conflict(None));
+        return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_TARGET_EXISTS(&request.to));
     }
     tx.execute(
         "UPDATE app_storage_items SET key=?3 WHERE bucket_id=?1 AND key=?2",
@@ -250,15 +265,6 @@ pub(super) fn move_document(
         from_key,
         to_key,
     ))
-}
-
-fn conflict(current: Option<&str>) -> CoreError {
-    CoreError {
-        id: None,
-        code: ErrorCode::Conflict,
-        message: "저장 항목이 다른 곳에서 바뀌었습니다.".into(),
-        details: vec![format!("current_revision={}", current.unwrap_or("null"))],
-    }
 }
 
 fn kind_name(kind: contract::StorageKind) -> &'static str {

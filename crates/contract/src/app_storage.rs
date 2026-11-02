@@ -422,7 +422,7 @@ pub fn validate_storage_decl(storage: &StorageDecl) -> Vec<String> {
                     if let Err(error) = validate_json_schema(schema, &at) {
                         errors.push(error);
                     } else if let Err(error) = validate_storage_content(entry, &entry.default) {
-                        errors.push(error);
+                        errors.push(error.message);
                     }
                 }
                 None => errors.push(format!("{at}/schema는 json 항목에 필요합니다")),
@@ -432,7 +432,7 @@ pub fn validate_storage_decl(storage: &StorageDecl) -> Vec<String> {
                     errors.push(format!("{at}/schema는 md 항목에 둘 수 없습니다"));
                 }
                 if let Err(error) = validate_storage_content(entry, &entry.default) {
-                    errors.push(format!("{at}/default: {error}"));
+                    errors.push(format!("{at}/default: {}", error.message));
                 }
             }
         }
@@ -588,19 +588,27 @@ fn valid_literal_choices(value: &Value) -> bool {
 }
 
 /// 저장 요청의 값을 선언된 kind/schema에 맞춰 검사한다.
-pub fn validate_storage_content(entry: &StorageEntryDecl, content: &Value) -> Result<(), String> {
+pub fn validate_storage_content(
+    entry: &StorageEntryDecl,
+    content: &Value,
+) -> Result<(), crate::CoreError> {
     match entry.kind {
         StorageKind::Json => {
             let schema = entry
                 .schema
                 .as_ref()
-                .ok_or_else(|| "json 항목에 schema가 없습니다.".to_string())?;
-            validate_json_value(schema, content, "")?;
-            let bytes = serde_json::to_vec(&canonicalize(content.clone()))
-                .map_err(|error| format!("JSON content를 직렬화하지 못했습니다: {error}."))?;
+                .ok_or_else(|| crate::errors::STORAGE_WRITE_SCHEMA_MISSING(&entry.key))?;
+            validate_json_value(schema, content, "").map_err(|reason| {
+                crate::errors::STORAGE_WRITE_SCHEMA_MISMATCH(&entry.key, reason)
+            })?;
+            let bytes = serde_json::to_vec(&canonicalize(content.clone())).map_err(|error| {
+                crate::errors::STORAGE_WRITE_JSON_SERIALIZATION_FAILED(&entry.key)
+                    .and_details(vec![error.to_string()])
+            })?;
             if bytes.len() > STORAGE_JSON_MAX_BYTES {
-                Err(format!(
-                    "json 항목이 {STORAGE_JSON_MAX_BYTES}바이트를 넘습니다."
+                Err(crate::errors::STORAGE_WRITE_JSON_TOO_LARGE(
+                    &entry.key,
+                    STORAGE_JSON_MAX_BYTES,
                 ))
             } else {
                 Ok(())
@@ -611,14 +619,15 @@ pub fn validate_storage_content(entry: &StorageEntryDecl, content: &Value) -> Re
                 .as_str()
                 .is_some_and(|text| text.len() > STORAGE_MD_MAX_BYTES)
             {
-                Err(format!(
-                    "md 항목이 {STORAGE_MD_MAX_BYTES} UTF-8 바이트를 넘습니다."
+                Err(crate::errors::STORAGE_WRITE_MD_TOO_LARGE(
+                    &entry.key,
+                    STORAGE_MD_MAX_BYTES,
                 ))
             } else {
                 Ok(())
             }
         }
-        StorageKind::Md => Err("md 항목의 content는 문자열이어야 합니다.".into()),
+        StorageKind::Md => Err(crate::errors::STORAGE_WRITE_MD_NOT_STRING(&entry.key)),
     }
 }
 
@@ -708,8 +717,8 @@ pub fn validate_storage_upgrade(
         }
         if let Err(error) = validate_storage_content(new, &stored.content) {
             errors.push(format!(
-                "새 선언이 기존 저장값 {}과 호환되지 않습니다: {error}",
-                stored.entry_id
+                "새 선언이 기존 저장값 {}과 호환되지 않습니다: {}",
+                stored.entry_id, error.message
             ));
         }
     }
@@ -1019,6 +1028,59 @@ mod tests {
         assert!(validate_storage_content(&entry, &json!("x".repeat(128 * 1024))).is_ok());
         assert!(
             validate_storage_content(&entry, &json!("x".repeat(STORAGE_JSON_MAX_BYTES))).is_err()
+        );
+    }
+
+    #[test]
+    fn storage_content_validation_returns_a_distinct_error_id_for_each_cause() {
+        let schema_entry: StorageEntryDecl = serde_json::from_value(json!({
+            "id":"document", "key":"document", "kind":"json", "label":"문서", "presentation":"hidden",
+            "schema":{"type":"string"}, "default":""
+        })).unwrap();
+        let missing_schema: StorageEntryDecl = serde_json::from_value(json!({
+            "id":"document", "key":"document", "kind":"json", "label":"문서", "presentation":"hidden",
+            "default":""
+        })).unwrap();
+        let markdown: StorageEntryDecl = serde_json::from_value(json!({
+            "id":"notes", "key":"notes", "kind":"md", "label":"메모", "presentation":"hidden",
+            "default":""
+        }))
+        .unwrap();
+
+        assert_eq!(
+            validate_storage_content(&schema_entry, &json!(1))
+                .unwrap_err()
+                .id
+                .as_deref(),
+            Some("STORAGE_WRITE_SCHEMA_MISMATCH")
+        );
+        assert_eq!(
+            validate_storage_content(&missing_schema, &json!("text"))
+                .unwrap_err()
+                .id
+                .as_deref(),
+            Some("STORAGE_WRITE_SCHEMA_MISSING")
+        );
+        assert_eq!(
+            validate_storage_content(&schema_entry, &json!("x".repeat(STORAGE_JSON_MAX_BYTES)))
+                .unwrap_err()
+                .id
+                .as_deref(),
+            Some("STORAGE_WRITE_JSON_TOO_LARGE")
+        );
+        assert_eq!(
+            validate_storage_content(&markdown, &json!("x".repeat(STORAGE_MD_MAX_BYTES + 1)))
+                .unwrap_err()
+                .id
+                .as_deref(),
+            Some("STORAGE_WRITE_MD_TOO_LARGE")
+        );
+        assert_eq!(
+            validate_storage_content(&markdown, &json!(1))
+                .unwrap_err()
+                .id
+                .as_deref(),
+            Some("STORAGE_WRITE_MD_NOT_STRING")
         );
     }
 

@@ -645,8 +645,7 @@ fn preview_storage(
             }
             let value: Value =
                 serde_json::from_str(&raw).map_err(|e| server_error(&e.to_string()))?;
-            kaleidoscope_contract::app_storage::validate_storage_content(entry, &value)
-                .map_err(|e| server_error(&e))?;
+            kaleidoscope_contract::app_storage::validate_storage_content(entry, &value)?;
             value
         } else {
             entry.default.clone()
