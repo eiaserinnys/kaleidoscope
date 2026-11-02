@@ -63,6 +63,24 @@ afterEach(() => {
 });
 
 describe("공용 가상 트리", () => {
+  it("row(null)은 현재 행으로 돌아가고 마지막 행 삭제의 null은 목록으로 돌아간다", async () => {
+    let focus!: TreeFocusController;
+    const props = { className: "ks-file-tree-list", label: "복귀 구분", expanded: new Set<string>(),
+      onActivate: vi.fn(), onExpandedChange: () => {}, onFocusController: (value: TreeFocusController) => { focus = value; } };
+    const nodes = [{ id: "only", label: "하나.md" }];
+    const { rerender } = render(<TreeView {...props} nodes={nodes} />);
+    const row = screen.getByRole("treeitem", { name: "하나.md" });
+    act(() => row.focus());
+    act(() => screen.getByRole("tree").focus());
+    act(() => focus.row(null));
+    await waitFor(() => expect(document.activeElement).toBe(row));
+    fireEvent.keyDown(row, { key: "Enter" });
+    expect(props.onActivate).toHaveBeenCalledTimes(1);
+    act(() => focus.afterDelete([null]));
+    rerender(<TreeView {...props} nodes={[]} />);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("tree")));
+    expect(document.activeElement).not.toBe(document.body);
+  });
   it("입력 중 숨었던 끝 행은 취소 뒤 복귀 요청을 받아 Enter를 처리한다", async () => {
     let focus!: TreeFocusController;
     function CancelHarness() {

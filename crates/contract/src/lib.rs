@@ -125,7 +125,7 @@
 //!
 //! # 계약 26판: 창 상태 이행 식과 머리 없는 탭
 //! 앱 판을 올릴 때 옛 상태에 없는 키의 값을 계산하는 `state_migrate`, 파일을 열 때 경로와 같이 쓰는 `opens.set_state`,
-//! 방문한 탭을 유지하는 `tabs.keep_mounted`와 탭 줄을 숨기는 `tabs.header`를 더한다. 블록 세트는 그대로다.
+//! 방문한 탭을 유지하는 `tabs.keep_mounted`와 탭 줄을 숨기는 `tabs.header`를 더한다. 새 필드는 블록 세트 15판이다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -263,7 +263,9 @@ pub const CONTRACT_VERSION: u32 = 26;
 /// - 11판: `sandbox`, `slider`, `color`와 `input.rows`.
 /// - 12판: 창 단위 클라이언트 로직과 `canvas`, `timeline`.
 /// - 13판: 파일 또는 저장소 문서 모음을 뿌리로 하는 읽기 전용 `folder`.
-pub const BLOCK_SET_VERSION: u32 = 14;
+/// - 14판: `canvas.surface`, `repeat`, `when`, `dialog`, `tour`, `anchor`, `progress`와 입력·배치 확장(v0.6.12).
+/// - 15판: `tabs.header`, `tabs.keep_mounted`, `tabs.collapsible`, `folder.header`, `state_migrate`, `opens.set_state`.
+pub const BLOCK_SET_VERSION: u32 = 15;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -749,7 +751,7 @@ pub struct AppDefinition {
     /// 창 상태의 키와 기본값. 창을 열 때 이 값으로 시작한다.
     #[serde(default)]
     pub state: BTreeMap<String, JsonValue>,
-    /// 앱 판을 올려 기존 창을 옮길 때, 옛 상태에 없는 키의 값을 계산하는 JSONata 식.
+    /// (15판) 앱 판을 올려 기존 창을 옮길 때, 옛 상태에 없는 키의 값을 계산하는 JSONata 식.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[ts(optional, as = "Option<BTreeMap<String, String>>")]
     pub state_migrate: BTreeMap<String, String>,
@@ -893,7 +895,7 @@ pub struct OpensDecl {
     pub permission: String,
     /// 연 파일의 경로(그 폴더 기준 상대 경로)를 쓸 상태 키. 블록은 이 키로 그 파일을 연다.
     pub state: String,
-    /// 파일을 열 때 경로와 함께 창 상태에 쓸 값.
+    /// (15판) 파일을 열 때 경로와 함께 창 상태에 쓸 값.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[ts(optional, as = "Option<BTreeMap<String, JsonValue>>")]
     pub set_state: BTreeMap<String, JsonValue>,
@@ -1350,7 +1352,7 @@ pub enum Block {
     /// PC 전체 권한은 탐색기만 받는다. `read_only`는 쓰기 UI를 보이지 않게 한다.
     Folder {
         root: FolderRoot,
-        /// 거짓이면 폴더 머리 줄을 숨긴다.
+        /// (15판) 거짓이면 폴더 머리 줄을 숨긴다.
         #[serde(
             default = "default_tabs_header",
             skip_serializing_if = "skip_default_tabs_header"
@@ -1535,7 +1537,7 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "skip_default_tabs_keep_mounted")]
         #[ts(optional, as = "Option<bool>")]
         keep_mounted: bool,
-        /// 참이면 분할 칸의 접기와 펼치기를 탭이 맡는다.
+        /// (15판) 참이면 분할 칸의 접기와 펼치기를 탭이 맡는다.
         #[serde(default, skip_serializing_if = "is_false")]
         #[ts(optional, as = "Option<bool>")]
         collapsible: bool,
@@ -5491,10 +5493,51 @@ mod tests {
     }
 
     #[test]
-    fn folder_header_and_collapsible_tabs_are_explicit_v13_options() {
+    fn new_definition_fields_require_block_set_fifteen() {
+        let base = serde_json::json!({
+            "id":"version-gate", "name":"판 검사", "requires":{"blocks":14,"modules":{"files":3}},
+            "permissions":[{"module":"files","id":"docs","access":"readwrite","label":"문서"}],
+            "state":{"path":null,"mode":0}, "ui":{"type":"text","value":"내용"}
+        });
+        let tabs = serde_json::json!({"type":"tabs","tabs":[{"label":"내용","child":{"type":"text","value":"내용"}}]});
+        let mut cases = Vec::new();
+        for field in ["header", "keep_mounted", "collapsible"] {
+            let mut app = base.clone();
+            app["ui"] = tabs.clone();
+            app["ui"][field] = serde_json::json!(false);
+            cases.push((field, app));
+        }
+        let mut folder = base.clone();
+        folder["ui"] =
+            serde_json::json!({"type":"folder","root":{"permission":"docs"},"header":false});
+        cases.push(("folder.header", folder));
+        let mut migration = base.clone();
+        migration["state_migrate"] = serde_json::json!({"mode":"0"});
+        cases.push(("state_migrate", migration));
+        let mut opens = base.clone();
+        opens["opens"] = serde_json::json!({"extensions":["md"],"permission":"docs","state":"path","set_state":{"mode":1}});
+        cases.push(("opens.set_state", opens));
+        for (field, mut app) in cases {
+            assert!(
+                validate::parse_app_definition(&app.to_string()).is_err(),
+                "14판은 {field}를 모른다"
+            );
+            app["requires"]["blocks"] = serde_json::json!(15);
+            assert!(
+                validate::parse_app_definition(&app.to_string()).is_ok(),
+                "15판은 {field}를 지원한다"
+            );
+        }
+        let mut section = base;
+        section["ui"] = serde_json::json!({"type":"section","title":"구역","collapsible":true,"child":{"type":"text","value":"내용"}});
+        assert!(validate::parse_app_definition(&section.to_string()).is_ok());
+    }
+
+    #[test]
+    fn folder_header_and_collapsible_tabs_are_explicit_v15_options() {
         let mut app = serde_json::json!({
             "id": "folder-tabs-options", "name": "옵션 검사",
-            "requires": { "blocks": 13, "modules": { "files": 1 } },
+            "requires": { "blocks": 15, "modules": { "files": 1 } },
             "permissions": [{ "module": "files", "id": "docs", "access": "read", "label": "문서" }],
             "state": {},
             "ui": { "type": "tabs", "collapsible": true, "tabs": [
@@ -5513,11 +5556,11 @@ mod tests {
         assert!(encoded["ui"].get("collapsible").is_none());
         assert!(encoded["ui"]["tabs"][0]["child"].get("header").is_none());
 
-        app["requires"]["blocks"] = serde_json::json!(12);
+        app["requires"]["blocks"] = serde_json::json!(14);
         assert!(validate::parse_app_definition(&app.to_string()).is_err());
         app["ui"]["tabs"][0]["child"] = serde_json::json!({ "type": "text", "value": "내용" });
         assert!(validate::parse_app_definition(&app.to_string()).is_err());
-        app["requires"]["blocks"] = serde_json::json!(13);
+        app["requires"]["blocks"] = serde_json::json!(15);
         app["ui"]["collapsible"] = serde_json::json!(true);
         app["ui"]["header"] = serde_json::json!(false);
         assert!(validate::parse_app_definition(&app.to_string()).is_err());
@@ -5528,7 +5571,7 @@ mod tests {
         let definition = serde_json::json!({
             "id": "u6-editor",
             "name": "U6 편집기",
-            "requires": { "blocks": 13, "modules": { "files": 3, "storage": 3 } },
+            "requires": { "blocks": 15, "modules": { "files": 3, "storage": 3 } },
             "permissions": [{ "module": "files", "id": "docs", "access": "readwrite", "label": "문서 폴더" }],
             "state": { "source": 0, "current_file": null, "current_document": null },
             "state_migrate": { "source": "$state.current_file != null ? 1 : 0" },
@@ -5625,7 +5668,7 @@ mod tests {
     fn u6_validation_checks_only_migration_syntax_and_declared_state_keys() {
         let base = serde_json::json!({
             "id": "u6-validation", "name": "검사",
-            "requires": { "blocks": 13, "modules": { "files": 3 } },
+            "requires": { "blocks": 15, "modules": { "files": 3 } },
             "permissions": [{ "module": "files", "id": "docs", "access": "readwrite", "label": "문서" }],
             "state": { "source": 0, "current_file": null },
             "state_migrate": { "source": "$state.current_file != null ? 1 : 0" },
@@ -5669,7 +5712,7 @@ mod tests {
         assert_eq!(encoded_legacy["ui"]["tabs"][0]["label"], "옛 탭");
 
         let mut explicit_defaults = old_tabs.clone();
-        explicit_defaults["requires"]["blocks"] = serde_json::json!(13);
+        explicit_defaults["requires"]["blocks"] = serde_json::json!(15);
         explicit_defaults["ui"]["header"] = serde_json::json!(true);
         explicit_defaults["ui"]["keep_mounted"] = serde_json::json!(false);
         let explicit_defaults: AppDefinition =
@@ -5680,42 +5723,43 @@ mod tests {
 
         let mut new_tab_fields_on_old_set = serde_json::json!({
             "id": "old-tabs", "name": "옛 탭",
-            "requires": { "blocks": 12 }, "state": {},
+            "requires": { "blocks": 14 }, "state": {},
             "ui": { "type": "tabs", "header": false,
                 "tabs": [{ "label": "탭", "child": { "type": "text", "value": "내용" } }] }
         });
         assert!(validate::parse_app_definition(&new_tab_fields_on_old_set.to_string()).is_err());
-        new_tab_fields_on_old_set["requires"]["blocks"] = serde_json::json!(13);
+        new_tab_fields_on_old_set["requires"]["blocks"] = serde_json::json!(15);
         assert!(validate::parse_app_definition(&new_tab_fields_on_old_set.to_string()).is_ok());
-        new_tab_fields_on_old_set["requires"]["blocks"] = serde_json::json!(12);
+        new_tab_fields_on_old_set["requires"]["blocks"] = serde_json::json!(14);
         new_tab_fields_on_old_set["ui"]["header"] = serde_json::json!(true);
         new_tab_fields_on_old_set["ui"]["keep_mounted"] = serde_json::json!(true);
         assert!(validate::parse_app_definition(&new_tab_fields_on_old_set.to_string()).is_err());
     }
 
     #[test]
-    fn u6_state_migration_and_open_state_require_block_set_13() {
+    fn u6_state_migration_and_open_state_require_block_set_15() {
         let mut definition = serde_json::json!({
             "id": "u6-state-version", "name": "상태 판 검사",
-            "requires": { "blocks": 12, "modules": { "files": 3 } },
+            "requires": { "blocks": 14, "modules": { "files": 3 } },
             "permissions": [{ "module": "files", "id": "docs", "access": "readwrite", "label": "문서" }],
             "state": { "source": 0, "current_file": null },
             "ui": { "type": "text", "value": "시험" }
         });
 
-        definition["state_migrate"] = serde_json::json!({ "source": "$state.current_file != null ? 1 : 0" });
+        definition["state_migrate"] =
+            serde_json::json!({ "source": "$state.current_file != null ? 1 : 0" });
         assert!(validate::parse_app_definition(&definition.to_string()).is_err());
-        definition["requires"]["blocks"] = serde_json::json!(13);
+        definition["requires"]["blocks"] = serde_json::json!(15);
         assert!(validate::parse_app_definition(&definition.to_string()).is_ok());
 
         definition.as_object_mut().unwrap().remove("state_migrate");
-        definition["requires"]["blocks"] = serde_json::json!(12);
+        definition["requires"]["blocks"] = serde_json::json!(14);
         definition["opens"] = serde_json::json!({
             "extensions": ["md"], "permission": "docs", "state": "current_file",
             "set_state": { "source": 1 }
         });
         assert!(validate::parse_app_definition(&definition.to_string()).is_err());
-        definition["requires"]["blocks"] = serde_json::json!(13);
+        definition["requires"]["blocks"] = serde_json::json!(15);
         assert!(validate::parse_app_definition(&definition.to_string()).is_ok());
     }
 

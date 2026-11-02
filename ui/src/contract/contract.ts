@@ -123,7 +123,7 @@ assets?: Array<AssetDep>, permissions: Array<PermissionDecl>,
  */
 state: { [key in string]: JsonValue }, 
 /**
- * 앱 판을 올려 기존 창을 옮길 때, 옛 상태에 없는 키의 값을 계산하는 JSONata 식.
+ * (15판) 앱 판을 올려 기존 창을 옮길 때, 옛 상태에 없는 키의 값을 계산하는 JSONata 식.
  */
 state_migrate?: { [key in string]: string }, 
 /**
@@ -266,7 +266,7 @@ sizes?: Array<number>, children: Array<Block>, } | { "type": "tree", items?: Bin
  */
 extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "folder", root: FolderRoot, 
 /**
- * 거짓이면 폴더 머리 줄을 숨긴다.
+ * (15판) 거짓이면 폴더 머리 줄을 숨긴다.
  */
 header?: boolean, extensions?: Array<string>, selected?: StateRef, on_select?: Actions, read_only?: boolean, } | { "type": "markdown", file?: FileRef, document?: DocumentRef, value?: Binding, read_only?: boolean, } | { "type": "html_view", document?: DocumentRef, file?: FileRef, value?: Binding, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "chat", permission?: string, root?: FolderRef, agents?: Binding, selected?: StateRef, on_select?: SetState, } | { "type": "web_view", 
 /**
@@ -298,7 +298,7 @@ view?: StateRef,
  */
 on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, wrap?: boolean, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, header?: boolean, keep_mounted?: boolean, 
 /**
- * 참이면 분할 칸의 접기와 펼치기를 탭이 맡는다.
+ * (15판) 참이면 분할 칸의 접기와 펼치기를 탭이 맡는다.
  */
 collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": "toolbar", start: Array<Block>, end?: Array<Block>, } | { "type": "section", title: Binding, 
 /**
@@ -862,7 +862,7 @@ permission: string,
  */
 state: string, 
 /**
- * 파일을 열 때 경로와 함께 창 상태에 쓸 값.
+ * (15판) 파일을 열 때 경로와 함께 창 상태에 쓸 값.
  */
 set_state?: { [key in string]: JsonValue }, };
 

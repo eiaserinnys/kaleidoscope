@@ -59,6 +59,7 @@ function storageFolderDefinition(readOnly = true): AppDefinition {
 
 function storageFolderTabsDefinition(): AppDefinition {
   const definition = storageFolderDefinition(false);
+  definition.requires.blocks = 15;
   (definition.ui as Extract<Block, { type: "folder" }> & { header: boolean }).header = false;
   definition.ui = {
     type: "tabs",
@@ -86,7 +87,7 @@ function setup(definition: AppDefinition, configure?: (transport: ReturnType<typ
     grants: definition.id === "folder-files-test" ? [grantFor("viewer-window", "docs")] : [],
     files,
   });
-  seed.snapshot.supported = { blocks: 13, modules: { files: 2, storage: 3 } };
+  seed.snapshot.supported = { blocks: 15, modules: { files: 2, storage: 3 } };
   seed.snapshot.shared.windows[0].state = { selected: null };
   const transport = createFakeTransport(seed);
   if (configure) configure(transport);
@@ -98,10 +99,32 @@ function setup(definition: AppDefinition, configure?: (transport: ReturnType<typ
 }
 
 describe("folder block", () => {
+  it("내 폴더 빈 공간 메뉴의 네 취소 경로는 현재 행과 Enter 동작을 유지한다", async () => {
+    const user = userEvent.setup();
+    const { call } = setup(fileFolderDefinition("readwrite", false), undefined, { "guide.md": "# 안내" });
+    const row = await screen.findByRole("treeitem", { name: "guide.md" });
+    await user.click(row);
+    expect(screen.queryByRole("treeitem", { name: "새 파일" })).toBeNull();
+    for (const label of ["새 파일", "새 폴더"]) {
+      for (const cancel of ["Escape", "empty"]) {
+        fireEvent.contextMenu(screen.getByRole("tree"));
+        await user.click(await screen.findByRole("menuitem", { name: label }));
+        const input = await screen.findByRole("textbox", { name: `${label} 이름` });
+        await waitFor(() => expect(document.activeElement).toBe(input));
+        if (cancel === "empty") await user.clear(input);
+        await user.keyboard(cancel === "empty" ? "{Enter}" : "{Escape}");
+        await waitFor(() => expect(document.activeElement).toBe(row));
+        const before = call.mock.calls.filter(([request]) => request.op === "data.act").length;
+        await user.keyboard("{Enter}");
+        await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "data.act").length).toBeGreaterThan(before));
+      }
+    }
+  });
   it.each(["끝 행", "빈 공간 메뉴", "머리", "행 메뉴"])("%s에서 연 만들기는 취소 뒤 원래 입구로 돌아간다", async (entrance) => {
     const user = userEvent.setup();
     const files = entrance === "머리" || entrance === "행 메뉴";
     const definition = files ? fileFolderDefinition("readwrite", false) : storageFolderDefinition(false);
+    if (!files) definition.requires.blocks = 15;
     if (!files) (definition.ui as Extract<Block, { type: "folder" }>).header = false;
     setup(definition, files ? undefined : (transport) => {
       const call = transport.call.bind(transport);
@@ -132,6 +155,7 @@ describe("folder block", () => {
     let release!: () => void;
     const pending = new Promise<void>((resolve) => { release = resolve; });
     const definition = storageFolderDefinition(false);
+    definition.requires.blocks = 15;
     (definition.ui as Extract<Block, { type: "folder" }>).header = false;
     setup(definition, (transport) => {
       const call = transport.call.bind(transport);
@@ -178,6 +202,7 @@ describe("folder block", () => {
   it.each([0, 1])("머리 없는 문서 모음 %i개에서도 끝 행으로 만들고 문서를 연다", async (count) => {
     let docs = count ? ["guide.md"] : [];
     const definition = storageFolderDefinition(false);
+    definition.requires.blocks = 15;
     (definition.ui as Extract<Block, { type: "folder" }>).header = false;
     const { store } = setup(definition, (transport) => {
       const call = transport.call.bind(transport);
@@ -499,6 +524,7 @@ describe("folder block", () => {
 
   it("hides the file-root header when explicitly disabled", async () => {
     const definition = fileFolderDefinition();
+    definition.requires.blocks = 15;
     (definition.ui as Extract<Block, { type: "folder" }> & { header: boolean }).header = false;
     setup(definition);
     await screen.findByRole("tree");
@@ -507,6 +533,7 @@ describe("folder block", () => {
 
   it.each([true, false])("ordinary tabs preserve the child folder collapse control (header=%s)", async (header) => {
     const definition = storageFolderDefinition();
+    definition.requires.blocks = 15;
     definition.ui = { type: "split", direction: "row", children: [
       { type: "tabs", header, tabs: [{ label: "문서 탭", child: definition.ui }] },
       { type: "text", value: "다른 패널" },

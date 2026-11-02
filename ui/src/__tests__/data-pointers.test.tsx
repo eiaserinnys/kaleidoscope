@@ -59,7 +59,7 @@ it("탭의 쉬는 포인터를 붙일 때 보내고 전환마다 한 번 갱신�
 
 it("방문한 탭은 숨겨 유지해 접힘 상태를 이어 간다", async () => {
   const definition: AppDefinition = {
-    id: "kept-tabs", name: "탭 유지 시험", requires: { blocks: 13, modules: {} }, permissions: [],
+    id: "kept-tabs", name: "탭 유지 시험", requires: { blocks: 15, modules: {} }, permissions: [],
     state: { selected: 0 },
     ui: { type: "tabs", keep_mounted: true, selected: { state: "selected" }, on_change: { set_state: "selected" }, tabs: [
       { label: "폴더", child: { type: "section", title: "폴더 상태", collapsible: true, child: { type: "text", value: "폴더 내용" } } },
@@ -87,7 +87,7 @@ it("방문한 탭은 숨겨 유지해 접힘 상태를 이어 간다", async () 
 
 it("탭이 분할 칸 접기를 맡고 접힌 패널을 유지하며 반대쪽 단추로 포커스를 옮긴다", async () => {
   const definition: AppDefinition = {
-    id: "collapsed-tabs", name: "접힌 탭 시험", requires: { blocks: 13, modules: {} }, permissions: [],
+    id: "collapsed-tabs", name: "접힌 탭 시험", requires: { blocks: 15, modules: {} }, permissions: [],
     state: { selected: 0 },
     ui: { type: "tabs", collapsible: true, selected: { state: "selected" }, tabs: [
       { label: "서버", child: { type: "text", value: "서버 내용" } },
@@ -128,7 +128,7 @@ it("탭이 분할 칸 접기를 맡고 접힌 패널을 유지하며 반대쪽 �
 
 it("머리 없는 탭은 분할 칸 접기 단추를 그리지 않는다", () => {
   const definition: AppDefinition = {
-    id: "headless-split-tabs", name: "머리 없는 분할 탭", requires: { blocks: 13, modules: {} }, permissions: [], state: {},
+    id: "headless-split-tabs", name: "머리 없는 분할 탭", requires: { blocks: 15, modules: {} }, permissions: [], state: {},
     ui: { type: "tabs", header: false, tabs: [
       { label: "내용", child: { type: "text", value: "내용" } },
     ] },
@@ -148,7 +148,7 @@ it("머리 없는 탭은 분할 칸 접기 단추를 그리지 않는다", () =>
 
 it("머리 없는 탭은 선택된 내용만 보이고 패널 이름을 제공한다", async () => {
   const definition: AppDefinition = {
-    id: "headless-tabs", name: "머리 없는 탭 시험", requires: { blocks: 13, modules: {} }, permissions: [],
+    id: "headless-tabs", name: "머리 없는 탭 시험", requires: { blocks: 15, modules: {} }, permissions: [],
     state: { selected: 1 },
     ui: { type: "tabs", header: false, selected: { state: "selected" }, tabs: [
       { label: "서버", child: { type: "text", value: "서버 내용" } },
