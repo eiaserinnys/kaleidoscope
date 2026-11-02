@@ -21,6 +21,9 @@ it("클라이언트 버튼 이름·아이콘과 색상 비활성 상태가 바�
   view.rerender(draw());
   expect(screen.getByRole("button", { name: "일시정지" }).querySelector("svg")).toBeTruthy();
   expect((screen.getByLabelText("배경") as HTMLInputElement).disabled).toBe(false);
+  runtime.values = { ...runtime.values, icon: "volume-2" };
+  view.rerender(draw());
+  expect(screen.getByRole("button", { name: "일시정지" }).querySelector("svg")).toBeNull();
 });
 
 it("라벨 입력과 묶음 선택지를 기존 선택기로 표시한다", () => {

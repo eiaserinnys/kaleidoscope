@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Block, SelectOption } from "../contract/contract";
+import { ICON_NAMES } from "../contract/limits";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import type { BlockContext } from "./block-context";
 import { useBinding, useWindowData } from "../data/window-data";
@@ -166,7 +167,7 @@ export function ButtonBlock({ block, pointer }: Props<"button">) {
   });
   const labelText = label.status === "ready" && typeof label.value === "string" ? label.value : "";
   const iconText = icon.status === "ready" && typeof icon.value === "string" ? icon.value : "";
-  const contents = <>{iconText ? <DataIcon name={iconText} /> : null}{!block.icon_only ? labelText : null}</>;
+  const contents = <>{(ICON_NAMES as readonly string[]).includes(iconText) ? <DataIcon name={iconText} /> : null}{!block.icon_only ? labelText : null}</>;
   const host = opener.current?.closest<HTMLElement>(".ks-data-window");
   return <span ref={opener} className={`ks-data-button is-${block.variant ?? "default"}`}>{block.icon_only
     ? <IconButton aria-label={labelText} disabled={busy || unavailable} onClick={() => block.confirm ? setConfirm(true) : void run(false)}>{contents}</IconButton>
