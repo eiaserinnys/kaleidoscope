@@ -11,6 +11,7 @@ import { flushShareViews } from "../share/share-view";
 import { HistoryAttachmentView, ImagePreview, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
 import { ChatComposer } from "./chat-composer";
 import { ChatHistory } from "./chat-history";
+import { useFrameCoalesced } from "./frame-coalesced";
 import { Select } from "../components/select-toggle";
 import { Dialog } from "../components/dialog";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -59,6 +60,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const [busy, setBusy] = useState(false);
   const [tool, setTool] = useState<string | null>(null);
   const [delta, setDelta] = useState("");
+  const coalescedDelta = useFrameCoalesced(setDelta);
   const shareRef = useRef<HTMLElement>(null);
   useShareDescriber(shareRef, () => ({ text: "[채팅]", visual: false }));
   const historyRef = useRef<HTMLDivElement>(null);
@@ -100,6 +102,12 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   }, []);
 
   const applyConversation = useCallback((update: ConversationEvent) => {
+    if (update.kind === "text") {
+      streamId.current = update.stream_id;
+      coalescedDelta.schedule(update.text);
+      return;
+    }
+    coalescedDelta.flush();
     if (update.kind === "snapshot") {
       setItems((current) => uniqueItems([...current, ...update.snapshot.items]));
       acknowledge(update.snapshot.items);
@@ -111,15 +119,12 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       setItems((current) => uniqueItems([...current, update.item]));
       acknowledge([update.item]);
       if (update.item.kind === "assistant") { streamId.current = null; setDelta(""); }
-    } else if (update.kind === "text") {
-      streamId.current = update.stream_id;
-      setDelta(update.text);
     } else {
       setBusy(update.busy);
       setTool(update.tool);
       if (!update.busy) { streamId.current = null; setDelta(""); }
     }
-  }, [acknowledge]);
+  }, [acknowledge, coalescedDelta]);
 
   const restoreDraft = useCallback((id: string, text: string, uploads: ConversationUpload[], failed: boolean) => {
     if (retryDraft.current?.id === id) {
@@ -165,7 +170,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
           setSelectedProfile(reply.start.profile);
           setSelectedPreset(reply.start.model ?? "");
         }
-        if (!sameThread) { setBusy(false); setTool(null); setDelta(""); }
+        if (!sameThread) { coalescedDelta.cancel(); setBusy(false); setTool(null); setDelta(""); }
         conversationQueue.current = null;
         events.forEach((event) => {
           if (event.event === "conversation.update" && event.thread_id === threadId.current) applyConversation(event.update);
@@ -181,7 +186,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         setLoading(false);
       }
     }
-  }, [acknowledge, applyConversation, connected, context.store, workspaceId, hasProvider, windowId, appVersion, handleError]);
+  }, [acknowledge, applyConversation, connected, context.store, workspaceId, hasProvider, windowId, appVersion, handleError, coalescedDelta]);
 
   useEffect(() => {
     void load();

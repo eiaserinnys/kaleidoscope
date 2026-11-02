@@ -11,6 +11,19 @@ import type { AppDefinition, CoreEvent, CoreReply, CoreRequest, ConversationItem
 import type { ShellStore } from "../core/shell-store";
 import { makeTestSnapshot } from "./fixtures";
 
+const markdownRenderCount = vi.hoisted(() => ({ value: 0 }));
+vi.mock("react-markdown", async () => {
+  const React = await import("react");
+  const actual = await vi.importActual<typeof import("react-markdown")>("react-markdown");
+  return {
+    ...actual,
+    default: (props: React.ComponentProps<typeof actual.default>) => {
+      markdownRenderCount.value += 1;
+      return React.createElement(actual.default, props);
+    },
+  };
+});
+
 const definition: AppDefinition = {
   id: "provider-chat", name: "대화", requires: { blocks: 2, modules: { agent: 3 } }, permissions: [], state: {}, ui: { type: "chat" },
   agent: { protocol: "conversation-v1", permission: "login", base_path: "api", namespace: "n", profile: "p", collection: "c", model_order: [], selected_model: "", title_template: "", initial_instruction_template: "", instructions_template: "", thread_entry: "thread" },
@@ -36,15 +49,57 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
   const store = { call, getSnapshot: () => snapshot, getError: () => null, subscribe: () => () => {}, subscribeEvents: (fn: (event: CoreEvent) => void) => { listeners.add(fn); return () => listeners.delete(fn); }, ready: Promise.resolve(), dispose: () => {} } as unknown as ShellStore;
   const window = snapshot.shared.windows[0];
   const context = { store, snapshot, window, definition: appDefinition };
-  render(<WindowDataProvider store={store} appWindow={window} definition={appDefinition}><AgentChatBlock block={{ type: "chat" }} context={context} /></WindowDataProvider>);
-  return { call, window, emit: (event: CoreEvent) => act(() => { listeners.forEach((fn) => fn(event)); }) };
+  const view = render(<WindowDataProvider store={store} appWindow={window} definition={appDefinition}><AgentChatBlock block={{ type: "chat" }} context={context} /></WindowDataProvider>);
+  return {
+    call,
+    window,
+    emit: (event: CoreEvent) => act(() => { listeners.forEach((fn) => fn(event)); }),
+    rerenderSnapshot: () => {
+      const nextWindow = { ...window, state: { ...window.state, changed_by_other_window: true } };
+      const nextSnapshot = { ...snapshot, shared: { ...snapshot.shared } };
+      view.rerender(<WindowDataProvider store={store} appWindow={nextWindow} definition={appDefinition}><AgentChatBlock block={{ type: "chat" }} context={{ ...context, snapshot: nextSnapshot, window: nextWindow }} /></WindowDataProvider>);
+    },
+  };
 }
 const get = (value: ConversationThread | null = thread, profile = "profile-a"): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles, start: { profile, model: "m" } });
 const error = (code: string) => ({ code, message: "실패", details: [] });
 beforeEach(() => { vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null as unknown as CanvasRenderingContext2D); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+async function setupMarkdownRenderCounter() {
+  const items = Array.from({ length: 24 }, (_, index) => item(`markdown-${index}`, `기록 ${index}`));
+  const state = setup(async (request) => request.op === "conversation.get" ? { ...get(), items } : (() => { throw new Error(request.op); })());
+  await waitFor(() => expect(markdownRenderCount.value).toBe(items.length));
+  markdownRenderCount.value = 0;
+  return state;
+}
+
 describe("대화 제공자 화면", () => {
+  it("입력 한 글자는 이미 표시한 대화를 다시 파싱하지 않는다", async () => {
+    await setupMarkdownRenderCounter();
+    fireEvent.change(await screen.findByRole("textbox", { name: "메시지" }), { target: { value: "가" } });
+    expect(markdownRenderCount.value).toBe(0);
+  });
+  it("다른 창의 snapshot 변경은 이미 표시한 대화를 다시 파싱하지 않는다", async () => {
+    const state = await setupMarkdownRenderCounter();
+    state.rerenderSnapshot();
+    expect(markdownRenderCount.value).toBe(0);
+  });
+  it("text update 한 번은 진행 글만 파싱한다", async () => {
+    const state = await setupMarkdownRenderCounter();
+    state.emit({ event: "conversation.update", thread_id: "thread-1", update: { kind: "text", stream_id: "stream-1", text: "새 진행 글" } });
+    await waitFor(() => expect(markdownRenderCount.value).toBe(1));
+    expect(markdownRenderCount.value).toBe(1);
+  });
+  it("같은 프레임의 text 뒤에 답이 끝나면 진행 글이 남지 않는다", async () => {
+    const state = setup(async (request) => request.op === "conversation.get" ? get() : (() => { throw new Error(request.op); })());
+    await screen.findByText("기록");
+    state.emit({ event: "conversation.update", thread_id: "thread-1", update: { kind: "text", stream_id: "stream-1", text: "보류할 진행문" } });
+    state.emit({ event: "conversation.update", thread_id: "thread-1", update: { kind: "item", item: item("2", "완료된 답") } });
+    expect(await screen.findByText("완료된 답")).toBeTruthy();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+    expect(screen.queryByText("보류할 진행문")).toBeNull();
+  });
   it("기존 앱에 제공자가 없으면 빈 상태를 보이고 대화 요청을 보내지 않는다", () => {
     const legacy: AppDefinition = { ...definition, agent: undefined };
     const state = setup(async (request) => { throw new Error(request.op); }, legacy);
@@ -63,7 +118,7 @@ describe("대화 제공자 화면", () => {
     state.emit({ event: "conversation.update", thread_id: "thread-1", update: { kind: "text", stream_id: "s", text: "진행" } });
     state.emit({ event: "conversation.update", thread_id: "thread-1", update: { kind: "text", stream_id: "s", text: "진행 중" } });
     state.emit({ event: "conversation.update", thread_id: "other-thread", update: { kind: "text", stream_id: "other", text: "다른 대화" } });
-    expect(screen.getByText("진행 중")).toBeTruthy();
+    expect(await screen.findByText("진행 중")).toBeTruthy();
     expect(screen.queryByText("다른 대화")).toBeNull();
     expect(screen.queryByText("진행진행 중")).toBeNull();
     state.emit({ event: "conversation.update", thread_id: "thread-1", update: { kind: "item", item: item("1", "기록") } });

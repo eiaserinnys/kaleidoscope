@@ -24,6 +24,7 @@ import { dataViewsApp } from "./data-views-app";
 import { dataLayoutApp } from "./data-layout-app";
 import pluginsDocument from "./fixtures/create-plugins.txt?raw";
 import { exposeDocsHarness, galleryForDocs } from "./docs-media-test";
+import { makeLongConversation } from "./chat-long-history";
 
 const mdEditor = mdEditorJson as AppDefinition;
 const htmlReport = htmlReportJson as AppDefinition;
@@ -41,6 +42,8 @@ const storageDocument: AppDefinition = {
 const galleryParams = new URLSearchParams(window.location.search);
 const gallery = galleryForDocs(galleryJson as AppDefinition, galleryParams.has("long-log"), galleryParams.has("crop-image"), galleryParams.has("video-controls"));
 const conversationMode = new URLSearchParams(window.location.search).get("conversation");
+const historyParam = new URLSearchParams(window.location.search).get("history");
+const historyCount = historyParam !== null && Number.isInteger(Number(historyParam)) && Number(historyParam) >= 0 ? Number(historyParam) : null;
 if (conversationMode) workspacePas.agent = {
   protocol: "conversation-v1", permission: "conversation", base_path: "api", namespace: "test", profile: "test", collection: "test", model_order: [], selected_model: "", title_template: "", initial_instruction_template: "", instructions_template: "", thread_entry: "thread",
 };
@@ -218,7 +221,7 @@ const fakeTransport = createFakeTransport({
   folder: { root_path: "/fake/docs", root_name: "문서" },
   conversation: conversationMode || pasMode ? {
     thread: conversationMode === "start" || conversationMode === "login-start" || pasMode === "empty" ? null : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false },
-    items: [{ id: "1", kind: "assistant", text: "기존 기록", at: timestamp, attachments: [] }],
+    items: historyCount === null ? [{ id: "1", kind: "assistant", text: "기존 기록", at: timestamp, attachments: [] }] : makeLongConversation(historyCount),
     olderPages: [[{ id: "0", kind: "user", text: "이전 기록", at: timestamp, attachments: [] }], [{ id: "older", kind: "assistant", text: "더 이전 기록", at: timestamp, attachments: [] }]],
     profiles: [{ id: "profile-a", label: "서소영", available: true }, { id: "profile-b", label: "키키", available: true }],
     start: { profile: "profile-a", model: "sol" },
@@ -227,7 +230,7 @@ const fakeTransport = createFakeTransport({
       { id: "sol", label: "Sol", available: true, group: { id: "eiaserinnys", label: "eiaserinnys" } },
       { id: "n1:eias-linegames:argon", label: "Argon", available: true, group: { id: "eias-linegames", label: "eias-linegames" } },
     ],
-    loginRequired: conversationMode === "login" || conversationMode === "login-start", conflict: conversationMode === "conflict", delayMs: pasMode === "loading" ? 5000 : conversationMode ? 350 : 0,
+    loginRequired: conversationMode === "login" || conversationMode === "login-start", conflict: conversationMode === "conflict", delayMs: pasMode === "loading" ? 5000 : historyCount !== null ? 0 : conversationMode ? 350 : 0,
     getError: pasMode === "load-error" ? "작업 PAS를 불러오지 못했습니다" : undefined,
     sendError: pasMode === "send-error" ? "메시지를 보내지 못했습니다" : undefined,
     sendDelayMs: Number(params.get("send-delay")) || undefined,
@@ -253,7 +256,21 @@ const transport = coreUrl ? createHttpTransport(coreUrl) : fakeTransport;
 const store = createShellStore(transport);
 if (!coreUrl) {
   exposeDocsHarness(fakeTransport, store);
-  Object.assign(window, { conversationHarness: { emit: fakeTransport.emit, calls: fakeTransport.getCalls } });
+  Object.assign(window, { conversationHarness: {
+    emit: fakeTransport.emit,
+    calls: fakeTransport.getCalls,
+    emitText: (text: string) => fakeTransport.emit({ event: "conversation.update", thread_id: "fake-thread", update: { kind: "text", stream_id: "perf-stream", text } }),
+    setBusy: (busy: boolean) => fakeTransport.emit({ event: "conversation.update", thread_id: "fake-thread", update: { kind: "activity", busy, tool: null } }),
+    moveOtherWindow: () => {
+      const snapshot = store.getSnapshot();
+      if (!snapshot) throw new Error("하네스 상태가 아직 준비되지 않았습니다");
+      const z = snapshot.shared.windows.find((item) => item.id === "editor-window")?.z ?? 0;
+      fakeTransport.emit({ event: "state.changed", snapshot: {
+        ...snapshot,
+        shared: { ...snapshot.shared, windows: snapshot.shared.windows.map((item) => item.id === "editor-window" ? { ...item, z: z === 1 ? 2 : 1 } : item) },
+      } });
+    },
+  } });
 }
 
 function Harness() {

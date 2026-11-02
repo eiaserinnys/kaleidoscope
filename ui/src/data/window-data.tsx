@@ -117,21 +117,24 @@ export class WindowData {
 }
 
 const DataContext = createContext<{ data: WindowData; state: AppWindow["state"] } | null>(null);
+const WindowDataContext = createContext<WindowData | null>(null);
 
 export function WindowDataProvider({ store, appWindow, definition, children }: { store: ShellStore; appWindow: AppWindow; definition: AppDefinition; children: ReactNode }) {
   const data = useMemo(() => new WindowData(store, appWindow.id, definition), [store, appWindow.id, appWindow.app_version]);
   useEffect(() => data.mount(), [data]);
-  return <DataContext.Provider value={{ data, state: appWindow.state }}>{children}</DataContext.Provider>;
+  return <WindowDataContext.Provider value={data}>
+    <DataContext.Provider value={{ data, state: appWindow.state }}>{children}</DataContext.Provider>
+  </WindowDataContext.Provider>;
 }
 
 export function useWindowData(): WindowData {
-  const value = useContext(DataContext);
+  const value = useContext(WindowDataContext);
   if (!value) throw new Error("창 데이터가 연결되지 않았습니다");
-  return value.data;
+  return value;
 }
 
 export function useOptionalWindowData(): WindowData | null {
-  return useContext(DataContext)?.data ?? null;
+  return useContext(WindowDataContext);
 }
 
 export function useBinding(pointer: string, binding: Binding): BindingValue {
