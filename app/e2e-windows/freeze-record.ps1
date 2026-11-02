@@ -49,17 +49,23 @@ public class FreezeRecorder {
    return text;
   } catch(Exception) { return null; }
  }
- public static int ProtectedDiff(byte[] a,byte[] b,string json) {
+ // 창 테두리 재래스터 안티앨리어싱의 실측 최대 채널 차이는 4/255다.
+ const int ProtectedThreshold=8;
+ public static int[] ProtectedDiff(byte[] a,byte[] b,string json) {
   int width=GetSystemMetrics(0),height=GetSystemMetrics(1);
   int left=Math.Max(0,Read(json,"client_x")),top=Math.Max(0,Read(json,"client_y"));
   int right=Math.Min(width,left+Read(json,"client_width")),bottom=Math.Min(height,top+Read(json,"client_height"));
   int ex=Read(json,"exclude_x"),ey=Read(json,"exclude_y"),er=ex+Read(json,"exclude_width"),eb=ey+Read(json,"exclude_height");
-  int n=0;
+  int n=0,raw=0,maxDelta=0;
   for(int y=top;y<bottom;y++) for(int x=left;x<right;x++) {
    if(x>=ex&&x<er&&y>=ey&&y<eb) continue;
-   int i=(y*width+x)*4; if(a[i]!=b[i]||a[i+1]!=b[i+1]||a[i+2]!=b[i+2]) n++;
+   int i=(y*width+x)*4;
+   int delta=Math.Max(Math.Abs((int)a[i]-b[i]),Math.Max(Math.Abs((int)a[i+1]-b[i+1]),Math.Abs((int)a[i+2]-b[i+2])));
+   if(delta>0) raw++;
+   if(delta>ProtectedThreshold) n++;
+   maxDelta=Math.Max(maxDelta,delta);
   }
-  return n;
+  return new[]{n,raw,maxDelta};
  }
  public static void HideConsole() { ShowWindow(GetConsoleWindow(),0); }
 }
@@ -82,7 +88,18 @@ if ($SelfTest) {
     if ($null -ne [FreezeRecorder]::ReadProtection($testPath)) { throw '미완성 영역 읽기 실패' }
     [IO.File]::WriteAllText($testPath, '{"client_x":1,"client_y":2,"client_width":3,"client_height":4,"exclude_x":5,"exclude_y":6,"exclude_width":7,"exclude_height":8}')
     if ($null -eq [FreezeRecorder]::ReadProtection($testPath)) { throw '완성된 영역 읽기 실패' }
-    Write-Output 'recorder state self-test passed'
+    $width = [FreezeRecorder]::GetSystemMetrics(0)
+    $height = [FreezeRecorder]::GetSystemMetrics(1)
+    $reference = [byte[]]::new($width * $height * 4)
+    $changed = [byte[]]::new($reference.Length)
+    $changed[0] = 4
+    $changed[4] = 8
+    $changed[8] = 9
+    $changed[12] = 255
+    $testRegion = '{"client_x":0,"client_y":0,"client_width":4,"client_height":1,"exclude_x":3,"exclude_y":0,"exclude_width":1,"exclude_height":1}'
+    $measured = [FreezeRecorder]::ProtectedDiff($reference, $changed, $testRegion)
+    if ($measured[0] -ne 1 -or $measured[1] -ne 3 -or $measured[2] -ne 9) { throw "보호 영역 차이 판정 실패: $measured" }
+    Write-Output 'recorder state and pixel self-test passed'
   } finally { [IO.File]::Delete($testPath) }
   exit 0
 }
@@ -107,7 +124,7 @@ while ($null -eq $phase -or $null -eq $protection) {
 $baseline = [FreezeRecorder]::Frame((Join-Path $Out "phase-$phase-baseline.png"))
 $clock = [System.Diagnostics.Stopwatch]::StartNew()
 $rows = [System.Collections.Generic.List[string]]::new()
-$rows.Add('index,ms,different_pixels,protected_pixels,phase')
+$rows.Add('index,ms,different_pixels,protected_pixels,protected_raw_pixels,protected_max_delta,phase')
 [System.IO.File]::WriteAllText((Join-Path $Out 'record.ready'), '')
 [System.IO.File]::WriteAllText((Join-Path $Out "phase-$phase.ready"), '')
 $index = 0
@@ -127,7 +144,7 @@ while (-not (Test-Path (Join-Path $Out 'record.stop')) -and $clock.Elapsed.Total
   $diff = [FreezeRecorder]::Diff($baseline, $frame)
   $protected = [FreezeRecorder]::ProtectedDiff($baseline, $frame, $protection)
   $ms = $clock.Elapsed.TotalMilliseconds
-  $rows.Add([string]::Format([Globalization.CultureInfo]::InvariantCulture,'{0},{1:F3},{2},{3},{4}',$index,$ms,$diff,$protected,$phase))
+  $rows.Add([string]::Format([Globalization.CultureInfo]::InvariantCulture,'{0},{1:F3},{2},{3},{4},{5},{6}',$index,$ms,$diff,$protected[0],$protected[1],$protected[2],$phase))
   if (-not $phaseSamples.ContainsKey($phase)) { $phaseSamples[$phase] = 0 }
   $phaseSamples[$phase]++
   $index++

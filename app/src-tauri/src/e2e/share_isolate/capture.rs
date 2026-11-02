@@ -360,10 +360,11 @@ pub(super) fn wait_for_recorder(out: &Path, log: &mut File) -> Result<(), String
     ];
     let mut max_protected_pixels = 0usize;
     let mut phases = BTreeMap::<String, usize>::new();
+    let mut phase_peaks = BTreeMap::<String, (usize, usize, usize)>::new();
     let mut phase_elapsed = BTreeMap::<String, (f64, f64)>::new();
     for row in &rows {
         let columns = row.split(',').collect::<Vec<_>>();
-        if columns.len() != 5 {
+        if columns.len() != 7 {
             return Err(format!("invalid screen recorder row: {row}"));
         }
         let elapsed = columns[1]
@@ -372,7 +373,21 @@ pub(super) fn wait_for_recorder(out: &Path, log: &mut File) -> Result<(), String
         let protected = columns[3]
             .parse::<usize>()
             .map_err(|error| error.to_string())?;
-        let phase = columns[4].to_owned();
+        let raw = columns[4]
+            .parse::<usize>()
+            .map_err(|error| error.to_string())?;
+        let max_delta = columns[5]
+            .parse::<usize>()
+            .map_err(|error| error.to_string())?;
+        let phase = columns[6].to_owned();
+        phase_peaks
+            .entry(phase.clone())
+            .and_modify(|peak| {
+                peak.0 = peak.0.max(protected);
+                peak.1 = peak.1.max(raw);
+                peak.2 = peak.2.max(max_delta);
+            })
+            .or_insert((protected, raw, max_delta));
         if measured_phases.contains(&phase.as_str()) {
             max_protected_pixels = max_protected_pixels.max(protected);
         }
@@ -387,10 +402,13 @@ pub(super) fn wait_for_recorder(out: &Path, log: &mut File) -> Result<(), String
         .filter(|phase| !phases.contains_key(**phase))
         .copied()
         .collect::<Vec<_>>();
+    let phase_peaks = phase_peaks.into_iter().map(|(phase, (protected, raw, max_delta))| {
+        (phase, json!({"protected_pixels":protected,"protected_raw_pixels":raw,"protected_max_delta":max_delta}))
+    }).collect::<BTreeMap<_, _>>();
     record(
         log,
         "screen.recording",
-        json!({"frames":rows.len(),"average_interval_ms":average_interval_ms,"phase_frames":phases,"max_protected_pixels":max_protected_pixels,"missing_phases":missing,"csv":"screen-frames.csv"}),
+        json!({"frames":rows.len(),"average_interval_ms":average_interval_ms,"phase_frames":phases,"phase_peaks":phase_peaks,"max_protected_pixels":max_protected_pixels,"missing_phases":missing,"csv":"screen-frames.csv"}),
     )?;
     if !missing.is_empty() {
         return Err(format!("screen recorder missed phases: {missing:?}"));
@@ -401,7 +419,7 @@ pub(super) fn wait_for_recorder(out: &Path, log: &mut File) -> Result<(), String
             .filter(|(phase, _)| measured_phases.contains(&phase.as_str()))
             .filter_map(|(phase, _)| {
                 rows.iter()
-                    .filter(|row| row.split(',').nth(4) == Some(phase.as_str()))
+                    .filter(|row| row.split(',').nth(6) == Some(phase.as_str()))
                     .any(|row| {
                         row.split(',')
                             .nth(3)
@@ -428,3 +446,7 @@ pub(super) fn wait_for_recorder(out: &Path, log: &mut File) -> Result<(), String
         json!({"frames":rows.len(),"average_interval_ms":average_interval_ms,"csv":"screen-frames.csv"}),
     )
 }
+
+#[cfg(test)]
+#[path = "capture_tests.rs"]
+mod tests;
