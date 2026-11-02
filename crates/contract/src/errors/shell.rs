@@ -108,7 +108,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "창의 캔버스 표면 등록",
         cause: "같은 창에서 이미 사용 중인 표면 이름을 다시 사용했다",
-        message: "표면 {id}은 이 창에서 이미 사용 중입니다. 캔버스마다 다른 이름을 지정하세요.",
+        message: "중복 표면 이름 {id}: 이 창에서 이미 사용 중입니다. 캔버스마다 다른 이름을 지정하세요.",
         fix: "캔버스마다 유일한 이름을 지정하세요"
     }
     SHELL_MARKDOWN_VALUE_NOT_TEXT() {
@@ -241,7 +241,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "앱 클라이언트 명령 실행",
         cause: "앱이 선언하지 않은 명령을 요청했다",
-        message: "앱 명령 {name}이 앱 정의에 없습니다. 앱 정의에 명령을 선언하세요.",
+        message: "앱 명령 {name}: 앱 정의에 없습니다. 앱 정의에 명령을 선언하세요.",
         fix: "앱 정의에 해당 명령을 선언하세요"
     }
     SHELL_CLIENT_SAVE_PROMPT_INPUT_INVALID() {
@@ -325,7 +325,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "앱 자산 읽기",
         cause: "앱이 정의에 없는 자산을 요청했다",
-        message: "앱 자산 {asset_id}이 앱 정의에 없습니다. 앱 정의의 자산 목록을 확인하세요.",
+        message: "앱 자산 {asset_id}: 앱 정의에 없습니다. 앱 정의의 자산 목록을 확인하세요.",
         fix: "앱 정의에 해당 자산을 추가하세요"
     }
     SHELL_CLIENT_HTTP_TRANSPORT_UNAVAILABLE() {
@@ -367,14 +367,14 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "앱 클라이언트 출력 JSON 변환",
         cause: "출력값을 JSON으로 바꿀 수 없다",
-        message: "앱 출력 {name}을 JSON으로 읽을 수 없습니다. 출력값을 JSON으로 바꾼 뒤 다시 보내세요.",
+        message: "앱 출력 {name}: JSON으로 읽을 수 없습니다. 출력값을 JSON으로 바꾼 뒤 다시 보내세요.",
         fix: "앱 출력값을 JSON으로 바꾸세요"
     }
     SHELL_CLIENT_OUTPUT_TOO_LARGE(name, max_bytes) {
         class: InvalidRequest,
         place: "앱 클라이언트 출력 크기 확인",
         cause: "출력 JSON이 허용 크기를 넘었다",
-        message: "앱 출력 {name}이 {max_bytes}바이트를 넘어 전달하지 못했습니다. 출력 크기를 줄이세요.",
+        message: "앱 출력 {name}: {max_bytes}바이트를 넘어 전달하지 못했습니다. 출력 크기를 줄이세요.",
         fix: "앱 출력 크기를 줄이세요"
     }
     SHELL_CLIENT_ACTION_FAILED(reason) {
@@ -388,21 +388,21 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱에 파일 전달",
         cause: "고른 파일이 앱 전달 한도를 넘었다",
-        message: "파일 {name}은 {max_bytes}바이트보다 커 앱에 전달할 수 없습니다. 더 작은 파일을 선택하세요.",
+        message: "파일 크기 초과: {name}. 앱에 전달할 수 있는 크기는 {max_bytes}바이트까지입니다. 더 작은 파일을 선택하세요.",
         fix: "더 작은 파일을 선택하세요"
     }
     SHELL_CLIENT_FILE_NOT_FOUND(file_id) {
         class: Io,
         place: "앱이 고른 파일 읽기",
         cause: "현재 앱 창에서 파일을 찾을 수 없다",
-        message: "파일 {file_id}을 이 앱 창에서 찾을 수 없습니다. 파일을 다시 고르세요.",
+        message: "파일 식별자 {file_id}: 이 앱 창에서 찾을 수 없습니다. 파일을 다시 고르세요.",
         fix: "파일을 다시 고르세요"
     }
     SHELL_CLIENT_FILE_READ_TOO_LARGE(name, max_bytes) {
         class: Io,
         place: "앱이 고른 파일 읽기",
         cause: "파일 크기가 앱 전달 한도를 넘었다",
-        message: "파일 {name}은 {max_bytes}바이트보다 커 앱에 전달할 수 없습니다. 더 작은 파일을 선택하세요.",
+        message: "파일 크기 초과: {name}. 앱에 전달할 수 있는 크기는 {max_bytes}바이트까지입니다. 더 작은 파일을 선택하세요.",
         fix: "더 작은 파일을 선택하세요"
     }
     SHELL_CLIENT_FILE_WRITE_TARGET_MISSING() {
@@ -416,7 +416,7 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱 파일 내보내기 쓰기",
         cause: "파일을 쓸 위치가 0 이상의 정수가 아니다",
-        message: "파일을 쓸 위치 {offset}이 올바르지 않습니다. 앱에서 위치를 다시 지정하세요.",
+        message: "파일 쓰기 위치 {offset}: 올바른 0 이상의 정수가 아닙니다. 앱에서 위치를 다시 지정하세요.",
         fix: "앱에서 0 이상의 정수 위치를 지정하세요"
     }
     SHELL_CLIENT_FILE_WRITE_TOO_LARGE() {
@@ -465,7 +465,7 @@ error_catalog! { ENTRIES;
         class: PermissionDenied,
         place: "앱 저장 항목 접근",
         cause: "앱이 정의에 없는 저장 항목을 요청했다",
-        message: "저장 항목 {entry}이 앱 정의에 없어 접근할 수 없습니다. 앱 정의의 저장 항목을 확인하세요.",
+        message: "저장 항목 {entry}: 앱 정의에 없어 접근할 수 없습니다. 앱 정의의 저장 항목을 확인하세요.",
         fix: "앱 정의에 해당 저장 항목을 선언하세요"
     }
     SHELL_CLIENT_SAVE_PROMPT_ACTION_REQUIRED() {
@@ -493,7 +493,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "대화 첨부 추가",
         cause: "고른 첨부 파일이 크기 제한을 넘었다",
-        message: "첨부 파일 {name}은 {max_bytes}바이트보다 커 보낼 수 없습니다. 작은 파일을 고르세요.",
+        message: "첨부 파일 크기 초과: {name}. 보낼 수 있는 크기는 {max_bytes}바이트까지입니다. 작은 파일을 고르세요.",
         fix: "작은 파일을 고르세요"
     }
     SHELL_CHAT_ATTACHMENT_TOTAL_TOO_LARGE(max_bytes) {
