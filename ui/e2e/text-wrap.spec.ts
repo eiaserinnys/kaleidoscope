@@ -1,9 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mkdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 
-const shots = "/home/eias/workspace/.local/tmp/card908/shots";
 const fixture = new URL("../harness/fixtures/text-wrap.md", import.meta.url);
-const phase = process.env.KS_WRAP_PHASE ?? "after";
 
 async function openChat(page: Page, width: number) {
   await page.setViewportSize({ width: width + 32, height: 732 });
@@ -17,9 +15,7 @@ async function openChat(page: Page, width: number) {
 }
 
 test("대화 글은 1100과 360 폭 안에서 줄바꿈하고 코드 들여쓰기와 복사를 보존한다", async ({ page }) => {
-  await mkdir(shots, { recursive: true });
   const source = await readFile(fixture, "utf8");
-  const codeOverflow: string[] = [];
 
   for (const width of [1100, 360]) {
     const { history } = await openChat(page, width);
@@ -30,12 +26,27 @@ test("대화 글은 1100과 360 폭 안에서 줄바꿈하고 코드 들여쓰�
     const pre = answer.locator("pre");
     await expect(pre).toBeVisible();
     await page.evaluate(() => document.fonts.ready.then(() => undefined));
-    await answer.screenshot({ path: `${shots}/${width}-${phase}.png` });
 
     const dimensions = await history.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
-    const codeDimensions = await pre.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
-    if (codeDimensions.scrollWidth > codeDimensions.clientWidth) codeOverflow.push(`${width}: ${codeDimensions.scrollWidth}/${codeDimensions.clientWidth}`);
+    const codeLayout = await pre.evaluate((element) => {
+      const styles = getComputedStyle(element);
+      const lines = [...element.querySelectorAll<HTMLElement>(".ks-code-line")];
+      const lineHeights = lines.map((line) => line.getBoundingClientRect().height);
+      const padding = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
+      const border = Number.parseFloat(styles.borderTopWidth) + Number.parseFloat(styles.borderBottomWidth);
+      return {
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+        height: element.getBoundingClientRect().height,
+        expectedHeight: lineHeights.reduce((sum, height) => sum + height, 0) + padding + border,
+        blankLineHeights: lines.filter((line) => line.textContent === "\n").map((line) => line.getBoundingClientRect().height),
+      };
+    });
+    expect(codeLayout.scrollWidth).toBeLessThanOrEqual(codeLayout.clientWidth);
+    expect(Math.abs(codeLayout.height - codeLayout.expectedHeight)).toBeLessThanOrEqual(1);
+    expect(codeLayout.blankLineHeights.length).toBeGreaterThan(0);
+    for (const height of codeLayout.blankLineHeights) expect(height).toBeGreaterThan(0);
     const overflowing = await answer.evaluate((element) => {
       const historyElement = element.closest("[role=log]")!;
       const right = historyElement.getBoundingClientRect().right - Number.parseFloat(getComputedStyle(historyElement).paddingRight || "0");
@@ -43,9 +54,9 @@ test("대화 글은 1100과 360 폭 안에서 줄바꿈하고 코드 들여쓰�
         .filter((child) => child.getBoundingClientRect().right > right + 1)
         .map((child) => child.tagName.toLowerCase());
     });
-    if (overflowing.length) codeOverflow.push(`${width}: overflowing ${overflowing.join(",")}`);
+    expect(overflowing).toEqual([]);
 
-    if (width === 360 && phase !== "before") {
+    if (width === 360) {
       const hanging = await pre.locator(".ks-code-line").evaluateAll((elements) => {
         const line = elements.find((element) => element.textContent?.includes("두 번째 단계도"));
         if (!line) return null;
@@ -65,20 +76,19 @@ test("대화 글은 1100과 360 폭 안에서 줄바꿈하고 코드 들여쓰�
       });
       expect(hanging?.length).toBeGreaterThan(1);
       expect(Math.max(...(hanging ?? [])) - Math.min(...(hanging ?? []))).toBeLessThanOrEqual(1);
-
-      const originalCode = await pre.evaluate((element) => element.textContent);
-      await pre.evaluate((element) => {
-        const selection = window.getSelection()!;
-        const range = document.createRange();
-        range.selectNodeContents(element);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      });
-      const copiedCode = await page.evaluate(() => window.getSelection()?.toString());
-      expect(copiedCode).toBe(originalCode);
     }
+
+    const originalCode = await pre.evaluate((element) => element.textContent);
+    await pre.evaluate((element) => {
+      const selection = window.getSelection()!;
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    const copiedCode = await page.evaluate(() => window.getSelection()?.toString());
+    expect(copiedCode).toBe(originalCode);
   }
-  expect(codeOverflow).toEqual([]);
 });
 
 test("긴 사용자 말, 알림, 오류와 도구 이름이 360 폭 기록 안에 든다", async ({ page }) => {
