@@ -144,6 +144,8 @@ pub(super) fn scenario(
         .map_err(|e| e.to_string())?;
     record(log,"environment",ui(app,"const gl=window.spikeGL,ext=gl?.getExtension('WEBGL_debug_renderer_info');return {ua:navigator.userAgent,dpr:devicePixelRatio,width:innerWidth,height:innerHeight,webgl:!!gl,renderer:ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):null};")?)?;
     ui(app,"const i=document.querySelector('#spikeInput');i.value='selection';i.focus();i.setSelectionRange(2,5);return true;")?;
+    frames(app, 2)?;
+    fs::write(out.join("record.phase"), b"setup").map_err(|e| e.to_string())?;
     fs::write(out.join("record.request"), b"").map_err(|e| e.to_string())?;
     let deadline = Instant::now() + Duration::from_secs(30);
     while !out.join("record.ready").exists() {
@@ -159,6 +161,8 @@ pub(super) fn scenario(
             for count in [1, 2] {
                 for wait in [1, 2] {
                     let tag = format!("c{count}-f{wait}-d{flushes}-{mode}");
+                    fs::write(out.join("record.phase"), tag.as_bytes())
+                        .map_err(|e| e.to_string())?;
                     let total = Instant::now();
                     record(log,"focus.before",ui(app,"const i=document.querySelector('#spikeInput');i.focus();i.value='selection';i.setSelectionRange(2,5);window.spikeFocused=document.activeElement;return {active:document.activeElement?.id,selection:[i.selectionStart,i.selectionEnd]};")?)?;
                     let before = on_ui(app, |_| native::foreground())?;
@@ -203,6 +207,7 @@ pub(super) fn scenario(
             }
         }
     }
+    fs::write(out.join("record.phase"), b"minimized").map_err(|e| e.to_string())?;
     on_ui(app, |h| native::begin(h, 5000))??;
     ui(
         app,
@@ -240,6 +245,7 @@ pub(super) fn scenario(
         native::flush();
         native::end();
     })?;
+    fs::write(out.join("record.phase"), b"retained").map_err(|e| e.to_string())?;
     // hidden의 display:none 대신 레이아웃을 유지한 최소화 대안을 같은 iframe에서 비교한다.
     on_ui(app, |h| native::begin(h, 5000))??;
     ui(app,"window.spikeHide(document.querySelector('#spikeB'),true);window.spikeA.hidden=false;window.spikeA.style.setProperty('display','flex','important');window.spikeA.style.visibility='';window.spikeA.style.opacity='1';window.spikeC.style.opacity='0';window.spikeA.querySelector('iframe').contentWindow.postMessage({type:'ks-html-focus-comment',id:'bottom',comments:[{id:'bottom',selector:'#bottom'}]},'*');return true;")?;
@@ -261,6 +267,7 @@ pub(super) fn scenario(
         native::flush();
         native::end();
     })?;
+    fs::write(out.join("record.phase"), b"timer").map_err(|e| e.to_string())?;
     let t = Instant::now();
     on_ui(app, |h| native::begin(h, 700))??;
     while on_ui(app, |_| native::active())? && t.elapsed() < Duration::from_secs(3) {
@@ -272,6 +279,7 @@ pub(super) fn scenario(
         json!({"elapsed_ms":t.elapsed().as_millis(),"still_active":on_ui(app,|_|native::active())?}),
     )?;
 
+    fs::write(out.join("record.phase"), b"input").map_err(|e| e.to_string())?;
     ui(app,"window.spikeClicks=0;document.querySelector('#spikeInput').addEventListener('pointerdown',()=>window.spikeClicks++);return true;")?;
     on_ui(app, |h| native::begin(h, 5000))??;
     let fg = on_ui(app, |_| native::foreground())?;
@@ -284,6 +292,7 @@ pub(super) fn scenario(
     )?;
     on_ui(app, |_| native::end())?;
 
+    fs::write(out.join("record.phase"), b"child").map_err(|e| e.to_string())?;
     // 화면 상태기계가 관리하지 않는 같은 호스트의 자식 웹뷰로 숨김 API 자체를 잰다.
     use kaleidoscope_core::WebHost;
     let host = super::super::web_host::TauriWebHost::new(app.clone());
