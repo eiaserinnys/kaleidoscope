@@ -38,7 +38,7 @@ async function open(page: Page) {
   await page.goto("/?preview=md-editor");
   const app = page.getByTestId("app-window-md-editor");
   await app.getByRole("button", { name: "문서 폴더 고르기" }).click();
-  await app.getByRole("button", { name: "reclick.md" }).click();
+  await app.getByRole("treeitem", { name: "reclick.md" }).click();
   const editor = app.locator(".cm-content");
   await expect(editor).toContainText("다시 누르기 시험");
   return { app, editor };
@@ -121,7 +121,7 @@ test("포커스를 잃은 뒤 다른 줄을 누르면 선택 없이 그 줄을 �
 
 test("Tab으로 편집기에 들어가면 커서가 있는 줄을 바로 원문으로 보인다", async ({ page }) => {
   const { app, editor } = await open(page);
-  await app.getByRole("button", { name: "reclick.md" }).focus();
+  await app.getByRole("treeitem", { name: "reclick.md" }).focus();
   await page.keyboard.press("Tab");
   await page.keyboard.press("Tab");
   await expect.poll(async () => (await snapshot(editor)).focused).toBe(true);

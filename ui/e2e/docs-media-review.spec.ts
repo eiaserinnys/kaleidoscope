@@ -5,7 +5,7 @@ async function conflict(page: Page, kind: "code" | "markdown") {
     await page.goto("/?preview=block-gallery");
     await page.getByRole("tab", { name: "코드", exact: true }).click();
     await page.getByRole("button", { name: "설정 파일 폴더 고르기" }).click();
-    await page.getByRole("button", { name: "settings.json", exact: true }).click();
+    await page.getByRole("treeitem", { name: "settings.json", exact: true }).click();
   } else {
     await page.goto("/?preview=md-editor");
     await page.getByRole("button", { name: "문서 폴더 고르기" }).click();
