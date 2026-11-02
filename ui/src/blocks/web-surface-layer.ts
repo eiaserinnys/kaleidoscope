@@ -59,6 +59,12 @@ interface RegisteredSurface {
   kind: WebSurfaceKind | null;
   bounds: Rect | null;
   generation: number;
+  active: boolean;
+}
+
+export interface WebSurfaceRegistration {
+  setActive(active: boolean): void;
+  unregister(): void;
 }
 
 const surfaces = new Set<RegisteredSurface>();
@@ -69,28 +75,50 @@ export function registerWebSurface(
   windowId: string,
   store: ShellStore,
   onState: (state: WebSurfaceState) => void,
-): () => void {
-  const surface: RegisteredSurface = { element, windowId, store, onState, kind: null, bounds: null, generation: 0 };
+  active = true,
+): WebSurfaceRegistration {
+  const surface: RegisteredSurface = { element, windowId, store, onState, kind: null, bounds: null, generation: 0, active };
   surfaces.add(surface);
-  scheduleFrame();
-  return () => {
-    surface.generation += 1;
-    surfaces.delete(surface);
-    if (surfaces.size === 0 && animationFrame !== null) {
-      cancelAnimationFrame(animationFrame);
-      animationFrame = null;
-    }
+  if (active) scheduleFrame();
+  else hideSurface(surface);
+  const unregister = () => {
+    if (!surfaces.delete(surface)) return;
+    if (surface.active) hideSurface(surface);
+    stopFrameWhenIdle();
+  };
+  return {
+    setActive(next) {
+      if (!surfaces.has(surface) || surface.active === next) return;
+      surface.active = next;
+      if (next) scheduleFrame();
+      else { hideSurface(surface); stopFrameWhenIdle(); }
+    },
+    unregister,
   };
 }
 
 function scheduleFrame() {
-  if (animationFrame !== null || surfaces.size === 0) return;
+  if (animationFrame !== null || ![...surfaces].some((surface) => surface.active)) return;
   animationFrame = requestAnimationFrame(readSurfaces);
+}
+
+function stopFrameWhenIdle() {
+  if ([...surfaces].some((surface) => surface.active) || animationFrame === null) return;
+  cancelAnimationFrame(animationFrame);
+  animationFrame = null;
+}
+
+function hideSurface(surface: RegisteredSurface) {
+  surface.generation += 1;
+  surface.kind = "hidden";
+  surface.bounds = null;
+  surface.onState({ kind: "hidden" });
+  void callPlace(surface, null);
 }
 
 function readSurfaces() {
   animationFrame = null;
-  for (const surface of surfaces) updateSurface(surface);
+  for (const surface of surfaces) if (surface.active) updateSurface(surface);
   scheduleFrame();
 }
 

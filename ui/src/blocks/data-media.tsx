@@ -30,27 +30,34 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
   const element = useRef<HTMLMediaElement | null>(null);
   useEffect(() => {
     let active = true;
-    let url: string | null = null;
     setLoaded(null); setError(null); setPlaying(false); setTime(0); setDuration(0);
-    if (src) void data.store.call({ op: "data.media", window_id: data.windowId, media: src }).then((reply) => {
-      if (!active) return;
-      const bytes = Uint8Array.from(atob(reply.media.data_base64), (char) => char.charCodeAt(0));
-      url = URL.createObjectURL(new Blob([bytes], { type: reply.media.mime }));
-      setLoaded({ key, url, mime: reply.media.mime });
-    }).catch((reason: unknown) => { if (active) setError(toCoreError(reason).message); });
-    return () => { active = false; if (url) URL.revokeObjectURL(url); };
+    if (src) {
+      const cacheKey = JSON.stringify([src, null]);
+      let request = data.mediaCache.get(cacheKey);
+      if (!request) {
+        request = data.store.call({ op: "data.media", window_id: data.windowId, media: src })
+          .then((reply) => `data:${reply.media.mime};base64,${reply.media.data_base64}`);
+        data.mediaCache.set(cacheKey, request);
+        const cachedRequest = request;
+        void request.catch(() => { if (data.mediaCache.get(cacheKey) === cachedRequest) data.mediaCache.delete(cacheKey); });
+      }
+      void request.then((url) => {
+        if (active) setLoaded({ key, url, mime: url.slice("data:".length, url.indexOf(";")) });
+      }).catch((reason: unknown) => { if (active) setError(toCoreError(reason).message); });
+    }
+    return () => { active = false; };
   }, [data, key]);
   const current = loaded?.key === key ? loaded : null;
   const video = (kind ?? (current?.mime.startsWith("video/") ? "video" : "audio")) === "video";
   const playbackError = () => { setError("재생할 수 없는 파일입니다"); setPlaying(false); setTime(0); setDuration(0); };
-  // 늦게 온 재생 실패는 그 재생을 시작한 원본(Blob URL)이 아직 지금 원본일 때만 알린다. 같은 <audio>를 다시 쓰므로
-  // 요소 비교만으로는 앞 원본의 실패가 새 원본을 덮는다.
-  const currentUrl = useRef<string | null>(null);
-  currentUrl.current = current?.url ?? null;
+  // 늦게 온 재생 실패는 재생을 시작한 미디어가 아직 현재 원본일 때만 알린다.
+  // URL은 캐시되므로 서로 다른 원본이 같은 데이터 URL을 가질 수 있다.
+  const currentSourceKey = useRef<string | null>(null);
+  currentSourceKey.current = current?.key ?? null;
   const play = (el: HTMLMediaElement) => {
-    const started = currentUrl.current;
+    const started = currentSourceKey.current;
     void el.play().catch((reason: unknown) => {
-      if (element.current !== el || currentUrl.current !== started) return;
+      if (element.current !== el || currentSourceKey.current !== started) return;
       if (!(reason && typeof reason === "object" && "name" in reason && reason.name === "NotAllowedError")) playbackError();
     });
   };
