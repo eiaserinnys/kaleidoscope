@@ -30,3 +30,16 @@ pub fn check_file_name(name: &str) -> Result<(), &'static str> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::check_file_name;
+
+    #[test]
+    fn accepts_unicode_and_rejects_windows_invalid_names() {
+        assert_eq!(check_file_name("메모 - 복사본.md"), Ok(()));
+        for name in ["", ".", "..", "a:b", "NUL.txt", "name.", "name "] {
+            assert!(check_file_name(name).is_err(), "{name:?}");
+        }
+    }
+}

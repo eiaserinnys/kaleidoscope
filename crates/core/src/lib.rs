@@ -14,6 +14,7 @@ mod data_runtime;
 mod data_sources;
 mod error;
 mod files;
+mod files_write;
 mod layout_apply;
 mod layout_reporter;
 mod layout_sync;
@@ -530,24 +531,14 @@ impl Core {
                 let state = self.inner.state.lock().unwrap();
                 files::read(&self.inner, &state, &window_id, &permission, &path)
             }
-            CoreRequest::FilesWrite {
-                window_id,
-                permission,
-                path,
-                text,
-                expected_revision,
-            } => {
-                let state = self.inner.state.lock().unwrap();
-                files::write(
-                    &self.inner,
-                    &state,
-                    &window_id,
-                    &permission,
-                    &path,
-                    &text,
-                    expected_revision.as_deref(),
-                )
-            }
+            request @ (CoreRequest::FilesWrite { .. }
+            | CoreRequest::FilesMkdir { .. }
+            | CoreRequest::FilesRename { .. }
+            | CoreRequest::FilesMove { .. }
+            | CoreRequest::FilesCopy { .. }
+            | CoreRequest::FilesRemove { .. }
+            | CoreRequest::FilesReveal { .. }
+            | CoreRequest::FilesPath { .. }) => files_write::handle(&self.inner, request),
             CoreRequest::FilesPickFolder {
                 window_id,
                 permission,
