@@ -195,13 +195,6 @@ error_catalog! { ENTRIES;
         message: "작업 화면에서 이 명령을 처리하지 못했습니다. 작업 화면을 새로고침한 뒤 다시 시도하세요.",
         fix: "작업 화면을 새로고침하세요"
     }
-    DESK_LOCAL_LINK_READ_NOT_FOUND() {
-        class: NotFound,
-        place: "기기 연결 정보 읽기",
-        cause: "기기 연결 정보 파일이 읽는 동안 사라졌다",
-        message: "기기 연결 정보 파일이 없습니다. 서버를 다시 연결하세요.",
-        fix: "서버를 다시 연결하세요"
-    }
     DESK_LOCAL_LINK_READ_FAILED() {
         class: Io,
         place: "기기 연결 정보 읽기",
@@ -209,26 +202,12 @@ error_catalog! { ENTRIES;
         message: "기기 연결 정보를 읽지 못했습니다. 파일 권한과 디스크 상태를 확인하세요.",
         fix: "파일 권한과 디스크 상태를 확인하세요"
     }
-    DESK_LOCAL_LINK_REMOVE_NOT_FOUND() {
-        class: NotFound,
-        place: "기기 연결 정보 삭제",
-        cause: "기기 연결 정보 파일이 삭제 중 사라졌다",
-        message: "기기 연결 정보 파일이 없습니다. 서버 연결 상태를 새로고침하세요.",
-        fix: "서버 연결 상태를 새로고침하세요"
-    }
     DESK_LOCAL_LINK_REMOVE_FAILED() {
         class: Io,
         place: "기기 연결 정보 삭제",
         cause: "기기 연결 정보 파일을 삭제하지 못했다",
         message: "기기 연결 정보를 지우지 못했습니다. 파일 권한과 디스크 상태를 확인하세요.",
         fix: "파일 권한과 디스크 상태를 확인하세요"
-    }
-    DESK_LOCAL_STATE_READ_NOT_FOUND() {
-        class: NotFound,
-        place: "로컬 상태 읽기",
-        cause: "상태 파일이 읽는 동안 사라졌다",
-        message: "로컬 상태 파일이 없습니다. 작업 상태를 새로고침한 뒤 다시 시도하세요.",
-        fix: "작업 상태를 새로고침하세요"
     }
     DESK_LOCAL_STATE_READ_FAILED() {
         class: Io,

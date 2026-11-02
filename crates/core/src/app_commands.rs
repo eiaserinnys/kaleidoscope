@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
 use kaleidoscope_contract::registry::RegistryApp;
-use kaleidoscope_contract::{App, AppDefinition, AppVersion, CoreError, CoreReply, SharedState};
+use kaleidoscope_contract::{
+    errors, App, AppDefinition, AppVersion, CoreError, CoreReply, SharedState,
+};
 
 use crate::state_commands::timestamp;
 use crate::CoreState;
@@ -13,15 +15,10 @@ pub(crate) fn import(
 ) -> Result<CoreReply, CoreError> {
     let definition = app_definition::parse_app_definition(&definition_json)?;
     if kaleidoscope_contract::builtin::is_builtin(&definition.id) {
-        return Err(CoreError::with_details(
-            kaleidoscope_contract::ErrorCode::InvalidAppDefinition,
-            vec!["기본 앱은 kaleidoscope 리포의 apps/에서 고치고 쉘 새 판으로 냅니다".into()],
-        ));
+        return Err(errors::DESK_APP_IMPORT_BUILTIN());
     }
     if !crate::supported().renders_app(&definition) {
-        return Err(CoreError::new(
-            kaleidoscope_contract::ErrorCode::UnsupportedApp,
-        ));
+        return Err(errors::DESK_APP_IMPORT_UNSUPPORTED_SHELL());
     }
     Ok(import_definition(state, definition))
 }

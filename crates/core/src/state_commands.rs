@@ -114,10 +114,9 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
             if deleting_active {
                 let active = state.shared.workspaces.first().unwrap();
                 state.device.active_workspace_id = Some(active.id.clone());
-                let desktop_id = active_desktop(state, &active.id)
-                    .ok_or_else(|| {
-                        errors::DESK_WORKSPACE_DELETE_ACTIVE_DESKTOP_MISSING(&active.id)
-                    })?;
+                let desktop_id = active_desktop(state, &active.id).ok_or_else(|| {
+                    errors::DESK_WORKSPACE_DELETE_ACTIVE_DESKTOP_MISSING(&active.id)
+                })?;
                 state
                     .device
                     .active_desktop_ids
@@ -133,9 +132,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .find(|workspace| workspace.id == workspace_id)
                 .ok_or_else(|| errors::DESK_WORKSPACE_ACTIVATE_NOT_FOUND(&workspace_id))?;
             let desktop_id = active_desktop(state, &workspace.id)
-                .ok_or_else(|| {
-                    errors::DESK_WORKSPACE_ACTIVATE_DESKTOP_MISSING(&workspace.id)
-                })?;
+                .ok_or_else(|| errors::DESK_WORKSPACE_ACTIVATE_DESKTOP_MISSING(&workspace.id))?;
             state.device.active_workspace_id = Some(workspace.id.clone());
             state
                 .device
@@ -150,7 +147,9 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .iter()
                 .any(|workspace| workspace.id == workspace_id)
             {
-                return Err(errors::DESK_DESKTOP_CREATE_WORKSPACE_NOT_FOUND(&workspace_id));
+                return Err(errors::DESK_DESKTOP_CREATE_WORKSPACE_NOT_FOUND(
+                    &workspace_id,
+                ));
             }
             let position = state
                 .shared

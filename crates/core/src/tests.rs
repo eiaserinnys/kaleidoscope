@@ -2641,7 +2641,10 @@ fn invalid_state_and_last_workspace_or_desktop_deletions_are_rejected() {
         }),
         ErrorCode::InvalidRequest,
     );
-    assert_eq!(desktop_error.id.as_deref(), Some("DESK_DESKTOP_DELETE_LAST"));
+    assert_eq!(
+        desktop_error.id.as_deref(),
+        Some("DESK_DESKTOP_DELETE_LAST")
+    );
     assert_eq!(
         desktop_error.message,
         "마지막 데스크톱은 지울 수 없습니다. 새 데스크톱을 먼저 만드세요."

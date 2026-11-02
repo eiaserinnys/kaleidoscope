@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use kaleidoscope_contract::{CoreError, SharedState};
+use kaleidoscope_contract::{errors, CoreError, ErrorCode, SharedState};
 use serde::{Deserialize, Serialize};
 
 use crate::storage::{self, LinkFile};
@@ -102,7 +102,12 @@ pub(crate) fn mark_local_changes(inner: &Inner, before: &SharedState, state: &mu
 }
 
 pub(crate) fn load(data_dir: &Path, link: Option<&LinkFile>) -> Result<SyncState, CoreError> {
-    let file: SyncFile = storage::load_file(&data_dir.join("sync.json"), "sync.json")?;
+    let file: SyncFile = storage::load_file(&data_dir.join("sync.json"), "sync.json").map_err(
+        |error| match error.code {
+            ErrorCode::NotFound => errors::SERVER_LAYOUT_SYNC_STATE_READ_NOT_FOUND(),
+            _ => errors::SERVER_LAYOUT_SYNC_STATE_READ_FAILED(),
+        },
+    )?;
     if file.format != 1 || link.map(|l| &l.device_id) != file.device_id.as_ref() || link.is_none() {
         return Ok(SyncState::default());
     }
@@ -127,12 +132,16 @@ pub(crate) fn save(data_dir: &Path, sync: &SyncState) -> Result<(), CoreError> {
             pending: sync.pending.keys().cloned().collect(),
         },
     )
+    .map_err(|error| match error.code {
+        ErrorCode::NotFound => errors::SERVER_LAYOUT_SYNC_STATE_SAVE_NOT_FOUND(),
+        _ => errors::SERVER_LAYOUT_SYNC_STATE_SAVE_FAILED(),
+    })
 }
 
 pub(crate) fn remove(data_dir: &Path) -> Result<(), CoreError> {
     match std::fs::remove_file(data_dir.join("sync.json")) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(crate::error::io_error(&error)),
+        Err(_) => Err(errors::SERVER_LAYOUT_SYNC_STATE_REMOVE_FAILED()),
     }
 }

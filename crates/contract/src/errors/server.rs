@@ -181,6 +181,20 @@ error_catalog! { ENTRIES;
         message: "기기 배치를 저장 형식으로 만들지 못했습니다. 쉘을 업데이트한 뒤 다시 보고하세요.",
         fix: "쉘을 업데이트하세요"
     }
+    SERVER_LAYOUT_REPORT_DEVICE_TRACKING_READ_FAILED() {
+        class: Server,
+        place: "기기 배치 보고의 동기화 대상 확인",
+        cause: "배치 동기화 대상 목록을 읽지 못했다",
+        message: "기기 배치 동기화 상태를 읽지 못했습니다. 서버 상태를 확인한 뒤 다시 보고하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_REPORT_TABLE_UNSUPPORTED() {
+        class: Server,
+        place: "기기 배치 보고 저장",
+        cause: "서버가 알지 못하는 배치 보고 항목 종류를 저장하려 했다",
+        message: "서버가 배치 보고 항목을 저장하지 못했습니다. 서버를 업데이트한 뒤 다시 보고하세요.",
+        fix: "서버를 업데이트하세요"
+    }
     SERVER_LAYOUT_INDEX_REFRESH_FAILED() {
         class: Server,
         place: "기기별 작업 목록 갱신",
@@ -230,6 +244,20 @@ error_catalog! { ENTRIES;
         message: "서버에 저장된 배치 정보를 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
         fix: "서버 저장소 상태를 확인하세요"
     }
+    SERVER_LAYOUT_CANONICAL_ENTITY_READ_FAILED() {
+        class: Server,
+        place: "저장된 배치 항목 조회",
+        cause: "작업, 데스크톱 또는 창 저장 행을 읽지 못했다",
+        message: "서버 저장소에서 배치 항목을 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_CANONICAL_ENTITY_TABLE_UNSUPPORTED() {
+        class: Server,
+        place: "저장된 배치 항목 조회",
+        cause: "서버가 알지 못하는 배치 항목 종류를 조회하려 했다",
+        message: "서버가 배치 항목을 읽지 못했습니다. 서버 상태를 확인하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
     SERVER_LAYOUT_CHILD_RELATION_UNSUPPORTED() {
         class: Server,
         place: "배치 항목 관계 조회",
@@ -258,11 +286,11 @@ error_catalog! { ENTRIES;
         message: "데스크톱 정보를 확인하지 못했습니다. 서버 저장소 상태를 확인한 뒤 다시 시도하세요.",
         fix: "서버 저장소 상태를 확인하세요"
     }
-    SERVER_LAYOUT_SNAPSHOT_DEVICE_LOOKUP_FAILED() {
+    SERVER_LAYOUT_SNAPSHOT_READ_FAILED() {
         class: Server,
-        place: "기기 배치 스냅샷 만들기",
-        cause: "스냅샷을 받을 기기의 계정을 확인하지 못했다",
-        message: "기기 배치 스냅샷을 만들지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        place: "기기 배치 스냅샷 읽기",
+        cause: "기기 계정 또는 배치 항목을 읽지 못했다",
+        message: "기기 배치 스냅샷을 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
         fix: "서버 저장소 상태를 확인하세요"
     }
     SERVER_LAYOUT_REPORT_LIST_FAILED() {
@@ -299,6 +327,13 @@ error_catalog! { ENTRIES;
         cause: "배치 동기화 상태 파일을 저장하지 못했다",
         message: "로컬 배치 동기화 상태를 저장하지 못했습니다. 디스크 공간과 저장 폴더 권한을 확인하세요.",
         fix: "디스크 공간과 저장 폴더 권한을 확인하세요"
+    }
+    SERVER_LAYOUT_SYNC_STATE_SAVE_NOT_FOUND() {
+        class: NotFound,
+        place: "로컬 배치 동기화 상태 저장",
+        cause: "배치 동기화 상태를 저장하는 동안 저장 경로가 사라졌다",
+        message: "로컬 배치 동기화 상태를 저장할 경로가 사라졌습니다. 서버 연결 상태를 새로고침한 뒤 다시 시도하세요.",
+        fix: "서버 연결 상태를 새로고침하세요"
     }
     SERVER_LAYOUT_SYNC_STATE_REMOVE_FAILED() {
         class: Io,

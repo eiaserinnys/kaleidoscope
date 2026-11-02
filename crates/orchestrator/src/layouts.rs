@@ -1,5 +1,6 @@
 use super::*;
 use axum::{extract::rejection::JsonRejection, extract::Extension};
+use kaleidoscope_contract::errors;
 use kaleidoscope_contract::registry::{DeviceLayout, LayoutChanges};
 
 pub(super) fn load_device_workspaces(
@@ -27,7 +28,7 @@ pub(super) async fn put_layout(
     let Ok(Json(layout)) = body else {
         return http::error_response(
             StatusCode::BAD_REQUEST,
-            CoreError::new(ErrorCode::InvalidRequest),
+            errors::SERVER_LAYOUT_REPORT_BODY_INVALID(),
         );
     };
     match state.save_layout(&device.0, &layout) {
@@ -44,20 +45,30 @@ pub(super) async fn post_layout_changes(
     let Ok(Json(changes)) = body else {
         return http::error_response(
             StatusCode::BAD_REQUEST,
-            CoreError::new(ErrorCode::InvalidRequest),
+            errors::SERVER_LAYOUT_CHANGE_BODY_INVALID(),
         );
     };
-    if !super::layout_changes::validate_changes(&changes)
-        || changes.windows.iter().any(|window| {
-            serde_json::to_vec(&window.state).map_or(true, |bytes| {
-                bytes.len() > kaleidoscope_contract::WINDOW_STATE_MAX_BYTES
-            })
-        })
-    {
-        return http::error_response(
-            StatusCode::BAD_REQUEST,
-            CoreError::new(ErrorCode::InvalidRequest),
-        );
+    if let Err(error) = super::layout_changes::validate_changes_error(&changes) {
+        return http::error_response(StatusCode::BAD_REQUEST, error);
+    }
+    for window in &changes.windows {
+        let bytes = match serde_json::to_vec(&window.state) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                return http::error_response(
+                    StatusCode::BAD_REQUEST,
+                    errors::SERVER_LAYOUT_CHANGE_STATE_SERIALIZATION_FAILED(),
+                )
+            }
+        };
+        if bytes.len() > kaleidoscope_contract::WINDOW_STATE_MAX_BYTES {
+            return http::error_response(
+                StatusCode::BAD_REQUEST,
+                errors::SERVER_LAYOUT_CHANGE_STATE_TOO_LARGE(
+                    kaleidoscope_contract::WINDOW_STATE_MAX_BYTES,
+                ),
+            );
+        }
     }
     match state.apply_layout_changes(Some(&device.0), &changes) {
         Ok((reply, changed)) => {
@@ -85,7 +96,7 @@ impl AppState {
             "workspaces" => "SELECT data FROM workspaces WHERE account_id=?1 ORDER BY created_at,id",
             "desktops" => "SELECT d.data FROM desktops d JOIN workspaces w ON w.id=d.workspace_id WHERE w.account_id=?1 ORDER BY d.created_at,d.id",
             "windows" => "SELECT v.data FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE w.account_id=?1 ORDER BY v.created_at,v.id",
-            _ => return Err(server_error("배치 표를 읽을 수 없습니다.")),
+            _ => return Err(errors::SERVER_LAYOUT_ENTITIES_TABLE_UNSUPPORTED()),
         };
         read_entities(db, query, Some(account_id))
     }
@@ -116,10 +127,12 @@ impl AppState {
             .0
             .layout_sync_devices
             .lock()
-            .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+            .map_err(|_| errors::SERVER_LAYOUT_REPORT_DEVICE_TRACKING_READ_FAILED())?
             .contains(device_id);
-        let mut db = self.lock_db()?;
-        let tx = db.transaction().map_err(db_error)?;
+        let mut db = self
+            .lock_db()
+            .map_err(|_| errors::SERVER_LAYOUT_REPORT_SAVE_FAILED())?;
+        let tx = db.transaction().map_err(layout_report_save_db_error)?;
         let account_id: String = tx
             .query_row(
                 "SELECT account_id FROM devices WHERE id=?1 AND revoked_at IS NULL",
@@ -127,18 +140,18 @@ impl AppState {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(db_error)?
-            .ok_or_else(|| server_error("기기를 찾을 수 없습니다."))?;
+            .map_err(layout_report_save_db_error)?
+            .ok_or_else(|| errors::SERVER_LAYOUT_REPORT_DEVICE_NOT_FOUND())?;
         let mut safe_layout = layout.clone();
         let owns = |table: &str, id: &str| -> Result<bool, CoreError> {
             let sql = match table {
                 "workspace" => "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?1 AND account_id=?2)",
                 "desktop" => "SELECT EXISTS(SELECT 1 FROM desktops d JOIN workspaces w ON w.id=d.workspace_id WHERE d.id=?1 AND w.account_id=?2)",
                 "window" => "SELECT EXISTS(SELECT 1 FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.id=?1 AND w.account_id=?2)",
-                _ => return Err(server_error("배치 표를 읽을 수 없습니다.")),
+                _ => return Err(errors::SERVER_LAYOUT_REPORT_TABLE_UNSUPPORTED()),
             };
             tx.query_row(sql, params![id, account_id], |row| row.get(0))
-                .map_err(db_error)
+                .map_err(layout_report_save_db_error)
         };
         let mut workspace_ids = HashSet::new();
         for item in &layout.workspaces {
@@ -149,7 +162,7 @@ impl AppState {
                     |row| row.get(0),
                 )
                 .optional()
-                .map_err(db_error)?;
+                .map_err(layout_report_save_db_error)?;
             let legacy_owner: Option<String> = tx
                 .query_row(
                     "SELECT account_id FROM legacy_workspace_owners WHERE workspace_id=?1",
@@ -157,7 +170,7 @@ impl AppState {
                     |row| row.get(0),
                 )
                 .optional()
-                .map_err(db_error)?;
+                .map_err(layout_report_save_db_error)?;
             let owned = match (canonical_owner, legacy_owner) {
                 (Some(owner), _) => owner == account_id,
                 (None, Some(owner)) => owner == account_id,
@@ -166,7 +179,7 @@ impl AppState {
                         "INSERT INTO legacy_workspace_owners(workspace_id,account_id) VALUES(?1,?2)",
                         params![item.id, account_id],
                     )
-                    .map_err(db_error)?;
+                    .map_err(layout_report_save_db_error)?;
                     true
                 }
                 (None, None) => false,
@@ -220,7 +233,7 @@ impl AppState {
             .map(|w| w.id.clone())
             .collect();
         let raw = serde_json::to_string(&safe_layout)
-            .map_err(|_| server_error("배치를 저장할 수 없습니다."))?;
+            .map_err(|_| errors::SERVER_LAYOUT_REPORT_SERIALIZATION_FAILED())?;
         let now = timestamp();
         let previous: Option<String> = tx
             .query_row(
@@ -229,7 +242,7 @@ impl AppState {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(db_error)?;
+            .map_err(layout_report_save_db_error)?;
         // 다른 기기의 변경을 반영한 쉘도 배치를 다시 보고하므로, 보고 자체는 활동이 아니다. 그 기기만의 것
         // (지금 보는 워크스페이스와 데스크톱, 고른 폴더)이 바뀌었을 때만 마지막 활동으로 친다.
         let active = previous
@@ -242,15 +255,15 @@ impl AppState {
         tx.execute(
             "INSERT INTO device_layouts(device_id,layout,reported_at) VALUES(?1,?2,?3) ON CONFLICT(device_id) DO UPDATE SET layout=excluded.layout,reported_at=excluded.reported_at",
             params![device_id, raw, now],
-        ).map_err(db_error)?;
+        ).map_err(layout_report_save_db_error)?;
         if active {
             tx.execute(
                 "UPDATE devices SET last_active_at=?2 WHERE id=?1 AND revoked_at IS NULL",
                 params![device_id, now],
             )
-            .map_err(db_error)?;
+            .map_err(layout_report_save_db_error)?;
         }
-        tx.commit().map_err(db_error)?;
+        tx.commit().map_err(layout_report_save_db_error)?;
         drop(db);
         self.0
             .device_workspaces
@@ -261,13 +274,16 @@ impl AppState {
     }
 
     pub(super) fn refresh_device_workspaces(&self) -> Result<(), CoreError> {
-        let db = self.lock_db()?;
-        let workspaces = load_device_workspaces(&db).map_err(db_error)?;
+        let db = self
+            .lock_db()
+            .map_err(|_| errors::SERVER_LAYOUT_INDEX_REFRESH_FAILED())?;
+        let workspaces = load_device_workspaces(&db)
+            .map_err(|_| errors::SERVER_LAYOUT_INDEX_REFRESH_FAILED())?;
         *self
             .0
             .device_workspaces
             .lock()
-            .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))? = workspaces;
+            .map_err(|_| errors::SERVER_LAYOUT_INDEX_REFRESH_FAILED())? = workspaces;
         Ok(())
     }
 
@@ -593,23 +609,30 @@ fn read_entities<T: for<'de> Deserialize<'de>>(
     query: &str,
     account_id: Option<&str>,
 ) -> Result<Vec<T>, CoreError> {
-    let mut statement = db.prepare(query).map_err(db_error)?;
+    let mut statement = db.prepare(query).map_err(layout_entities_read_db_error)?;
     let rows = match account_id {
         Some(account_id) => statement
             .query_map([account_id], |row| row.get::<_, String>(0))
-            .map_err(db_error)?
+            .map_err(layout_entities_read_db_error)?
             .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(db_error)?,
+            .map_err(layout_entities_read_db_error)?,
         None => statement
             .query_map([], |row| row.get::<_, String>(0))
-            .map_err(db_error)?
+            .map_err(layout_entities_read_db_error)?
             .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(db_error)?,
+            .map_err(layout_entities_read_db_error)?,
     };
     rows.into_iter()
         .map(|raw| {
-            serde_json::from_str(&raw)
-                .map_err(|error| server_error(&format!("배치 정본을 읽을 수 없습니다: {error}")))
+            serde_json::from_str(&raw).map_err(|_| errors::SERVER_LAYOUT_ENTITIES_READ_FAILED())
         })
         .collect()
+}
+
+fn layout_report_save_db_error(_: rusqlite::Error) -> CoreError {
+    errors::SERVER_LAYOUT_REPORT_SAVE_FAILED()
+}
+
+fn layout_entities_read_db_error(_: rusqlite::Error) -> CoreError {
+    errors::SERVER_LAYOUT_ENTITIES_READ_FAILED()
 }
