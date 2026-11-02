@@ -66,7 +66,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     try { const result = await readThread(store, windowId, entry, name); if (activeRef.current?.name === name) setThread(result.thread); }
     catch (reason) { setError(toCoreError(reason).message); }
   }, [entry, store, windowId]);
-  useEffect(() => { if (visible) void refreshList(); }, [visible, refreshList]);
+  useEffect(() => { if (visible) { void refreshList(); if (activeRef.current) void refreshThread(activeRef.current.name); } }, [visible, refreshList, refreshThread]);
   useEffect(() => store.subscribeEvents((event) => {
     if (!visible || event.event !== "storage.update" || event.window_id !== windowId) return;
     if (event.update.kind === "snapshot") { void refreshList(); if (activeRef.current) void refreshThread(activeRef.current.name); return; }
@@ -111,7 +111,8 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     void load(); return () => { readSequence.current++; };
   }, [active?.name, active?.rev, entry, refreshThread, store, windowId]);
   const comments = useMemo(() => active ? thread.comments.filter((comment) => comment.rev <= active.rev) : [], [thread, active]);
-  const frameComments = useMemo(() => comments.map((comment, index) => ({ id: comment.id, anchor: comment.anchor, number: index + 1, sameRevision: anchorRevision(comment) === active?.rev && !dirty })), [active?.rev, comments, dirty]);
+  const structuralEdits = undo.some((edit) => edit.kind === "insert" || edit.kind === "remove" || edit.kind === "move");
+  const frameComments = useMemo(() => comments.map((comment, index) => ({ id: comment.id, anchor: comment.anchor, number: index + 1, sameRevision: anchorRevision(comment) === active?.rev && !structuralEdits })), [active?.rev, comments, structuralEdits]);
   useEffect(() => { send({ type: "ks-html-comments", comments: frameComments }); }, [frameComments, send]);
   useEffect(() => { send({ type: "ks-html-mode", mode }); }, [mode, send]);
   const writeChange = useCallback(async (change: ThreadChange) => {
@@ -238,7 +239,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
       lines.push(`저장 안 한 수정 ${edits.length}건:`);
       edits.forEach((edit) => {
         if ("prop" in edit) lines.push(`- ${edit.selector} ${edit.prop} ${edit.before} → ${edit.after}`);
-        else if ("text" in edit) lines.push(`- ${edit.selector} 문구 "${edit.text.before}" → "${edit.text.after}"`);
+        else if ("text" in edit && edit.text) lines.push(`- ${edit.selector} 문구 "${edit.text.before}" → "${edit.text.after}"`);
         else lines.push(`- ${edit.selector} ${edit.dom}`);
       });
     }

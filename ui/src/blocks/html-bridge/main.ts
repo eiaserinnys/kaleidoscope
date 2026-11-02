@@ -3,12 +3,13 @@ import { applyEdit, findNumber } from "./edit";
 import type { FrameComment, FrameSelection, FrameToParent, ParentToFrame } from "./frame-protocol";
 
 const send = (message: FrameToParent) => parent.postMessage(message, "*");
-let mode: "select" | "view" = "view";
+let mode: "select" | "view" | "readonly" = "readonly";
 let selected: Element | null = null;
 let hover: Element | null = null;
 let comments: FrameComment[] = [];
 let editing: { element: HTMLElement; before: string } | null = null;
 let frame = 0;
+let lastResults = "";
 const host = document.createElement("div");
 host.setAttribute("data-ks-overlay", "");
 const shadow = host.attachShadow({ mode: "closed" });
@@ -53,10 +54,11 @@ function draw() {
     pin.addEventListener("click", (event) => { event.stopPropagation(); send({ type: "ks-html-select-comment", id: comment.id }); });
     layer.append(pin);
   }
-  const highlights = (CSS as typeof CSS & { highlights?: Map<string, unknown> }).highlights;
+  const highlights = (CSS as unknown as { highlights?: { set(name: string, value: unknown): void } }).highlights;
   const HighlightClass = (window as unknown as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight;
   if (highlights && HighlightClass) highlights.set("ks-html-comments", new HighlightClass(...ranges));
-  send({ type: "ks-html-anchor-results", results });
+  const encoded = JSON.stringify(results);
+  if (encoded !== lastResults) { lastResults = encoded; send({ type: "ks-html-anchor-results", results }); }
   updateObservation(Boolean(hover || selected || comments.length));
 }
 function selectionOf(element: Element, range?: Range): FrameSelection | null {
@@ -100,6 +102,7 @@ document.addEventListener("mouseup", () => {
   if (element) select(element, range);
 }, true);
 document.addEventListener("click", (event) => {
+  if (mode === "readonly") { if (event.target instanceof Element && event.target.closest("a")) event.preventDefault(); return; }
   if (mode !== "select" || editing) return;
   event.preventDefault(); event.stopPropagation();
   if (getSelection()?.toString().trim()) return;
