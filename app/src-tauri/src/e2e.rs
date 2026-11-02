@@ -16,16 +16,16 @@ use tauri::{AppHandle, Manager};
 
 mod files_write;
 mod local_agent;
+#[cfg(windows)]
+mod share_isolate;
 mod ui;
 mod update;
-#[cfg(windows)]
-mod share_freeze;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ScenarioKind {
     WebView,
     #[cfg(windows)]
-    ShareFreeze,
+    ShareIsolate,
     Update,
     LocalAgent,
     FilesWrite,
@@ -34,7 +34,7 @@ enum ScenarioKind {
 fn scenario_kind(name: Option<&str>) -> ScenarioKind {
     match name {
         #[cfg(windows)]
-        Some("share-freeze") => ScenarioKind::ShareFreeze,
+        Some("share-isolate") => ScenarioKind::ShareIsolate,
         Some("update" | "update-reject") => ScenarioKind::Update,
         Some("local-agent") => ScenarioKind::LocalAgent,
         Some("files-write") => ScenarioKind::FilesWrite,
@@ -67,6 +67,10 @@ pub(crate) fn setting(name: &str) -> Option<std::ffi::OsString> {
 
 pub(crate) fn observe_ui(request: &CoreRequest) {
     ui::observe(request);
+}
+
+pub(crate) fn complete_ui(request: &CoreRequest, elapsed_ms: u128) {
+    ui::complete(request, elapsed_ms);
 }
 
 const IPC_TEST: &str = r#"
@@ -483,7 +487,7 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
         }) {
             Ok(mut log) => match match selected {
                 #[cfg(windows)]
-                ScenarioKind::ShareFreeze => share_freeze::scenario(&app, &core, &out, &mut log),
+                ScenarioKind::ShareIsolate => share_isolate::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::WebView => scenario(&app, &core, &out, &mut log),
                 ScenarioKind::Update => update::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::LocalAgent => local_agent::scenario(&core, &out, &mut log),
@@ -517,6 +521,11 @@ mod tests {
         assert_eq!(scenario_kind(Some("local-agent")), ScenarioKind::LocalAgent);
         assert_eq!(scenario_kind(Some("files-write")), ScenarioKind::FilesWrite);
         assert_eq!(scenario_kind(Some("update")), ScenarioKind::Update);
+        #[cfg(windows)]
+        assert_eq!(
+            scenario_kind(Some("share-isolate")),
+            ScenarioKind::ShareIsolate
+        );
         assert_eq!(scenario_kind(None), ScenarioKind::WebView);
     }
 

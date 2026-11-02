@@ -60,6 +60,20 @@ impl TauriWebHost {
             .get_webview(&format!("web-{id}"))
             .ok_or_else(|| CoreError::new(ErrorCode::NotFound))
     }
+
+    fn on_main<T: Send + 'static>(
+        &self,
+        work: impl FnOnce(AppHandle) -> Result<T, CoreError> + Send + 'static,
+    ) -> Result<T, CoreError> {
+        let app = self.app.clone();
+        let task_app = app.clone();
+        let (tx, rx) = mpsc::channel();
+        app.run_on_main_thread(move || {
+            let _ = tx.send(work(task_app));
+        })
+        .map_err(fail)?;
+        rx.recv_timeout(Duration::from_secs(2)).map_err(fail)?
+    }
 }
 
 // WebView2 이벤트는 UI 스레드에서 오며 코어의 상태와 이벤트에 반영한다.
@@ -282,6 +296,32 @@ impl WebHost for TauriWebHost {
             .scale_factor()
             .map_err(fail)?;
         Ok(capture_view(view)?.map(|bytes| (bytes, scale)))
+    }
+    fn freeze(&self) -> Result<bool, CoreError> {
+        self.on_main(|app| {
+            let window = app
+                .get_window("main")
+                .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+            let hwnd = window.hwnd().map_err(fail)?;
+            crate::freeze_cover::freeze(hwnd).map_err(fail)
+        })?;
+        if let Err(error) = crate::freeze_cover::flush() {
+            let _ = self.on_main(|_| {
+                crate::freeze_cover::unfreeze();
+                Ok(())
+            });
+            return Err(fail(error));
+        }
+        Ok(true)
+    }
+    fn unfreeze(&self) -> Result<(), CoreError> {
+        let before = crate::freeze_cover::flush();
+        let destroy = self.on_main(|_| {
+            crate::freeze_cover::unfreeze();
+            Ok(())
+        });
+        let after = crate::freeze_cover::flush();
+        before.and(destroy).and(after).map_err(fail)
     }
     fn detach(&self, id: &str) -> Result<(), CoreError> {
         self.pages.lock().unwrap().remove(id);

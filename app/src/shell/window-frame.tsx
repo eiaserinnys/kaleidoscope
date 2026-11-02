@@ -39,7 +39,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
   const closeSettings = useCallback(() => { setSettingsOpen(false); requestAnimationFrame(() => settingsButton.current?.querySelector<HTMLButtonElement>("button")?.focus()); }, []);
   const isMaximized = Boolean(appWindow.maximized);
   const isMinimized = Boolean(appWindow.minimized);
-  useShareView({ windowId: appWindow.id, root: contentRef, enabled: sharing && !settingsOpen && !isMinimized, store });
+  useShareView({ windowId: appWindow.id, root: contentRef, enabled: sharing && !settingsOpen, store });
   const titleRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const previewRef = useRef<Rect | null>(null);
@@ -143,7 +143,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
       data-maximized={isMaximized ? "true" : "false"}
       data-minimized={isMinimized ? "true" : "false"}
       data-testid={`app-window-${appWindow.app_id}`}
-      hidden={isMinimized}
+      inert={isMinimized}
       onPointerDownCapture={() => {
         if (!isTop) void onCall({ op: "window.raise", window_id: appWindow.id });
       }}

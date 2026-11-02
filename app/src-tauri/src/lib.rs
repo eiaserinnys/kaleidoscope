@@ -1,5 +1,7 @@
 #[cfg(feature = "e2e")]
 mod e2e;
+#[cfg(windows)]
+mod freeze_cover;
 mod updater;
 #[cfg(windows)]
 mod web_host;
@@ -167,18 +169,27 @@ fn pc_roots() -> Vec<PcRoot> {
 #[tauri::command]
 async fn core(request: CoreRequest, core: State<'_, Arc<Core>>) -> Result<CoreReply, CoreError> {
     #[cfg(feature = "e2e")]
-    e2e::observe_ui(&request);
+    let observed_request = request.clone();
+    #[cfg(feature = "e2e")]
+    e2e::observe_ui(&observed_request);
     let core = Arc::clone(core.inner());
 
-    tauri::async_runtime::spawn_blocking(move || core.handle(request))
-        .await
-        .unwrap_or_else(|_| {
-            Err(CoreError {
-                code: ErrorCode::Io,
-                message: "코어 작업이 중단되었습니다.".into(),
-                details: Vec::new(),
-            })
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(feature = "e2e")]
+        let started = std::time::Instant::now();
+        let result = core.handle(request);
+        #[cfg(feature = "e2e")]
+        e2e::complete_ui(&observed_request, started.elapsed().as_millis());
+        result
+    })
+    .await
+    .unwrap_or_else(|_| {
+        Err(CoreError {
+            code: ErrorCode::Io,
+            message: "코어 작업이 중단되었습니다.".into(),
+            details: Vec::new(),
         })
+    })
 }
 
 #[tauri::command]

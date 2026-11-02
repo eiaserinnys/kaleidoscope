@@ -3,12 +3,39 @@ use std::sync::Mutex;
 
 mod driver;
 use driver::{
-    action, editor_state, on_top, open, request_mark, require_request, snapshot, wait_dom,
-    wait_place, wait_until, wait_web, WebEvents,
+    action, editor_state, on_top, open, request_mark, require_request, snapshot, wait_place,
+    wait_until, wait_web, WebEvents,
 };
+pub(super) use driver::{evaluate, wait_dom};
 
 pub(super) fn observe(request: &CoreRequest) {
     driver::observe(request);
+}
+
+pub(super) fn requests_since(mark: usize) -> Vec<CoreRequest> {
+    driver::requests_since(mark)
+}
+
+pub(super) fn latest_share_view(
+    window_id: &str,
+) -> Option<kaleidoscope_core::kaleidoscope_contract::VisibleView> {
+    driver::latest_share_view(window_id)
+}
+
+pub(super) fn capture_duration_mark() -> usize {
+    driver::capture_duration_mark()
+}
+
+pub(super) fn capture_durations_since(mark: usize) -> Vec<(String, u128)> {
+    driver::capture_durations_since(mark)
+}
+
+pub(super) fn complete(request: &CoreRequest, elapsed_ms: u128) {
+    driver::complete(request, elapsed_ms);
+}
+
+pub(super) fn mark_requests() -> usize {
+    request_mark()
 }
 
 struct NotesFixture(PathBuf);
