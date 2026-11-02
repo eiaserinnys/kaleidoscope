@@ -1,6 +1,7 @@
 param([string]$Out)
+$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
-Add-Type -ReferencedAssemblies System.Drawing.Common -TypeDefinition @'
+Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -13,7 +14,7 @@ public class FreezeRecorder {
    using(var g=Graphics.FromImage(b)) g.CopyFromScreen(0,0,0,0,b.Size);
    var d=b.LockBits(new Rectangle(0,0,width,height),ImageLockMode.ReadOnly,PixelFormat.Format32bppArgb);
    var v=new byte[width*height*4]; Marshal.Copy(d.Scan0,v,0,v.Length);b.UnlockBits(d);
-   if(path!=null)b.Save(path,ImageFormat.Png); return v;
+   if(!String.IsNullOrEmpty(path))b.Save(path,ImageFormat.Png); return v;
   }
  }
  public static int Diff(byte[] a,byte[] b) {int n=0;for(int i=0;i<a.Length;i+=4)if(a[i]!=b[i]||a[i+1]!=b[i+1]||a[i+2]!=b[i+2])n++;return n;}

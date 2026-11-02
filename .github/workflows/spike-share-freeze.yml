@@ -32,7 +32,7 @@ jobs:
           $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'freeze-local'
           $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'freeze-webview'
           New-Item -ItemType Directory $env:APPDATA,$env:LOCALAPPDATA | Out-Null
-          $rec = Start-Process pwsh -ArgumentList @('-NoProfile','-File',"$env:GITHUB_WORKSPACE/app/e2e-windows/freeze-record.ps1",$out) -PassThru -RedirectStandardError "$out/recorder-error.txt"
+          $rec = Start-Process powershell.exe -ArgumentList @('-NoProfile','-File',"$env:GITHUB_WORKSPACE/app/e2e-windows/freeze-record.ps1",$out) -PassThru -RedirectStandardError "$out/recorder-error.txt"
           $app = Start-Process 'target/release/kaleidoscope-app.exe' -ArgumentList @('--e2e-scenario=share-freeze',"--e2e-out=$out") -PassThru
           try {
             if(-not $app.WaitForExit(120000)){throw '측정 앱 시간 초과'}
