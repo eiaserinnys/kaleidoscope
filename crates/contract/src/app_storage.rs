@@ -595,7 +595,7 @@ pub fn validate_storage_content(entry: &StorageEntryDecl, content: &Value) -> Re
                 .schema
                 .as_ref()
                 .ok_or_else(|| "json 항목에 schema가 없습니다".to_string())?;
-            validate_json_value(schema, content, "/content")?;
+            validate_json_value(schema, content, "")?;
             let bytes = serde_json::to_vec(&canonicalize(content.clone()))
                 .map_err(|error| format!("JSON content를 직렬화하지 못했습니다: {error}"))?;
             if bytes.len() > STORAGE_JSON_MAX_BYTES {
@@ -907,27 +907,41 @@ fn validate_json_schema(schema: &StorageValueSchema, at: &str) -> Result<(), Str
 }
 
 fn validate_json_value(schema: &StorageValueSchema, value: &Value, at: &str) -> Result<(), String> {
+    let location = if at.is_empty() { "값 전체" } else { at };
     let types = match &schema.value_type {
         StorageSchemaType::One(kind) => vec![*kind],
         StorageSchemaType::Many(kinds) => kinds.clone(),
     };
     if !types.iter().any(|kind| matches_json_type(*kind, value)) {
-        return Err(format!("{at}: 선언된 JSON 형식과 다릅니다"));
+        let names = types
+            .iter()
+            .map(|kind| match kind {
+                JsonValueType::Object => "object",
+                JsonValueType::Array => "array",
+                JsonValueType::String => "string",
+                JsonValueType::Number => "number",
+                JsonValueType::Integer => "integer",
+                JsonValueType::Boolean => "boolean",
+                JsonValueType::Null => "null",
+            })
+            .collect::<Vec<_>>()
+            .join(" 또는 ");
+        return Err(format!("{location}는 {names} 형식이어야 합니다."));
     }
     if let Some(enum_values) = &schema.enum_values {
         if !enum_values.contains(value) {
-            return Err(format!("{at}: enum에 없는 값입니다"));
+            return Err(format!("{location}의 값이 허용 목록에 없습니다."));
         }
     }
     if let (Some(min_length), Some(text)) = (schema.min_length, value.as_str()) {
         if text.chars().count() < min_length as usize {
-            return Err(format!("{at}: 문자열이 minLength보다 짧습니다"));
+            return Err(format!("{location}의 글이 {min_length}자보다 짧습니다."));
         }
     }
     if let Some(object) = value.as_object() {
         if let Some(required) = &schema.required {
             if let Some(missing) = required.iter().find(|name| !object.contains_key(*name)) {
-                return Err(format!("{at}: 필수 필드 {missing}가 없습니다"));
+                return Err(format!("{location}에 필수 필드가 없습니다: {missing}."));
             }
         }
         for (name, field_value) in object {
@@ -941,7 +955,9 @@ fn validate_json_value(schema: &StorageValueSchema, value: &Value, at: &str) -> 
             {
                 validate_json_value(child, field_value, &format!("{at}/{name}"))?;
             } else {
-                return Err(format!("{at}: 허용되지 않은 필드입니다: {name}"));
+                return Err(format!(
+                    "{location}에 선언되지 않은 필드가 있습니다: {name}."
+                ));
             }
         }
     }
@@ -954,7 +970,7 @@ fn validate_json_value(schema: &StorageValueSchema, value: &Value, at: &str) -> 
         if schema.unique_items == Some(true) {
             for index in 0..items.len() {
                 if items[..index].contains(&items[index]) {
-                    return Err(format!("{at}: 중복 항목이 있습니다"));
+                    return Err(format!("{location}에 중복 항목이 있습니다."));
                 }
             }
         }

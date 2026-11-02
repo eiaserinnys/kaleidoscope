@@ -454,7 +454,7 @@ async fn builtin_write_rejects_undeclared_fields_and_invalid_schema() {
     assert!(details
         .details
         .iter()
-        .any(|detail| detail.contains("허용되지 않은 필드입니다")));
+        .any(|detail| detail == "값 전체에 선언되지 않은 필드가 있습니다: kind."));
 
     let invalid_http = state.write_app_value(
         &account,
@@ -469,7 +469,7 @@ async fn builtin_write_rejects_undeclared_fields_and_invalid_schema() {
     assert!(invalid_http
         .details
         .iter()
-        .any(|detail| detail.contains("허용되지 않은 필드입니다")));
+        .any(|detail| detail == "/documents/0/revisions/0에 선언되지 않은 필드가 있습니다: revision."));
     assert!(events.try_recv().is_err());
     let after = state
         .read_app_value(&account, "html-report", "reports")

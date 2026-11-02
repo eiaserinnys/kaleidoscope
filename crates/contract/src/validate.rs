@@ -24,21 +24,15 @@ pub fn parse_cached_app_definition(definition_json: &str) -> Result<AppDefinitio
 }
 
 fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition, CoreError> {
-    let value: Value = serde_json::from_str(definition_json).map_err(|parse_error| {
-        crate::errors::APP_DEFINITION_JSON_INVALID(&parse_error).and_details(vec![format!(
-            "앱 정의 JSON을 읽을 수 없습니다: {parse_error}"
-        )])
-    })?;
+    let value: Value = serde_json::from_str(definition_json)
+        .map_err(|parse_error| crate::errors::APP_DEFINITION_JSON_INVALID(&parse_error))?;
 
     if requires_unsupported(&value) {
         return Err(crate::errors::APP_DEFINITION_REQUIRES_NEWER_SHELL());
     }
 
-    let definition: AppDefinition = serde_json::from_value(value).map_err(|parse_error| {
-        crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error).and_details(vec![format!(
-            "앱 정의 형식이 올바르지 않습니다: {parse_error}"
-        )])
-    })?;
+    let definition: AppDefinition = serde_json::from_value(value)
+        .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
 
     let mut details = validate(&definition);
     if !cached && definition.agent.is_none() {

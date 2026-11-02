@@ -99,7 +99,9 @@ fn invalid_definitions_and_outside_paths_are_rejected_without_saving() {
     let err = state
         .publish_app(malformed, "agent", false, None)
         .unwrap_err();
-    assert!(!err.details.is_empty());
+    assert_eq!(err.id.as_deref(), Some("APP_DEFINITION_FORMAT_INVALID"));
+    assert!(err.message.contains("missing field"));
+    assert!(err.details.is_empty());
     let outside = test_definition(EDITOR).replace(
         r#""path": { "state": "current_file" }"#,
         r#""path": "../secret.md""#,

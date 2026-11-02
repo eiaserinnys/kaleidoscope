@@ -333,10 +333,9 @@ fn storage_schema_unknown_keyword_is_rejected() {
     definition["storage"]["entries"][0]["schema"]["pattern"] = json!(".*");
     let error = parse_app_definition(&definition.to_string()).unwrap_err();
     assert_eq!(error.code, ErrorCode::InvalidAppDefinition);
-    assert!(error
-        .details
-        .iter()
-        .any(|detail| detail.contains("pattern")));
+    assert_eq!(error.id.as_deref(), Some("APP_DEFINITION_FORMAT_INVALID"));
+    assert!(error.message.contains("pattern"));
+    assert!(error.details.is_empty());
 }
 
 #[test]

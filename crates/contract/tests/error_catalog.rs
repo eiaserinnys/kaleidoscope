@@ -2,24 +2,40 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use kaleidoscope_contract::{errors, ErrorCode};
+use kaleidoscope_contract::{
+    app_storage::{validate_storage_content, StorageEntryDecl},
+    errors,
+    validate::parse_app_definition,
+    ErrorCode,
+};
+use serde_json::json;
 
 fn codes() -> Vec<&'static str> {
     errors::all().map(|entry| entry.id).collect()
 }
 
+fn valid_code(id: &str) -> bool {
+    id.split('_').count() >= 3
+        && id.split('_').all(|part| !part.is_empty())
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte == b'_')
+}
+
 #[test]
 fn code_format_is_uppercase_and_has_three_parts() {
     for entry in errors::all() {
-        assert!(entry.id.split('_').count() >= 3, "{}", entry.id);
-        assert!(
-            entry
-                .id
-                .bytes()
-                .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_'),
-            "{}",
-            entry.id
-        );
+        assert!(valid_code(entry.id), "{}", entry.id);
+    }
+    assert!(valid_code("SHELL_OPEN_FAILED"));
+    for invalid in [
+        "SHELL_OPEN_FAIL2",
+        "SHELL__FAIL",
+        "_SHELL_FAIL",
+        "SHELL_FAIL_",
+        "shell_open_fail",
+    ] {
+        assert!(!valid_code(invalid), "{invalid}");
     }
 }
 
@@ -126,9 +142,90 @@ fn storage_schema_mismatch_message_includes_validation_reason() {
     assert_eq!(error.id.as_deref(), Some("STORAGE_WRITE_SCHEMA_MISMATCH"));
     assert_eq!(
         error.message,
-        "저장 항목 settings.theme의 값이 앱이 선언한 형식과 다릅니다: JSON path /color: expected string"
+        "저장 항목 settings.theme의 값이 앱 선언과 맞지 않습니다. JSON path /color: expected string 값을 고쳐 다시 저장하세요."
     );
     assert!(error.details.is_empty());
+}
+
+#[test]
+fn app_definition_parse_errors_show_reason_and_next_step_once() {
+    for (definition, id, beginning, ending) in [
+        (
+            "{",
+            "APP_DEFINITION_JSON_INVALID",
+            "앱 정의 JSON을 읽지 못했습니다: ",
+            ". JSON 문법을 고친 뒤 다시 올리세요.",
+        ),
+        (
+            "{}",
+            "APP_DEFINITION_FORMAT_INVALID",
+            "앱 정의의 형식이 올바르지 않습니다: ",
+            ". 해당 필드를 고친 뒤 다시 올리세요.",
+        ),
+    ] {
+        let error = parse_app_definition(definition).unwrap_err();
+        assert_eq!(error.id.as_deref(), Some(id));
+        assert!(error.message.starts_with(beginning), "{}", error.message);
+        assert!(error.message.ends_with(ending), "{}", error.message);
+        assert!(error.details.is_empty(), "{error:?}");
+    }
+}
+
+#[test]
+fn storage_validation_reasons_identify_value_and_fixable_cause() {
+    let cases = [
+        (
+            json!({"type":"boolean"}),
+            json!("no"),
+            "값 전체는 boolean 형식이어야 합니다.",
+        ),
+        (
+            json!({"type":["boolean","string"]}),
+            json!(3),
+            "값 전체는 boolean 또는 string 형식이어야 합니다.",
+        ),
+        (
+            json!({"type":"object","properties":{"enabled":{"type":"boolean"}}}),
+            json!({"enabled":"no"}),
+            "/enabled는 boolean 형식이어야 합니다.",
+        ),
+        (
+            json!({"type":"string","enum":["yes"]}),
+            json!("no"),
+            "값 전체의 값이 허용 목록에 없습니다.",
+        ),
+        (
+            json!({"type":"string","minLength":3}),
+            json!("가"),
+            "값 전체의 글이 3자보다 짧습니다.",
+        ),
+        (
+            json!({"type":"object","required":["enabled"]}),
+            json!({}),
+            "값 전체에 필수 필드가 없습니다: enabled.",
+        ),
+        (
+            json!({"type":"object"}),
+            json!({"extra":true}),
+            "값 전체에 선언되지 않은 필드가 있습니다: extra.",
+        ),
+        (
+            json!({"type":"array","uniqueItems":true}),
+            json!([1, 1]),
+            "값 전체에 중복 항목이 있습니다.",
+        ),
+    ];
+    for (schema, value, expected) in cases {
+        let entry: StorageEntryDecl = serde_json::from_value(json!({
+            "id":"value", "key":"settings/value", "kind":"json", "schema":schema, "default":null,
+            "label":"값", "presentation":"hidden"
+        }))
+        .unwrap();
+        assert_eq!(
+            validate_storage_content(&entry, &value).unwrap_err(),
+            expected
+        );
+    }
 }
 
 #[test]

@@ -3,14 +3,14 @@ error_catalog! { ENTRIES;
         class: InvalidAppDefinition,
         place: "앱 정의 JSON 읽기",
         cause: "JSON 문법이 올바르지 않다",
-        message: "앱 정의 JSON을 읽지 못했습니다: {reason}",
+        message: "앱 정의 JSON을 읽지 못했습니다: {reason}. JSON 문법을 고친 뒤 다시 올리세요.",
         fix: "앱 정의의 JSON 구문을 고친 뒤 다시 올리세요"
     }
     APP_DEFINITION_FORMAT_INVALID(reason) {
         class: InvalidAppDefinition,
         place: "앱 정의 구조 읽기",
         cause: "JSON 값이 앱 정의 형식에 맞지 않는다",
-        message: "앱 정의의 형식이 올바르지 않습니다: {reason}",
+        message: "앱 정의의 형식이 올바르지 않습니다: {reason}. 해당 필드를 고친 뒤 다시 올리세요.",
         fix: "안내된 필드와 값을 고친 뒤 다시 올리세요"
     }
     APP_DEFINITION_CHECK_FAILED() {

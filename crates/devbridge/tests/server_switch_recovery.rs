@@ -223,13 +223,15 @@ async fn real_remote_reconnect_recovers_storage_source_and_asset() {
                         let values = updates_listener.lock().unwrap();
                         ["/ui/children/0/value", "/ui/children/1/value"].iter().all(|pointer| values.iter().any(|view| view["values"][pointer]["status"] == "failed"))
                     });
-                    *offline_listener.lock().unwrap() = Some(json!({"message":error.message}));
+                    *offline_listener.lock().unwrap() = Some(json!({"message":error.message,"id":error.id}));
                 }
                 _ => {}
             }
         }));
         call(&core, json!({"op":"link.start","server_url":remote.server_url}));
-        assert_eq!(offline_result.lock().unwrap().as_ref().unwrap()["message"], "서버에 연결되어 있지 않습니다");
+        let offline = offline_result.lock().unwrap().clone().unwrap();
+        assert_eq!(offline["message"], "kaleidoscope 서버에 연결되어 있지 않아 미디어를 불러올 수 없습니다. 서버를 연결한 뒤 다시 시도하세요.");
+        assert_eq!(offline["id"], "MEDIA_LOAD_SERVER_NOT_CONNECTED");
         wait_for(|| connected(&core, ServerMode::Remote));
         wait_for(|| {
             let values = updates.lock().unwrap();
