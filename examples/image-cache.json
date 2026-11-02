@@ -13,7 +13,7 @@
     "http_permissions": ["image"], "device_storage": { "prefixes": ["cache/"] }
   },
   "ui": { "type": "stack", "direction": "column", "children": [
-    { "type": "toolbar", "children": [
+    { "type": "toolbar", "start": [
       { "type": "button", "label": "그림 받기", "on_click": { "client": "download" } },
       { "type": "button", "label": "보관 그림 열기", "on_click": { "client": "restore" } },
       { "type": "button", "label": "파일 보관", "on_click": { "pick_files": { "accept": [{ "mime": "application/octet-stream", "extensions": ["bin"] }], "client": "upload" } } },
