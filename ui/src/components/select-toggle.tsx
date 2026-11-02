@@ -13,9 +13,6 @@ export interface SelectChoice {
   value: JsonValue;
   label: string;
   disabled?: boolean;
-  className?: string;
-  prefix?: ReactNode;
-  suffix?: string;
   description?: string;
 }
 
@@ -34,6 +31,9 @@ type SelectBaseProps = {
   describedBy?: string;
   add?: boolean;
   disabled?: boolean;
+  className?: string;
+  prefix?: ReactNode;
+  suffix?: string;
 };
 
 type SelectProps = SelectBaseProps & (
