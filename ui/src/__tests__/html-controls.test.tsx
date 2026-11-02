@@ -10,6 +10,29 @@ import { Select } from "../components/select-toggle";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+it("글 범위가 바뀌면 쓰던 커멘트를 보존하며 다시 초점을 주고 같은 범위 갱신은 초점을 옮기지 않는다", async () => {
+  const model = {
+    selection: { n: 1, anchor: { kind: "text", tag: "p", quote: { exact: "첫 글" }, position: { start: 0, end: 3 } } },
+    active: { name: "시안", rev: 1 }, comments: [], results: {}, reviewComments: [],
+    root: { current: null }, send: vi.fn(), addComment: vi.fn(),
+  } as unknown as ComponentProps<typeof CommentFace>["model"];
+  const { rerender } = render(<CommentFace model={model} />);
+  const input = screen.getByRole("textbox", { name: "커멘트" });
+  const user = userEvent.setup();
+  expect(document.activeElement).toBe(input);
+  await user.keyboard("초안"); input.blur();
+  const selection = model.selection!;
+  const next = { ...model, selection: { ...selection, anchor: { ...selection.anchor, position: { start: 4, end: 7 } } } };
+  rerender(<CommentFace model={next} />);
+  expect.soft(document.activeElement).toBe(input);
+  expect(input).toHaveProperty("value", "초안");
+  input.blur(); rerender(<CommentFace model={{ ...next, selection: { ...next.selection } }} />);
+  expect(document.activeElement).not.toBe(input);
+  rerender(<CommentFace model={{ ...next, selection: { ...next.selection, n: 2 } }} />);
+  expect(document.activeElement).toBe(input);
+  expect(input).toHaveProperty("value", "초안");
+});
+
 it("공용 버튼의 제목과 선택 상자의 앞뒤 내용을 표시한다", () => {
   render(<><Button title="되돌리기 Ctrl+Z">되돌리기</Button><Select label="그림자" value="small" onChange={vi.fn()} groups={[{ options: [{ value: "small", label: "작게" }] }]} className="ks-html-prop" prefix={<span>그림자</span>} suffix="단위" /></>);
   expect(screen.getByRole("button", { name: "되돌리기" }).getAttribute("title")).toBe("되돌리기 Ctrl+Z");

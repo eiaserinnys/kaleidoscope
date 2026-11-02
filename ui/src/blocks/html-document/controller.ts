@@ -253,6 +253,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     if (data.key === "Escape") { send({ type: "ks-html-select-number", n: null }); return; }
     const doc = work.current; const target = selection && doc ? findNumber(doc, selection.n) : null;
     if (!doc || !target || !selection) return;
+    if (selection.anchor.kind === "text" && (data.key === "Delete" || data.key === "Backspace" || (data.ctrl && data.key.toLowerCase() === "d") || (data.alt && (data.key === "ArrowUp" || data.key === "ArrowDown")))) return;
     if (target === doc.body && ((data.key === "Enter" && data.shift) || data.key === "Tab" || data.key === "Delete" || data.key === "Backspace" || data.alt || data.ctrl)) return;
     let next: Element | null = null;
     if (data.key === "Enter") next = data.shift ? target.parentElement : target.firstElementChild;

@@ -63,7 +63,7 @@ export function CommentFace({ model }: { model: Model }) {
   const card = ({ comment, index }: { comment: Comment; index: number }) => <CommentCard key={comment.id} comment={comment} index={index} status={model.results[comment.id]} active={model.activeComment === comment.id} selected={model.selection} rev={model.active!.rev} dirty={model.dirty} saving={model.saving} change={model.writeChange} activate={model.openComment} deactivate={deactivate} deleted={deleted} />;
   return <>
     <div className="ks-html-rail-body">
-      {model.selection ? <><Target selection={model.selection} choose={(n) => model.send({ type: "ks-html-select-number", n })} /><Compose label="커멘트" focus={model.selection.anchor.kind === "text"} onSubmit={model.addComment} onEscape={clear} /></> : null}
+      {model.selection ? <><Target selection={model.selection} choose={(n) => model.send({ type: "ks-html-select-number", n })} /><Compose label="커멘트" selection={model.selection} focus={model.selection.anchor.kind === "text"} onSubmit={model.addComment} onEscape={clear} /></> : null}
       {orphans.length ? <Group title="제자리 없음" count={orphans.length} open={orphansOpen} onToggle={() => setOrphansOpen((value) => !value)}>{orphans.map(card)}</Group> : null}
       {unresolved.length ? <div className="ks-html-group">{unresolved.map(card)}</div> : null}
       {resolved.length ? <Group title="해결됨" count={resolved.length} open={resolvedOpen} onToggle={() => setResolvedOpen((value) => !value)}>{resolved.map(card)}</Group> : null}

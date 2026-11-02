@@ -44,6 +44,31 @@ it("커멘트 문서의 빠진 필드는 기본값으로 읽고 잘못된 구조
   await expect(readThread(core, "window", "drafts", "시안")).rejects.toThrow();
 });
 
+it("글 선택에서 구조 키는 요소를 바꾸지 않고 요소 선택의 삭제는 유지한다", async () => {
+  const base = createFakeTransport(makeTestSeed({ definitions: [definition as AppDefinition] }));
+  const call = async (request: CoreRequest) => {
+    if (request.op === "storage.list") return { op: "storage.list", result: { items: [{ doc: "시안/r1.html" }] } };
+    if (request.op === "storage.get") return { op: "storage.get", result: { content: "<p>앞</p><p>대상 문단</p><p>뒤</p>", revision: "r1" } };
+    return base.call(request as never);
+  };
+  render(<AppWindowContent store={createShellStore({ ...base, call: call as CoreTransport["call"] })} windowId="viewer-window" />);
+  const frame = await screen.findByTitle("HTML 보기") as HTMLIFrameElement;
+  await waitFor(() => expect(frame.srcdoc).toContain("대상 문단"));
+  const doc = new DOMParser().parseFromString(frame.srcdoc, "text/html");
+  const n = Number(doc.querySelectorAll("p")[1].getAttribute("data-ks-n"));
+  const post = vi.spyOn(frame.contentWindow!, "postMessage");
+  const dispatch = (data: object) => act(() => { window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, data })); });
+  dispatch({ type: "ks-html-select", selection: { n, anchor: { ...testAnchor, kind: "text", position: { start: 1, end: 3 } }, styles: {} } });
+  post.mockClear();
+  for (const key of [{ key: "Delete" }, { key: "Backspace" }, { key: "d", ctrl: true }, { key: "ArrowUp", alt: true }, { key: "ArrowDown", alt: true }]) {
+    dispatch({ type: "ks-html-key", ctrl: false, alt: false, shift: false, ...key });
+    expect(post.mock.calls.some(([message]) => message.type === "ks-html-edit")).toBe(false);
+  }
+  dispatch({ type: "ks-html-select", selection: { n, anchor: testAnchor, styles: {} } });
+  dispatch({ type: "ks-html-key", key: "Backspace", ctrl: false, alt: false, shift: false });
+  expect(post.mock.calls.some(([message]) => message.type === "ks-html-edit" && message.edit.kind === "remove")).toBe(true);
+});
+
 it("문서 머리 줄에서 고르기와 레일 면을 아이콘으로 바꾼다", async () => {
   const seed = makeTestSeed({ definitions: [definition as AppDefinition] });
   const base = createFakeTransport(seed);
