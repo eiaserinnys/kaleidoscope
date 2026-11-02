@@ -43,6 +43,22 @@ it("cycles table sort and exposes its direction", async () => {
   fireEvent.click(button);
   expect(header.getAttribute("aria-sort")).toBe("none");
 });
+it("sizes narrow numeric and fill columns to their content", async () => {
+  setup({
+    type: "table",
+    rows: [{ key: "short", comments: 3, title: "짧은 이야기" }, { key: "long", comments: 12345678, title: "긴 이야기" }],
+    columns: [
+      { field: "comments", label: "댓글", width: "narrow", format: "number" },
+      { field: "title", label: "이야기" },
+    ],
+  });
+  const table = await screen.findByRole("table");
+  const columns = table.style.getPropertyValue("--ks-table-columns");
+  const longestValue = Array.from(new Intl.NumberFormat().format(12345678)).length;
+  expect(columns).toContain(`calc(${longestValue} * var(--ks-type-body) * 0.6 + 2 * var(--ks-space-2))`);
+  expect(columns).toContain("calc(2 * var(--ks-type-body) + 2 * var(--ks-space-2))");
+  expect(columns).toContain("minmax(calc(var(--ks-space-6) * 2), 1fr)");
+});
 it("omits empty properties and renders formatted values", async () => {
   setup({ type: "properties", fields: [{ label: "빈 값", value: null }, { label: "코드", value: "hello", format: "code" }, { label: "배지", value: "진행", format: "badge" }] });
   expect(await screen.findByText("hello")).toBeTruthy();

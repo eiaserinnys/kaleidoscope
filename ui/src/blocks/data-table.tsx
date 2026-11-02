@@ -11,7 +11,12 @@ import { NoItems, VirtualSurface, asArray, dateText, isObject, keepRovingRow, us
 export type Row = Record<string, JsonValue> & { key: string };
 const validRow = (item: unknown): item is Row => isObject(item) && typeof item.key === "string";
 function width(column: Column, rows: Row[]) {
-  const base = column.width === "narrow" ? "calc(var(--ks-space-6) * 3)" : column.width === "medium" ? "calc(var(--ks-space-6) * 5)" : column.width === "wide" ? "calc(var(--ks-space-6) * 8)" : "calc(var(--ks-space-6) * 3)";
+  if (column.width === "narrow" && column.format === "number") {
+    const valueLength = rows.reduce((longest, row) => Math.max(longest, Array.from(cellValue(row[column.field], column)).length), 0);
+    const labelLength = Array.from(column.label).length;
+    return `max(calc(var(--ks-space-6) * 2), calc(${valueLength} * var(--ks-type-body) * 0.6 + 2 * var(--ks-space-2)), calc(${labelLength} * var(--ks-type-body) + 2 * var(--ks-space-2)))`;
+  }
+  const base = column.width === "narrow" ? "calc(var(--ks-space-6) * 3)" : column.width === "medium" ? "calc(var(--ks-space-6) * 5)" : column.width === "wide" ? "calc(var(--ks-space-6) * 8)" : "calc(var(--ks-space-6) * 2)";
   const length = column.format === "badge" ? Math.max(0, ...rows.map((row) => {
     const badge = row[column.field];
     return isBadge(badge) ? Array.from(typeof badge === "string" ? badge : badge.text).length : 0;

@@ -37,11 +37,26 @@ fn reader_is_hacker_news_only() {
     assert_eq!(definition.name, "해커뉴스");
 
     let mut types = Vec::new();
+    let mut search_on_change = None;
     walk_blocks(&definition.ui, "/ui", &mut |_, block| {
-        types.push(matches!(block, Block::Tabs { .. }));
-        assert!(!matches!(block, Block::Metrics { .. }));
+        match block {
+            Block::Tabs { .. } => types.push(true),
+            Block::Metrics { .. } => panic!("요약 타일이 남아 있음"),
+            Block::Input { on_change, .. } => {
+                search_on_change = Some(serde_json::to_value(on_change).expect("검색 입력 동작"));
+            }
+            _ => {}
+        }
     });
-    assert!(!types.into_iter().any(|is_tabs| is_tabs));
+    assert!(types.is_empty());
+    assert_eq!(
+        search_on_change,
+        Some(json!([
+            {"set_state":"search_input"},
+            {"set_state":"query","value":{"expr":"$event = '' ? '' : $state.query"}},
+            {"set_state":"selected_story","value":{"expr":"$event = '' ? 'top' : $state.selected_story"}}
+        ]))
+    );
 }
 
 #[test]
@@ -119,7 +134,8 @@ fn reader_evaluates_nested_discussion_bindings() {
     assert_eq!(feed[1]["children"][0]["key"], "2", "feed: {feed:#}");
     assert!(feed[0]["body"].as_str().unwrap().contains("소개 & 본문"));
     assert!(feed[0]["body"].as_str().unwrap().contains("Vec<T>"), "feed: {feed:#}");
-    assert_eq!(feed[0]["meta"], "작성자 본문");
+    assert_eq!(feed[0]["name"], "본문");
+    assert!(feed[0].get("meta").is_none());
     assert_eq!(feed[0]["badges"], json!([]));
     assert_eq!(feed[1]["meta"], "2026-10-31 10:00");
     assert_eq!(feed[1]["badges"], json!([]));
@@ -135,7 +151,7 @@ fn reader_evaluates_nested_discussion_bindings() {
     else {
         panic!("이야기 메타 식 결과")
     };
-    assert_eq!(story_meta.as_str(), Some("alice · 2026-10-31 11:52"));
+    assert_eq!(story_meta.as_str(), Some("alice 2026-10-31 11:52"));
 }
 
 #[test]
