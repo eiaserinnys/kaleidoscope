@@ -68,12 +68,13 @@ test("확인 대화상자와 실패한 구역 머리의 조작을 격리한다",
   await page.setViewportSize({ width: 700, height: 700 });
   await page.goto("/?preview=data-controls");
   const app = page.getByTestId("app-window-data-controls");
-  const header = app.locator(".ks-data-section-header").filter({ has: page.getByRole("button", { name: "다시 받기" }) });
+  const failedSection = app.locator(".ks-data-section").filter({ hasText: "데이터를 받지 못했습니다" });
+  const header = failedSection.locator(".ks-data-section-header");
   const sectionToggle = header.getByRole("button", { name: "접기" });
   await expect(sectionToggle).toHaveAttribute("aria-expanded", "true");
-  await header.getByRole("button", { name: "다시 받기" }).click();
+  await failedSection.getByRole("button", { name: "다시 받기" }).click();
   await expect(sectionToggle).toHaveAttribute("aria-expanded", "true");
-  await expect(app.getByText("구역 내용")).toBeVisible();
+  await expect(failedSection.getByText("데이터를 받지 못했습니다")).toBeVisible();
   await capture(page, "section-retry");
 
   // 머리 전체가 접기 단추다: 제목이 아닌 머리의 빈 곳(상태 단추 왼쪽)을 눌러도 접히고 다시 펴진다.

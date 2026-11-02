@@ -6,7 +6,7 @@ async function open(page: Page) {
   await page.goto("/?preview=md-editor");
   const app = page.getByTestId("app-window-md-editor");
   await app.getByRole("button", { name: "문서 폴더 고르기" }).click();
-  await app.getByRole("button", { name: "reclick.md" }).click();
+  await app.getByRole("treeitem", { name: "reclick.md" }).click();
   const editor = app.locator(".cm-content");
   await expect(editor).toContainText("다시 누르기 시험");
   return { app, editor };
