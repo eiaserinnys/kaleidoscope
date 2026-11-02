@@ -141,13 +141,13 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     setAttachments((current) => [...files, ...current]);
   }, []);
 
-  const load = useCallback(async (initialEvents: CoreEvent[] = [], profile?: string) => {
+  const load = useCallback(async (initialEvents: CoreEvent[] = [], profile?: string, quiet = false) => {
     if (!connected || !workspaceId || !hasProvider) return;
     const generation = ++loadGeneration.current;
     const events = initialEvents;
     conversationQueue.current = events;
     setCreating(false);
-    setLoading(true);
+    if (!quiet) setLoading(true);
     setLoadError(null);
     setLoginRequired(false);
     setBindingConflict(false);
@@ -210,10 +210,10 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   }), [applyConversation, context.store, workspaceId, hasProvider, providerEntry, windowId, restoreDraft, handleError, load]);
 
   useLayoutEffect(() => {
-    if (!restoreFocus.current || loading || loginRequired || loadError || bindingConflict || pendingSwitch) return;
+    if (!restoreFocus.current || loading || loginRequired || loadError || bindingConflict) return;
     const target = agent ? inputRef.current : startRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");
     if (target) { target.focus(); restoreFocus.current = false; }
-  }, [agent, loading, loginRequired, loadError, bindingConflict, models, pendingSwitch]);
+  }, [agent, loading, loginRequired, loadError, bindingConflict, models, switching]);
 
   const loadOlder = useConversationHistory({
     historyRef, nextBefore, enabled: hasProvider && Boolean(agent) && !loading && !loginRequired && !loadError && !bindingConflict,
@@ -241,6 +241,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
 
   const switchConversation = async (selection: { profile?: string; model?: string }) => {
     if (!thread || switching || busy) return;
+    restoreFocus.current = true;
     setSwitching(true);
     setSwitchError(null);
     try {
@@ -249,8 +250,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       setThread(reply.thread);
       setAgent(true);
       setNotices(reply.notices);
-      restoreFocus.current = true;
-      await load([], reply.thread.profile?.id);
+      await load([], reply.thread.profile?.id, true);
     } catch (reason) {
       const error = toCoreError(reason);
       if (!handleError(error)) setSwitchError(error.message);
@@ -479,7 +479,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
           title={`${pendingSwitch.label}(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.`}
           ok="바꾸기"
           onCancel={() => setPendingSwitch(null)}
-          onConfirm={() => { restoreFocus.current = true; setPendingSwitch(null); void switchConversation({ ...(pendingSwitch.profile ? { profile: pendingSwitch.profile } : {}), ...(pendingSwitch.model ? { model: pendingSwitch.model } : {}) }); }}
+          onConfirm={() => { setPendingSwitch(null); void switchConversation({ ...(pendingSwitch.profile ? { profile: pendingSwitch.profile } : {}), ...(pendingSwitch.model ? { model: pendingSwitch.model } : {}) }); }}
         /> : null;
       })() : null}
     </section>
