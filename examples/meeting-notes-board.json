@@ -1,0 +1,220 @@
+{
+  "id": "meeting-notes-board",
+  "name": "회의 안건 보드",
+  "description": "안건을 정리하고 완료 상태와 회의 구간을 함께 본다.",
+  "requires": { "blocks": 14, "modules": { "assets": 1, "client": 2 } },
+  "permissions": [],
+  "state": {
+    "language": "ko",
+    "show_surfaces": false,
+    "dialog_open": false,
+    "tour_open": false,
+    "tour_step": "agenda",
+    "tour_result": null
+  },
+  "messages": {
+    "ko": {
+      "board_title": "회의 안건",
+      "language_ko": "한국어",
+      "language_en": "English",
+      "show_surfaces": "표면 표시",
+      "open_help": "도움말",
+      "open_tour": "둘러보기",
+      "mark_done": "완료",
+      "edit_hint": "제목을 고치고 Shift를 누른 채 완료를 누르세요.",
+      "timeline_title": "회의 시간",
+      "completion": "완료한 안건",
+      "wide_note": "넓은 창에서 작업합니다.",
+      "help_title": "안건 보드 사용법",
+      "help_body": "안건 제목을 고치고 Shift와 완료 단추를 함께 눌러 상태를 바꿉니다. N 키로 안건을 추가할 수 있습니다.",
+      "tour_agenda_title": "안건 목록",
+      "tour_agenda_body": "표면 표시를 켜고 제목을 고치거나 안건을 완료할 수 있습니다.",
+      "tour_timeline_title": "회의 시간",
+      "tour_timeline_body": "시간축 단추로 보이는 구간을 조정합니다."
+    },
+    "en": {
+      "board_title": "Meeting agenda",
+      "language_ko": "한국어",
+      "language_en": "English",
+      "show_surfaces": "Show surfaces",
+      "open_help": "Help",
+      "open_tour": "Tour",
+      "mark_done": "Done",
+      "edit_hint": "Edit a title, then hold Shift and select Done.",
+      "timeline_title": "Meeting time",
+      "completion": "Completed agenda items",
+      "wide_note": "Wide workspace.",
+      "help_title": "Using the agenda board",
+      "help_body": "Edit an agenda title and hold Shift while selecting Done to change its status. Press N to add an item.",
+      "tour_agenda_title": "Agenda list",
+      "tour_agenda_body": "Show the surfaces, then edit a title or mark an item done.",
+      "tour_timeline_title": "Meeting time",
+      "tour_timeline_body": "Use the timeline controls to adjust the visible range."
+    }
+  },
+  "locale": { "state": "language" },
+  "assets": [{ "id": "meeting-notes-board", "version": 1 }],
+  "client": {
+    "runtime": "javascript",
+    "entry": { "id": "meeting-notes-board", "version": 1 },
+    "inputs": {},
+    "outputs": {
+      "items": {
+        "default": [
+          { "id": "agenda-1", "title": "분기 목표 정리", "done": false, "surface": "agenda-1" },
+          { "id": "agenda-2", "title": "결정이 필요한 항목", "done": false, "surface": "agenda-2" },
+          { "id": "agenda-3", "title": "담당자와 다음 일정", "done": false, "surface": "agenda-3" }
+        ]
+      },
+      "completed": { "default": 0 },
+      "wide": { "default": false },
+      "viewport": { "default": { "start": 0, "end": 3600 } },
+      "tracks": {
+        "default": [
+          {
+            "id": "meeting",
+            "label": "회의",
+            "items": [
+              { "id": "goals", "start": 0, "end": 900, "label": "목표" },
+              { "id": "decisions", "start": 1200, "end": 2100, "label": "결정" },
+              { "id": "next-steps", "start": 2400, "end": 3300, "label": "다음 일정" }
+            ]
+          }
+        ]
+      }
+    },
+    "actions": ["add_item", "edit_title", "mark_done", "set_viewport"],
+    "commands": {},
+    "state_keys": [],
+    "storage_entries": []
+  },
+  "shortcuts": [
+    { "code": "KeyN", "modifiers": [], "action": { "client": "add_item" } }
+  ],
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "fill": 0,
+    "children": [
+      {
+        "type": "split",
+        "direction": "row",
+        "sizes": [50, 50],
+        "children": [
+          {
+            "type": "section",
+            "title": { "message": "board_title" },
+            "child": {
+              "type": "stack",
+              "direction": "column",
+              "fill": 2,
+              "children": [
+                {
+                  "type": "anchor",
+                  "id": "agenda-section",
+                  "child": {
+                    "type": "stack",
+                    "direction": "row",
+                    "wrap": true,
+                    "children": [
+                      {
+                        "type": "toggle",
+                        "label": "표면 표시",
+                        "value": { "state": "show_surfaces" },
+                        "on_change": { "set_state": "show_surfaces" }
+                      },
+                      { "type": "button", "label": { "message": "language_ko" }, "on_click": [{ "set_state": "language", "value": "ko" }] },
+                      { "type": "button", "label": { "message": "language_en" }, "on_click": [{ "set_state": "language", "value": "en" }] },
+                      { "type": "button", "label": { "message": "open_help" }, "on_click": [{ "set_state": "dialog_open", "value": true }] },
+                      { "type": "button", "label": { "message": "open_tour" }, "on_click": [{ "set_state": "tour_open", "value": true }] }
+                    ]
+                  }
+                },
+                { "type": "text", "value": { "message": "edit_hint" } },
+                {
+                  "type": "repeat",
+                  "items": { "client": "items" },
+                  "key": "id",
+                  "layout": "column",
+                  "virtual": true,
+                  "template": {
+                    "type": "stack",
+                    "direction": "column",
+                    "children": [
+                      {
+                        "type": "stack",
+                        "direction": "row",
+                        "wrap": true,
+                        "children": [
+                          {
+                            "type": "input",
+                            "label": "안건 제목",
+                            "placeholder": "안건 제목",
+                            "value": { "item": "title" },
+                            "on_change": { "client": "edit_title" }
+                          },
+                          { "type": "button", "label": { "message": "mark_done" }, "on_click": { "client": "mark_done" } }
+                        ]
+                      },
+                      {
+                        "type": "when",
+                        "value": { "state": "show_surfaces" },
+                        "child": {
+                          "type": "canvas",
+                          "surface": { "item": "surface" },
+                          "aspect_ratio": 4,
+                          "description": { "item": "title" }
+                        }
+                      }
+                    ]
+                  }
+                },
+                { "type": "progress", "value": { "client": "completed" }, "max": 3, "label": { "message": "completion" } },
+                { "type": "when", "value": { "client": "wide" }, "child": { "type": "text", "value": { "message": "wide_note" } } }
+              ]
+            }
+          },
+          {
+            "type": "section",
+            "title": { "message": "timeline_title" },
+            "child": {
+              "type": "anchor",
+              "id": "timeline-section",
+              "child": {
+                "type": "timeline",
+                "duration": 3600,
+                "position": 0,
+                "tracks": { "client": "tracks" },
+                "viewport": { "client": "viewport" },
+                "controls": true,
+                "on_viewport": { "client": "set_viewport" }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "type": "dialog",
+        "open": { "state": "dialog_open" },
+        "title": { "message": "help_title" },
+        "child": { "type": "text", "value": { "message": "help_body" } },
+        "on_close": [{ "set_state": "dialog_open", "value": false }]
+      },
+      {
+        "type": "tour",
+        "open": { "state": "tour_open" },
+        "step": { "state": "tour_step" },
+        "steps": [
+          { "key": "agenda", "target": "agenda-section", "title": { "message": "tour_agenda_title" }, "body": { "message": "tour_agenda_body" } },
+          { "key": "timeline", "target": "timeline-section", "title": { "message": "tour_timeline_title" }, "body": { "message": "tour_timeline_body" } }
+        ],
+        "on_step": [{ "set_state": "tour_step", "value": { "expr": "$event" } }],
+        "on_close": [
+          { "set_state": "tour_open", "value": false },
+          { "set_state": "tour_result", "value": { "expr": "$event" } },
+          { "set_state": "tour_step", "value": "agenda" }
+        ]
+      }
+    ]
+  }
+}

@@ -263,7 +263,8 @@ fn existing_bundled_definitions_keep_their_required_versions() {
                 continue;
             }
             let value: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-            let app = parsed(&value);
+            let app = parse_app_definition(&value.to_string())
+                .unwrap_or_else(|error| panic!("{}: {error:?}", path.display()));
             assert_eq!(
                 app.requires.blocks,
                 value["requires"]["blocks"].as_u64().unwrap() as u32,
