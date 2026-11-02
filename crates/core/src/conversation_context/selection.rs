@@ -26,7 +26,7 @@ impl Context {
         let request = self.ensure_request(inner, model, profile)?;
         let reply: EnsureThreadReply = self
             .client
-            .json(
+            .json_until_settled(
                 reqwest::Method::PUT,
                 &self.client.path(&["threads", "by-key"])?,
                 &self.query(namespace),
@@ -196,7 +196,7 @@ impl Context {
         };
         let reply: EnsureThreadReply = self
             .client
-            .json(
+            .json_until_settled(
                 reqwest::Method::PUT,
                 &self.client.path(&["threads", &thread.id, "execution"])?,
                 &BTreeMap::new(),
