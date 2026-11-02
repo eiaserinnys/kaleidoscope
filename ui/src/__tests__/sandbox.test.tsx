@@ -27,7 +27,7 @@ it("샌드박스의 허용된 상태와 저장을 중계하고 같이 볼 이미
   let revision = "r1";
   const spy = vi.spyOn(store, "call").mockImplementation(async (request) => {
     if (request.op === "storage.get") return { op: "storage.get", result: { content: stored, revision, exists: true, kind: "md" } } as CoreReply;
-    if (request.op === "storage.write" && request.content === "충돌") throw { code: "conflict", message: "다른 창에서 변경했습니다", details: [] };
+    if (request.op === "storage.write" && request.content === "충돌") throw { id: "SHELL_CALL_UNEXPECTED_FAILURE", code: "io", message: "다른 창에서 변경했습니다", details: [] };
     if (request.op === "storage.write") { stored = String(request.content); revision = "r2"; return { op: "storage.write", revision } as CoreReply; }
     return original(request);
   });
@@ -57,7 +57,10 @@ it("샌드박스의 허용된 상태와 저장을 중계하고 같이 볼 이미
   await act(async () => { transport.emit({ event: "storage.update", window_id: "editor-window", update: { kind: "changed", changed: { bucket_id: "bucket", item: { entry_id: "draft", key: "draft", kind: "md", revision, exists: true } } } }); });
   await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-sandbox-storage-sync", content: "다른 창의 변경", revision: "r3" }), "*"));
   message({ type: "ks-sandbox-storage-set", requestId: "2", entry: "draft", content: "충돌" });
-  await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-sandbox-storage-reply", requestId: "2", error: "다른 창에서 변경했습니다" }), "*"));
+  await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-sandbox-storage-reply", requestId: "2", error: "다른 창에서 변경했습니다", errorId: "SHELL_CALL_UNEXPECTED_FAILURE", errorCode: "io" }), "*"));
+  const storageError = await screen.findByRole("alert");
+  expect(storageError.textContent).toContain("SHELL_CALL_UNEXPECTED_FAILURE");
+  expect(storageError.textContent).toContain("다른 창에서 변경했습니다");
   expect(spy.mock.calls.filter(([request]) => request.op === "storage.write" && request.content === "충돌")).toHaveLength(1);
   expect(spy).toHaveBeenCalledWith(expect.objectContaining({ op: "storage.write", content: "충돌", expected_revision: "r2" }));
   message({ type: "ks-sandbox-storage-applied", entry: "draft", revision: "r3" });

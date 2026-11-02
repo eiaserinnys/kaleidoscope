@@ -1,16 +1,31 @@
 import type { ClientCapability } from "../contract/contract";
+import * as shellErrors from "../contract/shell-errors";
 
-type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string; inputs?: Record<string, unknown>; capabilities?: ClientCapability[]; actions?: string[] };
+type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string; inputs?: Record<string, unknown>; capabilities?: ClientCapability[]; actions?: string[]; errors?: ReturnType<typeof sandboxErrors> };
+
+export function sandboxErrors() {
+  return {
+    storageEntryUndeclared: shellErrors.SHELL_CLIENT_STORAGE_ENTRY_UNDECLARED({ entry: "__ENTRY__" }),
+    savePromptActionRequired: shellErrors.SHELL_CLIENT_SAVE_PROMPT_ACTION_REQUIRED(),
+    canShareCapabilityUndeclared: shellErrors.SHELL_CLIENT_FRAME_CAN_SHARE_CAPABILITY_UNDECLARED(),
+    canShareActionRequired: shellErrors.SHELL_CLIENT_CAN_SHARE_ACTION_REQUIRED(),
+    shareCapabilityUndeclared: shellErrors.SHELL_CLIENT_FRAME_SHARE_CAPABILITY_UNDECLARED(),
+    shareActionRequired: shellErrors.SHELL_CLIENT_SHARE_ACTION_REQUIRED(),
+    keepAwakeCapabilityUndeclared: shellErrors.SHELL_CLIENT_FRAME_KEEP_AWAKE_CAPABILITY_UNDECLARED(),
+    keepAwakeActionRequired: shellErrors.SHELL_CLIENT_KEEP_AWAKE_ACTION_REQUIRED(),
+  };
+}
 
 const encodeScript = (source: string) => `data:text/javascript;charset=utf-8;base64,${btoa(Array.from(new TextEncoder().encode(source), (byte) => String.fromCharCode(byte)).join(""))}`;
 const csp = "default-src 'none'; script-src data: blob: 'unsafe-eval'; style-src 'unsafe-inline' data: blob:; img-src data: blob:; font-src data: blob:; media-src data: blob:; worker-src blob:; connect-src data: blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';";
 
 function bridgeSource(init: SandboxInit): string {
-  const config = JSON.stringify(init).replace(/</g, "\\u003c");
+  const config = JSON.stringify({ ...init, errors: init.errors ?? sandboxErrors() }).replace(/</g, "\\u003c");
   return `(() => {
     document.currentScript?.remove();
     const config = ${config};
     const token = config.token;
+    const fail = (error) => Object.assign(new Error(error.message), { id: error.id, code: error.code });
     let state = { ...config.state }, nextRequest = 0, shareText = '', shareImage = '', shareCanvas = null, explicitText = false;
     const stateListeners = new Set(), storageListeners = new Map(), pending = new Map(), pendingWrites = new Set();
     const send = (type, body = {}, transfer) => transfer ? parent.postMessage({ token, type, ...body }, '*', transfer) : parent.postMessage({ token, type, ...body }, '*');
@@ -24,7 +39,7 @@ function bridgeSource(init: SandboxInit): string {
       send(type, { requestId, ...body }, transfer);
     });
     const request = (type, entry, content) => new Promise((resolve, reject) => {
-      if (!config.storageEntries.includes(entry)) { reject(new Error('허용되지 않은 저장 항목')); return; }
+      if (!config.storageEntries.includes(entry)) { reject(fail({ ...config.errors.storageEntryUndeclared, message: config.errors.storageEntryUndeclared.message.replace('__ENTRY__', entry) })); return; }
       const requestId = String(++nextRequest);
       pending.set(requestId, { resolve, reject });
       send(type, { requestId, entry, ...(type === 'ks-sandbox-storage-set' ? { content } : {}) });
@@ -90,24 +105,24 @@ function bridgeSource(init: SandboxInit): string {
         close(sink) { return clientRequest('ks-client-file-close', { sink }); },
         abort(sink) { return clientRequest('ks-client-file-abort', { sink }); },
         save_prompt({ suggested_name, mime }) {
-          if (!activeActions) return Promise.reject(new Error('파일 저장 창은 클라이언트 동작 안에서 열어야 합니다'));
+          if (!activeActions) return Promise.reject(fail(config.errors.savePromptActionRequired));
           return clientRequest('ks-client-save-prompt', { suggested_name, mime });
         },
       },
       host: {
         can_share(file_id) {
-          if (!config.capabilities?.includes('share')) return Promise.reject(new Error('앱에 share capability가 선언되지 않았습니다'));
-          if (!activeActions) return Promise.reject(new Error('host API는 클라이언트 동작 안에서 호출해야 합니다'));
+          if (!config.capabilities?.includes('share')) return Promise.reject(fail(config.errors.canShareCapabilityUndeclared));
+          if (!activeActions) return Promise.reject(fail(config.errors.canShareActionRequired));
           return clientRequest('ks-client-can-share', { file_id });
         },
         share(file_id, title) {
-          if (!config.capabilities?.includes('share')) return Promise.reject(new Error('앱에 share capability가 선언되지 않았습니다'));
-          if (!activeActions) return Promise.reject(new Error('host API는 클라이언트 동작 안에서 호출해야 합니다'));
+          if (!config.capabilities?.includes('share')) return Promise.reject(fail(config.errors.shareCapabilityUndeclared));
+          if (!activeActions) return Promise.reject(fail(config.errors.shareActionRequired));
           return clientRequest('ks-client-share', { file_id, title });
         },
         keep_awake(enabled) {
-          if (!config.capabilities?.includes('keep_awake')) return Promise.reject(new Error('앱에 keep_awake capability가 선언되지 않았습니다'));
-          if (!activeActions) return Promise.reject(new Error('host API는 클라이언트 동작 안에서 호출해야 합니다'));
+          if (!config.capabilities?.includes('keep_awake')) return Promise.reject(fail(config.errors.keepAwakeCapabilityUndeclared));
+          if (!activeActions) return Promise.reject(fail(config.errors.keepAwakeActionRequired));
           return clientRequest('ks-client-keep-awake', { enabled });
         },
       },
@@ -138,9 +153,9 @@ function bridgeSource(init: SandboxInit): string {
         });
       }
       if (data.type === 'ks-client-inputs') { inputs = data.inputs; inputListeners.forEach(fn => fn(inputs, data.changed)); }
-      if (data.type === 'ks-client-action' && config.actions?.includes(data.name)) { const handler = handlers.get(data.name); if (handler) { activeActions += 1; Promise.resolve().then(() => handler(data.context)).catch(error => send('ks-client-notice', { message: String(error), error: true })).finally(() => { activeActions -= 1; }); } }
+      if (data.type === 'ks-client-action' && config.actions?.includes(data.name)) { const handler = handlers.get(data.name); if (handler) { activeActions += 1; Promise.resolve().then(() => handler(data.context)).catch(error => { const detail = error && typeof error === 'object' ? error : {}; send('ks-client-notice', { message: typeof detail.message === 'string' ? detail.message : String(error), error: true, errorId: detail.id, errorCode: detail.code }); }).finally(() => { activeActions -= 1; }); } }
       if (data.type === 'ks-client-ping') send('ks-client-pong');
-      if (data.type === 'ks-client-reply') { const job = pending.get(data.requestId); if (job) { pending.delete(data.requestId); data.error ? job.reject(new Error(data.error)) : job.resolve(data.result); } }
+      if (data.type === 'ks-client-reply') { const job = pending.get(data.requestId); if (job) { pending.delete(data.requestId); data.error ? job.reject(fail({ id: data.errorId, code: data.errorCode, message: data.error })) : job.resolve(data.result); } }
       if (data.type === 'ks-client-surface') {
         if (data.phase === 'detach') {
           if (surfaces.get(data.id)?.generation === data.generation) { surfaces.delete(data.id); surfaceListeners.get(data.id)?.forEach(fn => fn(null)); }
@@ -168,7 +183,7 @@ function bridgeSource(init: SandboxInit): string {
           if (accepted && data.revision !== undefined) send('ks-sandbox-storage-applied', { entry: data.entry, revision: data.revision });
         }
       }
-      if (data.type === 'ks-sandbox-storage-reply') { const job = pending.get(data.requestId); if (job) { pending.delete(data.requestId); data.error ? job.reject(new Error(data.error)) : job.resolve(data.content); } }
+      if (data.type === 'ks-sandbox-storage-reply') { const job = pending.get(data.requestId); if (job) { pending.delete(data.requestId); data.error ? job.reject(fail({ id: data.errorId, code: data.errorCode, message: data.error })) : job.resolve(data.content); } }
       if (data.type === 'ks-sandbox-request-share') report();
       if (data.type === 'ks-sandbox-flush') {
         window.dispatchEvent(new Event('pagehide'));

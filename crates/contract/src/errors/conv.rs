@@ -685,4 +685,18 @@ error_catalog! { ENTRIES;
         message: "제공자 대화 {thread}의 기록을 찾을 수 없습니다. 대화를 다시 불러오세요.",
         fix: "대화를 다시 불러오세요"
     }
+    CONV_STREAM_LOGIN_REQUIRED(name) {
+        class: LoginRequired,
+        place: "대화 스트림 연결",
+        cause: "제공자 연결에 다시 로그인이 필요하다",
+        message: "대화 제공자 연결 {name}: 로그인이 필요합니다. 로그인한 뒤 대화를 다시 여세요.",
+        fix: "제공자 연결에 로그인하세요"
+    }
+    CONV_STREAM_PERMISSION_DENIED(name) {
+        class: PermissionDenied,
+        place: "대화 스트림 연결",
+        cause: "제공자가 대화 이벤트 읽기를 거부했다",
+        message: "대화 제공자 연결 {name}: 대화 이벤트를 읽을 권한이 없습니다. 연결 권한을 확인하세요.",
+        fix: "제공자 연결 권한을 확인하세요"
+    }
 }

@@ -48,7 +48,7 @@ function setup(definition: AppDefinition, mime: string, content: string) {
 
 it("이미지 자산은 재연결 시 실패한 요청을 다시 읽는다", async () => {
   const state = setup(base, "image/png", "image");
-  function Image() { const result = useMedia({ asset: "sample", version: 1 }, 100); return <div>{result.status === "ready" ? result.url : result.status === "failed" ? result.message : "불러오는 중"}</div>; }
+  function Image() { const result = useMedia({ asset: "sample", version: 1 }, 100); return <div>{result.status === "ready" ? result.url : result.status === "failed" ? result.error.message : "불러오는 중"}</div>; }
   render(<WindowDataProvider store={state.store} windowId={state.windowId} definition={base}><Image /></WindowDataProvider>);
   await screen.findByText("서버에 연결되어 있지 않습니다");
   state.reconnect();
@@ -58,7 +58,7 @@ it("이미지 자산은 재연결 시 실패한 요청을 다시 읽는다", asy
 
 it("숨겨진 창의 실패 자산은 연결 후 창을 볼 때 다시 읽는다", async () => {
   const state = setup(base, "image/png", "image");
-  function Image() { const result = useMedia({ asset: "sample", version: 1 }, 100); return <div>{result.status === "ready" ? result.url : result.status === "failed" ? result.message : "불러오는 중"}</div>; }
+  function Image() { const result = useMedia({ asset: "sample", version: 1 }, 100); return <div>{result.status === "ready" ? result.url : result.status === "failed" ? result.error.message : "불러오는 중"}</div>; }
   render(<WindowDataProvider store={state.store} windowId={state.windowId} definition={base}><Image /></WindowDataProvider>);
   await screen.findByText("서버에 연결되어 있지 않습니다");
   state.setHidden(true);
@@ -71,7 +71,7 @@ it("숨겨진 창의 실패 자산은 연결 후 창을 볼 때 다시 읽는다
 
 it("최대화 창에 가린 실패 자산은 가림이 풀릴 때 다시 읽는다", async () => {
   const state = setup(base, "image/png", "image");
-  function Image() { const result = useMedia({ asset: "sample", version: 1 }, 100); return <div>{result.status === "ready" ? result.url : result.status === "failed" ? result.message : "불러오는 중"}</div>; }
+  function Image() { const result = useMedia({ asset: "sample", version: 1 }, 100); return <div>{result.status === "ready" ? result.url : result.status === "failed" ? result.error.message : "불러오는 중"}</div>; }
   render(<WindowDataProvider store={state.store} windowId={state.windowId} definition={base}><Image /></WindowDataProvider>);
   await screen.findByText("서버에 연결되어 있지 않습니다");
   state.setCovered(true);

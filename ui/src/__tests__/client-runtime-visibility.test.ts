@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { File as NodeFile } from "node:buffer";
 import type { AppDefinition, ShellSnapshot } from "../contract/contract";
+import * as shellErrors from "../contract/shell-errors";
 import { CLIENT_PING_TIMEOUT_SECS } from "../contract/limits";
 import type { ShellStore } from "../core/shell-store";
 import type { WindowData } from "../data/window-data";
@@ -162,9 +163,20 @@ describe("client runtime host services", () => {
       nativeFiles: options.nativeFiles ?? false,
     } as unknown as ShellStore;
     const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: [], commands: {}, capabilities: options.capabilities };
-    const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), clientDormant: false } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
-    return { runtime, store, get current() { return current; }, activate() { current = snapshot(true); listeners.forEach((listener) => listener()); }, hide() { current = snapshot(false); listeners.forEach((listener) => listener()); } };
+    const setNotice = vi.fn();
+    const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setNotice, clientDormant: false } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
+    return { runtime, store, setNotice, get current() { return current; }, activate() { current = snapshot(true); listeners.forEach((listener) => listener()); }, hide() { current = snapshot(false); listeners.forEach((listener) => listener()); } };
   };
+
+  it("앱 동작 오류의 코드와 ID를 쉘 알림에 보존한다", async () => {
+    const { runtime, setNotice } = createRuntime({});
+    await runtime.start();
+    const frame = document.querySelector("iframe")!;
+    const error = shellErrors.SHELL_CLIENT_ACTION_FAILED({ reason: "앱 동작을 끝내지 못했습니다" });
+    receive(frame, (runtime as any).token, "ks-client-notice", { error: true, message: error.message, errorId: error.id, errorCode: error.code });
+    expect(setNotice).toHaveBeenCalledWith(error);
+    await runtime.stop();
+  });
 
   it("기능 capability가 빠진 앱의 host 요청을 거부한다", async () => {
     const bytes = vi.fn(async () => new ArrayBuffer(0));

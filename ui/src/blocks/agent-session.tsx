@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import type { Block, ConversationAttachment, ConversationEvent, ConversationItem, CoreEvent, CoreRequest, LocalAgentSnapshot, SetState } from "../contract/contract";
+import type { Block, ConversationAttachment, ConversationEvent, ConversationItem, CoreError, CoreEvent, CoreRequest, LocalAgentSnapshot, SetState } from "../contract/contract";
 import { Button, EmptyState, IconButton, Notice, StatusText } from "../components/primitives";
 import { Folder, FolderOpen, MessageSquare } from "../components/icons";
 import { Select, Toggle } from "../components/select-toggle";
@@ -14,6 +14,7 @@ import { HistoryAttachmentView, ImagePreview, readUpload, type DraftAttachment, 
 import { ChatComposer } from "./chat-composer";
 import { ChatHistory } from "./chat-history";
 import { useFrameCoalesced } from "./frame-coalesced";
+import * as shellErrors from "../contract/shell-errors";
 
 export type AgentSessionBlockData = Extract<Block, { type: "chat" }> & { permission: string; root: { permission: string }; agents: NonNullable<Extract<Block, { type: "chat" }>["agents"]>; selected: NonNullable<Extract<Block, { type: "chat" }>["selected"]>; on_select: SetState };
 
@@ -36,8 +37,8 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
   const rootGrant = useWindowGrant(context, block.root.permission);
   const agentsBinding = useBinding(`${pointer}/agents`, block.agents);
   const [snapshot, setSnapshot] = useState<LocalAgentSnapshot | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<CoreError | null>(null);
+  const [actionError, setActionError] = useState<CoreError | null>(null);
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -95,13 +96,13 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
     setLoadError(null);
     void enqueueAgent(context.store, windowId, () => context.store.call({ op: "local_agent.attach", window_id: windowId })).then((reply) => {
       if (!active) return;
-      if (reply.op !== "local_agent.attach") throw new Error("에이전트 상태를 불러오지 못했습니다");
+      if (reply.op !== "local_agent.attach") throw shellErrors.SHELL_AGENT_SESSION_ATTACH_REPLY_INVALID();
       generationRef.current = reply.snapshot.generation;
       setSnapshot(reply.snapshot);
       buffered.forEach(applyUpdate);
       buffered.length = 0;
     }).catch((reason: unknown) => {
-      if (active) setLoadError(toCoreError(reason).message);
+      if (active) setLoadError(toCoreError(reason));
     });
     return () => {
       active = false;
@@ -120,7 +121,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
   const call = useCallback(async <K extends CoreRequest["op"],>(request: Extract<CoreRequest, { op: K }>) => {
     setActionError(null);
     try { await context.store.call(withLatestGeneration(request)); }
-    catch (reason) { setActionError(toCoreError(reason).message); }
+    catch (reason) { setActionError(toCoreError(reason)); }
   }, [context.store, withLatestGeneration]);
 
   const chooseAgent = useCallback((value: unknown) => {
@@ -162,7 +163,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
           : current);
       }
     } catch (reason) {
-      setActionError(toCoreError(reason).message);
+      setActionError(toCoreError(reason));
       setDraft((current) => current ? `${submittedDraft}\n${current}` : submittedDraft);
       setAttachments((current) => [...submittedAttachments, ...current]);
     }
@@ -174,12 +175,12 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
     cacheKey={["local_agent", windowId, item.id, attachment.id]}
     load={async () => {
       const reply = await context.store.call({ op: "local_agent.attachment", window_id: windowId, item_id: item.id, attachment_id: attachment.id });
-      if (reply.op !== "local_agent.attachment") throw new Error("첨부를 불러오지 못했습니다");
+      if (reply.op !== "local_agent.attachment") throw shellErrors.SHELL_AGENT_SESSION_ATTACHMENT_REPLY_INVALID();
       return { mime: reply.mime, data_base64: reply.data_base64 };
     }}
     open={async () => { await context.store.call({ op: "local_agent.attachment_open", window_id: windowId, item_id: item.id, attachment_id: attachment.id }); }}
     onPreview={setPreview}
-    onError={(reason) => setActionError(toCoreError(reason).message)}
+    onError={(reason) => setActionError(toCoreError(reason))}
   />, [context.store, windowId]);
 
   const closePreview = useCallback(() => setPreview(null), []);
@@ -202,19 +203,19 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
         await data.retry();
         return context.store.call({ op: "local_agent.attach", window_id: windowId });
       });
-      if (reply.op !== "local_agent.attach") throw new Error("에이전트 상태를 불러오지 못했습니다");
+      if (reply.op !== "local_agent.attach") throw shellErrors.SHELL_AGENT_SESSION_ATTACH_REPLY_INVALID();
       generationRef.current = reply.snapshot.generation;
       setSnapshot(reply.snapshot);
       setLoadError(null);
-    } catch (reason) { setLoadError(toCoreError(reason).message); }
+    } catch (reason) { setLoadError(toCoreError(reason)); }
   };
   const retryAction: [ReactNode] = [<Button key="retry" onClick={() => void retryLoading()}>다시 시도</Button>];
 
   let main: ReactNode;
-  if (loadError) main = <div className="ks-agent-session-state"><Notice role="alert" actions={retryAction}>{loadError}</Notice></div>;
+  if (loadError) main = <div className="ks-agent-session-state"><Notice role="alert" errorId={loadError.id} actions={retryAction}>{loadError.message}</Notice></div>;
   else if (!snapshot) main = <div className="ks-agent-session-state"><StatusText>불러오는 중</StatusText></div>;
   else if (snapshot.phase === "choosing_agent") main = <div className="ks-agent-session-state">{snapshot.agents.length === 0 && agentsBinding.status === "failed"
-    ? <Notice role="alert" actions={connected ? retryAction : undefined}>{agentsBinding.message}</Notice>
+    ? <Notice role="alert" errorId={agentsBinding.id} actions={connected ? retryAction : undefined}>{agentsBinding.message}</Notice>
     : snapshot.agents.length === 0 && agentsBinding.status === "loading"
       ? <StatusText>불러오는 중</StatusText>
       : <EmptyState icon={<MessageSquare size="empty" />} text="에이전트를 골라 주세요" />}</div>;
@@ -232,13 +233,16 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
     </div></div>;
   } else if (snapshot.phase === "starting") main = <div className="ks-agent-session-state"><StatusText>에이전트를 시작하는 중</StatusText></div>;
   else if (snapshot.phase === "login_required") main = <div className="ks-agent-session-state"><div className="ks-agent-session-login">
-    {snapshot.failure ? <Notice role="alert">{snapshot.failure.message}</Notice> : <StatusText>로그인이 필요합니다</StatusText>}
+    {snapshot.failure ? <Notice role="alert" errorId={snapshot.failure.id}>{snapshot.failure.message}</Notice> : <StatusText>로그인이 필요합니다</StatusText>}
     {snapshot.auth_methods.map((method) => <Button key={method.id} onClick={() => void call({ op: "local_agent.authenticate", window_id: windowId, generation: snapshot.generation, method_id: method.id })}>{method.name}</Button>)}
     {!snapshot.auth_methods.length ? <Button onClick={() => void call({ op: "local_agent.retry", window_id: windowId, generation: snapshot.generation })}>다시 시도</Button> : null}
   </div></div>;
-  else if (snapshot.phase === "failed") main = <div className="ks-agent-session-state"><Notice role="alert" actions={[<Button key="retry" onClick={() => void call({ op: "local_agent.retry", window_id: windowId, generation: snapshot.generation })}>다시 시도</Button>]}>
-    {snapshot.failure?.message ?? "에이전트를 시작하지 못했습니다"}{snapshot.failure?.command ? <> <code className="ks-agent-session-command">{snapshot.failure.command}</code></> : null}
-  </Notice></div>;
+  else if (snapshot.phase === "failed") {
+    const failure = snapshot.failure ?? shellErrors.SHELL_AGENT_SESSION_FAILURE_DETAILS_MISSING();
+    main = <div className="ks-agent-session-state"><Notice role="alert" errorId={failure.id} actions={[<Button key="retry" onClick={() => void call({ op: "local_agent.retry", window_id: windowId, generation: snapshot.generation })}>다시 시도</Button>]}>
+      {failure.message}{snapshot.failure?.command ? <> <code className="ks-agent-session-command">{snapshot.failure.command}</code></> : null}
+    </Notice></div>;
+  }
   else {
     const permissions = snapshot.permissions.length ? <div className="ks-agent-session-permissions">
       {snapshot.permissions.map((permission) => <div className="ks-agent-session-permission" key={permission.id}>
@@ -248,7 +252,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
         })}>{option.label}</Button>)}</div>
       </div>)}
     </div> : null;
-    const queued = snapshot.queued.map((message) => <QueuedPendingMessage key={message.id} message={message} context={context} windowId={windowId} onPreview={setPreview} onError={(reason) => setActionError(toCoreError(reason).message)} />);
+    const queued = snapshot.queued.map((message) => <QueuedPendingMessage key={message.id} message={message} context={context} windowId={windowId} onPreview={setPreview} onError={(reason) => setActionError(toCoreError(reason))} />);
     main = <>
       <ChatHistory
         items={snapshot.history}
@@ -260,7 +264,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
         followTail={followTail}
         renderAttachment={renderAttachment}
         renderPendingAttachment={(_attachment, _index) => null}
-        footer={<>{queued}{permissions}{actionError ? <Notice role="alert">{actionError}</Notice> : null}{snapshot.phase === "ended" ? <StatusText>대화가 끝났습니다</StatusText> : null}</>}
+        footer={<>{queued}{permissions}{actionError ? <Notice role="alert" errorId={actionError.id}>{actionError.message}</Notice> : null}{snapshot.phase === "ended" ? <StatusText>대화가 끝났습니다</StatusText> : null}</>}
       />
       {readyToChat ? <ChatComposer
         draft={draft}
@@ -323,7 +327,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
       </> : null}
     </div>
     {main}
-    {!readyToChat && actionError ? <Notice role="alert">{actionError}</Notice> : null}
+    {!readyToChat && actionError ? <Notice role="alert" errorId={actionError.id}>{actionError.message}</Notice> : null}
   </section>;
 }
 
@@ -360,7 +364,7 @@ function QueuedPendingMessage({ message, context, windowId, onPreview, onError }
       cacheKey={["local_agent", windowId, message.id, attachment.id]}
       load={async () => {
         const reply = await context.store.call({ op: "local_agent.attachment", window_id: windowId, item_id: message.id, attachment_id: attachment.id });
-        if (reply.op !== "local_agent.attachment") throw new Error("첨부를 불러오지 못했습니다");
+        if (reply.op !== "local_agent.attachment") throw shellErrors.SHELL_AGENT_SESSION_ATTACHMENT_REPLY_INVALID();
         return { mime: reply.mime, data_base64: reply.data_base64 };
       }}
       open={async () => { await context.store.call({ op: "local_agent.attachment_open", window_id: windowId, item_id: message.id, attachment_id: attachment.id }); }}

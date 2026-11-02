@@ -3,13 +3,14 @@ import type { ItemScope } from "../data/item-scope";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { CLIENT_PING_TIMEOUT_SECS } from "../contract/limits";
 import type { ShellStore } from "../core/shell-store";
-import { toCoreError } from "../core/core-transport";
+import { isCoreError, toCoreError } from "../core/core-transport";
 import type { WindowData } from "../data/window-data";
 import { isWindowVisible } from "../data/window-state";
-import { clientSource } from "../blocks/sandbox-frame";
+import { clientSource, sandboxErrors } from "../blocks/sandbox-frame";
 import { registerSandboxFlush } from "../blocks/sandbox-flush";
 import { BrowserFiles } from "./client-files";
 import { ClientHostServices } from "./client-host-services";
+import * as shellErrors from "../contract/shell-errors";
 
 type Client = NonNullable<AppDefinition["client"]>;
 const escapePointer = (value: string) => value.replace(/~/g, "~0").replace(/\//g, "~1");
@@ -61,7 +62,8 @@ export class ClientRuntime {
     try {
       const reply = await this.store.call({ op: "data.media", window_id: this.data.windowId, media: { asset: this.client.entry.id, version: this.client.entry.version } });
       if (this.stopped) return;
-      if (reply.op !== "data.media" || reply.media.mime.split(";")[0] !== "text/javascript") throw new Error("클라이언트 자산이 JavaScript가 아닙니다");
+      if (reply.op !== "data.media") throw shellErrors.SHELL_CLIENT_SCRIPT_ASSET_REPLY_INVALID();
+      if (reply.media.mime.split(";")[0] !== "text/javascript") throw shellErrors.SHELL_CLIENT_SCRIPT_ASSET_INVALID();
       const script = new TextDecoder().decode(Uint8Array.from(atob(reply.media.data_base64), (char) => char.charCodeAt(0)));
       this.token = crypto.randomUUID();
       const state = this.state();
@@ -69,9 +71,9 @@ export class ClientRuntime {
       frame.setAttribute("sandbox", "allow-scripts");
       frame.setAttribute("allow", "autoplay");
       frame.setAttribute("title", "클라이언트 런타임");
-      frame.srcdoc = clientSource(script, { token: this.token, state, stateKeys: this.client.state_keys, storageEntries: this.client.storage_entries, inputs: this.inputs(), capabilities: this.client.capabilities ?? [], actions: this.client.actions });
+      frame.srcdoc = clientSource(script, { token: this.token, state, stateKeys: this.client.state_keys, storageEntries: this.client.storage_entries, inputs: this.inputs(), capabilities: this.client.capabilities ?? [], actions: this.client.actions, errors: sandboxErrors() });
       frame.addEventListener("load", () => {
-        if (this.loaded) { this.ready = false; this.token = ""; this.data.failClient("클라이언트 프레임이 이동했습니다"); void this.stop(); }
+        if (this.loaded) { this.ready = false; this.token = ""; this.data.failClient(shellErrors.SHELL_CLIENT_FRAME_NAVIGATED()); void this.stop(); }
         else this.loaded = true;
       });
       let container = document.querySelector<HTMLDivElement>(".ks-client-frames");
@@ -101,7 +103,7 @@ export class ClientRuntime {
       window.addEventListener("focus", this.scheduleLifecycle);
       window.addEventListener("blur", this.scheduleLifecycle);
       document.addEventListener("visibilitychange", this.onDocumentVisibilityChange);
-    } catch (error) { if (!this.stopped) this.data.failClient(toCoreError(error).message); }
+    } catch (error) { if (!this.stopped) this.data.failClient(toCoreError(error)); }
   }
 
   private syncPingVisibility = () => {
@@ -118,7 +120,7 @@ export class ClientRuntime {
     // 숨겨진 동안의 시간은 응답 제한에 포함하지 않는다.
     this.lastPong = Date.now();
     this.ping = setInterval(() => {
-      if (Date.now() - this.lastPong > CLIENT_PING_TIMEOUT_SECS * 1000) { this.data.failClient("클라이언트가 응답하지 않습니다"); void this.stop(); return; }
+      if (Date.now() - this.lastPong > CLIENT_PING_TIMEOUT_SECS * 1000) { this.data.failClient(shellErrors.SHELL_CLIENT_UNRESPONSIVE()); void this.stop(); return; }
       this.send({ type: "ks-client-ping" });
     }, CLIENT_PING_TIMEOUT_SECS * 500);
   };
@@ -261,8 +263,8 @@ export class ClientRuntime {
     if (target && this.token) transfer ? target.postMessage(message, "*", transfer) : target.postMessage(message, "*");
   }
 
-  private reply(requestId: string, result?: unknown, error?: string, transfer?: Transferable[]) {
-    this.send({ type: "ks-client-reply", requestId, result, error }, transfer);
+  private reply(requestId: string, result?: unknown, error?: ReturnType<typeof toCoreError>, transfer?: Transferable[]) {
+    this.send({ type: "ks-client-reply", requestId, result, error: error?.message, errorId: error?.id, errorCode: error?.code }, transfer);
   }
 
   private async syncStorage(entry: string) {
@@ -303,19 +305,22 @@ export class ClientRuntime {
       Object.assign(this.patch, message.patch);
       if (this.patchFrame === null) this.patchFrame = requestAnimationFrame(() => { this.patchFrame = null; const patch = this.patch; this.patch = {}; this.data.publishClient(patch); });
     } else if (message.type === "ks-client-notice" && typeof message.message === "string") {
-      if (message.error) this.data.setNotice(message.message); else this.data.setStatus(message.message);
+      if (message.error) {
+        const forwarded = { id: message.errorId, code: message.errorCode, message: message.message, details: [] };
+        this.data.setNotice(isCoreError(forwarded) ? forwarded : shellErrors.SHELL_CLIENT_ACTION_FAILED({ reason: message.message }));
+      } else this.data.setStatus(message.message);
     }
     else if (message.type === "ks-sandbox-flushed") { this.pending.get(message.requestId)?.(message.ok === true); this.pending.delete(message.requestId); }
     else if (message.type === "ks-client-command") {
-      if (typeof message.name !== "string" || !Object.hasOwn(this.client.commands, message.name)) this.reply(message.requestId, undefined, "선언되지 않은 클라이언트 명령입니다");
-      else void this.store.call({ op: "client.command", window_id: this.data.windowId, name: message.name, event: message.event ?? null }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+      if (typeof message.name !== "string" || !Object.hasOwn(this.client.commands, message.name)) this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_COMMAND_UNDECLARED({ name: String(message.name) }));
+      else void this.store.call({ op: "client.command", window_id: this.data.windowId, name: message.name, event: message.event ?? null }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-save-prompt") {
       const task = async () => {
-        if (typeof message.suggested_name !== "string" || typeof message.mime !== "string") throw new Error("저장할 파일 이름과 형식이 필요합니다");
+        if (typeof message.suggested_name !== "string" || typeof message.mime !== "string") throw shellErrors.SHELL_CLIENT_SAVE_PROMPT_INPUT_INVALID();
         let fileId: string | null;
         if (this.store.nativeFiles) {
           const reply = await this.store.call({ op: "files.save_prompt", window_id: this.data.windowId, suggested_name: message.suggested_name, mime: message.mime });
-          if (reply.op !== "files.save_prompt") throw new Error("저장 대화상자 응답이 올바르지 않습니다");
+          if (reply.op !== "files.save_prompt") throw shellErrors.SHELL_CLIENT_SAVE_PROMPT_REPLY_INVALID();
           fileId = reply.file_id;
         } else {
           const result = await this.files.savePrompt(message.suggested_name, message.mime);
@@ -324,15 +329,15 @@ export class ClientRuntime {
         if (fileId) this.hostServices.registerFile({ id: fileId, name: message.suggested_name, mime: message.mime });
         this.reply(message.requestId, fileId);
       };
-      void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+      void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-can-share") {
-      if (!this.hostServices.hasCapability("share")) this.reply(message.requestId, undefined, "앱에 share capability가 선언되지 않았습니다");
+      if (!this.hostServices.hasCapability("share")) this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_CAN_SHARE_CAPABILITY_UNDECLARED());
       else void this.hostServices.canShare(message.file_id).then((result) => this.reply(message.requestId, result)).catch(() => this.reply(message.requestId, false));
     } else if (message.type === "ks-client-share") {
-      if (!this.hostServices.hasCapability("share")) this.reply(message.requestId, undefined, "앱에 share capability가 선언되지 않았습니다");
+      if (!this.hostServices.hasCapability("share")) this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_SHARE_CAPABILITY_UNDECLARED());
       else void this.hostServices.share(message.file_id, message.title).then((result) => this.reply(message.requestId, result)).catch(() => this.reply(message.requestId, { status: "failed" }));
     } else if (message.type === "ks-client-keep-awake") {
-      if (!this.hostServices.hasCapability("keep_awake")) this.reply(message.requestId, undefined, "앱에 keep_awake capability가 선언되지 않았습니다");
+      if (!this.hostServices.hasCapability("keep_awake")) this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_KEEP_AWAKE_CAPABILITY_UNDECLARED());
       else void this.hostServices.keepAwake(message.enabled === true).then((result) => this.reply(message.requestId, result)).catch(() => this.reply(message.requestId, false));
     } else if (message.type === "ks-sandbox-state-set" && message.patch && typeof message.patch === "object") {
       const state = this.store.getSnapshot()?.shared.windows.find((window) => window.id === this.data.windowId)?.state ?? {};
@@ -353,16 +358,16 @@ export class ClientRuntime {
         return message.content;
       });
       this.writes = task;
-      void task.then((content) => this.send({ type: "ks-sandbox-storage-reply", requestId: message.requestId, content })).catch((error) => this.send({ type: "ks-sandbox-storage-reply", requestId: message.requestId, error: toCoreError(error).message }));
+      void task.then((content) => this.send({ type: "ks-sandbox-storage-reply", requestId: message.requestId, content })).catch((reason) => { const error = toCoreError(reason); this.send({ type: "ks-sandbox-storage-reply", requestId: message.requestId, error: error.message, errorId: error.id, errorCode: error.code }); });
     } else if (message.type === "ks-client-asset-bytes") {
-      if (!this.definition.assets?.some((asset) => asset.id === message.id)) this.reply(message.requestId, undefined, "선언되지 않은 자산입니다");
+      if (!this.definition.assets?.some((asset) => asset.id === message.id)) this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_ASSET_UNDECLARED({ asset_id: String(message.id) }));
       else void this.store.call({ op: "data.media", window_id: this.data.windowId, media: { asset: message.id } }).then((reply) => {
           const bytes = Uint8Array.from(atob(reply.media.data_base64), (char) => char.charCodeAt(0)).buffer;
           this.reply(message.requestId, bytes, undefined, [bytes]);
-        }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+        }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-http-read") {
       const task = async () => {
-        if (!this.store.bytes) throw new Error("공개 바이트를 읽을 코어 전송 경로가 없습니다.");
+        if (!this.store.bytes) throw shellErrors.SHELL_CLIENT_HTTP_TRANSPORT_UNAVAILABLE();
         const body = new TextEncoder().encode(JSON.stringify({ permission: message.permission, path: message.path, query: message.query ?? {} })).buffer;
         const response = await this.store.bytes({ op: "client.http_read", window_id: this.data.windowId, handle: "" }, body);
         const length = new DataView(response).getUint32(0);
@@ -370,44 +375,44 @@ export class ClientRuntime {
         const bytes = response.slice(4 + length);
         this.reply(message.requestId, { bytes, mime }, undefined, [bytes]);
       };
-      void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+      void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-blob-put") {
       const task = async () => {
-        if ((typeof message.fileId === "string") === (message.bytes instanceof ArrayBuffer)) throw new Error("저장할 파일 또는 바이트 하나를 지정하세요.");
+        if ((typeof message.fileId === "string") === (message.bytes instanceof ArrayBuffer)) throw shellErrors.SHELL_CLIENT_BLOB_INPUT_INVALID();
         if (typeof message.fileId === "string" && this.store.nativeFiles) {
           await this.store.call({ op: "client.blob_put", window_id: this.data.windowId, key: message.key, file_id: message.fileId });
         } else {
-          if (!this.store.bytes) throw new Error("바이너리를 저장할 코어 전송 경로가 없습니다.");
+          if (!this.store.bytes) throw shellErrors.SHELL_CLIENT_BLOB_TRANSPORT_UNAVAILABLE();
           const bytes = typeof message.fileId === "string" ? await (this.blobFiles.has(message.fileId) ? this.store.bytes({ op: "files.read_bytes", window_id: this.data.windowId, handle: message.fileId }) : this.files.read(message.fileId)) : message.bytes;
-          if (!(bytes instanceof ArrayBuffer)) throw new Error("저장할 파일 또는 바이트가 필요합니다.");
+          if (!(bytes instanceof ArrayBuffer)) throw shellErrors.SHELL_CLIENT_BLOB_BYTES_REQUIRED();
           await this.store.bytes({ op: "client.blob_put", window_id: this.data.windowId, handle: message.key }, bytes);
         }
         this.reply(message.requestId, null);
       };
-      void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+      void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-blob-open") {
-      void this.store.call({ op: "client.blob_open", window_id: this.data.windowId, key: message.key }).then(({ file }) => { if (file) { this.blobFiles.add(file.id); this.hostServices.registerFile(file); } this.reply(message.requestId, file); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+      void this.store.call({ op: "client.blob_open", window_id: this.data.windowId, key: message.key }).then(({ file }) => { if (file) { this.blobFiles.add(file.id); this.hostServices.registerFile(file); } this.reply(message.requestId, file); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-blob-remove") {
-      void this.store.call({ op: "client.blob_remove", window_id: this.data.windowId, key: message.key }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+      void this.store.call({ op: "client.blob_remove", window_id: this.data.windowId, key: message.key }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-blob-list") {
-      void this.store.call({ op: "client.blob_list", window_id: this.data.windowId, prefix: message.prefix }).then(({ keys }) => this.reply(message.requestId, keys)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+      void this.store.call({ op: "client.blob_list", window_id: this.data.windowId, prefix: message.prefix }).then(({ keys }) => this.reply(message.requestId, keys)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-file-read") {
       const result = (this.store.nativeFiles || this.blobFiles.has(message.id)) && this.store.bytes ? this.store.bytes({ op: "files.read_bytes", window_id: this.data.windowId, handle: message.id }) : this.files.read(message.id);
-      void result.then((bytes) => this.reply(message.requestId, bytes, undefined, [bytes])).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+      void result.then((bytes) => this.reply(message.requestId, bytes, undefined, [bytes])).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-file-write") {
       const result = this.store.nativeFiles && this.store.bytes ? this.store.bytes({ op: "export.write", window_id: this.data.windowId, handle: message.sink, offset: message.offset }, message.bytes) : this.files.write(message.sink, message.offset, message.bytes);
-      void result.then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+      void result.then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-file-truncate") {
-      if (!Number.isSafeInteger(message.size) || message.size < 0) { this.reply(message.requestId, undefined, "파일 크기가 올바르지 않습니다"); return; }
+      if (!Number.isSafeInteger(message.size) || message.size < 0) { this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_FILE_SIZE_INVALID({ size: String(message.size) })); return; }
       const result = this.store.nativeFiles
         ? this.store.call({ op: "export.truncate", window_id: this.data.windowId, sink_id: message.sink, size: message.size })
         : this.files.truncate(message.sink, message.size);
-      void result.then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+      void result.then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-file-close" || message.type === "ks-client-file-abort") {
       const result = this.store.nativeFiles
         ? this.store.call({ op: message.type === "ks-client-file-close" ? "export.close" : "export.abort", window_id: this.data.windowId, sink_id: message.sink })
         : message.type === "ks-client-file-close" ? this.files.close(message.sink) : this.files.abort(message.sink);
-      void result.then(() => { if (message.type === "ks-client-file-abort") this.hostServices.removeFile(message.sink); this.reply(message.requestId, null); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+      void result.then(() => { if (message.type === "ks-client-file-abort") this.hostServices.removeFile(message.sink); this.reply(message.requestId, null); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     }
   };
 

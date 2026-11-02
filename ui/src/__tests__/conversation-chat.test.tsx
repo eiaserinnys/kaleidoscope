@@ -7,7 +7,7 @@ import { HistoryAttachmentView } from "../blocks/agent-attachments";
 import { AgentChatBlock, modelAvailabilityDescription } from "../blocks/agent-chat";
 import { Select } from "../components/select-toggle";
 import { WindowDataProvider } from "../data/window-data";
-import type { AppDefinition, CoreEvent, CoreReply, CoreRequest, ConversationItem, ConversationThread, ShellSnapshot } from "../contract/contract";
+import type { AppDefinition, CoreError, CoreEvent, CoreReply, CoreRequest, ConversationItem, ConversationThread, ShellSnapshot } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 import { createFakeTransport } from "../core/fake-transport";
 import { makeTestSnapshot } from "./fixtures";
@@ -71,7 +71,11 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
   };
 }
 const get = (value: ConversationThread | null = thread, profile = "profile-a"): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles, start: { profile, model: "m" } });
-const error = (code: string) => ({ code, message: "실패", details: [] });
+const error = (code: CoreError["code"]): CoreError => code === "binding_conflict"
+  ? { id: "CONV_CONTEXT_SAVED_BINDING_MISMATCH", code, message: "작업 ID workspace의 저장된 대화 thread: 연결 정보가 현재 작업과 맞지 않습니다. 대화 연결 설정을 확인하세요.", details: [] }
+  : code === "login_required"
+    ? { id: "CONV_STREAM_LOGIN_REQUIRED", code, message: "대화 제공자 연결 test: 로그인이 필요합니다. 로그인한 뒤 대화를 다시 여세요.", details: [] }
+    : { code, message: "실패", details: [] };
 beforeEach(() => { vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null as unknown as CanvasRenderingContext2D); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -283,14 +287,17 @@ describe("대화 제공자 화면", () => {
     });
     fireEvent.click(await screen.findByRole("button", { name: "로그인" }));
     await screen.findByText("기록");
-    state.emit({ event: "conversation.error", thread_id: "thread-1", code: "login_required" });
+    state.emit({ event: "conversation.error", thread_id: "thread-1", error: { id: "CONV_STREAM_LOGIN_REQUIRED", code: "login_required", message: "대화 제공자에 다시 로그인해야 합니다.", details: [] } });
+    expect(screen.queryByText("CONV_STREAM_LOGIN_REQUIRED")).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "로그인" }));
     await screen.findByText("기록");
     expect(state.call).toHaveBeenCalledWith({ op: "connection.login", window_id: state.window.id, permission: "login" });
   });
   it("묶음 충돌에서 시작과 입력을 숨긴다", async () => {
     setup(async () => { throw error("binding_conflict"); });
-    expect((await screen.findByRole("alert")).textContent).toContain("저장된 대화와 제공자의 대화가 다릅니다");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("CONV_CONTEXT_SAVED_BINDING_MISMATCH");
+    expect(alert.textContent).toContain("현재 작업과 맞지 않습니다");
     expect(screen.queryByRole("button", { name: "시작" })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "메시지" })).toBeNull();
   });

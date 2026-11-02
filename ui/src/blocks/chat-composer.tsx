@@ -1,9 +1,11 @@
 import { useRef, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
 import { AGENT_ATTACHMENTS_MAX, AGENT_ATTACHMENT_MAX_BYTES, AGENT_ATTACHMENTS_TOTAL_MAX_BYTES } from "../contract/limits";
+import type { CoreError } from "../contract/contract";
 import { Square as SquareIcon } from "lucide-react";
 import { ArrowUp, ICON_SIZE, Paperclip, ScreenShare } from "../components/icons";
 import { IconButton, Notice } from "../components/primitives";
 import { AttachmentChip, DraftChip, makeDraftAttachment, type DraftAttachment, type Preview } from "./agent-attachments";
+import * as shellErrors from "../contract/shell-errors";
 
 export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachmentsChange, onSend, disabled, busy, onCancel, sharedWindows, onRemoveShared, onPreview, error, onError }: {
   draft: string;
@@ -18,8 +20,8 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
   sharedWindows: Array<{ id: string; name: string }>;
   onRemoveShared: (id: string) => void;
   onPreview: (preview: Preview) => void;
-  error: string | null;
-  onError: (message: string | null) => void;
+  error: CoreError | null;
+  onError: (error: CoreError | null) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const addAttachments = (newAttachments: DraftAttachment[]) => {
@@ -27,9 +29,9 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
     const accepted = [...attachments];
     let total = accepted.reduce((sum, item) => sum + item.file.size, 0);
     for (const attachment of newAttachments) {
-      if (accepted.length >= AGENT_ATTACHMENTS_MAX) { onError("첨부는 한 번에 10개까지입니다"); break; }
-      if (attachment.file.size > AGENT_ATTACHMENT_MAX_BYTES) { onError(`${attachment.name}은 20MB를 넘어 첨부할 수 없습니다`); continue; }
-      if (total + attachment.file.size > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES) { onError("첨부의 합은 30MB까지입니다"); continue; }
+      if (accepted.length >= AGENT_ATTACHMENTS_MAX) { onError(shellErrors.SHELL_CHAT_ATTACHMENT_COUNT_EXCEEDED({ limit: String(AGENT_ATTACHMENTS_MAX) })); break; }
+      if (attachment.file.size > AGENT_ATTACHMENT_MAX_BYTES) { onError(shellErrors.SHELL_CHAT_ATTACHMENT_TOO_LARGE({ name: attachment.name, max_bytes: String(AGENT_ATTACHMENT_MAX_BYTES) })); continue; }
+      if (total + attachment.file.size > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES) { onError(shellErrors.SHELL_CHAT_ATTACHMENT_TOTAL_TOO_LARGE({ max_bytes: String(AGENT_ATTACHMENTS_TOTAL_MAX_BYTES) })); continue; }
       accepted.push(attachment);
       total += attachment.file.size;
     }
@@ -53,7 +55,7 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
   };
 
   return <div className="ks-agent-chat-input-area">
-    {error ? <Notice role="alert">{error}</Notice> : null}
+    {error ? <Notice role="alert" errorId={error.id}>{error.message}</Notice> : null}
     {sharedWindows.length ? <div className="ks-agent-attachment-list">{sharedWindows.map(({ id, name }) => <AttachmentChip key={id} name={name} preview={<span className="ks-agent-attachment-chip-preview ks-share-chip-icon"><ScreenShare /></span>} removeLabel={`${name} 같이 보기 끄기`} onRemove={() => onRemoveShared(id)} />)}</div> : null}
     {attachments.length ? <div className="ks-agent-attachment-list">{attachments.map((attachment) => <DraftChip key={attachment.id} attachment={attachment} onPreview={onPreview} onRemove={() => onAttachmentsChange(attachments.filter((item) => item.id !== attachment.id))} />)}</div> : null}
     <div className="ks-agent-chat-input-row">

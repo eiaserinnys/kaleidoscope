@@ -10,7 +10,7 @@ import { Button, EmptyState, ErrorId } from "./primitives";
 export function DataState({ value, compact = false, onRetry, onLogin }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; onRetry?: () => void; onLogin?: () => void }) {
   const data = useWindowData();
   const context = { store: data.store, window: { id: data.windowId } };
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReturnType<typeof toCoreError> | null>(null);
   const grants = useWindowGrants(context);
   const possiblePermissions = value.status === "failed"
     ? value.retry.map((name) => data.definition.sources?.[name])
@@ -27,18 +27,18 @@ export function DataState({ value, compact = false, onRetry, onLogin }: { value:
       setError(null);
       void data.store.call({ op: "files.pick_folder", window_id: data.windowId, permission: ungranted })
         .then((reply) => { if (reply.grant) void data.refresh(retry); })
-        .catch((reason: unknown) => setError(toCoreError(reason).message));
+        .catch((reason: unknown) => setError(toCoreError(reason)));
     };
     return <div className={compact ? "ks-data-state-compact" : "ks-data-state"}>
-      <EmptyState icon={<FolderOpen size={compact ? "inline" : "empty"} />} text={error ?? "폴더를 선택해 주세요"} action={<Button onClick={pick}>폴더 선택</Button>} />
+      <EmptyState icon={<FolderOpen size={compact ? "inline" : "empty"} />} text={error ? <>{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</> : "폴더를 선택해 주세요"} action={<Button onClick={pick}>폴더 선택</Button>} />
     </div>;
   }
-  const failureText = error ?? (value.status === "failed" ? <>{value.message}{value.id ? <> <ErrorId id={value.id} /></> : null}</> : "로그인이 필요합니다");
+  const failureText = error ? <>{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</> : (value.status === "failed" ? <>{value.message}{value.id ? <> <ErrorId id={value.id} /></> : null}</> : "로그인이 필요합니다");
   return <div className={compact ? "ks-data-state-compact" : "ks-data-state"}>
     <EmptyState icon={<DataIcon name={isLogin ? "log-in" : "triangle-alert"} size={compact ? "inline" : "empty"} />}
       text={failureText}
       action={isLogin
-        ? <Button onClick={() => { setError(null); void data.store.call({ op: "connection.login", window_id: data.windowId, permission: value.permission }).then(() => onLogin?.()).catch((reason: unknown) => setError(toCoreError(reason).message)); }}>로그인</Button>
+        ? <Button onClick={() => { setError(null); void data.store.call({ op: "connection.login", window_id: data.windowId, permission: value.permission }).then(() => onLogin?.()).catch((reason: unknown) => setError(toCoreError(reason))); }}>로그인</Button>
         : onRetry ? <Button onClick={onRetry}>다시 받기</Button> : value.retry.length ? <Button onClick={() => { void data.refresh(value.retry); }}>다시 받기</Button> : undefined} />
   </div>;
 }

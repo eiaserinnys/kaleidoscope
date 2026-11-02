@@ -116,7 +116,7 @@ test("미접수 초안과 첨부를 같은 ID로 보낸다", async ({ page }) =>
 test("스트림 인증 오류 뒤 로그인하여 복귀", async ({ page }) => {
   const chat = await open(page, "ready");
   await expect(chat.getByText("기존 기록")).toBeVisible();
-  await page.evaluate(() => (window as any).conversationHarness.emit({ event: "conversation.error", thread_id: "fake-thread", code: "login_required" }));
+  await page.evaluate(() => (window as any).conversationHarness.emit({ event: "conversation.error", thread_id: "fake-thread", error: { id: "CONV_STREAM_LOGIN_REQUIRED", code: "login_required", message: "대화 제공자에 다시 로그인해야 합니다.", details: [] } }));
   await expect(chat.getByText("로그인이 필요합니다")).toBeVisible();
   await capture(page, "stream-error");
   await chat.getByRole("button", { name: "로그인" }).click();
