@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Block, ConversationAttachment, ConversationEvent, ConversationItem, CoreEvent, CoreRequest, LocalAgentSnapshot, SetState } from "../contract/contract";
 import { Button, EmptyState, IconButton, Notice, StatusText } from "../components/primitives";
 import { Folder, FolderOpen, MessageSquare } from "../components/icons";
@@ -166,10 +166,6 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
   />, [context.store, windowId]);
 
   const closePreview = useCallback(() => setPreview(null), []);
-  useLayoutEffect(() => {
-    const history = historyRef.current;
-    if (history && followTail.current) history.scrollTop = history.scrollHeight;
-  }, [snapshot?.history, snapshot?.queued, snapshot?.text, snapshot?.activity]);
   const folderName = snapshot?.folder_name
     ?? context.snapshot.device.grants.find((grant) => grant.window_id === windowId && grant.permission === block.root.permission)?.root_name
     ?? null;
@@ -232,11 +228,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
         busy={snapshot.activity.busy}
         tool={snapshot.activity.tool}
         historyRef={historyRef}
-        onScroll={(event) => {
-          const history = event.currentTarget;
-          const threshold = Number.parseFloat(getComputedStyle(history).getPropertyValue("--ks-space-6")) || 0;
-          followTail.current = history.scrollHeight - history.clientHeight - history.scrollTop <= threshold;
-        }}
+        followTail={followTail}
         renderAttachment={renderAttachment}
         renderPendingAttachment={(_attachment, _index) => null}
         footer={<>{queued}{permissions}{actionError ? <Notice role="alert">{actionError}</Notice> : null}{snapshot.phase === "ended" ? <StatusText>대화가 끝났습니다</StatusText> : null}</>}

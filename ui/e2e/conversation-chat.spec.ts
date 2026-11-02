@@ -57,10 +57,10 @@ test("프로필과 다른 노드 모델 변경은 확인하고 답변 중에는 
   await capture(page, "profile-switch-confirm");
   await chat.getByRole("button", { name: "바꾸기" }).click();
   await expect.poll(() => page.evaluate(() => (window as any).conversationHarness.calls().some((c: any) => c.op === "conversation.switch" && c.profile === "profile-b"))).toBe(true);
-  await chat.getByRole("button", { name: "모델" }).click();
-  const models = await page.getByRole("menu").getByRole("menuitem", { name: "Argon" }).all();
-  await models[1].click();
-  await expect(chat.getByRole("dialog")).toContainText("Argon(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.");
+  await expect(chat.getByRole("button", { name: "실행 위치" })).toBeEnabled();
+  await chat.getByRole("button", { name: "실행 위치" }).click();
+  await page.getByRole("menuitem", { name: "eias-linegames" }).click();
+  await expect(chat.getByRole("dialog")).toContainText("eias-linegames의 Argon(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.");
   await chat.getByRole("button", { name: "바꾸기" }).click();
   await expect.poll(() => page.evaluate(() => (window as any).conversationHarness.calls().some((c: any) => c.op === "conversation.switch" && c.model === "n1:eias-linegames:argon"))).toBe(true);
   await page.evaluate(() => (window as any).conversationHarness.emit({ event: "conversation.update", thread_id: "fake-thread", update: { kind: "activity", busy: true, tool: null } }));

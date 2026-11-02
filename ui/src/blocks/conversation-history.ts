@@ -15,22 +15,27 @@ type HistoryOptions = {
 
 export function useConversationHistory({ historyRef, nextBefore, enabled, store, windowId, onItems, onError, items }: HistoryOptions) {
   const loading = useRef(false);
+  const restore = useRef<{ height: number; top: number } | null>(null);
   const callbacks = useRef({ onItems, onError });
   callbacks.current = { onItems, onError };
   const loadOlder = useCallback(() => {
     const history = historyRef.current;
     if (!enabled || !history || !nextBefore || loading.current) return;
     loading.current = true;
-    const height = history.scrollHeight;
     void store.call({ op: "conversation.history", window_id: windowId, before: nextBefore }).then((reply) => {
+      restore.current = { height: history.scrollHeight, top: history.scrollTop };
       callbacks.current.onItems(reply.items, reply.next_before);
-      requestAnimationFrame(() => { history.scrollTop += history.scrollHeight - height; });
     }).catch((reason: unknown) => callbacks.current.onError(reason)).finally(() => { loading.current = false; });
   }, [enabled, historyRef, nextBefore, store, windowId]);
 
   useLayoutEffect(() => {
     const history = historyRef.current;
     if (!history) return;
+    const position = restore.current;
+    if (position) {
+      restore.current = null;
+      history.scrollTop = position.top + history.scrollHeight - position.height;
+    }
     const fill = () => {
       if (history.clientHeight > 0 && history.scrollHeight <= history.clientHeight) loadOlder();
     };

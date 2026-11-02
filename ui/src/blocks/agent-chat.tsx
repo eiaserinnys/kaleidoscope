@@ -213,11 +213,6 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   }), [applyConversation, context.store, workspaceId, hasProvider, providerEntry, windowId, restoreDraft, handleError, load]);
 
   useLayoutEffect(() => {
-    const history = historyRef.current;
-    if (history && followTail.current) history.scrollTop = history.scrollHeight;
-  }, [items, pending, delta, busy, tool]);
-
-  useLayoutEffect(() => {
     if (!focusAfterLogin.current || loading || loginRequired || loadError || bindingConflict) return;
     const target = agent ? inputRef.current : startRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");
     if (target) { target.focus(); focusAfterLogin.current = false; }
@@ -456,12 +451,8 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         busy={busy}
         tool={tool}
         historyRef={historyRef}
-        onScroll={(event) => {
-          const history = event.currentTarget;
-          const threshold = Number.parseFloat(getComputedStyle(history).getPropertyValue("--ks-space-6")) || 0;
-          followTail.current = history.scrollHeight - history.clientHeight - history.scrollTop <= threshold;
-          if (hasProvider && nextBefore && history.scrollTop <= threshold) loadOlder();
-        }}
+        followTail={followTail}
+        onReachTop={() => { if (hasProvider && nextBefore) loadOlder(); }}
         renderAttachment={renderAttachment}
         renderPendingAttachment={(attachment, index) => <PendingAttachment key={index} attachment={attachment} onPreview={setPreview} />}
       />

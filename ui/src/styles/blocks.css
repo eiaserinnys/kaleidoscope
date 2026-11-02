@@ -600,14 +600,18 @@
 }
 
 .ks-agent-chat-history {
-  display: flex;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
-  flex-direction: column;
-  gap: var(--ks-space-3);
   overflow: auto;
   padding: var(--ks-space-4) var(--ks-space-3);
+}
+
+.ks-agent-chat-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--ks-space-3);
 }
 
 .ks-agent-chat-user {

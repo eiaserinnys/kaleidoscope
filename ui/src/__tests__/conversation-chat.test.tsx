@@ -326,14 +326,15 @@ describe("공용 대화 부품", () => {
     const historyRef = createRef<HTMLDivElement>();
     render(<ChatHistory
       items={[item("one", "기록")]} pending={null} delta="" busy tool="문서 읽기"
-      historyRef={historyRef} onScroll={() => {}}
+      historyRef={historyRef} followTail={{ current: true }}
       renderAttachment={() => null} renderPendingAttachment={() => null}
       footer={<button type="button">도구 승인</button>}
     />);
     const history = screen.getByRole("log", { name: "대화 기록" });
+    const content = history.querySelector(".ks-agent-chat-content");
     expect(within(history).getByText("기록")).toBeTruthy();
     expect(within(history).getByText("생각 중입니다… · 문서 읽기")).toBeTruthy();
-    expect(history.lastElementChild?.textContent).toBe("도구 승인");
+    expect(content?.lastElementChild?.textContent).toBe("도구 승인");
   });
 
   it("입력은 Enter만 보내고 Shift+Enter와 IME Enter는 보존한다", () => {

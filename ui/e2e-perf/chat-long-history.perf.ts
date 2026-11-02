@@ -15,7 +15,7 @@ function median(values: number[]): number {
 async function openHistory(page: Page, count: number): Promise<number> {
   const start = performance.now();
   await page.goto(`/?conversation=ready&preview=workspace-pas&history=${count}`);
-  const lastMessage = page.locator(".ks-agent-chat-history > .ks-agent-chat-assistant").last();
+  const lastMessage = page.locator(".ks-agent-chat-content > .ks-agent-chat-assistant").last();
   await expect(lastMessage).toBeVisible();
   await expect(page.getByRole("textbox", { name: "메시지" })).toBeVisible();
   return performance.now() - start;
@@ -83,7 +83,7 @@ async function sampleScroll(page: Page) {
 
 async function sampleWheel(page: Page) {
   await page.evaluate(() => { (window as Window & { wheelStart?: number }).wheelStart = performance.now(); });
-  await page.mouse.wheel(0, -320);
+  await page.mouse.wheel(0, 320);
   return page.evaluate(async () => {
     const start = (window as Window & { wheelStart?: number }).wheelStart ?? performance.now();
     await new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
