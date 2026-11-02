@@ -6,7 +6,7 @@ import { Shell } from "../../../app/src/shell/shell";
 import type { AppDefinition, CoreEvent, ShellSnapshot } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { createFakeTransport } from "../core/fake-transport";
-import { createShellStore } from "../core/shell-store";
+import { createShellStore, shareStructure } from "../core/shell-store";
 import * as renderBlockModule from "../render/render-block";
 import { makeTestSeed, makeTestSnapshot } from "./fixtures";
 
@@ -46,13 +46,14 @@ const definition: AppDefinition = {
   name: "격리 시험",
   requires: { blocks: 4, modules: {} },
   permissions: [],
-  state: { first: null, second: null },
+  state: { first: null, second: null, compound: null },
   ui: {
     type: "stack", direction: "column",
     children: [
       { type: "text", value: { state: "first" } },
       { type: "text", value: { state: "second" } },
       { type: "text", value: { expr: "$data.sample" } },
+      { type: "text", value: { state: "compound" } },
     ],
   },
 };
@@ -61,10 +62,11 @@ function testSnapshot(): ShellSnapshot {
   const snapshot = makeTestSnapshot({ definitions: [definition] });
   const first = snapshot.shared.windows[0];
   first.id = "window-a";
-  first.state = { first: "a", second: "b" };
+  const compound = { items: [1, 2], nested: { label: "stable" } };
+  first.state = { first: "a", second: "b", compound };
   snapshot.shared.windows = [
     first,
-    { ...first, id: "window-b", state: { first: "a", second: "b" }, z: 2 },
+    { ...first, id: "window-b", state: { first: "a", second: "b", compound: structuredClone(compound) }, z: 2 },
   ];
   snapshot.shared.desktops.push({
     id: "desktop-2", workspace_id: "workspace-1", name: "Desktop 2", position: 1,
@@ -76,6 +78,12 @@ function testSnapshot(): ShellSnapshot {
 
 function countFor(windowId: string, pointer?: string) {
   return calls.filter((call) => call.windowId === windowId && (pointer === undefined || call.pointer === pointer)).length;
+}
+
+function dispatchPointer(target: HTMLElement, type: "pointerdown" | "pointermove" | "pointerup", pointerId: number, clientX: number, clientY: number) {
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY });
+  Object.defineProperty(event, "pointerId", { value: pointerId });
+  target.dispatchEvent(event);
 }
 
 const calls: Array<{ windowId: string; pointer: string; type: string }> = [];
@@ -169,6 +177,40 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("최소화, 복원, 최대화는 복합 상태를 읽는 블록을 다시 그리지 않는다", async () => {
+    const { store } = await setup();
+    await store.call({ op: "window.minimize", window_id: "window-a" });
+    await store.call({ op: "window.raise", window_id: "window-a" });
+    await store.call({ op: "window.maximize", window_id: "window-a" });
+    expect(countFor("window-a", "/ui/children/3")).toBe(0);
+    expect(document.body.textContent).toContain("stable");
+    store.dispose();
+  });
+
+  it("제목 줄의 실제 포인터 드래그 중에는 앱 블록을 다시 그리지 않는다", async () => {
+    const { store } = await setup();
+    const windows = [...document.querySelectorAll<HTMLElement>(".ks-window")];
+    const windowElement = windows[1];
+    const titlebar = windowElement?.querySelector<HTMLElement>(".ks-window-titlebar");
+    if (!windowElement || !titlebar) throw new Error("두 번째 창의 제목 줄을 찾지 못했습니다");
+    const before = store.getSnapshot()!.shared.windows.find((item) => item.id === "window-b")!.rect;
+    await act(async () => {
+      dispatchPointer(titlebar, "pointerdown", 7, 100, 100);
+      for (let frame = 1; frame <= 30; frame += 1) {
+        dispatchPointer(windowElement, "pointermove", 7, 100 + frame, 100 + frame);
+      }
+      dispatchPointer(windowElement, "pointerup", 7, 130, 130);
+    });
+    await waitFor(() => {
+      const after = store.getSnapshot()!.shared.windows.find((item) => item.id === "window-b")!.rect;
+      expect(Number.isFinite(after.x) && Number.isFinite(after.y)).toBe(true);
+      expect(after.x).toBeGreaterThan(before.x);
+      expect(after.y).toBeGreaterThan(before.y);
+    });
+    expect(calls).toHaveLength(0);
+    store.dispose();
+  });
+
   it("쉘 업데이트 상태 변경은 앱 블록을 다시 그리지 않는다", async () => {
     const { store, snapshot, transport } = await setup();
     transport.emit({ event: "state.changed", snapshot: { ...snapshot, update: { state: "ready", current_version: "0.6.2", version: "0.7.0" } } });
@@ -223,5 +265,36 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     const windowIdentity = contextSource.match(/export interface WindowIdentity \{([^}]+)\}/)?.[1] ?? "";
     expect(blockContext).not.toMatch(/\b(?:snapshot|state|rect|z)\s*:/);
     expect(windowIdentity).not.toMatch(/\b(?:state|rect|z)\s*:/);
+  });
+});
+
+describe("shareStructure 참조 보존", () => {
+  it("키가 추가되거나 삭제되어도 공통 자식 참조를 보존하고, 값이 같으면 이전 객체를 돌려준다", () => {
+    const common = { nested: { value: 1 }, items: ["a", "b"] };
+    type Structure = { common: typeof common; other: { enabled: boolean }; extra?: string; removed?: { value: number } };
+    const previous: Structure = { common, other: { enabled: true } };
+    const equal = shareStructure(previous, {
+      common: { nested: { value: 1 }, items: ["a", "b"] },
+      other: { enabled: true },
+    });
+    expect(equal).toBe(previous);
+
+    const added = shareStructure(previous, {
+      common: { nested: { value: 1 }, items: ["a", "b"] },
+      other: { enabled: true },
+      extra: "new",
+    });
+    expect(added).not.toBe(previous);
+    expect(added.common).toBe(common);
+    expect(added.other).toBe(previous.other);
+
+    const withRemoved: Structure = { ...previous, removed: { value: 2 } };
+    const removed = shareStructure(withRemoved, {
+      common: { nested: { value: 1 }, items: ["a", "b"] },
+      other: { enabled: true },
+    });
+    expect(removed).not.toBe(withRemoved);
+    expect(removed.common).toBe(common);
+    expect(removed.other).toBe(previous.other);
   });
 });

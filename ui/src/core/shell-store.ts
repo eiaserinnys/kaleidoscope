@@ -73,13 +73,17 @@ export function useShellSelector<T>(store: ShellStore, select: (snapshot: ShellS
 
 export function shareShellSnapshot(previous: ShellSnapshot | null, next: ShellSnapshot): ShellSnapshot {
   if (!previous) return next;
-  const shared = shareStructure(previous, next);
   const previousVersions = new Map(previous.shared.app_versions.map((item) => [`${item.app_id}\0${item.version}`, item]));
-  const versions = next.shared.app_versions.map((item) => previousVersions.get(`${item.app_id}\0${item.version}`) ?? item);
-  if (versions.some((item, index) => item !== shared.shared.app_versions[index])) {
-    return { ...shared, shared: { ...shared.shared, app_versions: versions } };
-  }
-  return shared;
+  const versions = next.shared.app_versions.map((item) => {
+    const old = previousVersions.get(`${item.app_id}\0${item.version}`);
+    return old ? shareStructure(old, item) : item;
+  });
+  const appVersions = versions.length === previous.shared.app_versions.length &&
+    versions.every((item, index) => item === previous.shared.app_versions[index])
+    ? previous.shared.app_versions
+    : versions;
+  const shared = shareObjectStructure(previous.shared, next.shared, { app_versions: appVersions });
+  return shareObjectStructure(previous, next, { shared });
 }
 
 export function shareStructure<T>(previous: T, next: T): T {
@@ -99,18 +103,23 @@ export function shareStructure<T>(previous: T, next: T): T {
     return (changed ? result : previous) as T;
   }
   if (Array.isArray(previous) || Array.isArray(next)) return next;
+  return shareObjectStructure(previous, next) as T;
+}
+
+function shareObjectStructure<T extends object>(previous: T, next: T, overrides?: Record<string, unknown>): T {
   const oldObject = previous as Record<string, unknown>;
   const newObject = next as Record<string, unknown>;
   const oldKeys = Object.keys(oldObject);
   const newKeys = Object.keys(newObject);
-  if (oldKeys.length !== newKeys.length) return next;
-  let changed = false;
+  let changed = oldKeys.length !== newKeys.length;
   const result: Record<string, unknown> = {};
   for (const key of newKeys) {
-    if (!Object.hasOwn(oldObject, key)) return next;
-    const value = shareStructure(oldObject[key], newObject[key]);
+    const exists = Object.hasOwn(oldObject, key);
+    const value = overrides && Object.hasOwn(overrides, key)
+      ? overrides[key]
+      : exists ? shareStructure(oldObject[key], newObject[key]) : newObject[key];
     result[key] = value;
-    if (value !== oldObject[key]) changed = true;
+    if (!exists || value !== oldObject[key]) changed = true;
   }
   return (changed ? result : previous) as T;
 }
