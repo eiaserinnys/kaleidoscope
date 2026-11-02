@@ -12,7 +12,7 @@ import { Select, Toggle } from "../components/select-toggle";
 import { Button, IconButton } from "../components/primitives";
 import { display } from "./data-layout";
 import { asArray } from "./data-view-common";
-import { createThrottledSend } from "../data/throttled-send";
+import { createSerialSend, createThrottledSend } from "../data/throttled-send";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 const bindingName = (value: unknown, fallback: string) => {
@@ -98,7 +98,8 @@ export function SliderBlock({ block, pointer }: Props<"slider">) {
   const current = Number.isFinite(raw) ? raw : block.min;
   const [draft, setDraft] = useState(current);
   const dragging = useRef(false);
-  const throttled = useMemo(() => createThrottledSend((next: number) => { void data.act(`${pointer}/on_change`, next); }, 100), [data, pointer]);
+  const serialSend = useMemo(() => createSerialSend((next: number) => data.act(`${pointer}/on_change`, next)), [data, pointer]);
+  const throttled = useMemo(() => createThrottledSend(serialSend, 100), [serialSend]);
   useEffect(() => () => throttled.flush(), [throttled]);
   useEffect(() => { if (!dragging.current) setDraft(current); }, [current]);
   const finish = () => { throttled.flush(); dragging.current = false; };
@@ -121,7 +122,8 @@ export function ColorBlock({ block, pointer }: Props<"color">) {
   const unavailable = disabled.status !== "ready" || Boolean(disabled.value);
   const [color, setColor] = useState(current);
   const dragging = useRef(false);
-  const throttled = useMemo(() => createThrottledSend((next: string) => { void data.act(`${pointer}/on_change`, next); }, 100), [data, pointer]);
+  const serialSend = useMemo(() => createSerialSend((next: string) => data.act(`${pointer}/on_change`, next)), [data, pointer]);
+  const throttled = useMemo(() => createThrottledSend(serialSend, 100), [serialSend]);
   useEffect(() => () => throttled.flush(), [throttled]);
   useEffect(() => { if (!dragging.current) setColor(current); }, [current]);
   const change = (next: string, nativeType: string) => {
