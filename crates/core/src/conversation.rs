@@ -2,7 +2,10 @@
 use crate::{conversation_context::Context, error, Inner};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::{
-    conversation::ThreadItemsReply, CoreError, CoreReply, CoreRequest, ErrorCode,
+    conversation::{
+        ConversationModel, ConversationProfile, ModelsReply, ProfilesReply, ThreadItemsReply,
+    },
+    CoreError, CoreReply, CoreRequest, ErrorCode,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -60,8 +63,11 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                         .and_then(|thread| thread.profile.as_ref().map(|p| p.id.as_str()))
                 })
                 .unwrap_or(&start_profile);
-            let models = ctx.models(Some(profile))?.models;
-            let profiles = ctx.profiles()?.profiles;
+            let (models, profiles, items) = get_resources(
+                &ctx.client,
+                profile,
+                thread.as_ref().map(|thread| thread.id.as_str()),
+            )?;
             let model_order: Vec<String> =
                 serde_json::from_value(config.get("model_order").cloned().unwrap_or_default())
                     .map_err(|_| error::make(ErrorCode::InvalidRequest))?;
@@ -81,15 +87,6 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                             .then(|| selected.clone())
                     })
                 });
-            let items = if let Some(thread) = &thread {
-                history(&ctx, &thread.id, None)?
-            } else {
-                ThreadItemsReply {
-                    items: vec![],
-                    next_before: None,
-                    cursor: String::new(),
-                }
-            };
             if let Some(thread) = &thread {
                 let key = format!(
                     "{}\u{0}{}\u{0}{}",
@@ -211,16 +208,86 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
     }
 }
 
+fn get_resources(
+    client: &crate::conversation_http::Client,
+    profile: &str,
+    thread_id: Option<&str>,
+) -> Result<
+    (
+        Vec<ConversationModel>,
+        Vec<ConversationProfile>,
+        ThreadItemsReply,
+    ),
+    CoreError,
+> {
+    let models_client = client.clone();
+    let profiles_client = client.clone();
+    let items_client = client.clone();
+    let profile = profile.to_string();
+    let thread_id = thread_id.map(str::to_string);
+    std::thread::scope(
+        |scope| -> Result<
+            (
+                Vec<ConversationModel>,
+                Vec<ConversationProfile>,
+                ThreadItemsReply,
+            ),
+            CoreError,
+        > {
+            let models = scope.spawn(move || {
+                let query = BTreeMap::from([("profile".into(), profile)]);
+                models_client
+                    .json::<ModelsReply>(
+                        reqwest::Method::GET,
+                        &models_client.path(&["models"])?,
+                        &query,
+                        None::<&Value>,
+                    )?
+                    .ok_or_else(|| error::make(ErrorCode::NotFound))
+            });
+            let profiles = scope.spawn(move || {
+                profiles_client
+                    .json::<ProfilesReply>(
+                        reqwest::Method::GET,
+                        &profiles_client.path(&["profiles"])?,
+                        &BTreeMap::new(),
+                        None::<&Value>,
+                    )?
+                    .ok_or_else(|| error::make(ErrorCode::NotFound))
+            });
+            let items = scope.spawn(move || match thread_id {
+                Some(id) => history_client(&items_client, &id, None),
+                None => Ok(ThreadItemsReply {
+                    items: vec![],
+                    next_before: None,
+                    cursor: String::new(),
+                }),
+            });
+            let models = models.join().unwrap();
+            let profiles = profiles.join().unwrap();
+            let items = items.join().unwrap();
+            Ok((models?.models, profiles?.profiles, items?))
+        },
+    )
+}
+
 fn history(ctx: &Context, id: &str, before: Option<&str>) -> Result<ThreadItemsReply, CoreError> {
+    history_client(&ctx.client, id, before)
+}
+
+fn history_client(
+    client: &crate::conversation_http::Client,
+    id: &str,
+    before: Option<&str>,
+) -> Result<ThreadItemsReply, CoreError> {
     let mut query = BTreeMap::from([("limit".into(), "200".into())]);
     if let Some(before) = before {
         query.insert("before".into(), before.into());
     }
-    let mut reply: ThreadItemsReply = ctx
-        .client
+    let mut reply: ThreadItemsReply = client
         .json(
             reqwest::Method::GET,
-            &ctx.client.path(&["threads", id, "items"])?,
+            &client.path(&["threads", id, "items"])?,
             &query,
             None::<&Value>,
         )?
@@ -229,4 +296,127 @@ fn history(ctx: &Context, id: &str, before: Option<&str>) -> Result<ThreadItemsR
         crate::share::strip_legacy_share_from_item(item);
     }
     Ok(reply)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{conversation_http::Client, logins::LoginEntry, profiler::Profiler};
+    use kaleidoscope_contract::registry::{ConnectionInfo, ConnectionKind};
+    use std::{
+        io::{BufRead, BufReader, Write},
+        net::TcpListener,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        thread,
+        time::{Duration, Instant},
+    };
+
+    #[test]
+    fn conversation_get_resources_arrive_concurrently() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let peak = Arc::new(AtomicUsize::new(0));
+        let server_peak = peak.clone();
+        let server = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(4);
+            let mut requests = 0;
+            let mut workers = Vec::new();
+            while requests < 3 && Instant::now() < deadline {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        requests += 1;
+                        let peak = server_peak.clone();
+                        workers.push(thread::spawn(move || {
+                            static ACTIVE: AtomicUsize = AtomicUsize::new(0);
+                            let now = ACTIVE.fetch_add(1, Ordering::SeqCst) + 1;
+                            peak.fetch_max(now, Ordering::SeqCst);
+                            let mut reader = BufReader::new(stream.try_clone().unwrap());
+                            let mut line = String::new();
+                            reader.read_line(&mut line).unwrap();
+                            let path = line.split_whitespace().nth(1).unwrap();
+                            thread::sleep(Duration::from_millis(120));
+                            let body = if path.starts_with("/v1/models") {
+                                r#"{"models":[]}"#
+                            } else if path.starts_with("/v1/profiles") {
+                                r#"{"profiles":[]}"#
+                            } else {
+                                r#"{"items":[],"cursor":"cursor"}"#
+                            };
+                            write!(
+                                stream,
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                body.len(),
+                                body
+                            )
+                            .unwrap();
+                            ACTIVE.fetch_sub(1, Ordering::SeqCst);
+                        }));
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("local server accept failed: {error}"),
+                }
+            }
+            for worker in workers {
+                worker.join().unwrap();
+            }
+            requests
+        });
+
+        let temp = tempfile::tempdir().unwrap();
+        let logins = Arc::new(crate::logins::Logins::open(temp.path()).unwrap());
+        logins
+            .store(
+                "test",
+                LoginEntry {
+                    issuer: format!("http://{address}"),
+                    client_id: None,
+                    redirect_port: None,
+                    access_token: Some("token".into()),
+                    refresh_token: None,
+                    expires_at: None,
+                },
+            )
+            .unwrap();
+        let client = Client {
+            info: ConnectionInfo {
+                name: "test".into(),
+                kind: ConnectionKind::Oauth,
+                base_url: format!("http://{address}"),
+                writable: true,
+                paths: vec![],
+                issuer: None,
+                scopes: None,
+                resource: None,
+            },
+            base_path: "/v1".into(),
+            logins,
+            profiler: Profiler::default(),
+        };
+
+        let (models, profiles, items) = get_resources(
+            &client,
+            "profile",
+            Some("00000000-0000-0000-0000-000000000001"),
+        )
+        .unwrap();
+        assert!(models.is_empty());
+        assert!(profiles.is_empty());
+        assert_eq!(items.cursor, "cursor");
+        assert_eq!(server.join().unwrap(), 3);
+        assert!(peak.load(Ordering::SeqCst) > 1);
+        let spans = client.profiler.snapshot("network");
+        assert_eq!(spans["recent_spans"].as_array().unwrap().len(), 3);
+        assert!(spans["recent_spans"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|span| span["target"] == "GET /threads/{id}/items"));
+        assert_eq!(spans["categories"][0]["label"], "네트워크 요청");
+    }
 }

@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 23판, 261102)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 25판, 261102)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -117,6 +117,10 @@
 //! 폴더 생성, 이름 바꾸기, 이동, 복사, 삭제, 파일 관리자에서 보기, 절대 경로 조회를 더한다.
 //! 파일 변경 이벤트는 grant 절대 경로와 grant 기준 상대 경로만 화면에 보낸다.
 //!
+//! # 계약 25판: 블록 세트 13판의 `folder`
+//! 파일 권한 또는 `storage` 3판 문서 모음을 뿌리로 하는 읽기와 선택용 폴더 블록을 더한다.
+//! 옛 `tree.root`와 `file_tree` wire는 유지하고 공개 스키마에서 `tree.root`를 숨긴다.
+//!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
 //! - 코어는 이벤트 채널 하나로 [`CoreEvent`]를 보낸다.
@@ -221,7 +225,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 24;
+pub const CONTRACT_VERSION: u32 = 25;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -245,7 +249,8 @@ pub const CONTRACT_VERSION: u32 = 24;
 /// - 10판: 9판 + 세계 지도 `map`, 피드의 중첩 답글과 접기.
 /// - 11판: `sandbox`, `slider`, `color`와 `input.rows`.
 /// - 12판: 창 단위 클라이언트 로직과 `canvas`, `timeline`.
-pub const BLOCK_SET_VERSION: u32 = 12;
+/// - 13판: 파일 또는 저장소 문서 모음을 뿌리로 하는 읽기 전용 `folder`.
+pub const BLOCK_SET_VERSION: u32 = 13;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -1107,7 +1112,8 @@ pub enum Block {
         #[ts(optional)]
         items: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(skip)]
+        #[ts(skip)]
         root: Option<FolderRef>,
         /// 보일 파일 확장자(점 없이, 소문자). 비어 있으면 모든 파일. 폴더는 늘 보인다.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1122,6 +1128,23 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_select: Option<Actions>,
+    },
+    /// (13판) 파일 폴더 또는 선언된 저장소 문서 모음을 읽고 항목을 고른다.
+    /// PC 전체 권한은 탐색기만 받는다. `read_only`는 쓰기 UI를 보이지 않게 한다.
+    Folder {
+        root: FolderRoot,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(optional, as = "Option<Vec<String>>")]
+        extensions: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_select: Option<Actions>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        #[ts(optional, as = "Option<bool>")]
+        read_only: bool,
     },
     /// `file`, `document`, `value` 가운데 하나의 마크다운을 표시한다. `value`는 읽기 전용이다.
     /// `read_only`가 거짓이면 `file`이나 `document`를 편집하고 저장한다. 파일은 원문 줄바꿈을 보존하며 자동 저장,
@@ -1674,6 +1697,17 @@ enum RawBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_select: Option<Actions>,
     },
+    Folder {
+        root: FolderRoot,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        extensions: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selected: Option<StateRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_select: Option<Actions>,
+        #[serde(default)]
+        read_only: bool,
+    },
     /// 마크다운 원문 편집기. `file`이 가리키는 파일을 읽어 보이고, 원문을 그대로 쓴다.
     /// 자동 저장: 입력을 멈추고 1초 뒤, 다른 파일로 바뀌기 전, Ctrl+S에 저장한다. 저장은 읽은 revision을
     /// 함께 보내고, 그 사이 디스크에서 바뀌었으면(`conflict`) 다시 불러오기와 덮어쓰기를 고르게 한다.
@@ -2217,6 +2251,19 @@ impl From<RawBlock> for Block {
                 selected,
                 on_select,
             },
+            RawBlock::Folder {
+                root,
+                extensions,
+                selected,
+                on_select,
+                read_only,
+            } => Block::Folder {
+                root,
+                extensions,
+                selected,
+                on_select,
+                read_only,
+            },
             RawBlock::Markdown {
                 file,
                 document,
@@ -2611,6 +2658,7 @@ impl Block {
         match self {
             Block::Canvas { .. } | Block::Timeline { .. } => 12,
             Block::Sandbox { .. } | Block::Slider { .. } | Block::Color { .. } => 11,
+            Block::Folder { .. } => 13,
             Block::HtmlView { .. } => 6,
             Block::Split { .. } => 1,
             Block::Tree {
@@ -2681,6 +2729,7 @@ impl Block {
             Block::Color { .. } => "color",
             Block::Split { .. } => "split",
             Block::Tree { .. } => "tree",
+            Block::Folder { .. } => "folder",
             Block::Markdown { .. } => "markdown",
             Block::HtmlView { .. } => "html_view",
             Block::Chat { .. } => "chat",
@@ -3012,6 +3061,38 @@ pub struct SetState {
 #[ts(export, export_to = "contract.ts")]
 pub struct FolderRef {
     pub permission: String,
+}
+
+/// 블록 세트 13판 폴더 뿌리. 기기 파일 권한 또는 앱 저장소의 문서 모음이다.
+#[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum FolderRoot {
+    Files { permission: String },
+    Collection { entry: String },
+}
+
+impl<'de> Deserialize<'de> for FolderRoot {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let object = value.as_object().ok_or_else(|| {
+            <D::Error as serde::de::Error>::custom("folder root는 객체여야 합니다")
+        })?;
+        match (object.len(), object.get("permission"), object.get("entry")) {
+            (1, Some(serde_json::Value::String(permission)), None) => {
+                Ok(Self::Files { permission: permission.clone() })
+            }
+            (1, None, Some(serde_json::Value::String(entry))) => {
+                Ok(Self::Collection { entry: entry.clone() })
+            }
+            _ => Err(<D::Error as serde::de::Error>::custom(
+                "folder root는 permission 또는 entry 하나만 가져야 합니다",
+            )),
+        }
+    }
 }
 
 /// (블록 세트 5판) 탐색기 오른쪽 칸의 보기 방식. 창 상태에는 이 문자열로 둔다.
@@ -4214,6 +4295,134 @@ mod tests {
         let folder_tree = r#"{"id":"legacy-tree","name":"옛 파일 트리","requires":{"blocks":1,"modules":{"files":1}},"permissions":[{"module":"files","id":"docs","access":"read","label":"문서"}],"state":{"selected":null,"opened":null},"ui":{"type":"file_tree","root":{"permission":"docs"},"selected":{"state":"selected"},"on_select":{"set_state":"opened"}}}"#;
         validate::parse_app_definition(folder_tree)
             .expect("옛 파일 트리는 선택 키와 쓰기 키가 달라도 유효");
+    }
+
+    #[test]
+    fn folder_contract_keeps_legacy_tree_wire_and_uses_block_set_thirteen() {
+        assert!(
+            serde_json::from_value::<FolderRoot>(serde_json::json!({"permission":"docs","entry":"documents"})).is_err(),
+            "파일 권한과 저장소 뿌리를 한 값에 함께 두면 거부한다",
+        );
+
+        let legacy_file_tree: Block = serde_json::from_str(
+            r#"{"type":"file_tree","root":{"permission":"docs"},"extensions":["md"],"selected":{"state":"selected"},"on_select":{"set_state":"selected"}}"#,
+        )
+        .expect("옛 file_tree 역직렬화");
+        assert_eq!(legacy_file_tree.introduced_in(), 1);
+        assert_eq!(
+            serde_json::to_value(&legacy_file_tree).unwrap(),
+            serde_json::json!({
+                "type":"tree",
+                "root":{"permission":"docs"},
+                "extensions":["md"],
+                "by":"children",
+                "selected":{"state":"selected"},
+                "on_select":{"set_state":"selected"}
+            })
+        );
+
+        let legacy_tree_root: Block = serde_json::from_str(
+            r#"{"type":"tree","root":{"permission":"docs"},"extensions":["md"],"selected":{"state":"selected"},"on_select":{"set_state":"selected"}}"#,
+        )
+        .expect("옛 tree.root 역직렬화");
+        assert_eq!(legacy_tree_root.introduced_in(), 1);
+        assert_eq!(legacy_tree_root, legacy_file_tree);
+
+        let data_tree: Block = serde_json::from_str(
+            r#"{"type":"tree","items":{"state":"items"},"by":"children"}"#,
+        )
+        .expect("데이터 tree 역직렬화");
+        assert_eq!(data_tree.introduced_in(), 4);
+        assert_eq!(data_tree.type_name(), "tree");
+
+        let folder: Block = serde_json::from_value(serde_json::json!({
+            "type":"folder",
+            "root":{"permission":"docs"},
+            "extensions":["md"],
+            "selected":{"state":"selected"},
+            "on_select":{"set_state":"selected"},
+            "read_only":true
+        }))
+        .expect("새 folder 역직렬화");
+        assert_eq!(folder.introduced_in(), 13);
+        assert_eq!(folder.type_name(), "folder");
+        assert!(data::child_blocks(&folder, "/ui").is_empty());
+    }
+
+    #[test]
+    fn folder_requires_declared_file_permission_or_storage_collection_and_block_set_thirteen() {
+        let definition = |blocks: u32, root: serde_json::Value, pc: bool| {
+            let value = serde_json::json!({
+                "id":"folder-test",
+                "name":"Folder test",
+                "requires":{"blocks":blocks,"modules":{"files":1,"storage":3}},
+                "permissions":[
+                    {"module":"files","id":"docs","access":"read","label":"문서","scope":if pc {"pc"} else {"folder"}}
+                ],
+                "storage":{"entries":[
+                    {"id":"documents","key":"documents","collection":true,"kind":"md","default":"","label":"문서","presentation":"hidden"}
+                ]},
+                "state":{"selected":null},
+                "ui":{"type":"folder","root":root,"selected":{"state":"selected"},"on_select":{"set_state":"selected"},"read_only":true}
+            });
+            serde_json::to_string(&value).unwrap()
+        };
+
+        let file_root = serde_json::json!({"permission":"docs"});
+        assert!(validate::parse_app_definition(&definition(12, file_root.clone(), false)).is_err());
+        let file_app = validate::parse_app_definition(&definition(13, file_root.clone(), false))
+            .expect("blocks 13 파일 뿌리");
+        assert_eq!(file_app.ui.introduced_in(), 13);
+        assert!(data::ui_actions(&file_app).iter().any(|(pointer, _)| pointer == "/ui/on_select"));
+
+        let docs_root = serde_json::json!({"entry":"documents"});
+        let docs_app = validate::parse_app_definition(&definition(13, docs_root, false))
+            .expect("blocks 13 문서 모음 뿌리");
+        assert_eq!(docs_app.ui.type_name(), "folder");
+        assert!(validate::parse_app_definition(&definition(13, file_root, true)).is_err());
+        assert!(validate::parse_app_definition(&definition(13, serde_json::json!({"entry":"missing"}), false)).is_err());
+        let not_collection = definition(13, serde_json::json!({"entry":"documents"}), false)
+            .replace("\"collection\":true", "\"collection\":false");
+        assert!(validate::parse_app_definition(&not_collection).is_err());
+
+        let mut old_shell = Supported::current();
+        old_shell.blocks = 12;
+        assert!(!old_shell.renders(&file_app.requires));
+        assert!(Supported::current().renders(&file_app.requires));
+    }
+
+    #[test]
+    fn folder_schema_hides_legacy_tree_root_from_public_block_contract() {
+        fn find_variant<'a>(value: &'a serde_json::Value, name: &str) -> Option<&'a serde_json::Value> {
+            if value
+                .get("properties")
+                .and_then(|properties| properties.get("type"))
+                .and_then(|type_schema| type_schema.get("const"))
+                .and_then(serde_json::Value::as_str)
+                == Some(name)
+            {
+                return Some(value);
+            }
+            match value {
+                serde_json::Value::Object(object) => object.values().find_map(|child| find_variant(child, name)),
+                serde_json::Value::Array(array) => array.iter().find_map(|child| find_variant(child, name)),
+                _ => None,
+            }
+        }
+
+        let schema = app_definition_schema();
+        let tree = find_variant(&schema, "tree").expect("tree schema variant");
+        assert!(tree["properties"].get("root").is_none());
+        assert!(find_variant(&schema, "folder").is_some());
+
+        let typescript = include_str!("../../../ui/src/contract/contract.ts");
+        let tree = typescript
+            .split("{ \"type\": \"tree\", items?: Binding,")
+            .nth(1)
+            .expect("생성된 TypeScript tree variant");
+        let tree = tree.split("} | ").next().expect("tree variant 끝");
+        assert!(!tree.contains("root"), "공개 TypeScript tree에서 root를 숨긴다");
+        assert!(typescript.contains("{ \"type\": \"folder\", root: FolderRoot"));
     }
 
     #[test]

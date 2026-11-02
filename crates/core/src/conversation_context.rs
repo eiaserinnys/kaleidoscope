@@ -3,8 +3,7 @@ use crate::{app_commands, app_storage, conversation_http::Client, error, Inner};
 use kaleidoscope_contract::{
     app_storage::StorageReadReply,
     conversation::{
-        AdoptThreadRequest, ConversationThread, EnsureThreadReply, ModelsReply, ProfilesReply,
-        ThreadByKeyReply,
+        AdoptThreadRequest, ConversationThread, EnsureThreadReply, ModelsReply, ThreadByKeyReply,
     },
     data::{self, Binding},
     AgentProvider, AppDefinition, CoreError, ErrorCode, Workspace,
@@ -258,17 +257,6 @@ impl Context {
                 reqwest::Method::GET,
                 &self.client.path(&["models"])?,
                 &query,
-                None::<&Value>,
-            )?
-            .ok_or_else(|| error::make(ErrorCode::NotFound))
-    }
-
-    pub fn profiles(&self) -> Result<ProfilesReply, CoreError> {
-        self.client
-            .json(
-                reqwest::Method::GET,
-                &self.client.path(&["profiles"])?,
-                &BTreeMap::new(),
                 None::<&Value>,
             )?
             .ok_or_else(|| error::make(ErrorCode::NotFound))

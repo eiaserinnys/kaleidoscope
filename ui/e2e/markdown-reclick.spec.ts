@@ -182,7 +182,7 @@ test("이미지 대체 글을 다시 누르는 동안 해당 줄을 렌더 상�
   await page.goto("/?preview=md-editor");
   const app = page.getByTestId("app-window-md-editor");
   await app.getByRole("button", { name: "문서 폴더 고르기" }).click();
-  await app.getByRole("button", { name: "Kaleidoscope.md" }).click();
+  await app.getByRole("treeitem", { name: "Kaleidoscope.md" }).click();
   const editor = app.locator(".cm-content");
   const image = editor.locator(".ks-live-image");
   await image.scrollIntoViewIfNeeded();

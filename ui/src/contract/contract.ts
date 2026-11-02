@@ -248,11 +248,11 @@ export type Block = { "type": "canvas", surface: string, aspect_ratio?: Binding,
 /**
  * 자식마다의 상대 크기. 없으면 똑같이 나눈다.
  */
-sizes?: Array<number>, children: Array<Block>, } | { "type": "tree", items?: Binding, root?: FolderRef, 
+sizes?: Array<number>, children: Array<Block>, } | { "type": "tree", items?: Binding, 
 /**
  * 보일 파일 확장자(점 없이, 소문자). 비어 있으면 모든 파일. 폴더는 늘 보인다.
  */
-extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "markdown", file?: FileRef, document?: DocumentRef, value?: Binding, read_only?: boolean, } | { "type": "html_view", document?: DocumentRef, file?: FileRef, value?: Binding, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "chat", permission?: string, root?: FolderRef, agents?: Binding, selected?: StateRef, on_select?: SetState, } | { "type": "web_view", 
+extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "folder", root: FolderRoot, extensions?: Array<string>, selected?: StateRef, on_select?: Actions, read_only?: boolean, } | { "type": "markdown", file?: FileRef, document?: DocumentRef, value?: Binding, read_only?: boolean, } | { "type": "html_view", document?: DocumentRef, file?: FileRef, value?: Binding, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "chat", permission?: string, root?: FolderRef, agents?: Binding, selected?: StateRef, on_select?: SetState, } | { "type": "web_view", 
 /**
  * 열 주소. 상태에서 읽거나(`{ "state": "url" }`) 정의에 적는다(`"https://example.com"`).
  */
@@ -655,7 +655,7 @@ ext: string,
 /**
  * 파일 크기(바이트). 폴더는 0.
  */
-size: bigint, 
+size: number, 
 /**
  * 마지막으로 바뀐 시각(RFC 3339 UTC).
  */
@@ -665,6 +665,11 @@ modified: string, };
  * 권한 하나가 가리키는 폴더(고른 폴더 자체).
  */
 export type FolderRef = { permission: string, };
+
+/**
+ * 블록 세트 13판 폴더 뿌리. 기기 파일 권한 또는 앱 저장소의 문서 모음이다.
+ */
+export type FolderRoot = { permission: string, } | { entry: string, };
 
 /**
  * `stack`의 자식 사이 간격. 쉘의 간격 토큰 가운데 하나다.
