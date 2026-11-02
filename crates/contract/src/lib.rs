@@ -113,6 +113,9 @@
 //! # 계약 23판: 창 단위 클라이언트 로직과 시간축
 //! 모듈 `client` 1판, 블록 세트 12판의 `canvas`와 `timeline`, 로컬 출력 바인딩과 동작,
 //! 파일 선택 및 오프셋 내보내기 명령을 더했다. 세부 선언은 [`client`]와 [`data`]에 있다.
+//! # 계약 25판: 모듈 `files` 3판
+//! 폴더 생성, 이름 바꾸기, 이동, 복사, 삭제, 파일 관리자에서 보기, 절대 경로 조회를 더한다.
+//! 파일 변경 이벤트는 grant 절대 경로와 grant 기준 상대 경로만 화면에 보낸다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -260,7 +263,7 @@ pub const BLOCK_SET_VERSION: u32 = 12;
 /// - `local_agent` 1판: 앱이 선언한 ACP 실행 명세로 이 기기에서 로컬 에이전트와 대화한다.
 /// - `client` 1판: 창별 격리 프레임의 로직과 로컬 출력.
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
-    ("files", 2),
+    ("files", 3),
     ("agent", 3),
     ("web", 1),
     ("connection", 2),
@@ -3225,6 +3228,60 @@ pub enum CoreRequest {
         #[ts(optional)]
         expected_revision: Option<String>,
     },
+    /// 고른 폴더 안에 새 폴더를 만든다. 같은 이름이 있으면 conflict다.
+    #[serde(rename = "files.mkdir")]
+    FilesMkdir {
+        window_id: String,
+        permission: String,
+        parent: String,
+        name: String,
+    },
+    /// 항목의 이름을 바꾼다. 다른 폴더로 옮기지 않는다.
+    #[serde(rename = "files.rename")]
+    FilesRename {
+        window_id: String,
+        permission: String,
+        path: String,
+        name: String,
+    },
+    /// 선택한 항목을 대상 폴더로 옮긴다. 덮어쓰지 않는다.
+    #[serde(rename = "files.move")]
+    FilesMove {
+        window_id: String,
+        permission: String,
+        paths: Vec<String>,
+        destination: String,
+    },
+    /// 선택한 항목을 대상 폴더에 복사한다. 이름이 겹치면 복사본 이름을 붙인다.
+    #[serde(rename = "files.copy")]
+    FilesCopy {
+        window_id: String,
+        permission: String,
+        paths: Vec<String>,
+        destination: String,
+    },
+    /// 선택한 항목을 휴지통으로 보내거나 영구 삭제한다.
+    #[serde(rename = "files.remove")]
+    FilesRemove {
+        window_id: String,
+        permission: String,
+        paths: Vec<String>,
+        permanent: bool,
+    },
+    /// 파일 관리자에서 항목을 표시한다.
+    #[serde(rename = "files.reveal")]
+    FilesReveal {
+        window_id: String,
+        permission: String,
+        path: String,
+    },
+    /// 선택한 파일의 절대 경로를 읽는다.
+    #[serde(rename = "files.path")]
+    FilesPath {
+        window_id: String,
+        permission: String,
+        path: String,
+    },
     /// 탐색기 창에서 고른 파일을 그 확장자를 여는 앱의 창으로 연다. `window_id`와 `permission`은 탐색기 창과
     /// 그 권한, `path`는 그 폴더 안 파일, `app_id`는 열 앱이다. 여는 앱이 여럿일 때 고르는 것은 화면이 한다.
     ///
@@ -3691,6 +3748,20 @@ pub enum CoreReply {
     },
     #[serde(rename = "files.write")]
     FilesWrite { path: String, revision: String },
+    #[serde(rename = "files.mkdir")]
+    FilesMkdir { path: String },
+    #[serde(rename = "files.rename")]
+    FilesRename { from: String, to: String },
+    #[serde(rename = "files.move")]
+    FilesMove { results: Vec<FileOpResult> },
+    #[serde(rename = "files.copy")]
+    FilesCopy { results: Vec<FileOpResult> },
+    #[serde(rename = "files.remove")]
+    FilesRemove { results: Vec<FileOpResult> },
+    #[serde(rename = "files.reveal")]
+    FilesReveal {},
+    #[serde(rename = "files.path")]
+    FilesPath { text: String },
     #[serde(rename = "files.open")]
     FilesOpen { window: AppWindow },
 
@@ -3874,6 +3945,12 @@ pub enum CoreEvent {
     /// 공유 상태나 기기 상태, 연결 상태가 바뀌었다. 화면은 저장소를 이 snapshot으로 바꾼다.
     #[serde(rename = "state.changed")]
     StateChanged { snapshot: ShellSnapshot },
+    /// 파일 작업이 성공했다. root는 권한 grant의 절대 경로이며 changes는 grant 기준 상대 경로다.
+    #[serde(rename = "files.changed")]
+    FilesChanged {
+        root: String,
+        changes: Vec<FileChange>,
+    },
     /// 같은 앱의 설정 화면에서 적용 결과를 갱신한다.
     #[serde(rename = "conversation.apply_status")]
     ConversationApplyStatus {
@@ -3944,6 +4021,25 @@ pub enum CoreEvent {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct FileChange {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub from: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub to: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum FileOpResult {
+    Ok { path: String, ok: FileChange },
+    Error { path: String, error: CoreError },
+}
+
 /// 명령의 실패.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
@@ -3990,6 +4086,12 @@ pub enum ErrorCode {
     Unavailable,
     /// 로컬 에이전트와의 ACP 연결 또는 프로토콜 처리에 실패했다.
     LocalAgentFailed,
+    /// 파일 이름을 만들거나 바꿀 수 없다.
+    InvalidName,
+    /// 다른 프로그램이 파일을 사용 중이다.
+    FileBusy,
+    /// 시스템 휴지통으로 보낼 수 없다.
+    TrashUnavailable,
 }
 
 impl ErrorCode {
@@ -4015,6 +4117,9 @@ impl ErrorCode {
             }
             ErrorCode::Unavailable => "이 쉘에서는 쓸 수 없는 기능입니다.",
             ErrorCode::LocalAgentFailed => "로컬 에이전트와 통신할 수 없습니다.",
+            ErrorCode::InvalidName => "쓸 수 없는 파일 이름입니다.",
+            ErrorCode::FileBusy => "다른 프로그램에서 사용 중입니다. 닫은 뒤 다시 시도하세요.",
+            ErrorCode::TrashUnavailable => "파일을 휴지통으로 보낼 수 없습니다.",
         }
     }
 }

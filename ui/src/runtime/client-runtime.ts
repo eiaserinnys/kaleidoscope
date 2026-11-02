@@ -70,7 +70,13 @@ export class ClientRuntime {
       this.unsubscribeStorage = this.store.subscribeEvents((event) => {
         if (event.event !== "storage.update" || event.window_id !== this.data.windowId) return;
         for (const entry of this.client.storage_entries) {
-          if (event.update.kind === "snapshot" || (event.update.kind === "changed" && event.update.changed.item.entry_id === entry)) void this.syncStorage(entry);
+          if (
+            event.update.kind === "snapshot" ||
+            (event.update.kind === "changed" && event.update.changed.item.entry_id === entry) ||
+            (event.update.kind === "moved" && event.update.moved.entry_id === entry)
+          ) {
+            void this.syncStorage(entry);
+          }
         }
       });
       container.append(frame);
