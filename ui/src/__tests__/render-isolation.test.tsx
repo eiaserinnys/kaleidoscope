@@ -87,12 +87,35 @@ const chatDefinition: AppDefinition = {
   },
 };
 
+const localizedDefinition: AppDefinition = {
+  id: "localized-form",
+  name: "다국어 양식",
+  requires: { blocks: 14, modules: {} },
+  permissions: [],
+  state: { language: "ja" },
+  messages: {
+    ja: { greeting: "こんにちは" },
+    en: { greeting: "Hello" },
+  },
+  locale: { state: "language" },
+  ui: {
+    type: "stack", direction: "column",
+    children: [
+      { type: "text", value: { message: "greeting" } },
+      { type: "text", value: "unchanged" },
+    ],
+  },
+};
+
 function testSnapshot(definitions: AppDefinition[] = [definition], firstState: Record<string, JsonValue> = { first: null, second: null, compound: null }): ShellSnapshot {
   const snapshot = makeTestSnapshot({ definitions });
   const first = snapshot.shared.windows[0];
   first.id = "window-a";
   const compound = { items: [1, 2], nested: { label: "stable" } };
-  first.state = { ...firstState, first: firstState.first ?? "a", second: firstState.second ?? "b", compound: firstState.compound ?? compound };
+  first.state = { ...firstState };
+  if (Object.hasOwn(definitions[0].state, "first")) first.state.first ??= "a";
+  if (Object.hasOwn(definitions[0].state, "second")) first.state.second ??= "b";
+  if (Object.hasOwn(definitions[0].state, "compound")) first.state.compound ??= compound;
   snapshot.shared.windows = [
     first,
     { ...first, id: "window-b", state: structuredClone(first.state), z: 2 },
@@ -262,6 +285,24 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     for (let i = 0; i < 10; i += 1) await setState(store, "window-a", "first", `changed-${i}`);
     expect(calls.filter((call) => call.windowId === "window-a").map((call) => call.pointer)).toEqual(Array(10).fill("/ui/children/0"));
     expect(document.body.textContent).toContain("changed-9");
+    store.dispose();
+  });
+
+  it("기본 locale 사전으로 표시하고 locale 변경 시 그 메시지 블록만 다시 그린다", async () => {
+    const { store } = await setup([localizedDefinition], {});
+    expect(screen.getAllByText("こんにちは")).toHaveLength(2);
+    expect(screen.getAllByText("unchanged")).toHaveLength(2);
+    calls.length = 0;
+
+    await setState(store, "window-a", "language", "en");
+
+    await waitFor(() => expect(screen.getByText("Hello")).toBeTruthy());
+    expect(screen.getByText("こんにちは")).toBeTruthy();
+    expect(screen.getAllByText("unchanged")).toHaveLength(2);
+    expect(calls.filter((call) => call.windowId === "window-a").map((call) => call.pointer)).toEqual([
+      "/ui/children/0",
+    ]);
+    expect(countFor("window-b")).toBe(0);
     store.dispose();
   });
 

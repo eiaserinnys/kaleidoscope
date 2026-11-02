@@ -1,0 +1,96 @@
+{
+  "id": "localized-form",
+  "name": "다국어 양식",
+  "description": "세 언어 메시지와 상태 바인딩 예시",
+  "requires": { "blocks": 14, "modules": { "assets": 1, "client": 1 } },
+  "permissions": [],
+  "state": { "language": "ko", "dialog_open": false, "name": "" },
+  "messages": {
+    "ko": {
+      "language_label": "표시 언어",
+      "open_form": "양식 열기",
+      "dialog_title": "연락처 정보",
+      "name_label": "이름",
+      "name_guide": "답변을 받을 이름을 입력하세요.",
+      "save": "저장"
+    },
+    "en": {
+      "language_label": "Display language",
+      "open_form": "Open form",
+      "dialog_title": "Contact details",
+      "name_label": "Name",
+      "name_guide": "Enter the name for this response.",
+      "save": "Save"
+    },
+    "ja": {
+      "language_label": "表示言語",
+      "open_form": "フォームを開く",
+      "dialog_title": "連絡先",
+      "name_label": "名前",
+      "name_guide": "回答を受け取る名前を入力してください。",
+      "save": "保存"
+    }
+  },
+  "locale": { "state": "language" },
+  "assets": [{ "id": "localized-form", "version": 1 }],
+  "client": {
+    "runtime": "javascript",
+    "entry": { "id": "localized-form", "version": 1 },
+    "inputs": { "language": { "state": "language" } },
+    "outputs": {
+      "language_options": {
+        "default": [
+          { "value": "ko", "label": "한국어" },
+          { "value": "en", "label": "English" },
+          { "value": "ja", "label": "日本語" }
+        ]
+      }
+    },
+    "actions": [],
+    "commands": {},
+    "state_keys": [],
+    "storage_entries": []
+  },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "children": [
+      {
+        "type": "button",
+        "label": { "message": "open_form" },
+        "on_click": [{ "set_state": "dialog_open", "value": true }]
+      },
+      {
+        "type": "dialog",
+        "open": { "state": "dialog_open" },
+        "title": { "message": "dialog_title" },
+        "child": {
+          "type": "stack",
+          "direction": "column",
+          "children": [
+            { "type": "text", "value": { "message": "language_label" } },
+            {
+              "type": "select",
+              "value": { "state": "language" },
+              "on_change": { "set_state": "language" },
+              "options": { "client": "language_options" }
+            },
+            { "type": "text", "value": { "message": "name_label" } },
+            { "type": "text", "value": { "message": "name_guide" } },
+            {
+              "type": "input",
+              "value": { "state": "name" },
+              "on_change": { "set_state": "name" }
+            },
+            {
+              "type": "button",
+              "label": { "message": "save" },
+              "on_click": [{ "set_state": "dialog_open", "value": false }]
+            }
+          ]
+        },
+        "on_close": [{ "set_state": "dialog_open", "value": false }]
+      }
+    ]
+  }
+}

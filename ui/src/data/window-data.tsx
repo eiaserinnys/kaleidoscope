@@ -386,9 +386,11 @@ export function useBinding(pointer: string, binding: Binding): BindingValue {
   if (!context) throw new Error("창 데이터가 연결되지 않았습니다");
   const localName = binding !== null && typeof binding === "object" && !Array.isArray(binding) && Object.keys(binding).length === 1 && "client" in binding && typeof binding.client === "string" ? binding.client : null;
   const isExpression = binding !== null && typeof binding === "object" && !Array.isArray(binding) && Object.keys(binding).length === 1 && "expr" in binding && typeof binding.expr === "string";
+  const messageName = binding !== null && typeof binding === "object" && !Array.isArray(binding) && Object.keys(binding).length === 1 && "message" in binding && typeof binding.message === "string" ? binding.message : null;
   const key = localName !== null ? `@client/${localName}` : isExpression ? pointer : "@static";
   const stateKey = binding !== null && typeof binding === "object" && !Array.isArray(binding) && Object.keys(binding).length === 1 && "state" in binding && typeof binding.state === "string" ? binding.state : null;
-  const stateValue = useWindowStateValue({ store: context.data.store, window: { id: context.data.windowId } }, stateKey);
+  const localeKey = messageName === null ? null : context.data.definition.locale?.state ?? null;
+  const stateValue = useWindowStateValue({ store: context.data.store, window: { id: context.data.windowId } }, stateKey ?? localeKey);
   const value = useSyncExternalStore((listener) => context.data.subscribeValue(key, listener), () => context.data.getValue(key), () => loading);
   const stateBinding = useMemo<BindingValue>(() => ({ status: "ready", value: (stateValue as JsonValue) ?? null }), [stateValue]);
   const literalBinding = useMemo<BindingValue>(() => ({ status: "ready", value: binding as JsonValue }), [binding]);
@@ -399,10 +401,18 @@ export function useBinding(pointer: string, binding: Binding): BindingValue {
     }
     return literalBinding;
   }, [binding, scope, literalBinding]);
+  const defaultLocale = localeKey === null ? null : context.data.definition.state[localeKey];
+  const selectedLocale = typeof stateValue === "string" ? stateValue : defaultLocale;
+  const messageValue = messageName === null ? null
+    : (typeof selectedLocale === "string" ? context.data.definition.messages?.[selectedLocale]?.[messageName] : undefined)
+      ?? (typeof defaultLocale === "string" ? context.data.definition.messages?.[defaultLocale]?.[messageName] : undefined)
+      ?? null;
+  const messageBinding = useMemo<BindingValue>(() => ({ status: "ready", value: messageValue }), [messageValue]);
   if (localName !== null) return value;
   if (binding !== null && typeof binding === "object" && !Array.isArray(binding)) {
     if (stateKey !== null) return stateBinding;
     if (isExpression) return value;
+    if (messageName !== null) return messageBinding;
   }
   return itemBinding;
 }
