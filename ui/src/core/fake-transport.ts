@@ -438,6 +438,8 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         return { op: "state.get", snapshot: clone(snapshot) };
       case "data.attach":
         return { op: "data.attach", view: await data.attach(request.window_id) };
+      case "data.dormant":
+        return { op: "data.dormant" };
       case "data.detach":
         data.detach(request.window_id);
         return { op: "data.detach" };

@@ -6,6 +6,8 @@ import { ChevronRight, FilePlus, FileText, FolderOpen, PanelLeftClose, PanelLeft
 import { TextInput } from "../components/text-input";
 import type { BlockContext } from "./block-context";
 import { SplitPaneContext } from "./split-pane-context";
+import { useWindowGrant } from "../data/window-state";
+import { useShellSelector } from "../core/shell-store";
 
 interface CreatingFile {
   directory: string;
@@ -57,11 +59,11 @@ export function FileBrowserTree({
   const pane = useContext(SplitPaneContext);
   const treeRef = useRef<HTMLDivElement>(null);
   const restoreToggleFocus = useRef(false);
-  const { snapshot, store, window } = context;
-  const grant = snapshot.device.grants.find((item) => item.window_id === window.id && item.permission === permission) ?? null;
-  const pcAccess = scope === "pc" && snapshot.device.pc_access.some(
+  const { store, window } = context;
+  const grant = useWindowGrant(context, permission) ?? null;
+  const pcAccess = useShellSelector(store, (snapshot) => scope === "pc" && Boolean(snapshot?.device.pc_access.some(
     (item) => item.app_id === window.app_id && item.permission === permission,
-  );
+  )));
   const hasRoot = scope === "pc" ? pcAccess : grant !== null;
   const rootPath = scope === "pc" ? pcAccess ? "" : null : grant?.root_path ?? null;
   const rootName = scope === "pc" ? permissionLabel : grant?.root_name ?? "";

@@ -1,26 +1,26 @@
 import { useState } from "react";
 import type { BindingValue } from "../contract/contract";
 import { toCoreError } from "../core/core-transport";
-import { useShellSnapshot } from "../core/shell-store";
 import { useWindowData } from "../data/window-data";
+import { useWindowGrants } from "../data/window-state";
 import { DataIcon } from "./data-icons";
 import { FolderOpen } from "./icons";
 import { Button, EmptyState } from "./primitives";
 
 export function DataState({ value, compact = false, onRetry, onLogin }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; onRetry?: () => void; onLogin?: () => void }) {
   const data = useWindowData();
-  const snapshot = useShellSnapshot(data.store);
+  const context = { store: data.store, window: { id: data.windowId } };
   const [error, setError] = useState<string | null>(null);
+  const grants = useWindowGrants(context);
+  const possiblePermissions = value.status === "failed"
+    ? value.retry.map((name) => data.definition.sources?.[name])
+      .flatMap((source) => source && (source.kind === "file" || source.kind === "folder") ? [source.permission] : [])
+    : [];
+  const ungranted = possiblePermissions.find((permission) => !grants.some((grant) => grant.permission === permission));
   if (value.status === "loading") return <div className="ks-data-skeleton" role="status" aria-label="불러오는 중"><i /><i /><i /></div>;
   const isLogin = value.status === "login_required";
   // 기기 폴더 원천(file, folder)이 아직 폴더를 고르지 않아 실패했으면 다시 받기 대신 폴더 고르기를 보인다.
   // 폴더 원천만 쓰는 블록에는 파일 트리처럼 폴더를 고를 다른 자리가 없다.
-  const ungranted = value.status === "failed"
-    ? value.retry
-      .map((name) => data.definition.sources?.[name])
-      .flatMap((source) => source && (source.kind === "file" || source.kind === "folder") ? [source.permission] : [])
-      .find((permission) => !snapshot?.device.grants.some((grant) => grant.window_id === data.windowId && grant.permission === permission))
-    : undefined;
   if (ungranted !== undefined && value.status === "failed") {
     const retry = value.retry;
     const pick = () => {

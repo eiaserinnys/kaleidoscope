@@ -14,6 +14,46 @@ import { TableBlock } from "../blocks/data-table";
 beforeEach(mockVirtualLayout);
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+it("탭의 쉬는 포인터를 붙일 때 보내고 전환마다 한 번 갱신한다", async () => {
+  const definition: AppDefinition = {
+    id: "dormant-tabs", name: "탭 시험", requires: { blocks: 4, modules: {} }, permissions: [], state: {},
+    ui: { type: "tabs", tabs: [
+      { label: "첫째", child: { type: "text", value: "첫째 내용" } },
+      { label: "둘째", child: { type: "text", value: "둘째 내용" } },
+      { label: "셋째", child: { type: "text", value: "셋째 내용" } },
+    ] },
+  };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  let releaseAttach!: () => void;
+  const attached = new Promise<void>((resolve) => { releaseAttach = resolve; });
+  vi.spyOn(transport, "call").mockImplementation(async (request) => {
+    const reply = await original(request);
+    if (request.op === "data.attach") await attached;
+    return reply;
+  });
+  const store = createShellStore(transport);
+  render(<AppWindowContent store={store} windowId="viewer-window" />);
+  await waitFor(() => expect(transport.getCalls().find((call) => call.op === "data.attach")).toEqual({
+    op: "data.attach", window_id: "viewer-window", dormant: ["/ui/tabs/1", "/ui/tabs/2"],
+  }));
+
+  await userEvent.click(screen.getByRole("tab", { name: "둘째" }));
+  expect(transport.getCalls().filter((call) => call.op === "data.dormant")).toHaveLength(0);
+  await act(async () => releaseAttach());
+  await waitFor(() => expect(transport.getCalls().filter((call) => call.op === "data.dormant")).toEqual([
+    { op: "data.dormant", window_id: "viewer-window", dormant: ["/ui/tabs/2", "/ui/tabs/0"] },
+  ]));
+
+  await userEvent.click(screen.getByRole("tab", { name: "첫째" }));
+  await waitFor(() => expect(transport.getCalls().filter((call) => call.op === "data.dormant")).toEqual([
+    { op: "data.dormant", window_id: "viewer-window", dormant: ["/ui/tabs/2", "/ui/tabs/0"] },
+    { op: "data.dormant", window_id: "viewer-window", dormant: ["/ui/tabs/2", "/ui/tabs/1"] },
+  ]));
+  expect(screen.getByText("첫째 내용")).toBeTruthy();
+  store.dispose();
+});
+
 it("크기 제한을 넘은 출력만 거부하고 다른 출력은 반영한다", () => {
   const definition: AppDefinition = {
     id: "client-output-limit", name: "출력 시험", requires: { blocks: 12, modules: { assets: 1, client: 1 } }, permissions: [], state: {},
@@ -47,7 +87,7 @@ it("클라이언트가 발행한 행과 선택은 코어 동작 없이 표에 �
     return <><button onClick={() => data.publishClient({ rows: [{ key: "a", title: "계산된 행" }], selected: "a" })}>계산</button>
       <TableBlock block={definition.ui as Extract<AppDefinition["ui"], { type: "table" }>} context={context} pointer="/ui" /></>;
   }
-  render(<windowData.WindowDataProvider store={store} appWindow={appWindow} definition={definition}><Harness /></windowData.WindowDataProvider>);
+  render(<windowData.WindowDataProvider store={store} windowId={appWindow.id} definition={definition}><Harness /></windowData.WindowDataProvider>);
   await userEvent.click(screen.getByRole("button", { name: "계산" }));
   expect(await screen.findByText("계산된 행")).toBeTruthy();
   expect(transport.getCalls().filter((call) => call.op === "data.act" || call.op === "window.set_state")).toHaveLength(0);
@@ -146,7 +186,7 @@ it("only rerenders the subscriber of the changed data pointer", async () => {
     const value = windowData.useBinding(`/ui/${name}`, { expr: `$state.${name}` });
     return <span>{value.status === "ready" ? String(value.value) : "대기"}</span>;
   }
-  render(<windowData.WindowDataProvider store={store} appWindow={window} definition={definition}><Value name="a" /><Value name="b" /></windowData.WindowDataProvider>);
+  render(<windowData.WindowDataProvider store={store} windowId={window.id} definition={definition}><Value name="a" /><Value name="b" /></windowData.WindowDataProvider>);
   await waitFor(() => expect(renders.a).toBeGreaterThan(0));
   const before = { ...renders };
   act(() => transport.emit({ event: "data.update", window_id: window.id, view: { sources: {}, values: { "/ui/a": { status: "ready", value: "바뀐 A" } } } }));

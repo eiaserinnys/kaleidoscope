@@ -1,10 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import type { AppDefinition, AppWindow, Binding, BindingValue, DataView, PickFilesSpec, SaveFileSpec, SourceStatus } from "../contract/contract";
+import type { AppDefinition, Binding, BindingValue, DataView, PickFilesSpec, SaveFileSpec, SourceStatus } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { CLIENT_OUTPUT_MAX_BYTES } from "../contract/limits";
 import { toCoreError } from "../core/core-transport";
-import type { ShellStore } from "../core/shell-store";
+import { shareStructure, useShellSelector, type ShellStore } from "../core/shell-store";
 import { ClientRuntime } from "../runtime/client-runtime";
+import { useBlockRenderProbe } from "../render/render-probe";
+import { useWindowStateValue } from "./window-state";
 
 const loading: BindingValue = { status: "loading" };
 const emptySources: Record<string, SourceStatus> = {};
@@ -42,6 +44,8 @@ export class WindowData {
   private clientListeners = new Set<() => void>();
   private shareListeners = new Set<() => void>();
   private shareSequence = 0;
+  private dormantPointers = new Set<string>();
+  private dormantScheduled = false;
   private restarting = false;
   private surfaceGeneration = 0;
   private surfaces = new Map<string, { id: string; generation: number; canvas: OffscreenCanvas; css_width: number; css_height: number; dpr: number }>();
@@ -99,8 +103,9 @@ export class WindowData {
 
   private merge(view: DataView) {
     for (const [pointer, value] of Object.entries(view.values)) {
-      if (JSON.stringify(this.values[pointer]) === JSON.stringify(value)) continue;
-      this.values[pointer] = value;
+      const shared = shareStructure(this.values[pointer], value);
+      if (shared === this.values[pointer]) continue;
+      this.values[pointer] = shared;
       this.listeners.get(pointer)?.forEach((listener) => listener());
     }
     if (Object.keys(view.sources).length || Object.keys(view.source_meta ?? {}).length) {
@@ -126,7 +131,7 @@ export class WindowData {
     this.ready = enqueue(this.store, this.windowId, async () => {
       if (!this.active || mount !== this.mounts) return;
       try {
-        const reply = await this.store.call({ op: "data.attach", window_id: this.windowId });
+        const reply = await this.store.call({ op: "data.attach", window_id: this.windowId, dormant: [...this.dormantPointers] });
         if (!this.active || mount !== this.mounts) return;
         this.merge(reply.view);
         this.initialized = true;
@@ -156,6 +161,23 @@ export class WindowData {
   }
 
   syncClient = () => this.runtime?.sync();
+
+  setDormant = (pointer: string, dormant: boolean) => {
+    if (this.dormantPointers.has(pointer) === dormant) return;
+    if (dormant) this.dormantPointers.add(pointer);
+    else this.dormantPointers.delete(pointer);
+    if (!this.active || this.dormantScheduled) return;
+    this.dormantScheduled = true;
+    const mount = this.mounts;
+    queueMicrotask(() => {
+      this.dormantScheduled = false;
+      void this.ready.then(async () => {
+        if (!this.active || mount !== this.mounts || !this.initialized) return;
+        try { await this.store.call({ op: "data.dormant", window_id: this.windowId, dormant: [...this.dormantPointers] }); }
+        catch (error) { if (this.active && mount === this.mounts) this.setNotice(toCoreError(error).message); }
+      });
+    });
+  };
 
   attachSurface = (id: string, canvas: OffscreenCanvas, css_width: number, css_height: number, dpr: number) => {
     const surface = { id, generation: ++this.surfaceGeneration, canvas, css_width, css_height, dpr };
@@ -225,13 +247,19 @@ export class WindowData {
   };
 }
 
-const DataContext = createContext<{ data: WindowData; state: AppWindow["state"] } | null>(null);
+const DataContext = createContext<{ data: WindowData } | null>(null);
 
-export function WindowDataProvider({ store, appWindow, definition, children }: { store: ShellStore; appWindow: AppWindow; definition: AppDefinition; children: ReactNode }) {
-  const data = useMemo(() => new WindowData(store, appWindow.id, definition), [store, appWindow.id, appWindow.app_version]);
+export function WindowDataProvider({ store, windowId, definition, children }: { store: ShellStore; windowId: string; definition: AppDefinition; children: ReactNode }) {
+  const data = useMemo(() => new WindowData(store, windowId, definition), [store, windowId, definition]);
+  const context = useMemo(() => ({ data }), [data]);
   useEffect(() => data.mount(), [data]);
-  useEffect(() => { data.syncClient(); }, [data, appWindow.state]);
-  return <DataContext.Provider value={{ data, state: appWindow.state }}>{children}</DataContext.Provider>;
+  return <DataContext.Provider value={context}><ClientRuntimeSync data={data} />{children}</DataContext.Provider>;
+}
+
+function ClientRuntimeSync({ data }: { data: WindowData }) {
+  const state = useShellSelector(data.store, (snapshot) => snapshot?.shared.windows.find((window) => window.id === data.windowId)?.state);
+  useEffect(() => { data.syncClient(); }, [data, state]);
+  return null;
 }
 
 export function useWindowData(): WindowData {
@@ -244,16 +272,30 @@ export function useOptionalWindowData(): WindowData | null {
   return useContext(DataContext)?.data ?? null;
 }
 
+export function useDormant(pointer: string, dormant: boolean) {
+  const data = useOptionalWindowData();
+  useEffect(() => {
+    data?.setDormant(pointer, dormant);
+    return () => data?.setDormant(pointer, true);
+  }, [data, dormant, pointer]);
+}
+
 export function useBinding(pointer: string, binding: Binding): BindingValue {
+  useBlockRenderProbe();
   const context = useContext(DataContext);
   if (!context) throw new Error("창 데이터가 연결되지 않았습니다");
   const localName = binding !== null && typeof binding === "object" && !Array.isArray(binding) && Object.keys(binding).length === 1 && "client" in binding && typeof binding.client === "string" ? binding.client : null;
-  const key = localName === null ? pointer : `@client/${localName}`;
+  const isExpression = binding !== null && typeof binding === "object" && !Array.isArray(binding) && Object.keys(binding).length === 1 && "expr" in binding && typeof binding.expr === "string";
+  const key = localName !== null ? `@client/${localName}` : isExpression ? pointer : "@static";
+  const stateKey = binding !== null && typeof binding === "object" && !Array.isArray(binding) && Object.keys(binding).length === 1 && "state" in binding && typeof binding.state === "string" ? binding.state : null;
+  const stateValue = useWindowStateValue({ store: context.data.store, window: { id: context.data.windowId } }, stateKey);
   const value = useSyncExternalStore((listener) => context.data.subscribeValue(key, listener), () => context.data.getValue(key), () => loading);
+  const stateBinding = useMemo<BindingValue>(() => ({ status: "ready", value: (stateValue as JsonValue) ?? null }), [stateValue]);
+  const literalBinding = useMemo<BindingValue>(() => ({ status: "ready", value: binding as JsonValue }), [binding]);
   if (localName !== null) return value;
   if (binding !== null && typeof binding === "object" && !Array.isArray(binding)) {
-    if (Object.keys(binding).length === 1 && "state" in binding && typeof binding.state === "string") return { status: "ready", value: context.state[binding.state] ?? null };
-    if (Object.keys(binding).length === 1 && "expr" in binding && typeof binding.expr === "string") return value;
+    if (stateKey !== null) return stateBinding;
+    if (isExpression) return value;
   }
-  return { status: "ready", value: binding as JsonValue };
+  return literalBinding;
 }

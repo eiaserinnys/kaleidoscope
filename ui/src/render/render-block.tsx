@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import type { Block } from "../contract/contract";
-import type { BlockContext } from "../blocks/block-context";
+import type { BlockContext, LegacyBlockContext } from "../blocks/block-context";
+import { useShellSnapshot } from "../core/shell-store";
 import { FileTreeBlock } from "../blocks/file-tree";
 import type { FileTreeBlockData } from "../blocks/file-tree";
 import { MarkdownEditorBlock } from "../blocks/markdown-editor";
@@ -34,9 +35,23 @@ import { MapBlock } from "../blocks/data-map";
 import { SandboxBlock } from "../blocks/sandbox";
 import { CanvasBlock } from "../blocks/canvas";
 import { TimelineBlock } from "../blocks/timeline";
+import { BlockRenderContext, useBlockRenderProbe } from "./render-probe";
+
+export { renderProbe } from "./render-probe";
 
 export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"): ReactNode {
+  return <BlockNode block={block} context={context} pointer={pointer} />;
+}
+
+const BlockNode = memo(function BlockNode({ block, context, pointer }: { block: Block; context: BlockContext; pointer: string }) {
   const normalized = normalizeBlock(block);
+  return <BlockRenderContext.Provider value={{ windowId: context.window.id, pointer, type: normalized.type }}>
+    <BlockContent block={normalized} context={context} pointer={pointer} />
+  </BlockRenderContext.Provider>;
+});
+
+function BlockContent({ block: normalized, context, pointer }: { block: Block; context: BlockContext; pointer: string }) {
+  useBlockRenderProbe();
   switch (normalized.type) {
     case "canvas": return <CanvasBlock block={normalized} pointer={pointer} />;
     case "timeline": return <TimelineBlock block={normalized} pointer={pointer} />;
@@ -56,8 +71,8 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
       return <SandboxBlock block={normalized} context={context} pointer={pointer} />;
     case "chat":
       return normalized.permission !== undefined || normalized.root !== undefined || normalized.agents !== undefined || normalized.selected !== undefined || normalized.on_select !== undefined
-        ? <AgentSessionBlock block={normalized as AgentSessionBlockData} context={context} pointer={pointer} />
-        : <AgentChatBlock block={normalized as AgentChatBlockData} context={context} />;
+        ? <LegacyContextBlock kind="session" block={normalized as AgentSessionBlockData} context={context} pointer={pointer} />
+        : <LegacyContextBlock kind="chat" block={normalized as AgentChatBlockData} context={context} />;
     case "stack": return <StackBlock block={normalized} context={context} pointer={pointer} />;
     case "tabs": return <TabsBlock block={normalized} context={context} pointer={pointer} />;
     case "toolbar": return <ToolbarBlock block={normalized} context={context} pointer={pointer} />;
@@ -91,6 +106,21 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
       return <div className="ks-unknown-block" role="alert">지원하지 않는 블록: {String(unknown.type)}</div>;
     }
   }
+}
+
+function LegacyContextBlock({ kind, block, context, pointer }: {
+  kind: "chat" | "session";
+  block: AgentChatBlockData | AgentSessionBlockData;
+  context: BlockContext;
+  pointer?: string;
+}) {
+  const snapshot = useShellSnapshot(context.store);
+  const window = snapshot?.shared.windows.find((item) => item.id === context.window.id);
+  if (!snapshot || !window) return null;
+  const legacyContext = { ...context, snapshot, window } as LegacyBlockContext;
+  return kind === "session"
+    ? <AgentSessionBlock block={block as AgentSessionBlockData} context={legacyContext} pointer={pointer} />
+    : <AgentChatBlock block={block as AgentChatBlockData} context={legacyContext} />;
 }
 
 export function normalizeBlock(block: Block): Block {

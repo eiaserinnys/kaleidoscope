@@ -13,13 +13,15 @@ import { FileEditorSession } from "./file-editor-session";
 import { EditorConflict } from "./editor-conflict";
 import { codeHighlighting, codeLanguageForPath, languageExtension } from "./code-language";
 import { FileGrant } from "./file-grant";
+import { useWindowGrant, useWindowStateValue } from "../data/window-state";
 
 export type CodeEditorBlockData = Extract<Block, { type: "code" }> & { file: NonNullable<Extract<Block, { type: "code" }>["file"]> };
 export function CodeEditorBlock({ block, context }: { block: CodeEditorBlockData; context: BlockContext }) {
-  const path = resolveFilePath(block.file, context.window);
+  const stateValue = useWindowStateValue(context, typeof block.file.path === "string" ? null : block.file.path.state);
+  const path = resolveFilePath(block.file, stateValue);
   const emptyShareRef = useRef<HTMLDivElement>(null);
   useShareDescriber(emptyShareRef, () => ({ text: "[코드 편집기]", visual: false }));
-  const root = context.snapshot.device.grants.find((g) => g.window_id === context.window.id && g.permission === block.file.permission)?.root_path ?? null;
+  const root = useWindowGrant(context, block.file.permission)?.root_path ?? null;
   const session = useMemo(() => new FileEditorSession(context.store, context.window.id, block.file.permission), [block.file.permission, context.store, context.window.id]);
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
   const previousRoot = useRef(root);

@@ -14,6 +14,7 @@ import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
 import { codeHighlighting, codeLanguageForPath, codeViewText, languageExtension } from "./code-language";
 import { FileGrant } from "./file-grant";
+import { useWindowGrant, useWindowStateValue } from "../data/window-state";
 
 export type CodeViewBlockData = Extract<Block, { type: "code" }>;
 export function CodeViewBlock({ block, context, pointer }: { block: CodeViewBlockData; context: BlockContext; pointer: string }) {
@@ -26,10 +27,11 @@ function BoundCodeView({ block, pointer }: { block: CodeViewBlockData; pointer: 
   return <ReadOnlyCode text={codeViewText(value.value)} language={codeLanguageForPath(null, block.language)} follow={!!block.follow} wrap={!!block.wrap} />;
 }
 function FileCodeView({ block, file, context }: { block: CodeViewBlockData; file: FileRef; context: BlockContext }) {
-  const path = resolveFilePath(file, context.window);
+  const stateValue = useWindowStateValue(context, typeof file.path === "string" ? null : file.path.state);
+  const path = resolveFilePath(file, stateValue);
   const emptyShareRef = useRef<HTMLDivElement>(null);
   useShareDescriber(emptyShareRef, () => ({ text: "[코드 보기]", visual: false }));
-  const root = context.snapshot.device.grants.find((g) => g.window_id === context.window.id && g.permission === file.permission)?.root_path ?? null;
+  const root = useWindowGrant(context, file.permission)?.root_path ?? null;
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

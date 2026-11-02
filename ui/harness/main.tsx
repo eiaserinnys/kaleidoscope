@@ -7,7 +7,7 @@ import {
   createHttpTransport,
   createShellStore,
   installShellDragGuard,
-  useShellSnapshot,
+  useShellSelector,
   type FakeTransport,
 } from "@kaleidoscope/ui";
 import "@kaleidoscope/ui/styles.css";
@@ -289,7 +289,7 @@ if (!coreUrl) {
 
 function Harness() {
   const remoteEdits = useRef(0);
-  const snapshot = useShellSnapshot(store);
+  const snapshot = useShellSelector(store, (current) => current);
   const editorWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-editor");
   const htmlReportWindow = snapshot?.shared.windows.find((item) => item.app_id === "html-report");
   const dataWindow = snapshot?.shared.windows.find((item) => item.app_id === "data-controls");
