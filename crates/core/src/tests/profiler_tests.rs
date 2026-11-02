@@ -18,7 +18,37 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
     let core = open_core(dir.path(), vec![], &Arc::new(FakeHost::default()));
     let (workspace, desktop) = active_ids(&core);
     let profiler = open_window(&core, &desktop, "profiler");
+    let definition = snapshot(&core)
+        .shared
+        .app_versions
+        .into_iter()
+        .find(|version| version.app_id == "profiler")
+        .unwrap()
+        .definition;
+    let migrated = kaleidoscope_contract::migrate_window_state(
+        &definition,
+        &BTreeMap::from([
+            ("tab".into(), json!(4)),
+            ("category".into(), json!("data.view")),
+        ]),
+    );
+    assert_eq!(migrated["profiler_tab"], json!(0));
+    assert_eq!(migrated["category"], json!("data.view"));
+    assert!(!migrated.contains_key("tab"));
     let calculator = open_window(&core, &desktop, "calculator");
+    core.handle(CoreRequest::ProfilerReport {
+        inputs: vec![kaleidoscope_contract::UiInputSample {
+            event: "input".into(),
+            target: "textarea".into(),
+            app_id: Some("workspace-pas".into()),
+            responding: false,
+            wait_ms: 1.0,
+            processing_ms: 2.0,
+            paint_ms: 3.0,
+        }],
+        frames: vec![],
+    })
+    .unwrap();
     core.handle(CoreRequest::DataAttach {
         window_id: calculator.clone(),
         dormant: vec![],
@@ -102,12 +132,14 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
         matches!(crate::data_runtime::binding_value(&core.inner, &profiler, "/ui/children/1/items"), Some(BindingValue::Ready { value }) if value.as_array().is_some_and(|items| items.len() == 4))
     );
     for pointer in [
-        "/ui/children/2/tabs/0/child/children/0/series",
-        "/ui/children/2/tabs/0/child/children/1/rows",
-        "/ui/children/2/tabs/1/child/rows",
+        "/ui/children/2/tabs/0/child/rows",
+        "/ui/children/2/tabs/1/child/children/0/series",
+        "/ui/children/2/tabs/1/child/children/1/rows",
+        "/ui/children/2/tabs/1/child/children/2/rows",
         "/ui/children/2/tabs/2/child/rows",
         "/ui/children/2/tabs/3/child/rows",
         "/ui/children/2/tabs/4/child/rows",
+        "/ui/children/2/tabs/5/child/rows",
     ] {
         assert!(
             matches!(crate::data_runtime::binding_value(&core.inner, &profiler, pointer), Some(BindingValue::Ready { value }) if value.as_array().is_some_and(|rows| !rows.is_empty()) || value.is_object()),
@@ -205,6 +237,175 @@ fn snapshot_filters_visible_statistics_and_rounds_numbers() {
     let storage = only_storage.snapshot("storage.flush");
     assert_eq!(storage["apps"][0]["app_name"], "코어 공통");
     assert_eq!(storage["metrics"][1]["subtext"], "디스크 플러시 1건");
+}
+
+#[test]
+fn ui_timing_samples_feed_input_groups_targets_and_long_frame_spans() {
+    use kaleidoscope_contract::{UiFrameSample, UiInputSample};
+
+    let profiler = crate::profiler::Profiler::default();
+    profiler.report(
+        vec![
+            UiInputSample {
+                event: "input".into(),
+                target: "textarea".into(),
+                app_id: Some("workspace-pas".into()),
+                responding: true,
+                wait_ms: 3.0,
+                processing_ms: 4.0,
+                paint_ms: 5.0,
+            },
+            UiInputSample {
+                event: "input".into(),
+                target: "textarea".into(),
+                app_id: Some("workspace-pas".into()),
+                responding: true,
+                wait_ms: 7.0,
+                processing_ms: 6.0,
+                paint_ms: 9.0,
+            },
+            UiInputSample {
+                event: "compositionupdate".into(),
+                target: "textarea".into(),
+                app_id: Some("workspace-pas".into()),
+                responding: false,
+                wait_ms: 2.0,
+                processing_ms: 3.0,
+                paint_ms: 4.0,
+            },
+            UiInputSample {
+                event: "input".into(),
+                target: "DIV".into(),
+                app_id: Some("profiler".into()),
+                responding: false,
+                wait_ms: 99.0,
+                processing_ms: 99.0,
+                paint_ms: 99.0,
+            },
+        ],
+        vec![UiFrameSample {
+            ms: 61.0,
+            blocking_ms: 21.0,
+            script_ms: 28.0,
+            forced_layout_ms: 6.0,
+            render_ms: 12.0,
+            top_script: Some("event handler".into()),
+            input: true,
+        }],
+    );
+
+    let snapshot = profiler.snapshot("all");
+    let inputs = snapshot["inputs"].as_array().unwrap();
+    assert_eq!(inputs.len(), 2);
+    let input = inputs.iter().find(|row| row["event"] == "input").unwrap();
+    assert_eq!(input["state_label"], "답하는 중");
+    assert_eq!(input["calls"], 2);
+    assert_eq!(input["wait_avg_ms"], json!(5.0));
+    assert_eq!(input["wait_p95_ms"], json!(7.0));
+    assert_eq!(input["total_max_ms"], json!(22.0));
+    assert_eq!(inputs[0]["event"], "input");
+    let targets = snapshot["targets"].as_array().unwrap();
+    assert_eq!(targets[0]["target"], "event handler");
+    assert_eq!(targets[0]["calls"], 1);
+    assert_eq!(snapshot["summary"]["avg_command_ms"], json!(0.0));
+    let frame = snapshot["recent_spans"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["category"] == "ui.frame")
+        .unwrap();
+    assert_eq!(frame["target"], "event handler");
+    assert_eq!(frame["duration_ms"], json!(61.0));
+    assert!(frame["detail"].as_str().unwrap().contains("입력 포함"));
+}
+
+#[test]
+fn profiler_report_request_records_samples_without_recording_its_own_command_span() {
+    use kaleidoscope_contract::{UiFrameSample, UiInputSample};
+
+    let dir = TempDir::new().unwrap();
+    let core = open_core(dir.path(), vec![], &Arc::new(FakeHost::default()));
+    let command_count = core.inner.profiler.snapshot("all")["recent_spans"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["category"] == "command")
+        .count();
+    let reply = core
+        .handle(CoreRequest::ProfilerReport {
+            inputs: vec![UiInputSample {
+                event: "compositionupdate".into(),
+                target: "textarea".into(),
+                app_id: Some("workspace-pas".into()),
+                responding: false,
+                wait_ms: 1.0,
+                processing_ms: 2.0,
+                paint_ms: 3.0,
+            }],
+            frames: vec![UiFrameSample {
+                ms: 51.0,
+                blocking_ms: 11.0,
+                script_ms: 22.0,
+                forced_layout_ms: 4.0,
+                render_ms: 9.0,
+                top_script: None,
+                input: false,
+            }],
+        })
+        .unwrap();
+    assert!(matches!(reply, CoreReply::ProfilerReport {}));
+    let snapshot = core.inner.profiler.snapshot("all");
+    let command_count_after = snapshot["recent_spans"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["category"] == "command")
+        .count();
+    assert_eq!(command_count_after, command_count);
+    assert_eq!(snapshot["inputs"][0]["event"], "compositionupdate");
+    let frames: Vec<_> = snapshot["recent_spans"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["category"] == "ui.frame")
+        .collect();
+    assert_eq!(frames.len(), 1);
+    assert_eq!(frames[0]["target"], "렌더링");
+}
+
+#[test]
+fn profiler_bounds_inputs_and_spans_and_clear_resets_them() {
+    use kaleidoscope_contract::UiInputSample;
+
+    let profiler = crate::profiler::Profiler::default();
+    for index in 0..1_005 {
+        profiler.span("command", "state.get", "", "", index as f64, 0, 0, "");
+    }
+    for index in 0..301 {
+        profiler.report(
+            vec![UiInputSample {
+                event: "input".into(),
+                target: "textarea".into(),
+                app_id: Some("workspace-pas".into()),
+                responding: false,
+                wait_ms: index as f64,
+                processing_ms: 0.0,
+                paint_ms: 0.0,
+            }],
+            vec![],
+        );
+    }
+
+    let snapshot = profiler.snapshot("all");
+    assert_eq!(snapshot["summary"]["total_spans"], 1_000);
+    assert_eq!(snapshot["recent_spans"].as_array().unwrap().len(), 100);
+    assert_eq!(snapshot["inputs"][0]["calls"], 300);
+    assert_eq!(snapshot["inputs"][0]["total_max_ms"], json!(300.0));
+
+    profiler.clear();
+    let cleared = profiler.snapshot("all");
+    assert_eq!(cleared["summary"]["total_spans"], 0);
+    assert!(cleared["inputs"].as_array().unwrap().is_empty());
 }
 
 #[test]

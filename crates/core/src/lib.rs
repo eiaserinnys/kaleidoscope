@@ -418,19 +418,10 @@ impl Core {
 
     pub fn handle(&self, request: CoreRequest) -> Result<CoreReply, CoreError> {
         let started = std::time::Instant::now();
-        let (target, window_id) = match &request {
-            CoreRequest::WindowSetState { window_id, .. } => ("window.set_state", Some(window_id)),
-            CoreRequest::WindowSetRect { window_id, .. } => ("window.set_rect", Some(window_id)),
-            CoreRequest::WindowRaise { window_id } => ("window.raise", Some(window_id)),
-            CoreRequest::WindowMinimize { window_id } => ("window.minimize", Some(window_id)),
-            CoreRequest::WindowMaximize { window_id } => ("window.maximize", Some(window_id)),
-            CoreRequest::WindowRestore { window_id } => ("window.restore", Some(window_id)),
-            CoreRequest::DataAct { window_id, .. } => ("data.act", Some(window_id)),
-            CoreRequest::DataAttach { window_id, .. } => ("data.attach", Some(window_id)),
-            CoreRequest::DataRefresh { window_id, .. } => ("data.refresh", Some(window_id)),
-            _ => ("명령", None),
-        };
-        let (app_id, app_name) = window_id
+        let meta = request.meta();
+        let (app_id, app_name) = meta
+            .window_id
+            .as_ref()
             .and_then(|id| {
                 let state = self.inner.state.lock().unwrap();
                 let window = state.shared.windows.iter().find(|w| &w.id == id)?;
@@ -439,16 +430,18 @@ impl Core {
             })
             .unwrap_or_default();
         let result = self.handle_inner(request);
-        self.inner.profiler.span(
-            "command",
-            target,
-            &app_id,
-            &app_name,
-            started.elapsed().as_secs_f64() * 1000.0,
-            0,
-            0,
-            "",
-        );
+        if meta.op != "profiler.report" {
+            self.inner.profiler.span(
+                "command",
+                &meta.op,
+                &app_id,
+                &app_name,
+                started.elapsed().as_secs_f64() * 1000.0,
+                0,
+                0,
+                "",
+            );
+        }
         result
     }
 
@@ -470,6 +463,10 @@ impl Core {
 
     fn handle_inner(&self, request: CoreRequest) -> Result<CoreReply, CoreError> {
         match request {
+            CoreRequest::ProfilerReport { inputs, frames } => {
+                self.inner.profiler.report(inputs, frames);
+                Ok(CoreReply::ProfilerReport {})
+            }
             CoreRequest::StateGet {} => {
                 let state = self.inner.state.lock().unwrap();
                 Ok(CoreReply::StateGet {

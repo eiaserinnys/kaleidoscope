@@ -69,6 +69,10 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
         onChange={(event) => onDraft(event.currentTarget.value)}
         onKeyDown={onInputKeyDown}
         onPaste={onPaste}
+        spellCheck={false}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
         ref={inputRef}
         rows={1}
         value={draft}

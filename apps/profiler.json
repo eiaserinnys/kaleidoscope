@@ -16,7 +16,7 @@
     }
   ],
   "state": {
-    "tab": 0,
+    "profiler_tab": 0,
     "category": "all"
   },
   "sources": {
@@ -78,6 +78,10 @@
               {
                 "value": "storage.flush",
                 "label": "디스크 플러시"
+              },
+              {
+                "value": "ui.frame",
+                "label": "긴 프레임"
               }
             ]
           }
@@ -148,12 +152,35 @@
       {
         "type": "tabs",
         "selected": {
-          "state": "tab"
+          "state": "profiler_tab"
         },
         "on_change": {
-          "set_state": "tab"
+          "set_state": "profiler_tab"
         },
         "tabs": [
+          {
+            "label": "입력 지연",
+            "child": {
+              "type": "table",
+              "rows": {
+                "expr": "$data.profile.inputs"
+              },
+              "columns": [
+                { "label": "이벤트", "field": "event", "width": "narrow", "format": "text" },
+                { "label": "위치", "field": "target", "width": "narrow", "format": "text" },
+                { "label": "상태", "field": "state_label", "width": "narrow", "format": "text" },
+                { "label": "횟수", "field": "calls", "width": "narrow", "format": "number" },
+                { "label": "입력 대기 평균(ms)", "field": "wait_avg_ms", "width": "narrow", "format": "number" },
+                { "label": "입력 대기 P95(ms)", "field": "wait_p95_ms", "width": "narrow", "format": "number" },
+                { "label": "처리 평균(ms)", "field": "processing_avg_ms", "width": "narrow", "format": "number" },
+                { "label": "처리 P95(ms)", "field": "processing_p95_ms", "width": "narrow", "format": "number" },
+                { "label": "표시 평균(ms)", "field": "paint_avg_ms", "width": "narrow", "format": "number" },
+                { "label": "표시 P95(ms)", "field": "paint_p95_ms", "width": "narrow", "format": "number" },
+                { "label": "전체 P95(ms)", "field": "total_p95_ms", "width": "narrow", "format": "number" },
+                { "label": "전체 최대(ms)", "field": "total_max_ms", "width": "narrow", "format": "number" }
+              ]
+            }
+          },
           {
             "label": "구간별 분석",
             "child": {
@@ -213,6 +240,20 @@
                       "width": "narrow",
                       "format": "number"
                     }
+                  ]
+                },
+                {
+                  "type": "table",
+                  "rows": {
+                    "expr": "$data.profile.targets"
+                  },
+                  "columns": [
+                    { "label": "대상", "field": "target", "width": "fill", "format": "text" },
+                    { "label": "호출", "field": "calls", "width": "narrow", "format": "number" },
+                    { "label": "평균(ms)", "field": "avg_ms", "width": "narrow", "format": "number" },
+                    { "label": "P95(ms)", "field": "p95_ms", "width": "narrow", "format": "number" },
+                    { "label": "최대(ms)", "field": "max_ms", "width": "narrow", "format": "number" },
+                    { "label": "합계(ms)", "field": "total_ms", "width": "narrow", "format": "number" }
                   ]
                 }
               ]

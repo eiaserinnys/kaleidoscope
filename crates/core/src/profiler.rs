@@ -1,4 +1,5 @@
 //! 코어의 최근 처리 시간과 바인딩 계산 통계.
+use kaleidoscope_contract::{UiInputSample, UiFrameSample};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Mutex;
@@ -10,12 +11,20 @@ pub(crate) struct Profiler(std::sync::Arc<Mutex<Records>>);
 struct Records {
     next: u64,
     spans: VecDeque<Span>,
+    inputs: BTreeMap<InputKey, VecDeque<UiInputSample>>,
     bindings: BTreeMap<String, Binding>,
     evaluated: u64,
     skipped: u64,
     debounced: u64,
     coalesced: u64,
     batched: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct InputKey {
+    event: String,
+    target: String,
+    responding: bool,
 }
 
 #[derive(Clone)]
@@ -51,6 +60,7 @@ fn label(category: &str) -> &str {
         "data.act" => "액션 실행",
         "data.source" => "원천 조회",
         "storage.flush" => "디스크 플러시",
+        "ui.frame" => "긴 프레임",
         _ => category,
     }
 }
@@ -83,7 +93,7 @@ impl Profiler {
             skipped,
             detail: detail.into(),
         };
-        if r.spans.len() == 250 {
+        if r.spans.len() >= 1000 {
             r.spans.pop_front();
         }
         r.spans.push_back(span);
@@ -120,6 +130,54 @@ impl Profiler {
             binding.skipped += 1;
         }
     }
+    pub(crate) fn report(&self, inputs: Vec<UiInputSample>, frames: Vec<UiFrameSample>) {
+        let mut r = self.0.lock().unwrap();
+        for sample in inputs {
+            if sample.app_id.as_deref() == Some("profiler") {
+                continue;
+            }
+            let key = InputKey {
+                event: sample.event.clone(),
+                target: sample.target.clone(),
+                responding: sample.responding,
+            };
+            let samples = r.inputs.entry(key).or_default();
+            if samples.len() >= 300 {
+                samples.pop_front();
+            }
+            samples.push_back(sample);
+        }
+        for frame in frames {
+            r.next += 1;
+            let id = r.next;
+            if r.spans.len() >= 1000 {
+                r.spans.pop_front();
+            }
+            let target = frame.top_script.as_deref().unwrap_or("렌더링");
+            r.spans.push_back(Span {
+                id,
+                category: "ui.frame".into(),
+                target: target.into(),
+                app_id: String::new(),
+                app_name: String::new(),
+                ms: frame.ms,
+                evaluated: 0,
+                skipped: 0,
+                detail: format!(
+                    "차단 {:.2}ms, 스크립트 {:.2}ms, 강제 레이아웃 {:.2}ms, 렌더링 {:.2}ms, {}",
+                    round2(frame.blocking_ms),
+                    round2(frame.script_ms),
+                    round2(frame.forced_layout_ms),
+                    round2(frame.render_ms),
+                    if frame.input {
+                        "입력 포함"
+                    } else {
+                        "입력 없음"
+                    },
+                ),
+            });
+        }
+    }
     pub(crate) fn debounced(&self, coalesced: bool) {
         let mut r = self.0.lock().unwrap();
         r.debounced += 1;
@@ -147,7 +205,11 @@ impl Profiler {
             .map(|s| s.ms)
             .collect();
         if all_categories && durations.is_empty() {
-            durations = spans.iter().map(|s| s.ms).collect();
+            durations = spans
+                .iter()
+                .filter(|s| s.category != "ui.frame")
+                .map(|s| s.ms)
+                .collect();
         }
         let (avg, p95, max, _) = stats(&durations);
         let (avg, p95, max) = (round2(avg), round2(p95), round2(max));
@@ -215,7 +277,7 @@ impl Profiler {
                 "bindings": format!("{} / {} 생략", s.evaluated, s.skipped), "detail": s.detail,
             })
         };
-        let recent: Vec<_> = spans.iter().rev().map(|s| row(s)).collect();
+        let recent: Vec<_> = spans.iter().rev().take(100).map(|s| row(s)).collect();
         let mut slow = spans.clone();
         slow.sort_by(|a, b| b.ms.total_cmp(&a.ms));
         let slow: Vec<_> = slow.iter().take(30).map(|s| row(s)).collect();
@@ -242,6 +304,51 @@ impl Profiler {
                 .unwrap_or(0.0)
                 .total_cmp(&a["total_ms"].as_f64().unwrap_or(0.0))
         });
+        let mut input_rows: Vec<_> = r.inputs.iter().map(|(key, samples)| {
+            let wait: Vec<_> = samples.iter().map(|sample| sample.wait_ms).collect();
+            let processing: Vec<_> = samples.iter().map(|sample| sample.processing_ms).collect();
+            let paint: Vec<_> = samples.iter().map(|sample| sample.paint_ms).collect();
+            let total: Vec<_> = samples.iter().map(|sample| sample.wait_ms + sample.processing_ms + sample.paint_ms).collect();
+            let (wait_avg, wait_p95, _, _) = stats(&wait);
+            let (processing_avg, processing_p95, _, _) = stats(&processing);
+            let (paint_avg, paint_p95, _, _) = stats(&paint);
+            let (_, total_p95, total_max, _) = stats(&total);
+            json!({
+                "key": format!("{}:{}:{}", key.event, key.target, if key.responding { "responding" } else { "idle" }),
+                "event": key.event, "target": key.target,
+                "state_label": if key.responding { "답하는 중" } else { "쉬는 중" },
+                "calls": samples.len(),
+                "wait_avg_ms": round2(wait_avg), "wait_p95_ms": round2(wait_p95),
+                "processing_avg_ms": round2(processing_avg), "processing_p95_ms": round2(processing_p95),
+                "paint_avg_ms": round2(paint_avg), "paint_p95_ms": round2(paint_p95),
+                "total_p95_ms": round2(total_p95), "total_max_ms": round2(total_max),
+            })
+        }).collect();
+        input_rows.sort_by(|a, b| {
+            b["total_p95_ms"]
+                .as_f64()
+                .unwrap_or(0.0)
+                .total_cmp(&a["total_p95_ms"].as_f64().unwrap_or(0.0))
+        });
+        let mut target_groups: BTreeMap<String, Vec<&Span>> = BTreeMap::new();
+        for span in &spans {
+            target_groups
+                .entry(span.target.clone())
+                .or_default()
+                .push(span);
+        }
+        let mut target_rows: Vec<_> = target_groups.iter().map(|(target, rows)| {
+            let values: Vec<_> = rows.iter().map(|span| span.ms).collect();
+            let (avg, p95, max, total) = stats(&values);
+            json!({ "key": target, "target": target, "calls": rows.len(), "avg_ms": round2(avg), "p95_ms": round2(p95), "max_ms": round2(max), "total_ms": round2(total) })
+        }).collect();
+        target_rows.sort_by(|a, b| {
+            b["total_ms"]
+                .as_f64()
+                .unwrap_or(0.0)
+                .total_cmp(&a["total_ms"].as_f64().unwrap_or(0.0))
+        });
+        target_rows.truncate(30);
         let chart_series: Vec<_> = [("avg_ms", "평균(ms)"), ("max_ms", "최대(ms)")]
             .into_iter()
             .map(|(key, name)| {
@@ -269,7 +376,7 @@ impl Profiler {
             json!({"key":"skip","label":"바인딩 생략률","value":format!("{ratio:.2}"),"unit":"%","subtext":format!("{}회 생략",r.skipped)}),
             json!({"key":"disk","label":"디스크 쓰기 병합","value":r.coalesced,"unit":"회","subtext":format!("디바운스 {}회",r.debounced)}),
         ];
-        json!({"summary":{"total_spans":r.spans.len(),"avg_command_ms":avg,"p95_command_ms":p95,"max_command_ms":max,"binding_skip_ratio_pct":ratio,"evaluated_bindings":r.evaluated,"skipped_bindings":r.skipped,"debounced_state_saves":r.debounced,"coalesced_disk_writes":r.coalesced,"batched_action_steps":r.batched},"metrics":metrics,"chart_series":chart_series,"categories":categories,"apps":apps,"recent_spans":recent,"slowest_spans":slow,"slowest_bindings":binding_rows})
+        json!({"summary":{"total_spans":r.spans.len(),"avg_command_ms":avg,"p95_command_ms":p95,"max_command_ms":max,"binding_skip_ratio_pct":ratio,"evaluated_bindings":r.evaluated,"skipped_bindings":r.skipped,"debounced_state_saves":r.debounced,"coalesced_disk_writes":r.coalesced,"batched_action_steps":r.batched},"metrics":metrics,"chart_series":chart_series,"categories":categories,"apps":apps,"recent_spans":recent,"slowest_spans":slow,"slowest_bindings":binding_rows,"inputs":input_rows,"targets":target_rows})
     }
 }
 fn round2(value: f64) -> f64 {
@@ -304,7 +411,7 @@ impl Profiler {
             own.next += 1;
             let mut span = span.clone();
             span.id = own.next;
-            if own.spans.len() == 250 {
+            if own.spans.len() >= 1000 {
                 own.spans.pop_front();
             }
             own.spans.push_back(span);

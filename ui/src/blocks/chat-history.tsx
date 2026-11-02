@@ -1,9 +1,10 @@
-import { memo, useLayoutEffect, useRef, type ReactNode, type Ref, type UIEvent } from "react";
+import { memo, useEffect, useId, useLayoutEffect, useRef, type ReactNode, type Ref, type UIEvent } from "react";
 import type { ConversationAttachment, ConversationItem } from "../contract/contract";
 import { Notice } from "../components/primitives";
 import { ThinkingOrb } from "thinking-orbs";
 import { MarkdownText } from "./markdown-text";
 import type { DraftAttachment } from "./agent-attachments";
+import { markResponding } from "../profiler/chat-responding";
 
 export type ChatPendingMessage = { text: string; attachments: DraftAttachment[] };
 
@@ -22,6 +23,13 @@ export function ChatHistory({ items, pending, delta, busy, tool, historyRef, fol
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef(0);
+  const respondingKey = useId();
+  const responding = busy || pending !== null || Boolean(delta);
+
+  useEffect(() => {
+    markResponding(respondingKey, responding);
+    return () => markResponding(respondingKey, false);
+  }, [respondingKey, responding]);
 
   useLayoutEffect(() => {
     const content = contentRef.current;
