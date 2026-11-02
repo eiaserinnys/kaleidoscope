@@ -63,6 +63,43 @@ afterEach(() => {
 });
 
 describe("공용 가상 트리", () => {
+  it("목록 대기 중 다른 입력으로 옮긴 포커스를 빼앗지 않고 요청을 버린다", async () => {
+    let focus: TreeFocusController | null = null;
+    const props = {
+      className: "ks-file-tree-list", expanded: new Set<string>(), label: "대기 트리",
+      onActivate: () => {}, onExpandedChange: () => {},
+      onFocusController: (controller: TreeFocusController) => { focus = controller; },
+    };
+    const view = (nodes: TreeNode[]) => <><input aria-label="다른 입력" /><TreeView {...props} nodes={nodes} /></>;
+    const { rerender } = render(view([{ id: "old", label: "기존" }]));
+    act(() => focus!.row("new", true));
+    const outside = screen.getByRole("textbox", { name: "다른 입력" });
+    act(() => outside.focus());
+    const nodes = [{ id: "old", label: "기존" }, { id: "new", label: "새 행" }];
+    rerender(view(nodes));
+    await screen.findByRole("treeitem", { name: "새 행" });
+    expect(document.activeElement).toBe(outside);
+    act(() => outside.blur());
+    rerender(view([...nodes]));
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("인라인 입력을 연 채 위로 스크롤해도 사용자 위치를 유지한다", async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: vi.fn() });
+    const nodes: TreeNode[] = [
+      ...Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, label: `행 ${index}` })),
+      { id: "edit-row", label: "새 파일", interactiveContent: true, content: <input aria-label="새 파일 이름" /> },
+    ];
+    render(<TreeView className="ks-file-tree-list" expanded={new Set()} label="스크롤 트리"
+      nodes={nodes} onActivate={() => {}} onExpandedChange={() => {}} />);
+    await screen.findByRole("textbox", { name: "새 파일 이름" });
+    const tree = screen.getByRole("tree", { name: "스크롤 트리" });
+    tree.scrollTop = 1200;
+    fireEvent.scroll(tree);
+    await screen.findByRole("treeitem", { name: "행 35" });
+    expect(tree.scrollTop).toBe(1200);
+  });
+
   it("아직 없는 행의 포커스 요청을 행이 나타날 때까지 유지한다", async () => {
     let focus: TreeFocusController | null = null;
     const props = {

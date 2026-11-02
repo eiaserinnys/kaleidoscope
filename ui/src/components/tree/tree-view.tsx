@@ -227,6 +227,11 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
       .find((element) => element.dataset.treeRow === pendingFocus)
       ?.querySelector<HTMLElement>("[role=treeitem]");
     if (!row) return;
+    const active = document.activeElement;
+    if (active !== document.body && !scrollRef.current?.contains(active)) {
+      setPendingFocus(null);
+      return;
+    }
     row.focus();
     setPendingFocus(null);
   });
@@ -252,17 +257,27 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     setPendingInteractiveFocus(null);
   }, [pendingInteractiveFocus, virtualRows]);
 
+  const adjustedInteractiveRow = useRef<{ id: string; height: number } | null>(null);
   useLayoutEffect(() => {
     const scroll = scrollRef.current;
-    if (!scroll || interactiveIndex < 0) return;
+    if (!scroll || interactiveIndex < 0) {
+      adjustedInteractiveRow.current = null;
+      return;
+    }
     const row = Array.from(scroll.querySelectorAll<HTMLElement>("[data-tree-row]"))
       .find((element) => element.dataset.treeRow === flat[interactiveIndex].id);
     if (!row) return;
+    const id = flat[interactiveIndex].id;
+    if (!seenInteractiveRows.current.has(id) || pendingInteractiveFocus) return;
+    const height = row.getBoundingClientRect().height;
+    const adjusted = adjustedInteractiveRow.current;
+    if (adjusted?.id === id && adjusted.height === height) return;
+    adjustedInteractiveRow.current = { id, height };
     virtual.measureElement(row);
     const padding = Number.parseFloat(getComputedStyle(scroll).paddingBottom) || 0;
     const overflow = row.getBoundingClientRect().bottom + padding - scroll.getBoundingClientRect().bottom;
     if (overflow > 0) scroll.scrollTop += overflow;
-  }, [flat, interactiveIndex, virtual, virtualRows]);
+  }, [flat, interactiveIndex, pendingInteractiveFocus, virtual, virtualRows]);
   return <div
     aria-label={label}
     aria-rowcount={treeRows.length}
