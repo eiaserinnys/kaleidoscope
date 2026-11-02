@@ -2,6 +2,8 @@ import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-s
 import type { CoreError, CoreEvent, ShellSnapshot } from "../contract/contract";
 import { toCoreError, type CoreTransport } from "./core-transport";
 import { useBlockRenderProbe } from "../render/render-probe";
+import { startUiTiming } from "../profiler/ui-timing";
+import { isResponding } from "../profiler/chat-responding";
 
 export interface ShellStore {
   call: CoreTransport["call"];
@@ -32,11 +34,14 @@ export function createShellStore(transport: CoreTransport): ShellStore {
       for (const listener of eventListeners) listener(event);
     }
   });
+  let disposed = false;
+  let stopUiTiming: () => void = () => undefined;
 
   const ready = transport.call({ op: "state.get" }).then((reply) => {
     if (reply.op !== "state.get") throw { code: "io", message: "코어 상태 응답이 올바르지 않습니다", details: [] } satisfies CoreError;
     snapshot = shareShellSnapshot(snapshot, reply.snapshot);
     error = null;
+    if (!disposed) stopUiTiming = startUiTiming((inputs, frames) => transport.call({ op: "profiler.report", inputs, frames }), isResponding);
     notify();
   }).catch((reason: unknown) => {
     error = toCoreError(reason);
@@ -58,7 +63,11 @@ export function createShellStore(transport: CoreTransport): ShellStore {
       return () => eventListeners.delete(listener);
     },
     ready,
-    dispose: unsubscribe,
+    dispose() {
+      disposed = true;
+      stopUiTiming();
+      unsubscribe();
+    },
   };
 }
 

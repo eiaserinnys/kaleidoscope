@@ -47,9 +47,9 @@ export const AppWindowContent = memo(function AppWindowContent({
   if (!version || !context) return <div className="ks-app-content-error"><Notice role="alert">앱 정의를 찾을 수 없습니다</Notice></div>;
 
   const hasSettings = version.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false;
-  if (version.definition.requires.blocks < 4 && !hasSettings && !version.definition.agent) return <div className="ks-app-window-content">{renderBlock(version.definition.ui, context)}</div>;
+  if (version.definition.requires.blocks < 4 && !hasSettings && !version.definition.agent) return <div className="ks-app-window-content" data-ks-app-id={window.app_id}>{renderBlock(version.definition.ui, context)}</div>;
   return <WindowDataProvider store={store} windowId={window.id} definition={version.definition}>
-    <div className="ks-app-window-content ks-data-window">
+    <div className="ks-app-window-content ks-data-window" data-ks-app-id={window.app_id}>
       <ClientShareSignal />
       <div className="ks-data-window-body" hidden={settingsOpen} inert={settingsOpen || undefined}>{renderBlock(version.definition.ui, context)}</div>
       {hasSettings && settingsVisited ? <AppSettings key={window.app_version} context={context} open={settingsOpen} onClose={onSettingsClose} onProblem={onSettingsProblem} /> : null}

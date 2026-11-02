@@ -113,9 +113,10 @@
 //! # 계약 23판: 창 단위 클라이언트 로직과 시간축
 //! 모듈 `client` 1판, 블록 세트 12판의 `canvas`와 `timeline`, 로컬 출력 바인딩과 동작,
 //! 파일 선택 및 오프셋 내보내기 명령을 더했다. 세부 선언은 [`client`]와 [`data`]에 있다.
-//! # 계약 25판: 모듈 `files` 3판
+//! # 계약 25판: 모듈 `files` 3판과 입력 표본 프로파일링
 //! 폴더 생성, 이름 바꾸기, 이동, 복사, 삭제, 파일 관리자에서 보기, 절대 경로 조회를 더한다.
 //! 파일 변경 이벤트는 grant 절대 경로와 grant 기준 상대 경로만 화면에 보낸다.
+//! `profiler.report`는 입력 이벤트와 긴 프레임 표본을 묶어 코어 프로파일러에 보낸다.
 //!
 //! # 계약 25판: 블록 세트 13판의 `folder`
 //! 파일 권한 또는 `storage` 3판 문서 모음을 뿌리로 하는 읽기와 선택용 폴더 블록을 더한다.
@@ -190,6 +191,10 @@
 use std::collections::BTreeMap;
 
 use schemars::JsonSchema;
+use serde::ser::{
+    self, SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant, SerializeTuple,
+    SerializeTupleStruct, SerializeTupleVariant,
+};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -3691,6 +3696,377 @@ pub enum CoreRequest {
     /// - 설치를 시작하지 못하면(서명이 맞지 않음 포함) `io`와 까닭이고, 상태는 [`UpdateStatus::Failed`]가 된다.
     #[serde(rename = "update.restart")]
     UpdateRestart {},
+
+    /// 화면 입력 단계와 긴 프레임의 묶음 표본을 코어 프로파일러에 보낸다.
+    #[serde(rename = "profiler.report")]
+    ProfilerReport {
+        inputs: Vec<UiInputSample>,
+        frames: Vec<UiFrameSample>,
+    },
+}
+
+/// 입력 이벤트에서 측정한 브라우저 응답 단계.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct UiInputSample {
+    pub event: String,
+    pub target: String,
+    pub app_id: Option<String>,
+    pub responding: bool,
+    pub wait_ms: f64,
+    pub processing_ms: f64,
+    pub paint_ms: f64,
+}
+
+/// Long Animation Frame 관측값.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct UiFrameSample {
+    pub ms: f64,
+    pub blocking_ms: f64,
+    pub script_ms: f64,
+    pub forced_layout_ms: f64,
+    pub render_ms: f64,
+    pub top_script: Option<String>,
+    pub input: bool,
+}
+
+/// 프로파일러가 명령 처리에 필요한 최소 정보.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RequestMeta {
+    pub op: String,
+    pub window_id: Option<String>,
+}
+
+impl CoreRequest {
+    /// 태그와 창 id만 읽는다. 나머지 값은 값 직렬화를 시작하지 않는다.
+    pub fn meta(&self) -> RequestMeta {
+        self.serialize(RequestMetaSerializer::default())
+            .expect("request metadata serialization is infallible")
+    }
+}
+
+#[derive(Default)]
+struct RequestMetaSerializer {
+    meta: RequestMeta,
+    mode: MetaMode,
+}
+
+#[derive(Clone, Copy, Default)]
+enum MetaMode {
+    #[default]
+    Root,
+    Op,
+    WindowId,
+    MapKey,
+}
+
+struct MetaCompound {
+    meta: RequestMeta,
+    key: Option<String>,
+}
+
+fn metadata_value<T: ?Sized + Serialize>(key: &str, value: &T, meta: &mut RequestMeta) {
+    let mode = match key {
+        "op" => MetaMode::Op,
+        "window_id" => MetaMode::WindowId,
+        _ => return,
+    };
+    if let Ok(value_meta) = value.serialize(RequestMetaSerializer {
+        meta: RequestMeta::default(),
+        mode,
+    }) {
+        match key {
+            "op" => meta.op = value_meta.op,
+            "window_id" => meta.window_id = value_meta.window_id,
+            _ => {}
+        }
+    }
+}
+
+#[derive(Debug)]
+struct MetaSerializeError;
+
+impl std::fmt::Display for MetaSerializeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("metadata serialization failed")
+    }
+}
+impl std::error::Error for MetaSerializeError {}
+impl ser::Error for MetaSerializeError {
+    fn custom<T: std::fmt::Display>(_: T) -> Self {
+        Self
+    }
+}
+
+impl ser::Serializer for RequestMetaSerializer {
+    type Ok = RequestMeta;
+    type Error = MetaSerializeError;
+    type SerializeSeq = MetaCompound;
+    type SerializeTuple = MetaCompound;
+    type SerializeTupleStruct = MetaCompound;
+    type SerializeTupleVariant = MetaCompound;
+    type SerializeMap = MetaCompound;
+    type SerializeStruct = MetaCompound;
+    type SerializeStructVariant = MetaCompound;
+    fn serialize_bool(self, _: bool) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_i8(self, _: i8) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_i16(self, _: i16) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_i32(self, _: i32) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_i64(self, _: i64) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_i128(self, _: i128) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_u8(self, _: u8) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_u16(self, _: u16) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_u32(self, _: u32) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_u64(self, _: u64) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_u128(self, _: u128) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_f32(self, _: f32) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_f64(self, _: f64) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_char(self, _: char) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_str(mut self, value: &str) -> Result<Self::Ok, Self::Error> {
+        match self.mode {
+            MetaMode::Root => {}
+            MetaMode::Op | MetaMode::MapKey => self.meta.op = value.into(),
+            MetaMode::WindowId => self.meta.window_id = Some(value.into()),
+        }
+        Ok(self.meta)
+    }
+    fn serialize_bytes(self, _: &[u8]) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_some<T: ?Sized + Serialize>(self, value: &T) -> Result<Self::Ok, Self::Error> {
+        value.serialize(self)
+    }
+    fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_unit_struct(self, _: &'static str) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+    fn serialize_unit_variant(
+        mut self,
+        _: &'static str,
+        _: u32,
+        variant: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
+        self.meta.op = variant.into();
+        Ok(self.meta)
+    }
+    fn serialize_newtype_struct<T: ?Sized + Serialize>(
+        self,
+        _: &'static str,
+        value: &T,
+    ) -> Result<Self::Ok, Self::Error> {
+        value.serialize(self)
+    }
+    fn serialize_newtype_variant<T: ?Sized + Serialize>(
+        mut self,
+        _: &'static str,
+        _: u32,
+        variant: &'static str,
+        _: &T,
+    ) -> Result<Self::Ok, Self::Error> {
+        self.meta.op = variant.into();
+        Ok(self.meta)
+    }
+    fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+        Ok(MetaCompound {
+            meta: self.meta,
+            key: None,
+        })
+    }
+    fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple, Self::Error> {
+        Ok(MetaCompound {
+            meta: self.meta,
+            key: None,
+        })
+    }
+    fn serialize_tuple_struct(
+        self,
+        _: &'static str,
+        _: usize,
+    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        Ok(MetaCompound {
+            meta: self.meta,
+            key: None,
+        })
+    }
+    fn serialize_tuple_variant(
+        mut self,
+        _: &'static str,
+        _: u32,
+        variant: &'static str,
+        _: usize,
+    ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+        self.meta.op = variant.into();
+        Ok(MetaCompound {
+            meta: self.meta,
+            key: None,
+        })
+    }
+    fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        Ok(MetaCompound {
+            meta: self.meta,
+            key: None,
+        })
+    }
+    fn serialize_struct(
+        self,
+        _: &'static str,
+        _: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
+        Ok(MetaCompound {
+            meta: self.meta,
+            key: None,
+        })
+    }
+    fn serialize_struct_variant(
+        mut self,
+        _: &'static str,
+        _: u32,
+        variant: &'static str,
+        _: usize,
+    ) -> Result<Self::SerializeStructVariant, Self::Error> {
+        self.meta.op = variant.into();
+        Ok(MetaCompound {
+            meta: self.meta,
+            key: None,
+        })
+    }
+}
+
+impl SerializeMap for MetaCompound {
+    type Ok = RequestMeta;
+    type Error = MetaSerializeError;
+    fn serialize_key<T: ?Sized + Serialize>(&mut self, key: &T) -> Result<(), Self::Error> {
+        self.key = key
+            .serialize(RequestMetaSerializer {
+                meta: RequestMeta::default(),
+                mode: MetaMode::MapKey,
+            })
+            .ok()
+            .map(|meta| meta.op);
+        Ok(())
+    }
+    fn serialize_value<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
+        if let Some(key) = self.key.take() {
+            metadata_value(&key, value, &mut self.meta);
+        }
+        Ok(())
+    }
+    fn serialize_entry<K: ?Sized + Serialize, V: ?Sized + Serialize>(
+        &mut self,
+        key: &K,
+        value: &V,
+    ) -> Result<(), Self::Error> {
+        self.serialize_key(key)?;
+        self.serialize_value(value)
+    }
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+}
+
+impl SerializeStruct for MetaCompound {
+    type Ok = RequestMeta;
+    type Error = MetaSerializeError;
+    fn serialize_field<T: ?Sized + Serialize>(
+        &mut self,
+        key: &'static str,
+        value: &T,
+    ) -> Result<(), Self::Error> {
+        metadata_value(key, value, &mut self.meta);
+        Ok(())
+    }
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+}
+impl SerializeStructVariant for MetaCompound {
+    type Ok = RequestMeta;
+    type Error = MetaSerializeError;
+    fn serialize_field<T: ?Sized + Serialize>(
+        &mut self,
+        key: &'static str,
+        value: &T,
+    ) -> Result<(), Self::Error> {
+        metadata_value(key, value, &mut self.meta);
+        Ok(())
+    }
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+}
+impl SerializeSeq for MetaCompound {
+    type Ok = RequestMeta;
+    type Error = MetaSerializeError;
+    fn serialize_element<T: ?Sized + Serialize>(&mut self, _: &T) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+}
+impl SerializeTuple for MetaCompound {
+    type Ok = RequestMeta;
+    type Error = MetaSerializeError;
+    fn serialize_element<T: ?Sized + Serialize>(&mut self, _: &T) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+}
+impl SerializeTupleStruct for MetaCompound {
+    type Ok = RequestMeta;
+    type Error = MetaSerializeError;
+    fn serialize_field<T: ?Sized + Serialize>(&mut self, _: &T) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
+}
+impl SerializeTupleVariant for MetaCompound {
+    type Ok = RequestMeta;
+    type Error = MetaSerializeError;
+    fn serialize_field<T: ?Sized + Serialize>(&mut self, _: &T) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(self.meta)
+    }
 }
 
 /// (9판) 같이 보기 창에 지금 보이는 것을 화면이 옮긴 것.
@@ -3736,6 +4112,8 @@ pub enum ConversationApplyStatus {
 pub enum CoreReply {
     #[serde(rename = "state.get")]
     StateGet { snapshot: ShellSnapshot },
+    #[serde(rename = "profiler.report")]
+    ProfilerReport {},
     #[serde(rename = "files.pick")]
     FilesPick {
         cancelled: bool,
@@ -4702,6 +5080,28 @@ mod tests {
 
         let err = serde_json::from_str::<CoreRequest>(r#"{"op":"state.get","extra":1}"#);
         assert!(err.is_err(), "모르는 필드는 거부한다");
+    }
+
+    #[test]
+    fn request_meta_reports_variant_tags_and_window_without_serializing_payloads() {
+        let request = CoreRequest::WindowSetState {
+            window_id: "window-7".into(),
+            state: BTreeMap::from([("large".into(), JsonValue::String("payload".into()))]),
+        };
+        assert_eq!(request.meta().op, "window.set_state");
+        assert_eq!(request.meta().window_id.as_deref(), Some("window-7"));
+
+        let request = CoreRequest::ConversationAttachment {
+            window_id: "chat-2".into(),
+            item_id: "item-1".into(),
+            attachment_id: "attachment-1".into(),
+        };
+        assert_eq!(request.meta().op, "conversation.attachment");
+        assert_eq!(request.meta().window_id.as_deref(), Some("chat-2"));
+
+        let request = CoreRequest::StateGet {};
+        assert_eq!(request.meta().op, "state.get");
+        assert_eq!(request.meta().window_id, None);
     }
 
     #[test]

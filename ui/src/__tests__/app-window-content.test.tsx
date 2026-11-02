@@ -55,9 +55,11 @@ describe("app definition renderer", () => {
       files: { "README.md": "# Remaining block" },
     }));
     const store = createShellStore(transport);
-    render(<AppWindowContent store={store} windowId="editor-window" />);
+    const { container } = render(<AppWindowContent store={store} windowId="editor-window" />);
 
-    expect((await screen.findByRole("alert")).textContent).toContain("지원하지 않는 블록: future_block");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("지원하지 않는 블록: future_block");
+    expect(container.querySelector("[data-ks-app-id]")?.getAttribute("data-ks-app-id")).toBe("md-editor");
     expect(await screen.findByRole("heading", { name: "Remaining block" })).toBeTruthy();
   });
 

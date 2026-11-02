@@ -25,8 +25,8 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "profiler",
         name: "프로파일러",
-        version: 1,
-        updated_at: "2026-11-01T00:00:00Z",
+        version: 2,
+        updated_at: "2026-11-02T00:00:00Z",
         blocks: 9,
         modules: &[("profiler", 1)],
         assets: &[],
