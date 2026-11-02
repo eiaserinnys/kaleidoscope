@@ -2,6 +2,7 @@
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::{
@@ -11,6 +12,7 @@ use crate::{
     Inner,
 };
 use kaleidoscope_contract::{
+    conversation::{ConversationErrorCode, ConversationErrorEnvelope},
     data::HttpMethod,
     registry::{ConnectionInfo, ConnectionKind},
     validate::valid_request_path,
@@ -18,6 +20,10 @@ use kaleidoscope_contract::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
+
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+const PENDING_RETRY_INTERVAL: Duration = Duration::from_secs(1);
+const PENDING_TIMEOUT_MESSAGE: &str = "아직 처리 중입니다. 잠시 뒤 다시 확인해 주세요";
 
 #[derive(Clone)]
 pub(crate) struct Client {
@@ -132,6 +138,58 @@ impl Client {
         serde_json::from_slice(&body).map(Some).map_err(server)
     }
 
+    /// 제공자는 오래 걸리는 일에 504 `pending`으로 답하고 일을 뒤에서 계속한다.
+    /// 같은 요청은 다시 보내도 일이 겹치지 않으므로 끝날 때까지 다시 보낸다.
+    pub fn json_until_settled<T: DeserializeOwned>(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        query: &BTreeMap<String, String>,
+        body: Option<&impl Serialize>,
+    ) -> Result<Option<T>, CoreError> {
+        let body = body
+            .map(|body| {
+                serde_json::to_value(body).map_err(|_| error::make(ErrorCode::InvalidRequest))
+            })
+            .transpose()?;
+        let target = self.network_target(&method, path);
+        let started = Instant::now();
+        loop {
+            let attempt = Instant::now();
+            let response = self.send(method.clone(), path, query, body.clone(), false, None)?;
+            let status = response.status();
+            if status.as_u16() == 504 {
+                let bytes = response.bytes().map_err(server)?;
+                self.record_network(&target, 504, bytes.len(), attempt);
+                if matches!(
+                    serde_json::from_slice::<ConversationErrorEnvelope>(&bytes),
+                    Ok(envelope) if envelope.error.code == ConversationErrorCode::Pending
+                ) {
+                    if started.elapsed() >= REQUEST_TIMEOUT {
+                        return Err(error::with_message(
+                            ErrorCode::Server,
+                            PENDING_TIMEOUT_MESSAGE,
+                        ));
+                    }
+                    thread::sleep(PENDING_RETRY_INTERVAL);
+                    continue;
+                }
+                return Err(error::make(ErrorCode::Server));
+            }
+            let response = if status.as_u16() == 404 {
+                response
+            } else {
+                Self::status(response)?
+            };
+            let bytes = response.bytes().map_err(server)?;
+            self.record_network(&target, status.as_u16(), bytes.len(), attempt);
+            if status.as_u16() == 404 {
+                return Ok(None);
+            }
+            return serde_json::from_slice(&bytes).map(Some).map_err(server);
+        }
+    }
+
     pub fn bytes(&self, path: &str) -> Result<(String, String, Vec<u8>), CoreError> {
         let target = self.network_target(&reqwest::Method::GET, path);
         let started = Instant::now();
@@ -238,7 +296,7 @@ impl Client {
                 .bearer_auth(token)
                 .query(query);
             if !stream {
-                request = request.timeout(Duration::from_secs(120));
+                request = request.timeout(REQUEST_TIMEOUT);
             }
             if let Some(body) = &body {
                 request = request.json(body);
