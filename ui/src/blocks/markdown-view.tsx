@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { Binding, Block, FileRef } from "../contract/contract";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { Binding, Block, DocumentRef, FileRef } from "../contract/contract";
 import { Notice, StatusText } from "../components/primitives";
 import { DataState } from "../components/data-state";
 import type { BlockContext } from "./block-context";
@@ -7,7 +7,7 @@ import { resolveFilePath } from "./file-path";
 import { toCoreError } from "../core/core-transport";
 import { useShareDescriber } from "../share/visible";
 import { MarkdownText } from "./markdown-text";
-import { createDocumentEditorTarget } from "./file-editor-session";
+import { documentEditorSession } from "./document-editor-session";
 import { useBinding } from "../data/window-data";
 import { useWindowGrant, useWindowStateValue } from "../data/window-state";
 
@@ -16,7 +16,7 @@ type FileMarkdownViewBlockData = MarkdownViewBlockData & { file: FileRef };
 
 export function MarkdownViewBlock({ block, context, pointer }: { block: MarkdownViewBlockData; context: BlockContext; pointer: string }) {
   if (block.value !== undefined) return <BoundMarkdownViewBlock binding={block.value} pointer={pointer} context={context} />;
-  if (block.document) return <DocumentMarkdownViewBlock entry={block.document.entry} context={context} />;
+  if (block.document) return <DocumentMarkdownViewBlock document={block.document} context={context} />;
   if (!block.file) return null;
   return <FileMarkdownViewBlock block={{ ...block, file: block.file }} context={context} />;
 }
@@ -30,36 +30,22 @@ function BoundMarkdownViewBlock({ binding, pointer, context }: { binding: Bindin
   return <article className="ks-markdown-view" ref={shareRef}><MarkdownText>{value.value}</MarkdownText></article>;
 }
 
-function DocumentMarkdownViewBlock({ entry, context }: { entry: string; context: BlockContext }) {
-  const [text, setText] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const version = useRef(0);
+function DocumentMarkdownViewBlock({ document, context }: { document: DocumentRef; context: BlockContext }) {
+  const { entry } = document;
+  const stateKey = typeof document.doc === "object" ? document.doc.state : null;
+  const value = useWindowStateValue(context, stateKey);
+  const collection = document.doc !== undefined;
+  const doc = typeof document.doc === "string" ? document.doc : typeof value === "string" ? value : null;
+  const path = collection ? doc : entry;
+  const session = useMemo(() => documentEditorSession(context.store, context.window.id, entry, { context, collection, stateKey, readOnly: true }), [context, entry, collection, stateKey]);
+  const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
   const shareRef = useRef<HTMLElement>(null);
   useShareDescriber(shareRef, () => ({ text: "[마크다운 보기]", visual: false, continue: true }));
-  const read = useCallback(async () => {
-    const current = ++version.current;
-    try {
-      const result = await createDocumentEditorTarget(context.store, context.window.id, entry).read(entry);
-      if (current === version.current) { setText(result.text); setError(null); }
-    } catch (reason) {
-      if (current === version.current) setError(toCoreError(reason).message);
-    } finally {
-      if (current === version.current) setLoading(false);
-    }
-  }, [context.store, context.window.id, entry]);
-  useEffect(() => {
-    void read();
-    const unsubscribe = context.store.subscribeEvents((event) => {
-      if (event.event === "storage.update" && event.window_id === context.window.id &&
-        (event.update.kind === "snapshot" || (event.update.kind === "changed" && event.update.changed.item.entry_id === entry))) void read();
-    });
-    window.addEventListener("focus", read);
-    return () => { version.current++; unsubscribe(); window.removeEventListener("focus", read); };
-  }, [context.store, context.window.id, entry, read]);
-  if (loading) return <div className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (error) return <div className="ks-markdown-error"><Notice role="alert">{error}</Notice></div>;
-  return <article className="ks-markdown-view" ref={shareRef}><MarkdownText>{text}</MarkdownText></article>;
+  useEffect(() => { void session.open(path); }, [path, session]);
+  if (path === null) return <article className="ks-markdown-view" ref={shareRef} />;
+  if (!state.loaded) return <div className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
+  if (state.error) return <div className="ks-markdown-error"><Notice role="alert">{state.error}</Notice></div>;
+  return <article className="ks-markdown-view" ref={shareRef}><MarkdownText>{state.text}</MarkdownText></article>;
 }
 
 function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBlockData; context: BlockContext }) {

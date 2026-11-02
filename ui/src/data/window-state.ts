@@ -48,10 +48,34 @@ export function readWindowState(context: WindowStateTarget): AppWindow["state"] 
   return context.store.getSnapshot()?.shared.windows.find((window) => window.id === context.window.id)?.state ?? {};
 }
 
+type PendingPatch = {
+  patch: Record<string, JsonValue>;
+  promise: Promise<unknown>;
+  resolve: (value: unknown) => void;
+  reject: (reason: unknown) => void;
+};
+const pendingPatches = new WeakMap<ShellStore, Map<string, PendingPatch>>();
+
 export function patchWindowState(context: WindowStateTarget, patch: Record<string, JsonValue>): Promise<unknown> {
-  return context.store.call({
-    op: "window.set_state",
-    window_id: context.window.id,
-    state: { ...readWindowState(context), ...patch },
+  const windows = pendingPatches.get(context.store) ?? new Map<string, PendingPatch>();
+  pendingPatches.set(context.store, windows);
+  const existing = windows.get(context.window.id);
+  if (existing) {
+    Object.assign(existing.patch, patch);
+    return existing.promise;
+  }
+  let resolve!: (value: unknown) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<unknown>((onResolve, onReject) => { resolve = onResolve; reject = onReject; });
+  const pending = { patch: { ...patch }, promise, resolve, reject };
+  windows.set(context.window.id, pending);
+  queueMicrotask(() => {
+    windows.delete(context.window.id);
+    context.store.call({
+      op: "window.set_state",
+      window_id: context.window.id,
+      state: { ...readWindowState(context), ...pending.patch },
+    }).then(pending.resolve, pending.reject);
   });
+  return promise;
 }
