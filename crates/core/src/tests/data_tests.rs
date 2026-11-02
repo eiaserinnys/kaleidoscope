@@ -114,6 +114,159 @@ fn definition() -> String {
     .to_string()
 }
 
+fn collection_definition(id: &str, key: &str) -> String {
+    json!({
+        "id":id,
+        "name":"문서 모음",
+        "requires":{"blocks":6,"modules":{"storage":3}},
+        "storage":{"entries":[{
+            "id":"documents",
+            "key":key,
+            "kind":"md",
+            "collection":true,
+            "default":"",
+            "label":"문서",
+            "presentation":"hidden"
+        }]},
+        "ui":{"type":"text","value":"문서"}
+    })
+    .to_string()
+}
+
+#[test]
+fn collection_document_changes_reach_only_the_declaring_app_window() {
+    use kaleidoscope_contract::app_storage::{
+        AppValueMeta, StorageChanged, StorageItemMeta, StorageKind, StorageUpdate,
+    };
+
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core_with_client(
+        temp.path(),
+        vec![
+            collection_definition("collection-a", "documents"),
+            collection_definition("collection-b", "documents"),
+        ],
+        &host,
+        registry_client(),
+    );
+    let (_, desktop) = active_ids(&core);
+    let own_window = open_window(&core, &desktop, "collection-a");
+    let other_window = open_window(&core, &desktop, "collection-b");
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        let _ = tx.send(event.clone());
+    }));
+
+    crate::registry_events::apply_event(
+        &core.inner,
+        0,
+        DeviceEvent::StorageChanged {
+            app_id: "collection-a".into(),
+            changed: StorageChanged {
+                bucket_id: "bucket".into(),
+                item: StorageItemMeta {
+                    entry_id: "documents".into(),
+                    key: "documents/메모.md".into(),
+                    kind: StorageKind::Md,
+                    revision: Some("declared-revision".into()),
+                    exists: true,
+                },
+            },
+        },
+    );
+    assert!(matches!(
+        rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+        CoreEvent::StorageUpdate {
+            window_id,
+            update: StorageUpdate::Changed { changed }
+        } if window_id == own_window && changed.item.key == "documents/메모.md"
+    ));
+    assert!(rx.try_recv().is_err());
+
+    crate::registry_events::apply_event(
+        &core.inner,
+        0,
+        DeviceEvent::AppValueChanged {
+            app_id: "collection-a".into(),
+            bucket_id: "bucket".into(),
+            item: AppValueMeta {
+                key: "documents/메모.md".into(),
+                kind: StorageKind::Md,
+                revision: Some("raw-revision".into()),
+            },
+        },
+    );
+    assert!(matches!(
+        rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+        CoreEvent::StorageUpdate {
+            window_id,
+            update: StorageUpdate::Changed { changed }
+        } if window_id == own_window && changed.item.key == "documents/메모.md"
+    ));
+    assert_ne!(own_window, other_window);
+    assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn workspace_collection_move_reaches_only_matching_workspace_window() {
+    use kaleidoscope_contract::app_storage::StorageUpdate;
+
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core_with_client(
+        temp.path(),
+        vec![collection_definition(
+            "workspace-documents",
+            "workspaces/{workspace_id}/documents",
+        )],
+        &host,
+        registry_client(),
+    );
+    let (workspace_a, desktop_a) = active_ids(&core);
+    let window_a = open_window(&core, &desktop_a, "workspace-documents");
+    let (workspace_b, desktop_b) = match core
+        .handle(CoreRequest::WorkspaceCreate {
+            name: "다른 작업".into(),
+        })
+        .unwrap()
+    {
+        CoreReply::WorkspaceCreate { workspace, desktop } => (workspace.id, desktop.id),
+        reply => panic!("unexpected reply: {reply:?}"),
+    };
+    let window_b = open_window(&core, &desktop_b, "workspace-documents");
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        let _ = tx.send(event.clone());
+    }));
+
+    crate::registry_events::apply_event(
+        &core.inner,
+        0,
+        DeviceEvent::StorageMoved {
+            app_id: "workspace-documents".into(),
+            bucket_id: "bucket".into(),
+            entry_id: "documents".into(),
+            from_key: format!("workspaces/{workspace_a}/documents/메모.md"),
+            to_key: format!("workspaces/{workspace_a}/documents/새 메모.md"),
+            revision: "same-revision".into(),
+        },
+    );
+    assert!(matches!(
+        rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+        CoreEvent::StorageUpdate {
+            window_id,
+            update: StorageUpdate::Moved { moved }
+        } if window_id == window_a
+            && moved.from_doc == "메모.md"
+            && moved.to_doc == "새 메모.md"
+            && moved.revision == "same-revision"
+    ));
+    assert_ne!(workspace_a, workspace_b);
+    assert_ne!(window_a, window_b);
+    assert!(rx.try_recv().is_err());
+}
+
 #[test]
 fn attach_fetches_and_state_change_sends_only_changed_values() {
     let temp = TempDir::new().unwrap();

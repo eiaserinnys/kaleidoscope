@@ -201,7 +201,13 @@ pub(crate) fn act(
                 pending.insert(key, value);
                 pending_steps += 1;
             }
-            Step::SetStorage { entry, value } => {
+            Step::SetStorage { entry, doc, value } => {
+                if let Some(doc) = doc {
+                    crate::app_storage::write_action_with_doc(
+                        inner, window_id, &entry, &doc, value,
+                    )?;
+                    continue;
+                }
                 let revision = {
                     let windows = inner.data_runtimes.windows.lock().unwrap();
                     windows

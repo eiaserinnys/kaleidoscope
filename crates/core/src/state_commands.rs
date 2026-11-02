@@ -556,8 +556,10 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::ConversationAttachment { .. }
         | CoreRequest::ConversationAttachmentOpen { .. }
         | CoreRequest::StorageGet { .. }
+        | CoreRequest::StorageList { .. }
         | CoreRequest::StorageWrite { .. }
         | CoreRequest::StorageReset { .. }
+        | CoreRequest::StorageMove { .. }
         | CoreRequest::FilesPickFolder { .. }
         | CoreRequest::FilesAllowPc { .. }
         | CoreRequest::FilesOpen { .. }

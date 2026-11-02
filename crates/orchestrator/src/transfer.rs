@@ -238,18 +238,35 @@ impl AppState {
                 Err(e) => return Err(e),
             }
             if kaleidoscope_contract::builtin::is_builtin(&item.app_id) {
-                let limit_ok = match item.kind {
-                    StorageKind::Json => {
-                        serde_json::to_vec(&item.content).unwrap().len()
-                            <= contract::STORAGE_JSON_MAX_BYTES
+                let definition = super::builtin_specs::load_definition(&tx, &item.app_id)?;
+                let collection = definition.as_ref().and_then(|definition| {
+                    definition.storage.as_ref().and_then(|storage| {
+                        storage.entries.iter().find(|entry| {
+                            entry.collection
+                                && contract::storage_entry_key_matches(entry, &item.key)
+                        })
+                    })
+                });
+                if let Some(entry) = collection {
+                    if entry.kind != item.kind {
+                        return Err(CoreError::new(ErrorCode::InvalidRequest));
                     }
-                    StorageKind::Md => item
-                        .content
-                        .as_str()
-                        .is_some_and(|s| s.len() <= contract::STORAGE_MD_MAX_BYTES),
-                };
-                if !limit_ok {
-                    return Err(CoreError::new(ErrorCode::InvalidRequest));
+                    contract::validate_storage_content(entry, &item.content)
+                        .map_err(|_| CoreError::new(ErrorCode::InvalidRequest))?;
+                } else {
+                    let limit_ok = match item.kind {
+                        StorageKind::Json => {
+                            serde_json::to_vec(&item.content).unwrap().len()
+                                <= contract::STORAGE_JSON_MAX_BYTES
+                        }
+                        StorageKind::Md => item
+                            .content
+                            .as_str()
+                            .is_some_and(|s| s.len() <= contract::STORAGE_MD_MAX_BYTES),
+                    };
+                    if !limit_ok {
+                        return Err(CoreError::new(ErrorCode::InvalidRequest));
+                    }
                 }
             } else {
                 let raw: Option<String> = tx.query_row("SELECT v.definition FROM apps a JOIN app_versions v ON a.id=v.app_id AND a.current_version=v.version WHERE a.id=?1 AND a.deleted_at IS NULL",[&item.app_id],|r|r.get(0)).optional().map_err(db_error)?;
@@ -261,7 +278,7 @@ impl AppState {
                     .as_ref()
                     .and_then(|s| {
                         s.entries.iter().find(|e| {
-                            e.kind == item.kind && contract::storage_key_matches(&e.key, &item.key)
+                            e.kind == item.kind && contract::storage_entry_key_matches(e, &item.key)
                         })
                     })
                     .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?;

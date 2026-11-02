@@ -145,12 +145,30 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             );
             crate::conversation_reconcile::storage_changed(inner, &app_id, Some(&entry));
         }
+        DeviceEvent::StorageMoved {
+            app_id,
+            bucket_id,
+            entry_id,
+            from_key,
+            to_key,
+            revision,
+        } => {
+            emit_storage_moved(
+                inner,
+                &app_id,
+                Some(&entry_id),
+                bucket_id,
+                &from_key,
+                &to_key,
+                revision,
+            );
+        }
         DeviceEvent::AppValuesSnapshot {
             app_id,
             bucket_id,
             items,
         } => {
-            let items = raw_value_items(inner, &app_id, items);
+            let items = raw_value_items(inner, &app_id, items, false);
             emit_storage_update(
                 inner,
                 &app_id,
@@ -168,7 +186,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             bucket_id,
             item,
         } => {
-            for item in raw_value_items(inner, &app_id, vec![item]) {
+            for item in raw_value_items(inner, &app_id, vec![item], true) {
                 let entry = item.entry_id.clone();
                 emit_storage_update(
                     inner,
@@ -182,6 +200,17 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 );
                 crate::conversation_reconcile::storage_changed(inner, &app_id, Some(&entry));
             }
+        }
+        DeviceEvent::AppValueMoved {
+            app_id,
+            bucket_id,
+            from_key,
+            to_key,
+            revision,
+        } => {
+            emit_storage_moved(
+                inner, &app_id, None, bucket_id, &from_key, &to_key, revision,
+            );
         }
         DeviceEvent::LayoutSnapshot {
             workspaces,
@@ -281,8 +310,9 @@ fn raw_value_items(
     inner: &Inner,
     app_id: &str,
     items: Vec<kaleidoscope_contract::app_storage::AppValueMeta>,
+    include_collections: bool,
 ) -> Vec<kaleidoscope_contract::app_storage::StorageItemMeta> {
-    use kaleidoscope_contract::app_storage::{storage_key_matches, StorageItemMeta};
+    use kaleidoscope_contract::app_storage::{storage_entry_key_matches, StorageItemMeta};
     let state = inner.state.lock().unwrap();
     let Some(app) = state.shared.apps.iter().find(|app| app.id == app_id) else {
         return vec![];
@@ -300,7 +330,8 @@ fn raw_value_items(
             let entry = storage
                 .entries
                 .iter()
-                .find(|entry| storage_key_matches(&entry.key, &item.key))?;
+                .find(|entry| storage_entry_key_matches(entry, &item.key))
+                .filter(|entry| include_collections || !entry.collection)?;
             let exists = item.revision.is_some();
             Some(StorageItemMeta {
                 entry_id: entry.id.clone(),
@@ -311,6 +342,76 @@ fn raw_value_items(
             })
         })
         .collect()
+}
+
+fn storage_doc_for_key(
+    entry: &kaleidoscope_contract::app_storage::StorageEntryDecl,
+    workspace_id: &str,
+    key: &str,
+) -> Option<Option<String>> {
+    let resolved_key = entry.key.replace("{workspace_id}", workspace_id);
+    if entry.collection {
+        let doc = key.strip_prefix(&format!("{resolved_key}/"))?;
+        kaleidoscope_contract::app_storage::valid_collection_doc(doc).then(|| Some(doc.to_string()))
+    } else {
+        (key == resolved_key).then_some(None)
+    }
+}
+
+fn emit_storage_moved(
+    inner: &Arc<Inner>,
+    app_id: &str,
+    entry_id: Option<&str>,
+    bucket_id: String,
+    from_key: &str,
+    to_key: &str,
+    revision: String,
+) {
+    let moved_updates = {
+        let state = inner.state.lock().unwrap();
+        state
+            .shared
+            .windows
+            .iter()
+            .filter(|window| window.app_id == app_id)
+            .filter_map(|window| {
+                let desktop = state
+                    .shared
+                    .desktops
+                    .iter()
+                    .find(|desktop| desktop.id == window.desktop_id)?;
+                let definition =
+                    app_commands::definition_for(&state.shared, app_id, window.app_version)?;
+                let entry = definition.storage.as_ref()?.entries.iter().find(|entry| {
+                    entry.collection
+                        && entry_id.map_or(true, |entry_id| entry.id == entry_id)
+                        && storage_doc_for_key(entry, &desktop.workspace_id, from_key)
+                            .flatten()
+                            .is_some()
+                        && storage_doc_for_key(entry, &desktop.workspace_id, to_key)
+                            .flatten()
+                            .is_some()
+                })?;
+                let from_doc = storage_doc_for_key(entry, &desktop.workspace_id, from_key)??;
+                let to_doc = storage_doc_for_key(entry, &desktop.workspace_id, to_key)??;
+                Some((
+                    window.id.clone(),
+                    kaleidoscope_contract::app_storage::StorageMoved {
+                        bucket_id: bucket_id.clone(),
+                        entry_id: entry.id.clone(),
+                        from_doc,
+                        to_doc,
+                        revision: revision.clone(),
+                    },
+                ))
+            })
+            .collect::<Vec<_>>()
+    };
+    for (window_id, moved) in moved_updates {
+        let update = kaleidoscope_contract::app_storage::StorageUpdate::Moved { moved };
+        crate::data_runtime::storage_changed(inner, &window_id, &update);
+        inner.emit(&CoreEvent::StorageUpdate { window_id, update });
+    }
 }
 
 fn emit_storage_update(
@@ -339,10 +440,16 @@ fn emit_storage_update(
                 if window.app_id != app_id {
                     return false;
                 }
-                let kaleidoscope_contract::app_storage::StorageUpdate::Changed { changed } =
-                    &update
-                else {
-                    return true;
+                let changed = match &update {
+                    kaleidoscope_contract::app_storage::StorageUpdate::Snapshot { .. } => {
+                        return true
+                    }
+                    kaleidoscope_contract::app_storage::StorageUpdate::Changed { changed } => {
+                        changed
+                    }
+                    kaleidoscope_contract::app_storage::StorageUpdate::Moved { .. } => {
+                        return false
+                    }
                 };
                 let Some(desktop) = state
                     .shared
@@ -367,8 +474,8 @@ fn emit_storage_update(
                             .find(|entry| entry.id == changed.item.entry_id)
                     })
                     .is_some_and(|entry| {
-                        entry.key.replace("{workspace_id}", &desktop.workspace_id)
-                            == changed.item.key
+                        storage_doc_for_key(entry, &desktop.workspace_id, &changed.item.key)
+                            .is_some()
                     })
             })
             .map(|window| window.id.clone())

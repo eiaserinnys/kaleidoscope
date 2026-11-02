@@ -33,14 +33,29 @@ pub(super) fn initial_slots(definition: &AppDefinition) -> (BTreeMap<String, Slo
         if pointer.starts_with("/agent/") {
             continue;
         }
-        names.extend(data::storage_refs(expr));
+        names.extend(data::storage_refs(expr).into_iter().filter(|name| {
+            !definition.storage.as_ref().is_some_and(|storage| {
+                storage
+                    .entries
+                    .iter()
+                    .any(|entry| entry.id == *name && entry.collection)
+            })
+        }));
         meta |= !data::storage_meta_refs(expr).is_empty();
     }
     for (_, actions) in data::ui_actions(definition) {
         if let Actions::Many(actions) = actions {
             for action in actions {
                 if let Action::SetStorage(spec) = action {
-                    names.insert(spec.set_storage.entry.clone());
+                    let entry = &spec.set_storage.entry;
+                    if !definition.storage.as_ref().is_some_and(|storage| {
+                        storage
+                            .entries
+                            .iter()
+                            .any(|decl| decl.id == *entry && decl.collection)
+                    }) {
+                        names.insert(entry.clone());
+                    }
                 }
             }
         }
@@ -567,5 +582,6 @@ pub(crate) fn changed(inner: &Arc<Inner>, window: &str, update: &StorageUpdate) 
                 load(inner, window, Some(&changed.item.entry_id));
             }
         }
+        StorageUpdate::Moved { .. } => {}
     }
 }

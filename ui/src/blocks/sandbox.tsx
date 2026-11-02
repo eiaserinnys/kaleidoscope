@@ -54,7 +54,7 @@ export function SandboxBlock({ block, context, pointer }: { block: SandboxData; 
   useEffect(() => {
     if (!block.document) return;
     return context.store.subscribeEvents((event) => {
-      if (event.event === "storage.update" && event.window_id === context.window.id && (event.update.kind === "snapshot" || event.update.changed.item.entry_id === block.document?.entry)) void read();
+      if (event.event === "storage.update" && event.window_id === context.window.id && (event.update.kind === "snapshot" || (event.update.kind === "changed" && event.update.changed.item.entry_id === block.document?.entry))) void read();
     });
   }, [block.document, context.store, context.window.id, read]);
   if (block.file && !grant && permission) return <FileGrant context={context} permission={permission} />;
@@ -116,7 +116,7 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
   useEffect(() => context.store.subscribeEvents((event) => {
     if (event.event !== "storage.update" || event.window_id !== context.window.id) return;
     for (const entry of storageEntries) {
-      if (event.update.kind === "snapshot" || event.update.changed.item.entry_id === entry) {
+      if (event.update.kind === "snapshot" || (event.update.kind === "changed" && event.update.changed.item.entry_id === entry)) {
         void readStorage(entry).then(({ content, revision }) => {
           if (ownWrites.current[entry] === JSON.stringify(content)) return;
           delete ownWrites.current[entry];

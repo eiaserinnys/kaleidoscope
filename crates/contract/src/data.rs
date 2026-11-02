@@ -307,11 +307,15 @@ pub struct SetStorageAction {
     pub set_storage: SetStorageSpec,
 }
 
+/// 저장소 쓰기 규칙. 문서 모음 항목은 `doc`으로 대상을 지정하고 고정 항목은 생략한다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct SetStorageSpec {
     pub entry: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub doc: Option<crate::StringOrStateRef>,
     /// 빠졌으면 `$event`, 적혀 있으면 null도 값이다.
     #[serde(
         default,

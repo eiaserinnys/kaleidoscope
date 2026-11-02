@@ -457,8 +457,10 @@ impl Core {
                 conversation::handle(&self.inner, request)
             }
             request @ (CoreRequest::StorageGet { .. }
+            | CoreRequest::StorageList { .. }
             | CoreRequest::StorageWrite { .. }
-            | CoreRequest::StorageReset { .. }) => app_storage::handle(&self.inner, request),
+            | CoreRequest::StorageReset { .. }
+            | CoreRequest::StorageMove { .. }) => app_storage::handle(&self.inner, request),
             request @ (CoreRequest::LocalAgentAttach { .. }
             | CoreRequest::LocalAgentDetach { .. }
             | CoreRequest::LocalAgentAllow { .. }

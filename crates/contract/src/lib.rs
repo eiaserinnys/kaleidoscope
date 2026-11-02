@@ -192,6 +192,7 @@ pub mod assets;
 pub mod builtin;
 pub mod conversation;
 pub mod data;
+pub mod file_name;
 pub mod local_agent;
 pub mod registry;
 pub mod validate;
@@ -254,7 +255,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("agent", 3),
     ("web", 1),
     ("connection", 2),
-    ("storage", 2),
+    ("storage", 3),
     ("local_agent", 1),
     ("assets", 1),
     ("http", 1),
@@ -785,12 +786,24 @@ fn agent_binding_schema(generator: &mut schemars::SchemaGenerator) -> schemars::
     schema
 }
 
-/// 문서를 저장소 md 항목에 연결한다.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+/// 저장소 문서를 참조한다. `entry`는 앱의 저장 항목 id이고, 문서 모음에서는 `doc`에 문서 이름을 준다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct DocumentRef {
     pub entry: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub doc: Option<StringOrStateRef>,
+}
+
+/// 문서 모음 주소의 고정 이름 또는 창 상태 참조.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum StringOrStateRef {
+    String(String),
+    State(StateRef),
 }
 
 /// 앱이 필요로 하는 블록 세트와 모듈의 버전.
@@ -3154,12 +3167,24 @@ pub enum CoreRequest {
 
     /// (모듈 `storage` 1판) 창의 앱 선언 항목을 읽는다. 새 저장소 명령은 현재 unavailable이다.
     #[serde(rename = "storage.get")]
-    StorageGet { window_id: String, entry: String },
+    StorageGet {
+        window_id: String,
+        entry: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        doc: Option<String>,
+    },
+    /// (모듈 `storage` 3판) 문서 모음의 본문 없는 목록을 읽는다.
+    #[serde(rename = "storage.list")]
+    StorageList { window_id: String, entry: String },
     /// (모듈 `storage` 1판) expected_revision CAS로 선언 항목을 쓴다. 빠지거나 null이면 저장값이 없을 때만 만든다.
     #[serde(rename = "storage.write")]
     StorageWrite {
         window_id: String,
         entry: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        doc: Option<String>,
         content: JsonValue,
         #[serde(default)]
         #[ts(optional, as = "Option<app_storage::ExpectedRevision>")]
@@ -3170,9 +3195,21 @@ pub enum CoreRequest {
     StorageReset {
         window_id: String,
         entry: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        doc: Option<String>,
         #[serde(default)]
         #[ts(optional, as = "Option<app_storage::ExpectedRevision>")]
         expected_revision: app_storage::ExpectedRevision,
+    },
+    /// (모듈 `storage` 3판) 문서 모음 안에서 이름을 바꾼다. 한 CAS transaction이며 본문을 보내지 않는다.
+    #[serde(rename = "storage.move")]
+    StorageMove {
+        window_id: String,
+        entry: String,
+        from: String,
+        to: String,
+        expected_revision: String,
     },
 
     /// (블록 세트 4판) 창의 데이터를 잇는다. 4판 블록이 든 창이 그려질 때 한 번 부른다. 코어는 아직 받지 않은
@@ -3532,10 +3569,16 @@ pub enum CoreReply {
     StorageGet {
         result: app_storage::StorageReadReply,
     },
+    #[serde(rename = "storage.list")]
+    StorageList {
+        result: app_storage::CollectionListReply,
+    },
     #[serde(rename = "storage.write")]
     StorageWrite { revision: String },
     #[serde(rename = "storage.reset")]
     StorageReset { revision: Option<String> },
+    #[serde(rename = "storage.move")]
+    StorageMove { revision: String },
 
     #[serde(rename = "data.attach")]
     DataAttach { view: data::DataView },
