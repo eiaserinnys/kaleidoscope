@@ -11,7 +11,7 @@
 .ks-image-view { position: relative; display: grid; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; place-items: center; background: var(--ks-color-surface-raised); color: var(--ks-color-muted); }
 .ks-image-view.is-zoomable { touch-action: none; }
 .ks-image-frame { position: relative; flex: none; overflow: hidden; transform-origin: center; }
-.ks-image-frame img { position: absolute; inset: 0; width: 100%; height: 100%; user-select: none; }
+.ks-image-frame img { position: absolute; inset: 0; width: 100%; height: 100%; }
 .ks-image-controls { position: absolute; right: var(--ks-space-3); bottom: var(--ks-space-3); display: flex; border-radius: var(--ks-radius-small); background: var(--ks-color-surface); box-shadow: var(--ks-shadow-popover); }
 .ks-media-player { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; flex-direction: column; justify-content: flex-end; background: var(--ks-color-surface); }
 .ks-media-player video { width: 100%; min-height: 0; flex: 1 1 auto; object-fit: contain; background: var(--ks-color-surface-raised); }

@@ -4,6 +4,7 @@ import {
   Button,
   createFakeTransport,
   createShellStore,
+  installShellDragGuard,
   type FakeTransport,
   type FakeWebViewSnapshot,
   type CoreRequest,
@@ -40,6 +41,7 @@ declare global {
 }
 
 const timestamp = "2026-10-30T00:00:00Z";
+installShellDragGuard();
 const bottomMenuScenario = new URLSearchParams(window.location.search).has("bottom-menu");
 const harnessParams = new URLSearchParams(window.location.search);
 const longFolderScenario = harnessParams.has("long-folder");

@@ -29,11 +29,10 @@
 .ks-table-header button { display: flex; align-items: center; gap: var(--ks-space-1); width: 100%; padding: var(--ks-space-1) var(--ks-space-2); border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: start; }
 .ks-table-header button.is-numeric { justify-content: flex-end; }
 .ks-table-row { padding: var(--ks-space-1) 0; }
-.ks-table-row.is-activatable { user-select: none; }
 .ks-table-cell { min-width: 0; overflow: hidden; padding-inline: var(--ks-space-2); text-overflow: ellipsis; white-space: nowrap; }
 .ks-table-cell.is-numeric { text-align: end; font-variant-numeric: tabular-nums; }
 .ks-properties-container { container-type: inline-size; width: 100%; height: 100%; overflow: auto; }
-.ks-properties { display: grid; grid-template-columns: calc(var(--ks-space-6) * 4) minmax(0, 1fr); align-content: start; gap: var(--ks-space-2); margin: 0; padding: var(--ks-space-3); user-select: text; }
+.ks-properties { display: grid; grid-template-columns: calc(var(--ks-space-6) * 4) minmax(0, 1fr); align-content: start; gap: var(--ks-space-2); margin: 0; padding: var(--ks-space-3); }
 .ks-properties dt { color: var(--ks-color-muted); font-size: var(--ks-type-meta); }
 .ks-properties dd { min-width: 0; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ks-properties code { padding: var(--ks-space-1); border-radius: var(--ks-radius-small); background: var(--ks-color-code); font-family: var(--ks-font-code); }
@@ -46,7 +45,7 @@
 .ks-data-tree { padding: var(--ks-space-2); }
 .ks-tree-name { flex: 1 1 auto; }
 .ks-feed { padding-top: var(--ks-space-3); }
-.ks-feed-entry { display: flex; gap: var(--ks-space-2); padding: 0 var(--ks-space-3); margin-bottom: var(--ks-space-3); user-select: text; }
+.ks-feed-entry { display: flex; gap: var(--ks-space-2); padding: 0 var(--ks-space-3); margin-bottom: var(--ks-space-3); }
 .ks-feed-entry-nested { margin-inline-start: calc(var(--ks-feed-depth, 0) * 1.5 * var(--ks-space-3)); border-inline-start: var(--ks-line-width) solid var(--ks-color-border); padding-inline-start: var(--ks-space-2); }
 .ks-feed-entry.is-selected { background: var(--ks-color-selection); }
 .ks-feed-entry.is-selectable { cursor: pointer; }

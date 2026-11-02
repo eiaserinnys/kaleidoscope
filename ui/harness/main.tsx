@@ -6,6 +6,7 @@ import {
   createFakeTransport,
   createHttpTransport,
   createShellStore,
+  installShellDragGuard,
   useShellSnapshot,
   type FakeTransport,
 } from "@kaleidoscope/ui";
@@ -22,13 +23,43 @@ import { htmlReportSample } from "./html-report-sample";
 import workspacePasJson from "../../examples/workspace-pas.json";
 import { dataViewsApp } from "./data-views-app";
 import { dataLayoutApp } from "./data-layout-app";
+import earthJson from "../../apps/earth.json";
+import marketJson from "../../apps/market.json";
+import profilerJson from "../../apps/profiler.json";
+import readerJson from "../../apps/reader.json";
 import pluginsDocument from "./fixtures/create-plugins.txt?raw";
 import { exposeDocsHarness, galleryForDocs } from "./docs-media-test";
 
 const mdEditor = mdEditorJson as AppDefinition;
+installShellDragGuard();
 const htmlReport = htmlReportJson as AppDefinition;
 const workspacePas = workspacePasJson as unknown as AppDefinition;
 const agentApp = agentJson as unknown as AppDefinition;
+const visualPreviewDefinitions = [earthJson, marketJson, profilerJson, readerJson].map((definition) => definition as unknown as AppDefinition);
+const shellSelectionApp: AppDefinition = {
+  id: "shell-selection-test", name: "선택 간격 시험", requires: { blocks: 10, modules: {} }, permissions: [],
+  state: { note: "선택 가능한 입력 내용", enabled: false },
+  ui: { type: "stack", direction: "column", gap: "none", children: [
+    { type: "toolbar", start: [
+      { type: "text", value: "카드 제목" },
+      { type: "text", value: "**툴바 글자**", format: "markdown", style: "body" },
+    ], end: [{ type: "text", value: "889" }] },
+    { type: "tabs", tabs: [
+      { label: "요약", child: { type: "stack", direction: "column", gap: "medium", children: [
+        { type: "properties", fields: [{ label: "상태", value: "대기 중" }] },
+        { type: "section", title: "확인", collapsible: true, child: { type: "stack", direction: "column", gap: "small", children: [
+          { type: "text", value: "읽고 복사할 **요약 본문**입니다.", format: "markdown", style: "body" },
+          { type: "input", value: { state: "note" }, on_change: { set_state: "note" }, multiline: true, placeholder: "메모" },
+          { type: "toggle", label: "활성화", value: { state: "enabled" }, on_change: { set_state: "enabled" } },
+        ] } },
+      ] } },
+      { label: "확인 항목", child: { type: "list", items: [{ key: "1", title: "확인할 내용", value: "설명" }] } },
+      { label: "요청", child: { type: "text", value: "요청의 **본문 글자**입니다.", format: "markdown", style: "body" } },
+      { label: "노트", child: { type: "feed", entries: [{ key: "note-1", name: "작성자", body: "피드에서 복사할 글" }] } },
+    ] },
+  ] },
+};
+const previewDefinitions = [...visualPreviewDefinitions, shellSelectionApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},
@@ -44,7 +75,7 @@ const conversationMode = new URLSearchParams(window.location.search).get("conver
 if (conversationMode) workspacePas.agent = {
   protocol: "conversation-v1", permission: "conversation", base_path: "api", namespace: "test", profile: "test", collection: "test", model_order: [], selected_model: "", title_template: "", initial_instruction_template: "", instructions_template: "", thread_entry: "thread",
 };
-const definitions = [mdEditor, htmlReport, workspacePas, agentApp, dataLayoutApp, gallery, dataViewsApp, storageDocument];
+const definitions = [mdEditor, htmlReport, workspacePas, agentApp, dataLayoutApp, gallery, dataViewsApp, storageDocument, ...previewDefinitions];
 const timestamp = "2026-10-28T00:00:00Z";
 const agentHarnessParams = new URLSearchParams(window.location.search);
 const agentPhases = ["choosing_agent", "choosing_folder", "awaiting_permission", "starting", "login_required", "ready", "responding", "failed", "ended"] as const;
@@ -118,7 +149,7 @@ const initialSnapshot: ShellSnapshot = {
     app_versions: appVersions,
     workspaces: [{ id: "workspace-1", name: "kaleidoscope", created_at: timestamp, updated_at: timestamp }],
     desktops: [{ id: "desktop-1", workspace_id: "workspace-1", name: "작업", position: 0, created_at: timestamp, updated_at: timestamp }],
-  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(htmlReport, "html-report-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4), makeWindow(gallery, "gallery-window", 5), makeWindow(dataViewsApp, "views-window", 6), makeWindow(storageDocument, "storage-window", 7), agentWindow],
+  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(htmlReport, "html-report-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4), makeWindow(gallery, "gallery-window", 5), makeWindow(dataViewsApp, "views-window", 6), makeWindow(storageDocument, "storage-window", 7), agentWindow, ...previewDefinitions.map((definition, index) => makeWindow(definition, `${definition.id}-window`, 9 + index))],
   },
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [], pc_access: [], local_agent_access: [] },
   supported: { blocks: 10, modules: { files: 1, storage: 1 } },
@@ -319,6 +350,13 @@ function Harness() {
           <header className="ks-harness-window-header">저장소 문서</header>
           <div className="ks-harness-window-content">{storageWindow && previewAppId === "storage-document" ? <AppWindowContent store={store} windowId={storageWindow.id} /> : null}</div>
         </section>
+        {previewDefinitions.map((definition) => {
+          const appWindow = snapshot?.shared.windows.find((item) => item.app_id === definition.id);
+          return <section aria-label={definition.id} className={`ks-harness-window${previewOnly && previewAppId !== definition.id ? " is-hidden" : ""}`} data-app-id={definition.id} data-testid={`app-window-${definition.id}`} key={definition.id}>
+            <header className="ks-harness-window-header">{definition.id === "shell-selection-test" ? <>선택 간격 시험 <label>비선택 레이블</label></> : definition.name}</header>
+            <div className="ks-harness-window-content">{appWindow && previewAppId === definition.id ? <AppWindowContent store={store} windowId={appWindow.id} /> : null}</div>
+          </section>;
+        })}
       </div>
       {!coreUrl && previewAppId === "storage-document" ? <button onClick={async () => {
         const { result } = await fakeTransport.call({ op: "storage.get", window_id: "storage-window", entry: "memo" });
