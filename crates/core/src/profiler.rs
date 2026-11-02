@@ -55,6 +55,7 @@ struct Binding {
 fn label(category: &str) -> &str {
     match category {
         "command" => "명령 처리",
+        "network" => "네트워크 요청",
         "data.state_change" => "상태 반응",
         "data.view" => "화면 계산",
         "data.act" => "액션 실행",
