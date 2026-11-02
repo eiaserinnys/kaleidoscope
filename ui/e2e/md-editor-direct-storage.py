@@ -4,7 +4,8 @@ import time
 from pathlib import Path
 
 
-window = sb.window_of("md-editor")
+APP_ID = "md-editor-direct-storage-test"
+window = sb.window_of(APP_ID)
 assert window is not None, "마크다운 편집기 창을 열지 못했습니다"
 window_id = window["id"]
 initial_content = "# Direct server document\ninitial"
@@ -52,7 +53,7 @@ trigger_write = write_document("trigger.md", "# Refresh the document list")
 final_listing = core({"op": "storage.list", "window_id": window_id, "entry": "documents"})["result"]
 assert len(final_listing["items"]) == 300, f"Core 문서 목록이 300개가 아닙니다: {len(final_listing['items'])}"
 
-app = sb.window("md-editor")
+app = sb.window(APP_ID)
 page.wait_for_function(
     "() => document.querySelector('.ks-data-tab-panel:not([hidden]) .ks-file-tree-list')?.getAttribute('aria-rowcount') === '300'",
     timeout=15000,
@@ -99,6 +100,7 @@ assert saved["content"] == saved_content, f"Core 저장 결과가 다릅니다: 
 app.get_by_role("tab", name="내 폴더").click()
 page.wait_for_selector(".ks-file-tree-header", state="visible")
 page.wait_for_function("() => document.querySelector('.ks-data-tab-panel[aria-label=\"내 폴더\"] .ks-markdown-editor') !== null")
+page.wait_for_function("() => document.querySelector('.ks-split-pane:first-child .ks-data-tab-panel:not([hidden]) .ks-file-tree-list [role=\"treeitem\"]') !== null")
 
 
 def set_window_size(width, height):
@@ -126,9 +128,9 @@ def capture_toggle(theme, size_name, width, height):
     set_window_size(width, height)
     page.emulate_media(color_scheme=theme)
     page.wait_for_timeout(200)
-    expanded = sb.shot(f"{size_name}-{theme}-expanded.png", "md-editor")
+    expanded = sb.shot(f"{size_name}-{theme}-expanded.png", APP_ID)
     fold_box = toggle_at_center("목록 접기", "목록 펼치기")
-    collapsed = sb.shot(f"{size_name}-{theme}-collapsed.png", "md-editor")
+    collapsed = sb.shot(f"{size_name}-{theme}-collapsed.png", APP_ID)
     expand_box = app.get_by_role("button", name="목록 펼치기").bounding_box()
     assert expand_box is not None and round(expand_box["width"]) == 28 and round(expand_box["height"]) == 28
     page.mouse.click(expand_box["x"] + expand_box["width"] / 2, expand_box["y"] + expand_box["height"] / 2)
@@ -142,7 +144,7 @@ page.emulate_media(color_scheme="light")
 page.wait_for_timeout(350)
 coordinates = page.evaluate(
     """() => {
-      const root = document.querySelector('[data-testid="app-window-md-editor"]');
+      const root = document.querySelector('[data-testid="app-window-md-editor-direct-storage-test"]');
       const base = root.getBoundingClientRect();
       const box = (selector) => {
         const element = root.querySelector(selector);
@@ -151,8 +153,8 @@ coordinates = page.evaluate(
         return {
           left: Math.round(rect.left - base.left),
           top: Math.round(rect.top - base.top),
-          right: Math.round(rect.right - base.left - 1),
-          bottom: Math.round(rect.bottom - base.top - 1),
+          right: Math.round(rect.right - base.left),
+          bottom: Math.round(rect.bottom - base.top),
         };
       };
       const header = root.querySelector('.ks-file-tree-header');
@@ -162,14 +164,14 @@ coordinates = page.evaluate(
       return {
         window: { width: Math.round(base.width), height: Math.round(base.height) },
         title: box('.ks-file-tree-root-name'),
-        first_row: box('.ks-data-tab-panel .ks-file-tree-list [data-tree-id]'),
+        first_row: box('.ks-split-pane:first-child .ks-data-tab-panel:not([hidden]) .ks-file-tree-list [role="treeitem"]'),
         header_underline: {
           left: Math.round(headerRect.left - base.left),
-          right: Math.round(headerRect.right - base.left - 1),
+          right: Math.round(headerRect.right - base.left),
           top: Math.round(headerRect.bottom - base.top - border),
-          bottom: Math.round(headerRect.bottom - base.top - 1),
+          bottom: Math.round(headerRect.bottom - base.top),
         },
-        editor: box('.ks-data-tab-panel[aria-label="내 폴더"] .ks-markdown-editor'),
+        editor: box('.ks-split-pane:last-child .ks-data-tab-panel[aria-label="내 폴더"] .ks-markdown-editor'),
       };
     }"""
 )

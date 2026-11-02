@@ -1,0 +1,88 @@
+{
+  "id": "md-editor-direct-storage-test",
+  "name": "마크다운 편집기",
+  "description": "서버 문서와 고른 폴더의 md 파일을 원문 그대로 고친다",
+  "requires": { "blocks": 13, "modules": { "files": 3, "storage": 3 } },
+  "permissions": [
+    { "module": "files", "id": "docs", "access": "readwrite", "label": "문서 폴더" }
+  ],
+  "state": { "source": 0, "current_file": null, "current_document": null },
+  "state_migrate": { "source": "$state.current_file != null ? 1 : 0" },
+  "opens": {
+    "extensions": ["md"],
+    "permission": "docs",
+    "state": "current_file",
+    "set_state": { "source": 1 }
+  },
+  "storage": {
+    "entries": [
+      {
+        "id": "documents",
+        "key": "documents",
+        "collection": true,
+        "kind": "md",
+        "default": "",
+        "label": "문서",
+        "presentation": "hidden"
+      }
+    ]
+  },
+  "ui": {
+    "type": "split",
+    "direction": "row",
+    "sizes": [28, 72],
+    "children": [
+      {
+        "type": "tabs",
+        "keep_mounted": true,
+        "selected": { "state": "source" },
+        "on_change": { "set_state": "source" },
+        "tabs": [
+          {
+            "label": "서버",
+            "child": {
+              "type": "folder",
+              "root": { "entry": "documents" },
+              "extensions": ["md"],
+              "selected": { "state": "current_document" },
+              "on_select": { "set_state": "current_document" }
+            }
+          },
+          {
+            "label": "내 폴더",
+            "child": {
+              "type": "folder",
+              "root": { "permission": "docs" },
+              "extensions": ["md"],
+              "selected": { "state": "current_file" },
+              "on_select": { "set_state": "current_file" }
+            }
+          }
+        ]
+      },
+      {
+        "type": "tabs",
+        "header": false,
+        "keep_mounted": true,
+        "selected": { "state": "source" },
+        "on_change": { "set_state": "source" },
+        "tabs": [
+          {
+            "label": "서버",
+            "child": {
+              "type": "markdown",
+              "document": { "entry": "documents", "doc": { "state": "current_document" } }
+            }
+          },
+          {
+            "label": "내 폴더",
+            "child": {
+              "type": "markdown",
+              "file": { "permission": "docs", "path": { "state": "current_file" } }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
