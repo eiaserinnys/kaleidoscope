@@ -84,6 +84,7 @@ fn client(base: String, temp: &TempDir) -> Client {
             scopes: None,
             resource: None,
         },
+        workspace_name: "작업".into(),
         base_path: "/v1".into(),
         logins,
         profiler: Default::default(),

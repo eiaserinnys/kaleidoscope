@@ -1,16 +1,16 @@
 //! 창의 앱, 작업, 저장소와 제공자 연결을 하나의 대화 문맥으로 묶는다.
-use crate::{app_commands, app_storage, conversation_http::Client, error, Inner};
+use crate::{Inner, app_commands, app_storage, conversation_http::Client};
 use kaleidoscope_contract::{
+    AgentProvider, AppDefinition, CoreError, ErrorCode, Workspace,
     app_storage::StorageReadReply,
     conversation::{
         AdoptThreadRequest, ConversationThread, EnsureThreadReply, ModelsReply, ThreadByKeyReply,
     },
     data::{self, Binding},
-    AgentProvider, AppDefinition, CoreError, ErrorCode, Workspace,
 };
 use kaleidoscope_data::{CompiledApp, Env};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -42,7 +42,7 @@ impl Context {
         let provider = definition
             .agent
             .clone()
-            .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+            .ok_or_else(kaleidoscope_contract::errors::CONV_CONTEXT_PROVIDER_MISSING)?;
         let connection = definition
             .permissions
             .iter()
@@ -55,14 +55,15 @@ impl Context {
                 } if id == &provider.permission => Some(connection.clone()),
                 _ => None,
             })
-            .ok_or_else(|| error::make(ErrorCode::PermissionDenied))?;
+            .ok_or_else(kaleidoscope_contract::errors::CONV_CONTEXT_PERMISSION_MISSING)?;
         let link = inner
             .link_file
             .lock()
             .unwrap()
             .clone()
-            .ok_or_else(|| error::make(ErrorCode::Unavailable))?;
-        let client = Client::restore(inner, &connection, &provider.base_path)?;
+            .ok_or_else(kaleidoscope_contract::errors::CONV_CONTEXT_LINK_MISSING)?;
+        let client = Client::restore(inner, &connection, &provider.base_path)?
+            .with_workspace_name(&workspace.name);
         Ok(Self {
             client,
             storage: app_storage::Context {
@@ -94,14 +95,24 @@ impl Context {
             .definition
             .agent
             .clone()
-            .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
-        let client = Client::restore(inner, &saved.connection, &provider.base_path)?;
+            .ok_or_else(kaleidoscope_contract::errors::CONV_CONTEXT_PROVIDER_MISSING)?;
+        let client = Client::restore(inner, &saved.connection, &provider.base_path)
+            .map_err(|error| {
+                if error.code == ErrorCode::Unavailable {
+                    kaleidoscope_contract::errors::CONV_CONTEXT_CONNECTION_MISSING(
+                        &saved.connection,
+                    )
+                } else {
+                    error
+                }
+            })?
+            .with_workspace_name(&saved.workspace.name);
         let link = inner
             .link_file
             .lock()
             .unwrap()
             .clone()
-            .ok_or_else(|| error::make(ErrorCode::Unavailable))?;
+            .ok_or_else(kaleidoscope_contract::errors::CONV_CONTEXT_LINK_MISSING)?;
         Ok(Self {
             client,
             storage: app_storage::Context {
@@ -128,30 +139,43 @@ impl Context {
                 .windows
                 .iter()
                 .find(|w| w.id == window_id)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| {
+                    kaleidoscope_contract::errors::CONV_CONTEXT_WINDOW_NOT_FOUND(window_id)
+                })?;
             let desktop = state
                 .shared
                 .desktops
                 .iter()
                 .find(|d| d.id == window.desktop_id)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| {
+                    kaleidoscope_contract::errors::CONV_CONTEXT_DESKTOP_NOT_FOUND(
+                        &window.desktop_id,
+                    )
+                })?;
             let workspace = state
                 .shared
                 .workspaces
                 .iter()
                 .find(|w| w.id == desktop.workspace_id)
                 .cloned()
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| {
+                    kaleidoscope_contract::errors::CONV_CONTEXT_WORKSPACE_NOT_FOUND(
+                        &desktop.workspace_id,
+                    )
+                })?;
             let definition =
                 app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                    .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                    .ok_or_else(|| {
+                        kaleidoscope_contract::errors::CONV_CONTEXT_APP_NOT_FOUND(&window.app_id)
+                    })?;
             (definition, workspace)
         };
         let provider = definition
             .agent
             .clone()
-            .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
-        let client = Client::new(inner, window_id, &provider.permission, &provider.base_path)?;
+            .ok_or_else(kaleidoscope_contract::errors::CONV_CONTEXT_PROVIDER_MISSING)?;
+        let client = Client::new(inner, window_id, &provider.permission, &provider.base_path)?
+            .with_workspace_name(&workspace.name);
         let storage = app_storage::context(inner, window_id, Some(&provider.thread_entry))?;
         Ok(Self {
             client,
@@ -230,7 +254,9 @@ impl Context {
         for (field, binding) in bindings {
             let value = compiled
                 .evaluate_binding(binding, &format!("/agent/{field}"), &env)
-                .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))?;
+                .map_err(|reason| {
+                    kaleidoscope_contract::errors::CONV_CONTEXT_BINDING_INVALID(*field, reason)
+                })?;
             values.insert((*field).into(), value);
         }
         Ok((values, revisions))
@@ -260,7 +286,7 @@ impl Context {
                 &query,
                 None::<&Value>,
             )?
-            .ok_or_else(|| error::make(ErrorCode::NotFound))
+            .ok_or_else(kaleidoscope_contract::errors::CONV_CONTEXT_MODELS_MISSING)
     }
 
     pub fn thread(
@@ -276,12 +302,16 @@ impl Context {
         let id = value
             .get("thread_id")
             .and_then(Value::as_str)
-            .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+            .ok_or_else(kaleidoscope_contract::errors::CONV_CONTEXT_THREAD_ENTRY_INVALID)?;
         if value.get("namespace").and_then(Value::as_str) != Some(namespace)
             || value.get("external_key").and_then(Value::as_str) != Some(&self.workspace.id)
             || value.get("connection").and_then(Value::as_str) != Some(&self.client.info.name)
         {
-            return Err(error::make(ErrorCode::BindingConflict));
+            return Err(
+                kaleidoscope_contract::errors::CONV_CONTEXT_THREAD_BINDING_CONFLICT(
+                    &self.workspace.name,
+                ),
+            );
         }
         let path = self.client.path(&["threads", "by-key"])?;
         let query = self.query(namespace);
@@ -299,10 +329,16 @@ impl Context {
             let reply: EnsureThreadReply = self
                 .client
                 .json(reqwest::Method::PUT, &path, &query, Some(&adoption))?
-                .ok_or_else(|| error::make(ErrorCode::NotFound))
+                .ok_or_else(|| {
+                    kaleidoscope_contract::errors::CONV_CONTEXT_ADOPTION_NOT_FOUND(
+                        &self.workspace.name,
+                    )
+                })
                 .map_err(|e| {
                     if e.code == ErrorCode::Conflict {
-                        error::make(ErrorCode::BindingConflict)
+                        kaleidoscope_contract::errors::CONV_CONTEXT_THREAD_BINDING_CONFLICT(
+                            &self.workspace.name,
+                        )
                     } else {
                         e
                     }
@@ -310,7 +346,11 @@ impl Context {
             reply.thread
         };
         if thread.id != id {
-            return Err(error::make(ErrorCode::BindingConflict));
+            return Err(
+                kaleidoscope_contract::errors::CONV_CONTEXT_THREAD_BINDING_CONFLICT(
+                    &self.workspace.name,
+                ),
+            );
         }
         Ok(Some(thread))
     }
@@ -323,12 +363,12 @@ fn required_string_allow_empty(
     v.get(key)
         .and_then(Value::as_str)
         .map(str::to_string)
-        .ok_or_else(|| error::make(ErrorCode::InvalidRequest))
+        .ok_or_else(|| kaleidoscope_contract::errors::CONV_CONTEXT_VALUE_MISSING(key))
 }
 fn required_string(v: &BTreeMap<String, Value>, key: &str) -> Result<String, CoreError> {
     let value = required_string_allow_empty(v, key)?;
     if value.trim().is_empty() {
-        Err(error::make(ErrorCode::InvalidRequest))
+        Err(kaleidoscope_contract::errors::CONV_CONTEXT_VALUE_EMPTY(key))
     } else {
         Ok(value)
     }

@@ -1,14 +1,18 @@
 //! 접수 전 메시지를 기기에 보존하고 동일 요청 id로 영수증에 수렴한다.
 use crate::{
+    Inner,
     conversation_context::{Context, ContextSnapshot},
     conversation_http::Client,
-    error, share, storage, Inner,
+    share, storage,
 };
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use kaleidoscope_contract::{
-    conversation::{ConversationUpload, MessageReceipt, ReceiptStatus, SendMessageRequest},
-    CoreError, CoreEvent, CoreReply, ErrorCode, AGENT_ATTACHMENTS_MAX,
-    AGENT_ATTACHMENTS_TOTAL_MAX_BYTES, AGENT_ATTACHMENT_MAX_BYTES, CONVERSATION_MESSAGE_MAX_CHARS,
+    AGENT_ATTACHMENT_MAX_BYTES, AGENT_ATTACHMENTS_MAX, AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
+    CONVERSATION_MESSAGE_MAX_CHARS, CoreError, CoreEvent, CoreReply, ErrorCode,
+    conversation::{
+        ConversationError, ConversationErrorCode, ConversationUpload, MessageReceipt,
+        ReceiptStatus, SendMessageRequest,
+    },
 };
 use kaleidoscope_data::share::SentView;
 use serde::{Deserialize, Serialize};
@@ -16,7 +20,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc, Arc, Weak};
+use std::sync::{Arc, Weak, mpsc};
 use std::thread;
 use std::time::Duration;
 
@@ -49,21 +53,22 @@ pub(crate) fn send(
         || text.chars().count() > CONVERSATION_MESSAGE_MAX_CHARS
         || uploads.len() > AGENT_ATTACHMENTS_MAX
     {
-        return Err(error::make(ErrorCode::InvalidRequest));
+        return Err(kaleidoscope_contract::errors::CONV_SEND_REQUEST_INVALID());
     }
     let mut total = 0;
     for upload in &uploads {
         if upload.name.trim().is_empty() {
-            return Err(error::make(ErrorCode::InvalidRequest));
+            return Err(kaleidoscope_contract::errors::CONV_SEND_ATTACHMENT_NAME_EMPTY());
         }
         let bytes = STANDARD
             .decode(&upload.data_base64)
-            .map_err(|_| error::make(ErrorCode::InvalidRequest))?;
+            .map_err(|_| kaleidoscope_contract::errors::CONV_SEND_ATTACHMENT_ENCODING_INVALID())?;
         total += bytes.len() as u64;
-        if bytes.len() as u64 > AGENT_ATTACHMENT_MAX_BYTES
-            || total > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES
-        {
-            return Err(error::make(ErrorCode::InvalidRequest));
+        if bytes.len() as u64 > AGENT_ATTACHMENT_MAX_BYTES {
+            return Err(kaleidoscope_contract::errors::CONV_SEND_ATTACHMENT_TOO_LARGE());
+        }
+        if total > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES {
+            return Err(kaleidoscope_contract::errors::CONV_SEND_ATTACHMENTS_TOO_LARGE());
         }
     }
     let conversation = format!("{}\0{}", ctx.storage.app, ctx.workspace.id);
@@ -102,7 +107,7 @@ pub(crate) fn send(
         let mut active = inner.conversation_sends.lock().unwrap();
         let key = path.to_string_lossy().to_string();
         if active.contains(&key) {
-            return Err(error::make(ErrorCode::Conflict));
+            return Err(kaleidoscope_contract::errors::CONV_SEND_ALREADY_ACTIVE());
         }
         if path.exists() {
             let previous = read(&path)?;
@@ -110,7 +115,7 @@ pub(crate) fn send(
                 || previous.user_uploads != pending.user_uploads
                 || previous.failed_reason.is_some()
             {
-                return Err(error::make(ErrorCode::Conflict));
+                return Err(kaleidoscope_contract::errors::CONV_SEND_REQUEST_ID_CONFLICT());
             }
             pending = previous;
         } else {
@@ -121,22 +126,32 @@ pub(crate) fn send(
     let (tx, rx) = mpsc::sync_channel(1);
     let first_check = pending.post_started;
     spawn(Arc::downgrade(inner), path, pending, Some(tx), first_check);
-    rx.recv()
-        .unwrap_or_else(|_| Err(error::make(ErrorCode::Unavailable)))?;
+    rx.recv().unwrap_or_else(|_| {
+        Err(kaleidoscope_contract::errors::CONV_SEND_REPLY_LOST(
+            &ctx.workspace.name,
+        ))
+    })?;
     Ok(CoreReply::ConversationSend {})
 }
 
 fn path_for(data_dir: &Path, thread: &str, request: &str) -> Result<PathBuf, CoreError> {
     let dir = data_dir.join("conversation-pending");
-    std::fs::create_dir_all(&dir).map_err(|e| error::io_error(&e))?;
+    std::fs::create_dir_all(&dir).map_err(|e| {
+        kaleidoscope_contract::errors::CONV_SEND_PENDING_DIRECTORY_WRITE()
+            .and_details(vec![e.to_string()])
+    })?;
     Ok(dir.join(format!(
         "{:x}.json",
         Sha256::digest(format!("{thread}\0{request}").as_bytes())
     )))
 }
 fn read(path: &Path) -> Result<Pending, CoreError> {
-    let bytes = std::fs::read(path).map_err(|e| error::io_error(&e))?;
-    serde_json::from_slice(&bytes).map_err(|_| error::make(ErrorCode::Io))
+    let bytes = std::fs::read(path).map_err(|e| {
+        kaleidoscope_contract::errors::CONV_SEND_PENDING_FILE_READ()
+            .and_details(vec![e.to_string()])
+    })?;
+    serde_json::from_slice(&bytes)
+        .map_err(|_| kaleidoscope_contract::errors::CONV_SEND_PENDING_FILE_INVALID())
 }
 
 pub(crate) fn recover(inner: &Arc<Inner>) {
@@ -209,7 +224,11 @@ fn spawn(
                     let namespace = ctx.namespace(&owner)?;
                     ctx.thread(&owner, &namespace)?
                         .map(|thread| thread.id)
-                        .ok_or_else(|| error::make(ErrorCode::NotFound))
+                        .ok_or_else(|| {
+                            kaleidoscope_contract::errors::CONV_SEND_THREAD_NOT_FOUND(
+                                &pending.context.workspace.name,
+                            )
+                        })
                 });
                 match prepared {
                     Ok(thread) => {
@@ -226,7 +245,7 @@ fn spawn(
                 }
             }
             let client = match Client::restore(&owner, &pending.connection, &pending.base_path) {
-                Ok(client) => client,
+                Ok(client) => client.with_workspace_name(&pending.context.workspace.name),
                 Err(e) => {
                     finish(&owner, &path, &mut reply, Err(e), false);
                     return;
@@ -251,10 +270,11 @@ fn spawn(
                         pending.post_started = false;
                         let saved = storage::save_atomic(&path, &pending);
                         let outcome = saved.and_then(|_| {
-                            Err(error::with_message(
-                                ErrorCode::Server,
-                                "접수되지 않은 초안을 다시 보내 주세요.",
-                            ))
+                            Err(
+                                kaleidoscope_contract::errors::CONV_SEND_RECEIPT_NOT_ACCEPTED(
+                                    &pending.context.workspace.name,
+                                ),
+                            )
                         });
                         finish(&owner, &path, &mut reply, outcome, false);
                     }
@@ -281,13 +301,16 @@ fn spawn(
                 }
                 Ok(Some(receipt)) if receipt.status == ReceiptStatus::Failed => {
                     if let Some(owner) = inner.upgrade() {
-                        let message = receipt
-                            .error
-                            .map(|error| error.message)
-                            .unwrap_or_else(|| "대화 전송에 실패했습니다.".into());
-                        pending.failed_reason = Some(message.clone());
-                        let result = storage::save_atomic(&path, &pending)
-                            .and_then(|_| Err(error::with_message(ErrorCode::Server, &message)));
+                        let error = receipt.error.map_or_else(
+                            || {
+                                kaleidoscope_contract::errors::CONV_SEND_PROVIDER_ERROR_MISSING(
+                                    &pending.context.workspace.name,
+                                )
+                            },
+                            |error| provider_error(error, &pending.context.workspace.name),
+                        );
+                        pending.failed_reason = Some(error.message.clone());
+                        let result = storage::save_atomic(&path, &pending).and_then(|_| Err(error));
                         finish(&owner, &path, &mut reply, result, false);
                     }
                     return;
@@ -318,6 +341,36 @@ fn spawn(
             delay = (delay * 2).min(30);
         }
     });
+}
+
+pub(crate) fn provider_error(error: ConversationError, workspace: &str) -> CoreError {
+    let reason = if error.message.trim().is_empty() {
+        "제공자가 추가 설명을 보내지 않았습니다".to_string()
+    } else {
+        error.message
+    };
+    use ConversationErrorCode::*;
+    match error.code {
+        InvalidRequest => {
+            kaleidoscope_contract::errors::CONV_SEND_PROVIDER_INVALID_REQUEST(workspace, reason)
+        }
+        LoginRequired => {
+            kaleidoscope_contract::errors::CONV_SEND_PROVIDER_LOGIN_REQUIRED(workspace, reason)
+        }
+        Forbidden => kaleidoscope_contract::errors::CONV_SEND_PROVIDER_FORBIDDEN(workspace, reason),
+        NotFound => kaleidoscope_contract::errors::CONV_SEND_PROVIDER_NOT_FOUND(workspace, reason),
+        Conflict => kaleidoscope_contract::errors::CONV_SEND_PROVIDER_CONFLICT(workspace, reason),
+        AttachmentLimit => {
+            kaleidoscope_contract::errors::CONV_SEND_PROVIDER_ATTACHMENT_LIMIT(workspace, reason)
+        }
+        ModelUnavailable => {
+            kaleidoscope_contract::errors::CONV_SEND_PROVIDER_MODEL_UNAVAILABLE(workspace, reason)
+        }
+        Unavailable => {
+            kaleidoscope_contract::errors::CONV_SEND_PROVIDER_UNAVAILABLE(workspace, reason)
+        }
+        Pending => kaleidoscope_contract::errors::CONV_SEND_PROVIDER_PENDING(workspace, reason),
+    }
 }
 
 fn remove_failed(owner: &Inner, accepted: &Pending) {
@@ -382,5 +435,94 @@ fn finish(
         .remove(&path.to_string_lossy().to_string());
     if let Some(reply) = reply.take() {
         let _ = reply.send(result);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::provider_error;
+    use kaleidoscope_contract::{
+        ErrorCode,
+        conversation::{ConversationError, ConversationErrorCode},
+    };
+
+    #[test]
+    fn provider_error_codes_map_to_distinct_registered_conversation_errors() {
+        let cases = [
+            (
+                ConversationErrorCode::InvalidRequest,
+                "CONV_SEND_PROVIDER_INVALID_REQUEST",
+                ErrorCode::InvalidRequest,
+            ),
+            (
+                ConversationErrorCode::LoginRequired,
+                "CONV_SEND_PROVIDER_LOGIN_REQUIRED",
+                ErrorCode::LoginRequired,
+            ),
+            (
+                ConversationErrorCode::Forbidden,
+                "CONV_SEND_PROVIDER_FORBIDDEN",
+                ErrorCode::PermissionDenied,
+            ),
+            (
+                ConversationErrorCode::NotFound,
+                "CONV_SEND_PROVIDER_NOT_FOUND",
+                ErrorCode::NotFound,
+            ),
+            (
+                ConversationErrorCode::Conflict,
+                "CONV_SEND_PROVIDER_CONFLICT",
+                ErrorCode::Conflict,
+            ),
+            (
+                ConversationErrorCode::AttachmentLimit,
+                "CONV_SEND_PROVIDER_ATTACHMENT_LIMIT",
+                ErrorCode::InvalidRequest,
+            ),
+            (
+                ConversationErrorCode::ModelUnavailable,
+                "CONV_SEND_PROVIDER_MODEL_UNAVAILABLE",
+                ErrorCode::Unavailable,
+            ),
+            (
+                ConversationErrorCode::Unavailable,
+                "CONV_SEND_PROVIDER_UNAVAILABLE",
+                ErrorCode::Server,
+            ),
+            (
+                ConversationErrorCode::Pending,
+                "CONV_SEND_PROVIDER_PENDING",
+                ErrorCode::Server,
+            ),
+        ];
+
+        for (provider_code, expected_id, expected_class) in cases {
+            let error = provider_error(
+                ConversationError {
+                    code: provider_code,
+                    message: "선택한 모델을 사용할 수 없습니다".into(),
+                },
+                "작업",
+            );
+            assert_eq!(error.id.as_deref(), Some(expected_id));
+            assert_eq!(error.code, expected_class);
+            assert!(error.message.contains("작업"));
+            assert!(error.message.contains("선택한 모델을 사용할 수 없습니다"));
+        }
+    }
+
+    #[test]
+    fn provider_pending_and_request_timeout_have_separate_registered_errors() {
+        let provider = provider_error(
+            ConversationError {
+                code: ConversationErrorCode::Pending,
+                message: "아직 처리 중입니다".into(),
+            },
+            "작업",
+        );
+        let timeout = kaleidoscope_contract::errors::CONV_SEND_PENDING_TIMEOUT("작업");
+        assert_ne!(provider.id, timeout.id);
+        assert_eq!(provider.code, ErrorCode::Server);
+        assert_eq!(timeout.code, ErrorCode::Server);
     }
 }

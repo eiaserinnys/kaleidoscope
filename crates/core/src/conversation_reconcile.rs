@@ -1,18 +1,17 @@
 //! 저장 설정과 동기화된 작업을 대화 제공자의 현재 대화에 맞춘다.
 use std::collections::{BTreeMap, HashMap};
-use std::sync::{atomic::Ordering, Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic::Ordering};
 use std::thread;
 
 use kaleidoscope_contract::{
+    ConversationApplyStatus as Status, CoreError, CoreEvent, CoreReply, CoreRequest, LinkStatus,
     conversation::{PatchThreadRequest, ThreadInfoReply, ThreadListReply},
-    ConversationApplyStatus as Status, CoreError, CoreEvent, CoreReply, CoreRequest, ErrorCode,
-    LinkStatus,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::{app_commands, conversation_context::Context, error, storage, Inner};
+use crate::{Inner, app_commands, conversation_context::Context, storage};
 
 #[derive(Default)]
 pub(crate) struct Runtime {
@@ -63,16 +62,18 @@ pub(crate) fn schedule(inner: &Arc<Inner>) {
     state.running = true;
     drop(state);
     let inner = Arc::clone(inner);
-    thread::spawn(move || loop {
-        {
-            let mut state = inner.conversation_reconcile.state.lock().unwrap();
-            if !state.dirty {
-                state.running = false;
-                return;
+    thread::spawn(move || {
+        loop {
+            {
+                let mut state = inner.conversation_reconcile.state.lock().unwrap();
+                if !state.dirty {
+                    state.running = false;
+                    return;
+                }
+                state.dirty = false;
             }
-            state.dirty = false;
+            run(&inner);
         }
-        run(&inner);
     });
 }
 
@@ -159,7 +160,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             schedule(inner);
             Ok(CoreReply::ConversationApplyRetry {})
         }
-        _ => Err(error::make(ErrorCode::InvalidRequest)),
+        _ => Err(kaleidoscope_contract::errors::CONV_RECONCILE_REQUEST_INVALID()),
     }
 }
 
@@ -244,14 +245,22 @@ fn reconcile_app(
                 let id = binding
                     .get("thread_id")
                     .and_then(Value::as_str)
-                    .ok_or_else(|| error::make(ErrorCode::BindingConflict))?;
+                    .ok_or_else(|| {
+                        kaleidoscope_contract::errors::CONV_RECONCILE_BINDING_INVALID(
+                            &ctx.workspace.name,
+                        )
+                    })?;
                 if binding.get("namespace").and_then(Value::as_str) != Some(&namespace)
                     || binding.get("external_key").and_then(Value::as_str)
                         != Some(&ctx.workspace.id)
                     || binding.get("connection").and_then(Value::as_str)
                         != Some(&ctx.client.info.name)
                 {
-                    return Err(error::make(ErrorCode::BindingConflict));
+                    return Err(
+                        kaleidoscope_contract::errors::CONV_RECONCILE_BINDING_CONFLICT(
+                            &ctx.workspace.name,
+                        ),
+                    );
                 }
                 expected.insert(id.to_string());
             }
@@ -269,7 +278,7 @@ fn reconcile_app(
                     &query,
                     None::<&Value>,
                 )?
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(kaleidoscope_contract::errors::CONV_RECONCILE_THREAD_LIST_MISSING)?;
             for reference in page.refs {
                 if reference.archived {
                     continue;
@@ -281,9 +290,11 @@ fn reconcile_app(
                         &BTreeMap::new(),
                         None::<&Value>,
                     )?
-                    .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                    .ok_or_else(|| {
+                        kaleidoscope_contract::errors::CONV_RECONCILE_THREAD_MISSING(&reference.id)
+                    })?;
                 if info.thread.external.namespace != namespace {
-                    return Err(error::make(ErrorCode::BindingConflict));
+                    return Err(kaleidoscope_contract::errors::CONV_RECONCILE_NAMESPACE_CONFLICT());
                 }
                 let workspace = &info.thread.external.key;
                 if let Some(ctx) = contexts.iter().find(|ctx| &ctx.workspace.id == workspace) {
@@ -304,7 +315,11 @@ fn reconcile_app(
                         Some(&patch),
                     )?;
                     if reply.is_none() {
-                        return Err(error::make(ErrorCode::NotFound));
+                        return Err(
+                            kaleidoscope_contract::errors::CONV_RECONCILE_ARCHIVE_NOT_FOUND(
+                                &reference.id,
+                            ),
+                        );
                     }
                 }
             }
@@ -314,7 +329,13 @@ fn reconcile_app(
             }
         }
         if !expected.is_empty() {
-            return Err(error::make(ErrorCode::NotFound));
+            let workspace = contexts
+                .first()
+                .map(|ctx| ctx.workspace.name.as_str())
+                .unwrap_or("현재 작업");
+            return Err(
+                kaleidoscope_contract::errors::CONV_RECONCILE_BOUND_THREAD_MISSING(workspace),
+            );
         }
     }
     Ok(())
@@ -350,7 +371,9 @@ fn apply_thread(
         || binding.get("external_key").and_then(Value::as_str) != Some(&ctx.workspace.id)
         || binding.get("connection").and_then(Value::as_str) != Some(&ctx.client.info.name)
     {
-        return Err(error::make(ErrorCode::BindingConflict));
+        return Err(
+            kaleidoscope_contract::errors::CONV_RECONCILE_BINDING_CONFLICT(&ctx.workspace.name),
+        );
     }
     let p = &ctx.provider;
     let (values, revisions) = ctx.values_with_revisions(
@@ -362,12 +385,15 @@ fn apply_thread(
         ],
     )?;
     let template = |name: &str| -> Result<String, CoreError> {
-        let text = values
-            .get(name)
-            .and_then(Value::as_str)
-            .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
-        kaleidoscope_contract::validate::validate_workspace_template(text)
-            .map_err(|message| error::with_message(ErrorCode::InvalidRequest, message))?;
+        let text = values.get(name).and_then(Value::as_str).ok_or_else(|| {
+            kaleidoscope_contract::errors::CONV_RECONCILE_TEMPLATE_INVALID(
+                name,
+                "글자 값이 없습니다",
+            )
+        })?;
+        kaleidoscope_contract::validate::validate_workspace_template(text).map_err(|reason| {
+            kaleidoscope_contract::errors::CONV_RECONCILE_TEMPLATE_INVALID(name, reason)
+        })?;
         Ok(text
             .replace("{workspace.id}", &ctx.workspace.id)
             .replace("{workspace.name}", &ctx.workspace.name))
@@ -376,7 +402,7 @@ fn apply_thread(
     let instructions = template("instructions_template")?;
     let model_order: Vec<String> =
         serde_json::from_value(values.get("model_order").cloned().unwrap_or(Value::Null))
-            .map_err(|_| error::make(ErrorCode::InvalidRequest))?;
+            .map_err(|_| kaleidoscope_contract::errors::CONV_RECONCILE_MODEL_ORDER_INVALID())?;
     if model_order.is_empty()
         || model_order.iter().any(String::is_empty)
         || model_order
@@ -385,7 +411,7 @@ fn apply_thread(
             .len()
             != model_order.len()
     {
-        return Err(error::make(ErrorCode::InvalidRequest));
+        return Err(kaleidoscope_contract::errors::CONV_RECONCILE_MODEL_ORDER_INVALID());
     }
     let fingerprint = format!(
         "{:x}",
@@ -393,7 +419,7 @@ fn apply_thread(
             serde_json::to_vec(
                 &json!({"values": values, "revisions": revisions, "workspace": ctx.workspace.name})
             )
-            .map_err(|_| error::make(ErrorCode::InvalidRequest))?
+            .map_err(|_| kaleidoscope_contract::errors::CONV_RECONCILE_FINGERPRINT_INVALID())?
         )
     );
     let key = format!("{}\n{}", namespace, info.thread.id);
@@ -416,7 +442,9 @@ fn apply_thread(
             Some(&patch),
         )?;
         if reply.is_none() {
-            return Err(error::make(ErrorCode::NotFound));
+            return Err(
+                kaleidoscope_contract::errors::CONV_RECONCILE_PATCH_NOT_FOUND(&info.thread.id),
+            );
         }
         applied.threads.insert(
             key,

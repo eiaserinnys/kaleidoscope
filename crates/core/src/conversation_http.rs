@@ -6,28 +6,27 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::{
-    connections::{self, LoginStore},
-    error,
-    logins::Logins,
     Inner,
+    connections::{self, LoginStore},
+    logins::Logins,
 };
 use kaleidoscope_contract::{
+    CoreError,
     conversation::{ConversationErrorCode, ConversationErrorEnvelope},
     data::HttpMethod,
     registry::{ConnectionInfo, ConnectionKind},
     validate::valid_request_path,
-    CoreError, ErrorCode,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 const PENDING_RETRY_INTERVAL: Duration = Duration::from_secs(1);
-const PENDING_TIMEOUT_MESSAGE: &str = "아직 처리 중입니다. 잠시 뒤 다시 확인해 주세요";
 
 #[derive(Clone)]
 pub(crate) struct Client {
     pub info: ConnectionInfo,
+    pub workspace_name: String,
     pub base_path: String,
     pub(crate) logins: Arc<Logins>,
     pub(crate) profiler: crate::profiler::Profiler,
@@ -46,11 +45,16 @@ impl Client {
             .iter()
             .find(|item| item.name == connection)
             .cloned()
-            .ok_or_else(|| error::make(ErrorCode::Unavailable))?;
+            .ok_or_else(|| {
+                kaleidoscope_contract::errors::CONV_HTTP_PROVIDER_UNAVAILABLE(connection)
+            })?;
         if info.kind != ConnectionKind::Oauth || !info.writable {
-            return Err(error::make(ErrorCode::PermissionDenied));
+            return Err(
+                kaleidoscope_contract::errors::CONV_CONTEXT_CONNECTION_NOT_WRITABLE(connection),
+            );
         }
         Ok(Self {
+            workspace_name: connection.to_string(),
             info,
             base_path: base_path.into(),
             logins: inner.login_store.clone(),
@@ -71,9 +75,10 @@ impl Client {
             &format!("{base_path}/models"),
         )?;
         if info.kind != ConnectionKind::Oauth {
-            return Err(error::make(ErrorCode::InvalidRequest));
+            return Err(kaleidoscope_contract::errors::CONV_CONTEXT_PROVIDER_NOT_OAUTH());
         }
         Ok(Self {
+            workspace_name: info.name.clone(),
             info,
             base_path: base_path.to_string(),
             logins: inner.login_store.clone(),
@@ -81,11 +86,16 @@ impl Client {
         })
     }
 
+    pub fn with_workspace_name(mut self, workspace_name: &str) -> Self {
+        self.workspace_name = workspace_name.to_string();
+        self
+    }
+
     pub fn require_login(&self) -> Result<(), CoreError> {
         self.logins
             .token(&self.info.name)
             .map(|_| ())
-            .ok_or_else(|| error::make(ErrorCode::LoginRequired))
+            .ok_or_else(|| kaleidoscope_contract::errors::CONV_HTTP_LOGIN_REQUIRED(&self.info.name))
     }
 
     pub fn path(&self, segments: &[&str]) -> Result<String, CoreError> {
@@ -99,7 +109,7 @@ impl Client {
         if !valid_request_path(&path)
             || (!self.info.paths.is_empty() && !self.info.paths.iter().any(|p| path.starts_with(p)))
         {
-            return Err(error::make(ErrorCode::PermissionDenied));
+            return Err(kaleidoscope_contract::errors::CONV_HTTP_PATH_INVALID(path));
         }
         Ok(path)
     }
@@ -118,7 +128,8 @@ impl Client {
             path,
             query,
             body.map(|b| {
-                serde_json::to_value(b).map_err(|_| error::make(ErrorCode::InvalidRequest))
+                serde_json::to_value(b)
+                    .map_err(|_| kaleidoscope_contract::errors::CONV_HTTP_BODY_INVALID())
             })
             .transpose()?,
             false,
@@ -128,14 +139,18 @@ impl Client {
         let response = if status.as_u16() == 404 {
             response
         } else {
-            Self::status(response)?
+            self.status(response)?
         };
-        let body = response.bytes().map_err(server)?;
+        let body = response
+            .bytes()
+            .map_err(|error| self.response_read_failed(error))?;
         self.record_network(&target, status.as_u16(), body.len(), started);
         if status.as_u16() == 404 {
             return Ok(None);
         }
-        serde_json::from_slice(&body).map(Some).map_err(server)
+        serde_json::from_slice(&body)
+            .map(Some)
+            .map_err(|error| self.response_invalid(error))
     }
 
     /// 제공자는 오래 걸리는 일에 504 `pending`으로 답하고 일을 뒤에서 계속한다.
@@ -149,7 +164,8 @@ impl Client {
     ) -> Result<Option<T>, CoreError> {
         let body = body
             .map(|body| {
-                serde_json::to_value(body).map_err(|_| error::make(ErrorCode::InvalidRequest))
+                serde_json::to_value(body)
+                    .map_err(|_| kaleidoscope_contract::errors::CONV_HTTP_BODY_INVALID())
             })
             .transpose()?;
         let target = self.network_target(&method, path);
@@ -159,41 +175,46 @@ impl Client {
             let response = self.send(method.clone(), path, query, body.clone(), false, None)?;
             let status = response.status();
             if status.as_u16() == 504 {
-                let bytes = response.bytes().map_err(server)?;
+                let bytes = response
+                    .bytes()
+                    .map_err(|error| self.response_read_failed(error))?;
                 self.record_network(&target, 504, bytes.len(), attempt);
                 if matches!(
                     serde_json::from_slice::<ConversationErrorEnvelope>(&bytes),
                     Ok(envelope) if envelope.error.code == ConversationErrorCode::Pending
                 ) {
                     if started.elapsed() >= REQUEST_TIMEOUT {
-                        return Err(error::with_message(
-                            ErrorCode::Server,
-                            PENDING_TIMEOUT_MESSAGE,
+                        return Err(kaleidoscope_contract::errors::CONV_SEND_PENDING_TIMEOUT(
+                            &self.workspace_name,
                         ));
                     }
                     thread::sleep(PENDING_RETRY_INTERVAL);
                     continue;
                 }
-                return Err(error::make(ErrorCode::Server));
+                return Err(self.provider_error_or_status(&bytes, 504));
             }
             let response = if status.as_u16() == 404 {
                 response
             } else {
-                Self::status(response)?
+                self.status(response)?
             };
-            let bytes = response.bytes().map_err(server)?;
+            let bytes = response
+                .bytes()
+                .map_err(|error| self.response_read_failed(error))?;
             self.record_network(&target, status.as_u16(), bytes.len(), attempt);
             if status.as_u16() == 404 {
                 return Ok(None);
             }
-            return serde_json::from_slice(&bytes).map(Some).map_err(server);
+            return serde_json::from_slice(&bytes)
+                .map(Some)
+                .map_err(|error| self.response_invalid(error));
         }
     }
 
     pub fn bytes(&self, path: &str) -> Result<(String, String, Vec<u8>), CoreError> {
         let target = self.network_target(&reqwest::Method::GET, path);
         let started = Instant::now();
-        let mut response = Self::status(self.send(
+        let mut response = self.status(self.send(
             reqwest::Method::GET,
             path,
             &BTreeMap::new(),
@@ -236,10 +257,14 @@ impl Client {
         (&mut response)
             .take(kaleidoscope_contract::AGENT_ATTACHMENT_MAX_BYTES + 1)
             .read_to_end(&mut bytes)
-            .map_err(server)?;
+            .map_err(|error| {
+                let host = self.host();
+                kaleidoscope_contract::errors::CONV_HTTP_RESPONSE_READ_FAILED(&host)
+                    .and_details(vec![format!("호스트: {host}"), error.to_string()])
+            })?;
         self.record_network(&target, status, bytes.len(), started);
         if bytes.len() as u64 > kaleidoscope_contract::AGENT_ATTACHMENT_MAX_BYTES {
-            return Err(error::make(ErrorCode::InvalidRequest));
+            return Err(kaleidoscope_contract::errors::CONV_HTTP_ATTACHMENT_TOO_LARGE());
         }
         Ok((name, mime, bytes))
     }
@@ -285,9 +310,13 @@ impl Client {
     ) -> Result<reqwest::blocking::Response, CoreError> {
         if !valid_request_path(path)
             || (!self.info.paths.is_empty() && !self.info.paths.iter().any(|p| path.starts_with(p)))
-            || (method != reqwest::Method::GET && !self.info.writable)
         {
-            return Err(error::make(ErrorCode::PermissionDenied));
+            return Err(kaleidoscope_contract::errors::CONV_HTTP_PATH_INVALID(path));
+        }
+        if method != reqwest::Method::GET && !self.info.writable {
+            return Err(kaleidoscope_contract::errors::CONV_HTTP_PERMISSION_DENIED(
+                &self.info.name,
+            ));
         }
         let client = crate::http_client::shared()?;
         let send = |token: &str| {
@@ -304,12 +333,11 @@ impl Client {
             if let Some(cursor) = cursor {
                 request = request.header("Last-Event-ID", cursor);
             }
-            request.send().map_err(server)
+            request.send().map_err(|error| self.request_failed(error))
         };
-        let token = self
-            .logins
-            .token(&self.info.name)
-            .ok_or_else(|| error::make(ErrorCode::LoginRequired))?;
+        let token = self.logins.token(&self.info.name).ok_or_else(|| {
+            kaleidoscope_contract::errors::CONV_HTTP_LOGIN_REQUIRED(&self.info.name)
+        })?;
         let reply = send(&token)?;
         if reply.status() != reqwest::StatusCode::UNAUTHORIZED {
             return Ok(reply);
@@ -317,33 +345,183 @@ impl Client {
         let refreshed = self
             .logins
             .refresh(&self.info.name, &token)
-            .ok_or_else(|| error::make(ErrorCode::LoginRequired))?;
+            .ok_or_else(|| {
+                kaleidoscope_contract::errors::CONV_HTTP_LOGIN_REQUIRED(&self.info.name)
+            })?;
         let reply = send(&refreshed)?;
         if reply.status() == reqwest::StatusCode::UNAUTHORIZED {
             self.logins.invalidate(&self.info.name, &refreshed);
-            return Err(error::make(ErrorCode::LoginRequired));
+            return Err(kaleidoscope_contract::errors::CONV_HTTP_LOGIN_REQUIRED(
+                &self.info.name,
+            ));
         }
         Ok(reply)
     }
 
-    pub fn status(
+    fn status(
+        &self,
         reply: reqwest::blocking::Response,
     ) -> Result<reqwest::blocking::Response, CoreError> {
         if reply.status().is_success() {
             return Ok(reply);
         }
-        let code = match reply.status().as_u16() {
-            401 => ErrorCode::LoginRequired,
-            403 => ErrorCode::PermissionDenied,
-            404 => ErrorCode::NotFound,
-            409 => ErrorCode::Conflict,
-            400 | 413 | 422 => ErrorCode::InvalidRequest,
-            _ => ErrorCode::Server,
+        let status = reply.status().as_u16();
+        let body = reply
+            .bytes()
+            .map_err(|error| self.response_read_failed(error))?;
+        Err(self.provider_error_or_status(&body, status))
+    }
+
+    fn host(&self) -> String {
+        url::Url::parse(&self.info.base_url)
+            .ok()
+            .and_then(|url| {
+                let host = url.host_str()?;
+                Some(match url.port() {
+                    Some(port) => format!("{host}:{port}"),
+                    None => host.to_string(),
+                })
+            })
+            .unwrap_or_else(|| "대화 제공자".into())
+    }
+
+    fn request_failed(&self, error: reqwest::Error) -> CoreError {
+        let host = self.host();
+        let reason = error.without_url().to_string();
+        kaleidoscope_contract::errors::CONV_HTTP_REQUEST_FAILED(&host)
+            .and_details(vec![format!("호스트: {host}"), reason])
+    }
+
+    fn response_read_failed(&self, error: reqwest::Error) -> CoreError {
+        let host = self.host();
+        let reason = error.without_url().to_string();
+        kaleidoscope_contract::errors::CONV_HTTP_RESPONSE_READ_FAILED(&host)
+            .and_details(vec![format!("호스트: {host}"), reason])
+    }
+
+    fn response_invalid(&self, error: serde_json::Error) -> CoreError {
+        kaleidoscope_contract::errors::CONV_HTTP_RESPONSE_INVALID(
+            &self.info.name,
+            error.to_string(),
+        )
+    }
+
+    fn provider_error_or_status(&self, body: &[u8], status: u16) -> CoreError {
+        if let Ok(envelope) = serde_json::from_slice::<ConversationErrorEnvelope>(body) {
+            return crate::conversation_send::provider_error(envelope.error, &self.workspace_name)
+                .and_details(vec![
+                    format!("HTTP 상태: {status}"),
+                    format!("호스트: {}", self.host()),
+                ]);
+        }
+        let error = match status {
+            401 => kaleidoscope_contract::errors::CONV_HTTP_STATUS_LOGIN_REQUIRED(&self.info.name),
+            403 => kaleidoscope_contract::errors::CONV_HTTP_STATUS_FORBIDDEN(&self.info.name),
+            404 => kaleidoscope_contract::errors::CONV_HTTP_STATUS_NOT_FOUND(&self.info.name),
+            409 => kaleidoscope_contract::errors::CONV_HTTP_STATUS_CONFLICT(&self.info.name),
+            400 | 413 | 422 => {
+                kaleidoscope_contract::errors::CONV_HTTP_STATUS_INVALID_REQUEST(&self.info.name)
+            }
+            _ => kaleidoscope_contract::errors::CONV_HTTP_STATUS_SERVER(&self.info.name),
         };
-        Err(error::make(code))
+        error.and_details(vec![
+            format!("HTTP 상태: {status}"),
+            format!("호스트: {}", self.host()),
+        ])
     }
 }
 
-fn server(error: impl std::fmt::Display) -> CoreError {
-    error::with_message(ErrorCode::Server, &error.to_string())
+#[cfg(test)]
+mod tests {
+    use super::Client;
+    use crate::{logins::LoginEntry, profiler::Profiler};
+    use kaleidoscope_contract::registry::{ConnectionInfo, ConnectionKind};
+    use std::{collections::BTreeMap, net::TcpListener, sync::Arc};
+
+    #[test]
+    fn failed_request_does_not_expose_query_keys_or_tokens() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        drop(listener);
+        let temp = tempfile::tempdir().unwrap();
+        let logins = Arc::new(crate::logins::Logins::open(temp.path()).unwrap());
+        logins
+            .store(
+                "provider",
+                LoginEntry {
+                    issuer: format!("http://{address}"),
+                    client_id: None,
+                    redirect_port: None,
+                    access_token: Some("bearer-token-secret".into()),
+                    refresh_token: None,
+                    expires_at: None,
+                },
+            )
+            .unwrap();
+        let client = Client {
+            info: ConnectionInfo {
+                name: "provider".into(),
+                kind: ConnectionKind::Oauth,
+                base_url: format!("http://{address}"),
+                writable: true,
+                paths: vec![],
+                issuer: None,
+                scopes: None,
+                resource: None,
+            },
+            workspace_name: "provider".into(),
+            base_path: "/v1".into(),
+            logins,
+            profiler: Profiler::default(),
+        };
+        let query = BTreeMap::from([("api_key".into(), "query-secret".into())]);
+
+        let error = client
+            .json::<serde_json::Value>(
+                reqwest::Method::GET,
+                "/v1/models",
+                &query,
+                None::<&serde_json::Value>,
+            )
+            .unwrap_err();
+
+        let output = format!("{} {:?}", error.message, error.details);
+        assert_eq!(error.id.as_deref(), Some("CONV_HTTP_REQUEST_FAILED"));
+        assert!(output.contains(&address.to_string()));
+        assert!(!output.contains("api_key"));
+        assert!(!output.contains("query-secret"));
+        assert!(!output.contains("bearer-token-secret"));
+    }
+
+    #[test]
+    fn provider_error_uses_the_workspace_name_in_its_message() {
+        let temp = tempfile::tempdir().unwrap();
+        let logins = Arc::new(crate::logins::Logins::open(temp.path()).unwrap());
+        let client = Client {
+            info: ConnectionInfo {
+                name: "provider".into(),
+                kind: ConnectionKind::Oauth,
+                base_url: "https://provider.example".into(),
+                writable: true,
+                paths: vec![],
+                issuer: None,
+                scopes: None,
+                resource: None,
+            },
+            workspace_name: "kaleidoscope".into(),
+            base_path: "/v1".into(),
+            logins,
+            profiler: Profiler::default(),
+        };
+        let body = serde_json::json!({
+            "error": {"code": "unavailable", "message": "시험용 제공자 오류"}
+        });
+
+        let error = client.provider_error_or_status(&serde_json::to_vec(&body).unwrap(), 503);
+
+        assert_eq!(error.id.as_deref(), Some("CONV_SEND_PROVIDER_UNAVAILABLE"));
+        assert!(error.message.contains("작업 kaleidoscope"));
+        assert!(error.message.contains("시험용 제공자 오류"));
+        assert!(!error.message.contains("provider"));
+    }
 }

@@ -1,14 +1,14 @@
-use super::{required_string, required_string_allow_empty, same_model_group, Context};
-use crate::{app_storage, error, Inner};
+use super::{Context, required_string, required_string_allow_empty, same_model_group};
+use crate::{Inner, app_storage};
 use kaleidoscope_contract::{
+    CoreError, ErrorCode,
     app_storage::{ExpectedRevision, StorageWriteRequest},
     conversation::{
         ConversationThread, EnsureThreadReply, EnsureThreadRequest, ExecutionThreadRequest,
         ThreadByKeyReply,
     },
-    CoreError, ErrorCode,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -32,7 +32,9 @@ impl Context {
                 &self.query(namespace),
                 Some(&request),
             )?
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(|| {
+                kaleidoscope_contract::errors::CONV_SELECTION_CREATE_NOT_FOUND(&self.workspace.name)
+            })?;
         let thread = reply.thread;
         let content = json!({"connection":self.client.info.name,"namespace":namespace,"external_key":self.workspace.id,"thread_id":thread.id,"created_at":thread.created_at});
         let write = StorageWriteRequest {
@@ -56,7 +58,11 @@ impl Context {
                 if existing.content.get("thread_id").and_then(Value::as_str) == Some(&thread.id) {
                     Ok(thread)
                 } else {
-                    Err(error::make(ErrorCode::BindingConflict))
+                    Err(
+                        kaleidoscope_contract::errors::CONV_SELECTION_BINDING_CONFLICT(
+                            &self.workspace.name,
+                        ),
+                    )
                 }
             }
             Err(e) => Err(app_storage::map_error(inner, &self.storage.link, e)),
@@ -84,18 +90,21 @@ impl Context {
         let v = self.values(inner, &bindings)?;
         let models: Vec<String> =
             serde_json::from_value(v.get("model_order").cloned().unwrap_or_default())
-                .map_err(|_| error::make(ErrorCode::InvalidRequest))?;
+                .map_err(|_| kaleidoscope_contract::errors::CONV_SELECTION_MODEL_ORDER_INVALID())?;
         if model.is_empty()
             || models.is_empty()
             || models.iter().any(String::is_empty)
             || models.iter().collect::<BTreeSet<_>>().len() != models.len()
         {
-            return Err(error::make(ErrorCode::InvalidRequest));
+            return Err(kaleidoscope_contract::errors::CONV_SELECTION_MODEL_ORDER_INVALID());
         }
         let template = |name| -> Result<String, CoreError> {
             let template = required_string_allow_empty(&v, name)?;
-            kaleidoscope_contract::validate::validate_workspace_template(&template)
-                .map_err(|message| error::with_message(ErrorCode::InvalidRequest, message))?;
+            kaleidoscope_contract::validate::validate_workspace_template(&template).map_err(
+                |reason| {
+                    kaleidoscope_contract::errors::CONV_SELECTION_TEMPLATE_INVALID(name, reason)
+                },
+            )?;
             Ok(template
                 .replace("{workspace.id}", &self.workspace.id)
                 .replace("{workspace.name}", &self.workspace.name))
@@ -106,7 +115,9 @@ impl Context {
             model_order: models,
             profile: match profile {
                 Some(profile) if !profile.trim().is_empty() => profile.into(),
-                Some(_) => return Err(error::make(ErrorCode::InvalidRequest)),
+                Some(_) => {
+                    return Err(kaleidoscope_contract::errors::CONV_SELECTION_PROFILE_EMPTY());
+                }
                 None => required_string(&v, "profile")?,
             },
             collection: required_string(&v, "collection")?,
@@ -122,9 +133,9 @@ impl Context {
         requested_profile: Option<&str>,
         requested_model: Option<&str>,
     ) -> Result<(ConversationThread, Vec<String>), CoreError> {
-        let thread = self
-            .thread(inner, namespace)?
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        let thread = self.thread(inner, namespace)?.ok_or_else(|| {
+            kaleidoscope_contract::errors::CONV_SELECTION_THREAD_NOT_FOUND(&self.workspace.name)
+        })?;
         let configured_profile = if requested_profile.is_none() && thread.profile.is_none() {
             let values = self.values(inner, &[("profile", &self.provider.profile)])?;
             Some(required_string(&values, "profile")?)
@@ -170,16 +181,22 @@ impl Context {
                 Some(&patch),
             )?;
             let updated = updated
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?
+                .ok_or_else(|| {
+                    kaleidoscope_contract::errors::CONV_SELECTION_MODEL_NOT_FOUND(model)
+                })?
                 .thread;
             if updated.id != thread.id {
-                return Err(error::make(ErrorCode::BindingConflict));
+                return Err(
+                    kaleidoscope_contract::errors::CONV_SELECTION_THREAD_MISMATCH(
+                        &self.workspace.name,
+                    ),
+                );
             }
             return Ok((updated, Vec::new()));
         }
 
-        let target_profile =
-            target_profile.ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+        let target_profile = target_profile
+            .ok_or_else(|| kaleidoscope_contract::errors::CONV_SELECTION_PROFILE_MISSING())?;
         let ensure = self.ensure_request(inner, model, Some(target_profile))?;
         let execution = ExecutionThreadRequest {
             expected_execution_id: thread
@@ -202,9 +219,13 @@ impl Context {
                 &BTreeMap::new(),
                 Some(&execution),
             )?
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(|| {
+                kaleidoscope_contract::errors::CONV_SELECTION_THREAD_NOT_FOUND(&self.workspace.name)
+            })?;
         if reply.thread.id != thread.id {
-            return Err(error::make(ErrorCode::BindingConflict));
+            return Err(
+                kaleidoscope_contract::errors::CONV_SELECTION_THREAD_MISMATCH(&self.workspace.name),
+            );
         }
         Ok((reply.thread, reply.notices))
     }
