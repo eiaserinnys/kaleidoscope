@@ -8,8 +8,11 @@ export function Target({ selection, choose }: { selection: FrameSelection; choos
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const close = useCallback(() => setAnchor(null), []);
   const ancestors = selection.ancestors ?? [];
-  const shown = ancestors.length > 2 ? ancestors.slice(-2) : ancestors;
   const quote = selection.anchor.kind === "text";
+  const name = selection.name ?? selection.anchor.tag;
+  const crumbName = name.includes("#") ? name : name.split(".").slice(0, 2).join(".");
+  const path = quote ? [...ancestors, { n: selection.n, label: crumbName }] : ancestors;
+  const shown = path.length > 2 ? path.slice(-2) : path;
   return <div className="ks-html-target">
     <nav className="ks-html-crumbs" aria-label="부모 경로">
       {ancestors.length > 2 ? <><button type="button" className="ks-html-crumb" aria-label="전체 경로" onClick={(event) => setAnchor(event.currentTarget)}>…</button><span aria-hidden="true">›</span></> : null}
