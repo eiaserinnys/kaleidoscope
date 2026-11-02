@@ -5,6 +5,7 @@ import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
+import { EmptyState } from "../components/primitives";
 import { grantFor, makeTestSeed } from "./fixtures";
 
 function setup(block: Block) {
@@ -16,6 +17,15 @@ function setup(block: Block) {
   return { ...result, transport };
 }
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it("빈 상태는 아이콘이 없으면 아이콘 칸을 두지 않고 전달된 아이콘은 표시한다", () => {
+  const view = render(<EmptyState text="알림" action={<button>다시 받기</button>} />);
+  expect(view.container.querySelector(".ks-empty-state-icon")).toBeNull();
+  expect(screen.getByText("알림")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "다시 받기" })).toBeTruthy();
+  view.rerender(<EmptyState icon={<span>그림</span>} text="알림" />);
+  expect(view.container.querySelector(".ks-empty-state-icon")?.textContent).toBe("그림");
+});
 
 it("코드 편집은 CRLF를 지켜 자동 저장하고 외부 변경 충돌을 알린다", async () => {
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "readwrite", label: "문서" }], state: {}, ui: { type: "code", file: { permission: "docs", path: "settings.json" } } };
