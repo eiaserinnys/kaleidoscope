@@ -15,7 +15,7 @@ import {
   flushEditors,
   flushSandboxes,
   toCoreError,
-  useShellSnapshot,
+  useShellSelector,
   type CoreError,
   type CoreReply,
   type CoreRequest,
@@ -35,7 +35,7 @@ type OpenMenu =
   | { kind: "link"; anchor: HTMLElement };
 
 export function Shell({ store }: { store: ShellStore }) {
-  const snapshot = useShellSnapshot(store);
+  const snapshot = useShellSelector(store, (value) => value, sameShellChrome);
   const fileInput = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [notice, setNotice] = useState<CoreError | null>(null);
@@ -143,12 +143,16 @@ export function Shell({ store }: { store: ShellStore }) {
     const appEntries = (apps: typeof builtinApps) => apps.map((app) => ({
         id: `app-${app.id}`,
         label: app.name,
-        onSelect: () => void runCommand({
-          op: "window.open",
-          desktop_id: activeDesktop.id,
-          app_id: app.id,
-          rect: newWindowRect(activeDesktop.id, snapshot),
-        }),
+        onSelect: () => {
+          const latest = store.getSnapshot();
+          if (!latest) return;
+          void runCommand({
+            op: "window.open",
+            desktop_id: activeDesktop.id,
+            app_id: app.id,
+            rect: newWindowRect(activeDesktop.id, latest),
+          });
+        },
       }));
     const entries: MenuEntry[] = [
       ...(builtinApps.length ? [{ id: "app-group-builtin", type: "heading" as const, label: "기본앱" }, ...appEntries(builtinApps)] : []),
@@ -369,7 +373,6 @@ export function Shell({ store }: { store: ShellStore }) {
         onCall={runCommand}
         onOpenApps={openAppMenu}
         getNewWindowRect={newWindowRect}
-        snapshot={snapshot}
         store={store}
       />
 
@@ -396,6 +399,22 @@ export function Shell({ store }: { store: ShellStore }) {
       ) : null}
     </main>
   );
+}
+
+function sameShellChrome(left: ShellSnapshot | null, right: ShellSnapshot | null): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.link === right.link
+    && left.update === right.update
+    && left.shared.workspaces === right.shared.workspaces
+    && left.shared.desktops === right.shared.desktops
+    && left.shared.apps === right.shared.apps
+    && left.shared.app_versions === right.shared.app_versions
+    && left.device.active_workspace_id === right.device.active_workspace_id
+    && left.device.active_desktop_ids === right.device.active_desktop_ids
+    && left.embedded_available === right.embedded_available
+    && left.last_transfer === right.last_transfer
+    && left.transfer_error === right.transfer_error;
 }
 
 function selectWorkspace(snapshot: ShellSnapshot): Workspace | undefined {

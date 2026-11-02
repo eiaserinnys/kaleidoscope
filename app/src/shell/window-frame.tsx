@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { IconButton, Maximize2, Minus, Minimize2, Notice, ScreenShare, Settings, X, useShareView, type ShellStore, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
 
@@ -36,7 +36,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
   const [settingsVisited, setSettingsVisited] = useState(false);
   const [settingsProblem, setSettingsProblem] = useState<string | null>(null);
   const settingsButton = useRef<HTMLSpanElement>(null);
-  const closeSettings = () => { setSettingsOpen(false); requestAnimationFrame(() => settingsButton.current?.querySelector<HTMLButtonElement>("button")?.focus()); };
+  const closeSettings = useCallback(() => { setSettingsOpen(false); requestAnimationFrame(() => settingsButton.current?.querySelector<HTMLButtonElement>("button")?.focus()); }, []);
   const isMaximized = Boolean(appWindow.maximized);
   const isMinimized = Boolean(appWindow.minimized);
   useShareView({ windowId: appWindow.id, root: contentRef, enabled: sharing && !settingsOpen && !isMinimized, store });
