@@ -20,14 +20,15 @@ textarea,
 .ks-metric-value,
 .ks-notice-message,
 .ks-error-id,
-.ks-html-comment,
+.ks-html-comment-text,
+.ks-html-reply p,
+.ks-html-target-name,
 .ks-empty-state-text,
 .ks-inline-error,
 .ks-unknown-block,
 .ks-agent-session-command,
 .ks-agent-session-env,
-.ks-metric-subvalue,
-.ks-html-selector {
+.ks-metric-subvalue {
   user-select: text;
 }
 

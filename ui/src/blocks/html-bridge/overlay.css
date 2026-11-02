@@ -1,0 +1,13 @@
+/* 프레임 안 겹침 층. closed shadow root의 <style>에 그대로 넣는다.
+   값은 htmlViewSource가 프레임 :root에 넘긴 --ks-* 토큰이다. all: initial은 사용자 지정 속성을 지우지 않는다.
+   본문 색이 무엇이든 읽히도록 선은 늘 accent와 accent-contrast 두 겹으로 그린다. */
+:host { all: initial; display: block; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; }
+.ks-o-box { position: fixed; box-sizing: border-box; pointer-events: none; }
+.ks-o-box.is-hover { border: var(--ks-line-width) solid var(--ks-color-accent); box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-accent-contrast), inset 0 0 0 var(--ks-line-width) var(--ks-color-accent-contrast); }
+.ks-o-box.is-selected { border: var(--ks-focus-width) solid var(--ks-color-accent); box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-accent-contrast), inset 0 0 0 var(--ks-line-width) var(--ks-color-accent-contrast); }
+.ks-o-tag { position: fixed; box-sizing: border-box; max-width: calc(100vw - 2 * var(--ks-space-1)); overflow: hidden; border-radius: var(--ks-radius-small) var(--ks-radius-small) 0 0; padding-inline: var(--ks-space-1); background: var(--ks-color-accent); box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-accent-contrast); color: var(--ks-color-accent-contrast); font-family: var(--ks-font-family); font-size: var(--ks-type-meta); font-weight: 600; line-height: var(--ks-line-body); pointer-events: none; text-overflow: ellipsis; white-space: nowrap; }
+.ks-o-tag.is-hover { background: var(--ks-color-accent-contrast); box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-accent); color: var(--ks-color-accent); font-weight: 400; }
+.ks-o-tag.is-inside { border-radius: 0 0 var(--ks-radius-small) 0; }
+.ks-o-pin { position: fixed; box-sizing: border-box; display: grid; width: var(--ks-space-5); height: var(--ks-space-5); place-items: center; border: 0; border-radius: var(--ks-radius-large) var(--ks-radius-large) var(--ks-radius-large) 0; padding: 0; background: var(--ks-color-accent); box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-accent-contrast); color: var(--ks-color-accent-contrast); cursor: pointer; font-family: var(--ks-font-family); font-size: var(--ks-type-meta); font-variant-numeric: tabular-nums; font-weight: 600; line-height: 1; pointer-events: auto; }
+.ks-o-pin:focus-visible, .ks-o-pin.is-active { outline: var(--ks-focus-width) solid var(--ks-color-accent); outline-offset: var(--ks-line-width); }
+.ks-o-pin.is-moved::after { position: absolute; inset-block-start: 0; inset-inline-end: 0; width: var(--ks-space-2); height: var(--ks-space-2); border-radius: 50%; background: var(--ks-color-warning); box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-accent-contrast); content: ""; }

@@ -258,7 +258,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
         ("slackbot", 2),
         ("explorer", 3),
         ("md-editor", 3),
-        ("html-report", 1),
+        ("html-report", 2),
         ("web-browser", 1),
         ("calculator", 2),
         ("weather", 1),

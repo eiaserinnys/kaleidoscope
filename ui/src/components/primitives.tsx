@@ -8,6 +8,7 @@ export interface ButtonProps {
   disabled?: boolean;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   type?: "button" | "submit";
+  title?: string;
   "aria-pressed"?: boolean;
   "aria-expanded"?: boolean;
   "aria-label"?: string;
@@ -22,6 +23,7 @@ export function Button({
   disabled = false,
   onClick,
   type = "button",
+  title,
   "aria-pressed": pressed,
   "aria-expanded": expanded,
   "aria-label": label,
@@ -39,6 +41,7 @@ export function Button({
       aria-describedby={describedBy}
       onClick={onClick}
       type={type}
+      title={title}
     >
       {children}
     </button>

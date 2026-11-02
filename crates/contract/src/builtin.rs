@@ -75,10 +75,10 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "html-report",
         name: "시안과 리포트",
-        version: 1,
-        updated_at: "2026-10-31T00:00:00Z",
+        version: 2,
+        updated_at: "2026-11-02T00:00:00Z",
         blocks: 10,
-        modules: &[("storage", 1)],
+        modules: &[("storage", 3)],
         assets: &[],
     },
     BuiltinIdentity {

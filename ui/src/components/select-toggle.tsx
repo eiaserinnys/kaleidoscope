@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import type { SelectOption } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { ChevronDown, Plus } from "./icons";
@@ -31,6 +31,9 @@ type SelectBaseProps = {
   describedBy?: string;
   add?: boolean;
   disabled?: boolean;
+  className?: string;
+  prefix?: ReactNode;
+  suffix?: string;
 };
 
 type SelectProps = SelectBaseProps & (
@@ -38,7 +41,7 @@ type SelectProps = SelectBaseProps & (
   | { groups: SelectGroup[]; items?: never }
 );
 
-export function Select({ items, groups, value, onChange, placeholder = "", segmented = false, label, invalid, describedBy, add = false, disabled = false }: SelectProps) {
+export function Select({ items, groups, value, onChange, placeholder = "", segmented = false, label, invalid, describedBy, add = false, disabled = false, className, prefix, suffix }: SelectProps) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const close = useCallback(() => setAnchor(null), []);
   const choices = groups ? groups.flatMap((group) => group.options) : items ?? [];
@@ -64,8 +67,8 @@ export function Select({ items, groups, value, onChange, placeholder = "", segme
         checked: equalOption(value, optionValue(item)),
         onSelect: () => { onChange(optionValue(item)); anchor?.focus(); },
       }));
-  if (segmented) return <div className="ks-data-segmented">{(items ?? []).map((item, index) => <Button key={index} disabled={disabled} aria-pressed={equalOption(value, optionValue(item))} onClick={() => onChange(optionValue(item))}>{optionLabel(item)}</Button>)}</div>;
-  return <><Button aria-label={label} aria-invalid={invalid} aria-describedby={describedBy} disabled={disabled || choices.length === 0} onClick={(event) => setAnchor(event.currentTarget)}>{selected ? groups ? <><span className="ks-select-choice-label">{(selected as SelectChoice).label}</span>{selectedGroup?.name ? <span className="ks-select-group-label">{selectedGroup.name}</span> : null}</> : optionLabel(selected as SelectOption) : placeholder}{add ? <Plus size="inline" /> : <ChevronDown size="inline" />}</Button>{anchor && menuItems.length > 0 ? <Menu anchor={anchor} onClose={close} items={menuItems} /> : null}</>;
+  if (segmented) return <div className={`ks-data-segmented${className ? ` ${className}` : ""}`}>{(items ?? []).map((item, index) => <Button key={index} disabled={disabled} aria-pressed={equalOption(value, optionValue(item))} onClick={() => onChange(optionValue(item))}>{optionLabel(item)}</Button>)}</div>;
+  return <><Button className={className} aria-label={label} aria-invalid={invalid} aria-describedby={describedBy} disabled={disabled || choices.length === 0} onClick={(event) => setAnchor(event.currentTarget)}>{prefix}{selected ? groups ? <><span className="ks-select-choice-label">{(selected as SelectChoice).label}</span>{selectedGroup?.name ? <span className="ks-select-group-label">{selectedGroup.name}</span> : null}</> : optionLabel(selected as SelectOption) : placeholder}{suffix ? <span className="ks-select-group-label">{suffix}</span> : null}{add ? <Plus size="inline" /> : <ChevronDown size="inline" />}</Button>{anchor && menuItems.length > 0 ? <Menu anchor={anchor} onClose={close} items={menuItems} /> : null}</>;
 }
 
 export function Toggle({ checked, onChange, label, labelledBy, invalid, describedBy }: { checked: boolean; onChange: (value: boolean) => void; label?: string; labelledBy?: string; invalid?: boolean; describedBy?: string }) {

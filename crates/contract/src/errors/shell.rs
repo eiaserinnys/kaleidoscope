@@ -1,4 +1,11 @@
 error_catalog! { ENTRIES;
+    SHELL_THREAD_READ_INVALID(name) {
+        class: InvalidRequest,
+        place: "HTML 문서 커멘트 읽기",
+        cause: "thread.json을 JSON으로 읽을 수 없거나 커멘트 문서 구조가 올바르지 않다",
+        message: "문서 {name}의 thread.json 형식이 올바르지 않습니다. 파일을 고쳐 다시 저장하세요.",
+        fix: "thread.json 파일을 고쳐 다시 저장하세요"
+    }
     SHELL_CALL_UNEXPECTED_FAILURE(reason) {
         class: Io,
         place: "쉘 코어 호출 응답 처리",

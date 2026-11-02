@@ -39,6 +39,29 @@ import {
   ScreenShare as ScreenShareIcon,
   X as XIcon,
   Video as VideoIcon,
+  Undo2 as Undo2Icon,
+  Redo2 as Redo2Icon,
+  MousePointer2 as MousePointer2Icon,
+  Eye as EyeIcon,
+  EyeOff as EyeOffIcon,
+  Check as CheckIcon,
+  Ellipsis as EllipsisIcon,
+  Copy as CopyIcon,
+  Trash2 as Trash2Icon,
+  Save as SaveIcon,
+  SlidersHorizontal as SlidersHorizontalIcon,
+  AlignLeft as AlignLeftIcon,
+  AlignCenter as AlignCenterIcon,
+  AlignRight as AlignRightIcon,
+  AlignJustify as AlignJustifyIcon,
+  AlignStartVertical as AlignStartVerticalIcon,
+  AlignCenterVertical as AlignCenterVerticalIcon,
+  AlignEndVertical as AlignEndVerticalIcon,
+  AlignHorizontalSpaceBetween as AlignHorizontalSpaceBetweenIcon,
+  AlignVerticalSpaceBetween as AlignVerticalSpaceBetweenIcon,
+  AlignStartHorizontal as AlignStartHorizontalIcon,
+  AlignCenterHorizontal as AlignCenterHorizontalIcon,
+  AlignEndHorizontal as AlignEndHorizontalIcon,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -111,6 +134,29 @@ export const ScreenShare = (props: IconProps) => renderIcon(ScreenShareIcon, pro
 export const X = (props: IconProps) => renderIcon(XIcon, props);
 export const Cloud = (props: IconProps) => renderIcon(CloudIcon, props);
 export const CloudOff = (props: IconProps) => renderIcon(CloudOffIcon, props);
+export const Undo2 = (props: IconProps) => renderIcon(Undo2Icon, props);
+export const Redo2 = (props: IconProps) => renderIcon(Redo2Icon, props);
+export const MousePointer2 = (props: IconProps) => renderIcon(MousePointer2Icon, props);
+export const Eye = (props: IconProps) => renderIcon(EyeIcon, props);
+export const EyeOff = (props: IconProps) => renderIcon(EyeOffIcon, props);
+export const Check = (props: IconProps) => renderIcon(CheckIcon, props);
+export const Ellipsis = (props: IconProps) => renderIcon(EllipsisIcon, props);
+export const Copy = (props: IconProps) => renderIcon(CopyIcon, props);
+export const Trash2 = (props: IconProps) => renderIcon(Trash2Icon, props);
+export const Save = (props: IconProps) => renderIcon(SaveIcon, props);
+export const SlidersHorizontal = (props: IconProps) => renderIcon(SlidersHorizontalIcon, props);
+export const AlignLeft = (props: IconProps) => renderIcon(AlignLeftIcon, props);
+export const AlignCenter = (props: IconProps) => renderIcon(AlignCenterIcon, props);
+export const AlignRight = (props: IconProps) => renderIcon(AlignRightIcon, props);
+export const AlignJustify = (props: IconProps) => renderIcon(AlignJustifyIcon, props);
+export const AlignStartVertical = (props: IconProps) => renderIcon(AlignStartVerticalIcon, props);
+export const AlignCenterVertical = (props: IconProps) => renderIcon(AlignCenterVerticalIcon, props);
+export const AlignEndVertical = (props: IconProps) => renderIcon(AlignEndVerticalIcon, props);
+export const AlignHorizontalSpaceBetween = (props: IconProps) => renderIcon(AlignHorizontalSpaceBetweenIcon, props);
+export const AlignVerticalSpaceBetween = (props: IconProps) => renderIcon(AlignVerticalSpaceBetweenIcon, props);
+export const AlignStartHorizontal = (props: IconProps) => renderIcon(AlignStartHorizontalIcon, props);
+export const AlignCenterHorizontal = (props: IconProps) => renderIcon(AlignCenterHorizontalIcon, props);
+export const AlignEndHorizontal = (props: IconProps) => renderIcon(AlignEndHorizontalIcon, props);
 export const PairingCloud = (props: IconProps) => renderIcon(
   CloudIcon,
   props,
