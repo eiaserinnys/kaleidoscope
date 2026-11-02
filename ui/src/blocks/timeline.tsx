@@ -144,24 +144,24 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     const start = Math.max(0, Math.min(seconds - length, edit.start + delta));
     dispatch({ ...edit, phase: "commit", start, end: start + length });
   };
-  const flushSeek = (event?: PointerEvent<HTMLElement>) => {
+  const flushSeek = () => {
     if (seekFrame.current !== null) cancelAnimationFrame(seekFrame.current);
     seekFrame.current = null;
-    const value = event ? seekValue(event) : pendingSeek.current;
+    const value = pendingSeek.current;
     pendingSeek.current = null;
-    if (value !== null && value !== undefined) serialSeek(value);
+    if (value !== null) serialSeek(value, { coalesce: true });
   };
   const seek = (event: PointerEvent<HTMLElement>, immediate = false) => {
     const value = seekValue(event);
     if (value === undefined || value === null) return;
-    if (immediate) { pendingSeek.current = value; flushSeek(); return; }
+    if (immediate) { flushSeek(); serialSeek(value, { coalesce: false }); return; }
     pendingSeek.current = value;
     if (seekFrame.current !== null) return;
     seekFrame.current = requestAnimationFrame(() => {
       seekFrame.current = null;
       const latest = pendingSeek.current;
       pendingSeek.current = null;
-      if (latest !== null) serialSeek(latest);
+      if (latest !== null) serialSeek(latest, { coalesce: true });
     });
   };
   useEffect(() => () => {
@@ -169,7 +169,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     seekFrame.current = null;
     const latest = pendingSeek.current;
     pendingSeek.current = null;
-    if (latest !== null) serialSeek(latest);
+    if (latest !== null) serialSeek(latest, { coalesce: true });
   }, [serialSeek]);
   if (duration.status !== "ready") return <DataState value={duration} />;
   if (tracks.status !== "ready") return <DataState value={tracks} />;

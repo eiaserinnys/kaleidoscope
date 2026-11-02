@@ -53,6 +53,7 @@ let frames: Map<number, FrameRequestCallback>;
 beforeEach(() => {
   runtime.calls.length = 0;
   runtime.act.mockClear();
+  runtime.act.mockImplementation((pointer: string, event: unknown) => { runtime.calls.push({ pointer, event }); return Promise.resolve(true); });
   runtime.bindings = {
     "/ui/value": 0,
     "/ui/duration": 10,
@@ -116,12 +117,12 @@ describe("slider and color change dispatch", () => {
 });
 
 describe("canvas pointer dispatch", () => {
-  it("waits for an in-flight move before applying pointer up", async () => {
+  it("keeps the last pending move before pointer up while a move is in flight", async () => {
     const block = { type: "canvas", surface: "surface", on_pointer: { set_state: "pointer" } } as Extract<Block, { type: "canvas" }>;
     let finishMove!: (success: boolean) => void;
     runtime.act.mockImplementation((_pointer: string, event: unknown) => {
       runtime.calls.push({ pointer: "/ui/on_pointer", event });
-      if ((event as { phase: string }).phase === "move") return new Promise<boolean>((resolve) => { finishMove = resolve; });
+      if (runtime.calls.length === 1) return new Promise<boolean>((resolve) => { finishMove = resolve; });
       return Promise.resolve(true);
     });
     const { container } = render(<CanvasBlock block={block} pointer="/ui" />);
@@ -133,15 +134,63 @@ describe("canvas pointer dispatch", () => {
     expect(runtime.calls).toHaveLength(1);
     expect((runtime.calls[0].event as { x: number }).x).toBe(10 / 320);
 
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 15, clientY: 20, buttons: 1 });
+    const nextFrame = [...frames.entries()].at(-1)!;
+    act(() => nextFrame[1](32));
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 20, clientY: 20, buttons: 1 });
     fireEvent.pointerUp(canvas, { pointerId: 1, clientX: 21, clientY: 20, buttons: 0 });
     expect(runtime.calls.map((call: { pointer: string; event: unknown }) => (call.event as { phase: string }).phase)).toEqual(["move"]);
     finishMove(true);
-    await waitFor(() => expect(runtime.calls.map((call: { pointer: string; event: unknown }) => (call.event as { phase: string }).phase)).toEqual(["move", "up"]));
+    await waitFor(() => expect(runtime.calls.map((call: { pointer: string; event: unknown }) => (call.event as { phase: string }).phase)).toEqual(["move", "move", "up"]));
+    expect((runtime.calls[1].event as { x: number }).x).toBe(20 / 320);
+  });
+
+  it("keeps a pending down before moves and up while another send is in flight", async () => {
+    const block = { type: "canvas", surface: "surface", on_pointer: { set_state: "pointer" } } as Extract<Block, { type: "canvas" }>;
+    let finishFirst!: (success: boolean) => void;
+    runtime.act.mockImplementation((_pointer: string, event: unknown) => {
+      runtime.calls.push({ pointer: "/ui/on_pointer", event });
+      return runtime.calls.length === 1 ? new Promise<boolean>((resolve) => { finishFirst = resolve; }) : Promise.resolve(true);
+    });
+    const { container } = render(<CanvasBlock block={block} pointer="/ui" />);
+    const canvas = container.querySelector(".ks-canvas")!;
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 1, clientY: 20 });
+    act(() => [...frames.entries()].at(-1)![1](16));
+    fireEvent.pointerDown(canvas, { pointerId: 1, clientX: 10, clientY: 20, buttons: 1 });
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 15, clientY: 20, buttons: 1 });
+    act(() => [...frames.entries()].at(-1)![1](32));
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 20, clientY: 20, buttons: 1 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, clientX: 21, clientY: 20 });
+
+    finishFirst(true);
+    await waitFor(() => expect(runtime.calls.map((call: { event: unknown }) => (call.event as { phase: string }).phase)).toEqual(["move", "down", "move", "up"]));
+    expect((runtime.calls[2].event as { x: number }).x).toBe(20 / 320);
   });
 });
 
 describe("timeline seek and playback visibility", () => {
   const block = { type: "timeline", duration: 10, position: { position: 1, sampled_at: 1000, rate: 1, running: true, duration: 10 }, tracks: [], on_seek: { set_state: "position" } } as Extract<Block, { type: "timeline" }>;
+  it("preserves down, the last move and up while a previous seek is in flight", async () => {
+    runtime.bindings["/ui/position"] = { position: 1, sampled_at: 1000, rate: 1, running: false, duration: 10 };
+    let finishFirst!: (success: boolean) => void;
+    runtime.act.mockImplementation((pointer: string, event: unknown) => {
+      runtime.calls.push({ pointer, event });
+      return runtime.calls.length === 1 ? new Promise<boolean>((resolve) => { finishFirst = resolve; }) : Promise.resolve(true);
+    });
+    const { container } = render(<TimelineBlock block={block} pointer="/ui" context={context} />);
+    const ruler = container.querySelector(".ks-timeline-ruler")!;
+    fireEvent.pointerDown(ruler, { pointerId: 1, clientX: 0, buttons: 1 });
+    fireEvent.pointerUp(ruler, { pointerId: 1, clientX: 32 });
+    fireEvent.pointerDown(ruler, { pointerId: 1, clientX: 64, buttons: 1 });
+    fireEvent.pointerMove(ruler, { pointerId: 1, clientX: 96, buttons: 1 });
+    act(() => [...frames.entries()].at(-1)![1](16));
+    fireEvent.pointerMove(ruler, { pointerId: 1, clientX: 128, buttons: 1 });
+    fireEvent.pointerUp(ruler, { pointerId: 1, clientX: 160 });
+
+    finishFirst(true);
+    await waitFor(() => expect(runtime.calls.map((call: { event: unknown }) => call.event)).toEqual([0, 1, 2, 4, 5]));
+  });
+
   it("coalesces seek moves and sends the final pointer position", async () => {
     runtime.bindings["/ui/position"] = { position: 1, sampled_at: 1000, rate: 1, running: false, duration: 10 };
     const seekBlock = { ...block, position: { position: 1, sampled_at: 1000, rate: 1, running: false, duration: 10 } };

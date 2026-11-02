@@ -68,14 +68,31 @@ describe("createSerialSend", () => {
     });
     const serial = createSerialSend(send);
 
-    serial("first");
-    serial("old");
-    serial("latest");
+    serial("first", { coalesce: true });
+    serial("old", { coalesce: true });
+    serial("latest", { coalesce: true });
     expect(send.mock.calls).toEqual([["first"]]);
 
     finishFirst();
     await latestStarted;
     expect(send.mock.calls).toEqual([["first"], ["latest"]]);
+  });
+
+  it.each([
+    { name: "move before up", pending: [["move 1", true], ["move 2", true], ["up", false]], expected: ["first", "move 2", "up"] },
+    { name: "down before move and up", pending: [["down", false], ["move 1", true], ["move 2", true], ["up", false]], expected: ["first", "down", "move 2", "up"] },
+  ] as const)("preserves $name while coalescing consecutive moves", async ({ pending, expected }) => {
+    let finishFirst!: () => void;
+    const firstPending = new Promise<void>((resolve) => { finishFirst = resolve; });
+    const send = vi.fn((value: string) => value === "first" ? firstPending : Promise.resolve());
+    const serial = createSerialSend(send);
+
+    serial("first", { coalesce: false });
+    for (const [value, coalesce] of pending) serial(value, { coalesce });
+    expect(send.mock.calls).toEqual([["first"]]);
+    finishFirst();
+
+    await vi.waitFor(() => expect(send.mock.calls.map(([value]) => value)).toEqual(expected));
   });
 
   it("continues with the next value after a send rejects", async () => {
@@ -90,8 +107,8 @@ describe("createSerialSend", () => {
     });
     const serial = createSerialSend(send);
 
-    serial("first");
-    serial("next");
+    serial("first", { coalesce: false });
+    serial("next", { coalesce: false });
     rejectFirst(new Error("expected test rejection"));
 
     await nextStarted;

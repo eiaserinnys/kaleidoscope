@@ -43,7 +43,7 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     moveFrame.current = null;
     const pending = pendingMove.current;
     pendingMove.current = null;
-    if (pending) serialSend(pending);
+    if (pending) serialSend(pending, { coalesce: true });
   };
   useEffect(() => () => flushMove(), [data, pointer, serialSend]);
   useEffect(() => {
@@ -87,7 +87,7 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
       return;
     }
     flushMove();
-    serialSend(value);
+    serialSend(value, { coalesce: false });
   };
   return <div ref={root} className="ks-canvas" role="img" aria-label={text || "캔버스"} style={{ "--ks-canvas-ratio": aspect ? Math.max(aspect, 1) : undefined } as CSSProperties}
     onPointerDown={(event) => pointerEvent("down", event)} onPointerMove={(event) => pointerEvent("move", event)}
