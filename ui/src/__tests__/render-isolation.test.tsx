@@ -1,4 +1,4 @@
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -55,6 +55,20 @@ const definition: AppDefinition = {
       { type: "text", value: { expr: "$data.sample" } },
       { type: "text", value: { state: "compound" } },
     ],
+  },
+};
+
+const chatDefinition: AppDefinition = {
+  id: "provider-chat",
+  name: "대화 앱",
+  requires: { blocks: 2, modules: { agent: 3 } },
+  permissions: [],
+  state: {},
+  ui: { type: "chat" },
+  agent: {
+    protocol: "conversation-v1", permission: "login", base_path: "api", namespace: "n", profile: "p",
+    collection: "c", model_order: [], selected_model: "", title_template: "", initial_instruction_template: "",
+    instructions_template: "", thread_entry: "thread",
   },
 };
 
@@ -126,6 +140,37 @@ async function setup() {
   return { store, transport, snapshot };
 }
 
+async function setupChatWindow() {
+  calls.length = 0;
+  const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;
+  if (probe) probe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
+  const snapshot = makeTestSnapshot({ definitions: [definition, chatDefinition] });
+  snapshot.shared.windows[0].id = "window-a";
+  snapshot.shared.windows[0].state = { first: "a" };
+  snapshot.shared.windows[1].id = "window-b";
+  snapshot.link = { state: "connected", mode: "remote", server_url: "https://example.test", device_name: "시험" };
+  const transport = createFakeTransport({
+    snapshot,
+    folder: null,
+    files: {},
+    conversation: {
+      thread: {
+        id: "thread-chat", external: { namespace: "workspace", key: "chat" }, title: "Chat",
+        model: { id: "model", label: "Model" }, created_at: "2026-10-28T00:00:00Z", archived: false,
+      },
+      items: [], models: [{ id: "model", label: "Model", available: true }], profiles: [],
+      start: { profile: "", model: "model" },
+    },
+  });
+  const store = createShellStore(transport);
+  render(<Shell store={store} />);
+  await store.ready;
+  await waitFor(() => expect(document.querySelector('[data-window-id="window-b"]')).not.toBeNull());
+  await screen.findByRole("textbox", { name: "메시지" });
+  calls.length = 0;
+  return { store, transport, snapshot };
+}
+
 async function setState(store: ReturnType<typeof createShellStore>, windowId: string, key: string, value: JsonValue) {
   const window = store.getSnapshot()!.shared.windows.find((item) => item.id === windowId)!;
   await store.call({ op: "window.set_state", window_id: windowId, state: { ...window.state, [key]: value } });
@@ -143,6 +188,21 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     const { store } = await setup();
     for (let i = 0; i < 10; i += 1) await setState(store, "window-a", "first", `changed-${i}`);
     expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
+  it("창 A 상태 변경 10회는 채팅 창 B를 다시 그리지 않는다", async () => {
+    const { store } = await setupChatWindow();
+    for (let i = 0; i < 10; i += 1) await setState(store, "window-a", "first", `changed-${i}`);
+    expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
+  it("sharing 변경은 채팅의 같이 보기 칩을 갱신한다", async () => {
+    const { store, transport, snapshot } = await setupChatWindow();
+    expect(screen.queryByRole("button", { name: "격리 시험 같이 보기 끄기" })).toBeNull();
+    await act(async () => transport.emit({ event: "state.changed", snapshot: { ...snapshot, sharing: ["window-a"] } }));
+    expect(await screen.findByRole("button", { name: "격리 시험 같이 보기 끄기" })).toBeTruthy();
     store.dispose();
   });
 
@@ -227,7 +287,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
-  it("useShellSnapshot 사용은 LegacyContextBlock 하나로 제한한다", () => {
+  it("스냅샷 전체 구독과 Legacy 채팅 문맥은 없다", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const targets = [join(repoRoot, "ui/src"), join(repoRoot, "app/src")];
     const files: string[] = [];
@@ -239,27 +299,14 @@ describe("실제 Shell의 블록 렌더 격리", () => {
       }
     };
     targets.forEach(visit);
-    const uses = files.flatMap((path) => {
+    const legacyReferences = files.flatMap((path) => {
       if (path.endsWith("render-isolation.test.tsx")) return [];
       const source = readFileSync(path, "utf8");
-      return /\buseShellSnapshot\s*\(/.test(source) && !/function\s+useShellSnapshot\s*\(/.test(source)
+      return /\b(?:useShellSnapshot|LegacyBlockContext|LegacyContextBlock)\b/.test(source)
         ? [path.replace(repoRoot + "/", "")]
         : [];
     });
-    expect(uses).toEqual(["ui/src/render/render-block.tsx"]);
-    expect(readFileSync(join(repoRoot, "ui/src/index.ts"), "utf8")).not.toMatch(/useShellSnapshot/);
-    const legacyContextFiles = files.flatMap((path) => {
-      if (path.endsWith("render-isolation.test.tsx")) return [];
-      return readFileSync(path, "utf8").includes("LegacyBlockContext")
-        ? [path.replace(repoRoot + "/", "")]
-        : [];
-    }).sort();
-    expect(legacyContextFiles).toEqual([
-      "ui/src/blocks/agent-chat.tsx",
-      "ui/src/blocks/agent-session.tsx",
-      "ui/src/blocks/block-context.ts",
-      "ui/src/render/render-block.tsx",
-    ]);
+    expect(legacyReferences).toEqual([]);
     const contextSource = readFileSync(join(repoRoot, "ui/src/blocks/block-context.ts"), "utf8");
     const blockContext = contextSource.match(/export interface BlockContext \{([\s\S]*?)\n\}/)?.[1] ?? "";
     const windowIdentity = contextSource.match(/export interface WindowIdentity \{([^}]+)\}/)?.[1] ?? "";

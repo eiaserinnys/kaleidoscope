@@ -68,7 +68,7 @@ function setup(agent = localAgent("ready"), respond?: (request: CoreRequest) => 
     dispose: () => undefined,
   } as unknown as ShellStore;
   const window = base.shared.windows[0];
-  const context = { store, snapshot: base, window, definition: appDefinition };
+  const context = { store, window: { id: window.id, app_id: window.app_id, app_version: window.app_version, desktop_id: window.desktop_id }, definition: appDefinition };
   render(<WindowDataProvider store={store} windowId={window.id} definition={appDefinition}><AgentSessionBlock block={appDefinition.ui as AgentSessionBlockData} context={context} /></WindowDataProvider>);
   return { call, window, emit: (event: CoreEvent) => act(() => { listeners.forEach((listener) => listener(event)); }) };
 }

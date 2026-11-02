@@ -62,10 +62,6 @@ export function createShellStore(transport: CoreTransport): ShellStore {
   };
 }
 
-export function useShellSnapshot(store: ShellStore): ShellSnapshot | null {
-  return useShellSelector(store, (snapshot) => snapshot);
-}
-
 export function useShellSelector<T>(store: ShellStore, select: (snapshot: ShellSnapshot | null) => T, equal: (a: T, b: T) => boolean = Object.is): T {
   useBlockRenderProbe();
   return useSyncExternalStoreWithSelector(store.subscribe, store.getSnapshot, store.getSnapshot, select, equal);

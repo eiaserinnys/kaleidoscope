@@ -5,7 +5,8 @@ import { Folder, FolderOpen, MessageSquare } from "../components/icons";
 import { Select, Toggle } from "../components/select-toggle";
 import { toCoreError } from "../core/core-transport";
 import { useBinding } from "../data/window-data";
-import type { LegacyBlockContext as BlockContext } from "./block-context";
+import type { BlockContext } from "./block-context";
+import { readWindowState, useWindowGrant } from "../data/window-state";
 import { useShareDescriber } from "../share/visible";
 import { flushShareViews } from "../share/share-view";
 import { HistoryAttachmentView, ImagePreview, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
@@ -17,6 +18,7 @@ export type AgentSessionBlockData = Extract<Block, { type: "chat" }> & { permiss
 
 export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: AgentSessionBlockData; context: BlockContext; pointer?: string }) {
   const windowId = context.window.id;
+  const rootGrant = useWindowGrant(context, block.root.permission);
   const agentsBinding = useBinding(`${pointer}/agents`, block.agents);
   const [snapshot, setSnapshot] = useState<LocalAgentSnapshot | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -111,10 +113,10 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
       void call({
         op: "window.set_state",
         window_id: windowId,
-        state: { ...context.window.state, [block.on_select.set_state]: value },
+        state: { ...readWindowState(context), [block.on_select.set_state]: value },
       });
     }
-  }, [block.on_select.set_state, call, context.window.state, windowId]);
+  }, [block.on_select.set_state, call, windowId]);
 
   const chooseFolder = useCallback(async () => {
     await call({ op: "files.pick_folder", window_id: windowId, permission: block.root.permission });
@@ -166,9 +168,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
   />, [context.store, windowId]);
 
   const closePreview = useCallback(() => setPreview(null), []);
-  const folderName = snapshot?.folder_name
-    ?? context.snapshot.device.grants.find((grant) => grant.window_id === windowId && grant.permission === block.root.permission)?.root_name
-    ?? null;
+  const folderName = snapshot?.folder_name ?? rootGrant?.root_name ?? null;
   const readyToChat = snapshot?.phase === "ready" || snapshot?.phase === "responding";
   const responding = snapshot?.phase === "responding";
   const runControl = (controlId: string, value: string | boolean) => {

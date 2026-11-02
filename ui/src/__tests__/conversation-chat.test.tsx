@@ -7,8 +7,9 @@ import { HistoryAttachmentView } from "../blocks/agent-attachments";
 import { AgentChatBlock, modelAvailabilityDescription } from "../blocks/agent-chat";
 import { Select } from "../components/select-toggle";
 import { WindowDataProvider } from "../data/window-data";
-import type { AppDefinition, CoreEvent, CoreReply, CoreRequest, ConversationItem, ConversationThread } from "../contract/contract";
+import type { AppDefinition, CoreEvent, CoreReply, CoreRequest, ConversationItem, ConversationThread, ShellSnapshot } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
+import { createFakeTransport } from "../core/fake-transport";
 import { makeTestSnapshot } from "./fixtures";
 
 const markdownRenderCount = vi.hoisted(() => ({ value: 0 }));
@@ -41,23 +42,31 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
   const snapshot = makeTestSnapshot({ definitions: [appDefinition] });
   snapshot.link = { state: "connected", mode: "remote", server_url: "https://example.test", device_name: "시험" };
   const listeners = new Set<(event: CoreEvent) => void>();
+  const snapshotListeners = new Set<() => void>();
+  const transport = createFakeTransport({ snapshot, folder: null, files: {} });
+  let currentSnapshot: ShellSnapshot | null = snapshot;
+  const unsubscribeTransport = transport.subscribe((event) => {
+    if (event.event !== "state.changed") return;
+    currentSnapshot = event.snapshot;
+    snapshotListeners.forEach((listener) => listener());
+  });
   const call = vi.fn(async (request: CoreRequest): Promise<CoreReply> => {
     if (request.op === "data.attach") return { op: "data.attach", view: { values: {}, sources: {} } };
     if (request.op === "data.detach") return { op: "data.detach" };
     return handler(request);
   });
-  const store = { call, getSnapshot: () => snapshot, getError: () => null, subscribe: () => () => {}, subscribeEvents: (fn: (event: CoreEvent) => void) => { listeners.add(fn); return () => listeners.delete(fn); }, ready: Promise.resolve(), dispose: () => {} } as unknown as ShellStore;
+  const store = { call, getSnapshot: () => currentSnapshot, getError: () => null, subscribe: (fn: () => void) => { snapshotListeners.add(fn); return () => snapshotListeners.delete(fn); }, subscribeEvents: (fn: (event: CoreEvent) => void) => { listeners.add(fn); return () => listeners.delete(fn); }, ready: Promise.resolve(), dispose: unsubscribeTransport } as unknown as ShellStore;
   const window = snapshot.shared.windows[0];
-  const context = { store, snapshot, window, definition: appDefinition };
-  const view = render(<WindowDataProvider store={store} windowId={window.id} definition={appDefinition}><AgentChatBlock block={{ type: "chat" }} context={context} /></WindowDataProvider>);
+  const context = { store, window: { id: window.id, app_id: window.app_id, app_version: window.app_version, desktop_id: window.desktop_id }, definition: appDefinition };
+  render(<WindowDataProvider store={store} windowId={window.id} definition={appDefinition}><AgentChatBlock block={{ type: "chat" }} context={context} /></WindowDataProvider>);
   return {
     call,
     window,
     emit: (event: CoreEvent) => act(() => { listeners.forEach((fn) => fn(event)); }),
-    rerenderSnapshot: () => {
-      const nextWindow = { ...window, state: { ...window.state, changed_by_other_window: true } };
-      const nextSnapshot = { ...snapshot, shared: { ...snapshot.shared } };
-      view.rerender(<WindowDataProvider store={store} windowId={nextWindow.id} definition={appDefinition}><AgentChatBlock block={{ type: "chat" }} context={{ ...context, snapshot: nextSnapshot, window: nextWindow }} /></WindowDataProvider>);
+    updateSnapshot: () => {
+      const nextSnapshot = structuredClone(snapshot);
+      nextSnapshot.shared.windows[0].state.changed_by_other_window = true;
+      act(() => transport.emit({ event: "state.changed", snapshot: nextSnapshot }));
     },
   };
 }
@@ -80,9 +89,9 @@ describe("대화 제공자 화면", () => {
     fireEvent.change(await screen.findByRole("textbox", { name: "메시지" }), { target: { value: "가" } });
     expect(markdownRenderCount.value).toBe(0);
   });
-  it("다른 창의 snapshot 변경은 이미 표시한 대화를 다시 파싱하지 않는다", async () => {
+  it("창 상태 스냅샷 변경은 이미 표시한 대화를 다시 파싱하지 않는다", async () => {
     const state = await setupMarkdownRenderCounter();
-    state.rerenderSnapshot();
+    state.updateSnapshot();
     expect(markdownRenderCount.value).toBe(0);
   });
   it("text update 한 번은 진행 글만 파싱한다", async () => {
