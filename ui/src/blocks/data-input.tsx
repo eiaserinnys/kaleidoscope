@@ -47,7 +47,7 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     if (block.format?.kind === "decimal") number = Number(number.toFixed(decimalDigits(block.format.digits)));
     return number;
   }, [block.kind, block.format, minimum, maximum]);
-  const { draft, change, finish, holding, send } = useLocalDraft<string>(initialDraft, pointer, { sendOnChange: false, resetOnFailure: false, toJson: toEventValue });
+  const { draft, change, finish, holding, send } = useLocalDraft<string>(initialDraft, pointer, { sendOnChange: false, resetOnFailure: false, syncOnSuccess: true, toJson: toEventValue });
   const [focused, setFocused] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputElement = useRef<HTMLInputElement | null>(null);
@@ -170,7 +170,7 @@ function validGroup(value: unknown): value is { name: string; options: unknown[]
 function useLocalDraft<T extends JsonValue>(
   current: T,
   pointer: string,
-  options: { sendOnChange?: boolean; toJson?: (value: T) => JsonValue; intervalMs?: number; resetOnFailure?: boolean } = {},
+  options: { sendOnChange?: boolean; toJson?: (value: T) => JsonValue; intervalMs?: number; resetOnFailure?: boolean; syncOnSuccess?: boolean } = {},
 ) {
   const data = useWindowData();
   const [draft, setDraft] = useState(current);
@@ -182,6 +182,7 @@ function useLocalDraft<T extends JsonValue>(
   const sendOnChange = options.sendOnChange ?? true;
   const toJson = options.toJson ?? identityJson;
   const resetOnFailure = options.resetOnFailure ?? true;
+  const syncOnSuccess = options.syncOnSuccess ?? false;
   const serialSend = useMemo(() => createSerialSend(async ({ value, revision: sentRevision }: { value: T; revision: number }) => {
     inFlight.current += 1;
     let success = false;
@@ -190,9 +191,9 @@ function useLocalDraft<T extends JsonValue>(
       if (!success && resetOnFailure && !holding.current && revision.current === sentRevision) setDraft(latest.current);
     } finally {
       inFlight.current -= 1;
-      if (success && inFlight.current === 0 && !holding.current && revision.current === sentRevision) setDraft(latest.current);
+      if (success && syncOnSuccess && inFlight.current === 0 && !holding.current && revision.current === sentRevision) setDraft(latest.current);
     }
-  }), [data, pointer, resetOnFailure, toJson]);
+  }), [data, pointer, resetOnFailure, syncOnSuccess, toJson]);
   const enqueue = (value: T, coalesce: boolean) => serialSend({ value, revision: revision.current }, { coalesce });
   const throttled = useMemo(() => createThrottledSend((next: T) => enqueue(next, true), options.intervalMs ?? 100), [options.intervalMs, serialSend]);
   useEffect(() => () => throttled.flush(), [throttled]);
