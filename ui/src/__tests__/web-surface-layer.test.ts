@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { evaluateWebSurface } from "../blocks/web-surface-layer";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { evaluateWebSurface, registerWebSurface } from "../blocks/web-surface-layer";
 import type { Rect } from "../contract/contract";
+import type { ShellStore } from "../core/shell-store";
+
+afterEach(() => vi.unstubAllGlobals());
 
 const bounds: Rect = { x: 20, y: 20, width: 100, height: 80 };
 
@@ -36,5 +39,29 @@ describe("web surface overlap", () => {
   it("ignores hidden occluders and rectangles that only touch an edge", () => {
     expect(evaluate({ overlays: [{ bounds: { x: 120, y: 20, width: 10, height: 10 }, visible: true }] })).toBe("live");
     expect(evaluate({ overlays: [{ bounds: { x: 30, y: 30, width: 20, height: 20 }, visible: false }] })).toBe("live");
+  });
+
+  it("does not run a frame loop with inactive surfaces and resumes on activation", () => {
+    const request = vi.fn(() => 17);
+    const cancel = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", request);
+    vi.stubGlobal("cancelAnimationFrame", cancel);
+    const element = document.createElement("div");
+    document.body.append(element);
+    const store = { call: vi.fn(async () => ({ op: "web.place" })) } as unknown as ShellStore;
+    const onState = vi.fn();
+    const surface = registerWebSurface(element, "window-1", store, onState, false);
+
+    expect(request).not.toHaveBeenCalled();
+    surface.setActive(true);
+    expect(request).toHaveBeenCalledTimes(1);
+    surface.setActive(false);
+    expect(cancel).toHaveBeenCalledWith(17);
+    expect(onState).toHaveBeenLastCalledWith({ kind: "hidden" });
+    surface.setActive(true);
+    expect(request).toHaveBeenCalledTimes(2);
+    surface.unregister();
+    element.remove();
+    expect(cancel).toHaveBeenCalledTimes(2);
   });
 });

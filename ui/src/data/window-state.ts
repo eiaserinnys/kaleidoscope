@@ -1,4 +1,4 @@
-import type { AppWindow, Grant } from "../contract/contract";
+import type { AppWindow, Grant, ShellSnapshot } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { useShellSelector, type ShellStore } from "../core/shell-store";
 import type { WindowIdentity } from "../blocks/block-context";
@@ -6,6 +6,19 @@ import type { WindowIdentity } from "../blocks/block-context";
 export interface WindowStateTarget {
   store: ShellStore;
   window: Pick<WindowIdentity, "id">;
+}
+
+export function isWindowVisible(snapshot: ShellSnapshot | null | undefined, windowId: string): boolean {
+  if (!snapshot || !snapshot.device.active_workspace_id) return false;
+  const window = snapshot.shared.windows.find((item) => item.id === windowId);
+  if (!window || window.minimized) return false;
+  const desktop = snapshot.shared.desktops.find((item) => item.id === window.desktop_id);
+  return desktop?.workspace_id === snapshot.device.active_workspace_id
+    && snapshot.device.active_desktop_ids[desktop.workspace_id] === desktop.id;
+}
+
+export function useWindowVisible(context: WindowStateTarget): boolean {
+  return useShellSelector(context.store, (snapshot) => isWindowVisible(snapshot, context.window.id));
 }
 
 export function useWindowStateValue(context: WindowStateTarget, key: string | null): unknown {

@@ -62,7 +62,7 @@ it("code는 값을 읽기만 하며 변경 시 위치를 지킨다", async () =>
   expect(scroll.scrollTop).toBe(1000);
 });
 
-it("재생기는 원본 Blob URL을 만들고 바뀌면 해제하며 키보드로 이동한다", async () => {
+it("재생기는 미디어 원본을 캐시하고 키보드로 이동한다", async () => {
   const create = vi.fn().mockReturnValueOnce("blob:first").mockReturnValueOnce("blob:second");
   const revoke = vi.fn();
   vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke }));
@@ -75,7 +75,7 @@ it("재생기는 원본 Blob URL을 만들고 바뀌면 해제하며 키보드�
   const send = (path: string) => act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/src": { status: "ready", value: { permission: "media", path } } } } }));
   await screen.findByRole("button", { name: "재생" });
   send("one.wav");
-  await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(transport.call).toHaveBeenCalledWith(expect.objectContaining({ op: "data.media", media: { permission: "media", path: "one.wav" } })));
   const audio = rendered.container.querySelector("audio")!;
   Object.defineProperty(audio, "duration", { configurable: true, value: 60 });
   fireEvent.durationChange(audio);
@@ -84,10 +84,10 @@ it("재생기는 원본 Blob URL을 만들고 바뀌면 해제하며 키보드�
   fireEvent.keyDown(screen.getByRole("slider", { name: "재생 위치" }), { key: "ArrowRight" });
   expect(audio.currentTime).toBe(15);
   send("two.wav");
-  await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
-  expect(revoke).toHaveBeenCalledWith("blob:first");
+  await waitFor(() => expect(transport.call).toHaveBeenCalledWith(expect.objectContaining({ op: "data.media", media: { permission: "media", path: "two.wav" } })));
   rendered.unmount();
-  expect(revoke).toHaveBeenCalledWith("blob:second");
+  expect(create).not.toHaveBeenCalled();
+  expect(revoke).not.toHaveBeenCalled();
   vi.unstubAllGlobals();
 });
 
@@ -99,7 +99,7 @@ it("영상 MIME을 받으면 영상으로 자동 재생한다", async () => {
   const original = transport.call.bind(transport);
   vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media" ? Promise.resolve({ op: "data.media", media: { mime: "video/webm", data_base64: "YQ==", width: null, height: null } }) as never : original(request as never));
   const rendered = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
-  await waitFor(() => expect(rendered.container.querySelector("video")?.getAttribute("src")).toBe("blob:video"));
+  await waitFor(() => expect(rendered.container.querySelector("video")?.getAttribute("src")).toBe("data:video/webm;base64,YQ=="));
   await waitFor(() => expect(play).toHaveBeenCalled());
   vi.unstubAllGlobals();
 });

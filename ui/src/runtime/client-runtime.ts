@@ -4,6 +4,7 @@ import { CLIENT_PING_TIMEOUT_SECS } from "../contract/limits";
 import type { ShellStore } from "../core/shell-store";
 import { toCoreError } from "../core/core-transport";
 import type { WindowData } from "../data/window-data";
+import { isWindowVisible } from "../data/window-state";
 import { clientSource } from "../blocks/sandbox-frame";
 import { registerSandboxFlush } from "../blocks/sandbox-flush";
 import { BrowserFiles } from "./client-files";
@@ -24,6 +25,8 @@ export class ClientRuntime {
   private ready = false;
   private lastPong = 0;
   private ping?: ReturnType<typeof setInterval>;
+  private pingVisible = false;
+  private unsubscribeVisibility?: () => void;
   private unregister?: () => void;
   private pending = new Map<string, (ok: boolean) => void>();
   private revisions: Record<string, string | null> = {};
@@ -75,13 +78,27 @@ export class ClientRuntime {
       });
       container.append(frame);
       this.unregister = registerSandboxFlush(this.data.windowId, this.flush);
-      this.lastPong = Date.now();
-      this.ping = setInterval(() => {
-        if (Date.now() - this.lastPong > CLIENT_PING_TIMEOUT_SECS * 1000) { this.data.failClient("클라이언트가 응답하지 않습니다"); void this.stop(); return; }
-        this.send({ type: "ks-client-ping" });
-      }, CLIENT_PING_TIMEOUT_SECS * 500);
+      this.unsubscribeVisibility = this.store.subscribe(this.syncPingVisibility);
+      this.syncPingVisibility();
     } catch (error) { if (!this.stopped) this.data.failClient(toCoreError(error).message); }
   }
+
+  private syncPingVisibility = () => {
+    const visible = isWindowVisible(this.store.getSnapshot(), this.data.windowId);
+    if (visible === this.pingVisible) return;
+    this.pingVisible = visible;
+    if (!visible) {
+      if (this.ping) clearInterval(this.ping);
+      this.ping = undefined;
+      return;
+    }
+    // 숨겨진 동안의 시간은 응답 제한에 포함하지 않는다.
+    this.lastPong = Date.now();
+    this.ping = setInterval(() => {
+      if (Date.now() - this.lastPong > CLIENT_PING_TIMEOUT_SECS * 1000) { this.data.failClient("클라이언트가 응답하지 않습니다"); void this.stop(); return; }
+      this.send({ type: "ks-client-ping" });
+    }, CLIENT_PING_TIMEOUT_SECS * 500);
+  };
 
   private state() {
     const state = this.store.getSnapshot()?.shared.windows.find((window) => window.id === this.data.windowId)?.state ?? {};
@@ -290,6 +307,7 @@ export class ClientRuntime {
     if (this.store.nativeFiles) await this.store.call({ op: "client.release", window_id: this.data.windowId }).catch((error) => this.data.setNotice(toCoreError(error).message));
     this.unregister?.();
     this.unsubscribeStorage?.();
+    this.unsubscribeVisibility?.();
     if (this.ping) clearInterval(this.ping);
     if (this.patchFrame !== null) cancelAnimationFrame(this.patchFrame);
     window.removeEventListener("message", this.receive);

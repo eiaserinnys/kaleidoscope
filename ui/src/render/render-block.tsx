@@ -54,7 +54,7 @@ function BlockContent({ block: normalized, context, pointer }: { block: Block; c
   useBlockRenderProbe();
   switch (normalized.type) {
     case "canvas": return <CanvasBlock block={normalized} pointer={pointer} />;
-    case "timeline": return <TimelineBlock block={normalized} pointer={pointer} />;
+    case "timeline": return <TimelineBlock block={normalized} pointer={pointer} context={context} />;
     case "split":
       return <SplitBlock block={normalized} context={context} pointer={pointer} />;
     case "tree":
