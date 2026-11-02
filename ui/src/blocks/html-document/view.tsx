@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useRef, useState } from "react";
 import type { Block, DocumentRef } from "../../contract/contract";
 import { Badge } from "../../components/badge";
 import { Button, Notice, StatusText } from "../../components/primitives";
@@ -13,6 +13,11 @@ import type { Comment, ThreadChange } from "./thread";
 
 type HtmlBlock = Extract<Block, { type: "html_view" }> & { document: DocumentRef };
 const labels = { needs_agent_review: "검토 요청", needs_user_reply: "답변 도착", resolved: "해결됨" } as const;
+
+function Field({ name, value, onEdit }: { name: string; value: string; onEdit: (value: string) => void }) {
+  const baseline = useRef(value);
+  return <label className="ks-html-field"><span>{name}</span><TextInput aria-label={name} persistent value={value} onEdit={onEdit} onFocus={() => { baseline.current = value; }} onCommit={onEdit} onCancel={() => { onEdit(baseline.current); return baseline.current; }} /></label>;
+}
 
 const CommentCard = memo(function CommentCard({ comment, index, status, selected, rev, saving, change, focus }: {
   comment: Comment; index: number; status: AnchorStatus | undefined; selected: ReturnType<typeof useHtmlDocument>["selection"]; rev: number; saving: boolean;
@@ -68,9 +73,9 @@ function Rail({ model }: { model: ReturnType<typeof useHtmlDocument> }) {
         ["글꼴", "font-family"], ["글자 크기", "font-size"], ["글자 굵기", "font-weight"], ["줄 간격", "line-height"],
         ["글자 색", "color"], ["배경 색", "background-color"], ["안쪽 여백", "padding"], ["바깥 여백", "margin"],
         ["너비", "width"], ["높이", "height"], ["테두리", "border"], ["모서리", "border-radius"], ["그림자", "box-shadow"], ["투명도", "opacity"],
-      ] as const).map(([name, prop]) => <label className="ks-html-field" key={prop}><span>{name}</span><TextInput aria-label={name} persistent value={model.selection!.styles[prop] ?? ""} onEdit={(value) => model.editStyle(prop, value)} /></label>)}
+      ] as const).map(([name, prop]) => <Field key={prop} name={name} value={model.selection!.styles[prop] ?? ""} onEdit={(value) => model.editStyle(prop, value)} />)}
       </> : <div className="ks-html-empty"><StatusText>요소를 선택하세요</StatusText></div>}
-      <label className="ks-html-field"><span>리비전 메모</span><TextInput aria-label="리비전 메모" persistent value={note} onEdit={setNote} /></label>
+      <Field name="리비전 메모" value={note} onEdit={setNote} />
       <Button disabled={model.saving || !model.dirty} onClick={() => void model.saveRevision(note)}>새 리비전으로 저장</Button>
     </div>}
   </aside>;
