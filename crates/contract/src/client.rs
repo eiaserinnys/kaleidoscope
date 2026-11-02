@@ -374,6 +374,15 @@ pub struct ClientActionContext {
     pub item: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
+    pub parent_item: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub key: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub index: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub args: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]

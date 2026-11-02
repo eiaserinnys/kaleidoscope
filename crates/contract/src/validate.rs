@@ -258,7 +258,23 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
     let mut local_agent_blocks = 0;
     let mut surfaces = HashSet::new();
     let mut anchors = HashSet::new();
+    let mut repeat_templates: Vec<String> = Vec::new();
     data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
+        if matches!(block, Block::Repeat { .. }) {
+            repeat_templates.push(format!("{pointer}/template"));
+        }
+        if matches!(block, Block::ButtonGrid { .. })
+            && repeat_templates.iter().any(|template| {
+                pointer == template.as_str()
+                    || pointer
+                        .strip_prefix(template)
+                        .is_some_and(|rest| rest.starts_with('/'))
+            })
+        {
+            details.push(format!(
+                "{pointer}: repeat 안에는 button_grid를 둘 수 없습니다. button을 사용하세요"
+            ));
+        }
         if let Block::Canvas {
             surface: Binding::Literal(value),
             ..

@@ -125,6 +125,7 @@ if (!globalThis.ResizeObserver) {
       observe() {
         this.callback([{ contentRect: { width: 960, height: 552 } } as ResizeObserverEntry] as ResizeObserverEntry[], this as unknown as ResizeObserver);
       }
+      unobserve() {}
       disconnect() {}
     },
   });
@@ -264,6 +265,39 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     expect(calls.map((call) => call.pointer)).toEqual(["/ui/children/2"]);
     expect(document.body.textContent).toContain("new");
     expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
+  it("반복 항목 300개에서 바뀐 행만 다시 그린다", async () => {
+    const rows = Array.from({ length: 300 }, (_, index) => ({ id: String(index), title: `항목 ${index}` }));
+    const repeat: AppDefinition = { id: "repeat-isolation", name: "반복 격리", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { rows }, ui: { type: "repeat", key: "id", items: { state: "rows" }, virtual: false, template: { type: "text", value: { item: "title" } } } };
+    const snapshot = makeTestSnapshot({ definitions: [repeat] });
+    snapshot.shared.windows[0].id = "window-repeat";
+    snapshot.shared.windows[0].state = { rows };
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const store = createShellStore(transport);
+    renderBlockModule.renderProbe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
+    render(<Shell store={store} />);
+    await store.ready;
+    await screen.findByText("항목 299");
+    await settleRenders();
+    calls.length = 0;
+    const changedAll = rows.map((row) => ({ ...row, title: `${row.title}!` }));
+    await setState(store, "window-repeat", "rows", changedAll);
+    await settleRenders();
+    expect(countFor("window-repeat", "/ui/template")).toBe(300);
+    calls.length = 0;
+    const changedOne = changedAll.map((row, index) => index === 150 ? { ...row, title: "고친 항목" } : row);
+    await setState(store, "window-repeat", "rows", changedOne);
+    await settleRenders();
+    expect(screen.getByText("고친 항목")).toBeTruthy();
+    expect(countFor("window-repeat", "/ui/template")).toBe(1);
+    calls.length = 0;
+    await setState(store, "window-repeat", "rows", changedOne.slice(1));
+    await settleRenders();
+    expect(screen.queryByText("항목 0!")).toBeNull();
+    expect(countFor("window-repeat", "/ui/template")).toBe(0);
     store.dispose();
   });
 
