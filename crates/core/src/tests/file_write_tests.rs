@@ -1,5 +1,21 @@
 use super::*;
 
+#[derive(Default)]
+struct RecordingAttachmentOpener {
+    revealed: Mutex<Vec<PathBuf>>,
+}
+
+impl crate::AttachmentOpener for RecordingAttachmentOpener {
+    fn open(&self, _path: &Path) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    fn reveal(&self, path: &Path) -> std::io::Result<()> {
+        self.revealed.lock().unwrap().push(path.to_path_buf());
+        Ok(())
+    }
+}
+
 fn writable_core(temp: &TempDir, root: &Path, host: &Arc<FakeHost>) -> (Core, String) {
     host.choose(Some(root.to_path_buf()));
     let core = seeded_core(&temp.path().join("data"), host);
@@ -11,6 +27,61 @@ fn writable_core(temp: &TempDir, root: &Path, host: &Arc<FakeHost>) -> (Core, St
     })
     .unwrap();
     (core, window)
+}
+
+#[test]
+fn files_reveal_passes_the_grant_display_path_to_the_opener() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("documents");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("note.txt"), "hello").unwrap();
+
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(root.clone()));
+    let opener = Arc::new(RecordingAttachmentOpener::default());
+    let core = open_core_with_attachment_opener(
+        &temp.path().join("data"),
+        vec![test_definition(MD_EDITOR)],
+        &host,
+        registry_client(),
+        opener.clone(),
+    );
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "test-md-editor");
+    core.handle(CoreRequest::FilesPickFolder {
+        window_id: window.clone(),
+        permission: "docs".into(),
+    })
+    .unwrap();
+
+    let CoreReply::FilesPath { text: expected } = core
+        .handle(CoreRequest::FilesPath {
+            window_id: window.clone(),
+            permission: "docs".into(),
+            path: "note.txt".into(),
+        })
+        .unwrap()
+    else {
+        panic!("unexpected files.path response")
+    };
+    assert!(expected.starts_with(&root.to_string_lossy().into_owned()));
+    assert!(!expected.starts_with(r"\\?\"));
+
+    assert!(matches!(
+        core.handle(CoreRequest::FilesReveal {
+            window_id: window,
+            permission: "docs".into(),
+            path: "note.txt".into(),
+        })
+        .unwrap(),
+        CoreReply::FilesReveal {}
+    ));
+    let revealed = opener.revealed.lock().unwrap();
+    assert_eq!(revealed.len(), 1);
+    let revealed_path = revealed[0].to_string_lossy();
+    assert!(revealed_path.starts_with(&root.to_string_lossy().into_owned()));
+    assert!(!revealed_path.contains(r"\\?\"));
+    assert_eq!(revealed.as_slice(), &[PathBuf::from(expected)]);
 }
 
 fn mkdir(core: &Core, window: &str, name: &str) -> Result<CoreReply, CoreError> {

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use kaleidoscope_contract::{
@@ -120,11 +120,11 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 permission: _,
                 path: _,
             },
-            Authorization::Read { resolved },
+            Authorization::DisplayPath(text),
         ) => {
             inner
                 .attachment_opener
-                .reveal(&resolved)
+                .reveal(Path::new(&text))
                 .map_err(|error| files::operation_io_error(&error))?;
             Ok(CoreReply::FilesReveal {})
         }
@@ -142,7 +142,6 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
 
 enum Authorization {
     Write { root: PathBuf, grant_root: String },
-    Read { resolved: PathBuf },
     DisplayPath(String),
 }
 
@@ -186,10 +185,8 @@ fn authorize(
             window_id,
             permission,
             path,
-        } => Ok(Authorization::Read {
-            resolved: ops::readable_path(inner, state, window_id, permission, path)?,
-        }),
-        CoreRequest::FilesPath {
+        }
+        | CoreRequest::FilesPath {
             window_id,
             permission,
             path,
