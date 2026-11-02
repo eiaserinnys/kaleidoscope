@@ -10,6 +10,7 @@ import { NoItems, VirtualSurface, asArray, dateText, isObject, keepRovingRow, us
 
 export type Row = Record<string, JsonValue> & { key: string };
 const validRow = (item: unknown): item is Row => isObject(item) && typeof item.key === "string";
+const numberFormatter = new Intl.NumberFormat();
 function width(column: Column, rows: Row[]) {
   if (column.width === "narrow" && column.format === "number") {
     const valueLength = rows.reduce((longest, row) => Math.max(longest, Array.from(cellValue(row[column.field], column)).length), 0);
@@ -28,7 +29,7 @@ function width(column: Column, rows: Row[]) {
 function cellValue(value: JsonValue | undefined, column: Column): string {
   if (value == null) return "";
   if (column.format === "date") return dateText(value);
-  if (column.format === "number" && typeof value === "number") return new Intl.NumberFormat().format(value);
+  if (column.format === "number" && typeof value === "number") return numberFormatter.format(value);
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 const numeric = (value: JsonValue | undefined): number | null => {
@@ -105,7 +106,7 @@ export function TableView({ columns: sourceColumns, rows: sourceRows, initialSor
   const { scroll, virtual } = useVirtualRows(rows.length, 32);
   const roving = useRoving(rows, selected, scroll, virtual);
   keepRovingRow(virtual, roving.focus);
-  const gridColumns = sourceColumns.map((column) => width(column, rows)).join(" ");
+  const gridColumns = useMemo(() => sourceColumns.map((column) => width(column, sourceRows)).join(" "), [sourceRows, sourceColumns]);
   const toggleSort = (field: string) => setSort((old) => old?.field !== field ? { field, desc: false } : !old.desc ? { field, desc: true } : null);
   return <div className="ks-data-view ks-table-scroll" ref={scroll} role="table" aria-rowcount={rows.length} aria-label={ariaLabel} style={{ "--ks-table-columns": gridColumns } as CSSProperties}>
     <div className="ks-table-inner">

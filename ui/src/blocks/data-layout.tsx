@@ -60,8 +60,7 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
       {block.collapsible
         ? <button className="ks-data-section-toggle" aria-expanded={!collapsed} aria-label={titleText === null ? collapsed ? "펼치기" : "접기" : undefined} onClick={() => setCollapsed(!collapsed)} type="button">
           {collapsed ? <ChevronRight size="inline" /> : <ChevronDown size="inline" />}
-          {titleText}
-          {metaText}
+          <span className="ks-data-section-heading">{titleText}{metaText}</span>
         </button>
         : <>{titleText}{metaText}</>}
     </div>

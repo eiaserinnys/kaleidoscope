@@ -42,8 +42,10 @@
 .ks-data-section-child > .ks-data-stack.is-column > .ks-data-stack-item.is-fill:has(> .ks-data-view) { min-height: var(--ks-pane-min-size); }
 .ks-split-pane > .ks-data-section > .ks-data-section-child > .ks-data-stack { box-sizing: border-box; padding-inline: var(--ks-space-3); }
 .ks-split-pane > .ks-data-section > .ks-data-section-child > .ks-data-skeleton { box-sizing: border-box; padding: var(--ks-space-3); }
+.ks-split-pane > .ks-data-skeleton { box-sizing: border-box; padding: var(--ks-space-3); }
 .ks-data-section-child > .ks-data-stack > .ks-data-stack-item > .ks-data-section > .ks-data-section-header { width: 100%; margin-inline: 0; }
 .ks-data-section-header { display: flex; flex-wrap: wrap; width: 100%; align-items: center; gap: var(--ks-space-2); row-gap: var(--ks-space-1); }
+.ks-data-section-header:empty { display: none; }
 .ks-data-stack-item > .ks-data-section > .ks-data-section-header:not(.ks-data-tab-panel *),
 .ks-split-pane > .ks-data-section > .ks-data-section-header:not(.ks-data-tab-panel *) { width: calc(100% - 2 * var(--ks-space-3)); margin-inline: var(--ks-space-3); padding-block-start: var(--ks-space-2); }
 .ks-data-section-child > .ks-chart, .ks-data-section-child > .ks-map { padding-block-start: var(--ks-space-2); }
@@ -90,7 +92,9 @@
   .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
   .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
 ) > .ks-data-toolbar { min-height: calc(var(--ks-control-height) + var(--ks-space-2)); }
-.ks-data-section-toggle { display: flex; flex: 1 1 auto; flex-wrap: wrap; min-width: 0; align-items: center; gap: var(--ks-space-2); row-gap: var(--ks-space-1); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.ks-data-section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: flex-start; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.ks-data-section-heading { display: flex; flex: 1 1 0; flex-wrap: wrap; min-width: 0; align-items: center; gap: var(--ks-space-2); row-gap: var(--ks-space-1); }
+.ks-data-section-toggle > svg { margin-block-start: var(--ks-space-1); }
 /* 머리 폭 전체를 차지하는 단추라 바깥 외곽선이 이웃 요소에 가려진다. 파일 트리의 접힌 단추처럼 안쪽에 그린다. */
 .ks-data-section-toggle { padding-block: var(--ks-space-1); border-radius: var(--ks-radius-small); }
 .ks-data-section-toggle:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
