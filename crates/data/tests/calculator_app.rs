@@ -24,6 +24,7 @@ fn press(app: &CompiledApp, state: &mut BTreeMap<String, JsonValue>, key: &str) 
         storage_meta: &empty,
         event: &event,
         item: &item,
+        modifiers: None,
     };
     match app.action_step("/ui/children/1/on_press", 0, &env).unwrap() {
         Step::SetState { key, value } => {
@@ -89,6 +90,7 @@ fn weather_city_selection_and_live_search_actions() {
                 storage_meta: &empty,
                 event: &event,
                 item: &Value::Null,
+                modifiers: None,
             };
             let Step::SetState { key, value } = app
                 .action_step("/ui/children/1/children/0/on_select", index, &env)
@@ -112,6 +114,7 @@ fn weather_city_selection_and_live_search_actions() {
         storage_meta: &empty,
         event: &event,
         item: &Value::Null,
+        modifiers: None,
     };
     for pointer in [
         "/ui/children/0/start/1/on_change",

@@ -44,6 +44,7 @@ fn worker_action_evaluates_arguments_in_event_context() {
         storage_meta: &empty,
         event: &event,
         item: &item,
+        modifiers: None,
     };
     assert_eq!(
         app.action_step("/ui/children/0/on_select", 0, &env)
@@ -79,6 +80,7 @@ fn set_storage_resolves_collection_doc_from_window_state() {
         storage_meta: &empty,
         event: &event,
         item: &item,
+        modifiers: None,
     };
     assert_eq!(
         app.action_step("/ui/children/0/on_select", 0, &env)
@@ -215,6 +217,7 @@ fn source_status_is_scoped_to_each_expression_and_actions_are_ordered() {
         storage_meta: &BTreeMap::new(),
         event: &event,
         item: &item,
+        modifiers: None,
     };
     assert_eq!(app.actions_len("/ui/children/0/on_select"), Some(3));
     assert_eq!(
@@ -254,6 +257,7 @@ fn explicit_null_differs_from_missing_value() {
         storage_meta: &BTreeMap::new(),
         event: &event,
         item: &item,
+        modifiers: None,
     };
     assert_eq!(
         app.action_step("/ui/children/0/on_select", 0, &env)
@@ -324,6 +328,7 @@ fn storage_values_flow_through_expressions_source_plans_and_actions() {
         storage_meta: &storage_meta,
         event: &event,
         item: &item,
+        modifiers: None,
     };
     assert_eq!(
         app.action_step("/ui/children/0/on_select", 0, &env)

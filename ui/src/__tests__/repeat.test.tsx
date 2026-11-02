@@ -97,7 +97,7 @@ it("반복 항목의 값과 중첩 항목의 부모를 표시하고 템플릿 �
   store.dispose();
 });
 
-it("중첩 단추의 클라이언트 동작에 항목과 부모, 키와 순서를 전달한다", async () => {
+it("중첩 단추의 클라이언트 동작에 항목과 부모, 키, 순서와 수정 키를 전달한다", async () => {
   const definition: AppDefinition = {
     id: "repeat-client", name: "반복 동작 시험", requires: { blocks: 14, modules: { client: 1, assets: 1 } }, permissions: [],
     state: { rows: [{ id: "parent", children: [{ id: "inner", name: "고르기" }] }] },
@@ -119,9 +119,9 @@ it("중첩 단추의 클라이언트 동작에 항목과 부모, 키와 순서�
   await waitFor(() => expect(document.querySelector(".ks-client-frames iframe")).toBeTruthy());
   const frame = document.querySelector(".ks-client-frames iframe") as HTMLIFrameElement;
   const post = vi.spyOn(frame.contentWindow!, "postMessage");
-  await userEvent.click(await screen.findByRole("button", { name: "고르기" }));
+  fireEvent.click(await screen.findByRole("button", { name: "고르기" }), { shiftKey: true });
   expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-action", name: "choose", context: {
-    event: null, item: { id: "inner", name: "고르기" }, parent_item: { id: "parent", children: [{ id: "inner", name: "고르기" }] }, key: "inner", index: 0,
+    event: null, item: { id: "inner", name: "고르기" }, parent_item: { id: "parent", children: [{ id: "inner", name: "고르기" }] }, key: "inner", index: 0, modifiers: { shift: true, alt: false, ctrl: false, meta: false },
   } }), "*");
   store.dispose();
 });

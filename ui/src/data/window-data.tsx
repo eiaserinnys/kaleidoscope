@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import type { AppDefinition, Binding, BindingValue, DataView, PickFilesSpec, SaveFileSpec, ShellSnapshot, SourceStatus } from "../contract/contract";
+import type { AppDefinition, Binding, BindingValue, DataView, EventModifiers, PickFilesSpec, SaveFileSpec, ShellSnapshot, SourceStatus } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { CLIENT_OUTPUT_MAX_BYTES } from "../contract/limits";
 import { toCoreError } from "../core/core-transport";
@@ -30,6 +30,10 @@ function enqueue(store: ShellStore, id: string, task: () => Promise<void>) {
 }
 
 export class WindowData {
+  clientHost: HTMLElement | null = null;
+  clientDormant = false;
+  setClientHost = (host: HTMLElement | null) => { this.clientHost = host; this.runtime?.observeHost(host); };
+  setClientDormant = (dormant: boolean) => { this.clientDormant = dormant; this.runtime?.scheduleLifecycle(); };
   readonly mediaCache = new Map<string, Promise<string>>();
   private values: DataView["values"] = {};
   private clientValues: Record<string, BindingValue> = {};
@@ -299,12 +303,12 @@ export class WindowData {
     return binding as JsonValue;
   }
 
-  act = async (pointer: string, event: JsonValue, item?: JsonValue, scope?: ItemScope) => {
+  act = async (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope) => {
     try {
       if (scope) item = scope.item;
       const action = this.localAction(pointer);
       if (action) {
-        if (typeof action.client === "string") return this.runtime?.action(action.client, event, item, action.args as JsonValue | undefined, scope) ?? false;
+        if (typeof action.client === "string") return this.runtime?.action(action.client, event, item, action.args as JsonValue | undefined, scope, modifiers) ?? false;
         if (action.pick_files) return await this.runtime?.pick(action.pick_files as PickFilesSpec, scope) ?? false;
         if (action.save_file) {
           const spec = action.save_file as SaveFileSpec;
@@ -313,7 +317,7 @@ export class WindowData {
         }
       }
       await this.ready;
-      await this.store.call({ op: "data.act", window_id: this.windowId, pointer, event, ...(item === undefined ? {} : { item }) });
+      await this.store.call({ op: "data.act", window_id: this.windowId, pointer, event, ...(item === undefined ? {} : { item }), ...(modifiers === undefined ? {} : { modifiers }) });
       return true;
     } catch (error) { this.setNotice(toCoreError(error).message); return false; }
   };
@@ -351,7 +355,7 @@ export function useOptionalWindowData(): WindowData | null {
   return useMemo(() => {
     if (!value || !scope) return value;
     const proxy = Object.create(value) as WindowData;
-    proxy.act = (pointer, event, item) => value.act(pointer, event, item, scope);
+    proxy.act = (pointer, event, item, modifiers) => value.act(pointer, event, item, modifiers, scope);
     return proxy;
   }, [value, scope]);
 }

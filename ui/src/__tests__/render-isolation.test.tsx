@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -222,6 +222,16 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     await setState(store, "window-a", "visible", false);
     await waitFor(() => expect(screen.queryByText("조건 자식")).toBeNull());
     expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    store.dispose();
+  });
+
+  it("단축키 처리 중 다른 창과 무관한 블록을 다시 그리지 않는다", async () => {
+    const shortcutDefinition: AppDefinition = { ...definition, requires: { blocks: 14, modules: { client: 2 } }, shortcuts: [{ code: "KeyR", modifiers: [], action: { client: "reset" } }] };
+    const { store } = await setup([shortcutDefinition]);
+    fireEvent.keyDown(document.body, { code: "KeyR", key: "r" });
+    await settleRenders();
+    expect(countFor("window-a")).toBe(0);
+    expect(countFor("window-b")).toBe(0);
     store.dispose();
   });
 

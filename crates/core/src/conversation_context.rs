@@ -223,6 +223,7 @@ impl Context {
             storage_meta: &meta,
             event: &null,
             item: &null,
+            modifiers: None,
         };
         let compiled = CompiledApp::compile(&self.definition);
         let mut values = BTreeMap::new();

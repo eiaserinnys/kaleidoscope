@@ -1731,3 +1731,47 @@ fn folder_and_file_sources_must_protect_data_dir() {
 
 mod liveness_tests;
 mod rate_limit_tests;
+
+#[test]
+fn action_modifiers_are_available_in_expressions_with_false_defaults() {
+    let temp = TempDir::new().unwrap();
+    let definition = json!({
+        "id":"modifier-test", "name":"수정 키", "requires":{"blocks":4,"modules":{}},
+        "permissions":[], "state":{"result":null},
+        "ui":{"type":"button","label":"선택", "on_click":[{"set_state":"result","value":{"expr":"$modifiers"}}]}
+    }).to_string();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(temp.path(), vec![definition], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "modifier-test");
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+        dormant: vec![],
+    })
+    .unwrap();
+    for (modifiers, expected) in [
+        (
+            Some(kaleidoscope_contract::client::EventModifiers {
+                shift: true,
+                alt: false,
+                ctrl: true,
+                meta: false,
+            }),
+            json!({"shift":true,"alt":false,"ctrl":true,"meta":false}),
+        ),
+        (
+            None,
+            json!({"shift":false,"alt":false,"ctrl":false,"meta":false}),
+        ),
+    ] {
+        core.handle(CoreRequest::DataAct {
+            window_id: window.clone(),
+            pointer: "/ui/on_click".into(),
+            event: Value::Null,
+            item: Value::Null,
+            modifiers,
+        })
+        .unwrap();
+        assert_eq!(snapshot(&core).shared.windows[0].state["result"], expected);
+    }
+}

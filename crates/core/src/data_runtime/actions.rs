@@ -33,6 +33,7 @@ pub(crate) fn act(
     pointer: &str,
     event: Value,
     item: Value,
+    modifiers: Option<kaleidoscope_contract::client::EventModifiers>,
 ) -> Result<CoreReply, CoreError> {
     let item = {
         let windows = inner.data_runtimes.windows.lock().unwrap();
@@ -124,6 +125,7 @@ pub(crate) fn act(
                         storage_meta: &storage_meta,
                         event: &event,
                         item: &item,
+                        modifiers: modifiers.as_ref(),
                     },
                 )
                 .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))
