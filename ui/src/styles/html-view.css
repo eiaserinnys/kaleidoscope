@@ -12,7 +12,7 @@
 .ks-html-compose, .ks-html-inspector, .ks-html-comment { display: flex; flex-direction: column; min-width: 0; gap: var(--ks-space-2); }
 .ks-html-compose > span, .ks-html-inspector > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ks-html-comment { padding: var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); }
-.ks-html-comment p { margin: 0; overflow-wrap: anywhere; }
+.ks-html-comment p { margin: 0; }
 .ks-html-comment-target { display: flex; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .ks-html-comment-target > .ks-badge:first-child { background: var(--ks-color-accent); color: var(--ks-color-accent-contrast); border-radius: var(--ks-radius-large); }
 .ks-html-comment[data-status="needs_user_reply"] .ks-html-comment-target > .ks-badge:nth-of-type(2) { background: var(--ks-color-accent-soft, var(--ks-color-selection)); color: var(--ks-color-accent-text, var(--ks-color-accent)); }
