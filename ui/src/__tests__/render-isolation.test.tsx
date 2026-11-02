@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { TreeView } from "../components/tree/tree-view";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -12,8 +13,10 @@ import { createShellStore, shareShellSnapshot, shareStructure } from "../core/sh
 import * as windowData from "../data/window-data";
 import { TimelineBlock } from "../blocks/timeline";
 import * as renderBlockModule from "../render/render-block";
+import { ClientRuntime } from "../runtime/client-runtime";
 import { grantFor, makeTestSeed, makeTestSnapshot } from "./fixtures";
 import { AppWindowContent } from "../render/app-window-content";
+import { mockVirtualLayout } from "./virtual-layout";
 
 const rowRenders = vi.hoisted(() => new Map<string, number>());
 vi.mock("../components/tree/tree-row", async (importOriginal) => {
@@ -107,7 +110,7 @@ const localizedDefinition: AppDefinition = {
   name: "다국어 양식",
   requires: { blocks: 14, modules: {} },
   permissions: [],
-  state: { language: "ja" },
+  state: { language: "ja", name: "" },
   messages: {
     ja: { greeting: "こんにちは" },
     en: { greeting: "Hello" },
@@ -118,6 +121,7 @@ const localizedDefinition: AppDefinition = {
     children: [
       { type: "text", value: { message: "greeting" } },
       { type: "text", value: "unchanged" },
+      { type: "input", value: { state: "name" }, on_change: { set_state: "name" } },
     ],
   },
 };
@@ -159,13 +163,17 @@ if (!globalThis.ResizeObserver) {
   Object.defineProperty(globalThis, "ResizeObserver", {
     configurable: true,
     value: class {
+      private readonly targets = new Set<Element>();
       constructor(private readonly callback: ResizeObserverCallback) {}
       observe(target: Element) {
-        const height = target.hasAttribute("data-tree-row") ? 32 : 552;
-        this.callback([{ target, contentRect: { width: 960, height } } as ResizeObserverEntry] as ResizeObserverEntry[], this as unknown as ResizeObserver);
+        this.targets.add(target);
+        this.callback([...this.targets].map((observed) => ({
+          target: observed,
+          contentRect: { width: 960, height: observed.hasAttribute("data-tree-row") ? 32 : 552 },
+        } as ResizeObserverEntry)), this as unknown as ResizeObserver);
       }
-      unobserve() {}
-      disconnect() {}
+      unobserve(target: Element) { this.targets.delete(target); }
+      disconnect() { this.targets.clear(); }
     },
   });
 }
@@ -326,6 +334,34 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("실제 대화상자가 열린 동안 창 단축키를 막고 닫은 뒤 다시 허용한다", async () => {
+    const dialogShortcut: AppDefinition = {
+      id: "dialog-shortcut", name: "대화상자 단축키", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { open: false, used: false },
+      shortcuts: [{ code: "KeyR", modifiers: [], action: [{ set_state: "used", value: true }] }],
+      ui: { type: "stack", direction: "column", children: [
+        { type: "button", label: "열기", on_click: [{ set_state: "open", value: true }] },
+        { type: "dialog", open: { state: "open" }, title: "회의 안건", child: { type: "text", value: "안건 편집 중" }, on_close: [{ set_state: "open", value: false }] },
+      ] },
+    };
+    const { store, transport } = await setup([dialogShortcut], { open: false, used: false });
+    await store.call({ op: "window.raise", window_id: "window-a" });
+    await userEvent.click(screen.getAllByRole("button", { name: "열기" })[0]);
+    await screen.findByRole("dialog", { name: "회의 안건" });
+    fireEvent.keyDown(document.body, { code: "KeyR", key: "r" });
+    await settleRenders();
+    expect(transport.getCalls().filter((call) => call.op === "data.act" && call.pointer === "/shortcuts/0/action")).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole("button", { name: "닫기" }));
+    expect(transport.getCalls().some((call) => call.op === "data.act" && call.pointer === "/ui/children/1/on_close")).toBe(true);
+    // FakeData does not execute dialog.on_close; the local-core scenario covers the actual close action.
+    await setState(store, "window-a", "open", false);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "회의 안건" })).toBeNull());
+    fireEvent.keyDown(document.body, { code: "KeyR", key: "r" });
+    await waitFor(() => expect(transport.getCalls().filter((call) => call.op === "data.act" && call.pointer === "/shortcuts/0/action")).toHaveLength(1));
+    store.dispose();
+  });
+
   it("창 A 상태 변경은 창 B 블록을 다시 그리지 않는다", async () => {
     const { store } = await setup();
     for (let i = 0; i < 10; i += 1) await setState(store, "window-a", "first", `changed-${i}`);
@@ -371,6 +407,17 @@ describe("실제 Shell의 블록 렌더 격리", () => {
       "/ui/children/0",
     ]);
     expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
+  it("언어를 바꾸는 동안 포커스된 입력 초안을 유지한다", async () => {
+    const { store } = await setup([localizedDefinition], { language: "ja", name: "" });
+    const input = (await screen.findAllByRole("textbox"))[0] as HTMLInputElement;
+    input.focus();
+    fireEvent.change(input, { target: { value: "초안 보존" } });
+    await setState(store, "window-a", "language", "en");
+    await waitFor(() => expect(screen.getByText("Hello")).toBeTruthy());
+    expect(input.value).toBe("초안 보존");
     store.dispose();
   });
 
@@ -441,6 +488,74 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     await setState(store, "window-canvas", "rows", changed);
     await settleRenders();
     expect(countFor("window-canvas", "/ui/template")).toBe(1);
+    store.dispose();
+  });
+
+  it("가상 반복에서 캔버스 행이 화면 밖으로 나갔다 돌아오면 표면을 떼고 다시 붙인다", async () => {
+    mockVirtualLayout();
+    const rows = Array.from({ length: 80 }, (_, index) => ({ id: String(index), surface: `surface-${index}` }));
+    const repeat: AppDefinition = {
+      id: "virtual-canvas-isolation", name: "가상 표면 격리", requires: { blocks: 14, modules: { assets: 1, client: 1 } }, permissions: [],
+      state: { rows }, assets: [{ id: "script", version: 1 }],
+      client: { runtime: "javascript", entry: { id: "script", version: 1 }, inputs: {}, outputs: {}, actions: [], commands: {}, state_keys: [], storage_entries: [] },
+      ui: { type: "repeat", key: "id", items: { state: "rows" }, virtual: true, template: { type: "canvas", surface: { item: "surface" } } },
+    };
+    const snapshot = makeTestSnapshot({ definitions: [repeat] });
+    snapshot.shared.windows[0].id = "window-virtual-canvas";
+    snapshot.shared.windows[0].state = { rows };
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const call = transport.call.bind(transport);
+    vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "data.media"
+      ? { op: "data.media", media: { mime: "text/javascript", data_base64: btoa(""), width: null, height: null } } as CoreReply
+      : call(request));
+    vi.spyOn(ClientRuntime.prototype, "surface");
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 320, height: 180 } as DOMRect);
+    const originalTransfer = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "transferControlToOffscreen");
+    Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", { configurable: true, value: () => ({}) });
+    const store = createShellStore(transport);
+    const view = render(<Shell store={store} />);
+    await store.ready;
+    await waitFor(() => expect(document.querySelector('[data-testid="app-window-virtual-canvas-isolation"] .ks-canvas')).not.toBeNull());
+    const scroll = document.querySelector<HTMLElement>('[data-testid="app-window-virtual-canvas-isolation"] .ks-repeat')!;
+    const firstSurface = () => vi.mocked(ClientRuntime.prototype.surface).mock.calls
+      .map(([message]) => message).filter((message) => message.id === "surface-0");
+    const firstCanvas = scroll.querySelector('[data-repeat-key="0"] .ks-canvas');
+
+    scroll.scrollTop = 1600;
+    fireEvent.scroll(scroll);
+    await waitFor(() => expect(scroll.querySelector('[data-repeat-key="0"]')).toBeNull());
+    await waitFor(() => expect(firstSurface().some((message) => message.phase === "detach")).toBe(true));
+    scroll.scrollTop = 0;
+    fireEvent.scroll(scroll);
+    await waitFor(() => expect(scroll.querySelector('[data-repeat-key="0"] .ks-canvas')).not.toBeNull());
+    const nextCanvas = scroll.querySelector('[data-repeat-key="0"] .ks-canvas');
+    expect(nextCanvas).not.toBe(firstCanvas);
+    expect(firstSurface().filter((message) => message.phase === "attach").length).toBeGreaterThan(1);
+    view.unmount();
+    store.dispose();
+    if (originalTransfer) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", originalTransfer);
+    else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
+  });
+
+  it("숨긴 반복 영역은 행 값이 바뀌어도 다시 그리지 않는다", async () => {
+    const hiddenRepeat: AppDefinition = {
+      id: "hidden-repeat-isolation", name: "숨긴 반복 격리", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { visible: true, rows: [{ id: "a", title: "첫 안건" }] },
+      ui: { type: "when", value: { state: "visible" }, child: {
+        type: "repeat", key: "id", items: { state: "rows" }, virtual: false,
+        template: { type: "text", value: { item: "title" } },
+      } },
+    };
+    const { store } = await setup([hiddenRepeat], { visible: true, rows: [{ id: "a", title: "첫 안건" }] });
+    await setState(store, "window-a", "visible", false);
+    await setState(store, "window-b", "visible", false);
+    await waitFor(() => expect(screen.queryByText("첫 안건")).toBeNull());
+    calls.length = 0;
+    await setState(store, "window-a", "rows", [{ id: "a", title: "바뀐 안건" }]);
+    await settleRenders();
+    expect(calls.filter((call) => call.windowId === "window-a" && call.pointer.startsWith("/ui/child/template"))).toHaveLength(0);
+    await setState(store, "window-a", "visible", true);
+    await screen.findByText("바뀐 안건");
     store.dispose();
   });
 

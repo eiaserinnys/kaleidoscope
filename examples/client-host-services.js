@@ -14,6 +14,9 @@
     }
     try {
       const bytes = new TextEncoder().encode(text).buffer;
+      // Clear a partial output in the same sink before retrying the write.
+      await client.files.write(fileId, 0, bytes.slice(0, 8));
+      await client.files.truncate(fileId, 0);
       await client.files.write(fileId, 0, bytes);
       await client.files.close(fileId);
       savedFileId = fileId;
