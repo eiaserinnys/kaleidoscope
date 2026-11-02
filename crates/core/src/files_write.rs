@@ -25,12 +25,12 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 text,
                 expected_revision,
             },
-            Authorization::Write(root),
+            Authorization::Write { root, grant_root },
         ) => {
             let reply = ops::write(inner, &root, &path, &text, expected_revision.as_deref())?;
             emit_changes(
                 inner,
-                root,
+                grant_root,
                 vec![FileChange {
                     from: None,
                     to: Some(path),
@@ -45,12 +45,12 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 parent,
                 name,
             },
-            Authorization::Write(root),
+            Authorization::Write { root, grant_root },
         ) => {
             let path = ops::mkdir(inner, &root, &parent, &name)?;
             emit_changes(
                 inner,
-                root,
+                grant_root,
                 vec![FileChange {
                     from: None,
                     to: Some(path.clone()),
@@ -65,14 +65,14 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 path,
                 name,
             },
-            Authorization::Write(root),
+            Authorization::Write { root, grant_root },
         ) => {
             let change = ops::rename(inner, &root, &path, &name)?;
             let reply = CoreReply::FilesRename {
                 from: change.from.clone().unwrap_or_default(),
                 to: change.to.clone().unwrap_or_default(),
             };
-            emit_changes(inner, root, vec![change]);
+            emit_changes(inner, grant_root, vec![change]);
             Ok(reply)
         }
         (
@@ -82,10 +82,10 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 paths,
                 destination,
             },
-            Authorization::Write(root),
+            Authorization::Write { root, grant_root },
         ) => {
             let results = ops::move_paths(inner, &root, &paths, &destination);
-            emit_changes(inner, root, ops::successful_changes(&results));
+            emit_changes(inner, grant_root, ops::successful_changes(&results));
             Ok(CoreReply::FilesMove { results })
         }
         (
@@ -95,10 +95,10 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 paths,
                 destination,
             },
-            Authorization::Write(root),
+            Authorization::Write { root, grant_root },
         ) => {
             let results = ops::copy_paths(inner, &root, &paths, &destination);
-            emit_changes(inner, root, ops::successful_changes(&results));
+            emit_changes(inner, grant_root, ops::successful_changes(&results));
             Ok(CoreReply::FilesCopy { results })
         }
         (
@@ -108,10 +108,10 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 paths,
                 permanent,
             },
-            Authorization::Write(root),
+            Authorization::Write { root, grant_root },
         ) => {
             let results = ops::remove_paths(inner, &root, &paths, permanent);
-            emit_changes(inner, root, ops::successful_changes(&results));
+            emit_changes(inner, grant_root, ops::successful_changes(&results));
             Ok(CoreReply::FilesRemove { results })
         }
         (
@@ -120,7 +120,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 permission: _,
                 path: _,
             },
-            Authorization::Read(resolved),
+            Authorization::Read { resolved },
         ) => {
             inner
                 .attachment_opener
@@ -134,17 +134,16 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 permission: _,
                 path: _,
             },
-            Authorization::Read(resolved),
-        ) => Ok(CoreReply::FilesPath {
-            text: resolved.to_string_lossy().into_owned(),
-        }),
+            Authorization::DisplayPath(text),
+        ) => Ok(CoreReply::FilesPath { text }),
         _ => Err(error::make(ErrorCode::InvalidRequest)),
     }
 }
 
 enum Authorization {
-    Write(PathBuf),
-    Read(PathBuf),
+    Write { root: PathBuf, grant_root: String },
+    Read { resolved: PathBuf },
+    DisplayPath(String),
 }
 
 fn authorize(
@@ -182,38 +181,61 @@ fn authorize(
             window_id,
             permission,
             ..
-        } => Ok(Authorization::Write(writable_root(
-            state, window_id, permission,
-        )?)),
+        } => writable_root(state, window_id, permission),
         CoreRequest::FilesReveal {
             window_id,
             permission,
             path,
-        }
-        | CoreRequest::FilesPath {
+        } => Ok(Authorization::Read {
+            resolved: ops::readable_path(inner, state, window_id, permission, path)?,
+        }),
+        CoreRequest::FilesPath {
             window_id,
             permission,
             path,
-        } => Ok(Authorization::Read(ops::readable_path(
-            inner, state, window_id, permission, path,
-        )?)),
+        } => {
+            let resolved = ops::readable_path(inner, state, window_id, permission, path)?;
+            let text = if files::scope(state, window_id, permission)? == FilesScope::Pc {
+                resolved.to_string_lossy().into_owned()
+            } else {
+                let grant_root = grant_root_path(state, window_id, permission)?;
+                PathBuf::from(grant_root)
+                    .join(path)
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            Ok(Authorization::DisplayPath(text))
+        }
         _ => Err(error::make(ErrorCode::InvalidRequest)),
     }
 }
 
-fn emit_changes(inner: &Arc<Inner>, root: PathBuf, changes: Vec<FileChange>) {
+fn emit_changes(inner: &Arc<Inner>, root: String, changes: Vec<FileChange>) {
     if !changes.is_empty() {
-        inner.emit(&CoreEvent::FilesChanged {
-            root: root.to_string_lossy().into_owned(),
-            changes,
-        });
+        inner.emit(&CoreEvent::FilesChanged { root, changes });
     }
 }
 
-fn writable_root(state: &CoreState, window: &str, permission: &str) -> Result<PathBuf, CoreError> {
+fn writable_root(
+    state: &CoreState,
+    window: &str,
+    permission: &str,
+) -> Result<Authorization, CoreError> {
     files::permission(state, window, permission, true)?;
     if files::scope(state, window, permission)? == FilesScope::Pc {
         return Err(error::make(ErrorCode::PermissionDenied));
     }
-    files::granted_root(state, window, permission, true)
+    let grant_root = grant_root_path(state, window, permission)?;
+    let root = files::granted_root(state, window, permission, true)?;
+    Ok(Authorization::Write { root, grant_root })
+}
+
+fn grant_root_path(state: &CoreState, window: &str, permission: &str) -> Result<String, CoreError> {
+    state
+        .device
+        .grants
+        .iter()
+        .find(|grant| grant.window_id == window && grant.permission == permission)
+        .map(|grant| grant.root_path.clone())
+        .ok_or_else(|| error::make(ErrorCode::NotGranted))
 }

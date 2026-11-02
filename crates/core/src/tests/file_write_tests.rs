@@ -30,6 +30,18 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
     fs::write(root.join("note.txt"), "hello").unwrap();
     let host = Arc::new(FakeHost::default());
     let (core, window) = writable_core(&temp, &root, &host);
+    let grant_root = core
+        .inner
+        .state
+        .lock()
+        .unwrap()
+        .device
+        .grants
+        .iter()
+        .find(|grant| grant.window_id == window && grant.permission == "docs")
+        .unwrap()
+        .root_path
+        .clone();
     let (tx, rx) = mpsc::channel();
     core.subscribe(Box::new(move |event| {
         let _ = tx.send(event.clone());
@@ -42,7 +54,7 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
     assert!(matches!(
         rx.recv_timeout(Duration::from_secs(1)).unwrap(),
         CoreEvent::FilesChanged { root: event_root, changes }
-            if event_root == fs::canonicalize(&root).unwrap().to_string_lossy()
+            if event_root == grant_root
                 && changes == vec![kaleidoscope_contract::FileChange {
                     from: None,
                     to: Some("notes".into()),
@@ -219,7 +231,9 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
             path: "notes".into(),
         })
         .unwrap(),
-        CoreReply::FilesPath { text } if Path::new(&text) == root.join("notes")
+        CoreReply::FilesPath { text }
+            if text.starts_with(&grant_root)
+                && Path::new(&text) == PathBuf::from(&grant_root).join("notes")
     ));
 }
 
