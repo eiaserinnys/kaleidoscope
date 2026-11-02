@@ -274,7 +274,7 @@
 //!   현재 계정 × 앱 칸의 항목 metadata를 보낸다. 기기에서 쓰는 코어는 `storage.update`로 화면에 전달한다.
 //!   서버는 이벤트 스트림의 지원 범위에 `storage: 1`을 보낸 기기에만 두 이벤트를 보낸다. 저장소 모듈을 모르는
 //!   옛 쉘에는 새 이벤트 variant를 보내지 않는다.
-//!   이름 변경은 `storage.moved` 또는 기본 앱의 `app_value.moved` metadata 이벤트로 보내며 본문은 싣지 않는다.
+//!   이름 변경은 전체 저장 키를 담은 `storage.moved` 또는 기본 앱의 `app_value.moved` metadata 이벤트로 보내며 본문은 싣지 않는다.
 //! - 앱을 새 버전으로 올릴 때 저장값이 있는 선언의 `id`, key, kind가 바뀌거나 기존 값이 새 schema를 통과하지 못하면
 //!   올리기를 거부한다. revision은 md 원문 UTF-8 바이트 또는 키를 정렬한 JSON 직렬화 바이트의 SHA-256이다.
 //!
@@ -612,7 +612,11 @@ pub enum DeviceEvent {
     #[serde(rename = "storage.moved")]
     StorageMoved {
         app_id: String,
-        moved: crate::app_storage::StorageMoved,
+        bucket_id: String,
+        entry_id: String,
+        from_key: String,
+        to_key: String,
+        revision: String,
     },
     #[serde(rename = "app_value.moved")]
     AppValueMoved {

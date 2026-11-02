@@ -154,7 +154,16 @@ impl AppState {
         entry_id: &str,
         request: &contract::CollectionMove,
         workspace_id: Option<&str>,
-    ) -> Result<(contract::CollectionMoveReply, String, StorageUpdate), CoreError> {
+    ) -> Result<
+        (
+            contract::CollectionMoveReply,
+            String,
+            StorageUpdate,
+            String,
+            String,
+        ),
+        CoreError,
+    > {
         let db = self.lock_db()?;
         let definition =
             current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;

@@ -206,6 +206,8 @@ pub(super) fn move_document(
         contract::CollectionMoveReply,
         String,
         contract::StorageUpdate,
+        String,
+        String,
     ),
     CoreError,
 > {
@@ -245,6 +247,8 @@ pub(super) fn move_document(
         contract::CollectionMoveReply { revision },
         account_id.to_string(),
         contract::StorageUpdate::Moved { moved },
+        from_key,
+        to_key,
     ))
 }
 

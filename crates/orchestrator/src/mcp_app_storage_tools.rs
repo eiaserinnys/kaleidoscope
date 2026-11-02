@@ -95,6 +95,28 @@ fn builtin_key(
     Some((resolved, workspace))
 }
 
+fn builtin_collection_document(
+    state: &AppState,
+    app_id: &str,
+    key: &str,
+    workspace: Option<String>,
+    principal: &McpPrincipal,
+) -> Option<(
+    kaleidoscope_contract::app_storage::StorageEntryDecl,
+    Option<String>,
+)> {
+    let effective = effective_workspace_id(workspace, principal);
+    let (entry, _, _) = state
+        .builtin_collection_for_key(app_id, key, effective.as_deref())
+        .ok()?;
+    let workspace = entry
+        .key
+        .contains("{workspace_id}")
+        .then_some(effective)
+        .flatten();
+    Some((entry, workspace))
+}
+
 #[tool_router(router = app_storage_tool_router, vis = "pub(super)")]
 impl super::McpServer {
     #[cfg(test)]
@@ -238,6 +260,35 @@ impl super::McpServer {
             Err(error) => return Ok(json_error(error)),
         };
         if kaleidoscope_contract::builtin::is_builtin(&args.app_id) {
+            if args.entry_id.is_none() && args.doc.is_none() {
+                if let Some(key) = args.key.as_deref() {
+                    if let Some((_, workspace)) = builtin_collection_document(
+                        &self.state,
+                        &args.app_id,
+                        key,
+                        args.workspace_id.clone(),
+                        &principal,
+                    ) {
+                        return Ok(
+                            match self.state.read_app_value_with_workspace(
+                                &account_id,
+                                &args.app_id,
+                                key,
+                                workspace.as_deref(),
+                            ) {
+                                Ok(value) if value.exists => json_result(json!({
+                                    "kind": value.kind,
+                                    "content": value.content,
+                                    "revision": value.revision,
+                                    "exists": true,
+                                })),
+                                Ok(_) => json_error(CoreError::new(ErrorCode::NotFound)),
+                                Err(error) => json_error(error),
+                            },
+                        );
+                    }
+                }
+            }
             let Some((key, workspace)) = builtin_key(
                 &self.state,
                 &args.app_id,
@@ -365,6 +416,33 @@ impl super::McpServer {
             Err(error) => return Ok(json_error(error)),
         };
         if kaleidoscope_contract::builtin::is_builtin(&args.app_id) {
+            if args.entry_id.is_none() && args.doc.is_none() {
+                if let Some(key) = args.key.as_deref() {
+                    if let Some((entry, workspace)) = builtin_collection_document(
+                        &self.state,
+                        &args.app_id,
+                        key,
+                        args.workspace_id.clone(),
+                        &principal,
+                    ) {
+                        let kind = args.kind.unwrap_or(entry.kind);
+                        return Ok(
+                            match self.state.write_app_value(
+                                &account_id,
+                                &args.app_id,
+                                key,
+                                kind,
+                                args.content,
+                                args.expected_revision,
+                                workspace.as_deref(),
+                            ) {
+                                Ok(revision) => json_result(json!({"revision":revision})),
+                                Err(error) => json_error(error),
+                            },
+                        );
+                    }
+                }
+            }
             let Some((key, workspace)) = builtin_key(
                 &self.state,
                 &args.app_id,
@@ -552,12 +630,14 @@ impl super::McpServer {
                 &request,
                 args.workspace_id.as_deref(),
             ) {
-                Ok((reply, account, update)) => {
-                    super::super::app_storage_http::send_storage_update(
+                Ok((reply, account, update, from_key, to_key)) => {
+                    super::super::app_storage_http::send_storage_move(
                         &self.state,
                         &args.app_id,
                         &account,
                         update,
+                        from_key,
+                        to_key,
                     );
                     json_result(serde_json::to_value(reply).unwrap())
                 }
@@ -601,6 +681,33 @@ impl super::McpServer {
             Err(error) => return Ok(json_error(error)),
         };
         if kaleidoscope_contract::builtin::is_builtin(&args.app_id) {
+            if args.entry_id.is_none() && args.doc.is_none() {
+                if let Some(key) = args.key.as_deref() {
+                    if let Some((_, workspace)) = builtin_collection_document(
+                        &self.state,
+                        &args.app_id,
+                        key,
+                        args.workspace_id.clone(),
+                        &principal,
+                    ) {
+                        if args.expected_revision.is_none() {
+                            return Ok(json_error(CoreError::new(ErrorCode::InvalidRequest)));
+                        }
+                        return Ok(
+                            match self.state.reset_app_value_with_workspace(
+                                &account_id,
+                                &args.app_id,
+                                key,
+                                args.expected_revision,
+                                workspace.as_deref(),
+                            ) {
+                                Ok(()) => json_result(json!({"revision":null})),
+                                Err(error) => json_error(error),
+                            },
+                        );
+                    }
+                }
+            }
             let Some((key, workspace)) = builtin_key(
                 &self.state,
                 &args.app_id,

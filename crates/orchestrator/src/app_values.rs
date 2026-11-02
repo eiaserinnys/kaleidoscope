@@ -406,11 +406,9 @@ pub(super) fn move_collection(
         to: to_doc,
         expected_revision: request.expected_revision,
     };
-    let (reply, account, update) = super::collection_storage::move_document(
+    let (reply, account, update, from_key, to_key) = super::collection_storage::move_document(
         state, account, app_id, &entry, &prefix, &request, workspace,
     )?;
-    let from_key = format!("{prefix}/{}", request.from);
-    let to_key = format!("{prefix}/{}", request.to);
     super::app_storage_http::send_raw_storage_move(
         state, app_id, &account, update, from_key, to_key,
     );

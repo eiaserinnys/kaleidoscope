@@ -127,7 +127,7 @@ function HtmlDocumentViewBlock({ block, context }: { block: HtmlViewData & { doc
   useEffect(() => {
     void read();
     const unsubscribe = context.store.subscribeEvents((event) => {
-      if (event.event === "storage.update" && event.window_id === context.window.id && (event.update.kind === "snapshot" || event.update.changed.item.entry_id === block.document.entry)) void read();
+      if (event.event === "storage.update" && event.window_id === context.window.id && (event.update.kind === "snapshot" || (event.update.kind === "changed" && event.update.changed.item.entry_id === block.document.entry))) void read();
     });
     return () => { readSeq.current++; unsubscribe(); };
   }, [read, context.store, context.window.id, block.document.entry]);

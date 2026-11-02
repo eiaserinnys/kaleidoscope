@@ -683,6 +683,91 @@ async fn mcp_storage_tools_and_workspace_context_use_declared_account_data() {
     assert_eq!(reset["revision"], Value::Null);
 }
 
+#[tokio::test]
+async fn builtin_mcp_raw_collection_key_supports_read_write_and_reset() {
+    use super::mcp::app_storage_tools::{
+        AppStorageEntryArgs, AppStorageResetArgs, AppStorageWriteArgs,
+    };
+    use kaleidoscope_contract::{app_storage::StorageKind, worker::BuiltinRuntimeSpec};
+
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    let storage = serde_json::from_value(json!({
+        "entries":[{
+            "id":"documents",
+            "key":"documents",
+            "kind":"md",
+            "collection":true,
+            "default":"",
+            "label":"문서",
+            "presentation":"hidden"
+        }]
+    }))
+    .unwrap();
+    state
+        .register_builtin_specs(&[BuiltinRuntimeSpec {
+            app_id: "agent".into(),
+            version: 4,
+            storage: Some(storage),
+            worker: None,
+        }])
+        .unwrap();
+    let server = super::mcp::McpServer::new(state.clone());
+    let key = "documents/메모.md";
+
+    let written = decode(
+        server
+            .write_app_storage(Parameters(AppStorageWriteArgs {
+                app_id: "agent".into(),
+                entry_id: None,
+                key: Some(key.into()),
+                doc: None,
+                kind: Some(StorageKind::Md),
+                workspace_id: None,
+                content: json!("본문"),
+                expected_revision: None,
+            }))
+            .await
+            .unwrap(),
+    );
+    let revision = written["revision"].as_str().unwrap().to_string();
+    let read = decode(
+        server
+            .read_app_storage(Parameters(AppStorageEntryArgs {
+                app_id: "agent".into(),
+                entry_id: None,
+                key: Some(key.into()),
+                doc: None,
+                workspace_id: None,
+            }))
+            .await
+            .unwrap(),
+    );
+    assert_eq!(read["content"], "본문");
+    assert_eq!(read["revision"], revision);
+
+    let reset = decode(
+        server
+            .reset_app_storage(Parameters(AppStorageResetArgs {
+                app_id: "agent".into(),
+                entry_id: None,
+                key: Some(key.into()),
+                doc: None,
+                workspace_id: None,
+                expected_revision: Some(revision),
+            }))
+            .await
+            .unwrap(),
+    );
+    assert_eq!(reset["revision"], Value::Null);
+    assert!(
+        !state
+            .read_app_value_with_workspace(&account, "agent", key, None)
+            .unwrap()
+            .exists
+    );
+}
+
 fn decode(result: rmcp::model::CallToolResult) -> Value {
     let value = serde_json::to_value(result).unwrap();
     serde_json::from_str(value["content"][0]["text"].as_str().unwrap()).unwrap()

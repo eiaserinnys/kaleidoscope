@@ -70,10 +70,9 @@ pub(super) fn send_storage_update(
             app_id: app_id.into(),
             changed,
         },
-        StorageUpdate::Moved { moved } => DeviceEvent::StorageMoved {
-            app_id: app_id.into(),
-            moved,
-        },
+        StorageUpdate::Moved { .. } => {
+            unreachable!("StorageMoved broadcasts require resolved document keys")
+        }
     };
     state.publish_storage_update(event, account_id);
 }
@@ -93,6 +92,30 @@ pub(super) fn send_raw_storage_move(
         DeviceEvent::AppValueMoved {
             app_id: app_id.into(),
             bucket_id: moved.bucket_id,
+            from_key,
+            to_key,
+            revision: moved.revision,
+        },
+        account_id,
+    );
+}
+
+pub(super) fn send_storage_move(
+    state: &AppState,
+    app_id: &str,
+    account_id: &str,
+    update: StorageUpdate,
+    from_key: String,
+    to_key: String,
+) {
+    let StorageUpdate::Moved { moved } = update else {
+        return;
+    };
+    state.publish_storage_update(
+        DeviceEvent::StorageMoved {
+            app_id: app_id.into(),
+            bucket_id: moved.bucket_id,
+            entry_id: moved.entry_id,
             from_key,
             to_key,
             revision: moved.revision,
@@ -229,8 +252,8 @@ pub(super) async fn device_collection_move(
         &request,
         query.workspace_id.as_deref(),
     ) {
-        Ok((reply, account, update)) => {
-            send_storage_update(&state, &app_id, &account, update);
+        Ok((reply, account, update, from_key, to_key)) => {
+            send_storage_move(&state, &app_id, &account, update, from_key, to_key);
             (StatusCode::OK, Json(reply)).into_response()
         }
         Err(error) => storage_error_response(error),

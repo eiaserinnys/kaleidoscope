@@ -224,7 +224,9 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
                 "storage 선언은 블록 세트 6판이라 requires.blocks가 6 이상이어야 합니다".into(),
             );
         }
-        let minimum_storage_version = if storage
+        let minimum_storage_version = if storage.entries.iter().any(|entry| entry.collection) {
+            3
+        } else if storage
             .entries
             .iter()
             .any(|entry| entry.description.is_some() || entry.choices.is_some())
@@ -1936,6 +1938,29 @@ mod profiler_permission_tests {
         definition["requires"]["modules"] = json!({"files":1});
         definition["permissions"][0] =
             json!({"module":"files","id":"core_profiler","label":"파일","access":"read"});
+        assert!(parse_app_definition(&definition.to_string()).is_err());
+    }
+
+    #[test]
+    fn storage_collection_requires_module_version_three() {
+        let mut definition = json!({
+            "id":"collection-version",
+            "name":"문서 모음",
+            "requires":{"blocks":6,"modules":{"storage":3}},
+            "storage":{"entries":[{
+                "id":"documents",
+                "key":"documents",
+                "kind":"md",
+                "collection":true,
+                "default":"",
+                "label":"문서",
+                "presentation":"hidden"
+            }]},
+            "ui":{"type":"text","value":"문서"}
+        });
+        assert!(parse_app_definition(&definition.to_string()).is_ok());
+
+        definition["requires"]["modules"]["storage"] = json!(1);
         assert!(parse_app_definition(&definition.to_string()).is_err());
     }
 }
