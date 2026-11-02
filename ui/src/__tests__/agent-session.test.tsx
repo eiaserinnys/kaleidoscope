@@ -43,10 +43,14 @@ function localAgent(phase: LocalAgentSnapshot["phase"]): LocalAgentSnapshot {
   };
 }
 
-function setup(agent = localAgent("ready"), respond?: (request: CoreRequest) => Promise<CoreReply>, view: DataView = { values: {}, sources: {} }, appDefinition = definition) {
+function setup(agent = localAgent("ready"), respond?: (request: CoreRequest) => Promise<CoreReply>, view: DataView = { values: {}, sources: {} }, appDefinition = definition, failFirstAttach = false) {
   const base = makeTestSnapshot({ definitions: [appDefinition] });
   const listeners = new Set<(event: CoreEvent) => void>();
+  let dataAttempts = 0;
+  let agentAttempts = 0;
   const call = vi.fn(async (request: CoreRequest): Promise<CoreReply> => {
+    if (request.op === "data.attach" && ++dataAttempts === 1 && failFirstAttach) throw new Error("창 데이터를 읽지 못했습니다");
+    if (request.op === "local_agent.attach" && ++agentAttempts === 1 && failFirstAttach) throw new Error("에이전트 설정을 읽지 못했습니다");
     if (request.op === "data.attach") return { op: "data.attach", view };
     if (request.op === "data.detach") return { op: "data.detach" };
     if (request.op === "local_agent.attach") return { op: "local_agent.attach", snapshot: agent };
@@ -76,6 +80,13 @@ function setup(agent = localAgent("ready"), respond?: (request: CoreRequest) => 
 afterEach(() => cleanup());
 
 describe("기기 로컬 에이전트 화면", () => {
+  it("처음 붙이기에 실패한 창은 다시 시도할 때 데이터 연결을 유지한다", async () => {
+    const state = setup(localAgent("choosing_agent"), undefined, { values: {}, sources: {} }, definition, true);
+    expect(await screen.findByText("에이전트 설정을 읽지 못했습니다")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+    await waitFor(() => expect(state.call.mock.calls.filter(([request]) => request.op === "local_agent.attach")).toHaveLength(2));
+    expect(state.call.mock.calls.filter(([request]) => request.op === "data.detach")).toHaveLength(0);
+  });
   it("같은 프레임의 text 뒤에 답이 끝나면 보류한 진행 글을 되살리지 않는다", async () => {
     const state = setup(localAgent("ready"));
     await screen.findByRole("textbox", { name: "메시지" });
@@ -92,12 +103,15 @@ describe("기기 로컬 에이전트 화면", () => {
       ui: { ...definition.ui, agents: { expr: "$storage.agents" } },
     } as AppDefinition;
     const empty = { ...localAgent("choosing_agent"), agents: [] };
-    setup(empty, undefined, {
+    const state = setup(empty, undefined, {
       values: { "/ui/agents": { status: "failed", message: "저장소를 읽지 못했습니다", retry: [] } },
       sources: {},
     }, failedDefinition);
 
     expect((await screen.findByRole("alert")).textContent).toContain("저장소를 읽지 못했습니다");
+    fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+    await waitFor(() => expect(state.call.mock.calls.filter(([request]) => request.op === "data.attach")).toHaveLength(2));
+    await waitFor(() => expect(state.call.mock.calls.filter(([request]) => request.op === "local_agent.attach")).toHaveLength(2));
     const button = screen.getByRole("button", { name: "에이전트" }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     fireEvent.click(button);

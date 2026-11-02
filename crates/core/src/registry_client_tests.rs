@@ -3,6 +3,15 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 
 #[test]
+fn raw_app_value_url_preserves_key_segments_without_empty_segment() {
+    let url = raw_app_value_item_url("http://127.0.0.1:1234/", "agent", "settings/agents").unwrap();
+    assert_eq!(
+        url.as_str(),
+        "http://127.0.0.1:1234/api/device/app-values/agent/settings/agents"
+    );
+}
+
+#[test]
 fn parses_deleted_snapshot_and_event() {
     assert!(
         matches!(parse_event_line(r#"data: {"event":"apps.snapshot","apps":[],"deleted":["personal"]}"#), Some(DeviceEvent::AppsSnapshot { deleted, .. }) if deleted == ["personal"])

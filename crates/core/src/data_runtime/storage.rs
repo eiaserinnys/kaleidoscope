@@ -87,6 +87,13 @@ pub(super) fn initial_slots(definition: &AppDefinition) -> (BTreeMap<String, Slo
 }
 
 impl Runtime {
+    pub(super) fn has_failed_storage(&self) -> bool {
+        self.storage
+            .values()
+            .any(|slot| matches!(slot.status, Status::Failed(_)))
+            || (self.storage_meta.needed && matches!(self.storage_meta.status, Status::Failed(_)))
+    }
+
     pub(super) fn storage_values(&self) -> (BTreeMap<String, Value>, BTreeMap<String, Value>) {
         let values = self
             .storage
@@ -330,6 +337,7 @@ mod freshness_tests {
             definition.clone(),
             definition.state.clone(),
             true,
+            false,
             Default::default(),
         )
     }

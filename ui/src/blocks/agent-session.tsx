@@ -4,7 +4,7 @@ import { Button, EmptyState, IconButton, Notice, StatusText } from "../component
 import { Folder, FolderOpen, MessageSquare } from "../components/icons";
 import { Select, Toggle } from "../components/select-toggle";
 import { toCoreError } from "../core/core-transport";
-import { useBinding } from "../data/window-data";
+import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { readWindowState, useWindowGrant } from "../data/window-state";
 import { useShareDescriber } from "../share/visible";
@@ -18,6 +18,7 @@ export type AgentSessionBlockData = Extract<Block, { type: "chat" }> & { permiss
 
 export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: AgentSessionBlockData; context: BlockContext; pointer?: string }) {
   const windowId = context.window.id;
+  const data = useWindowData();
   const rootGrant = useWindowGrant(context, block.root.permission);
   const agentsBinding = useBinding(`${pointer}/agents`, block.agents);
   const [snapshot, setSnapshot] = useState<LocalAgentSnapshot | null>(null);
@@ -181,11 +182,23 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
   };
   const selectOptions = (snapshot?.agents ?? []).map((agent) => ({ value: agent.id, label: agent.name }));
 
+  const retryLoading = async () => {
+    try {
+      await data.retry();
+      const reply = await context.store.call({ op: "local_agent.attach", window_id: windowId });
+      if (reply.op !== "local_agent.attach") throw new Error("에이전트 상태를 불러오지 못했습니다");
+      generationRef.current = reply.snapshot.generation;
+      setSnapshot(reply.snapshot);
+      setLoadError(null);
+    } catch (reason) { setLoadError(toCoreError(reason).message); }
+  };
+  const retryAction: [ReactNode] = [<Button key="retry" onClick={() => void retryLoading()}>다시 시도</Button>];
+
   let main: ReactNode;
-  if (loadError) main = <div className="ks-agent-session-state"><Notice role="alert">{loadError}</Notice></div>;
+  if (loadError) main = <div className="ks-agent-session-state"><Notice role="alert" actions={retryAction}>{loadError}</Notice></div>;
   else if (!snapshot) main = <div className="ks-agent-session-state"><StatusText>불러오는 중</StatusText></div>;
   else if (snapshot.phase === "choosing_agent") main = <div className="ks-agent-session-state">{snapshot.agents.length === 0 && agentsBinding.status === "failed"
-    ? <Notice role="alert">{agentsBinding.message}</Notice>
+    ? <Notice role="alert" actions={retryAction}>{agentsBinding.message}</Notice>
     : snapshot.agents.length === 0 && agentsBinding.status === "loading"
       ? <StatusText>불러오는 중</StatusText>
       : <EmptyState icon={<MessageSquare size="empty" />} text="에이전트를 골라 주세요" />}</div>;

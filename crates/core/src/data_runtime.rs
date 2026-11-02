@@ -58,6 +58,8 @@ impl Default for DataRuntimes {
 struct Runtime {
     version: u32,
     using_defaults: bool,
+    connected: bool,
+    storage_reconnect_pending: bool,
     definition: AppDefinition,
     compiled: CompiledApp,
     state: BTreeMap<String, Value>,
@@ -124,6 +126,7 @@ impl Runtime {
         definition: AppDefinition,
         state: BTreeMap<String, Value>,
         using_defaults: bool,
+        connected: bool,
         profiler: crate::profiler::Profiler,
     ) -> Self {
         let compiled = CompiledApp::compile(&definition);
@@ -151,6 +154,8 @@ impl Runtime {
         Self {
             version,
             using_defaults,
+            connected,
+            storage_reconnect_pending: false,
             definition,
             compiled,
             state,
@@ -926,6 +931,10 @@ pub(crate) fn attach(
                 definition.clone(),
                 window.state.clone(),
                 using_defaults,
+                matches!(
+                    state.link,
+                    kaleidoscope_contract::LinkStatus::Connected { .. }
+                ),
                 inner.profiler.clone(),
             )
         });
@@ -960,7 +969,11 @@ pub(crate) fn attach(
                 .events
                 .send((window_id.into(), version, delta));
         }
-        (view, pending, !already_attached)
+        (
+            view,
+            pending,
+            !already_attached || runtime.has_failed_storage(),
+        )
     };
     if start_storage {
         storage::load(inner, window_id, None);
@@ -1079,6 +1092,10 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
             &state,
             inner.link_file.lock().unwrap().is_some(),
         );
+        let connected = matches!(
+            state.link,
+            kaleidoscope_contract::LinkStatus::Connected { .. }
+        );
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
         windows.retain(|id, runtime| {
             state
@@ -1095,10 +1112,17 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                 id,
                 inner.data_runtimes.shell_visible.load(Ordering::SeqCst),
             );
-            if runtime.using_defaults != using_defaults {
-                runtime.using_defaults = using_defaults;
-                if runtime.attached > 0 {
-                    reloads.push(id.clone());
+            let just_connected = !runtime.connected && connected;
+            runtime.connected = connected;
+            let defaults_changed = runtime.using_defaults != using_defaults;
+            runtime.using_defaults = using_defaults;
+            runtime.storage_reconnect_pending |= just_connected;
+            let reconnect_reload =
+                connected && runtime.visible && runtime.storage_reconnect_pending;
+            if runtime.attached > 0 && (defaults_changed || reconnect_reload) {
+                reloads.push(id.clone());
+                if reconnect_reload {
+                    runtime.storage_reconnect_pending = false;
                 }
             }
             let window = state
@@ -1107,7 +1131,7 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                 .iter()
                 .find(|window| window.id == *id)
                 .unwrap();
-            if runtime.state == window.state {
+            if runtime.state == window.state && !just_connected {
                 continue;
             }
             let started = Instant::now();
@@ -1123,6 +1147,20 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
             let live = liveness::live_sources(runtime);
             let mut changed_sources = BTreeSet::new();
             for name in names {
+                if just_connected
+                    && !matches!(runtime.sources[&name].status, SourceStatus::Ready { .. })
+                {
+                    let source = runtime.sources.get_mut(&name).unwrap();
+                    if source.in_flight {
+                        source.generation = inner
+                            .data_runtimes
+                            .next_generation
+                            .fetch_add(1, Ordering::SeqCst)
+                            + 1;
+                        source.in_flight = false;
+                    }
+                    source.last_fetched = None;
+                }
                 let source = &runtime.definition.sources[&name];
                 let depends = kaleidoscope_contract::data::source_bindings(source)
                     .iter()
@@ -1152,7 +1190,9 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                 if changed || runtime.sources[&name].status != old_status {
                     changed_sources.insert(name.clone());
                 }
-                if should_prepare_after_plan(runtime, &live, &name, changed, false) {
+                let retry = just_connected
+                    && !matches!(runtime.sources[&name].status, SourceStatus::Ready { .. });
+                if should_prepare_after_plan(runtime, &live, &name, changed || retry, false) {
                     if let Some(job) = prepare(&inner.data_runtimes, runtime, id, &name, false) {
                         pending.push(job);
                     }
@@ -1300,12 +1340,7 @@ pub(crate) fn set_shell_visible(inner: &Arc<Inner>, visible: bool) {
         .swap(visible, Ordering::SeqCst)
         != visible
     {
-        let state = inner.state.lock().unwrap();
-        for (id, runtime) in inner.data_runtimes.windows.lock().unwrap().iter_mut() {
-            runtime.visible = liveness::visible(&state, id, visible);
-        }
-        drop(state);
-        run_due(inner, None);
+        state_changed(inner);
     }
 }
 
@@ -1435,6 +1470,7 @@ mod freshness_tests {
             definition.clone(),
             definition.state.clone(),
             true,
+            false,
             Default::default(),
         )
     }
@@ -1468,7 +1504,14 @@ mod freshness_tests {
             "state":{}, "sources":{"item":{"kind":"file","permission":"file","path":"a.json"}},
             "ui":{"type":"text","value":{"expr":"$data_meta.item.stale"}}
         }).to_string()).unwrap();
-        let mut runtime = Runtime::new(1, definition, BTreeMap::new(), true, Default::default());
+        let mut runtime = Runtime::new(
+            1,
+            definition,
+            BTreeMap::new(),
+            true,
+            false,
+            Default::default(),
+        );
         let manager = DataRuntimes::default();
         let first = SourcePlan::File {
             permission: "file".into(),

@@ -46,22 +46,27 @@ pub(crate) fn context(
     let definition =
         app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
             .ok_or_else(|| error::make(ErrorCode::NotFound))?;
-    let declaration = definition
-        .storage
-        .as_ref()
-        .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+    let declaration = definition.storage.as_ref().ok_or_else(|| {
+        error::with_message(
+            ErrorCode::InvalidRequest,
+            "앱에 저장소가 선언되지 않았습니다.",
+        )
+    })?;
     if entry.is_some_and(|id| !declaration.entries.iter().any(|item| item.id == id)) {
-        return Err(error::make(ErrorCode::InvalidRequest));
+        return Err(error::with_message(
+            ErrorCode::InvalidRequest,
+            "앱에 선언되지 않은 저장소 항목입니다.",
+        ));
     }
     if !matches!(state.link, LinkStatus::Connected { .. }) {
-        return Err(error::make(ErrorCode::Unavailable));
+        return Err(error::with_message(
+            ErrorCode::Unavailable,
+            "서버에 연결되어 있지 않습니다.",
+        ));
     }
-    let link = inner
-        .link_file
-        .lock()
-        .unwrap()
-        .clone()
-        .ok_or_else(|| error::make(ErrorCode::Unavailable))?;
+    let link = inner.link_file.lock().unwrap().clone().ok_or_else(|| {
+        error::with_message(ErrorCode::Unavailable, "서버에 연결되어 있지 않습니다.")
+    })?;
     Ok(Context {
         app: window.app_id.clone(),
         workspace: desktop.workspace_id.clone(),
@@ -129,7 +134,10 @@ fn list_collection(
     let ctx = context(inner, window, Some(entry))?;
     let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
     if !decl.collection {
-        return Err(error::make(ErrorCode::InvalidRequest));
+        return Err(error::with_message(
+            ErrorCode::InvalidRequest,
+            "문서 모음이 아닌 저장 항목입니다.",
+        ));
     }
     let reply = if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
         let prefix = decl.key.replace("{workspace_id}", &ctx.workspace);
@@ -186,7 +194,12 @@ fn read_with_doc(
                 .storage
                 .as_ref()
                 .and_then(|storage| storage.entries.iter().find(|item| item.id == entry))
-                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+                .ok_or_else(|| {
+                    error::with_message(
+                        ErrorCode::InvalidRequest,
+                        "앱에 선언되지 않은 저장소 항목입니다.",
+                    )
+                })?;
             if item.collection {
                 return Err(error::make(ErrorCode::Unavailable));
             }
@@ -201,9 +214,14 @@ fn read_with_doc(
     let ctx = context(inner, window, Some(entry))?;
     let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
     if decl.collection {
-        let doc = doc.ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+        let doc = doc.ok_or_else(|| {
+            error::with_message(ErrorCode::InvalidRequest, "문서 이름이 필요합니다.")
+        })?;
         if !contract::valid_collection_doc(doc) {
-            return Err(error::make(ErrorCode::InvalidRequest));
+            return Err(error::with_message(
+                ErrorCode::InvalidRequest,
+                "문서 이름이 올바르지 않습니다.",
+            ));
         }
         if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
             let prefix = decl.key.replace("{workspace_id}", &ctx.workspace);
@@ -223,14 +241,23 @@ fn read_with_doc(
             if !raw.exists {
                 return Err(error::make(ErrorCode::NotFound));
             }
-            let kind = raw
-                .kind
-                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
-            let content = raw
-                .content
-                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+            let kind = raw.kind.ok_or_else(|| {
+                error::with_message(
+                    ErrorCode::InvalidRequest,
+                    "서버가 저장 항목의 종류를 보내지 않았습니다.",
+                )
+            })?;
+            let content = raw.content.ok_or_else(|| {
+                error::with_message(
+                    ErrorCode::InvalidRequest,
+                    "서버가 저장 항목의 내용을 보내지 않았습니다.",
+                )
+            })?;
             if kind != decl.kind || contract::validate_storage_content(decl, &content).is_err() {
-                return Err(error::make(ErrorCode::InvalidRequest));
+                return Err(error::with_message(
+                    ErrorCode::InvalidRequest,
+                    "서버의 저장 항목 내용이 앱 선언과 맞지 않습니다.",
+                ));
             }
             return Ok(StorageReadReply {
                 kind,
@@ -252,7 +279,10 @@ fn read_with_doc(
             .map_err(|error| map_error(inner, &ctx.link, error));
     }
     if doc.is_some() {
-        return Err(error::make(ErrorCode::InvalidRequest));
+        return Err(error::with_message(
+            ErrorCode::InvalidRequest,
+            "문서 모음이 아닌 항목에 문서 이름을 지정할 수 없습니다.",
+        ));
     }
     if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
         let key = decl.key.replace("{workspace_id}", &ctx.workspace);
@@ -328,9 +358,14 @@ fn write_with_doc(
     let ctx = context(inner, window, Some(entry))?;
     let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
     if decl.collection {
-        let doc = doc.ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+        let doc = doc.ok_or_else(|| {
+            error::with_message(ErrorCode::InvalidRequest, "문서 이름이 필요합니다.")
+        })?;
         if !contract::valid_collection_doc(doc) {
-            return Err(error::make(ErrorCode::InvalidRequest));
+            return Err(error::with_message(
+                ErrorCode::InvalidRequest,
+                "문서 이름이 올바르지 않습니다.",
+            ));
         }
         contract::validate_storage_content(decl, &content)
             .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))?;
@@ -372,7 +407,10 @@ fn write_with_doc(
         return Ok(reply.revision);
     }
     if doc.is_some() {
-        return Err(error::make(ErrorCode::InvalidRequest));
+        return Err(error::with_message(
+            ErrorCode::InvalidRequest,
+            "문서 모음이 아닌 항목에 문서 이름을 지정할 수 없습니다.",
+        ));
     }
     if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
         contract::validate_storage_content(decl, &content)
@@ -479,11 +517,14 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             let ctx = context(inner, &window_id, Some(&entry))?;
             let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
             if decl.collection {
-                let doc = doc
-                    .as_deref()
-                    .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+                let doc = doc.as_deref().ok_or_else(|| {
+                    error::with_message(ErrorCode::InvalidRequest, "문서 이름이 필요합니다.")
+                })?;
                 if !contract::valid_collection_doc(doc) || expected_revision.0.is_none() {
-                    return Err(error::make(ErrorCode::InvalidRequest));
+                    return Err(error::with_message(
+                        ErrorCode::InvalidRequest,
+                        "문서 이름이나 삭제할 리비전이 올바르지 않습니다.",
+                    ));
                 }
                 let request = StorageResetRequest { expected_revision };
                 let reply = if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
@@ -517,7 +558,10 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 });
             }
             if doc.is_some() {
-                return Err(error::make(ErrorCode::InvalidRequest));
+                return Err(error::with_message(
+                    ErrorCode::InvalidRequest,
+                    "문서 모음이 아닌 항목에 문서 이름을 지정할 수 없습니다.",
+                ));
             }
             if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
                 let key = decl.key.replace("{workspace_id}", &ctx.workspace);
@@ -568,12 +612,18 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             expected_revision,
         } => {
             if !contract::valid_collection_doc(&from) || !contract::valid_collection_doc(&to) {
-                return Err(error::make(ErrorCode::InvalidRequest));
+                return Err(error::with_message(
+                    ErrorCode::InvalidRequest,
+                    "이동할 문서 이름이 올바르지 않습니다.",
+                ));
             }
             let ctx = context(inner, &window_id, Some(&entry))?;
             let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
             if !decl.collection {
-                return Err(error::make(ErrorCode::InvalidRequest));
+                return Err(error::with_message(
+                    ErrorCode::InvalidRequest,
+                    "문서 모음이 아닌 저장 항목입니다.",
+                ));
             }
             let request = CollectionMove {
                 from: from.clone(),
@@ -612,6 +662,9 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 revision: reply.revision,
             })
         }
-        _ => Err(error::make(ErrorCode::InvalidRequest)),
+        _ => Err(error::with_message(
+            ErrorCode::InvalidRequest,
+            "앱 저장소 명령이 올바르지 않습니다.",
+        )),
     }
 }

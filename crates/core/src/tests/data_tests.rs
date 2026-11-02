@@ -1170,6 +1170,12 @@ fn unavailable_storage_never_looks_like_a_null_default() {
         device_name: "test-device".into(),
         reason: "offline".into(),
     };
+    assert_eq!(
+        crate::app_storage::read(&core.inner, &window, "choice")
+            .unwrap_err()
+            .message,
+        "서버에 연결되어 있지 않습니다."
+    );
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
         dormant: vec![],
@@ -1184,6 +1190,252 @@ fn unavailable_storage_never_looks_like_a_null_default() {
             .unwrap();
         matches!(view, CoreReply::DataAttach { view } if matches!(view.values.get("/ui/value"), Some(BindingValue::Failed { .. })))
     });
+}
+
+#[test]
+fn storage_failed_while_offline_is_reloaded_after_connecting() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let registry = registry_client();
+    let definition = json!({
+        "id":"storage-reconnect","name":"Storage","requires":{"blocks":6,"modules":{"storage":1}},
+        "state":{},"permissions":[],
+        "storage":{"entries":[{"id":"choice","key":"settings/choice","kind":"json","schema":{"type":"string"},"default":"local","label":"선택","presentation":"hidden"}]},
+        "ui":{"type":"text","value":{"expr":"$storage.choice"}}
+    }).to_string();
+    let core = open_core_with_client(temp.path(), vec![definition], &host, registry);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "storage-reconnect");
+    *core.inner.link_file.lock().unwrap() = Some(connected_link_file());
+    core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: kaleidoscope_contract::ServerMode::Remote,
+        server_url: "https://registry.test".into(),
+        device_name: "test-device".into(),
+        reason: "offline".into(),
+    };
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+        dormant: vec![],
+    })
+    .unwrap();
+    wait_until(|| {
+        matches!(
+            crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"),
+            Some(BindingValue::Failed { .. })
+        )
+    });
+    mark_connected(&core);
+    crate::data_runtime::state_changed(&core.inner);
+    wait_until(
+        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"), Some(BindingValue::Ready { value }) if value == "one.json"),
+    );
+}
+
+#[test]
+fn hidden_window_reloads_failed_storage_when_it_becomes_visible() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let definition = json!({
+        "id":"storage-hidden","name":"Storage","requires":{"blocks":6,"modules":{"storage":1}},
+        "state":{},"permissions":[],
+        "storage":{"entries":[{"id":"choice","key":"settings/choice","kind":"json","schema":{"type":"string"},"default":"local","label":"선택","presentation":"hidden"}]},
+        "ui":{"type":"text","value":{"expr":"$storage.choice"}}
+    }).to_string();
+    let core = open_core_with_client(temp.path(), vec![definition], &host, client.clone());
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "storage-hidden");
+    *core.inner.link_file.lock().unwrap() = Some(connected_link_file());
+    core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: kaleidoscope_contract::ServerMode::Remote,
+        server_url: "https://registry.test".into(),
+        device_name: "test-device".into(),
+        reason: "offline".into(),
+    };
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+        dormant: vec![],
+    })
+    .unwrap();
+    wait_until(|| {
+        matches!(
+            crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"),
+            Some(BindingValue::Failed { .. })
+        )
+    });
+    core.handle(CoreRequest::WindowMinimize {
+        window_id: window.clone(),
+    })
+    .unwrap();
+    mark_connected(&core);
+    crate::data_runtime::state_changed(&core.inner);
+    thread::sleep(Duration::from_millis(100));
+    assert!(client.storage_workspace.lock().unwrap().is_empty());
+    core.handle(CoreRequest::WindowRestore {
+        window_id: window.clone(),
+    })
+    .unwrap();
+    wait_until(
+        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"), Some(BindingValue::Ready { value }) if value == "one.json"),
+    );
+}
+
+#[test]
+fn source_failed_while_offline_is_retried_after_connecting() {
+    use kaleidoscope_contract::registry::ConnectionKind;
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    client
+        .connection_replies
+        .lock()
+        .unwrap()
+        .insert("/old".into(), response(200, json!([{"key":"restored"}])));
+    let core = open_core_with_client(temp.path(), vec![connection_definition()], &host, client);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "connection-app");
+    *core.inner.connections.lock().unwrap() = vec![info(ConnectionKind::Relay)];
+    *core.inner.link_file.lock().unwrap() = Some(connected_link_file());
+    core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: kaleidoscope_contract::ServerMode::Remote,
+        server_url: "https://registry.test".into(),
+        device_name: "test-device".into(),
+        reason: "offline".into(),
+    };
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+        dormant: vec![],
+    })
+    .unwrap();
+    wait_until(|| {
+        matches!(
+            crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"),
+            Some(BindingValue::Failed { .. })
+        )
+    });
+    mark_connected(&core);
+    crate::data_runtime::state_changed(&core.inner);
+    wait_until(
+        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == json!([{"key":"restored"}])),
+    );
+}
+
+#[test]
+fn hidden_window_retries_failed_source_when_it_becomes_visible() {
+    use kaleidoscope_contract::registry::ConnectionKind;
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    client
+        .connection_replies
+        .lock()
+        .unwrap()
+        .insert("/old".into(), response(200, json!([{"key":"restored"}])));
+    let core = open_core_with_client(
+        temp.path(),
+        vec![connection_definition()],
+        &host,
+        client.clone(),
+    );
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "connection-app");
+    *core.inner.connections.lock().unwrap() = vec![info(ConnectionKind::Relay)];
+    *core.inner.link_file.lock().unwrap() = Some(connected_link_file());
+    core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: kaleidoscope_contract::ServerMode::Remote,
+        server_url: "https://registry.test".into(),
+        device_name: "test-device".into(),
+        reason: "offline".into(),
+    };
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+        dormant: vec![],
+    })
+    .unwrap();
+    wait_until(|| {
+        matches!(
+            crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"),
+            Some(BindingValue::Failed { .. })
+        )
+    });
+    core.handle(CoreRequest::WindowMinimize {
+        window_id: window.clone(),
+    })
+    .unwrap();
+    mark_connected(&core);
+    crate::data_runtime::state_changed(&core.inner);
+    assert!(client.connection_requests.lock().unwrap().is_empty());
+    core.handle(CoreRequest::WindowRestore {
+        window_id: window.clone(),
+    })
+    .unwrap();
+    wait_until(
+        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == json!([{"key":"restored"}])),
+    );
+}
+
+#[test]
+fn reconnect_replaces_in_flight_source_and_discards_its_late_failure() {
+    use kaleidoscope_contract::registry::ConnectionKind;
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    client
+        .connection_replies
+        .lock()
+        .unwrap()
+        .insert("/old".into(), response(200, json!([{"key":"restored"}])));
+    let (release, pause) = mpsc::channel();
+    *client.connection_pause.lock().unwrap() = Some(pause);
+    let core = open_core_with_client(
+        temp.path(),
+        vec![connection_definition()],
+        &host,
+        client.clone(),
+    );
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "connection-app");
+    mark_connected(&core);
+    *core.inner.connections.lock().unwrap() = vec![info(ConnectionKind::Relay)];
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+        dormant: vec![],
+    })
+    .unwrap();
+    wait_until(|| client.connection_requests.lock().unwrap().len() == 1);
+    let (release_retry, pause_retry) = mpsc::channel();
+    *client.connection_pause.lock().unwrap() = Some(pause_retry);
+    core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: kaleidoscope_contract::ServerMode::Remote,
+        server_url: "https://registry.test".into(),
+        device_name: "test-device".into(),
+        reason: "offline".into(),
+    };
+    crate::data_runtime::state_changed(&core.inner);
+    mark_connected(&core);
+    crate::data_runtime::state_changed(&core.inner);
+    client.connection_replies.lock().unwrap().insert(
+        "/old".into(),
+        response(500, json!({"error":"late failure"})),
+    );
+    release.send(()).unwrap();
+    wait_until(|| client.connection_requests.lock().unwrap().len() == 2);
+    assert!(!matches!(
+        crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"),
+        Some(BindingValue::Failed { .. })
+    ));
+    client
+        .connection_replies
+        .lock()
+        .unwrap()
+        .insert("/old".into(), response(200, json!([{"key":"restored"}])));
+    release_retry.send(()).unwrap();
+    wait_until(
+        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == json!([{"key":"restored"}])),
+    );
+    assert!(
+        matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == json!([{"key":"restored"}]))
+    );
 }
 
 #[test]

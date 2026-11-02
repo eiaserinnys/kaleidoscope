@@ -6,12 +6,20 @@ use kaleidoscope_contract::app_storage::{
 };
 
 fn validate(app_id: &str, key: &str) -> Result<(), CoreError> {
-    if !kaleidoscope_contract::builtin::is_builtin(app_id)
-        || !contract::valid_concrete_storage_key(key)
-    {
-        return Err(CoreError::new(ErrorCode::InvalidRequest));
+    if !kaleidoscope_contract::builtin::is_builtin(app_id) {
+        return Err(invalid("기본 앱을 찾을 수 없습니다."));
+    }
+    if !contract::valid_concrete_storage_key(key) {
+        return Err(invalid("앱 저장소 키가 올바르지 않습니다."));
     }
     Ok(())
+}
+
+fn invalid(message: &str) -> CoreError {
+    CoreError {
+        message: message.into(),
+        ..CoreError::new(ErrorCode::InvalidRequest)
+    }
 }
 
 fn content_size(kind: StorageKind, content: &Value) -> Result<(), CoreError> {
@@ -25,7 +33,9 @@ fn content_size(kind: StorageKind, content: &Value) -> Result<(), CoreError> {
     if valid {
         Ok(())
     } else {
-        Err(CoreError::new(ErrorCode::InvalidRequest))
+        Err(invalid(
+            "앱 저장소 내용의 형식이나 크기가 올바르지 않습니다.",
+        ))
     }
 }
 
@@ -106,7 +116,7 @@ impl AppState {
         app_id: &str,
     ) -> Result<AppValueList, CoreError> {
         if !kaleidoscope_contract::builtin::is_builtin(app_id) {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(invalid("기본 앱을 찾을 수 없습니다."));
         }
         let id = super::app_storage::bucket_id(account, app_id);
         let db = self.lock_db()?;
@@ -227,7 +237,7 @@ impl AppState {
         content_size(kind, &content)?;
         if let Ok((entry, prefix, doc)) = self.builtin_collection_for_key(app_id, key, workspace) {
             if kind != entry.kind {
-                return Err(CoreError::new(ErrorCode::InvalidRequest));
+                return Err(invalid("앱 저장소 항목의 종류가 올바르지 않습니다."));
             }
             let (reply, account, update) = super::collection_storage::write(
                 self, account, app_id, &entry, &prefix, &doc, workspace, content, expected,
@@ -237,15 +247,17 @@ impl AppState {
         }
         let (entry, resolved) = self.builtin_entry(app_id, key, workspace)?;
         if resolved != key || kind != entry.kind {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(invalid("앱 저장소 키나 항목의 종류가 올바르지 않습니다."));
         }
-        contract::validate_storage_content(&entry, &content)
-            .map_err(|detail| CoreError::with_details(ErrorCode::InvalidRequest, vec![detail]))?;
+        contract::validate_storage_content(&entry, &content).map_err(|detail| CoreError {
+            details: vec![detail],
+            ..invalid("앱 저장소 내용이 선언된 형식과 맞지 않습니다.")
+        })?;
         if workspace.is_some_and(|workspace| !key.split('/').any(|segment| segment == workspace)) {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(invalid("앱 저장소 키가 작업과 일치하지 않습니다."));
         }
         let revision = contract::storage_revision(kind, &content)
-            .map_err(|_| CoreError::new(ErrorCode::InvalidRequest))?;
+            .map_err(|_| invalid("앱 저장소 내용을 읽을 수 없습니다."))?;
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(db_error)?;
         super::app_storage::check_workspace_owner(&tx, account, workspace)?;
@@ -327,7 +339,7 @@ impl AppState {
         }
         let (entry, resolved) = self.builtin_entry(app_id, key, workspace)?;
         if resolved != key {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(invalid("앱 저장소 키가 올바르지 않습니다."));
         }
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(db_error)?;
@@ -390,7 +402,7 @@ pub(super) fn move_collection(
     workspace: Option<&str>,
 ) -> Result<contract::CollectionMoveReply, CoreError> {
     if request.operation != "move" {
-        return Err(CoreError::new(ErrorCode::InvalidRequest));
+        return Err(invalid("저장 문서 이동 요청이 올바르지 않습니다."));
     }
     validate(app_id, &request.from_key)?;
     validate(app_id, &request.to_key)?;
@@ -399,7 +411,7 @@ pub(super) fn move_collection(
     let (target_entry, target_prefix, to_doc) =
         state.builtin_collection_for_key(app_id, &request.to_key, workspace)?;
     if entry.id != target_entry.id || prefix != target_prefix {
-        return Err(CoreError::new(ErrorCode::InvalidRequest));
+        return Err(invalid("같은 문서 모음 안에서만 이동할 수 있습니다."));
     }
     let request = contract::CollectionMove {
         from: from_doc,
