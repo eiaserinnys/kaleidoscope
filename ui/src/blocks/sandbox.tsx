@@ -54,7 +54,7 @@ export function SandboxBlock({ block, context, pointer }: { block: SandboxData; 
   useEffect(() => {
     if (!block.document) return;
     return context.store.subscribeEvents((event) => {
-      if (event.event === "storage.update" && event.window_id === context.window.id && (event.update.kind === "snapshot" || event.update.changed.item.entry_id === block.document?.entry)) void read();
+      if (event.event === "storage.update" && event.window_id === context.window.id && (event.update.kind === "snapshot" || (event.update.kind === "changed" && event.update.changed.item.entry_id === block.document?.entry))) void read();
     });
   }, [block.document, context.store, context.window.id, read]);
   if (block.file && !grant && permission) return <FileGrant context={context} permission={permission} />;
@@ -73,6 +73,8 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
   const ownWrites = useRef<Record<string, string>>({});
   const writes = useRef<Promise<unknown>>(Promise.resolve());
   const loaded = useRef(false);
+  const active = useRef(true);
+  const currentToken = useRef("");
   const flushes = useRef(new Map<string, (ok: boolean) => void>());
   const [sequence, setSequence] = useState(0);
   const [share, setShare] = useState({ text: "", image: "", sequence: 0 });
@@ -85,12 +87,16 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
     const state = Object.fromEntries(stateKeys.filter((key) => key in context.window.state).map((key) => [key, context.window.state[key]]));
     return { token, html: sandboxSource(rawHtml, { token, state, stateKeys, storageEntries }) };
   // 창 상태가 바뀌어도 프레임을 다시 시작하지 않는다.
-  }, [rawHtml, stateSignature, storageSignature]);
-  const send = useCallback((data: object) => frame.current?.contentWindow?.postMessage(data, "*"), [source.token]);
+  }, [rawHtml, stateSignature, storageSignature, sequence]);
+  const send = useCallback((data: object) => {
+    if (active.current && currentToken.current === source.token) frame.current?.contentWindow?.postMessage(data, "*");
+  }, [source.token]);
   const state = Object.fromEntries(stateKeys.filter((key) => key in context.window.state).map((key) => [key, context.window.state[key]]));
   const stateJson = JSON.stringify(state);
   useEffect(() => { send({ type: "ks-sandbox-state-sync", state: JSON.parse(stateJson) }); }, [stateJson, send]);
   useLayoutEffect(() => {
+    active.current = true;
+    currentToken.current = source.token;
     loaded.current = false;
     revisions.current = {};
     pendingRevisions.current = {};
@@ -116,7 +122,7 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
   useEffect(() => context.store.subscribeEvents((event) => {
     if (event.event !== "storage.update" || event.window_id !== context.window.id) return;
     for (const entry of storageEntries) {
-      if (event.update.kind === "snapshot" || event.update.changed.item.entry_id === entry) {
+      if (event.update.kind === "snapshot" || (event.update.kind === "changed" && event.update.changed.item.entry_id === entry)) {
         void readStorage(entry).then(({ content, revision }) => {
           if (ownWrites.current[entry] === JSON.stringify(content)) return;
           delete ownWrites.current[entry];
@@ -128,7 +134,7 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
   }), [context.store, context.window.id, readStorage, send, storageSignature]);
   useLayoutEffect(() => {
     const receive = (event: MessageEvent) => {
-      if (event.source !== frame.current?.contentWindow || !["null", ""].includes(event.origin) || !event.data || event.data.token !== source.token) return;
+      if (!active.current || event.source !== frame.current?.contentWindow || !["null", ""].includes(event.origin) || !event.data || event.data.token !== source.token) return;
       const data = event.data;
       if (data.type === "ks-sandbox-ready") {
         send({ type: "ks-sandbox-state-sync", state: JSON.parse(stateJson) });
@@ -174,8 +180,8 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
   const appName = context.definition.name || "샌드박스";
   useShareDescriber(root, () => ({ text: `[${appName}]\n\n${share.text}`.trim(), visual: true, ...(share.image ? { image_base64: share.image } : {}) }));
   return <section className="ks-sandbox" ref={root} data-share-seq={share.sequence}>
-    <iframe key={`${source.token}-${sequence}`} ref={frame} title={block.title ?? appName} sandbox="allow-scripts allow-downloads allow-modals" srcDoc={source.html}
+    <iframe key={`${source.token}-${sequence}`} ref={frame} title={block.title ?? appName} sandbox="allow-scripts allow-downloads allow-modals" allow="autoplay" srcDoc={source.html}
       style={block.height ? { minHeight: block.height } : undefined}
-      onLoad={() => { if (loaded.current) { loaded.current = false; setSequence((value) => value + 1); } else loaded.current = true; }} />
+      onLoad={() => { if (loaded.current) { active.current = false; loaded.current = false; setSequence((value) => value + 1); } else loaded.current = true; }} />
   </section>;
 }

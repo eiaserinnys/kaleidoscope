@@ -82,3 +82,37 @@ fn missing_dependency_rolls_back_attached_upload() {
     assert!(state.list_assets().unwrap().is_empty());
     assert!(state.app("asset-example", None).unwrap().is_none());
 }
+
+#[test]
+fn client_entry_must_be_javascript_and_upload_is_atomic() {
+    let state = AppState::in_memory("secret");
+    let definition = json!({"id":"client-example", "name":"클라이언트 시험", "requires":{"blocks":12,"modules":{"assets":1,"client":1}},
+        "assets":[{"id":"entry","version":1}], "permissions":[], "state":{},
+        "client":{"runtime":"javascript","entry":{"id":"entry","version":1},"inputs":{},"outputs":{},"actions":[],"commands":{},"state_keys":[],"storage_entries":[]},
+        "ui":{"type":"text","value":"시험"}});
+    let wrong = upload("entry", "<svg/>");
+    assert!(state
+        .publish_app_with_assets_for_device(
+            &definition.to_string(),
+            "시험",
+            false,
+            None,
+            None,
+            &[wrong]
+        )
+        .is_err());
+    assert!(state.list_assets().unwrap().is_empty());
+    let script = "window.ready = true;";
+    let mut valid = upload("entry", script);
+    valid.format = AssetFormat::Javascript;
+    assert!(state
+        .publish_app_with_assets_for_device(
+            &definition.to_string(),
+            "시험",
+            false,
+            None,
+            None,
+            &[valid]
+        )
+        .is_ok());
+}

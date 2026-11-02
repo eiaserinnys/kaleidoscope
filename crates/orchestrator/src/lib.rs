@@ -120,6 +120,7 @@ struct Inner {
     layout_sync_devices: Mutex<HashSet<String>>,
     storage_devices: Mutex<HashSet<String>>,
     app_value_devices: Mutex<HashSet<String>>,
+    collection_devices: Mutex<HashSet<String>>,
     device_workspaces: Mutex<HashMap<String, HashSet<String>>>,
     pairings: AsyncMutex<HashMap<String, Pairing>>,
     mcp_token: String,
@@ -210,6 +211,7 @@ impl AppState {
             layout_sync_devices: Mutex::new(HashSet::new()),
             storage_devices: Mutex::new(HashSet::new()),
             app_value_devices: Mutex::new(HashSet::new()),
+            collection_devices: Mutex::new(HashSet::new()),
             device_workspaces: Mutex::new(device_workspaces),
             pairings: AsyncMutex::new(HashMap::new()),
             mcp_token,
@@ -582,6 +584,7 @@ mod app_values;
 mod assets;
 mod backup;
 mod builtin_specs;
+mod collection_storage;
 mod connection_relay;
 mod connections;
 mod device_stream;

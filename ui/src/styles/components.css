@@ -172,13 +172,19 @@
   z-index: 10000;
   display: flex;
   max-width: calc(100vw - 2 * var(--ks-space-3));
+  max-height: calc(100vh - 2 * var(--ks-space-3));
   flex-direction: column;
+  overflow: hidden auto;
   border: var(--ks-line-width) solid var(--ks-color-border);
   border-radius: var(--ks-radius-small);
   background: var(--ks-color-surface-raised);
   box-shadow: var(--ks-shadow-popover);
   color: var(--ks-color-text);
   padding: var(--ks-space-1) 0;
+}
+
+.ks-menu > * {
+  flex: 0 0 auto;
 }
 
 .ks-menu-item {

@@ -1,5 +1,201 @@
 use super::*;
+use axum::{
+    body::{to_bytes, Body},
+    http::{Request, StatusCode},
+};
 use kaleidoscope_contract::app_storage::StorageKind;
+use tower::ServiceExt;
+
+fn add_device(state: &AppState, id: &str, account_id: &str, token: &str) {
+    state.lock_db().unwrap().execute(
+        "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,?1,?2,?3,'now')",
+        params![id, account_id, sha256_hex(token.as_bytes())],
+    ).unwrap();
+}
+
+async fn raw_values_request(
+    state: &AppState,
+    token: &str,
+    method: &str,
+    uri: &str,
+    body: Value,
+) -> (StatusCode, Value) {
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(uri)
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), 2 * 1024 * 1024)
+        .await
+        .unwrap();
+    (status, serde_json::from_slice(&bytes).unwrap())
+}
+
+#[tokio::test]
+async fn builtin_collection_raw_values_support_cas_move_events_and_delete() {
+    use kaleidoscope_contract::worker::BuiltinRuntimeSpec;
+
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    add_device(&state, "device-a", &account, "token-a");
+    add_device(&state, "device-b", &account, "token-b");
+    let storage = serde_json::from_value(json!({
+        "entries":[{"id":"docs","key":"documents","kind":"md","collection":true,"default":"","label":"문서","presentation":"hidden"}]
+    })).unwrap();
+    state
+        .register_builtin_specs(&[BuiltinRuntimeSpec {
+            app_id: "agent".into(),
+            version: 3,
+            storage: Some(storage),
+            worker: None,
+        }])
+        .unwrap();
+    let supported = Supported::current();
+    let _stream_a = state
+        .stream_with_registry(
+            "device-a".into(),
+            Some(supported.clone()),
+            registry::COLLECTION_REGISTRY_VERSION,
+        )
+        .unwrap();
+    let _stream_b = state
+        .stream_with_registry(
+            "device-b".into(),
+            Some(supported),
+            registry::COLLECTION_REGISTRY_VERSION,
+        )
+        .unwrap();
+    let collection = "/api/device/app-values/agent?prefix=documents";
+    let original_key = "documents/%ED%9A%8C%EC%9D%98%EB%A1%9D.md";
+
+    let (status, empty) = raw_values_request(&state, "token-a", "GET", collection, json!({})).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(empty["items"].as_array().unwrap().is_empty());
+
+    let (status, created) = raw_values_request(
+        &state,
+        "token-a",
+        "PUT",
+        &format!("/api/device/app-values/agent/{original_key}"),
+        json!({"kind":"md","content":"한글 기본 앱 문서","expected_revision":null}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let revision = created["revision"].as_str().unwrap();
+
+    let (status, listing) =
+        raw_values_request(&state, "token-a", "GET", collection, json!({})).await;
+    assert_eq!(status, StatusCode::OK);
+    let listed = &listing["items"][0];
+    assert_eq!(listed["doc"], "회의록.md");
+    assert_eq!(listed["revision"], revision);
+    assert_eq!(listed["byte_size"], "한글 기본 앱 문서".len());
+    assert!(listed.get("content").is_none());
+    assert!(listed["updated_at"].as_str().is_some());
+
+    let (status, stale) = raw_values_request(
+        &state,
+        "token-b",
+        "PUT",
+        &format!("/api/device/app-values/agent/{original_key}"),
+        json!({"kind":"md","content":"stale","expected_revision":null}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(stale["current_revision"], revision);
+
+    let occupied_key = "documents/occupied.md";
+    let (status, occupied) = raw_values_request(
+        &state,
+        "token-a",
+        "PUT",
+        &format!("/api/device/app-values/agent/{occupied_key}"),
+        json!({"kind":"md","content":"occupied","expected_revision":null}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(occupied["revision"].as_str().is_some());
+
+    let mut events = state.0.events.subscribe();
+    let move_body = json!({
+        "operation":"move",
+        "from_key":"documents/회의록.md",
+        "to_key":"documents/새 문서.md",
+        "expected_revision":revision,
+    });
+    let (status, moved) = raw_values_request(
+        &state,
+        "token-a",
+        "POST",
+        "/api/device/app-values/agent",
+        move_body,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(moved["revision"], revision);
+    let broadcast = events.try_recv().unwrap();
+    assert!(matches!(broadcast.event, DeviceEvent::AppValueMoved { .. }));
+    assert!(matches!(
+        state.event_for_broadcast("device-a", broadcast.clone()),
+        Some(DeviceEvent::AppValueMoved { .. })
+    ));
+    assert!(matches!(
+        state.event_for_broadcast("device-b", broadcast),
+        Some(DeviceEvent::AppValueMoved { .. })
+    ));
+
+    let renamed_key = "documents/%EC%83%88%20%EB%AC%B8%EC%84%9C.md";
+    let (status, read) = raw_values_request(
+        &state,
+        "token-b",
+        "GET",
+        &format!("/api/device/app-values/agent/{renamed_key}"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(read["content"], "한글 기본 앱 문서");
+    assert_eq!(read["revision"], revision);
+
+    let (status, target_conflict) = raw_values_request(
+        &state,
+        "token-a",
+        "POST",
+        "/api/device/app-values/agent",
+        json!({"operation":"move","from_key":"documents/새 문서.md","to_key":occupied_key,"expected_revision":revision}),
+    ).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert!(target_conflict.get("current_revision").is_some());
+
+    let (status, reset) = raw_values_request(
+        &state,
+        "token-a",
+        "DELETE",
+        &format!("/api/device/app-values/agent/{renamed_key}"),
+        json!({"expected_revision":revision}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(reset["revision"], Value::Null);
+    let (status, after_reset) = raw_values_request(
+        &state,
+        "token-a",
+        "GET",
+        &format!("/api/device/app-values/agent/{renamed_key}"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(after_reset["exists"], false);
+}
 
 #[tokio::test]
 async fn builtin_entry_id_writes_global_json_and_broadcasts() {
@@ -13,6 +209,7 @@ async fn builtin_entry_id_writes_global_json_and_broadcasts() {
             app_id: "html-report".into(),
             entry_id: Some("reports".into()),
             key: None,
+            doc: None,
             kind: None,
             workspace_id: None,
             content: json!({"documents": []}),
@@ -37,6 +234,7 @@ async fn builtin_entry_id_writes_global_json_and_broadcasts() {
             app_id: "html-report".into(),
             entry_id: Some("reports".into()),
             key: None,
+            doc: None,
             workspace_id: None,
         }))
         .await
@@ -45,6 +243,7 @@ async fn builtin_entry_id_writes_global_json_and_broadcasts() {
     let listed = server
         .list_app_storage(Parameters(AppStorageArgs {
             app_id: "html-report".into(),
+            entry_id: None,
             workspace_id: None,
         }))
         .await
@@ -66,6 +265,7 @@ async fn builtin_entry_id_writes_global_json_and_broadcasts() {
                 app_id: "html-report".into(),
                 entry_id: Some("reports".into()),
                 key: None,
+                doc: None,
                 kind: None,
                 workspace_id: None,
                 content: json!({"documents": [{"id":"doc", "title":"시안", "revisions":[]}]}),
@@ -82,6 +282,7 @@ async fn builtin_entry_id_writes_global_json_and_broadcasts() {
                 app_id: "html-report".into(),
                 entry_id: Some("reports".into()),
                 key: None,
+                doc: None,
                 workspace_id: None,
             },
             principal,
@@ -143,7 +344,7 @@ fn builtin_raw_values_preserve_cas_and_do_not_supply_defaults() {
         ErrorCode::Conflict
     );
     state
-        .reset_app_value(&account, "agent", "settings/agents", Some(revision), None)
+        .reset_app_value(&account, "agent", "settings/agents", Some(revision))
         .unwrap();
     assert!(
         !state
@@ -215,6 +416,7 @@ async fn builtin_write_rejects_undeclared_fields_and_invalid_schema() {
             app_id: "html-report".into(),
             entry_id: Some("reports".into()),
             key: None,
+            doc: None,
             kind: None,
             workspace_id: None,
             content: original.clone(),
@@ -237,6 +439,7 @@ async fn builtin_write_rejects_undeclared_fields_and_invalid_schema() {
             app_id: "html-report".into(),
             entry_id: Some("reports".into()),
             key: None,
+            doc: None,
             kind: None,
             workspace_id: None,
             content: json!({"documents":[], "kind":"json"}),
@@ -279,6 +482,7 @@ async fn builtin_write_rejects_undeclared_fields_and_invalid_schema() {
             app_id: "agent".into(),
             entry_id: Some("agents".into()),
             key: None,
+            doc: None,
             kind: None,
             workspace_id: None,
             content: json!([{"id":"saved","name":"Saved","command":"agent","args":[],"env":{}}]),

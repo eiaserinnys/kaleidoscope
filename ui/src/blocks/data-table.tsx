@@ -49,15 +49,16 @@ function formattedCell(value: JsonValue | undefined, column: Column): ReactNode 
   return undefined;
 }
 const numericColumn = (column: Column) => column.format === "number" || column.format === "date" || column.format === "delta";
-export function TableBlock({ block, context, pointer }: { block: Extract<Block, { type: "table" }>; context: BlockContext; pointer: string }) {
+export function TableBlock({ block, pointer }: { block: Extract<Block, { type: "table" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/rows`, block.rows);
   if (value.status !== "ready") return <DataState value={value} />;
-  return <TableReady block={block} context={context} pointer={pointer} value={value.value} />;
+  return <TableReady block={block} pointer={pointer} value={value.value} />;
 }
-function TableReady({ block, context, pointer, value }: { block: Extract<Block, { type: "table" }>; context: BlockContext; pointer: string; value: unknown }) {
+function TableReady({ block, pointer, value }: { block: Extract<Block, { type: "table" }>; pointer: string; value: unknown }) {
   const data = useWindowData();
   const rows = useMemo(() => asArray(value).filter(validRow), [value]);
-  const selected = block.selected ? context.window.state[block.selected.state] : null;
+  const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
+  const selected = selectedValue.status === "ready" ? selectedValue.value : null;
   const choose = (row: Row) => { if (block.on_select) void data.act(`${pointer}/on_select`, row.key, row); };
   return <TableView columns={block.columns} rows={rows} initialSort={block.sort} selected={typeof selected === "string" ? selected : null} onChoose={choose} />;
 }

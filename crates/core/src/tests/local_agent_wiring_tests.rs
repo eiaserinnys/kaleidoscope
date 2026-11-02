@@ -469,6 +469,7 @@ fn storage_defaults_only_apply_before_a_link() {
         .handle(CoreRequest::StorageWrite {
             window_id: window.clone(),
             entry: "agents".into(),
+            doc: None,
             content: json!([]),
             expected_revision: kaleidoscope_contract::app_storage::ExpectedRevision(None),
         })

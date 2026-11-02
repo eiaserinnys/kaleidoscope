@@ -187,6 +187,35 @@ impl Runtime {
             })
             .collect()
     }
+    fn add_client_inputs(
+        &self,
+        values: &mut BTreeMap<String, kaleidoscope_contract::data::BindingValue>,
+    ) {
+        use kaleidoscope_contract::data::{Binding, BindingValue};
+        if let Some(client) = &self.definition.client {
+            for (name, binding) in &client.inputs {
+                let value = match binding {
+                    Binding::State(reference) => Some(
+                        self.state
+                            .get(&reference.state)
+                            .cloned()
+                            .unwrap_or(Value::Null),
+                    ),
+                    Binding::Literal(value) => Some(value.clone()),
+                    Binding::Expr(_) | Binding::Client(_) => None,
+                };
+                if let Some(value) = value {
+                    values.insert(
+                        format!(
+                            "/client/inputs/{}",
+                            kaleidoscope_contract::data::escape_pointer(name)
+                        ),
+                        BindingValue::Ready { value },
+                    );
+                }
+            }
+        }
+    }
     fn view(&self) -> DataView {
         let started = Instant::now();
         let statuses: BTreeMap<_, _> = self
@@ -230,6 +259,7 @@ impl Runtime {
                 values.insert(binding.pointer.clone(), status);
             }
         }
+        self.add_client_inputs(&mut values);
         DataView {
             values,
             sources: statuses,
@@ -302,6 +332,7 @@ impl Runtime {
                 values.insert(binding.pointer.clone(), problem);
             }
         }
+        self.add_client_inputs(&mut values);
         DataView {
             values,
             sources: statuses,

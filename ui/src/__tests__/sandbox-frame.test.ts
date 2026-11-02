@@ -1,5 +1,27 @@
 import { expect, it, vi } from "vitest";
 import { sandboxSource } from "../blocks/sandbox-frame";
+import tauriConfig from "../../../app/src-tauri/tauri.conf.json";
+
+it("공통 프레임 브리지는 로컬 출력과 동작 및 표면 API를 제공한다", () => {
+  vi.useFakeTimers();
+  const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험" });
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
+  const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
+  const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  new Function(code)();
+  const sdk = (window as unknown as { kaleidoscope: { publish: (value: object) => void; handle: (name: string, callback: () => void) => void; surfaces: { on: Function } } }).kaleidoscope;
+  expect(typeof sdk.handle).toBe("function");
+  expect(typeof sdk.surfaces.on).toBe("function");
+  sdk.publish({ count: 1 });
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-publish", patch: { count: 1 } }), "*");
+  vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+});
+
+it("부모 프레임 정책은 HTTP 주소로의 이동을 허용하지 않는다", () => {
+  expect(tauriConfig.app.security.csp).toContain("frame-src data: blob:");
+  expect(tauriConfig.app.security.csp).not.toContain("frame-src 'self'");
+});
 
 it("스크립트와 인라인 이벤트를 격리 프레임의 실행 가능한 코드로 옮긴다", () => {
   const source = sandboxSource('<html><head><script>window.글 = "안녕"</script></head><body><button onclick="this.dataset.done=event.type">누르기</button></body></html>', { state: {}, stateKeys: [], storageEntries: [], token: "시험" });
@@ -22,7 +44,7 @@ it("스크립트와 인라인 이벤트를 격리 프레임의 실행 가능한 
   button.remove();
 });
 
-it("자동 공유는 암호와 숨겨진 입력값을 보내지 않는다", () => {
+it("자동 공유는 암호와 숨겨진 입력값을 보내지 않는다", async () => {
   vi.useFakeTimers();
   const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험" });
   const doc = new DOMParser().parseFromString(source, "text/html");
@@ -33,6 +55,7 @@ it("자동 공유는 암호와 숨겨진 입력값을 보내지 않는다", () =
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
   new Function(code)();
+  await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
   const share = post.mock.calls.map(([value]) => value).find((value) => value.type === "ks-sandbox-share");
   expect(share.text).toContain("공개");
   expect(share.text).not.toContain("암호값");

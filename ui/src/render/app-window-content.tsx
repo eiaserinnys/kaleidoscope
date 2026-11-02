@@ -1,6 +1,6 @@
 import { AppSettings } from "../settings/app-settings";
 import { WindowDataProvider } from "../data/window-data";
-import { WindowNotice } from "../data/window-notice";
+import { ClientShareSignal, WindowNotice } from "../data/window-notice";
 import type { BlockContext } from "../blocks/block-context";
 import { Notice, StatusText } from "../components/primitives";
 import type { ShellStore } from "../core/shell-store";
@@ -46,6 +46,7 @@ export function AppWindowContent({
   if (version.definition.requires.blocks < 4 && !hasSettings && !version.definition.agent) return <div className="ks-app-window-content">{renderBlock(version.definition.ui, context)}</div>;
   return <WindowDataProvider store={store} appWindow={window} definition={version.definition}>
     <div className="ks-app-window-content ks-data-window">
+      <ClientShareSignal />
       <div className="ks-data-window-body" hidden={settingsOpen} inert={settingsOpen || undefined}>{renderBlock(version.definition.ui, context)}</div>
       {hasSettings && settingsVisited ? <AppSettings key={window.app_version} context={context} open={settingsOpen} onClose={onSettingsClose} onProblem={onSettingsProblem} /> : null}
       <div className="ks-data-window-notice"><WindowNotice /></div>

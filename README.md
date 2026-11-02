@@ -7,6 +7,8 @@
 
 Ask an agent for a tool. It uploads a JSON app definition through MCP, and kaleidoscope opens it as a window on your desktop. Apps combine built-in UI blocks with local files, connected services, and saved state. Creating or updating an app does not require rebuilding the shell.
 
+블록 세트 12판은 창마다 격리된 `client` 로직, 픽셀을 그리는 `canvas`, 구간과 파형을 편집하는 `timeline`을 지원합니다. 앱은 로컬 출력과 선언형 화면을 연결하고 사용자가 고른 파일을 가져오거나 저장할 수 있습니다.
+
 ![A project desktop with a file explorer and live-preview Markdown editor](docs/screenshots/overview.png)
 
 *Actual browser development shell with synthetic project files. The shell currently uses Korean interface labels.*

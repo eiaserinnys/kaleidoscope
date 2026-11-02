@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Request, State};
-use axum::http::{header, HeaderValue, Method, StatusCode};
+use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
@@ -139,9 +139,16 @@ async fn run() -> Result<(), String> {
     let cors = CorsLayer::new()
         .allow_origin(HeaderValue::from_static(DEV_UI_ORIGIN))
         .allow_methods([Method::GET, Method::POST])
-        .allow_headers([header::CONTENT_TYPE]);
+        .allow_headers([
+            header::CONTENT_TYPE,
+            HeaderName::from_static("x-ks-operation"),
+            HeaderName::from_static("x-ks-window"),
+            HeaderName::from_static("x-ks-handle"),
+            HeaderName::from_static("x-ks-offset"),
+        ]);
     let app = Router::new()
         .route("/core", post(post_core))
+        .route("/bytes", post(post_core_bytes))
         .layer(DefaultBodyLimit::max(
             kaleidoscope_contract::CONVERSATION_SEND_BODY_MAX_BYTES,
         ))
@@ -213,6 +220,48 @@ async fn post_core(State(state): State<AppState>, body: Bytes) -> Response {
             )
                 .into_response()
         }
+    }
+}
+
+async fn post_core_bytes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let get = |name: &str| {
+        headers
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned)
+    };
+    let Some((operation, window, handle)) = get("x-ks-operation")
+        .zip(get("x-ks-window"))
+        .zip(get("x-ks-handle"))
+        .map(|((operation, window), handle)| (operation, window, handle))
+    else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let offset = get("x-ks-offset").and_then(|value| value.parse::<u64>().ok());
+    let core = state.core.clone();
+    let result = tokio::task::spawn_blocking(move || match operation.as_str() {
+        "files.read_bytes" => core.client_read_file(&window, &handle),
+        "export.write" => core
+            .client_write_export(
+                &window,
+                &handle,
+                offset.ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?,
+                &body,
+            )
+            .map(|()| Vec::new()),
+        _ => Err(CoreError::new(ErrorCode::InvalidRequest)),
+    })
+    .await;
+    match result {
+        Ok(Ok(bytes)) => {
+            ([(header::CONTENT_TYPE, "application/octet-stream")], bytes).into_response()
+        }
+        Ok(Err(error)) => (StatusCode::BAD_REQUEST, Json(error)).into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 

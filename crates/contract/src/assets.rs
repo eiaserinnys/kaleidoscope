@@ -14,6 +14,10 @@ pub enum AssetFormat {
     Webp,
     Jpeg,
     Gif,
+    Javascript,
+    Woff2,
+    Ttf,
+    Otf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]

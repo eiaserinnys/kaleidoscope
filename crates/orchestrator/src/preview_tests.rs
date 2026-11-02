@@ -31,6 +31,29 @@ fn definition() -> Value {
     })
 }
 
+#[tokio::test]
+async fn preview_uses_client_output_default_without_running_script() {
+    let server = McpServer::new(AppState::in_memory("secret"));
+    let definition = json!({"id":"client-preview", "name":"클라이언트 미리보기", "requires":{"blocks":12,"modules":{"assets":1,"client":1}},
+        "assets":[{"id":"script","version":1}], "permissions":[], "state":{},
+        "client":{"runtime":"javascript","entry":{"id":"script","version":1},"inputs":{},"outputs":{"rows":{"default":[{"key":"one","title":"기본값"}]}},"actions":[],"commands":{},"state_keys":[],"storage_entries":[]},
+        "ui":{"type":"list","items":{"client":"rows"}}});
+    let value = result_value(server.preview_app_result(args(definition)).await.unwrap());
+    assert!(value["values"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["pointer"] == "/ui/items"
+            && item["value"]
+                .as_str()
+                .is_some_and(|text| text.contains("기본값"))));
+    assert!(value["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|note| note.as_str().unwrap().contains("클라이언트")));
+}
+
 fn result_value(result: CallToolResult) -> Value {
     let result = serde_json::to_value(result).unwrap();
     serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap()

@@ -4,8 +4,9 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use kaleidoscope_contract::app_storage::{
-    StorageConflict, StorageListReply, StorageReadReply, StorageResetReply, StorageResetRequest,
-    StorageWriteReply, StorageWriteRequest,
+    AppValueRead, CollectionListReply, CollectionMove, CollectionMoveReply, StorageConflict,
+    StorageListReply, StorageReadReply, StorageResetReply, StorageResetRequest, StorageWriteReply,
+    StorageWriteRequest,
 };
 use kaleidoscope_contract::registry::{
     device_connection_request_path, ConnectionReply, ConnectionRequest, DeviceEvent, DeviceLayout,
@@ -15,6 +16,17 @@ use kaleidoscope_contract::registry::{
     PAIR_START_PATH, REGISTRY_HEADER, REGISTRY_VERSION,
 };
 use kaleidoscope_contract::{CoreError, ErrorCode};
+
+fn raw_app_value_item_url(url: &str, app: &str, key: &str) -> Result<reqwest::Url, RegistryError> {
+    let base = format!("{}/api/device/app-values/{app}/", url.trim_end_matches('/'));
+    let mut address =
+        reqwest::Url::parse(&base).map_err(|error| RegistryError::Failure(error.to_string()))?;
+    address
+        .path_segments_mut()
+        .map_err(|_| RegistryError::Failure("앱 저장소 주소를 만들 수 없습니다.".into()))?
+        .extend(key.split('/'));
+    Ok(address)
+}
 
 #[derive(Debug, Clone)]
 pub(crate) enum RegistryError {
@@ -77,6 +89,47 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
     ) -> Result<StorageResetReply, RegistryError> {
         Err(RegistryError::NotFound)
     }
+    fn values_collection_list(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _prefix: &str,
+        _workspace: Option<&str>,
+    ) -> Result<CollectionListReply, RegistryError> {
+        Err(RegistryError::NotFound)
+    }
+    fn values_collection_read(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _key: &str,
+        _workspace: Option<&str>,
+    ) -> Result<AppValueRead, RegistryError> {
+        Err(RegistryError::NotFound)
+    }
+    fn values_collection_reset(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _key: &str,
+        _workspace: Option<&str>,
+        _request: &StorageResetRequest,
+    ) -> Result<StorageResetReply, RegistryError> {
+        Err(RegistryError::NotFound)
+    }
+    fn values_collection_move(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _request: &kaleidoscope_contract::app_storage::AppValueMoveRequest,
+        _workspace: Option<&str>,
+    ) -> Result<CollectionMoveReply, RegistryError> {
+        Err(RegistryError::NotFound)
+    }
     fn asset_get(
         &self,
         _url: &str,
@@ -125,6 +178,62 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         _workspace: &str,
         _request: &StorageResetRequest,
     ) -> Result<StorageResetReply, RegistryError> {
+        Err(RegistryError::Failure("storage unavailable".into()))
+    }
+    fn storage_collection_list(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _entry: &str,
+        _workspace: &str,
+    ) -> Result<CollectionListReply, RegistryError> {
+        Err(RegistryError::Failure("storage unavailable".into()))
+    }
+    fn storage_document_get(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _entry: &str,
+        _doc: &str,
+        _workspace: &str,
+    ) -> Result<StorageReadReply, RegistryError> {
+        Err(RegistryError::Failure("storage unavailable".into()))
+    }
+    fn storage_document_write(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _entry: &str,
+        _doc: &str,
+        _workspace: &str,
+        _request: &StorageWriteRequest,
+    ) -> Result<StorageWriteReply, RegistryError> {
+        Err(RegistryError::Failure("storage unavailable".into()))
+    }
+    fn storage_document_reset(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _entry: &str,
+        _doc: &str,
+        _workspace: &str,
+        _request: &StorageResetRequest,
+    ) -> Result<StorageResetReply, RegistryError> {
+        Err(RegistryError::Failure("storage unavailable".into()))
+    }
+    fn storage_document_move(
+        &self,
+        _url: &str,
+        _token: &str,
+        _app: &str,
+        _entry: &str,
+        _workspace: &str,
+        _request: &CollectionMove,
+    ) -> Result<CollectionMoveReply, RegistryError> {
         Err(RegistryError::Failure("storage unavailable".into()))
     }
     fn connection_request(
@@ -269,6 +378,105 @@ impl RegistryClient for HttpRegistryClient {
         }
         storage_success_json(response)
     }
+    fn values_collection_list(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        prefix: &str,
+        workspace: Option<&str>,
+    ) -> Result<CollectionListReply, RegistryError> {
+        let mut request = self
+            .requests()?
+            .get(format!(
+                "{}/api/device/app-values/{app}",
+                url.trim_end_matches('/')
+            ))
+            .bearer_auth(token)
+            .query(&[("prefix", prefix)]);
+        if let Some(workspace) = workspace {
+            request = request.query(&[("workspace_id", workspace)]);
+        }
+        let response = request
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        if response.status().as_u16() == 404 {
+            return Err(RegistryError::NotFound);
+        }
+        storage_success_json(response)
+    }
+    fn values_collection_read(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        key: &str,
+        workspace: Option<&str>,
+    ) -> Result<AppValueRead, RegistryError> {
+        let mut request = self
+            .requests()?
+            .get(raw_app_value_item_url(url, app, key)?)
+            .bearer_auth(token);
+        if let Some(workspace) = workspace {
+            request = request.query(&[("workspace_id", workspace)]);
+        }
+        let response = request
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        if response.status().as_u16() == 404 {
+            return Err(RegistryError::NotFound);
+        }
+        storage_success_json(response)
+    }
+    fn values_collection_reset(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        key: &str,
+        workspace: Option<&str>,
+        request: &StorageResetRequest,
+    ) -> Result<StorageResetReply, RegistryError> {
+        let mut builder = self
+            .requests()?
+            .delete(raw_app_value_item_url(url, app, key)?)
+            .bearer_auth(token);
+        if let Some(workspace) = workspace {
+            builder = builder.query(&[("workspace_id", workspace)]);
+        }
+        let response = builder
+            .json(request)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        if response.status().as_u16() == 404 {
+            return Err(RegistryError::NotFound);
+        }
+        storage_success_json(response)
+    }
+    fn values_collection_move(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        request: &kaleidoscope_contract::app_storage::AppValueMoveRequest,
+        workspace: Option<&str>,
+    ) -> Result<CollectionMoveReply, RegistryError> {
+        let mut builder = self
+            .requests()?
+            .post(format!(
+                "{}/api/device/app-values/{app}",
+                url.trim_end_matches('/')
+            ))
+            .bearer_auth(token);
+        if let Some(workspace) = workspace {
+            builder = builder.query(&[("workspace_id", workspace)]);
+        }
+        let response = builder
+            .json(request)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        storage_success_json(response)
+    }
     fn values_get(
         &self,
         url: &str,
@@ -278,10 +486,7 @@ impl RegistryClient for HttpRegistryClient {
     ) -> Result<kaleidoscope_contract::app_storage::AppValueRead, RegistryError> {
         let response = self
             .requests()?
-            .get(format!(
-                "{}/api/device/app-values/{app}/{key}",
-                url.trim_end_matches('/')
-            ))
+            .get(raw_app_value_item_url(url, app, key)?)
             .bearer_auth(token)
             .send()
             .map_err(|e| RegistryError::Failure(e.to_string()))?;
@@ -300,10 +505,7 @@ impl RegistryClient for HttpRegistryClient {
     ) -> Result<StorageWriteReply, RegistryError> {
         let response = self
             .requests()?
-            .put(format!(
-                "{}/api/device/app-values/{app}/{key}",
-                url.trim_end_matches('/')
-            ))
+            .put(raw_app_value_item_url(url, app, key)?)
             .bearer_auth(token)
             .json(request)
             .send()
@@ -323,10 +525,7 @@ impl RegistryClient for HttpRegistryClient {
     ) -> Result<StorageResetReply, RegistryError> {
         let response = self
             .requests()?
-            .delete(format!(
-                "{}/api/device/app-values/{app}/{key}",
-                url.trim_end_matches('/')
-            ))
+            .delete(raw_app_value_item_url(url, app, key)?)
             .bearer_auth(token)
             .json(request)
             .send()
@@ -469,6 +668,110 @@ impl RegistryClient for HttpRegistryClient {
             .json(request)
             .send()
             .map_err(|e| RegistryError::Failure(e.to_string()))?;
+        storage_success_json(response)
+    }
+    fn storage_collection_list(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        entry: &str,
+        workspace: &str,
+    ) -> Result<CollectionListReply, RegistryError> {
+        let response = self
+            .requests()?
+            .get(format!(
+                "{url}/api/device/app-storage/{app}/collections/{entry}"
+            ))
+            .bearer_auth(token)
+            .query(&[("workspace_id", workspace)])
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        storage_success_json(response)
+    }
+    fn storage_document_get(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        entry: &str,
+        doc: &str,
+        workspace: &str,
+    ) -> Result<StorageReadReply, RegistryError> {
+        let response = self
+            .requests()?
+            .get(format!(
+                "{url}/api/device/app-storage/{app}/collections/{entry}/document"
+            ))
+            .bearer_auth(token)
+            .query(&[("workspace_id", workspace), ("doc", doc)])
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        storage_success_json(response)
+    }
+    fn storage_document_write(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        entry: &str,
+        doc: &str,
+        workspace: &str,
+        request: &StorageWriteRequest,
+    ) -> Result<StorageWriteReply, RegistryError> {
+        let response = self
+            .requests()?
+            .put(format!(
+                "{url}/api/device/app-storage/{app}/collections/{entry}/document"
+            ))
+            .bearer_auth(token)
+            .query(&[("workspace_id", workspace), ("doc", doc)])
+            .json(request)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        storage_success_json(response)
+    }
+    fn storage_document_reset(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        entry: &str,
+        doc: &str,
+        workspace: &str,
+        request: &StorageResetRequest,
+    ) -> Result<StorageResetReply, RegistryError> {
+        let response = self
+            .requests()?
+            .delete(format!(
+                "{url}/api/device/app-storage/{app}/collections/{entry}/document"
+            ))
+            .bearer_auth(token)
+            .query(&[("workspace_id", workspace), ("doc", doc)])
+            .json(request)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
+        storage_success_json(response)
+    }
+    fn storage_document_move(
+        &self,
+        url: &str,
+        token: &str,
+        app: &str,
+        entry: &str,
+        workspace: &str,
+        request: &CollectionMove,
+    ) -> Result<CollectionMoveReply, RegistryError> {
+        let response = self
+            .requests()?
+            .post(format!(
+                "{url}/api/device/app-storage/{app}/collections/{entry}/move"
+            ))
+            .bearer_auth(token)
+            .query(&[("workspace_id", workspace)])
+            .json(request)
+            .send()
+            .map_err(|error| RegistryError::Failure(error.to_string()))?;
         storage_success_json(response)
     }
     fn push_layout_changes(

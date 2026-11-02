@@ -323,7 +323,6 @@
   font: inherit;
   padding: var(--ks-space-2);
   text-align: center;
-  user-select: none;
 }
 
 .ks-explorer-icon:hover {

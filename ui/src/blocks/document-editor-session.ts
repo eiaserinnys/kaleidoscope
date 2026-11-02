@@ -15,7 +15,7 @@ export function documentEditorSession(store: ShellStore, windowId: string, entry
   const refresh = () => { void session.refreshOnFocus(); };
   const unsubscribeEvents = store.subscribeEvents((event) => {
     if (event.event !== "storage.update" || event.window_id !== windowId) return;
-    if (event.update.kind === "snapshot" || event.update.changed.item.entry_id === entry) refresh();
+    if (event.update.kind === "snapshot" || (event.update.kind === "changed" && event.update.changed.item.entry_id === entry)) refresh();
   });
   let linkState = store.getSnapshot()?.link.state;
   const unsubscribeState = store.subscribe(() => {

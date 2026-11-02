@@ -38,6 +38,27 @@ pub fn validate_upload(upload: &AssetUpload) -> Result<Vec<u8>, String> {
 }
 
 pub fn validate_bytes(format: AssetFormat, bytes: &[u8]) -> Result<(), String> {
+    match format {
+        AssetFormat::Javascript => {
+            return std::str::from_utf8(bytes)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        }
+        AssetFormat::Woff2 | AssetFormat::Ttf | AssetFormat::Otf => {
+            let valid = match format {
+                AssetFormat::Woff2 => bytes.starts_with(b"wOF2"),
+                AssetFormat::Ttf => bytes.starts_with(b"\0\x01\0\0") || bytes.starts_with(b"true"),
+                AssetFormat::Otf => bytes.starts_with(b"OTTO"),
+                _ => false,
+            };
+            return if valid {
+                Ok(())
+            } else {
+                Err("폰트 자산 형식이 일치하지 않습니다".into())
+            };
+        }
+        _ => {}
+    }
     if format == AssetFormat::Html {
         let text = std::str::from_utf8(bytes).map_err(|error| error.to_string())?;
         return if text.trim().is_empty() {
@@ -56,6 +77,9 @@ pub fn validate_bytes(format: AssetFormat, bytes: &[u8]) -> Result<(), String> {
         AssetFormat::Gif => image::ImageFormat::Gif,
         AssetFormat::Svg => unreachable!(),
         AssetFormat::Html => unreachable!(),
+        AssetFormat::Javascript | AssetFormat::Woff2 | AssetFormat::Ttf | AssetFormat::Otf => {
+            unreachable!()
+        }
     };
     if image::guess_format(bytes).ok() != Some(expected) {
         return Err("자산 이미지 형식이 일치하지 않습니다".into());

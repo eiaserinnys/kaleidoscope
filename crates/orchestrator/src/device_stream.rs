@@ -94,6 +94,25 @@ impl AppState {
                 devices.remove(&device_id);
             }
         }
+        {
+            let mut devices = self
+                .0
+                .collection_devices
+                .lock()
+                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?;
+            if registry_version >= registry::COLLECTION_REGISTRY_VERSION
+                && supported.as_ref().is_some_and(|supported| {
+                    supported
+                        .modules
+                        .get("storage")
+                        .is_some_and(|version| *version >= 3)
+                })
+            {
+                devices.insert(device_id.clone());
+            } else {
+                devices.remove(&device_id);
+            }
+        }
         let mut initial_events = vec![snapshot];
         if supported.as_ref().is_some_and(|supported| {
             supported
@@ -180,6 +199,9 @@ impl Drop for ConnectionGuard {
                         storage.remove(&self.device_id);
                     }
                     if let Ok(mut devices) = self.state.0.app_value_devices.lock() {
+                        devices.remove(&self.device_id);
+                    }
+                    if let Ok(mut devices) = self.state.0.collection_devices.lock() {
                         devices.remove(&self.device_id);
                     }
                 }

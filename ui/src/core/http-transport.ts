@@ -46,6 +46,11 @@ export function createHttpTransport(baseUrl: string): CoreTransport {
 
   return {
     call,
+    async bytes(request, body) {
+      const response = await fetch(`${base}/bytes`, { method: "POST", headers: { "content-type": "application/octet-stream", "x-ks-operation": request.op, "x-ks-window": request.window_id, "x-ks-handle": request.handle, "x-ks-offset": String(request.offset ?? 0) }, body: body ?? new ArrayBuffer(0) });
+      if (!response.ok) throw toCoreError(await response.json().catch(() => `코어 바이트 요청 실패 (${response.status})`));
+      return response.arrayBuffer();
+    },
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

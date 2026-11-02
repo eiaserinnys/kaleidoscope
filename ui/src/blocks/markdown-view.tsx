@@ -51,7 +51,7 @@ function DocumentMarkdownViewBlock({ entry, context }: { entry: string; context:
     void read();
     const unsubscribe = context.store.subscribeEvents((event) => {
       if (event.event === "storage.update" && event.window_id === context.window.id &&
-        (event.update.kind === "snapshot" || event.update.changed.item.entry_id === entry)) void read();
+        (event.update.kind === "snapshot" || (event.update.kind === "changed" && event.update.changed.item.entry_id === entry))) void read();
     });
     window.addEventListener("focus", read);
     return () => { version.current++; unsubscribe(); window.removeEventListener("focus", read); };

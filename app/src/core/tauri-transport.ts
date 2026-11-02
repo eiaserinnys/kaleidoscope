@@ -12,6 +12,11 @@ function isCoreError(value: unknown): value is CoreError {
 
 export function createTauriTransport(): CoreTransport {
   return {
+    nativeFiles: true,
+    async bytes(request, body) {
+      try { return await invoke<ArrayBuffer>("core_bytes", body ?? new ArrayBuffer(0), { headers: { "x-ks-operation": request.op, "x-ks-window": request.window_id, "x-ks-handle": request.handle, "x-ks-offset": String(request.offset ?? 0) } }); }
+      catch (error) { if (isCoreError(error)) throw error; throw { code: "io", message: String(error), details: [] } satisfies CoreError; }
+    },
     async call<K extends CoreRequest["op"]>(request: RequestFor<K>): Promise<ReplyFor<K>> {
       try {
         return await invoke<ReplyFor<K>>("core", { request });

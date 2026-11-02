@@ -70,6 +70,7 @@ pub(crate) fn act(
                     Some(BindingValue::Ready { value }) => value.clone(),
                     _ => return Err(error::make(ErrorCode::InvalidRequest)),
                 },
+                data::Binding::Client(_) => return Err(error::make(ErrorCode::InvalidRequest)),
             };
             let buttons = data::validate_button_grid_items(&value, u32::from(columns))
                 .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))?;
@@ -201,7 +202,13 @@ pub(crate) fn act(
                 pending.insert(key, value);
                 pending_steps += 1;
             }
-            Step::SetStorage { entry, value } => {
+            Step::SetStorage { entry, doc, value } => {
+                if let Some(doc) = doc {
+                    crate::app_storage::write_action_with_doc(
+                        inner, window_id, &entry, &doc, value,
+                    )?;
+                    continue;
+                }
                 let revision = {
                     let windows = inner.data_runtimes.windows.lock().unwrap();
                     windows

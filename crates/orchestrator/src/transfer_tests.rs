@@ -5,6 +5,108 @@ use kaleidoscope_contract::{registry::LayoutChanges, transfer::*};
 fn app() -> AppDefinition {
     parse_app_definition(r#"{"id":"personal-test","name":"시험","requires":{"blocks":6,"modules":{"storage":1}},"permissions":[],"state":{},"storage":{"entries":[{"id":"setting","key":"setting","kind":"json","default":0,"schema":{"type":"integer"},"label":"값","presentation":"hidden"}]},"ui":{"type":"text","value":"시험"}}"#).unwrap()
 }
+
+fn app_with_collection() -> AppDefinition {
+    let mut definition = app();
+    definition.requires.modules.insert("storage".into(), 3);
+    definition.storage.as_mut().unwrap().entries.push(
+        serde_json::from_value(json!({
+            "id":"documents", "key":"documents", "kind":"md", "collection":true,
+            "default":"", "label":"문서", "presentation":"hidden"
+        }))
+        .unwrap(),
+    );
+    definition
+}
+
+fn builtin_collection_spec() -> kaleidoscope_contract::worker::BuiltinRuntimeSpec {
+    kaleidoscope_contract::worker::BuiltinRuntimeSpec {
+        app_id: "agent".into(),
+        version: 3,
+        storage: Some(serde_json::from_value(json!({
+            "entries":[{"id":"documents","key":"documents","kind":"md","collection":true,"default":"","label":"문서","presentation":"hidden"}]
+        })).unwrap()),
+        worker: None,
+    }
+}
+
+#[test]
+fn transfer_moves_personal_and_builtin_collection_documents() {
+    let local = AppState::in_memory("local");
+    let remote = AppState::in_memory("remote");
+    let local_account = local.mcp_account_id().unwrap();
+    let remote_account = remote.mcp_account_id().unwrap();
+    let definition = app_with_collection();
+    local
+        .publish_app(
+            &serde_json::to_string(&definition).unwrap(),
+            "test",
+            false,
+            None,
+        )
+        .unwrap();
+    local
+        .register_builtin_specs(&[builtin_collection_spec()])
+        .unwrap();
+    remote
+        .register_builtin_specs(&[builtin_collection_spec()])
+        .unwrap();
+
+    local
+        .write_app_storage_document(
+            &local_account,
+            &definition.id,
+            "documents",
+            "회의록.md",
+            None,
+            json!("개인 앱 문서"),
+            None,
+        )
+        .unwrap();
+    local
+        .write_app_value(
+            &local_account,
+            "agent",
+            "documents/기본.md",
+            StorageKind::Md,
+            json!("기본 앱 문서"),
+            None,
+            None,
+        )
+        .unwrap();
+
+    let bundle = local.export_data(&local_account).unwrap();
+    assert!(bundle
+        .values
+        .iter()
+        .any(|item| item.key == "documents/회의록.md"));
+    assert!(bundle
+        .values
+        .iter()
+        .any(|item| item.key == "documents/기본.md"));
+    let result = remote.import_data(&remote_account, bundle).unwrap();
+    assert_eq!(result.imported, 3);
+    assert_eq!(
+        remote
+            .read_app_storage_document(
+                &remote_account,
+                &definition.id,
+                "documents",
+                "회의록.md",
+                None
+            )
+            .unwrap()
+            .content,
+        json!("개인 앱 문서")
+    );
+    assert_eq!(
+        remote
+            .read_app_value(&remote_account, "agent", "documents/기본.md")
+            .unwrap()
+            .content,
+        Some(json!("기본 앱 문서"))
+    );
+}
 #[test]
 fn transfer_keeps_remote_values_and_is_repeatable() {
     let local = AppState::in_memory("local");

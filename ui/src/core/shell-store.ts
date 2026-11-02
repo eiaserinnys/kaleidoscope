@@ -10,6 +10,8 @@ export interface ShellStore {
   subscribeEvents(listener: (event: CoreEvent) => void): () => void;
   ready: Promise<void>;
   dispose(): void;
+  nativeFiles?: boolean;
+  bytes?: CoreTransport["bytes"];
 }
 
 export function createShellStore(transport: CoreTransport): ShellStore {
@@ -41,6 +43,8 @@ export function createShellStore(transport: CoreTransport): ShellStore {
   });
 
   return {
+    nativeFiles: transport.nativeFiles,
+    bytes: transport.bytes?.bind(transport),
     call: transport.call.bind(transport) as CoreTransport["call"],
     getSnapshot: () => snapshot,
     getError: () => error,

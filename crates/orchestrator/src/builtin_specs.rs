@@ -7,9 +7,18 @@ fn definition(spec: &BuiltinRuntimeSpec) -> Result<AppDefinition, CoreError> {
     if !kaleidoscope_contract::builtin::is_builtin(&spec.app_id) || spec.version == 0 {
         return Err(CoreError::new(ErrorCode::InvalidRequest));
     }
+    let storage_version = if spec
+        .storage
+        .as_ref()
+        .is_some_and(|storage| storage.entries.iter().any(|entry| entry.collection))
+    {
+        3
+    } else {
+        2
+    };
     let value = json!({
         "id": spec.app_id, "name": spec.app_id,
-        "requires": {"blocks": 6, "modules": {"storage": 2, "worker": 1}},
+        "requires": {"blocks": 6, "modules": {"storage": storage_version, "worker": 1}},
         "permissions": [], "state": {}, "ui": {"type": "text", "value": ""},
         "storage": spec.storage, "worker": spec.worker
     });
@@ -74,6 +83,68 @@ impl AppState {
             return Err(CoreError::new(ErrorCode::InvalidRequest));
         }
         Ok((entry.clone(), key))
+    }
+
+    pub(super) fn builtin_collection_prefix(
+        &self,
+        app: &str,
+        prefix: &str,
+        workspace: Option<&str>,
+    ) -> Result<(kaleidoscope_contract::app_storage::StorageEntryDecl, String), CoreError> {
+        let db = self.lock_db()?;
+        let definition =
+            load_definition(&db, app)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let entry = definition
+            .storage
+            .as_ref()
+            .and_then(|storage| {
+                storage.entries.iter().find(|entry| {
+                    entry.collection
+                        && super::app_storage::resolve_key(entry, workspace)
+                            .is_ok_and(|resolved| resolved == prefix)
+                })
+            })
+            .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?;
+        Ok((entry.clone(), prefix.to_string()))
+    }
+
+    pub(super) fn builtin_collection_for_key(
+        &self,
+        app: &str,
+        key: &str,
+        workspace: Option<&str>,
+    ) -> Result<
+        (
+            kaleidoscope_contract::app_storage::StorageEntryDecl,
+            String,
+            String,
+        ),
+        CoreError,
+    > {
+        let db = self.lock_db()?;
+        let definition =
+            load_definition(&db, app)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let entry = definition
+            .storage
+            .as_ref()
+            .and_then(|storage| {
+                storage.entries.iter().find(|entry| {
+                    if !entry.collection {
+                        return false;
+                    }
+                    super::app_storage::resolve_key(entry, workspace).is_ok_and(|prefix| {
+                        kaleidoscope_contract::app_storage::collection_key_matches(&prefix, key)
+                    })
+                })
+            })
+            .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?;
+        let prefix = super::app_storage::resolve_key(entry, workspace)?;
+        let doc = key
+            .strip_prefix(&prefix)
+            .and_then(|tail| tail.strip_prefix('/'))
+            .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?
+            .to_string();
+        Ok((entry.clone(), prefix, doc))
     }
 }
 

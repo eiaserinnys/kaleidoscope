@@ -32,10 +32,14 @@ import { DataKeypadBlock } from "../blocks/data-keypad";
 import { ChartBlock } from "../blocks/data-chart";
 import { MapBlock } from "../blocks/data-map";
 import { SandboxBlock } from "../blocks/sandbox";
+import { CanvasBlock } from "../blocks/canvas";
+import { TimelineBlock } from "../blocks/timeline";
 
 export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"): ReactNode {
   const normalized = normalizeBlock(block);
   switch (normalized.type) {
+    case "canvas": return <CanvasBlock block={normalized} pointer={pointer} />;
+    case "timeline": return <TimelineBlock block={normalized} pointer={pointer} />;
     case "split":
       return <SplitBlock block={normalized} context={context} pointer={pointer} />;
     case "tree":

@@ -26,6 +26,7 @@ pub struct StorageDecl {
 }
 
 /// 앱 정의의 저장 항목. JSON 항목은 제한된 JSON Schema와 JSON 기본값을, md 항목은 문자열 기본값을 가진다.
+/// `collection` 항목은 선언 키 아래의 문서를 동적으로 관리한다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
@@ -33,6 +34,9 @@ pub struct StorageEntryDecl {
     pub id: String,
     /// 계정 × 앱 bucket 안의 키. 유일한 치환자는 `{workspace_id}`다.
     pub key: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    #[ts(optional, as = "Option<bool>")]
+    pub collection: bool,
     pub kind: StorageKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -54,6 +58,10 @@ pub struct StorageEntryDecl {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub agent_context: Option<bool>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 /// 설정 선택지 하나. 문자열은 값과 라벨을 겸하고 객체는 별도 라벨을 제공한다.
@@ -197,6 +205,51 @@ pub struct StorageListReply {
     pub items: Vec<StorageItemMeta>,
 }
 
+/// 문서 모음의 목록 항목. 본문은 별도 read 요청으로 가져온다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct CollectionItem {
+    pub doc: String,
+    pub revision: String,
+    pub updated_at: String,
+    pub byte_size: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct CollectionListReply {
+    pub bucket_id: String,
+    pub items: Vec<CollectionItem>,
+}
+
+/// 문서 모음 안에서 문서 하나를 이름 변경한다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct CollectionMove {
+    pub from: String,
+    pub to: String,
+    pub expected_revision: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct CollectionMoveReply {
+    pub revision: String,
+}
+
+/// 기본 앱의 원시 app-values 경로에서 문서 이름을 옮긴다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AppValueMoveRequest {
+    pub operation: String,
+    pub from_key: String,
+    pub to_key: String,
+    pub expected_revision: String,
+}
+
 /// `content`는 JSON kind에서 임의 JSON, md kind에서 문자열이다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export, export_to = "contract.ts")]
@@ -306,6 +359,17 @@ pub struct StorageChanged {
 pub enum StorageUpdate {
     Snapshot { snapshot: StorageSnapshot },
     Changed { changed: StorageChanged },
+    Moved { moved: StorageMoved },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct StorageMoved {
+    pub bucket_id: String,
+    pub entry_id: String,
+    pub from_doc: String,
+    pub to_doc: String,
+    pub revision: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -408,8 +472,51 @@ pub fn validate_storage_decl(storage: &StorageDecl) -> Vec<String> {
                 }
             }
         }
+        if entry.collection
+            && (entry.kind != StorageKind::Md
+                || entry.presentation != StoragePresentation::Hidden
+                || entry.default != Value::String(String::new())
+                || entry.schema.is_some()
+                || entry.choices.is_some()
+                || entry.agent_context.is_some())
+        {
+            errors.push(format!(
+                "{at}: collection은 kind=md, presentation=hidden, default=빈 문자열이어야 하며 schema, choices, agent_context를 둘 수 없습니다"
+            ));
+        }
+    }
+    for (index, left) in storage.entries.iter().enumerate() {
+        for right in storage.entries.iter().skip(index + 1) {
+            if collection_prefixes_overlap(left, right) {
+                errors.push(format!(
+                    "/storage/entries: 저장 키와 문서 모음 prefix가 겹칩니다: {} / {}",
+                    left.key, right.key
+                ));
+            }
+        }
     }
     errors
+}
+
+fn collection_prefixes_overlap(left: &StorageEntryDecl, right: &StorageEntryDecl) -> bool {
+    fn segments_can_match(left: &str, right: &str) -> bool {
+        left == "{workspace_id}" || right == "{workspace_id}" || left == right
+    }
+    fn could_prefix(collection: &str, other: &str) -> bool {
+        let collection: Vec<_> = collection.split('/').collect();
+        let other: Vec<_> = other.split('/').collect();
+        collection.len() <= other.len()
+            && collection
+                .iter()
+                .zip(other.iter())
+                .all(|(left, right)| segments_can_match(left, right))
+    }
+    match (left.collection, right.collection) {
+        (true, true) => could_prefix(&left.key, &right.key) || could_prefix(&right.key, &left.key),
+        (true, false) => could_prefix(&left.key, &right.key),
+        (false, true) => could_prefix(&right.key, &left.key),
+        (false, false) => false,
+    }
 }
 
 fn settings_schema_supported(schema: &StorageValueSchema) -> bool {
@@ -559,6 +666,11 @@ pub fn validate_storage_upgrade(
         if old.kind != new.kind {
             errors.push(format!("저장 항목의 kind를 바꿀 수 없습니다: {entry_id}"));
         }
+        if old.collection != new.collection {
+            errors.push(format!(
+                "저장 항목의 collection 여부를 바꿀 수 없습니다: {entry_id}"
+            ));
+        }
         let old_type = old.schema.as_ref().map(|schema| &schema.value_type);
         let new_type = new.schema.as_ref().map(|schema| &schema.value_type);
         if old_type != new_type {
@@ -581,7 +693,7 @@ pub fn validate_storage_upgrade(
             ));
             continue;
         };
-        if !storage_key_matches(&new.key, &stored.key) {
+        if !storage_entry_key_matches(new, &stored.key) {
             errors.push(format!(
                 "저장값의 key가 새 선언과 맞지 않습니다: {}",
                 stored.entry_id
@@ -651,8 +763,64 @@ pub fn storage_key_matches(template: &str, concrete: &str) -> bool {
         )
 }
 
+pub fn storage_entry_key_matches(entry: &StorageEntryDecl, concrete: &str) -> bool {
+    storage_key_matches(&entry.key, concrete)
+        || (entry.collection && collection_key_matches_template(&entry.key, concrete))
+}
+
 pub fn valid_concrete_storage_key(key: &str) -> bool {
-    !key.is_empty() && key.len() <= 512 && key.split('/').all(valid_storage_segment)
+    !key.is_empty()
+        && key.len() <= 2048
+        && key
+            .split('/')
+            .all(|segment| crate::file_name::check_file_name(segment).is_ok())
+}
+
+/// 모음 prefix로 실제 저장 키를 해석한다. 경계는 prefix + `/`로 고정한다.
+pub fn collection_key_matches(prefix: &str, concrete: &str) -> bool {
+    if !valid_storage_key(prefix) || !valid_concrete_storage_key(concrete) {
+        return false;
+    }
+    let Some(doc) = concrete
+        .strip_prefix(prefix)
+        .and_then(|tail| tail.strip_prefix('/'))
+    else {
+        return false;
+    };
+    valid_collection_doc(doc)
+}
+
+/// workspace 템플릿을 포함한 선언 prefix에서 문서 키가 나왔는지 검사한다.
+pub fn collection_key_matches_template(template: &str, concrete: &str) -> bool {
+    if !valid_storage_key(template) || !valid_concrete_storage_key(concrete) {
+        return false;
+    }
+    let template_segments: Vec<_> = template.split('/').collect();
+    let concrete_segments: Vec<_> = concrete.split('/').collect();
+    if concrete_segments.len() <= template_segments.len() {
+        return false;
+    }
+    if !template_segments.iter().zip(&concrete_segments).all(
+        |(template_segment, concrete_segment)| {
+            if *template_segment == "{workspace_id}" {
+                valid_storage_segment(concrete_segment)
+            } else {
+                *template_segment == *concrete_segment
+            }
+        },
+    ) {
+        return false;
+    }
+    valid_collection_doc(&concrete_segments[template_segments.len()..].join("/"))
+}
+
+/// 문서 모음에서 쓰는 상대 경로. Unicode는 원문 그대로 두고 각 경로 이름을 검사한다.
+pub fn valid_collection_doc(doc: &str) -> bool {
+    !doc.is_empty()
+        && doc.len() <= 1024
+        && doc
+            .split('/')
+            .all(|segment| crate::file_name::check_file_name(segment).is_ok())
 }
 
 fn valid_storage_segment(segment: &str) -> bool {
@@ -929,5 +1097,51 @@ mod tests {
         ] {
             assert!(!valid_storage_key(key), "{key}");
         }
+    }
+
+    #[test]
+    fn collection_declarations_are_hidden_empty_markdown_with_disjoint_prefixes() {
+        let declaration = |id: &str, key: &str, collection: bool| {
+            serde_json::from_value::<StorageEntryDecl>(json!({
+                "id": id,
+                "key": key,
+                "kind": "md",
+                "collection": collection,
+                "default": "",
+                "label": id,
+                "presentation": "hidden"
+            }))
+            .unwrap()
+        };
+        assert!(validate_storage_decl(&StorageDecl {
+            entries: vec![declaration("docs", "documents", true)]
+        })
+        .is_empty());
+        for entry in [
+            declaration("docs", "documents", true),
+            declaration("docs2", "documents/child", false),
+        ] {
+            assert!(!validate_storage_decl(&StorageDecl {
+                entries: vec![entry.clone(), declaration("docs", "documents", true)]
+            })
+            .is_empty());
+        }
+        let mut invalid = declaration("docs", "documents", true);
+        invalid.default = json!("not empty");
+        assert!(!validate_storage_decl(&StorageDecl {
+            entries: vec![invalid]
+        })
+        .is_empty());
+    }
+
+    #[test]
+    fn concrete_collection_keys_accept_unicode_dotted_names_and_boundaries() {
+        assert!(valid_concrete_storage_key("documents/메모.md"));
+        assert!(valid_concrete_storage_key("documents/회의록/메모.v2.md"));
+        assert!(!valid_concrete_storage_key("documents/../secret.md"));
+        assert!(!valid_concrete_storage_key("documents//메모.md"));
+        assert!(!valid_concrete_storage_key("documents/메모/"));
+        assert!(!collection_key_matches("documents", "documents2/메모.md"));
+        assert!(collection_key_matches("documents", "documents/메모.md"));
     }
 }

@@ -104,6 +104,10 @@ pub(crate) fn get(
                         kaleidoscope_contract::assets::AssetFormat::Webp => "image/webp",
                         kaleidoscope_contract::assets::AssetFormat::Jpeg => "image/jpeg",
                         kaleidoscope_contract::assets::AssetFormat::Gif => "image/gif",
+                        kaleidoscope_contract::assets::AssetFormat::Javascript => "text/javascript",
+                        kaleidoscope_contract::assets::AssetFormat::Woff2 => "font/woff2",
+                        kaleidoscope_contract::assets::AssetFormat::Ttf => "font/ttf",
+                        kaleidoscope_contract::assets::AssetFormat::Otf => "font/otf",
                     }
                     .into(),
                     data_base64: STANDARD.encode(bytes),

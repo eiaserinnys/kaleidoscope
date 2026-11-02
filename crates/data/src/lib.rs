@@ -16,7 +16,7 @@ use kaleidoscope_contract::{
         SourceStatus,
     },
     validate::{valid_relative_path, valid_request_path},
-    AppDefinition,
+    AppDefinition, StringOrStateRef,
 };
 use serde_json::Value;
 
@@ -85,6 +85,7 @@ pub enum Step {
     },
     SetStorage {
         entry: String,
+        doc: Option<String>,
         value: Value,
     },
     Refresh {
@@ -414,6 +415,7 @@ impl CompiledApp {
         self.actions.get(pointer).map(|a| match a {
             Actions::One(_) => 1,
             Actions::Many(a) => a.len(),
+            Actions::Client(_) | Actions::PickFiles(_) | Actions::SaveFile(_) => 0,
         })
     }
 
@@ -437,6 +439,9 @@ impl CompiledApp {
                 let action = actions.get(index).ok_or("없는 동작 단계입니다")?;
                 let base = format!("{pointer}/{index}");
                 match action {
+                    Action::Client(_) | Action::PickFiles(_) | Action::SaveFile(_) => {
+                        Err("클라이언트 동작은 코어에서 실행할 수 없습니다".into())
+                    }
                     Action::Worker(worker) => Ok(Step::Worker {
                         action: worker.worker.action.clone(),
                         args: worker
@@ -464,6 +469,17 @@ impl CompiledApp {
                     }),
                     Action::SetStorage(set_storage) => Ok(Step::SetStorage {
                         entry: set_storage.set_storage.entry.clone(),
+                        doc: match &set_storage.set_storage.doc {
+                            Some(StringOrStateRef::String(doc)) => Some(doc.clone()),
+                            Some(StringOrStateRef::State(state)) => Some(
+                                env.state
+                                    .get(&state.state)
+                                    .and_then(Value::as_str)
+                                    .ok_or("set_storage doc 상태는 문자열이어야 합니다")?
+                                    .to_owned(),
+                            ),
+                            None => None,
+                        },
                         value: match &set_storage.set_storage.value {
                             Some(binding) => self.binding(
                                 binding,
@@ -528,6 +544,7 @@ impl CompiledApp {
                 Ok(state.get(&reference.state).cloned().unwrap_or(Value::Null))
             }
             Binding::Expr(_) => self.eval(pointer, vars),
+            Binding::Client(_) => Err("클라이언트 값은 코어에서 읽을 수 없습니다".into()),
         }
     }
 

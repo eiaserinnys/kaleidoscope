@@ -89,7 +89,7 @@ function SettingsEntry({ context, entry, index, open, onProblem }: { context: Bl
   useEffect(() => {
     void session.load();
     const unsubscribe = context.store.subscribeEvents((event) => {
-      if (event.event === "storage.update" && event.window_id === context.window.id && (event.update.kind === "snapshot" || event.update.changed.item.entry_id === entry.id)) void session.refresh();
+      if (event.event === "storage.update" && event.window_id === context.window.id && (event.update.kind === "snapshot" || (event.update.kind === "changed" && event.update.changed.item.entry_id === entry.id))) void session.refresh();
     });
     return () => { unsubscribe(); session.dispose(); };
   }, [context.store, context.window.id, entry.id, session]);

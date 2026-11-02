@@ -117,6 +117,59 @@ fn contract_11_workspace_pas_example_accepts_storage_provider_and_document() {
 }
 
 #[test]
+fn collection_document_refs_and_actions_require_a_document_path() {
+    let mut definition = workspace_pas_v2();
+    definition.as_object_mut().unwrap().remove("agent");
+    definition["requires"]["modules"]["storage"] = json!(3);
+    definition["storage"]["entries"] = json!([{
+        "id":"docs", "key":"documents", "kind":"md", "collection":true,
+        "default":"", "label":"문서", "presentation":"hidden"
+    }]);
+    definition["state"]["current_doc"] = json!("draft.md");
+    definition["ui"] = json!({
+        "type":"button", "label":"저장", "on_click":[{
+            "set_storage":{"entry":"docs","doc":{"state":"current_doc"},"value":{"expr":"$event"}}
+        }]
+    });
+    assert!(parse_app_definition(&definition.to_string()).is_ok());
+
+    definition["ui"]["children"] = json!([{
+        "type":"markdown", "document":{"entry":"docs"}
+    }]);
+    definition["ui"] =
+        json!({"type":"stack","direction":"column","children":definition["ui"]["children"]});
+    let missing_doc = parse_app_definition(&definition.to_string()).unwrap_err();
+    assert!(missing_doc
+        .details
+        .iter()
+        .any(|detail| detail.contains("doc이 필요합니다")));
+
+    definition["ui"]["children"][0]["document"]["doc"] = json!("../draft.md");
+    assert!(parse_app_definition(&definition.to_string()).is_err());
+}
+
+#[test]
+fn collection_documents_are_not_available_through_storage_expressions() {
+    let mut definition = workspace_pas_v2();
+    definition.as_object_mut().unwrap().remove("agent");
+    definition["requires"]["modules"]["storage"] = json!(3);
+    definition["storage"]["entries"] = json!([{
+        "id":"docs", "key":"documents", "kind":"md", "collection":true,
+        "default":"", "label":"문서", "presentation":"hidden"
+    }]);
+    definition["ui"] = json!({
+        "type":"button", "label":"저장", "on_click":[{
+            "set_storage":{"entry":"docs","doc":"draft.md","value":{"expr":"$storage.docs"}}
+        }]
+    });
+    let error = parse_app_definition(&definition.to_string()).unwrap_err();
+    assert!(error
+        .details
+        .iter()
+        .any(|detail| detail.contains("문서 모음은 $storage 식에 포함되지 않습니다")));
+}
+
+#[test]
 fn settings_entry_accepts_description_and_dynamic_choices_binding() {
     let mut definition = workspace_pas_v2();
     definition["requires"]["modules"]["storage"] = json!(2);

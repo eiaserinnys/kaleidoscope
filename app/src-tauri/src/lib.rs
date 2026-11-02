@@ -45,6 +45,44 @@ impl Host for DialogHost {
             .blocking_pick_folder()
             .and_then(|path| path.into_path().ok())
     }
+    fn pick_files(
+        &self,
+        accept: &[kaleidoscope_core::kaleidoscope_contract::data::FileAccept],
+        multiple: bool,
+    ) -> Option<Vec<PathBuf>> {
+        let parent = self.app.get_window("main")?;
+        let mut dialog = self.app.dialog().file().set_parent(&parent);
+        for item in accept {
+            let extensions: Vec<_> = item
+                .extensions
+                .iter()
+                .map(|extension| extension.trim_start_matches('.'))
+                .collect();
+            if !extensions.is_empty() {
+                dialog = dialog.add_filter(&item.mime, &extensions);
+            }
+        }
+        if multiple {
+            dialog
+                .blocking_pick_files()?
+                .into_iter()
+                .map(|path| path.into_path().ok())
+                .collect()
+        } else {
+            Some(vec![dialog.blocking_pick_file()?.into_path().ok()?])
+        }
+    }
+    fn pick_save_file(&self, suggested_name: &str, _mime: &str) -> Option<PathBuf> {
+        let parent = self.app.get_window("main")?;
+        self.app
+            .dialog()
+            .file()
+            .set_parent(&parent)
+            .set_file_name(suggested_name)
+            .blocking_save_file()?
+            .into_path()
+            .ok()
+    }
     fn pc_roots(&self) -> Vec<PcRoot> {
         pc_roots()
     }
@@ -143,6 +181,49 @@ async fn core(request: CoreRequest, core: State<'_, Arc<Core>>) -> Result<CoreRe
         })
 }
 
+#[tauri::command]
+async fn core_bytes(
+    request: tauri::ipc::Request<'_>,
+    core: State<'_, Arc<Core>>,
+) -> Result<tauri::ipc::Response, CoreError> {
+    let header = |name: &str| {
+        request
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned)
+            .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))
+    };
+    let operation = header("x-ks-operation")?;
+    let window = header("x-ks-window")?;
+    let handle = header("x-ks-handle")?;
+    let offset = request
+        .headers()
+        .get("x-ks-offset")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok());
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => bytes.clone(),
+        _ => return Err(CoreError::new(ErrorCode::InvalidRequest)),
+    };
+    let core = Arc::clone(core.inner());
+    let result = tauri::async_runtime::spawn_blocking(move || match operation.as_str() {
+        "files.read_bytes" => core.client_read_file(&window, &handle),
+        "export.write" => core
+            .client_write_export(
+                &window,
+                &handle,
+                offset.ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?,
+                &bytes,
+            )
+            .map(|()| Vec::new()),
+        _ => Err(CoreError::new(ErrorCode::InvalidRequest)),
+    })
+    .await
+    .map_err(|_| CoreError::new(ErrorCode::Io))??;
+    Ok(tauri::ipc::Response::new(result))
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -223,7 +304,7 @@ pub fn run() {
             e2e::start(app.handle().clone(), core);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![core])
+        .invoke_handler(tauri::generate_handler![core, core_bytes])
         .build(tauri::generate_context!())
         .expect("error while building kaleidoscope application")
         .run(|app, event| {
