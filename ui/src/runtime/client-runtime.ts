@@ -38,7 +38,7 @@ export class ClientRuntime {
   private patch: Record<string, JsonValue> = {};
   private patchFrame: number | null = null;
   private previousInputs: Record<string, string> = {};
-  private surfaces = new Map<string, { message: Record<string, unknown>; sent: boolean }>();
+  private surfaces = new Map<string, { message: Record<string, unknown>; sent: boolean; sentVisible?: boolean }>();
   private files = new BrowserFiles();
   private blobFiles = new Set<string>();
   private stopping?: Promise<void>;
@@ -137,6 +137,7 @@ export class ClientRuntime {
     const snapshot = this.store.getSnapshot();
     const current = snapshot?.shared.windows.find((item) => item.id === this.data.windowId);
     const visible = isWindowVisible(snapshot, this.data.windowId) && !this.data.clientDormant;
+    for (const [id, surface] of this.surfaces) this.syncSurfaceVisibility(id, surface);
     const focused = visible && document.hasFocus() && !!current && !snapshot?.shared.windows.some((item) => item.desktop_id === current.desktop_id && !item.minimized && item.z > current.z);
     const rect = this.host?.getBoundingClientRect();
     const lifecycle: ClientLifecycle = { visible, focused, viewport: { width: rect?.width ?? 0, height: rect?.height ?? 0, coarse_pointer: window.matchMedia?.("(pointer: coarse)").matches ?? false }, phase };
@@ -200,7 +201,7 @@ export class ClientRuntime {
     } catch (error) { this.data.setNotice(toCoreError(error).message); return false; }
   }
 
-  surface(message: { phase: string; id: string; generation: number; canvas?: OffscreenCanvas; css_width?: number; css_height?: number; dpr?: number }) {
+  surface(message: { phase: string; id: string; generation: number; canvas?: OffscreenCanvas; css_width?: number; css_height?: number; dpr?: number; visible?: boolean }) {
     const current = this.surfaces.get(message.id);
     if (message.phase === "attach") {
       this.surfaces.set(message.id, { message: { ...message }, sent: false });
@@ -209,6 +210,9 @@ export class ClientRuntime {
       if (message.phase === "detach") {
         if (current.sent) this.send({ type: "ks-client-surface", ...message });
         this.surfaces.delete(message.id);
+      } else if (message.phase === "visibility") {
+        current.message.visible = message.visible;
+        this.syncSurfaceVisibility(message.id, current);
       } else {
         Object.assign(current.message, { css_width: message.css_width, css_height: message.css_height, dpr: message.dpr });
         if (current.sent) this.send({ type: "ks-client-surface", ...message });
@@ -216,10 +220,22 @@ export class ClientRuntime {
     }
   }
 
+  private surfaceVisible(visible: unknown) {
+    return !!visible && isWindowVisible(this.store.getSnapshot(), this.data.windowId) && !this.data.clientDormant;
+  }
+
+  private syncSurfaceVisibility(id: string, surface: { message: Record<string, unknown>; sent: boolean; sentVisible?: boolean }) {
+    const visible = this.surfaceVisible(surface.message.visible);
+    if (!surface.sent || surface.sentVisible === visible) return;
+    surface.sentVisible = visible;
+    this.send({ type: "ks-client-surface", phase: "visibility", id, generation: surface.message.generation, visible });
+  }
+
   private sendSurface(id: string) {
     const surface = this.surfaces.get(id);
     if (!surface || surface.sent || !this.frame) return;
-    this.send({ type: "ks-client-surface", ...surface.message }, [surface.message.canvas as OffscreenCanvas]);
+    surface.sentVisible = this.surfaceVisible(surface.message.visible);
+    this.send({ type: "ks-client-surface", ...surface.message, visible: surface.sentVisible }, [surface.message.canvas as OffscreenCanvas]);
     surface.sent = true;
   }
 

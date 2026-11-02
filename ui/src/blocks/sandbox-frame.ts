@@ -117,11 +117,15 @@ function bridgeSource(init: SandboxInit): string {
       if (data.type === 'ks-client-ping') send('ks-client-pong');
       if (data.type === 'ks-client-reply') { const job = pending.get(data.requestId); if (job) { pending.delete(data.requestId); data.error ? job.reject(new Error(data.error)) : job.resolve(data.result); } }
       if (data.type === 'ks-client-surface') {
-        if (data.phase === 'detach') { surfaces.delete(data.id); surfaceListeners.get(data.id)?.forEach(fn => fn(null)); }
+        if (data.phase === 'detach') {
+          if (surfaces.get(data.id)?.generation === data.generation) { surfaces.delete(data.id); surfaceListeners.get(data.id)?.forEach(fn => fn(null)); }
+        }
         else {
-          const surface = data.phase === 'attach' ? { id: data.id, generation: data.generation, canvas: data.canvas, cssWidth: data.css_width, cssHeight: data.css_height, dpr: data.dpr, resize: new EventTarget() } : surfaces.get(data.id);
+          const surface = data.phase === 'attach' ? { id: data.id, generation: data.generation, canvas: data.canvas, cssWidth: data.css_width, cssHeight: data.css_height, dpr: data.dpr, visible: data.visible, resize: new EventTarget() } : surfaces.get(data.id);
           if (surface && surface.generation === data.generation) {
-            surface.cssWidth = data.css_width; surface.cssHeight = data.css_height; surface.dpr = data.dpr; surfaces.set(data.id, surface);
+            if (data.phase === 'visibility') surface.visible = data.visible;
+            else { surface.cssWidth = data.css_width; surface.cssHeight = data.css_height; surface.dpr = data.dpr; }
+            surfaces.set(data.id, surface);
             if (data.phase === 'attach') surfaceListeners.get(data.id)?.forEach(fn => fn(surface));
             else surface.resize.dispatchEvent(new Event('resize'));
           }

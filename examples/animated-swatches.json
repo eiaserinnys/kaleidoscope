@@ -1,0 +1,19 @@
+{
+  "id": "animated-swatches",
+  "name": "움직이는 견본",
+  "description": "보이는 견본만 움직이는 격자입니다.",
+  "requires": { "blocks": 14, "modules": { "assets": 1, "client": 2 } },
+  "permissions": [],
+  "state": {},
+  "assets": [{ "id": "animated-swatches", "version": 1 }],
+  "client": {
+    "runtime": "javascript", "entry": { "id": "animated-swatches", "version": 1 },
+    "inputs": {}, "outputs": { "swatches": { "default": [] } },
+    "actions": ["filter"], "commands": {}, "state_keys": [], "storage_entries": []
+  },
+  "ui": { "type": "stack", "direction": "column", "children": [
+    { "type": "toolbar", "start": [{ "type": "button", "label": "짝수만 / 전체", "on_click": { "client": "filter" } }] },
+    { "type": "repeat", "items": { "client": "swatches" }, "key": "id", "layout": "grid", "grid": { "columns": 3 }, "virtual": true,
+      "template": { "type": "canvas", "surface": { "item": "surface" }, "aspect_ratio": 1, "description": { "item": "label" } } }
+  ] }
+}

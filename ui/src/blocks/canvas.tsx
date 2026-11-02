@@ -27,7 +27,8 @@ export function surfaceDpr(width: number, height: number, dpr: number) {
 
 export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointer: string }) {
   const data = useWindowData();
-  const surface = typeof block.surface === "string" ? block.surface : "";
+  const surfaceValue = useBinding(`${pointer}/surface`, block.surface);
+  const surface = surfaceValue.status === "ready" && typeof surfaceValue.value === "string" ? surfaceValue.value : "";
   const generation = useSyncExternalStore(data.subscribeClient, data.getClientGeneration, data.getClientGeneration);
   const serialSend = useMemo(() => createSerialSend((value: Record<string, string | number | boolean>) => data.act(`${pointer}/on_pointer`, value)), [data, pointer]);
   const root = useRef<HTMLDivElement>(null);
@@ -54,6 +55,8 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     host.appendChild(element);
     if (!element.transferControlToOffscreen) { data.setNotice("이 환경은 캔버스 전송을 지원하지 않습니다"); element.remove(); return; }
     let attachedGeneration: number | undefined;
+    let attempted = false;
+    let intersecting = typeof IntersectionObserver === "undefined";
     const update = () => {
       const bounds = host.getBoundingClientRect();
       if (bounds.width <= 0 || bounds.height <= 0) return;
@@ -61,16 +64,22 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
       rect.current = next;
       Object.assign(element.style, { left: `${next.x}px`, top: `${next.y}px`, width: `${next.width}px`, height: `${next.height}px` });
       const dpr = surfaceDpr(next.width, next.height, window.devicePixelRatio || 1);
-      if (attachedGeneration === undefined) {
+      if (!attempted) {
+        attempted = true;
         element.width = Math.max(1, Math.round(next.width * dpr));
         element.height = Math.max(1, Math.round(next.height * dpr));
-        attachedGeneration = data.attachSurface(surface, element.transferControlToOffscreen(), next.width, next.height, dpr);
-      } else data.resizeSurface(surface, attachedGeneration, next.width, next.height, dpr);
+        attachedGeneration = data.attachSurface(surface, element.transferControlToOffscreen(), next.width, next.height, dpr, intersecting);
+      } else if (attachedGeneration !== undefined) data.resizeSurface(surface, attachedGeneration, next.width, next.height, dpr);
     };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(host);
-    return () => { observer.disconnect(); if (attachedGeneration !== undefined) data.detachSurface(surface, attachedGeneration); element.remove(); };
+    const intersection = typeof IntersectionObserver === "undefined" ? null : new IntersectionObserver((entries) => {
+      intersecting = entries[0]?.isIntersecting ?? false;
+      if (attachedGeneration !== undefined) data.setSurfaceVisible(surface, attachedGeneration, intersecting);
+    });
+    intersection?.observe(host);
+    return () => { observer.disconnect(); intersection?.disconnect(); if (attachedGeneration !== undefined) data.detachSurface(surface, attachedGeneration); element.remove(); };
   }, [surface, aspect, block.fit, data, generation]);
 
   const pointerEvent = (phase: "down" | "move" | "up" | "cancel", event: PointerEvent<HTMLDivElement>) => {

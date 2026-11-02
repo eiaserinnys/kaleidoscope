@@ -65,7 +65,7 @@ export class WindowData {
   private dormantScheduled = false;
   private restarting = false;
   private surfaceGeneration = 0;
-  private surfaces = new Map<string, { id: string; generation: number; canvas: OffscreenCanvas; css_width: number; css_height: number; dpr: number }>();
+  private surfaces = new Map<string, { id: string; generation: number; canvas: OffscreenCanvas; css_width: number; css_height: number; dpr: number; visible: boolean }>();
 
   constructor(readonly store: ShellStore, readonly windowId: string, readonly definition: AppDefinition) {
     for (const [name, output] of Object.entries(definition.client?.outputs ?? {})) this.clientValues[name] = { status: "ready", value: output.default };
@@ -262,10 +262,20 @@ export class WindowData {
     if (!group.size) this.dormantInstances.delete(pointer);
   };
 
-  attachSurface = (id: string, canvas: OffscreenCanvas, css_width: number, css_height: number, dpr: number) => {
-    const surface = { id, generation: ++this.surfaceGeneration, canvas, css_width, css_height, dpr };
+  attachSurface = (id: string, canvas: OffscreenCanvas, css_width: number, css_height: number, dpr: number, visible: boolean) => {
+    if (this.surfaces.has(id)) {
+      this.setNotice(`표면 "${id}"이 이 창에 이미 있습니다. 각 캔버스에 서로 다른 표면 이름을 지정하세요. [SHELL_CANVAS_DUPLICATE_SURFACE]`);
+      return undefined;
+    }
+    const surface = { id, generation: ++this.surfaceGeneration, canvas, css_width, css_height, dpr, visible };
     this.surfaces.set(id, surface); this.runtime?.surface({ phase: "attach", ...surface });
     return surface.generation;
+  };
+  setSurfaceVisible = (id: string, generation: number, visible: boolean) => {
+    const surface = this.surfaces.get(id);
+    if (!surface || surface.generation !== generation || surface.visible === visible) return;
+    surface.visible = visible;
+    this.runtime?.surface({ phase: "visibility", id, generation, visible });
   };
   resizeSurface = (id: string, generation: number, css_width: number, css_height: number, dpr: number) => {
     const surface = this.surfaces.get(id);
