@@ -1746,7 +1746,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             on_select_revision,
         } => match (document, file, value) {
             (Some(document), None, None) => {
-                validate_module_version("storage", 1, definition, details, at);
+                validate_module_version("storage", 3, definition, details, at);
                 let entry = definition.storage.as_ref().and_then(|storage| {
                     storage
                         .entries
@@ -1754,11 +1754,9 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                         .find(|entry| entry.id == document.entry)
                 });
                 match entry {
-                    Some(entry) if entry.kind == StorageKind::Json => {
-                        validate_document_ref(document, entry, definition, details, at);
-                    }
+                    Some(entry) if entry.kind == StorageKind::Md && entry.collection => {}
                     Some(_) => details.push(format!(
-                        "{at}: html_view는 json 저장소 항목만 읽을 수 있습니다: {}",
+                        "{at}: html_view는 md 문서 모음이 필요합니다: {}",
                         document.entry
                     )),
                     None => details.push(format!(

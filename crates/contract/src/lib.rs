@@ -1169,7 +1169,7 @@ pub enum Block {
         #[ts(optional, as = "Option<bool>")]
         read_only: bool,
     },
-    /// HTML을 격리된 프레임으로 본다. document 모드는 문서·리비전·코멘트를 다루고 file/value 모드는 HTML을 읽기만 한다.
+    /// HTML을 격리된 프레임으로 본다. document 모드는 storage 3판의 md 문서 모음에서 리비전과 코멘트를 다루고 file/value 모드는 HTML을 읽기만 한다.
     HtmlView {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -4804,20 +4804,22 @@ mod tests {
     }
 
     #[test]
-    fn html_view_accepts_json_documents_and_checks_references() {
-        let raw = r#"{"id":"review","name":"Review","requires":{"blocks":6,"modules":{"storage":1}},"permissions":[],"state":{"selected":null},"storage":{"entries":[{"id":"reports","key":"reports","kind":"json","label":"Reports","presentation":"hidden","schema":{"type":"object","properties":{"documents":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"}}}}}},"default":{"documents":[]}}]},"ui":{"type":"html_view","document":{"entry":"reports"},"selected_doc":{"state":"selected"}}}"#;
+    fn html_view_accepts_document_collections_and_checks_references() {
+        let raw = r#"{"id":"review","name":"Review","requires":{"blocks":6,"modules":{"storage":3}},"permissions":[],"state":{"selected":null},"storage":{"entries":[{"id":"drafts","key":"drafts","kind":"md","label":"Drafts","presentation":"hidden","collection":true,"default":""}]},"ui":{"type":"html_view","document":{"entry":"drafts"},"selected_doc":{"state":"selected"}}}"#;
         let definition = validate::parse_app_definition(raw).expect("HTML 보기 정의");
         assert_eq!(definition.ui.introduced_in(), 6);
         let entry = &definition.storage.as_ref().unwrap().entries[0];
         assert!(app_storage::validate_storage_content(
             entry,
-            &serde_json::json!({"documents":[{"id":"one"}]})
+            &serde_json::json!("<p>one</p>")
         )
         .is_ok());
         assert!(validate::parse_app_definition(
-            &raw.replace("\"entry\":\"reports\"", "\"entry\":\"missing\"")
+            &raw.replace("\"entry\":\"drafts\"", "\"entry\":\"missing\"")
         )
         .is_err());
+        assert!(validate::parse_app_definition(&raw.replace("\"storage\":3", "\"storage\":1")).is_err());
+        assert!(validate::parse_app_definition(&raw.replace("\"collection\":true", "\"collection\":false")).is_err());
         assert!(
             validate::parse_app_definition(&raw.replace("\"blocks\":6", "\"blocks\":5")).is_err()
         );

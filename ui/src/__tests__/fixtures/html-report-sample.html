@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>랜딩 시안</title>
+<style>
+  :root { --brand: #3b5bdb; --ink: #1f2933; --muted: #52606d; --line: #e4e7eb; --paper: #ffffff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Pretendard", system-ui, sans-serif; color: var(--ink); background: #f5f7fa; }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 16px 32px; background: var(--paper); border-bottom: 1px solid var(--line); }
+  .logo { font-weight: 700; font-size: 18px; }
+  nav a { margin-left: 20px; color: var(--muted); text-decoration: none; font-size: 14px; }
+  .hero { padding: 56px 32px; text-align: center; background: linear-gradient(180deg, #eef2ff, #f5f7fa); }
+  .hero h1 { margin: 0 0 12px; font-size: 40px; line-height: 1.2; }
+  .hero p { margin: 0 auto 24px; max-width: 520px; color: var(--muted); font-size: 16px; }
+  .cta { display: inline-block; padding: 12px 24px; border: 0; border-radius: 8px; background: var(--brand); color: #fff; font-size: 15px; font-weight: 600; }
+  .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 32px; }
+  .plan { padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+  .plan h2 { margin: 0 0 8px; font-size: 18px; }
+  .plan .price { margin: 0 0 12px; font-size: 28px; font-weight: 700; }
+  .plan ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; line-height: 1.8; }
+  .plan.best { border-color: var(--brand); }
+  .badge { display: inline-block; margin-bottom: 8px; padding: 2px 8px; border-radius: 999px; background: #e0e7ff; color: var(--brand); font-size: 12px; font-weight: 600; }
+  table { width: calc(100% - 64px); margin: 0 32px 32px; border-collapse: collapse; background: var(--paper); font-size: 14px; }
+  th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; }
+  footer { padding: 20px 32px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Lumen</div>
+  <nav><a href="#plans">요금제</a><a href="#compare">비교</a><a href="#contact">문의</a></nav>
+</header>
+<section class="hero">
+  <h1>회의록을 자동으로 정리합니다</h1>
+  <p>녹음을 올리면 결정과 할 일만 남긴 요약이 팀 채널로 전달됩니다. 설치도 설정도 필요 없습니다.</p>
+  <button class="cta">무료로 시작하기</button>
+</section>
+<section class="plans" id="plans">
+  <article class="plan">
+    <h2>개인</h2>
+    <p class="price">무료</p>
+    <ul><li>월 5회 요약</li><li>회의당 30분</li><li>이메일 전달</li></ul>
+  </article>
+  <article class="plan best">
+    <span class="badge">가장 많이 선택</span>
+    <h2>팀</h2>
+    <p class="price">₩12,000</p>
+    <ul><li>요약 무제한</li><li>회의당 3시간</li><li>슬랙 전달</li></ul>
+  </article>
+  <article class="plan">
+    <h2>기업</h2>
+    <p class="price">문의</p>
+    <ul><li>전용 저장소</li><li>감사 로그</li><li>SSO</li></ul>
+  </article>
+</section>
+<table id="compare">
+  <thead><tr><th>기능</th><th>개인</th><th>팀</th><th>기업</th></tr></thead>
+  <tbody>
+    <tr><td>요약 언어</td><td>한국어</td><td>12개</td><td>12개</td></tr>
+    <tr><td>할 일 추출</td><td>없음</td><td>있음</td><td>있음</td></tr>
+  </tbody>
+</table>
+<footer id="contact">문의 hello@lumen.example</footer>
+</body>
+</html>

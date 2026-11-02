@@ -2,7 +2,7 @@
   "id": "html-report",
   "name": "시안과 리포트",
   "description": "앱 저장소의 HTML 시안과 리포트를 리비전별로 보고 선택 영역에 코멘트를 남긴다",
-  "requires": { "blocks": 10, "modules": { "storage": 1 } },
+  "requires": { "blocks": 10, "modules": { "storage": 3 } },
   "permissions": [],
   "storage": {
     "entries": [{
@@ -39,11 +39,13 @@
         }
       },
       "default": { "documents": [] }
+    }, {
+      "id": "drafts", "key": "drafts", "kind": "md", "label": "시안과 리포트", "presentation": "hidden", "collection": true, "default": ""
     }]
   },
   "state": { "selected_doc": null, "selected_revision": null },
   "ui": {
-    "type": "html_view", "document": { "entry": "reports" },
+    "type": "html_view", "document": { "entry": "drafts" },
     "selected_doc": { "state": "selected_doc" }, "on_select_doc": { "set_state": "selected_doc" },
     "selected_revision": { "state": "selected_revision" }, "on_select_revision": { "set_state": "selected_revision" }
   }
