@@ -246,7 +246,7 @@ test("견본의 다섯 보기와 다크 배지 캡처", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?preview=block-gallery");
-  await expect(page.locator(".ks-badge").first()).toBeVisible();
+  await expect(page.getByTestId("app-window-block-gallery").locator(".ks-badge").first()).toBeVisible();
   await capture(page, "gallery-badges-dark");
 });
 
