@@ -378,7 +378,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
-  it("timeline viewport 조작은 코어를 부르지 않고 형제 블록을 다시 그리지 않는다", async () => {
+  it("timeline 확대 단추는 코어를 부르지 않고 형제 블록을 다시 그리지 않는다", async () => {
     const timeline = {
       type: "timeline" as const, duration: 100, position: 0, tracks: [],
       viewport: { client: "viewport" }, controls: true, on_viewport: { client: "set_viewport" },
@@ -412,10 +412,9 @@ describe("실제 Shell의 블록 렌더 격리", () => {
 
     const frame = document.querySelector(".ks-client-frames iframe") as HTMLIFrameElement;
     const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
-    const scroll = document.querySelector(".ks-timeline-scroll")!;
     const siblingRendersBefore = siblingRender.mock.calls.length;
     const coreCallsBefore = transport.getCalls().length;
-    fireEvent.wheel(scroll, { deltaY: -100, clientX: 200 });
+    fireEvent.click(screen.getByRole("button", { name: "확대" }));
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: "ks-client-action", name: "set_viewport",
     }), "*"));
