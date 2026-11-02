@@ -10,7 +10,7 @@ it("선택한 글의 경로에 글을 담은 요소를 표시하고 고를 수 �
   const selection = {
     n: 3, name: "p.summary.lead", ancestors: [{ n: 1, label: "body" }, { n: 2, label: "section.hero" }],
     anchor: { kind: "text", tag: "p", quote: { exact: "결정과 할 일" } },
-  } as FrameSelection;
+  } as unknown as FrameSelection;
   const choose = vi.fn();
   render(<Target selection={selection} choose={choose} />);
   const path = within(screen.getByRole("navigation", { name: "부모 경로" }));
