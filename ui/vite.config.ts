@@ -18,6 +18,7 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5173,
     strictPort: true,
+    headers: { "Content-Security-Policy": "frame-src data: blob:" },
     fs: { allow: [resolve(packageDir, ".."), packageDir] },
   },
 });

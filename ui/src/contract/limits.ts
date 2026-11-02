@@ -14,6 +14,12 @@ export const STORAGE_JSON_MAX_BYTES = 1048576;
 export const STORAGE_MD_MAX_BYTES = 1048576;
 /** 저장소 명령 HTTP 본문의 최대 바이트 수. */
 export const STORAGE_COMMAND_BODY_MAX_BYTES = 8388608;
+/** 클라이언트 출력 하나의 최대 UTF-8 바이트 수. */
+export const CLIENT_OUTPUT_MAX_BYTES = 1048576;
+/** 클라이언트가 고른 파일 하나의 최대 바이트 수. */
+export const CLIENT_PICK_FILE_MAX_BYTES = 536870912;
+/** 클라이언트 프레임 응답을 기다리는 최대 초. */
+export const CLIENT_PING_TIMEOUT_SECS = 5;
 /** (9판) 같이 보기 글 하나의 최대 바이트 수(UTF-8). */
 export const SHARE_TEXT_MAX_BYTES = 16384;
 /** (9판) 잘린 같이 보기 글의 마지막 줄. */

@@ -2274,6 +2274,7 @@ dependencies = [
  "image",
  "kaleidoscope-contract",
  "kaleidoscope-data",
+ "mime_guess",
  "opener",
  "percent-encoding",
  "process-wrap",

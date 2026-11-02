@@ -4,6 +4,7 @@
   "webviews": ["main"],
   "permissions": [
     "allow-core",
+    "allow-core-bytes",
     "core:event:allow-listen",
     "core:event:allow-unlisten"
   ]

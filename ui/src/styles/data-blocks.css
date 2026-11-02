@@ -33,6 +33,8 @@
 .ks-split-pane > .ks-data-section, .ks-data-tab-panel > .ks-data-section { display: flex; height: 100%; flex-direction: column; }
 .ks-split-pane > .ks-data-section > .ks-data-section-child, .ks-data-tab-panel > .ks-data-section > .ks-data-section-child { flex: 1 1 auto; min-height: 0; }
 .ks-data-section-child > .ks-data-stack { height: auto; }
+.ks-split-pane > .ks-data-section > .ks-data-section-child > .ks-data-stack { box-sizing: border-box; padding-inline: var(--ks-space-3); }
+.ks-data-section-child > .ks-data-stack > .ks-data-stack-item > .ks-data-section > .ks-data-section-header { width: 100%; margin-inline: 0; }
 .ks-data-section-header { display: flex; width: 100%; align-items: center; gap: var(--ks-space-2); }
 .ks-data-stack-item > .ks-data-section > .ks-data-section-header:not(.ks-data-tab-panel *),
 .ks-split-pane > .ks-data-section > .ks-data-section-header:not(.ks-data-tab-panel *) { width: calc(100% - 2 * var(--ks-space-3)); margin-inline: var(--ks-space-3); padding-block-start: var(--ks-space-2); }
@@ -93,6 +95,7 @@
 .ks-data-input { position: relative; width: 100%; min-width: 0; }
 .ks-data-section-child > .ks-data-input:not(.ks-data-tab-panel *),
 .ks-data-stack-item > .ks-data-input:not(.ks-data-tab-panel *) { width: calc(100% - 2 * var(--ks-space-3)); margin-inline: var(--ks-space-3); margin-block: var(--ks-space-1) var(--ks-space-2); }
+.ks-split-pane > .ks-data-section > .ks-data-section-child > .ks-data-stack > .ks-data-stack-item > .ks-data-input:not(.ks-data-tab-panel *) { width: 100%; margin-inline: 0; }
 .ks-data-input .ks-text-input { display: block; font-family: inherit; }
 .ks-data-input textarea { padding-block: calc((var(--ks-control-height) - var(--ks-type-body) * var(--ks-line-body)) / 2); max-height: calc(var(--ks-type-body) * var(--ks-line-body) * 8 + var(--ks-control-height) - var(--ks-type-body) * var(--ks-line-body)); resize: none; overflow-y: auto; }
 .ks-data-input.has-rows textarea { max-height: none; }
@@ -247,3 +250,39 @@
 .ks-dialog-title { font-size: var(--ks-type-title); font-weight: 600; }
 .ks-dialog-body { margin-top: var(--ks-space-2); white-space: pre-wrap; }
 .ks-dialog-actions { display: flex; justify-content: flex-end; gap: var(--ks-space-2); margin-top: var(--ks-space-4); }
+.ks-client-frames { position: fixed; left: 0; top: 0; width: 2px; height: 2px; opacity: 0; pointer-events: none; }
+.ks-client-frames iframe { width: 2px; height: 2px; border: 0; }
+@container ks-data-window (max-width: 560px) {
+  .ks-split-row:has(.ks-canvas) { display: flex; flex-direction: column; overflow-y: auto; }
+  .ks-split-row:has(.ks-canvas) > .ks-split-pane { flex: 0 0 auto; overflow: visible; }
+  .ks-split-row:has(.ks-canvas) > .ks-split-pane:has(.ks-canvas) { order: -1; min-height: calc(var(--ks-pane-min-size) * 2); }
+  .ks-split-row:has(.ks-canvas) > .ks-split-handle { display: none; }
+}
+.ks-canvas { position: relative; width: 100%; height: 100%; min-height: var(--ks-pane-min-size); overflow: hidden; }
+.ks-canvas canvas { position: absolute; display: block; }
+.ks-timeline { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.ks-timeline-tools { display: flex; gap: var(--ks-space-1); padding-inline: var(--ks-space-3); }
+.ks-timeline-layout { display: flex; min-height: 0; overflow: hidden; }
+.ks-timeline-labels { flex: 0 0 calc(var(--ks-space-6) * 4); overflow: hidden; }
+.ks-timeline-labels > div, .ks-timeline-track, .ks-timeline-ruler { height: calc(var(--ks-control-height) * 1.25); }
+.ks-timeline-labels > div { display: flex; align-items: center; padding: 0 var(--ks-space-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-timeline-scroll { overflow: auto; flex: 1; min-width: 0; }
+.ks-timeline-body { position: relative; min-width: 100%; }
+.ks-timeline-ruler { position: relative; cursor: pointer; border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-timeline-ruler span { position: absolute; bottom: var(--ks-space-1); font-size: var(--ks-type-meta); }
+.ks-timeline-ruler span:not(:first-child) { transform: translateX(-50%); }
+.ks-timeline-ruler span:last-child { transform: translateX(-100%); }
+.ks-timeline-track { position: relative; border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-timeline-item { position: absolute; top: var(--ks-space-1); bottom: var(--ks-space-1); overflow: hidden; display: flex; align-items: center; padding: 0 var(--ks-space-2); background: var(--ks-color-hover); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); cursor: grab; }
+.ks-timeline-item.is-accent, .ks-timeline-item.is-neutral.series-1 { background: color-mix(in srgb, var(--ks-color-accent) 25%, var(--ks-color-surface)); }
+.ks-timeline-item.is-success, .ks-timeline-item.is-neutral.series-2 { background: color-mix(in srgb, var(--ks-color-share) 25%, var(--ks-color-surface)); }
+.ks-timeline-item.is-warning, .ks-timeline-item.is-neutral.series-3 { background: color-mix(in srgb, var(--ks-color-warning) 25%, var(--ks-color-surface)); }
+.ks-timeline-item.is-danger { background: color-mix(in srgb, var(--ks-color-danger) 25%, var(--ks-color-surface)); }
+.ks-timeline-item.is-selected { border-color: var(--ks-color-accent); }
+.ks-timeline-item > span:not(.ks-timeline-handle) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-timeline-handle { position: absolute; top: 0; bottom: 0; width: var(--ks-space-2); cursor: ew-resize; }
+.ks-timeline-handle.is-start { left: 0; } .ks-timeline-handle.is-end { right: 0; }
+.ks-timeline-waveform { position: absolute; width: 100%; height: 100%; stroke: var(--ks-color-accent); opacity: .5; }
+.ks-timeline-tick, .ks-timeline-playhead { position: absolute; top: 0; bottom: 0; width: var(--ks-line-width); pointer-events: none; }
+.ks-timeline-tick { background: var(--ks-color-border); } .ks-timeline-playhead { background: var(--ks-color-accent); }
+.ks-timeline-marker { position: absolute; top: 0; width: var(--ks-space-3); height: var(--ks-space-3); transform: translateX(-50%); border: 0; background: var(--ks-color-accent); cursor: ew-resize; }

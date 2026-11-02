@@ -148,6 +148,7 @@ pub(super) fn resolve(
             );
             (value, pending)
         }
+        data::Binding::Client(_) => (None, false),
     };
     let specs = match result {
         Some(BindingValue::Ready { value }) => match validate_agent_specs(&value) {

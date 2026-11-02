@@ -2,6 +2,48 @@ use super::*;
 use kaleidoscope_contract::data::{BindingValue, SourceStatus};
 
 #[test]
+fn client_inputs_include_state_literal_and_expression_and_follow_state() {
+    let temp = TempDir::new().unwrap();
+    let definition = json!({"id":"client-inputs","name":"입력 시험","requires":{"blocks":12,"modules":{"assets":1,"client":1}},
+        "permissions":[],"state":{"count":1},"assets":[{"id":"entry","version":1}],
+        "client":{"runtime":"javascript","entry":{"id":"entry","version":1},"inputs":{"state":{"state":"count"},"literal":7,"expr":{"expr":"$state.count + 1"}},"outputs":{},"actions":[],"commands":{},"state_keys":[],"storage_entries":[]},
+        "ui":{"type":"text","value":"시험"}}).to_string();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(temp.path(), vec![definition], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "client-inputs");
+    let CoreReply::DataAttach { view } = core
+        .handle(CoreRequest::DataAttach {
+            window_id: window.clone(),
+        })
+        .unwrap()
+    else {
+        panic!("data.attach");
+    };
+    assert_eq!(
+        view.values.get("/client/inputs/state"),
+        Some(&BindingValue::Ready { value: json!(1) })
+    );
+    assert_eq!(
+        view.values.get("/client/inputs/literal"),
+        Some(&BindingValue::Ready { value: json!(7) })
+    );
+    assert_eq!(
+        view.values.get("/client/inputs/expr"),
+        Some(&BindingValue::Ready { value: json!(2.0) })
+    );
+    core.handle(CoreRequest::WindowSetState {
+        window_id: window.clone(),
+        state: BTreeMap::from([("count".into(), json!(3))]),
+    })
+    .unwrap();
+    wait_until(|| {
+        crate::data_runtime::binding_value(&core.inner, &window, "/client/inputs/state")
+            == Some(BindingValue::Ready { value: json!(3) })
+    });
+}
+
+#[test]
 fn source_pipeline_fetches_in_order_and_replans_when_state_changes() {
     let temp = TempDir::new().unwrap();
     let folder = TempDir::new().unwrap();

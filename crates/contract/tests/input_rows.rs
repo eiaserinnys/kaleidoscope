@@ -12,7 +12,7 @@ fn app(blocks: u32, rows: u8, kind: &str) -> String {
 
 #[test]
 fn rows_requires_eleven_and_accepts_one_to_twenty() {
-    assert_eq!(BLOCK_SET_VERSION, 11);
+    assert_eq!(BLOCK_SET_VERSION, 12);
     for kind in ["input", "textarea"] {
         let definition = parse_app_definition(&app(11, 4, kind)).unwrap();
         let mut old = Supported::current();

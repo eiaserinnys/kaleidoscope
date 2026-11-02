@@ -1,0 +1,27 @@
+{
+  "id": "client-counter",
+  "name": "클라이언트 계산 예제",
+  "description": "격리 프레임의 계산 결과를 표로 표시합니다.",
+  "requires": { "blocks": 12, "modules": { "assets": 1, "client": 1 } },
+  "permissions": [],
+  "state": {},
+  "assets": [{ "id": "client-counter", "version": 1 }],
+  "client": {
+    "runtime": "javascript",
+    "entry": { "id": "client-counter", "version": 1 },
+    "inputs": {},
+    "outputs": { "rows": { "default": [] } },
+    "actions": ["increment"],
+    "commands": {},
+    "state_keys": [],
+    "storage_entries": []
+  },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "children": [
+      { "type": "button", "label": "하나 더", "on_click": { "client": "increment" } },
+      { "type": "table", "rows": { "client": "rows" }, "columns": [{ "field": "value", "label": "값" }] }
+    ]
+  }
+}

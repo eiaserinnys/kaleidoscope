@@ -10,12 +10,12 @@ import { Badges, GroupHeading, NoItems, VirtualSurface, groups, isObject, keepRo
 
 const validItem = (v: unknown): v is ListItem => isObject(v) && typeof v.key === "string" && typeof v.title === "string";
 type Row = { kind: "heading"; title: string; meta?: string } | { kind: "items"; items: ListItem[]; start: number };
-export function ListBlock({ block, context, pointer }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string }) {
+export function ListBlock({ block, pointer }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/items`, block.items);
   if (value.status !== "ready") return <DataState value={value} />;
-  return <ListReady block={block} context={context} pointer={pointer} value={value.value} />;
+  return <ListReady block={block} pointer={pointer} value={value.value} />;
 }
-function ListReady({ block, context, pointer, value }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string; value: unknown }) {
+function ListReady({ block, pointer, value }: { block: Extract<Block, { type: "list" }>; pointer: string; value: unknown }) {
   const data = useWindowData();
   const grouped = useMemo(() => groups(value, Boolean(block.grouped), validItem), [value, block.grouped]);
   const items = useMemo(() => grouped.flatMap((group) => group.items), [grouped]);
@@ -45,7 +45,8 @@ function ListReady({ block, context, pointer, value }: { block: Extract<Block, {
   }, [grouped, block.grouped, grid, columns]);
   const { virtual } = useVirtualRows(rows.length, grid ? 220 : 40, scroll);
   const rowOf = (index: number) => Math.max(0, rows.findIndex((row) => row.kind === "items" && index >= row.start && index < row.start + row.items.length));
-  const selected = block.selected ? context.window.state[block.selected.state] : null;
+  const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
+  const selected = selectedValue.status === "ready" ? selectedValue.value : null;
   const roving = useRoving(items, selected, scroll, virtual, rowOf);
   keepRovingRow(virtual, rowOf(roving.focus));
   if (value === null) return null;

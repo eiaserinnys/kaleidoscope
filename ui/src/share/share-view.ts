@@ -2,7 +2,8 @@ import { useEffect, type RefObject } from "react";
 import { SHARE_DEBOUNCE_MS } from "../contract/limits";
 import type { VisibleView } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
-import { describeVisible } from "./visible";
+import { clientShare } from "../runtime/client-runtime";
+import { describeVisible, limitShareText } from "./visible";
 
 const active = new Set<() => Promise<void>>();
 export async function flushShareViews(): Promise<void> {
@@ -23,17 +24,23 @@ export function useShareView({ windowId, root, enabled, store }: { windowId: str
       if (!rect.width || !rect.height || element.closest("[hidden]")) return pending;
       const description = describeVisible(element);
       const view: VisibleView = { ...description, bounds: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) } };
-      const key = JSON.stringify(view);
-      if (key === last) return pending;
-      last = key;
       pending = pending.catch(() => undefined).then(async () => {
-        if (alive) await store.call({ op: "share.view", window_id: windowId, view });
-      }).catch(() => { if (last === key) last = ""; });
+        const client = await clientShare(store, windowId, view.visual);
+        if (client?.text) view.text = limitShareText([view.text, client.text].filter(Boolean).join("\n"));
+        if (!view.image_base64 && client?.image) view.image_base64 = client.image;
+        const key = JSON.stringify(view);
+        if (!alive || key === last) return;
+        last = key;
+        try { await store.call({ op: "share.view", window_id: windowId, view }); }
+        catch { if (last === key) last = ""; }
+      });
       return pending;
     };
     const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { void send(); }, SHARE_DEBOUNCE_MS); };
     const observer = new MutationObserver((records) => {
-      if (records.some((record) => record.type === "attributes" && record.attributeName === "data-share-seq")) {
+      const changes = records.filter((record) => !(record.type === "attributes" && record.attributeName === "style" && record.target instanceof HTMLElement && record.target.classList.contains("ks-timeline-playhead")));
+      if (!changes.length) return;
+      if (changes.some((record) => record.type === "attributes" && record.attributeName === "data-share-seq")) {
         if (!timer) timer = setTimeout(() => { void send(); }, SHARE_DEBOUNCE_MS);
       } else schedule();
     });

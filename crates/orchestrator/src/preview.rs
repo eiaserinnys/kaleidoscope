@@ -440,7 +440,12 @@ impl McpServer {
                 .unwrap_or_else(|| "unknown".into());
             blocks.push((pointer.to_owned(), block_type));
         });
-        let values = kaleidoscope_contract::data::ui_bindings(&definition)
+        if definition.client.is_some() {
+            notes.push(
+                "클라이언트 출력은 기본값으로 표시하며 실제 값은 창의 런타임에서 계산합니다".into(),
+            );
+        }
+        let values = kaleidoscope_contract::data::all_ui_bindings(&definition)
             .into_iter()
             .map(|(pointer, binding)| {
                 let result =
@@ -453,6 +458,14 @@ impl McpServer {
                         }),
                         Binding::State(reference) => BindingValue::Ready {
                             value: state.get(&reference.state).cloned().unwrap_or(Value::Null),
+                        },
+                        Binding::Client(reference) => BindingValue::Ready {
+                            value: definition
+                                .client
+                                .as_ref()
+                                .and_then(|client| client.outputs.get(&reference.client))
+                                .map(|output| output.default.clone())
+                                .unwrap_or(Value::Null),
                         },
                         Binding::Literal(value) => BindingValue::Ready {
                             value: value.clone(),

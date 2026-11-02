@@ -250,10 +250,17 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
 
     validate_worker(definition, &mut details);
     validate_sources(definition, &mut details);
+    validate_client(definition, &mut details);
 
     let mut web_views = 0;
     let mut local_agent_blocks = 0;
+    let mut surfaces = HashSet::new();
     data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
+        if let Block::Canvas { surface, .. } = block {
+            if surface.trim().is_empty() || !surfaces.insert(surface.clone()) {
+                details.push(format!("{pointer}: canvas 표면 이름이 비었거나 중복됩니다"));
+            }
+        }
         if matches!(block, Block::WebView { .. }) {
             web_views += 1;
         }
@@ -273,14 +280,110 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
         ));
     }
 
-    for (pointer, actions) in data::ui_actions(definition) {
+    for (pointer, actions) in data::all_ui_actions(definition) {
         validate_actions(actions, definition, &mut details, &pointer);
     }
-    for (pointer, binding) in data::ui_bindings(definition) {
-        validate_binding_shape(binding, definition, &mut details, &pointer);
+    for (pointer, binding) in data::all_ui_bindings(definition) {
+        validate_ui_binding(binding, definition, &mut details, &pointer);
     }
     validate_exprs(definition, &mut details);
     details
+}
+
+fn validate_client(definition: &AppDefinition, details: &mut Vec<String>) {
+    let Some(client) = &definition.client else {
+        return;
+    };
+    validate_module_version("client", 1, definition, details, "/client");
+    if !definition.assets.iter().any(|asset| asset == &client.entry) {
+        details.push("/client/entry: 선언된 자산과 판이 일치해야 합니다".into());
+    }
+    for name in client
+        .inputs
+        .keys()
+        .chain(client.outputs.keys())
+        .chain(client.actions.iter())
+        .chain(client.commands.keys())
+    {
+        if !data::valid_source_name(name) {
+            details.push(format!("/client: 이름이 올바르지 않습니다: {name}"));
+        }
+    }
+    for (name, value) in &client.inputs {
+        let at = format!("/client/inputs/{name}");
+        validate_binding_shape(value, definition, details, &at);
+        if let Binding::Expr(expr) = value {
+            if uses_var(&expr.expr, "$event") || uses_var(&expr.expr, "$item") {
+                details.push(format!("{at}: $event와 $item은 쓸 수 없습니다"));
+            }
+        }
+    }
+    for (name, actions) in &client.commands {
+        let at = format!("/client/commands/{name}");
+        if data::local_actions(actions) {
+            details.push(format!("{at}: 클라이언트 동작을 쓸 수 없습니다"));
+        } else {
+            validate_actions(actions, definition, details, &at);
+        }
+    }
+    for key in &client.state_keys {
+        validate_state_key(key, definition, details, "/client/state_keys");
+    }
+    for entry in &client.storage_entries {
+        if !definition
+            .storage
+            .as_ref()
+            .is_some_and(|storage| storage.entries.iter().any(|item| &item.id == entry))
+        {
+            details.push(format!(
+                "/client/storage_entries: 선언되지 않은 저장 항목입니다: {entry}"
+            ));
+        }
+    }
+}
+
+fn validate_ui_binding(
+    binding: &Binding,
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+    at: &str,
+) {
+    if let Binding::Client(reference) = binding {
+        if !(at == "/ui" || at.starts_with("/ui/"))
+            || definition.requires.blocks < 12
+            || definition
+                .requires
+                .modules
+                .get("client")
+                .copied()
+                .unwrap_or(0)
+                < 1
+            || !definition
+                .client
+                .as_ref()
+                .is_some_and(|client| client.outputs.contains_key(&reference.client))
+        {
+            details.push(format!(
+                "{at}: 선언되지 않은 클라이언트 출력입니다: {}",
+                reference.client
+            ));
+        }
+    } else {
+        validate_binding_shape(binding, definition, details, at);
+    }
+}
+
+fn validate_control_binding(
+    binding: &Binding,
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+    at: &str,
+) {
+    if matches!(binding, Binding::State(_) | Binding::Client(_)) {
+        validate_ui_binding(binding, definition, details, at);
+    } else {
+        details.push(format!("{at}: 상태나 클라이언트 출력 바인딩이 필요합니다"));
+    }
 }
 
 fn validate_worker(definition: &AppDefinition, details: &mut Vec<String>) {
@@ -550,6 +653,7 @@ fn validate_agent_provider(
         let window_dependent = match binding {
             Binding::State(_) => true,
             Binding::Expr(expr) => agent_expr_uses_runtime_variable(&expr.expr),
+            Binding::Client(_) => true,
             Binding::Literal(_) => false,
         };
         if window_dependent {
@@ -637,6 +741,7 @@ fn static_binding_value<'a>(
     match binding {
         Binding::Literal(value) => Some(value),
         Binding::State(reference) => definition.state.get(&reference.state),
+        Binding::Client(_) => None,
         Binding::Expr(expr) => {
             let reference = expr.expr.strip_prefix("$storage.")?;
             if reference.is_empty() || reference.contains('.') || reference.contains('[') {
@@ -809,8 +914,13 @@ fn validate_binding_shape(
     match binding {
         Binding::State(reference) => validate_state_key(&reference.state, definition, details, at),
         Binding::Expr(_) => {}
+        Binding::Client(_) => details.push(format!(
+            "{at}: 이 자리에는 클라이언트 바인딩을 쓸 수 없습니다"
+        )),
         Binding::Literal(Value::Object(object))
-            if object.contains_key("state") || object.contains_key("expr") =>
+            if object.contains_key("state")
+                || object.contains_key("expr")
+                || object.contains_key("client") =>
         {
             details.push(format!(
                 "{at}: 바인딩 모양이 틀렸습니다. 상태는 {{\"state\": \"키\"}}, 식은 {{\"expr\": \"식\"}} 하나만 씁니다"
@@ -828,6 +938,21 @@ fn validate_actions(
 ) {
     match actions {
         Actions::One(set) => validate_state_key(&set.set_state, definition, details, at),
+        Actions::Client(action) => {
+            validate_client_action(&action.client, definition, details, at, false)
+        }
+        Actions::PickFiles(action) => {
+            validate_client_action(&action.pick_files.client, definition, details, at, true)
+        }
+        Actions::SaveFile(action) => {
+            validate_client_action(&action.save_file.client, definition, details, at, true);
+            validate_ui_binding(
+                &action.save_file.suggested_name,
+                definition,
+                details,
+                &format!("{at}/save_file/suggested_name"),
+            );
+        }
         Actions::Many(list) => {
             if list.is_empty() {
                 details.push(format!("{at}: 동작 목록이 비어 있습니다"));
@@ -835,6 +960,42 @@ fn validate_actions(
             for (index, action) in list.iter().enumerate() {
                 let at = format!("{at}/{index}");
                 match action {
+                    Action::Client(action) => {
+                        if list.len() != 1 {
+                            details.push(format!("{at}: 클라이언트 동작은 단독으로 써야 합니다"));
+                        }
+                        validate_client_action(&action.client, definition, details, &at, false);
+                    }
+                    Action::PickFiles(action) => {
+                        if list.len() != 1 {
+                            details.push(format!("{at}: 파일 동작은 단독으로 써야 합니다"));
+                        }
+                        validate_client_action(
+                            &action.pick_files.client,
+                            definition,
+                            details,
+                            &at,
+                            true,
+                        );
+                    }
+                    Action::SaveFile(action) => {
+                        if list.len() != 1 {
+                            details.push(format!("{at}: 파일 동작은 단독으로 써야 합니다"));
+                        }
+                        validate_client_action(
+                            &action.save_file.client,
+                            definition,
+                            details,
+                            &at,
+                            true,
+                        );
+                        validate_ui_binding(
+                            &action.save_file.suggested_name,
+                            definition,
+                            details,
+                            &format!("{at}/save_file/suggested_name"),
+                        );
+                    }
                     Action::Worker(worker) => {
                         if !definition
                             .worker
@@ -990,6 +1151,35 @@ fn validate_actions(
     }
 }
 
+fn validate_client_action(
+    name: &str,
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+    at: &str,
+    file: bool,
+) {
+    let click = at.ends_with("/on_click") || at.ends_with("/on_click/0");
+    if !at.starts_with("/ui/")
+        || (file && !click)
+        || definition.requires.blocks < 12
+        || definition
+            .requires
+            .modules
+            .get("client")
+            .copied()
+            .unwrap_or(0)
+            < 1
+        || !definition
+            .client
+            .as_ref()
+            .is_some_and(|client| client.actions.iter().any(|action| action == name))
+    {
+        details.push(format!(
+            "{at}: 선언되지 않았거나 사용할 수 없는 클라이언트 동작입니다: {name}"
+        ));
+    }
+}
+
 fn valid_extension(value: &str) -> bool {
     (1..=16).contains(&value.len())
         && value
@@ -1111,6 +1301,90 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         ));
     }
     match block {
+        Block::Canvas { aspect_ratio, .. } => {
+            if definition.client.is_none() {
+                details.push(format!("{at}: canvas에는 client 선언이 필요합니다"));
+            }
+            if aspect_ratio.is_some_and(|ratio| !ratio.is_finite() || ratio <= 0.0) {
+                details.push(format!("{at}: aspect_ratio는 유한한 양수여야 합니다"));
+            }
+        }
+        Block::Timeline {
+            duration,
+            tracks,
+            markers,
+            ..
+        } => {
+            if let Binding::Literal(value) = duration {
+                if value
+                    .as_f64()
+                    .is_none_or(|number| !number.is_finite() || number < 0.0)
+                {
+                    details.push(format!("{at}: duration은 유한한 0 이상의 수여야 합니다"));
+                }
+            }
+            let mut ids = HashSet::new();
+            if let Binding::Literal(value) = tracks {
+                match serde_json::from_value::<Vec<crate::client::TimelineTrack>>(value.clone()) {
+                    Ok(tracks) => {
+                        for track in tracks {
+                            if let Some(waveform) = &track.waveform {
+                                let invalid_bound = |value: f64| !value.is_finite() || value < 0.0;
+                                if waveform
+                                    .peaks
+                                    .iter()
+                                    .any(|peak| !peak.is_finite() || !(0.0..=1.0).contains(peak))
+                                    || waveform.start.is_some_and(invalid_bound)
+                                    || waveform.end.is_some_and(invalid_bound)
+                                    || waveform
+                                        .start
+                                        .zip(waveform.end)
+                                        .is_some_and(|(start, end)| start > end)
+                                {
+                                    details.push(format!(
+                                        "{at}: 파형의 값 또는 시간이 올바르지 않습니다"
+                                    ));
+                                }
+                            }
+                            if track.id.is_empty() || !ids.insert(track.id) {
+                                details.push(format!("{at}: 트랙 id가 비었거나 중복됩니다"));
+                            }
+                            for item in track.items {
+                                if item.id.is_empty()
+                                    || !ids.insert(item.id)
+                                    || !item.start.is_finite()
+                                    || !item.end.is_finite()
+                                    || item.start < 0.0
+                                    || item.start > item.end
+                                {
+                                    details.push(format!(
+                                        "{at}: 구간 id 또는 시간이 올바르지 않습니다"
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => details.push(format!("{at}: 트랙 형식이 올바르지 않습니다")),
+                }
+            }
+            if let Some(Binding::Literal(value)) = markers {
+                match serde_json::from_value::<Vec<crate::client::TimelineMarker>>(value.clone()) {
+                    Ok(markers) => {
+                        for marker in markers {
+                            if marker.id.is_empty()
+                                || !ids.insert(marker.id)
+                                || !marker.time.is_finite()
+                                || marker.time < 0.0
+                            {
+                                details
+                                    .push(format!("{at}: 마커 id 또는 시간이 올바르지 않습니다"));
+                            }
+                        }
+                    }
+                    Err(_) => details.push(format!("{at}: 마커 형식이 올바르지 않습니다")),
+                }
+            }
+        }
         Block::Sandbox {
             asset,
             file,
@@ -1181,7 +1455,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             step,
             ..
         } => {
-            validate_state_key(&value.state, definition, details, at);
+            validate_control_binding(value, definition, details, at);
             if !min.is_finite() || !max.is_finite() || min >= max {
                 details.push(format!("{at}: slider의 min과 max가 올바르지 않습니다"));
             }
@@ -1189,7 +1463,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 details.push(format!("{at}: slider의 step은 0보다 커야 합니다"));
             }
         }
-        Block::Color { value, .. } => validate_state_key(&value.state, definition, details, at),
+        Block::Color { value, .. } => validate_control_binding(value, definition, details, at),
         Block::Map {
             points, selected, ..
         } => {
@@ -1502,6 +1776,9 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
                 validate_state_key(&selected.state, definition, details, at);
                 validate_state_key(&on_select.set_state, definition, details, at);
+                if matches!(agents, crate::data::Binding::Client(_)) {
+                    details.push(format!("{at}/agents: 코어에서 실행하는 에이전트 설정에는 클라이언트 출력을 쓸 수 없습니다"));
+                }
                 if let crate::data::Binding::Literal(value) = agents {
                     if let Err(error) = local_agent::validate_agent_specs(value) {
                         details.push(format!("{at}/agents: {error}"));
@@ -1611,7 +1888,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         }
         Block::List { selected, .. } => {
             if let Some(selected) = selected {
-                validate_state_key(&selected.state, definition, details, at);
+                validate_control_binding(selected, definition, details, at);
             }
         }
         Block::Feed {
@@ -1672,7 +1949,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
             if let Some(selected) = selected {
-                validate_state_key(&selected.state, definition, details, at);
+                validate_control_binding(selected, definition, details, at);
             }
         }
         Block::Properties { fields } => {
@@ -1681,7 +1958,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             }
         }
         Block::Input { value, rows, .. } => {
-            validate_state_key(&value.state, definition, details, at);
+            validate_control_binding(value, definition, details, at);
             if let Some(rows) = rows {
                 if !(1..=20).contains(rows) {
                     details.push(format!("{at}: input의 rows는 1부터 20까지입니다"));
@@ -1692,7 +1969,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             }
         }
         Block::Select { value, .. } | Block::Toggle { value, .. } => {
-            validate_state_key(&value.state, definition, details, at);
+            validate_control_binding(value, definition, details, at);
         }
         Block::Button { label, icon, .. } => {
             if label.trim().is_empty() {

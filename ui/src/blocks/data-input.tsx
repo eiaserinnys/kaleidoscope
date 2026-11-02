@@ -13,11 +13,19 @@ import { display } from "./data-layout";
 import { asArray } from "./data-view-common";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
+const bindingName = (value: unknown, fallback: string) => {
+  if (value && typeof value === "object") {
+    if ("state" in value && typeof value.state === "string") return value.state;
+    if ("client" in value && typeof value.client === "string") return value.client;
+  }
+  return fallback;
+};
 
-export function InputBlock({ block, context, pointer }: Props<"input">) {
+export function InputBlock({ block, pointer }: Props<"input">) {
   const data = useWindowData();
   const multiline = Boolean(block.multiline || (block.rows ?? 0) >= 2);
-  const current = context.window.state[block.value.state];
+  const bound = useBinding(`${pointer}/value`, block.value);
+  const current = bound.status === "ready" ? bound.value : null;
   const [draft, setDraft] = useState(current == null ? "" : String(current));
   const [focused, setFocused] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -81,40 +89,44 @@ function validOption(value: unknown): value is SelectOption {
   return typeof value === "string" || (typeof value === "object" && value !== null && "label" in value && typeof value.label === "string" && "value" in value);
 }
 
-export function SliderBlock({ block, context, pointer }: Props<"slider">) {
+export function SliderBlock({ block, pointer }: Props<"slider">) {
   const data = useWindowData();
-  const raw = Number(context.window.state[block.value.state] ?? block.min);
+  const value = useBinding(`${pointer}/value`, block.value);
+  const raw = Number((value.status === "ready" ? value.value : null) ?? block.min);
   const current = Number.isFinite(raw) ? raw : block.min;
   const [draft, setDraft] = useState(current);
   useEffect(() => { setDraft(current); }, [current]);
   return <label className="ks-field ks-slider-field">
     {block.label ? <span data-ks-share-skip="">{block.label}</span> : null}
-    <input type="range" className="ks-slider" aria-label={block.label ?? block.value.state} min={block.min} max={block.max} step={block.step ?? 1} value={draft}
+    <input type="range" className="ks-slider" aria-label={block.label ?? bindingName(block.value, "슬라이더")} min={block.min} max={block.max} step={block.step ?? 1} value={draft}
       onChange={(event) => { const next = Number(event.currentTarget.value); setDraft(next); void data.act(`${pointer}/on_change`, next); }} />
     <span className="ks-slider-value" data-ks-share-skip="">{draft}</span>
   </label>;
 }
 
-export function ColorBlock({ block, context, pointer }: Props<"color">) {
+export function ColorBlock({ block, pointer }: Props<"color">) {
   const data = useWindowData();
-  const value = context.window.state[block.value.state];
+  const bound = useBinding(`${pointer}/value`, block.value);
+  const value = bound.status === "ready" ? bound.value : null;
   const color = typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "#000000";
   return <label className="ks-field ks-color-field">
     {block.label ? <span data-ks-share-skip="">{block.label}</span> : null}
-    <span className="ks-color-control"><input className="ks-color-input" type="color" aria-label={block.label ?? block.value.state} value={color}
+    <span className="ks-color-control"><input className="ks-color-input" type="color" aria-label={block.label ?? bindingName(block.value, "색상")} value={color}
       onChange={(event) => { void data.act(`${pointer}/on_change`, event.currentTarget.value.toLowerCase()); }} /><span className="ks-color-code" data-ks-share-skip="">{color}</span></span>
   </label>;
 }
-export function SelectBlock({ block, context, pointer }: Props<"select">) {
+export function SelectBlock({ block, pointer }: Props<"select">) {
   const data = useWindowData();
   const options = useBinding(`${pointer}/options`, block.options);
+  const value = useBinding(`${pointer}/value`, block.value);
   if (options.status !== "ready") return <DataState value={options} compact />;
-  return <Select items={asArray(options.value).filter(validOption)} value={context.window.state[block.value.state]} placeholder={block.placeholder} segmented={block.style === "segmented"} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} />;
+  return <Select items={asArray(options.value).filter(validOption)} value={value.status === "ready" ? value.value : null} placeholder={block.placeholder} segmented={block.style === "segmented"} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} />;
 }
 
-export function ToggleBlock({ block, context, pointer }: Props<"toggle">) {
+export function ToggleBlock({ block, pointer }: Props<"toggle">) {
   const data = useWindowData();
-  return <Toggle checked={Boolean(context.window.state[block.value.state])} label={block.label} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} />;
+  const value = useBinding(`${pointer}/value`, block.value);
+  return <Toggle checked={value.status === "ready" && Boolean(value.value)} label={block.label} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} />;
 }
 
 export function ButtonBlock({ block, pointer }: Props<"button">) {

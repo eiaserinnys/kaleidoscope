@@ -70,6 +70,7 @@ pub(crate) fn act(
                     Some(BindingValue::Ready { value }) => value.clone(),
                     _ => return Err(error::make(ErrorCode::InvalidRequest)),
                 },
+                data::Binding::Client(_) => return Err(error::make(ErrorCode::InvalidRequest)),
             };
             let buttons = data::validate_button_grid_items(&value, u32::from(columns))
                 .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))?;
