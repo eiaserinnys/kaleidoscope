@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Actions, Block, EventModifiers, TimelineViewport } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { IconButton } from "../components/primitives";
@@ -88,6 +88,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   const gesture = useRef<Gesture | null>(null), previewFrame = useRef<number | null>(null), pendingPreview = useRef<{ edit: Edit; modifiers: EventModifiers } | null>(null);
   const seekFrame = useRef<number | null>(null), pendingSeek = useRef<number | null>(null);
   const viewportFrame = useRef<number | null>(null), pendingViewport = useRef<TimelineViewport | null>(null);
+  const wheelHandler = useRef<((event: globalThis.WheelEvent) => void) | null>(null);
   const [localViewport, setLocalViewport] = useState<TimelineViewport | null>(null), [draftViewport, setDraftViewport] = useState<TimelineViewport | null>(null), [preview, setPreview] = useState<Edit | null>(null);
   const seconds = duration.status === "ready" && typeof duration.value === "number" && Number.isFinite(duration.value) ? Math.max(0, duration.value) : 0;
   const trackData = tracks.status === "ready" && Array.isArray(tracks.value) ? tracks.value.filter((v): v is unknown & Track => !!v && typeof v === "object" && !Array.isArray(v) && typeof v.id === "string" && Array.isArray(v.items)) : [];
@@ -155,6 +156,13 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     viewportFrame.current = null;
     pendingViewport.current = null;
   }, []);
+  useEffect(() => {
+    const element = scroll.current;
+    if (!element) return;
+    const listener = (event: globalThis.WheelEvent) => wheelHandler.current?.(event);
+    element.addEventListener("wheel", listener, { passive: false });
+    return () => element.removeEventListener("wheel", listener);
+  }, [duration.status, tracks.status]);
   useLayoutEffect(() => {
     const scroller = scroll.current, content = body.current;
     if (!scroller || !content || seconds <= 0) return;
@@ -278,7 +286,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     const anchorTime = pointerFraction === undefined ? currentTime : current.start + fraction * span;
     changeViewport(zoomViewport(current, seconds, factor, fraction, anchorTime));
   };
-  const onWheel = (event: WheelEvent<HTMLDivElement>) => {
+  const onWheel = (event: globalThis.WheelEvent) => {
     if (!canChangeViewport || seconds <= 0) return;
     event.preventDefault();
     const bounds = scroll.current?.getBoundingClientRect();
@@ -296,11 +304,12 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
       zoomBy(Math.exp(-event.deltaY * (event.ctrlKey ? 0.01 : 0.0025)), fraction);
     }
   };
+  wheelHandler.current = onWheel;
   const showControls = block.controls !== false;
   const bodyWidth = seconds > 0 ? `${seconds / viewportSpan * 100}%` : "100%";
   return <div className="ks-timeline" ref={root}>
     <div className={`ks-timeline-layout${block.controls === true ? " has-controls" : ""}`}><div className="ks-timeline-labels"><div className="ks-timeline-ruler-label">{showControls ? <><IconButton aria-label="축소" disabled={!canChangeViewport || zoom <= 1} onClick={() => zoomBy(1 / 1.6)}><DataIcon name="minus" size="inline" /></IconButton><IconButton aria-label="확대" disabled={!canChangeViewport || zoom >= maxZoom} onClick={() => zoomBy(1.6)}><DataIcon name="plus" size="inline" /></IconButton>{block.controls === true ? <IconButton aria-label="전체 맞춤" disabled={!canChangeViewport || (viewportRange.start === 0 && viewportRange.end === seconds)} onClick={() => changeViewport({ start: 0, end: seconds })}><DataIcon name="maximize-2" size="inline" /></IconButton> : null}</> : null}</div>{trackData.map((track) => <div key={track.id}><span>{track.label ?? track.id}</span>{track.locked ? <DataIcon name="lock" size="inline" /> : null}</div>)}</div>
-      <div className="ks-timeline-scroll" ref={scroll} onWheel={onWheel}><div className="ks-timeline-body" ref={body} style={{ width: bodyWidth }}>
+      <div className="ks-timeline-scroll" ref={scroll}><div className="ks-timeline-body" ref={body} style={{ width: bodyWidth }}>
         <div className="ks-timeline-ruler" ref={ruler} role="slider" aria-label="재생 위치" aria-valuemin={0} aria-valuemax={Math.round(seconds * 100) / 100} aria-valuenow={Math.round(currentTime * 100) / 100} tabIndex={block.on_seek ? 0 : -1} onKeyDown={(event) => { if (!block.on_seek || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return; event.preventDefault(); const increment = event.shiftKey ? 0.1 : snapValue?.step && snapValue.step > 0 ? snapValue.step : 1; void data.act(`${pointer}/on_seek`, Math.max(0, Math.min(seconds, currentTime + (event.key === "ArrowRight" ? increment : -increment)))); }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); seek(event, true); }} onPointerMove={(event) => { if (event.buttons) seek(event); }} onPointerUp={(event) => seek(event, true)} onPointerCancel={() => flushSeek()}>
           {rulerTicks.map((tick) => <span key={tick} className={seconds > 0 && tick / seconds >= 0.96 ? "is-end" : undefined} style={{ left: percent(tick) }}>{rulerTime(tick)}</span>)}
         </div>
