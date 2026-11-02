@@ -58,7 +58,13 @@ export function Menu({ anchor, items, onClose }: MenuProps) {
           ? aboveTop
           : Math.max(viewportInset, window.innerHeight - viewportInset - menuHeight),
     });
-    itemRefs.current.find((item) => item && !item.disabled)?.focus();
+    const checked = menu?.querySelector<HTMLButtonElement>('[aria-current="true"]');
+    if (menu && checked) menu.scrollTop = checked.offsetTop - (menu.clientHeight - checked.offsetHeight) / 2;
+    const focusTarget = checked && !checked.disabled
+      ? checked
+      : itemRefs.current.find((item) => item && !item.disabled);
+    if (checked) focusTarget?.focus({ preventScroll: true });
+    else focusTarget?.focus();
 
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target;
