@@ -72,12 +72,12 @@ describe("shell core events", () => {
     expect(calls).toHaveBeenCalledWith({ op: "window.raise", window_id: "editor-window" });
 
     fireEvent.click(editorItem);
-    await waitFor(() => expect(editorWindow.getAttribute("hidden")).not.toBeNull());
+    await waitFor(() => expect(editorWindow.getAttribute("data-minimized")).toBe("true"));
     expect(editorItem.getAttribute("data-state")).toBe("minimized");
     expect(calls).toHaveBeenCalledWith({ op: "window.minimize", window_id: "editor-window" });
 
     fireEvent.click(editorItem);
-    await waitFor(() => expect(editorWindow.getAttribute("hidden")).toBeNull());
+    await waitFor(() => expect(editorWindow.getAttribute("data-minimized")).toBe("false"));
     expect(editorItem.getAttribute("data-state")).toBe("active");
 
     fireEvent.contextMenu(editorItem);
@@ -89,9 +89,9 @@ describe("shell core events", () => {
     expect(calls).toHaveBeenCalledWith({ op: "window.maximize", window_id: "editor-window" });
 
     fireEvent.click(editorItem);
-    await waitFor(() => expect(editorWindow.getAttribute("hidden")).not.toBeNull());
+    await waitFor(() => expect(editorWindow.getAttribute("data-minimized")).toBe("true"));
     fireEvent.click(editorItem);
-    await waitFor(() => expect(editorWindow.getAttribute("hidden")).toBeNull());
+    await waitFor(() => expect(editorWindow.getAttribute("data-minimized")).toBe("false"));
     expect(editorWindow.getAttribute("data-maximized")).toBe("true");
 
     fireEvent.click(screen.getByRole("button", { name: "이전 크기로 복원" }));

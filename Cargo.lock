@@ -2264,10 +2264,11 @@ dependencies = [
 
 [[package]]
 name = "kaleidoscope-app"
-version = "0.6.9"
+version = "0.6.10"
 dependencies = [
  "base64 0.22.1",
  "dirs",
+ "image",
  "kaleidoscope-core",
  "kaleidoscope-orchestrator",
  "serde_json",

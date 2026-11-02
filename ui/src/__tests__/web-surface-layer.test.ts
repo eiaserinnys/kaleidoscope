@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { evaluateWebSurface, registerWebSurface } from "../blocks/web-surface-layer";
+import { evaluateWebSurface, isFullyVisible, registerWebSurface } from "../blocks/web-surface-layer";
 import type { Rect } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 
@@ -109,5 +109,30 @@ describe("web surface overlap", () => {
     await vi.waitFor(() => expect(store.call).toHaveBeenCalledTimes(4));
     registration.unregister();
     element.remove();
+  });
+
+  it("does not let a minimized window cover a live web surface", () => {
+    const canvas = document.createElement("div");
+    canvas.className = "ks-desktop-canvas";
+    const target = document.createElement("section");
+    target.className = "ks-window";
+    target.style.zIndex = "1";
+    const surface = document.createElement("div");
+    target.append(surface);
+    const minimized = document.createElement("section");
+    minimized.className = "ks-window";
+    minimized.dataset.minimized = "true";
+    minimized.style.zIndex = "2";
+    canvas.append(target, minimized);
+    document.body.append(canvas);
+    const rect = { left: 20, top: 20, right: 120, bottom: 100, x: 20, y: 20, width: 100, height: 80, toJSON() {} };
+    const bounds = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
+    const clientRects = vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({ length: 1, item: () => rect } as unknown as DOMRectList);
+
+    expect(isFullyVisible(surface)).toBe(true);
+
+    bounds.mockRestore();
+    clientRects.mockRestore();
+    canvas.remove();
   });
 });

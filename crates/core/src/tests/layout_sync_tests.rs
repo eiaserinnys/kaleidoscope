@@ -271,6 +271,8 @@ fn another_core_keeps_synced_share_baselines_before_view_arrives() {
             png: Mutex::new(png.clone()),
             web_captures: AtomicUsize::new(0),
             shell_captures: AtomicUsize::new(0),
+            freeze_calls: AtomicUsize::new(0),
+            unfreeze_calls: AtomicUsize::new(0),
         })
     };
     let open = |data_dir: &Path, host: &Arc<CaptureTestHost>| {
@@ -299,6 +301,7 @@ fn another_core_keeps_synced_share_baselines_before_view_arrives() {
     let view = kaleidoscope_contract::VisibleView {
         text: "동기화된 글".into(),
         visual: true,
+        occluded: false,
         image_base64: None,
         bounds: Rect {
             x: 0,
