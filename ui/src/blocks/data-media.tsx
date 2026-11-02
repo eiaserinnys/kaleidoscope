@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import type { Block, MediaRef } from "../contract/contract";
 import { useBinding, useWindowData } from "../data/window-data";
 import { DataState } from "../components/data-state";
@@ -19,6 +19,7 @@ export function MediaBlock({ block, pointer }: { block: Data; pointer: string })
 }
 function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "audio" | "video"; autoplay: boolean }) {
   const data = useWindowData();
+  const generation = useSyncExternalStore(data.subscribeMedia, data.getMediaGeneration, data.getMediaGeneration);
   const key = src ? JSON.stringify(src) : "";
   const [loaded, setLoaded] = useState<{ key: string; url: string; mime: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +30,7 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
   const [muted, setMuted] = useState(false);
   const element = useRef<HTMLMediaElement | null>(null);
   useEffect(() => {
+    if (loaded?.key === key) return;
     let active = true;
     setLoaded(null); setError(null); setPlaying(false); setTime(0); setDuration(0);
     if (src) {
@@ -46,7 +48,7 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
       }).catch((reason: unknown) => { if (active) setError(toCoreError(reason).message); });
     }
     return () => { active = false; };
-  }, [data, key]);
+  }, [data, key, generation]);
   const current = loaded?.key === key ? loaded : null;
   const video = (kind ?? (current?.mime.startsWith("video/") ? "video" : "audio")) === "video";
   const playbackError = () => { setError("재생할 수 없는 파일입니다"); setPlaying(false); setTime(0); setDuration(0); };
