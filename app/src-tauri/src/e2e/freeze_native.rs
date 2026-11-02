@@ -1,6 +1,7 @@
 //! Windows 정지 화면 실험. 모든 호출은 소유 HWND의 UI 스레드에서 한다.
 use std::cell::Cell;
 use std::ffi::c_void;
+use std::time::Instant;
 type Handle = isize;
 #[repr(C)]
 #[derive(Default)]
@@ -94,7 +95,10 @@ extern "system" {
 extern "system" {
     fn DwmFlush() -> i32;
 }
-thread_local! { static COVER:Cell<Handle> = const { Cell::new(0) }; }
+thread_local! { static COVER:Cell<Handle> = const { Cell::new(0) }; static PARTS:Cell<(u128,u128,u128)>=const {Cell::new((0,0,0))}; }
+pub fn parts() -> (u128, u128, u128) {
+    PARTS.with(Cell::get)
+}
 unsafe extern "system" fn expired(w: Handle, _: u32, _: usize, _: u32) {
     DestroyWindow(w);
     COVER.with(|c| c.set(0));
@@ -121,7 +125,11 @@ pub fn end() {
     });
 }
 pub fn begin(owner: Handle, timeout_ms: u32) -> Result<(), String> {
+    begin_with_flush(owner, timeout_ms, 1)
+}
+pub fn begin_with_flush(owner: Handle, timeout_ms: u32, flushes: u32) -> Result<(), String> {
     end();
+    let start = Instant::now();
     unsafe {
         let mut r = Rect::default();
         let mut p = Point::default();
@@ -137,6 +145,7 @@ pub fn begin(owner: Handle, timeout_ms: u32) -> Result<(), String> {
         let bitmap = CreateCompatibleBitmap(dc, size.x, size.y);
         let old = SelectObject(mem, bitmap);
         let copied = BitBlt(mem, 0, 0, size.x, size.y, dc, p.x, p.y, 0x00CC0020);
+        let copied_us = start.elapsed().as_micros();
         let class: Vec<u16> = "STATIC\0".encode_utf16().collect();
         let w = CreateWindowExW(
             0x80000 | 0x20 | 0x08000000 | 0x80,
@@ -179,7 +188,17 @@ pub fn begin(owner: Handle, timeout_ms: u32) -> Result<(), String> {
             return Err("타이머 생성 실패".into());
         }
         ShowWindow(w, 4);
-        DwmFlush();
+        let shown_us = start.elapsed().as_micros();
+        for _ in 0..flushes {
+            DwmFlush();
+        }
+        PARTS.with(|p| {
+            p.set((
+                copied_us,
+                shown_us - copied_us,
+                start.elapsed().as_micros() - shown_us,
+            ))
+        });
     }
     Ok(())
 }

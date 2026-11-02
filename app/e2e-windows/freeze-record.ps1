@@ -8,6 +8,8 @@ using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 public class FreezeRecorder {
  [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
+ [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+ [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr w,int c);
  public static byte[] Frame(string path) {
   int width=GetSystemMetrics(0),height=GetSystemMetrics(1);
   using(var b=new Bitmap(width,height,PixelFormat.Format32bppArgb)) {
@@ -20,6 +22,7 @@ public class FreezeRecorder {
  public static int Diff(byte[] a,byte[] b) {int n=0;for(int i=0;i<a.Length;i+=4)if(a[i]!=b[i]||a[i+1]!=b[i+1]||a[i+2]!=b[i+2])n++;return n;}
 }
 '@
+[FreezeRecorder]::ShowWindow([FreezeRecorder]::GetConsoleWindow(),0) | Out-Null
 while(-not (Test-Path "$Out/record.request")){Start-Sleep -Milliseconds 20}
 $base=[FreezeRecorder]::Frame("$Out/screen-baseline.png")
 New-Item "$Out/record.ready" -ItemType File | Out-Null

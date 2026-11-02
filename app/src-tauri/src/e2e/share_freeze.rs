@@ -83,7 +83,7 @@ pub(super) fn scenario(
     let code = (1..=200)
         .map(|i| format!("line {i}: const value = {i};\n"))
         .collect::<String>();
-    let def = json!({"id":"spike-html","name":"정지 화면 시험","requires":{"blocks":10,"modules":{}},"permissions":[],"state":{},"ui":{"type":"split","direction":"row","sizes":[50,50],"children":[{"type":"html_view","value":"<html><body style='margin:0;background:rgb(17,153,51)'><div style='height:700px'>IFRAME TOP</div><div id='bottom' style='height:700px;background:rgb(51,119,170)'>IFRAME BOTTOM</div></body></html>"},{"type":"code","value":code}]}});
+    let mut def = json!({"id":"spike-html","name":"정지 화면 시험","requires":{"blocks":10,"modules":{}},"permissions":[],"state":{},"ui":{"type":"split","direction":"row","sizes":[50,50],"children":[{"type":"html_view","value":"<html><body style='margin:0;background:rgb(17,153,51)'><div style='height:700px'>IFRAME TOP</div><div id='bottom' style='height:700px;background:rgb(51,119,170)'>IFRAME BOTTOM</div></body></html>"},{"type":"code","value":code}]}});
     call(
         core,
         CoreRequest::AppImport {
@@ -103,10 +103,30 @@ pub(super) fn scenario(
             }),
         },
     )?;
+    def["id"] = json!("spike-second");
+    call(
+        core,
+        CoreRequest::AppImport {
+            definition_json: def.to_string(),
+        },
+    )?;
+    call(
+        core,
+        CoreRequest::WindowOpen {
+            desktop_id: desktop.clone(),
+            app_id: "spike-second".into(),
+            rect: Some(Rect {
+                x: 80,
+                y: 80,
+                width: 600,
+                height: 420,
+            }),
+        },
+    )?;
     thread::sleep(Duration::from_secs(2));
     ui(
         app,
-        r#"window.spikeRaf=0;function tick(){window.spikeRaf++;requestAnimationFrame(tick);}requestAnimationFrame(tick);const a=document.querySelector('[data-testid="app-window-spike-html"]');window.spikeA=a; const b=document.createElement('div'); b.id='spikeB';b.style='position:fixed;left:20px;top:90px;width:680px;height:470px;background:rgb(221,34,102);z-index:999999'; const i=document.createElement('input');i.id='spikeInput';b.append(i); document.body.append(b);i.focus();return {iframe:!!a.querySelector('iframe'),focus:document.hasFocus(),raf:window.spikeRaf};"#,
+        r#"window.spikeRaf=0;function tick(){window.spikeRaf++;requestAnimationFrame(tick);}requestAnimationFrame(tick);const a=document.querySelector('[data-testid="app-window-spike-html"]');window.spikeA=a;window.spikeC=document.querySelector('[data-testid="app-window-spike-second"]'); const b=document.createElement('div'); b.id='spikeB';b.style='position:fixed;left:20px;top:90px;width:680px;height:470px;background:rgb(221,34,102);z-index:999999'; const i=document.createElement('input');i.id='spikeInput';b.append(i); document.body.append(b);i.focus();return {iframe:!!a.querySelector('iframe'),focus:document.hasFocus(),raf:window.spikeRaf};"#,
     )?;
     frames(app, 2)?;
     ui(
@@ -114,6 +134,14 @@ pub(super) fn scenario(
         r#"const a=window.spikeA;const sc=a.querySelector('.cm-scroller');if(!sc)throw new Error('CodeMirror 없음');sc.scrollTop=450;window.spikeScroll=sc.scrollTop;const frame=a.querySelector('iframe');frame.contentWindow.postMessage({type:'ks-html-focus-comment',id:'bottom',comments:[{id:'bottom',selector:'#bottom'}]},'*');const canvas=document.createElement('canvas');canvas.width=100;canvas.height=100;canvas.style='position:absolute;left:180px;top:100px;width:100px;height:100px;z-index:5';a.append(canvas);window.spikeGL=canvas.getContext('webgl');if(window.spikeGL){const gl=window.spikeGL;function draw(){gl.clearColor(0.2,0.3333333,0.8666667,1);gl.clear(gl.COLOR_BUFFER_BIT);requestAnimationFrame(draw);}draw();}return {scroll:window.spikeScroll,webgl:!!window.spikeGL};"#,
     )?;
     thread::sleep(Duration::from_millis(1800));
+    app.get_window("main")
+        .ok_or("메인 창 없음")?
+        .set_focus()
+        .map_err(|e| e.to_string())?;
+    app.get_webview("main")
+        .ok_or("메인 웹뷰 없음")?
+        .set_focus()
+        .map_err(|e| e.to_string())?;
     fs::write(out.join("record.request"), b"").map_err(|e| e.to_string())?;
     let deadline = Instant::now() + Duration::from_secs(30);
     while !out.join("record.ready").exists() {
@@ -122,55 +150,68 @@ pub(super) fn scenario(
         }
         thread::sleep(Duration::from_millis(20));
     }
-    for count in [1, 2] {
-        for wait in [1, 2, 3] {
-            let tag = format!("c{count}-f{wait}");
-            let total = Instant::now();
-            let before = on_ui(app, |_| native::foreground())?;
-            let start = Instant::now();
-            on_ui(app, |hwnd| native::begin(hwnd, 5000))??;
-            let freeze = start.elapsed().as_millis();
-            let start = Instant::now();
-            let hidden=ui(app,"document.querySelector('#spikeB').style.visibility='hidden';window.spikeA.hidden=false;return window.spikeRaf;")?;
-            let hide_ms = start.elapsed().as_millis();
-            let mut shots = Vec::new();
-            for index in 0..count {
-                let state = frames(app, wait)?;
-                let ms = capture(app, out, &format!("{tag}-{index}"))?;
-                shots.push(json!({"state":state,"capture_ms":ms}));
-            }
-            let start = Instant::now();
-            ui(
+    ui(app,"window.spikeHide=(e,v)=>{e.style[window.spikeMode]=v?(window.spikeMode==='opacity'?'0':'hidden'):'';};return true;")?;
+    for mode in ["visibility", "opacity"] {
+        ui(app, &format!("window.spikeMode='{mode}';return true;"))?;
+        for flushes in [0, 1] {
+            for count in [1, 2] {
+                for wait in [1, 2] {
+                    let tag = format!("c{count}-f{wait}-d{flushes}-{mode}");
+                    let total = Instant::now();
+                    record(log,"focus.before",ui(app,"const i=document.querySelector('#spikeInput');i.focus();i.value='selection';i.setSelectionRange(2,5);window.spikeFocused=document.activeElement;return {active:document.activeElement?.id,selection:[i.selectionStart,i.selectionEnd]};")?)?;
+                    let before = on_ui(app, |_| native::foreground())?;
+                    let start = Instant::now();
+                    on_ui(app, move |hwnd| {
+                        native::begin_with_flush(hwnd, 5000, flushes)
+                    })??;
+                    let freeze = start.elapsed().as_millis();
+                    let start = Instant::now();
+                    let hidden=ui(app,"window.spikeHide(document.querySelector('#spikeB'),true);window.spikeA.hidden=false;return window.spikeRaf;")?;
+                    let hide_ms = start.elapsed().as_millis();
+                    let mut shots = Vec::new();
+                    for index in 0..count {
+                        ui(app, &format!("window.spikeHide(window.spikeA,{});window.spikeHide(window.spikeC,{});return true;",index!=0,index==0))?;
+                        let state = frames(app, wait)?;
+                        let ms = capture(app, out, &format!("{tag}-{index}"))?;
+                        shots.push(json!({"state":state,"capture_ms":ms}));
+                    }
+                    let start = Instant::now();
+                    ui(
                 app,
-                "document.querySelector('#spikeB').style.visibility='';return true;",
+                "window.spikeHide(document.querySelector('#spikeB'),false);window.spikeHide(window.spikeA,false);window.spikeHide(window.spikeC,false);return true;",
             )?;
-            let restored = frames(app, wait)?;
-            let restore_ms = start.elapsed().as_millis();
-            let start = Instant::now();
-            on_ui(app, |_| {
-                native::flush();
-                native::end();
-                native::flush();
-            })?;
-            record(
-                log,
-                "freeze.measure",
-                json!({"tag":tag,"count":count,"wait":wait,"wall_ms":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis(),"freeze_ms":freeze,"hide_ms":hide_ms,"raf_before":hidden,"captures":shots,"restore":restored,"restore_ms":restore_ms,"unfreeze_ms":start.elapsed().as_millis(),"total_ms":total.elapsed().as_millis(),"foreground_kept":before==on_ui(app,|_|native::foreground())?}),
-            )?;
-            thread::sleep(Duration::from_millis(300));
+                    let restored = frames(app, wait)?;
+                    record(log,"focus.restored",ui(app,"const before=document.activeElement?.id;window.spikeFocused.focus({preventScroll:true});return {before,after:document.activeElement?.id,selection:[window.spikeFocused.selectionStart,window.spikeFocused.selectionEnd]};")?)?;
+                    let restore_ms = start.elapsed().as_millis();
+                    let start = Instant::now();
+                    on_ui(app, move |_| {
+                        for _ in 0..flushes {
+                            native::flush();
+                        }
+                        native::end();
+                        native::flush();
+                    })?;
+                    record(
+                        log,
+                        "freeze.measure",
+                        json!({"tag":tag,"count":count,"wait":wait,"dwm_flushes":flushes,"hide_mode":mode,"wall_ms":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis(),"native_parts_us":on_ui(app, |_| native::parts())?,"freeze_ms":freeze,"hide_ms":hide_ms,"raf_before":hidden,"captures":shots,"restore":restored,"restore_ms":restore_ms,"unfreeze_ms":start.elapsed().as_millis(),"total_ms":total.elapsed().as_millis(),"foreground_kept":before==on_ui(app,|_|native::foreground())?}),
+                    )?;
+                    thread::sleep(Duration::from_millis(300));
+                }
+            }
         }
     }
     on_ui(app, |h| native::begin(h, 5000))??;
     ui(
         app,
-        "document.querySelector('#spikeB').style.visibility='hidden';return true;",
+        "window.spikeHide(document.querySelector('#spikeB'),true);window.spikeHide(window.spikeC,true);return true;",
     )?;
     frames(app, 2)?;
     capture(app, out, "minimized-reference")?;
     record(log,"minimized.before",ui(app,"const s=window.spikeA.querySelector('.cm-scroller');return {scroll:s.scrollTop,width:s.clientWidth,height:s.clientHeight,lines:window.spikeA.querySelectorAll('.cm-line').length,webgl:!!window.spikeGL};")?)?;
     ui(
         app,
-        "document.querySelector('#spikeB').style.visibility='';return true;",
+        "window.spikeHide(document.querySelector('#spikeB'),false);window.spikeHide(window.spikeA,false);window.spikeHide(window.spikeC,false);return true;",
     )?;
     frames(app, 2)?;
     on_ui(app, |_| {
@@ -181,7 +222,7 @@ pub(super) fn scenario(
     ui(app, "window.spikeA.hidden=true;return true;")?;
     frames(app, 2)?;
     on_ui(app, |h| native::begin(h, 5000))??;
-    ui(app,"document.querySelector('#spikeB').style.visibility='hidden';window.spikeA.hidden=false;return true;")?;
+    ui(app,"window.spikeHide(document.querySelector('#spikeB'),true);window.spikeA.hidden=false;window.spikeHide(window.spikeC,true);return true;")?;
     for n in 1..=3 {
         let state = frames(app, 1)?;
         let ms = capture(app, out, &format!("minimized-frame-{n}"))?;
@@ -191,7 +232,7 @@ pub(super) fn scenario(
             json!({"frame":n,"state":state,"capture_ms":ms,"editor":ui(app,"const s=window.spikeA.querySelector('.cm-scroller');return {scroll:s.scrollTop,width:s.clientWidth,height:s.clientHeight,lines:window.spikeA.querySelectorAll('.cm-line').length};")?}),
         )?;
     }
-    ui(app,"window.spikeA.hidden=true;document.querySelector('#spikeB').style.visibility='';return true;")?;
+    ui(app,"window.spikeA.hidden=true;window.spikeHide(document.querySelector('#spikeB'),false);window.spikeHide(window.spikeA,false);window.spikeHide(window.spikeC,false);return true;")?;
     frames(app, 2)?;
     on_ui(app, |_| {
         native::flush();
