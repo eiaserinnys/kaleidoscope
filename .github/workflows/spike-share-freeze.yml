@@ -26,6 +26,7 @@ jobs:
       - name: 측정
         shell: pwsh
         run: |
+          $env:KALEIDOSCOPE_E2E_RETAINED_ONLY = '1'
           $out = Join-Path $env:GITHUB_WORKSPACE 'freeze-results'
           New-Item -ItemType Directory $out | Out-Null
           $env:APPDATA = Join-Path $env:RUNNER_TEMP 'freeze-appdata'
