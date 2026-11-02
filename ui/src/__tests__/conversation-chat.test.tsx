@@ -431,8 +431,14 @@ describe("공용 대화 부품", () => {
   it("다른 실행 위치 전환은 확인창을 닫고 기다린 뒤 새 위치와 모델을 보인다", async () => {
     let current = thread;
     let resolveSwitch!: (reply: CoreReply) => void;
+    let resolveReload!: (reply: CoreReply) => void;
+    let getCount = 0;
     setup(async (request) => {
-      if (request.op === "conversation.get") return get(current);
+      if (request.op === "conversation.get") {
+        getCount += 1;
+        if (getCount === 1) return get(current);
+        return new Promise<CoreReply>((resolve) => { resolveReload = resolve; });
+      }
       if (request.op === "conversation.switch") return new Promise<CoreReply>((resolve) => { resolveSwitch = resolve; });
       throw new Error(request.op);
     });
@@ -445,12 +451,18 @@ describe("공용 대화 부품", () => {
     expect(await screen.findByText("바꾸는 중")).toBeTruthy();
     expect((screen.getByRole("button", { name: "실행 위치" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("기록")).toBeTruthy();
+    const messageInput = screen.getByRole("textbox", { name: "메시지" });
+    expect(document.activeElement).toBe(messageInput);
 
     current = { ...thread, model: { id: "m2", label: "모델 2", group: { id: "node-b", label: "노드 B" } } };
     await act(async () => resolveSwitch({ op: "conversation.switch", thread: current, notices: [] }));
+    await waitFor(() => expect(getCount).toBe(2));
+    expect(screen.queryByRole("textbox", { name: "메시지" })).toBeNull();
+    await act(async () => resolveReload(get(current)));
     await waitFor(() => expect(screen.getByRole("button", { name: "실행 위치" }).textContent).toContain("노드 B"));
     expect(screen.getByRole("button", { name: "모델" }).textContent).toContain("모델 2");
     expect(screen.queryByText("바꾸는 중")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "메시지" }));
   });
 
   it("실행 위치 전환 실패는 대화 기록을 남기고 알림 뒤 선택을 다시 연다", async () => {

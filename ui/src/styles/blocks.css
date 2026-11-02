@@ -599,12 +599,17 @@
   background: var(--ks-color-surface);
 }
 
+.ks-agent-chat > .ks-notice {
+  flex: 0 0 auto;
+  margin: var(--ks-space-2) var(--ks-space-3) 0;
+}
+
 .ks-agent-chat-history {
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;
-  padding: var(--ks-space-4) var(--ks-space-3);
+  padding: 0 var(--ks-space-3);
 }
 
 .ks-agent-chat-content {
@@ -612,6 +617,7 @@
   min-width: 0;
   flex-direction: column;
   gap: var(--ks-space-3);
+  padding-block: var(--ks-space-4);
 }
 
 .ks-agent-chat-user {

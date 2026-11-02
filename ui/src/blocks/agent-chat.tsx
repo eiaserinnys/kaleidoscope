@@ -64,7 +64,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const historyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const startRef = useRef<HTMLDivElement>(null);
-  const focusAfterLogin = useRef(false);
+  const restoreFocus = useRef(false);
   const followTail = useRef(true);
   const loadGeneration = useRef(0);
   const threadId = useRef<string | null>(null);
@@ -210,10 +210,10 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   }), [applyConversation, context.store, workspaceId, hasProvider, providerEntry, windowId, restoreDraft, handleError, load]);
 
   useLayoutEffect(() => {
-    if (!focusAfterLogin.current || loading || loginRequired || loadError || bindingConflict) return;
+    if (!restoreFocus.current || loading || loginRequired || loadError || bindingConflict || pendingSwitch) return;
     const target = agent ? inputRef.current : startRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");
-    if (target) { target.focus(); focusAfterLogin.current = false; }
-  }, [agent, loading, loginRequired, loadError, bindingConflict, models]);
+    if (target) { target.focus(); restoreFocus.current = false; }
+  }, [agent, loading, loginRequired, loadError, bindingConflict, models, pendingSwitch]);
 
   const loadOlder = useConversationHistory({
     historyRef, nextBefore, enabled: hasProvider && Boolean(agent) && !loading && !loginRequired && !loadError && !bindingConflict,
@@ -249,6 +249,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       setThread(reply.thread);
       setAgent(true);
       setNotices(reply.notices);
+      restoreFocus.current = true;
       await load([], reply.thread.profile?.id);
     } catch (reason) {
       const error = toCoreError(reason);
@@ -416,7 +417,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   }
   if (!workspaceId) return null;
   if (loading) return <div className="ks-agent-chat-state"><StatusText>불러오는 중</StatusText></div>;
-  if (loginRequired && provider) return <DataState value={{ status: "login_required", permission: provider.permission }} onLogin={() => { focusAfterLogin.current = true; void load(); }} />;
+  if (loginRequired && provider) return <DataState value={{ status: "login_required", permission: provider.permission }} onLogin={() => { restoreFocus.current = true; void load(); }} />;
   if (bindingConflict) return <div className="ks-agent-chat-state"><Notice role="alert">저장된 대화와 제공자의 대화가 다릅니다.</Notice></div>;
   if (loadError) {
     return (
@@ -478,7 +479,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
           title={`${pendingSwitch.label}(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.`}
           ok="바꾸기"
           onCancel={() => setPendingSwitch(null)}
-          onConfirm={() => { setPendingSwitch(null); void switchConversation({ ...(pendingSwitch.profile ? { profile: pendingSwitch.profile } : {}), ...(pendingSwitch.model ? { model: pendingSwitch.model } : {}) }); }}
+          onConfirm={() => { restoreFocus.current = true; setPendingSwitch(null); void switchConversation({ ...(pendingSwitch.profile ? { profile: pendingSwitch.profile } : {}), ...(pendingSwitch.model ? { model: pendingSwitch.model } : {}) }); }}
         /> : null;
       })() : null}
     </section>
