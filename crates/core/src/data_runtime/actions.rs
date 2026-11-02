@@ -39,7 +39,7 @@ pub(crate) fn act(
         let windows = inner.data_runtimes.windows.lock().unwrap();
         let runtime = windows
             .get(window_id)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(|| errors::DATA_ACT_ACTION_WINDOW_MISSING(window_id))?;
         let mut button_grid = None;
         data::walk_blocks(
             &runtime.definition.ui,
@@ -69,33 +69,53 @@ pub(crate) fn act(
                     .unwrap_or(Value::Null),
                 data::Binding::Expr(_) => match runtime.last.values.get(&binding_pointer) {
                     Some(BindingValue::Ready { value }) => value.clone(),
-                    _ => return Err(error::make(ErrorCode::InvalidRequest)),
+                    _ => {
+                        return Err(errors::DATA_ACT_BUTTON_GRID_EXPR_NOT_READY(
+                            &binding_pointer,
+                        ))
+                    }
                 },
                 data::Binding::Client(_)
                 | data::Binding::Item(_)
                 | data::Binding::ParentItem(_)
-                | data::Binding::Message(_) => return Err(error::make(ErrorCode::InvalidRequest)),
+                | data::Binding::Message(_) => {
+                    return Err(errors::DATA_ACT_BUTTON_GRID_BINDING_UNSUPPORTED(
+                        &binding_pointer,
+                    ))
+                }
             };
-            let buttons = data::validate_button_grid_items(&value, u32::from(columns))
-                .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))?;
+            let buttons =
+                data::validate_button_grid_items(&value, u32::from(columns)).map_err(|reason| {
+                    errors::DATA_ACT_BUTTON_GRID_INVALID(&binding_pointer, &reason)
+                })?;
             let key = event
                 .as_str()
-                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+                .ok_or_else(|| errors::DATA_ACT_BUTTON_GRID_EVENT_INVALID(&binding_pointer))?;
             let button = buttons
                 .into_iter()
-                .find(|button| button.key == key && !button.disabled)
-                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
-            serde_json::to_value(button).map_err(|_| error::make(ErrorCode::InvalidRequest))?
+                .find(|button| button.key == key)
+                .ok_or_else(|| errors::DATA_ACT_BUTTON_GRID_KEY_NOT_FOUND(&binding_pointer, key))?;
+            if button.disabled {
+                return Err(errors::DATA_ACT_BUTTON_GRID_KEY_DISABLED(
+                    &binding_pointer,
+                    key,
+                ));
+            }
+            serde_json::to_value(button)
+                .map_err(|_| errors::DATA_ACT_BUTTON_GRID_SERIALIZE_FAILED(&binding_pointer))?
         } else {
             item
         }
     };
     let len = {
         let windows = inner.data_runtimes.windows.lock().unwrap();
-        windows
+        let runtime = windows
             .get(window_id)
-            .and_then(|runtime| runtime.compiled.actions_len(pointer))
-            .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?
+            .ok_or_else(|| errors::DATA_ACT_ACTION_WINDOW_MISSING(window_id))?;
+        runtime
+            .compiled
+            .actions_len(pointer)
+            .ok_or_else(|| errors::DATA_ACT_ACTION_NOT_FOUND(pointer))?
     };
     let started = Instant::now();
     let mut pending = BTreeMap::new();
@@ -105,7 +125,7 @@ pub(crate) fn act(
             let windows = inner.data_runtimes.windows.lock().unwrap();
             let runtime = windows
                 .get(window_id)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DATA_ACT_WINDOW_NOT_FOUND(window_id))?;
             if let Some(error) = runtime.action_storage_error(pointer, index) {
                 return Err(error);
             }
@@ -128,7 +148,7 @@ pub(crate) fn act(
                         modifiers: modifiers.as_ref(),
                     },
                 )
-                .map_err(|message| error::with_message(ErrorCode::InvalidRequest, &message))
+                .map_err(|reason| errors::DATA_ACT_STEP_INVALID(pointer).and_details(vec![reason]))
         })();
         let step = match step {
             Ok(step) => step,
@@ -142,6 +162,7 @@ pub(crate) fn act(
         }
         match step {
             Step::Worker { action, args } => {
+                let worker_action = action.clone();
                 let (app, workspace, link) = {
                     let state = inner.state.lock().unwrap();
                     let window = state
@@ -149,22 +170,26 @@ pub(crate) fn act(
                         .windows
                         .iter()
                         .find(|window| window.id == window_id)
-                        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                        .ok_or_else(|| {
+                            errors::DATA_ACT_WORKER_WINDOW_NOT_FOUND(window_id, &worker_action)
+                        })?;
                     let desktop = state
                         .shared
                         .desktops
                         .iter()
                         .find(|desktop| desktop.id == window.desktop_id)
-                        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                        .ok_or_else(|| {
+                            errors::DATA_ACT_WORKER_DESKTOP_NOT_FOUND(window_id, &worker_action)
+                        })?;
                     if !matches!(state.link, LinkStatus::Connected { .. }) {
-                        return Err(error::make(ErrorCode::Unavailable));
+                        return Err(errors::DATA_ACT_WORKER_SERVER_NOT_CONNECTED(&worker_action));
                     }
                     let link = inner
                         .link_file
                         .lock()
                         .unwrap()
                         .clone()
-                        .ok_or_else(|| error::make(ErrorCode::Unavailable))?;
+                        .ok_or_else(|| errors::DATA_ACT_WORKER_LINK_MISSING(&worker_action))?;
                     (window.app_id.clone(), desktop.workspace_id.clone(), link)
                 };
                 inner
@@ -180,29 +205,34 @@ pub(crate) fn act(
                         },
                     )
                     .map_err(|err| {
-                        if matches!(err, crate::registry_client::RegistryError::Unauthorized) {
+                        if matches!(&err, crate::registry_client::RegistryError::Unauthorized) {
                             crate::link::token_rejected(inner, link.clone());
                         }
-                        crate::link::registry_error_to_core(err, "서버 워커를 호출할 수 없습니다.")
+                        map_worker_error(err, &worker_action)
                     })?;
             }
             Step::SetState { key, value } => {
-                let valid = {
+                let (declared, valid) = {
                     let windows = inner.data_runtimes.windows.lock().unwrap();
                     let runtime = windows
                         .get(window_id)
-                        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                        .ok_or_else(|| errors::DATA_ACT_WINDOW_NOT_FOUND(window_id))?;
                     let mut next = runtime.state.clone();
                     next.extend(pending.clone());
                     next.insert(key.clone(), value.clone());
-                    runtime.definition.state.contains_key(&key)
-                        && serde_json::to_vec(&next).is_ok_and(|bytes| {
-                            bytes.len() <= kaleidoscope_contract::WINDOW_STATE_MAX_BYTES
-                        })
+                    let declared = runtime.definition.state.contains_key(&key);
+                    let valid = serde_json::to_vec(&next).is_ok_and(|bytes| {
+                        bytes.len() <= kaleidoscope_contract::WINDOW_STATE_MAX_BYTES
+                    });
+                    (declared, valid)
                 };
+                if !declared {
+                    let _ = flush_pending_state(inner, window_id, &mut pending, &mut pending_steps);
+                    return Err(errors::DATA_ACT_STATE_KEY_NOT_DECLARED(&key));
+                }
                 if !valid {
                     let _ = flush_pending_state(inner, window_id, &mut pending, &mut pending_steps);
-                    return Err(error::make(ErrorCode::InvalidRequest));
+                    return Err(errors::DATA_ACT_STATE_TOO_LARGE());
                 }
                 pending.insert(key, value);
                 pending_steps += 1;
@@ -218,7 +248,7 @@ pub(crate) fn act(
                     let windows = inner.data_runtimes.windows.lock().unwrap();
                     windows
                         .get(window_id)
-                        .ok_or_else(|| error::make(ErrorCode::NotFound))?
+                        .ok_or_else(|| errors::DATA_ACT_WINDOW_NOT_FOUND(window_id))?
                         .revision(&entry)?
                 };
                 let revision = crate::app_storage::write(
@@ -250,8 +280,10 @@ pub(crate) fn act(
                 )
                 .map_err(|err| match err {
                     RequestError::Core(err) => err,
-                    RequestError::Login(_) => error::make(ErrorCode::NotGranted),
-                    RequestError::RateLimited { .. } => error::make(ErrorCode::Unavailable),
+                    RequestError::Login(_) => errors::DATA_ACT_CALL_LOGIN_REQUIRED(&permission),
+                    RequestError::RateLimited { .. } => {
+                        errors::DATA_ACT_CALL_RATE_LIMITED(&permission)
+                    }
                 })?;
                 if !(200..300).contains(&reply.status) {
                     return Err(connections::response_error(&reply));
@@ -275,6 +307,61 @@ pub(crate) fn act(
         );
     }
     Ok(CoreReply::DataAct {})
+}
+
+fn map_worker_error(error: crate::registry_client::RegistryError, action: &str) -> CoreError {
+    match error {
+        crate::registry_client::RegistryError::Validation(error) => error,
+        crate::registry_client::RegistryError::Unauthorized => {
+            errors::DATA_ACT_WORKER_UNAUTHORIZED(action)
+        }
+        crate::registry_client::RegistryError::NotFound => {
+            errors::DATA_ACT_WORKER_NOT_FOUND(action)
+        }
+        crate::registry_client::RegistryError::Failure { stage, detail } => {
+            let error = match stage {
+                crate::registry_client::FailureStage::Send => {
+                    errors::DATA_ACT_WORKER_UNREACHABLE(action)
+                }
+                crate::registry_client::FailureStage::Status => {
+                    errors::DATA_ACT_WORKER_REJECTED(action)
+                }
+                crate::registry_client::FailureStage::Read => {
+                    errors::DATA_ACT_WORKER_RESPONSE_READ_FAILED(action)
+                }
+            };
+            error.and_details(vec![detail])
+        }
+    }
+}
+
+#[cfg(test)]
+mod error_mapping_tests {
+    use super::map_worker_error;
+    use crate::registry_client::{FailureStage, RegistryError};
+    use kaleidoscope_contract::ErrorCode;
+
+    #[test]
+    fn worker_failure_stages_have_distinct_codes_and_preserve_detail() {
+        for (stage, id) in [
+            (FailureStage::Send, "DATA_ACT_WORKER_UNREACHABLE"),
+            (FailureStage::Status, "DATA_ACT_WORKER_REJECTED"),
+            (FailureStage::Read, "DATA_ACT_WORKER_RESPONSE_READ_FAILED"),
+        ] {
+            let error = map_worker_error(
+                RegistryError::Failure {
+                    stage,
+                    detail: "HTTP 503; host=registry.example".into(),
+                },
+                "save",
+            );
+
+            assert_eq!(error.code, ErrorCode::Server);
+            assert_eq!(error.id.as_deref(), Some(id));
+            assert!(error.message.contains("save"));
+            assert_eq!(error.details, vec!["HTTP 503; host=registry.example"]);
+        }
+    }
 }
 
 pub(crate) fn layout_errors(inner: &Inner) -> Vec<LayoutDataError> {

@@ -1,5 +1,5 @@
 //! 코어의 최근 처리 시간과 바인딩 계산 통계.
-use kaleidoscope_contract::{UiInputSample, UiFrameSample};
+use kaleidoscope_contract::{UiFrameSample, UiInputSample};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Mutex;
@@ -443,15 +443,15 @@ pub(crate) fn request(
     query: &BTreeMap<String, String>,
     body: Option<Value>,
 ) -> Result<kaleidoscope_contract::registry::ConnectionReply, kaleidoscope_contract::CoreError> {
-    use kaleidoscope_contract::{data::HttpMethod, registry::ConnectionReply, ErrorCode};
+    use kaleidoscope_contract::{data::HttpMethod, errors, registry::ConnectionReply};
     if body.is_some() {
-        return Err(crate::error::make(ErrorCode::InvalidRequest));
+        return Err(errors::DATA_PROFILER_BODY_NOT_ALLOWED());
     }
     match (method, path) {
         (HttpMethod::Get, "/snapshot") => {}
         (HttpMethod::Post, "/clear") => inner.profiler.clear(),
         (HttpMethod::Post, "/benchmark") => benchmark(inner)?,
-        _ => return Err(crate::error::make(ErrorCode::InvalidRequest)),
+        _ => return Err(errors::DATA_PROFILER_ROUTE_NOT_FOUND(path)),
     }
     Ok(ConnectionReply {
         status: 200,
@@ -468,7 +468,7 @@ pub(crate) fn request(
 }
 
 fn benchmark(inner: &std::sync::Arc<crate::Inner>) -> Result<(), kaleidoscope_contract::CoreError> {
-    use kaleidoscope_contract::{CoreReply, CoreRequest, ErrorCode};
+    use kaleidoscope_contract::{errors, CoreReply, CoreRequest};
     let started = std::time::Instant::now();
     let mut children = Vec::new();
     for index in 0..24 {
@@ -486,7 +486,15 @@ fn benchmark(inner: &std::sync::Arc<crate::Inner>) -> Result<(), kaleidoscope_co
     children.push(json!({"type":"button","label":"실행","on_click":steps}));
     let definition = json!({"id":"profiler-benchmark","name":"벤치마크","requires":{"blocks":4,"modules":{}},"state":{"active_tab":0,"extra":1,"a":0,"b":0,"c":0,"d":0},"ui":{"type":"stack","direction":"column","children":children}}).to_string();
     let dir = std::env::temp_dir().join(format!("kaleidoscope-benchmark-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&dir).map_err(|err| crate::error::io_error(&err))?;
+    std::fs::create_dir_all(&dir).map_err(|err| {
+        let mut error = if err.kind() == std::io::ErrorKind::NotFound {
+            errors::DATA_PROFILER_TEMP_DIR_NOT_FOUND()
+        } else {
+            errors::DATA_PROFILER_TEMP_DIR_CREATE_FAILED()
+        };
+        error.details = vec![err.to_string()];
+        error
+    })?;
     let run = (|| {
         let core = crate::Core::open_with_client(
             crate::CoreConfig {
@@ -500,13 +508,13 @@ fn benchmark(inner: &std::sync::Arc<crate::Inner>) -> Result<(), kaleidoscope_co
             inner.registry.clone(),
         )?;
         let CoreReply::StateGet { snapshot } = core.handle(CoreRequest::StateGet {})? else {
-            return Err(crate::error::make(ErrorCode::InvalidRequest));
+            return Err(errors::DATA_PROFILER_STATE_REPLY_INVALID());
         };
         let desktop = snapshot
             .shared
             .desktops
             .first()
-            .ok_or_else(|| crate::error::make(ErrorCode::NotFound))?
+            .ok_or_else(errors::DATA_PROFILER_DESKTOP_NOT_FOUND)?
             .id
             .clone();
         let CoreReply::WindowOpen { window } = core.handle(CoreRequest::WindowOpen {
@@ -515,7 +523,7 @@ fn benchmark(inner: &std::sync::Arc<crate::Inner>) -> Result<(), kaleidoscope_co
             rect: None,
         })?
         else {
-            return Err(crate::error::make(ErrorCode::InvalidRequest));
+            return Err(errors::DATA_PROFILER_WINDOW_REPLY_INVALID());
         };
         core.handle(CoreRequest::DataAttach {
             window_id: window.id.clone(),

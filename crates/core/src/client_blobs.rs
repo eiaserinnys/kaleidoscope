@@ -1,8 +1,8 @@
 //! 기기와 서버, 앱 범위의 바이너리 보관.
-use crate::{app_commands, client_files, error, server_switch, Inner};
+use crate::{app_commands, client_files, server_switch, Inner};
 use kaleidoscope_contract::{
     client::{ClientFile, CLIENT_PICK_FILE_MAX_BYTES},
-    CoreError, ErrorCode,
+    errors, CoreError,
 };
 use std::{
     fs,
@@ -18,21 +18,16 @@ fn location(inner: &Inner, window: &str, key: &str) -> Result<(PathBuf, PathBuf)
         .windows
         .iter()
         .find(|w| w.id == window)
-        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        .ok_or_else(|| errors::DATA_CLIENT_BLOB_WINDOW_NOT_FOUND(window))?;
     let definition =
         app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(|| errors::DATA_CLIENT_BLOB_APP_NOT_FOUND(&window.app_id))?;
     let prefixes = definition
         .client
         .as_ref()
         .and_then(|c| c.device_storage.as_ref())
         .map(|s| &s.prefixes)
-        .ok_or_else(|| {
-            error::with_message(
-                ErrorCode::PermissionDenied,
-                &format!("앱 {}에 기기 보관이 선언되지 않았습니다. 앱 정의에 device_storage를 추가하세요.", window.app_id),
-            )
-        })?;
+        .ok_or_else(|| errors::DATA_CLIENT_BLOB_STORAGE_NOT_DECLARED(&window.app_id))?;
     if key.is_empty()
         || key.contains('\\')
         || !Path::new(key)
@@ -40,18 +35,10 @@ fn location(inner: &Inner, window: &str, key: &str) -> Result<(PathBuf, PathBuf)
             .all(|c| matches!(c, Component::Normal(_)))
         || key.split('/').any(|part| part == "." || part == "..")
     {
-        return Err(error::with_message(
-            ErrorCode::InvalidRequest,
-            &format!(
-                "보관 키 {key}가 올바르지 않습니다. 상대 경로를 쓰고 .과 .. 경로 조각을 없애세요."
-            ),
-        ));
+        return Err(errors::DATA_CLIENT_BLOB_KEY_INVALID(key));
     }
     if !prefixes.iter().any(|prefix| key.starts_with(prefix)) {
-        return Err(error::with_message(
-            ErrorCode::PermissionDenied,
-            &format!("보관 키 {key}는 앱 {}의 허용 접두어 밖입니다. 앱 정의의 device_storage.prefixes를 확인하세요.", window.app_id),
-        ));
+        return Err(errors::DATA_CLIENT_BLOB_PREFIX_DENIED(key, &window.app_id));
     }
     let root = server_switch::active_archive(inner)
         .join("client-blobs")
@@ -70,42 +57,82 @@ pub(crate) fn put(
     let mut input: Box<dyn Read + '_> = match (file_id, bytes) {
         (Some(id), None) => {
             let source = client_files::input_path(inner, window, id)?;
-            let file = fs::File::open(source).map_err(|e| error::io_error(&e))?;
+            let file = fs::File::open(source).map_err(|e| {
+                let mut error = if e.kind() == std::io::ErrorKind::NotFound {
+                    errors::DATA_CLIENT_BLOB_INPUT_NOT_FOUND(key)
+                } else {
+                    errors::DATA_CLIENT_BLOB_INPUT_OPEN_FAILED(key)
+                };
+                error.details = vec![e.to_string()];
+                error
+            })?;
             Box::new(file)
         }
         (None, Some(bytes)) => Box::new(std::io::Cursor::new(bytes)),
-        _ => {
-            return Err(error::with_message(
-                ErrorCode::InvalidRequest,
-                "저장할 파일 또는 바이트 하나를 지정하세요.",
-            ))
-        }
+        _ => return Err(errors::DATA_CLIENT_BLOB_INPUT_INVALID()),
     };
     let parent = path
         .parent()
-        .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
-    fs::create_dir_all(parent).map_err(|e| error::io_error(&e))?;
+        .ok_or_else(|| errors::DATA_CLIENT_BLOB_PARENT_INVALID(key))?;
+    fs::create_dir_all(parent).map_err(|e| {
+        let mut error = if e.kind() == std::io::ErrorKind::NotFound {
+            errors::DATA_CLIENT_BLOB_DIR_NOT_FOUND(key)
+        } else {
+            errors::DATA_CLIENT_BLOB_DIR_CREATE_FAILED(key)
+        };
+        error.details = vec![e.to_string()];
+        error
+    })?;
     let temp = parent.join(format!(".kaleidoscope-{}.tmp", Uuid::new_v4()));
     let result = (|| {
         let mut output = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&temp)
-            .map_err(|e| error::io_error(&e))?;
+            .map_err(|e| {
+                let mut error = if e.kind() == std::io::ErrorKind::NotFound {
+                    errors::DATA_CLIENT_BLOB_TEMP_NOT_FOUND(key)
+                } else {
+                    errors::DATA_CLIENT_BLOB_TEMP_CREATE_FAILED(key)
+                };
+                error.details = vec![e.to_string()];
+                error
+            })?;
         let size = std::io::copy(
             &mut input.by_ref().take(CLIENT_PICK_FILE_MAX_BYTES + 1),
             &mut output,
         )
-        .map_err(|e| error::io_error(&e))?;
+        .map_err(|e| {
+            let mut error = if e.kind() == std::io::ErrorKind::NotFound {
+                errors::DATA_CLIENT_BLOB_COPY_NOT_FOUND(key)
+            } else {
+                errors::DATA_CLIENT_BLOB_COPY_FAILED(key)
+            };
+            error.details = vec![e.to_string()];
+            error
+        })?;
         if size > CLIENT_PICK_FILE_MAX_BYTES {
-            return Err(error::with_message(
-                ErrorCode::InvalidRequest,
-                &format!("보관 키 {key}에 쓸 파일이 512MiB를 넘습니다. 더 작은 파일을 선택하세요."),
-            ));
+            return Err(errors::DATA_CLIENT_BLOB_TOO_LARGE(key));
         }
-        output.flush().map_err(|e| error::io_error(&e))?;
+        output.flush().map_err(|e| {
+            let mut error = if e.kind() == std::io::ErrorKind::NotFound {
+                errors::DATA_CLIENT_BLOB_FLUSH_NOT_FOUND(key)
+            } else {
+                errors::DATA_CLIENT_BLOB_FLUSH_FAILED(key)
+            };
+            error.details = vec![e.to_string()];
+            error
+        })?;
         drop(output);
-        fs::rename(&temp, &path).map_err(|e| error::io_error(&e))?;
+        fs::rename(&temp, &path).map_err(|e| {
+            let mut error = if e.kind() == std::io::ErrorKind::NotFound {
+                errors::DATA_CLIENT_BLOB_RENAME_NOT_FOUND(key)
+            } else {
+                errors::DATA_CLIENT_BLOB_RENAME_FAILED(key)
+            };
+            error.details = vec![e.to_string()];
+            error
+        })?;
         Ok(())
     })();
     if result.is_err() {
@@ -130,7 +157,11 @@ pub(crate) fn remove(inner: &Inner, window: &str, key: &str) -> Result<(), CoreE
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(error::io_error(&e)),
+        Err(e) => {
+            let mut error = errors::DATA_CLIENT_BLOB_REMOVE_FAILED(key);
+            error.details = vec![e.to_string()];
+            Err(error)
+        }
     }
 }
 pub(crate) fn list(inner: &Inner, window: &str, prefix: &str) -> Result<Vec<String>, CoreError> {
@@ -144,11 +175,31 @@ pub(crate) fn list(inner: &Inner, window: &str, prefix: &str) -> Result<Vec<Stri
         let entries = match fs::read_dir(dir) {
             Ok(entries) => entries,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(e) => return Err(error::io_error(&e)),
+            Err(e) => {
+                let mut error = errors::DATA_CLIENT_BLOB_LIST_READ_FAILED(prefix);
+                error.details = vec![e.to_string()];
+                return Err(error);
+            }
         };
         for entry in entries {
-            let entry = entry.map_err(|e| error::io_error(&e))?;
-            let kind = entry.file_type().map_err(|e| error::io_error(&e))?;
+            let entry = entry.map_err(|e| {
+                let mut error = if e.kind() == std::io::ErrorKind::NotFound {
+                    errors::DATA_CLIENT_BLOB_LIST_ENTRY_NOT_FOUND(prefix)
+                } else {
+                    errors::DATA_CLIENT_BLOB_LIST_ENTRY_READ_FAILED(prefix)
+                };
+                error.details = vec![e.to_string()];
+                error
+            })?;
+            let kind = entry.file_type().map_err(|e| {
+                let mut error = if e.kind() == std::io::ErrorKind::NotFound {
+                    errors::DATA_CLIENT_BLOB_LIST_KIND_NOT_FOUND(prefix)
+                } else {
+                    errors::DATA_CLIENT_BLOB_LIST_KIND_READ_FAILED(prefix)
+                };
+                error.details = vec![e.to_string()];
+                error
+            })?;
             if kind.is_dir() {
                 walk(root, &entry.path(), prefix, keys)?;
             } else if kind.is_file() {

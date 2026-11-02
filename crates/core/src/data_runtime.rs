@@ -22,12 +22,12 @@ pub(crate) fn binding_value(
 
 use kaleidoscope_contract::{
     data::{DataView, SourceDecl, SourceFormat, SourceMeta, SourceState, SourceStatus},
-    AppDefinition, CoreError, CoreEvent, CoreReply, ErrorCode,
+    errors, AppDefinition, CoreError, CoreEvent, CoreReply,
 };
 use kaleidoscope_data::{CompiledApp, SourcePlan};
 use serde_json::Value;
 
-use crate::{app_commands, connections::RequestError, data_sources, error, Inner};
+use crate::{app_commands, connections::RequestError, data_sources, Inner};
 
 pub(crate) struct DataRuntimes {
     windows: Mutex<BTreeMap<String, Runtime>>,
@@ -284,6 +284,7 @@ impl Runtime {
                 )
             },
         );
+        self.label_expression_failures(&mut values);
         self.profiler.span(
             "data.view",
             "바인딩 계산",
@@ -335,6 +336,7 @@ impl Runtime {
                 )
             },
         ));
+        self.label_expression_failures(&mut values);
         for binding in self
             .compiled
             .binding_dependencies()
@@ -379,6 +381,25 @@ impl Runtime {
             values,
             sources: statuses,
             source_meta: self.source_meta(),
+        }
+    }
+    fn label_expression_failures(
+        &self,
+        values: &mut BTreeMap<String, kaleidoscope_contract::data::BindingValue>,
+    ) {
+        for binding in self.compiled.binding_dependencies() {
+            let Some(kaleidoscope_contract::data::BindingValue::Failed { message, id, retry }) =
+                values.get_mut(&binding.pointer)
+            else {
+                continue;
+            };
+            if id.is_some() || !retry.is_empty() {
+                continue;
+            }
+            let reason = std::mem::take(message);
+            let error = errors::DATA_BINDING_EXPR_FAILED(&binding.pointer, &reason);
+            *message = error.message;
+            *id = error.id;
         }
     }
     fn selected_for(
@@ -563,11 +584,14 @@ fn set_plan(manager: &DataRuntimes, runtime: &mut Runtime, name: &str, plan: Sou
         source.last_success_at = None;
         source.last_success_instant = None;
         source.status = match &plan {
-            SourcePlan::Invalid(message) => SourceStatus::Failed {
-                message: message.clone(),
-                has_value: false,
-                id: None,
-            },
+            SourcePlan::Invalid(reason) => {
+                let error = errors::DATA_SOURCE_PLAN_INVALID(name, reason);
+                SourceStatus::Failed {
+                    message: error.message,
+                    has_value: false,
+                    id: error.id,
+                }
+            }
             _ => SourceStatus::Idle {},
         };
     }
@@ -730,7 +754,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                 } else if let Some(cached) = &cached {
                     Ok(cached.value.clone())
                 } else {
-                    data_sources::fetch(&inner, &job.window, &job.plan, job.format)
+                    data_sources::fetch_named(&inner, &job.window, &job.name, &job.plan, job.format)
                 };
                 let wait_until = match (&job.gate, &result, blocked) {
                     (_, _, Some(until)) => Some(until),
@@ -915,10 +939,10 @@ pub(crate) fn attach(
             .windows
             .iter()
             .find(|window| window.id == window_id)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(|| errors::DATA_RUNTIME_ATTACH_WINDOW_NOT_FOUND(window_id))?;
         let definition =
             app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DATA_RUNTIME_ATTACH_APP_NOT_FOUND(window_id))?;
         let version = window.app_version;
         let using_defaults = crate::app_storage::uses_defaults_for(
             &state,
@@ -998,7 +1022,7 @@ pub(crate) fn dormant(
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
         windows
             .get_mut(window_id)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?
+            .ok_or_else(|| errors::DATA_RUNTIME_DORMANT_WINDOW_NOT_FOUND(window_id))?
             .dormant = dormant;
     }
     run_due(inner, Some(window_id));
@@ -1026,7 +1050,7 @@ pub(crate) fn refresh(
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
         let runtime = windows
             .get_mut(window_id)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(|| errors::DATA_RUNTIME_REFRESH_WINDOW_NOT_FOUND(window_id))?;
         let mut selected: std::collections::BTreeSet<String> = if names.is_empty() {
             runtime.compiled.source_order().iter().cloned().collect()
         } else {
@@ -1479,6 +1503,89 @@ mod freshness_tests {
             false,
             Default::default(),
         )
+    }
+
+    #[test]
+    fn failed_source_id_reaches_its_binding_value() {
+        let mut runtime = request_runtime();
+        runtime.sources.get_mut("stories").unwrap().status = SourceStatus::Failed {
+            message: "원천 요청 실패".into(),
+            has_value: false,
+            id: Some("CONN_REQUEST_PUBLIC_HTTP_FAILED".into()),
+        };
+        let pointer = runtime
+            .compiled
+            .binding_dependencies()
+            .iter()
+            .find(|binding| binding.data.iter().any(|name| name == "stories"))
+            .expect("stories 원천을 쓰는 바인딩")
+            .pointer
+            .clone();
+
+        let value = runtime.view().values.remove(&pointer).unwrap();
+        let kaleidoscope_contract::data::BindingValue::Failed { id, .. } = value else {
+            panic!("원천 실패가 바인딩 실패로 보여야 한다");
+        };
+        assert_eq!(id.as_deref(), Some("CONN_REQUEST_PUBLIC_HTTP_FAILED"));
+    }
+
+    #[test]
+    fn invalid_source_plan_has_a_registered_error_id() {
+        let definition = parse_app_definition(&json!({
+            "id":"invalid-plan", "name":"원천 계획 시험", "requires":{"blocks":4,"modules":{"files":1}},
+            "permissions":[{"module":"files","id":"file","label":"파일","access":"read"}],
+            "state":{}, "sources":{"item":{"kind":"file","permission":"file","path":"a.json"}},
+            "ui":{"type":"text","value":{"expr":"$data.item"}}
+        }).to_string()).unwrap();
+        let mut runtime = Runtime::new(
+            1,
+            definition,
+            BTreeMap::new(),
+            true,
+            false,
+            Default::default(),
+        );
+        set_plan(
+            &DataRuntimes::default(),
+            &mut runtime,
+            "item",
+            SourcePlan::Invalid("없는 원천입니다".into()),
+        );
+        let SourceStatus::Failed {
+            message,
+            id: Some(id),
+            ..
+        } = &runtime.sources["item"].status
+        else {
+            panic!("잘못된 원천 계획은 코드와 함께 실패해야 한다");
+        };
+        assert_eq!(id, "DATA_SOURCE_PLAN_INVALID");
+        assert!(message.contains("item"));
+    }
+
+    #[test]
+    fn expression_failure_uses_its_binding_path_and_error_id() {
+        let runtime = request_runtime();
+        let binding = runtime.compiled.binding_dependencies().first().unwrap();
+        let mut values = BTreeMap::from([(
+            binding.pointer.clone(),
+            kaleidoscope_contract::data::BindingValue::Failed {
+                message: "expected value".into(),
+                id: None,
+                retry: Vec::new(),
+            },
+        )]);
+
+        runtime.label_expression_failures(&mut values);
+
+        let kaleidoscope_contract::data::BindingValue::Failed { id, message, .. } =
+            &values[&binding.pointer]
+        else {
+            panic!("식 계산 실패가 유지되어야 한다");
+        };
+        assert_eq!(id.as_deref(), Some("DATA_BINDING_EXPR_FAILED"));
+        assert!(message.contains(&binding.pointer));
+        assert!(message.contains("expected value"));
     }
 
     fn seed_request_cache(

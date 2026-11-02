@@ -8,20 +8,32 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use kaleidoscope_contract::{
     data::{self, FolderEntry, SourceFormat},
+    errors,
     registry::ConnectionAccept,
-    CoreError, ErrorCode, FileKind,
+    CoreError, FileKind,
 };
 use kaleidoscope_data::SourcePlan;
 use serde_json::Value;
 
 use crate::{
     connections::{self, RequestError},
-    error, files, Inner,
+    files, Inner,
 };
 
+#[cfg(test)]
 pub(crate) fn fetch(
     inner: &Arc<Inner>,
     window: &str,
+    plan: &SourcePlan,
+    format: SourceFormat,
+) -> Result<Value, RequestError> {
+    fetch_named(inner, window, "원천", plan, format)
+}
+
+pub(crate) fn fetch_named(
+    inner: &Arc<Inner>,
+    window: &str,
+    source: &str,
     plan: &SourcePlan,
     format: SourceFormat,
 ) -> Result<Value, RequestError> {
@@ -32,16 +44,29 @@ pub(crate) fn fetch(
             format,
         } => {
             let root = root(inner, window, permission)?;
-            let path = files::resolve_path(&inner.data_dir, &root, path, false, false)?;
-            let file = fs::File::open(path).map_err(|err| error::io_error(&err))?;
+            let source_path = path;
+            let path = files::resolve_path(&inner.data_dir, &root, source_path, false, false)?;
+            let file = fs::File::open(path).map_err(|err| {
+                let mut error = if err.kind() == std::io::ErrorKind::NotFound {
+                    errors::DATA_SOURCE_FILE_NOT_FOUND(source, source_path)
+                } else {
+                    errors::DATA_SOURCE_FILE_OPEN_FAILED(source, source_path)
+                };
+                error.details = vec![err.to_string()];
+                error
+            })?;
             let mut bytes = Vec::new();
             file.take(data::SOURCE_MAX_BYTES + 1)
                 .read_to_end(&mut bytes)
-                .map_err(|err| error::io_error(&err))?;
+                .map_err(|err| {
+                    let mut error = errors::DATA_SOURCE_FILE_READ_FAILED(source, source_path);
+                    error.details = vec![err.to_string()];
+                    error
+                })?;
             if bytes.len() as u64 > data::SOURCE_MAX_BYTES {
-                return Err(error::with_message(ErrorCode::Io, "원천이 너무 큽니다").into());
+                return Err(errors::DATA_SOURCE_FILE_TOO_LARGE(source, source_path).into());
             }
-            decode(bytes, *format).map_err(Into::into)
+            decode(source, source_path, bytes, *format).map_err(Into::into)
         }
         SourcePlan::Folder {
             permission,
@@ -57,6 +82,7 @@ pub(crate) fn fetch(
                 &inner.data_dir,
                 &root,
                 &directory,
+                source,
                 dir,
                 *recursive,
                 extensions,
@@ -98,13 +124,19 @@ pub(crate) fn fetch(
                 });
             }
             if !(200..300).contains(&response.status) {
-                return Err(connections::response_error(&response).into());
+                let mut error = errors::DATA_SOURCE_RESPONSE_STATUS_FAILED(source, path);
+                let mut details = vec![format!("HTTP 상태: {}", response.status)];
+                if let Some(host) = request_host(inner, window, permission) {
+                    details.push(format!("호스트: {host}"));
+                }
+                error.details = details;
+                return Err(error.into());
             }
             match format {
                 SourceFormat::Json => match (response.json, response.text) {
                     (Some(json), _) => Ok(json),
                     (None, Some(_)) => {
-                        Err(error::with_message(ErrorCode::Io, "JSON을 읽을 수 없습니다").into())
+                        Err(errors::DATA_SOURCE_RESPONSE_JSON_INVALID(source).into())
                     }
                     (None, None) => Ok(Value::Null),
                 },
@@ -112,10 +144,47 @@ pub(crate) fn fetch(
             }
         }
         SourcePlan::Idle => Ok(Value::Null),
-        SourcePlan::Invalid(message) => {
-            Err(error::with_message(ErrorCode::InvalidRequest, message).into())
-        }
+        SourcePlan::Invalid(reason) => Err(errors::DATA_SOURCE_PLAN_INVALID(source, reason).into()),
     }
+}
+
+fn request_host(inner: &Inner, window_id: &str, permission: &str) -> Option<String> {
+    let (base_url, connection_name) = {
+        let state = inner.state.lock().unwrap();
+        let window = state
+            .shared
+            .windows
+            .iter()
+            .find(|window| window.id == window_id)?;
+        let definition =
+            crate::app_commands::definition_for(&state.shared, &window.app_id, window.app_version)?;
+        match definition
+            .permissions
+            .iter()
+            .find(|declaration| declaration.id() == permission)?
+        {
+            kaleidoscope_contract::PermissionDecl::Http { base_url, .. } => {
+                (Some(base_url.clone()), None)
+            }
+            kaleidoscope_contract::PermissionDecl::Connection { connection, .. } => {
+                (None, Some(connection.clone()))
+            }
+            _ => return None,
+        }
+    };
+    let base_url = base_url.or_else(|| {
+        let name = connection_name?;
+        inner
+            .connections
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|connection| connection.name == name)
+            .map(|connection| connection.base_url.clone())
+    })?;
+    reqwest::Url::parse(&base_url)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
 }
 
 fn root(
@@ -127,14 +196,23 @@ fn root(
     files::granted_root(&state, window, permission, false)
 }
 
-fn decode(bytes: Vec<u8>, format: SourceFormat) -> Result<Value, CoreError> {
+fn decode(
+    source: &str,
+    path: &str,
+    bytes: Vec<u8>,
+    format: SourceFormat,
+) -> Result<Value, CoreError> {
     match format {
         SourceFormat::Json => serde_json::from_slice(&bytes).map_err(|err| {
-            error::with_message(ErrorCode::Io, &format!("JSON을 읽을 수 없습니다: {err}"))
+            let mut error = errors::DATA_SOURCE_FILE_JSON_INVALID(source, path);
+            error.details = vec![err.to_string()];
+            error
         }),
-        SourceFormat::Text => String::from_utf8(bytes)
-            .map(Value::String)
-            .map_err(|_| error::with_message(ErrorCode::Io, "UTF-8 텍스트가 아닙니다")),
+        SourceFormat::Text => String::from_utf8(bytes).map(Value::String).map_err(|err| {
+            let mut error = errors::DATA_SOURCE_FILE_TEXT_INVALID(source, path);
+            error.details = vec![err.to_string()];
+            error
+        }),
     }
 }
 
@@ -142,6 +220,7 @@ fn walk(
     data_dir: &Path,
     root: &Path,
     directory: &Path,
+    source: &str,
     relative: &str,
     recursive: bool,
     extensions: &[String],
@@ -151,8 +230,24 @@ fn walk(
     if !visited.insert(directory.to_path_buf()) {
         return Ok(());
     }
-    for entry in fs::read_dir(directory).map_err(|err| error::io_error(&err))? {
-        let entry = entry.map_err(|err| error::io_error(&err))?;
+    for entry in fs::read_dir(directory).map_err(|err| {
+        let mut error = if err.kind() == std::io::ErrorKind::NotFound {
+            errors::DATA_SOURCE_FOLDER_NOT_FOUND(source, relative)
+        } else {
+            errors::DATA_SOURCE_FOLDER_READ_FAILED(source, relative)
+        };
+        error.details = vec![err.to_string()];
+        error
+    })? {
+        let entry = entry.map_err(|err| {
+            let mut error = if err.kind() == std::io::ErrorKind::NotFound {
+                errors::DATA_SOURCE_FOLDER_ENTRY_NOT_FOUND(source, relative)
+            } else {
+                errors::DATA_SOURCE_FOLDER_ENTRY_READ_FAILED(source, relative)
+            };
+            error.details = vec![err.to_string()];
+            error
+        })?;
         let name = entry.file_name().to_string_lossy().into_owned();
         if name.starts_with('.') {
             continue;
@@ -197,9 +292,27 @@ fn walk(
         }
         if is_dir && recursive {
             walk(
-                data_dir, root, &resolved, &path, true, extensions, visited, entries,
+                data_dir, root, &resolved, source, &path, true, extensions, visited, entries,
             )?;
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod error_id_tests {
+    use super::decode;
+    use kaleidoscope_contract::{data::SourceFormat, ErrorCode};
+
+    #[test]
+    fn malformed_json_file_has_source_code_and_context() {
+        let error = decode("items", "items.json", b"{".to_vec(), SourceFormat::Json)
+            .expect_err("잘못된 JSON은 읽지 못해야 한다");
+
+        assert_eq!(error.id.as_deref(), Some("DATA_SOURCE_FILE_JSON_INVALID"));
+        assert_eq!(error.code, ErrorCode::Io);
+        assert!(error.message.contains("items"));
+        assert!(error.message.contains("items.json"));
+        assert_eq!(error.details.len(), 1);
+    }
 }

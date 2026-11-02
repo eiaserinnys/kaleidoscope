@@ -723,7 +723,7 @@ fn failed_relay_has_retry_and_read_permission_rejects_post() {
     while Instant::now() < deadline {
         if let Ok(CoreEvent::DataUpdate { view, .. }) = rx.recv_timeout(Duration::from_millis(100))
         {
-            if matches!(view.values.get("/ui/children/0/items"),Some(BindingValue::Failed{id,retry,..}) if id.as_deref() == Some("CONN_REQUEST_SERVER_RESPONSE_FAILED") && retry == &vec!["items".to_owned()])
+            if matches!(view.values.get("/ui/children/0/items"),Some(BindingValue::Failed{id,retry,..}) if id.as_deref() == Some("DATA_SOURCE_RESPONSE_STATUS_FAILED") && retry == &vec!["items".to_owned()])
             {
                 failed = true;
                 break;
@@ -806,10 +806,10 @@ fn closing_window_discards_pending_fetch() {
             dormant: vec![]
         }),
         Err(CoreError {
-            id: None,
+            id: Some(id),
             code: ErrorCode::NotFound,
             ..
-        })
+        }) if id == "DATA_RUNTIME_ATTACH_WINDOW_NOT_FOUND"
     ));
 }
 
@@ -880,8 +880,8 @@ fn source_safety_failed_refresh_keeps_value_and_reports_error_in_layout() {
                     id,
                     message,
                     ..
-                }) if id.as_deref() == Some("CONN_REQUEST_SERVER_RESPONSE_FAILED")
-                    && message == "원격 연결 요청이 실패했습니다. 연결 설정과 서버 상태를 확인하세요."
+                }) if id.as_deref() == Some("DATA_SOURCE_RESPONSE_STATUS_FAILED")
+                    && message == "원천 items의 요청 경로는 /old입니다. 서버가 성공 응답을 보내지 않아 원천을 읽지 못했습니다. 주소와 서버 상태를 확인하세요."
             ) {
                 assert!(!view.values.contains_key("/ui/children/0/items"));
                 failed = true;

@@ -1,6 +1,6 @@
 //! 클라이언트에 선언된 공개 HTTPS 바이트 읽기.
-use crate::{app_commands, error, Inner};
-use kaleidoscope_contract::{data, CoreError, ErrorCode, PermissionDecl};
+use crate::{app_commands, Inner};
+use kaleidoscope_contract::{data, errors, CoreError, PermissionDecl};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -18,31 +18,25 @@ pub(crate) fn read(
             .windows
             .iter()
             .find(|w| w.id == window)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(|| errors::DATA_CLIENT_HTTP_WINDOW_NOT_FOUND(window))?;
         let definition =
             app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DATA_CLIENT_HTTP_APP_NOT_FOUND(&window.app_id))?;
         if !definition
             .client
             .as_ref()
             .and_then(|c| c.http_permissions.as_ref())
             .is_some_and(|p| p.iter().any(|p| p == permission))
         {
-            return Err(error::with_message(
-                ErrorCode::PermissionDenied,
-                &format!("HTTP 권한 {permission}이 클라이언트에 선언되지 않았습니다. 앱 정의의 client.http_permissions를 확인하세요."),
+            return Err(errors::DATA_CLIENT_HTTP_CLIENT_PERMISSION_DENIED(
+                permission,
             ));
         }
         match definition.permissions.iter().find(|p| p.id() == permission) {
             Some(PermissionDecl::Http {
                 base_url, paths, ..
             }) => (base_url.clone(), paths.clone()),
-            _ => {
-                return Err(error::with_message(
-                    ErrorCode::PermissionDenied,
-                    &format!("HTTP 권한 {permission}이 앱에 선언되지 않았습니다. 앱 정의의 permissions를 확인하세요."),
-                ))
-            }
+            _ => return Err(errors::DATA_CLIENT_HTTP_APP_PERMISSION_DENIED(permission)),
         }
     };
     let query = query
@@ -53,30 +47,27 @@ pub(crate) fn read(
             other => Some((k, other.to_string())),
         })
         .collect();
+    let host = reqwest::Url::parse(&base)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned));
     let response =
         kaleidoscope_data::public_http::get(&base, &paths, path, &query, data::SOURCE_MAX_BYTES)
             .map_err(|e| {
-                let mut error = error::with_message(
-                    ErrorCode::Server,
-                    &format!(
-                "공개 HTTPS 경로 {path}를 읽지 못했습니다: {e}. 앱의 권한과 주소를 확인하세요."
-            ),
-                );
-                error.details = vec![format!("호스트: {base}")];
+                let mut error = errors::DATA_CLIENT_HTTP_READ_FAILED(path);
+                let mut details = vec![e];
+                if let Some(host) = &host {
+                    details.push(format!("호스트: {host}"));
+                }
+                error.details = details;
                 error
             })?;
     if !(200..300).contains(&response.status) {
-        let mut error = error::with_message(
-            ErrorCode::Server,
-            &format!(
-                "공개 HTTPS 경로 {path}가 상태 {}을 반환했습니다. 주소를 확인하거나 나중에 다시 시도하세요.",
-                response.status
-            ),
-        );
-        error.details = vec![
-            format!("호스트: {base}"),
-            format!("HTTP 상태: {}", response.status),
-        ];
+        let mut error = errors::DATA_CLIENT_HTTP_STATUS_FAILED(path);
+        let mut details = vec![format!("HTTP 상태: {}", response.status)];
+        if let Some(host) = host {
+            details.push(format!("호스트: {host}"));
+        }
+        error.details = details;
         return Err(error);
     }
     Ok((response.bytes, response.mime))
