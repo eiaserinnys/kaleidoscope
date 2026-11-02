@@ -428,6 +428,7 @@
 .ks-editor-view .cm-content {
   caret-color: var(--ks-color-text);
   min-height: 100%;
+  min-width: 0;
   padding: var(--ks-space-4);
   white-space: pre-wrap;
 }
@@ -876,7 +877,7 @@
   content: "";
   transform: rotate(45deg);
 }
-.ks-live-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.ks-live-table { width: 100%; border-collapse: collapse; }
 .ks-live-table th,
 .ks-live-table td { border: var(--ks-line-width) solid var(--ks-color-border); padding: var(--ks-space-2); }
 .ks-live-table th { background: var(--ks-color-surface-raised); }

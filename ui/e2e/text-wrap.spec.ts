@@ -131,7 +131,7 @@ test("기본 에이전트의 실행 명령과 오류 명령이 360 폭 안에 �
   expect(await failedCommand.evaluate((element) => element.parentElement!.scrollWidth <= element.parentElement!.clientWidth)).toBe(true);
 });
 
-test("마크다운 편집기의 넓은 표와 긴 코드 줄이 360 폭 안에 든다", async ({ page }) => {
+test("마크다운 편집기의 표와 긴 코드 줄이 창 폭에 맞는다", async ({ page }) => {
   await page.setViewportSize({ width: 392, height: 732 });
   await page.goto("/?preview=md-editor");
   await page.addStyleTag({ content: ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }" });
@@ -143,4 +143,13 @@ test("마크다운 편집기의 넓은 표와 긴 코드 줄이 360 폭 안에 �
   await expect(scroller).toBeVisible();
   const dimensions = await scroller.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+
+  await page.setViewportSize({ width: 1132, height: 732 });
+  const table = app.locator(".ks-live-table").last();
+  await table.scrollIntoViewIfNeeded();
+  const columnWidths = await table.locator("tr:first-child > *").evaluateAll((cells) =>
+    cells.map((cell) => cell.getBoundingClientRect().width),
+  );
+  expect(columnWidths.length).toBeGreaterThan(1);
+  expect(Math.max(...columnWidths) - Math.min(...columnWidths)).toBeGreaterThan(1);
 });
