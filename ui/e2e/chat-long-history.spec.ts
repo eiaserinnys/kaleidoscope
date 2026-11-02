@@ -72,6 +72,32 @@ test("맨 아래에서 입력창이 여러 줄로 커져도 맨 아래를 유지
   expect(Math.abs(await bottomGap(history))).toBeLessThanOrEqual(1);
 });
 
+test("긴 기록은 입력창이 여러 줄로 커져도 대화 기록 밖에서 배치되고 맨 아래를 유지한다", async ({ page }) => {
+  const { chat, history } = await openLongHistory(page);
+  const input = chat.getByRole("textbox", { name: "메시지" });
+  const initialInputHeight = await input.evaluate((element) => element.getBoundingClientRect().height);
+
+  const historyLayout = await history.evaluate((element) => ({
+    contain: getComputedStyle(element).contain,
+    clientHeight: element.clientHeight,
+  }));
+  expect(historyLayout.contain).toBe("strict");
+  expect(historyLayout.clientHeight).toBeGreaterThan(0);
+
+  await input.pressSequentially("첫째 줄 입력");
+  await input.press("Shift+Enter");
+  await input.pressSequentially("둘째 줄 입력");
+  await input.press("Shift+Enter");
+  await input.pressSequentially("셋째 줄 입력");
+  await waitForFrames(page);
+
+  const typedValue = await input.inputValue();
+  const grownInputHeight = await input.evaluate((element) => element.getBoundingClientRect().height);
+  expect(typedValue).toBe("첫째 줄 입력\n둘째 줄 입력\n셋째 줄 입력");
+  expect(grownInputHeight).toBeGreaterThan(initialInputHeight);
+  expect(Math.abs(await bottomGap(history))).toBeLessThanOrEqual(1);
+});
+
 test("위로 읽는 동안 스트리밍은 scrollTop과 보이는 말풍선 위치를 유지한다", async ({ page }) => {
   const { history } = await openLongHistory(page);
   const bounds = await history.boundingBox();
