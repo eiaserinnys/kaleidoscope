@@ -3,11 +3,11 @@ use super::*;
 use kaleidoscope_core::kaleidoscope_contract::local_agent::{LocalAgentPhase, LocalAgentSnapshot};
 use kaleidoscope_core::{crop_share_capture_png, WebHost};
 use std::cmp::min;
-use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 const A_ID: &str = "e2e-share-a";
 const B_ID: &str = "e2e-share-b";
+const WEB_APP_ID: &str = "e2e-share-web-browser";
 const AGENT_APP_ID: &str = "e2e-share-agent";
 const AGENT_ID: &str = "test-agent";
 const WINDOW_READY_TIMEOUT: Duration = Duration::from_secs(30);
@@ -83,21 +83,20 @@ pub(super) fn scenario(
         ),
     )?;
     import_definition(core, agent_definition(out))?;
+    let mut web_browser: Value =
+        serde_json::from_str(include_str!("../../../../apps/web-browser.json"))
+            .map_err(|error| error.to_string())?;
+    web_browser["id"] = json!(WEB_APP_ID);
+    web_browser["state"]["url"] = json!("https://example.com/");
+    import_definition(core, web_browser)?;
     let a_id = open_window(core, &desktop_id, A_ID, layout.a)?;
     let b_id = open_window(core, &desktop_id, B_ID, layout.b)?;
     let web_events = ui::track_web_events(core);
-    let web_id = open_window(core, &desktop_id, "web-browser", layout.web)?;
-    call(
-        core,
-        CoreRequest::WindowSetState {
-            window_id: web_id.clone(),
-            state: BTreeMap::from([("url".into(), json!("https://example.com/"))]),
-        },
-    )?;
+    let web_id = open_window(core, &desktop_id, WEB_APP_ID, layout.web)?;
     // 웹 창이 가장 앞에 있을 때 먼저 화면과 페이지를 올린다.
     ui::wait_dom(
         app,
-        "return !!document.querySelector('[data-testid=\"app-window-web-browser\"] [data-ks-web-surface]');",
+        &format!("return !!document.querySelector('[data-testid=\\\"app-window-{WEB_APP_ID}\\\"] [data-ks-web-surface]');"),
         "web surface rendered",
     )?;
     let web_page = ui::wait_for_web_page(&web_events, &web_id, "https://example.com/")?;
