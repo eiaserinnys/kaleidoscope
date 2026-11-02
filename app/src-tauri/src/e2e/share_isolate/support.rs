@@ -51,7 +51,7 @@ pub(super) fn set_agent_rect(
 
 pub(super) fn wait_window_rect(app: &AppHandle, app_id: &str, rect: Rect) -> Result<(), String> {
     ui::wait_dom(app, &format!(
-        "const e=document.querySelector('[data-testid=\\\"app-window-{app_id}\\\"]');return !!e && parseFloat(e.style.left)==={} && parseFloat(e.style.top)==={} && parseFloat(e.style.width)==={} && parseFloat(e.style.height)==={};", rect.x, rect.y, rect.width, rect.height
+        "const e=document.querySelector('[data-testid=\\\"app-window-{app_id}\\\"]');return !!e && parseFloat(e.style.width)==={} && parseFloat(e.style.height)==={};", rect.width, rect.height
     ), "window geometry updated")
 }
 

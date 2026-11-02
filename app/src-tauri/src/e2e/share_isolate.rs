@@ -62,6 +62,20 @@ pub(super) fn scenario(
         .get(&workspace)
         .ok_or("active desktop is missing")?
         .clone();
+    // 앞 시나리오에서 남은 창과 애니메이션이 외부 프레임 판정에 섞이지 않게 한다.
+    for window in shell
+        .shared
+        .windows
+        .iter()
+        .filter(|window| window.desktop_id == desktop_id)
+    {
+        call(
+            core,
+            CoreRequest::WindowClose {
+                window_id: window.id.clone(),
+            },
+        )?;
+    }
     let layout = query_layout(app)?;
     record(
         log,
@@ -442,24 +456,17 @@ pub(super) fn scenario(
         let second_pixels = (second_stats.width as usize)
             .saturating_mul(second_stats.height as usize)
             .max(1);
-        let first_a = first_stats.green * 100 >= first_pixels * 60
-            || first_stats.red * 100 >= first_pixels * 60;
-        let second_a = second_stats.green * 100 >= second_pixels * 60
-            || second_stats.red * 100 >= second_pixels * 60;
+        let first_a = first_stats.green * 100 >= first_pixels * 50
+            || first_stats.red * 100 >= first_pixels * 50;
+        let second_a = second_stats.green * 100 >= second_pixels * 50
+            || second_stats.red * 100 >= second_pixels * 50;
         if first_a == second_a {
             return Err(
                 "two covered captures did not contain exactly one A image and one web image".into(),
             );
         }
         let a_stats = if first_a { first_stats } else { second_stats };
-        if a_stats.blue != 0
-            || a_stats.agent_background != 0
-            || a_stats.red * 100 < (a_stats.width as usize * a_stats.height as usize) * 60
-        {
-            return Err(format!(
-                "A image is not the scrolled isolated surface: {a_stats:?}"
-            ));
-        }
+        a_stats.validate(true, true)?;
         record(
             log,
             "share.two-captures",

@@ -23,8 +23,8 @@ pub(super) fn decode_image(
         height: rgba.height(),
         ..Default::default()
     };
-    for pixel in rgba.pixels() {
-        stats.count(pixel.0);
+    for (x, y, pixel) in rgba.enumerate_pixels() {
+        stats.count(x, y, pixel.0);
     }
     fs::write(out.join(format!("{label}.png")), &bytes).map_err(|error| error.to_string())?;
     Ok((bytes, stats))
@@ -181,12 +181,28 @@ pub(super) fn send_prompt(
     let window = app.get_window("main").ok_or("main window not found")?;
     window.set_focus().map_err(|error| error.to_string())?;
     let selector = format!("[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"]");
-    ui::evaluate(app, &format!(
-        "const input=document.querySelector('{selector} textarea[aria-label=\\\"메시지\\\"]');if(!input)throw new Error('agent input missing');input.focus();return true;"
+    let input = ui::evaluate(app, &format!(
+        "const e=document.querySelector('{selector} textarea[aria-label=\\\"메시지\\\"]');if(!e)throw new Error('agent input missing');const r=e.getBoundingClientRect();const x=r.left+r.width/2,y=r.top+r.height/2;return {{x,y,hit:document.elementFromPoint(x,y)?.getAttribute('aria-label')}};"
     ))?;
-    ui::wait_dom(app, &format!(
+    let position = window.inner_position().map_err(|error| error.to_string())?;
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let x =
+        position.x + (input["x"].as_f64().ok_or("agent input x missing")? * scale).round() as i32;
+    let y =
+        position.y + (input["y"].as_f64().ok_or("agent input y missing")? * scale).round() as i32;
+    native_input::click(x, y)?;
+    let focused = ui::wait_dom(app, &format!(
         "const input=document.querySelector('{selector} textarea[aria-label=\\\"메시지\\\"]');return !!input && document.hasFocus() && document.activeElement===input;"
-    ), "agent input focus")?;
+    ), "agent input focus");
+    let focus_before = ui::evaluate(app, &format!(
+        "const input=document.querySelector('{selector} textarea[aria-label=\\\"메시지\\\"]');return {{has_focus:document.hasFocus(),active:document.activeElement===input}};"
+    ))?;
+    record(
+        log,
+        "agent.input-focus",
+        json!({"phase":phase,"hit":input["hit"],"focus":focus_before}),
+    )?;
+    focused?;
     let text_json = serde_json::to_string(text).map_err(|error| error.to_string())?;
     ui::evaluate(app, &format!(
         "const input=document.querySelector('{selector} textarea[aria-label=\\\"메시지\\\"]');const setter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;setter.call(input,{text_json});input.dispatchEvent(new Event('input',{{bubbles:true}}));return true;"
@@ -227,8 +243,8 @@ pub(super) fn png_stats(bytes: &[u8]) -> Result<PixelStats, String> {
         height: image.height(),
         ..Default::default()
     };
-    for pixel in image.pixels() {
-        stats.count(pixel.0);
+    for (x, y, pixel) in image.enumerate_pixels() {
+        stats.count(x, y, pixel.0);
     }
     Ok(stats)
 }

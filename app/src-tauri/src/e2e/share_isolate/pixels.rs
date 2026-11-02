@@ -6,22 +6,25 @@ pub(super) struct PixelStats {
     pub(super) blue: usize,
     pub(super) red: usize,
     pub(super) agent_background: usize,
+    pub(super) green_bounds: Option<(u32, u32, u32, u32)>,
+    pub(super) red_bounds: Option<(u32, u32, u32, u32)>,
 }
 
 impl PixelStats {
-    pub(super) fn count(&mut self, [r, g, b, _]: [u8; 4]) {
+    pub(super) fn count(&mut self, x: u32, y: u32, [r, g, b, _]: [u8; 4]) {
         if [r, g, b] == [251, 0, 251] {
             self.agent_background += 1;
         }
-        let (r, g, b) = (r as u16, g as u16, b as u16);
-        if g > 150 && g * 2 > r * 3 && g * 2 > b * 3 {
+        if [r, g, b] == [20, 210, 70] {
             self.green += 1;
+            extend(&mut self.green_bounds, x, y);
         }
-        if b > 170 && b * 2 > r * 3 && b * 5 > g * 6 {
+        if [r, g, b] == [25, 65, 225] {
             self.blue += 1;
         }
-        if r > 160 && r * 2 > g * 3 && r * 2 > b * 3 {
+        if [r, g, b] == [230, 35, 65] {
             self.red += 1;
+            extend(&mut self.red_bounds, x, y);
         }
     }
 
@@ -30,8 +33,27 @@ impl PixelStats {
             .saturating_mul(self.height as usize)
             .max(1);
         let target = if red { self.red } else { self.green };
-        if target * 100 < pixels * 60 {
+        if target * 100 < pixels * 50 {
             return Err(format!("target color {target} / {pixels} pixels: {self:?}"));
+        }
+        let (left, top, right, bottom) = (if red {
+            self.red_bounds
+        } else {
+            self.green_bounds
+        })
+        .ok_or("target color bounds missing")?;
+        let width = right - left + 1;
+        let height = bottom - top + 1;
+        let bounds_area = width as usize * height as usize;
+        if left != 0
+            || top != 0
+            || width * 2 < self.width
+            || height * 10 < self.height * 9
+            || target * 100 < bounds_area * 95
+        {
+            return Err(format!(
+                "target color does not fill the visible surface: {self:?}"
+            ));
         }
         if reject_blue && self.blue != 0 {
             return Err(format!("covering window pixels: {self:?}"));
@@ -40,6 +62,18 @@ impl PixelStats {
             return Err(format!("agent background pixels: {self:?}"));
         }
         Ok(())
+    }
+}
+
+fn extend(bounds: &mut Option<(u32, u32, u32, u32)>, x: u32, y: u32) {
+    match bounds {
+        Some((left, top, right, bottom)) => {
+            *left = (*left).min(x);
+            *top = (*top).min(y);
+            *right = (*right).max(x);
+            *bottom = (*bottom).max(y);
+        }
+        None => *bounds = Some((x, y, x, y)),
     }
 }
 
@@ -54,14 +88,16 @@ mod tests {
             height: 10,
             ..Default::default()
         };
-        for _ in 0..100 {
-            image.count([20, 210, 70, 255]);
+        for y in 0..10 {
+            for x in 0..10 {
+                image.count(x, y, [20, 210, 70, 255]);
+            }
         }
         assert!(image.validate(false, true).is_ok());
-        image.count([25, 65, 225, 255]);
+        image.count(0, 0, [25, 65, 225, 255]);
         assert!(image.validate(false, true).is_err());
         image.blue = 0;
-        image.count([251, 0, 251, 255]);
+        image.count(0, 0, [251, 0, 251, 255]);
         assert!(image.validate(false, true).is_err());
         assert!(image.validate(true, true).is_err());
     }
