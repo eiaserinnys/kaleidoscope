@@ -80,13 +80,13 @@ export function EmptyState({
   text,
   action,
 }: {
-  icon: ReactNode;
+  icon?: ReactNode;
   text?: ReactNode;
   action?: ReactNode;
 }) {
   return (
     <div className={`ks-empty-state${text ? "" : " ks-empty-state-without-text"}`}>
-      <span aria-hidden="true" className="ks-empty-state-icon">{icon}</span>
+      {icon != null ? <span aria-hidden="true" className="ks-empty-state-icon">{icon}</span> : null}
       {text ? <span className="ks-empty-state-text">{text}</span> : null}
       {action ? <span className="ks-empty-state-action">{action}</span> : null}
     </div>

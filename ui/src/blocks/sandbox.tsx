@@ -9,10 +9,11 @@ import { useShareDescriber } from "../share/visible";
 import type { BlockContext } from "./block-context";
 import { FileGrant } from "./file-grant";
 import { resolveFilePath } from "./file-path";
-import { sandboxSource } from "./sandbox-frame";
+import { sandboxErrors, sandboxSource } from "./sandbox-frame";
 import { registerSandboxFlush } from "./sandbox-flush";
 import { patchWindowState, useWindowGrant, useWindowStateValue } from "../data/window-state";
 import { useShellSelector } from "../core/shell-store";
+import * as shellErrors from "../contract/shell-errors";
 
 type SandboxData = Extract<Block, { type: "sandbox" }>;
 
@@ -25,7 +26,7 @@ export function SandboxBlock({ block, context, pointer }: { block: SandboxData; 
   const boundValue = bound.status === "ready" ? bound.value : null;
   const [rawHtml, setRawHtml] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReturnType<typeof toCoreError> | null>(null);
   const readSequence = useRef(0);
   const permission = block.file?.permission;
   const fileState = useWindowStateValue(context, block.file && typeof block.file.path !== "string" ? block.file.path.state : null);
@@ -39,7 +40,7 @@ export function SandboxBlock({ block, context, pointer }: { block: SandboxData; 
       if (block.asset !== undefined) {
         const reply = await context.store.call({ op: "data.media", window_id: context.window.id, media: { asset: block.asset } });
         if (reply.op === "data.media") {
-          if (reply.media.mime.split(";")[0] !== "text/html") throw new Error("HTML 자산이 아닙니다");
+          if (reply.media.mime.split(";")[0] !== "text/html") throw shellErrors.SHELL_SANDBOX_HTML_ASSET_MIME_INVALID();
           text = new TextDecoder().decode(Uint8Array.from(atob(reply.media.data_base64), (char) => char.charCodeAt(0)));
         }
       } else if (block.file && permission && path !== null && grant) {
@@ -50,7 +51,7 @@ export function SandboxBlock({ block, context, pointer }: { block: SandboxData; 
         if (reply.op === "storage.get" && typeof reply.result.content === "string") text = reply.result.content;
       } else if (block.value !== undefined && boundStatus === "ready" && typeof boundValue === "string") text = boundValue;
       if (sequence === readSequence.current) { setRawHtml(text); setError(null); }
-    } catch (reason) { if (sequence === readSequence.current) setError(toCoreError(reason).message); }
+    } catch (reason) { if (sequence === readSequence.current) setError(toCoreError(reason)); }
     finally { if (sequence === readSequence.current) setLoading(false); }
   }, [block.asset, block.file, block.document, block.value, boundStatus, boundValue, context.store, context.window.id, permission, path, grant]);
   useEffect(() => { void read(); }, [read]);
@@ -73,7 +74,7 @@ export function SandboxBlock({ block, context, pointer }: { block: SandboxData; 
   if (block.file && !grant && permission) return <FileGrant context={context} permission={permission} />;
   if (block.value !== undefined && bound.status !== "ready") return <DataState value={bound} />;
   if (loading) return <div className="ks-html-state"><StatusText>불러오는 중</StatusText></div>;
-  if (error) return <div className="ks-html-state"><Notice role="alert">{error}</Notice></div>;
+  if (error) return <div className="ks-html-state"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
   return <SandboxFrame block={block} context={context} rawHtml={rawHtml} />;
 }
 
@@ -106,7 +107,7 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
   }, sameState);
   const source = useMemo(() => {
     const token = crypto.randomUUID();
-    return { token, html: sandboxSource(rawHtml, { token, state, stateKeys, storageEntries }) };
+    return { token, html: sandboxSource(rawHtml, { token, state, stateKeys, storageEntries, errors: sandboxErrors() }) };
   // 창 상태가 바뀌어도 프레임을 다시 시작하지 않는다.
   }, [rawHtml, stateSignature, storageSignature, sequence]);
   const send = useCallback((data: object) => {
@@ -125,7 +126,7 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
   }, [source.token]);
   const readStorage = useCallback(async (entry: string) => {
     const reply = await context.store.call({ op: "storage.get", window_id: context.window.id, entry });
-    if (reply.op !== "storage.get") throw new Error("저장 항목을 읽지 못했습니다");
+    if (reply.op !== "storage.get") throw shellErrors.SHELL_SANDBOX_STORAGE_READ_REPLY_INVALID();
     return reply.result;
   }, [context.store, context.window.id]);
   const getStorage = useCallback(async (entry: string) => {
@@ -177,16 +178,16 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
           let reply;
           try { reply = await context.store.call({ op: "storage.write", window_id: context.window.id, entry, content: data.content as JsonValue, expected_revision: revisions.current[entry] }); }
           catch (reason) { delete ownWrites.current[entry]; throw reason; }
-          if (reply.op !== "storage.write") throw new Error("저장 항목을 쓰지 못했습니다");
+          if (reply.op !== "storage.write") throw shellErrors.SHELL_SANDBOX_STORAGE_WRITE_REPLY_INVALID();
           revisions.current[entry] = reply.revision;
           return data.content;
         };
         const task = writes.current.catch(() => undefined).then(run);
         writes.current = task;
         void task.then((content) => send({ type: "ks-sandbox-storage-reply", requestId, content })).catch((reason) => {
-          const message = toCoreError(reason).message;
-          dataRuntime.setNotice(message);
-          send({ type: "ks-sandbox-storage-reply", requestId, error: message });
+          const error = toCoreError(reason);
+          dataRuntime.setNotice(error);
+          send({ type: "ks-sandbox-storage-reply", requestId, error: error.message, errorId: error.id, errorCode: error.code });
         });
       } else if (data.type === "ks-sandbox-share") {
         const text = typeof data.text === "string" ? data.text : "";

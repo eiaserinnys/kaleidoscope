@@ -1,9 +1,9 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import type { MediaRef } from "../contract/contract";
+import type { CoreError, MediaRef } from "../contract/contract";
 import { toCoreError } from "../core/core-transport";
 import { useWindowData } from "./window-data";
 
-type MediaResult = { status: "loading" } | { status: "ready"; url: string } | { status: "failed"; message: string };
+type MediaResult = { status: "loading" } | { status: "ready"; url: string } | { status: "failed"; error: CoreError };
 
 export function useMedia(media: MediaRef | null, maxPx: number): MediaResult & { retry: () => void } {
   const data = useWindowData();
@@ -26,7 +26,7 @@ export function useMedia(media: MediaRef | null, maxPx: number): MediaResult & {
     }
     void request.then(
       (url) => { if (active) setResult({ key, attempt, value: { status: "ready", url } }); },
-      (error: unknown) => { if (active) setResult({ key, attempt, value: { status: "failed", message: toCoreError(error).message } }); },
+      (error: unknown) => { if (active) setResult({ key, attempt, value: { status: "failed", error: toCoreError(error) } }); },
     );
     return () => { active = false; };
   }, [data, key, requestSize, attempt, generation]);

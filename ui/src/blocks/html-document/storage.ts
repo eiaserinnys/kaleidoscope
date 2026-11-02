@@ -1,4 +1,4 @@
-import { SHELL_THREAD_READ_INVALID } from "../../contract/shell-errors";
+import * as shellErrors from "../../contract/shell-errors";
 import type { ShellStore } from "../../core/shell-store";
 import { toCoreError } from "../../core/core-transport";
 import { applyThreadChange, type Thread, type ThreadChange } from "./thread";
@@ -6,7 +6,7 @@ import { applyThreadChange, type Thread, type ThreadChange } from "./thread";
 export const emptyThread = (): Thread => ({ revisions: {}, comments: [] });
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
-const invalidThread = (name: string) => SHELL_THREAD_READ_INVALID({ name });
+const invalidThread = (name: string) => shellErrors.SHELL_THREAD_READ_INVALID({ name });
 
 function parseThread(content: string, name: string): Thread {
   let value: unknown;
@@ -32,10 +32,10 @@ function parseThread(content: string, name: string): Thread {
 export async function readThread(store: ShellStore, windowId: string, entry: string, name: string): Promise<{ thread: Thread; revision: string | null }> {
   try {
     const list = await store.call({ op: "storage.list", window_id: windowId, entry });
-    if (list.op !== "storage.list") throw new Error("커멘트 문서 목록을 읽을 수 없습니다");
+    if (list.op !== "storage.list") throw shellErrors.SHELL_HTML_COMMENT_LIST_REPLY_INVALID();
     if (!list.result.items.some((item) => item.doc === `${name}/thread.json`)) return { thread: emptyThread(), revision: null };
     const result = await store.call({ op: "storage.get", window_id: windowId, entry, doc: `${name}/thread.json` });
-    if (result.op !== "storage.get") throw new Error("커멘트 문서를 읽을 수 없습니다");
+    if (result.op !== "storage.get") throw shellErrors.SHELL_HTML_COMMENT_THREAD_REPLY_INVALID();
     const thread = parseThread(String(result.result.content), name);
     return { thread, revision: result.result.revision };
   } catch (reason) {
@@ -54,5 +54,5 @@ export async function writeThreadChange(store: ShellStore, windowId: string, ent
       if (toCoreError(reason).code !== "conflict" || attempt === 2) throw reason;
     }
   }
-  throw new Error("커멘트를 저장하지 못했습니다");
+  throw shellErrors.SHELL_HTML_COMMENT_SAVE_CONFLICT();
 }

@@ -3,6 +3,7 @@ import type { Block } from "../contract/contract";
 import { useBinding, useWindowData } from "../data/window-data";
 import { createSerialSend } from "../data/throttled-send";
 import { useShareDescriber } from "../share/visible";
+import * as shellErrors from "../contract/shell-errors";
 
 type Rect = { x: number; y: number; width: number; height: number };
 type CanvasBlockData = Extract<Block, { type: "canvas" }>;
@@ -53,7 +54,7 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     if (!host || !surface) return;
     const element = document.createElement("canvas");
     host.appendChild(element);
-    if (!element.transferControlToOffscreen) { data.setNotice("이 환경은 캔버스 전송을 지원하지 않습니다"); element.remove(); return; }
+    if (!element.transferControlToOffscreen) { data.setNotice(shellErrors.SHELL_CANVAS_TRANSFER_UNSUPPORTED()); element.remove(); return; }
     let attachedGeneration: number | undefined;
     let attempted = false;
     let intersecting = typeof IntersectionObserver === "undefined";

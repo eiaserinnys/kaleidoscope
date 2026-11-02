@@ -14,6 +14,14 @@ fn codes() -> Vec<&'static str> {
     errors::all().map(|entry| entry.id).collect()
 }
 
+#[test]
+fn conversation_binding_errors_use_the_workspace_name_once() {
+    let saved = errors::CONV_CONTEXT_SAVED_BINDING_MISMATCH("작업 1");
+    assert!(saved.message.starts_with("작업 1:"));
+    let adoption = errors::CONV_CONTEXT_ADOPTION_CONFLICT("작업 1");
+    assert!(adoption.message.starts_with("작업 1:"));
+}
+
 fn valid_code(id: &str) -> bool {
     id.split('_').count() >= 3
         && id.split('_').all(|part| !part.is_empty())

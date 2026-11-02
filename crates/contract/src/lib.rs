@@ -4992,7 +4992,7 @@ pub enum CoreEvent {
     },
     /// 대화 스트림의 최종 로그인 필요 또는 권한 거부. 제공자 wire 이벤트와는 별개다.
     #[serde(rename = "conversation.error")]
-    ConversationError { thread_id: String, code: ErrorCode },
+    ConversationError { thread_id: String, error: CoreError },
     /// 미접수 초안은 같은 request_id로, 실패한 초안은 새 request_id로 다시 보낸다.
     #[serde(rename = "conversation.draft")]
     ConversationDraft {

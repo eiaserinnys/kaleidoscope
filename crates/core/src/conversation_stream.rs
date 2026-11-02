@@ -1,6 +1,6 @@
 //! 창들이 함께 쓰는 대화별 SSE. 저장 cursor만 재접속에 쓴다.
 use crate::{connections::LoginStore, conversation_http::Client, Inner};
-use kaleidoscope_contract::{conversation::ConversationEvent, CoreEvent, ErrorCode};
+use kaleidoscope_contract::{conversation::ConversationEvent, errors, CoreError, CoreEvent};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, Weak};
 use std::thread;
@@ -99,7 +99,7 @@ fn spawn(inner: Weak<Inner>, key: String) {
             drop(inner);
             match runtime.block_on(read_stream(weak.clone(), &key, &client, &thread, &cursor)) {
                 Outcome::Gone => return,
-                Outcome::Auth(code) => {
+                Outcome::Auth(error) => {
                     if let Some(inner) = weak.upgrade() {
                         if let Some(stream) =
                             inner.conversation_streams.0.lock().unwrap().get_mut(&key)
@@ -108,7 +108,7 @@ fn spawn(inner: Weak<Inner>, key: String) {
                         }
                         inner.emit(&CoreEvent::ConversationError {
                             thread_id: thread,
-                            code,
+                            error,
                         });
                     }
                     return;
@@ -124,7 +124,7 @@ fn spawn(inner: Weak<Inner>, key: String) {
 
 enum Outcome {
     Gone,
-    Auth(ErrorCode),
+    Auth(CoreError),
     Retry,
 }
 
@@ -137,7 +137,7 @@ async fn read_stream(
 ) -> Outcome {
     let path = match provider.path(&["threads", thread, "events"]) {
         Ok(path) => path,
-        Err(_) => return Outcome::Auth(ErrorCode::PermissionDenied),
+        Err(_) => return Outcome::Auth(errors::CONV_STREAM_PERMISSION_DENIED(&provider.info.name)),
     };
     let client = match reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -151,7 +151,7 @@ async fn read_stream(
     let logins = provider.logins.clone();
     let name = provider.info.name.clone();
     let Ok(Some(token)) = tokio::task::spawn_blocking(move || logins.token(&name)).await else {
-        return Outcome::Auth(ErrorCode::LoginRequired);
+        return Outcome::Auth(errors::CONV_STREAM_LOGIN_REQUIRED(&provider.info.name));
     };
     let request = |token: &str| {
         let mut req = client
@@ -173,7 +173,7 @@ async fn read_stream(
         let Ok(Some(refreshed)) =
             tokio::task::spawn_blocking(move || logins.refresh(&name, &rejected)).await
         else {
-            return Outcome::Auth(ErrorCode::LoginRequired);
+            return Outcome::Auth(errors::CONV_STREAM_LOGIN_REQUIRED(&provider.info.name));
         };
         response = match request(&refreshed).await {
             Ok(response) => response,
@@ -181,11 +181,11 @@ async fn read_stream(
         };
         if response.status() == reqwest::StatusCode::UNAUTHORIZED {
             provider.logins.invalidate(&provider.info.name, &refreshed);
-            return Outcome::Auth(ErrorCode::LoginRequired);
+            return Outcome::Auth(errors::CONV_STREAM_LOGIN_REQUIRED(&provider.info.name));
         }
     }
     if response.status() == reqwest::StatusCode::FORBIDDEN {
-        return Outcome::Auth(ErrorCode::PermissionDenied);
+        return Outcome::Auth(errors::CONV_STREAM_PERMISSION_DENIED(&provider.info.name));
     }
     if !response.status().is_success() {
         return Outcome::Retry;

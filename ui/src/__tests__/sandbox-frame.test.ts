@@ -68,8 +68,14 @@ it("host 기능과 저장 대화상자는 capability와 선언 액션 안에서 
     expect.objectContaining({ type: "ks-client-keep-awake", enabled: true }),
     expect.objectContaining({ type: "ks-client-save-prompt", suggested_name: "메모.txt", mime: "text/plain" }),
   ]));
-  await expect(sdk.host.can_share("file-1")).rejects.toThrow("클라이언트 동작");
-  await expect(sdk.files.save_prompt({ suggested_name: "메모.txt", mime: "text/plain" })).rejects.toThrow("클라이언트 동작");
+  await expect(sdk.host.can_share("file-1")).rejects.toMatchObject({
+    id: "SHELL_CLIENT_CAN_SHARE_ACTION_REQUIRED",
+    message: "파일 공유 가능 여부 확인은 앱 동작 안에서 해야 합니다. 앱 코드를 고치세요.",
+  });
+  await expect(sdk.files.save_prompt({ suggested_name: "메모.txt", mime: "text/plain" })).rejects.toMatchObject({
+    id: "SHELL_CLIENT_SAVE_PROMPT_ACTION_REQUIRED",
+    message: "파일 저장 대화상자는 앱 동작 안에서 열어야 합니다. 앱 코드를 고치세요.",
+  });
   expect(pending).toHaveLength(4);
   vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
 });
@@ -92,7 +98,10 @@ it("선언되지 않은 client 동작 메시지는 handler와 host API를 열지
 
   expect(handler).not.toHaveBeenCalled();
   expect(post.mock.calls.map(([value]) => value.type)).not.toContain("ks-client-keep-awake");
-  await expect(sdk.host.keep_awake(true)).rejects.toThrow("클라이언트 동작");
+  await expect(sdk.host.keep_awake(true)).rejects.toMatchObject({
+    id: "SHELL_CLIENT_KEEP_AWAKE_ACTION_REQUIRED",
+    message: "화면 켜짐 유지 요청은 앱 동작 안에서 해야 합니다. 앱 코드를 고치세요.",
+  });
   vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
 });
 

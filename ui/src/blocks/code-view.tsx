@@ -34,7 +34,7 @@ function FileCodeView({ block, file, context }: { block: CodeViewBlockData; file
   const root = useWindowGrant(context, file.permission)?.root_path ?? null;
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReturnType<typeof toCoreError> | null>(null);
   const version = useRef(0);
   const read = useCallback(async (initial = false) => {
     const current = ++version.current;
@@ -43,7 +43,7 @@ function FileCodeView({ block, file, context }: { block: CodeViewBlockData; file
     try {
       const result = await context.store.call({ op: "files.read", window_id: context.window.id, permission: file.permission, path });
       if (current === version.current) { setText(result.text); setError(null); }
-    } catch (reason) { if (current === version.current) setError(toCoreError(reason).message); }
+    } catch (reason) { if (current === version.current) setError(toCoreError(reason)); }
     finally { if (current === version.current) setLoading(false); }
   }, [root, path, context.store, context.window.id, file.permission]);
   useEffect(() => { void read(true); return () => { version.current++; }; }, [read]);
@@ -51,7 +51,7 @@ function FileCodeView({ block, file, context }: { block: CodeViewBlockData; file
   if (!root) return <FileGrant context={context} permission={file.permission} />;
   if (path === null) return <div className="ks-code-view" ref={emptyShareRef} />;
   if (loading) return <div className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (error) return <div className="ks-editor-error"><Notice role="alert">{error}</Notice></div>;
+  if (error) return <div className="ks-editor-error"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
   return <ReadOnlyCode path={path} text={text} language={codeLanguageForPath(path, block.language)} follow={!!block.follow} wrap={block.wrap !== false} />;
 }
 function ReadOnlyCode({ text, language, follow, wrap, path = null }: { text: string; language: CodeLanguage; follow: boolean; wrap: boolean; path?: string | null }) {

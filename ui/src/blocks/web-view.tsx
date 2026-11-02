@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Block, WebPage } from "../contract/contract";
-import { EmptyState, IconButton, Notice } from "../components/primitives";
+import { EmptyState, ErrorId, IconButton, Notice } from "../components/primitives";
 import { ArrowLeft, ArrowRight, Globe, RotateCw, X } from "../components/icons";
 import { TextInput } from "../components/text-input";
 import { toCoreError } from "../core/core-transport";
@@ -51,7 +51,7 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
   useShareDescriber(shareRef, () => ({ text: `[웹 화면: ${page?.title ?? ""}, ${page?.url ?? validAddress ?? ""}]`, visual: true }));
   const [webReady, setWebReady] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReturnType<typeof toCoreError> | null>(null);
   const [editingAddress, setEditingAddress] = useState(false);
   const [surface, setSurface] = useState<WebSurfaceState>({ kind: "hidden" });
 
@@ -90,7 +90,7 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
         setWebReady(false);
         const coreError = toCoreError(reason);
         if (coreError.code === "unavailable") setUnavailable(true);
-        else setError(coreError.message);
+        setError(coreError);
       } finally {
         attaching.current = false;
       }
@@ -103,7 +103,7 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
       await store.call({ op: "web.navigate", window_id: windowId, url });
     } catch (reason) {
       pendingAddress.current = null;
-      setError(toCoreError(reason).message);
+      setError(toCoreError(reason));
     }
   };
 
@@ -163,7 +163,7 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
 
   const history = (action: "back" | "forward" | "reload" | "stop") => {
     void store.call({ op: "web.history", window_id: windowId, action }).catch((reason) => {
-      setError(toCoreError(reason).message);
+      setError(toCoreError(reason));
     });
   };
 
@@ -204,9 +204,9 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
         )}
       </div>
       <div className="ks-web-surface" data-ks-web-surface ref={surfaceRef}>
-        {error ? <div className="ks-web-error" data-ks-overlay><Notice role="alert">{error}</Notice></div> : null}
+        {error && !unavailable ? <div className="ks-web-error" data-ks-overlay><Notice role="alert" errorId={error.id}>{error.message}</Notice></div> : null}
         {!webReady && unavailable ? (
-          <EmptyState icon={<Globe size="empty" />} text="이 쉘에서는 웹 화면을 열 수 없습니다" />
+          <EmptyState icon={<Globe size="empty" />} text={error ? <>{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</> : "이 쉘에서는 웹 화면을 열 수 없습니다"} />
         ) : !page ? (
           <EmptyState icon={<Globe size="empty" />} />
         ) : frozen ? (

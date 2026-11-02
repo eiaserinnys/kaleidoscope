@@ -38,11 +38,14 @@ fn allowed(url: &tauri::Url) -> bool {
         && !(url.host_str() == Some("localhost") && url.port_or_known_default() == Some(1420))
 }
 fn parse_url(url: &str, window: &str) -> Result<tauri::Url, CoreError> {
-    let url: tauri::Url = url
-        .parse()
-        .map_err(|error| with_detail(error, errors::WEB_HOST_URL_PARSE_FAILED(window)))?;
+    let url: tauri::Url = url.parse().map_err(|error| {
+        with_detail(
+            error,
+            errors::WEB_HOST_URL_PARSE_FAILED().and_details(vec![format!("창 ID: {window}")]),
+        )
+    })?;
     if !allowed(&url) {
-        return Err(errors::WEB_HOST_URL_BLOCKED(window));
+        return Err(errors::WEB_HOST_URL_BLOCKED().and_details(vec![format!("창 ID: {window}")]));
     }
     Ok(url)
 }
@@ -54,9 +57,9 @@ impl TauriWebHost {
         }
     }
     fn view(&self, id: &str) -> Result<Webview, CoreError> {
-        self.app
-            .get_webview(&format!("web-{id}"))
-            .ok_or_else(|| errors::WEB_HOST_VIEW_NOT_FOUND(id))
+        self.app.get_webview(&format!("web-{id}")).ok_or_else(|| {
+            errors::WEB_HOST_VIEW_NOT_FOUND().and_details(vec![format!("창 ID: {id}")])
+        })
     }
 
     fn on_main<T: Send + 'static>(
@@ -165,10 +168,25 @@ fn register(view: &Webview, app: AppHandle, id: String, page: Page) -> Result<()
         })();
         let _ = tx.send(result.map_err(|e| e.to_string()));
     })
-    .map_err(|error| with_detail(error, errors::WEB_HOST_REGISTER_FAILED(&window)))?;
+    .map_err(|error| {
+        with_detail(
+            error,
+            errors::WEB_HOST_REGISTER_FAILED().and_details(vec![format!("창 ID: {window}")]),
+        )
+    })?;
     rx.recv_timeout(Duration::from_secs(2))
-        .map_err(|error| with_detail(error, errors::WEB_HOST_REGISTER_FAILED(&window)))?
-        .map_err(|detail| with_detail(detail, errors::WEB_HOST_REGISTER_FAILED(&window)))
+        .map_err(|error| {
+            with_detail(
+                error,
+                errors::WEB_HOST_REGISTER_FAILED().and_details(vec![format!("창 ID: {window}")]),
+            )
+        })?
+        .map_err(|detail| {
+            with_detail(
+                detail,
+                errors::WEB_HOST_REGISTER_FAILED().and_details(vec![format!("창 ID: {window}")]),
+            )
+        })
 }
 
 impl WebHost for TauriWebHost {
@@ -222,9 +240,18 @@ impl WebHost for TauriWebHost {
                 LogicalPosition::new(0., 0.),
                 LogicalSize::new(1., 1.),
             )
-            .map_err(|error| with_detail(error, errors::WEB_HOST_ATTACH_FAILED(id)))?;
-        view.hide()
-            .map_err(|error| with_detail(error, errors::WEB_HOST_ATTACH_FAILED(id)))?;
+            .map_err(|error| {
+                with_detail(
+                    error,
+                    errors::WEB_HOST_ATTACH_FAILED().and_details(vec![format!("창 ID: {id}")]),
+                )
+            })?;
+        view.hide().map_err(|error| {
+            with_detail(
+                error,
+                errors::WEB_HOST_ATTACH_FAILED().and_details(vec![format!("창 ID: {id}")]),
+            )
+        })?;
         self.pages.lock().unwrap().insert(id.into(), page.clone());
         if let Err(e) = register(&view, self.app.clone(), id.into(), page.clone()) {
             self.pages.lock().unwrap().remove(id);
@@ -238,27 +265,53 @@ impl WebHost for TauriWebHost {
         let view = self.view(id)?;
         if let Some(b) = bounds {
             view.set_position(LogicalPosition::new(b.x as f64, b.y as f64))
-                .map_err(|error| with_detail(error, errors::WEB_HOST_PLACE_FAILED(id)))?;
+                .map_err(|error| {
+                    with_detail(
+                        error,
+                        errors::WEB_HOST_PLACE_FAILED().and_details(vec![format!("창 ID: {id}")]),
+                    )
+                })?;
             view.set_size(LogicalSize::new(b.width as f64, b.height as f64))
-                .map_err(|error| with_detail(error, errors::WEB_HOST_PLACE_FAILED(id)))?;
-            view.show()
-                .map_err(|error| with_detail(error, errors::WEB_HOST_PLACE_FAILED(id)))
+                .map_err(|error| {
+                    with_detail(
+                        error,
+                        errors::WEB_HOST_PLACE_FAILED().and_details(vec![format!("창 ID: {id}")]),
+                    )
+                })?;
+            view.show().map_err(|error| {
+                with_detail(
+                    error,
+                    errors::WEB_HOST_PLACE_FAILED().and_details(vec![format!("창 ID: {id}")]),
+                )
+            })
         } else {
-            view.hide()
-                .map_err(|error| with_detail(error, errors::WEB_HOST_PLACE_FAILED(id)))
+            view.hide().map_err(|error| {
+                with_detail(
+                    error,
+                    errors::WEB_HOST_PLACE_FAILED().and_details(vec![format!("창 ID: {id}")]),
+                )
+            })
         }
     }
     fn navigate(&self, id: &str, url: &str) -> Result<(), CoreError> {
         self.view(id)?
             .navigate(parse_url(url, id)?)
-            .map_err(|error| with_detail(error, errors::WEB_HOST_NAVIGATE_FAILED(id)))
+            .map_err(|error| {
+                with_detail(
+                    error,
+                    errors::WEB_HOST_NAVIGATE_FAILED().and_details(vec![format!("창 ID: {id}")]),
+                )
+            })
     }
     fn history(&self, id: &str, action: WebHistoryAction) -> Result<(), CoreError> {
         let view = self.view(id)?;
         if matches!(action, WebHistoryAction::Reload) {
-            return view
-                .reload()
-                .map_err(|error| with_detail(error, errors::WEB_HOST_HISTORY_FAILED(id)));
+            return view.reload().map_err(|error| {
+                with_detail(
+                    error,
+                    errors::WEB_HOST_HISTORY_FAILED().and_details(vec![format!("창 ID: {id}")]),
+                )
+            });
         }
         let (tx, rx) = mpsc::channel();
         view.with_webview(move |native| {
@@ -289,10 +342,25 @@ impl WebHost for TauriWebHost {
             };
             let _ = tx.send(result.map_err(|e| e.to_string()));
         })
-        .map_err(|error| with_detail(error, errors::WEB_HOST_HISTORY_FAILED(id)))?;
+        .map_err(|error| {
+            with_detail(
+                error,
+                errors::WEB_HOST_HISTORY_FAILED().and_details(vec![format!("창 ID: {id}")]),
+            )
+        })?;
         rx.recv_timeout(Duration::from_secs(2))
-            .map_err(|error| with_detail(error, errors::WEB_HOST_HISTORY_FAILED(id)))?
-            .map_err(|detail| with_detail(detail, errors::WEB_HOST_HISTORY_FAILED(id)))
+            .map_err(|error| {
+                with_detail(
+                    error,
+                    errors::WEB_HOST_HISTORY_FAILED().and_details(vec![format!("창 ID: {id}")]),
+                )
+            })?
+            .map_err(|detail| {
+                with_detail(
+                    detail,
+                    errors::WEB_HOST_HISTORY_FAILED().and_details(vec![format!("창 ID: {id}")]),
+                )
+            })
     }
     fn capture(&self, id: &str) -> Result<Option<Vec<u8>>, CoreError> {
         capture_view(self.view(id)?, id)
@@ -355,8 +423,12 @@ impl WebHost for TauriWebHost {
     fn detach(&self, id: &str) -> Result<(), CoreError> {
         self.pages.lock().unwrap().remove(id);
         if let Some(view) = self.app.get_webview(&format!("web-{id}")) {
-            view.close()
-                .map_err(|error| with_detail(error, errors::WEB_HOST_DETACH_FAILED(id)))?;
+            view.close().map_err(|error| {
+                with_detail(
+                    error,
+                    errors::WEB_HOST_DETACH_FAILED().and_details(vec![format!("창 ID: {id}")]),
+                )
+            })?;
         }
         Ok(())
     }
@@ -401,6 +473,11 @@ fn capture_view(view: Webview, window: &str) -> Result<Option<Vec<u8>>, CoreErro
             eprintln!("웹뷰 캡처 실패: {error}");
         }
     })
-    .map_err(|error| with_detail(error, errors::WEB_HOST_CAPTURE_FAILED(window)))?;
+    .map_err(|error| {
+        with_detail(
+            error,
+            errors::WEB_HOST_CAPTURE_FAILED().and_details(vec![format!("창 ID: {window}")]),
+        )
+    })?;
     Ok(rx.recv_timeout(Duration::from_secs(2)).ok().flatten())
 }

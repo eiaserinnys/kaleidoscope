@@ -98,7 +98,8 @@ describe('감수 수명 재현', () => {
     await screen.findByRole('textbox', {name: '메시지'});
     state.emit({event: 'conversation.update', thread_id: 'thread-1', update: {kind: 'activity', busy: true, tool: '문서 읽기'}});
     state.emit({event: 'conversation.update', thread_id: 'thread-1', update: {kind: 'text', stream_id: 's', text: '진행 중'}});
-    state.emit({event: 'conversation.error', thread_id: 'thread-1', code: 'io'});
+    state.emit({event: 'conversation.error', thread_id: 'thread-1', error: { id: 'CONV_STREAM_PERMISSION_DENIED', code: 'permission_denied', message: '대화 제공자 연결 test: 대화 이벤트를 읽을 권한이 없습니다. 연결 권한을 확인하세요.', details: [] }});
+    expect((await screen.findByRole('alert')).textContent).toContain('CONV_STREAM_PERMISSION_DENIED');
     fireEvent.click(screen.getByRole('button', {name: '다시 시도'}));
     expect(await screen.findByText('진행 중')).toBeTruthy();
     state.emit({event: 'conversation.update', thread_id: 'thread-1', update: {kind: 'text', stream_id: 's', text: ''}});

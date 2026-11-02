@@ -5,6 +5,7 @@ import { DataState } from "../components/data-state";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
 import { toCoreError } from "../core/core-transport";
+import * as shellErrors from "../contract/shell-errors";
 import { useShareDescriber } from "../share/visible";
 import { MarkdownText } from "./markdown-text";
 import { documentEditorSession } from "./document-editor-session";
@@ -26,7 +27,7 @@ function BoundMarkdownViewBlock({ binding, pointer, context }: { binding: Bindin
   const shareRef = useRef<HTMLElement>(null);
   useShareDescriber(shareRef, () => ({ text: `[${context.definition.name || "Markdown 보기"}]`, visual: false, continue: true }));
   if (value.status !== "ready") return <DataState value={value} />;
-  if (typeof value.value !== "string") return <div className="ks-markdown-error"><Notice role="alert">마크다운 값이 글이 아닙니다</Notice></div>;
+  if (typeof value.value !== "string") { const error = shellErrors.SHELL_MARKDOWN_VALUE_NOT_TEXT(); return <div className="ks-markdown-error"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>; }
   return <article className="ks-markdown-view" ref={shareRef}><MarkdownText>{value.value}</MarkdownText></article>;
 }
 
@@ -56,7 +57,7 @@ function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBloc
   const grant = grantRoot !== null;
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReturnType<typeof toCoreError> | null>(null);
   const readVersion = useRef(0);
   const shareRef = useRef<HTMLElement>(null);
   useShareDescriber(shareRef, () => ({ text: path ? `[파일 ${path}]` : "[마크다운 보기]", visual: false, continue: true }));
@@ -86,7 +87,7 @@ function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBloc
       });
       if (reply.op === "files.read" && version === readVersion.current) setText(reply.text);
     } catch (reason) {
-      if (version === readVersion.current) setError(toCoreError(reason).message);
+      if (version === readVersion.current) setError(toCoreError(reason));
     } finally {
       if (version === readVersion.current) setLoading(false);
     }
@@ -105,7 +106,7 @@ function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBloc
   if (!grant) return null;
   if (path === null) return <article className="ks-markdown-view" ref={shareRef} />;
   if (loading) return <div className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (error) return <div className="ks-markdown-error"><Notice role="alert">{error}</Notice></div>;
+  if (error) return <div className="ks-markdown-error"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
 
   return (
     <article className="ks-markdown-view" ref={shareRef}>

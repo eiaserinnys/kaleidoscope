@@ -9,6 +9,7 @@ import { htmlViewSource, htmlViewTokens, sanitizeFragment } from "../html-view-f
 import { applyEdit, findNumber, invertEdit, numberElements, serializeOriginal, type HtmlEdit } from "../html-bridge/edit";
 import type { AnchorStatus, FrameSelection, FrameToParent, ParentToFrame } from "../html-bridge/frame-protocol";
 import { emptyThread, readThread, writeThreadChange } from "./storage";
+import * as shellErrors from "../../contract/shell-errors";
 import { anchorRevision, anchorRevisionFor, listRevisions, type Comment, type Thread, type ThreadChange } from "./thread";
 
 type HtmlBlock = Extract<Block, { type: "html_view" }> & { document: DocumentRef };
@@ -145,7 +146,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
         let html = cache.current.get(path);
         if (html === undefined) {
           const reply = await store.call({ op: "storage.get", window_id: windowId, entry, doc: path });
-          if (reply.op !== "storage.get" || typeof reply.result.content !== "string") throw new Error("HTML 리비전을 읽을 수 없습니다");
+          if (reply.op !== "storage.get" || typeof reply.result.content !== "string") throw shellErrors.SHELL_HTML_REVISION_REPLY_INVALID();
           html = reply.result.content; cache.current.set(path, html);
         }
         if (sequence !== readSequence.current) return;

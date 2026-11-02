@@ -58,11 +58,10 @@ fn stream_auth_failure_reports_and_successful_login_reconnects() {
     crate::conversation_stream::watch(&core.inner, "key".into(), &window, client, "thread-1", "0");
     let event = rx.recv_timeout(Duration::from_secs(10)).unwrap();
     assert!(matches!(
-        event,
-        CoreEvent::ConversationError {
-            code: ErrorCode::LoginRequired,
-            ..
-        }
+        &event,
+        CoreEvent::ConversationError { error, .. }
+            if error.id.as_deref() == Some("CONV_STREAM_LOGIN_REQUIRED")
+                && error.code == kaleidoscope_contract::ErrorCode::LoginRequired
     ));
     fixture.state.lock().unwrap().stream_status = 200;
     login(&core, &window).unwrap();
@@ -74,12 +73,11 @@ fn stream_auth_failure_reports_and_successful_login_reconnects() {
         }
     ));
     fixture.state.lock().unwrap().stream_status = 403;
+    let event = rx.recv_timeout(Duration::from_secs(10)).unwrap();
     assert!(matches!(
-        rx.recv_timeout(Duration::from_secs(10)).unwrap(),
-        CoreEvent::ConversationError {
-            code: ErrorCode::PermissionDenied,
-            ..
-        }
+        &event,
+        CoreEvent::ConversationError { error, .. }
+            if error.id.as_deref() == Some("CONV_STREAM_PERMISSION_DENIED")
     ));
     fixture.state.lock().unwrap().stream_status = 200;
     login(&core, &window).unwrap();

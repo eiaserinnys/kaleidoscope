@@ -97,7 +97,7 @@ test("로그인 뒤 시작 판의 첫 조작에 포커스를 둔다", async ({ p
 
 test("묶음 충돌은 시작이나 입력을 보이지 않는다", async ({ page }) => {
   const chat = await open(page, "conflict");
-  await expect(chat.getByRole("alert")).toContainText("저장된 대화와 제공자의 대화가 다릅니다");
+  await expect(chat.getByRole("alert")).toContainText("대화 연결이 충돌합니다");
   await capture(page, "conflict");
   await expect(chat.getByRole("button", { name: "시작" })).toHaveCount(0);
   await expect(chat.getByRole("textbox", { name: "메시지" })).toHaveCount(0);
@@ -116,7 +116,7 @@ test("미접수 초안과 첨부를 같은 ID로 보낸다", async ({ page }) =>
 test("스트림 인증 오류 뒤 로그인하여 복귀", async ({ page }) => {
   const chat = await open(page, "ready");
   await expect(chat.getByText("기존 기록")).toBeVisible();
-  await page.evaluate(() => (window as any).conversationHarness.emit({ event: "conversation.error", thread_id: "fake-thread", code: "login_required" }));
+  await page.evaluate(() => (window as any).conversationHarness.emit({ event: "conversation.error", thread_id: "fake-thread", error: { id: "CONV_STREAM_LOGIN_REQUIRED", code: "login_required", message: "대화 제공자에 다시 로그인해야 합니다.", details: [] } }));
   await expect(chat.getByText("로그인이 필요합니다")).toBeVisible();
   await capture(page, "stream-error");
   await chat.getByRole("button", { name: "로그인" }).click();

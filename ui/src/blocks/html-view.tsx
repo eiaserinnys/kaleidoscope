@@ -12,6 +12,7 @@ import { FileGrant } from "./file-grant";
 import { htmlViewSource } from "./html-view-frame";
 import { htmlText } from "./html-view-model";
 import { HtmlDocumentViewBlock } from "./html-document/view";
+import * as shellErrors from "../contract/shell-errors";
 
 type HtmlViewData = Extract<Block, { type: "html_view" }>;
 
@@ -40,7 +41,7 @@ function BoundHtmlViewBlock({ binding, pointer, context }: { binding: Binding; p
   const appName = context.definition.name || "HTML 보기";
   useShareDescriber(root, () => ({ text: `[${appName}]\n\n${visibleText || htmlText(rawHtml)}`, visual: true }));
   if (value.status !== "ready") return <DataState value={value} />;
-  if (typeof value.value !== "string") return <div className="ks-html-state"><Notice role="alert">HTML 값이 글이 아닙니다</Notice></div>;
+  if (typeof value.value !== "string") { const error = shellErrors.SHELL_HTML_VALUE_NOT_TEXT(); return <div className="ks-html-state"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>; }
   return <section className="ks-html-view" ref={root}><div className="ks-html-content"><iframe ref={frame} title={appName} sandbox="allow-scripts" srcDoc={source} /></div></section>;
 }
 
@@ -52,7 +53,7 @@ function FileHtmlViewBlock({ file, context }: { file: FileRef; context: BlockCon
   const source = useMemo(() => htmlViewSource(rawHtml), [rawHtml]);
   const [visibleText, setVisibleText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReturnType<typeof toCoreError> | null>(null);
   const version = useRef(0);
   const root = useRef<HTMLElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -73,13 +74,13 @@ function FileHtmlViewBlock({ file, context }: { file: FileRef; context: BlockCon
     try {
       const reply = await context.store.call({ op: "files.read", window_id: context.window.id, permission: file.permission, path });
       if (reply.op === "files.read" && current === version.current) { setRawHtml(reply.text); setError(null); }
-    } catch (reason) { if (current === version.current) setError(toCoreError(reason).message); }
+    } catch (reason) { if (current === version.current) setError(toCoreError(reason)); }
     finally { if (current === version.current) setLoading(false); }
   }, [context.store, context.window.id, file.permission, path, rootPath]);
   useEffect(() => { void read(true); return () => { version.current++; }; }, [read]);
   useEffect(() => { const refresh = () => void read(); window.addEventListener("focus", refresh); return () => window.removeEventListener("focus", refresh); }, [read]);
   if (!rootPath) return <FileGrant context={context} permission={file.permission} />;
   if (loading) return <div className="ks-html-state"><StatusText>불러오는 중</StatusText></div>;
-  if (error) return <div className="ks-html-state"><Notice role="alert">{error}</Notice></div>;
+  if (error) return <div className="ks-html-state"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
   return <section className="ks-html-view" ref={root}><div className="ks-html-content"><iframe ref={frame} title={appName} sandbox="allow-scripts" srcDoc={source} /></div></section>;
 }

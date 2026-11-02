@@ -17,6 +17,7 @@ import { Select } from "../components/select-toggle";
 import { Dialog } from "../components/dialog";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { executionPlaces, keepStartModel, pickModel, placeIdOf } from "./agent-chat-places";
+import * as shellErrors from "../contract/shell-errors";
 
 export type AgentChatBlockData = Extract<Block, { type: "chat" }>;
 
@@ -39,11 +40,11 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const [selectedPreset, setSelectedPreset] = useState("");
   const [loading, setLoading] = useState(true);
   const [loginRequired, setLoginRequired] = useState(false);
-  const [bindingConflict, setBindingConflict] = useState(false);
+  const [bindingConflict, setBindingConflict] = useState<CoreError | null>(null);
   const [nextBefore, setNextBefore] = useState<string | undefined>();
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [switchError, setSwitchError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<CoreError | null>(null);
+  const [createError, setCreateError] = useState<CoreError | null>(null);
+  const [switchError, setSwitchError] = useState<CoreError | null>(null);
   const [creating, setCreating] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [loadingChoices, setLoadingChoices] = useState(false);
@@ -54,7 +55,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<CoreError | null>(null);
   const [busy, setBusy] = useState(false);
   const [tool, setTool] = useState<string | null>(null);
   const [delta, setDelta] = useState("");
@@ -81,12 +82,12 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     cacheKey={["conversation", windowId, item.id, attachment.id]}
     load={async () => {
       const reply = await context.store.call({ op: "conversation.attachment", window_id: windowId, item_id: item.id, attachment_id: attachment.id });
-      if (reply.op !== "conversation.attachment") throw new Error("첨부를 불러오지 못했습니다");
+      if (reply.op !== "conversation.attachment") throw shellErrors.SHELL_CONVERSATION_ATTACHMENT_REPLY_INVALID();
       return { mime: reply.mime, data_base64: reply.data_base64 };
     }}
     open={async () => { await context.store.call({ op: "conversation.attachment_open", window_id: windowId, item_id: item.id, attachment_id: attachment.id }); }}
     onPreview={setPreview}
-    onError={(reason) => setSendError(toCoreError(reason).message)}
+    onError={(reason) => setSendError(toCoreError(reason))}
   />, [context.store, windowId]);
 
   const acknowledge = useCallback((incoming: ConversationItem[]) => {
@@ -95,7 +96,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
 
   const handleError = useCallback((error: CoreError) => {
     if (error.code === "login_required") { setLoginRequired(true); return true; }
-    if (error.code === "binding_conflict") { setBindingConflict(true); return true; }
+    if (error.code === "binding_conflict") { setBindingConflict(error); return true; }
     return false;
   }, []);
 
@@ -150,7 +151,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     if (!quiet) setLoading(true);
     setLoadError(null);
     setLoginRequired(false);
-    setBindingConflict(false);
+    setBindingConflict(null);
     try {
       {
         const reply = await context.store.call({ op: "conversation.get", window_id: windowId, ...(profile ? { profile } : {}) });
@@ -172,12 +173,12 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         conversationQueue.current = null;
         events.forEach((event) => {
           if (event.event === "conversation.update" && event.thread_id === threadId.current) applyConversation(event.update);
-          if (event.event === "conversation.error" && event.thread_id === threadId.current && !handleError({ code: event.code, message: "대화 연결이 끊겼습니다", details: [] })) setLoadError("대화 연결이 끊겼습니다");
+          if (event.event === "conversation.error" && event.thread_id === threadId.current && !handleError(event.error)) setLoadError(event.error);
         });
         return;
       }
     } catch (reason) {
-      if (generation === loadGeneration.current) { const error = toCoreError(reason); if (!handleError(error)) setLoadError(error.message); }
+      if (generation === loadGeneration.current) { const error = toCoreError(reason); if (!handleError(error)) setLoadError(error); }
     } finally {
       if (generation === loadGeneration.current) {
         conversationQueue.current = null;
@@ -202,7 +203,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         if (conversationQueue.current) conversationQueue.current.push(event);
         else if (event.thread_id === threadId.current) {
           if (event.event === "conversation.update") applyConversation(event.update);
-          else if (!handleError({ code: event.code, message: "대화 연결이 끊겼습니다", details: [] })) setLoadError("대화 연결이 끊겼습니다");
+          else if (!handleError(event.error)) setLoadError(event.error);
         }
       }
       return;
@@ -218,7 +219,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const loadOlder = useConversationHistory({
     historyRef, nextBefore, enabled: hasProvider && Boolean(agent) && !loading && !loginRequired && !loadError && !bindingConflict,
     store: context.store, windowId, onItems: (older, before) => { setItems((current) => uniqueItems([...older, ...current])); setNextBefore(before); },
-    onError: (reason) => { const error = toCoreError(reason); if (!handleError(error)) setSendError(error.message); },
+    onError: (reason) => { const error = toCoreError(reason); if (!handleError(error)) setSendError(error); },
     items,
   });
 
@@ -233,7 +234,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       if (!reply.thread) setSelectedPreset(keepStartModel(reply.models, reply.start.model, previous) ?? "");
     } catch (reason) {
       const error = toCoreError(reason);
-      if (!handleError(error)) setLoadError(error.message);
+      if (!handleError(error)) setLoadError(error);
     } finally {
       setLoadingChoices(false);
     }
@@ -253,7 +254,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       await load([], reply.thread.profile?.id, true);
     } catch (reason) {
       const error = toCoreError(reason);
-      if (!handleError(error)) setSwitchError(error.message);
+      if (!handleError(error)) setSwitchError(error);
     } finally {
       setSwitching(false);
     }
@@ -371,7 +372,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       await load(events);
     } catch (reason) {
       const error = toCoreError(reason);
-      if (!handleError(error)) setCreateError(error.message);
+      if (!handleError(error)) setCreateError(error);
       setCreating(false);
     } finally {
       creatingConversation.current = false;
@@ -401,7 +402,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     } catch (reason) {
       setPending(null);
       const error = toCoreError(reason);
-      if (!handleError(error)) setSendError(error.message);
+      if (!handleError(error)) setSendError(error);
       retryDraft.current = { id: requestId, text, attachments: submittedAttachments, failed: false };
       setDraft((current) => current ? `${submittedDraft}\n${current}` : submittedDraft);
       setAttachments((current) => [...submittedAttachments, ...current]);
@@ -418,11 +419,11 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   if (!workspaceId) return null;
   if (loading) return <div className="ks-agent-chat-state"><StatusText>불러오는 중</StatusText></div>;
   if (loginRequired && provider) return <DataState value={{ status: "login_required", permission: provider.permission }} onLogin={() => { restoreFocus.current = true; void load(); }} />;
-  if (bindingConflict) return <div className="ks-agent-chat-state"><Notice role="alert">저장된 대화와 제공자의 대화가 다릅니다.</Notice></div>;
+  if (bindingConflict) return <div className="ks-agent-chat-state"><Notice role="alert" errorId={bindingConflict.id}>{bindingConflict.message}</Notice></div>;
   if (loadError) {
     return (
       <div className="ks-agent-chat-state">
-        <Notice role="alert" actions={[<Button key="retry" onClick={() => void load()}>다시 시도</Button>]}>{loadError}</Notice>
+        <Notice role="alert" errorId={loadError.id} actions={[<Button key="retry" onClick={() => void load()}>다시 시도</Button>]}>{loadError.message}</Notice>
       </div>
     );
   }
@@ -433,7 +434,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         <div className="ks-agent-chat-start-action">
           <Button disabled={!selectedStartProfile?.available || !selectedStartModel?.available || creating || switching || loadingChoices} variant="emphasis" onClick={() => void start()}>시작</Button>
           {creating ? <StatusText>시작하는 중</StatusText> : null}
-          {createError ? <Notice role="alert">{createError}</Notice> : null}
+          {createError ? <Notice role="alert" errorId={createError.id}>{createError.message}</Notice> : null}
         </div>
       </div>
     );
@@ -443,7 +444,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     <section className="ks-agent-chat" ref={shareRef}>
       {selectorRow}
       {notices.length ? <Notice>{notices.join("\n")}</Notice> : null}
-      {switchError ? <Notice role="alert">{switchError}</Notice> : null}
+      {switchError ? <Notice role="alert" errorId={switchError.id}>{switchError.message}</Notice> : null}
       <ChatHistory
         items={items}
         pending={pending}

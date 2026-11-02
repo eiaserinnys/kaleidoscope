@@ -6,6 +6,7 @@ import { DataIcon } from "../components/data-icons";
 import { isMedia } from "../components/media-thumbnail";
 import { IconButton, Notice } from "../components/primitives";
 import { toCoreError } from "../core/core-transport";
+import * as shellErrors from "../contract/shell-errors";
 
 type Data = Extract<Block, { type: "media" }>;
 export function formatMediaTime(value: number): string {
@@ -22,7 +23,7 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
   const generation = useSyncExternalStore(data.subscribeMedia, data.getMediaGeneration, data.getMediaGeneration);
   const key = src ? JSON.stringify(src) : "";
   const [loaded, setLoaded] = useState<{ key: string; url: string; mime: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReturnType<typeof toCoreError> | null>(null);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -45,13 +46,13 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
       }
       void request.then((url) => {
         if (active) setLoaded({ key, url, mime: url.slice("data:".length, url.indexOf(";")) });
-      }).catch((reason: unknown) => { if (active) setError(toCoreError(reason).message); });
+      }).catch((reason: unknown) => { if (active) setError(toCoreError(reason)); });
     }
     return () => { active = false; };
   }, [data, key, generation]);
   const current = loaded?.key === key ? loaded : null;
   const video = (kind ?? (current?.mime.startsWith("video/") ? "video" : "audio")) === "video";
-  const playbackError = () => { setError("재생할 수 없는 파일입니다"); setPlaying(false); setTime(0); setDuration(0); };
+  const playbackError = () => { setError(shellErrors.SHELL_MEDIA_PLAYBACK_UNSUPPORTED()); setPlaying(false); setTime(0); setDuration(0); };
   // 늦게 온 재생 실패는 재생을 시작한 미디어가 아직 현재 원본일 때만 알린다.
   // URL은 캐시되므로 서로 다른 원본이 같은 데이터 URL을 가질 수 있다.
   const currentSourceKey = useRef<string | null>(null);
@@ -75,7 +76,7 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
   const props = { src: current?.url, onError: () => { if (current) playbackError(); }, onPlay: () => setPlaying(true), onPause: () => setPlaying(false), onTimeUpdate: (e: React.SyntheticEvent<HTMLMediaElement>) => setTime(e.currentTarget.currentTime), onDurationChange: (e: React.SyntheticEvent<HTMLMediaElement>) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0), onVolumeChange: (e: React.SyntheticEvent<HTMLMediaElement>) => { setVolume(e.currentTarget.volume); setMuted(e.currentTarget.muted); } };
   return <div className={`ks-media-player${video ? " is-video" : ""}`}>
     {video ? <video ref={(el) => { element.current = el; }} {...props} /> : <audio ref={(el) => { element.current = el; }} {...props} />}
-    {error ? <Notice role="alert">{error}</Notice> : null}
+    {error ? <Notice role="alert" errorId={error.id}>{error.message}</Notice> : null}
     <div className="ks-media-controls-container">
       <div className="ks-media-controls" onKeyDown={onKeyDown}>
         <div className="ks-media-main">

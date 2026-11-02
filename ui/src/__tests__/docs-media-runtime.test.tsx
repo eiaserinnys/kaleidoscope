@@ -5,6 +5,7 @@ import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
+import { EmptyState } from "../components/primitives";
 import { grantFor, makeTestSeed } from "./fixtures";
 
 function setup(block: Block) {
@@ -16,6 +17,15 @@ function setup(block: Block) {
   return { ...result, transport };
 }
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it("빈 상태는 아이콘이 없으면 아이콘 칸을 두지 않고 전달된 아이콘은 표시한다", () => {
+  const view = render(<EmptyState text="알림" action={<button>다시 받기</button>} />);
+  expect(view.container.querySelector(".ks-empty-state-icon")).toBeNull();
+  expect(screen.getByText("알림")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "다시 받기" })).toBeTruthy();
+  view.rerender(<EmptyState icon={<span>그림</span>} text="알림" />);
+  expect(view.container.querySelector(".ks-empty-state-icon")?.textContent).toBe("그림");
+});
 
 it("코드 편집은 CRLF를 지켜 자동 저장하고 외부 변경 충돌을 알린다", async () => {
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "readwrite", label: "문서" }], state: {}, ui: { type: "code", file: { permission: "docs", path: "settings.json" } } };
@@ -136,10 +146,11 @@ it("이미지 요청 실패를 알리고 다시 받으면 성공한다", async (
   const original = transport.call.bind(transport);
   let calls = 0;
   vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media"
-    ? (++calls === 1 ? Promise.reject(new Error("받지 못했습니다")) : Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "YQ==", width: 1, height: 1 } })) as never
+    ? (++calls === 1 ? Promise.reject({ id: "SHELL_CALL_UNEXPECTED_FAILURE", code: "io", message: "이미지 원본을 읽지 못했습니다", details: [] }) : Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "YQ==", width: 1, height: 1 } })) as never
     : original(request as never));
   const result = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
-  expect(await screen.findByText("이미지를 불러오지 못했습니다")).toBeTruthy();
+  expect(await screen.findByText("이미지 원본을 읽지 못했습니다")).toBeTruthy();
+  expect(screen.getByText("SHELL_CALL_UNEXPECTED_FAILURE")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "다시 받기" }));
   await waitFor(() => expect(result.container.querySelector(".ks-image-frame img")).toBeTruthy());
   expect(calls).toBe(2);
@@ -157,11 +168,13 @@ it("재생 실패를 알리고 원천 변경 뒤 조작부를 복구한다", asy
   send("bad.wav");
   await waitFor(() => expect((screen.getByRole("button", { name: "재생" }) as HTMLButtonElement).disabled).toBe(false));
   fireEvent.error(result.container.querySelector("audio")!);
-  expect(await screen.findByText("재생할 수 없는 파일입니다")).toBeTruthy();
+  const playbackError = await screen.findByRole("alert");
+  expect(playbackError.textContent).toContain("이 파일의 미디어 데이터를 재생할 수 없습니다.");
+  expect(playbackError.textContent).toContain("SHELL_MEDIA_PLAYBACK_UNSUPPORTED");
   expect((screen.getByRole("button", { name: "재생" }) as HTMLButtonElement).disabled).toBe(true);
   send("good.wav");
   await waitFor(() => expect((screen.getByRole("button", { name: "재생" }) as HTMLButtonElement).disabled).toBe(false));
-  expect(screen.queryByText("재생할 수 없는 파일입니다")).toBeNull();
+  expect(screen.queryByText("SHELL_MEDIA_PLAYBACK_UNSUPPORTED")).toBeNull();
 });
 
 it("자동 재생 정책 거부는 오류로 보이지 않고 다른 재생 실패는 알린다", async () => {
@@ -173,9 +186,11 @@ it("자동 재생 정책 거부는 오류로 보이지 않고 다른 재생 실�
   vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media" ? Promise.resolve({ op: "data.media", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } }) as never : original(request as never));
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1));
-  expect(screen.queryByText("재생할 수 없는 파일입니다")).toBeNull();
+  expect(screen.queryByText("SHELL_MEDIA_PLAYBACK_UNSUPPORTED")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "재생" }));
-  expect(await screen.findByText("재생할 수 없는 파일입니다")).toBeTruthy();
+  const playbackError = await screen.findByRole("alert");
+  expect(playbackError.textContent).toContain("이 파일의 미디어 데이터를 재생할 수 없습니다.");
+  expect(playbackError.textContent).toContain("SHELL_MEDIA_PLAYBACK_UNSUPPORTED");
 });
 
 it("앞 원본의 늦은 재생 실패는 새 원본에 오류를 보이지 않는다", async () => {
@@ -195,6 +210,6 @@ it("앞 원본의 늦은 재생 실패는 새 원본에 오류를 보이지 않�
   send("two.wav");
   await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2));
   await act(async () => { rejectFirst(new DOMException("bad", "NotSupportedError")); await first.catch(() => undefined); });
-  expect(screen.queryByText("재생할 수 없는 파일입니다")).toBeNull();
+  expect(screen.queryByText("SHELL_MEDIA_PLAYBACK_UNSUPPORTED")).toBeNull();
   expect((screen.getByRole("button", { name: /재생|일시 정지/ }) as HTMLButtonElement).disabled).toBe(false);
 });

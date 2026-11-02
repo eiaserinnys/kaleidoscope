@@ -84,7 +84,8 @@ test("손상된 소리를 알리고 다른 파일 선택으로 복구한다", as
     await page.getByRole("tab", { name: "소리", exact: true }).click();
     await page.getByText("tone.wav", { exact: true }).click();
     const player = page.locator(".ks-media-player");
-    await expect(player.getByRole("alert")).toHaveText("재생할 수 없는 파일입니다");
+    await expect(player.getByRole("alert")).toContainText("이 파일의 미디어 데이터를 재생할 수 없습니다");
+    await expect(player.getByRole("alert")).toContainText("SHELL_MEDIA_PLAYBACK_UNSUPPORTED");
     await expect(player.getByRole("button", { name: "재생" })).toBeDisabled();
     await expect(player.getByRole("slider", { name: "소리 크기" })).toBeDisabled();
     await page.screenshot({ path: info.outputPath(`media-failed-${width}.png`) });

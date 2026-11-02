@@ -3,12 +3,13 @@ import { AppSettings } from "../settings/app-settings";
 import { WindowDataProvider, useWindowData, useDormant } from "../data/window-data";
 import { ClientShareSignal, WindowNotice } from "../data/window-notice";
 import type { BlockContext, WindowIdentity } from "../blocks/block-context";
-import { ErrorNotice, Notice, StatusText } from "../components/primitives";
+import { ErrorNotice, StatusText } from "../components/primitives";
 import type { ShellStore } from "../core/shell-store";
 import type { Rect } from "../contract/contract";
 import { useShellSelector } from "../core/shell-store";
 import { registerAppShortcuts } from "../runtime/shortcuts";
 import { renderBlock } from "./render-block";
+import * as shellErrors from "../contract/shell-errors";
 
 export const AppWindowContent = memo(function AppWindowContent({
   store,
@@ -44,8 +45,8 @@ export const AppWindowContent = memo(function AppWindowContent({
       ? <div className="ks-app-content-error"><ErrorNotice error={error} /></div>
       : <div className="ks-app-content-loading"><StatusText>불러오는 중</StatusText></div>;
   }
-  if (!window) return <div className="ks-app-content-error"><Notice role="alert">앱 창을 찾을 수 없습니다</Notice></div>;
-  if (!version || !context) return <div className="ks-app-content-error"><Notice role="alert">앱 정의를 찾을 수 없습니다</Notice></div>;
+  if (!window) return <div className="ks-app-content-error"><ErrorNotice error={shellErrors.SHELL_APP_WINDOW_NOT_FOUND()} /></div>;
+  if (!version || !context) return <div className="ks-app-content-error"><ErrorNotice error={shellErrors.SHELL_APP_VERSION_NOT_FOUND()} /></div>;
 
   const hasSettings = version.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false;
   if (version.definition.requires.blocks < 4 && !hasSettings && !version.definition.agent) return <div className="ks-app-window-content" data-ks-app-id={window.app_id}>{renderBlock(version.definition.ui, context)}</div>;

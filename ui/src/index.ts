@@ -66,3 +66,4 @@ export type {
 } from "./contract/contract";
 export { prepareShareForSend, useShareView } from "./share/share-view";
 export { installShellDragGuard } from "./shell-drag-guard";
+export * from "./contract/shell-errors";

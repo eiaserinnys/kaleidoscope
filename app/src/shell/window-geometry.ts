@@ -1,4 +1,4 @@
-import type { Rect } from "@kaleidoscope/ui";
+import { SHELL_WINDOW_GEOMETRY_TOKEN_INVALID, type Rect } from "@kaleidoscope/ui";
 
 const RESIZE_CORNER_SIZE = 12;
 export const TASKBAR_HEIGHT = 40;
@@ -34,7 +34,7 @@ export function makeNewWindowRect(
   const minWidth = Number.parseFloat(style.getPropertyValue("--ks-window-min-width"));
   const minHeight = Number.parseFloat(style.getPropertyValue("--ks-window-min-height"));
   if (!Number.isFinite(minWidth) || !Number.isFinite(minHeight)) {
-    throw new Error("필수 창 최소 크기 토큰을 읽을 수 없습니다");
+    throw SHELL_WINDOW_GEOMETRY_TOKEN_INVALID();
   }
 
   const rectFor = (offset: number): Rect => {

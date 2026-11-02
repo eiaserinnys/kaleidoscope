@@ -97,18 +97,18 @@ error_catalog! { ENTRIES;
         message: "저장된 대화 연결에 제공자 대화 식별자가 없습니다. 대화 설정을 확인하고 다시 연결하세요.",
         fix: "저장된 대화 연결을 다시 설정하세요"
     }
-    CONV_CONTEXT_SAVED_BINDING_MISMATCH(workspace_id, thread) {
+    CONV_CONTEXT_SAVED_BINDING_MISMATCH(workspace) {
         class: BindingConflict,
         place: "저장된 대화 연결 확인",
         cause: "저장된 대화 연결의 작업 정보가 현재 설정과 다르다",
-        message: "작업 ID {workspace_id}의 저장된 대화 {thread}: 연결 정보가 현재 작업과 맞지 않습니다. 대화 연결 설정을 확인하세요.",
-        fix: "저장된 대화 연결 설정을 확인하세요"
+        message: "{workspace}: 저장된 대화 연결 정보가 현재 설정과 맞지 않습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "에이전트에게 이 오류 코드를 전하세요"
     }
-    CONV_CONTEXT_ADOPTION_CONFLICT(workspace_id, thread) {
+    CONV_CONTEXT_ADOPTION_CONFLICT(workspace) {
         class: BindingConflict,
         place: "기존 대화 연결 복구",
         cause: "제공자가 저장된 대화를 현재 작업에 연결하지 않았다",
-        message: "작업 ID {workspace_id}의 저장된 대화 {thread}: 제공자가 현재 작업에 연결하지 않았습니다. 대화 연결을 확인하세요.",
+        message: "{workspace}: 제공자가 저장된 대화를 현재 작업에 연결하지 않았습니다. 대화 연결을 확인하세요.",
         fix: "대화 연결을 확인하세요"
     }
     CONV_CONTEXT_ADOPTED_THREAD_MISMATCH(saved_thread, returned_thread) {
@@ -684,5 +684,19 @@ error_catalog! { ENTRIES;
         cause: "제공자가 대화 기록을 반환하지 않았다",
         message: "제공자 대화 {thread}의 기록을 찾을 수 없습니다. 대화를 다시 불러오세요.",
         fix: "대화를 다시 불러오세요"
+    }
+    CONV_STREAM_LOGIN_REQUIRED(name) {
+        class: LoginRequired,
+        place: "대화 스트림 연결",
+        cause: "제공자 연결에 다시 로그인이 필요하다",
+        message: "대화 제공자 연결 {name}: 로그인이 필요합니다. 로그인한 뒤 대화를 다시 여세요.",
+        fix: "제공자 연결에 로그인하세요"
+    }
+    CONV_STREAM_PERMISSION_DENIED(name) {
+        class: PermissionDenied,
+        place: "대화 스트림 연결",
+        cause: "제공자가 대화 이벤트 읽기를 거부했다",
+        message: "대화 제공자 연결 {name}: 대화 이벤트를 읽을 권한이 없습니다. 연결 권한을 확인하세요.",
+        fix: "제공자 연결 권한을 확인하세요"
     }
 }

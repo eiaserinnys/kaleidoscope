@@ -45,7 +45,7 @@ export const MarkdownText = memo(function MarkdownText({ children }: { children:
               let url: URL;
               try { url = new URL(href); } catch { return; }
               if (url.protocol !== "http:" && url.protocol !== "https:") return;
-              if (data) void data.store.call({ op: "external.open", window_id: data.windowId, url: url.href }).catch((error: unknown) => data.setNotice(toCoreError(error).message));
+              if (data) void data.store.call({ op: "external.open", window_id: data.windowId, url: url.href }).catch((error: unknown) => data.setNotice(toCoreError(error)));
               else globalThis.window.open(url.href, "_blank", "noopener,noreferrer");
             }}>{linkText}</a>
           ),
