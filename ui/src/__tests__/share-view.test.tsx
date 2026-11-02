@@ -39,14 +39,18 @@ it("시간축 재생 중에도 클라이언트의 같이 보기 설명을 갱신
   function Probe() {
     const root = useRef<HTMLDivElement>(null);
     useShareView({ windowId: "window", root, enabled: true, store });
-    return <div ref={root}><span data-share-seq="0" /><div className="ks-timeline-playhead" /></div>;
+    return <div ref={root}><span data-share-seq="0" /><div className="ks-timeline-scroll"><div className="ks-timeline-playhead" /><div className="ks-timeline-ruler" aria-valuenow={0} /></div></div>;
   }
   const { container } = render(<Probe />);
   await act(async () => {});
   text = "바뀐 설명";
   await act(async () => { container.querySelector("[data-share-seq]")!.setAttribute("data-share-seq", "1"); });
   for (let i = 1; i <= 10; i++) {
-    await act(async () => { (container.querySelector(".ks-timeline-playhead") as HTMLElement).style.left = `${i}%`; });
+    await act(async () => {
+      (container.querySelector(".ks-timeline-playhead") as HTMLElement).style.left = `${i}%`;
+      container.querySelector(".ks-timeline-ruler")!.setAttribute("aria-valuenow", String(i));
+      container.querySelector(".ks-timeline-scroll")!.dispatchEvent(new Event("scroll"));
+    });
     await act(async () => { await vi.advanceTimersByTimeAsync(100); });
   }
   expect(call).toHaveBeenCalledWith(expect.objectContaining({ op: "share.view", view: expect.objectContaining({ text: "바뀐 설명" }) }));

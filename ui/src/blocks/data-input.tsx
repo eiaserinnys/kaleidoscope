@@ -78,15 +78,20 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => change(event.currentTarget.value), onKeyDown: keyDown,
     onCompositionStart: () => { composing.current = true; }, onCompositionEnd: () => { composing.current = false; },
   };
-  return <div className={`ks-data-input${block.kind === "search" ? " is-search" : ""}${(block.rows ?? 0) >= 2 ? " has-rows" : ""}`}>
+  const input = <div className={`ks-data-input${block.kind === "search" ? " is-search" : ""}${(block.rows ?? 0) >= 2 ? " has-rows" : ""}`}>
     {block.kind === "search" ? <span className="ks-data-input-search"><DataIcon name="search" size="inline" /></span> : null}
     {multiline ? <textarea {...props} ref={textarea} rows={block.rows ?? 1} /> : <input {...props} type={block.kind === "number" ? "number" : "text"} />}
     {block.kind === "search" && draft ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" onClick={() => { change(""); send(""); }}><X size="inline" /></IconButton></span> : null}
   </div>;
+  return block.label ? <label className="ks-field ks-input-field"><span className="ks-field-label" data-ks-share-skip="">{block.label}</span>{input}</label> : input;
 }
 
 function validOption(value: unknown): value is SelectOption {
   return typeof value === "string" || (typeof value === "object" && value !== null && "label" in value && typeof value.label === "string" && "value" in value);
+}
+
+function validGroup(value: unknown): value is { name: string; options: unknown[] } {
+  return typeof value === "object" && value !== null && "name" in value && typeof value.name === "string" && "options" in value && Array.isArray(value.options);
 }
 
 export function SliderBlock({ block, pointer }: Props<"slider">) {
@@ -97,7 +102,7 @@ export function SliderBlock({ block, pointer }: Props<"slider">) {
   const [draft, setDraft] = useState(current);
   useEffect(() => { setDraft(current); }, [current]);
   return <label className="ks-field ks-slider-field">
-    {block.label ? <span data-ks-share-skip="">{block.label}</span> : null}
+    {block.label ? <span className="ks-field-label" data-ks-share-skip="">{block.label}</span> : null}
     <input type="range" className="ks-slider" aria-label={block.label ?? bindingName(block.value, "슬라이더")} min={block.min} max={block.max} step={block.step ?? 1} value={draft}
       onChange={(event) => { const next = Number(event.currentTarget.value); setDraft(next); void data.act(`${pointer}/on_change`, next); }} />
     <span className="ks-slider-value" data-ks-share-skip="">{draft}</span>
@@ -107,11 +112,13 @@ export function SliderBlock({ block, pointer }: Props<"slider">) {
 export function ColorBlock({ block, pointer }: Props<"color">) {
   const data = useWindowData();
   const bound = useBinding(`${pointer}/value`, block.value);
+  const disabled = useBinding(`${pointer}/disabled`, block.disabled ?? false);
   const value = bound.status === "ready" ? bound.value : null;
   const color = typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "#000000";
-  return <label className="ks-field ks-color-field">
-    {block.label ? <span data-ks-share-skip="">{block.label}</span> : null}
-    <span className="ks-color-control"><input className="ks-color-input" type="color" aria-label={block.label ?? bindingName(block.value, "색상")} value={color}
+  const unavailable = disabled.status !== "ready" || Boolean(disabled.value);
+  return <label className={`ks-field ks-color-field${unavailable ? " is-disabled" : ""}`}>
+    {block.label ? <span className="ks-field-label" data-ks-share-skip="">{block.label}</span> : null}
+    <span className="ks-color-control"><input className="ks-color-input" type="color" aria-label={block.label ?? bindingName(block.value, "색상")} value={color} disabled={unavailable}
       onChange={(event) => { void data.act(`${pointer}/on_change`, event.currentTarget.value.toLowerCase()); }} /><span className="ks-color-code" data-ks-share-skip="">{color}</span></span>
   </label>;
 }
@@ -120,7 +127,16 @@ export function SelectBlock({ block, pointer }: Props<"select">) {
   const options = useBinding(`${pointer}/options`, block.options);
   const value = useBinding(`${pointer}/value`, block.value);
   if (options.status !== "ready") return <DataState value={options} compact />;
-  return <Select items={asArray(options.value).filter(validOption)} value={value.status === "ready" ? value.value : null} placeholder={block.placeholder} segmented={block.style === "segmented"} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} />;
+  const entries = asArray(options.value);
+  const hasGroups = entries.some(validGroup);
+  const toChoice = (option: SelectOption) => typeof option === "string" ? { value: option, label: option } : option;
+  const groups = entries.flatMap((entry) => {
+    if (validGroup(entry)) return [{ name: entry.name, options: entry.options.filter(validOption).map(toChoice) }];
+    return validOption(entry) ? [{ name: "", options: [toChoice(entry)] }] : [];
+  });
+  const props = { value: value.status === "ready" ? value.value : null, placeholder: block.placeholder, segmented: block.style === "segmented", label: block.label, onChange: (next: JsonValue) => { void data.act(`${pointer}/on_change`, next); } };
+  const select = hasGroups ? <Select {...props} groups={groups} /> : <Select {...props} items={entries.filter(validOption)} />;
+  return block.label ? <label className="ks-field ks-select-field"><span className="ks-field-label" data-ks-share-skip="">{block.label}</span>{select}</label> : select;
 }
 
 export function ToggleBlock({ block, pointer }: Props<"toggle">) {
@@ -131,6 +147,8 @@ export function ToggleBlock({ block, pointer }: Props<"toggle">) {
 
 export function ButtonBlock({ block, pointer }: Props<"button">) {
   const data = useWindowData();
+  const label = useBinding(`${pointer}/label`, block.label);
+  const icon = useBinding(`${pointer}/icon`, block.icon ?? null);
   const disabled = useBinding(`${pointer}/disabled`, block.disabled ?? false);
   const body = useBinding(`${pointer}/confirm/body`, block.confirm?.body ?? null);
   const [confirm, setConfirm] = useState(false);
@@ -146,11 +164,13 @@ export function ButtonBlock({ block, pointer }: Props<"button">) {
       opener.current?.querySelector<HTMLButtonElement>(":scope > button")?.focus();
     }
   });
-  const contents = <>{block.icon ? <DataIcon name={block.icon} /> : null}{!block.icon_only ? block.label : null}</>;
+  const labelText = label.status === "ready" && typeof label.value === "string" ? label.value : "";
+  const iconText = icon.status === "ready" && typeof icon.value === "string" ? icon.value : "";
+  const contents = <>{iconText ? <DataIcon name={iconText} /> : null}{!block.icon_only ? labelText : null}</>;
   const host = opener.current?.closest<HTMLElement>(".ks-data-window");
   return <span ref={opener} className={`ks-data-button is-${block.variant ?? "default"}`}>{block.icon_only
-    ? <IconButton aria-label={block.label} disabled={busy || unavailable} onClick={() => block.confirm ? setConfirm(true) : void run(false)}>{contents}</IconButton>
+    ? <IconButton aria-label={labelText} disabled={busy || unavailable} onClick={() => block.confirm ? setConfirm(true) : void run(false)}>{contents}</IconButton>
     : <Button variant={block.variant === "primary" ? "emphasis" : "default"} disabled={busy || unavailable} onClick={() => block.confirm ? setConfirm(true) : void run(false)}>{contents}</Button>}
-    {confirm && block.confirm && host ? <Dialog host={host} title={block.confirm.title} ok={block.confirm.ok ?? block.label} danger={block.variant === "danger"} onCancel={close} onConfirm={() => void run(true)} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} /> : null}
+    {confirm && block.confirm && host ? <Dialog host={host} title={block.confirm.title} ok={block.confirm.ok ?? labelText} danger={block.variant === "danger"} onCancel={close} onConfirm={() => void run(true)} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} /> : null}
   </span>;
 }

@@ -864,6 +864,14 @@ pub enum SelectOption {
     Labeled { value: JsonValue, label: String },
 }
 
+/// `select`에서 선택지를 이름으로 묶는다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct SelectGroup {
+    pub name: String,
+    pub options: Vec<SelectOption>,
+}
+
 /// `folder` 원천의 항목.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
@@ -1200,11 +1208,20 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         Block::Sandbox { value: None, .. } => {}
         Block::Slider {
             value, on_change, ..
-        }
-        | Block::Color {
-            value, on_change, ..
         } => {
             bind!("value", value);
+            act!("on_change", on_change)
+        }
+        Block::Color {
+            value,
+            on_change,
+            disabled,
+            ..
+        } => {
+            bind!("value", value);
+            if let Some(disabled) = disabled {
+                bind!("disabled", disabled);
+            }
             act!("on_change", on_change)
         }
         Block::Metrics { items, .. } => bind!("items", items),
@@ -1318,11 +1335,17 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             act!("on_change", on_change);
         }
         Block::Button {
+            label,
+            icon,
             on_click,
             confirm,
             disabled,
             ..
         } => {
+            bind!("label", label);
+            if let Some(icon) = icon {
+                bind!("icon", icon);
+            }
             act!("on_click", on_click);
             if let Some(body) = confirm.as_ref().and_then(|confirm| confirm.body.as_ref()) {
                 bind!("confirm/body", body);

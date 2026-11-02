@@ -1076,6 +1076,9 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         label: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        disabled: Option<Binding>,
     },
     /// 자식 블록을 나란히 놓는다. 경계를 끌어 크기를 바꿀 수 있다(바꾼 크기는 저장하지 않는다).
     Split {
@@ -1397,6 +1400,9 @@ pub enum Block {
     Input {
         value: Binding,
         on_change: Actions,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        label: Option<String>,
         #[serde(default)]
         #[ts(optional, as = "Option<InputKind>")]
         kind: InputKind,
@@ -1419,6 +1425,9 @@ pub enum Block {
         value: Binding,
         on_change: Actions,
         options: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        label: Option<String>,
         #[serde(default)]
         #[ts(optional, as = "Option<SelectStyle>")]
         style: SelectStyle,
@@ -1436,10 +1445,10 @@ pub enum Block {
     /// 한 줄이 보인다. `confirm`이 있으면 확인 대화상자에서 확인했을 때만 돈다. `icon_only`면 아이콘만 보이고
     /// `label`은 도움말과 읽어 주기에 쓴다. `disabled`가 참이면 누를 수 없다.
     Button {
-        label: String,
+        label: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        icon: Option<String>,
+        icon: Option<Binding>,
         #[serde(default)]
         #[ts(optional, as = "Option<bool>")]
         icon_only: bool,
@@ -1626,6 +1635,8 @@ enum RawBlock {
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        disabled: Option<Binding>,
     },
     /// 자식 블록을 나란히 놓는다. 경계를 끌어 크기를 바꿀 수 있다(바꾼 크기는 저장하지 않는다).
     Split {
@@ -1896,6 +1907,8 @@ enum RawBlock {
     Input {
         value: Binding,
         on_change: Actions,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
         #[serde(default)]
         kind: InputKind,
         #[serde(default)]
@@ -1910,6 +1923,8 @@ enum RawBlock {
     Textarea {
         value: Binding,
         on_change: Actions,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
         #[serde(default)]
         kind: InputKind,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1925,6 +1940,8 @@ enum RawBlock {
         value: Binding,
         on_change: Actions,
         options: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
         #[serde(default)]
         style: SelectStyle,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1940,9 +1957,9 @@ enum RawBlock {
     /// 한 줄이 보인다. `confirm`이 있으면 확인 대화상자에서 확인했을 때만 돈다. `icon_only`면 아이콘만 보이고
     /// `label`은 도움말과 읽어 주기에 쓴다. `disabled`가 참이면 누를 수 없다.
     Button {
-        label: String,
+        label: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        icon: Option<String>,
+        icon: Option<Binding>,
         #[serde(default)]
         icon_only: bool,
         #[serde(default)]
@@ -2166,10 +2183,12 @@ impl From<RawBlock> for Block {
                 value,
                 on_change,
                 label,
+                disabled,
             } => Block::Color {
                 value,
                 on_change,
                 label,
+                disabled,
             },
             RawBlock::Split {
                 direction,
@@ -2352,6 +2371,7 @@ impl From<RawBlock> for Block {
             RawBlock::Input {
                 value,
                 on_change,
+                label,
                 kind,
                 multiline,
                 rows,
@@ -2360,6 +2380,7 @@ impl From<RawBlock> for Block {
             } => Block::Input {
                 value,
                 on_change,
+                label,
                 kind,
                 multiline,
                 rows,
@@ -2369,6 +2390,7 @@ impl From<RawBlock> for Block {
             RawBlock::Textarea {
                 value,
                 on_change,
+                label,
                 kind,
                 rows,
                 placeholder,
@@ -2376,6 +2398,7 @@ impl From<RawBlock> for Block {
             } => Block::Input {
                 value,
                 on_change,
+                label,
                 kind,
                 multiline: true,
                 rows,
@@ -2386,12 +2409,14 @@ impl From<RawBlock> for Block {
                 value,
                 on_change,
                 options,
+                label,
                 style,
                 placeholder,
             } => Block::Select {
                 value,
                 on_change,
                 options,
+                label,
                 style,
                 placeholder,
             },

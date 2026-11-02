@@ -37,11 +37,19 @@ export function useShareView({ windowId, root, enabled, store }: { windowId: str
       return pending;
     };
     const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { void send(); }, SHARE_DEBOUNCE_MS); };
+    const scheduleOnce = () => { if (!timer) timer = setTimeout(() => { void send(); }, SHARE_DEBOUNCE_MS); };
+    const onScroll = (event: Event) => {
+      if (event.target instanceof HTMLElement && event.target.classList.contains("ks-timeline-scroll")) scheduleOnce();
+      else schedule();
+    };
     const observer = new MutationObserver((records) => {
-      const changes = records.filter((record) => !(record.type === "attributes" && record.attributeName === "style" && record.target instanceof HTMLElement && record.target.classList.contains("ks-timeline-playhead")));
+      const changes = records.filter((record) => !(record.type === "attributes" && record.target instanceof HTMLElement && (
+        (record.attributeName === "style" && record.target.classList.contains("ks-timeline-playhead")) ||
+        (record.attributeName === "aria-valuenow" && record.target.classList.contains("ks-timeline-ruler"))
+      )));
       if (!changes.length) return;
       if (changes.some((record) => record.type === "attributes" && record.attributeName === "data-share-seq")) {
-        if (!timer) timer = setTimeout(() => { void send(); }, SHARE_DEBOUNCE_MS);
+        scheduleOnce();
       } else schedule();
     });
     observer.observe(element, { subtree: true, childList: true, characterData: true, attributes: true });
@@ -51,14 +59,14 @@ export function useShareView({ windowId, root, enabled, store }: { windowId: str
     const canvas = element.closest(".ks-desktop-canvas");
     if (canvas) canvasObserver.observe(canvas, { attributes: true, attributeFilter: ["hidden"] });
     const resize = new ResizeObserver(schedule); resize.observe(element);
-    element.addEventListener("scroll", schedule, true);
+    element.addEventListener("scroll", onScroll, true);
     element.addEventListener("input", schedule, true);
     window.addEventListener("resize", schedule);
     active.add(send);
     void send();
     return () => {
       alive = false; clearTimeout(timer); active.delete(send); observer.disconnect(); frameObserver.disconnect(); canvasObserver.disconnect(); resize.disconnect();
-      element.removeEventListener("scroll", schedule, true); element.removeEventListener("input", schedule, true); window.removeEventListener("resize", schedule);
+      element.removeEventListener("scroll", onScroll, true); element.removeEventListener("input", schedule, true); window.removeEventListener("resize", schedule);
     };
   }, [enabled, root, store, windowId]);
 }

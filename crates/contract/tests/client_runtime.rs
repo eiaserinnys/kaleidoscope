@@ -141,3 +141,60 @@ fn save_file_expression_is_calculated_for_object_and_array_actions() {
             .any(|(slot, _)| slot == pointer));
     }
 }
+
+#[test]
+fn client_outputs_are_accepted_in_document_tree_and_sandbox_values() {
+    for block in [
+        json!({"type":"markdown","value":{"client":"value"},"read_only":true}),
+        json!({"type":"code","value":{"client":"value"},"read_only":true}),
+        json!({"type":"html_view","value":{"client":"value"}}),
+        json!({"type":"tree","items":{"client":"tracks"}}),
+        json!({"type":"sandbox","value":{"client":"value"}}),
+    ] {
+        assert!(accepted(&definition(block.clone())), "{block}");
+    }
+}
+
+#[test]
+fn dynamic_button_labels_and_icons_keep_literal_validation() {
+    let mut app = definition(
+        json!({"type":"button","label":{"client":"value"},"icon":{"client":"value"},"on_click":{"client":"change"}}),
+    );
+    assert!(accepted(&app));
+    app["ui"]["label"] = json!("");
+    assert!(!accepted(&app));
+    app["ui"]["label"] = json!("재생");
+    app["ui"]["icon"] = json!("없는-아이콘");
+    assert!(!accepted(&app));
+    app["ui"]["icon"] = json!("play");
+    assert!(accepted(&app));
+}
+
+#[test]
+fn controls_support_labels_disabled_color_and_grouped_options() {
+    let app = definition(json!({"type":"stack","direction":"column","children":[
+        {"type":"input","label":"BPM","value":{"state":"value"},"on_change":{"client":"change"}},
+        {"type":"select","label":"스타일","value":{"state":"value"},"on_change":{"client":"change"},"options":[{"name":"묶음","options":[{"value":"a","label":"항목"}]}]},
+        {"type":"color","label":"배경","value":{"client":"value"},"disabled":{"client":"value"},"on_change":{"client":"change"}}
+    ]}));
+    assert!(accepted(&app));
+    let group = json!({"name":"묶음","options":[{"value":"a","label":"항목"}]});
+    assert!(serde_json::from_value::<kaleidoscope_contract::data::SelectGroup>(group).is_ok());
+}
+
+#[test]
+fn new_control_fields_require_block_set_twelve() {
+    for block in [
+        json!({"type":"input","label":"BPM","value":{"state":"value"},"on_change":{"set_state":"value"}}),
+        json!({"type":"select","label":"스타일","value":{"state":"value"},"on_change":{"set_state":"value"},"options":[]}),
+        json!({"type":"select","value":{"state":"value"},"on_change":{"set_state":"value"},"options":[{"name":"기본","options":["a"]}]}),
+        json!({"type":"color","value":{"state":"value"},"disabled":false,"on_change":{"set_state":"value"}}),
+        json!({"type":"button","label":{"expr":"'재생'"},"on_click":{"set_state":"value"}}),
+    ] {
+        let mut app = definition(block.clone());
+        app["requires"] = json!({"blocks":11,"modules":{}});
+        app.as_object_mut().unwrap().remove("client");
+        app.as_object_mut().unwrap().remove("assets");
+        assert!(!accepted(&app), "{block}");
+    }
+}

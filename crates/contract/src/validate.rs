@@ -1427,7 +1427,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 );
             }
             if let Some(value) = value {
-                validate_binding_shape(value, definition, details, &format!("{at}/value"));
+                validate_ui_binding(value, definition, details, &format!("{at}/value"));
             }
             if height.is_some_and(|h| !(120..=2400).contains(&h)) {
                 details.push(format!("{at}: sandbox의 height는 120부터 2400까지입니다"));
@@ -1463,7 +1463,16 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 details.push(format!("{at}: slider의 step은 0보다 커야 합니다"));
             }
         }
-        Block::Color { value, .. } => validate_control_binding(value, definition, details, at),
+        Block::Color {
+            value, disabled, ..
+        } => {
+            validate_control_binding(value, definition, details, at);
+            if disabled.is_some() && definition.requires.blocks < 12 {
+                details.push(format!(
+                    "{at}: color.disabled는 blocks 12 이상이 필요합니다"
+                ));
+            }
+        }
         Block::Map {
             points, selected, ..
         } => {
@@ -1566,7 +1575,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 if !extensions.is_empty() {
                     details.push(format!("{at}: 데이터 tree에는 extensions를 쓸 수 없습니다"));
                 }
-                validate_binding_shape(items, definition, details, &format!("{at}/items"));
+                validate_ui_binding(items, definition, details, &format!("{at}/items"));
                 if let Some(selected) = selected {
                     validate_state_key(&selected.state, definition, details, at);
                 }
@@ -1638,7 +1647,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 );
             }
             (None, None, Some(value)) => {
-                validate_binding_shape(value, definition, details, &format!("{at}/value"))
+                validate_ui_binding(value, definition, details, &format!("{at}/value"))
             }
             _ => details.push(format!(
                 "{at}: markdown 블록은 file, document, value 가운데 꼭 하나만 가져야 합니다"
@@ -1651,7 +1660,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             ..
         } => match (value, file) {
             (Some(value), None) => {
-                validate_binding_shape(value, definition, details, &format!("{at}/value"))
+                validate_ui_binding(value, definition, details, &format!("{at}/value"))
             }
             (None, Some(file)) => {
                 validate_file_ref(file, definition, details, at);
@@ -1720,7 +1729,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
             (None, None, Some(value)) => {
-                validate_binding_shape(value, definition, details, &format!("{at}/value"));
+                validate_ui_binding(value, definition, details, &format!("{at}/value"));
                 if selected_doc.is_some()
                     || on_select_doc.is_some()
                     || selected_revision.is_some()
@@ -1957,8 +1966,13 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 details.push(format!("{at}: properties에는 줄이 하나 이상 필요합니다"));
             }
         }
-        Block::Input { value, rows, .. } => {
+        Block::Input {
+            value, rows, label, ..
+        } => {
             validate_control_binding(value, definition, details, at);
+            if label.is_some() && definition.requires.blocks < 12 {
+                details.push(format!("{at}: input.label은 blocks 12 이상이 필요합니다"));
+            }
             if let Some(rows) = rows {
                 if !(1..=20).contains(rows) {
                     details.push(format!("{at}: input의 rows는 1부터 20까지입니다"));
@@ -1968,16 +1982,43 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
         }
-        Block::Select { value, .. } | Block::Toggle { value, .. } => {
+        Block::Select {
+            value,
+            label,
+            options,
+            ..
+        } => {
             validate_control_binding(value, definition, details, at);
-        }
-        Block::Button { label, icon, .. } => {
-            if label.trim().is_empty() {
-                details.push(format!("{at}: button의 label이 비어 있습니다"));
+            let grouped = matches!(options, Binding::Literal(Value::Array(items)) if items.iter().any(|item| item.get("name").is_some() && item.get("options").is_some()));
+            if (label.is_some() || grouped) && definition.requires.blocks < 12 {
+                details.push(format!(
+                    "{at}: select.label과 묶음 선택지는 blocks 12 이상이 필요합니다"
+                ));
             }
-            if let Some(icon) = icon {
-                if !data::ICON_NAMES.contains(&icon.as_str()) {
-                    details.push(format!("{at}: 쉘에 없는 아이콘입니다: {icon}"));
+        }
+        Block::Toggle { value, .. } => validate_control_binding(value, definition, details, at),
+        Block::Button { label, icon, .. } => {
+            if definition.requires.blocks < 12
+                && (!matches!(label, Binding::Literal(_))
+                    || icon
+                        .as_ref()
+                        .is_some_and(|value| !matches!(value, Binding::Literal(_))))
+            {
+                details.push(format!(
+                    "{at}: button의 동적 label과 icon은 blocks 12 이상이 필요합니다"
+                ));
+            }
+            if let Binding::Literal(value) = label {
+                if value.as_str().is_none_or(|text| text.trim().is_empty()) {
+                    details.push(format!("{at}: button의 label이 비어 있습니다"));
+                }
+            }
+            if let Some(Binding::Literal(value)) = icon {
+                if value
+                    .as_str()
+                    .is_none_or(|name| !data::ICON_NAMES.contains(&name))
+                {
+                    details.push(format!("{at}: 쉘에 없는 아이콘입니다: {value}"));
                 }
             }
         }

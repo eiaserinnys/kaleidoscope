@@ -239,7 +239,7 @@ export type BindingValue = { "status": "ready", value: JsonValue, } | { "status"
  * 데이터 블록은 그 상태를 그 자리에 보인다. 4판 블록은 쉘의 토큰과 공통 부품만으로 그리고, 앱이 색이나 크기를
  * 정하지 않는다(항목의 `color`와 배지 색만 예외).
  */
-export type Block = { "type": "canvas", surface: string, aspect_ratio?: number, fit?: CanvasFit, description?: Binding, on_pointer?: Actions, } | { "type": "timeline", duration: Binding, position: Binding, tracks: Binding, markers?: Binding, ticks?: Binding, selection?: Binding, snap?: Binding, read_only?: boolean, on_seek?: Actions, on_select?: Actions, on_edit?: Actions, } | { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: Binding, on_change: Actions, label?: string, min: number, max: number, step?: number, } | { "type": "color", value: Binding, on_change: Actions, label?: string, } | { "type": "split", direction: SplitDirection, 
+export type Block = { "type": "canvas", surface: string, aspect_ratio?: number, fit?: CanvasFit, description?: Binding, on_pointer?: Actions, } | { "type": "timeline", duration: Binding, position: Binding, tracks: Binding, markers?: Binding, ticks?: Binding, selection?: Binding, snap?: Binding, read_only?: boolean, on_seek?: Actions, on_select?: Actions, on_edit?: Actions, } | { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: Binding, on_change: Actions, label?: string, min: number, max: number, step?: number, } | { "type": "color", value: Binding, on_change: Actions, label?: string, disabled?: Binding, } | { "type": "split", direction: SplitDirection, 
 /**
  * 자식마다의 상대 크기. 없으면 똑같이 나눈다.
  */
@@ -293,7 +293,7 @@ copy?: boolean,
 /**
  * (블록 세트 10판) 대댓글과 긴 항목의 접기·펴기를 켠다.
  */
-collapsible?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", value: Binding, format?: TextFormat, style?: TextStyle, } | { "type": "input", value: Binding, on_change: Actions, kind?: InputKind, multiline?: boolean, rows?: number, placeholder?: string, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, style?: SelectStyle, placeholder?: string, } | { "type": "toggle", value: Binding, on_change: Actions, label: string, } | { "type": "button", label: string, icon?: string, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code", value?: Binding, file?: FileRef, language?: CodeLanguage, read_only?: boolean, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "button_grid", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
+collapsible?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", value: Binding, format?: TextFormat, style?: TextStyle, } | { "type": "input", value: Binding, on_change: Actions, label?: string, kind?: InputKind, multiline?: boolean, rows?: number, placeholder?: string, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: string, style?: SelectStyle, placeholder?: string, } | { "type": "toggle", value: Binding, on_change: Actions, label: string, } | { "type": "button", label: Binding, icon?: Binding, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code", value?: Binding, file?: FileRef, language?: CodeLanguage, read_only?: boolean, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "button_grid", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
 
 export type ButtonVariant = "default" | "primary" | "danger" | "ghost";
 
@@ -864,6 +864,11 @@ export type ResourceMediaRef = { permission: string, path: string, query?: { [ke
 export type SaveFileAction = { save_file: SaveFileSpec, };
 
 export type SaveFileSpec = { suggested_name: Binding, mime: string, client: string, };
+
+/**
+ * `select`에서 선택지를 이름으로 묶는다.
+ */
+export type SelectGroup = { name: string, options: Array<SelectOption>, };
 
 /**
  * `select`의 선택지. 문자열만 쓰면 값과 이름이 같다.
