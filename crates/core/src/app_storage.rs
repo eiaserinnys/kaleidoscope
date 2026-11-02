@@ -1,5 +1,5 @@
 //! 창에서 앱과 작업을 해석해 선언된 저장 항목만 기기 API에 전달한다.
-use crate::{app_commands, error, link, registry_client::RegistryError, storage::LinkFile, Inner};
+use crate::{app_commands, link, registry_client::RegistryError, storage::LinkFile, Inner};
 use kaleidoscope_contract::app_storage::{
     self as contract, CollectionListReply, CollectionMove, ExpectedRevision, StorageListReply,
     StorageReadReply, StorageResetRequest, StorageWriteRequest,
@@ -36,37 +36,40 @@ pub(crate) fn context(
         .windows
         .iter()
         .find(|w| w.id == window_id)
-        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_WINDOW_NOT_FOUND(window_id))?;
     let desktop = state
         .shared
         .desktops
         .iter()
         .find(|d| d.id == window.desktop_id)
-        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        .ok_or_else(|| {
+            kaleidoscope_contract::errors::STORAGE_DESKTOP_NOT_FOUND(&window.desktop_id)
+        })?;
     let definition =
         app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(|| {
+                kaleidoscope_contract::errors::STORAGE_APP_VERSION_NOT_FOUND(
+                    &window.app_id,
+                    window.app_version,
+                )
+            })?;
     let declaration = definition.storage.as_ref().ok_or_else(|| {
-        error::with_message(
-            ErrorCode::InvalidRequest,
-            "앱에 저장소가 선언되지 않았습니다.",
-        )
+        kaleidoscope_contract::errors::STORAGE_DECLARATION_MISSING(&window.app_id)
     })?;
     if entry.is_some_and(|id| !declaration.entries.iter().any(|item| item.id == id)) {
-        return Err(error::with_message(
-            ErrorCode::InvalidRequest,
-            "앱에 선언되지 않은 저장소 항목입니다.",
+        return Err(kaleidoscope_contract::errors::STORAGE_ENTRY_NOT_DECLARED(
+            entry.unwrap(),
         ));
     }
     if !matches!(state.link, LinkStatus::Connected { .. }) {
-        return Err(error::with_message(
-            ErrorCode::Unavailable,
-            "서버에 연결되어 있지 않습니다",
-        ));
+        return Err(kaleidoscope_contract::errors::STORAGE_SERVER_NOT_CONNECTED());
     }
-    let link = inner.link_file.lock().unwrap().clone().ok_or_else(|| {
-        error::with_message(ErrorCode::Unavailable, "서버에 연결되어 있지 않습니다")
-    })?;
+    let link = inner
+        .link_file
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or_else(kaleidoscope_contract::errors::STORAGE_SERVER_NOT_CONNECTED)?;
     Ok(Context {
         app: window.app_id.clone(),
         workspace: desktop.workspace_id.clone(),
@@ -76,10 +79,22 @@ pub(crate) fn context(
 }
 
 pub(crate) fn map_error(inner: &Arc<Inner>, file: &LinkFile, err: RegistryError) -> CoreError {
-    if matches!(err, RegistryError::Unauthorized) {
-        link::token_rejected(inner, file.clone());
+    match err {
+        RegistryError::Validation(error) => error,
+        RegistryError::Unauthorized => {
+            link::token_rejected(inner, file.clone());
+            kaleidoscope_contract::errors::STORAGE_SERVER_UNAUTHORIZED()
+        }
+        RegistryError::NotFound => kaleidoscope_contract::errors::STORAGE_SERVER_NOT_FOUND(),
+        RegistryError::Failure(detail) => {
+            kaleidoscope_contract::errors::STORAGE_SERVER_REQUEST_FAILED().and_details(vec![detail
+                .lines()
+                .next()
+                .unwrap_or(&detail)
+                .trim()
+                .to_string()])
+        }
     }
-    link::registry_error_to_core(err, "저장소에 연결할 수 없습니다.")
 }
 
 pub(crate) fn list(inner: &Arc<Inner>, window: &str) -> Result<StorageListReply, CoreError> {
@@ -134,10 +149,7 @@ fn list_collection(
     let ctx = context(inner, window, Some(entry))?;
     let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
     if !decl.collection {
-        return Err(error::with_message(
-            ErrorCode::InvalidRequest,
-            "문서 모음이 아닌 저장 항목입니다.",
-        ));
+        return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_LIST_REQUIRED(entry));
     }
     let reply = if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
         let prefix = decl.key.replace("{workspace_id}", &ctx.workspace);
@@ -186,22 +198,24 @@ fn read_with_doc(
                 .windows
                 .iter()
                 .find(|w| w.id == window)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_WINDOW_NOT_FOUND(window))?;
             let definition =
                 app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                    .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                    .ok_or_else(|| {
+                        kaleidoscope_contract::errors::STORAGE_APP_VERSION_NOT_FOUND(
+                            &window.app_id,
+                            window.app_version,
+                        )
+                    })?;
             let item = definition
                 .storage
                 .as_ref()
                 .and_then(|storage| storage.entries.iter().find(|item| item.id == entry))
-                .ok_or_else(|| {
-                    error::with_message(
-                        ErrorCode::InvalidRequest,
-                        "앱에 선언되지 않은 저장소 항목입니다.",
-                    )
-                })?;
+                .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_ENTRY_NOT_DECLARED(entry))?;
             if item.collection {
-                return Err(error::make(ErrorCode::Unavailable));
+                return Err(
+                    kaleidoscope_contract::errors::STORAGE_OFFLINE_COLLECTION_UNAVAILABLE(entry),
+                );
             }
             return Ok(StorageReadReply {
                 kind: item.kind,
@@ -214,14 +228,10 @@ fn read_with_doc(
     let ctx = context(inner, window, Some(entry))?;
     let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
     if decl.collection {
-        let doc = doc.ok_or_else(|| {
-            error::with_message(ErrorCode::InvalidRequest, "문서 이름이 필요합니다.")
-        })?;
+        let doc =
+            doc.ok_or_else(|| kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_REQUIRED())?;
         if !contract::valid_collection_doc(doc) {
-            return Err(error::with_message(
-                ErrorCode::InvalidRequest,
-                "문서 이름이 올바르지 않습니다.",
-            ));
+            return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_INVALID(doc));
         }
         if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
             let prefix = decl.key.replace("{workspace_id}", &ctx.workspace);
@@ -239,26 +249,20 @@ fn read_with_doc(
                 )
                 .map_err(|error| map_error(inner, &ctx.link, error))?;
             if !raw.exists {
-                return Err(error::make(ErrorCode::NotFound));
+                return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_READ_NOT_FOUND(doc));
             }
             let kind = raw.kind.ok_or_else(|| {
-                error::with_message(
-                    ErrorCode::InvalidRequest,
-                    "서버가 저장 항목의 종류를 보내지 않았습니다.",
-                )
+                kaleidoscope_contract::errors::STORAGE_STORED_KIND_MISSING(&decl.key)
             })?;
             let content = raw.content.ok_or_else(|| {
-                error::with_message(
-                    ErrorCode::InvalidRequest,
-                    "서버가 저장 항목의 내용을 보내지 않았습니다.",
-                )
+                kaleidoscope_contract::errors::STORAGE_STORED_CONTENT_MISSING(&decl.key)
             })?;
-            if kind != decl.kind || contract::validate_storage_content(decl, &content).is_err() {
-                return Err(error::with_message(
-                    ErrorCode::InvalidRequest,
-                    "서버의 저장 항목 내용이 앱 선언과 맞지 않습니다.",
-                ));
+            if kind != decl.kind {
+                return Err(
+                    kaleidoscope_contract::errors::STORAGE_RECEIVED_KIND_MISMATCH(&decl.key),
+                );
             }
+            contract::validate_storage_content(decl, &content)?;
             return Ok(StorageReadReply {
                 kind,
                 content,
@@ -279,10 +283,7 @@ fn read_with_doc(
             .map_err(|error| map_error(inner, &ctx.link, error));
     }
     if doc.is_some() {
-        return Err(error::with_message(
-            ErrorCode::InvalidRequest,
-            "문서 모음이 아닌 항목에 문서 이름을 지정할 수 없습니다.",
-        ));
+        return Err(kaleidoscope_contract::errors::STORAGE_READ_DOCUMENT_NAME_NOT_ALLOWED(entry));
     }
     if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
         let key = decl.key.replace("{workspace_id}", &ctx.workspace);
@@ -296,14 +297,13 @@ fn read_with_doc(
                 } else {
                     decl.default.clone()
                 };
-                if raw.exists
-                    && (raw.kind != Some(decl.kind)
-                        || contract::validate_storage_content(decl, &content).is_err())
-                {
-                    return Err(error::with_message(
-                        ErrorCode::InvalidRequest,
-                        "저장된 값이 앱의 저장소 선언과 다릅니다",
-                    ));
+                if raw.exists && raw.kind != Some(decl.kind) {
+                    return Err(
+                        kaleidoscope_contract::errors::STORAGE_RECEIVED_KIND_MISMATCH(&decl.key),
+                    );
+                }
+                if raw.exists {
+                    contract::validate_storage_content(decl, &content)?;
                 }
                 return Ok(StorageReadReply {
                     kind: decl.kind,
@@ -358,18 +358,12 @@ fn write_with_doc(
     let ctx = context(inner, window, Some(entry))?;
     let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
     if decl.collection {
-        let doc = doc.ok_or_else(|| {
-            error::with_message(ErrorCode::InvalidRequest, "문서 이름이 필요합니다.")
-        })?;
+        let doc =
+            doc.ok_or_else(|| kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_REQUIRED())?;
         if !contract::valid_collection_doc(doc) {
-            return Err(error::with_message(
-                ErrorCode::InvalidRequest,
-                "문서 이름이 올바르지 않습니다.",
-            ));
+            return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_INVALID(doc));
         }
-        contract::validate_storage_content(decl, &content).map_err(|reason| {
-            kaleidoscope_contract::errors::STORAGE_WRITE_SCHEMA_MISMATCH(&decl.key, reason)
-        })?;
+        contract::validate_storage_content(decl, &content)?;
         let request = StorageWriteRequest {
             content,
             expected_revision,
@@ -408,15 +402,10 @@ fn write_with_doc(
         return Ok(reply.revision);
     }
     if doc.is_some() {
-        return Err(error::with_message(
-            ErrorCode::InvalidRequest,
-            "문서 모음이 아닌 항목에 문서 이름을 지정할 수 없습니다.",
-        ));
+        return Err(kaleidoscope_contract::errors::STORAGE_WRITE_DOCUMENT_NAME_NOT_ALLOWED(entry));
     }
     if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
-        contract::validate_storage_content(decl, &content).map_err(|reason| {
-            kaleidoscope_contract::errors::STORAGE_WRITE_SCHEMA_MISMATCH(&decl.key, reason)
-        })?;
+        contract::validate_storage_content(decl, &content)?;
         let key = decl.key.replace("{workspace_id}", &ctx.workspace);
         let request = contract::AppValueWrite {
             kind: decl.kind,
@@ -519,14 +508,18 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             let ctx = context(inner, &window_id, Some(&entry))?;
             let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
             if decl.collection {
-                let doc = doc.as_deref().ok_or_else(|| {
-                    error::with_message(ErrorCode::InvalidRequest, "문서 이름이 필요합니다.")
-                })?;
-                if !contract::valid_collection_doc(doc) || expected_revision.0.is_none() {
-                    return Err(error::with_message(
-                        ErrorCode::InvalidRequest,
-                        "문서 이름이나 삭제할 리비전이 올바르지 않습니다.",
-                    ));
+                let doc = doc
+                    .as_deref()
+                    .ok_or_else(kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_REQUIRED)?;
+                if !contract::valid_collection_doc(doc) {
+                    return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_INVALID(doc));
+                }
+                if expected_revision.0.is_none() {
+                    return Err(
+                        kaleidoscope_contract::errors::STORAGE_DOCUMENT_RESET_REVISION_REQUIRED(
+                            doc,
+                        ),
+                    );
                 }
                 let request = StorageResetRequest { expected_revision };
                 let reply = if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
@@ -560,10 +553,9 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 });
             }
             if doc.is_some() {
-                return Err(error::with_message(
-                    ErrorCode::InvalidRequest,
-                    "문서 모음이 아닌 항목에 문서 이름을 지정할 수 없습니다.",
-                ));
+                return Err(
+                    kaleidoscope_contract::errors::STORAGE_RESET_DOCUMENT_NAME_NOT_ALLOWED(&entry),
+                );
             }
             if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
                 let key = decl.key.replace("{workspace_id}", &ctx.workspace);
@@ -614,18 +606,14 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             expected_revision,
         } => {
             if !contract::valid_collection_doc(&from) || !contract::valid_collection_doc(&to) {
-                return Err(error::with_message(
-                    ErrorCode::InvalidRequest,
-                    "이동할 문서 이름이 올바르지 않습니다.",
-                ));
+                return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_NAME_INVALID());
             }
             let ctx = context(inner, &window_id, Some(&entry))?;
             let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
             if !decl.collection {
-                return Err(error::with_message(
-                    ErrorCode::InvalidRequest,
-                    "문서 모음이 아닌 저장 항목입니다.",
-                ));
+                return Err(
+                    kaleidoscope_contract::errors::STORAGE_COLLECTION_MOVE_REQUIRED(&entry),
+                );
             }
             let request = CollectionMove {
                 from: from.clone(),
@@ -664,9 +652,6 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 revision: reply.revision,
             })
         }
-        _ => Err(error::with_message(
-            ErrorCode::InvalidRequest,
-            "앱 저장소 명령이 올바르지 않습니다.",
-        )),
+        _ => Err(kaleidoscope_contract::errors::STORAGE_COMMAND_INVALID()),
     }
 }

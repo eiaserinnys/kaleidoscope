@@ -1214,11 +1214,12 @@ fn app_storage_unavailable_never_looks_like_a_null_default() {
         device_name: "test-device".into(),
         reason: "offline".into(),
     };
+    let error = crate::app_storage::read(&core.inner, &window, "choice").unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("STORAGE_SERVER_NOT_CONNECTED"));
+    assert_eq!(error.code, ErrorCode::Unavailable);
     assert_eq!(
-        crate::app_storage::read(&core.inner, &window, "choice")
-            .unwrap_err()
-            .message,
-        "서버에 연결되어 있지 않습니다"
+        error.message,
+        "kaleidoscope 서버에 연결되어 있지 않아 저장소를 사용할 수 없습니다. 서버를 연결한 뒤 다시 시도하세요."
     );
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),

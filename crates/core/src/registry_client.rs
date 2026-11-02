@@ -980,15 +980,18 @@ fn storage_success_json<T: serde::de::DeserializeOwned>(
     if status.as_u16() == 409 {
         let conflict: StorageConflict =
             serde_json::from_slice(&body).map_err(|e| RegistryError::Failure(e.to_string()))?;
-        return Err(RegistryError::Validation(CoreError {
-            id: None,
-            code: ErrorCode::Conflict,
-            message: "저장 항목이 읽은 뒤 바뀌었습니다.".into(),
-            details: vec![format!(
-                "current_revision={}",
-                conflict.current_revision.as_deref().unwrap_or("null")
-            )],
-        }));
+        let current_revision = format!(
+            "current_revision={}",
+            conflict.current_revision.as_deref().unwrap_or("null")
+        );
+        let mut error = conflict
+            .error
+            .unwrap_or_else(kaleidoscope_contract::errors::STORAGE_SERVER_WRITE_CONFLICT);
+        error
+            .details
+            .retain(|detail| !detail.starts_with("current_revision="));
+        error.details.push(current_revision);
+        return Err(RegistryError::Validation(error));
     }
     if status.as_u16() == 404 {
         return Err(match serde_json::from_slice::<CoreError>(&body) {

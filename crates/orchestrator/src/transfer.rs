@@ -252,8 +252,7 @@ impl AppState {
                     if entry.kind != item.kind {
                         return Err(CoreError::new(ErrorCode::InvalidRequest));
                     }
-                    contract::validate_storage_content(entry, &item.content)
-                        .map_err(|_| CoreError::new(ErrorCode::InvalidRequest))?;
+                    contract::validate_storage_content(entry, &item.content)?;
                 } else {
                     let limit_ok = match item.kind {
                         StorageKind::Json => {
@@ -283,8 +282,7 @@ impl AppState {
                         })
                     })
                     .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?;
-                contract::validate_storage_content(entry, &item.content)
-                    .map_err(|_| CoreError::new(ErrorCode::InvalidRequest))?;
+                contract::validate_storage_content(entry, &item.content)?;
             }
             let bucket = app_storage::bucket_id(account, &item.app_id);
             if let Some((kind, content, _)) = app_storage::load_item(&tx, &bucket, &item.key)? {

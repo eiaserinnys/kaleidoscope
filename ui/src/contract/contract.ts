@@ -1072,7 +1072,7 @@ export type StorageChoice = string | StorageChoiceObject;
 
 export type StorageChoiceObject = { value: string, label?: string, };
 
-export type StorageConflict = { current_revision: string | null, };
+export type StorageConflict = { current_revision: string | null, error?: CoreError, };
 
 /**
  * 앱 정의가 저장소에 선언하는 항목 모음.

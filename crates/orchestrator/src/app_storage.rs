@@ -20,8 +20,10 @@ pub(super) fn current_definition(
         [app_id], |row| row.get(0),
     ).optional().map_err(db_error)?;
     raw.map(|raw| {
-        serde_json::from_str(&raw)
-            .map_err(|e| server_error(&format!("앱 정의를 읽을 수 없습니다: {e}")))
+        serde_json::from_str(&raw).map_err(|error| {
+            kaleidoscope_contract::errors::STORAGE_APP_DEFINITION_INVALID(app_id)
+                .and_details(vec![error.to_string()])
+        })
     })
     .transpose()
 }
@@ -34,7 +36,7 @@ fn declared_entry<'a>(
         .storage
         .as_ref()
         .and_then(|storage| storage.entries.iter().find(|entry| entry.id == entry_id))
-        .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))
+        .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_ENTRY_NOT_DECLARED(entry_id))
 }
 
 impl AppState {
@@ -46,11 +48,12 @@ impl AppState {
         workspace_id: Option<&str>,
     ) -> Result<contract::CollectionListReply, CoreError> {
         let db = self.lock_db()?;
-        let definition =
-            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = current_definition(&db, app_id)?.ok_or_else(|| {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_LIST_APP_NOT_FOUND(app_id)
+        })?;
         let entry = declared_entry(&definition, entry_id)?;
         if !entry.collection {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_LIST_REQUIRED(entry_id));
         }
         let prefix = resolve_key(entry, workspace_id)?;
         let mut tx = db.unchecked_transaction().map_err(db_error)?;
@@ -70,11 +73,12 @@ impl AppState {
         workspace_id: Option<&str>,
     ) -> Result<contract::StorageReadReply, CoreError> {
         let db = self.lock_db()?;
-        let definition =
-            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = current_definition(&db, app_id)?.ok_or_else(|| {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_READ_APP_NOT_FOUND(app_id)
+        })?;
         let entry = declared_entry(&definition, entry_id)?;
         if !entry.collection {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_READ_REQUIRED(entry_id));
         }
         let prefix = resolve_key(entry, workspace_id)?;
         let mut tx = db.unchecked_transaction().map_err(db_error)?;
@@ -96,11 +100,12 @@ impl AppState {
         expected_revision: Option<String>,
     ) -> Result<(contract::StorageWriteReply, String, StorageUpdate), CoreError> {
         let db = self.lock_db()?;
-        let definition =
-            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = current_definition(&db, app_id)?.ok_or_else(|| {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_WRITE_APP_NOT_FOUND(app_id)
+        })?;
         let entry = declared_entry(&definition, entry_id)?.clone();
         if !entry.collection {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_WRITE_REQUIRED(entry_id));
         }
         let prefix = resolve_key(&entry, workspace_id)?;
         drop(db);
@@ -127,11 +132,12 @@ impl AppState {
         expected_revision: Option<String>,
     ) -> Result<(contract::StorageResetReply, String, StorageUpdate), CoreError> {
         let db = self.lock_db()?;
-        let definition =
-            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = current_definition(&db, app_id)?.ok_or_else(|| {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_RESET_APP_NOT_FOUND(app_id)
+        })?;
         let entry = declared_entry(&definition, entry_id)?.clone();
         if !entry.collection {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_RESET_REQUIRED(entry_id));
         }
         let prefix = resolve_key(&entry, workspace_id)?;
         drop(db);
@@ -165,11 +171,12 @@ impl AppState {
         CoreError,
     > {
         let db = self.lock_db()?;
-        let definition =
-            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = current_definition(&db, app_id)?.ok_or_else(|| {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_APP_NOT_FOUND(app_id)
+        })?;
         let entry = declared_entry(&definition, entry_id)?.clone();
         if !entry.collection {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_MOVE_REQUIRED(entry_id));
         }
         let prefix = resolve_key(&entry, workspace_id)?;
         drop(db);
@@ -196,10 +203,12 @@ pub(super) fn resolve_key(
             if contract::storage_key_matches(&entry.key, &key) {
                 Ok(key)
             } else {
-                Err(CoreError::new(ErrorCode::InvalidRequest))
+                Err(kaleidoscope_contract::errors::STORAGE_WORKSPACE_KEY_INVALID(&key))
             }
         }
-        (true, None) => Err(CoreError::new(ErrorCode::InvalidRequest)),
+        (true, None) => Err(kaleidoscope_contract::errors::STORAGE_WORKSPACE_REQUIRED(
+            &entry.key,
+        )),
         (false, _) => Ok(entry.key.clone()),
     }
 }
@@ -219,7 +228,9 @@ pub(super) fn check_workspace_owner(
     if owns {
         Ok(())
     } else {
-        Err(CoreError::new(ErrorCode::NotFound))
+        Err(kaleidoscope_contract::errors::STORAGE_WORKSPACE_NOT_OWNED(
+            workspace_id,
+        ))
     }
 }
 
@@ -238,9 +249,9 @@ pub(super) fn load_item(
         .map_err(db_error)?;
     row.map(|(kind, content, revision)| {
         let kind = serde_json::from_str(&format!("\"{kind}\""))
-            .map_err(|e| server_error(&format!("저장 항목 kind를 읽을 수 없습니다: {e}")))?;
+            .map_err(|_| kaleidoscope_contract::errors::STORAGE_STORED_KIND_INVALID(key))?;
         let content = serde_json::from_str(&content)
-            .map_err(|e| server_error(&format!("저장 항목을 읽을 수 없습니다: {e}")))?;
+            .map_err(|_| kaleidoscope_contract::errors::STORAGE_STORED_CONTENT_INVALID(key))?;
         Ok((kind, content, revision))
     })
     .transpose()
@@ -290,7 +301,7 @@ pub(super) fn validate_storage_publish(
         .map_err(db_error)?
     {
         let content = serde_json::from_str(&raw)
-            .map_err(|error| server_error(&format!("저장값을 읽을 수 없습니다: {error}")))?;
+            .map_err(|_| kaleidoscope_contract::errors::STORAGE_STORED_CONTENT_INVALID(&key))?;
         let entry_id = previous_storage
             .entries
             .iter()
@@ -313,12 +324,7 @@ pub(super) fn validate_storage_publish(
     if errors.is_empty() {
         Ok(())
     } else {
-        Err(CoreError {
-            id: None,
-            code: ErrorCode::InvalidAppDefinition,
-            message: "저장 항목 선언이 기존 저장값과 호환되지 않습니다.".into(),
-            details: errors,
-        })
+        Err(kaleidoscope_contract::errors::STORAGE_PUBLISH_INCOMPATIBLE(app_id).and_details(errors))
     }
 }
 
@@ -339,12 +345,11 @@ impl AppState {
         workspace_id: Option<&str>,
     ) -> Result<contract::StorageListReply, CoreError> {
         let db = self.lock_db()?;
-        let definition =
-            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
-        let entries = definition
-            .storage
-            .as_ref()
-            .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = current_definition(&db, app_id)?
+            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_APP_NOT_FOUND(app_id))?;
+        let entries = definition.storage.as_ref().ok_or_else(|| {
+            kaleidoscope_contract::errors::STORAGE_APP_DECLARATION_NOT_FOUND(app_id)
+        })?;
         let mut tx = db.unchecked_transaction().map_err(db_error)?;
         check_workspace_owner(&tx, account_id, workspace_id)?;
         let id = bucket_id(account_id, app_id);
@@ -389,11 +394,11 @@ impl AppState {
         workspace_id: Option<&str>,
     ) -> Result<contract::StorageReadReply, CoreError> {
         let db = self.lock_db()?;
-        let definition =
-            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = current_definition(&db, app_id)?
+            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_READ_APP_NOT_FOUND(app_id))?;
         let entry = declared_entry(&definition, entry_id)?;
         if entry.collection {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(kaleidoscope_contract::errors::STORAGE_READ_COLLECTION_NEEDS_DOC(entry_id));
         }
         let key = resolve_key(entry, workspace_id)?;
         let mut tx = db.unchecked_transaction().map_err(db_error)?;
@@ -409,7 +414,9 @@ impl AppState {
                     exists: true,
                 })
             }
-            Some(_) => Err(server_error("저장 항목 kind가 선언과 다릅니다.")),
+            Some(_) => Err(kaleidoscope_contract::errors::STORAGE_STORED_KIND_INVALID(
+                &key,
+            )),
             None => Ok(contract::StorageReadReply {
                 kind: entry.kind,
                 content: entry.default.clone(),
@@ -449,35 +456,39 @@ impl AppState {
     ) -> Result<(contract::StorageWriteReply, String, StorageUpdate), CoreError> {
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(db_error)?;
-        let definition =
-            current_definition(&tx, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = current_definition(&tx, app_id)?
+            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_WRITE_APP_NOT_FOUND(app_id))?;
         let entry = declared_entry(&definition, entry_id)?.clone();
         if entry.collection {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(
+                kaleidoscope_contract::errors::STORAGE_WRITE_COLLECTION_NEEDS_DOC(entry_id),
+            );
         }
         let key = resolve_key(&entry, workspace_id)?;
         check_workspace_owner(&tx, account_id, workspace_id)?;
-        contract::validate_storage_content(&entry, &content)
-            .map_err(|err| CoreError::with_details(ErrorCode::InvalidRequest, vec![err]))?;
+        contract::validate_storage_content(&entry, &content)?;
         let id = bucket_id(account_id, app_id);
         let old = load_item(&tx, &id, &key)?;
         let current_revision = old.as_ref().map(|(_, _, revision)| revision.clone());
         if current_revision != expected_revision {
-            return Err(CoreError {
-                id: None,
-                code: ErrorCode::Conflict,
-                message: "저장 항목이 다른 곳에서 바뀌었습니다.".into(),
-                details: vec![format!(
-                    "current_revision={}",
-                    current_revision.as_deref().unwrap_or("null")
-                )],
-            });
+            return Err(
+                kaleidoscope_contract::errors::STORAGE_ITEM_WRITE_CONFLICT(&key).and_details(vec![
+                    format!(
+                        "current_revision={}",
+                        current_revision.as_deref().unwrap_or("null")
+                    ),
+                ]),
+            );
         }
         let revision = contract::storage_revision(entry.kind, &content)
-            .map_err(|_| CoreError::new(ErrorCode::InvalidRequest))?;
+            .map_err(|_| kaleidoscope_contract::errors::STORAGE_REVISION_FAILED(&key))?;
         let now = timestamp();
         tx.execute("INSERT INTO app_storage_buckets(id,account_id,app_id) VALUES(?1,?2,?3) ON CONFLICT(account_id,app_id) DO NOTHING", params![id,account_id,app_id]).map_err(db_error)?;
-        tx.execute("INSERT INTO app_storage_items(bucket_id,key,kind,content,revision,updated_at) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(bucket_id,key) DO UPDATE SET kind=excluded.kind,content=excluded.content,revision=excluded.revision,updated_at=excluded.updated_at", params![id,key,serde_json::to_value(entry.kind).unwrap().as_str().unwrap(),serde_json::to_string(&content).map_err(|e|server_error(&e.to_string()))?,revision,now]).map_err(db_error)?;
+        let serialized = serde_json::to_string(&content).map_err(|error| {
+            kaleidoscope_contract::errors::STORAGE_STORED_SERIALIZATION_FAILED(&key)
+                .and_details(vec![error.to_string()])
+        })?;
+        tx.execute("INSERT INTO app_storage_items(bucket_id,key,kind,content,revision,updated_at) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(bucket_id,key) DO UPDATE SET kind=excluded.kind,content=excluded.content,revision=excluded.revision,updated_at=excluded.updated_at", params![id,key,serde_json::to_value(entry.kind).unwrap().as_str().unwrap(),serialized,revision,now]).map_err(db_error)?;
         tx.commit().map_err(db_error)?;
         let meta = StorageItemMeta {
             entry_id: entry.id,
@@ -526,11 +537,13 @@ impl AppState {
     ) -> Result<(contract::StorageResetReply, String, StorageUpdate), CoreError> {
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(db_error)?;
-        let definition =
-            current_definition(&tx, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = current_definition(&tx, app_id)?
+            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_RESET_APP_NOT_FOUND(app_id))?;
         let entry = declared_entry(&definition, entry_id)?.clone();
         if entry.collection {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(
+                kaleidoscope_contract::errors::STORAGE_RESET_COLLECTION_NEEDS_DOC(entry_id),
+            );
         }
         let key = resolve_key(&entry, workspace_id)?;
         check_workspace_owner(&tx, account_id, workspace_id)?;
@@ -538,15 +551,14 @@ impl AppState {
         let old = load_item(&tx, &id, &key)?;
         let current_revision = old.as_ref().map(|(_, _, revision)| revision.clone());
         if current_revision != expected_revision {
-            return Err(CoreError {
-                id: None,
-                code: ErrorCode::Conflict,
-                message: "저장 항목이 다른 곳에서 바뀌었습니다.".into(),
-                details: vec![format!(
-                    "current_revision={}",
-                    current_revision.as_deref().unwrap_or("null")
-                )],
-            });
+            return Err(
+                kaleidoscope_contract::errors::STORAGE_ITEM_RESET_CONFLICT(&key).and_details(vec![
+                    format!(
+                        "current_revision={}",
+                        current_revision.as_deref().unwrap_or("null")
+                    ),
+                ]),
+            );
         }
         tx.execute(
             "DELETE FROM app_storage_items WHERE bucket_id=?1 AND key=?2",
@@ -659,8 +671,11 @@ impl AppState {
         drop(statement);
         let mut deleted = Vec::new();
         for (app_id, id, key, raw_definition) in found {
-            let definition: AppDefinition = serde_json::from_str(&raw_definition)
-                .map_err(|error| server_error(&format!("앱 정의를 읽을 수 없습니다: {error}")))?;
+            let definition: AppDefinition =
+                serde_json::from_str(&raw_definition).map_err(|error| {
+                    kaleidoscope_contract::errors::STORAGE_APP_DEFINITION_INVALID(&app_id)
+                        .and_details(vec![error.to_string()])
+                })?;
             let Some(entry) = definition.storage.as_ref().and_then(|storage| {
                 storage.entries.iter().find(|entry| {
                     if !entry.key.contains("{workspace_id}") {

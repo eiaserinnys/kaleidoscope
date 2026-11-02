@@ -118,6 +118,7 @@ fn messages_do_not_use_generic_or_disallowed_phrases() {
             entry.id
         );
         for forbidden in [
+            "`",
             "명령을 처리할 수 없습니다",
             "요청한 항목을 찾을 수 없습니다",
             "이거나 ",
@@ -177,47 +178,50 @@ fn storage_validation_reasons_identify_value_and_fixable_cause() {
         (
             json!({"type":"boolean"}),
             json!("no"),
-            "값 전체는 boolean 형식이어야 합니다.",
+            Err("값 전체는 boolean 형식이어야 합니다."),
         ),
         (
             json!({"type":["boolean","string"]}),
             json!(3),
-            "값 전체는 boolean 또는 string 형식이어야 합니다.",
+            Err("값 전체는 boolean 또는 string 형식이어야 합니다."),
         ),
         (
             json!({"type":"object","properties":{"enabled":{"type":"boolean"}}}),
             json!({"enabled":"no"}),
-            "/enabled는 boolean 형식이어야 합니다.",
+            Err("/enabled는 boolean 형식이어야 합니다."),
         ),
         (
             json!({"type":"string","enum":["yes"]}),
             json!("no"),
-            "값 전체의 값이 허용 목록에 없습니다.",
+            Err("값 전체의 값이 허용 목록에 없습니다."),
         ),
         (
             json!({"type":"string","minLength":3}),
             json!("가"),
-            "값 전체의 글이 3자보다 짧습니다.",
+            Err("값 전체의 글이 3자보다 짧습니다."),
         ),
         (
             json!({"type":"object","required":["enabled"]}),
             json!({}),
-            "값 전체에 필수 필드가 없습니다: enabled.",
+            Err("값 전체에 필수 필드가 없습니다: enabled."),
         ),
         (
             json!({"type":"object"}),
             json!({"extra":true}),
-            "값 전체에 선언되지 않은 필드가 있습니다: extra.",
+            Err("값 전체에 선언되지 않은 필드가 있습니다: extra."),
         ),
         (
             json!({"type":"array","uniqueItems":true}),
             json!([1, 1]),
-            "값 전체에 중복 항목이 있습니다.",
+            Err("값 전체에 중복 항목이 있습니다."),
         ),
         (
             json!({"type":"string"}),
             json!("a".repeat(kaleidoscope_contract::app_storage::STORAGE_JSON_MAX_BYTES)),
-            "json 항목이 1048576바이트를 넘습니다.",
+            Ok((
+                "STORAGE_WRITE_JSON_TOO_LARGE",
+                "저장 항목 settings/value의 JSON 값이 1048576바이트를 넘습니다. 값을 줄인 뒤 다시 저장하세요.",
+            )),
         ),
     ];
     for (schema, value, expected) in cases {
@@ -226,10 +230,17 @@ fn storage_validation_reasons_identify_value_and_fixable_cause() {
             "label":"값", "presentation":"hidden"
         }))
         .unwrap();
-        assert_eq!(
-            validate_storage_content(&entry, &value).unwrap_err(),
-            expected
-        );
+        let error = validate_storage_content(&entry, &value).unwrap_err();
+        match expected {
+            Ok((expected_id, expected_message)) => {
+                assert_eq!(error.id.as_deref(), Some(expected_id));
+                assert_eq!(error.message, expected_message);
+            }
+            Err(expected_reason) => {
+                assert_eq!(error.id.as_deref(), Some("STORAGE_WRITE_SCHEMA_MISMATCH"));
+                assert!(error.message.contains(expected_reason), "{}", error.message);
+            }
+        }
     }
 }
 

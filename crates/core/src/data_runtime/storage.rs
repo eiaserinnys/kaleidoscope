@@ -6,6 +6,13 @@ use kaleidoscope_contract::{
 };
 use std::collections::BTreeSet;
 
+fn storage_failure(message: String, id: Option<String>) -> CoreError {
+    let mut error = kaleidoscope_contract::errors::STORAGE_RUNTIME_FAILED();
+    error.id = id.or(error.id);
+    error.message = message;
+    error
+}
+
 #[derive(Clone)]
 enum Status {
     Loading,
@@ -224,12 +231,8 @@ impl Runtime {
             }
         }
         match self.storage_problem(&names, meta) {
-            Some(BindingValue::Failed { message, id, .. }) => {
-                let mut error = error::with_message(ErrorCode::Server, &message);
-                error.id = id;
-                Some(error)
-            }
-            Some(_) => Some(error::make(ErrorCode::Unavailable)),
+            Some(BindingValue::Failed { message, id, .. }) => Some(storage_failure(message, id)),
+            Some(_) => Some(kaleidoscope_contract::errors::STORAGE_RUNTIME_NOT_READY()),
             None => None,
         }
     }
@@ -237,15 +240,13 @@ impl Runtime {
         let slot = self
             .storage
             .get(entry)
-            .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_RUNTIME_ENTRY_MISSING(entry))?;
         match (&slot.status, &slot.value) {
             (Status::Ready, Some(value)) => Ok(value.revision.clone()),
             (Status::Failed { message, id }, _) => {
-                let mut error = error::with_message(ErrorCode::Server, message);
-                error.id = id.clone();
-                Err(error)
+                Err(storage_failure(message.clone(), id.clone()))
             }
-            _ => Err(error::make(ErrorCode::Unavailable)),
+            _ => Err(kaleidoscope_contract::errors::STORAGE_RUNTIME_NOT_READY()),
         }
     }
 }
