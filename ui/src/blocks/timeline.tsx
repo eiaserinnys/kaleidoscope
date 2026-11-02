@@ -21,6 +21,7 @@ type Marker = { id: string; time: number; label?: string; movable?: boolean };
 type Edit = { phase: "preview" | "commit" | "cancel"; kind: "move" | "resize_start" | "resize_end" | "move_marker"; id: string; track: string | null; start: number; end: number };
 type Gesture = { pointerId: number; x: number; width: number; original: Edit; current: Edit };
 type TimelineData = Extract<Block, { type: "timeline" }>;
+const RULER_STEPS = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 14400, 21600, 28800, 43200, 86400];
 
 export function snapTime(time: number, snap: Snap | null, pixelsPerSecond: number, disabled: boolean): number {
   if (!snap || disabled || pixelsPerSecond <= 0) return time;
@@ -32,7 +33,7 @@ export function snapTime(time: number, snap: Snap | null, pixelsPerSecond: numbe
 
 export function rulerStep(seconds: number, zoom: number): number {
   const wanted = seconds / Math.max(1, 5 * zoom);
-  return [0.5, 1, 2, 5, 10, 15, 30, 60].find((step) => step >= wanted) ?? 60;
+  return RULER_STEPS.find((step) => step >= wanted) ?? Math.ceil(wanted / 86400) * 86400;
 }
 
 export function rulerTime(seconds: number): string {
