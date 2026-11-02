@@ -41,7 +41,7 @@ it("HTTP와 기기 보관 요청은 바이트를 전송 목록에 담는다", ()
 
 it("host 기능과 저장 대화상자는 capability와 선언 액션 안에서 프레임 요청으로 전달된다", async () => {
   vi.useFakeTimers();
-  const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험", capabilities: ["share", "keep_awake"] });
+  const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험", capabilities: ["share", "keep_awake"], actions: ["save-and-share"] });
   const doc = new DOMParser().parseFromString(source, "text/html");
   const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
@@ -71,6 +71,28 @@ it("host 기능과 저장 대화상자는 capability와 선언 액션 안에서 
   await expect(sdk.host.can_share("file-1")).rejects.toThrow("클라이언트 동작");
   await expect(sdk.files.save_prompt({ suggested_name: "메모.txt", mime: "text/plain" })).rejects.toThrow("클라이언트 동작");
   expect(pending).toHaveLength(4);
+  vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+});
+
+it("선언되지 않은 client 동작 메시지는 handler와 host API를 열지 않는다", async () => {
+  vi.useFakeTimers();
+  const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험", capabilities: ["keep_awake"], actions: [] });
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
+  const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
+  const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  new Function(code)();
+  const sdk = (window as any).kaleidoscope;
+  const handler = vi.fn(() => sdk.host.keep_awake(true));
+  sdk.handle("undeclared", handler);
+
+  window.dispatchEvent(new MessageEvent("message", { source: window, data: { type: "ks-client-action", name: "undeclared", context: {} } }));
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(handler).not.toHaveBeenCalled();
+  expect(post.mock.calls.map(([value]) => value.type)).not.toContain("ks-client-keep-awake");
+  await expect(sdk.host.keep_awake(true)).rejects.toThrow("클라이언트 동작");
   vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
 });
 
