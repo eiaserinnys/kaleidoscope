@@ -4,7 +4,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::SetCursorPos;
 
-pub(super) fn click_and_key(x: i32, y: i32, key: u16) -> Result<(), String> {
+pub(super) fn click(x: i32, y: i32) -> Result<(), String> {
     unsafe {
         SetCursorPos(x, y).map_err(|error| error.to_string())?;
         let click = [
@@ -36,8 +36,15 @@ pub(super) fn click_and_key(x: i32, y: i32, key: u16) -> Result<(), String> {
             },
         ];
         if SendInput(&click, std::mem::size_of::<INPUT>() as i32) != click.len() as u32 {
-            return Err("could not click the HTML frame".into());
+            return Err("could not click the agent input".into());
         }
+    }
+    Ok(())
+}
+
+pub(super) fn click_and_key(x: i32, y: i32, key: u16) -> Result<(), String> {
+    click(x, y)?;
+    unsafe {
         let key = [
             INPUT {
                 r#type: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_KEYBOARD,

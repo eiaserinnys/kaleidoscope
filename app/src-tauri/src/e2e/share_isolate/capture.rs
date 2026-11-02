@@ -215,8 +215,26 @@ pub(super) fn send_prompt(
 ) -> Result<Vec<PathBuf>, String> {
     let window = app.get_window("main").ok_or("main window not found")?;
     window.set_focus().map_err(|error| error.to_string())?;
+    let input_point = ui::evaluate(app, &format!(
+        "const input=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');if(!input)return null;const r=input.getBoundingClientRect();return {{x:r.left+r.width/2,y:r.top+r.height/2}};"
+    ))?;
+    let position = window.inner_position().map_err(|error| error.to_string())?;
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let input_x = position.x
+        + (input_point["x"]
+            .as_f64()
+            .ok_or("agent input x is missing")?
+            * scale)
+            .round() as i32;
+    let input_y = position.y
+        + (input_point["y"]
+            .as_f64()
+            .ok_or("agent input y is missing")?
+            * scale)
+            .round() as i32;
+    native_input::click(input_x, input_y)?;
     let focus_before = ui::evaluate(app, &format!(
-        "const input=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');if(!input)return {{has_focus:false,active:false,selection:null}};input.focus();return {{has_focus:document.hasFocus(),active:document.activeElement===input,selection:[input.selectionStart,input.selectionEnd]}};"
+        "const input=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');if(!input)return {{has_focus:false,active:false,selection:null}};return {{has_focus:document.hasFocus(),active:document.activeElement===input,selection:[input.selectionStart,input.selectionEnd]}};"
     ))?;
     if focus_before["has_focus"] != json!(true) || focus_before["active"] != json!(true) {
         return Err(format!(
