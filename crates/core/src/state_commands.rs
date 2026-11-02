@@ -566,6 +566,13 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::FilesList { .. }
         | CoreRequest::FilesRead { .. }
         | CoreRequest::FilesWrite { .. }
+        | CoreRequest::FilesMkdir { .. }
+        | CoreRequest::FilesRename { .. }
+        | CoreRequest::FilesMove { .. }
+        | CoreRequest::FilesCopy { .. }
+        | CoreRequest::FilesRemove { .. }
+        | CoreRequest::FilesReveal { .. }
+        | CoreRequest::FilesPath { .. }
         | CoreRequest::WebAttach { .. }
         | CoreRequest::WebPlace { .. }
         | CoreRequest::WebNavigate { .. }

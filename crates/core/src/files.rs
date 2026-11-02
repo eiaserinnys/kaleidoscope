@@ -12,8 +12,28 @@ use crate::error;
 use crate::{CoreState, Inner};
 
 mod pc;
+use pc::pc_roots;
 pub(crate) use pc::scope;
-use pc::{pc_access, pc_resolve, pc_roots};
+
+pub(crate) fn pc_access(
+    state: &CoreState,
+    window_id: &str,
+    permission_id: &str,
+) -> Result<(), CoreError> {
+    pc::pc_access(state, window_id, permission_id)
+}
+
+pub(crate) fn pc_resolve(inner: &Inner, path: &str) -> Result<(PathBuf, PathBuf), CoreError> {
+    pc::pc_resolve(inner, path)
+}
+
+pub(crate) fn operation_io_error(error: &std::io::Error) -> CoreError {
+    #[cfg(windows)]
+    if matches!(error.raw_os_error(), Some(32 | 33)) {
+        return error::make(ErrorCode::FileBusy);
+    }
+    error::io_error(error)
+}
 
 pub(crate) fn permission(
     state: &CoreState,
@@ -193,45 +213,6 @@ pub(crate) fn read(
     })
 }
 
-pub(crate) fn write(
-    inner: &Inner,
-    state: &CoreState,
-    window_id: &str,
-    permission_id: &str,
-    path: &str,
-    text: &str,
-    expected_revision: Option<&str>,
-) -> Result<CoreReply, CoreError> {
-    let root = granted_root(state, window_id, permission_id, true)?;
-    let resolved = resolve_path(&inner.data_dir, &root, path, false, true)?;
-
-    match expected_revision {
-        Some(expected) => {
-            let current = match fs::read(&resolved) {
-                Ok(bytes) => bytes,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    return Err(error::make(ErrorCode::Conflict));
-                }
-                Err(error) => return Err(error::io_error(&error)),
-            };
-            if revision(&current) != expected {
-                return Err(error::make(ErrorCode::Conflict));
-            }
-        }
-        None => match fs::symlink_metadata(&resolved) {
-            Ok(_) => return Err(error::make(ErrorCode::Conflict)),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error::io_error(&error)),
-        },
-    }
-
-    fs::write(&resolved, text.as_bytes()).map_err(|error| error::io_error(&error))?;
-    Ok(CoreReply::FilesWrite {
-        path: path.to_string(),
-        revision: revision(text.as_bytes()),
-    })
-}
-
 pub(crate) fn granted_root(
     state: &CoreState,
     window_id: &str,
@@ -283,7 +264,7 @@ pub(crate) fn resolve_path(
             ensure_missing_path_inside(root, &candidate)?;
             Ok((candidate, false))
         }
-        Err(io_error) => Err(error::io_error(&io_error)),
+        Err(io_error) => Err(operation_io_error(&io_error)),
     }?;
     let actual = if exists {
         resolved.clone()
@@ -351,7 +332,7 @@ fn ensure_missing_path_inside(root: &Path, candidate: &Path) -> Result<(), CoreE
 
 use kaleidoscope_contract::validate::valid_relative_path;
 
-fn revision(bytes: &[u8]) -> String {
+pub(crate) fn revision(bytes: &[u8]) -> String {
     let hash = Sha256::digest(bytes);
     format!("{hash:x}")[..16].to_string()
 }

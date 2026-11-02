@@ -26,6 +26,7 @@ use crate::storage::LinkFile;
 use crate::{Core, CoreConfig, CoreError, Host};
 
 mod client_files_tests;
+mod file_write_tests;
 mod layout_sync_tests;
 mod pc_tests;
 mod profiler_concurrency_tests;
@@ -195,15 +196,15 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     for (id, version) in [
         ("profiler", 1),
         ("agent", 3),
-        ("slackbot", 1),
+        ("slackbot", 2),
         ("explorer", 3),
         ("md-editor", 3),
         ("html-report", 1),
         ("web-browser", 1),
         ("calculator", 2),
         ("weather", 1),
-        ("market", 1),
-        ("earth", 1),
+        ("market", 2),
+        ("earth", 2),
         ("reader", 2),
     ] {
         assert!(apps
@@ -2317,7 +2318,12 @@ fn state_changes_emit_one_snapshot_event_and_file_reads_failures_emit_none() {
         expected_revision: None,
     })
     .unwrap();
-    assert!(events.lock().unwrap().is_empty());
+    {
+        let mut emitted = events.lock().unwrap();
+        assert_eq!(emitted.len(), 1);
+        assert!(matches!(emitted[0], CoreEvent::FilesChanged { .. }));
+        emitted.clear();
+    }
     core.handle(CoreRequest::WindowClose { window_id }).unwrap();
     check_one(&events);
 

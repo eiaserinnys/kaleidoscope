@@ -14,6 +14,7 @@ use kaleidoscope_core::Core;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
+mod files_write;
 mod local_agent;
 mod ui;
 mod update;
@@ -23,12 +24,14 @@ enum ScenarioKind {
     WebView,
     Update,
     LocalAgent,
+    FilesWrite,
 }
 
 fn scenario_kind(name: Option<&str>) -> ScenarioKind {
     match name {
         Some("update" | "update-reject") => ScenarioKind::Update,
         Some("local-agent") => ScenarioKind::LocalAgent,
+        Some("files-write") => ScenarioKind::FilesWrite,
         _ => ScenarioKind::WebView,
     }
 }
@@ -476,6 +479,10 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
                 ScenarioKind::WebView => scenario(&app, &core, &out, &mut log),
                 ScenarioKind::Update => update::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::LocalAgent => local_agent::scenario(&core, &out, &mut log),
+                ScenarioKind::FilesWrite => match setting("PICK_FOLDER") {
+                    Some(folder) => files_write::scenario(&core, &PathBuf::from(folder), &mut log),
+                    None => Err("files-write test folder is missing".into()),
+                },
             } {
                 Ok(()) => 0,
                 Err(error) => {
@@ -500,6 +507,7 @@ mod tests {
     #[test]
     fn local_agent_setting_selects_process_lifetime_scenario() {
         assert_eq!(scenario_kind(Some("local-agent")), ScenarioKind::LocalAgent);
+        assert_eq!(scenario_kind(Some("files-write")), ScenarioKind::FilesWrite);
         assert_eq!(scenario_kind(Some("update")), ScenarioKind::Update);
         assert_eq!(scenario_kind(None), ScenarioKind::WebView);
     }

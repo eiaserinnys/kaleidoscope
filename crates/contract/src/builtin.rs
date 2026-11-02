@@ -48,8 +48,8 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "slackbot",
         name: "슬랙봇",
-        version: 1,
-        updated_at: "2026-11-01T00:00:00Z",
+        version: 2,
+        updated_at: "2026-11-02T00:00:00Z",
         blocks: 9,
         modules: &[("storage", 2), ("worker", 1)],
         assets: &[],
@@ -111,8 +111,8 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "market",
         name: "시세와 환율",
-        version: 1,
-        updated_at: "2026-10-31T00:00:00Z",
+        version: 2,
+        updated_at: "2026-11-02T00:00:00Z",
         blocks: 9,
         modules: &[("http", 1)],
         assets: &[],
@@ -120,8 +120,8 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "earth",
         name: "지구 상황판",
-        version: 1,
-        updated_at: "2026-10-31T00:00:00Z",
+        version: 2,
+        updated_at: "2026-11-02T00:00:00Z",
         blocks: 10,
         modules: &[("http", 1)],
         assets: &[],

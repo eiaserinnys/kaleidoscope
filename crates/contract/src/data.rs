@@ -49,7 +49,7 @@
 //! - 이미 값이 있는 원천을 다시 받다 실패하면 값은 그대로 두고 원천 상태만 `failed`가 된다. 화면은 창 아래에
 //!   오류 한 줄과 다시 받기를 보인다.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -67,6 +67,8 @@ pub const SOURCE_MAX_BYTES: u64 = 16 * 1024 * 1024;
 pub const FOLDER_SOURCE_MAX_ENTRIES: usize = 5000;
 /// `refresh_secs`의 최솟값.
 pub const SOURCE_REFRESH_MIN_SECS: u32 = 10;
+/// 앱 기본 화면에서 한 호스트에 허용하는 지속 호출 예산.
+pub const CALL_BUDGET_PER_MINUTE: f64 = 6.0;
 /// 연결 요청 하나를 기다리는 시간(원천 받기, 동작의 연결 부르기, 이미지와 소리).
 pub const CONNECTION_TIMEOUT_SECS: u64 = 60;
 /// 이미지와 소리 원본 하나의 최대 바이트 수.
@@ -236,6 +238,137 @@ pub enum SourceDecl {
         #[ts(optional)]
         refresh_secs: Option<u32>,
     },
+}
+
+/// 한 앱이 한 호스트에 보내는 원천의 분당 호출 계산값.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HostCallBudget {
+    pub host: String,
+    pub default_per_minute: f64,
+    pub all_per_minute: f64,
+}
+
+/// 앱 정의의 기본 화면과 전체 원천을 호스트별 분당 호출 수로 계산한다.
+pub fn call_budget(definition: &AppDefinition) -> Vec<HostCallBudget> {
+    let dormant = default_dormant(&definition.ui, &definition.state);
+    let live = live_sources(definition, &dormant);
+    let mut budgets: BTreeMap<String, (f64, f64)> = BTreeMap::new();
+
+    for (name, source) in &definition.sources {
+        let SourceDecl::Request { permission, .. } = source else {
+            continue;
+        };
+        let host = definition
+            .permissions
+            .iter()
+            .find(|decl| decl.id() == permission)
+            .and_then(|decl| match decl {
+                crate::PermissionDecl::Http { base_url, .. } => url::Url::parse(base_url)
+                    .ok()?
+                    .host_str()
+                    .map(str::to_owned),
+                crate::PermissionDecl::Connection { connection, .. } => Some(connection.clone()),
+                _ => None,
+            });
+        let Some(host) = host else {
+            continue;
+        };
+        let budget = budgets.entry(host).or_default();
+        let Some(refresh_secs) = source.refresh_secs() else {
+            continue;
+        };
+        let per_minute = 60.0 / f64::from(refresh_secs);
+        budget.1 += per_minute;
+        if live.contains(name) {
+            budget.0 += per_minute;
+        }
+    }
+
+    budgets
+        .into_iter()
+        .map(
+            |(host, (default_per_minute, all_per_minute))| HostCallBudget {
+                host,
+                default_per_minute,
+                all_per_minute,
+            },
+        )
+        .collect()
+}
+
+fn default_dormant(ui: &Block, state: &BTreeMap<String, JsonValue>) -> Vec<String> {
+    let mut dormant = Vec::new();
+    walk_blocks(ui, "/ui", &mut |pointer, block| match block {
+        Block::Tabs { tabs, selected, .. } => {
+            let selected = selected
+                .as_ref()
+                .and_then(|selected| state.get(&selected.state))
+                .and_then(JsonValue::as_u64)
+                .and_then(|index| usize::try_from(index).ok())
+                .filter(|index| *index < tabs.len())
+                .unwrap_or(0);
+            for (index, _) in tabs.iter().enumerate() {
+                if index != selected {
+                    dormant.push(format!("{pointer}/tabs/{index}/child"));
+                }
+            }
+        }
+        Block::Section {
+            collapsed: true, ..
+        } => dormant.push(format!("{pointer}/child")),
+        _ => {}
+    });
+    dormant
+}
+
+/// 화면에서 실제 사용하는 원천과 그 원천이 기대는 상류 원천을 돌려준다.
+/// dormant에는 화면에 보이지 않는 블록의 포인터 앞부분을 넣는다.
+pub fn live_sources(definition: &AppDefinition, dormant: &[String]) -> BTreeSet<String> {
+    let mut live = BTreeSet::new();
+    for (pointer, expr) in all_exprs(definition) {
+        if pointer.starts_with("/sources/") || pointer.starts_with("/agent/") {
+            continue;
+        }
+        if dormant.iter().any(|prefix| {
+            pointer == *prefix
+                || pointer
+                    .strip_prefix(prefix)
+                    .is_some_and(|tail| tail.starts_with('/'))
+        }) {
+            continue;
+        }
+        let refs = data_refs(expr)
+            .into_iter()
+            .chain(data_meta_refs(expr))
+            .collect::<Vec<_>>();
+        if reads_all_data(expr, "$data")
+            || reads_all_data(expr, "$data_meta")
+            || (pointer.starts_with("/client/") && !refs.is_empty())
+        {
+            return definition.sources.keys().cloned().collect();
+        }
+        live.extend(refs);
+    }
+
+    let mut pending: Vec<_> = live.iter().cloned().collect();
+    while let Some(name) = pending.pop() {
+        if let Some(source) = definition.sources.get(&name) {
+            for dependency in source_data_refs(source) {
+                if definition.sources.contains_key(&dependency) && live.insert(dependency.clone()) {
+                    pending.push(dependency);
+                }
+            }
+        }
+    }
+    live
+}
+
+fn reads_all_data(expr: &str, variable: &str) -> bool {
+    expr.match_indices(variable).any(|(index, _)| {
+        expr.as_bytes()
+            .get(index + variable.len())
+            .is_none_or(|byte| *byte != b'.' && !byte.is_ascii_alphanumeric() && *byte != b'_')
+    })
 }
 
 impl SourceDecl {

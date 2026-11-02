@@ -81,12 +81,9 @@
       "path": "/v1/latest",
       "query": {
         "base": "USD",
-        "amount": {
-          "expr": "$string($round($number($data.asset_tickers[symbol = ($state.asset & 'USDT')].lastPrice), 2))"
-        },
         "symbols": "KRW,EUR,JPY,GBP,CNY,CHF,CAD,AUD"
       },
-      "refresh_secs": 120
+      "refresh_secs": 3600
     },
     "fx_series": {
       "kind": "request",
@@ -98,7 +95,7 @@
         },
         "symbols": "KRW,EUR,JPY,GBP,CNY,CHF,CAD,AUD"
       },
-      "refresh_secs": 300
+      "refresh_secs": 3600
     },
     "macro_cpi": {
       "kind": "request",
@@ -110,8 +107,7 @@
         "date": {
           "expr": "'2020:' & $substring($data.fx_asset_quote.date, 0, 4)"
         }
-      },
-      "refresh_secs": 600
+      }
     },
     "macro_ppp": {
       "kind": "request",
@@ -123,8 +119,7 @@
         "date": {
           "expr": "'2020:' & $substring($data.fx_asset_quote.date, 0, 4)"
         }
-      },
-      "refresh_secs": 600
+      }
     },
     "trend_btc": {
       "kind": "request",
@@ -135,7 +130,7 @@
         "interval": "1h",
         "limit": "24"
       },
-      "refresh_secs": 60
+      "refresh_secs": 300
     },
     "trend_eth": {
       "kind": "request",
@@ -146,7 +141,7 @@
         "interval": "1h",
         "limit": "24"
       },
-      "refresh_secs": 60
+      "refresh_secs": 300
     },
     "trend_sol": {
       "kind": "request",
@@ -157,7 +152,7 @@
         "interval": "1h",
         "limit": "24"
       },
-      "refresh_secs": 60
+      "refresh_secs": 300
     },
     "trend_xrp": {
       "kind": "request",
@@ -168,7 +163,7 @@
         "interval": "1h",
         "limit": "24"
       },
-      "refresh_secs": 60
+      "refresh_secs": 300
     },
     "trend_bnb": {
       "kind": "request",
@@ -179,7 +174,7 @@
         "interval": "1h",
         "limit": "24"
       },
-      "refresh_secs": 60
+      "refresh_secs": 300
     },
     "trend_doge": {
       "kind": "request",
@@ -190,7 +185,7 @@
         "interval": "1h",
         "limit": "24"
       },
-      "refresh_secs": 60
+      "refresh_secs": 300
     },
     "trend_ada": {
       "kind": "request",
@@ -201,7 +196,7 @@
         "interval": "1h",
         "limit": "24"
       },
-      "refresh_secs": 60
+      "refresh_secs": 300
     },
     "trend_avax": {
       "kind": "request",
@@ -212,7 +207,7 @@
         "interval": "1h",
         "limit": "24"
       },
-      "refresh_secs": 60
+      "refresh_secs": 300
     }
   },
   "ui": {
@@ -321,7 +316,7 @@
               {
                 "set_state": "amount_local",
                 "value": {
-                  "expr": "$state.amount_usd != null ? $round($state.amount_usd * ($lookup($data.fx_asset_quote.rates, $event) / $data.fx_asset_quote.amount), 2) : null"
+                  "expr": "$state.amount_usd != null ? $round($state.amount_usd * ($lookup($data.fx_asset_quote.rates, $event)), 2) : null"
                 }
               },
               {
@@ -400,7 +395,7 @@
               {
                 "set_state": "amount_local",
                 "value": {
-                  "expr": "$state.amount_usd != null ? $round($state.amount_usd * ($lookup($data.fx_asset_quote.rates, $state.currency) / $data.fx_asset_quote.amount), 2) : null"
+                  "expr": "$state.amount_usd != null ? $round($state.amount_usd * ($lookup($data.fx_asset_quote.rates, $state.currency)), 2) : null"
                 }
               }
             ]
@@ -417,7 +412,7 @@
             "type": "metrics",
             "columns": 4,
             "items": {
-              "expr": "(\n $chg := $number($data.asset_tickers[symbol = ($state.asset & 'USDT')].priceChangePercent); $p := $number($data.asset_tickers[symbol = ($state.asset & 'USDT')].lastPrice); $rate := ($lookup($data.fx_asset_quote.rates, $state.currency) / $data.fx_asset_quote.amount); $ppp := ($id := $lookup({\"KRW\":\"KOR\",\"EUR\":\"DEU\",\"JPY\":\"JPN\",\"GBP\":\"GBR\",\"CNY\":\"CHN\",\"CHF\":\"CHE\",\"CAD\":\"CAN\",\"AUD\":\"AUS\"}, $state.currency); $data.macro_ppp[1][countryiso3code = $id and value != null][0].value); $cpi := ($id := $lookup({\"KRW\":\"KOR\",\"EUR\":\"EMU\",\"JPY\":\"JPN\",\"GBP\":\"GBR\",\"CNY\":\"CHN\",\"CHF\":\"CHE\",\"CAD\":\"CAN\",\"AUD\":\"AUS\"}, $state.currency); $data.macro_cpi[1][countryiso3code = $id and value != null][0]);\n $us := $data.macro_cpi[1][countryiso3code = 'USA' and value != null][0].value;\n $cut := $fromMillis($toMillis($data.fx_asset_quote.date & 'T00:00:00Z') - 2592000000, '[Y0001]-[M01]-[D01]'); $keys := $sort($keys($data.fx_series.rates))[$ >= $cut]; $first := $lookup($lookup($data.fx_series.rates,$keys[0]),$state.currency); $last := $lookup($lookup($data.fx_series.rates,$keys[$count($keys)-1]),$state.currency);\n [{\"label\":\"1 \" & $state.asset & \" (\" & $state.currency & \")\", \"value\":$formatNumber($p*$rate, \"#,##0.##\"),\"unit\":$state.currency,\"featured\":true,\"subtext\":\"USD \" & $formatNumber($p, \"#,##0.##\") & \" · 고 \" & $formatNumber($number($data.asset_tickers[symbol = ($state.asset & 'USDT')].highPrice), \"#,##0.##\") & \" / 저 \" & $formatNumber($number($data.asset_tickers[symbol = ($state.asset & 'USDT')].lowPrice), \"#,##0.##\"),\"badge\":($chg > 0 ? \"+\" : \"\") & $formatNumber($chg, \"0.00\") & \"%\"},\n {\"label\":\"USD / \" & $state.currency,\"value\":$formatNumber($rate, \"#,##0.####\"),\"unit\":$state.currency,\"subtext\":\"30일 전 대비 · \" & $data.fx_asset_quote.date,\"badge\":$string($round(($last-$first)/$first*100,2)) & \"%\"},\n {\"label\":\"PPP 구매력 환율\",\"value\":$formatNumber($ppp, \"#,##0.##\"),\"unit\":$state.currency,\"subtext\":\"자산 실질 가치 $\" & $formatNumber($p*$rate/$ppp, \"#,##0.##\"),\"badge\":$string($round(($rate-$ppp)/$ppp*100,2)) & \"%\"},\n {\"label\":\"연간 물가 CPI\",\"value\":$round($cpi.value,2),\"unit\":\"%\",\"subtext\":$cpi.date & \"년\", \"badge\":\"US 대비 \" & $formatNumber($cpi.value-$us, \"0.00\") & \"%p\"}])"
+              "expr": "(\n $chg := $number($data.asset_tickers[symbol = ($state.asset & 'USDT')].priceChangePercent); $p := $number($data.asset_tickers[symbol = ($state.asset & 'USDT')].lastPrice); $rate := ($lookup($data.fx_asset_quote.rates, $state.currency)); $ppp := ($id := $lookup({\"KRW\":\"KOR\",\"EUR\":\"DEU\",\"JPY\":\"JPN\",\"GBP\":\"GBR\",\"CNY\":\"CHN\",\"CHF\":\"CHE\",\"CAD\":\"CAN\",\"AUD\":\"AUS\"}, $state.currency); $data.macro_ppp[1][countryiso3code = $id and value != null][0].value); $cpi := ($id := $lookup({\"KRW\":\"KOR\",\"EUR\":\"EMU\",\"JPY\":\"JPN\",\"GBP\":\"GBR\",\"CNY\":\"CHN\",\"CHF\":\"CHE\",\"CAD\":\"CAN\",\"AUD\":\"AUS\"}, $state.currency); $data.macro_cpi[1][countryiso3code = $id and value != null][0]);\n $us := $data.macro_cpi[1][countryiso3code = 'USA' and value != null][0].value;\n $cut := $fromMillis($toMillis($data.fx_asset_quote.date & 'T00:00:00Z') - 2592000000, '[Y0001]-[M01]-[D01]'); $keys := $sort($keys($data.fx_series.rates))[$ >= $cut]; $first := $lookup($lookup($data.fx_series.rates,$keys[0]),$state.currency); $last := $lookup($lookup($data.fx_series.rates,$keys[$count($keys)-1]),$state.currency);\n [{\"label\":\"1 \" & $state.asset & \" (\" & $state.currency & \")\", \"value\":$formatNumber($p*$rate, \"#,##0.##\"),\"unit\":$state.currency,\"featured\":true,\"subtext\":\"USD \" & $formatNumber($p, \"#,##0.##\") & \" · 고 \" & $formatNumber($number($data.asset_tickers[symbol = ($state.asset & 'USDT')].highPrice), \"#,##0.##\") & \" / 저 \" & $formatNumber($number($data.asset_tickers[symbol = ($state.asset & 'USDT')].lowPrice), \"#,##0.##\"),\"badge\":($chg > 0 ? \"+\" : \"\") & $formatNumber($chg, \"0.00\") & \"%\"},\n {\"label\":\"USD / \" & $state.currency,\"value\":$formatNumber($rate, \"#,##0.####\"),\"unit\":$state.currency,\"subtext\":\"30일 전 대비 · \" & $data.fx_asset_quote.date,\"badge\":$string($round(($last-$first)/$first*100,2)) & \"%\"},\n {\"label\":\"PPP 구매력 환율\",\"value\":$formatNumber($ppp, \"#,##0.##\"),\"unit\":$state.currency,\"subtext\":\"자산 실질 가치 $\" & $formatNumber($p*$rate/$ppp, \"#,##0.##\"),\"badge\":$string($round(($rate-$ppp)/$ppp*100,2)) & \"%\"},\n {\"label\":\"연간 물가 CPI\",\"value\":$round($cpi.value,2),\"unit\":\"%\",\"subtext\":$cpi.date & \"년\", \"badge\":\"US 대비 \" & $formatNumber($cpi.value-$us, \"0.00\") & \"%p\"}])"
             }
           },
           {
@@ -448,7 +443,7 @@
                       {
                         "set_state": "amount_local",
                         "value": {
-                          "expr": "$event != null ? $round($number($event)*($lookup($data.fx_asset_quote.rates, $state.currency) / $data.fx_asset_quote.amount),2) : null"
+                          "expr": "$event != null ? $round($number($event)*($lookup($data.fx_asset_quote.rates, $state.currency)),2) : null"
                         }
                       }
                     ]
@@ -474,7 +469,7 @@
                       {
                         "set_state": "amount_usd",
                         "value": {
-                          "expr": "$event != null ? $round($number($event)/($lookup($data.fx_asset_quote.rates, $state.currency) / $data.fx_asset_quote.amount),2) : null"
+                          "expr": "$event != null ? $round($number($event)/($lookup($data.fx_asset_quote.rates, $state.currency)),2) : null"
                         }
                       }
                     ]
@@ -494,7 +489,7 @@
                       {
                         "set_state": "amount_local",
                         "value": {
-                          "expr": "$round((1000) * ($lookup($data.fx_asset_quote.rates, $state.currency) / $data.fx_asset_quote.amount), 2)"
+                          "expr": "$round((1000) * ($lookup($data.fx_asset_quote.rates, $state.currency)), 2)"
                         }
                       }
                     ]
@@ -512,7 +507,7 @@
                       {
                         "set_state": "amount_local",
                         "value": {
-                          "expr": "$round(($number($data.asset_tickers[symbol = ($state.asset & 'USDT')].lastPrice)) * ($lookup($data.fx_asset_quote.rates, $state.currency) / $data.fx_asset_quote.amount), 2)"
+                          "expr": "$round(($number($data.asset_tickers[symbol = ($state.asset & 'USDT')].lastPrice)) * ($lookup($data.fx_asset_quote.rates, $state.currency)), 2)"
                         }
                       }
                     ]
@@ -523,7 +518,7 @@
                 "type": "text",
                 "style": "meta",
                 "value": {
-                  "expr": "$state.amount_usd != null ? ($rate := ($lookup($data.fx_asset_quote.rates, $state.currency) / $data.fx_asset_quote.amount); $ppp := ($id := $lookup({\"KRW\":\"KOR\",\"EUR\":\"DEU\",\"JPY\":\"JPN\",\"GBP\":\"GBR\",\"CNY\":\"CHN\",\"CHF\":\"CHE\",\"CAD\":\"CAN\",\"AUD\":\"AUS\"}, $state.currency); $data.macro_ppp[1][countryiso3code = $id and value != null][0].value); '$' & $formatNumber($state.amount_usd, '#,##0.##') & ' = ' & $formatNumber($state.amount_usd * $rate, '#,##0.##') & ' ' & $state.currency & ' · ' & $string($round($state.amount_usd / $number($data.asset_tickers[symbol = ($state.asset & 'USDT')].lastPrice), 4)) & ' ' & $state.asset & ' · PPP $' & $formatNumber($state.amount_usd * $rate / $ppp, '#,##0.##')) : ''"
+                  "expr": "$state.amount_usd != null ? ($rate := ($lookup($data.fx_asset_quote.rates, $state.currency)); $ppp := ($id := $lookup({\"KRW\":\"KOR\",\"EUR\":\"DEU\",\"JPY\":\"JPN\",\"GBP\":\"GBR\",\"CNY\":\"CHN\",\"CHF\":\"CHE\",\"CAD\":\"CAN\",\"AUD\":\"AUS\"}, $state.currency); $data.macro_ppp[1][countryiso3code = $id and value != null][0].value); '$' & $formatNumber($state.amount_usd, '#,##0.##') & ' = ' & $formatNumber($state.amount_usd * $rate, '#,##0.##') & ' ' & $state.currency & ' · ' & $string($round($state.amount_usd / $number($data.asset_tickers[symbol = ($state.asset & 'USDT')].lastPrice), 4)) & ' ' & $state.asset & ' · PPP $' & $formatNumber($state.amount_usd * $rate / $ppp, '#,##0.##')) : ''"
                 }
               }
             ]
@@ -541,7 +536,7 @@
               "kind": "candlestick",
               "height": "medium",
               "series": {
-                "expr": "($rate := $state.quote_unit = 'LOCAL' ? ($lookup($data.fx_asset_quote.rates, $state.currency) / $data.fx_asset_quote.amount) : 1; [{\"key\":\"price\",\"name\":$state.asset,\"points\":[$map($data.asset_candles,function($k){{\"x\":$fromMillis($k[0], $state.interval = '4h' ? '[M01]-[D01] [H01]:[m01]' : '[M01]-[D01]'),\"open\":$round($number($k[1])*$rate,2),\"high\":$round($number($k[2])*$rate,2),\"low\":$round($number($k[3])*$rate,2),\"close\":$round($number($k[4])*$rate,2)}})]}])"
+                "expr": "($rate := $state.quote_unit = 'LOCAL' ? ($lookup($data.fx_asset_quote.rates, $state.currency)) : 1; [{\"key\":\"price\",\"name\":$state.asset,\"points\":[$map($data.asset_candles,function($k){{\"x\":$fromMillis($k[0], $state.interval = '4h' ? '[M01]-[D01] [H01]:[m01]' : '[M01]-[D01]'),\"open\":$round($number($k[1])*$rate,2),\"high\":$round($number($k[2])*$rate,2),\"low\":$round($number($k[3])*$rate,2),\"close\":$round($number($k[4])*$rate,2)}})]}])"
               },
               "on_select": [
                 {
@@ -567,7 +562,7 @@
                 "child": {
                   "type": "table",
                   "rows": {
-                    "expr": "($rows := [{\"code\":\"KRW\",\"name\":\"대한민국 원\",\"ppp\":\"KOR\",\"cpi\":\"KOR\"},{\"code\":\"EUR\",\"name\":\"유로\",\"ppp\":\"DEU\",\"cpi\":\"EMU\"},{\"code\":\"JPY\",\"name\":\"일본 엔\",\"ppp\":\"JPN\",\"cpi\":\"JPN\"},{\"code\":\"GBP\",\"name\":\"영국 파운드\",\"ppp\":\"GBR\",\"cpi\":\"GBR\"},{\"code\":\"CNY\",\"name\":\"중국 위안\",\"ppp\":\"CHN\",\"cpi\":\"CHN\"},{\"code\":\"CHF\",\"name\":\"스위스 프랑\",\"ppp\":\"CHE\",\"cpi\":\"CHE\"},{\"code\":\"CAD\",\"name\":\"캐나다 달러\",\"ppp\":\"CAN\",\"cpi\":\"CAN\"},{\"code\":\"AUD\",\"name\":\"호주 달러\",\"ppp\":\"AUS\",\"cpi\":\"AUS\"}]; $cut := $fromMillis($toMillis($data.fx_asset_quote.date & 'T00:00:00Z') - 2592000000, '[Y0001]-[M01]-[D01]'); $dates := $sort($keys($data.fx_series.rates))[$ >= $cut]; $map($rows,function($r){(\n $code := $r.code; $rate := $lookup($data.fx_asset_quote.rates,$code)/$data.fx_asset_quote.amount;\n $values := [$map($dates,function($d){$lookup($lookup($data.fx_series.rates,$d),$code)})];\n $ppp := $data.macro_ppp[1][countryiso3code = $r.ppp and value != null][0].value;\n $cpi := $data.macro_cpi[1][countryiso3code = $r.cpi and value != null][0].value;\n {\"key\":$code,\"currency\":$code & \" · \" & $r.name,\"asset_quote\":$lookup($data.fx_asset_quote.rates,$code),\"fx_rate\":$rate,\"fx_delta\":($values[$count($values)-1]-$values[0])/$values[0]*100,\"fx_spark\":$values,\"ppp_gap\":($rate-$ppp)/$ppp*100,\"cpi\":$cpi != null ? $formatNumber($cpi, \"0.00\") & \"%\" : \"—\"})}))"
+                    "expr": "($rows := [{\"code\":\"KRW\",\"name\":\"대한민국 원\",\"ppp\":\"KOR\",\"cpi\":\"KOR\"},{\"code\":\"EUR\",\"name\":\"유로\",\"ppp\":\"DEU\",\"cpi\":\"EMU\"},{\"code\":\"JPY\",\"name\":\"일본 엔\",\"ppp\":\"JPN\",\"cpi\":\"JPN\"},{\"code\":\"GBP\",\"name\":\"영국 파운드\",\"ppp\":\"GBR\",\"cpi\":\"GBR\"},{\"code\":\"CNY\",\"name\":\"중국 위안\",\"ppp\":\"CHN\",\"cpi\":\"CHN\"},{\"code\":\"CHF\",\"name\":\"스위스 프랑\",\"ppp\":\"CHE\",\"cpi\":\"CHE\"},{\"code\":\"CAD\",\"name\":\"캐나다 달러\",\"ppp\":\"CAN\",\"cpi\":\"CAN\"},{\"code\":\"AUD\",\"name\":\"호주 달러\",\"ppp\":\"AUS\",\"cpi\":\"AUS\"}]; $cut := $fromMillis($toMillis($data.fx_asset_quote.date & 'T00:00:00Z') - 2592000000, '[Y0001]-[M01]-[D01]'); $dates := $sort($keys($data.fx_series.rates))[$ >= $cut]; $map($rows,function($r){(\n $code := $r.code; $rate := $lookup($data.fx_asset_quote.rates,$code);\n $values := [$map($dates,function($d){$lookup($lookup($data.fx_series.rates,$d),$code)})];\n $ppp := $data.macro_ppp[1][countryiso3code = $r.ppp and value != null][0].value;\n $cpi := $data.macro_cpi[1][countryiso3code = $r.cpi and value != null][0].value;\n {\"key\":$code,\"currency\":$code & \" · \" & $r.name,\"asset_quote\":$lookup($data.fx_asset_quote.rates,$code)*$number($data.asset_tickers[symbol = ($state.asset & 'USDT')].lastPrice),\"fx_rate\":$rate,\"fx_delta\":($values[$count($values)-1]-$values[0])/$values[0]*100,\"fx_spark\":$values,\"ppp_gap\":($rate-$ppp)/$ppp*100,\"cpi\":$cpi != null ? $formatNumber($cpi, \"0.00\") & \"%\" : \"—\"})}))"
                   },
                   "columns": [
                     {
@@ -623,7 +618,7 @@
                     {
                       "set_state": "amount_local",
                       "value": {
-                        "expr": "$state.amount_usd != null ? $round($state.amount_usd * ($lookup($data.fx_asset_quote.rates, $event) / $data.fx_asset_quote.amount), 2) : null"
+                        "expr": "$state.amount_usd != null ? $round($state.amount_usd * ($lookup($data.fx_asset_quote.rates, $event)), 2) : null"
                       }
                     },
                     {
@@ -638,7 +633,7 @@
                 "child": {
                   "type": "table",
                   "rows": {
-                    "expr": "($names := {\"BTC\":\"Bitcoin\",\"ETH\":\"Ethereum\",\"SOL\":\"Solana\",\"XRP\":\"XRP\",\"BNB\":\"BNB\",\"DOGE\":\"Dogecoin\",\"ADA\":\"Cardano\",\"AVAX\":\"Avalanche\"}; $trends := {\"BTC\":$data.trend_btc,\"ETH\":$data.trend_eth,\"SOL\":$data.trend_sol,\"XRP\":$data.trend_xrp,\"BNB\":$data.trend_bnb,\"DOGE\":$data.trend_doge,\"ADA\":$data.trend_ada,\"AVAX\":$data.trend_avax}; $map($data.asset_tickers,function($t){(\n $asset := $substringBefore($t.symbol,'USDT'); $history := $lookup($trends,$asset); $usd := $number($t.lastPrice); $local := $usd * ($lookup($data.fx_asset_quote.rates, $state.currency) / $data.fx_asset_quote.amount);\n {\"key\":$asset,\"asset\":$asset & \" · \" & $lookup($names,$asset),\"local_price\":$round($local, $local >= 100 ? 2 : 4),\"usd_price\":$round($usd, $usd >= 100 ? 2 : 4),\"change_24h\":$number($t.priceChangePercent),\"spark_24h\":[$map($history,function($k){$number($k[4])})]})}))"
+                    "expr": "($names := {\"BTC\":\"Bitcoin\",\"ETH\":\"Ethereum\",\"SOL\":\"Solana\",\"XRP\":\"XRP\",\"BNB\":\"BNB\",\"DOGE\":\"Dogecoin\",\"ADA\":\"Cardano\",\"AVAX\":\"Avalanche\"}; $trends := {\"BTC\":$data.trend_btc,\"ETH\":$data.trend_eth,\"SOL\":$data.trend_sol,\"XRP\":$data.trend_xrp,\"BNB\":$data.trend_bnb,\"DOGE\":$data.trend_doge,\"ADA\":$data.trend_ada,\"AVAX\":$data.trend_avax}; $map($data.asset_tickers,function($t){(\n $asset := $substringBefore($t.symbol,'USDT'); $history := $lookup($trends,$asset); $usd := $number($t.lastPrice); $local := $usd * ($lookup($data.fx_asset_quote.rates, $state.currency));\n {\"key\":$asset,\"asset\":$asset & \" · \" & $lookup($names,$asset),\"local_price\":$round($local, $local >= 100 ? 2 : 4),\"usd_price\":$round($usd, $usd >= 100 ? 2 : 4),\"change_24h\":$number($t.priceChangePercent),\"spark_24h\":[$map($history,function($k){$number($k[4])})]})}))"
                   },
                   "columns": [
                     {
