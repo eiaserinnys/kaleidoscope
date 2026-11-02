@@ -5,7 +5,7 @@ use kaleidoscope_contract::{
     data::{Binding, BindingValue, HttpMethod, SourceDecl, SourceFormat, SourceStatus},
     registry::{ConnectionAccept, ConnectionKind, ConnectionRequest},
     validate::parse_app_definition,
-    CoreError, ErrorCode, PermissionDecl,
+    CoreError, PermissionDecl,
 };
 use kaleidoscope_data::{CompiledApp, SourcePlan};
 use rmcp::{model::CallToolResult, ErrorData};
@@ -48,32 +48,41 @@ impl McpServer {
             data: samples,
             max_chars,
         } = args;
-        if app_id
+        let builtin_app_id = app_id
             .as_deref()
-            .is_some_and(kaleidoscope_contract::builtin::is_builtin)
-            || definition_input
-                .as_ref()
-                .and_then(|value| value.get("id"))
-                .and_then(Value::as_str)
-                .is_some_and(kaleidoscope_contract::builtin::is_builtin)
-        {
-            return Ok(json_error(CoreError {
-                id: None,
-                code: ErrorCode::UnsupportedApp,
-                message: "기본 앱은 로컬 시험 쉘에서 미리 봅니다".into(),
-                details: vec![],
-            }));
+            .filter(|id| kaleidoscope_contract::builtin::is_builtin(id))
+            .or_else(|| {
+                definition_input
+                    .as_ref()
+                    .and_then(|value| value.get("id"))
+                    .and_then(Value::as_str)
+                    .filter(|id| kaleidoscope_contract::builtin::is_builtin(id))
+            });
+        if let Some(app_id) = builtin_app_id {
+            return Ok(json_error(
+                kaleidoscope_contract::errors::APP_PREVIEW_BUILTIN_APP_UNSUPPORTED(app_id),
+            ));
         }
         let definition = match (app_id, definition_input) {
             (Some(app_id), None) => match self.state.app(&app_id, None) {
                 Ok(Some(app)) => app.version.definition,
-                Ok(None) => return Ok(json_error(CoreError::new(ErrorCode::NotFound))),
+                Ok(None) => {
+                    return Ok(json_error(
+                        kaleidoscope_contract::errors::APP_PREVIEW_APP_NOT_FOUND(&app_id),
+                    ));
+                }
                 Err(error) => return Ok(json_error(error)),
             },
             (None, Some(input)) => {
                 let definition_json = match serde_json::to_string(&input) {
                     Ok(json) => json,
-                    Err(error) => return Ok(json_error(server_error(&error.to_string()))),
+                    Err(error) => {
+                        return Ok(json_error(
+                            kaleidoscope_contract::errors::APP_PREVIEW_DEFINITION_SERIALIZE_FAILED(
+                            )
+                            .and_details(vec![error.to_string()]),
+                        ));
+                    }
                 };
                 match parse_app_definition(&definition_json) {
                     Ok(definition) => definition,
@@ -81,14 +90,16 @@ impl McpServer {
                 }
             }
             _ => {
-                return Ok(preview_error(
-                    "app_id 또는 definition 가운데 하나만 지정해야 합니다.",
+                return Ok(json_error(
+                    kaleidoscope_contract::errors::APP_PREVIEW_ARGUMENTS_INVALID(),
                 ))
             }
         };
         let max_chars = max_chars.unwrap_or(4000);
         if !(1..=20_000).contains(&max_chars) {
-            return Ok(preview_error("max_chars는 1~20000 사이여야 합니다."));
+            return Ok(json_error(
+                kaleidoscope_contract::errors::APP_PREVIEW_MAX_CHARS_INVALID(max_chars),
+            ));
         }
         let (storage, storage_meta) = match preview_storage(
             &self.state,
@@ -104,7 +115,13 @@ impl McpServer {
             None => match window_id.as_deref() {
                 Some(window_id) => match preview_window_state(&self.state, window_id) {
                     Ok(Some(state)) => state,
-                    Ok(None) => return Ok(preview_error("보고된 창이 없습니다.")),
+                    Ok(None) => {
+                        return Ok(json_error(
+                            kaleidoscope_contract::errors::APP_PREVIEW_WINDOW_NOT_REPORTED(
+                                window_id,
+                            ),
+                        ));
+                    }
                     Err(error) => return Ok(json_error(error)),
                 },
                 None => definition.state.clone(),
@@ -548,11 +565,14 @@ fn preview_window_state(
     let raw: Option<String> = db.query_row(
         "SELECT v.data FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.id=?1 AND w.account_id=?2",
         params![window_id, account], |row| row.get(0)
-    ).optional().map_err(db_error)?;
+    ).optional().map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_PREVIEW_WINDOW_STATE_DATABASE_FAILED(window_id)))?;
     raw.map(|raw| {
         serde_json::from_str::<kaleidoscope_contract::AppWindow>(&raw)
             .map(|window| window.state)
-            .map_err(|e| server_error(&e.to_string()))
+            .map_err(|e| {
+                kaleidoscope_contract::errors::SERVER_PREVIEW_WINDOW_STATE_JSON_INVALID(window_id)
+                    .and_details(vec![e.to_string()])
+            })
     })
     .transpose()
 }
@@ -572,7 +592,7 @@ fn preview_storage(
         let canonical: Option<(String, String)> = db.query_row(
             "SELECT d.workspace_id,v.app_id FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.id=?1 AND w.account_id=?2",
             params![window, account], |row| Ok((row.get(0)?,row.get(1)?))
-        ).optional().map_err(db_error)?;
+        ).optional().map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_PREVIEW_WINDOW_LOOKUP_DATABASE_FAILED(window)))?;
         drop(db);
         let found = if canonical.is_some() {
             canonical
@@ -592,9 +612,16 @@ fn preview_storage(
             }
             found
         };
-        let (id, app) = found.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let (id, app) = found.ok_or_else(|| {
+            kaleidoscope_contract::errors::APP_PREVIEW_WINDOW_NOT_FOUND(window, &definition.id)
+        })?;
         if app != definition.id {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(
+                kaleidoscope_contract::errors::APP_PREVIEW_WINDOW_APP_MISMATCH(
+                    window,
+                    &definition.id,
+                ),
+            );
         }
         Some(id)
     } else {
@@ -602,16 +629,21 @@ fn preview_storage(
     };
     if workspace
         .zip(window_workspace.as_deref())
-        .is_some_and(|(a, b)| a != b)
+        .is_some_and(|(requested, window)| requested != window)
     {
-        return Err(CoreError::new(ErrorCode::InvalidRequest));
+        return Err(
+            kaleidoscope_contract::errors::APP_PREVIEW_WORKSPACE_WINDOW_MISMATCH(
+                workspace.unwrap(),
+                window_workspace.as_deref().unwrap(),
+            ),
+        );
     }
     let workspace = workspace.or(window_workspace.as_deref());
     let db = state.lock_db()?;
     if let Some(workspace) = workspace {
-        let owns: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?1 AND account_id=?2) OR EXISTS(SELECT 1 FROM legacy_workspace_owners o WHERE o.workspace_id=?1 AND o.account_id=?2 AND NOT EXISTS(SELECT 1 FROM workspaces w WHERE w.id=o.workspace_id))", params![workspace, account], |row| row.get(0)).map_err(db_error)?;
+        let owns: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?1 AND account_id=?2) OR EXISTS(SELECT 1 FROM legacy_workspace_owners o WHERE o.workspace_id=?1 AND o.account_id=?2 AND NOT EXISTS(SELECT 1 FROM workspaces w WHERE w.id=o.workspace_id))", params![workspace, account], |row| row.get(0)).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_PREVIEW_WORKSPACE_ACCESS_DATABASE_FAILED(&definition.id)))?;
         if !owns {
-            return Err(CoreError::new(ErrorCode::NotFound));
+            return Err(kaleidoscope_contract::errors::APP_PREVIEW_WORKSPACE_NOT_FOUND(workspace));
         }
     }
     let bucket = sha256_hex(format!("{account}\0{}", definition.id).as_bytes());
@@ -624,7 +656,13 @@ fn preview_storage(
                     kaleidoscope_contract::data::storage_refs(expr).contains(&entry.id)
                 });
             if used {
-                return Err(CoreError { id: None, code: ErrorCode::InvalidRequest, message: "작업 전용 저장 항목을 미리 보려면 workspace_id 또는 window_id가 필요합니다.".into(), details: vec![entry.id.clone()] });
+                return Err(
+                    kaleidoscope_contract::errors::APP_PREVIEW_WORKSPACE_REQUIRED(
+                        &definition.id,
+                        &entry.key,
+                    )
+                    .and_details(vec![entry.id.clone()]),
+                );
             }
             continue;
         }
@@ -636,15 +674,34 @@ fn preview_storage(
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::SERVER_APP_PREVIEW_STORAGE_DATABASE_FAILED(
+                        &definition.id,
+                    ),
+                )
+            })?;
         let value = if let Some((kind, raw)) = item {
-            let expected_kind =
-                serde_json::to_value(entry.kind).map_err(|e| server_error(&e.to_string()))?;
+            let expected_kind = serde_json::to_value(entry.kind).map_err(|e| {
+                kaleidoscope_contract::errors::APP_PREVIEW_STORAGE_KIND_SERIALIZE_FAILED(
+                    &definition.id,
+                    &entry.key,
+                )
+                .and_details(vec![e.to_string()])
+            })?;
             if expected_kind.as_str() != Some(&kind) {
-                return Err(server_error("저장 항목 kind가 선언과 다릅니다."));
+                return Err(kaleidoscope_contract::errors::STORAGE_STORED_KIND_INVALID(
+                    &entry.key,
+                ));
             }
-            let value: Value =
-                serde_json::from_str(&raw).map_err(|e| server_error(&e.to_string()))?;
+            let value: Value = serde_json::from_str(&raw).map_err(|e| {
+                kaleidoscope_contract::errors::APP_PREVIEW_STORAGE_VALUE_JSON_INVALID(
+                    &definition.id,
+                    &entry.key,
+                )
+                .and_details(vec![e.to_string()])
+            })?;
             kaleidoscope_contract::app_storage::validate_storage_content(entry, &value).map_err(
                 |error| {
                     kaleidoscope_contract::errors::STORAGE_PREVIEW_VALUE_INVALID(&entry.key)
@@ -658,15 +715,6 @@ fn preview_storage(
         values.insert(entry.id.clone(), value);
     }
     Ok((values, [("bucket_id".into(), Value::String(bucket))].into()))
-}
-
-fn preview_error(message: &str) -> CallToolResult {
-    json_error(CoreError {
-        id: None,
-        code: ErrorCode::InvalidRequest,
-        message: message.into(),
-        details: Vec::new(),
-    })
 }
 
 fn binding_result(

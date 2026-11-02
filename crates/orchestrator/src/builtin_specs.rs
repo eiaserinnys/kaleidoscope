@@ -3,16 +3,17 @@ use super::*;
 use axum::extract::{Extension, State};
 use kaleidoscope_contract::worker::BuiltinRuntimeSpec;
 
-fn invalid(message: &str) -> CoreError {
-    CoreError {
-        message: message.into(),
-        ..CoreError::new(ErrorCode::InvalidRequest)
-    }
-}
-
 fn definition(spec: &BuiltinRuntimeSpec) -> Result<AppDefinition, CoreError> {
-    if !kaleidoscope_contract::builtin::is_builtin(&spec.app_id) || spec.version == 0 {
-        return Err(invalid("기본 앱 실행 설정이 올바르지 않습니다."));
+    if !kaleidoscope_contract::builtin::is_builtin(&spec.app_id) {
+        return Err(kaleidoscope_contract::errors::APP_BUILTIN_SPEC_APP_ID_INVALID(&spec.app_id));
+    }
+    if spec.version == 0 {
+        return Err(
+            kaleidoscope_contract::errors::APP_BUILTIN_SPEC_VERSION_INVALID(
+                &spec.app_id,
+                spec.version,
+            ),
+        );
     }
     let storage_version = if spec
         .storage
@@ -39,14 +40,20 @@ fn save(db: &Connection, spec: &BuiltinRuntimeSpec) -> Result<(), CoreError> {
         .as_ref()
         .map(serde_json::to_string)
         .transpose()
-        .map_err(|e| server_error(&e.to_string()))?;
+        .map_err(|e| {
+            kaleidoscope_contract::errors::APP_BUILTIN_SPEC_STORAGE_SERIALIZE_FAILED(&spec.app_id)
+                .and_details(vec![e.to_string()])
+        })?;
     let worker = spec
         .worker
         .as_ref()
         .map(serde_json::to_string)
         .transpose()
-        .map_err(|e| server_error(&e.to_string()))?;
-    db.execute("INSERT INTO builtin_app_specs(app_id,version,storage_json,worker_json,updated_at) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(app_id) DO UPDATE SET version=excluded.version,storage_json=excluded.storage_json,worker_json=excluded.worker_json,updated_at=excluded.updated_at WHERE excluded.version >= builtin_app_specs.version", params![spec.app_id, spec.version, storage, worker, timestamp()]).map_err(db_error)?;
+        .map_err(|e| {
+            kaleidoscope_contract::errors::APP_BUILTIN_SPEC_WORKER_SERIALIZE_FAILED(&spec.app_id)
+                .and_details(vec![e.to_string()])
+        })?;
+    db.execute("INSERT INTO builtin_app_specs(app_id,version,storage_json,worker_json,updated_at) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(app_id) DO UPDATE SET version=excluded.version,storage_json=excluded.storage_json,worker_json=excluded.worker_json,updated_at=excluded.updated_at WHERE excluded.version >= builtin_app_specs.version", params![spec.app_id, spec.version, storage, worker, timestamp()]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_BUILTIN_SPEC_SAVE_DATABASE_FAILED()))?;
     Ok(())
 }
 
@@ -56,11 +63,21 @@ impl AppState {
             definition(spec)?;
         }
         let db = self.lock_db()?;
-        let tx = db.unchecked_transaction().map_err(db_error)?;
+        let tx = db.unchecked_transaction().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::SERVER_BUILTIN_SPEC_SAVE_DATABASE_FAILED(),
+            )
+        })?;
         for spec in specs {
             save(&tx, spec)?;
         }
-        tx.commit().map_err(db_error)
+        tx.commit().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::SERVER_BUILTIN_SPEC_SAVE_DATABASE_FAILED(),
+            )
+        })
     }
 
     pub(super) fn builtin_entry(
@@ -70,8 +87,8 @@ impl AppState {
         workspace: Option<&str>,
     ) -> Result<(kaleidoscope_contract::app_storage::StorageEntryDecl, String), CoreError> {
         let db = self.lock_db()?;
-        let definition =
-            load_definition(&db, app)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = load_definition(&db, app)?
+            .ok_or_else(|| kaleidoscope_contract::errors::APP_BUILTIN_SPEC_NOT_FOUND(app))?;
         let entry = definition
             .storage
             .as_ref()
@@ -84,10 +101,16 @@ impl AppState {
                         )
                 })
             })
-            .ok_or_else(|| invalid("앱에 선언되지 않은 저장소 항목입니다."))?;
+            .ok_or_else(|| {
+                kaleidoscope_contract::errors::APP_BUILTIN_STORAGE_ENTRY_NOT_DECLARED(
+                    app, id_or_key,
+                )
+            })?;
         let key = super::app_storage::resolve_key(entry, workspace)?;
         if id_or_key != entry.id && id_or_key != entry.key && id_or_key != key {
-            return Err(invalid("앱 저장소 키가 작업과 일치하지 않습니다."));
+            return Err(
+                kaleidoscope_contract::errors::APP_BUILTIN_STORAGE_KEY_MISMATCH(app, id_or_key),
+            );
         }
         Ok((entry.clone(), key))
     }
@@ -99,8 +122,8 @@ impl AppState {
         workspace: Option<&str>,
     ) -> Result<(kaleidoscope_contract::app_storage::StorageEntryDecl, String), CoreError> {
         let db = self.lock_db()?;
-        let definition =
-            load_definition(&db, app)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = load_definition(&db, app)?
+            .ok_or_else(|| kaleidoscope_contract::errors::APP_BUILTIN_SPEC_NOT_FOUND(app))?;
         let entry = definition
             .storage
             .as_ref()
@@ -111,7 +134,9 @@ impl AppState {
                             .is_ok_and(|resolved| resolved == prefix)
                 })
             })
-            .ok_or_else(|| invalid("앱에 선언되지 않은 문서 모음입니다."))?;
+            .ok_or_else(|| {
+                kaleidoscope_contract::errors::APP_BUILTIN_COLLECTION_NOT_DECLARED(app, prefix)
+            })?;
         Ok((entry.clone(), prefix.to_string()))
     }
 
@@ -129,8 +154,8 @@ impl AppState {
         CoreError,
     > {
         let db = self.lock_db()?;
-        let definition =
-            load_definition(&db, app)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let definition = load_definition(&db, app)?
+            .ok_or_else(|| kaleidoscope_contract::errors::APP_BUILTIN_SPEC_NOT_FOUND(app))?;
         let entry = definition
             .storage
             .as_ref()
@@ -144,12 +169,16 @@ impl AppState {
                     })
                 })
             })
-            .ok_or_else(|| invalid("앱에 선언되지 않은 문서 모음입니다."))?;
+            .ok_or_else(|| {
+                kaleidoscope_contract::errors::APP_BUILTIN_COLLECTION_NOT_DECLARED(app, key)
+            })?;
         let prefix = super::app_storage::resolve_key(entry, workspace)?;
         let doc = key
             .strip_prefix(&prefix)
             .and_then(|tail| tail.strip_prefix('/'))
-            .ok_or_else(|| invalid("앱 저장소 키가 올바르지 않습니다."))?
+            .ok_or_else(|| {
+                kaleidoscope_contract::errors::APP_BUILTIN_COLLECTION_KEY_INVALID(app, key)
+            })?
             .to_string();
         Ok((entry.clone(), prefix, doc))
     }
@@ -166,14 +195,36 @@ pub(super) fn load_definition(
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()
-        .map_err(db_error)?;
+        .map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::SERVER_BUILTIN_SPEC_LOAD_DATABASE_FAILED(app_id),
+            )
+        })?;
     if let Some((version, storage, worker)) = row {
-        let parse = |raw: Option<String>| -> Result<Option<Value>, CoreError> {
-            raw.map(|s| serde_json::from_str(&s).map_err(|e| server_error(&e.to_string())))
-                .transpose()
-        };
-        let spec: BuiltinRuntimeSpec = serde_json::from_value(json!({"app_id":app_id,"version":version,"storage":parse(storage)?,"worker":parse(worker)?}))
-            .map_err(|e| server_error(&e.to_string()))?;
+        let storage: Option<kaleidoscope_contract::app_storage::StorageDecl> = storage
+            .map(|raw| {
+                serde_json::from_str(&raw).map_err(|e| {
+                    kaleidoscope_contract::errors::APP_BUILTIN_SPEC_STORAGE_JSON_INVALID(app_id)
+                        .and_details(vec![e.to_string()])
+                })
+            })
+            .transpose()?;
+        let worker: Option<kaleidoscope_contract::worker::WorkerDecl> = worker
+            .map(|raw| {
+                serde_json::from_str(&raw).map_err(|e| {
+                    kaleidoscope_contract::errors::APP_BUILTIN_SPEC_WORKER_JSON_INVALID(app_id)
+                        .and_details(vec![e.to_string()])
+                })
+            })
+            .transpose()?;
+        let spec: BuiltinRuntimeSpec = serde_json::from_value(
+            json!({"app_id":app_id,"version":version,"storage":storage,"worker":worker}),
+        )
+        .map_err(|e| {
+            kaleidoscope_contract::errors::APP_BUILTIN_SPEC_RECORD_INVALID(app_id)
+                .and_details(vec![e.to_string()])
+        })?;
         return definition(&spec).map(Some);
     }
     if std::env::var_os("KALEIDOSCOPE_EXCLUSION_CHILD").is_some() {
@@ -196,10 +247,20 @@ pub(super) fn load_definition(
         if !path.is_file() {
             continue;
         }
-        let raw = std::fs::read_to_string(path).map_err(|e| server_error(&e.to_string()))?;
+        let raw = std::fs::read_to_string(&path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                kaleidoscope_contract::errors::APP_BUILTIN_SPEC_FILE_READ_NOT_FOUND(app_id)
+                    .and_details(vec![e.to_string()])
+            } else {
+                kaleidoscope_contract::errors::APP_BUILTIN_SPEC_FILE_READ_FAILED(app_id)
+                    .and_details(vec![e.to_string()])
+            }
+        })?;
         let app = parse_app_definition(&raw)?;
         if app.id != app_id {
-            return Err(CoreError::new(ErrorCode::InvalidAppDefinition));
+            return Err(
+                kaleidoscope_contract::errors::APP_BUILTIN_SPEC_FILE_ID_MISMATCH(app_id, &app.id),
+            );
         }
         let spec = BuiltinRuntimeSpec {
             app_id: app_id.into(),
@@ -226,7 +287,7 @@ pub(super) async fn device_register(
         Ok(false) => {
             return super::http::error_response(
                 StatusCode::FORBIDDEN,
-                CoreError::new(ErrorCode::PermissionDenied),
+                kaleidoscope_contract::errors::SERVER_HTTP_BUILTIN_SPECS_ACCOUNT_FORBIDDEN(),
             )
         }
         Err(error) => return super::http::error_response(StatusCode::INTERNAL_SERVER_ERROR, error),

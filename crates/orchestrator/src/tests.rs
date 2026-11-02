@@ -31,6 +31,21 @@ fn builtin_apps_are_listed_and_upload_is_rejected() {
     assert!(state.publish_app(EDITOR, "agent", false, None).is_err());
 }
 
+#[test]
+fn app_list_database_error_has_operation_specific_code_and_details() {
+    let state = AppState::in_memory("secret");
+    state
+        .lock_db()
+        .unwrap()
+        .execute_batch("DROP TABLE apps")
+        .unwrap();
+
+    let error = state.current_apps().unwrap_err();
+
+    assert_eq!(error.id.as_deref(), Some("SERVER_APP_LIST_DATABASE_FAILED"));
+    assert!(!error.details.is_empty());
+}
+
 #[tokio::test]
 async fn device_upload_rejects_builtin_id() {
     let state = AppState::in_memory("secret");
@@ -213,6 +228,9 @@ async fn mcp_requires_bearer_token() {
     let app = router(AppState::in_memory("secret"));
     let response=app.oneshot(request("POST","/mcp",None,Body::from(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}"#))).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(error["id"], "SERVER_HTTP_MCP_AUTH_REJECTED");
 }
 
 #[tokio::test]
