@@ -1,11 +1,11 @@
 use super::*;
-use axum::{Router, routing::any};
+use axum::{routing::any, Router};
 use kaleidoscope_contract::{
-    FileAccess,
     data::HttpMethod,
     registry::{ConnectionAccept, ConnectionRequest},
+    FileAccess,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio::task::JoinHandle;
 
 fn definition() -> Value {
@@ -45,18 +45,94 @@ async fn preview_uses_client_output_default_without_running_script() {
                 .as_str()
                 .is_some_and(|text| text.contains("기본값"))
     }));
-    assert!(
-        value["notes"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|note| note.as_str().unwrap().contains("클라이언트"))
-    );
+    assert!(value["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|note| note.as_str().unwrap().contains("클라이언트")));
 }
 
 fn result_value(result: CallToolResult) -> Value {
     let result = serde_json::to_value(result).unwrap();
     serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap()
+}
+
+fn market_sample_data(
+    amount: Option<f64>,
+    btc_price: &str,
+) -> std::collections::BTreeMap<String, Value> {
+    use std::collections::BTreeMap;
+
+    let currencies = [
+        ("KRW", 1350.0),
+        ("EUR", 0.92),
+        ("JPY", 150.0),
+        ("GBP", 0.79),
+        ("CNY", 7.2),
+        ("CHF", 0.88),
+        ("CAD", 1.38),
+        ("AUD", 1.52),
+    ];
+    let rates = currencies
+        .iter()
+        .map(|(code, rate)| ((*code).to_owned(), json!(rate * amount.unwrap_or(1.0))))
+        .collect::<serde_json::Map<_, _>>();
+    let mut quote = json!({"base":"USD", "date":"2026-11-02", "rates":rates});
+    if let Some(amount) = amount {
+        quote["amount"] = json!(amount);
+    }
+    let series_rates = currencies
+        .iter()
+        .map(|(code, rate)| ((*code).to_owned(), json!(rate)))
+        .collect::<serde_json::Map<_, _>>();
+    let tickers = [
+        ("BTCUSDT", btc_price),
+        ("ETHUSDT", "50"),
+        ("SOLUSDT", "10"),
+        ("XRPUSDT", "0.5"),
+        ("BNBUSDT", "20"),
+        ("DOGEUSDT", "0.1"),
+        ("ADAUSDT", "0.4"),
+        ("AVAXUSDT", "30"),
+    ]
+    .into_iter()
+    .map(|(symbol, price)| {
+        json!({"symbol":symbol, "lastPrice":price, "priceChangePercent":"2.5", "highPrice":price, "lowPrice":price})
+    })
+    .collect::<Vec<_>>();
+    let world_bank = |value: f64| {
+        json!([
+            {"page":1},
+            [
+                {"countryiso3code":"KOR", "value":value, "date":"2025"},
+                {"countryiso3code":"USA", "value":value, "date":"2025"},
+                {"countryiso3code":"EMU", "value":value, "date":"2025"},
+                {"countryiso3code":"DEU", "value":value, "date":"2025"},
+                {"countryiso3code":"JPN", "value":value, "date":"2025"},
+                {"countryiso3code":"GBR", "value":value, "date":"2025"},
+                {"countryiso3code":"CHN", "value":value, "date":"2025"},
+                {"countryiso3code":"CHE", "value":value, "date":"2025"},
+                {"countryiso3code":"CAN", "value":value, "date":"2025"},
+                {"countryiso3code":"AUS", "value":value, "date":"2025"}
+            ]
+        ])
+    };
+    let candle = json!([[1790899200000_u64, "100", "110", "90", "105"]]);
+    let mut data = BTreeMap::from([
+        ("asset_tickers".into(), json!(tickers)),
+        ("asset_candles".into(), candle.clone()),
+        ("fx_asset_quote".into(), quote),
+        (
+            "fx_series".into(),
+            json!({"base":"USD", "rates":{"2026-10-05":series_rates, "2026-11-01":series_rates}}),
+        ),
+        ("macro_cpi".into(), world_bank(2.0)),
+        ("macro_ppp".into(), world_bank(1300.0)),
+    ]);
+    for asset in ["btc", "eth", "sol", "xrp", "bnb", "doge", "ada", "avax"] {
+        data.insert(format!("trend_{asset}"), candle.clone());
+    }
+    data
 }
 
 async fn fake_origin(status: u16, body: &'static str) -> (String, JoinHandle<()>) {
@@ -105,12 +181,10 @@ async fn previews_definition_with_relay_data_using_definition_permissions() {
     assert!(value["sources"]["cards"]["bytes"].as_u64().unwrap() > 0);
     assert_eq!(value["values"][0]["pointer"], "/ui/children/0/value");
     assert_eq!(value["values"][0]["status"], "ready");
-    assert!(
-        value["values"][0]["value"]
-            .as_str()
-            .unwrap()
-            .contains("완료 항목")
-    );
+    assert!(value["values"][0]["value"]
+        .as_str()
+        .unwrap()
+        .contains("완료 항목"));
     server_task.abort();
 }
 
@@ -139,12 +213,10 @@ async fn preview_accepts_device_source_samples_and_marks_unsampled_sources_idle(
     let sample = result_value(server.preview_app_result(sample_args).await.unwrap());
     assert_eq!(sample["sources"]["files"]["state"], "ready");
     assert_eq!(sample["values"][1]["status"], "ready");
-    assert!(
-        sample["values"][1]["value"]
-            .as_str()
-            .unwrap()
-            .contains("notes.md")
-    );
+    assert!(sample["values"][1]["value"]
+        .as_str()
+        .unwrap()
+        .contains("notes.md"));
 
     let idle = result_value(server.preview_app_result(args(definition())).await.unwrap());
     assert_eq!(idle["sources"]["files"]["state"], "idle");
@@ -239,79 +311,6 @@ fn market_display_bindings_match_for_legacy_and_normalized_fx_samples() {
         }
     }
 
-    fn sample_data(amount: Option<f64>) -> BTreeMap<String, Value> {
-        let currencies = [
-            ("KRW", 1350.0),
-            ("EUR", 0.92),
-            ("JPY", 150.0),
-            ("GBP", 0.79),
-            ("CNY", 7.2),
-            ("CHF", 0.88),
-            ("CAD", 1.38),
-            ("AUD", 1.52),
-        ];
-        let rates = currencies
-            .iter()
-            .map(|(code, rate)| ((*code).to_owned(), json!(rate * amount.unwrap_or(1.0))))
-            .collect::<serde_json::Map<_, _>>();
-        let mut quote = json!({"base":"USD", "date":"2026-11-02", "rates":rates});
-        if let Some(amount) = amount {
-            quote["amount"] = json!(amount);
-        }
-        let series_rates = currencies
-            .iter()
-            .map(|(code, rate)| ((*code).to_owned(), json!(rate)))
-            .collect::<serde_json::Map<_, _>>();
-        let tickers = [
-            ("BTCUSDT", "100"),
-            ("ETHUSDT", "50"),
-            ("SOLUSDT", "10"),
-            ("XRPUSDT", "0.5"),
-            ("BNBUSDT", "20"),
-            ("DOGEUSDT", "0.1"),
-            ("ADAUSDT", "0.4"),
-            ("AVAXUSDT", "30"),
-        ]
-        .into_iter()
-        .map(|(symbol, price)| {
-            json!({"symbol":symbol, "lastPrice":price, "priceChangePercent":"2.5", "highPrice":price, "lowPrice":price})
-        })
-        .collect::<Vec<_>>();
-        let world_bank = |value: f64| {
-            json!([
-                {"page":1},
-                [
-                    {"countryiso3code":"KOR", "value":value, "date":"2025"},
-                    {"countryiso3code":"USA", "value":value, "date":"2025"},
-                    {"countryiso3code":"EMU", "value":value, "date":"2025"},
-                    {"countryiso3code":"DEU", "value":value, "date":"2025"},
-                    {"countryiso3code":"JPN", "value":value, "date":"2025"},
-                    {"countryiso3code":"GBR", "value":value, "date":"2025"},
-                    {"countryiso3code":"CHN", "value":value, "date":"2025"},
-                    {"countryiso3code":"CHE", "value":value, "date":"2025"},
-                    {"countryiso3code":"CAN", "value":value, "date":"2025"},
-                    {"countryiso3code":"AUS", "value":value, "date":"2025"}
-                ]
-            ])
-        };
-        let candle = json!([[1790899200000_u64, "100", "110", "90", "105"]]);
-        let mut data = BTreeMap::from([
-            ("asset_tickers".into(), json!(tickers)),
-            ("asset_candles".into(), candle.clone()),
-            ("fx_asset_quote".into(), quote),
-            (
-                "fx_series".into(),
-                json!({"base":"USD", "rates":{"2026-10-05":series_rates, "2026-11-01":series_rates}}),
-            ),
-            ("macro_cpi".into(), world_bank(2.0)),
-            ("macro_ppp".into(), world_bank(1300.0)),
-        ]);
-        for asset in ["btc", "eth", "sol", "xrp", "bnb", "doge", "ada", "avax"] {
-            data.insert(format!("trend_{asset}"), candle.clone());
-        }
-        data
-    }
-
     let market_path =
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/market.json");
     let current: Value = serde_json::from_slice(&std::fs::read(market_path).unwrap()).unwrap();
@@ -323,14 +322,53 @@ fn market_display_bindings_match_for_legacy_and_normalized_fx_samples() {
 
     let legacy_definition = parse_app_definition(&legacy.to_string()).unwrap();
     let current_definition = parse_app_definition(&current.to_string()).unwrap();
-    let legacy_data = sample_data(Some(100.0));
-    let current_data = sample_data(None);
+    let legacy_data = market_sample_data(Some(100.0), "100");
+    let current_data = market_sample_data(None, "100");
     let no_status = BTreeMap::new();
     let legacy_values: BTreeMap<String, BindingValue> = CompiledApp::compile(&legacy_definition)
         .evaluate(&legacy_definition.state, &legacy_data, &no_status);
     let current_values: BTreeMap<String, BindingValue> = CompiledApp::compile(&current_definition)
         .evaluate(&current_definition.state, &current_data, &no_status);
     assert_eq!(legacy_values, current_values);
+}
+
+#[test]
+fn market_currency_table_uses_full_subcent_asset_price() {
+    use kaleidoscope_contract::{data::BindingValue, validate::parse_app_definition};
+    use kaleidoscope_data::CompiledApp;
+    use std::collections::BTreeMap;
+
+    let market_path =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/market.json");
+    let source: Value = serde_json::from_slice(&std::fs::read(market_path).unwrap()).unwrap();
+    let definition = parse_app_definition(&source.to_string()).unwrap();
+    let data = market_sample_data(None, "0.123");
+    let no_status = BTreeMap::new();
+    let values: BTreeMap<String, BindingValue> =
+        CompiledApp::compile(&definition).evaluate(&definition.state, &data, &no_status);
+
+    let rows = values
+        .iter()
+        .find_map(|(pointer, binding)| match binding {
+            BindingValue::Ready {
+                value: Value::Array(rows),
+            } if pointer.ends_with("/rows")
+                && rows
+                    .iter()
+                    .any(|row| row["key"] == "KRW" && row.get("asset_quote").is_some()) =>
+            {
+                Some(rows)
+            }
+            _ => None,
+        })
+        .expect("통화 표 행 식이 계산되어야 한다");
+    let krw = rows
+        .iter()
+        .find(|row| row["key"] == "KRW")
+        .expect("KRW 표 행이 있어야 한다");
+    let asset_quote = krw["asset_quote"].as_f64().unwrap();
+
+    assert!((asset_quote - 166.05).abs() < 1e-9);
 }
 
 #[tokio::test]
@@ -371,13 +409,11 @@ async fn preview_notes_missing_connection_even_when_request_source_uses_sample_d
 
     let value = result_value(server.preview_app_result(preview_args).await.unwrap());
 
-    assert!(
-        value["notes"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|note| { note.as_str().unwrap().contains("서버에 없는 연결: board") })
-    );
+    assert!(value["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|note| { note.as_str().unwrap().contains("서버에 없는 연결: board") }));
 }
 
 #[tokio::test]
@@ -394,13 +430,11 @@ async fn preview_notes_missing_connection_used_only_by_action() {
 
     let value = result_value(server.preview_app_result(args(definition)).await.unwrap());
 
-    assert!(
-        value["notes"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|note| { note.as_str().unwrap().contains("서버에 없는 연결: board") })
-    );
+    assert!(value["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|note| { note.as_str().unwrap().contains("서버에 없는 연결: board") }));
 }
 
 #[tokio::test]
@@ -440,18 +474,14 @@ async fn preview_uses_the_reported_window_state() {
 
     let value = result_value(server.preview_app_result(preview_args).await.unwrap());
 
-    assert!(
-        value["values"][0]["value"]
-            .as_str()
-            .unwrap()
-            .contains("현재 항목")
-    );
-    assert!(
-        !value["values"][0]["value"]
-            .as_str()
-            .unwrap()
-            .contains("완료 항목")
-    );
+    assert!(value["values"][0]["value"]
+        .as_str()
+        .unwrap()
+        .contains("현재 항목"));
+    assert!(!value["values"][0]["value"]
+        .as_str()
+        .unwrap()
+        .contains("완료 항목"));
     server_task.abort();
 }
 
@@ -490,12 +520,10 @@ async fn preview_reports_failed_source_and_binding_retry_for_non_2xx() {
     let value = result_value(server.preview_app_result(args(definition())).await.unwrap());
 
     assert_eq!(value["sources"]["cards"]["state"], "failed");
-    assert!(
-        value["sources"]["cards"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("500")
-    );
+    assert!(value["sources"]["cards"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("500"));
     assert_eq!(value["values"][0]["status"], "failed");
     assert_eq!(value["values"][0]["retry"], json!(["cards"]));
     server_task.abort();
@@ -528,12 +556,10 @@ async fn preview_uses_the_current_registry_definition_by_app_id() {
     let value = result_value(server.preview_app_result(preview_args).await.unwrap());
 
     assert_eq!(value["sources"]["cards"]["state"], "ready");
-    assert!(
-        value["values"][0]["value"]
-            .as_str()
-            .unwrap()
-            .contains("저장된 앱")
-    );
+    assert!(value["values"][0]["value"]
+        .as_str()
+        .unwrap()
+        .contains("저장된 앱"));
 }
 
 #[tokio::test]
