@@ -21,42 +21,35 @@
     "direction": "column",
     "children": [
       {
-        "type": "toolbar",
-        "start": [
-          {
-            "type": "anchor",
-            "id": "advanced-toggle",
-            "child": {
-              "type": "toggle",
-              "label": "고급 설정",
-              "value": { "state": "advanced" },
-              "on_change": { "set_state": "advanced" }
-            }
-          }
-        ],
-        "end": [
-          {
-            "type": "anchor",
-            "id": "dialog-button",
-            "child": {
-              "type": "button",
-              "label": "파일 설정 안내",
-              "on_click": { "set_state": "dialog_open", "value": true }
-            }
-          },
-          {
-            "type": "anchor",
-            "id": "guide-button",
-            "child": {
-              "type": "button",
-              "label": "처음 사용 안내",
-              "on_click": [
-                { "set_state": "tour_open", "value": true },
-                { "set_state": "tour_step", "value": "advanced" }
-              ]
-            }
-          }
-        ]
+        "type": "anchor",
+        "id": "advanced-toggle",
+        "child": {
+          "type": "toggle",
+          "label": "고급 설정",
+          "value": { "state": "advanced" },
+          "on_change": { "set_state": "advanced" }
+        }
+      },
+      {
+        "type": "anchor",
+        "id": "dialog-button",
+        "child": {
+          "type": "button",
+          "label": "파일 설정 안내",
+          "on_click": [{ "set_state": "dialog_open", "value": true }]
+        }
+      },
+      {
+        "type": "anchor",
+        "id": "guide-button",
+        "child": {
+          "type": "button",
+          "label": "처음 사용 안내",
+          "on_click": [
+            { "set_state": "tour_open", "value": true },
+            { "set_state": "tour_step", "value": "advanced" }
+          ]
+        }
       },
       {
         "type": "when",
@@ -78,7 +71,7 @@
           "type": "text",
           "value": "고급 설정은 접혀 있을 때 원천을 읽지 않습니다."
         },
-        "on_close": { "set_state": "dialog_open", "value": false }
+        "on_close": [{ "set_state": "dialog_open", "value": false }]
       },
       {
         "type": "tour",
@@ -110,10 +103,11 @@
             "body": "다음 안내는 이 단추에서 다시 열 수 있습니다."
           }
         ],
-        "on_step": { "set_state": "tour_step", "value": { "expr": "$event" } },
+        "on_step": [{ "set_state": "tour_step", "value": { "expr": "$event" } }],
         "on_close": [
           { "set_state": "tour_open", "value": false },
-          { "set_state": "tour_result", "value": { "expr": "$event" } }
+          { "set_state": "tour_result", "value": { "expr": "$event" } },
+          { "set_state": "tour_step", "value": "advanced" }
         ]
       }
     ]
