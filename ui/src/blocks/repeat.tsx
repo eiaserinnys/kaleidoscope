@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { useBinding, useDormant } from "../data/window-data";
@@ -70,7 +70,8 @@ function RepeatReady({ block, context, pointer, entries, parent, follow }: {
     resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => observer.disconnect();
   }, [layout, block.grid?.columns]);
   const rowSize = layout === "grid" ? columns : 1;
-  const { virtual } = useVirtualRows(Math.ceil(entries.length / rowSize), DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, horizontal);
+  const itemKey = useCallback((index: number) => entries[index].key, [entries]);
+  const { virtual } = useVirtualRows(Math.ceil(entries.length / rowSize), DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, horizontal, layout === "grid" ? undefined : itemKey);
   const followIndex = entries.findIndex((entry) => entry.key === follow);
   useEffect(() => {
     if (followIndex < 0 || Date.now() < pauseUntil.current) return;

@@ -13,6 +13,24 @@ import { mockVirtualLayout } from "./virtual-layout";
 beforeEach(mockVirtualLayout);
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
+it.each(["column", "row"] as const)("가상 %s에서 앞 항목을 지워도 남은 항목을 다시 마운트하지 않는다", async (layout) => {
+  const rows = [{ id: "a", title: "첫째" }, { id: "b", title: "둘째" }, { id: "c", title: "셋째" }];
+  const definition: AppDefinition = { id: `virtual-${layout}`, name: "가상 반복", requires: { blocks: 14, modules: {} },
+    permissions: [], state: { rows }, ui: { type: "repeat", items: { state: "rows" }, key: "id", layout, virtual: true,
+      template: { type: "text", value: { item: "title" } } } };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = definition.state;
+  const store = createShellStore(createFakeTransport(seed));
+  render(<AppWindowContent store={store} windowId="viewer-window" />);
+  const second = await screen.findByText("둘째");
+  const third = await screen.findByText("셋째");
+  await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { rows: rows.slice(1) } }); });
+  await waitFor(() => expect(screen.queryByText("첫째")).toBeNull());
+  expect(screen.getByText("둘째")).toBe(second);
+  expect(screen.getByText("셋째")).toBe(third);
+  store.dispose();
+});
+
 it("item을 포함한 여러 필드의 리터럴은 그대로 표시한다", async () => {
   const definition: AppDefinition = { id: "literal-item", name: "리터럴", requires: { blocks: 14, modules: {} },
     permissions: [], state: {}, ui: { type: "text", value: { item: "원래 값", label: "그대로" } } };
