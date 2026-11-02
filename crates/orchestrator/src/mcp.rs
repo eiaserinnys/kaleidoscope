@@ -127,11 +127,12 @@ impl McpServer {
 }
 
 use rmcp::{
+    ErrorData,
     handler::server::router::tool::ToolRouter,
     handler::server::wrapper::Parameters,
     model::{CallToolResult, ContentBlock},
     service::{RequestContext, RoleServer},
-    tool, tool_router, ErrorData,
+    tool, tool_router,
 };
 
 fn request_principal(context: &RequestContext<RoleServer>) -> McpPrincipal {
@@ -184,8 +185,15 @@ impl McpServer {
         principal: McpPrincipal,
     ) -> Result<CallToolResult, ErrorData> {
         args.workspace_id = effective_workspace_id(args.workspace_id, &principal);
-        let definition = serde_json::to_string(&args.definition)
-            .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+        let definition = match serde_json::to_string(&args.definition) {
+            Ok(definition) => definition,
+            Err(error) => {
+                return Ok(json_error(
+                    kaleidoscope_contract::errors::MCP_UPLOAD_APP_SERIALIZE_FAILED()
+                        .and_details(vec![error.to_string()]),
+                ));
+            }
+        };
         let missing_connections = match self.state.missing_app_connections_from_json(&definition) {
             Ok(missing) => missing,
             Err(error) => return Ok(json_error(error)),
@@ -284,7 +292,10 @@ impl McpServer {
             .and_then(|account| self.state.get_asset(&account, &args.id, args.version));
         Ok(match result {
             Ok(Some((meta, _))) => json_result(json!({"meta":meta})),
-            Ok(None) => json_error(CoreError::new(ErrorCode::NotFound)),
+            Ok(None) => json_error(kaleidoscope_contract::errors::MCP_GET_ASSET_NOT_FOUND(
+                &args.id,
+                args.version,
+            )),
             Err(error) => json_error(error),
         })
     }
@@ -306,11 +317,8 @@ impl McpServer {
     ) -> Result<CallToolResult, ErrorData> {
         let result = (|| -> Result<usize, CoreError> {
             if kaleidoscope_contract::builtin::is_builtin(&args.app_id) {
-                return Err(CoreError::with_details(
-                    ErrorCode::InvalidAppDefinition,
-                    vec![
-                        "기본 앱은 kaleidoscope 리포의 apps/에서 고치고 쉘 새 판으로 냅니다".into(),
-                    ],
+                return Err(kaleidoscope_contract::errors::MCP_DELETE_APP_BUILTIN(
+                    &args.app_id,
                 ));
             }
             let account_id = self.state.mcp_account_id()?;
@@ -323,7 +331,9 @@ impl McpServer {
                     )
                     .map_err(db_error)?;
                 if updated == 0 {
-                    return Err(server_error("앱을 찾을 수 없습니다."));
+                    return Err(kaleidoscope_contract::errors::MCP_DELETE_APP_NOT_FOUND(
+                        &args.app_id,
+                    ));
                 }
                 let mut statement = db.prepare("SELECT v.id FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.app_id=?1 AND w.account_id=?2").map_err(db_error)?;
                 let ids = statement
@@ -368,11 +378,13 @@ impl McpServer {
         Parameters(args): Parameters<VersionArgs>,
     ) -> Result<CallToolResult, ErrorData> {
         if let Some(identity) = kaleidoscope_contract::builtin::builtin_identity(&args.app_id) {
-            if args
-                .version
-                .is_some_and(|version| version != identity.version)
-            {
-                return Ok(json_error(CoreError::new(ErrorCode::NotFound)));
+            if let Some(version) = args.version.filter(|version| *version != identity.version) {
+                return Ok(json_error(
+                    kaleidoscope_contract::errors::MCP_GET_APP_VERSION_NOT_FOUND(
+                        &args.app_id,
+                        version,
+                    ),
+                ));
             }
             let modules: std::collections::BTreeMap<_, _> = identity
                 .modules
@@ -389,7 +401,9 @@ impl McpServer {
             Ok(Some(row)) => json_result(
                 json!({"app_id":row.app.id,"version":row.version.version,"definition":row.version.definition}),
             ),
-            Ok(None) => json_error(server_error("앱 또는 버전을 찾을 수 없습니다.")),
+            Ok(None) => json_error(kaleidoscope_contract::errors::MCP_GET_APP_NOT_FOUND(
+                &args.app_id,
+            )),
             Err(e) => json_error(e),
         })
     }
@@ -548,7 +562,9 @@ impl McpServer {
                 );
                 Ok(json_result(value))
             }
-            Ok(None) => Ok(json_error(server_error("앱을 찾을 수 없습니다."))),
+            Ok(None) => Ok(json_error(
+                kaleidoscope_contract::errors::MCP_OPEN_APP_NOT_FOUND(&args.app_id),
+            )),
             Err(e) => Ok(json_error(e)),
         }
     }
@@ -580,9 +596,9 @@ impl McpServer {
         principal: McpPrincipal,
     ) -> Result<CallToolResult, ErrorData> {
         let Some(workspace_id) = effective_workspace_id(args.workspace_id, &principal) else {
-            return Ok(json_error(server_error(
-                "작업 id가 필요합니다. list_workspaces에서 현재 작업을 확인하세요.",
-            )));
+            return Ok(json_error(
+                kaleidoscope_contract::errors::MCP_GET_WORKSPACE_ID_REQUIRED(),
+            ));
         };
         Ok(match self.state.get_workspace(&workspace_id) {
             Ok(Some(mut value)) => {
@@ -592,8 +608,8 @@ impl McpServer {
                 }
                 json_result(value)
             }
-            Ok(None) => json_error(server_error(
-                "작업을 찾을 수 없습니다. list_workspaces에서 현재 작업을 확인하세요.",
+            Ok(None) => json_error(kaleidoscope_contract::errors::MCP_GET_WORKSPACE_NOT_FOUND(
+                &workspace_id,
             )),
             Err(error) => json_error(error),
         })
@@ -626,7 +642,9 @@ impl McpServer {
         principal: McpPrincipal,
     ) -> Result<CallToolResult, ErrorData> {
         let Some(workspace_id) = effective_workspace_id(args.workspace_id, &principal) else {
-            return Ok(json_error(server_error("작업 id가 필요합니다.")));
+            return Ok(json_error(
+                kaleidoscope_contract::errors::MCP_GET_SHARED_VIEW_WORKSPACE_ID_REQUIRED(),
+            ));
         };
         Ok(match self.state.shared_views(&workspace_id) {
             Ok(views) => {
@@ -680,9 +698,13 @@ impl McpServer {
                     .iter()
                     .any(|workspace| workspace.id == args.workspace_id) =>
             {
-                Ok(json_error(server_error("마지막 작업은 지울 수 없습니다.")))
+                Ok(json_error(
+                    kaleidoscope_contract::errors::MCP_DELETE_WORKSPACE_LAST(&args.workspace_id),
+                ))
             }
-            Ok(_) => Ok(json_error(server_error("작업을 찾을 수 없습니다."))),
+            Ok(_) => Ok(json_error(
+                kaleidoscope_contract::errors::MCP_DELETE_WORKSPACE_NOT_FOUND(&args.workspace_id),
+            )),
             Err(error) => Ok(json_error(error)),
         }
     }
@@ -718,7 +740,9 @@ impl McpServer {
     ) -> Result<CallToolResult, ErrorData> {
         Ok(match self.state.revoke_device(&args.device_id) {
             Ok(true) => json_result(json!({"revoked":true})),
-            Ok(false) => json_error(server_error("기기를 찾을 수 없습니다.")),
+            Ok(false) => json_error(kaleidoscope_contract::errors::MCP_REVOKE_DEVICE_NOT_FOUND(
+                &args.device_id,
+            )),
             Err(e) => json_error(e),
         })
     }
@@ -785,7 +809,9 @@ impl McpServer {
     ) -> Result<CallToolResult, ErrorData> {
         Ok(match self.state.delete_connection(&args.name) {
             Ok(true) => json_result(json!({"deleted":true})),
-            Ok(false) => json_error(server_error("연결을 찾을 수 없습니다.")),
+            Ok(false) => json_error(
+                kaleidoscope_contract::errors::MCP_DELETE_CONNECTION_NOT_FOUND(&args.name),
+            ),
             Err(error) => json_error(error),
         })
     }
@@ -834,3 +860,25 @@ mod tests;
 #[cfg(test)]
 #[path = "mcp_workspace_tests.rs"]
 mod workspace_tests;
+
+#[cfg(test)]
+mod worker_mcp_error_id_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn get_app_tool_error_contains_registered_id() {
+        let server = McpServer::new(AppState::in_memory("test-token"));
+        let result = server
+            .get_app(Parameters(VersionArgs {
+                app_id: "missing-app".into(),
+                version: None,
+            }))
+            .await
+            .unwrap();
+        let result = serde_json::to_value(result).unwrap();
+        let error: CoreError =
+            serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+
+        assert_eq!(error.id.as_deref(), Some("MCP_GET_APP_NOT_FOUND"));
+    }
+}

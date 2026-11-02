@@ -68,25 +68,24 @@ pub(super) async fn execute(
     {
         wrapped.wrap(process_wrap::tokio::JobObject);
         let mut flags = process_wrap::tokio::CreationFlags(Default::default());
-        flags.0 .0 = 0x08000000;
+        flags.0.0 = 0x08000000;
         wrapped.wrap(flags);
     }
     wrapped.wrap(KillOnDrop);
-    let mut child = ProcessTree(
-        wrapped
-            .spawn()
-            .map_err(|e| server_error(&format!("워커를 시작할 수 없습니다: {e}")))?,
-    );
+    let mut child = ProcessTree(wrapped.spawn().map_err(|error| {
+        kaleidoscope_contract::errors::WORKER_PROCESS_START_FAILED()
+            .and_details(vec![error.to_string()])
+    })?);
     let mut stdout = child
         .0
         .stdout()
         .take()
-        .ok_or_else(|| server_error("stdout 없음"))?;
+        .ok_or_else(|| kaleidoscope_contract::errors::WORKER_PROCESS_STDOUT_MISSING())?;
     let mut stderr = child
         .0
         .stderr()
         .take()
-        .ok_or_else(|| server_error("stderr 없음"))?;
+        .ok_or_else(|| kaleidoscope_contract::errors::WORKER_PROCESS_STDERR_MISSING())?;
     let output = tokio::time::timeout_at(deadline, async {
         let mut stdin = child
             .0
@@ -115,8 +114,9 @@ pub(super) async fn execute(
             let _ = child.0.start_kill();
             let _ = child.0.wait().await;
             return Err(match other {
-                Err(_) => server_error("워커 실행 시간이 초과되었습니다"),
-                Ok(Err(error)) => server_error(&format!("워커 실행 실패: {error}")),
+                Err(_) => kaleidoscope_contract::errors::WORKER_PROCESS_TIMEOUT(),
+                Ok(Err(error)) => kaleidoscope_contract::errors::WORKER_PROCESS_IO_FAILED()
+                    .and_details(vec![error.to_string()]),
                 Ok(Ok(_)) => unreachable!(),
             });
         }
