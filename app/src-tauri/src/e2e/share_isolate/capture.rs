@@ -127,24 +127,43 @@ pub(super) fn wait_file(path: &Path, description: &str, timeout: Duration) -> Re
     Ok(())
 }
 
+fn remember_recorder_failure(out: &Path, result: Result<(), String>) -> Result<(), String> {
+    if let Err(error) = result {
+        fs::write(out.join("record.failure"), error).map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
 pub(super) fn set_phase(
     app: &AppHandle,
     out: &Path,
     agent_window_id: &str,
     phase: &str,
 ) -> Result<(), String> {
-    let ready = out.join(format!("phase-{phase}.ready"));
-    if ready.exists() {
-        fs::remove_file(&ready).map_err(|error| error.to_string())?;
+    if out.join("record.failure").is_file() {
+        return Ok(());
     }
-    fs::write(
-        out.join("protected.json"),
-        serde_json::to_vec(&protected_bounds(app, agent_window_id)?)
-            .map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
-    fs::write(out.join("record.phase"), phase.as_bytes()).map_err(|error| error.to_string())?;
-    wait_file(&ready, phase, Duration::from_secs(30))
+    let result = (|| -> Result<(), String> {
+        let ready = out.join(format!("phase-{phase}.ready"));
+        let phase_path = out.join("record.phase");
+        if ready.is_file()
+            && fs::read_to_string(&phase_path).ok().as_deref() == Some(&format!("{phase}\n"))
+        {
+            return Ok(());
+        }
+        if ready.exists() {
+            fs::remove_file(&ready).map_err(|error| error.to_string())?;
+        }
+        fs::write(
+            out.join("protected.json"),
+            serde_json::to_vec(&protected_bounds(app, agent_window_id)?)
+                .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        fs::write(phase_path, format!("{phase}\n")).map_err(|error| error.to_string())?;
+        wait_file(&ready, phase, Duration::from_secs(30))
+    })();
+    remember_recorder_failure(out, result)
 }
 
 pub(super) fn start_recorder(
@@ -152,19 +171,22 @@ pub(super) fn start_recorder(
     out: &Path,
     agent_window_id: &str,
 ) -> Result<(), String> {
-    fs::write(
-        out.join("protected.json"),
-        serde_json::to_vec(&protected_bounds(app, agent_window_id)?)
-            .map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
-    fs::write(out.join("record.phase"), b"setup").map_err(|error| error.to_string())?;
-    fs::write(out.join("record.request"), b"").map_err(|error| error.to_string())?;
-    wait_file(
-        &out.join("record.ready"),
-        "screen recorder",
-        Duration::from_secs(30),
-    )
+    let result = (|| -> Result<(), String> {
+        fs::write(
+            out.join("protected.json"),
+            serde_json::to_vec(&protected_bounds(app, agent_window_id)?)
+                .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        fs::write(out.join("record.phase"), b"setup\n").map_err(|error| error.to_string())?;
+        fs::write(out.join("record.request"), b"").map_err(|error| error.to_string())?;
+        wait_file(
+            &out.join("record.ready"),
+            "screen recorder",
+            Duration::from_secs(30),
+        )
+    })();
+    remember_recorder_failure(out, result)
 }
 
 pub(super) fn send_prompt(
@@ -287,6 +309,10 @@ pub(super) fn cover_active(app: &AppHandle) -> Result<bool, String> {
 }
 
 pub(super) fn wait_for_recorder(out: &Path, log: &mut File) -> Result<(), String> {
+    if let Ok(error) = fs::read_to_string(out.join("record.failure")) {
+        let recorder_error = fs::read_to_string(out.join("recorder-error.txt")).unwrap_or_default();
+        return Err(format!("screen recorder failed: {error}; {recorder_error}"));
+    }
     wait_file(
         &out.join("screen-frames.csv"),
         "screen frame report",

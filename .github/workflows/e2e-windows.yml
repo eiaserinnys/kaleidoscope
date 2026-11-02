@@ -191,6 +191,8 @@ jobs:
           @('@echo off', '"%~dp0kaleidoscope-acp-test-agent.exe" %*') | Set-Content -Encoding Ascii (Join-Path $env:KALEIDOSCOPE_E2E_AGENT_BIN 'fake-agent.cmd')
           $env:PATH = "$env:KALEIDOSCOPE_E2E_AGENT_BIN;$env:PATH"
           $recorderPath = Join-Path $env:GITHUB_WORKSPACE 'app/e2e-windows/freeze-record.ps1'
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $recorderPath -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw '화면 녹화 상태 읽기 자체 시험 실패' }
           $recorder = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $recorderPath, $env:KALEIDOSCOPE_E2E_OUT) -WindowStyle Hidden -PassThru
           $appPath = Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe'
           $app = Start-Process -FilePath $appPath -ArgumentList @('--e2e-scenario=share-isolate', "--e2e-out=$env:KALEIDOSCOPE_E2E_OUT") -PassThru
