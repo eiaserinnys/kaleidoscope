@@ -89,10 +89,8 @@ pub(super) fn read(
                 exists: true,
             })
         }
-        Some(_) => Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_KIND_MISMATCH(doc)),
-        None => Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_NOT_FOUND(
-            doc,
-        )),
+        Some(_) => Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_READ_KIND_MISMATCH(doc)),
+        None => Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_READ_NOT_FOUND(doc)),
     }
 }
 
@@ -123,7 +121,7 @@ pub(super) fn write(
         );
     }
     let revision = contract::storage_revision(entry.kind, &content)
-        .map_err(|_| kaleidoscope_contract::errors::STORAGE_DOCUMENT_SERIALIZATION_FAILED(doc))?;
+        .map_err(|_| kaleidoscope_contract::errors::STORAGE_DOCUMENT_REVISION_FAILED(doc))?;
     tx.execute(
         "INSERT INTO app_storage_buckets(id,account_id,app_id) VALUES(?1,?2,?3) ON CONFLICT(account_id,app_id) DO NOTHING",
         params![bucket, account_id, app_id],
@@ -229,9 +227,9 @@ pub(super) fn move_document(
     let bucket = super::app_storage::bucket_id(account_id, app_id);
     let source = super::app_storage::load_item(&tx, &bucket, &from_key)?;
     let Some((kind, _content, revision)) = source else {
-        return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_NOT_FOUND(
-            &request.from,
-        ));
+        return Err(
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_SOURCE_NOT_FOUND(&request.from),
+        );
     };
     if revision != request.expected_revision {
         return Err(
@@ -240,7 +238,9 @@ pub(super) fn move_document(
         );
     }
     if kind != entry.kind {
-        return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_KIND_MISMATCH(&request.from));
+        return Err(
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_KIND_MISMATCH(&request.from),
+        );
     }
     if super::app_storage::load_item(&tx, &bucket, &to_key)?.is_some() {
         return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_TARGET_EXISTS(&request.to));

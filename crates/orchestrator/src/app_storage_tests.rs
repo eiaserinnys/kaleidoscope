@@ -178,6 +178,7 @@ async fn device_storage_http_reads_defaults_cas_writes_and_resets() {
     let state = AppState::in_memory("secret");
     let account = state.mcp_account_id().unwrap();
     add_device(&state, "device-a", &account, "token-a");
+    add_device(&state, "device-b", &account, "token-b");
     state
         .publish_app(&definition(), "test", false, None)
         .unwrap();
@@ -228,7 +229,7 @@ async fn device_storage_http_reads_defaults_cas_writes_and_resets() {
 
     let (status, conflict) = request(
         &state,
-        "token-a",
+        "token-b",
         "PUT",
         "/api/device/app-storage/storage-test/items/title",
         json!({"content":"stale","expected_revision":null}),
@@ -236,6 +237,8 @@ async fn device_storage_http_reads_defaults_cas_writes_and_resets() {
     .await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(conflict["current_revision"], revision);
+    assert_eq!(conflict["error"]["id"], "STORAGE_ITEM_WRITE_CONFLICT");
+    assert_eq!(conflict["error"]["message"], "저장 항목 settings/title: 읽은 뒤 값이 바뀌었습니다. 값을 다시 읽고 변경 내용을 적용하세요.");
     let (status, reset) = request(
         &state,
         "token-a",
@@ -681,6 +684,63 @@ async fn mcp_storage_tools_and_workspace_context_use_declared_account_data() {
             .unwrap(),
     );
     assert_eq!(reset["revision"], Value::Null);
+}
+
+#[tokio::test]
+async fn general_app_mcp_write_reports_each_invalid_selector() {
+    use super::mcp::app_storage_tools::AppStorageWriteArgs;
+
+    let state = AppState::in_memory("secret");
+    state
+        .publish_app(&definition(), "test", false, None)
+        .unwrap();
+    let server = super::mcp::McpServer::new(state);
+    let cases = [
+        (
+            AppStorageWriteArgs {
+                app_id: "storage-test".into(),
+                entry_id: Some("title".into()),
+                key: None,
+                doc: None,
+                kind: Some(kaleidoscope_contract::app_storage::StorageKind::Json),
+                workspace_id: None,
+                content: json!("value"),
+                expected_revision: None,
+            },
+            "STORAGE_MCP_WRITE_KIND_NOT_ALLOWED",
+        ),
+        (
+            AppStorageWriteArgs {
+                app_id: "storage-test".into(),
+                entry_id: None,
+                key: None,
+                doc: None,
+                kind: None,
+                workspace_id: None,
+                content: json!("value"),
+                expected_revision: None,
+            },
+            "STORAGE_MCP_WRITE_ENTRY_REQUIRED",
+        ),
+        (
+            AppStorageWriteArgs {
+                app_id: "storage-test".into(),
+                entry_id: Some("title".into()),
+                key: Some("settings/title".into()),
+                doc: None,
+                kind: None,
+                workspace_id: None,
+                content: json!("value"),
+                expected_revision: None,
+            },
+            "STORAGE_MCP_WRITE_KEY_WITH_ENTRY",
+        ),
+    ];
+    for (args, expected_id) in cases {
+        let result = server.write_app_storage(Parameters(args)).await.unwrap();
+        assert_eq!(result.is_error, Some(true));
+        assert_eq!(decode(result)["id"], expected_id);
+    }
 }
 
 #[tokio::test]

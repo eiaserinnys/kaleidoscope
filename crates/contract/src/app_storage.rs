@@ -295,6 +295,9 @@ pub struct StorageResetReply {
 #[ts(export, export_to = "contract.ts")]
 pub struct StorageConflict {
     pub current_revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub error: Option<crate::CoreError>,
 }
 
 /// 기본 앱이 선언을 가진 채 서버에 저장하는 원시 값의 메타데이터.

@@ -149,9 +149,7 @@ fn list_collection(
     let ctx = context(inner, window, Some(entry))?;
     let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
     if !decl.collection {
-        return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_REQUIRED(
-            entry,
-        ));
+        return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_LIST_REQUIRED(entry));
     }
     let reply = if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
         let prefix = decl.key.replace("{workspace_id}", &ctx.workspace);
@@ -251,9 +249,7 @@ fn read_with_doc(
                 )
                 .map_err(|error| map_error(inner, &ctx.link, error))?;
             if !raw.exists {
-                return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_NOT_FOUND(
-                    doc,
-                ));
+                return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_READ_NOT_FOUND(doc));
             }
             let kind = raw.kind.ok_or_else(|| {
                 kaleidoscope_contract::errors::STORAGE_STORED_KIND_MISSING(&decl.key)
@@ -262,9 +258,9 @@ fn read_with_doc(
                 kaleidoscope_contract::errors::STORAGE_STORED_CONTENT_MISSING(&decl.key)
             })?;
             if kind != decl.kind {
-                return Err(kaleidoscope_contract::errors::STORAGE_STORED_KIND_INVALID(
-                    &decl.key,
-                ));
+                return Err(
+                    kaleidoscope_contract::errors::STORAGE_RECEIVED_KIND_MISMATCH(&decl.key),
+                );
             }
             contract::validate_storage_content(decl, &content)?;
             return Ok(StorageReadReply {
@@ -287,7 +283,7 @@ fn read_with_doc(
             .map_err(|error| map_error(inner, &ctx.link, error));
     }
     if doc.is_some() {
-        return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_NOT_ALLOWED(entry));
+        return Err(kaleidoscope_contract::errors::STORAGE_READ_DOCUMENT_NAME_NOT_ALLOWED(entry));
     }
     if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
         let key = decl.key.replace("{workspace_id}", &ctx.workspace);
@@ -302,9 +298,9 @@ fn read_with_doc(
                     decl.default.clone()
                 };
                 if raw.exists && raw.kind != Some(decl.kind) {
-                    return Err(kaleidoscope_contract::errors::STORAGE_STORED_KIND_INVALID(
-                        &decl.key,
-                    ));
+                    return Err(
+                        kaleidoscope_contract::errors::STORAGE_RECEIVED_KIND_MISMATCH(&decl.key),
+                    );
                 }
                 if raw.exists {
                     contract::validate_storage_content(decl, &content)?;
@@ -406,7 +402,7 @@ fn write_with_doc(
         return Ok(reply.revision);
     }
     if doc.is_some() {
-        return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_NOT_ALLOWED(entry));
+        return Err(kaleidoscope_contract::errors::STORAGE_WRITE_DOCUMENT_NAME_NOT_ALLOWED(entry));
     }
     if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
         contract::validate_storage_content(decl, &content)?;
@@ -558,7 +554,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             }
             if doc.is_some() {
                 return Err(
-                    kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_NOT_ALLOWED(&entry),
+                    kaleidoscope_contract::errors::STORAGE_RESET_DOCUMENT_NAME_NOT_ALLOWED(&entry),
                 );
             }
             if kaleidoscope_contract::builtin::is_builtin(&ctx.app) {
@@ -615,9 +611,9 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             let ctx = context(inner, &window_id, Some(&entry))?;
             let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
             if !decl.collection {
-                return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_REQUIRED(
-                    &entry,
-                ));
+                return Err(
+                    kaleidoscope_contract::errors::STORAGE_COLLECTION_MOVE_REQUIRED(&entry),
+                );
             }
             let request = CollectionMove {
                 from: from.clone(),

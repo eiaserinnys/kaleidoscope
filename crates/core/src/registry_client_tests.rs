@@ -52,6 +52,94 @@ fn old_registry_without_storage_route_reports_unavailable() {
 }
 
 #[test]
+fn storage_write_conflict_preserves_server_error_and_adds_current_revision() {
+    fn server(body: String) -> (String, std::thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = format!("http://{}", listener.local_addr().unwrap());
+        let worker = std::thread::spawn(move || {
+            let (mut conn, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(conn.try_clone().unwrap());
+            let mut headers = String::new();
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                headers.push_str(&line);
+            }
+            let length = headers
+                .lines()
+                .find_map(|line| {
+                    line.to_lowercase()
+                        .strip_prefix("content-length: ")
+                        .and_then(|value| value.trim().parse::<usize>().ok())
+                })
+                .unwrap();
+            let mut request_body = vec![0; length];
+            reader.read_exact(&mut request_body).unwrap();
+            write!(
+                conn,
+                "HTTP/1.1 409 Conflict\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+            assert!(headers.starts_with("PUT /api/device/app-storage/app/items/entry?"));
+        });
+        (address, worker)
+    }
+
+    let body = serde_json::json!({
+        "current_revision":"revision-2",
+        "error": {
+            "id":"STORAGE_ITEM_WRITE_CONFLICT",
+            "code":"conflict",
+            "message":"저장 항목 settings/title: 읽은 뒤 값이 바뀌었습니다. 값을 다시 읽고 변경 내용을 적용하세요.",
+            "details":[]
+        }
+    });
+    let (url, worker) = server(body.to_string());
+    let error = HttpRegistryClient::new()
+        .storage_write(
+            &url,
+            "token",
+            "app",
+            "entry",
+            "workspace",
+            &kaleidoscope_contract::app_storage::StorageWriteRequest {
+                content: serde_json::json!("changed"),
+                expected_revision: kaleidoscope_contract::app_storage::ExpectedRevision(Some(
+                    "revision-1".into(),
+                )),
+            },
+        )
+        .unwrap_err();
+    assert!(matches!(error, RegistryError::Validation(error)
+        if error.id.as_deref() == Some("STORAGE_ITEM_WRITE_CONFLICT")
+            && error.details == ["current_revision=revision-2"]));
+    worker.join().unwrap();
+
+    let (url, worker) = server(r#"{"current_revision":"revision-2"}"#.into());
+    let error = HttpRegistryClient::new()
+        .storage_write(
+            &url,
+            "token",
+            "app",
+            "entry",
+            "workspace",
+            &kaleidoscope_contract::app_storage::StorageWriteRequest {
+                content: serde_json::json!("changed"),
+                expected_revision: kaleidoscope_contract::app_storage::ExpectedRevision(None),
+            },
+        )
+        .unwrap_err();
+    assert!(matches!(error, RegistryError::Validation(error)
+        if error.id.as_deref() == Some("STORAGE_SERVER_WRITE_CONFLICT")
+            && error.details == ["current_revision=revision-2"]));
+    worker.join().unwrap();
+}
+
+#[test]
 fn events_send_supported_header() {
     let server = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = server.local_addr().unwrap();

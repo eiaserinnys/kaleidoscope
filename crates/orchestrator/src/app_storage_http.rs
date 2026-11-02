@@ -31,7 +31,10 @@ fn storage_error_response(error: CoreError) -> Response {
             .map(str::to_string);
         return (
             StatusCode::CONFLICT,
-            Json(contract::StorageConflict { current_revision }),
+            Json(contract::StorageConflict {
+                current_revision,
+                error: Some(error),
+            }),
         )
             .into_response();
     }

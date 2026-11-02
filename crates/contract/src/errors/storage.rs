@@ -1,7 +1,7 @@
 error_catalog! { ENTRIES;
     STORAGE_WRITE_SCHEMA_MISMATCH(key, reason) {
         class: InvalidRequest,
-        place: "앱 저장소 JSON 항목 쓰기",
+        place: "저장소 내용 검사",
         cause: "쓴 값이 항목에 선언된 JSON 스키마를 만족하지 않는다",
         message: "저장 항목 {key}의 값이 앱 선언과 맞지 않습니다. {reason} 값을 고쳐 다시 저장하세요.",
         fix: "앱 정의의 저장소 스키마와 저장하는 값을 대조해 고치세요"
@@ -97,12 +97,61 @@ error_catalog! { ENTRIES;
         message: "저장 항목 {entry_id}: 앱 정의에 없습니다. 선언된 항목을 골라 다시 시도하세요.",
         fix: "앱에 선언된 저장 항목 id를 사용하세요"
     }
-    STORAGE_COLLECTION_REQUIRED(entry_id) {
+    STORAGE_COLLECTION_LIST_REQUIRED(entry_id) {
         class: InvalidRequest,
-        place: "저장 문서 모음 작업",
+        place: "저장 문서 목록 요청",
         cause: "요청한 항목이 문서 모음으로 선언되지 않았다",
-        message: "저장 항목 {entry_id}: 문서 모음으로 선언되지 않았습니다. 문서 모음 항목을 선택하세요.",
+        message: "저장 항목 {entry_id}: 문서 모음으로 선언되지 않았습니다. 문서 모음 항목의 목록을 요청하세요.",
         fix: "문서 모음으로 선언된 항목을 선택하세요"
+    }
+    STORAGE_COLLECTION_READ_REQUIRED(entry_id) {
+        class: InvalidRequest,
+        place: "저장 문서 읽기 요청",
+        cause: "읽기를 요청한 항목이 문서 모음으로 선언되지 않았다",
+        message: "저장 항목 {entry_id}: 문서 모음으로 선언되지 않았습니다. 문서 모음 항목에서 문서를 읽으세요.",
+        fix: "문서 모음으로 선언된 항목에서 문서를 읽으세요"
+    }
+    STORAGE_COLLECTION_WRITE_REQUIRED(entry_id) {
+        class: InvalidRequest,
+        place: "저장 문서 쓰기 요청",
+        cause: "쓰기를 요청한 항목이 문서 모음으로 선언되지 않았다",
+        message: "저장 항목 {entry_id}: 문서 모음으로 선언되지 않았습니다. 문서 모음 항목에 문서를 쓰세요.",
+        fix: "문서 모음으로 선언된 항목에 문서를 쓰세요"
+    }
+    STORAGE_COLLECTION_RESET_REQUIRED(entry_id) {
+        class: InvalidRequest,
+        place: "저장 문서 초기화 요청",
+        cause: "초기화를 요청한 항목이 문서 모음으로 선언되지 않았다",
+        message: "저장 항목 {entry_id}: 문서 모음으로 선언되지 않았습니다. 문서 모음 항목에서 문서를 초기화하세요.",
+        fix: "문서 모음으로 선언된 항목에서 문서를 초기화하세요"
+    }
+    STORAGE_COLLECTION_MOVE_REQUIRED(entry_id) {
+        class: InvalidRequest,
+        place: "저장 문서 이름 변경 요청",
+        cause: "이름 변경을 요청한 항목이 문서 모음으로 선언되지 않았다",
+        message: "저장 항목 {entry_id}: 문서 모음으로 선언되지 않았습니다. 문서 모음 항목의 문서 이름을 바꾸세요.",
+        fix: "문서 모음으로 선언된 항목의 문서 이름을 바꾸세요"
+    }
+    STORAGE_READ_COLLECTION_NEEDS_DOC(entry_id) {
+        class: InvalidRequest,
+        place: "저장 항목 읽기 요청",
+        cause: "문서 모음 항목을 읽으면서 문서 이름을 지정하지 않았다",
+        message: "저장 항목 {entry_id}: 문서 모음이라 문서 이름을 함께 지정해야 합니다. 문서 이름을 넣어 다시 읽으세요.",
+        fix: "읽을 문서 이름을 지정하세요"
+    }
+    STORAGE_WRITE_COLLECTION_NEEDS_DOC(entry_id) {
+        class: InvalidRequest,
+        place: "저장 항목 쓰기 요청",
+        cause: "문서 모음 항목에 쓰면서 문서 이름을 지정하지 않았다",
+        message: "저장 항목 {entry_id}: 문서 모음이라 문서 이름을 함께 지정해야 합니다. 문서 이름을 넣어 다시 저장하세요.",
+        fix: "저장할 문서 이름을 지정하세요"
+    }
+    STORAGE_RESET_COLLECTION_NEEDS_DOC(entry_id) {
+        class: InvalidRequest,
+        place: "저장 항목 초기화 요청",
+        cause: "문서 모음 항목을 초기화하면서 문서 이름을 지정하지 않았다",
+        message: "저장 항목 {entry_id}: 문서 모음이라 문서 이름을 함께 지정해야 합니다. 초기화할 문서 이름을 넣으세요.",
+        fix: "초기화할 문서 이름을 지정하세요"
     }
     STORAGE_WORKSPACE_REQUIRED(key) {
         class: InvalidRequest,
@@ -132,6 +181,13 @@ error_catalog! { ENTRIES;
         message: "저장 항목 {key}의 종류가 앱 선언과 다릅니다. 저장소 상태를 확인하고 다시 시도하세요.",
         fix: "저장 항목 선언과 저장된 종류를 확인하세요"
     }
+    STORAGE_RECEIVED_KIND_MISMATCH(key) {
+        class: InvalidRequest,
+        place: "서버 저장값 읽기",
+        cause: "서버가 보낸 저장 항목 종류가 앱 선언과 다르다",
+        message: "저장 항목 {key}의 종류가 서버 응답과 앱 선언에서 다릅니다. 저장소를 새로고침한 뒤 다시 읽으세요.",
+        fix: "서버 응답과 앱 선언의 저장 항목 종류를 확인하세요"
+    }
     STORAGE_STORED_CONTENT_INVALID(key) {
         class: Server,
         place: "저장값 읽기",
@@ -153,11 +209,18 @@ error_catalog! { ENTRIES;
         message: "저장 항목 {key}의 내용이 서버 응답에 없습니다. 서버 연결을 새로고침한 뒤 다시 읽으세요.",
         fix: "서버 연결을 새로고침하고 다시 읽으세요"
     }
-    STORAGE_DOCUMENT_NOT_FOUND(doc) {
+    STORAGE_DOCUMENT_READ_NOT_FOUND(doc) {
         class: NotFound,
         place: "저장 문서 읽기",
         cause: "문서 모음에 요청한 문서가 없다",
         message: "저장 문서를 찾을 수 없습니다: {doc}. 문서 목록을 새로고침한 뒤 다시 시도하세요.",
+        fix: "문서 목록을 새로고침하세요"
+    }
+    STORAGE_DOCUMENT_MOVE_SOURCE_NOT_FOUND(doc) {
+        class: NotFound,
+        place: "저장 문서 이름 변경",
+        cause: "이름을 바꾸려는 원본 문서가 없다",
+        message: "이름을 바꿀 저장 문서를 찾을 수 없습니다: {doc}. 문서 목록을 새로고침한 뒤 다시 시도하세요.",
         fix: "문서 목록을 새로고침하세요"
     }
     STORAGE_DOCUMENT_KEY_INVALID(doc) {
@@ -181,10 +244,17 @@ error_catalog! { ENTRIES;
         message: "저장 문서 이름이 허용된 형식이 아닙니다: {doc}. 문서 이름을 고쳐 다시 시도하세요.",
         fix: "문서 이름에 허용된 문자와 경로를 사용하세요"
     }
-    STORAGE_DOCUMENT_KIND_MISMATCH(doc) {
+    STORAGE_DOCUMENT_READ_KIND_MISMATCH(doc) {
         class: Server,
         place: "저장 문서 읽기",
         cause: "저장된 문서 종류가 항목 선언과 다르다",
+        message: "저장 문서 {doc}의 종류가 앱 선언과 다릅니다. 문서 목록을 새로고침한 뒤 다시 시도하세요.",
+        fix: "저장 문서 종류와 항목 선언을 확인하세요"
+    }
+    STORAGE_DOCUMENT_MOVE_KIND_MISMATCH(doc) {
+        class: Server,
+        place: "저장 문서 이름 변경",
+        cause: "이름을 바꾸려는 문서 종류가 항목 선언과 다르다",
         message: "저장 문서 {doc}의 종류가 앱 선언과 다릅니다. 문서 목록을 새로고침한 뒤 다시 시도하세요.",
         fix: "저장 문서 종류와 항목 선언을 확인하세요"
     }
@@ -194,6 +264,27 @@ error_catalog! { ENTRIES;
         cause: "저장할 문서 내용을 JSON으로 직렬화할 수 없다",
         message: "저장 문서 {doc}의 내용을 저장 형식으로 만들지 못했습니다. 내용을 고친 뒤 다시 저장하세요.",
         fix: "저장 문서 내용을 JSON으로 표현할 수 있게 고치세요"
+    }
+    STORAGE_DOCUMENT_REVISION_FAILED(doc) {
+        class: InvalidRequest,
+        place: "저장 문서 revision 만들기",
+        cause: "문서 내용을 바탕으로 revision을 만들 수 없다",
+        message: "저장 문서 {doc}의 변경 확인값을 만들지 못했습니다. 문서 내용을 고친 뒤 다시 저장하세요.",
+        fix: "문서 내용을 확인하세요"
+    }
+    STORAGE_PREVIEW_VALUE_INVALID(key) {
+        class: Server,
+        place: "저장값 미리 보기",
+        cause: "저장된 값이 앱 선언과 맞지 않아 미리 보기를 만들 수 없다",
+        message: "저장 항목 {key}의 값이 앱 선언과 맞지 않아 미리 보기를 만들 수 없습니다. 저장값을 확인하세요.",
+        fix: "저장 항목 값과 앱 선언을 확인하세요"
+    }
+    STORAGE_SERVER_WRITE_CONFLICT() {
+        class: Conflict,
+        place: "저장 항목 쓰기",
+        cause: "서버가 저장 항목 쓰기 충돌을 알렸지만 오류 코드가 없다",
+        message: "저장 항목이 읽은 뒤 바뀌었습니다. 값을 다시 읽고 변경 내용을 적용하세요.",
+        fix: "값을 다시 읽고 변경 내용을 적용하세요"
     }
     STORAGE_DOCUMENT_WRITE_CONFLICT(doc) {
         class: Conflict,
@@ -393,10 +484,73 @@ error_catalog! { ENTRIES;
     }
     STORAGE_APP_NOT_FOUND(app_id) {
         class: NotFound,
-        place: "앱 저장소 접근",
+        place: "서버 저장 항목 목록 조회",
         cause: "요청한 앱이 현재 계정에 없다",
-        message: "앱 ID {app_id}: 저장소를 열 앱을 찾지 못했습니다. 앱 목록을 새로고침하고 다시 시도하세요.",
+        message: "앱 ID {app_id}: 저장 항목 목록을 만들 앱을 찾지 못했습니다. 앱 목록을 새로고침하고 다시 시도하세요.",
         fix: "현재 계정의 앱 id를 사용하세요"
+    }
+    STORAGE_READ_APP_NOT_FOUND(app_id) {
+        class: NotFound,
+        place: "서버 저장 항목 읽기",
+        cause: "읽을 저장 항목이 속한 앱이 현재 계정에 없다",
+        message: "앱 ID {app_id}: 읽을 저장 항목이 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 읽으세요.",
+        fix: "현재 계정의 앱에서 저장 항목을 읽으세요"
+    }
+    STORAGE_WRITE_APP_NOT_FOUND(app_id) {
+        class: NotFound,
+        place: "서버 저장 항목 쓰기",
+        cause: "쓸 저장 항목이 속한 앱이 현재 계정에 없다",
+        message: "앱 ID {app_id}: 저장할 항목이 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 저장하세요.",
+        fix: "현재 계정의 앱에 저장 항목을 쓰세요"
+    }
+    STORAGE_RESET_APP_NOT_FOUND(app_id) {
+        class: NotFound,
+        place: "서버 저장 항목 초기화",
+        cause: "초기화할 저장 항목이 속한 앱이 현재 계정에 없다",
+        message: "앱 ID {app_id}: 초기화할 항목이 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 초기화하세요.",
+        fix: "현재 계정의 앱에서 저장 항목을 초기화하세요"
+    }
+    STORAGE_DOCUMENT_LIST_APP_NOT_FOUND(app_id) {
+        class: NotFound,
+        place: "저장 문서 목록 조회",
+        cause: "문서 목록을 조회할 앱이 현재 계정에 없다",
+        message: "앱 ID {app_id}: 문서 목록을 조회할 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 시도하세요.",
+        fix: "현재 계정의 앱에서 문서 목록을 조회하세요"
+    }
+    STORAGE_DOCUMENT_READ_APP_NOT_FOUND(app_id) {
+        class: NotFound,
+        place: "저장 문서 읽기",
+        cause: "읽을 문서가 속한 앱이 현재 계정에 없다",
+        message: "앱 ID {app_id}: 읽을 문서가 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 읽으세요.",
+        fix: "현재 계정의 앱에서 문서를 읽으세요"
+    }
+    STORAGE_DOCUMENT_WRITE_APP_NOT_FOUND(app_id) {
+        class: NotFound,
+        place: "저장 문서 쓰기",
+        cause: "쓸 문서가 속한 앱이 현재 계정에 없다",
+        message: "앱 ID {app_id}: 저장할 문서가 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 저장하세요.",
+        fix: "현재 계정의 앱에 문서를 쓰세요"
+    }
+    STORAGE_DOCUMENT_RESET_APP_NOT_FOUND(app_id) {
+        class: NotFound,
+        place: "저장 문서 초기화",
+        cause: "초기화할 문서가 속한 앱이 현재 계정에 없다",
+        message: "앱 ID {app_id}: 초기화할 문서가 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 초기화하세요.",
+        fix: "현재 계정의 앱에서 문서를 초기화하세요"
+    }
+    STORAGE_DOCUMENT_MOVE_APP_NOT_FOUND(app_id) {
+        class: NotFound,
+        place: "저장 문서 이름 변경",
+        cause: "이름을 바꿀 문서가 속한 앱이 현재 계정에 없다",
+        message: "앱 ID {app_id}: 이름을 바꿀 문서가 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 시도하세요.",
+        fix: "현재 계정의 앱에서 문서 이름을 바꾸세요"
+    }
+    STORAGE_MCP_LOOKUP_APP_NOT_FOUND(app_id) {
+        class: NotFound,
+        place: "저장소 MCP 앱 조회",
+        cause: "저장소를 조회할 앱이 현재 계정에 없다",
+        message: "앱 ID {app_id}: 저장소를 조회할 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 조회하세요.",
+        fix: "현재 계정의 앱을 지정하세요"
     }
     STORAGE_APP_DECLARATION_NOT_FOUND(app_id) {
         class: NotFound,
@@ -447,19 +601,54 @@ error_catalog! { ENTRIES;
         message: "저장 항목 {entry_id}의 문서 모음은 오프라인에서 읽을 수 없습니다. 서버를 연결한 뒤 다시 시도하세요.",
         fix: "서버에 연결하세요"
     }
-    STORAGE_DOCUMENT_NAME_NOT_ALLOWED(entry_id) {
+    STORAGE_READ_DOCUMENT_NAME_NOT_ALLOWED(entry_id) {
         class: InvalidRequest,
-        place: "저장 항목 읽기 요청",
+        place: "코어 저장 항목 읽기 요청",
         cause: "문서 모음이 아닌 항목에 문서 이름을 지정했다",
         message: "저장 항목 {entry_id}: 문서 모음이 아닙니다. doc 없이 항목을 읽으세요.",
+        fix: "문서 모음 항목에서만 doc을 지정하세요"
+    }
+    STORAGE_WRITE_DOCUMENT_NAME_NOT_ALLOWED(entry_id) {
+        class: InvalidRequest,
+        place: "코어 저장 항목 쓰기 요청",
+        cause: "문서 모음이 아닌 항목에 문서 이름을 지정했다",
+        message: "저장 항목 {entry_id}: 문서 모음이 아닙니다. doc 없이 항목을 저장하세요.",
+        fix: "문서 모음 항목에서만 doc을 지정하세요"
+    }
+    STORAGE_RESET_DOCUMENT_NAME_NOT_ALLOWED(entry_id) {
+        class: InvalidRequest,
+        place: "코어 저장 항목 초기화 요청",
+        cause: "문서 모음이 아닌 항목에 문서 이름을 지정했다",
+        message: "저장 항목 {entry_id}: 문서 모음이 아닙니다. doc 없이 항목을 초기화하세요.",
+        fix: "문서 모음 항목에서만 doc을 지정하세요"
+    }
+    STORAGE_MCP_READ_DOCUMENT_NAME_NOT_ALLOWED(entry_id) {
+        class: InvalidRequest,
+        place: "저장소 MCP 읽기 요청",
+        cause: "문서 모음이 아닌 항목에 문서 이름을 지정했다",
+        message: "저장 항목 {entry_id}: 문서 모음이 아닙니다. MCP 읽기 요청에서 doc을 빼세요.",
+        fix: "문서 모음 항목에서만 doc을 지정하세요"
+    }
+    STORAGE_MCP_WRITE_DOCUMENT_NAME_NOT_ALLOWED(entry_id) {
+        class: InvalidRequest,
+        place: "저장소 MCP 쓰기 요청",
+        cause: "문서 모음이 아닌 항목에 문서 이름을 지정했다",
+        message: "저장 항목 {entry_id}: 문서 모음이 아닙니다. MCP 쓰기 요청에서 doc을 빼세요.",
+        fix: "문서 모음 항목에서만 doc을 지정하세요"
+    }
+    STORAGE_MCP_RESET_DOCUMENT_NAME_NOT_ALLOWED(entry_id) {
+        class: InvalidRequest,
+        place: "저장소 MCP 초기화 요청",
+        cause: "문서 모음이 아닌 항목에 문서 이름을 지정했다",
+        message: "저장 항목 {entry_id}: 문서 모음이 아닙니다. MCP 초기화 요청에서 doc을 빼세요.",
         fix: "문서 모음 항목에서만 doc을 지정하세요"
     }
     STORAGE_DOCUMENT_RESET_REVISION_REQUIRED(doc) {
         class: InvalidRequest,
         place: "저장 문서 초기화 요청",
-        cause: "문서 초기화에 필요한 이름 또는 revision이 없다",
-        message: "저장 문서 {doc} 초기화: doc 이름이나 revision이 없습니다. 문서를 다시 읽고 doc과 revision을 함께 보내세요.",
-        fix: "문서를 다시 읽고 doc과 revision을 보내세요"
+        cause: "문서 초기화에 필요한 revision이 없다",
+        message: "저장 문서 {doc}: 초기화 revision이 없습니다. 문서를 다시 읽고 revision과 함께 요청하세요.",
+        fix: "문서를 다시 읽고 revision을 보내세요"
     }
     STORAGE_DOCUMENT_MOVE_NAME_INVALID() {
         class: InvalidRequest,
@@ -481,6 +670,27 @@ error_catalog! { ENTRIES;
         cause: "고정 저장 항목 요청에 entry_id가 없거나 key와 함께 지정되었다",
         message: "저장소 {action} 요청에 entry_id가 없거나 key와 함께 지정되었습니다. entry_id만 지정해 다시 요청하세요.",
         fix: "entry_id를 하나 지정하고 key는 생략하세요"
+    }
+    STORAGE_MCP_WRITE_KIND_NOT_ALLOWED() {
+        class: InvalidRequest,
+        place: "일반 앱 저장소 MCP 쓰기 요청",
+        cause: "일반 앱 저장소 쓰기에 kind를 지정했다",
+        message: "일반 앱 저장소 쓰기 요청은 kind를 받지 않습니다. 앱 정의에 선언된 종류를 쓰도록 kind를 빼세요.",
+        fix: "일반 앱 저장소 쓰기 요청에서 kind를 빼세요"
+    }
+    STORAGE_MCP_WRITE_ENTRY_REQUIRED() {
+        class: InvalidRequest,
+        place: "일반 앱 저장소 MCP 쓰기 요청",
+        cause: "일반 앱 저장소 쓰기에 entry_id가 없다",
+        message: "일반 앱 저장소 쓰기 요청에 entry_id가 없습니다. 앱에 선언된 항목 ID를 지정하세요.",
+        fix: "앱에 선언된 entry_id를 지정하세요"
+    }
+    STORAGE_MCP_WRITE_KEY_WITH_ENTRY() {
+        class: InvalidRequest,
+        place: "일반 앱 저장소 MCP 쓰기 요청",
+        cause: "일반 앱 저장소 쓰기에 entry_id와 key를 함께 지정했다",
+        message: "일반 앱 저장소 쓰기 요청에 entry_id와 key를 함께 지정했습니다. entry_id만 남기고 key를 빼세요.",
+        fix: "일반 앱 저장소 쓰기 요청에서 key를 빼세요"
     }
     STORAGE_MCP_KEY_INVALID(key) {
         class: InvalidRequest,

@@ -48,13 +48,12 @@ impl AppState {
         workspace_id: Option<&str>,
     ) -> Result<contract::CollectionListReply, CoreError> {
         let db = self.lock_db()?;
-        let definition = current_definition(&db, app_id)?
-            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_APP_NOT_FOUND(app_id))?;
+        let definition = current_definition(&db, app_id)?.ok_or_else(|| {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_LIST_APP_NOT_FOUND(app_id)
+        })?;
         let entry = declared_entry(&definition, entry_id)?;
         if !entry.collection {
-            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_REQUIRED(
-                entry_id,
-            ));
+            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_LIST_REQUIRED(entry_id));
         }
         let prefix = resolve_key(entry, workspace_id)?;
         let mut tx = db.unchecked_transaction().map_err(db_error)?;
@@ -74,13 +73,12 @@ impl AppState {
         workspace_id: Option<&str>,
     ) -> Result<contract::StorageReadReply, CoreError> {
         let db = self.lock_db()?;
-        let definition = current_definition(&db, app_id)?
-            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_APP_NOT_FOUND(app_id))?;
+        let definition = current_definition(&db, app_id)?.ok_or_else(|| {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_READ_APP_NOT_FOUND(app_id)
+        })?;
         let entry = declared_entry(&definition, entry_id)?;
         if !entry.collection {
-            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_REQUIRED(
-                entry_id,
-            ));
+            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_READ_REQUIRED(entry_id));
         }
         let prefix = resolve_key(entry, workspace_id)?;
         let mut tx = db.unchecked_transaction().map_err(db_error)?;
@@ -102,13 +100,12 @@ impl AppState {
         expected_revision: Option<String>,
     ) -> Result<(contract::StorageWriteReply, String, StorageUpdate), CoreError> {
         let db = self.lock_db()?;
-        let definition = current_definition(&db, app_id)?
-            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_APP_NOT_FOUND(app_id))?;
+        let definition = current_definition(&db, app_id)?.ok_or_else(|| {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_WRITE_APP_NOT_FOUND(app_id)
+        })?;
         let entry = declared_entry(&definition, entry_id)?.clone();
         if !entry.collection {
-            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_REQUIRED(
-                entry_id,
-            ));
+            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_WRITE_REQUIRED(entry_id));
         }
         let prefix = resolve_key(&entry, workspace_id)?;
         drop(db);
@@ -135,13 +132,12 @@ impl AppState {
         expected_revision: Option<String>,
     ) -> Result<(contract::StorageResetReply, String, StorageUpdate), CoreError> {
         let db = self.lock_db()?;
-        let definition = current_definition(&db, app_id)?
-            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_APP_NOT_FOUND(app_id))?;
+        let definition = current_definition(&db, app_id)?.ok_or_else(|| {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_RESET_APP_NOT_FOUND(app_id)
+        })?;
         let entry = declared_entry(&definition, entry_id)?.clone();
         if !entry.collection {
-            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_REQUIRED(
-                entry_id,
-            ));
+            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_RESET_REQUIRED(entry_id));
         }
         let prefix = resolve_key(&entry, workspace_id)?;
         drop(db);
@@ -175,13 +171,12 @@ impl AppState {
         CoreError,
     > {
         let db = self.lock_db()?;
-        let definition = current_definition(&db, app_id)?
-            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_APP_NOT_FOUND(app_id))?;
+        let definition = current_definition(&db, app_id)?.ok_or_else(|| {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_APP_NOT_FOUND(app_id)
+        })?;
         let entry = declared_entry(&definition, entry_id)?.clone();
         if !entry.collection {
-            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_REQUIRED(
-                entry_id,
-            ));
+            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_MOVE_REQUIRED(entry_id));
         }
         let prefix = resolve_key(&entry, workspace_id)?;
         drop(db);
@@ -400,12 +395,10 @@ impl AppState {
     ) -> Result<contract::StorageReadReply, CoreError> {
         let db = self.lock_db()?;
         let definition = current_definition(&db, app_id)?
-            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_APP_NOT_FOUND(app_id))?;
+            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_READ_APP_NOT_FOUND(app_id))?;
         let entry = declared_entry(&definition, entry_id)?;
         if entry.collection {
-            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_REQUIRED(
-                entry_id,
-            ));
+            return Err(kaleidoscope_contract::errors::STORAGE_READ_COLLECTION_NEEDS_DOC(entry_id));
         }
         let key = resolve_key(entry, workspace_id)?;
         let mut tx = db.unchecked_transaction().map_err(db_error)?;
@@ -464,12 +457,12 @@ impl AppState {
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(db_error)?;
         let definition = current_definition(&tx, app_id)?
-            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_APP_NOT_FOUND(app_id))?;
+            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_WRITE_APP_NOT_FOUND(app_id))?;
         let entry = declared_entry(&definition, entry_id)?.clone();
         if entry.collection {
-            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_REQUIRED(
-                entry_id,
-            ));
+            return Err(
+                kaleidoscope_contract::errors::STORAGE_WRITE_COLLECTION_NEEDS_DOC(entry_id),
+            );
         }
         let key = resolve_key(&entry, workspace_id)?;
         check_workspace_owner(&tx, account_id, workspace_id)?;
@@ -545,12 +538,12 @@ impl AppState {
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(db_error)?;
         let definition = current_definition(&tx, app_id)?
-            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_APP_NOT_FOUND(app_id))?;
+            .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_RESET_APP_NOT_FOUND(app_id))?;
         let entry = declared_entry(&definition, entry_id)?.clone();
         if entry.collection {
-            return Err(kaleidoscope_contract::errors::STORAGE_COLLECTION_REQUIRED(
-                entry_id,
-            ));
+            return Err(
+                kaleidoscope_contract::errors::STORAGE_RESET_COLLECTION_NEEDS_DOC(entry_id),
+            );
         }
         let key = resolve_key(&entry, workspace_id)?;
         check_workspace_owner(&tx, account_id, workspace_id)?;

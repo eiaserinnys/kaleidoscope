@@ -468,7 +468,10 @@ fn response_error(error: CoreError) -> Response {
             .map(str::to_string);
         return (
             StatusCode::CONFLICT,
-            Json(contract::StorageConflict { current_revision }),
+            Json(contract::StorageConflict {
+                current_revision,
+                error: None,
+            }),
         )
             .into_response();
     }

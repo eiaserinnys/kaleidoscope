@@ -177,7 +177,9 @@ impl super::McpServer {
                     Ok(Some(definition)) => definition,
                     Ok(None) => {
                         return Ok(json_error(
-                            kaleidoscope_contract::errors::STORAGE_APP_NOT_FOUND(&args.app_id),
+                            kaleidoscope_contract::errors::STORAGE_MCP_LOOKUP_APP_NOT_FOUND(
+                                &args.app_id,
+                            ),
                         ))
                     }
                     Err(error) => return Ok(json_error(error)),
@@ -187,7 +189,9 @@ impl super::McpServer {
                     Ok(Some(app)) => app.version.definition,
                     Ok(None) => {
                         return Ok(json_error(
-                            kaleidoscope_contract::errors::STORAGE_APP_NOT_FOUND(&args.app_id),
+                            kaleidoscope_contract::errors::STORAGE_MCP_LOOKUP_APP_NOT_FOUND(
+                                &args.app_id,
+                            ),
                         ))
                     }
                     Err(error) => return Ok(json_error(error)),
@@ -215,13 +219,11 @@ impl super::McpServer {
                         let definition =
                             match super::super::builtin_specs::load_definition(&db, &args.app_id) {
                                 Ok(Some(definition)) => definition,
-                                Ok(None) => {
-                                    return Ok(json_error(
-                                        kaleidoscope_contract::errors::STORAGE_APP_NOT_FOUND(
-                                            &args.app_id,
-                                        ),
-                                    ))
-                                }
+                                Ok(None) => return Ok(json_error(
+                                    kaleidoscope_contract::errors::STORAGE_MCP_LOOKUP_APP_NOT_FOUND(
+                                        &args.app_id,
+                                    ),
+                                )),
                                 Err(error) => return Ok(json_error(error)),
                             };
                         json_result(
@@ -241,7 +243,7 @@ impl super::McpServer {
                     json!({"storage":app.version.definition.storage,"bucket_id":reply.bucket_id,"items":reply.items}),
                 )),
                 Ok(None) => Ok(json_error(
-                    kaleidoscope_contract::errors::STORAGE_APP_NOT_FOUND(&args.app_id),
+                    kaleidoscope_contract::errors::STORAGE_MCP_LOOKUP_APP_NOT_FOUND(&args.app_id),
                 )),
                 Err(error) => Ok(json_error(error)),
             },
@@ -337,7 +339,9 @@ impl super::McpServer {
             if let Some(doc) = args.doc.as_deref() {
                 if !entry.collection {
                     return Ok(json_error(
-                        kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_NOT_ALLOWED(&entry.id),
+                        kaleidoscope_contract::errors::STORAGE_MCP_READ_DOCUMENT_NAME_NOT_ALLOWED(
+                            &entry.id,
+                        ),
                     ));
                 }
                 if !kaleidoscope_contract::app_storage::valid_collection_doc(doc) {
@@ -508,7 +512,9 @@ impl super::McpServer {
             if let Some(doc) = args.doc.as_deref() {
                 if !entry.collection {
                     return Ok(json_error(
-                        kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_NOT_ALLOWED(&entry.id),
+                        kaleidoscope_contract::errors::STORAGE_MCP_WRITE_DOCUMENT_NAME_NOT_ALLOWED(
+                            &entry.id,
+                        ),
                     ));
                 }
                 if !kaleidoscope_contract::app_storage::valid_collection_doc(doc) {
@@ -557,15 +563,21 @@ impl super::McpServer {
                 },
             );
         }
-        let Some(entry_id) = args
-            .entry_id
-            .as_deref()
-            .filter(|_| args.key.is_none() && args.kind.is_none())
-        else {
+        if args.kind.is_some() {
             return Ok(json_error(
-                kaleidoscope_contract::errors::STORAGE_MCP_ENTRY_REQUIRED("쓰기"),
+                kaleidoscope_contract::errors::STORAGE_MCP_WRITE_KIND_NOT_ALLOWED(),
+            ));
+        }
+        let Some(entry_id) = args.entry_id.as_deref() else {
+            return Ok(json_error(
+                kaleidoscope_contract::errors::STORAGE_MCP_WRITE_ENTRY_REQUIRED(),
             ));
         };
+        if args.key.is_some() {
+            return Ok(json_error(
+                kaleidoscope_contract::errors::STORAGE_MCP_WRITE_KEY_WITH_ENTRY(),
+            ));
+        }
         if let Some(doc) = args.doc.as_deref() {
             if !kaleidoscope_contract::app_storage::valid_collection_doc(doc) {
                 return Ok(json_error(
@@ -654,7 +666,9 @@ impl super::McpServer {
                 Ok(value) if value.0.collection => value,
                 Ok(_) => {
                     return Ok(json_error(
-                        kaleidoscope_contract::errors::STORAGE_COLLECTION_REQUIRED(&args.entry_id),
+                        kaleidoscope_contract::errors::STORAGE_COLLECTION_MOVE_REQUIRED(
+                            &args.entry_id,
+                        ),
                     ))
                 }
                 Err(error) => return Ok(json_error(error)),
@@ -798,7 +812,9 @@ impl super::McpServer {
             if let Some(doc) = args.doc.as_deref() {
                 if !entry.collection {
                     return Ok(json_error(
-                        kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_NOT_ALLOWED(&entry.id),
+                        kaleidoscope_contract::errors::STORAGE_MCP_RESET_DOCUMENT_NAME_NOT_ALLOWED(
+                            &entry.id,
+                        ),
                     ));
                 }
                 if !kaleidoscope_contract::app_storage::valid_collection_doc(doc) {
