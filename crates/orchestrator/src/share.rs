@@ -82,12 +82,15 @@ impl AppState {
         upload: ShareUpload,
     ) -> Result<(), CoreError> {
         if !self.device_owns_workspace(device_id, &upload.workspace_id)? {
-            return Err(CoreError::new(ErrorCode::NotFound));
+            return Err(
+                kaleidoscope_contract::errors::SHARE_UPLOAD_WORKSPACE_NOT_FOUND(&upload.app_name),
+            );
         }
+        let app_name = upload.app_name.clone();
         self.0
             .shares
             .lock()
-            .map_err(|_| server_error("같이 보기 상태를 저장할 수 없습니다."))?
+            .map_err(|_| kaleidoscope_contract::errors::SHARE_UPLOAD_STATE_WRITE_FAILED(&app_name))?
             .put(device_id, device_name, window_id, upload);
         Ok(())
     }
@@ -112,7 +115,7 @@ impl AppState {
             .0
             .shares
             .lock()
-            .map_err(|_| server_error("같이 보기 상태를 읽을 수 없습니다."))?
+            .map_err(|_| kaleidoscope_contract::errors::SHARE_LIST_STATE_READ_FAILED())?
             .workspace_views(workspace_id))
     }
 }
@@ -126,15 +129,19 @@ pub(super) async fn put_share(
     let Ok(Json(upload)) = body else {
         return http::error_response(
             StatusCode::BAD_REQUEST,
-            CoreError::new(ErrorCode::InvalidRequest),
+            kaleidoscope_contract::errors::SHARE_UPLOAD_BODY_INVALID(&window_id),
         );
     };
-    if upload.workspace_id.trim().is_empty()
-        || upload.text.as_bytes().len() > kaleidoscope_contract::SHARE_TEXT_MAX_BYTES
-    {
+    if upload.workspace_id.trim().is_empty() {
         return http::error_response(
             StatusCode::BAD_REQUEST,
-            CoreError::new(ErrorCode::InvalidRequest),
+            kaleidoscope_contract::errors::SHARE_UPLOAD_WORKSPACE_INVALID(&upload.app_name),
+        );
+    }
+    if upload.text.as_bytes().len() > kaleidoscope_contract::SHARE_TEXT_MAX_BYTES {
+        return http::error_response(
+            StatusCode::BAD_REQUEST,
+            kaleidoscope_contract::errors::SHARE_UPLOAD_TEXT_TOO_LARGE(&upload.app_name),
         );
     }
     match state.put_shared_view(&device_id, &device_name, &window_id, upload) {

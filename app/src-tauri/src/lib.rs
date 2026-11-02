@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use kaleidoscope_core::kaleidoscope_contract::{
-    CoreError, CoreReply, CoreRequest, ErrorCode, TAURI_EVENT,
+    errors, CoreError, CoreReply, CoreRequest, TAURI_EVENT,
 };
 use kaleidoscope_core::{Core, CoreConfig, Host, PcRoot};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -183,14 +183,7 @@ async fn core(request: CoreRequest, core: State<'_, Arc<Core>>) -> Result<CoreRe
         result
     })
     .await
-    .unwrap_or_else(|_| {
-        Err(CoreError {
-            id: None,
-            code: ErrorCode::Io,
-            message: "코어 작업이 중단되었습니다.".into(),
-            details: Vec::new(),
-        })
-    })
+    .unwrap_or_else(|_| Err(errors::SHELL_IPC_CORE_TASK_INTERRUPTED()))
 }
 
 #[tauri::command]
@@ -204,7 +197,12 @@ async fn core_bytes(
             .get(name)
             .and_then(|value| value.to_str().ok())
             .map(str::to_owned)
-            .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))
+            .ok_or_else(|| match name {
+                "x-ks-operation" => errors::SHELL_IPC_OPERATION_HEADER_INVALID(),
+                "x-ks-window" => errors::SHELL_IPC_WINDOW_HEADER_INVALID(),
+                "x-ks-handle" => errors::SHELL_IPC_HANDLE_HEADER_INVALID(),
+                _ => unreachable!("core_bytes only reads its three required headers"),
+            })
     };
     let operation = header("x-ks-operation")?;
     let window = header("x-ks-window")?;
@@ -219,7 +217,7 @@ async fn core_bytes(
         .and_then(|value| value.parse::<u64>().ok());
     let bytes = match request.body() {
         tauri::ipc::InvokeBody::Raw(bytes) => bytes.clone(),
-        _ => return Err(CoreError::new(ErrorCode::InvalidRequest)),
+        _ => return Err(errors::SHELL_IPC_BODY_INVALID()),
     };
     let core = Arc::clone(core.inner());
     let result = tauri::async_runtime::spawn_blocking(move || match operation.as_str() {
@@ -228,17 +226,17 @@ async fn core_bytes(
             .client_write_export(
                 &window,
                 &handle,
-                offset.ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?,
+                offset.ok_or_else(errors::SHELL_IPC_EXPORT_OFFSET_INVALID)?,
                 &bytes,
             )
             .map(|()| Vec::new()),
         "client.http_read" | "client.blob_put" => {
             core.client_binary(&operation, &window, &handle, &bytes)
         }
-        _ => Err(CoreError::new(ErrorCode::InvalidRequest)),
+        _ => Err(errors::SHELL_IPC_OPERATION_UNSUPPORTED()),
     })
     .await
-    .map_err(|_| CoreError::new(ErrorCode::Io))??;
+    .map_err(|_| errors::SHELL_IPC_BYTES_TASK_INTERRUPTED())??;
     Ok(tauri::ipc::Response::new(result))
 }
 

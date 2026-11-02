@@ -9,8 +9,7 @@ pub(super) struct PreparedAsset {
 }
 
 pub(super) fn prepare(upload: &AssetUpload) -> Result<PreparedAsset, CoreError> {
-    let bytes = kaleidoscope_data::asset_validation::validate_upload(upload)
-        .map_err(|message| CoreError::with_details(ErrorCode::InvalidRequest, vec![message]))?;
+    let bytes = kaleidoscope_data::asset_validation::validate_upload(upload)?;
     Ok(PreparedAsset {
         upload: upload.clone(),
         bytes,
@@ -67,9 +66,12 @@ pub(super) fn get_in(
     account: &str,
     id: &str,
     version: u32,
+    query_failed: impl FnOnce() -> CoreError,
 ) -> Result<Option<(AssetMeta, Vec<u8>)>, CoreError> {
     db.query_row("SELECT id,version,format,sha256,source,license,byte_size,created_at,bytes FROM asset_versions WHERE account_id=?1 AND id=?2 AND version=?3",
-        params![account, id, version], read_row).optional().map_err(db_error)
+        params![account, id, version], read_row).optional().map_err(|error| {
+            query_failed().and_details(vec![error.to_string()])
+        })
 }
 
 pub(super) fn insert(
@@ -78,7 +80,12 @@ pub(super) fn insert(
     prepared: &PreparedAsset,
 ) -> Result<AssetMeta, CoreError> {
     let upload = &prepared.upload;
-    if let Some((existing, bytes)) = get_in(tx, account, &upload.id, upload.version)? {
+    if let Some((existing, bytes)) = get_in(tx, account, &upload.id, upload.version, || {
+        kaleidoscope_contract::errors::ASSET_REGISTER_EXISTING_LOOKUP_FAILED(
+            &upload.id,
+            upload.version,
+        )
+    })? {
         if existing.format == upload.format
             && existing.sha256 == upload.sha256
             && existing.source == upload.source
@@ -87,7 +94,12 @@ pub(super) fn insert(
         {
             return Ok(existing);
         }
-        return Err(CoreError::new(ErrorCode::Conflict));
+        return Err(
+            kaleidoscope_contract::errors::ASSET_REGISTER_VERSION_CONFLICT(
+                &upload.id,
+                upload.version,
+            ),
+        );
     }
     let meta = AssetMeta {
         id: upload.id.clone(),
@@ -100,7 +112,10 @@ pub(super) fn insert(
         created_at: timestamp(),
     };
     tx.execute("INSERT INTO asset_versions(account_id,id,version,format,sha256,source,license,byte_size,created_at,bytes) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
-        params![account, meta.id, meta.version, format_name(meta.format), meta.sha256, meta.source, meta.license, meta.byte_size as i64, meta.created_at, prepared.bytes]).map_err(db_error)?;
+        params![account, meta.id, meta.version, format_name(meta.format), meta.sha256, meta.source, meta.license, meta.byte_size as i64, meta.created_at, prepared.bytes]).map_err(|error| {
+            kaleidoscope_contract::errors::ASSET_REGISTER_INSERT_FAILED(&upload.id, upload.version)
+                .and_details(vec![error.to_string()])
+        })?;
     Ok(meta)
 }
 
@@ -111,15 +126,20 @@ pub(super) fn verify_dependencies(
 ) -> Result<(), CoreError> {
     for asset in assets {
         if !kaleidoscope_contract::builtin::is_bundled_asset(&asset.id, asset.version)
-            && get_in(tx, account, &asset.id, asset.version)?.is_none()
+            && get_in(tx, account, &asset.id, asset.version, || {
+                kaleidoscope_contract::errors::ASSET_APP_DEPENDENCY_LOOKUP_FAILED(
+                    &asset.id,
+                    asset.version,
+                )
+            })?
+            .is_none()
         {
-            return Err(CoreError::with_details(
-                ErrorCode::InvalidAppDefinition,
-                vec![format!(
-                    "등록되지 않은 자산입니다: {} 판 {}",
-                    asset.id, asset.version
-                )],
-            ));
+            return Err(
+                kaleidoscope_contract::errors::ASSET_APP_DEPENDENCY_NOT_FOUND(
+                    &asset.id,
+                    asset.version,
+                ),
+            );
         }
     }
     Ok(())
@@ -131,12 +151,27 @@ pub(super) fn verify_client_entry(
     definition: &AppDefinition,
 ) -> Result<(), CoreError> {
     if let Some(client) = &definition.client {
-        let asset = get_in(db, account, &client.entry.id, client.entry.version)?;
-        if !asset.is_some_and(|(meta, _)| meta.format == AssetFormat::Javascript) {
-            return Err(CoreError::with_details(
-                ErrorCode::InvalidAppDefinition,
-                vec!["클라이언트 진입 자산은 javascript 형식이어야 합니다".into()],
-            ));
+        let asset = get_in(db, account, &client.entry.id, client.entry.version, || {
+            kaleidoscope_contract::errors::ASSET_APP_CLIENT_ENTRY_LOOKUP_FAILED(
+                &client.entry.id,
+                client.entry.version,
+            )
+        })?;
+        let Some((meta, _)) = asset else {
+            return Err(
+                kaleidoscope_contract::errors::ASSET_APP_CLIENT_ENTRY_NOT_FOUND(
+                    &client.entry.id,
+                    client.entry.version,
+                ),
+            );
+        };
+        if meta.format != AssetFormat::Javascript {
+            return Err(
+                kaleidoscope_contract::errors::ASSET_APP_CLIENT_ENTRY_FORMAT_INVALID(
+                    &client.entry.id,
+                    client.entry.version,
+                ),
+            );
         }
     }
     Ok(())
@@ -147,19 +182,36 @@ impl AppState {
         let prepared = prepare(upload)?;
         let account = self.mcp_account_id()?;
         let mut db = self.lock_db()?;
-        let tx = db.transaction().map_err(db_error)?;
+        let tx = db.transaction().map_err(|error| {
+            kaleidoscope_contract::errors::ASSET_REGISTER_TRANSACTION_BEGIN_FAILED(&upload.id)
+                .and_details(vec![error.to_string()])
+        })?;
         let meta = insert(&tx, &account, &prepared)?;
-        tx.commit().map_err(db_error)?;
+        tx.commit().map_err(|error| {
+            kaleidoscope_contract::errors::ASSET_REGISTER_TRANSACTION_COMMIT_FAILED(&upload.id)
+                .and_details(vec![error.to_string()])
+        })?;
         Ok(meta)
     }
 
     pub(super) fn list_assets(&self) -> Result<Vec<AssetMeta>, CoreError> {
         let account = self.mcp_account_id()?;
         let db = self.lock_db()?;
-        let mut statement = db.prepare("SELECT id,version,format,sha256,source,license,byte_size,created_at,X'' FROM asset_versions WHERE account_id=?1 ORDER BY id,version").map_err(db_error)?;
-        let rows = statement.query_map([account], read_row).map_err(db_error)?;
-        rows.map(|row| row.map(|(meta, _)| meta).map_err(db_error))
-            .collect()
+        let mut statement = db.prepare("SELECT id,version,format,sha256,source,license,byte_size,created_at,X'' FROM asset_versions WHERE account_id=?1 ORDER BY id,version").map_err(|error| {
+            kaleidoscope_contract::errors::ASSET_LIST_PREPARE_FAILED()
+                .and_details(vec![error.to_string()])
+        })?;
+        let rows = statement.query_map([account], read_row).map_err(|error| {
+            kaleidoscope_contract::errors::ASSET_LIST_QUERY_FAILED()
+                .and_details(vec![error.to_string()])
+        })?;
+        rows.map(|row| {
+            row.map(|(meta, _)| meta).map_err(|error| {
+                kaleidoscope_contract::errors::ASSET_LIST_ROW_READ_FAILED()
+                    .and_details(vec![error.to_string()])
+            })
+        })
+        .collect()
     }
 
     pub(super) fn get_asset(
@@ -172,7 +224,9 @@ impl AppState {
             return Ok(None);
         }
         let db = self.lock_db()?;
-        get_in(&db, account, id, version)
+        get_in(&db, account, id, version, || {
+            kaleidoscope_contract::errors::ASSET_DOWNLOAD_LOOKUP_FAILED(id, version)
+        })
     }
 }
 
@@ -208,9 +262,10 @@ pub(super) async fn device_get(
             )
                 .into_response()
         }
-        Ok(None) => {
-            super::http::error_response(StatusCode::NOT_FOUND, CoreError::new(ErrorCode::NotFound))
-        }
+        Ok(None) => super::http::error_response(
+            StatusCode::NOT_FOUND,
+            kaleidoscope_contract::errors::ASSET_DOWNLOAD_NOT_FOUND(&id, version),
+        ),
         Err(error) => super::http::error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
     }
 }

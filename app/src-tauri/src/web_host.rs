@@ -3,7 +3,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use kaleidoscope_core::kaleidoscope_contract::{
-    CoreError, ErrorCode, Rect, WebHistoryAction, WebPage,
+    errors, CoreError, Rect, WebHistoryAction, WebPage,
 };
 use kaleidoscope_core::{Core, WebHost};
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
@@ -29,23 +29,20 @@ pub struct TauriWebHost {
     pages: Mutex<HashMap<String, Page>>,
 }
 
-fn fail(error: impl std::fmt::Display) -> CoreError {
-    CoreError {
-        id: None,
-        code: ErrorCode::Io,
-        message: "웹 화면을 조작하지 못했습니다.".into(),
-        details: vec![error.to_string()],
-    }
+fn with_detail(detail: impl std::fmt::Display, error: CoreError) -> CoreError {
+    error.and_details(vec![detail.to_string()])
 }
 fn allowed(url: &tauri::Url) -> bool {
     matches!(url.scheme(), "http" | "https")
         && url.host_str() != Some("tauri.localhost")
         && !(url.host_str() == Some("localhost") && url.port_or_known_default() == Some(1420))
 }
-fn parse_url(url: &str) -> Result<tauri::Url, CoreError> {
-    let url: tauri::Url = url.parse().map_err(fail)?;
+fn parse_url(url: &str, window: &str) -> Result<tauri::Url, CoreError> {
+    let url: tauri::Url = url
+        .parse()
+        .map_err(|error| with_detail(error, errors::WEB_HOST_URL_PARSE_FAILED(window)))?;
     if !allowed(&url) {
-        return Err(CoreError::new(ErrorCode::InvalidRequest));
+        return Err(errors::WEB_HOST_URL_BLOCKED(window));
     }
     Ok(url)
 }
@@ -59,12 +56,13 @@ impl TauriWebHost {
     fn view(&self, id: &str) -> Result<Webview, CoreError> {
         self.app
             .get_webview(&format!("web-{id}"))
-            .ok_or_else(|| CoreError::new(ErrorCode::NotFound))
+            .ok_or_else(|| errors::WEB_HOST_VIEW_NOT_FOUND(id))
     }
 
     fn on_main<T: Send + 'static>(
         &self,
         work: impl FnOnce(AppHandle) -> Result<T, CoreError> + Send + 'static,
+        failed: impl Fn(&str) -> CoreError + Send + Sync + 'static,
     ) -> Result<T, CoreError> {
         let app = self.app.clone();
         let task_app = app.clone();
@@ -72,8 +70,14 @@ impl TauriWebHost {
         app.run_on_main_thread(move || {
             let _ = tx.send(work(task_app));
         })
-        .map_err(fail)?;
-        rx.recv_timeout(Duration::from_secs(2)).map_err(fail)?
+        .map_err(|error| {
+            let detail = error.to_string();
+            with_detail(&detail, failed(&detail))
+        })?;
+        rx.recv_timeout(Duration::from_secs(2)).map_err(|error| {
+            let detail = error.to_string();
+            with_detail(&detail, failed(&detail))
+        })?
     }
 }
 
@@ -119,6 +123,7 @@ fn update(app: &AppHandle, id: &str, state: &Page, view: &ICoreWebView2, loading
 }
 
 fn register(view: &Webview, app: AppHandle, id: String, page: Page) -> Result<(), CoreError> {
+    let window = id.clone();
     let (tx, rx) = mpsc::channel();
     view.with_webview(move |native| {
         let result = (|| unsafe {
@@ -160,15 +165,15 @@ fn register(view: &Webview, app: AppHandle, id: String, page: Page) -> Result<()
         })();
         let _ = tx.send(result.map_err(|e| e.to_string()));
     })
-    .map_err(fail)?;
+    .map_err(|error| with_detail(error, errors::WEB_HOST_REGISTER_FAILED(&window)))?;
     rx.recv_timeout(Duration::from_secs(2))
-        .map_err(fail)?
-        .map_err(fail)
+        .map_err(|error| with_detail(error, errors::WEB_HOST_REGISTER_FAILED(&window)))?
+        .map_err(|detail| with_detail(detail, errors::WEB_HOST_REGISTER_FAILED(&window)))
 }
 
 impl WebHost for TauriWebHost {
     fn attach(&self, id: &str, url: &str) -> Result<WebPage, CoreError> {
-        let url = parse_url(url)?;
+        let url = parse_url(url, id)?;
         if let Some(page) = self.pages.lock().unwrap().get(id).cloned() {
             return Ok(page.lock().unwrap().clone());
         }
@@ -209,15 +214,16 @@ impl WebHost for TauriWebHost {
         let window = self
             .app
             .get_window("main")
-            .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+            .ok_or_else(errors::WEB_HOST_ATTACH_MAIN_WINDOW_NOT_FOUND)?;
         let view = window
             .add_child(
                 builder,
                 LogicalPosition::new(0., 0.),
                 LogicalSize::new(1., 1.),
             )
-            .map_err(fail)?;
-        view.hide().map_err(fail)?;
+            .map_err(|error| with_detail(error, errors::WEB_HOST_ATTACH_FAILED(id)))?;
+        view.hide()
+            .map_err(|error| with_detail(error, errors::WEB_HOST_ATTACH_FAILED(id)))?;
         self.pages.lock().unwrap().insert(id.into(), page.clone());
         if let Err(e) = register(&view, self.app.clone(), id.into(), page.clone()) {
             self.pages.lock().unwrap().remove(id);
@@ -231,21 +237,27 @@ impl WebHost for TauriWebHost {
         let view = self.view(id)?;
         if let Some(b) = bounds {
             view.set_position(LogicalPosition::new(b.x as f64, b.y as f64))
-                .map_err(fail)?;
+                .map_err(|error| with_detail(error, errors::WEB_HOST_PLACE_FAILED(id)))?;
             view.set_size(LogicalSize::new(b.width as f64, b.height as f64))
-                .map_err(fail)?;
-            view.show().map_err(fail)
+                .map_err(|error| with_detail(error, errors::WEB_HOST_PLACE_FAILED(id)))?;
+            view.show()
+                .map_err(|error| with_detail(error, errors::WEB_HOST_PLACE_FAILED(id)))
         } else {
-            view.hide().map_err(fail)
+            view.hide()
+                .map_err(|error| with_detail(error, errors::WEB_HOST_PLACE_FAILED(id)))
         }
     }
     fn navigate(&self, id: &str, url: &str) -> Result<(), CoreError> {
-        self.view(id)?.navigate(parse_url(url)?).map_err(fail)
+        self.view(id)?
+            .navigate(parse_url(url, id)?)
+            .map_err(|error| with_detail(error, errors::WEB_HOST_NAVIGATE_FAILED(id)))
     }
     fn history(&self, id: &str, action: WebHistoryAction) -> Result<(), CoreError> {
         let view = self.view(id)?;
         if matches!(action, WebHistoryAction::Reload) {
-            return view.reload().map_err(fail);
+            return view
+                .reload()
+                .map_err(|error| with_detail(error, errors::WEB_HOST_HISTORY_FAILED(id)));
         }
         let (tx, rx) = mpsc::channel();
         view.with_webview(move |native| {
@@ -276,67 +288,80 @@ impl WebHost for TauriWebHost {
             };
             let _ = tx.send(result.map_err(|e| e.to_string()));
         })
-        .map_err(fail)?;
+        .map_err(|error| with_detail(error, errors::WEB_HOST_HISTORY_FAILED(id)))?;
         rx.recv_timeout(Duration::from_secs(2))
-            .map_err(fail)?
-            .map_err(fail)
+            .map_err(|error| with_detail(error, errors::WEB_HOST_HISTORY_FAILED(id)))?
+            .map_err(|detail| with_detail(detail, errors::WEB_HOST_HISTORY_FAILED(id)))
     }
     fn capture(&self, id: &str) -> Result<Option<Vec<u8>>, CoreError> {
-        capture_view(self.view(id)?)
+        capture_view(self.view(id)?, id)
     }
 
     fn capture_shell(&self) -> Result<Option<(Vec<u8>, f64)>, CoreError> {
         let view = self
             .app
             .get_webview("main")
-            .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+            .ok_or_else(errors::WEB_HOST_CAPTURE_MAIN_VIEW_NOT_FOUND)?;
         let scale = self
             .app
             .get_window("main")
-            .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?
+            .ok_or_else(errors::WEB_HOST_CAPTURE_MAIN_WINDOW_NOT_FOUND)?
             .scale_factor()
-            .map_err(fail)?;
-        Ok(capture_view(view)?.map(|bytes| (bytes, scale)))
+            .map_err(|error| with_detail(error, errors::WEB_HOST_CAPTURE_SCALE_FAILED()))?;
+        Ok(capture_view(view, "쉘")?.map(|bytes| (bytes, scale)))
     }
     fn freeze(&self) -> Result<bool, CoreError> {
-        self.on_main(|app| {
-            let window = app
-                .get_window("main")
-                .ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
-            let hwnd = window.hwnd().map_err(fail)?;
-            crate::freeze_cover::freeze(hwnd).map_err(fail)
-        })?;
+        self.on_main(
+            |app| {
+                let window = app
+                    .get_window("main")
+                    .ok_or_else(errors::WEB_HOST_FREEZE_MAIN_WINDOW_NOT_FOUND)?;
+                let hwnd = window
+                    .hwnd()
+                    .map_err(|error| with_detail(error, errors::WEB_HOST_FREEZE_FAILED()))?;
+                crate::freeze_cover::freeze(hwnd)
+                    .map_err(|error| with_detail(error, errors::WEB_HOST_FREEZE_FAILED()))
+            },
+            |_| errors::WEB_HOST_FREEZE_FAILED(),
+        )?;
         if let Err(error) = crate::freeze_cover::flush() {
-            let _ = self.on_main(|_| {
-                crate::freeze_cover::unfreeze();
-                Ok(())
-            });
-            return Err(fail(error));
+            let _ = self.on_main(
+                |_| {
+                    crate::freeze_cover::unfreeze();
+                    Ok(())
+                },
+                |_| errors::WEB_HOST_UNFREEZE_FAILED(),
+            );
+            return Err(with_detail(error, errors::WEB_HOST_FREEZE_FAILED()));
         }
         Ok(true)
     }
     fn unfreeze(&self) -> Result<(), CoreError> {
         let before = crate::freeze_cover::flush();
-        let destroy = self.on_main(|_| {
-            crate::freeze_cover::unfreeze();
-            Ok(())
-        });
+        let destroy = self.on_main(
+            |_| {
+                crate::freeze_cover::unfreeze();
+                Ok(())
+            },
+            |_| errors::WEB_HOST_UNFREEZE_FAILED(),
+        );
         let after = crate::freeze_cover::flush();
         before
             .and(destroy.map_err(|error| format!("{error:?}")))
             .and(after)
-            .map_err(fail)
+            .map_err(|error| with_detail(error, errors::WEB_HOST_UNFREEZE_FAILED()))
     }
     fn detach(&self, id: &str) -> Result<(), CoreError> {
         self.pages.lock().unwrap().remove(id);
         if let Some(view) = self.app.get_webview(&format!("web-{id}")) {
-            view.close().map_err(fail)?;
+            view.close()
+                .map_err(|error| with_detail(error, errors::WEB_HOST_DETACH_FAILED(id)))?;
         }
         Ok(())
     }
 }
 
-fn capture_view(view: Webview) -> Result<Option<Vec<u8>>, CoreError> {
+fn capture_view(view: Webview, window: &str) -> Result<Option<Vec<u8>>, CoreError> {
     let (tx, rx) = mpsc::channel();
     view.with_webview(move |native| {
         let started = (|| unsafe {
@@ -375,6 +400,6 @@ fn capture_view(view: Webview) -> Result<Option<Vec<u8>>, CoreError> {
             eprintln!("웹뷰 캡처 실패: {error}");
         }
     })
-    .map_err(fail)?;
+    .map_err(|error| with_detail(error, errors::WEB_HOST_CAPTURE_FAILED(window)))?;
     Ok(rx.recv_timeout(Duration::from_secs(2)).ok().flatten())
 }

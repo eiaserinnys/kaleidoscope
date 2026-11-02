@@ -677,6 +677,75 @@ fn remote_asset_without_server_reports_media_load_error() {
 }
 
 #[test]
+fn missing_media_file_reports_registered_media_error() {
+    use kaleidoscope_contract::data::{MediaRef, ResourceMediaRef};
+    let temp = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(folder.path().to_path_buf()));
+    let core = open_core(temp.path(), vec![definition()], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "data-app");
+    pick_folder(&core, &window);
+
+    let error = expect_error(
+        core.handle(CoreRequest::DataMedia {
+            window_id: window,
+            media: MediaRef::Resource(ResourceMediaRef {
+                permission: "docs".into(),
+                path: "missing.png".into(),
+                query: BTreeMap::new(),
+                crop: None,
+            }),
+            max_px: None,
+        }),
+        ErrorCode::NotFound,
+    );
+    assert_eq!(error.id.as_deref(), Some("MEDIA_LOAD_FILE_PATH_NOT_FOUND"));
+    assert_eq!(
+        error.message,
+        "미디어 파일을 찾지 못했습니다. 파일 이름: missing.png. 고른 폴더에서 위치를 확인하세요."
+    );
+}
+
+#[test]
+fn rejected_public_media_path_omits_query_secrets_from_message() {
+    use kaleidoscope_contract::data::{MediaRef, ResourceMediaRef};
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let definition = json!({
+        "id":"public-media-app",
+        "name":"공개 미디어",
+        "requires":{"blocks":4,"modules":{"http":1}},
+        "permissions":[{"module":"http","id":"public","label":"공개","base_url":"https://example.com","paths":["/allowed/"]}],
+        "state":{},
+        "ui":{"type":"text","value":"시험"}
+    })
+    .to_string();
+    let core = open_core(temp.path(), vec![definition], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "public-media-app");
+
+    let error = expect_error(
+        core.handle(CoreRequest::DataMedia {
+            window_id: window,
+            media: MediaRef::Resource(ResourceMediaRef {
+                permission: "public".into(),
+                path: "/outside?token=secret-value".into(),
+                query: BTreeMap::new(),
+                crop: None,
+            }),
+            max_px: None,
+        }),
+        ErrorCode::PermissionDenied,
+    );
+    assert_eq!(error.id.as_deref(), Some("MEDIA_LOAD_HTTP_PATH_FORBIDDEN"));
+    assert!(error.message.contains("/outside"));
+    assert!(!error.message.contains("token"));
+    assert!(!error.message.contains("secret-value"));
+}
+
+#[test]
 fn explicit_null_and_absent_action_value_are_distinct() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());

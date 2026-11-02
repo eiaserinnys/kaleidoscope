@@ -2,18 +2,20 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Cursor, Read};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, UNIX_EPOCH};
 
 use crate::{
     app_commands,
     connections::{self, RequestError},
-    error, files, Inner,
+    files, Inner,
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use image::{GenericImageView, ImageEncoder};
 use kaleidoscope_contract::{
     data::{self, HttpMethod, MediaData, MediaRef},
+    errors,
     registry::ConnectionAccept,
     CoreError, ErrorCode, PermissionDecl,
 };
@@ -30,6 +32,38 @@ struct Entry {
     width: Option<u32>,
     height: Option<u32>,
     used: Instant,
+}
+
+enum Source {
+    File(PathBuf),
+    Connection { name: String, host: String },
+    Http { host: String },
+}
+
+fn file_root_error(media: &str, error: CoreError) -> CoreError {
+    if error.id.is_some() {
+        return error;
+    }
+    match error.code {
+        ErrorCode::NotFound => errors::MEDIA_LOAD_FILE_ROOT_NOT_FOUND(media),
+        ErrorCode::Io => errors::MEDIA_LOAD_FILE_ROOT_ACCESS_FAILED(media),
+        ErrorCode::PathOutsideRoot => errors::MEDIA_LOAD_FILE_ROOT_INVALID(media),
+        _ => error,
+    }
+}
+
+fn file_path_error(media: &str, error: CoreError) -> CoreError {
+    if error.id.is_some() {
+        return error;
+    }
+    match error.code {
+        ErrorCode::NotFound => errors::MEDIA_LOAD_FILE_PATH_NOT_FOUND(media),
+        ErrorCode::PathOutsideRoot => errors::MEDIA_LOAD_FILE_PATH_OUTSIDE_ROOT(media),
+        ErrorCode::PermissionDenied => errors::MEDIA_LOAD_FILE_PATH_PROTECTED(media),
+        ErrorCode::Io => errors::MEDIA_LOAD_FILE_PATH_RESOLVE_FAILED(media),
+        ErrorCode::FileBusy => errors::MEDIA_LOAD_FILE_PATH_BUSY(media),
+        _ => error,
+    }
 }
 
 impl MediaCache {
@@ -65,8 +99,13 @@ pub(crate) fn get(
     media: &MediaRef,
     max_px: Option<u32>,
 ) -> Result<MediaData, CoreError> {
+    let window_id = window;
+    let target = match media {
+        MediaRef::Resource(media) => media.path.clone(),
+        MediaRef::Asset(media) => media.asset.clone(),
+    };
     if max_px == Some(0) {
-        return Err(error::make(ErrorCode::InvalidRequest));
+        return Err(errors::MEDIA_LOAD_OPTIONS_INVALID(&target));
     }
     let media = match media {
         MediaRef::Resource(media) => media,
@@ -77,21 +116,21 @@ pub(crate) fn get(
                     .shared
                     .windows
                     .iter()
-                    .find(|item| item.id == window)
-                    .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                    .find(|item| item.id == window_id)
+                    .ok_or_else(|| errors::MEDIA_LOAD_WINDOW_NOT_FOUND(window_id))?;
                 let definition =
                     app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                        .ok_or_else(|| errors::MEDIA_LOAD_APP_DEFINITION_NOT_FOUND(window_id))?;
                 let dependency = definition
                     .assets
                     .iter()
                     .find(|asset| asset.id == media.asset)
-                    .ok_or_else(|| error::make(ErrorCode::PermissionDenied))?;
+                    .ok_or_else(|| errors::MEDIA_LOAD_ASSET_NOT_DECLARED(&media.asset))?;
                 if media
                     .version
                     .is_some_and(|version| version != dependency.version)
                 {
-                    return Err(error::make(ErrorCode::PermissionDenied));
+                    return Err(errors::MEDIA_LOAD_ASSET_VERSION_MISMATCH(&media.asset));
                 }
                 dependency.version
             };
@@ -116,14 +155,12 @@ pub(crate) fn get(
                 });
             }
             if kaleidoscope_contract::builtin::is_bundled_asset(&media.asset, version) {
-                return Err(error::make(ErrorCode::NotFound));
+                return Err(errors::MEDIA_LOAD_BUNDLED_ASSET_MISSING(&media.asset));
             }
-            let link = inner
-                .link_file
-                .lock()
-                .unwrap()
-                .clone()
-                .ok_or_else(|| kaleidoscope_contract::errors::MEDIA_LOAD_SERVER_NOT_CONNECTED())?;
+            let link =
+                inner.link_file.lock().unwrap().clone().ok_or_else(|| {
+                    kaleidoscope_contract::errors::MEDIA_LOAD_SERVER_NOT_CONNECTED()
+                })?;
             use sha2::{Digest, Sha256};
             let namespace = format!(
                 "{:x}",
@@ -143,17 +180,28 @@ pub(crate) fn get(
                 let download = inner
                     .registry
                     .asset_get(&link.server_url, &link.token, &media.asset, version)
-                    .map_err(|error| {
-                        error::with_message(
-                            ErrorCode::Server,
-                            &format!("자산 받기 실패: {error:?}"),
-                        )
+                    .map_err(|failure| match failure {
+                        crate::registry_client::RegistryError::Failure { stage, detail } => {
+                            let error = match stage {
+                                crate::registry_client::FailureStage::Send => {
+                                    errors::MEDIA_LOAD_ASSET_DOWNLOAD_SEND_FAILED(&media.asset)
+                                }
+                                crate::registry_client::FailureStage::Status => {
+                                    errors::MEDIA_LOAD_ASSET_DOWNLOAD_STATUS_REJECTED(&media.asset)
+                                }
+                                crate::registry_client::FailureStage::Read => {
+                                    errors::MEDIA_LOAD_ASSET_DOWNLOAD_RESPONSE_READ_FAILED(
+                                        &media.asset,
+                                    )
+                                }
+                            };
+                            error.and_details(vec![detail])
+                        }
+                        failure => errors::MEDIA_LOAD_ASSET_DOWNLOAD_FAILED(&media.asset)
+                            .and_details(vec![format!("{failure:?}")]),
                     })?;
                 if format!("{:x}", Sha256::digest(&download.bytes)) != download.sha256 {
-                    return Err(error::with_message(
-                        ErrorCode::Server,
-                        "자산 해시가 올바르지 않습니다",
-                    ));
+                    return Err(errors::MEDIA_LOAD_ASSET_HASH_MISMATCH(&media.asset));
                 }
                 let (width, height) = dimensions(&download.bytes, &download.mime);
                 let entry = Entry {
@@ -167,7 +215,7 @@ pub(crate) fn get(
                 entry
             };
             let result = if let Some(max) = max_px {
-                shrink(&original, max)?
+                shrink(&original, max, &target)?
             } else {
                 original
             };
@@ -180,27 +228,43 @@ pub(crate) fn get(
             .shared
             .windows
             .iter()
-            .find(|item| item.id == window)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .find(|item| item.id == window_id)
+            .ok_or_else(|| errors::MEDIA_LOAD_WINDOW_NOT_FOUND(window_id))?;
         let definition =
             app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::MEDIA_LOAD_APP_DEFINITION_NOT_FOUND(window_id))?;
         definition
             .permissions
             .iter()
             .find(|permission| permission.id() == media.permission)
             .cloned()
-            .ok_or_else(|| error::make(ErrorCode::PermissionDenied))?
+            .ok_or_else(|| errors::MEDIA_LOAD_PERMISSION_NOT_DECLARED(&media.permission))?
     };
-    let (key, file) = match module {
+    let (key, source) = match module {
         PermissionDecl::Files { .. } => {
             let state = inner.state.lock().unwrap();
-            let root = files::granted_root(&state, window, &media.permission, false)?;
-            let path = files::resolve_path(&inner.data_dir, &root, &media.path, false, false)?;
-            let modified = fs::metadata(&path)
-                .map_err(|err| error::io_error(&err))?
+            let root = files::granted_root(&state, window, &media.permission, false)
+                .map_err(|error| file_root_error(&media.path, error))?;
+            let path = files::resolve_path(&inner.data_dir, &root, &media.path, false, false)
+                .map_err(|error| file_path_error(&media.path, error))?;
+            let metadata = fs::metadata(&path).map_err(|err| {
+                let error = if err.kind() == std::io::ErrorKind::NotFound {
+                    errors::MEDIA_LOAD_FILE_METADATA_NOT_FOUND(&media.path)
+                } else {
+                    errors::MEDIA_LOAD_FILE_METADATA_FAILED(&media.path)
+                };
+                error.and_details(vec![err.to_string()])
+            })?;
+            let modified = metadata
                 .modified()
-                .map_err(|err| error::io_error(&err))?
+                .map_err(|err| {
+                    let error = if err.kind() == std::io::ErrorKind::NotFound {
+                        errors::MEDIA_LOAD_FILE_MODIFIED_TIME_NOT_FOUND(&media.path)
+                    } else {
+                        errors::MEDIA_LOAD_FILE_MODIFIED_TIME_FAILED(&media.path)
+                    };
+                    error.and_details(vec![err.to_string()])
+                })?
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_nanos();
@@ -211,17 +275,18 @@ pub(crate) fn get(
                     media.path,
                     serde_json::to_string(&media.query).unwrap()
                 ),
-                Some(path),
+                Source::File(path),
             )
         }
         PermissionDecl::Connection { .. } => {
             let (_, info) = connections::authorize(
                 inner,
-                window,
+                window_id,
                 &media.permission,
                 HttpMethod::Get,
                 &media.path,
             )?;
+            let host = host_from_url(&info.base_url);
             (
                 format!(
                     "connection:{}:{}:{}",
@@ -229,14 +294,21 @@ pub(crate) fn get(
                     media.path,
                     serde_json::to_string(&media.query).unwrap()
                 ),
-                None,
+                Source::Connection {
+                    name: info.name,
+                    host,
+                },
             )
         }
         PermissionDecl::Http {
             base_url, paths, ..
         } => {
             if !kaleidoscope_contract::validate::allowed_public_http_path(&paths, &media.path) {
-                return Err(error::make(ErrorCode::PermissionDenied));
+                let display_path = media
+                    .path
+                    .split_once('?')
+                    .map_or(media.path.as_str(), |(path, _)| path);
+                return Err(errors::MEDIA_LOAD_HTTP_PATH_FORBIDDEN(display_path));
             }
             (
                 format!(
@@ -245,11 +317,13 @@ pub(crate) fn get(
                     media.path,
                     serde_json::to_string(&media.query).unwrap()
                 ),
-                None,
+                Source::Http {
+                    host: host_from_url(&base_url),
+                },
             )
         }
         PermissionDecl::LocalAgent { .. } | PermissionDecl::Profiler { .. } => {
-            return Err(error::make(ErrorCode::PermissionDenied));
+            return Err(errors::MEDIA_LOAD_SOURCE_UNSUPPORTED(&media.path));
         }
     };
     let variant = format!("{key}|{:?}", max_px);
@@ -260,17 +334,31 @@ pub(crate) fn get(
     let original = if let Some(entry) = inner.media_cache.get(&original_key) {
         entry
     } else {
-        let (bytes, mime) = if let Some(path) = file {
-            let file = fs::File::open(&path).map_err(|err| error::io_error(&err))?;
+        let (bytes, mime) = if let Source::File(path) = &source {
+            let file = fs::File::open(path).map_err(|err| {
+                let error = if err.kind() == std::io::ErrorKind::NotFound {
+                    errors::MEDIA_LOAD_FILE_OPEN_NOT_FOUND(&media.path)
+                } else {
+                    errors::MEDIA_LOAD_FILE_OPEN_FAILED(&media.path)
+                };
+                error.and_details(vec![err.to_string()])
+            })?;
             let mut bytes = Vec::new();
             file.take(data::MEDIA_MAX_BYTES + 1)
                 .read_to_end(&mut bytes)
-                .map_err(|err| error::io_error(&err))?;
+                .map_err(|err| {
+                    let error = if err.kind() == std::io::ErrorKind::NotFound {
+                        errors::MEDIA_LOAD_FILE_READ_NOT_FOUND(&media.path)
+                    } else {
+                        errors::MEDIA_LOAD_FILE_READ_FAILED(&media.path)
+                    };
+                    error.and_details(vec![err.to_string()])
+                })?;
             (bytes, mime_for_path(&media.path).to_string())
         } else {
             let reply = connections::request(
                 inner,
-                window,
+                window_id,
                 &media.permission,
                 HttpMethod::Get,
                 &media.path,
@@ -280,19 +368,53 @@ pub(crate) fn get(
             )
             .map_err(|err| match err {
                 RequestError::Core(err) => err,
-                RequestError::Login(_) => error::make(ErrorCode::NotGranted),
-                RequestError::RateLimited { .. } => error::make(ErrorCode::Unavailable),
+                RequestError::Login(_) => {
+                    let connection = match &source {
+                        Source::Connection { name, .. } => name.as_str(),
+                        Source::Http { .. } => "공개 HTTP",
+                        Source::File(_) => "파일",
+                    };
+                    errors::MEDIA_LOAD_CONNECTION_LOGIN_REQUIRED(&target, connection)
+                }
+                RequestError::RateLimited { .. } => match &source {
+                    Source::Connection { name, host } => {
+                        errors::MEDIA_LOAD_CONNECTION_RATE_LIMITED(&target, name)
+                            .and_details(vec![format!("HTTP 429; host={host}")])
+                    }
+                    Source::Http { host } => errors::MEDIA_LOAD_HTTP_RATE_LIMITED(&target)
+                        .and_details(vec![format!("HTTP 429; host={host}")]),
+                    Source::File(_) => unreachable!(),
+                },
             })?;
             if !(200..300).contains(&reply.status) {
-                return Err(connections::response_error(&reply));
+                let (error, host) = match &source {
+                    Source::Connection { name, host } => (
+                        errors::MEDIA_LOAD_CONNECTION_RESPONSE_FAILED(&target, name),
+                        host,
+                    ),
+                    Source::Http { host } => {
+                        (errors::MEDIA_LOAD_HTTP_RESPONSE_FAILED(&target), host)
+                    }
+                    Source::File(_) => unreachable!(),
+                };
+                return Err(error.and_details(vec![format!("HTTP {}; host={host}", reply.status)]));
             }
             let bytes = STANDARD
                 .decode(reply.data_base64.unwrap_or_default())
-                .map_err(|_| error::make(ErrorCode::Server))?;
+                .map_err(|detail| {
+                    let error = match &source {
+                        Source::Connection { name, .. } => {
+                            errors::MEDIA_LOAD_CONNECTION_DATA_INVALID(&target, name)
+                        }
+                        Source::Http { .. } => errors::MEDIA_LOAD_HTTP_DATA_INVALID(&target),
+                        Source::File(_) => unreachable!(),
+                    };
+                    error.and_details(vec![detail.to_string()])
+                })?;
             (bytes, reply.mime)
         };
         if bytes.len() as u64 > data::MEDIA_MAX_BYTES {
-            return Err(error::with_message(ErrorCode::Io, "미디어가 너무 큽니다"));
+            return Err(errors::MEDIA_LOAD_DATA_TOO_LARGE(&target));
         }
         let (width, height) = dimensions(&bytes, &mime);
         let entry = Entry {
@@ -306,7 +428,7 @@ pub(crate) fn get(
         entry
     };
     let result = if let Some(max) = max_px {
-        shrink(&original, max)?
+        shrink(&original, max, &target)?
     } else {
         original.clone()
     };
@@ -331,12 +453,20 @@ fn raster(mime: &str) -> bool {
         "image/png" | "image/jpeg" | "image/webp" | "image/gif"
     )
 }
-fn shrink(entry: &Entry, max: u32) -> Result<Entry, CoreError> {
+fn host_from_url(url: &str) -> String {
+    reqwest::Url::parse(url)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+        .unwrap_or_else(|| "알 수 없는 서버".into())
+}
+
+fn shrink(entry: &Entry, max: u32, media: &str) -> Result<Entry, CoreError> {
     if !raster(&entry.mime) {
         return Ok(entry.clone());
     }
-    let image = image::load_from_memory(&entry.bytes)
-        .map_err(|err| error::with_message(ErrorCode::Io, &err.to_string()))?;
+    let image = image::load_from_memory(&entry.bytes).map_err(|err| {
+        errors::MEDIA_RESIZE_IMAGE_DECODE_FAILED(media).and_details(vec![err.to_string()])
+    })?;
     let (w, h) = image.dimensions();
     let resized = if w.max(h) > max {
         image.resize(max, max, image::imageops::FilterType::Lanczos3)
@@ -350,13 +480,17 @@ fn shrink(entry: &Entry, max: u32) -> Result<Entry, CoreError> {
     let mime = if transparent {
         resized
             .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
-            .map_err(|err| error::with_message(ErrorCode::Io, &err.to_string()))?;
+            .map_err(|err| {
+                errors::MEDIA_RESIZE_PNG_ENCODE_FAILED(media).and_details(vec![err.to_string()])
+            })?;
         "image/png"
     } else {
         let rgb = resized.to_rgb8();
         image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 85)
             .write_image(rgb.as_raw(), width, height, image::ExtendedColorType::Rgb8)
-            .map_err(|err| error::with_message(ErrorCode::Io, &err.to_string()))?;
+            .map_err(|err| {
+                errors::MEDIA_RESIZE_JPEG_ENCODE_FAILED(media).and_details(vec![err.to_string()])
+            })?;
         "image/jpeg"
     };
     Ok(Entry {

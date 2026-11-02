@@ -6,14 +6,13 @@ use base64::Engine as _;
 use image::{imageops::FilterType, DynamicImage, ImageFormat, RgbaImage};
 use kaleidoscope_contract::registry::ShareUpload;
 use kaleidoscope_contract::{
-    conversation::ConversationUpload, CoreError, CoreReply, ErrorCode, LinkStatus,
+    conversation::ConversationUpload, errors, CoreError, CoreReply, ErrorCode, LinkStatus,
     SentShareContext, SharedState, VisibleView, AGENT_ATTACHMENTS_MAX,
     AGENT_ATTACHMENTS_TOTAL_MAX_BYTES, AGENT_ATTACHMENT_MAX_BYTES, SHARE_CAPTURE_MAX_EDGE,
     SHARE_CAPTURE_NAME_PREFIX, SHARE_TEXT_MAX_BYTES,
 };
 use sha2::{Digest, Sha256};
 
-use crate::error;
 use crate::storage::LinkFile;
 use crate::{CoreState, Inner};
 use kaleidoscope_contract::conversation::{ConversationItem, ConversationItemKind};
@@ -221,6 +220,36 @@ fn empty_context(context: &SentShareContext) -> bool {
     context.app_name.is_none() && context.text.is_none() && context.visual_hash.is_none()
 }
 
+fn window_name(state: &CoreState, window_id: &str) -> String {
+    state
+        .shared
+        .windows
+        .iter()
+        .find(|window| window.id == window_id)
+        .and_then(|window| {
+            state
+                .shared
+                .apps
+                .iter()
+                .find(|app| app.id == window.app_id)
+                .map(|app| app.name.clone())
+        })
+        .unwrap_or_else(|| window_id.to_owned())
+}
+
+fn capture_error(window: &str, error: CoreError) -> CoreError {
+    if error.id.is_some() {
+        return error;
+    }
+    match error.code {
+        ErrorCode::NotFound => {
+            errors::SHARE_CAPTURE_WINDOW_NOT_FOUND(window).and_details(error.details)
+        }
+        ErrorCode::Io => errors::SHARE_CAPTURE_FAILED(window).and_details(error.details),
+        _ => error,
+    }
+}
+
 pub(crate) fn set(
     inner: &std::sync::Arc<Inner>,
     window_id: &str,
@@ -228,19 +257,22 @@ pub(crate) fn set(
 ) -> Result<CoreReply, CoreError> {
     let (event, delete) = {
         let mut state = inner.state.lock().unwrap();
-        let desktop_id = state
+        let Some(desktop_id) = state
             .shared
             .windows
             .iter()
             .find(|window| window.id == window_id)
             .map(|window| window.desktop_id.clone())
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        else {
+            return Err(errors::SHARE_SET_WINDOW_NOT_FOUND(window_id));
+        };
+        let title = window_name(&state, window_id);
         let desktop_index = state
             .shared
             .desktops
             .iter()
             .position(|desktop| desktop.id == desktop_id)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(|| errors::SHARE_SET_DESKTOP_NOT_FOUND(&title))?;
         let was_on = state.shared.desktops[desktop_index]
             .sharing
             .iter()
@@ -293,24 +325,27 @@ pub(crate) fn view(
 ) -> Result<CoreReply, CoreError> {
     let upload = {
         let mut state = inner.state.lock().unwrap();
+        let title = window_name(&state, window_id);
         if !state
             .shared
             .windows
             .iter()
             .any(|window| window.id == window_id)
         {
-            return Err(error::make(ErrorCode::NotFound));
+            return Err(errors::SHARE_VIEW_WINDOW_NOT_FOUND(&title));
         }
         if !is_sharing(&state, window_id) {
             return Ok(CoreReply::ShareView {});
         }
-        if view.text.len() > SHARE_TEXT_MAX_BYTES
-            || view
-                .image_base64
-                .as_ref()
-                .is_some_and(|image| image.len() as u64 > SHARE_IMAGE_MAX_BASE64_BYTES)
+        if view.text.len() > SHARE_TEXT_MAX_BYTES {
+            return Err(errors::SHARE_VIEW_TEXT_TOO_LARGE(&title));
+        }
+        if view
+            .image_base64
+            .as_ref()
+            .is_some_and(|image| image.len() as u64 > SHARE_IMAGE_MAX_BASE64_BYTES)
         {
-            return Err(error::make(ErrorCode::InvalidRequest));
+            return Err(errors::SHARE_VIEW_IMAGE_TOO_LARGE(&title));
         }
         state.share.views.insert(window_id.to_owned(), view.clone());
         if !connected(inner, &state)
@@ -345,8 +380,9 @@ pub(crate) fn freeze(inner: &Inner) -> CoreReply {
 }
 
 pub(crate) fn capture(inner: &Inner, window_id: &str) -> Result<CoreReply, CoreError> {
-    let (bounds, has_web) = {
+    let (bounds, has_web, title) = {
         let state = inner.state.lock().unwrap();
+        let title = window_name(&state, window_id);
         let view = state.share.views.get(window_id);
         if !is_sharing(&state, window_id) || !view.is_some_and(|view| view.visual) {
             return Ok(CoreReply::ShareCapture { captured: false });
@@ -355,18 +391,24 @@ pub(crate) fn capture(inner: &Inner, window_id: &str) -> Result<CoreReply, CoreE
         let Some(has_web) = window_has_web(&state, window_id) else {
             return Ok(CoreReply::ShareCapture { captured: false });
         };
-        (view.bounds, has_web)
+        (view.bounds, has_web, title)
     };
     let Some(web) = inner.host.web() else {
         return Ok(CoreReply::ShareCapture { captured: false });
     };
     let (bytes, crop) = if has_web {
-        let Some(bytes) = web.capture(window_id)? else {
+        let Some(bytes) = web
+            .capture(window_id)
+            .map_err(|error| capture_error(&title, error))?
+        else {
             return Ok(CoreReply::ShareCapture { captured: false });
         };
         (bytes, None)
     } else {
-        let Some((bytes, scale)) = web.capture_shell()? else {
+        let Some((bytes, scale)) = web
+            .capture_shell()
+            .map_err(|error| capture_error(&title, error))?
+        else {
             return Ok(CoreReply::ShareCapture { captured: false });
         };
         (bytes, Some((bounds, scale)))
