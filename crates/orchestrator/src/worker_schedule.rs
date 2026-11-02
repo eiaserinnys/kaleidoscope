@@ -26,18 +26,29 @@ pub async fn worker_schedule_tick(state: &AppState) {
     }
     let accounts = (|| -> Result<HashSet<String>, CoreError> {
         let db = state.lock_db()?;
-        let mut statement = db.prepare("SELECT account_id FROM mcp_principal UNION SELECT account_id FROM app_storage_buckets").map_err(db_error)?;
+        let mut statement = db.prepare("SELECT account_id FROM mcp_principal UNION SELECT account_id FROM app_storage_buckets").map_err(|error| db_error_with(error, kaleidoscope_contract::errors::WORKER_SCHEDULE_ACCOUNT_LIST_DATABASE_FAILED()))?;
         let accounts = statement
             .query_map([], |row| row.get(0))
-            .map_err(db_error)?
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::WORKER_SCHEDULE_ACCOUNT_LIST_DATABASE_FAILED(),
+                )
+            })?
             .collect::<rusqlite::Result<HashSet<_>>>()
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::WORKER_SCHEDULE_ACCOUNT_LIST_DATABASE_FAILED(),
+                )
+            })?;
         Ok(accounts)
     })();
     let accounts = match accounts {
         Ok(accounts) => accounts,
         Err(error) => {
-            eprintln!("워커 계정 조회 실패: {}", error.message);
+            super::log_core_error(&error, "워커 계정 조회");
+            eprintln!("워커 계정 조회 오류 상세: {:?}", error.details);
             return;
         }
     };

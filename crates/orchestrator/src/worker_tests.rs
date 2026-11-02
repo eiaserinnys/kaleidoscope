@@ -25,11 +25,7 @@ pub(super) fn setup(code: &str) -> (AppState, String) {
     (state, account)
 }
 
-fn assert_database_error(
-    error: kaleidoscope_contract::CoreError,
-    id: &str,
-    detail: Option<&str>,
-) {
+fn assert_database_error(error: kaleidoscope_contract::CoreError, id: &str, detail: Option<&str>) {
     assert_eq!(error.id.as_deref(), Some(id));
     assert_eq!(error.code, kaleidoscope_contract::ErrorCode::Server);
     assert!(!error.details.is_empty());
@@ -45,6 +41,33 @@ async fn webhook_error(
     let status = response.status();
     let body = response.into_body().collect().await.unwrap().to_bytes();
     (status, serde_json::from_slice(&body).unwrap())
+}
+
+#[tokio::test]
+async fn webhook_secret_database_failure_hides_internal_error_from_public_response() {
+    let (state, _) = setup(CODE);
+    let mut app: Value = serde_json::from_str(&definition(CODE)).unwrap();
+    app["worker"]["webhook"] = json!({"token_secret":"token"});
+    state
+        .publish_app(&app.to_string(), "test", false, None)
+        .unwrap();
+    state
+        .lock_db()
+        .unwrap()
+        .execute("DROP TABLE app_secrets", [])
+        .unwrap();
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/webhooks/worker-test")
+        .body(Body::from("{}"))
+        .unwrap();
+    let (status, error) = webhook_error(router(state).oneshot(request).await.unwrap()).await;
+    assert_eq!(status, axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        error.id.as_deref(),
+        Some("WORKER_WEBHOOK_REQUEST_UNAVAILABLE")
+    );
+    assert!(error.details.is_empty());
 }
 
 #[tokio::test]
@@ -137,9 +160,7 @@ fn worker_secret_database_operations_have_specific_ids_and_sql_details() {
         Some("app_secrets"),
     );
     assert_database_error(
-        state
-            .list_app_secrets(&account, "worker-test")
-            .unwrap_err(),
+        state.list_app_secrets(&account, "worker-test").unwrap_err(),
         "WORKER_SECRET_LIST_DATABASE_FAILED",
         Some("app_secrets"),
     );

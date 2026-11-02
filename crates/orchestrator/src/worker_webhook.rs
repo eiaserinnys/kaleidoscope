@@ -88,7 +88,15 @@ async fn invoke_inner(
                 |row| row.get(0),
             )
             .optional()
-            .map_err(db_error)?;
+            .map_err(|error| {
+                let detail = db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::WORKER_WEBHOOK_SECRET_READ_DATABASE_FAILED(&app),
+                );
+                super::log_core_error(&detail, "500");
+                eprintln!("웹훅 저장소 오류 상세: {:?}", detail.details);
+                kaleidoscope_contract::errors::WORKER_WEBHOOK_REQUEST_UNAVAILABLE()
+            })?;
         let auth = headers
             .get(header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())

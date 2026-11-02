@@ -1,11 +1,4 @@
 error_catalog! { ENTRIES;
-    SERVER_DATABASE_OPERATION_FAILED() {
-        class: Server,
-        place: "서버 데이터베이스 작업",
-        cause: "SQL 작업이 실패했다",
-        message: "서버 데이터베이스 작업을 마치지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
-    }
     SERVER_MCP_ACCOUNT_LOOKUP_DATABASE_FAILED() {
         class: Server,
         place: "MCP 계정 조회",

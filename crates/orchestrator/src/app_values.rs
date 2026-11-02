@@ -58,7 +58,14 @@ impl AppState {
     ) -> Result<contract::CollectionListReply, CoreError> {
         let (entry, resolved) = self.builtin_collection_prefix(app_id, prefix, workspace)?;
         let db = self.lock_db()?;
-        let mut tx = db.unchecked_transaction().map_err(db_error)?;
+        let mut tx = db.unchecked_transaction().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::STORAGE_APP_VALUE_DOCUMENT_LIST_DATABASE_FAILED(
+                    prefix,
+                ),
+            )
+        })?;
         super::app_storage::check_workspace_owner(&tx, account, workspace)?;
         let result = super::collection_storage::list(
             &tx,
@@ -76,7 +83,7 @@ impl AppState {
         account: &str,
         workspace: &str,
     ) -> Result<Vec<(String, AppValueMeta)>, CoreError> {
-        let mut statement = tx.prepare("SELECT b.app_id,i.key,i.kind FROM app_storage_items i JOIN app_storage_buckets b ON b.id=i.bucket_id WHERE b.account_id=?1 AND i.workspace_id=?2").map_err(db_error)?;
+        let mut statement = tx.prepare("SELECT b.app_id,i.key,i.kind FROM app_storage_items i JOIN app_storage_buckets b ON b.id=i.bucket_id WHERE b.account_id=?1 AND i.workspace_id=?2").map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_APP_VALUES_WORKSPACE_DELETE_DATABASE_FAILED()))?;
         let rows = statement
             .query_map(params![account, workspace], |row| {
                 Ok((
@@ -85,12 +92,12 @@ impl AppState {
                     row.get::<_, String>(2)?,
                 ))
             })
-            .map_err(db_error)?;
+            .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_APP_VALUES_WORKSPACE_DELETE_DATABASE_FAILED()))?;
         let items = rows
             .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(db_error)?;
+            .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_APP_VALUES_WORKSPACE_DELETE_DATABASE_FAILED()))?;
         drop(statement);
-        tx.execute("DELETE FROM app_storage_items WHERE workspace_id=?1 AND bucket_id IN (SELECT id FROM app_storage_buckets WHERE account_id=?2)", params![workspace, account]).map_err(db_error)?;
+        tx.execute("DELETE FROM app_storage_items WHERE workspace_id=?1 AND bucket_id IN (SELECT id FROM app_storage_buckets WHERE account_id=?2)", params![workspace, account]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_APP_VALUES_WORKSPACE_DELETE_DATABASE_FAILED()))?;
         items
             .into_iter()
             .map(|(app_id, key, kind)| {
@@ -129,7 +136,12 @@ impl AppState {
             .prepare(
                 "SELECT key,kind,revision FROM app_storage_items WHERE bucket_id=?1 ORDER BY key",
             )
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::STORAGE_APP_VALUES_LIST_DATABASE_FAILED(app_id),
+                )
+            })?;
         let rows = statement
             .query_map([&id], |row| {
                 Ok((
@@ -138,10 +150,22 @@ impl AppState {
                     row.get::<_, String>(2)?,
                 ))
             })
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::STORAGE_APP_VALUES_LIST_DATABASE_FAILED(app_id),
+                )
+            })?;
         let items = rows
             .map(|row| {
-                let (key, kind, revision) = row.map_err(db_error)?;
+                let (key, kind, revision) = row.map_err(|error| {
+                    db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::STORAGE_APP_VALUES_LIST_DATABASE_FAILED(
+                            app_id,
+                        ),
+                    )
+                })?;
                 let kind = match kind.as_str() {
                     "json" => StorageKind::Json,
                     "md" => StorageKind::Md,
@@ -184,7 +208,14 @@ impl AppState {
         validate(app_id, key)?;
         if let Ok((entry, prefix, doc)) = self.builtin_collection_for_key(app_id, key, workspace) {
             let db = self.lock_db()?;
-            let mut tx = db.unchecked_transaction().map_err(db_error)?;
+            let mut tx = db.unchecked_transaction().map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::STORAGE_APP_VALUE_DOCUMENT_READ_DATABASE_FAILED(
+                        key,
+                    ),
+                )
+            })?;
             super::app_storage::check_workspace_owner(&tx, account, workspace)?;
             let bucket_id = super::app_storage::bucket_id(account, app_id);
             let value =
@@ -275,7 +306,12 @@ impl AppState {
         let revision = contract::storage_revision(kind, &content)
             .map_err(|_| kaleidoscope_contract::errors::STORAGE_APP_VALUE_REVISION_FAILED(key))?;
         let mut db = self.lock_db()?;
-        let tx = db.transaction().map_err(db_error)?;
+        let tx = db.transaction().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::STORAGE_APP_VALUE_WRITE_DATABASE_FAILED(key),
+            )
+        })?;
         super::app_storage::check_workspace_owner(&tx, account, workspace)?;
         let id = super::app_storage::bucket_id(account, app_id);
         let previous = super::app_storage::load_item(&tx, &id, key)?;
@@ -287,14 +323,19 @@ impl AppState {
                 ),
             );
         }
-        tx.execute("INSERT INTO app_storage_buckets(id,account_id,app_id) VALUES(?1,?2,?3) ON CONFLICT(account_id,app_id) DO NOTHING", params![id,account,app_id]).map_err(db_error)?;
+        tx.execute("INSERT INTO app_storage_buckets(id,account_id,app_id) VALUES(?1,?2,?3) ON CONFLICT(account_id,app_id) DO NOTHING", params![id,account,app_id]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_APP_VALUE_WRITE_DATABASE_FAILED(key)))?;
         let kind_name = match kind {
             StorageKind::Json => "json",
             StorageKind::Md => "md",
         };
         tx.execute("INSERT INTO app_storage_items(bucket_id,key,kind,content,revision,updated_at,workspace_id) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(bucket_id,key) DO UPDATE SET kind=excluded.kind,content=excluded.content,revision=excluded.revision,updated_at=excluded.updated_at,workspace_id=excluded.workspace_id",
-            params![id,key,kind_name,serde_json::to_string(&content).map_err(|error| kaleidoscope_contract::errors::STORAGE_APP_VALUE_SERIALIZATION_FAILED(key).and_details(vec![error.to_string()]))?,revision,timestamp(),workspace]).map_err(db_error)?;
-        tx.commit().map_err(db_error)?;
+            params![id,key,kind_name,serde_json::to_string(&content).map_err(|error| kaleidoscope_contract::errors::STORAGE_APP_VALUE_SERIALIZATION_FAILED(key).and_details(vec![error.to_string()]))?,revision,timestamp(),workspace]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_APP_VALUE_WRITE_DATABASE_FAILED(key)))?;
+        tx.commit().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::STORAGE_APP_VALUE_WRITE_DATABASE_FAILED(key),
+            )
+        })?;
         drop(db);
         self.send_event_for_account(
             DeviceEvent::AppValueChanged {
@@ -362,7 +403,12 @@ impl AppState {
             return Err(kaleidoscope_contract::errors::STORAGE_APP_VALUE_KEY_INVALID(key));
         }
         let mut db = self.lock_db()?;
-        let tx = db.transaction().map_err(db_error)?;
+        let tx = db.transaction().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::STORAGE_APP_VALUE_RESET_DATABASE_FAILED(key),
+            )
+        })?;
         super::app_storage::check_workspace_owner(&tx, account, workspace)?;
         let id = super::app_storage::bucket_id(account, app_id);
         let old = super::app_storage::load_item(&tx, &id, key)?;
@@ -378,8 +424,18 @@ impl AppState {
             "DELETE FROM app_storage_items WHERE bucket_id=?1 AND key=?2",
             params![id, key],
         )
-        .map_err(db_error)?;
-        tx.commit().map_err(db_error)?;
+        .map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::STORAGE_APP_VALUE_RESET_DATABASE_FAILED(key),
+            )
+        })?;
+        tx.commit().map_err(|error| {
+            db_error_with(
+                error,
+                kaleidoscope_contract::errors::STORAGE_APP_VALUE_RESET_DATABASE_FAILED(key),
+            )
+        })?;
         drop(db);
         if let Some((kind, _, _)) = old {
             self.send_event_for_account(

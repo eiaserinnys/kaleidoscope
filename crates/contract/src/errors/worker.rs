@@ -1,4 +1,25 @@
 error_catalog! { ENTRIES;
+    WORKER_SCHEDULE_ACCOUNT_LIST_DATABASE_FAILED() {
+        class: Server,
+        place: "워커 주기 실행 계정 조회",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "워커 주기 실행에 필요한 계정 목록을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    WORKER_WEBHOOK_SECRET_READ_DATABASE_FAILED(app) {
+        class: Server,
+        place: "워커 웹훅 인증 정보 조회",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "앱 {app}: 웹훅 인증 정보를 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    WORKER_WEBHOOK_REQUEST_UNAVAILABLE() {
+        class: Server,
+        place: "웹훅 요청 처리",
+        cause: "웹훅 요청을 처리하는 서버 작업을 마치지 못했다",
+        message: "웹훅 요청을 처리하지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
     WORKER_APP_NOT_FOUND(app_id) {
         class: NotFound,
         place: "워커 정의 조회",

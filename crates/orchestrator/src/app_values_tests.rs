@@ -1,4 +1,21 @@
 use super::*;
+
+#[test]
+fn list_values_database_failure_has_operation_id_and_details() {
+    let state = AppState::in_memory("secret");
+    state
+        .lock_db()
+        .unwrap()
+        .execute("DROP TABLE app_storage_items", [])
+        .unwrap();
+    let error = state.list_app_values("account", "md-editor").unwrap_err();
+    assert_eq!(
+        error.id.as_deref(),
+        Some("STORAGE_APP_VALUES_LIST_DATABASE_FAILED")
+    );
+    assert_eq!(error.code, ErrorCode::Server);
+    assert!(!error.details.is_empty());
+}
 use axum::{
     body::{to_bytes, Body},
     http::{Request, StatusCode},
