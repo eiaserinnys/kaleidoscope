@@ -17,7 +17,7 @@ fn market_bindings_evaluate_with_representative_public_api_data() {
         ),
         (
             "fx_asset_quote".into(),
-            json!({"base":"USD","amount":100,"date":"2026-10-30","rates":{"KRW":133527,"EUR":89,"JPY":15000,"GBP":75,"CNY":700,"CHF":80,"CAD":140,"AUD":150}}),
+            json!({"base":"USD","date":"2026-10-30","rates":{"KRW":1335.27,"EUR":0.89,"JPY":150.0,"GBP":0.75,"CNY":7.0,"CHF":0.8,"CAD":1.4,"AUD":1.5}}),
         ),
         (
             "fx_series".into(),
@@ -80,7 +80,7 @@ fn market_bindings_evaluate_with_representative_public_api_data() {
         unreachable!()
     };
     assert!(summary.as_str().unwrap().contains("1,335,270 KRW"));
-    data.get_mut("fx_asset_quote").unwrap()["rates"]["KRW"] = json!(138450);
+    data.get_mut("fx_asset_quote").unwrap()["rates"]["KRW"] = json!(1384.5);
     let refreshed = app.evaluate_with_data_meta(
         &definition.state,
         &data,
@@ -115,10 +115,10 @@ fn market_bindings_evaluate_with_representative_public_api_data() {
 }
 
 #[test]
-fn market_has_a_three_stage_pipeline() {
+fn market_fx_quote_is_independent_of_asset_tickers_but_macro_ranges_follow_fx_dates() {
     let definition = parse_app_definition(include_str!("../../../apps/market.json")).unwrap();
     let app = CompiledApp::compile(&definition);
-    assert!(app
+    assert!(!app
         .source_dependencies("fx_asset_quote")
         .contains(&"asset_tickers".to_owned()));
     assert!(app

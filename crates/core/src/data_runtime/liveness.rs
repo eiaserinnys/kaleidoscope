@@ -41,49 +41,8 @@ pub(super) fn visible(state: &crate::CoreState, window_id: &str, shell_visible: 
         .any(|w| w.desktop_id == window.desktop_id && !w.minimized && w.maximized && w.z > window.z)
 }
 
-fn dynamic(expr: &str, variable: &str) -> bool {
-    expr.match_indices(variable).any(|(index, _)| {
-        expr.as_bytes()
-            .get(index + variable.len())
-            .is_none_or(|b| *b != b'.' && !b.is_ascii_alphanumeric() && *b != b'_')
-    })
-}
-
 pub(super) fn live_sources(runtime: &Runtime) -> BTreeSet<String> {
-    let mut live = BTreeSet::new();
-    for (pointer, expr) in data::all_exprs(&runtime.definition) {
-        if pointer.starts_with("/sources/") || pointer.starts_with("/agent/") {
-            continue;
-        }
-        if runtime.dormant.iter().any(|prefix| {
-            pointer == *prefix
-                || pointer
-                    .strip_prefix(prefix)
-                    .is_some_and(|tail| tail.starts_with('/'))
-        }) {
-            continue;
-        }
-        let refs = data::data_refs(expr)
-            .into_iter()
-            .chain(data::data_meta_refs(expr))
-            .collect::<Vec<_>>();
-        if dynamic(expr, "$data")
-            || dynamic(expr, "$data_meta")
-            || (pointer.starts_with("/client/") && !refs.is_empty())
-        {
-            return runtime.definition.sources.keys().cloned().collect();
-        }
-        live.extend(refs);
-    }
-    let mut pending: Vec<_> = live.iter().cloned().collect();
-    while let Some(name) = pending.pop() {
-        for dep in runtime.compiled.source_dependencies(&name) {
-            if live.insert(dep.clone()) {
-                pending.push(dep.clone());
-            }
-        }
-    }
-    live
+    data::live_sources(&runtime.definition, &runtime.dormant)
 }
 
 pub(super) fn source_live(runtime: &Runtime, live: &BTreeSet<String>, name: &str) -> bool {

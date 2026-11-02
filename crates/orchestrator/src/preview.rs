@@ -1,5 +1,5 @@
 // 미리 보기의 저장소 문맥은 이번 위임 범위인 이 파일에 둔다.
-use super::mcp::{json_error, json_result, McpServer};
+use super::mcp::{call_budget_warnings, json_error, json_result, McpServer};
 use super::*;
 use kaleidoscope_contract::{
     data::{Binding, BindingValue, HttpMethod, SourceDecl, SourceFormat, SourceStatus},
@@ -490,12 +490,17 @@ impl McpServer {
             })
             .collect::<Vec<_>>();
 
-        Ok(json_result(json!({
+        let mut response = json!({
             "sources": source_results,
             "source_meta": data_meta,
             "values": values,
             "notes": notes,
-        })))
+        });
+        let warnings = call_budget_warnings(&definition);
+        if !warnings.is_empty() {
+            response["warnings"] = serde_json::json!(warnings);
+        }
+        Ok(json_result(response))
     }
 }
 

@@ -39,14 +39,12 @@ async fn preview_uses_client_output_default_without_running_script() {
         "client":{"runtime":"javascript","entry":{"id":"script","version":1},"inputs":{},"outputs":{"rows":{"default":[{"key":"one","title":"기본값"}]}},"actions":[],"commands":{},"state_keys":[],"storage_entries":[]},
         "ui":{"type":"list","items":{"client":"rows"}}});
     let value = result_value(server.preview_app_result(args(definition)).await.unwrap());
-    assert!(value["values"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|item| item["pointer"] == "/ui/items"
+    assert!(value["values"].as_array().unwrap().iter().any(|item| {
+        item["pointer"] == "/ui/items"
             && item["value"]
                 .as_str()
-                .is_some_and(|text| text.contains("기본값"))));
+                .is_some_and(|text| text.contains("기본값"))
+    }));
     assert!(value["notes"]
         .as_array()
         .unwrap()
@@ -57,6 +55,84 @@ async fn preview_uses_client_output_default_without_running_script() {
 fn result_value(result: CallToolResult) -> Value {
     let result = serde_json::to_value(result).unwrap();
     serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap()
+}
+
+fn market_sample_data(
+    amount: Option<f64>,
+    btc_price: &str,
+) -> std::collections::BTreeMap<String, Value> {
+    use std::collections::BTreeMap;
+
+    let currencies = [
+        ("KRW", 1350.0),
+        ("EUR", 0.92),
+        ("JPY", 150.0),
+        ("GBP", 0.79),
+        ("CNY", 7.2),
+        ("CHF", 0.88),
+        ("CAD", 1.38),
+        ("AUD", 1.52),
+    ];
+    let rates = currencies
+        .iter()
+        .map(|(code, rate)| ((*code).to_owned(), json!(rate * amount.unwrap_or(1.0))))
+        .collect::<serde_json::Map<_, _>>();
+    let mut quote = json!({"base":"USD", "date":"2026-11-02", "rates":rates});
+    if let Some(amount) = amount {
+        quote["amount"] = json!(amount);
+    }
+    let series_rates = currencies
+        .iter()
+        .map(|(code, rate)| ((*code).to_owned(), json!(rate)))
+        .collect::<serde_json::Map<_, _>>();
+    let tickers = [
+        ("BTCUSDT", btc_price),
+        ("ETHUSDT", "50"),
+        ("SOLUSDT", "10"),
+        ("XRPUSDT", "0.5"),
+        ("BNBUSDT", "20"),
+        ("DOGEUSDT", "0.1"),
+        ("ADAUSDT", "0.4"),
+        ("AVAXUSDT", "30"),
+    ]
+    .into_iter()
+    .map(|(symbol, price)| {
+        json!({"symbol":symbol, "lastPrice":price, "priceChangePercent":"2.5", "highPrice":price, "lowPrice":price})
+    })
+    .collect::<Vec<_>>();
+    let world_bank = |value: f64| {
+        json!([
+            {"page":1},
+            [
+                {"countryiso3code":"KOR", "value":value, "date":"2025"},
+                {"countryiso3code":"USA", "value":value, "date":"2025"},
+                {"countryiso3code":"EMU", "value":value, "date":"2025"},
+                {"countryiso3code":"DEU", "value":value, "date":"2025"},
+                {"countryiso3code":"JPN", "value":value, "date":"2025"},
+                {"countryiso3code":"GBR", "value":value, "date":"2025"},
+                {"countryiso3code":"CHN", "value":value, "date":"2025"},
+                {"countryiso3code":"CHE", "value":value, "date":"2025"},
+                {"countryiso3code":"CAN", "value":value, "date":"2025"},
+                {"countryiso3code":"AUS", "value":value, "date":"2025"}
+            ]
+        ])
+    };
+    let candle = json!([[1790899200000_u64, "100", "110", "90", "105"]]);
+    let mut data = BTreeMap::from([
+        ("asset_tickers".into(), json!(tickers)),
+        ("asset_candles".into(), candle.clone()),
+        ("fx_asset_quote".into(), quote),
+        (
+            "fx_series".into(),
+            json!({"base":"USD", "rates":{"2026-10-05":series_rates, "2026-11-01":series_rates}}),
+        ),
+        ("macro_cpi".into(), world_bank(2.0)),
+        ("macro_ppp".into(), world_bank(1300.0)),
+    ]);
+    for asset in ["btc", "eth", "sol", "xrp", "bnb", "doge", "ada", "avax"] {
+        data.insert(format!("trend_{asset}"), candle.clone());
+    }
+    data
 }
 
 async fn fake_origin(status: u16, body: &'static str) -> (String, JoinHandle<()>) {
@@ -149,6 +225,150 @@ async fn preview_accepts_device_source_samples_and_marks_unsampled_sources_idle(
             .unwrap()
             .contains("기기에서만 받는 원천: files")
     }));
+}
+
+#[tokio::test]
+async fn preview_warns_when_a_host_exceeds_the_default_screen_call_budget() {
+    let server = McpServer::new(AppState::in_memory("secret"));
+    let definition = json!({
+        "id": "over-budget-preview",
+        "name": "예산 초과 미리보기",
+        "requires": {"blocks": 4, "modules": {"http": 1}},
+        "permissions": [{"module":"http", "id":"public", "label":"공개 API", "base_url":"https://api.example.test", "paths":["/first", "/second"]}],
+        "state": {},
+        "sources": {
+            "first": {"kind":"request", "permission":"public", "path":"/first", "refresh_secs":10},
+            "second": {"kind":"request", "permission":"public", "path":"/second", "refresh_secs":10}
+        },
+        "ui": {"type":"stack", "direction":"column", "children":[
+            {"type":"text", "value":{"expr":"$data.first"}},
+            {"type":"text", "value":{"expr":"$data.second"}}
+        ]}
+    });
+    let mut preview = args(definition);
+    preview.data = Some(
+        [
+            ("first".into(), json!({"ok":1})),
+            ("second".into(), json!({"ok":2})),
+        ]
+        .into(),
+    );
+
+    let value = result_value(server.preview_app_result(preview).await.unwrap());
+    assert!(value["warnings"].as_array().unwrap().iter().any(|warning| {
+        warning.as_str().unwrap()
+            == "api.example.test: 기본 화면에서 분당 12.0회 호출합니다. 묶음 요청을 찾거나 refresh_secs를 늘리십시오(기준 분당 6회)."
+    }));
+}
+
+#[test]
+fn market_display_bindings_match_for_legacy_and_normalized_fx_samples() {
+    use kaleidoscope_contract::{data::BindingValue, validate::parse_app_definition};
+    use kaleidoscope_data::CompiledApp;
+    use std::collections::BTreeMap;
+
+    fn restore_legacy_fx_formulas(value: &mut Value) {
+        match value {
+            Value::String(expression) => {
+                let legacy_expression = expression.replace(
+                    "\"asset_quote\":$lookup($data.fx_asset_quote.rates,$code)*$number($data.asset_tickers[symbol = ($state.asset & 'USDT')].lastPrice)",
+                    "\"asset_quote\":$lookup($data.fx_asset_quote.rates,$code)",
+                );
+                let marker = "$lookup($data.fx_asset_quote.rates,";
+                let mut restored = String::with_capacity(legacy_expression.len() + 64);
+                let mut cursor = 0;
+                while let Some(relative_start) = legacy_expression[cursor..].find(marker) {
+                    let start = cursor + relative_start;
+                    restored.push_str(&legacy_expression[cursor..start]);
+                    let end = start + legacy_expression[start..].find(')').unwrap() + 1;
+                    let lookup = &legacy_expression[start..end];
+                    if legacy_expression[..start]
+                        .trim_end()
+                        .ends_with("\"asset_quote\":")
+                    {
+                        restored.push_str(lookup);
+                    } else {
+                        restored.push('(');
+                        restored.push_str(lookup);
+                        restored.push_str(" / $data.fx_asset_quote.amount)");
+                    }
+                    cursor = end;
+                }
+                restored.push_str(&legacy_expression[cursor..]);
+                *expression = restored;
+            }
+            Value::Array(items) => {
+                for item in items {
+                    restore_legacy_fx_formulas(item);
+                }
+            }
+            Value::Object(fields) => {
+                for item in fields.values_mut() {
+                    restore_legacy_fx_formulas(item);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let market_path =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/market.json");
+    let current: Value = serde_json::from_slice(&std::fs::read(market_path).unwrap()).unwrap();
+    let mut legacy = current.clone();
+    legacy["sources"]["fx_asset_quote"]["query"]["amount"] = json!({
+        "expr":"$string($round($number($data.asset_tickers[symbol = ($state.asset & 'USDT')].lastPrice), 2))"
+    });
+    restore_legacy_fx_formulas(&mut legacy);
+
+    let legacy_definition = parse_app_definition(&legacy.to_string()).unwrap();
+    let current_definition = parse_app_definition(&current.to_string()).unwrap();
+    let legacy_data = market_sample_data(Some(100.0), "100");
+    let current_data = market_sample_data(None, "100");
+    let no_status = BTreeMap::new();
+    let legacy_values: BTreeMap<String, BindingValue> = CompiledApp::compile(&legacy_definition)
+        .evaluate(&legacy_definition.state, &legacy_data, &no_status);
+    let current_values: BTreeMap<String, BindingValue> = CompiledApp::compile(&current_definition)
+        .evaluate(&current_definition.state, &current_data, &no_status);
+    assert_eq!(legacy_values, current_values);
+}
+
+#[test]
+fn market_currency_table_uses_full_subcent_asset_price() {
+    use kaleidoscope_contract::{data::BindingValue, validate::parse_app_definition};
+    use kaleidoscope_data::CompiledApp;
+    use std::collections::BTreeMap;
+
+    let market_path =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/market.json");
+    let source: Value = serde_json::from_slice(&std::fs::read(market_path).unwrap()).unwrap();
+    let definition = parse_app_definition(&source.to_string()).unwrap();
+    let data = market_sample_data(None, "0.123");
+    let no_status = BTreeMap::new();
+    let values: BTreeMap<String, BindingValue> =
+        CompiledApp::compile(&definition).evaluate(&definition.state, &data, &no_status);
+
+    let rows = values
+        .iter()
+        .find_map(|(pointer, binding)| match binding {
+            BindingValue::Ready {
+                value: Value::Array(rows),
+            } if pointer.ends_with("/rows")
+                && rows
+                    .iter()
+                    .any(|row| row["key"] == "KRW" && row.get("asset_quote").is_some()) =>
+            {
+                Some(rows)
+            }
+            _ => None,
+        })
+        .expect("통화 표 행 식이 계산되어야 한다");
+    let krw = rows
+        .iter()
+        .find(|row| row["key"] == "KRW")
+        .expect("KRW 표 행이 있어야 한다");
+    let asset_quote = krw["asset_quote"].as_f64().unwrap();
+
+    assert!((asset_quote - 166.05).abs() < 1e-9);
 }
 
 #[tokio::test]

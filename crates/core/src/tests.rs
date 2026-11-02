@@ -195,15 +195,15 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     for (id, version) in [
         ("profiler", 1),
         ("agent", 3),
-        ("slackbot", 1),
+        ("slackbot", 2),
         ("explorer", 3),
         ("md-editor", 3),
         ("html-report", 1),
         ("web-browser", 1),
         ("calculator", 2),
         ("weather", 1),
-        ("market", 1),
-        ("earth", 1),
+        ("market", 2),
+        ("earth", 2),
         ("reader", 2),
     ] {
         assert!(apps
