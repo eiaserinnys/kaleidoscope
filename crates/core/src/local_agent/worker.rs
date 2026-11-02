@@ -481,9 +481,9 @@ pub(super) async fn run(owner: Arc<Shared>, mut rx: mpsc::UnboundedReceiver<Comm
                         .collect::<Vec<_>>()
                         .join(" · ");
                     let reason = if tail.is_empty() {
-                        e.message
+                        e.to_string()
                     } else {
-                        format!("{} {tail}", e.message)
+                        format!("{e} {tail}")
                     };
                     fail(
                         &owner,

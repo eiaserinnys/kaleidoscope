@@ -90,6 +90,12 @@ fn main() {
                 emit(json!({"jsonrpc":"2.0","id":id,"result":{}}));
             }
             "session/new" | "session/load" => {
+                if method == "session/new" && scenario.contains("error_data") {
+                    emit(
+                        json!({"jsonrpc":"2.0","id":id,"error":{"code":-32603,"message":"Internal error","data":"agent-supplied detail"}}),
+                    );
+                    continue;
+                }
                 if scenario.contains("auth") && !authenticated {
                     emit(
                         json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,"message":"Authentication required"}}),

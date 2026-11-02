@@ -154,24 +154,28 @@ impl WorkerHandle {
         let _ = self.shared.tx.send(Command::Cancel);
     }
     pub fn answer_permission(&self, id: &str, option: &str) -> Result<(), CoreError> {
-        if updates::answer(&self.shared, id, Some(option))
+        match updates::answer(&self.shared, id, Some(option))
             .map_err(|e| errors::AGENT_PERMISSION_REPLY_SAVE_FAILED(e.to_string()))?
         {
-            Ok(())
-        } else {
-            Err(errors::AGENT_PERMISSION_REPLY_NOT_FOUND())
+            updates::AnswerResult::Answered => Ok(()),
+            updates::AnswerResult::RequestNotFound => Err(
+                errors::AGENT_PERMISSION_REPLY_REQUEST_NOT_FOUND(id.to_string()),
+            ),
+            updates::AnswerResult::OptionNotFound => Err(
+                errors::AGENT_PERMISSION_REPLY_OPTION_NOT_FOUND(option.to_string()),
+            ),
         }
     }
     pub fn configure(&self, id: &str, value: AgentControlValue) -> Result<(), CoreError> {
         let s = self.shared.state.lock().unwrap();
-        if s.snapshot.phase != LocalAgentPhase::Ready
-            || !s
-                .snapshot
-                .controls
-                .iter()
-                .any(|c| c.id == id && updates::accepts(c, &value))
-        {
-            return Err(errors::AGENT_CONTROL_UPDATE_UNAVAILABLE());
+        if s.snapshot.phase != LocalAgentPhase::Ready {
+            return Err(errors::AGENT_CONTROL_UPDATE_PHASE_INVALID());
+        }
+        let Some(control) = s.snapshot.controls.iter().find(|control| control.id == id) else {
+            return Err(errors::AGENT_CONTROL_UPDATE_ID_NOT_FOUND(id.to_string()));
+        };
+        if !updates::accepts(control, &value) {
+            return Err(errors::AGENT_CONTROL_UPDATE_VALUE_INVALID(id.to_string()));
         }
         drop(s);
         self.shared
@@ -181,10 +185,11 @@ impl WorkerHandle {
     }
     pub fn authenticate(&self, id: &str) -> Result<(), CoreError> {
         let s = self.shared.state.lock().unwrap();
-        if s.snapshot.phase != LocalAgentPhase::LoginRequired
-            || !s.snapshot.auth_methods.iter().any(|m| m.id == id)
-        {
-            return Err(errors::AGENT_AUTHENTICATE_UNAVAILABLE());
+        if s.snapshot.phase != LocalAgentPhase::LoginRequired {
+            return Err(errors::AGENT_AUTHENTICATE_PHASE_INVALID());
+        }
+        if !s.snapshot.auth_methods.iter().any(|m| m.id == id) {
+            return Err(errors::AGENT_AUTHENTICATE_METHOD_NOT_FOUND(id.to_string()));
         }
         drop(s);
         self.shared

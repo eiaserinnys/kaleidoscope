@@ -153,19 +153,19 @@ error_catalog! { ENTRIES;
         message: "에이전트 권한 응답을 기록하지 못했습니다. 기기 저장 공간을 확인한 뒤 다시 선택하세요. {reason}",
         fix: "기기 저장 공간을 확인하세요"
     }
-    AGENT_PERMISSION_REPLY_NOT_FOUND() {
+    AGENT_PERMISSION_REPLY_REQUEST_NOT_FOUND(request_id) {
         class: InvalidRequest,
         place: "에이전트 권한 응답",
-        cause: "응답할 권한 요청이 더 이상 없다",
-        message: "에이전트 권한 요청이 이미 끝나 응답할 수 없습니다. 새 요청이 오면 다시 선택하세요.",
+        cause: "응답할 권한 요청이 더 이상 대기 중이지 않다",
+        message: "에이전트 권한 요청 ID {request_id}: 더 이상 대기 중이지 않습니다. 새 요청이 오면 다시 선택하세요.",
         fix: "새 권한 요청이 오면 선택하세요"
     }
-    AGENT_CONTROL_UPDATE_UNAVAILABLE() {
+    AGENT_PERMISSION_REPLY_OPTION_NOT_FOUND(option_id) {
         class: InvalidRequest,
-        place: "에이전트 설정 변경",
-        cause: "에이전트가 준비되지 않았거나 설정 선택지가 없다",
-        message: "에이전트 설정을 지금 바꿀 수 없습니다. 에이전트가 준비된 뒤 다시 선택하세요.",
-        fix: "에이전트가 준비된 뒤 설정을 바꾸세요"
+        place: "에이전트 권한 응답",
+        cause: "요청에 선택한 권한 선택지가 없다",
+        message: "에이전트 권한 선택지 ID {option_id}: 현재 요청에 없습니다. 요청에 표시된 선택지를 누르세요.",
+        fix: "요청에 표시된 선택지를 누르세요"
     }
     AGENT_CONTROL_UPDATE_CHANNEL_CLOSED() {
         class: LocalAgentFailed,
@@ -174,12 +174,40 @@ error_catalog! { ENTRIES;
         message: "에이전트 실행기가 설정 변경을 중단했습니다. 실행기를 다시 시작한 뒤 바꾸세요.",
         fix: "에이전트 실행기를 다시 시작하세요"
     }
-    AGENT_AUTHENTICATE_UNAVAILABLE() {
+    AGENT_CONTROL_UPDATE_PHASE_INVALID() {
+        class: InvalidRequest,
+        place: "에이전트 설정 변경",
+        cause: "에이전트가 설정을 바꿀 수 있는 상태가 아니다",
+        message: "에이전트가 준비되지 않아 설정을 바꿀 수 없습니다. 준비가 끝난 뒤 다시 선택하세요.",
+        fix: "에이전트가 준비된 뒤 설정을 바꾸세요"
+    }
+    AGENT_CONTROL_UPDATE_ID_NOT_FOUND(control_id) {
+        class: InvalidRequest,
+        place: "에이전트 설정 변경",
+        cause: "요청한 설정 항목이 없다",
+        message: "에이전트 설정 ID {control_id}: 현재 선택할 수 없습니다. 설정 목록을 새로 불러온 뒤 다시 선택하세요.",
+        fix: "설정 목록을 새로 불러온 뒤 다시 선택하세요"
+    }
+    AGENT_CONTROL_UPDATE_VALUE_INVALID(control_id) {
+        class: InvalidRequest,
+        place: "에이전트 설정 변경",
+        cause: "선택한 값이 해당 설정의 선택지와 다르다",
+        message: "에이전트 설정 ID {control_id}: 선택한 값이 현재 항목과 맞지 않습니다. 표시된 선택지에서 다시 고르세요.",
+        fix: "표시된 선택지에서 다시 고르세요"
+    }
+    AGENT_AUTHENTICATE_PHASE_INVALID() {
         class: InvalidRequest,
         place: "에이전트 로그인",
-        cause: "현재 로그인할 수 있는 방법이 없다",
-        message: "에이전트가 로그인 선택을 기다리고 있지 않습니다. 로그인 요청이 표시되면 다시 선택하세요.",
+        cause: "에이전트가 로그인 요청을 기다리고 있지 않다",
+        message: "에이전트가 로그인 요청을 기다리고 있지 않습니다. 로그인 요청이 표시되면 다시 선택하세요.",
         fix: "에이전트가 로그인 요청을 표시하면 선택하세요"
+    }
+    AGENT_AUTHENTICATE_METHOD_NOT_FOUND(method_id) {
+        class: InvalidRequest,
+        place: "에이전트 로그인",
+        cause: "요청한 로그인 방법이 선택지에 없다",
+        message: "에이전트 로그인 방법 ID {method_id}: 현재 선택할 수 없습니다. 화면에 표시된 로그인 방법에서 다시 고르세요.",
+        fix: "화면에 표시된 로그인 방법에서 다시 고르세요"
     }
     AGENT_AUTHENTICATE_CHANNEL_CLOSED() {
         class: LocalAgentFailed,
@@ -353,7 +381,7 @@ error_catalog! { ENTRIES;
         class: NotFound,
         place: "에이전트 첨부 파일 조회",
         cause: "대화 기록에 첨부 파일이 없다",
-        message: "대화 항목 {item_id}에서 첨부 {attachment_id}를 찾지 못했습니다. 대화를 새로 불러오세요.",
+        message: "대화 항목 {item_id}에서 첨부 {attachment_id} 정보를 찾지 못했습니다. 대화를 새로 불러오세요.",
         fix: "대화를 새로 불러오세요"
     }
     AGENT_ATTACHMENT_READ_NOT_FOUND(reason) {
