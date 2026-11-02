@@ -594,13 +594,13 @@ pub fn validate_storage_content(entry: &StorageEntryDecl, content: &Value) -> Re
             let schema = entry
                 .schema
                 .as_ref()
-                .ok_or_else(|| "json 항목에 schema가 없습니다".to_string())?;
+                .ok_or_else(|| "json 항목에 schema가 없습니다.".to_string())?;
             validate_json_value(schema, content, "")?;
             let bytes = serde_json::to_vec(&canonicalize(content.clone()))
-                .map_err(|error| format!("JSON content를 직렬화하지 못했습니다: {error}"))?;
+                .map_err(|error| format!("JSON content를 직렬화하지 못했습니다: {error}."))?;
             if bytes.len() > STORAGE_JSON_MAX_BYTES {
                 Err(format!(
-                    "json 항목이 {STORAGE_JSON_MAX_BYTES}바이트를 넘습니다"
+                    "json 항목이 {STORAGE_JSON_MAX_BYTES}바이트를 넘습니다."
                 ))
             } else {
                 Ok(())
@@ -612,13 +612,13 @@ pub fn validate_storage_content(entry: &StorageEntryDecl, content: &Value) -> Re
                 .is_some_and(|text| text.len() > STORAGE_MD_MAX_BYTES)
             {
                 Err(format!(
-                    "md 항목이 {STORAGE_MD_MAX_BYTES} UTF-8 바이트를 넘습니다"
+                    "md 항목이 {STORAGE_MD_MAX_BYTES} UTF-8 바이트를 넘습니다."
                 ))
             } else {
                 Ok(())
             }
         }
-        StorageKind::Md => Err("md 항목의 content는 문자열이어야 합니다".into()),
+        StorageKind::Md => Err("md 항목의 content는 문자열이어야 합니다.".into()),
     }
 }
 

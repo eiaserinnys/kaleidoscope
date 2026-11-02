@@ -214,6 +214,11 @@ fn storage_validation_reasons_identify_value_and_fixable_cause() {
             json!([1, 1]),
             "값 전체에 중복 항목이 있습니다.",
         ),
+        (
+            json!({"type":"string"}),
+            json!("a".repeat(kaleidoscope_contract::app_storage::STORAGE_JSON_MAX_BYTES)),
+            "json 항목이 1048576바이트를 넘습니다.",
+        ),
     ];
     for (schema, value, expected) in cases {
         let entry: StorageEntryDecl = serde_json::from_value(json!({

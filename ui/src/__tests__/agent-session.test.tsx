@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentSessionBlock, type AgentSessionBlockData } from "../blocks/agent-session";
 import { WindowDataProvider } from "../data/window-data";
-import type { AppDefinition, CoreEvent, CoreReply, CoreRequest, DataView, LocalAgentSnapshot } from "../contract/contract";
+import type { AppDefinition, CoreError, CoreEvent, CoreReply, CoreRequest, DataView, LocalAgentSnapshot } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 import { createFakeTransport } from "../core/fake-transport";
 import { makeTestSeed, makeTestSnapshot } from "./fixtures";
@@ -52,8 +52,8 @@ function setup(agent = localAgent("ready"), respond?: (request: CoreRequest) => 
   let dataAttempts = 0;
   let agentAttempts = 0;
   const call = vi.fn(async (request: CoreRequest): Promise<CoreReply> => {
-    if (request.op === "data.attach" && ++dataAttempts === 1 && failFirstAttach) throw new Error("창 데이터를 읽지 못했습니다");
-    if (request.op === "local_agent.attach" && ++agentAttempts === 1 && failFirstAttach) throw new Error("에이전트 설정을 읽지 못했습니다");
+    if (request.op === "data.attach" && ++dataAttempts === 1 && failFirstAttach) throw { code: "io", message: "창 데이터를 읽지 못했습니다", details: [] } satisfies CoreError;
+    if (request.op === "local_agent.attach" && ++agentAttempts === 1 && failFirstAttach) throw { code: "local_agent_failed", message: "에이전트 설정을 읽지 못했습니다", details: [] } satisfies CoreError;
     if (request.op === "data.attach") return { op: "data.attach", view };
     if (request.op === "data.detach") return { op: "data.detach" };
     if (request.op === "local_agent.attach") return { op: "local_agent.attach", snapshot: agent };
