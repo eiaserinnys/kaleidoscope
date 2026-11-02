@@ -1,0 +1,41 @@
+{
+  "id": "timeline-schedule",
+  "name": "하루 일정표",
+  "description": "시작 시각을 조정하는 시간축 예제입니다.",
+  "requires": { "blocks": 14, "modules": { "assets": 1, "client": 1 } },
+  "permissions": [],
+  "state": {},
+  "assets": [{ "id": "timeline-schedule", "version": 1 }],
+  "client": {
+    "runtime": "javascript",
+    "entry": { "id": "timeline-schedule", "version": 1 },
+    "inputs": {},
+    "outputs": {
+      "viewport": { "default": { "start": 0, "end": 28800 } },
+      "tracks": { "default": [] },
+      "status": { "default": "일정을 준비합니다." }
+    },
+    "actions": ["set_viewport", "edit"],
+    "commands": {},
+    "state_keys": [],
+    "storage_entries": []
+  },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "children": [
+      {
+        "type": "timeline",
+        "duration": 28800,
+        "position": 0,
+        "tracks": { "client": "tracks" },
+        "viewport": { "client": "viewport" },
+        "controls": true,
+        "snap": { "step": 900, "threshold_px": 8 },
+        "on_viewport": { "client": "set_viewport" },
+        "on_edit": { "client": "edit" }
+      },
+      { "type": "text", "value": { "client": "status" } }
+    ]
+  }
+}
