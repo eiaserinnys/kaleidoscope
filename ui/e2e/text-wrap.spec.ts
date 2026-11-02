@@ -162,6 +162,37 @@ test("360·560 폭의 들여쓴 긴 토큰은 첫 행부터 글자가 나온다"
   }
 });
 
+for (const [width, indents] of [[360, [40, 100]], [560, [60, 100]]] as const) {
+  test(`${width} 폭의 깊은 들여쓰기도 기록 안에 첫 글자가 보인다`, async ({ page }) => {
+    const pre = await emitFence(page, width, indents.map((count) => `${" ".repeat(count)}leaf: 1`).join("\n"));
+    const layout = await pre.evaluate((element) => {
+      const history = element.closest<HTMLElement>("[role=log]")!;
+      const bounds = history.getBoundingClientRect();
+      const firstLetters = [...element.querySelectorAll(".ks-code-line")].map((line) => {
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+          const text = walker.currentNode;
+          const index = text.textContent!.search(/\S/u);
+          if (index < 0) continue;
+          const range = document.createRange();
+          range.setStart(text, index);
+          range.setEnd(text, index + 1);
+          const rect = range.getBoundingClientRect();
+          return { left: rect.left, right: rect.right };
+        }
+        throw new Error("첫 글자가 없습니다");
+      });
+      return { scrollWidth: history.scrollWidth, clientWidth: history.clientWidth, left: bounds.left, right: bounds.right, firstLetters };
+    });
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
+    expect(layout.firstLetters).toHaveLength(2);
+    for (const letter of layout.firstLetters) {
+      expect(letter.left).toBeGreaterThanOrEqual(layout.left);
+      expect(letter.right).toBeLessThanOrEqual(layout.right);
+    }
+  });
+}
+
 test("긴 사용자 말, 알림, 오류와 도구 이름이 360 폭 기록 안에 든다", async ({ page }) => {
   const { history } = await openChat(page, 360);
   const longText = "좁은창줄바꿈검증문자열".repeat(20);

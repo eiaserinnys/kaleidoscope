@@ -6,6 +6,9 @@ import { toCoreError } from "../core/core-transport";
 
 const remarkPlugins = [remarkGfm];
 
+// 얕은 줄만 들여쓰기와 첫 글자를 묶는다. 들여쓰기가 내용 폭을 넘는 줄까지 묶으면 글자가 창 밖으로 나간다.
+const GLUE_MAX_COLUMNS = 24;
+
 const MarkdownPre: NonNullable<Components["pre"]> = ({ node, children: _children, ...props }) => {
   const code = node?.children.find((child) => child.type === "element" && child.tagName === "code");
   const text = code?.type === "element"
@@ -21,7 +24,7 @@ const MarkdownPre: NonNullable<Components["pre"]> = ({ node, children: _children
       else break;
     }
     const style = columns ? { "--ks-code-indent": `${columns}ch` } as CSSProperties : undefined;
-    const indent = line.match(/^[ \t]+[^\s]/u)?.[0];
+    const indent = columns <= GLUE_MAX_COLUMNS ? line.match(/^[ \t]+[^\s]/u)?.[0] : undefined;
     return <span className="ks-code-line" key={index} style={style}>{indent
       ? <><span className="ks-code-indent">{indent}</span>{line.slice(indent.length)}</>
       : line}</span>;

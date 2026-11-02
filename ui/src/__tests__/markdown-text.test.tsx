@@ -28,3 +28,13 @@ it("들여쓰기와 첫 글자를 묶고 원문의 공백과 유니코드 글자
   expect(lines[3].querySelector(".ks-code-indent")).toBeNull();
   expect(pre.textContent).toBe(code);
 });
+
+it("24칸까지 첫 글자를 묶고 25칸부터는 원문 그대로 줄바꿈한다", () => {
+  const code = `${" ".repeat(24)}first\n${" ".repeat(25)}second`;
+  const { container } = render(<MarkdownText>{`\`\`\`text\n${code}\n\`\`\``}</MarkdownText>);
+  const pre = container.querySelector("pre")!;
+  const lines = [...pre.querySelectorAll(".ks-code-line")];
+  expect(lines[0].querySelector(".ks-code-indent")?.textContent).toBe(`${" ".repeat(24)}f`);
+  expect(lines[1].querySelector(".ks-code-indent")).toBeNull();
+  expect(pre.textContent).toBe(code);
+});
