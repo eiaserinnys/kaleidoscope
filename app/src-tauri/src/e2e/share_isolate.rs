@@ -93,6 +93,18 @@ pub(super) fn scenario(
             state: BTreeMap::from([("url".into(), json!("https://example.com/"))]),
         },
     )?;
+    // 웹 창이 가장 앞에 있을 때 먼저 화면과 페이지를 올린다.
+    ui::wait_dom(
+        app,
+        "return !!document.querySelector('[data-ks-web-surface]');",
+        "web surface rendered",
+    )?;
+    let web_page = wait_web_loaded(core, &web_id)?;
+    record(
+        log,
+        "web.loaded",
+        json!({"window_id":web_id,"url":web_page.url}),
+    )?;
     let agent_window_id = open_window(core, &desktop_id, AGENT_APP_ID, layout.agent)?;
     let grant = match call(
         core,
@@ -125,16 +137,6 @@ pub(super) fn scenario(
     )?;
     wait_agent_phase(core, &agent_window_id, LocalAgentPhase::Ready)?;
     ui::wait_dom(app, &format!("return !!document.querySelector('[data-testid=\\\"app-window-{A_ID}\\\"] iframe') && !!document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');"), "share windows rendered")?;
-    // 발신 창이 웹 창 위에 열리므로, 처음에는 웹 창을 앞으로 올려 이동을 끝낸다.
-    // 페이지가 열린 뒤 발신 창을 다시 앞에 두어 가림 처리를 시작한다.
-    raise(core, &web_id)?;
-    let web_page = wait_web_loaded(core, &web_id)?;
-    raise(core, &agent_window_id)?;
-    record(
-        log,
-        "web.loaded",
-        json!({"window_id":web_id,"url":web_page.url}),
-    )?;
     share(core, &a_id, true)?;
     ui::wait_dom(
         app,

@@ -305,16 +305,18 @@ pub(super) fn wait_web_loaded(core: &Core, window_id: &str) -> Result<WebPage, S
                 url: "https://example.com/".into(),
             },
         )? {
-            CoreReply::WebAttach { page }
-                if !page.loading && page.url.starts_with("https://example.com") =>
-            {
-                return Ok(page)
+            CoreReply::WebAttach { page } => {
+                if !page.loading && page.url.starts_with("https://example.com") {
+                    return Ok(page);
+                }
+                if Instant::now() >= deadline {
+                    return Err(format!(
+                        "example.com web view did not finish loading: url={}, title={}, loading={}",
+                        page.url, page.title, page.loading
+                    ));
+                }
             }
-            CoreReply::WebAttach { .. } => {}
             reply => return Err(format!("unexpected web.attach response: {reply:?}")),
-        }
-        if Instant::now() >= deadline {
-            return Err("example.com web view did not finish loading".into());
         }
         thread::sleep(Duration::from_millis(100));
     }
