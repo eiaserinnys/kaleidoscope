@@ -258,9 +258,9 @@ test("파일 트리 행의 공통화 전후 모습을 비교한다", async ({ pa
     await page.goto("/?preview=md-editor");
     const app = page.getByTestId("app-window-md-editor");
     await app.getByRole("button", { name: "문서 폴더 고르기" }).click();
-    await app.getByRole("button", { name: "notes" }).click();
-    await app.getByRole("button", { name: "README.md" }).click();
-    await expect(app.getByRole("button", { name: "README.md" })).toHaveAttribute("aria-current", "page");
+    await app.getByRole("treeitem", { name: "notes" }).click();
+    await app.getByRole("treeitem", { name: "README.md" }).click();
+    await expect(app.getByRole("treeitem", { name: "README.md" })).toHaveAttribute("aria-current", "page");
     await page.evaluate((css) => {
       const style = document.createElement("style");
       style.id = "old-file-tree-css";

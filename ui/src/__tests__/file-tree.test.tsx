@@ -37,7 +37,7 @@ describe("file_tree block", () => {
       window_id: "editor-window",
       permission: "docs",
     });
-    expect(await screen.findByRole("button", { name: "README.md" })).toBeTruthy();
+    expect(await screen.findByRole("treeitem", { name: "README.md" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "notes.txt" })).toBeNull();
   });
 
@@ -49,7 +49,7 @@ describe("file_tree block", () => {
     const store = createShellStore(transport);
     render(<AppWindowContent store={store} windowId="editor-window" />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "README.md" }));
+    fireEvent.click(await screen.findByRole("treeitem", { name: "README.md" }));
 
     await waitFor(() => expect(call).toHaveBeenCalledWith({
       op: "window.set_state",
@@ -67,12 +67,12 @@ describe("file_tree block", () => {
     const store = createShellStore(transport);
     render(<AppWindowContent store={store} windowId="editor-window" />);
 
-    const folder = await screen.findByRole("button", { name: "notes" });
+    const folder = await screen.findByRole("treeitem", { name: "notes" });
     fireEvent.click(folder, { detail: 1 });
     fireEvent.click(folder, { detail: 2 });
 
     expect(folder.closest('[role="treeitem"]')?.getAttribute("aria-expanded")).toBe("true");
-    expect(await screen.findByRole("button", { name: "README.md" })).toBeTruthy();
+    expect(await screen.findByRole("treeitem", { name: "README.md" })).toBeTruthy();
   });
 
   it("creates an md file only for readwrite access and selects it", async () => {
@@ -86,6 +86,7 @@ describe("file_tree block", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "새 파일" }));
     const input = await screen.findByRole("textbox", { name: "새 파일 이름" });
+    expect(input.closest('[aria-disabled="true"]')).toBeNull();
     fireEvent.change(input, { target: { value: "회의 메모" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
@@ -97,7 +98,7 @@ describe("file_tree block", () => {
       text: "",
     }));
     await waitFor(() => expect(store.getSnapshot()?.shared.windows.find((item) => item.id === "editor-window")?.state.current_file).toBe("회의 메모.md"));
-    expect((await screen.findByRole("button", { name: "회의 메모.md" })).getAttribute("aria-current")).toBe("page");
+    expect((await screen.findByRole("treeitem", { name: "회의 메모.md" })).getAttribute("aria-current")).toBe("page");
     expect(transport.getFiles()["회의 메모.md"]).toBe("");
   });
 
@@ -111,7 +112,7 @@ describe("file_tree block", () => {
     const store = createShellStore(transport);
     render(<AppWindowContent store={store} windowId="editor-window" />);
 
-    await screen.findByRole("button", { name: "notes" });
+    await screen.findByRole("treeitem", { name: "notes" });
     await waitFor(() => expect(call.mock.calls
       .filter(([request]) => request.op === "files.list")
       .map(([request]) => request.op === "files.list" ? request.dir : null)).toEqual([""]));
@@ -125,9 +126,10 @@ describe("file_tree block", () => {
       expect(directories).toContain("notes");
       expect(directories).toContain("notes/sub");
     });
-    const nestedChildren = input.closest(".ks-file-tree-children");
-    expect(nestedChildren?.querySelector('[role="treeitem"] input[aria-label="새 파일 이름"]')).toBe(input);
-    expect(await screen.findByRole("button", { name: "기존.md" })).toBeTruthy();
+    const creationRow = input.closest<HTMLElement>('[data-tree-row="creating:notes/sub"]');
+    expect(creationRow?.querySelector('[aria-label="새 파일 이름"]')).toBe(input);
+    expect(creationRow?.querySelector('[role="treeitem"]')).toBeNull();
+    expect(await screen.findByRole("treeitem", { name: "기존.md" })).toBeTruthy();
   });
 
   it("keeps the entered name and reports a conflict in the inline row", async () => {

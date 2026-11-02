@@ -9,7 +9,8 @@ use crate::app_storage::{self, StorageKind};
 use crate::data::{self, Action, Actions, Binding, SourceDecl};
 use crate::{
     local_agent, AgentProvider, AppDefinition, Block, CoreError, ErrorCode, FileAccess, FileRef,
-    FilesScope, PathValue, PermissionDecl, UrlValue, BLOCK_SET_VERSION, MODULE_VERSIONS,
+    FilesScope, FolderRoot, PathValue, PermissionDecl, UrlValue, BLOCK_SET_VERSION,
+    MODULE_VERSIONS,
 };
 
 /// 앱 정의 JSON 원문을 읽고 검사한다. 통과하면 정의를, 걸리면 `unsupported_app`이나
@@ -1619,6 +1620,64 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 "{at}: tree 블록은 items와 root 가운데 꼭 하나만 가져야 합니다"
             )),
         },
+        Block::Folder {
+            root,
+            extensions,
+            selected,
+            ..
+        } => {
+            match root {
+                FolderRoot::Files { permission } => {
+                    validate_permission_declared_module(
+                        permission,
+                        "files",
+                        definition,
+                        details,
+                        at,
+                    );
+                    match find_permission(definition, permission) {
+                        Some(PermissionDecl::Files {
+                            scope: FilesScope::Folder,
+                            ..
+                        }) => {}
+                        Some(PermissionDecl::Files { .. }) => details.push(format!(
+                            "{at}: folder의 파일 root 권한은 folder 범위여야 합니다"
+                        )),
+                        Some(_) => details.push(format!("{at}: folder의 root는 files 권한이어야 합니다")),
+                        None => {}
+                    }
+                    for extension in extensions {
+                        if !valid_extension(extension) {
+                            details.push(format!("{at}: extensions의 확장자는 점 없이 소문자와 숫자 1~16자여야 합니다: {extension}"));
+                        }
+                    }
+                }
+                FolderRoot::Collection { entry } => {
+                    validate_module_version("storage", 3, definition, details, at);
+                    match definition
+                        .storage
+                        .as_ref()
+                        .and_then(|storage| storage.entries.iter().find(|item| item.id == *entry))
+                    {
+                        Some(storage_entry) if storage_entry.collection => {}
+                        Some(_) => details.push(format!(
+                            "{at}: folder의 storage root는 문서 모음이어야 합니다"
+                        )),
+                        None => details.push(format!(
+                            "{at}: 선언되지 않은 storage 문서 모음입니다: {entry}"
+                        )),
+                    }
+                    for extension in extensions {
+                        if !valid_extension(extension) {
+                            details.push(format!("{at}: extensions의 확장자는 점 없이 소문자와 숫자 1~16자여야 합니다: {extension}"));
+                        }
+                    }
+                }
+            }
+            if let Some(selected) = selected {
+                validate_state_key(&selected.state, definition, details, at);
+            }
+        }
         Block::Markdown {
             file,
             document,

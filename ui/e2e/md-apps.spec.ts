@@ -7,7 +7,7 @@ test("opens, edits and autosaves a markdown file", async ({ page }) => {
   const editor = page.getByTestId("app-window-md-editor");
 
   await editor.getByRole("button", { name: "문서 폴더 고르기" }).click();
-  await editor.getByRole("button", { name: "README.md" }).click();
+  await editor.getByRole("treeitem", { name: "README.md" }).click();
 
   const editorContent = editor.locator(".cm-content");
   await expect(editorContent).toContainText("첫 문서");
@@ -41,7 +41,7 @@ test("captures empty and opened views at both sizes and color schemes", async ({
 
       const editor = page.getByTestId("app-window-md-editor");
       await editor.getByRole("button", { name: "문서 폴더 고르기" }).click();
-      await editor.getByRole("button", { name: "Kaleidoscope.md" }).click();
+      await editor.getByRole("treeitem", { name: "Kaleidoscope.md" }).click();
       await expect(editor.locator(".cm-content")).toContainText("kaleidoscope 작업 메모");
       await page.screenshot({
         path: testInfo.outputPath(`${label}-file-open.png`),
