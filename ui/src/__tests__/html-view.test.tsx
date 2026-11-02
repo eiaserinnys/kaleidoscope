@@ -67,6 +67,8 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   seed.snapshot.shared.windows[1].id = "agent-window";
   seed.snapshot.shared.windows[1].z = 1;
   seed.snapshot.shared.windows.push({ ...seed.snapshot.shared.windows[1], id: "top-agent-window", z: 2 });
+  seed.snapshot.shared.desktops.push({ ...seed.snapshot.shared.desktops[0], id: "other-desktop" });
+  seed.snapshot.shared.windows.push({ ...seed.snapshot.shared.windows[1], id: "other-desktop-agent", desktop_id: "other-desktop", z: 99 });
   const base = createFakeTransport(seed);
   const files = new Map<string, { content: string; revision: string }>([["시안/r1.html", { content: "<h1>제목</h1>", revision: "html1" }]]);
   const sent: CoreRequest[] = []; let seq = 0;

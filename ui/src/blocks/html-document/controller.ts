@@ -49,7 +49,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     return snapshot.shared.windows.filter((item) => {
       if (snapshot.shared.desktops.find((desktop) => desktop.id === item.desktop_id)?.workspace_id !== workspace) return false;
       return Boolean(snapshot.shared.app_versions.find((app) => app.app_id === item.app_id && app.version === item.app_version)?.definition.agent);
-    }).sort((left, right) => right.z - left.z)[0]?.id ?? null;
+    }).sort((left, right) => Number(right.desktop_id === context.window.desktop_id) - Number(left.desktop_id === context.window.desktop_id) || right.z - left.z)[0]?.id ?? null;
   });
   const send = useCallback((message: ParentToFrame) => frame.current?.contentWindow?.postMessage(message, "*"), []);
   const patchState = useCallback((name: string, rev: number | null) => {
