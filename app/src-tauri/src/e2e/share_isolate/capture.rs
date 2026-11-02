@@ -1,15 +1,7 @@
+use super::pixels::PixelStats;
 use super::*;
 use base64::engine::general_purpose::STANDARD;
 use std::collections::BTreeMap;
-
-#[derive(Debug, Default)]
-pub(super) struct PixelStats {
-    pub(super) width: u32,
-    pub(super) height: u32,
-    pub(super) green: usize,
-    pub(super) blue: usize,
-    pub(super) red: usize,
-}
 
 pub(super) fn decode_image(
     path: &Path,
@@ -32,16 +24,7 @@ pub(super) fn decode_image(
         ..Default::default()
     };
     for pixel in rgba.pixels() {
-        let [r, g, b, _] = pixel.0;
-        if g > 150 && g > r.saturating_mul(3) / 2 && g > b.saturating_mul(3) / 2 {
-            stats.green += 1;
-        }
-        if b > 170 && b > r.saturating_mul(3) / 2 && b > g.saturating_mul(6) / 5 {
-            stats.blue += 1;
-        }
-        if r > 160 && r > g.saturating_mul(3) / 2 && r > b.saturating_mul(3) / 2 {
-            stats.red += 1;
-        }
+        stats.count(pixel.0);
     }
     fs::write(out.join(format!("{label}.png")), &bytes).map_err(|error| error.to_string())?;
     Ok((bytes, stats))
@@ -55,25 +38,16 @@ pub(super) fn assert_isolated_surface(
     forbidden_blue: bool,
 ) -> Result<PixelStats, String> {
     let (_, stats) = decode_image(path, out, label)?;
-    let pixels = (stats.width as usize)
-        .saturating_mul(stats.height as usize)
-        .max(1);
-    if stats.green * 100 < pixels * 60 {
-        return Err(format!(
-            "{label} image is not mostly the target surface: {} green pixels / {pixels}",
-            stats.green
-        ));
-    }
-    if forbidden_blue && stats.blue != 0 {
-        return Err(format!(
-            "{label} image contains {} pixels from the blue covering window",
-            stats.blue
-        ));
-    }
     record(
         log,
         "share.image",
-        json!({"label":label,"width":stats.width,"height":stats.height,"green_pixels":stats.green,"blue_pixels":stats.blue,"red_pixels":stats.red,"passed":true}),
+        json!({"label":label,"width":stats.width,"height":stats.height,"green_pixels":stats.green,"blue_pixels":stats.blue,"red_pixels":stats.red,"agent_background_pixels":stats.agent_background}),
+    )?;
+    stats.validate(false, forbidden_blue)?;
+    record(
+        log,
+        "share.image",
+        json!({"label":label,"width":stats.width,"height":stats.height,"green_pixels":stats.green,"blue_pixels":stats.blue,"red_pixels":stats.red,"agent_background_pixels":stats.agent_background,"passed":true}),
     )?;
     Ok(stats)
 }
@@ -85,25 +59,16 @@ pub(super) fn assert_scrolled_surface(
     log: &mut File,
 ) -> Result<PixelStats, String> {
     let (_, stats) = decode_image(path, out, label)?;
-    let pixels = (stats.width as usize)
-        .saturating_mul(stats.height as usize)
-        .max(1);
-    if stats.red * 100 < pixels * 60 {
-        return Err(format!(
-            "{label} image does not show the scrolled lower region: {} red pixels / {pixels}",
-            stats.red
-        ));
-    }
-    if stats.blue != 0 {
-        return Err(format!(
-            "{label} image contains {} pixels from the blue covering window",
-            stats.blue
-        ));
-    }
     record(
         log,
         "share.image",
-        json!({"label":label,"width":stats.width,"height":stats.height,"green_pixels":stats.green,"blue_pixels":stats.blue,"red_pixels":stats.red,"passed":true}),
+        json!({"label":label,"width":stats.width,"height":stats.height,"green_pixels":stats.green,"blue_pixels":stats.blue,"red_pixels":stats.red,"agent_background_pixels":stats.agent_background}),
+    )?;
+    stats.validate(true, true)?;
+    record(
+        log,
+        "share.image",
+        json!({"label":label,"width":stats.width,"height":stats.height,"green_pixels":stats.green,"blue_pixels":stats.blue,"red_pixels":stats.red,"agent_background_pixels":stats.agent_background,"passed":true}),
     )?;
     Ok(stats)
 }
@@ -118,7 +83,7 @@ pub(super) fn assert_png(
     record(
         log,
         "share.image",
-        json!({"label":label,"width":stats.width,"height":stats.height,"green_pixels":stats.green,"blue_pixels":stats.blue,"red_pixels":stats.red,"passed":true}),
+        json!({"label":label,"width":stats.width,"height":stats.height,"green_pixels":stats.green,"blue_pixels":stats.blue,"red_pixels":stats.red,"agent_background_pixels":stats.agent_background,"passed":true}),
     )?;
     Ok(stats)
 }
@@ -209,92 +174,48 @@ pub(super) fn send_prompt(
     image_dir: &Path,
     agent_window_id: &str,
     text: &str,
-    expected_visuals: usize,
     phase: &str,
+    focus_results: &mut Vec<(String, bool)>,
     log: &mut File,
 ) -> Result<Vec<PathBuf>, String> {
     let window = app.get_window("main").ok_or("main window not found")?;
     window.set_focus().map_err(|error| error.to_string())?;
-    let points = ui::evaluate(app, &format!(
-        "const e=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"]');const input=e?.querySelector('textarea[aria-label=\\\"메시지\\\"]');const title=e?.querySelector('.ks-window-title');if(!input||!title)return null;const center=e=>{{const r=e.getBoundingClientRect();return {{x:r.left+r.width/2,y:r.top+r.height/2}};}};const p=center(input);const hit=document.elementFromPoint(p.x,p.y);return {{input:p,title:center(title),hit:{{tag:hit?.tagName??null,className:typeof hit?.className==='string'?hit.className:'',ariaLabel:hit?.getAttribute('aria-label')}}}};"
+    let selector = format!("[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"]");
+    ui::evaluate(app, &format!(
+        "const input=document.querySelector('{selector} textarea[aria-label=\\\"메시지\\\"]');if(!input)throw new Error('agent input missing');input.focus();return true;"
     ))?;
-    let position = window.inner_position().map_err(|error| error.to_string())?;
-    let scale = window.scale_factor().map_err(|error| error.to_string())?;
-    let title_x = position.x
-        + (points["title"]["x"]
-            .as_f64()
-            .ok_or("agent title x is missing")?
-            * scale)
-            .round() as i32;
-    let title_y = position.y
-        + (points["title"]["y"]
-            .as_f64()
-            .ok_or("agent title y is missing")?
-            * scale)
-            .round() as i32;
-    let input_x = position.x
-        + (points["input"]["x"]
-            .as_f64()
-            .ok_or("agent input x is missing")?
-            * scale)
-            .round() as i32;
-    let input_y = position.y
-        + (points["input"]["y"]
-            .as_f64()
-            .ok_or("agent input y is missing")?
-            * scale)
-            .round() as i32;
-    native_input::click(title_x, title_y)?;
-    native_input::click(input_x, input_y)?;
-    let focus_before = ui::evaluate(app, &format!(
-        "const input=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');if(!input)return {{has_focus:false,active:false,selection:null}};return {{has_focus:document.hasFocus(),active:document.activeElement===input,selection:[input.selectionStart,input.selectionEnd]}};"
-    ))?;
-    record(
-        log,
-        "agent.input-focus",
-        json!({"title_screen":[title_x,title_y],"input_screen":[input_x,input_y],"scale":scale,"hit":points["hit"],"focus":focus_before}),
-    )?;
-    if focus_before["has_focus"] != json!(true) || focus_before["active"] != json!(true) {
-        return Err(format!(
-            "could not establish agent input focus before capture: {focus_before}"
-        ));
-    }
-    set_phase(app, out, agent_window_id, phase)?;
-    let start_count = count_images(image_dir)?;
-    let started = Instant::now();
+    ui::wait_dom(app, &format!(
+        "const input=document.querySelector('{selector} textarea[aria-label=\\\"메시지\\\"]');return !!input && document.hasFocus() && document.activeElement===input;"
+    ), "agent input focus")?;
     let text_json = serde_json::to_string(text).map_err(|error| error.to_string())?;
-    let result = ui::evaluate(app, &format!(
-        "const input=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');if(!input)return false;const setter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')?.set;setter.call(input,{text_json});input.dispatchEvent(new Event('input',{{bubbles:true}}));input.dispatchEvent(new KeyboardEvent('keydown',{{key:'Enter',code:'Enter',bubbles:true,cancelable:true}}));return true;"
+    ui::evaluate(app, &format!(
+        "const input=document.querySelector('{selector} textarea[aria-label=\\\"메시지\\\"]');const setter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;setter.call(input,{text_json});input.dispatchEvent(new Event('input',{{bubbles:true}}));return true;"
     ))?;
-    if result != json!(true) {
-        return Err("could not submit through the agent input".into());
-    }
-    let images = wait_images(image_dir, start_count + expected_visuals)?;
+    ui::wait_dom(app, &format!(
+        "const e=document.querySelector('{selector}');const input=e?.querySelector('textarea[aria-label=\\\"메시지\\\"]');const button=e?.querySelector('button[aria-label=\\\"보내기\\\"]');return input?.value==={text_json} && !!button && !button.disabled;"
+    ), "agent draft committed and send enabled")?;
+    // 전송이 초안을 비운 뒤의 빈 입력 선택 위치가 캡처 내내 유지되어야 한다.
+    set_phase(app, out, agent_window_id, phase)?;
+    let started = Instant::now();
+    ui::evaluate(app, &format!(
+        "const input=document.querySelector('{selector} textarea[aria-label=\\\"메시지\\\"]');input.dispatchEvent(new KeyboardEvent('keydown',{{key:'Enter',code:'Enter',bubbles:true,cancelable:true}}));return true;"
+    ))?;
+    let images = wait_prompt_images(image_dir, text)?;
     wait_agent_phase(core, agent_window_id, LocalAgentPhase::Ready)?;
     let focus = ui::evaluate(app, &format!(
-        "const input=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');return {{has_focus:document.hasFocus(),active:document.activeElement===input,selection:[input?.selectionStart,input?.selectionEnd]}};"
+        "const input=document.querySelector('{selector} textarea[aria-label=\\\"메시지\\\"]');return {{has_focus:document.hasFocus(),active:document.activeElement===input,selection:[input?.selectionStart,input?.selectionEnd],value:input?.value}};"
     ))?;
-    if focus["has_focus"] != json!(true) || focus["active"] != json!(true) {
-        return Err(format!(
-            "agent input focus changed during image capture: {focus}"
-        ));
-    }
-    if focus["selection"] != focus_before["selection"] {
-        return Err(format!(
-            "agent input selection changed during image capture: before={}, after={}",
-            focus_before["selection"], focus["selection"]
-        ));
-    }
+    let focus_ok = focus["has_focus"] == json!(true)
+        && focus["active"] == json!(true)
+        && focus["selection"] == json!([0, 0])
+        && focus["value"] == json!("");
+    focus_results.push((phase.to_owned(), focus_ok));
     record(
         log,
         "share.send",
-        json!({"phase":phase,"text":text,"visual_count":expected_visuals,"elapsed_ms":started.elapsed().as_millis(),"focus_before":focus_before,"focus_after":focus,"entered_through_input":true}),
+        json!({"phase":phase,"text":text,"visual_count":images.len(),"elapsed_ms":started.elapsed().as_millis(),"focus_after":focus,"focus_ok":focus_ok,"entered_through_input":true}),
     )?;
-    Ok(images
-        .into_iter()
-        .skip(start_count)
-        .take(expected_visuals)
-        .collect())
+    Ok(images)
 }
 
 pub(super) fn png_stats(bytes: &[u8]) -> Result<PixelStats, String> {
@@ -307,16 +228,7 @@ pub(super) fn png_stats(bytes: &[u8]) -> Result<PixelStats, String> {
         ..Default::default()
     };
     for pixel in image.pixels() {
-        let [r, g, b, _] = pixel.0;
-        if g > 150 && g > r.saturating_mul(3) / 2 && g > b.saturating_mul(3) / 2 {
-            stats.green += 1;
-        }
-        if b > 170 && b > r.saturating_mul(3) / 2 && b > g.saturating_mul(6) / 5 {
-            stats.blue += 1;
-        }
-        if r > 160 && r > g.saturating_mul(3) / 2 && r > b.saturating_mul(3) / 2 {
-            stats.red += 1;
-        }
+        stats.count(pixel.0);
     }
     Ok(stats)
 }
@@ -433,6 +345,11 @@ pub(super) fn wait_for_recorder(out: &Path, log: &mut File) -> Result<(), String
         .filter(|phase| !phases.contains_key(**phase))
         .copied()
         .collect::<Vec<_>>();
+    record(
+        log,
+        "screen.recording",
+        json!({"frames":rows.len(),"average_interval_ms":average_interval_ms,"phase_frames":phases,"max_protected_pixels":max_protected_pixels,"missing_phases":missing,"csv":"screen-frames.csv"}),
+    )?;
     if !missing.is_empty() {
         return Err(format!("screen recorder missed phases: {missing:?}"));
     }

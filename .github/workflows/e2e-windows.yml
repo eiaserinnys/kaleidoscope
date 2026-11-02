@@ -203,23 +203,27 @@ jobs:
             }
             $app.Refresh()
             if (-not $app.HasExited) { throw '같이 보기 격리 캡처 E2E 시간 초과' }
-            if ($app.ExitCode -ne 0) { throw "같이 보기 격리 캡처 E2E 실패: $($app.ExitCode)" }
+            $appExitCode = $app.ExitCode
             if (-not $recorder.WaitForExit(15000)) { throw '화면 녹화 프로세스가 끝나지 않음' }
             if ($recorder.ExitCode -ne 0) { throw "화면 녹화 실패: $($recorder.ExitCode)" }
             $eventPath = Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl'
             $events = Get-Content $eventPath | ForEach-Object { $_ | ConvertFrom-Json }
-            foreach ($step in @('share.image', 'share.scroll-position', 'share.scroll-restored', 'share.scroll-top', 'share.minimized-text', 'web.capture-duration', 'web.hidden-after-send', 'share.two-captures', 'share.no-target-freeze', 'share.watchdog', 'screen.recording', 'complete')) {
-              if (-not ($events | Where-Object { $_.step -eq $step })) { throw "같이 보기 격리 캡처 단계 로그 누락: $step" }
+            $results = @($events | Where-Object { $_.step -eq 'check.result' })
+            $required = @('1-covered-b', '1-covered-agent', '2-minimized', '3-web-covered', '3-web-minimized', '4-both-covered', '5-flicker', '6-focus', '7-watchdog', '8-visible')
+            foreach ($id in $required) {
+              $check = @($results | Where-Object { $_.data.id -eq $id })
+              if ($check.Count -ne 1) { throw "검사 결과 누락 또는 중복: $id" }
+              Write-Host "$id : $($check[0].data.ok) $($check[0].data.message)"
             }
-            $sends = @($events | Where-Object { $_.step -eq 'share.send' })
-            if ($sends.Count -ne 7) { throw "실제 입력 전송 수가 잘못됨: $($sends.Count)" }
-            $images = @(Get-ChildItem (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'share-isolate-images') -Filter '*.b64')
-            if ($images.Count -ne 8) { throw "에이전트가 받은 이미지 수가 잘못됨: $($images.Count)" }
             $frames = Import-Csv (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'screen-frames.csv')
-            if ($frames.Count -lt 8) { throw "화면 프레임이 부족함: $($frames.Count)" }
             $measuredPhases = @('a-covered-by-b', 'a-covered-by-agent', 'a-minimized', 'web-covered', 'web-minimized', 'both-covered', 'a-visible')
-            $changed = @($frames | Where-Object { $_.phase -in $measuredPhases -and [int]$_.protected_pixels -ne 0 })
-            if ($changed.Count -gt 0) { throw "보호 화면 영역이 바뀐 프레임 수: $($changed.Count)" }
+            foreach ($phase in $measuredPhases) {
+              $phaseFrames = @($frames | Where-Object { $_.phase -eq $phase })
+              if ($phaseFrames.Count -eq 0) { throw "화면 프레임 누락: $phase" }
+              if (@($phaseFrames | Where-Object { [int]$_.protected_pixels -ne 0 }).Count -gt 0) { throw "보호 화면 영역이 바뀜: $phase" }
+            }
+            if ($appExitCode -ne 0 -or @($results | Where-Object { -not $_.data.ok }).Count -gt 0) { throw "같이 보기 격리 캡처 E2E 실패: $appExitCode" }
+
           } finally {
             Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
             Stop-Process -Id $recorder.Id -Force -ErrorAction SilentlyContinue

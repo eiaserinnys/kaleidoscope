@@ -39,6 +39,22 @@ pub(super) fn set_rect(core: &Core, window_id: &str, rect: Rect) -> Result<(), S
     Ok(())
 }
 
+pub(super) fn set_agent_rect(
+    app: &AppHandle,
+    core: &Core,
+    window_id: &str,
+    rect: Rect,
+) -> Result<(), String> {
+    set_rect(core, window_id, rect)?;
+    wait_window_rect(app, AGENT_APP_ID, rect)
+}
+
+pub(super) fn wait_window_rect(app: &AppHandle, app_id: &str, rect: Rect) -> Result<(), String> {
+    ui::wait_dom(app, &format!(
+        "const e=document.querySelector('[data-testid=\\\"app-window-{app_id}\\\"]');return !!e && parseFloat(e.style.left)==={} && parseFloat(e.style.top)==={} && parseFloat(e.style.width)==={} && parseFloat(e.style.height)==={};", rect.x, rect.y, rect.width, rect.height
+    ), "window geometry updated")
+}
+
 pub(super) fn minimize(core: &Core, window_id: &str) -> Result<(), String> {
     call(
         core,
@@ -258,38 +274,75 @@ pub(super) fn wait_agent_phase(
     }
 }
 
-pub(super) fn count_images(directory: &Path) -> Result<usize, String> {
-    Ok(fs::read_dir(directory)
-        .map_err(|error| error.to_string())?
-        .filter_map(Result::ok)
-        .filter(|entry| {
-            entry
-                .path()
-                .extension()
-                .is_some_and(|extension| extension == "b64")
-        })
-        .count())
-}
-
-pub(super) fn wait_images(directory: &Path, count: usize) -> Result<Vec<PathBuf>, String> {
+pub(super) fn wait_prompt_images(directory: &Path, text: &str) -> Result<Vec<PathBuf>, String> {
     let deadline = Instant::now() + Duration::from_secs(45);
+    let prompts = directory.join("prompts.jsonl");
     loop {
-        let mut paths = fs::read_dir(directory)
-            .map_err(|error| error.to_string())?
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .filter(|path| path.extension().is_some_and(|extension| extension == "b64"))
-            .collect::<Vec<_>>();
-        paths.sort();
-        if paths.len() >= count {
-            return Ok(paths);
+        if let Ok(contents) = fs::read_to_string(&prompts) {
+            for line in contents.lines() {
+                let Ok(prompt) = serde_json::from_str::<Value>(line) else {
+                    continue;
+                };
+                let matches_text = prompt["text_blocks"]
+                    .as_array()
+                    .is_some_and(|blocks| blocks.iter().any(|block| block.as_str() == Some(text)));
+                if matches_text {
+                    let images = prompt["images"].as_array().ok_or("prompt images missing")?;
+                    return images
+                        .iter()
+                        .map(|image| {
+                            image
+                                .as_str()
+                                .map(|name| directory.join(name))
+                                .ok_or_else(|| "invalid prompt image name".to_owned())
+                        })
+                        .collect();
+                }
+            }
         }
         if Instant::now() >= deadline {
-            return Err(format!(
-                "ACP agent received {} images, expected {count}",
-                paths.len()
-            ));
+            return Err(format!("agent did not receive prompt {text:?}"));
         }
         thread::sleep(Duration::from_millis(50));
     }
+}
+
+pub(super) fn expect_images(
+    images: Vec<PathBuf>,
+    count: usize,
+    label: &str,
+) -> Result<Vec<PathBuf>, String> {
+    if images.len() != count {
+        return Err(format!(
+            "{label}: agent received {} images, expected {count}",
+            images.len()
+        ));
+    }
+    Ok(images)
+}
+
+pub(super) fn prompt_contains(
+    directory: &Path,
+    prompt_text: &str,
+    marker: &str,
+) -> Result<bool, String> {
+    let contents =
+        fs::read_to_string(directory.join("prompts.jsonl")).map_err(|error| error.to_string())?;
+    for line in contents.lines() {
+        let Ok(prompt) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        if let Some(blocks) = prompt["text_blocks"].as_array() {
+            if blocks
+                .iter()
+                .any(|block| block.as_str() == Some(prompt_text))
+            {
+                return Ok(blocks
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .any(|block| block.contains(marker)));
+            }
+        }
+    }
+    Err(format!("agent prompt missing: {prompt_text}"))
 }

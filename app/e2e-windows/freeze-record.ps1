@@ -61,7 +61,7 @@ $rows.Add('index,ms,different_pixels,protected_pixels,phase')
 [System.IO.File]::WriteAllText((Join-Path $Out "phase-$phase.ready"), '')
 $index = 0
 $phaseSamples = @{}
-while (-not (Test-Path (Join-Path $Out 'record.stop')) -and $clock.Elapsed.TotalSeconds -lt 90) {
+while (-not (Test-Path (Join-Path $Out 'record.stop')) -and $clock.Elapsed.TotalSeconds -lt 480) {
   $nextPhase = (Get-Content -Raw $phasePath).Trim()
   if ($nextPhase -ne $phase) {
     [FreezeRecorder]::Frame((Join-Path $Out "phase-$phase-final.png")) | Out-Null
