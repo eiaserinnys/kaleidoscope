@@ -29,7 +29,7 @@ def ready(processes):
     for _ in range(100):
         assert all(process.poll() is None for process in processes), "시험 서버가 종료됨"
         try:
-            with urllib.request.urlopen("http://localhost:1420/", timeout=1):
+            with urllib.request.urlopen("http://127.0.0.1:1420/", timeout=1):
                 pass
             return command(op="state.get")["snapshot"]
         except (OSError, ValueError):
@@ -62,12 +62,27 @@ def run(directory):
     }
     seed = directory / "seed.json"
     seed.write_text(json.dumps(definition, ensure_ascii=False))
+    grouped_state = {
+        "list_groups": [{"title": "목록 묶음", "items": items}],
+        "feed_groups": [{"title": "피드 묶음", "items": entries}],
+    }
+    grouped = {
+        "id": "virtual-grouped-test", "name": "묶음 보기 시험",
+        "requires": {"blocks": 12, "modules": {}}, "permissions": [],
+        "state": grouped_state,
+        "ui": {"type": "split", "direction": "row", "sizes": [50, 50], "children": [
+            {"type": "list", "grouped": True, "items": {"state": "list_groups"}},
+            {"type": "feed", "grouped": True, "entries": {"state": "feed_groups"}},
+        ]},
+    }
+    grouped_seed = directory / "grouped.json"
+    grouped_seed.write_text(json.dumps(grouped, ensure_ascii=False))
     processes = []
     try:
         commands = [
             [str(ROOT / "target/debug/kaleidoscope-devbridge"), "--data-dir", str(directory / "data"),
-             "--port", "1431", "--seed", str(seed)],
-            ["node", str(ROOT / "app/node_modules/vite/bin/vite.js"), "--host", "localhost"],
+             "--port", "1431", "--seed", str(seed), "--seed", str(grouped_seed)],
+            ["node", str(ROOT / "app/node_modules/vite/bin/vite.js"), "--host", "127.0.0.1"],
         ]
         for args in commands:
             log = (directory / f"server-{len(processes)}.log").open("w")
@@ -79,7 +94,8 @@ def run(directory):
         command(op="desktop.create", workspace_id=desktop["workspace_id"], name="다른 화면")
         command(op="desktop.activate", desktop_id=desktop["id"])
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
+            # 코어가 허용하는 localhost Origin을 유지하며 IPv4의 이 시험 서버만 사용한다.
+            browser = playwright.chromium.launch(args=["--host-resolver-rules=MAP localhost 127.0.0.1"])
             page = browser.new_page(viewport={"width": 1400, "height": 900})
             page.goto("http://localhost:1420/?core=http://127.0.0.1:1431")
             tree, feed = page.get_by_role("tree"), page.get_by_role("feed")
@@ -118,8 +134,31 @@ def run(directory):
                     else:
                         assert old == new, (kind, old, new)
                 assert page.get_by_role("listbox").inner_text() == "하나\n둘"
+            command(op="window.close", window_id=window["id"])
+            grouped_window = command(op="window.open", desktop_id=desktop["id"], app_id=grouped["id"],
+                                     rect={"x": 0, "y": 0, "width": 1100, "height": 700})["window"]
+            views = [page.locator(".ks-list"), page.locator(".ks-feed")]
+            views[0].wait_for(state="visible")
+            for view in views:
+                view.evaluate("element => { element.scrollTop = 720; }")
+            page.wait_for_timeout(500)
+            before_headings = [view.locator(".ks-view-sticky").inner_text() for view in views]
+            assert before_headings == ["목록 묶음", "피드 묶음"], before_headings
+            page.screenshot(path=str(directory / "grouped-before.png"))
+            page.get_by_role("button", name="다른 화면", exact=True).click()
+            page.wait_for_timeout(400)
+            # 숨김 중 상태 변경으로 다시 렌더한다. 복사 피드백 타이머와 같은 경로다.
+            changed = {key: [{**group[0], "meta": "갱신"}] for key, group in grouped_state.items()}
+            command(op="window.set_state", window_id=grouped_window["id"], state=changed)
+            page.wait_for_timeout(400)
+            page.get_by_role("button", name=desktop["name"], exact=True).click()
+            page.wait_for_timeout(800)
+            after_headings = [view.locator(".ks-view-sticky").all_text_contents() for view in views]
+            page.screenshot(path=str(directory / "grouped-after.png"))
+            print("grouped", json.dumps({"before": before_headings, "after": after_headings}, ensure_ascii=False), flush=True)
+            assert after_headings == [["목록 묶음갱신"], ["피드 묶음갱신"]], after_headings
             browser.close()
-        print("4 passed: desktop, minimize, hidden, shrink", flush=True)
+        print("6 passed: desktop, minimize, hidden, shrink, grouped list, grouped feed", flush=True)
     finally:
         for process in reversed(processes):
             try:
