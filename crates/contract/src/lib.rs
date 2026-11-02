@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 21판, 261030)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 23판, 261102)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -110,6 +110,10 @@
 //! `conversation.create`는 선택 프로필을 받을 수 있고, `conversation.switch`는 같은 대화 기록 안에서 프로필이나 모델을 바꾼다.
 //! 모델의 실행 위치 묶음과 제한 정보, thread의 프로필·실행 식별자를 추가한다. 블록 세트, 모듈과 레지스트리 판은 그대로다.
 //!
+//! # 계약 23판: 창 단위 클라이언트 로직과 시간축
+//! 모듈 `client` 1판, 블록 세트 12판의 `canvas`와 `timeline`, 로컬 출력 바인딩과 동작,
+//! 파일 선택 및 오프셋 내보내기 명령을 더했다. 세부 선언은 [`client`]와 [`data`]에 있다.
+//!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
 //! - 코어는 이벤트 채널 하나로 [`CoreEvent`]를 보낸다.
@@ -190,6 +194,7 @@ pub const APP_AUTHORING_GUIDE: &str = include_str!("app_guide.txt");
 pub mod app_storage;
 pub mod assets;
 pub mod builtin;
+pub mod client;
 pub mod conversation;
 pub mod data;
 pub mod file_name;
@@ -212,6 +217,8 @@ pub const CONVERSATION_SEND_BODY_MAX_BYTES: usize = 48 * 1024 * 1024;
 pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
+/// 코어와 화면 사이 계약의 판.
+pub const CONTRACT_VERSION: u32 = 23;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -234,7 +241,8 @@ pub const TAURI_EVENT: &str = "core-event";
 /// - 9판: 8판 + `metrics`, `button_grid`, `chart`(캔들 포함), 표의 등락률과 스파크라인.
 /// - 10판: 9판 + 세계 지도 `map`, 피드의 중첩 답글과 접기.
 /// - 11판: `sandbox`, `slider`, `color`와 `input.rows`.
-pub const BLOCK_SET_VERSION: u32 = 11;
+/// - 12판: 창 단위 클라이언트 로직과 `canvas`, `timeline`.
+pub const BLOCK_SET_VERSION: u32 = 12;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -250,6 +258,7 @@ pub const BLOCK_SET_VERSION: u32 = 11;
 ///   `oauth` 두 가지다([`registry`]의 「연결」 절).
 /// - `connection` 2판: 계정마다 연결 이름을 등록한다.
 /// - `local_agent` 1판: 앱이 선언한 ACP 실행 명세로 이 기기에서 로컬 에이전트와 대화한다.
+/// - `client` 1판: 창별 격리 프레임의 로직과 로컬 출력.
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("files", 2),
     ("agent", 3),
@@ -261,6 +270,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("http", 1),
     ("worker", 1),
     ("profiler", 1),
+    ("client", 1),
 ];
 
 /// 지원 범위를 알리지 않는 옛 쉘(블록 세트 3판 전)이 그릴 수 있는 블록 세트 판. 서버가 그런 기기에 보낼 앱을
@@ -712,6 +722,10 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub worker: Option<worker::WorkerDecl>,
+    /// 창 단위 클라이언트 로직.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub client: Option<client::ClientDecl>,
     /// 창 안을 채우는 블록 트리의 뿌리.
     pub ui: Block,
 }
@@ -969,6 +983,52 @@ pub enum FileAccess {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub enum Block {
+    /// (12판) 클라이언트가 그리는 픽셀 표면.
+    Canvas {
+        surface: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        aspect_ratio: Option<Binding>,
+        #[serde(default)]
+        #[ts(optional, as = "Option<client::CanvasFit>")]
+        fit: client::CanvasFit,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        description: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_pointer: Option<Actions>,
+    },
+    /// (12판) 구간과 마커를 표시하고 시간축 편집 의도를 전달한다.
+    Timeline {
+        duration: Binding,
+        position: Binding,
+        tracks: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        markers: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        ticks: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        selection: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        snap: Option<Binding>,
+        #[serde(default)]
+        #[ts(optional, as = "Option<bool>")]
+        read_only: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_seek: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_select: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_edit: Option<Actions>,
+    },
     /// (11판) 선언한 HTML을 격리된 프레임에서 실행한다.
     Sandbox {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -998,7 +1058,7 @@ pub enum Block {
     },
     /// (11판) 수치 범위를 선택한다.
     Slider {
-        value: StateRef,
+        value: Binding,
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -1011,11 +1071,14 @@ pub enum Block {
     },
     /// (11판) 색상을 선택한다.
     Color {
-        value: StateRef,
+        value: Binding,
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         label: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        disabled: Option<Binding>,
     },
     /// 자식 블록을 나란히 놓는다. 경계를 끌어 크기를 바꿀 수 있다(바꾼 크기는 저장하지 않는다).
     Split {
@@ -1256,7 +1319,7 @@ pub enum Block {
         grouped: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        selected: Option<StateRef>,
+        selected: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_select: Option<Actions>,
@@ -1272,7 +1335,7 @@ pub enum Block {
         sort: Option<SortSpec>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        selected: Option<StateRef>,
+        selected: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_select: Option<Actions>,
@@ -1335,8 +1398,11 @@ pub enum Block {
     /// 돋보기, 글이 있으면 끝에 지우기 단추가 붙는다. `multiline`이면 한 줄로 시작해 글을 따라 자란다(최대 8줄).
     /// Enter는 `on_submit`이 있으면 그것을 부른다(`multiline`에서는 Ctrl+Enter). 한글 조합 중의 Enter는 보내지 않는다.
     Input {
-        value: StateRef,
+        value: Binding,
         on_change: Actions,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        label: Option<String>,
         #[serde(default)]
         #[ts(optional, as = "Option<InputKind>")]
         kind: InputKind,
@@ -1356,9 +1422,12 @@ pub enum Block {
     /// (4판) 고르기. `options`는 [`data::SelectOption`] 배열이다. 고르면 `on_change`가 `$event`(고른 값)로 돈다.
     /// `segmented`는 선택지가 한 줄에 다 보이는 모양이다(선택지 2~5개에 쓴다).
     Select {
-        value: StateRef,
+        value: Binding,
         on_change: Actions,
         options: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        label: Option<String>,
         #[serde(default)]
         #[ts(optional, as = "Option<SelectStyle>")]
         style: SelectStyle,
@@ -1368,7 +1437,7 @@ pub enum Block {
     },
     /// (4판) 켜고 끄기. 바꾸면 `on_change`가 `$event`(참이나 거짓)로 돈다.
     Toggle {
-        value: StateRef,
+        value: Binding,
         on_change: Actions,
         label: String,
     },
@@ -1376,10 +1445,10 @@ pub enum Block {
     /// 한 줄이 보인다. `confirm`이 있으면 확인 대화상자에서 확인했을 때만 돈다. `icon_only`면 아이콘만 보이고
     /// `label`은 도움말과 읽어 주기에 쓴다. `disabled`가 참이면 누를 수 없다.
     Button {
-        label: String,
+        label: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        icon: Option<String>,
+        icon: Option<Binding>,
         #[serde(default)]
         #[ts(optional, as = "Option<bool>")]
         icon_only: bool,
@@ -1500,6 +1569,38 @@ where
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 enum RawBlock {
+    Canvas {
+        surface: String,
+        #[serde(default)]
+        aspect_ratio: Option<Binding>,
+        #[serde(default)]
+        fit: client::CanvasFit,
+        #[serde(default)]
+        description: Option<Binding>,
+        #[serde(default)]
+        on_pointer: Option<Actions>,
+    },
+    Timeline {
+        duration: Binding,
+        position: Binding,
+        tracks: Binding,
+        #[serde(default)]
+        markers: Option<Binding>,
+        #[serde(default)]
+        ticks: Option<Binding>,
+        #[serde(default)]
+        selection: Option<Binding>,
+        #[serde(default)]
+        snap: Option<Binding>,
+        #[serde(default)]
+        read_only: bool,
+        #[serde(default)]
+        on_seek: Option<Actions>,
+        #[serde(default)]
+        on_select: Option<Actions>,
+        #[serde(default)]
+        on_edit: Option<Actions>,
+    },
     #[serde(alias = "interactive_html")]
     Sandbox {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1520,7 +1621,7 @@ enum RawBlock {
         storage_entries: Vec<String>,
     },
     Slider {
-        value: StateRef,
+        value: Binding,
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
@@ -1530,10 +1631,12 @@ enum RawBlock {
         step: Option<f64>,
     },
     Color {
-        value: StateRef,
+        value: Binding,
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        disabled: Option<Binding>,
     },
     /// 자식 블록을 나란히 놓는다. 경계를 끌어 크기를 바꿀 수 있다(바꾼 크기는 저장하지 않는다).
     Split {
@@ -1737,7 +1840,7 @@ enum RawBlock {
         #[serde(default)]
         grouped: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        selected: Option<StateRef>,
+        selected: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_select: Option<Actions>,
     },
@@ -1750,7 +1853,7 @@ enum RawBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         sort: Option<SortSpec>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        selected: Option<StateRef>,
+        selected: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_select: Option<Actions>,
     },
@@ -1802,8 +1905,10 @@ enum RawBlock {
     /// 돋보기, 글이 있으면 끝에 지우기 단추가 붙는다. `multiline`이면 한 줄로 시작해 글을 따라 자란다(최대 8줄).
     /// Enter는 `on_submit`이 있으면 그것을 부른다(`multiline`에서는 Ctrl+Enter). 한글 조합 중의 Enter는 보내지 않는다.
     Input {
-        value: StateRef,
+        value: Binding,
         on_change: Actions,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
         #[serde(default)]
         kind: InputKind,
         #[serde(default)]
@@ -1816,8 +1921,10 @@ enum RawBlock {
         on_submit: Option<Actions>,
     },
     Textarea {
-        value: StateRef,
+        value: Binding,
         on_change: Actions,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
         #[serde(default)]
         kind: InputKind,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1830,9 +1937,11 @@ enum RawBlock {
     /// (4판) 고르기. `options`는 [`data::SelectOption`] 배열이다. 고르면 `on_change`가 `$event`(고른 값)로 돈다.
     /// `segmented`는 선택지가 한 줄에 다 보이는 모양이다(선택지 2~5개에 쓴다).
     Select {
-        value: StateRef,
+        value: Binding,
         on_change: Actions,
         options: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
         #[serde(default)]
         style: SelectStyle,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1840,7 +1949,7 @@ enum RawBlock {
     },
     /// (4판) 켜고 끄기. 바꾸면 `on_change`가 `$event`(참이나 거짓)로 돈다.
     Toggle {
-        value: StateRef,
+        value: Binding,
         on_change: Actions,
         label: String,
     },
@@ -1848,9 +1957,9 @@ enum RawBlock {
     /// 한 줄이 보인다. `confirm`이 있으면 확인 대화상자에서 확인했을 때만 돈다. `icon_only`면 아이콘만 보이고
     /// `label`은 도움말과 읽어 주기에 쓴다. `disabled`가 참이면 누를 수 없다.
     Button {
-        label: String,
+        label: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        icon: Option<String>,
+        icon: Option<Binding>,
         #[serde(default)]
         icon_only: bool,
         #[serde(default)]
@@ -1998,6 +2107,44 @@ enum RawBlock {
 impl From<RawBlock> for Block {
     fn from(raw: RawBlock) -> Self {
         match raw {
+            RawBlock::Canvas {
+                surface,
+                aspect_ratio,
+                fit,
+                description,
+                on_pointer,
+            } => Block::Canvas {
+                surface,
+                aspect_ratio,
+                fit,
+                description,
+                on_pointer,
+            },
+            RawBlock::Timeline {
+                duration,
+                position,
+                tracks,
+                markers,
+                ticks,
+                selection,
+                snap,
+                read_only,
+                on_seek,
+                on_select,
+                on_edit,
+            } => Block::Timeline {
+                duration,
+                position,
+                tracks,
+                markers,
+                ticks,
+                selection,
+                snap,
+                read_only,
+                on_seek,
+                on_select,
+                on_edit,
+            },
             RawBlock::Sandbox {
                 asset,
                 file,
@@ -2036,10 +2183,12 @@ impl From<RawBlock> for Block {
                 value,
                 on_change,
                 label,
+                disabled,
             } => Block::Color {
                 value,
                 on_change,
                 label,
+                disabled,
             },
             RawBlock::Split {
                 direction,
@@ -2222,6 +2371,7 @@ impl From<RawBlock> for Block {
             RawBlock::Input {
                 value,
                 on_change,
+                label,
                 kind,
                 multiline,
                 rows,
@@ -2230,6 +2380,7 @@ impl From<RawBlock> for Block {
             } => Block::Input {
                 value,
                 on_change,
+                label,
                 kind,
                 multiline,
                 rows,
@@ -2239,6 +2390,7 @@ impl From<RawBlock> for Block {
             RawBlock::Textarea {
                 value,
                 on_change,
+                label,
                 kind,
                 rows,
                 placeholder,
@@ -2246,6 +2398,7 @@ impl From<RawBlock> for Block {
             } => Block::Input {
                 value,
                 on_change,
+                label,
                 kind,
                 multiline: true,
                 rows,
@@ -2256,12 +2409,14 @@ impl From<RawBlock> for Block {
                 value,
                 on_change,
                 options,
+                label,
                 style,
                 placeholder,
             } => Block::Select {
                 value,
                 on_change,
                 options,
+                label,
                 style,
                 placeholder,
             },
@@ -2451,6 +2606,7 @@ impl Block {
     /// 이 블록이 처음 생긴 블록 세트 판. 정의의 `requires.blocks`는 쓴 블록의 이 값 이상이어야 한다.
     pub fn introduced_in(&self) -> u32 {
         match self {
+            Block::Canvas { .. } | Block::Timeline { .. } => 12,
             Block::Sandbox { .. } | Block::Slider { .. } | Block::Color { .. } => 11,
             Block::HtmlView { .. } => 6,
             Block::Split { .. } => 1,
@@ -2515,6 +2671,8 @@ impl Block {
     /// JSON의 `type` 이름.
     pub fn type_name(&self) -> &'static str {
         match self {
+            Block::Canvas { .. } => "canvas",
+            Block::Timeline { .. } => "timeline",
             Block::Sandbox { .. } => "sandbox",
             Block::Slider { .. } => "slider",
             Block::Color { .. } => "color",
@@ -3007,6 +3165,30 @@ pub enum CoreRequest {
         window_id: String,
         permission: String,
     },
+    #[serde(rename = "files.pick")]
+    FilesPick {
+        window_id: String,
+        accept: Vec<data::FileAccept>,
+        multiple: bool,
+    },
+    #[serde(rename = "export.begin")]
+    ExportBegin {
+        window_id: String,
+        suggested_name: String,
+        mime: String,
+    },
+    #[serde(rename = "export.close")]
+    ExportClose { window_id: String, sink_id: String },
+    #[serde(rename = "export.abort")]
+    ExportAbort { window_id: String, sink_id: String },
+    #[serde(rename = "client.release")]
+    ClientRelease { window_id: String },
+    #[serde(rename = "client.command")]
+    ClientCommand {
+        window_id: String,
+        name: String,
+        event: JsonValue,
+    },
     /// (계약 14판) 창의 앱에 `scope: pc` 권한 하나를 이 기기에서 허용한다([`PcAccess`]). 그 앱의 모든 창이 쓴다.
     /// 권한이 `pc` 범위가 아니면 `invalid_request`. 이미 허용했으면 그대로 둔다. 응답은 허용 기록이고
     /// `state.changed`가 따라온다(이미 있었으면 없다).
@@ -3405,6 +3587,24 @@ pub enum ConversationApplyStatus {
 pub enum CoreReply {
     #[serde(rename = "state.get")]
     StateGet { snapshot: ShellSnapshot },
+    #[serde(rename = "files.pick")]
+    FilesPick {
+        cancelled: bool,
+        files: Vec<client::ClientFile>,
+    },
+    #[serde(rename = "export.begin")]
+    ExportBegin {
+        cancelled: bool,
+        sink_id: Option<String>,
+    },
+    #[serde(rename = "export.close")]
+    ExportClose {},
+    #[serde(rename = "export.abort")]
+    ExportAbort {},
+    #[serde(rename = "client.release")]
+    ClientRelease {},
+    #[serde(rename = "client.command")]
+    ClientCommand {},
 
     #[serde(rename = "conversation.apply_status")]
     ConversationApplyStatus { status: ConversationApplyStatus },
@@ -4082,6 +4282,12 @@ mod tests {
              export const STORAGE_MD_MAX_BYTES = {};\n\
              /** 저장소 명령 HTTP 본문의 최대 바이트 수. */\n\
              export const STORAGE_COMMAND_BODY_MAX_BYTES = {};\n\
+             /** 클라이언트 출력 하나의 최대 UTF-8 바이트 수. */\n\
+             export const CLIENT_OUTPUT_MAX_BYTES = {};\n\
+             /** 클라이언트가 고른 파일 하나의 최대 바이트 수. */\n\
+             export const CLIENT_PICK_FILE_MAX_BYTES = {};\n\
+             /** 클라이언트 프레임 응답을 기다리는 최대 초. */\n\
+             export const CLIENT_PING_TIMEOUT_SECS = {};\n\
              /** (9판) 같이 보기 글 하나의 최대 바이트 수(UTF-8). */\n\
              export const SHARE_TEXT_MAX_BYTES = {};\n\
              /** (9판) 잘린 같이 보기 글의 마지막 줄. */\n\
@@ -4100,6 +4306,9 @@ mod tests {
             app_storage::STORAGE_JSON_MAX_BYTES,
             app_storage::STORAGE_MD_MAX_BYTES,
             app_storage::STORAGE_COMMAND_BODY_MAX_BYTES,
+            client::CLIENT_OUTPUT_MAX_BYTES,
+            client::CLIENT_PICK_FILE_MAX_BYTES,
+            client::CLIENT_PING_TIMEOUT_SECS,
             SHARE_TEXT_MAX_BYTES,
             SHARE_TEXT_CUT_MARK,
             SHARE_DEBOUNCE_MS,

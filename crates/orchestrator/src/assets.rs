@@ -25,6 +25,10 @@ fn format_name(format: AssetFormat) -> &'static str {
         AssetFormat::Webp => "webp",
         AssetFormat::Jpeg => "jpeg",
         AssetFormat::Gif => "gif",
+        AssetFormat::Javascript => "javascript",
+        AssetFormat::Woff2 => "woff2",
+        AssetFormat::Ttf => "ttf",
+        AssetFormat::Otf => "otf",
     }
 }
 
@@ -37,6 +41,10 @@ fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(AssetMeta, Vec<u8>)> {
         "webp" => AssetFormat::Webp,
         "jpeg" => AssetFormat::Jpeg,
         "gif" => AssetFormat::Gif,
+        "javascript" => AssetFormat::Javascript,
+        "woff2" => AssetFormat::Woff2,
+        "ttf" => AssetFormat::Ttf,
+        "otf" => AssetFormat::Otf,
         _ => return Err(rusqlite::Error::InvalidQuery),
     };
     Ok((
@@ -117,6 +125,23 @@ pub(super) fn verify_dependencies(
     Ok(())
 }
 
+pub(super) fn verify_client_entry(
+    db: &Connection,
+    account: &str,
+    definition: &AppDefinition,
+) -> Result<(), CoreError> {
+    if let Some(client) = &definition.client {
+        let asset = get_in(db, account, &client.entry.id, client.entry.version)?;
+        if !asset.is_some_and(|(meta, _)| meta.format == AssetFormat::Javascript) {
+            return Err(CoreError::with_details(
+                ErrorCode::InvalidAppDefinition,
+                vec!["클라이언트 진입 자산은 javascript 형식이어야 합니다".into()],
+            ));
+        }
+    }
+    Ok(())
+}
+
 impl AppState {
     pub(super) fn upload_asset(&self, upload: &AssetUpload) -> Result<AssetMeta, CoreError> {
         let prepared = prepare(upload)?;
@@ -168,6 +193,10 @@ pub(super) async fn device_get(
                 AssetFormat::Webp => "image/webp",
                 AssetFormat::Jpeg => "image/jpeg",
                 AssetFormat::Gif => "image/gif",
+                AssetFormat::Javascript => "text/javascript",
+                AssetFormat::Woff2 => "font/woff2",
+                AssetFormat::Ttf => "font/ttf",
+                AssetFormat::Otf => "font/otf",
             };
             (
                 [

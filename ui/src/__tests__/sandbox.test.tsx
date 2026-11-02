@@ -33,6 +33,7 @@ it("샌드박스의 허용된 상태와 저장을 중계하고 같이 볼 이미
   });
   render(<AppWindowContent store={store} windowId="editor-window" />);
   const iframe = await screen.findByTitle("시험") as HTMLIFrameElement;
+  expect(iframe.getAttribute("allow")).toBe("autoplay");
   const rect = { left: 0, top: 0, right: 100, bottom: 100, x: 0, y: 0, width: 100, height: 100, toJSON() {} };
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
   expect(describeVisible(iframe.closest(".ks-sandbox") as HTMLElement).text).not.toContain("숨겨진 내용");
@@ -74,6 +75,9 @@ it("샌드박스의 허용된 상태와 저장을 중계하고 같이 볼 이미
   const flushRequest = post.mock.calls.map(([data]) => data).find((data) => data.type === "ks-sandbox-flush");
   message({ type: "ks-sandbox-flushed", requestId: flushRequest.requestId, ok: true });
   expect(await flushing).toBe(true);
+  const originalSource = iframe.srcdoc;
+  vi.mocked(crypto.randomUUID).mockReturnValueOnce("00000000-0000-4000-8000-000000000002");
   fireEvent.load(iframe); fireEvent.load(iframe);
   await waitFor(() => expect(screen.getByTitle("시험")).not.toBe(iframe));
+  expect((screen.getByTitle("시험") as HTMLIFrameElement).srcdoc).not.toBe(originalSource);
 });

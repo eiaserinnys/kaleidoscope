@@ -54,6 +54,7 @@ use kaleidoscope_contract::{
 use registry_client::{HttpRegistryClient, RegistryClient};
 
 pub use kaleidoscope_contract;
+mod client_files;
 
 /// 쉘 PNG에서 창이 보이는 자리를 잘라 같이 보기 첨부용 PNG로 만든다.
 pub fn crop_share_capture_png(bytes: &[u8], bounds: Rect, scale_factor: f64) -> Option<Vec<u8>> {
@@ -63,6 +64,16 @@ pub fn crop_share_capture_png(bytes: &[u8], bounds: Rect, scale_factor: f64) -> 
 pub trait Host: Send + Sync + 'static {
     /// 폴더 고르기 창을 띄우고 고른 폴더의 절대 경로를 돌려준다. 취소하면 None이다.
     fn pick_folder(&self) -> Option<PathBuf>;
+    fn pick_files(
+        &self,
+        _accept: &[kaleidoscope_contract::data::FileAccept],
+        _multiple: bool,
+    ) -> Option<Vec<PathBuf>> {
+        None
+    }
+    fn pick_save_file(&self, _suggested_name: &str, _mime: &str) -> Option<PathBuf> {
+        None
+    }
     fn pc_roots(&self) -> Vec<PcRoot> {
         Vec::new()
     }
@@ -182,6 +193,7 @@ pub(crate) struct Inner {
     pub(crate) login_store: Arc<logins::Logins>,
     pub(crate) login_in_progress: Mutex<HashSet<String>>,
     pub(crate) media_cache: media::MediaCache,
+    pub(crate) client_files: client_files::ClientFiles,
     pub(crate) web_attached: Mutex<std::collections::HashSet<String>>,
     pub(crate) web_follow: Mutex<HashMap<String, std::time::Instant>>,
 }
@@ -333,6 +345,7 @@ impl Core {
             conversation_reconcile: conversation_reconcile::Runtime::default(),
             web_attached: Mutex::new(std::collections::HashSet::new()),
             web_follow: Mutex::new(HashMap::new()),
+            client_files: client_files::ClientFiles::default(),
             layout_signal: LayoutSignal {
                 sequence: Mutex::new(0),
                 changed: Condvar::new(),
@@ -427,6 +440,22 @@ impl Core {
         result
     }
 
+    /// 사용자가 고른 파일을 원시 바이트로 읽는다.
+    pub fn client_read_file(&self, window_id: &str, handle: &str) -> Result<Vec<u8>, CoreError> {
+        client_files::read(&self.inner, window_id, handle)
+    }
+
+    /// 사용자가 고른 출력의 지정 위치에 원시 바이트를 쓴다.
+    pub fn client_write_export(
+        &self,
+        window_id: &str,
+        sink_id: &str,
+        offset: u64,
+        bytes: &[u8],
+    ) -> Result<(), CoreError> {
+        client_files::write(&self.inner, window_id, sink_id, offset, bytes)
+    }
+
     fn handle_inner(&self, request: CoreRequest) -> Result<CoreReply, CoreError> {
         match request {
             CoreRequest::StateGet {} => {
@@ -512,6 +541,56 @@ impl Core {
                 window_id,
                 permission,
             } => self.pick_folder(&window_id, &permission),
+            CoreRequest::FilesPick {
+                window_id,
+                accept,
+                multiple,
+            } => {
+                let (cancelled, files) =
+                    client_files::pick(&self.inner, &window_id, &accept, multiple)?;
+                Ok(CoreReply::FilesPick { cancelled, files })
+            }
+            CoreRequest::ExportBegin {
+                window_id,
+                suggested_name,
+                mime,
+            } => {
+                let sink_id = client_files::begin(&self.inner, &window_id, &suggested_name, &mime)?;
+                Ok(CoreReply::ExportBegin {
+                    cancelled: sink_id.is_none(),
+                    sink_id,
+                })
+            }
+            CoreRequest::ExportClose { window_id, sink_id } => {
+                client_files::finish(&self.inner, &window_id, &sink_id, true)?;
+                Ok(CoreReply::ExportClose {})
+            }
+            CoreRequest::ExportAbort { window_id, sink_id } => {
+                client_files::finish(&self.inner, &window_id, &sink_id, false)?;
+                Ok(CoreReply::ExportAbort {})
+            }
+            CoreRequest::ClientRelease { window_id } => {
+                client_files::release(&self.inner, &window_id);
+                Ok(CoreReply::ClientRelease {})
+            }
+            CoreRequest::ClientCommand {
+                window_id,
+                name,
+                event,
+            } => {
+                let pointer = format!(
+                    "/client/commands/{}",
+                    kaleidoscope_contract::data::escape_pointer(&name)
+                );
+                data_runtime::act(
+                    &self.inner,
+                    &window_id,
+                    &pointer,
+                    event,
+                    serde_json::Value::Null,
+                )?;
+                Ok(CoreReply::ClientCommand {})
+            }
             CoreRequest::FilesAllowPc {
                 window_id,
                 permission,
@@ -606,6 +685,7 @@ impl Core {
     }
 
     pub fn shutdown(&self) {
+        client_files::release_all(&self.inner);
         local_agent::shutdown(&self.inner);
         if let Err(err) = self.flush_storage() {
             eprintln!("상태를 저장할 수 없습니다: {}", err.message);

@@ -164,7 +164,16 @@ pub const ICON_NAMES: &[&str] = &[
 pub enum Binding {
     State(StateRef),
     Expr(ExprRef),
+    Client(ClientRef),
     Literal(JsonValue),
+}
+
+/// 창에서 실행하는 클라이언트가 발행한 값.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ClientRef {
+    pub client: String,
 }
 
 /// 식 바인딩. 예: `{ "expr": "$data.cards.cards[status = 'running']" }`.
@@ -266,6 +275,9 @@ pub enum SourceFormat {
 #[ts(export, export_to = "contract.ts")]
 pub enum Actions {
     One(SetState),
+    Client(ClientAction),
+    PickFiles(PickFilesAction),
+    SaveFile(SaveFileAction),
     Many(Vec<Action>),
 }
 
@@ -279,6 +291,61 @@ pub enum Action {
     Call(CallAction),
     SetStorage(SetStorageAction),
     Worker(WorkerAction),
+    Client(ClientAction),
+    PickFiles(PickFilesAction),
+    SaveFile(SaveFileAction),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ClientAction {
+    pub client: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub args: Option<JsonValue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct FileAccept {
+    pub mime: String,
+    #[serde(default)]
+    pub extensions: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct PickFilesAction {
+    pub pick_files: PickFilesSpec,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct PickFilesSpec {
+    pub accept: Vec<FileAccept>,
+    #[serde(default)]
+    pub multiple: bool,
+    pub client: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct SaveFileAction {
+    pub save_file: SaveFileSpec,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct SaveFileSpec {
+    pub suggested_name: Binding,
+    pub mime: String,
+    pub client: String,
 }
 
 /// 서버 워커의 선언된 동작을 호출한다.
@@ -797,6 +864,14 @@ pub enum SelectOption {
     Labeled { value: JsonValue, label: String },
 }
 
+/// `select`에서 선택지를 이름으로 묶는다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct SelectGroup {
+    pub name: String,
+    pub options: Vec<SelectOption>,
+}
+
 /// `folder` 원천의 항목.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
@@ -911,6 +986,43 @@ pub struct MediaData {
 /// 앱 정의의 화면 바인딩 자리(JSON Pointer)와 바인딩. UI 트리 순서 뒤에 저장 설정 선택지를 선언 순서로 둔다.
 /// 1~3판 블록의 상태 참조(`StateRef`)는 바인딩이 아니라 담지 않는다.
 pub fn ui_bindings(definition: &AppDefinition) -> Vec<(String, &Binding)> {
+    let mut out = all_ui_bindings(definition)
+        .into_iter()
+        .filter(|(_, binding)| !matches!(binding, Binding::Client(_)))
+        .collect::<Vec<_>>();
+    if let Some(client) = &definition.client {
+        out.extend(
+            client.inputs.iter().map(|(name, binding)| {
+                (format!("/client/inputs/{}", escape_pointer(name)), binding)
+            }),
+        );
+    }
+    for (pointer, actions) in all_ui_actions(definition) {
+        let save = match actions {
+            Actions::SaveFile(save) => Some((
+                &save.save_file,
+                format!("{pointer}/save_file/suggested_name"),
+            )),
+            Actions::Many(list) if list.len() == 1 => match &list[0] {
+                Action::SaveFile(save) => Some((
+                    &save.save_file,
+                    format!("{pointer}/0/save_file/suggested_name"),
+                )),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some((save, pointer)) = save {
+            if !matches!(save.suggested_name, Binding::Client(_)) {
+                out.push((pointer, &save.suggested_name));
+            }
+        }
+    }
+    out
+}
+
+/// 검사에 필요한 모든 화면 바인딩 자리.
+pub fn all_ui_bindings(definition: &AppDefinition) -> Vec<(String, &Binding)> {
     let mut out = Vec::new();
     walk(&definition.ui, "/ui", &mut |pointer, slot| {
         if let Slot::Binding(binding) = slot {
@@ -929,6 +1041,35 @@ pub fn ui_bindings(definition: &AppDefinition) -> Vec<(String, &Binding)> {
 
 /// 앱 정의의 `ui` 안의 모든 동작 자리(JSON Pointer)와 동작. 화면은 이 자리를 `data.act`의 `pointer`로 보낸다.
 pub fn ui_actions(definition: &AppDefinition) -> Vec<(String, &Actions)> {
+    let mut out = all_ui_actions(definition)
+        .into_iter()
+        .filter(|(_, actions)| !local_actions(actions))
+        .collect::<Vec<_>>();
+    if let Some(client) = &definition.client {
+        out.extend(
+            client.commands.iter().map(|(name, action)| {
+                (format!("/client/commands/{}", escape_pointer(name)), action)
+            }),
+        );
+    }
+    out
+}
+
+pub fn local_actions(actions: &Actions) -> bool {
+    match actions {
+        Actions::Client(_) | Actions::PickFiles(_) | Actions::SaveFile(_) => true,
+        Actions::Many(list) => list.iter().any(|action| {
+            matches!(
+                action,
+                Action::Client(_) | Action::PickFiles(_) | Action::SaveFile(_)
+            )
+        }),
+        Actions::One(_) => false,
+    }
+}
+
+/// 검사에 필요한 모든 화면 동작 자리.
+pub fn all_ui_actions(definition: &AppDefinition) -> Vec<(String, &Actions)> {
     let mut out = Vec::new();
     walk(&definition.ui, "/ui", &mut |pointer, slot| {
         if let Slot::Actions(actions) = slot {
@@ -945,7 +1086,7 @@ pub fn ui_uses_worker_action(definition: &AppDefinition) -> bool {
             Actions::Many(actions) => actions
                 .iter()
                 .any(|action| matches!(action, Action::Worker(_))),
-            Actions::One(_) => false,
+            _ => false,
         })
 }
 
@@ -1013,11 +1154,78 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         };
     }
     match block {
+        Block::Canvas {
+            aspect_ratio,
+            description,
+            on_pointer,
+            ..
+        } => {
+            if let Some(value) = aspect_ratio {
+                bind!("aspect_ratio", value);
+            }
+            if let Some(value) = description {
+                bind!("description", value);
+            }
+            if let Some(action) = on_pointer {
+                act!("on_pointer", action);
+            }
+        }
+        Block::Timeline {
+            duration,
+            position,
+            tracks,
+            markers,
+            ticks,
+            selection,
+            snap,
+            on_seek,
+            on_select,
+            on_edit,
+            ..
+        } => {
+            bind!("duration", duration);
+            bind!("position", position);
+            bind!("tracks", tracks);
+            for (name, value) in [
+                ("markers", markers),
+                ("ticks", ticks),
+                ("selection", selection),
+                ("snap", snap),
+            ] {
+                if let Some(value) = value {
+                    bind!(name, value);
+                }
+            }
+            for (name, action) in [
+                ("on_seek", on_seek),
+                ("on_select", on_select),
+                ("on_edit", on_edit),
+            ] {
+                if let Some(action) = action {
+                    act!(name, action);
+                }
+            }
+        }
         Block::Sandbox {
             value: Some(value), ..
         } => bind!("value", value),
         Block::Sandbox { value: None, .. } => {}
-        Block::Slider { on_change, .. } | Block::Color { on_change, .. } => {
+        Block::Slider {
+            value, on_change, ..
+        } => {
+            bind!("value", value);
+            act!("on_change", on_change)
+        }
+        Block::Color {
+            value,
+            on_change,
+            disabled,
+            ..
+        } => {
+            bind!("value", value);
+            if let Some(disabled) = disabled {
+                bind!("disabled", disabled);
+            }
             act!("on_change", on_change)
         }
         Block::Metrics { items, .. } => bind!("items", items),
@@ -1050,9 +1258,15 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
         }
         Block::List {
-            items, on_select, ..
+            items,
+            selected,
+            on_select,
+            ..
         } => {
             bind!("items", items);
+            if let Some(selected) = selected {
+                bind!("selected", selected);
+            }
             if let Some(on_select) = on_select {
                 act!("on_select", on_select);
             }
@@ -1069,9 +1283,15 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         }
         Block::Tree { items: None, .. } => {}
         Block::Table {
-            rows, on_select, ..
+            rows,
+            selected,
+            on_select,
+            ..
         } => {
             bind!("rows", rows);
+            if let Some(selected) = selected {
+                bind!("selected", selected);
+            }
             if let Some(on_select) = on_select {
                 act!("on_select", on_select);
             }
@@ -1091,28 +1311,45 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         }
         Block::Text { value, .. } => bind!("value", value),
         Block::Input {
+            value,
             on_change,
             on_submit,
             ..
         } => {
+            bind!("value", value);
             act!("on_change", on_change);
             if let Some(on_submit) = on_submit {
                 act!("on_submit", on_submit);
             }
         }
         Block::Select {
-            options, on_change, ..
+            value,
+            options,
+            on_change,
+            ..
         } => {
+            bind!("value", value);
             bind!("options", options);
             act!("on_change", on_change);
         }
-        Block::Toggle { on_change, .. } => act!("on_change", on_change),
+        Block::Toggle {
+            value, on_change, ..
+        } => {
+            bind!("value", value);
+            act!("on_change", on_change);
+        }
         Block::Button {
+            label,
+            icon,
             on_click,
             confirm,
             disabled,
             ..
         } => {
+            bind!("label", label);
+            if let Some(icon) = icon {
+                bind!("icon", icon);
+            }
             act!("on_click", on_click);
             if let Some(body) = confirm.as_ref().and_then(|confirm| confirm.body.as_ref()) {
                 bind!("confirm/body", body);
@@ -1295,6 +1532,11 @@ pub fn action_bindings(action: &Action) -> Vec<(String, &Binding)> {
             .iter()
             .map(|args| ("worker/args".to_string(), args))
             .collect(),
+        Action::Client(_) | Action::PickFiles(_) => Vec::new(),
+        Action::SaveFile(action) => vec![(
+            "save_file/suggested_name".into(),
+            &action.save_file.suggested_name,
+        )],
     }
 }
 

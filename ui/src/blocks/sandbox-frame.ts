@@ -1,4 +1,4 @@
-type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string };
+type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string; inputs?: Record<string, unknown> };
 
 const encodeScript = (source: string) => `data:text/javascript;charset=utf-8;base64,${btoa(Array.from(new TextEncoder().encode(source), (byte) => String.fromCharCode(byte)).join(""))}`;
 const csp = "default-src 'none'; script-src data: blob: 'unsafe-eval'; style-src 'unsafe-inline' data: blob:; img-src data: blob:; font-src data: blob:; media-src data: blob:; worker-src blob:; connect-src data: blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';";
@@ -11,15 +11,30 @@ function bridgeSource(init: SandboxInit): string {
     const token = config.token;
     let state = { ...config.state }, nextRequest = 0, shareText = '', shareImage = '', shareCanvas = null, explicitText = false;
     const stateListeners = new Set(), storageListeners = new Map(), pending = new Map(), pendingWrites = new Set();
-    const send = (type, body = {}) => parent.postMessage({ token, type, ...body }, '*');
+    const send = (type, body = {}, transfer) => transfer ? parent.postMessage({ token, type, ...body }, '*', transfer) : parent.postMessage({ token, type, ...body }, '*');
+    const inputListeners = new Set(), handlers = new Map(), surfaceListeners = new Map(), surfaces = new Map();
+    let inputs = config.inputs || {};
+    const clientRequest = (type, body = {}, transfer) => new Promise((resolve, reject) => {
+      const requestId = String(++nextRequest); pending.set(requestId, { resolve, reject });
+      send(type, { requestId, ...body }, transfer);
+    });
     const request = (type, entry, content) => new Promise((resolve, reject) => {
       if (!config.storageEntries.includes(entry)) { reject(new Error('허용되지 않은 저장 항목')); return; }
       const requestId = String(++nextRequest);
       pending.set(requestId, { resolve, reject });
       send(type, { requestId, entry, ...(type === 'ks-sandbox-storage-set' ? { content } : {}) });
     });
-    const canvasImage = canvas => {
-      try { const url = canvas && canvas.toDataURL('image/png'); return url && url.startsWith('data:image/png;base64,') ? url.slice(22) : ''; }
+    const canvasImage = async canvas => {
+      try {
+        if (canvas && typeof canvas.convertToBlob === 'function') {
+          const bytes = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer());
+          if (bytes.length > 10 * 1024 * 1024) return '';
+          let binary = '';
+          for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
+          return btoa(binary);
+        }
+        const url = canvas && canvas.toDataURL('image/png'); return url && url.startsWith('data:image/png;base64,') ? url.slice(22) : '';
+      }
       catch { return ''; }
     };
     const largestCanvas = () => [...document.querySelectorAll('canvas')].filter(c => {
@@ -34,7 +49,7 @@ function bridgeSource(init: SandboxInit): string {
       }).map(el => (el.getAttribute('aria-label') || el.name || el.placeholder || '') + ': ' + el.value);
       return [document.body?.innerText || '', ...fields].filter(Boolean).join('\\n');
     };
-    const report = () => send('ks-sandbox-share', { text: explicitText ? shareText : automaticText(), imageBase64: canvasImage(shareCanvas) || shareImage || canvasImage(largestCanvas()) });
+    const report = async () => send('ks-sandbox-share', { text: explicitText ? shareText : automaticText(), imageBase64: await canvasImage(shareCanvas) || shareImage || await canvasImage(largestCanvas()) });
     let reportTimer;
     const schedule = () => { clearTimeout(reportTimer); reportTimer = setTimeout(report, 400); };
     window.kaleidoscope = {
@@ -52,6 +67,24 @@ function bridgeSource(init: SandboxInit): string {
         return write;
       },
       onStorageChange(entry, listener) { const set = storageListeners.get(entry) || new Set(); set.add(listener); storageListeners.set(entry, set); return () => set.delete(listener); },
+      get inputs() { return inputs; },
+      onInputs(listener) { inputListeners.add(listener); return () => inputListeners.delete(listener); },
+      publish(patch) { send('ks-client-publish', { patch }); },
+      handle(name, listener) { handlers.set(name, listener); },
+      command(name, event) { return clientRequest('ks-client-command', { name, event }); },
+      surfaces: { on(id, listener) {
+        const set = surfaceListeners.get(id) || new Set(); set.add(listener); surfaceListeners.set(id, set);
+        if (surfaces.has(id)) listener(surfaces.get(id));
+        return () => set.delete(listener);
+      } },
+      files: {
+        read(id) { return clientRequest('ks-client-file-read', { id }); },
+        write(sink, offset, bytes) { return clientRequest('ks-client-file-write', { sink, offset, bytes }, [bytes]); },
+        close(sink) { return clientRequest('ks-client-file-close', { sink }); },
+        abort(sink) { return clientRequest('ks-client-file-abort', { sink }); },
+      },
+      assets: { bytes(id) { return clientRequest('ks-client-asset-bytes', { id }); } },
+      notice(message) { send('ks-client-notice', { message }); },
       reportShare(payload = {}) {
         if (typeof payload.text === 'string') { explicitText = true; shareText = payload.text; }
         if (typeof payload.imageBase64 === 'string') shareImage = payload.imageBase64.replace(/^data:image\\/png;base64,/, '');
@@ -62,6 +95,25 @@ function bridgeSource(init: SandboxInit): string {
     window.addEventListener('message', event => {
       if (event.source !== parent || !event.data) return;
       const data = event.data;
+      if (data.type === 'ks-client-inputs') { inputs = data.inputs; inputListeners.forEach(fn => fn(inputs, data.changed)); }
+      if (data.type === 'ks-client-action') { const handler = handlers.get(data.name); if (handler) Promise.resolve().then(() => handler(data.context)).catch(error => send('ks-client-notice', { message: String(error), error: true })); }
+      if (data.type === 'ks-client-ping') send('ks-client-pong');
+      if (data.type === 'ks-client-reply') { const job = pending.get(data.requestId); if (job) { pending.delete(data.requestId); data.error ? job.reject(new Error(data.error)) : job.resolve(data.result); } }
+      if (data.type === 'ks-client-surface') {
+        if (data.phase === 'detach') { surfaces.delete(data.id); surfaceListeners.get(data.id)?.forEach(fn => fn(null)); }
+        else {
+          const surface = data.phase === 'attach' ? { id: data.id, generation: data.generation, canvas: data.canvas, cssWidth: data.css_width, cssHeight: data.css_height, dpr: data.dpr, resize: new EventTarget() } : surfaces.get(data.id);
+          if (surface && surface.generation === data.generation) {
+            surface.cssWidth = data.css_width; surface.cssHeight = data.css_height; surface.dpr = data.dpr; surfaces.set(data.id, surface);
+            if (data.phase === 'attach') surfaceListeners.get(data.id)?.forEach(fn => fn(surface));
+            else surface.resize.dispatchEvent(new Event('resize'));
+          }
+        }
+      }
+      if (data.type === 'ks-client-snapshot') {
+        const surface = surfaces.get(data.id);
+        if (surface) surface.canvas.convertToBlob({ type: 'image/png' }).then(blob => blob.arrayBuffer()).then(bytes => send('ks-client-snapshot-result', { requestId: data.requestId, bytes }, [bytes])).catch(error => send('ks-client-snapshot-result', { requestId: data.requestId, error: String(error) }));
+      }
       if (data.type === 'ks-sandbox-state-sync') { state = { ...data.state }; stateListeners.forEach(fn => fn({ ...state })); }
       if (data.type === 'ks-sandbox-storage-sync') {
         const listeners = storageListeners.get(data.entry);
@@ -88,6 +140,10 @@ function bridgeSource(init: SandboxInit): string {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready, { once: true }); else ready();
     setInterval(report, 1000);
   })();`;
+}
+
+export function clientSource(script: string, init: SandboxInit): string {
+  return sandboxSource(`<html><head><script src="${encodeScript(script)}"></script></head><body></body></html>`, init);
 }
 
 export function sandboxSource(rawHtml: string, init: SandboxInit): string {

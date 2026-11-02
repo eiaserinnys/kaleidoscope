@@ -93,6 +93,7 @@ impl AppState {
                 super::assets::insert(&tx, &account_id, asset)?;
             }
             super::assets::verify_dependencies(&tx, &account_id, &definition.assets)?;
+            super::assets::verify_client_entry(&tx, &account_id, &definition)?;
             let current: Option<(u32, String, String, Option<String>)> = tx.query_row(
                 "SELECT a.current_version, v.definition, a.created_at, a.deleted_at FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.id=?1",
                 [&definition.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
