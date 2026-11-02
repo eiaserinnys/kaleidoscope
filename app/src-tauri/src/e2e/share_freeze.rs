@@ -142,6 +142,8 @@ pub(super) fn scenario(
         .ok_or("메인 웹뷰 없음")?
         .set_focus()
         .map_err(|e| e.to_string())?;
+    record(log,"environment",ui(app,"const gl=window.spikeGL,ext=gl?.getExtension('WEBGL_debug_renderer_info');return {ua:navigator.userAgent,dpr:devicePixelRatio,width:innerWidth,height:innerHeight,webgl:!!gl,renderer:ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):null};")?)?;
+    ui(app,"const i=document.querySelector('#spikeInput');i.value='selection';i.focus();i.setSelectionRange(2,5);return true;")?;
     fs::write(out.join("record.request"), b"").map_err(|e| e.to_string())?;
     let deadline = Instant::now() + Duration::from_secs(30);
     while !out.join("record.ready").exists() {
@@ -233,6 +235,27 @@ pub(super) fn scenario(
         )?;
     }
     ui(app,"window.spikeA.hidden=true;window.spikeHide(document.querySelector('#spikeB'),false);window.spikeHide(window.spikeA,false);window.spikeHide(window.spikeC,false);return true;")?;
+    frames(app, 2)?;
+    on_ui(app, |_| {
+        native::flush();
+        native::end();
+    })?;
+    // hidden의 display:none 대신 레이아웃을 유지한 최소화 대안을 같은 iframe에서 비교한다.
+    on_ui(app, |h| native::begin(h, 5000))??;
+    ui(app,"window.spikeHide(document.querySelector('#spikeB'),true);window.spikeA.hidden=false;window.spikeA.style.setProperty('display','flex','important');window.spikeA.style.visibility='';window.spikeA.style.opacity='1';window.spikeC.style.opacity='0';window.spikeA.querySelector('iframe').contentWindow.postMessage({type:'ks-html-focus-comment',id:'bottom',comments:[{id:'bottom',selector:'#bottom'}]},'*');return true;")?;
+    thread::sleep(Duration::from_millis(1800));
+    capture(app, out, "retained-reference")?;
+    ui(
+        app,
+        "window.spikeA.hidden=true;window.spikeA.style.opacity='0';return true;",
+    )?;
+    frames(app, 2)?;
+    ui(app,"window.spikeA.hidden=false;window.spikeA.style.opacity='1';window.spikeHide(document.querySelector('#spikeB'),true);return true;")?;
+    for n in 1..=3 {
+        frames(app, 1)?;
+        capture(app, out, &format!("retained-frame-{n}"))?;
+    }
+    ui(app,"window.spikeA.hidden=true;window.spikeA.style.opacity='0';window.spikeHide(document.querySelector('#spikeB'),false);window.spikeHide(window.spikeC,false);return true;")?;
     frames(app, 2)?;
     on_ui(app, |_| {
         native::flush();

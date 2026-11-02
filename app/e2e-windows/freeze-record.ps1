@@ -20,22 +20,28 @@ public class FreezeRecorder {
   }
  }
  public static int Diff(byte[] a,byte[] b) {int n=0;for(int i=0;i<a.Length;i+=4)if(a[i]!=b[i]||a[i+1]!=b[i+1]||a[i+2]!=b[i+2])n++;return n;}
+ public static void Record(string directory) {
+  ShowWindow(GetConsoleWindow(),0);
+  var deadline=DateTime.UtcNow.AddSeconds(90);
+  while(!System.IO.File.Exists(System.IO.Path.Combine(directory,"record.request"))) {
+   if(DateTime.UtcNow>deadline)throw new Exception("record.request timeout");
+   System.Threading.Thread.Sleep(20);
+  }
+  var baseline=Frame(System.IO.Path.Combine(directory,"screen-baseline.png"));
+  var clock=System.Diagnostics.Stopwatch.StartNew();
+  var rows=new System.Collections.Generic.List<string>();rows.Add("index,ms,different_pixels");
+  System.IO.File.WriteAllText(System.IO.Path.Combine(directory,"record.ready"),"");
+  int index=0;
+  while(!System.IO.File.Exists(System.IO.Path.Combine(directory,"record.stop")) && clock.Elapsed.TotalSeconds<60) {
+   double ms=clock.Elapsed.TotalMilliseconds;
+   var frame=Frame(null);int diff=Diff(baseline,frame);
+   rows.Add(String.Format(System.Globalization.CultureInfo.InvariantCulture,"{0},{1:F3},{2}",index,ms,diff));
+   if(diff>1000 && index%10==0)Frame(System.IO.Path.Combine(directory,"changed-"+index+".png"));
+   index++;
+  }
+  System.IO.File.WriteAllLines(System.IO.Path.Combine(directory,"screen-frames.csv"),rows);
+ }
+
 }
 '@
-[FreezeRecorder]::ShowWindow([FreezeRecorder]::GetConsoleWindow(),0) | Out-Null
-while(-not (Test-Path "$Out/record.request")){Start-Sleep -Milliseconds 20}
-$base=[FreezeRecorder]::Frame("$Out/screen-baseline.png")
-New-Item "$Out/record.ready" -ItemType File | Out-Null
-$clock=[Diagnostics.Stopwatch]::StartNew()
-$rows=[Collections.Generic.List[object]]::new()
-$index=0
-while(-not (Test-Path "$Out/record.stop") -and $clock.Elapsed.TotalSeconds -lt 60){
- $time=$clock.Elapsed.TotalMilliseconds
- $frame=[FreezeRecorder]::Frame($null)
- $diff=[FreezeRecorder]::Diff($base,$frame)
- $rows.Add([PSCustomObject]@{index=$index;ms=$time;different_pixels=$diff})
- if($diff -gt 1000 -and $index % 10 -eq 0){[FreezeRecorder]::Frame("$Out/changed-$index.png") | Out-Null}
- $index++
- Start-Sleep -Milliseconds 8
-}
-$rows | ConvertTo-Json | Set-Content "$Out/screen-frames.json"
+[FreezeRecorder]::Record($Out)
