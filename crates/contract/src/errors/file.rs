@@ -3,161 +3,161 @@ error_catalog! { ENTRIES;
         class: PermissionDenied,
         place: "파일 접근 권한 검사",
         cause: "앱 정의에 파일 권한이 선언되지 않았다",
-        message: "파일 권한 {permission}이 앱 정의에 없습니다. 앱 정의에 권한을 선언한 뒤 다시 시도하세요.",
+        message: "파일 권한 {permission}: 앱 정의 permissions에 선언되지 않았습니다. 앱 정의 permissions에 추가하세요.",
         fix: "앱 정의의 files 권한 목록을 확인하세요"
     }
     FILE_WRITE_READ_ONLY_PERMISSION(permission) {
         class: PermissionDenied,
         place: "파일 쓰기 권한 검사",
         cause: "요청한 파일 권한의 접근 수준이 읽기 전용이다",
-        message: "파일 권한 {permission}은 읽기 전용이라 쓸 수 없습니다. 앱 정의에서 읽기 쓰기 권한을 선언하세요.",
+        message: "파일 권한 {permission}: 쓰기 접근이 선언되지 않았습니다. 앱 정의 permissions에서 access를 readwrite로 바꾸세요.",
         fix: "앱 정의에서 해당 권한의 access를 readwrite로 바꾸세요"
     }
     FILE_ACCESS_FOLDER_NOT_CHOSEN(permission) {
         class: NotGranted,
         place: "기기 폴더 접근 검사",
         cause: "이 앱 창에서 파일 권한의 폴더를 고르지 않았다",
-        message: "파일 권한 {permission}의 폴더를 이 기기에서 고르지 않았습니다. 앱에서 폴더를 선택하세요.",
+        message: "파일 권한 {permission}: 이 기기에서 사용할 폴더가 없습니다. 앱에서 폴더 선택을 누르세요.",
         fix: "앱의 폴더 선택 단추를 눌러 접근할 폴더를 고르세요"
     }
-    FILE_ACCESS_WINDOW_NOT_FOUND(window) {
+    FILE_ACCESS_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "파일 권한 검사",
         cause: "파일 권한을 확인할 창이 없다",
-        message: "파일 권한을 확인할 창 {window}이 없습니다. 앱을 다시 열고 시도하세요.",
+        message: "파일 권한을 확인할 앱 창이 없습니다. 파일을 다시 여세요.",
         fix: "앱을 다시 여세요"
     }
-    FILE_ACCESS_APP_VERSION_NOT_FOUND(window) {
+    FILE_ACCESS_APP_VERSION_NOT_FOUND() {
         class: NotFound,
         place: "파일 권한 검사",
         cause: "창이 사용하는 앱 버전이 없다",
-        message: "창 {window}이 사용하는 앱 버전을 찾을 수 없습니다. 앱을 다시 열고 시도하세요.",
+        message: "앱 창의 현재 정의를 찾을 수 없습니다. 앱 레지스트리에 현재 앱 정의를 등록하세요.",
         fix: "앱을 다시 여세요"
     }
     FILE_ACCESS_PERMISSION_NOT_FILES(permission) {
         class: PermissionDenied,
         place: "파일 권한 검사",
         cause: "요청한 권한이 파일 권한이 아니다",
-        message: "권한 {permission}은 파일 권한이 아닙니다. 앱 정의의 파일 권한을 확인하세요.",
+        message: "앱 정의 permissions의 {permission}: files 모듈이 아닙니다. 이 항목의 module을 files로 고치세요.",
         fix: "앱 정의에서 files 모듈 권한을 확인하세요"
     }
     FILE_ACCESS_ROOT_CHANGED(permission) {
         class: PathOutsideRoot,
         place: "선택한 폴더 검사",
         cause: "선택한 폴더가 더는 같은 위치의 폴더가 아니다",
-        message: "파일 권한 {permission}에 고른 폴더가 바뀌었거나 폴더가 아닙니다. 폴더를 다시 선택하세요.",
+        message: "파일 권한 {permission}: 선택한 폴더가 바뀌었거나 더는 폴더가 아닙니다. 파일 관리자에서 폴더를 확인하세요.",
         fix: "파일 권한에 사용할 폴더를 다시 고르세요"
     }
     FILE_LIST_DIRECTORY_IO(path) {
         class: Io,
         place: "파일 목록 읽기",
         cause: "폴더를 읽지 못했다",
-        message: "폴더 {path}의 파일 목록을 읽지 못했습니다. 폴더 접근 권한을 확인한 뒤 다시 불러오세요.",
+        message: "폴더 {path}: 파일 목록을 읽지 못했습니다. 파일 관리자에서 폴더가 열리는지 확인하세요.",
         fix: "폴더 접근 권한을 확인하세요"
     }
     FILE_LIST_DIRECTORY_NOT_FOUND(path) {
         class: NotFound,
         place: "파일 목록 읽기",
         cause: "목록을 읽으려는 폴더가 사라졌다",
-        message: "폴더 {path}를 찾을 수 없습니다. 파일 목록을 새로 불러오세요.",
+        message: "폴더 {path}: 찾을 수 없습니다. 파일 관리자에서 폴더가 있는지 확인하세요.",
         fix: "파일 목록을 새로 불러오세요"
     }
     FILE_LIST_ENTRY_IO(path) {
         class: Io,
         place: "파일 목록 항목 읽기",
         cause: "목록 항목 정보를 읽지 못했다",
-        message: "폴더 {path}의 항목 정보를 읽지 못했습니다. 폴더를 다시 불러오세요.",
+        message: "폴더 {path}: 안의 항목 정보를 읽지 못했습니다. 파일 관리자에서 항목이 열리는지 확인하세요.",
         fix: "폴더를 다시 불러오세요"
     }
     FILE_LIST_ENTRY_NOT_FOUND(path) {
         class: NotFound,
         place: "파일 목록 항목 읽기",
         cause: "목록을 읽는 중 폴더가 사라졌다",
-        message: "폴더 {path}가 바뀌었습니다. 파일 목록을 새로 불러오세요.",
+        message: "폴더 {path}: 읽는 동안 바뀌었습니다. 파일 관리자에서 폴더가 있는지 확인하세요.",
         fix: "파일 목록을 새로 불러오세요"
     }
     FILE_LIST_NAME_NOT_TEXT(path) {
         class: Io,
         place: "파일 목록 항목 이름 읽기",
         cause: "항목 이름이 UTF-8 문자열이 아니다",
-        message: "폴더 {path}의 항목 이름을 읽을 수 없습니다. 파일 관리자에서 이름을 바꾼 뒤 다시 불러오세요.",
+        message: "폴더 {path}: 안에 이름을 읽을 수 없는 항목이 있습니다. 파일 관리자에서 그 항목의 이름을 바꾸세요.",
         fix: "파일 관리자에서 항목 이름을 바꾸세요"
     }
     FILE_READ_NOT_FOUND(path) {
         class: NotFound,
         place: "파일 읽기",
         cause: "읽으려는 파일이 없다",
-        message: "파일 {path}을 찾을 수 없습니다. 파일 목록을 새로 불러온 뒤 다시 여세요.",
+        message: "파일 {path}: 찾을 수 없습니다. 파일 관리자에서 파일이 있는지 확인하세요.",
         fix: "파일 목록을 새로 불러오세요"
     }
     FILE_READ_IO(path) {
         class: Io,
         place: "파일 읽기",
         cause: "파일을 읽지 못했다",
-        message: "파일 {path}을 읽지 못했습니다. 파일 접근 권한을 확인한 뒤 다시 여세요.",
+        message: "파일 {path}: 읽지 못했습니다. 파일 관리자에서 파일이 열리는지 확인하세요.",
         fix: "파일 접근 권한을 확인하세요"
     }
     FILE_READ_TOO_LARGE(path) {
         class: Io,
         place: "파일 크기 검사",
         cause: "파일이 읽기 한도보다 크다",
-        message: "파일 {path}은 5MB를 넘어 읽을 수 없습니다. 더 작은 파일을 선택하세요.",
+        message: "파일 {path}: 5MB를 넘어 읽을 수 없습니다. 더 작은 파일을 선택하세요.",
         fix: "5MB 이하의 파일을 선택하세요"
     }
     FILE_READ_NOT_TEXT(path) {
         class: Io,
         place: "텍스트 파일 읽기",
         cause: "파일 내용이 UTF-8 텍스트가 아니다",
-        message: "파일 {path}은 UTF-8 텍스트가 아닙니다. 텍스트 파일을 선택하세요.",
+        message: "파일 {path}: UTF-8 텍스트가 아닙니다. UTF-8 텍스트 파일을 선택하세요.",
         fix: "UTF-8 텍스트 파일을 선택하세요"
     }
     FILE_PATH_OUTSIDE_ROOT(path) {
         class: PathOutsideRoot,
         place: "파일 경로 검사",
         cause: "경로가 선택한 폴더 밖을 가리킨다",
-        message: "경로 {path}가 선택한 폴더 밖을 가리킵니다. 선택한 폴더 안의 경로를 사용하세요.",
+        message: "경로 {path}: 선택한 폴더 밖을 가리킵니다. 선택한 폴더 안의 경로를 사용하세요.",
         fix: "선택한 폴더 안의 경로를 사용하세요"
     }
     FILE_PATH_NOT_FOUND(path) {
         class: NotFound,
         place: "파일 경로 검사",
         cause: "경로의 파일이나 상위 폴더가 없다",
-        message: "경로 {path}에서 파일이나 상위 폴더를 찾을 수 없습니다. 파일 목록을 새로 불러오세요.",
+        message: "경로 {path}: 파일이나 상위 폴더를 찾을 수 없습니다. 파일 관리자에서 경로가 있는지 확인하세요.",
         fix: "파일 목록을 새로 불러오세요"
     }
     FILE_PATH_IO(path) {
         class: Io,
         place: "파일 경로 검사",
         cause: "경로 정보를 확인하지 못했다",
-        message: "경로 {path}를 확인하지 못했습니다. 폴더 접근 권한을 확인하세요.",
+        message: "경로 {path}: 위치 정보를 확인하지 못했습니다. 파일 관리자에서 파일과 폴더가 열리는지 확인하세요.",
         fix: "폴더 접근 권한을 확인하세요"
     }
     FILE_PATH_PROTECTED(path) {
         class: PermissionDenied,
         place: "파일 저장 위치 검사",
         cause: "경로가 kaleidoscope 내부 데이터 폴더를 가리킨다",
-        message: "경로 {path}는 쉘 내부 데이터 폴더라 접근할 수 없습니다. 다른 폴더를 선택하세요.",
+        message: "경로 {path}: 쉘 내부 데이터 폴더라 접근할 수 없습니다. 다른 폴더를 선택하세요.",
         fix: "쉘 내부 데이터 폴더 밖을 선택하세요"
     }
     FILE_NAME_INVALID(reason) {
         class: InvalidName,
         place: "파일 이름 검사",
         cause: "파일 시스템에서 허용하지 않는 이름이다",
-        message: "파일 이름을 사용할 수 없습니다: {reason}. 다른 이름을 입력하세요.",
+        message: "파일 이름을 사용할 수 없습니다. 다른 이름을 입력하세요. 원인: {reason}",
         fix: "파일 시스템에서 허용하는 이름을 입력하세요"
     }
     FILE_CREATE_FILE_NAME_TAKEN(name) {
         class: Conflict,
         place: "파일 만들기",
         cause: "대상 위치에 같은 이름의 항목이 있다",
-        message: "파일 {name}를 만들지 못했습니다. 같은 이름의 항목이 있습니다. 다른 이름으로 만드세요.",
+        message: "파일 이름 {name}: 같은 이름의 항목이 있어 만들지 못했습니다. 다른 이름을 입력하세요.",
         fix: "다른 파일 이름을 사용하세요"
     }
     FILE_CREATE_FOLDER_NAME_TAKEN(name) {
         class: Conflict,
         place: "폴더 만들기",
         cause: "대상 위치에 같은 이름의 항목이 있다",
-        message: "폴더 {name}를 만들지 못했습니다. 같은 이름의 항목이 있습니다. 다른 이름으로 만드세요.",
+        message: "폴더 이름 {name}: 같은 이름의 항목이 있어 만들지 못했습니다. 다른 이름을 입력하세요.",
         fix: "다른 폴더 이름을 사용하세요"
     }
     FILE_CREATE_PARENT_NOT_FOLDER(path) {
@@ -171,7 +171,7 @@ error_catalog! { ENTRIES;
         class: Conflict,
         place: "파일 저장",
         cause: "읽은 뒤 파일 내용이 바뀌었거나 파일이 지워졌다",
-        message: "파일 {name}가 읽은 뒤 바뀌었거나 지워졌습니다. 다시 읽고 내용을 고친 뒤 저장하세요.",
+        message: "파일 {name}: 읽은 뒤 바뀌거나 삭제되어 저장하지 못했습니다. 다시 불러오거나 덮어쓰기를 선택하세요.",
         fix: "파일을 다시 읽고 수정한 뒤 저장하세요"
     }
     FILE_RENAME_ROOT_DENIED() {
@@ -185,7 +185,7 @@ error_catalog! { ENTRIES;
         class: Conflict,
         place: "파일 이름 바꾸기",
         cause: "대상 위치에 같은 이름의 항목이 있다",
-        message: "이름을 {name}(으)로 바꾸지 못했습니다. 같은 이름의 항목이 있습니다. 다른 이름을 사용하세요.",
+        message: "새 이름 {name}: 같은 이름의 항목이 있어 바꾸지 못했습니다. 다른 이름을 입력하세요.",
         fix: "다른 이름을 사용하세요"
     }
     FILE_MOVE_ROOT_DENIED() {
@@ -199,14 +199,14 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "파일 옮기기 경로 검사",
         cause: "폴더를 자기 안으로 옮기려 했다",
-        message: "폴더 {path} 안으로는 폴더를 옮길 수 없습니다. 다른 폴더를 선택하세요.",
+        message: "폴더 {path}: 자기 안으로 옮길 수 없습니다. 다른 대상 폴더를 선택하세요.",
         fix: "다른 대상 폴더를 선택하세요"
     }
     FILE_MOVE_NAME_TAKEN(path) {
         class: Conflict,
         place: "파일 옮기기",
         cause: "대상 폴더에 같은 이름의 항목이 있다",
-        message: "파일 {path}를 옮기지 못했습니다. 대상 폴더에 같은 이름이 있습니다. 이름을 바꾸거나 다른 폴더를 선택하세요.",
+        message: "대상 항목 {path}: 같은 이름이 있어 옮기지 못했습니다. 대상 이름을 바꾸거나 다른 폴더를 선택하세요.",
         fix: "이름을 바꾸거나 다른 대상 폴더를 선택하세요"
     }
     FILE_COPY_ROOT_DENIED() {
@@ -220,42 +220,42 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "파일 복사 경로 검사",
         cause: "폴더를 자기 안으로 복사하려 했다",
-        message: "폴더 {path} 안으로는 폴더를 복사할 수 없습니다. 다른 폴더를 선택하세요.",
+        message: "폴더 {path}: 자기 안으로 복사할 수 없습니다. 다른 대상 폴더를 선택하세요.",
         fix: "다른 대상 폴더를 선택하세요"
     }
     FILE_COPY_NAME_TAKEN(path) {
         class: Conflict,
         place: "파일 복사",
         cause: "복사 대상에 같은 이름의 항목이 생겼다",
-        message: "파일 {path}를 복사하지 못했습니다. 대상 폴더에 같은 이름이 생겼습니다. 다시 복사하세요.",
-        fix: "대상 폴더를 새로 불러온 뒤 복사하세요"
+        message: "대상 항목 {path}: 같은 이름이 생겨 복사하지 못했습니다. 다른 대상 폴더를 선택해 다시 복사하세요.",
+        fix: "다른 대상 폴더를 선택하세요"
     }
     FILE_DESTINATION_NOT_FOLDER(path) {
         class: InvalidRequest,
         place: "파일 작업 대상 검사",
         cause: "대상 위치가 폴더가 아니다",
-        message: "대상 {path}은 폴더가 아닙니다. 파일 목록에서 폴더를 선택하세요.",
+        message: "대상 {path}: 폴더가 아닙니다. 파일 목록에서 폴더를 선택하세요.",
         fix: "대상 폴더를 선택하세요"
     }
     FILE_OPERATION_IO(path) {
         class: Io,
         place: "파일 작업",
         cause: "파일 작업 중 입출력에 실패했다",
-        message: "파일 {path} 작업을 마치지 못했습니다. 파일 접근 권한과 저장 공간을 확인하세요.",
-        fix: "파일 접근 권한과 저장 공간을 확인하세요"
+        message: "파일 {path}: 작업을 마치지 못했습니다. 파일 관리자에서 파일이 열리는지와 저장 공간을 확인하세요.",
+        fix: "파일 관리자에서 파일과 저장 공간을 확인하세요"
     }
     FILE_OPERATION_NOT_FOUND(path) {
         class: NotFound,
         place: "파일 작업",
         cause: "작업할 파일이 사라졌다",
-        message: "파일 {path}을 찾을 수 없습니다. 파일 목록을 새로 불러온 뒤 다시 시도하세요.",
-        fix: "파일 목록을 새로 불러오세요"
+        message: "파일 {path}: 작업 중 사라졌습니다. 파일 관리자에서 파일이 이동되거나 삭제되었는지 확인하세요.",
+        fix: "파일 관리자에서 파일 위치를 확인하세요"
     }
     FILE_OPERATION_BUSY(path) {
         class: FileBusy,
         place: "파일 작업",
         cause: "다른 프로그램이 파일을 사용 중이다",
-        message: "파일 {path}을 다른 프로그램에서 사용 중입니다. 닫은 뒤 다시 시도하세요.",
+        message: "파일 {path}: 다른 프로그램에서 사용 중입니다. 그 프로그램에서 파일을 닫은 뒤 다시 시도하세요.",
         fix: "파일을 사용하는 프로그램을 닫으세요"
     }
     FILE_REMOVE_ROOT_DENIED() {
@@ -269,85 +269,85 @@ error_catalog! { ENTRIES;
         class: TrashUnavailable,
         place: "파일 휴지통 보내기",
         cause: "시스템 휴지통으로 보낼 수 없다",
-        message: "파일 {path}를 휴지통으로 보내지 못했습니다. 파일 관리자에서 직접 확인하세요.",
+        message: "파일 {path}: 휴지통으로 보내지 못했습니다. 파일 관리자에서 파일을 확인하세요.",
         fix: "파일 관리자에서 파일을 확인하세요"
     }
     FILE_OPEN_NOT_FILE(path) {
         class: InvalidRequest,
         place: "파일 열기 대상 검사",
         cause: "열려는 경로가 파일이 아니다",
-        message: "경로 {path}는 파일이 아닙니다. 파일을 선택해 다시 여세요.",
+        message: "경로 {path}: 파일이 아닙니다. 파일을 선택해 다시 여세요.",
         fix: "파일을 선택하세요"
     }
-    FILE_OPEN_APP_NOT_FOUND(app) {
+    FILE_OPEN_APP_NOT_FOUND() {
         class: NotFound,
         place: "파일 열기 앱 찾기",
         cause: "파일을 열 앱이 등록되어 있지 않다",
-        message: "파일을 열 앱 {app}을 찾을 수 없습니다. 앱 목록을 새로 불러오세요.",
-        fix: "앱 목록을 새로 불러오세요"
+        message: "파일을 열 앱이 등록되어 있지 않습니다. 앱 레지스트리에 해당 앱을 등록하세요.",
+        fix: "앱 레지스트리에 파일을 열 앱을 등록하세요"
     }
-    FILE_OPEN_APP_VERSION_NOT_FOUND(app) {
+    FILE_OPEN_APP_VERSION_NOT_FOUND() {
         class: NotFound,
         place: "파일 열기 앱 정의 찾기",
         cause: "파일을 열 앱의 현재 정의가 없다",
-        message: "앱 {app}의 현재 정의를 찾을 수 없습니다. 앱을 다시 등록한 뒤 여세요.",
-        fix: "앱을 다시 등록하세요"
+        message: "파일을 열 앱의 현재 정의를 찾을 수 없습니다. 앱 레지스트리에 현재 앱 정의를 등록하세요.",
+        fix: "앱 레지스트리에 현재 앱 정의를 등록하세요"
     }
-    FILE_OPEN_APP_CANNOT_OPEN(path) {
+    FILE_OPEN_APP_CANNOT_OPEN() {
         class: InvalidRequest,
         place: "파일 열기 확장자 검사",
         cause: "앱이 이 파일 확장자를 열도록 선언하지 않았다",
-        message: "앱이 파일 {path}을 열도록 선언하지 않았습니다. 이 파일을 여는 앱을 선택하세요.",
-        fix: "확장자를 지원하는 앱을 선택하세요"
+        message: "앱 정의 opens.extensions에 이 파일의 확장자가 없습니다. 앱 정의에 지원 확장자를 추가하세요.",
+        fix: "앱 정의 opens.extensions에 확장자를 추가하세요"
     }
     FILE_PC_ACCESS_NOT_GRANTED(permission) {
         class: NotGranted,
         place: "내 PC 파일 권한 검사",
         cause: "이 기기에서 내 PC 파일 접근을 허용하지 않았다",
-        message: "파일 권한 {permission}의 내 PC 접근을 허용하지 않았습니다. 접근을 허용한 뒤 다시 시도하세요.",
-        fix: "내 PC 파일 접근을 허용하세요"
+        message: "파일 권한 {permission}: 내 PC 파일 읽기가 아직 허용되지 않았습니다. 이 PC의 파일 읽기 허용을 누르세요.",
+        fix: "이 PC의 파일 읽기 허용을 누르세요"
     }
-    FILE_PC_ROOT_NOT_FOUND(path) {
+    FILE_PC_ROOT_NOT_FOUND() {
         class: NotFound,
         place: "내 PC 폴더 찾기",
         cause: "내 PC에서 고른 폴더를 찾지 못했다",
-        message: "내 PC 폴더 {path}를 찾을 수 없습니다. 폴더 목록을 새로 불러오세요.",
-        fix: "폴더 목록을 새로 불러오세요"
+        message: "내 PC 폴더를 찾을 수 없습니다. 파일 관리자에서 폴더가 있는지 확인하세요.",
+        fix: "파일 관리자에서 폴더를 확인하세요"
     }
     FILE_PC_SCOPE_NOT_SUPPORTED(permission) {
         class: PermissionDenied,
         place: "내 PC 파일 권한 검사",
         cause: "요청한 권한이 내 PC 파일 권한이 아니다",
-        message: "파일 권한 {permission}으로 내 PC 파일에 접근할 수 없습니다. 앱 정의를 확인하세요.",
-        fix: "내 PC 범위의 files 권한을 확인하세요"
+        message: "파일 권한 {permission}: 내 PC 범위가 아닙니다. 앱 정의 permissions에서 scope를 pc로 고치세요.",
+        fix: "앱 정의 permissions의 scope를 pc로 고치세요"
     }
     FILE_WRITE_REQUEST_INVALID() {
         class: InvalidRequest,
         place: "파일 쓰기 명령 확인",
         cause: "파일 쓰기 처리기에 다른 종류의 명령이 전달됐다",
-        message: "파일 쓰기 요청을 읽지 못했습니다. 작업을 다시 시도하세요.",
-        fix: "요청을 다시 시도하세요"
+        message: "파일 쓰기 요청 형식이 올바르지 않습니다. 쉘을 최신 판으로 업데이트하세요.",
+        fix: "쉘을 최신 판으로 업데이트하세요"
     }
-    FILE_CLIENT_WINDOW_NOT_FOUND(window) {
+    FILE_CLIENT_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "앱 파일 창 찾기",
         cause: "앱 파일 작업을 요청한 창이 없다",
-        message: "앱 파일 작업을 요청한 창 {window}이 없습니다. 앱을 다시 열고 시도하세요.",
+        message: "앱 파일 작업을 요청한 창이 닫혔습니다. 앱을 다시 열고 시도하세요.",
         fix: "앱을 다시 여세요"
     }
-    FILE_CLIENT_APP_VERSION_NOT_FOUND(window) {
+    FILE_CLIENT_APP_VERSION_NOT_FOUND() {
         class: NotFound,
         place: "앱 파일 권한 검사",
         cause: "창이 사용하는 앱 정의가 없다",
-        message: "창 {window}의 앱 정의를 찾을 수 없습니다. 앱을 다시 열고 시도하세요.",
+        message: "앱의 현재 정의를 찾을 수 없습니다. 앱 레지스트리에 현재 버전을 등록하세요.",
         fix: "앱을 다시 여세요"
     }
-    FILE_CLIENT_NOT_DECLARED(window) {
+    FILE_CLIENT_NOT_DECLARED() {
         class: PermissionDenied,
         place: "앱 파일 권한 검사",
         cause: "창에서 창별 파일 기능을 선언하지 않았다",
-        message: "창 {window}의 앱은 파일 입력과 출력을 선언하지 않았습니다. 파일 기능을 선언한 앱에서 시도하세요.",
-        fix: "앱 정의에 파일 기능을 선언하세요"
+        message: "앱 정의 client에 파일 입력과 출력을 선언하지 않았습니다. 앱 정의의 client 설정을 고치세요.",
+        fix: "앱 정의 client에 파일 입력과 출력을 선언하세요"
     }
     FILE_CLIENT_INPUT_NOT_OWNED() {
         class: PermissionDenied,
@@ -360,14 +360,14 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "앱 파일 선택 검사",
         cause: "선택한 대상이 일반 파일이 아니다",
-        message: "선택한 항목 {name}은 파일이 아닙니다. 파일을 선택하세요.",
+        message: "선택한 항목 {name}: 파일이 아닙니다. 파일을 선택하세요.",
         fix: "일반 파일을 선택하세요"
     }
     FILE_CLIENT_PICK_TOO_LARGE(name) {
         class: InvalidRequest,
         place: "앱 파일 크기 검사",
         cause: "선택한 파일이 읽기 한도를 넘었다",
-        message: "선택한 파일 {name}은 20MB를 넘어 전달할 수 없습니다. 더 작은 파일을 선택하세요.",
+        message: "선택한 파일 {name}: 20MB를 넘어 전달할 수 없습니다. 더 작은 파일을 선택하세요.",
         fix: "20MB 이하의 파일을 선택하세요"
     }
     FILE_CLIENT_PICK_NAME_INVALID(path) {
@@ -381,49 +381,49 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱 파일 선택 정보 읽기",
         cause: "선택한 파일 정보를 읽지 못했다",
-        message: "선택한 파일 {path}의 정보를 읽지 못했습니다. 파일 접근 권한을 확인하세요.",
-        fix: "파일 접근 권한을 확인하세요"
+        message: "선택한 파일 {path}의 정보를 읽지 못했습니다. 파일 관리자에서 파일이 열리는지 확인하세요.",
+        fix: "파일 관리자에서 파일을 확인하세요"
     }
     FILE_CLIENT_PICK_NOT_FOUND(path) {
         class: NotFound,
         place: "앱 파일 선택 정보 읽기",
         cause: "선택한 뒤 파일이 사라졌다",
-        message: "선택한 파일 {path}을 찾을 수 없습니다. 파일을 다시 선택하세요.",
+        message: "선택한 파일 {path}: 찾을 수 없습니다. 파일 선택 창에서 다시 선택하세요.",
         fix: "파일을 다시 선택하세요"
     }
     FILE_CLIENT_READ_NOT_FOUND(name) {
         class: NotFound,
         place: "앱 파일 읽기",
         cause: "고른 뒤 파일이 지워졌다",
-        message: "선택한 파일 {name}을 찾을 수 없습니다. 파일을 다시 선택하세요.",
+        message: "선택한 파일 {name}: 찾을 수 없습니다. 파일 선택 창에서 다시 선택하세요.",
         fix: "파일을 다시 선택하세요"
     }
     FILE_CLIENT_READ_TOO_LARGE(name) {
         class: InvalidRequest,
         place: "앱 파일 크기 검사",
         cause: "고른 뒤 파일 크기가 읽기 한도를 넘었다",
-        message: "선택한 파일 {name}은 20MB를 넘어 읽을 수 없습니다. 더 작은 파일을 선택하세요.",
+        message: "선택한 파일 {name}: 20MB를 넘어 읽을 수 없습니다. 더 작은 파일을 선택하세요.",
         fix: "20MB 이하의 파일을 선택하세요"
     }
     FILE_CLIENT_READ_IO(name) {
         class: Io,
         place: "앱 파일 읽기",
         cause: "선택한 파일을 읽지 못했다",
-        message: "선택한 파일 {name}을 읽지 못했습니다. 파일 접근 권한을 확인한 뒤 다시 선택하세요.",
+        message: "선택한 파일 {name}: 읽지 못했습니다. 파일 관리자에서 파일이 열리는지 확인하세요.",
         fix: "파일 접근 권한을 확인하세요"
     }
     FILE_CLIENT_REGISTER_NOT_FILE(path) {
         class: InvalidRequest,
         place: "앱 파일 등록 검사",
         cause: "등록할 대상이 일반 파일이 아니다",
-        message: "앱에 전달할 항목 {path}은 파일이 아닙니다. 파일을 선택하세요.",
+        message: "앱에 전달할 항목 {path}: 파일이 아닙니다. 파일을 선택하세요.",
         fix: "일반 파일을 선택하세요"
     }
     FILE_CLIENT_REGISTER_TOO_LARGE(path) {
         class: InvalidRequest,
         place: "앱 파일 등록 크기 검사",
         cause: "등록할 파일이 읽기 한도를 넘었다",
-        message: "앱에 전달할 파일 {path}은 20MB를 넘어 전달할 수 없습니다. 더 작은 파일을 선택하세요.",
+        message: "앱에 전달할 파일 {path}: 20MB를 넘어 전달할 수 없습니다. 더 작은 파일을 선택하세요.",
         fix: "20MB 이하의 파일을 선택하세요"
     }
     FILE_CLIENT_REGISTER_NAME_INVALID(path) {
@@ -437,14 +437,14 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱 파일 등록 정보 읽기",
         cause: "등록할 파일 정보를 읽지 못했다",
-        message: "앱에 전달할 파일 {path}의 정보를 읽지 못했습니다. 파일 접근 권한을 확인하세요.",
-        fix: "파일 접근 권한을 확인하세요"
+        message: "앱에 전달할 파일 {path}의 정보를 읽지 못했습니다. 파일 관리자에서 파일이 열리는지 확인하세요.",
+        fix: "파일 관리자에서 파일을 확인하세요"
     }
     FILE_CLIENT_REGISTER_NOT_FOUND(path) {
         class: NotFound,
         place: "앱 파일 등록 정보 읽기",
         cause: "등록할 파일이 사라졌다",
-        message: "앱에 전달할 파일 {path}을 찾을 수 없습니다. 파일을 다시 선택하세요.",
+        message: "앱에 전달할 파일 {path}: 찾을 수 없습니다. 파일 선택 창에서 다시 선택하세요.",
         fix: "파일을 다시 선택하세요"
     }
     FILE_CLIENT_EXPORT_ID_NOT_OWNED() {
@@ -458,42 +458,42 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "앱 파일 출력 위치 확인",
         cause: "저장 대화상자가 유효한 파일 위치를 돌려주지 않았다",
-        message: "파일 {name}을 저장할 위치를 확인하지 못했습니다. 저장 위치를 다시 선택하세요.",
+        message: "파일 {name}: 저장할 위치를 확인하지 못했습니다. 파일 선택 창에서 저장 위치를 다시 선택하세요.",
         fix: "저장 위치를 다시 선택하세요"
     }
     FILE_CLIENT_EXPORT_IO(name) {
         class: Io,
         place: "앱 파일 내보내기",
         cause: "임시 파일을 만들거나 파일 내용을 쓰지 못했다",
-        message: "파일 {name}을 내보내지 못했습니다. 저장 공간과 폴더 접근 권한을 확인하세요.",
-        fix: "저장 공간과 폴더 접근 권한을 확인하세요"
+        message: "파일 {name}: 내보내지 못했습니다. 파일 관리자에서 저장 폴더가 열리는지와 저장 공간을 확인하세요.",
+        fix: "파일 관리자에서 저장 폴더와 저장 공간을 확인하세요"
     }
     FILE_CLIENT_EXPORT_NOT_FOUND(name) {
         class: NotFound,
         place: "앱 파일 내보내기",
         cause: "내보내는 동안 임시 파일이나 저장 폴더가 사라졌다",
-        message: "파일 {name}을 저장할 위치를 찾을 수 없습니다. 저장 폴더를 확인하고 다시 내보내세요.",
+        message: "파일 {name}: 저장할 위치를 찾을 수 없습니다. 파일 관리자에서 저장 폴더를 확인하세요.",
         fix: "저장 폴더를 확인하고 다시 내보내세요"
     }
     FILE_CLIENT_EXPORT_FINISH_IO(name) {
         class: Io,
         place: "앱 파일 내보내기 완료",
         cause: "임시 파일을 저장 위치로 옮기지 못했다",
-        message: "파일 {name}을 저장 위치에 마치지 못했습니다. 저장 공간과 폴더 접근 권한을 확인하세요.",
-        fix: "저장 공간과 폴더 접근 권한을 확인하세요"
+        message: "파일 {name}: 저장 위치로 옮기지 못했습니다. 파일 관리자에서 저장 폴더가 열리는지와 저장 공간을 확인하세요.",
+        fix: "파일 관리자에서 저장 폴더와 저장 공간을 확인하세요"
     }
     FILE_CLIENT_EXPORT_TRUNCATE_IO(name) {
         class: Io,
         place: "앱 파일 출력 크기 조정",
         cause: "출력 파일 크기를 바꾸지 못했다",
-        message: "파일 {name}의 내보내기 위치를 조정하지 못했습니다. 저장 공간을 확인하세요.",
+        message: "파일 {name}: 내보내기 크기를 조정하지 못했습니다. 저장 공간을 확인하세요.",
         fix: "저장 공간을 확인하세요"
     }
     FILE_CLIENT_EXPORT_CANCEL_IO(name) {
         class: Io,
         place: "앱 파일 내보내기 취소",
         cause: "임시 파일을 지우지 못했다",
-        message: "파일 {name} 내보내기를 취소했지만 임시 파일을 지우지 못했습니다. 파일 관리자에서 확인하세요.",
-        fix: "파일 관리자에서 임시 파일을 확인하세요"
+        message: "파일 {name} 내보내기를 취소했지만 임시 파일을 지우지 못했습니다. 저장 폴더에서 임시 파일을 확인하세요.",
+        fix: "저장 폴더에서 임시 파일을 확인하세요"
     }
 }

@@ -552,4 +552,25 @@ error_catalog! { ENTRIES;
         message: "저장 항목 {entry}의 값이 마크다운 문서가 아닙니다. 앱 정의의 저장 형식을 확인하세요.",
         fix: "앱 정의에서 저장 항목 형식을 확인하세요"
     }
+    SHELL_FILE_EXTENSION_NOT_ALLOWED(name, extensions) {
+        class: InvalidRequest,
+        place: "파일 이름 확장자 확인",
+        cause: "파일 이름이 허용된 확장자로 끝나지 않는다",
+        message: "파일 이름 ({name})의 확장자가 허용되지 않습니다. 허용되는 확장자 ({extensions})에 맞춰 이름을 고치세요.",
+        fix: "허용된 확장자에 맞춰 파일 이름을 고치세요"
+    }
+    SHELL_FILE_EDITOR_SAVE_FAILED() {
+        class: Io,
+        place: "파일 작업 전 편집기 저장",
+        cause: "파일 작업 전에 편집 중인 내용을 저장하지 못했다",
+        message: "편집 중인 내용을 저장하지 못해 파일 작업을 취소했습니다. 편집기에 표시된 오류를 확인하세요.",
+        fix: "편집기에 표시된 오류를 확인하세요"
+    }
+    SHELL_TREE_CONTROL_HEIGHT_MISSING() {
+        class: InvalidRequest,
+        place: "트리 행 표시 설정 읽기",
+        cause: "쉘 스타일에 트리 행 높이가 없다",
+        message: "트리 행 높이 설정을 읽지 못했습니다. 쉘 스타일에서 행 높이를 설정하세요.",
+        fix: "쉘 스타일에 트리 행 높이를 설정하세요"
+    }
 }

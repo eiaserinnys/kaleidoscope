@@ -227,18 +227,18 @@ describe("folder block", () => {
     (definition.ui as Extract<Block, { type: "folder" }>).extensions = extensions;
     setup(definition, undefined, { "guide.md": "# 안내" });
     const guide = await screen.findByRole("treeitem", { name: "guide.md" });
-    const message = extensions.length === 1 ? "이름은 .md로 끝나야 합니다" : "이름은 .md, .markdown 가운데 하나로 끝나야 합니다";
+    const message = (name: string) => `파일 이름 (${name})의 확장자가 허용되지 않습니다. 허용되는 확장자 (.${extensions.join(", .")})에 맞춰 이름을 고치세요. SHELL_FILE_EXTENSION_NOT_ALLOWED`;
     fireEvent.click(screen.getByRole("button", { name: "새 파일" }));
     let input = await screen.findByRole("textbox", { name: "새 파일 이름" });
     fireEvent.change(input, { target: { value: "wrong.txt" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect((await screen.findByRole("alert")).textContent).toBe(message);
+    expect((await screen.findByRole("alert")).textContent).toBe(message("wrong.txt"));
     fireEvent.keyDown(screen.getByRole("textbox", { name: "새 파일 이름" }), { key: "Escape" });
     fireEvent.keyDown(guide, { key: "F2" });
     input = await screen.findByRole("textbox", { name: "이름 바꾸기" });
     fireEvent.change(input, { target: { value: "without-extension" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect((await screen.findByRole("alert")).textContent).toBe(message);
+    expect((await screen.findByRole("alert")).textContent).toBe(message("without-extension"));
   });
 
   it("뿌리에 놓은 뒤 현재 행 대신 목록에 포커스를 둔다", async () => {
@@ -347,13 +347,13 @@ describe("folder block", () => {
     if (["닫기", "Enter", "펼친 뒤 Escape"].includes(dismiss)) expect(screen.getByRole("tree").contains(document.activeElement)).toBe(true);
   });
 
-  it.each([false, true, "같은 원인"])("묶음 중 한 건 실패는 개수와 경로를 보이고 코어 식별자를 보존한다 (%s)", async (registered) => {
+  it.each([false, true])("묶음 중 한 건 실패는 개수와 경로를 보이고 코어 식별자를 보존한다 (%s)", async (registered) => {
     setup(fileFolderDefinition("readwrite", false), (transport) => {
       const original = transport.call.bind(transport);
       vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "files.remove"
         ? { op: "files.remove", results: [
-          { path: "a.md", error: { code: "conflict", message: "등록된 원인", details: [], ...(registered ? { id: "FILES_REMOVE_CONFLICT" } : {}) } },
-          { path: "b.md", ...(registered === "같은 원인" ? { error: { code: "conflict", message: "등록된 원인", details: [], id: "FILES_REMOVE_CONFLICT" } } : { ok: {} }) },
+          { path: "a.md", error: { code: "trash_unavailable", message: "파일 a.md: 휴지통으로 보내지 못했습니다. 파일 관리자에서 파일을 확인하세요.", details: [], ...(registered ? { id: "FILE_REMOVE_TRASH_UNAVAILABLE" } : {}) } },
+          { path: "b.md", ok: {} },
         ] } : original(request));
     }, { "a.md": "a", "b.md": "b" });
     const a = await screen.findByRole("treeitem", { name: "a.md" });
@@ -361,28 +361,35 @@ describe("folder block", () => {
     fireEvent.click(a); fireEvent.click(b, { ctrlKey: true }); fireEvent.keyDown(b, { key: "Delete" });
     fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "휴지통으로 이동" }));
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain(registered === "같은 원인" ? "2개 실패: 등록된 원인" : registered ? "1개 실패: a.md: 등록된 원인" : "1개 실패: a.md: 같은 이름이 있습니다");
-    if (registered !== "같은 원인") expect(within(alert).queryByRole("button", { name: "펼치기" })).toBeNull();
-    if (registered) expect(alert.textContent).toContain("FILES_REMOVE_CONFLICT");
+    expect(alert.textContent).toContain("1개 실패: 파일 a.md: 휴지통으로 보내지 못했습니다.");
+    expect(within(alert).queryByRole("button", { name: "펼치기" })).toBeNull();
+    if (registered) expect(alert.textContent).toContain("FILE_REMOVE_TRASH_UNAVAILABLE");
   });
 
-  it("여러 실패는 개수만 보이고 펼치면 경로별 원인을 보여준다", async () => {
+  it("묶음 이동 실패는 펼쳤을 때 코어 문구와 행별 코드를 보여준다", async () => {
     setup(fileFolderDefinition("readwrite", false), (transport) => {
       const original = transport.call.bind(transport);
-      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "files.remove"
-        ? { op: "files.remove", results: [
-          { path: "a.md", error: { code: "conflict", message: "충돌", details: [] } },
-          { path: "b.md", error: { code: "io", message: "디스크 오류", details: [] } },
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "files.move"
+        ? { op: "files.move", results: [
+          { path: "a.md", error: { code: "conflict", message: "대상 항목 a.md: 같은 이름이 있어 옮기지 못했습니다. 대상 이름을 바꾸거나 다른 폴더를 선택하세요.", details: [], id: "FILE_MOVE_NAME_TAKEN" } },
+          { path: "b.md", error: { code: "io", message: "파일 b.md: 작업을 마치지 못했습니다. 파일 관리자에서 파일이 열리는지와 저장 공간을 확인하세요.", details: [], id: "FILE_OPERATION_IO" } },
         ] } : original(request));
-    }, { "a.md": "a", "b.md": "b" });
+    }, { "a.md": "a", "b.md": "b", "target/.hidden": "x" });
     const a = await screen.findByRole("treeitem", { name: "a.md" });
     const b = screen.getByRole("treeitem", { name: "b.md" });
-    fireEvent.click(a); fireEvent.click(b, { ctrlKey: true }); fireEvent.keyDown(b, { key: "Delete" });
-    fireEvent.click(within(await screen.findByRole("dialog", { name: "2개 항목" })).getByRole("button", { name: "휴지통으로 이동" }));
+    const target = screen.getByRole("treeitem", { name: "target" });
+    fireEvent.click(a); fireEvent.click(b, { ctrlKey: true });
+    const data = new Map<string, string>();
+    const dataTransfer = { setData: (key: string, value: string) => data.set(key, value), getData: (key: string) => data.get(key) ?? "", effectAllowed: "", dropEffect: "" };
+    fireEvent.dragStart(a, { dataTransfer }); fireEvent.dragOver(target, { dataTransfer }); fireEvent.drop(target, { dataTransfer });
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).not.toContain("a.md");
     fireEvent.click(within(alert).getByRole("button", { name: "펼치기" }));
-    expect(alert.textContent).toContain("a.md"); expect(alert.textContent).toContain("같은 이름이 있습니다");
+    expect(alert.textContent).toContain("대상 항목 a.md: 같은 이름이 있어 옮기지 못했습니다. 대상 이름을 바꾸거나 다른 폴더를 선택하세요.");
+    expect(alert.textContent).toContain("파일 b.md: 작업을 마치지 못했습니다. 파일 관리자에서 파일이 열리는지와 저장 공간을 확인하세요.");
+    expect(alert.textContent).toContain("FILE_MOVE_NAME_TAKEN");
+    expect(alert.textContent).toContain("FILE_OPERATION_IO");
+    expect(alert.textContent).not.toContain("같은 이름이 있습니다");
   });
 
   it("빈 폴더 안내에 놓으면 해당 폴더로 옮기고 같은 폴더 이동은 막는다", async () => {
@@ -716,7 +723,7 @@ describe("folder block", () => {
     await waitFor(() => expect(input.selectionEnd).toBe("새 문서".length));
     fireEvent.change(input, { target: { value: "보고서.txt" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect((await screen.findByRole("alert")).textContent).toBe("이름은 .md로 끝나야 합니다");
+    expect((await screen.findByRole("alert")).textContent).toContain("SHELL_FILE_EXTENSION_NOT_ALLOWED");
     expect(screen.getByRole("textbox", { name: "새 문서 이름" })).toBeTruthy();
   });
 

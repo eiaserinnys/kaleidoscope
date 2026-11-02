@@ -41,7 +41,8 @@ pub(super) fn pc_roots(inner: &Inner) -> Vec<crate::PcRoot> {
 
 pub(super) fn pc_resolve(inner: &Inner, path: &str) -> Result<(PathBuf, PathBuf), CoreError> {
     if path.is_empty() {
-        return Err(kaleidoscope_contract::errors::FILE_PC_ROOT_NOT_FOUND(path));
+        return Err(kaleidoscope_contract::errors::FILE_PC_ROOT_NOT_FOUND()
+            .and_details(vec!["pc_path: empty".into()]));
     }
     if !valid_relative_path(path, false) {
         return Err(kaleidoscope_contract::errors::FILE_PATH_OUTSIDE_ROOT(path));
@@ -57,10 +58,14 @@ pub(super) fn pc_resolve(inner: &Inner, path: &str) -> Result<(PathBuf, PathBuf)
     if root.is_none() {
         root = pc_roots(inner).into_iter().find(|r| r.id == id);
     }
-    let root = root.ok_or_else(|| kaleidoscope_contract::errors::FILE_PC_ROOT_NOT_FOUND(id))?;
+    let root = root.ok_or_else(|| {
+        kaleidoscope_contract::errors::FILE_PC_ROOT_NOT_FOUND()
+            .and_details(vec![format!("pc_root_id: {id}")])
+    })?;
     let root = fs::canonicalize(root.path).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
-            kaleidoscope_contract::errors::FILE_PC_ROOT_NOT_FOUND(id)
+            kaleidoscope_contract::errors::FILE_PC_ROOT_NOT_FOUND()
+                .and_details(vec![format!("pc_root_id: {id}")])
         } else {
             kaleidoscope_contract::errors::FILE_PATH_IO(path).and_details(vec![error.to_string()])
         }
@@ -79,14 +84,21 @@ pub(crate) fn scope(
         .windows
         .iter()
         .find(|w| w.id == window_id)
-        .ok_or_else(|| kaleidoscope_contract::errors::FILE_ACCESS_WINDOW_NOT_FOUND(window_id))?;
+        .ok_or_else(|| {
+            kaleidoscope_contract::errors::FILE_ACCESS_WINDOW_NOT_FOUND()
+                .and_details(vec![format!("window_id: {window_id}")])
+        })?;
     let version = state
         .shared
         .app_versions
         .iter()
         .find(|v| v.app_id == window.app_id && v.version == window.app_version)
         .ok_or_else(|| {
-            kaleidoscope_contract::errors::FILE_ACCESS_APP_VERSION_NOT_FOUND(window_id)
+            kaleidoscope_contract::errors::FILE_ACCESS_APP_VERSION_NOT_FOUND().and_details(vec![
+                format!("window_id: {}", window.id),
+                format!("app_id: {}", window.app_id),
+                format!("app_version: {}", window.app_version),
+            ])
         })?;
     match version
         .definition

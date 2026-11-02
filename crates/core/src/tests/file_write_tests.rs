@@ -168,7 +168,7 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
     assert_eq!(error.id.as_deref(), Some("FILE_CREATE_FOLDER_NAME_TAKEN"));
     assert_eq!(
         error.message,
-        "폴더 notes를 만들지 못했습니다. 같은 이름의 항목이 있습니다. 다른 이름으로 만드세요."
+        "폴더 이름 notes: 같은 이름의 항목이 있어 만들지 못했습니다. 다른 이름을 입력하세요."
     );
     for name in ["", ".", "..", "bad:name", "NUL.txt", "trailing."] {
         assert_eq!(
@@ -199,6 +199,21 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
             window_id: window.clone(),
             permission: "docs".into(),
             path: "renamed.txt".into(),
+            text: "stale write".into(),
+            expected_revision: Some("stale-revision".into()),
+        })
+        .unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("FILE_SAVE_REVISION_CONFLICT"));
+    assert_eq!(
+        error.message,
+        "파일 renamed.txt: 읽은 뒤 바뀌거나 삭제되어 저장하지 못했습니다. 다시 불러오거나 덮어쓰기를 선택하세요."
+    );
+
+    let error = core
+        .handle(CoreRequest::FilesWrite {
+            window_id: window.clone(),
+            permission: "docs".into(),
+            path: "renamed.txt".into(),
             text: "overwrite".into(),
             expected_revision: None,
         })
@@ -206,7 +221,7 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
     assert_eq!(error.id.as_deref(), Some("FILE_CREATE_FILE_NAME_TAKEN"));
     assert_eq!(
         error.message,
-        "파일 renamed.txt를 만들지 못했습니다. 같은 이름의 항목이 있습니다. 다른 이름으로 만드세요."
+        "파일 이름 renamed.txt: 같은 이름의 항목이 있어 만들지 못했습니다. 다른 이름을 입력하세요."
     );
     assert_eq!(
         fs::read_to_string(root.join("renamed.txt")).unwrap(),
@@ -249,7 +264,7 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
         kaleidoscope_contract::FileOpResult::Error { error, .. }
             if error.code == ErrorCode::InvalidRequest
                 && error.id.as_deref() == Some("FILE_MOVE_INTO_SELF")
-                && error.message == "폴더 notes 안으로는 폴더를 옮길 수 없습니다. 다른 폴더를 선택하세요."
+                && error.message == "폴더 notes: 자기 안으로 옮길 수 없습니다. 다른 대상 폴더를 선택하세요."
     ));
     assert!(root.join("notes/sub").is_dir());
 
@@ -269,7 +284,7 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
         kaleidoscope_contract::FileOpResult::Error { error, .. }
             if error.code == ErrorCode::InvalidRequest
                 && error.id.as_deref() == Some("FILE_COPY_INTO_SELF")
-                && error.message == "폴더 notes 안으로는 폴더를 복사할 수 없습니다. 다른 폴더를 선택하세요."
+                && error.message == "폴더 notes: 자기 안으로 복사할 수 없습니다. 다른 대상 폴더를 선택하세요."
     ));
 
     let CoreReply::FilesMove { results } = core
@@ -329,7 +344,7 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
         &results[0],
         kaleidoscope_contract::FileOpResult::Error { error, .. }
             if error.id.as_deref() == Some("FILE_MOVE_NAME_TAKEN")
-                && error.message == "파일 notes/occupied.txt를 옮기지 못했습니다. 대상 폴더에 같은 이름이 있습니다. 이름을 바꾸거나 다른 폴더를 선택하세요."
+                && error.message == "대상 항목 notes/occupied.txt: 같은 이름이 있어 옮기지 못했습니다. 대상 이름을 바꾸거나 다른 폴더를 선택하세요."
     ));
     assert_eq!(
         fs::read_to_string(root.join("notes/occupied.txt")).unwrap(),

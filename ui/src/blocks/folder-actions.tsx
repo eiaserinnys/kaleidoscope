@@ -1,6 +1,8 @@
 // 메뉴·인라인 편집·알림이 같은 동작 상태를 공유한다. 지정된 알림 보완 범위를 지키기 위해 500줄 분리는 이 변경에서 보류한다.
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { ShellStore } from "../core/shell-store";
+import type { CoreError } from "../contract/contract";
+import { SHELL_FILE_EDITOR_SAVE_FAILED, SHELL_FILE_EXTENSION_NOT_ALLOWED } from "../contract/shell-errors";
 import { toCoreError } from "../core/core-transport";
 import type { TreeRowModel } from "../components/tree/tree-model";
 import type { TreeFocusController } from "../components/tree/tree-view";
@@ -8,7 +10,7 @@ import { dateText } from "./data-view-common";
 import { FileText, FolderOpen } from "../components/icons";
 import { Dialog } from "../components/dialog";
 import { Menu, type MenuEntry } from "../components/menu";
-import { Button, Notice } from "../components/primitives";
+import { Button, ErrorId, Notice } from "../components/primitives";
 import { TextInput, type TextInputCancelReason } from "../components/text-input";
 import type { FolderBackend, FolderItem } from "./folder-backend";
 import { editorRevision, flushEditors } from "./file-editor-session";
@@ -17,6 +19,10 @@ import { clipboardListeners, getClipboard, setClipboard, type ShellClipboard } f
 function parentPath(path: string): string {
   const slash = path.lastIndexOf("/");
   return slash < 0 ? "" : path.slice(0, slash);
+}
+
+function failureMessage(path: string, message: string): string {
+  return message.includes(path) ? message : `${path}: ${message}`;
 }
 
 function extensionOf(name: string): string {
@@ -50,9 +56,9 @@ function rowId(path: string, collection: boolean): string {
   return collection ? `doc:${path}` : path;
 }
 
-function allowedExtensionMessage(extensions: string[]): string {
+function allowedExtensionMessage(name: string, extensions: string[]): CoreError {
   const endings = extensions.map((extension) => `.${extension}`).join(", ");
-  return `이름은 ${endings}${extensions.length > 1 ? " 가운데 하나" : ""}로 끝나야 합니다`;
+  return SHELL_FILE_EXTENSION_NOT_ALLOWED({ name, extensions: endings });
 }
 
 export interface FolderInlineEdit {
@@ -62,7 +68,7 @@ export interface FolderInlineEdit {
   item?: FolderItem;
   document?: boolean;
   initialName: string;
-  error: string | null;
+  error: CoreError | null;
   attempt: number;
 }
 
@@ -90,7 +96,7 @@ export function FolderInlineRow({ edit, onCommit, onCancel }: {
         value={edit.initialName}
       />
     </div>
-    {edit.error ? <span className="ks-inline-error" role="alert">{edit.error}</span> : null}
+    {edit.error ? <span className="ks-inline-error" role="alert">{edit.error.message}{edit.error.id ? <> <ErrorId id={edit.error.id} /></> : null}</span> : null}
   </div>;
 }
 
@@ -124,7 +130,7 @@ export function useFolderActions({
   const [inlineEdit, setInlineEdit] = useState<FolderInlineEdit | null>(null);
   const [menuState, setMenuState] = useState<{ anchor: HTMLElement; point: { x: number; y: number }; item: FolderItem | null; row: TreeRowModel | null; parent: string; focus: TreeFocusController; targetId: string | null } | null>(null);
   const [dialog, setDialog] = useState<{ action: "trash" | "permanent" | "properties"; item: FolderItem; paths: string[]; row: TreeRowModel; focus: TreeFocusController; focusTargets: Array<string | null> } | null>(null);
-  const [notice, setNotice] = useState<{ message: string; errorId?: string; failures?: Array<{ path: string; message: string }>; mixed?: boolean; allowPermanent?: FolderItem; row?: TreeRowModel; focus?: TreeFocusController; focusTargets?: Array<string | null> } | null>(null);
+  const [notice, setNotice] = useState<{ message: string; errorId?: string; failures?: Array<{ path: string; message: string; errorId?: string }>; allowPermanent?: FolderItem; row?: TreeRowModel; focus?: TreeFocusController; focusTargets?: Array<string | null> } | null>(null);
   const [noticeExpanded, setNoticeExpanded] = useState(false);
   const operationRunning = useRef(false);
 
@@ -189,40 +195,50 @@ export function useFolderActions({
     else current.focus.row(current.cancelId, current.cancelId !== null);
   }, [editFocus]);
 
-  const operationFailed = useCallback((message: string, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>, errorId?: string) => {
+  const operationFailed = useCallback((error: CoreError | string, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>, errorId?: string) => {
     setNoticeExpanded(false);
-    setNotice({ message, errorId, ...(item ? { allowPermanent: item } : {}), ...(row ? { row } : {}), ...(focus ? { focus } : {}), ...(focusTargets ? { focusTargets } : {}) });
+    const resolvedErrorId = typeof error === "string" ? errorId : error.id;
+    setNotice({
+      message: typeof error === "string" ? error : error.message,
+      ...(resolvedErrorId ? { errorId: resolvedErrorId } : {}),
+      ...(item ? { allowPermanent: item } : {}),
+      ...(row ? { row } : {}),
+      ...(focus ? { focus } : {}),
+      ...(focusTargets ? { focusTargets } : {}),
+    });
   }, []);
 
-  const reportResults = useCallback((results: Array<{ path: string; error?: { code: string; message: string; id?: string } }>, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>) => {
+  const reportResults = useCallback((results: Array<{ path: string; error?: CoreError }>, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>) => {
     const failures = results.filter((result) => result.error);
     if (!failures.length) return true;
     const trashUnavailable = failures.find((result) => result.error?.code === "trash_unavailable");
     if (trashUnavailable && item) {
-      operationFailed(`${trashUnavailable.error?.message ?? "휴지통으로 이동할 수 없습니다."} 영구 삭제를 선택할 수 있습니다.`, item, row, focus, focusTargets);
+      operationFailed(trashUnavailable.error!, item, row, focus, focusTargets);
       return false;
     }
-    const details = failures.map((failure) => ({ path: failure.path, message: failure.error!.code === "conflict" && !failure.error!.id ? "같은 이름이 있습니다" : failure.error!.message }));
+    const details = failures.map((failure) => {
+      const id = failure.error!.id;
+      return { path: failure.path, message: failure.error!.message, ...(id ? { errorId: id } : {}) };
+    });
     const errorId = failures.every((failure) => failure.error?.id === failures[0].error?.id) ? failures[0].error?.id : undefined;
     if (results.length === 1) {
-      const message = failures[0].error!.code === "conflict" && !errorId ? `${details[0].path}: ${details[0].message}` : details[0].message;
-      operationFailed(message, undefined, undefined, undefined, undefined, errorId);
+      operationFailed(failures[0].error!, undefined, undefined, undefined, undefined, errorId);
       return false;
     }
     if (details.length === 1) {
-      operationFailed(`1개 실패: ${details[0].path}: ${details[0].message}`, undefined, undefined, undefined, undefined, errorId);
+      operationFailed(`1개 실패: ${failureMessage(details[0].path, details[0].message)}`, undefined, undefined, undefined, undefined, errorId);
       return false;
     }
-    const mixed = details.some((failure) => failure.message !== details[0].message);
+    const sameMessage = details.every((failure) => failure.message === details[0].message);
     setNoticeExpanded(false);
-    setNotice({ message: `${details.length}개 실패${mixed ? "" : `: ${details[0].message}`}`, failures: details, mixed, errorId });
+    setNotice({ message: `${details.length}개 실패${sameMessage ? `: ${details[0].message}` : ""}`, failures: details, ...(errorId ? { errorId } : {}) });
     return false;
   }, [operationFailed]);
 
   const flushPaths = useCallback(async (paths: string[]) => {
     const results = await Promise.all(paths.map((path) => flushEditors(backend.editorAddress(path))));
     if (results.every(Boolean)) return true;
-    operationFailed("편집 중인 내용을 저장하지 못해 작업을 취소했습니다.");
+    operationFailed(SHELL_FILE_EDITOR_SAVE_FAILED());
     return false;
   }, [backend, operationFailed]);
   const flushBefore = useCallback((item: FolderItem) => flushPaths([item.path]), [flushPaths]);
@@ -245,7 +261,7 @@ export function useFolderActions({
       else focus.row(row.id);
     } catch (cause) {
       const error = toCoreError(cause);
-      operationFailed(error.message, !permanent && error.code === "trash_unavailable" ? item : undefined, row, focus, focusTargets);
+      operationFailed(error, !permanent && error.code === "trash_unavailable" ? item : undefined, row, focus, focusTargets);
       focus.row(row.id);
     } finally {
       operationRunning.current = false;
@@ -277,7 +293,7 @@ export function useFolderActions({
       setInlineEdit((currentEdit) => currentEdit ? {
         ...currentEdit,
         initialName: name,
-        error: allowedExtensionMessage(extensions),
+        error: allowedExtensionMessage(name, extensions),
         attempt: currentEdit.attempt + 1,
       } : null);
       return;
@@ -302,7 +318,7 @@ export function useFolderActions({
       setInlineEdit((currentEdit) => currentEdit ? {
         ...currentEdit,
         initialName: name,
-        error: error.code === "conflict" ? "같은 이름이 있습니다" : error.message,
+        error,
         attempt: currentEdit.attempt + 1,
       } : null);
     } finally {
@@ -316,7 +332,7 @@ export function useFolderActions({
       if (value === undefined) return;
       await navigator.clipboard.writeText(value);
     } catch (cause) {
-      operationFailed(toCoreError(cause).message);
+      operationFailed(toCoreError(cause));
     }
   }, [backend.actions.absolutePath, backend.actions.relativePath, operationFailed]);
 
@@ -337,7 +353,7 @@ export function useFolderActions({
       }
       reportResults(results);
     } catch (cause) {
-      operationFailed(toCoreError(cause).message);
+      operationFailed(toCoreError(cause));
     } finally {
       operationRunning.current = false;
     }
@@ -353,7 +369,7 @@ export function useFolderActions({
     try {
       if (await flushBefore(item)) reportResults(await backend.actions.copy([item.path], destination));
     } catch (cause) {
-      operationFailed(toCoreError(cause).message);
+      operationFailed(toCoreError(cause));
     } finally {
       operationRunning.current = false;
     }
@@ -394,7 +410,7 @@ export function useFolderActions({
     if (item && single && (capabilities.absolutePath || capabilities.relativePath || capabilities.reveal)) items.push({ id: "separator-path", type: "separator" });
     if (item && single && capabilities.absolutePath) items.push({ id: "absolute-path", label: "경로 복사", onSelect: () => void copyPath(item, true) });
     if (item && single && capabilities.relativePath) items.push({ id: "relative-path", label: "상대 경로 복사", onSelect: () => void copyPath(item, false) });
-    if (item && single && capabilities.reveal) items.push({ id: "reveal", label: "파일 관리자에서 보기", onSelect: () => void backend.actions.reveal?.(item.path).catch((cause) => operationFailed(toCoreError(cause).message)) });
+    if (item && single && capabilities.reveal) items.push({ id: "reveal", label: "파일 관리자에서 보기", onSelect: () => void backend.actions.reveal?.(item.path).catch((cause) => operationFailed(toCoreError(cause))) });
     if (items.length) items.push({ id: "refresh-separator", type: "separator" });
     items.push({ id: "refresh", label: "새로 고침", shortcut: "F5", onSelect: () => refreshDirectory(parent) });
     if (item && single && capabilities.properties) items.push({ id: "properties", label: "속성", onSelect: () => setDialog({ action: "properties", item, paths, row: row!, focus, focusTargets: focus.deletionTargets(row!) }) });
@@ -500,7 +516,7 @@ export function useFolderActions({
     getFocusController()?.visibleRow(null);
   };
   const closeNotice = <Button key="close" onClick={dismissNotice}>닫기</Button>;
-  const noticeNode = notice ? <Notice role="alert" onDismiss={dismissNotice} errorId={notice.errorId} details={noticeExpanded && notice.failures ? notice.failures.map((failure) => <div key={failure.path}>{failure.path}{notice.mixed ? `: ${failure.message}` : ""}</div>) : undefined} actions={notice.failures ? [<Button key="details" onClick={() => setNoticeExpanded((current) => !current)}>{noticeExpanded ? "접기" : "펼치기"}</Button>, closeNotice] : notice.allowPermanent ? [<Button key="permanent" onClick={() => {
+  const noticeNode = notice ? <Notice role="alert" onDismiss={dismissNotice} errorId={notice.errorId} details={noticeExpanded && notice.failures ? notice.failures.map((failure) => <div key={failure.path}>{failureMessage(failure.path, failure.message)}{failure.errorId ? <> <ErrorId id={failure.errorId} /></> : null}</div>) : undefined} actions={notice.failures ? [<Button key="details" onClick={() => setNoticeExpanded((current) => !current)}>{noticeExpanded ? "접기" : "펼치기"}</Button>, closeNotice] : notice.allowPermanent ? [<Button key="permanent" onClick={() => {
     const item = notice.allowPermanent!;
     const row = notice.row;
     const focus = notice.focus;

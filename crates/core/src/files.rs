@@ -49,14 +49,21 @@ pub(crate) fn permission(
         .windows
         .iter()
         .find(|window| window.id == window_id)
-        .ok_or_else(|| kaleidoscope_contract::errors::FILE_ACCESS_WINDOW_NOT_FOUND(window_id))?;
+        .ok_or_else(|| {
+            kaleidoscope_contract::errors::FILE_ACCESS_WINDOW_NOT_FOUND()
+                .and_details(vec![format!("window_id: {window_id}")])
+        })?;
     let version = state
         .shared
         .app_versions
         .iter()
         .find(|version| version.app_id == window.app_id && version.version == window.app_version)
         .ok_or_else(|| {
-            kaleidoscope_contract::errors::FILE_ACCESS_APP_VERSION_NOT_FOUND(window_id)
+            kaleidoscope_contract::errors::FILE_ACCESS_APP_VERSION_NOT_FOUND().and_details(vec![
+                format!("window_id: {}", window.id),
+                format!("app_id: {}", window.app_id),
+                format!("app_version: {}", window.app_version),
+            ])
         })?;
     let permission = version
         .definition
@@ -460,7 +467,10 @@ pub(crate) fn open(
         .windows
         .iter()
         .find(|w| w.id == window_id)
-        .ok_or_else(|| kaleidoscope_contract::errors::FILE_ACCESS_WINDOW_NOT_FOUND(window_id))?;
+        .ok_or_else(|| {
+            kaleidoscope_contract::errors::FILE_ACCESS_WINDOW_NOT_FOUND()
+                .and_details(vec![format!("window_id: {window_id}")])
+        })?;
     let desktop_id = source.desktop_id.clone();
     let grant = if pc {
         let parent = resolved.parent().ok_or_else(|| {
@@ -492,24 +502,32 @@ pub(crate) fn open(
         .apps
         .iter()
         .find(|a| a.id == app_id)
-        .ok_or_else(|| kaleidoscope_contract::errors::FILE_OPEN_APP_NOT_FOUND(app_id))?;
+        .ok_or_else(|| {
+            kaleidoscope_contract::errors::FILE_OPEN_APP_NOT_FOUND()
+                .and_details(vec![format!("app_id: {app_id}")])
+        })?;
     let definition =
         crate::app_commands::definition_for(&state.shared, app_id, app.current_version)
             .ok_or_else(|| {
-                kaleidoscope_contract::errors::FILE_OPEN_APP_VERSION_NOT_FOUND(app_id)
+                kaleidoscope_contract::errors::FILE_OPEN_APP_VERSION_NOT_FOUND().and_details(vec![
+                    format!("app_id: {app_id}"),
+                    format!("app_version: {}", app.current_version),
+                ])
             })?;
     let opens = definition
         .opens
-        .ok_or_else(|| kaleidoscope_contract::errors::FILE_OPEN_APP_CANNOT_OPEN(path))?;
+        .ok_or_else(|| {
+            kaleidoscope_contract::errors::FILE_OPEN_APP_CANNOT_OPEN()
+                .and_details(vec![format!("file_path: {path}")])
+        })?;
     let extension = Path::new(path)
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_lowercase();
     if !opens.extensions.contains(&extension) {
-        return Err(kaleidoscope_contract::errors::FILE_OPEN_APP_CANNOT_OPEN(
-            path,
-        ));
+        return Err(kaleidoscope_contract::errors::FILE_OPEN_APP_CANNOT_OPEN()
+            .and_details(vec![format!("file_path: {path}"), format!("extension: {extension}")]));
     }
     let reuse = state
         .shared

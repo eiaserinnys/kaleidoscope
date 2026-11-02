@@ -134,8 +134,8 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function fail(code: CoreError["code"], message: string, details: string[] = []): never {
-  throw { code, message, details } satisfies CoreError;
+function fail(code: CoreError["code"], message: string, details: string[] = [], id?: string): never {
+  throw { code, message, details, ...(id ? { id } : {}) } satisfies CoreError;
 }
 
 function validRelativePath(path: string, allowEmpty = false): boolean {
@@ -1067,8 +1067,11 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         const pcOpened = pcOpenedFileGrants.has(grantKey(request.window_id, request.permission));
         const path = filePathForGrant(grant, request.path, pcOpened);
         const current = files.get(path);
-        if (request.expected_revision === undefined ? current !== undefined : !current || current.revision !== request.expected_revision) {
-          return fail("conflict", "파일이 읽은 뒤에 바뀌었습니다");
+        if (request.expected_revision === undefined && current !== undefined) {
+          return fail("conflict", `파일 이름 ${request.path}: 같은 이름의 항목이 있어 만들지 못했습니다. 다른 이름을 입력하세요.`, [], "FILE_CREATE_FILE_NAME_TAKEN");
+        }
+        if (request.expected_revision !== undefined && (!current || current.revision !== request.expected_revision)) {
+          return fail("conflict", `파일 ${request.path}: 읽은 뒤 바뀌거나 삭제되어 저장하지 못했습니다. 다시 불러오거나 덮어쓰기를 선택하세요.`, [], "FILE_SAVE_REVISION_CONFLICT");
         }
         const revision = `fake-revision-${revisionNumber++}`;
         files.set(path, { text: request.text, revision });
