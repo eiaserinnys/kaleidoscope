@@ -1,0 +1,103 @@
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Block } from "../contract/contract";
+import type { JsonValue } from "../contract/serde_json/JsonValue";
+import { useBinding, useDormant } from "../data/window-data";
+import { ItemScopeProvider, useItemScope, type ItemScope } from "../data/item-scope";
+import { DataState } from "../components/data-state";
+import { shareStructure } from "../core/shell-store";
+import { renderBlock } from "../render/render-block";
+import type { BlockContext } from "./block-context";
+import { asArray, DEFAULT_VIRTUAL_ROW_ESTIMATE, isObject, useVirtualRows } from "./data-view-common";
+
+type Repeat = Extract<Block, { type: "repeat" }>;
+type Entry = { item: JsonValue; key: string | number; index: { current: number } };
+
+export function RepeatBlock({ block, context, pointer }: { block: Repeat; context: BlockContext; pointer: string }) {
+  const value = useBinding(`${pointer}/items`, block.items);
+  const follow = useBinding(`${pointer}/follow_key`, block.follow_key ?? null);
+  const parent = useItemScope();
+  const previous = useRef(new Map<string | number, Entry>());
+  const entries = useMemo(() => {
+    const result = value.status !== "ready" ? [] : asArray(value.value).flatMap((item, index) => {
+      if (!isObject(item)) return [];
+      const key = item[block.key];
+      if (typeof key !== "string" && typeof key !== "number") return [];
+      const old = previous.current.get(key);
+      // 행을 다시 그리지 않아도 동작은 현재 순서를 읽어야 한다.
+      const position = old?.index ?? { current: index };
+      position.current = index;
+      return [{ item: shareStructure(old?.item, item as JsonValue) as JsonValue, key, index: position }];
+    });
+    previous.current = new Map(result.map((entry) => [entry.key, entry]));
+    return result;
+  }, [value, block.key]);
+  useDormant(`${pointer}/template`, entries.length === 0);
+  if (value.status !== "ready") return <DataState value={value} />;
+  return <RepeatReady block={block} context={context} pointer={pointer} entries={entries} parent={parent?.item} follow={follow.status === "ready" ? follow.value : null} />;
+}
+
+const Row = memo(function Row({ item, itemKey, index, parent, template, context, pointer }: {
+  item: JsonValue; itemKey: string | number; index: { current: number }; parent?: JsonValue; template: Block; context: BlockContext; pointer: string;
+}) {
+  const instance = useRef({});
+  const scope = useMemo<ItemScope>(() => ({ item, parent_item: parent, key: itemKey, get index() { return index.current; }, instance: instance.current }), [item, parent, itemKey, index]);
+  return <div className="ks-repeat-item" data-repeat-key={String(itemKey)}><ItemScopeProvider value={scope}>{renderBlock(template, context, `${pointer}/template`)}</ItemScopeProvider></div>;
+});
+
+function RepeatReady({ block, context, pointer, entries, parent, follow }: {
+  block: Repeat; context: BlockContext; pointer: string; entries: Entry[]; parent?: JsonValue; follow: JsonValue;
+}) {
+  const scroll = useRef<HTMLDivElement>(null);
+  const [columns, setColumns] = useState(1);
+  const [resume, setResume] = useState(0);
+  const pauseUntil = useRef(0);
+  const draggingScrollbar = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const layout = block.layout ?? "column";
+  const horizontal = layout === "row";
+  useEffect(() => {
+    if (layout !== "grid" || !scroll.current) return;
+    const element = scroll.current;
+    const resize = () => {
+      if (!element.clientWidth) return;
+      if (typeof block.grid?.columns === "number") { setColumns(block.grid.columns); return; }
+      const style = getComputedStyle(element);
+      const pane = parseFloat(style.getPropertyValue("--ks-pane-min-size"));
+      const gap = parseFloat(style.getPropertyValue("--ks-space-3"));
+      if (!Number.isFinite(pane) || !Number.isFinite(gap) || pane <= 0) return;
+      setColumns(Math.max(1, Math.floor((element.clientWidth + gap) / (pane + gap))));
+    };
+    resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => observer.disconnect();
+  }, [layout, block.grid?.columns]);
+  const rowSize = layout === "grid" ? columns : 1;
+  const itemKey = useCallback((index: number) => entries[index].key, [entries]);
+  const { virtual } = useVirtualRows(Math.ceil(entries.length / rowSize), DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, horizontal, layout === "grid" ? undefined : itemKey);
+  const followIndex = entries.findIndex((entry) => entry.key === follow);
+  useEffect(() => {
+    if (followIndex < 0 || Date.now() < pauseUntil.current) return;
+    if (block.virtual) virtual.scrollToIndex(Math.floor(followIndex / rowSize), { align: "auto" });
+    else (scroll.current?.querySelector(":scope > .ks-repeat-content")?.children[followIndex] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [followIndex, follow, block.virtual, rowSize, virtual, resume]);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const pause = () => {
+    const ms = block.follow_pause_ms ?? 2500;
+    pauseUntil.current = Date.now() + ms;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setResume((n) => n + 1), ms);
+  };
+  const row = (entry: Entry) => <Row key={entry.key} item={entry.item} itemKey={entry.key} index={entry.index} parent={parent} template={block.template} context={context} pointer={pointer} />;
+  const gridStyle = layout === "grid" ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined;
+  return <div ref={scroll} className={`ks-data-view ks-repeat is-${layout}`} onWheel={pause} onTouchMove={pause}
+    onPointerDown={(event) => { if (event.target === event.currentTarget) { draggingScrollbar.current = true; pause(); } }}
+    onPointerUp={() => { draggingScrollbar.current = false; }} onPointerCancel={() => { draggingScrollbar.current = false; }}
+    onScroll={() => { if (draggingScrollbar.current) pause(); }}
+    onKeyDown={(event) => { if (event.target === event.currentTarget && ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) pause(); }}>
+    {block.virtual ? <div style={horizontal ? { width: virtual.getTotalSize(), height: "100%", position: "relative" } : { height: virtual.getTotalSize(), width: "100%", position: "relative" }}>
+      {virtual.getVirtualItems().map((virtualRow) => <div key={virtualRow.key} data-index={virtualRow.index} ref={virtual.measureElement}
+        className={layout === "grid" ? "ks-repeat-grid-row" : undefined}
+        style={{ position: "absolute", top: 0, left: 0, ...(horizontal ? { height: "100%", transform: `translateX(${virtualRow.start}px)` } : { width: "100%", transform: `translateY(${virtualRow.start}px)` }), ...gridStyle }}>
+        {entries.slice(virtualRow.index * rowSize, (virtualRow.index + 1) * rowSize).map(row)}
+      </div>)}
+    </div> : <div className="ks-repeat-content" style={gridStyle}>{entries.map(row)}</div>}
+  </div>;
+}

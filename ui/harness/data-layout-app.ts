@@ -21,10 +21,9 @@ export const dataLayoutApp: AppDefinition = {
           { type: "select", value: { state: "choice" }, on_change: { set_state: "choice" }, options: ["하나", "둘"], style: "segmented" },
           { type: "button", label: "삭제", icon: "trash-2", variant: "danger", confirm: { title: "삭제할까요?", body: "이 동작을 진행합니다." }, on_click: [{ call: { permission: "sample", method: "GET", path: "/" } }] },
         ] } },
-        { type: "section", title: { expr: "$data.failed.heading" }, collapsible: true, child: { type: "text", value: "구역 내용" } },
+        { type: "section", title: { expr: "$data.failed.heading" }, collapsible: true, child: { type: "text", value: { expr: "$data.failed.message" } } },
         { type: "section", title: "데이터", child: { type: "stack", direction: "column", gap: "medium", children: [
           { type: "text", value: { expr: "$data.sample.message" } },
-          { type: "text", value: { expr: "$data.failed.message" } },
         ] } },
       ] } },
       { label: "다른 탭", child: { type: "text", value: "두 번째 탭" } },

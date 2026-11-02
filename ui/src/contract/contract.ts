@@ -338,7 +338,7 @@ export type ChartSeries = { key: string, name: string, points: Array<ChartPoint>
 
 export type ClientAction = { client: string, args?: JsonValue, };
 
-export type ClientActionContext = { event: JsonValue, item?: JsonValue, args?: JsonValue, modifiers?: EventModifiers, };
+export type ClientActionContext = { event: JsonValue, item?: JsonValue, parent_item?: JsonValue, key?: JsonValue, index?: number, args?: JsonValue, modifiers?: EventModifiers, };
 
 export type ClientBridgeReply = { "type": "ks-client-reply", requestId: string, result?: JsonValue | ArrayBuffer | { bytes: ArrayBuffer; mime: string }, error?: string, };
 

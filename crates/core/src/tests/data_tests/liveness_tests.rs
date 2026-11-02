@@ -1,6 +1,62 @@
 use super::*;
 
 #[test]
+fn 쉬는_when_dialog_anchor_자식은_호출하지_않고_when_조건은_살아있다() {
+    use kaleidoscope_contract::registry::ConnectionKind;
+    let definition = json!({
+        "id":"when-liveness", "name":"조건부 원천 시험",
+        "requires":{"blocks":14,"modules":{"connection":1}},
+        "permissions":[{"module":"connection","id":"api","connection":"example","access":"read","label":"API"}],
+        "state":{"closed":false},
+        "sources":{
+            "condition":{"kind":"request","permission":"api","path":"/condition"},
+            "when_child":{"kind":"request","permission":"api","path":"/when"},
+            "dialog_child":{"kind":"request","permission":"api","path":"/dialog"},
+            "anchor_child":{"kind":"request","permission":"api","path":"/anchor"}
+        },
+        "ui":{"type":"stack","direction":"column","children":[
+            {"type":"when","value":{"expr":"$data.condition.open"},"child":{"type":"text","value":{"expr":"$data.when_child.value"}}},
+            {"type":"dialog","open":false,"title":"대화상자","child":{"type":"text","value":{"expr":"$data.dialog_child.value"}},"on_close":[{"set_state":"closed","value":true}]},
+            {"type":"anchor","id":"target","child":{"type":"text","value":{"expr":"$data.anchor_child.value"}}}
+        ]}
+    }).to_string();
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    client.connection_replies.lock().unwrap().extend([
+        ("/condition".into(), response(200, json!({"open":false}))),
+        ("/when".into(), response(200, json!({"value":"visible"}))),
+        ("/dialog".into(), response(200, json!({"value":"visible"}))),
+        ("/anchor".into(), response(200, json!({"value":"visible"}))),
+    ]);
+    let core = open_core_with_client(temp.path(), vec![definition], &host, client.clone());
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "when-liveness");
+    mark_connected(&core);
+    *core.inner.connections.lock().unwrap() = vec![info(ConnectionKind::Relay)];
+    core.handle(
+        serde_json::from_value(json!({
+            "op":"data.attach", "window_id":window,
+            "dormant":["/ui/children/0/child","/ui/children/1/child","/ui/children/2/child"]
+        })).unwrap(),
+    ).unwrap();
+
+    wait_until(|| client.connection_requests.lock().unwrap().len() == 1);
+    assert_eq!(client.connection_requests.lock().unwrap()[0].path, "/condition");
+    thread::sleep(Duration::from_millis(200));
+    assert_eq!(client.connection_requests.lock().unwrap().len(), 1);
+
+    core.handle(
+        serde_json::from_value(json!({"op":"data.dormant","window_id":window,"dormant":[]})).unwrap(),
+    ).unwrap();
+    wait_until(|| client.connection_requests.lock().unwrap().len() == 4);
+    let requests = client.connection_requests.lock().unwrap();
+    for path in ["/condition", "/when", "/dialog", "/anchor"] {
+        assert!(requests.iter().any(|request| request.path == path), "{path}");
+    }
+}
+
+#[test]
 fn 숨긴_쉘과_쉬는_블록의_원천은_보일_때만_요청한다() {
     use kaleidoscope_contract::registry::ConnectionKind;
     let temp = TempDir::new().unwrap();

@@ -1,0 +1,34 @@
+{
+  "id": "editable-checklist",
+  "name": "편집할 일 목록",
+  "requires": { "blocks": 14, "modules": {} },
+  "permissions": [],
+  "state": {
+    "rows": [
+      { "id": "a", "name": "서류 정리", "steps": [{ "id": "a1", "name": "분류" }, { "id": "a2", "name": "보관" }] },
+      { "id": "b", "name": "책상 정리", "steps": [{ "id": "b1", "name": "닦기" }] }
+    ],
+    "selected": null
+  },
+  "ui": {
+    "type": "repeat", "items": { "state": "rows" }, "key": "id", "layout": "column", "virtual": false,
+    "follow_key": { "state": "selected" }, "follow_pause_ms": 2500,
+    "template": {
+      "type": "stack", "direction": "column", "gap": "small", "children": [
+        {
+          "type": "input", "kind": "text", "value": { "item": "name" },
+          "on_change": [{ "set_state": "rows", "value": { "expr": "$append([], $map($state.rows, function($row) { $row.id = $item.id ? $merge([$row, {'name': $event}]) : $row }))" } }]
+        },
+        {
+          "type": "repeat", "items": { "item": "steps" }, "key": "id", "layout": "row", "virtual": false,
+          "template": {
+            "type": "stack", "direction": "row", "children": [
+              { "type": "text", "value": { "parent_item": "name" } },
+              { "type": "button", "label": { "item": "name" }, "on_click": [{ "set_state": "selected", "value": { "expr": "$item.id" } }] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

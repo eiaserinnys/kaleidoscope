@@ -69,6 +69,19 @@ fn rejects_missing_key_and_out_of_scope_references() {
 }
 
 #[test]
+fn rejects_button_grid_inside_repeat_template() {
+    let grid = json!({"type":"button_grid","columns":1,"buttons":[{"key":"a","label":"A"}],"on_press":{"set_state":"language"}});
+    parsed(&definition(grid.clone()));
+    let app = definition(json!({"type":"repeat","items":[],"key":"id","template":{
+        "type":"stack","direction":"column","children":[grid]
+    }}));
+    rejects(
+        &app,
+        "/ui/template/children/0: repeat 안에는 button_grid를 둘 수 없습니다. button을 사용하세요",
+    );
+}
+
+#[test]
 fn rejects_duplicate_shortcut_and_missing_translation() {
     let mut app = definition(json!({"type":"text","value":{"message":"title"}}));
     app["shortcuts"] = json!([

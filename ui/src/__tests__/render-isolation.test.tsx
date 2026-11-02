@@ -58,6 +58,21 @@ const definition: AppDefinition = {
   },
 };
 
+const whenDefinition: AppDefinition = {
+  id: "when-isolation",
+  name: "조건 격리 시험",
+  requires: { blocks: 14, modules: {} },
+  permissions: [],
+  state: { visible: false, first: null, second: null, compound: null },
+  ui: {
+    type: "stack", direction: "column",
+    children: [
+      { type: "when", value: { state: "visible" }, child: { type: "text", value: "조건 자식" } },
+      { type: "text", value: "다른 블록" },
+    ],
+  },
+};
+
 const chatDefinition: AppDefinition = {
   id: "provider-chat",
   name: "대화 앱",
@@ -72,15 +87,15 @@ const chatDefinition: AppDefinition = {
   },
 };
 
-function testSnapshot(): ShellSnapshot {
-  const snapshot = makeTestSnapshot({ definitions: [definition] });
+function testSnapshot(definitions: AppDefinition[] = [definition], firstState: Record<string, JsonValue> = { first: null, second: null, compound: null }): ShellSnapshot {
+  const snapshot = makeTestSnapshot({ definitions });
   const first = snapshot.shared.windows[0];
   first.id = "window-a";
   const compound = { items: [1, 2], nested: { label: "stable" } };
-  first.state = { first: "a", second: "b", compound };
+  first.state = { ...firstState, first: firstState.first ?? "a", second: firstState.second ?? "b", compound: firstState.compound ?? compound };
   snapshot.shared.windows = [
     first,
-    { ...first, id: "window-b", state: { first: "a", second: "b", compound: structuredClone(compound) }, z: 2 },
+    { ...first, id: "window-b", state: structuredClone(first.state), z: 2 },
   ];
   snapshot.shared.desktops.push({
     id: "desktop-2", workspace_id: "workspace-1", name: "Desktop 2", position: 1,
@@ -110,12 +125,13 @@ if (!globalThis.ResizeObserver) {
       observe() {
         this.callback([{ contentRect: { width: 960, height: 552 } } as ResizeObserverEntry] as ResizeObserverEntry[], this as unknown as ResizeObserver);
       }
+      unobserve() {}
       disconnect() {}
     },
   });
 }
 
-async function setup() {
+async function setup(definitions: AppDefinition[] = [definition], firstState: Record<string, JsonValue> = { first: null, second: null, compound: null }) {
   calls.length = 0;
   const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;
   if (probe) probe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
@@ -129,7 +145,7 @@ async function setup() {
       queueMicrotask(() => pending.delete(key));
     };
   }
-  const snapshot = testSnapshot();
+  const snapshot = testSnapshot(definitions, firstState);
   const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
   const store = createShellStore(transport);
   render(<Shell store={store} />);
@@ -193,6 +209,22 @@ afterEach(() => {
 });
 
 describe("실제 Shell의 블록 렌더 격리", () => {
+  it("when 조건을 바꿀 때 자식만 마운트하고 다른 블록은 다시 그리지 않는다", async () => {
+    const { store } = await setup([whenDefinition], { visible: false });
+    expect(screen.queryByText("조건 자식")).toBeNull();
+    calls.length = 0;
+
+    await setState(store, "window-a", "visible", true);
+    expect(await screen.findByText("조건 자식")).toBeTruthy();
+    expect(countFor("window-a", "/ui/children/1")).toBe(0);
+
+    calls.length = 0;
+    await setState(store, "window-a", "visible", false);
+    await waitFor(() => expect(screen.queryByText("조건 자식")).toBeNull());
+    expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    store.dispose();
+  });
+
   it("창 A 상태 변경은 창 B 블록을 다시 그리지 않는다", async () => {
     const { store } = await setup();
     for (let i = 0; i < 10; i += 1) await setState(store, "window-a", "first", `changed-${i}`);
@@ -233,6 +265,39 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     expect(calls.map((call) => call.pointer)).toEqual(["/ui/children/2"]);
     expect(document.body.textContent).toContain("new");
     expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
+  it("반복 항목 300개에서 바뀐 행만 다시 그린다", async () => {
+    const rows = Array.from({ length: 300 }, (_, index) => ({ id: String(index), title: `항목 ${index}` }));
+    const repeat: AppDefinition = { id: "repeat-isolation", name: "반복 격리", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { rows }, ui: { type: "repeat", key: "id", items: { state: "rows" }, virtual: false, template: { type: "text", value: { item: "title" } } } };
+    const snapshot = makeTestSnapshot({ definitions: [repeat] });
+    snapshot.shared.windows[0].id = "window-repeat";
+    snapshot.shared.windows[0].state = { rows };
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const store = createShellStore(transport);
+    renderBlockModule.renderProbe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
+    render(<Shell store={store} />);
+    await store.ready;
+    await screen.findByText("항목 299");
+    await settleRenders();
+    calls.length = 0;
+    const changedAll = rows.map((row) => ({ ...row, title: `${row.title}!` }));
+    await setState(store, "window-repeat", "rows", changedAll);
+    await settleRenders();
+    expect(countFor("window-repeat", "/ui/template")).toBe(300);
+    calls.length = 0;
+    const changedOne = changedAll.map((row, index) => index === 150 ? { ...row, title: "고친 항목" } : row);
+    await setState(store, "window-repeat", "rows", changedOne);
+    await settleRenders();
+    expect(screen.getByText("고친 항목")).toBeTruthy();
+    expect(countFor("window-repeat", "/ui/template")).toBe(1);
+    calls.length = 0;
+    await setState(store, "window-repeat", "rows", changedOne.slice(1));
+    await settleRenders();
+    expect(screen.queryByText("항목 0!")).toBeNull();
+    expect(countFor("window-repeat", "/ui/template")).toBe(0);
     store.dispose();
   });
 

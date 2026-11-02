@@ -1,4 +1,5 @@
 import type { AppDefinition, Binding, BindingValue, ClientActionContext, PickFilesSpec, SaveFileSpec } from "../contract/contract";
+import type { ItemScope } from "../data/item-scope";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { CLIENT_PING_TIMEOUT_SECS } from "../contract/limits";
 import type { ShellStore } from "../core/shell-store";
@@ -136,27 +137,27 @@ export class ClientRuntime {
     this.send({ type: "ks-sandbox-state-sync", state: this.state() });
   }
 
-  action(name: string, event: JsonValue, item?: JsonValue, args?: JsonValue) {
+  action(name: string, event: JsonValue, item?: JsonValue, args?: JsonValue, scope?: ItemScope) {
     if (!this.client.actions.includes(name) || !this.frame) return false;
-    const context: ClientActionContext = { event, ...(item === undefined ? {} : { item }), ...(args === undefined ? {} : { args }) };
+    const context: ClientActionContext = { event, ...(item === undefined ? {} : { item }), ...(args === undefined ? {} : { args }), ...(scope ? { parent_item: scope.parent_item, key: scope.key, index: scope.index } : {}) };
     this.send({ type: "ks-client-action", name, context });
     return true;
   }
 
-  async pick(spec: PickFilesSpec): Promise<boolean> {
+  async pick(spec: PickFilesSpec, scope?: ItemScope): Promise<boolean> {
     try {
       const result = this.store.nativeFiles
         ? await this.store.call({ op: "files.pick", window_id: this.data.windowId, accept: spec.accept, multiple: spec.multiple ?? false })
         : await this.files.pick(spec.accept, spec.multiple ?? false);
-      return this.action(spec.client, { cancelled: result.cancelled, files: result.files } as unknown as JsonValue);
+      return this.action(spec.client, { cancelled: result.cancelled, files: result.files } as unknown as JsonValue, scope?.item, undefined, scope);
     } catch (error) { this.data.setNotice(toCoreError(error).message); return false; }
   }
 
-  async save(spec: SaveFileSpec, name: string): Promise<boolean> {
+  async save(spec: SaveFileSpec, name: string, scope?: ItemScope): Promise<boolean> {
     try {
       const native = this.store.nativeFiles ? await this.store.call({ op: "export.begin", window_id: this.data.windowId, suggested_name: name, mime: spec.mime }) : null;
       const result = native ? { cancelled: native.cancelled, ...(native.sink_id ? { sink: native.sink_id } : {}) } : await this.files.save(name, spec.mime);
-      return this.action(spec.client, result as JsonValue);
+      return this.action(spec.client, result as JsonValue, scope?.item, undefined, scope);
     } catch (error) { this.data.setNotice(toCoreError(error).message); return false; }
   }
 

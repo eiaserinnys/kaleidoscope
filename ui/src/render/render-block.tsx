@@ -33,7 +33,13 @@ import { MapBlock } from "../blocks/data-map";
 import { SandboxBlock } from "../blocks/sandbox";
 import { CanvasBlock } from "../blocks/canvas";
 import { TimelineBlock } from "../blocks/timeline";
+import { WhenBlock } from "../blocks/conditional";
+import { DialogBlock } from "../blocks/dialog";
+import { AnchorBlock } from "../blocks/anchor";
+import { TourBlock } from "../blocks/tour";
+import { RepeatBlock } from "../blocks/repeat";
 import { BlockRenderContext, useBlockRenderProbe } from "./render-probe";
+import { useItemScope } from "../data/item-scope";
 
 export { renderProbe } from "./render-probe";
 
@@ -43,7 +49,8 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
 
 const BlockNode = memo(function BlockNode({ block, context, pointer }: { block: Block; context: BlockContext; pointer: string }) {
   const normalized = normalizeBlock(block);
-  return <BlockRenderContext.Provider value={{ windowId: context.window.id, pointer, type: normalized.type }}>
+  const scope = useItemScope();
+  return <BlockRenderContext.Provider value={{ windowId: context.window.id, pointer, type: normalized.type, instance: scope?.instance }}>
     <BlockContent block={normalized} context={context} pointer={pointer} />
   </BlockRenderContext.Provider>;
 });
@@ -51,7 +58,12 @@ const BlockNode = memo(function BlockNode({ block, context, pointer }: { block: 
 function BlockContent({ block: normalized, context, pointer }: { block: Block; context: BlockContext; pointer: string }) {
   useBlockRenderProbe();
   switch (normalized.type) {
-    case "repeat": case "when": case "dialog": case "tour": case "anchor": case "progress": return null;
+    case "repeat": return <RepeatBlock block={normalized} context={context} pointer={pointer} />;
+    case "progress": return null;
+    case "when": return <WhenBlock block={normalized} context={context} pointer={pointer} />;
+    case "dialog": return <DialogBlock block={normalized} context={context} pointer={pointer} />;
+    case "anchor": return <AnchorBlock block={normalized} context={context} pointer={pointer} />;
+    case "tour": return <TourBlock block={normalized} context={context} pointer={pointer} />;
     case "canvas": return <CanvasBlock block={normalized} pointer={pointer} />;
     case "timeline": return <TimelineBlock block={normalized} pointer={pointer} context={context} />;
     case "split":

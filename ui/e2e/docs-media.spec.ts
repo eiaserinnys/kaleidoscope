@@ -9,7 +9,7 @@ test("코드 편집의 저장과 충돌, 큰 로그의 스크롤을 확인한다
   await openGallery(page);
   await page.getByRole("tab", { name: "코드" }).click();
   await page.getByRole("button", { name: "설정 파일 폴더 고르기" }).click();
-  await page.getByRole("button", { name: "settings.json" }).click();
+  await page.getByRole("treeitem", { name: "settings.json" }).click();
   const editor = page.getByRole("textbox", { name: "코드 편집기" });
   await expect(editor).toContainText('"theme"');
   await editor.click();
@@ -143,7 +143,7 @@ test("코드와 미디어를 넓은 폭과 400px에서 캡처한다", async ({ b
     await openGallery(page);
     await page.getByRole("tab", { name: "코드" }).click();
     await page.getByRole("button", { name: "설정 파일 폴더 고르기" }).click();
-    await page.getByRole("button", { name: "settings.json" }).click();
+    await page.getByRole("treeitem", { name: "settings.json" }).click();
     await expect(page.getByRole("textbox", { name: "코드 편집기" })).toBeVisible();
     const codeBounds = await page.locator(".ks-code-view").evaluateAll((views) => views.map((view) => {
       const rect = view.getBoundingClientRect(); return { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom };
