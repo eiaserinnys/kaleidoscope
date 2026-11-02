@@ -5018,22 +5018,44 @@ impl ErrorCode {
     /// 코드마다의 기본 한국어 설명.
     pub fn default_message(self) -> &'static str {
         match self {
-            ErrorCode::InvalidRequest => "명령을 처리할 수 없습니다.",
-            ErrorCode::Unauthorized => "인증 정보가 올바르지 않습니다.",
-            ErrorCode::NotFound => "요청한 항목을 찾을 수 없습니다.",
-            ErrorCode::InvalidAppDefinition => "앱 정의가 유효하지 않습니다.",
-            ErrorCode::UnsupportedApp => "앱이 지원되지 않는 블록이나 모듈 버전을 요구합니다.",
-            ErrorCode::PermissionDenied => {
-                "앱에 선언되지 않았거나 쓰기가 허용되지 않은 권한입니다."
+            ErrorCode::InvalidRequest => {
+                "요청 값이 빠졌거나 올바르지 않습니다. 요청 내용을 확인한 뒤 다시 시도하세요."
             }
-            ErrorCode::NotGranted => "이 기기에서 폴더를 선택해야 합니다.",
-            ErrorCode::PathOutsideRoot => "고른 폴더 밖의 경로입니다.",
-            ErrorCode::Conflict => "파일이 읽은 뒤 바뀌었거나 이미 존재합니다.",
-            ErrorCode::LoginRequired => "대화 제공자에 로그인이 필요합니다.",
-            ErrorCode::BindingConflict => "저장된 대화 참조와 제공자의 대화가 다릅니다.",
-            ErrorCode::Io => "파일을 읽거나 쓸 수 없습니다.",
+            ErrorCode::Unauthorized => {
+                "인증 정보를 확인하지 못했습니다. 로그인 상태와 인증 정보를 확인하세요."
+            }
+            ErrorCode::NotFound => {
+                "요청한 대상에 접근할 수 없습니다. 대상 ID와 계정 범위를 확인하세요."
+            }
+            ErrorCode::InvalidAppDefinition => {
+                "앱 정의를 등록하지 못했습니다. 필수 값과 선언된 기능을 확인하세요."
+            }
+            ErrorCode::UnsupportedApp => {
+                "앱이 현재 쉘에서 지원하지 않는 블록이나 모듈 버전을 요구합니다. 쉘을 업데이트하세요."
+            }
+            ErrorCode::PermissionDenied => {
+                "요청한 앱 권한이 선언되지 않았거나 접근 수준이 부족합니다. 앱 권한과 요청 동작을 확인하세요."
+            }
+            ErrorCode::NotGranted => {
+                "이 기기에서 아직 필요한 폴더를 선택하지 않았습니다. 권한에 쓸 폴더를 고르세요."
+            }
+            ErrorCode::PathOutsideRoot => {
+                "요청한 경로가 허용된 폴더 밖에 있습니다. 선택한 폴더 안의 경로를 사용하세요."
+            }
+            ErrorCode::Conflict => {
+                "파일이 읽은 뒤 바뀌었거나 같은 이름의 파일이 있습니다. 최신 상태를 확인하세요."
+            }
+            ErrorCode::LoginRequired => {
+                "대화 제공자에 로그인해야 합니다. 계정 연결을 완료한 뒤 다시 시도하세요."
+            }
+            ErrorCode::BindingConflict => {
+                "저장된 대화 참조가 제공자의 대화와 다릅니다. 대화 연결을 다시 확인하세요."
+            }
+            ErrorCode::Io => {
+                "파일 작업을 마치지 못했습니다. 파일 형식과 접근 권한을 확인하세요."
+            }
             ErrorCode::Server => {
-                "kaleidoscope 서버에 연결되어 있지 않거나 서버가 요청을 처리하지 못했습니다."
+                "서버 요청을 처리하지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요."
             }
             ErrorCode::Unavailable => "이 쉘에서는 쓸 수 없는 기능입니다.",
             ErrorCode::LocalAgentFailed => "로컬 에이전트와 통신할 수 없습니다.",

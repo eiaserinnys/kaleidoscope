@@ -58,10 +58,9 @@ impl AppState {
     ) -> Result<(RegistryApp, bool, Option<OpenTarget>), CoreError> {
         let definition = parse_app_definition(definition_json)?;
         if kaleidoscope_contract::builtin::is_builtin(&definition.id) {
-            return Err(CoreError::with_details(
-                ErrorCode::InvalidAppDefinition,
-                vec!["기본 앱은 kaleidoscope 리포의 apps/에서 고치고 쉘 새 판으로 냅니다".into()],
-            ));
+            return Err(
+                kaleidoscope_contract::errors::APP_PUBLISH_BUILTIN_APP_FORBIDDEN(&definition.id),
+            );
         }
         let now = timestamp();
         let prepared = asset_uploads
@@ -109,8 +108,11 @@ impl AppState {
                 _,
             )) = current
             {
-                let previous: AppDefinition = serde_json::from_str(&stored).map_err(|e| {
-                    server_error(&format!("저장된 앱 정의를 읽을 수 없습니다: {e}"))
+                let previous: AppDefinition = serde_json::from_str(&stored).map_err(|error| {
+                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_STORED_DEFINITION_JSON_INVALID(
+                        &definition.id,
+                    )
+                    .and_details(vec![error.to_string()])
                 })?;
                 if previous == definition {
                     (current_version, created_at, true)
@@ -324,21 +326,15 @@ impl AppState {
             }
         }
         let candidates = {
-            let connected = self
-                .0
-                .connections
-                .lock()
-                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?;
-            let syncing = self
-                .0
-                .layout_sync_devices
-                .lock()
-                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?;
-            let support = self
-                .0
-                .device_support
-                .lock()
-                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?;
+            let connected = self.0.connections.lock().map_err(|_| {
+                kaleidoscope_contract::errors::SERVER_APP_PUBLISH_CONNECTION_STATE_LOCK_FAILED()
+            })?;
+            let syncing = self.0.layout_sync_devices.lock().map_err(|_| {
+                kaleidoscope_contract::errors::SERVER_APP_PUBLISH_LAYOUT_SYNC_STATE_LOCK_FAILED()
+            })?;
+            let support = self.0.device_support.lock().map_err(|_| {
+                kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DEVICE_SUPPORT_STATE_LOCK_FAILED()
+            })?;
             let mut values = Vec::new();
             for id in syncing
                 .iter()
@@ -500,13 +496,19 @@ fn move_app_windows(
     };
     let mut moved = Vec::with_capacity(rows.len());
     for (id, raw) in rows {
-        let mut window: AppWindow = serde_json::from_str(&raw)
-            .map_err(|error| server_error(&format!("저장된 창을 읽을 수 없습니다: {error}")))?;
+        let mut window: AppWindow = serde_json::from_str(&raw).map_err(|error| {
+            kaleidoscope_contract::errors::SERVER_APP_PUBLISH_WINDOW_STATE_INVALID(&id)
+                .and_details(vec![error.to_string()])
+        })?;
         window.state = migrate_window_state(definition, &window.state);
         window.app_version = version;
         window.updated_at = now.to_string();
-        let data = serde_json::to_string(&window)
-            .map_err(|_| server_error("창 상태를 저장할 수 없습니다."))?;
+        let data = serde_json::to_string(&window).map_err(|error| {
+            kaleidoscope_contract::errors::SERVER_APP_PUBLISH_WINDOW_STATE_SERIALIZE_FAILED(
+                &window.id,
+            )
+            .and_details(vec![error.to_string()])
+        })?;
         tx.execute("UPDATE windows SET data=?2 WHERE id=?1", params![id, data])
             .map_err(db_error)?;
         moved.push(window);

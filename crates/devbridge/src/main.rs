@@ -12,7 +12,7 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use kaleidoscope_contract::{CoreError, CoreEvent, CoreRequest, ErrorCode};
+use kaleidoscope_contract::{CoreEvent, CoreRequest};
 use kaleidoscope_core::{Core, CoreConfig, Host, PcRoot};
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
@@ -200,15 +200,13 @@ async fn restrict_origin(request: Request, next: Next) -> Response {
 async fn post_core(State(state): State<AppState>, body: Bytes) -> Response {
     let request = match serde_json::from_slice::<CoreRequest>(&body) {
         Ok(request) => request,
-        Err(_) => {
+        Err(error) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(CoreError {
-                    id: None,
-                    code: ErrorCode::InvalidRequest,
-                    message: "요청 형식이 올바르지 않습니다.".into(),
-                    details: Vec::new(),
-                }),
+                Json(
+                    kaleidoscope_contract::errors::SERVER_DEVBRIDGE_BODY_INVALID()
+                        .and_details(vec![error.to_string()]),
+                ),
             )
                 .into_response();
         }
@@ -222,12 +220,10 @@ async fn post_core(State(state): State<AppState>, body: Bytes) -> Response {
             eprintln!("코어 명령 실행 태스크가 실패했습니다: {join_error}");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(CoreError {
-                    id: None,
-                    code: ErrorCode::Io,
-                    message: "코어 명령을 실행할 수 없습니다.".into(),
-                    details: Vec::new(),
-                }),
+                Json(
+                    kaleidoscope_contract::errors::SERVER_DEVBRIDGE_TASK_FAILED()
+                        .and_details(vec![join_error.to_string()]),
+                ),
             )
                 .into_response()
         }
@@ -252,25 +248,33 @@ async fn post_core_bytes(
     else {
         return StatusCode::BAD_REQUEST.into_response();
     };
-    let offset = get("x-ks-offset").and_then(|value| value.parse::<u64>().ok());
+    let offset = headers.get("x-ks-offset").map(|value| {
+        let raw = value
+            .to_str()
+            .map_err(|_| "읽을 수 없는 값".to_string())?;
+        raw.parse::<u64>().map_err(|_| raw.to_string())
+    });
     let handle = percent_encoding::percent_decode_str(&handle)
         .decode_utf8_lossy()
         .into_owned();
     let core = state.core.clone();
     let result = tokio::task::spawn_blocking(move || match operation.as_str() {
         "files.read_bytes" => core.client_read_file(&window, &handle),
-        "export.write" => core
-            .client_write_export(
-                &window,
-                &handle,
-                offset.ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?,
-                &body,
-            )
-            .map(|()| Vec::new()),
+        "export.write" => match offset.as_ref() {
+            None => Err(kaleidoscope_contract::errors::SERVER_DEVBRIDGE_EXPORT_OFFSET_REQUIRED()),
+            Some(Err(value)) => Err(
+                kaleidoscope_contract::errors::SERVER_DEVBRIDGE_EXPORT_OFFSET_INVALID(value),
+            ),
+            Some(Ok(offset)) => core
+                .client_write_export(&window, &handle, *offset, &body)
+                .map(|()| Vec::new()),
+        },
         "client.http_read" | "client.blob_put" => {
             core.client_binary(&operation, &window, &handle, &body)
         }
-        _ => Err(CoreError::new(ErrorCode::InvalidRequest)),
+        operation => {
+            Err(kaleidoscope_contract::errors::SERVER_DEVBRIDGE_OPERATION_UNSUPPORTED(operation))
+        }
     })
     .await;
     match result {

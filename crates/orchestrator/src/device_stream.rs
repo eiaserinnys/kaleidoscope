@@ -30,25 +30,33 @@ impl AppState {
                 .0
                 .connections
                 .lock()
-                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+                .map_err(|_| {
+                    kaleidoscope_contract::errors::SERVER_DEVICE_CONNECTION_STATE_LOCK_FAILED()
+                })?
                 .entry(device_id.clone())
                 .or_default() += 1;
             self.0
                 .device_support
                 .lock()
-                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+                .map_err(|_| {
+                    kaleidoscope_contract::errors::SERVER_DEVICE_SUPPORT_STATE_LOCK_FAILED()
+                })?
                 .insert(device_id.clone(), supported.clone());
             if registry_version >= registry::LAYOUT_SYNC_REGISTRY_VERSION {
                 self.0
                     .layout_sync_devices
                     .lock()
-                    .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+                    .map_err(|_| {
+                        kaleidoscope_contract::errors::SERVER_LAYOUT_SYNC_DEVICE_STATE_LOCK_FAILED()
+                    })?
                     .insert(device_id.clone());
             } else {
                 self.0
                     .layout_sync_devices
                     .lock()
-                    .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+                    .map_err(|_| {
+                        kaleidoscope_contract::errors::SERVER_LAYOUT_SYNC_DEVICE_STATE_LOCK_FAILED()
+                    })?
                     .remove(&device_id);
             }
         }
@@ -71,23 +79,25 @@ impl AppState {
             self.0
                 .storage_devices
                 .lock()
-                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+                .map_err(|_| {
+                    kaleidoscope_contract::errors::SERVER_STORAGE_DEVICE_STATE_LOCK_FAILED()
+                })?
                 .insert(device_id.clone());
         } else {
             self.0
                 .storage_devices
                 .lock()
-                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?
+                .map_err(|_| {
+                    kaleidoscope_contract::errors::SERVER_STORAGE_DEVICE_STATE_LOCK_FAILED()
+                })?
                 .remove(&device_id);
         }
         let supports_app_values =
             supports_storage && registry_version >= registry::APP_VALUES_REGISTRY_VERSION;
         {
-            let mut devices = self
-                .0
-                .app_value_devices
-                .lock()
-                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?;
+            let mut devices = self.0.app_value_devices.lock().map_err(|_| {
+                kaleidoscope_contract::errors::SERVER_APP_VALUE_DEVICE_STATE_LOCK_FAILED()
+            })?;
             if supports_app_values {
                 devices.insert(device_id.clone());
             } else {
@@ -95,11 +105,9 @@ impl AppState {
             }
         }
         {
-            let mut devices = self
-                .0
-                .collection_devices
-                .lock()
-                .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?;
+            let mut devices = self.0.collection_devices.lock().map_err(|_| {
+                kaleidoscope_contract::errors::SERVER_COLLECTION_DEVICE_STATE_LOCK_FAILED()
+            })?;
             if registry_version >= registry::COLLECTION_REGISTRY_VERSION
                 && supported.as_ref().is_some_and(|supported| {
                     supported

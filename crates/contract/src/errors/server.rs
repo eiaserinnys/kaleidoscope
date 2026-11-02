@@ -1,4 +1,326 @@
 error_catalog! { ENTRIES;
+    SERVER_DATABASE_OPERATION_FAILED() {
+        class: Server,
+        place: "서버 데이터베이스 작업",
+        cause: "SQL 작업이 실패했다",
+        message: "서버 데이터베이스 작업을 마치지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_DATABASE_LOCK_FAILED() {
+        class: Server,
+        place: "서버 데이터베이스 접근",
+        cause: "데이터베이스 잠금을 얻지 못했다",
+        message: "서버 데이터베이스를 사용할 수 없습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    SERVER_DEVICE_ACCOUNT_NOT_FOUND(device_id) {
+        class: Server,
+        place: "연결 기기 계정 조회",
+        cause: "등록된 기기의 계정 정보를 찾지 못했다",
+        message: "기기 ID {device_id}: 계정 정보를 찾지 못했습니다. 기기 등록 상태를 확인하세요.",
+        fix: "기기 등록 상태를 확인하세요"
+    }
+    SERVER_APP_DEFINITION_JSON_INVALID(app_id) {
+        class: Server,
+        place: "저장된 앱 정의 읽기",
+        cause: "저장된 앱 정의가 올바른 JSON이 아니다",
+        message: "앱 ID {app_id}의 저장된 정의를 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_APP_LIST_DEFINITION_JSON_INVALID(app_id) {
+        class: Server,
+        place: "현재 앱 목록 조회",
+        cause: "목록에 포함된 저장 앱 정의가 올바른 JSON이 아니다",
+        message: "앱 ID {app_id}의 저장된 정의를 앱 목록에 불러오지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_PREVIEW_WINDOW_STATE_JSON_INVALID(window_id) {
+        class: Server,
+        place: "미리 볼 창 상태 읽기",
+        cause: "저장된 창 상태가 올바른 JSON이 아니다",
+        message: "창 ID {window_id}의 저장된 상태를 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_TRANSFER_EXPORT_LAYOUT_JSON_INVALID(table) {
+        class: Server,
+        place: "서버 자료 내보내기 배치 읽기",
+        cause: "저장된 배치 항목이 올바른 JSON이 아니다",
+        message: "자료를 내보내는 중 {table} 배치 항목을 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_TRANSFER_EXPORT_VALUE_KIND_INVALID(app_id, key) {
+        class: Server,
+        place: "서버 자료 내보내기 저장값 종류 읽기",
+        cause: "저장된 값의 종류를 해석하지 못했다",
+        message: "앱 ID {app_id}, 저장 항목 {key}: 종류를 내보내지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_TRANSFER_EXPORT_VALUE_JSON_INVALID(app_id, key) {
+        class: Server,
+        place: "서버 자료 내보내기 저장값 읽기",
+        cause: "저장된 값이 올바른 JSON이 아니다",
+        message: "앱 ID {app_id}, 저장 항목 {key}: 저장값을 JSON으로 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_TRANSFER_IMPORT_DEFINITION_SERIALIZE_FAILED(app_id) {
+        class: Server,
+        place: "서버 자료 가져오기 앱 정의 변환",
+        cause: "가져올 앱 정의를 JSON으로 바꾸지 못했다",
+        message: "앱 ID {app_id} 정의를 가져오기 요청으로 바꾸지 못했습니다. 앱 정의를 확인하세요.",
+        fix: "앱 정의를 확인하세요"
+    }
+    SERVER_TRANSFER_IMPORT_STORED_APP_DEFINITION_JSON_INVALID(app_id) {
+        class: Server,
+        place: "서버 자료 가져오기 기존 앱 정의 조회",
+        cause: "기존 앱 정의가 올바른 JSON이 아니다",
+        message: "앱 ID {app_id}의 기존 정의를 가져오기 중 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_TRANSFER_IMPORT_LAYOUT_INVALID() {
+        class: InvalidRequest,
+        place: "서버 자료 가져오기 배치 검사",
+        cause: "가져올 배치 변경이 올바르지 않다",
+        message: "가져올 작업, 데스크톱 또는 창 정보가 올바르지 않습니다. 내보낸 자료를 다시 확인하세요.",
+        fix: "내보낸 자료를 다시 확인하세요"
+    }
+    SERVER_TRANSFER_IMPORT_DELETIONS_PRESENT() {
+        class: InvalidRequest,
+        place: "서버 자료 가져오기 삭제 항목 검사",
+        cause: "가져올 자료에 삭제 목록이 들어 있다",
+        message: "서버 간 자료 가져오기는 삭제 항목을 적용하지 않습니다. 삭제 목록을 뺀 뒤 다시 가져오세요.",
+        fix: "자료에서 삭제 목록을 빼세요"
+    }
+    SERVER_TRANSFER_IMPORT_BUILTIN_APP(app_id) {
+        class: InvalidRequest,
+        place: "서버 자료 가져오기 기본 앱 검사",
+        cause: "쉘 기본 앱을 서버 앱으로 가져오려 했다",
+        message: "기본 앱 ID {app_id}: 서버 자료로 가져올 수 없습니다. 쉘과 함께 배포되는 기본 앱을 사용하세요.",
+        fix: "기본 앱을 가져오기 자료에서 빼세요"
+    }
+    SERVER_TRANSFER_IMPORT_COLLECTION_KIND_MISMATCH(app_id, key) {
+        class: InvalidRequest,
+        place: "서버 자료 가져오기 문서 모음 저장값 검사",
+        cause: "가져온 저장값 종류가 기본 앱의 문서 모음 선언과 다르다",
+        message: "기본 앱 ID {app_id}, 저장 항목 {key}: 종류가 선언과 다릅니다. 내보낸 자료와 앱 선언을 맞추세요.",
+        fix: "내보낸 저장값 종류를 앱 선언과 맞추세요"
+    }
+    SERVER_TRANSFER_IMPORT_VALUE_TOO_LARGE(app_id, key) {
+        class: InvalidRequest,
+        place: "서버 자료 가져오기 저장값 크기 검사",
+        cause: "가져온 저장값이 허용 크기를 넘는다",
+        message: "앱 ID {app_id}, 저장 항목 {key}: 허용 크기를 넘습니다. 내보낸 자료의 값을 줄이세요.",
+        fix: "저장값을 허용 크기 안으로 줄이세요"
+    }
+    SERVER_TRANSFER_IMPORT_APP_NOT_FOUND(app_id) {
+        class: NotFound,
+        place: "서버 자료 가져오기 앱 조회",
+        cause: "저장값을 적용할 앱이 등록되지 않았다",
+        message: "앱 ID {app_id}: 찾을 수 없어 저장값을 가져오지 못했습니다. 앱을 먼저 가져오세요.",
+        fix: "앱을 먼저 가져오세요"
+    }
+    SERVER_TRANSFER_IMPORT_STORAGE_ENTRY_NOT_FOUND(app_id, key) {
+        class: InvalidRequest,
+        place: "서버 자료 가져오기 저장 항목 확인",
+        cause: "저장 항목이 앱 정의에 없다",
+        message: "앱 ID {app_id}, 저장 항목 {key}: 앱 정의에 선언되어 있지 않습니다. 앱 정의와 내보낸 자료를 맞추세요.",
+        fix: "앱 정의와 내보낸 저장값을 맞추세요"
+    }
+    SERVER_TRANSFER_IMPORT_STORAGE_KIND_MISMATCH(app_id, key) {
+        class: InvalidRequest,
+        place: "서버 자료 가져오기 저장 항목 종류 확인",
+        cause: "가져온 저장값 종류가 앱 정의의 저장 항목과 다르다",
+        message: "앱 ID {app_id}, 저장 항목 {key}: 가져온 값의 종류가 앱 정의와 다릅니다. 앱 정의와 내보낸 자료를 맞추세요.",
+        fix: "앱 정의와 내보낸 저장값 종류를 맞추세요"
+    }
+    SERVER_TRANSFER_IMPORT_MD_NOT_STRING(app_id, key) {
+        class: InvalidRequest,
+        place: "서버 자료 가져오기 Markdown 저장값 검사",
+        cause: "가져온 Markdown 저장값이 문자열이 아니다",
+        message: "앱 ID {app_id}, 저장 항목 {key}: Markdown 값이 문자열이 아닙니다. 문자열 값으로 고쳐 다시 가져오세요.",
+        fix: "Markdown 저장값을 문자열로 바꾸세요"
+    }
+    SERVER_TRANSFER_IMPORT_REVISION_FAILED(app_id, key) {
+        class: InvalidRequest,
+        place: "서버 자료 가져오기 저장값 판 계산",
+        cause: "가져온 저장값의 판을 계산하지 못했다",
+        message: "앱 ID {app_id}, 저장 항목 {key}: 판을 계산하지 못했습니다. 내보낸 값을 확인하세요.",
+        fix: "내보낸 저장값을 확인하세요"
+    }
+    SERVER_HTTP_MCP_AUTH_REJECTED() {
+        class: Server,
+        place: "MCP HTTP 인증",
+        cause: "요청에 유효한 MCP 인증 정보가 없다",
+        message: "MCP 요청을 인증하지 못했습니다. 인증 정보를 확인한 뒤 다시 요청하세요.",
+        fix: "MCP 인증 정보를 확인하세요"
+    }
+    SERVER_HTTP_DEVICE_AUTH_REJECTED() {
+        class: Server,
+        place: "기기 HTTP 인증",
+        cause: "요청에 유효한 기기 인증 정보가 없다",
+        message: "기기 요청을 인증하지 못했습니다. 기기를 다시 연결한 뒤 다시 요청하세요.",
+        fix: "기기를 다시 연결하세요"
+    }
+    SERVER_HTTP_MCP_ACCOUNT_FORBIDDEN() {
+        class: NotFound,
+        place: "MCP 기기 계정 접근 확인",
+        cause: "인증한 기기가 MCP 계정에 속하지 않는다",
+        message: "이 기기로는 MCP 요청을 할 수 없습니다. MCP 계정에 연결된 인증 정보를 사용하세요.",
+        fix: "MCP 계정에 연결된 인증 정보를 사용하세요"
+    }
+    SERVER_HTTP_MCP_WORKSPACE_FORBIDDEN() {
+        class: NotFound,
+        place: "MCP 작업 접근 확인",
+        cause: "요청한 작업이 연결된 계정에서 확인되지 않는다",
+        message: "요청을 처리할 작업을 찾지 못했습니다. 연결된 계정의 작업 ID를 확인하세요.",
+        fix: "연결된 계정의 작업 ID를 사용하세요"
+    }
+    SERVER_HTTP_MCP_WORKSPACE_HEADER_INVALID() {
+        class: NotFound,
+        place: "MCP 작업 접근 확인",
+        cause: "작업 ID 헤더가 유효한 문자열이 아니다",
+        message: "MCP 작업 ID 헤더를 읽지 못했습니다. 유효한 작업 ID를 넣어 다시 요청하세요.",
+        fix: "유효한 작업 ID를 넣어 다시 요청하세요"
+    }
+    SERVER_HTTP_DEVICE_WORKSPACE_NOT_FOUND() {
+        class: NotFound,
+        place: "기기 요청 작업 접근 확인",
+        cause: "요청한 작업이 기기 계정에서 확인되지 않는다",
+        message: "요청을 처리할 작업을 찾지 못했습니다. 기기 계정의 작업 ID를 확인하세요.",
+        fix: "기기 계정에 속한 작업 ID를 사용하세요"
+    }
+    SERVER_HTTP_BUILTIN_SPECS_ACCOUNT_FORBIDDEN() {
+        class: PermissionDenied,
+        place: "기본 앱 실행 설정 등록 권한 확인",
+        cause: "연결 기기가 MCP 계정의 기본 앱 설정을 등록할 권한이 없다",
+        message: "이 기기는 기본 앱 실행 설정을 등록할 수 없습니다. MCP 계정에 연결된 기기에서 요청하세요.",
+        fix: "MCP 계정에 연결된 기기에서 요청하세요"
+    }
+    SERVER_DEVICE_CONNECTION_STATE_LOCK_FAILED() {
+        class: Server,
+        place: "기기 연결 상태 잠금",
+        cause: "기기 연결 상태 잠금을 얻지 못했다",
+        message: "기기 연결 상태를 읽지 못했습니다. 서버 상태를 확인한 뒤 다시 연결하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    SERVER_DEVICE_LIST_CONNECTION_STATE_LOCK_FAILED() {
+        class: Server,
+        place: "연결 기기 목록 상태 잠금",
+        cause: "연결 기기 목록을 읽기 위한 잠금을 얻지 못했다",
+        message: "연결 기기 상태를 읽지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    SERVER_APP_PUBLISH_CONNECTION_STATE_LOCK_FAILED() {
+        class: Server,
+        place: "앱 게시 대상 기기 선택",
+        cause: "연결 상태 잠금을 얻지 못했다",
+        message: "앱을 열 연결 기기를 고르지 못했습니다. 서버 상태를 확인한 뒤 다시 게시하세요.",
+        fix: "서버 상태를 확인한 뒤 다시 게시하세요"
+    }
+    SERVER_APP_PUBLISH_LAYOUT_SYNC_STATE_LOCK_FAILED() {
+        class: Server,
+        place: "앱 게시 대상 기기 선택",
+        cause: "배치 동기화 상태 잠금을 얻지 못했다",
+        message: "앱을 열 배치 동기화 기기를 고르지 못했습니다. 서버 상태를 확인한 뒤 다시 게시하세요.",
+        fix: "서버 상태를 확인한 뒤 다시 게시하세요"
+    }
+    SERVER_APP_PUBLISH_DEVICE_SUPPORT_STATE_LOCK_FAILED() {
+        class: Server,
+        place: "앱 게시 대상 기기 선택",
+        cause: "기기 지원 기능 상태 잠금을 얻지 못했다",
+        message: "앱을 열 수 있는 기기를 고르지 못했습니다. 서버 상태를 확인한 뒤 다시 게시하세요.",
+        fix: "서버 상태를 확인한 뒤 다시 게시하세요"
+    }
+    SERVER_DEVICE_SUPPORT_STATE_LOCK_FAILED() {
+        class: Server,
+        place: "기기 지원 기능 상태 잠금",
+        cause: "기기 지원 기능 상태 잠금을 얻지 못했다",
+        message: "기기 지원 기능 상태를 읽지 못했습니다. 서버 상태를 확인한 뒤 다시 연결하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_SYNC_DEVICE_STATE_LOCK_FAILED() {
+        class: Server,
+        place: "배치 동기화 기기 목록 잠금",
+        cause: "배치 동기화 기기 목록 잠금을 얻지 못했다",
+        message: "배치 동기화 상태를 읽지 못했습니다. 서버 상태를 확인한 뒤 다시 연결하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    SERVER_STORAGE_DEVICE_STATE_LOCK_FAILED() {
+        class: Server,
+        place: "저장소 연결 기기 목록 잠금",
+        cause: "저장소 연결 기기 목록 잠금을 얻지 못했다",
+        message: "저장소 연결 상태를 읽지 못했습니다. 서버 상태를 확인한 뒤 다시 연결하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    SERVER_APP_VALUE_DEVICE_STATE_LOCK_FAILED() {
+        class: Server,
+        place: "앱 저장값 연결 기기 목록 잠금",
+        cause: "앱 저장값 연결 기기 목록 잠금을 얻지 못했다",
+        message: "앱 저장값 연결 상태를 읽지 못했습니다. 서버 상태를 확인한 뒤 다시 연결하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    SERVER_COLLECTION_DEVICE_STATE_LOCK_FAILED() {
+        class: Server,
+        place: "문서 모음 연결 기기 목록 잠금",
+        cause: "문서 모음 연결 기기 목록 잠금을 얻지 못했다",
+        message: "문서 모음 연결 상태를 읽지 못했습니다. 서버 상태를 확인한 뒤 다시 연결하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    SERVER_APP_PUBLISH_STORED_DEFINITION_JSON_INVALID(app_id) {
+        class: Server,
+        place: "앱 게시 중 기존 정의 조회",
+        cause: "저장된 현재 앱 정의가 올바른 JSON이 아니다",
+        message: "앱 ID {app_id}의 기존 정의를 게시 중 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_APP_PUBLISH_WINDOW_STATE_INVALID(window_id) {
+        class: Server,
+        place: "앱 게시 중 창 상태 읽기",
+        cause: "저장된 창 상태가 앱 판 변경 자료로 해석되지 않는다",
+        message: "창 ID {window_id}의 상태를 앱 게시 중 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_APP_PUBLISH_WINDOW_STATE_SERIALIZE_FAILED(window_id) {
+        class: Server,
+        place: "앱 게시 중 창 상태 저장",
+        cause: "변경한 창 상태를 JSON으로 바꾸지 못했다",
+        message: "창 ID {window_id}의 상태를 앱 게시 중 저장하지 못했습니다. 서버 상태를 확인하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    SERVER_DEVBRIDGE_BODY_INVALID() {
+        class: InvalidRequest,
+        place: "개발 다리 코어 요청 읽기",
+        cause: "HTTP 본문이 코어 요청 형식에 맞지 않는다",
+        message: "개발 다리 요청 JSON을 읽지 못했습니다. 코어 요청 형식을 확인하세요.",
+        fix: "코어 요청 JSON을 확인하세요"
+    }
+    SERVER_DEVBRIDGE_TASK_FAILED() {
+        class: Io,
+        place: "개발 다리 코어 명령 실행",
+        cause: "코어 명령 실행 태스크가 완료되지 않았다",
+        message: "개발 다리에서 코어 명령을 실행하지 못했습니다. 코어 상태를 확인하세요.",
+        fix: "코어 상태를 확인하세요"
+    }
+    SERVER_DEVBRIDGE_EXPORT_OFFSET_REQUIRED() {
+        class: InvalidRequest,
+        place: "개발 다리 파일 내보내기 쓰기",
+        cause: "내보낼 파일의 쓰기 위치가 지정되지 않았다",
+        message: "파일 내보내기 쓰기 위치가 필요합니다. x-ks-offset에 파일 위치를 지정하세요.",
+        fix: "x-ks-offset에 파일 위치를 지정하세요"
+    }
+    SERVER_DEVBRIDGE_EXPORT_OFFSET_INVALID(value) {
+        class: InvalidRequest,
+        place: "개발 다리 파일 내보내기 쓰기",
+        cause: "내보낼 파일의 쓰기 위치가 0 이상의 정수가 아니다",
+        message: "파일 쓰기 위치 {value}: 0 이상의 정수가 아닙니다. x-ks-offset에 정수를 지정하세요.",
+        fix: "x-ks-offset에 0 이상의 정수를 지정하세요"
+    }
+    SERVER_DEVBRIDGE_OPERATION_UNSUPPORTED(operation) {
+        class: InvalidRequest,
+        place: "개발 다리 코어 동작 선택",
+        cause: "요청한 코어 동작을 개발 다리가 지원하지 않는다",
+        message: "개발 다리에서 동작 ID {operation}: 실행할 수 없습니다. 지원되는 동작을 사용하세요.",
+        fix: "지원되는 개발 다리 동작을 사용하세요"
+    }
     SERVER_SWITCH_CANCELLED() {
         class: InvalidRequest,
         place: "서버 전환",

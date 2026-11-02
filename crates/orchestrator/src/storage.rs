@@ -295,7 +295,8 @@ pub(super) fn timestamp() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 pub(super) fn db_error(error: rusqlite::Error) -> CoreError {
-    server_error(&format!("레지스트리 저장소 오류: {error}"))
+    kaleidoscope_contract::errors::SERVER_DATABASE_OPERATION_FAILED()
+        .and_details(vec![error.to_string()])
 }
 pub(super) fn server_error(message: &str) -> CoreError {
     CoreError {

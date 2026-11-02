@@ -1,4 +1,200 @@
 error_catalog! { ENTRIES;
+    APP_PREVIEW_BUILTIN_APP_UNSUPPORTED(app_id) {
+        class: UnsupportedApp,
+        place: "기본 앱 미리 보기",
+        cause: "기본 앱은 원격 미리 보기 대상이 아니다",
+        message: "기본 앱 ID {app_id}: 이 도구에서는 미리 볼 수 없습니다. 로컬 시험 쉘에서 확인하세요.",
+        fix: "로컬 시험 쉘에서 기본 앱을 미리 보세요"
+    }
+    APP_PREVIEW_APP_NOT_FOUND(app_id) {
+        class: NotFound,
+        place: "앱 미리 보기",
+        cause: "미리 볼 앱이 계정에 없다",
+        message: "앱 ID {app_id}: 찾을 수 없어 미리 보지 못했습니다. 앱 목록에서 현재 ID를 확인하세요.",
+        fix: "현재 앱 ID를 확인하세요"
+    }
+    APP_PREVIEW_DEFINITION_SERIALIZE_FAILED() {
+        class: Server,
+        place: "앱 정의 미리 보기 입력 변환",
+        cause: "받은 앱 정의 값을 JSON으로 바꾸지 못했다",
+        message: "앱 정의를 미리 보기 요청으로 바꾸지 못했습니다. 입력 값을 확인한 뒤 다시 시도하세요.",
+        fix: "앱 정의 입력을 확인하세요"
+    }
+    APP_PREVIEW_STORAGE_KIND_SERIALIZE_FAILED(app_id, key) {
+        class: Server,
+        place: "앱 미리 보기 저장 항목 종류 읽기",
+        cause: "앱 저장 항목 종류를 JSON 값으로 바꾸지 못했다",
+        message: "앱 ID {app_id}, 저장 항목 {key}: 종류를 읽지 못했습니다. 서버 상태를 확인하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    APP_PREVIEW_ARGUMENTS_INVALID() {
+        class: InvalidRequest,
+        place: "앱 미리 보기 요청 확인",
+        cause: "앱 ID와 앱 정의를 동시에 주거나 둘 다 주지 않았다",
+        message: "앱 미리 보기에는 app_id 또는 definition 중 하나만 필요합니다. 하나만 지정해 다시 요청하세요.",
+        fix: "app_id 또는 definition 하나만 지정하세요"
+    }
+    APP_PREVIEW_MAX_CHARS_INVALID(value) {
+        class: InvalidRequest,
+        place: "앱 미리 보기 결과 크기 확인",
+        cause: "결과 글자 수 제한이 허용 범위를 벗어났다",
+        message: "미리 보기 결과 제한 값 {value}: 1부터 20000 사이여야 합니다. 허용 범위 안의 값을 지정하세요.",
+        fix: "1부터 20000 사이의 값을 지정하세요"
+    }
+    APP_PREVIEW_WINDOW_NOT_REPORTED(window_id) {
+        class: InvalidRequest,
+        place: "보고된 창 미리 보기",
+        cause: "기기에서 보고한 창 상태가 없다",
+        message: "창 ID {window_id}: 배치 보고가 없어 미리 볼 상태를 찾지 못했습니다. 기기 배치를 다시 보고한 뒤 시도하세요.",
+        fix: "기기 배치를 다시 보고하세요"
+    }
+    APP_PREVIEW_WINDOW_NOT_FOUND(window_id, app_id) {
+        class: NotFound,
+        place: "앱 창 상태 조회",
+        cause: "현재 계정의 창과 보고된 배치에서 창을 찾지 못했다",
+        message: "창 ID {window_id}: 앱 ID {app_id}의 미리 보기 상태를 찾지 못했습니다. 현재 기기 배치를 다시 보고한 뒤 시도하세요.",
+        fix: "현재 기기 배치를 다시 보고하세요"
+    }
+    APP_PREVIEW_WINDOW_APP_MISMATCH(window_id, app_id) {
+        class: InvalidRequest,
+        place: "앱 창 미리 보기 확인",
+        cause: "창이 미리 볼 앱과 연결되어 있지 않다",
+        message: "창 ID {window_id}: 앱 ID {app_id}에 속하지 않습니다. 해당 앱의 창 ID를 지정하세요.",
+        fix: "해당 앱의 창 ID를 지정하세요"
+    }
+    APP_PREVIEW_WORKSPACE_WINDOW_MISMATCH(workspace_id, window_id) {
+        class: InvalidRequest,
+        place: "앱 미리 보기 작업 확인",
+        cause: "지정한 작업이 창에 연결된 작업과 다르다",
+        message: "작업 ID {workspace_id}: 창 ID {window_id}에 연결된 작업과 다릅니다. 창의 작업을 지정하거나 window_id를 빼세요.",
+        fix: "창의 작업을 지정하거나 window_id를 빼세요"
+    }
+    APP_PREVIEW_WORKSPACE_NOT_FOUND(workspace_id) {
+        class: NotFound,
+        place: "앱 미리 보기 작업 조회",
+        cause: "현재 계정에 속한 작업이 없다",
+        message: "작업 ID {workspace_id}: 찾을 수 없어 앱 저장값을 미리 볼 수 없습니다. 현재 계정의 작업 ID를 지정하세요.",
+        fix: "현재 계정의 작업 ID를 지정하세요"
+    }
+    APP_PREVIEW_WORKSPACE_REQUIRED(app_id, key) {
+        class: InvalidRequest,
+        place: "작업 전용 저장값 미리 보기",
+        cause: "앱이 사용하는 작업 전용 저장값에 작업 ID가 필요하다",
+        message: "앱 ID {app_id}, 저장 항목 {key}: 작업별 값이라 workspace_id 또는 window_id가 필요합니다. 작업이나 창을 지정하세요.",
+        fix: "workspace_id 또는 window_id를 지정하세요"
+    }
+    APP_BUILTIN_SPEC_APP_ID_INVALID(app_id) {
+        class: InvalidRequest,
+        place: "기본 앱 실행 설정 검사",
+        cause: "설정의 앱 ID가 기본 앱 ID가 아니다",
+        message: "앱 ID {app_id}: 기본 앱 실행 설정에 등록할 수 없습니다. 기본 앱 ID를 확인하세요.",
+        fix: "등록된 기본 앱 ID를 사용하세요"
+    }
+    APP_BUILTIN_SPEC_VERSION_INVALID(app_id, version) {
+        class: InvalidRequest,
+        place: "기본 앱 실행 설정 판 검사",
+        cause: "기본 앱 실행 설정의 판이 0이다",
+        message: "기본 앱 ID {app_id}, 실행 설정 판 {version}: 올바르지 않습니다. 1 이상의 판을 보내세요.",
+        fix: "1 이상의 판을 지정하세요"
+    }
+    APP_BUILTIN_SPEC_STORAGE_SERIALIZE_FAILED(app_id) {
+        class: Server,
+        place: "기본 앱 저장소 설정 저장",
+        cause: "저장소 설정을 JSON으로 바꾸지 못했다",
+        message: "기본 앱 ID {app_id}의 저장소 설정을 저장 형식으로 바꾸지 못했습니다. 서버 상태를 확인하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    APP_BUILTIN_SPEC_WORKER_SERIALIZE_FAILED(app_id) {
+        class: Server,
+        place: "기본 앱 워커 설정 저장",
+        cause: "워커 설정을 JSON으로 바꾸지 못했다",
+        message: "기본 앱 ID {app_id}의 워커 설정을 저장 형식으로 바꾸지 못했습니다. 서버 상태를 확인하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    APP_BUILTIN_SPEC_STORAGE_JSON_INVALID(app_id) {
+        class: Server,
+        place: "기본 앱 저장소 설정 읽기",
+        cause: "저장된 저장소 설정이 올바른 JSON이 아니다",
+        message: "기본 앱 ID {app_id}의 저장소 설정을 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    APP_BUILTIN_SPEC_WORKER_JSON_INVALID(app_id) {
+        class: Server,
+        place: "기본 앱 워커 설정 읽기",
+        cause: "저장된 워커 설정이 올바른 JSON이 아니다",
+        message: "기본 앱 ID {app_id}의 워커 설정을 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    APP_BUILTIN_SPEC_RECORD_INVALID(app_id) {
+        class: Server,
+        place: "기본 앱 실행 설정 읽기",
+        cause: "저장된 기본 앱 설정이 앱 실행 설정 형식에 맞지 않는다",
+        message: "기본 앱 ID {app_id}의 실행 설정을 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    APP_BUILTIN_SPEC_FILE_READ_NOT_FOUND(app_id) {
+        class: Server,
+        place: "기본 앱 정의 파일 읽기",
+        cause: "기본 앱 정의 파일이 읽는 동안 사라졌다",
+        message: "기본 앱 정의 파일 {app_id}.json을 찾지 못했습니다. kaleidoscope 리포의 apps 폴더를 확인하세요.",
+        fix: "kaleidoscope 리포의 apps 폴더에 정의 파일을 두세요"
+    }
+    APP_BUILTIN_SPEC_FILE_READ_FAILED(app_id) {
+        class: Server,
+        place: "기본 앱 정의 파일 읽기",
+        cause: "기본 앱 정의 파일을 읽지 못했다",
+        message: "기본 앱 정의 파일 {app_id}.json을 읽지 못했습니다. 파일 권한과 디스크 상태를 확인하세요.",
+        fix: "파일 권한과 디스크 상태를 확인하세요"
+    }
+    APP_BUILTIN_SPEC_FILE_ID_MISMATCH(app_id, declared_id) {
+        class: InvalidAppDefinition,
+        place: "기본 앱 정의 파일 ID 확인",
+        cause: "파일 이름의 앱 ID와 정의 안의 ID가 다르다",
+        message: "기본 앱 ID {app_id}: 파일 정의의 앱 ID는 {declared_id}입니다. 파일 이름과 앱 정의의 ID를 같게 고치세요.",
+        fix: "파일 이름과 앱 정의의 ID를 같게 고치세요"
+    }
+    APP_BUILTIN_SPEC_NOT_FOUND(app_id) {
+        class: NotFound,
+        place: "기본 앱 실행 설정 조회",
+        cause: "기본 앱 실행 설정이 등록되지 않았다",
+        message: "기본 앱 ID {app_id}: 실행 설정을 찾지 못했습니다. 기본 앱 설정을 등록한 뒤 다시 시도하세요.",
+        fix: "기본 앱 설정을 등록하세요"
+    }
+    APP_BUILTIN_STORAGE_ENTRY_NOT_DECLARED(app_id, key) {
+        class: InvalidRequest,
+        place: "기본 앱 저장 항목 조회",
+        cause: "요청한 저장 항목이 기본 앱 정의에 없다",
+        message: "기본 앱 ID {app_id}, 저장 항목 {key}: 선언되지 않았습니다. 선언된 저장 항목을 사용하세요.",
+        fix: "기본 앱 정의에 선언된 저장 항목을 사용하세요"
+    }
+    APP_BUILTIN_COLLECTION_NOT_DECLARED(app_id, key) {
+        class: InvalidRequest,
+        place: "기본 앱 문서 모음 조회",
+        cause: "요청한 문서 모음이 기본 앱 정의에 없다",
+        message: "기본 앱 ID {app_id}, 문서 모음 {key}: 선언되지 않았습니다. 선언된 문서 모음을 사용하세요.",
+        fix: "기본 앱 정의에 선언된 문서 모음을 사용하세요"
+    }
+    APP_BUILTIN_COLLECTION_KEY_INVALID(app_id, key) {
+        class: InvalidRequest,
+        place: "기본 앱 문서 키 확인",
+        cause: "저장 키가 선언된 문서 모음 아래의 문서 키가 아니다",
+        message: "기본 앱 ID {app_id}, 저장 키 {key}: 문서 모음 아래에 있지 않습니다. 문서 모음 경로와 문서 이름을 확인하세요.",
+        fix: "문서 모음 아래의 문서 키를 사용하세요"
+    }
+    APP_PUBLISH_BUILTIN_APP_FORBIDDEN(app_id) {
+        class: InvalidAppDefinition,
+        place: "기본 앱 올리기",
+        cause: "쉘과 함께 배포하는 기본 앱을 서버에 올리려 했다",
+        message: "기본 앱 ID {app_id}: 서버에 올릴 수 없습니다. kaleidoscope 리포의 apps 폴더에서 고친 뒤 쉘 새 판으로 내세요.",
+        fix: "kaleidoscope 리포의 apps 폴더에서 기본 앱을 수정하세요"
+    }
+    APP_BUILTIN_STORAGE_KEY_MISMATCH(app_id, key) {
+        class: InvalidRequest,
+        place: "기본 앱 저장 항목 키 확인",
+        cause: "요청한 저장 키가 선언의 ID, 키 또는 작업 키와 맞지 않는다",
+        message: "기본 앱 ID {app_id}, 저장 키 {key}: 선언된 저장 항목과 일치하지 않습니다. 앱 정의의 항목 ID와 키를 확인하세요.",
+        fix: "앱 정의에 선언된 저장 항목 ID 또는 키를 사용하세요"
+    }
     APP_DEFINITION_JSON_INVALID(reason) {
         class: InvalidAppDefinition,
         place: "앱 정의 JSON 읽기",

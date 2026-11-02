@@ -123,7 +123,7 @@ async fn mcp_auth(State(state): State<AppState>, mut request: Request, next: Nex
     let Some(provided) = bearer(request.headers()) else {
         return error_response(
             StatusCode::UNAUTHORIZED,
-            server_error("MCP 인증이 필요합니다."),
+            kaleidoscope_contract::errors::SERVER_HTTP_MCP_AUTH_REJECTED(),
         );
     };
     let mut principal = if constant_time_eq(provided.as_bytes(), state.0.mcp_token.as_bytes()) {
@@ -134,7 +134,7 @@ async fn mcp_auth(State(state): State<AppState>, mut request: Request, next: Nex
             Ok(None) => {
                 return error_response(
                     StatusCode::UNAUTHORIZED,
-                    server_error("MCP 인증이 필요합니다."),
+                    kaleidoscope_contract::errors::SERVER_HTTP_MCP_AUTH_REJECTED(),
                 );
             }
             Err(error) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
@@ -148,7 +148,10 @@ async fn mcp_auth(State(state): State<AppState>, mut request: Request, next: Nex
             Err(error) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
         };
         if account != principal_account {
-            return error_response(StatusCode::FORBIDDEN, CoreError::new(ErrorCode::NotFound));
+            return error_response(
+                StatusCode::FORBIDDEN,
+                kaleidoscope_contract::errors::SERVER_HTTP_MCP_ACCOUNT_FORBIDDEN(),
+            );
         }
         McpPrincipal {
             device_id: Some(device_id),
@@ -158,12 +161,18 @@ async fn mcp_auth(State(state): State<AppState>, mut request: Request, next: Nex
 
     if let Some(value) = request.headers().get(registry::WORKSPACE_HEADER) {
         let Ok(workspace_id) = value.to_str() else {
-            return error_response(StatusCode::FORBIDDEN, CoreError::new(ErrorCode::NotFound));
+            return error_response(
+                StatusCode::FORBIDDEN,
+                kaleidoscope_contract::errors::SERVER_HTTP_MCP_WORKSPACE_HEADER_INVALID(),
+            );
         };
         match state.mcp_owns_workspace(workspace_id) {
             Ok(true) => principal.workspace_id = Some(workspace_id.to_string()),
             Ok(false) => {
-                return error_response(StatusCode::FORBIDDEN, CoreError::new(ErrorCode::NotFound));
+                return error_response(
+                    StatusCode::FORBIDDEN,
+                    kaleidoscope_contract::errors::SERVER_HTTP_MCP_WORKSPACE_FORBIDDEN(),
+                );
             }
             Err(error) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
         }
@@ -193,7 +202,10 @@ async fn device_auth(State(state): State<AppState>, mut request: Request, next: 
                 .device_owns_workspace(&device.0, workspace_id)
                 .unwrap_or(false)
             {
-                return error_response(StatusCode::NOT_FOUND, CoreError::new(ErrorCode::NotFound));
+                return error_response(
+                    StatusCode::NOT_FOUND,
+                    kaleidoscope_contract::errors::SERVER_HTTP_DEVICE_WORKSPACE_NOT_FOUND(),
+                );
             }
         }
         request.extensions_mut().insert(device);
@@ -287,5 +299,5 @@ async fn device_events(State(state): State<AppState>, headers: HeaderMap) -> Res
     }
 }
 fn device_auth_error() -> CoreError {
-    server_error("기기 연결이 거부되었습니다. 쉘에서 다시 연결하세요.")
+    kaleidoscope_contract::errors::SERVER_HTTP_DEVICE_AUTH_REJECTED()
 }

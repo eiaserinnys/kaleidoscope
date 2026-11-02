@@ -213,6 +213,9 @@ async fn mcp_requires_bearer_token() {
     let app = router(AppState::in_memory("secret"));
     let response=app.oneshot(request("POST","/mcp",None,Body::from(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}"#))).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(error["id"], "SERVER_HTTP_MCP_AUTH_REJECTED");
 }
 
 #[tokio::test]

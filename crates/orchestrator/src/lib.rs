@@ -243,7 +243,7 @@ impl AppState {
         self.0
             .db
             .lock()
-            .map_err(|_| server_error("데이터베이스 잠금을 얻을 수 없습니다."))
+            .map_err(|_| kaleidoscope_contract::errors::SERVER_DATABASE_LOCK_FAILED())
     }
 
     fn mcp_account_id(&self) -> Result<String, CoreError> {
@@ -282,7 +282,9 @@ impl AppState {
             )
             .optional()
             .map_err(db_error)?
-            .ok_or_else(|| server_error("기기를 찾을 수 없습니다."))
+            .ok_or_else(|| {
+                kaleidoscope_contract::errors::SERVER_DEVICE_ACCOUNT_NOT_FOUND(device_id)
+            })
     }
 
     fn device_owns_workspace(
@@ -363,33 +365,50 @@ impl AppState {
         let query = format!("SELECT a.id,a.name,a.current_version,a.created_at,a.updated_at,v.definition,v.created_at FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.deleted_at IS NULL AND a.id NOT IN ({placeholders}) ORDER BY a.id");
         let mut stmt = db.prepare(&query).map_err(db_error)?;
         let rows = stmt
-            .query_map(rusqlite::params_from_iter(builtin_ids), |r| {
-                let definition: String = r.get(5)?;
-                let definition = serde_json::from_str(&definition).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        5,
-                        rusqlite::types::Type::Text,
-                        Box::new(e),
-                    )
-                })?;
-                Ok(RegistryApp {
-                    app: App {
-                        id: r.get(0)?,
-                        name: r.get(1)?,
-                        current_version: r.get(2)?,
-                        created_at: r.get(3)?,
-                        updated_at: r.get(4)?,
-                    },
-                    version: AppVersion {
-                        app_id: r.get(0)?,
-                        version: r.get(2)?,
-                        definition,
-                        created_at: r.get(6)?,
-                    },
-                })
+            .query_map(rusqlite::params_from_iter(builtin_ids), |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, u32>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                ))
             })
             .map_err(db_error)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
+        let mut apps = Vec::new();
+        for row in rows {
+            let (
+                id,
+                name,
+                current_version,
+                created_at,
+                updated_at,
+                raw_definition,
+                version_created_at,
+            ) = row.map_err(db_error)?;
+            let definition = serde_json::from_str(&raw_definition).map_err(|error| {
+                kaleidoscope_contract::errors::SERVER_APP_LIST_DEFINITION_JSON_INVALID(&id)
+                    .and_details(vec![error.to_string()])
+            })?;
+            apps.push(RegistryApp {
+                app: App {
+                    id: id.clone(),
+                    name,
+                    current_version,
+                    created_at,
+                    updated_at,
+                },
+                version: AppVersion {
+                    app_id: id,
+                    version: current_version,
+                    definition,
+                    created_at: version_created_at,
+                },
+            });
+        }
+        Ok(apps)
     }
 
     fn app(&self, app_id: &str, version: Option<u32>) -> Result<Option<RegistryApp>, CoreError> {
@@ -420,8 +439,10 @@ impl AppState {
         let Some((definition, version_created_at)) = found else {
             return Ok(None);
         };
-        let definition = serde_json::from_str(&definition)
-            .map_err(|e| server_error(&format!("저장된 앱 정의를 읽을 수 없습니다: {e}")))?;
+        let definition = serde_json::from_str(&definition).map_err(|error| {
+            kaleidoscope_contract::errors::SERVER_APP_DEFINITION_JSON_INVALID(&id)
+                .and_details(vec![error.to_string()])
+        })?;
         Ok(Some(RegistryApp {
             app: App {
                 id: id.clone(),
@@ -535,11 +556,9 @@ impl AppState {
             )
             .map_err(db_error)?;
         let mut stmt = db.prepare("SELECT id,name,created_at,last_seen_at,revoked_at FROM devices WHERE account_id=?1 ORDER BY created_at,id").map_err(db_error)?;
-        let connected = self
-            .0
-            .connections
-            .lock()
-            .map_err(|_| server_error("연결 상태를 읽을 수 없습니다."))?;
+        let connected = self.0.connections.lock().map_err(|_| {
+            kaleidoscope_contract::errors::SERVER_DEVICE_LIST_CONNECTION_STATE_LOCK_FAILED()
+        })?;
         let rows = stmt
             .query_map([account_id], |r| {
                 let id: String = r.get(0)?;

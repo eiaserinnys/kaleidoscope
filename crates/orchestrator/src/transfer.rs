@@ -31,6 +31,7 @@ impl AppState {
         let db = self.lock_db()?;
         fn rows<T: serde::de::DeserializeOwned>(
             db: &Connection,
+            table: &str,
             sql: &str,
             account: &str,
         ) -> Result<Vec<T>, CoreError> {
@@ -39,18 +40,21 @@ impl AppState {
                 .query_map([account], |r| r.get::<_, String>(0))
                 .map_err(db_error)?;
             rows.map(|r| {
-                serde_json::from_str(&r.map_err(db_error)?)
-                    .map_err(|e| server_error(&e.to_string()))
+                serde_json::from_str(&r.map_err(db_error)?).map_err(|error| {
+                    kaleidoscope_contract::errors::SERVER_TRANSFER_EXPORT_LAYOUT_JSON_INVALID(table)
+                        .and_details(vec![error.to_string()])
+                })
             })
             .collect()
         }
         bundle.layout.workspaces = rows(
             &db,
+            "작업",
             "SELECT data FROM workspaces WHERE account_id=?1",
             account,
         )?;
-        bundle.layout.desktops = rows(&db, "SELECT d.data FROM desktops d JOIN workspaces w ON d.workspace_id=w.id WHERE w.account_id=?1", account)?;
-        bundle.layout.windows = rows(&db, "SELECT n.data FROM windows n JOIN desktops d ON n.desktop_id=d.id JOIN workspaces w ON d.workspace_id=w.id WHERE w.account_id=?1", account)?;
+        bundle.layout.desktops = rows(&db, "데스크톱", "SELECT d.data FROM desktops d JOIN workspaces w ON d.workspace_id=w.id WHERE w.account_id=?1", account)?;
+        bundle.layout.windows = rows(&db, "창", "SELECT n.data FROM windows n JOIN desktops d ON n.desktop_id=d.id JOIN workspaces w ON d.workspace_id=w.id WHERE w.account_id=?1", account)?;
         let mut stmt = db.prepare("SELECT b.app_id,i.key,i.kind,i.content,i.workspace_id FROM app_storage_items i JOIN app_storage_buckets b ON i.bucket_id=b.id WHERE b.account_id=?1").map_err(db_error)?;
         let rows = stmt
             .query_map([account], |r| {
@@ -70,13 +74,23 @@ impl AppState {
             {
                 continue;
             }
+            let kind = serde_json::from_value(json!(kind)).map_err(|error| {
+                kaleidoscope_contract::errors::SERVER_TRANSFER_EXPORT_VALUE_KIND_INVALID(
+                    &app_id, &key,
+                )
+                .and_details(vec![error.to_string()])
+            })?;
+            let content = serde_json::from_str(&content).map_err(|error| {
+                kaleidoscope_contract::errors::SERVER_TRANSFER_EXPORT_VALUE_JSON_INVALID(
+                    &app_id, &key,
+                )
+                .and_details(vec![error.to_string()])
+            })?;
             bundle.values.push(TransferValue {
                 app_id,
                 key,
-                kind: serde_json::from_value(json!(kind))
-                    .map_err(|e| server_error(&e.to_string()))?,
-                content: serde_json::from_str(&content)
-                    .map_err(|e| server_error(&e.to_string()))?,
+                kind,
+                content,
                 workspace_id,
             });
         }
@@ -87,12 +101,14 @@ impl AppState {
         account: &str,
         bundle: TransferBundle,
     ) -> Result<TransferResult, CoreError> {
-        if !layout_changes::validate_changes(&bundle.layout)
-            || !bundle.layout.deleted_workspaces.is_empty()
+        if !layout_changes::validate_changes(&bundle.layout) {
+            return Err(kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_LAYOUT_INVALID());
+        }
+        if !bundle.layout.deleted_workspaces.is_empty()
             || !bundle.layout.deleted_desktops.is_empty()
             || !bundle.layout.deleted_windows.is_empty()
         {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DELETIONS_PRESENT());
         }
         let mut result = TransferResult::default();
         let mut blocked_apps = HashSet::new();
@@ -117,10 +133,19 @@ impl AppState {
         }
         for definition in bundle.apps {
             let definition = parse_app_definition(
-                &serde_json::to_string(&definition).map_err(|e| server_error(&e.to_string()))?,
+                &serde_json::to_string(&definition).map_err(|error| {
+                    kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DEFINITION_SERIALIZE_FAILED(
+                        &definition.id,
+                    )
+                    .and_details(vec![error.to_string()])
+                })?,
             )?;
             if kaleidoscope_contract::builtin::is_builtin(&definition.id) {
-                return Err(CoreError::new(ErrorCode::InvalidRequest));
+                return Err(
+                    kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_BUILTIN_APP(
+                        &definition.id,
+                    ),
+                );
             }
             let deleted: bool = tx
                 .query_row(
@@ -256,7 +281,12 @@ impl AppState {
                 });
                 if let Some(entry) = collection {
                     if entry.kind != item.kind {
-                        return Err(CoreError::new(ErrorCode::InvalidRequest));
+                        return Err(
+                            kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_COLLECTION_KIND_MISMATCH(
+                                &item.app_id,
+                                &item.key,
+                            ),
+                        );
                     }
                     contract::validate_storage_content(entry, &item.content)?;
                 } else {
@@ -271,23 +301,57 @@ impl AppState {
                             .is_some_and(|s| s.len() <= contract::STORAGE_MD_MAX_BYTES),
                     };
                     if !limit_ok {
-                        return Err(CoreError::new(ErrorCode::InvalidRequest));
+                        if item.kind == StorageKind::Md && item.content.as_str().is_none() {
+                            return Err(
+                                kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_MD_NOT_STRING(
+                                    &item.app_id,
+                                    &item.key,
+                                ),
+                            );
+                        }
+                        return Err(
+                            kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_VALUE_TOO_LARGE(
+                                &item.app_id,
+                                &item.key,
+                            ),
+                        );
                     }
                 }
             } else {
                 let raw: Option<String> = tx.query_row("SELECT v.definition FROM apps a JOIN app_versions v ON a.id=v.app_id AND a.current_version=v.version WHERE a.id=?1 AND a.deleted_at IS NULL",[&item.app_id],|r|r.get(0)).optional().map_err(db_error)?;
-                let definition: AppDefinition =
-                    serde_json::from_str(&raw.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?)
-                        .map_err(|e| server_error(&e.to_string()))?;
+                let raw = raw.ok_or_else(|| {
+                    kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_APP_NOT_FOUND(
+                        &item.app_id,
+                    )
+                })?;
+                let definition: AppDefinition = serde_json::from_str(&raw).map_err(|error| {
+                    kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_STORED_APP_DEFINITION_JSON_INVALID(
+                        &item.app_id,
+                    )
+                    .and_details(vec![error.to_string()])
+                })?;
                 let entry = definition
                     .storage
                     .as_ref()
                     .and_then(|s| {
-                        s.entries.iter().find(|e| {
-                            e.kind == item.kind && contract::storage_entry_key_matches(e, &item.key)
-                        })
+                        s.entries
+                            .iter()
+                            .find(|e| contract::storage_entry_key_matches(e, &item.key))
                     })
-                    .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?;
+                    .ok_or_else(|| {
+                        kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_STORAGE_ENTRY_NOT_FOUND(
+                            &item.app_id,
+                            &item.key,
+                        )
+                    })?;
+                if entry.kind != item.kind {
+                    return Err(
+                        kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_STORAGE_KIND_MISMATCH(
+                            &item.app_id,
+                            &item.key,
+                        ),
+                    );
+                }
                 contract::validate_storage_content(entry, &item.content)?;
             }
             let bucket = app_storage::bucket_id(account, &item.app_id);
@@ -297,8 +361,22 @@ impl AppState {
                 }
                 continue;
             }
-            let revision = contract::storage_revision(item.kind, &item.content)
-                .map_err(|_| CoreError::new(ErrorCode::InvalidRequest))?;
+            let revision =
+                contract::storage_revision(item.kind, &item.content).map_err(|reason| {
+                    if item.kind == StorageKind::Md {
+                        kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_MD_NOT_STRING(
+                            &item.app_id,
+                            &item.key,
+                        )
+                        .and_details(vec![reason])
+                    } else {
+                        kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_REVISION_FAILED(
+                            &item.app_id,
+                            &item.key,
+                        )
+                        .and_details(vec![reason])
+                    }
+                })?;
             tx.execute("INSERT INTO app_storage_buckets(id,account_id,app_id) VALUES(?1,?2,?3) ON CONFLICT DO NOTHING",params![bucket,account,item.app_id]).map_err(db_error)?;
             tx.execute("INSERT INTO app_storage_items(bucket_id,key,kind,content,revision,updated_at,workspace_id) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![bucket,item.key,serde_json::to_value(item.kind).unwrap().as_str().unwrap(),serde_json::to_string(&item.content).unwrap(),revision,timestamp(),item.workspace_id]).map_err(db_error)?;
             result.imported += 1;
