@@ -114,7 +114,7 @@ test("확인 대화상자와 실패한 구역 머리의 조작을 격리한다",
   await expect(app.locator(".ks-data-window-body")).not.toHaveAttribute("inert", "");
 });
 
-test("도구막대는 세 폭에서 겹치거나 글자를 줄바꿈하지 않는다", async ({ page }) => {
+test("도구막대는 세 폭에서 겹치거나 넘치거나 글자를 줄바꿈하지 않는다", async ({ page }) => {
   const metrics = [];
   for (const width of [400, 700, 1440]) {
     await page.setViewportSize({ width, height: 700 });
@@ -122,6 +122,7 @@ test("도구막대는 세 폭에서 겹치거나 글자를 줄바꿈하지 않�
     const app = page.getByTestId("app-window-data-controls");
     const toolbar = app.locator(".ks-data-toolbar");
     await expect(toolbar.getByRole("button", { name: "실행" })).toBeVisible();
+    const bar = (await toolbar.boundingBox())!;
     const boxes = await toolbar.locator("input, button").evaluateAll((elements) => elements.map((element) => {
       const rect = element.getBoundingClientRect();
       const text = Array.from(element.childNodes).find((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim());
@@ -131,13 +132,16 @@ test("도구막대는 세 폭에서 겹치거나 글자를 줄바꿈하지 않�
     }));
     for (const [index, box] of boxes.entries()) {
       expect(box.lines).toBeLessThanOrEqual(1);
+      expect(box.x).toBeGreaterThanOrEqual(bar.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(bar.x + bar.width);
       for (const other of boxes.slice(index + 1)) {
         const overlapX = Math.min(box.x + box.width, other.x + other.width) - Math.max(box.x, other.x);
         const overlapY = Math.min(box.y + box.height, other.y + other.height) - Math.max(box.y, other.y);
         expect(overlapX <= 0 || overlapY <= 0).toBe(true);
       }
     }
-    expect(new Set(boxes.map((box) => box.y)).size).toBe(1);
+    // 좁은 창의 도구막대는 넘치지 않도록 접힌다. 한 줄은 자리가 넉넉한 폭에서만 요구한다.
+    if (width >= 700) expect(new Set(boxes.map((box) => box.y)).size).toBe(1);
     metrics.push({ width, boxes });
     await capture(page, `toolbar-${width}`);
   }

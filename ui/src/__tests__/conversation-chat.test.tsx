@@ -428,6 +428,97 @@ describe("공용 대화 부품", () => {
     await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "conversation.switch", window_id: state.window.id, model: "m2" }));
   });
 
+  it("다른 실행 위치 전환은 확인창을 닫고 기다린 뒤 새 위치와 모델을 보인다", async () => {
+    let current = thread;
+    let resolveSwitch!: (reply: CoreReply) => void;
+    let resolveReload!: (reply: CoreReply) => void;
+    let getCount = 0;
+    setup(async (request) => {
+      if (request.op === "conversation.get") {
+        getCount += 1;
+        if (getCount === 1) return get(current);
+        return new Promise<CoreReply>((resolve) => { resolveReload = resolve; });
+      }
+      if (request.op === "conversation.switch") return new Promise<CoreReply>((resolve) => { resolveSwitch = resolve; });
+      throw new Error(request.op);
+    });
+    await screen.findByText("기록");
+    fireEvent.click(screen.getByRole("button", { name: "실행 위치" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "노드 B" }));
+    fireEvent.click(await screen.findByRole("button", { name: "바꾸기" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(await screen.findByText("바꾸는 중")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "실행 위치" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("기록")).toBeTruthy();
+    const messageInput = screen.getByRole("textbox", { name: "메시지" }) as HTMLTextAreaElement;
+    expect(document.activeElement).toBe(messageInput);
+    fireEvent.change(messageInput, { target: { value: "가나다" } });
+    messageInput.setSelectionRange(3, 3);
+
+    current = { ...thread, model: { id: "m2", label: "모델 2", group: { id: "node-b", label: "노드 B" } } };
+    await act(async () => resolveSwitch({ op: "conversation.switch", thread: current, notices: [] }));
+    await waitFor(() => expect(getCount).toBe(2));
+    expect(screen.getByRole("textbox", { name: "메시지" })).toBe(messageInput);
+    expect(messageInput.value).toBe("가나다");
+    expect(messageInput.selectionStart).toBe(3);
+    expect(screen.queryByText("불러오는 중")).toBeNull();
+    expect(screen.getByText("바꾸는 중")).toBeTruthy();
+    fireEvent.change(messageInput, { target: { value: "가나다라마" } });
+    messageInput.setSelectionRange(5, 5);
+    await act(async () => resolveReload(get(current)));
+    await waitFor(() => expect(screen.getByRole("button", { name: "실행 위치" }).textContent).toContain("노드 B"));
+    expect(screen.getByRole("button", { name: "모델" }).textContent).toContain("모델 2");
+    expect(screen.queryByText("바꾸는 중")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "메시지" })).toBe(messageInput);
+    expect(messageInput.value).toBe("가나다라마");
+    expect(messageInput.selectionStart).toBe(5);
+    expect(document.activeElement).toBe(messageInput);
+  });
+
+  it("같은 실행 위치의 모델 변경이 실패해도 입력에 포커스를 둔다", async () => {
+    let rejectSwitch!: (reason: unknown) => void;
+    setup(async (request) => {
+      if (request.op === "conversation.get") return get();
+      if (request.op === "conversation.switch") return new Promise<CoreReply>((_resolve, reject) => { rejectSwitch = reject; });
+      throw new Error(request.op);
+    });
+    await screen.findByText("기록");
+    fireEvent.click(screen.getByRole("button", { name: "모델" }));
+    const choice = screen.getByRole("menuitem", { name: "모델 같은 노드" });
+    choice.focus();
+    fireEvent.click(choice);
+    const messageInput = screen.getByRole("textbox", { name: "메시지" });
+    expect(screen.getByText("바꾸는 중")).toBeTruthy();
+    expect(document.activeElement).toBe(messageInput);
+    await act(async () => rejectSwitch(error("server")));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(document.activeElement).toBe(messageInput);
+  });
+
+  it("실행 위치 전환 실패는 대화 기록을 남기고 알림 뒤 선택을 다시 연다", async () => {
+    let rejectSwitch!: (reason: unknown) => void;
+    const state = setup(async (request) => {
+      if (request.op === "conversation.get") return get();
+      if (request.op === "conversation.switch") return new Promise<CoreReply>((_resolve, reject) => { rejectSwitch = reject; });
+      throw new Error(request.op);
+    });
+    await screen.findByText("기록");
+    fireEvent.click(screen.getByRole("button", { name: "실행 위치" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "노드 B" }));
+    fireEvent.click(await screen.findByRole("button", { name: "바꾸기" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(await screen.findByText("바꾸는 중")).toBeTruthy();
+
+    await act(async () => rejectSwitch(error("server")));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("실패");
+    expect(screen.getByText("기록")).toBeTruthy();
+    expect(screen.queryByText("다시 시도")).toBeNull();
+    expect((screen.getByRole("button", { name: "실행 위치" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(state.call.mock.calls.filter(([request]) => request.op === "conversation.get")).toHaveLength(1);
+  });
+
   it("답하는 중에는 고르기를 막고 안내한다", async () => {
     const state = setup(async (request) => request.op === "conversation.get" ? get() : (() => { throw new Error(request.op); })());
     await screen.findByText("기록");
