@@ -240,6 +240,288 @@ describe("folder block", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect((await screen.findByRole("alert")).textContent).toBe(message);
   });
+
+  it("뿌리에 놓은 뒤 현재 행 대신 목록에 포커스를 둔다", async () => {
+    setup(fileFolderDefinition("readwrite", false), (transport) => {
+      const original = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "files.move"
+        ? { op: "files.move", results: request.paths.map((path) => ({ path, ok: { from: path, to: "a.md" } })) }
+        : original(request));
+    }, { "notes/a.md": "a", "readme.md": "r" });
+    fireEvent.click(await screen.findByRole("treeitem", { name: "notes" }));
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    act(() => a.focus());
+    const data = new Map<string, string>();
+    const dataTransfer = { setData: (key: string, value: string) => data.set(key, value), getData: (key: string) => data.get(key) ?? "", effectAllowed: "", dropEffect: "" };
+    fireEvent.dragStart(a, { dataTransfer }); fireEvent.drop(screen.getByRole("treeitem", { name: "readme.md" }), { dataTransfer });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("tree")));
+  });
+
+  it("포커스 행을 선택에서 빼도 Delete와 잘라내기는 남은 선택을 쓴다", async () => {
+    setup(fileFolderDefinition("readwrite", false), undefined, { "a.md": "a", "b.md": "b", "notes/n.md": "n" });
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const b = screen.getByRole("treeitem", { name: "b.md" });
+    const notes = screen.getByRole("treeitem", { name: "notes" });
+    fireEvent.click(a); fireEvent.click(b, { ctrlKey: true }); fireEvent.click(notes, { ctrlKey: true });
+    fireEvent.click(a, { ctrlKey: true });
+    fireEvent.keyDown(a, { key: "x", ctrlKey: true });
+    expect(b.className).toContain("is-cut"); expect(notes.className).toContain("is-cut");
+    expect(a.className).not.toContain("is-cut");
+    fireEvent.keyDown(a, { key: "Delete" });
+    expect(await screen.findByRole("dialog", { name: "2개 항목" })).toBeTruthy();
+  });
+
+  it("열린 파일 표시와 묶음 선택을 따로 두고 F2는 선택이 하나일 때만 연다", async () => {
+    setup(fileFolderDefinition("readwrite", false), undefined, { "a.md": "a", "b.md": "b" });
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const b = screen.getByRole("treeitem", { name: "b.md" });
+    fireEvent.click(a);
+    await waitFor(() => expect(a.className).toContain("is-open-file"));
+    fireEvent.click(b, { ctrlKey: true });
+    fireEvent.keyDown(b, { key: "F2" });
+    expect(screen.queryByRole("textbox", { name: "이름 바꾸기" })).toBeNull();
+    fireEvent.click(a, { ctrlKey: true });
+    expect(a.className).toContain("is-open-file");
+    expect(a.className).not.toContain("is-selected");
+    expect(b.className).toContain("is-selected");
+    fireEvent.keyDown(a, { key: "F2" });
+    const input = await screen.findByRole("textbox", { name: "이름 바꾸기" });
+    expect((input as HTMLInputElement).value).toBe("b.md");
+  });
+
+  it("빈 공간 클릭으로 선택을 비우고 Ctrl+A와 Home, Shift+End로 보이는 항목을 고른다", async () => {
+    setup(fileFolderDefinition("readwrite", false), undefined, { "a.md": "a", "b.md": "b", "notes/n.md": "n" });
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const b = screen.getByRole("treeitem", { name: "b.md" });
+    const notes = screen.getByRole("treeitem", { name: "notes" });
+    fireEvent.keyDown(a, { key: "a", ctrlKey: true });
+    expect([a, b, notes].every((row) => row.getAttribute("aria-selected") === "true")).toBe(true);
+    const tree = screen.getByRole("tree"); fireEvent.click(tree);
+    expect([a, b, notes].every((row) => row.getAttribute("aria-selected") === "false")).toBe(true);
+    fireEvent.keyDown(tree, { key: "Home" });
+    await waitFor(() => expect(document.activeElement).toBe(notes));
+    fireEvent.keyDown(notes, { key: "End", shiftKey: true });
+    expect([a, b, notes].every((row) => row.getAttribute("aria-selected") === "true")).toBe(true);
+  });
+
+  it("읽기 전용 폴더의 Ctrl 클릭은 기존처럼 파일을 연다", async () => {
+    const { store } = setup(fileFolderDefinition("read", true), undefined, { "a.md": "a" });
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    fireEvent.click(a, { ctrlKey: true });
+    await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.selected).toBe("a.md"));
+    expect(screen.getByRole("tree").hasAttribute("aria-multiselectable")).toBe(false);
+  });
+
+  it.each(["재시도", "Escape", "닫기", "Enter", "펼친 뒤 Escape"])("실패 알림을 %s로 지우고 선택을 보존한다", async (dismiss) => {
+    let failed = true;
+    setup(fileFolderDefinition("readwrite", false), (transport) => {
+      const original = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "files.move"
+        ? { op: "files.move", results: request.paths.map((path) => failed
+          ? { path, error: { code: "conflict", message: "충돌", details: [] } }
+          : { path, ok: { from: path, to: `target/${path}` } }) }
+        : original(request));
+    }, { "a.md": "a", "b.md": "b", "target/.hidden": "x" });
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const b = screen.getByRole("treeitem", { name: "b.md" });
+    const target = screen.getByRole("treeitem", { name: "target" });
+    fireEvent.click(a); fireEvent.click(b, { ctrlKey: true });
+    const data = new Map<string, string>();
+    const dataTransfer = { setData: (key: string, value: string) => data.set(key, value), getData: (key: string) => data.get(key) ?? "", effectAllowed: "", dropEffect: "" };
+    const drop = () => { fireEvent.dragStart(a, { dataTransfer }); fireEvent.dragOver(target, { dataTransfer }); fireEvent.drop(target, { dataTransfer }); };
+    drop();
+    const alert = await screen.findByRole("alert");
+    if (dismiss === "재시도") { failed = false; drop(); }
+    else if (dismiss === "Escape") fireEvent.keyDown(target, { key: "Escape" });
+    else if (dismiss === "펼친 뒤 Escape") {
+      const details = within(alert).getByRole("button", { name: "펼치기" });
+      await userEvent.click(details);
+      fireEvent.keyDown(details, { key: "Escape" });
+    } else if (dismiss === "Enter") {
+      act(() => within(alert).getByRole("button", { name: "닫기" }).focus());
+      await userEvent.keyboard("{Enter}");
+    } else await userEvent.click(within(alert).getByRole("button", { name: "닫기" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(a.getAttribute("aria-selected")).toBe("true");
+    expect(b.getAttribute("aria-selected")).toBe("true");
+    if (["닫기", "Enter", "펼친 뒤 Escape"].includes(dismiss)) expect(screen.getByRole("tree").contains(document.activeElement)).toBe(true);
+  });
+
+  it.each([false, true, "같은 원인"])("묶음 중 한 건 실패는 개수와 경로를 보이고 코어 식별자를 보존한다 (%s)", async (registered) => {
+    setup(fileFolderDefinition("readwrite", false), (transport) => {
+      const original = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "files.remove"
+        ? { op: "files.remove", results: [
+          { path: "a.md", error: { code: "conflict", message: "등록된 원인", details: [], ...(registered ? { id: "FILES_REMOVE_CONFLICT" } : {}) } },
+          { path: "b.md", ...(registered === "같은 원인" ? { error: { code: "conflict", message: "등록된 원인", details: [], id: "FILES_REMOVE_CONFLICT" } } : { ok: {} }) },
+        ] } : original(request));
+    }, { "a.md": "a", "b.md": "b" });
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const b = screen.getByRole("treeitem", { name: "b.md" });
+    fireEvent.click(a); fireEvent.click(b, { ctrlKey: true }); fireEvent.keyDown(b, { key: "Delete" });
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "휴지통으로 이동" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain(registered === "같은 원인" ? "2개 실패: 등록된 원인" : registered ? "1개 실패: a.md: 등록된 원인" : "1개 실패: a.md: 같은 이름이 있습니다");
+    if (registered !== "같은 원인") expect(within(alert).queryByRole("button", { name: "펼치기" })).toBeNull();
+    if (registered) expect(alert.textContent).toContain("FILES_REMOVE_CONFLICT");
+  });
+
+  it("여러 실패는 개수만 보이고 펼치면 경로별 원인을 보여준다", async () => {
+    setup(fileFolderDefinition("readwrite", false), (transport) => {
+      const original = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "files.remove"
+        ? { op: "files.remove", results: [
+          { path: "a.md", error: { code: "conflict", message: "충돌", details: [] } },
+          { path: "b.md", error: { code: "io", message: "디스크 오류", details: [] } },
+        ] } : original(request));
+    }, { "a.md": "a", "b.md": "b" });
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const b = screen.getByRole("treeitem", { name: "b.md" });
+    fireEvent.click(a); fireEvent.click(b, { ctrlKey: true }); fireEvent.keyDown(b, { key: "Delete" });
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "2개 항목" })).getByRole("button", { name: "휴지통으로 이동" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).not.toContain("a.md");
+    fireEvent.click(within(alert).getByRole("button", { name: "펼치기" }));
+    expect(alert.textContent).toContain("a.md"); expect(alert.textContent).toContain("같은 이름이 있습니다");
+  });
+
+  it("빈 폴더 안내에 놓으면 해당 폴더로 옮기고 같은 폴더 이동은 막는다", async () => {
+    const { call } = setup(fileFolderDefinition("readwrite", false), undefined, { "a.md": "a", "target/.hidden": "x" });
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const target = screen.getByRole("treeitem", { name: "target" });
+    fireEvent.click(target);
+    const empty = await screen.findByText("비어 있음");
+    const data = new Map<string, string>();
+    const dataTransfer = { setData: (key: string, value: string) => data.set(key, value), getData: (key: string) => data.get(key) ?? "", effectAllowed: "", dropEffect: "" };
+    fireEvent.dragStart(a, { dataTransfer });
+    fireEvent.dragOver(empty, { dataTransfer });
+    expect(target.getAttribute("data-drop-state")).toBe("valid");
+    fireEvent.drop(empty, { dataTransfer });
+    await waitFor(() => expect(call).toHaveBeenCalledWith(expect.objectContaining({ op: "files.move", paths: ["a.md"], destination: "target" })));
+    await waitFor(() => expect(document.activeElement).toBe(target));
+  });
+
+  it("선택 일부가 이미 목적지에 있으면 나머지만 옮긴다", async () => {
+    const { call } = setup(fileFolderDefinition("readwrite", false), undefined, { "target/a.md": "a", "b.md": "b" });
+    const target = await screen.findByRole("treeitem", { name: "target" });
+    fireEvent.click(target);
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const b = screen.getByRole("treeitem", { name: "b.md" });
+    fireEvent.click(a); fireEvent.click(b, { ctrlKey: true });
+    const data = new Map<string, string>();
+    const dataTransfer = { setData: (key: string, value: string) => data.set(key, value), getData: (key: string) => data.get(key) ?? "", effectAllowed: "", dropEffect: "" };
+    fireEvent.dragStart(a, { dataTransfer }); fireEvent.dragOver(target, { dataTransfer }); fireEvent.drop(target, { dataTransfer });
+    await waitFor(() => expect(call).toHaveBeenCalledWith(expect.objectContaining({ op: "files.move", paths: ["b.md"], destination: "target" })));
+  });
+
+  it("잘라낸 항목을 끌어 이동하면 클립보드에서도 지운다", async () => {
+    setup(fileFolderDefinition("readwrite", false), (transport) => {
+      const original = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "files.move"
+        ? { op: "files.move", results: request.paths.map((path) => ({ path, ok: { from: path, to: `target/${path}` } })) }
+        : original(request));
+    }, { "a.md": "a", "target/.hidden": "x" });
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const target = screen.getByRole("treeitem", { name: "target" });
+    fireEvent.keyDown(a, { key: "x", ctrlKey: true });
+    await waitFor(() => expect(a.className).toContain("is-cut"));
+    const data = new Map<string, string>();
+    const dataTransfer = { setData: (key: string, value: string) => data.set(key, value), getData: (key: string) => data.get(key) ?? "", effectAllowed: "", dropEffect: "" };
+    fireEvent.dragStart(a, { dataTransfer }); fireEvent.dragOver(target, { dataTransfer }); fireEvent.drop(target, { dataTransfer });
+    await waitFor(() => expect(a.className).not.toContain("is-cut"));
+    fireEvent.contextMenu(target);
+    await screen.findByRole("menu");
+    expect(screen.queryByRole("menuitem", { name: "붙여넣기" })).toBeNull();
+  });
+
+  it("같은 폴더로 이동은 표시와 요청을 없애고 Ctrl 복사는 허용한다", async () => {
+    const { call } = setup(fileFolderDefinition("readwrite", false), undefined, { "target/a.md": "a" });
+    const target = await screen.findByRole("treeitem", { name: "target" });
+    fireEvent.click(target);
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const data = new Map<string, string>();
+    const dataTransfer = { setData: (key: string, value: string) => data.set(key, value), getData: (key: string) => data.get(key) ?? "", effectAllowed: "", dropEffect: "" };
+    fireEvent.dragStart(a, { dataTransfer }); fireEvent.dragOver(target, { dataTransfer });
+    expect(dataTransfer.dropEffect).toBe("none"); expect(target.hasAttribute("data-drop-state")).toBe(false);
+    fireEvent.drop(target, { dataTransfer });
+    expect(call.mock.calls.some(([request]) => request.op === "files.move")).toBe(false);
+    const ctrlDrag = (type: string) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, ctrlKey: true });
+      Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
+      fireEvent(target, event);
+    };
+    fireEvent.dragStart(a, { dataTransfer }); ctrlDrag("dragover");
+    expect(dataTransfer.dropEffect).toBe("copy");
+    ctrlDrag("drop");
+    await waitFor(() => expect(call).toHaveBeenCalledWith(expect.objectContaining({ op: "files.copy", paths: ["target/a.md"], destination: "target" })));
+  });
+  it("여러 행을 고르고 키보드 범위를 늘려도 열린 파일은 바뀌지 않으며 묶음 복사와 삭제를 한다", async () => {
+    const { store, call } = setup(fileFolderDefinition("readwrite", false), undefined, { "a.md": "a", "b.md": "b", "c.md": "c", "target/inside.md": "x" });
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const b = screen.getByRole("treeitem", { name: "b.md" });
+    const c = screen.getByRole("treeitem", { name: "c.md" });
+    fireEvent.click(a);
+    await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.selected).toBe("a.md"));
+    fireEvent.click(c, { ctrlKey: true });
+    expect(a.className).toContain("is-selected");
+    expect(c.className).toContain("is-selected");
+    expect(store.getSnapshot()?.shared.windows[0].state.selected).toBe("a.md");
+    fireEvent.click(b, { shiftKey: true });
+    expect(b.className).toContain("is-selected");
+    fireEvent.keyDown(b, { key: "ArrowUp", shiftKey: true });
+    await waitFor(() => expect(document.activeElement).toBe(a));
+    expect(store.getSnapshot()?.shared.windows[0].state.selected).toBe("a.md");
+    fireEvent.keyDown(a, { key: "c", ctrlKey: true });
+    const target = screen.getByRole("treeitem", { name: "target" });
+    fireEvent.keyDown(target, { key: "v", ctrlKey: true });
+    await waitFor(() => expect(call).toHaveBeenCalledWith(expect.objectContaining({ op: "files.copy", paths: ["c.md", "b.md", "a.md"], destination: "target" })));
+    fireEvent.keyDown(a, { key: "Delete" });
+    expect(await screen.findByRole("dialog", { name: "3개 항목" })).toBeTruthy();
+  });
+
+  it("묶음을 폴더로 끌고 자기 하위는 거부하며 끌기 동안 코어를 호출하지 않는다", async () => {
+    const { call } = setup(fileFolderDefinition("readwrite", false), undefined, { "a.md": "a", "b.md": "b", "target/inside.md": "x" });
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const b = screen.getByRole("treeitem", { name: "b.md" });
+    const target = screen.getByRole("treeitem", { name: "target" });
+    fireEvent.click(a);
+    fireEvent.click(b, { ctrlKey: true });
+    const values = new Map<string, string>();
+    const transfer = { setData: (type: string, data: string) => values.set(type, data), getData: (type: string) => values.get(type) ?? "", types: ["application/x-kaleidoscope-folder"], effectAllowed: "", dropEffect: "" };
+    fireEvent.dragStart(a, { dataTransfer: transfer });
+    const before = call.mock.calls.length;
+    fireEvent.dragOver(target, { dataTransfer: transfer });
+    expect(call.mock.calls.length).toBe(before);
+    fireEvent.drop(target, { dataTransfer: transfer });
+    await waitFor(() => expect(call).toHaveBeenCalledWith(expect.objectContaining({ op: "files.move", paths: ["a.md", "b.md"], destination: "target" })));
+    fireEvent.dragStart(target, { dataTransfer: transfer });
+    fireEvent.dragOver(target, { dataTransfer: transfer });
+    expect(transfer.dropEffect).toBe("none");
+  });
+
+  it("묶음 메뉴에서 단일 항목 동작을 감추고 부분 삭제 실패를 하나로 알린다", async () => {
+    const { call } = setup(fileFolderDefinition("readwrite", false), (transport) => {
+      const original = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "files.remove"
+        ? { op: "files.remove", results: [
+          { path: "a.md", ok: { from: "a.md" } },
+          { path: "b.md", error: { code: "io", message: "파일을 지우지 못했습니다", details: [] } },
+        ] } : original(request));
+    }, { "a.md": "a", "b.md": "b" });
+    const a = await screen.findByRole("treeitem", { name: "a.md" });
+    const b = screen.getByRole("treeitem", { name: "b.md" });
+    fireEvent.click(a, { ctrlKey: true });
+    fireEvent.click(b, { ctrlKey: true });
+    fireEvent.contextMenu(b);
+    expect(await screen.findByRole("menuitem", { name: "휴지통으로 이동" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "이름 바꾸기" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "열기" })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "휴지통으로 이동" }));
+    const dialog = await screen.findByRole("dialog", { name: "2개 항목" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "휴지통으로 이동" }));
+    await waitFor(() => expect(call).toHaveBeenCalledWith(expect.objectContaining({ op: "files.remove", paths: ["a.md", "b.md"] })));
+    expect((await screen.findByRole("alert")).textContent).toContain("파일을 지우지 못했습니다");
+  });
   it("이름 입력을 바깥 클릭으로 닫으면 누른 대상에 키보드 포커스를 남기고 Escape만 원래 행으로 돌린다", async () => {
     const user = userEvent.setup();
     setup(fileFolderDefinition("readwrite", false), undefined, { "a.md": "# a", "b.md": "# b", "notes/guide.md": "# 안내" });

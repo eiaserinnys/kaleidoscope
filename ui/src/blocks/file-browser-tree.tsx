@@ -13,6 +13,7 @@ import { patchWindowState, readWindowState, useWindowGrant, useWindowVisible } f
 import { useShellSelector } from "../core/shell-store";
 import { createFileFolderBackend, type FolderBackend } from "./folder-backend";
 import { useFolderActions } from "./folder-actions";
+import { useFolderDrag } from "./folder-drag";
 
 interface CreatingFile {
   directory: string;
@@ -110,6 +111,7 @@ export function FileBrowserTree({
     readOnly,
   }), [permission, permissionAccess, providedBackend, readOnly, rootPath, scope, store, window.id]);
   const collection = backend.kind === "collection";
+  const multiSelect = actionsEnabled && (backend.capabilities.move || backend.capabilities.copy || backend.capabilities.trash || backend.capabilities.permanentDelete);
   const activeRoot = collection ? "" : rootPath;
   const hasRoot = collection || (scope === "pc" ? pcAccess : grant !== null);
   const rootName = backendLabel ?? (scope === "pc" ? permissionLabel : grant?.root_name ?? "");
@@ -438,6 +440,19 @@ export function FileBrowserTree({
     getFocusController: () => focusController.current,
     createCancelFocusId,
   });
+  const drag = useFolderDrag({
+    enabled: actionsEnabled && backend.capabilities.move && backend.capabilities.copy,
+    root: backend.identity,
+    selection: actions.selection,
+    setSelection: actions.setSelection,
+    pathsFor: actions.pathsFor,
+    transfer: actions.transferPaths,
+    expand: setDirectoryExpanded,
+    focusDestination: (path) => {
+      if (path) focusController.current?.visibleRow(path);
+      else focusController.current?.afterDelete([null]);
+    },
+  });
 
   const visible = useCallback((entry: FolderEntry) => mode === "folders" ? entry.kind === "dir" : entry.kind === "dir"
     || extensions.length === 0
@@ -595,6 +610,9 @@ export function FileBrowserTree({
             onDoubleClick={onFileDoubleClick ? doubleClick : undefined}
             onExpandedChange={setDirectoryExpanded}
             onFocusController={(controller) => { focusController.current = controller; }}
+            selection={multiSelect ? actions.selection : undefined}
+            onSelectionChange={multiSelect ? actions.setSelection : undefined}
+            drag={actionsEnabled ? drag : undefined}
             menuTargetId={actions.menuTargetId}
             selectedId={collection && selectedPath ? `doc:${selectedPath}` : selectedPath}
           />

@@ -1,3 +1,4 @@
+// 메뉴·인라인 편집·알림이 같은 동작 상태를 공유한다. 지정된 알림 보완 범위를 지키기 위해 500줄 분리는 이 변경에서 보류한다.
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { ShellStore } from "../core/shell-store";
 import { toCoreError } from "../core/core-transport";
@@ -11,25 +12,7 @@ import { Button, Notice } from "../components/primitives";
 import { TextInput, type TextInputCancelReason } from "../components/text-input";
 import type { FolderBackend, FolderItem } from "./folder-backend";
 import { editorRevision, flushEditors } from "./file-editor-session";
-
-interface ShellClipboard {
-  root: string;
-  path: string;
-  mode: "copy" | "cut";
-}
-
-const clipboardByStore = new WeakMap<ShellStore, ShellClipboard>();
-const clipboardListeners = new WeakMap<ShellStore, Set<(clipboard: ShellClipboard | null) => void>>();
-
-function getClipboard(store: ShellStore): ShellClipboard | null {
-  return clipboardByStore.get(store) ?? null;
-}
-
-function setClipboard(store: ShellStore, clipboard: ShellClipboard | null) {
-  if (clipboard) clipboardByStore.set(store, clipboard);
-  else clipboardByStore.delete(store);
-  for (const listener of clipboardListeners.get(store) ?? []) listener(clipboard);
-}
+import { clipboardListeners, getClipboard, setClipboard, type ShellClipboard } from "./folder-clipboard";
 
 function parentPath(path: string): string {
   const slash = path.lastIndexOf("/");
@@ -137,10 +120,12 @@ export function useFolderActions({
   createCancelFocusId: string | null;
 }) {
   const [clipboard, setLocalClipboard] = useState<ShellClipboard | null>(() => getClipboard(store));
+  const [selection, setSelection] = useState<string[]>([]);
   const [inlineEdit, setInlineEdit] = useState<FolderInlineEdit | null>(null);
   const [menuState, setMenuState] = useState<{ anchor: HTMLElement; point: { x: number; y: number }; item: FolderItem | null; row: TreeRowModel | null; parent: string; focus: TreeFocusController; targetId: string | null } | null>(null);
-  const [dialog, setDialog] = useState<{ action: "trash" | "permanent" | "properties"; item: FolderItem; row: TreeRowModel; focus: TreeFocusController; focusTargets: Array<string | null> } | null>(null);
-  const [notice, setNotice] = useState<{ message: string; allowPermanent?: FolderItem; row?: TreeRowModel; focus?: TreeFocusController; focusTargets?: Array<string | null> } | null>(null);
+  const [dialog, setDialog] = useState<{ action: "trash" | "permanent" | "properties"; item: FolderItem; paths: string[]; row: TreeRowModel; focus: TreeFocusController; focusTargets: Array<string | null> } | null>(null);
+  const [notice, setNotice] = useState<{ message: string; errorId?: string; failures?: Array<{ path: string; message: string }>; mixed?: boolean; allowPermanent?: FolderItem; row?: TreeRowModel; focus?: TreeFocusController; focusTargets?: Array<string | null> } | null>(null);
+  const [noticeExpanded, setNoticeExpanded] = useState(false);
   const operationRunning = useRef(false);
 
   useEffect(() => {
@@ -152,14 +137,21 @@ export function useFolderActions({
     return () => { listeners.delete(setLocalClipboard); };
   }, [enabled, store]);
 
+  useEffect(() => { setSelection([]); }, [backend.identity]);
+  const pathsFor = useCallback((row: TreeRowModel | null) => {
+    if (!row || !itemFromRow(row)) return [];
+    const ids = selection.includes(row.id) ? selection : [row.id];
+    return ids.map((id) => backend.kind === "collection" ? id.slice(4) : id);
+  }, [backend.kind, selection]);
   const isCutPath = useCallback((path: string) => clipboard?.root === backend.identity
-    && clipboard.mode === "cut" && clipboard.path === path, [backend.identity, clipboard]);
+    && clipboard.mode === "cut" && clipboard.paths.includes(path), [backend.identity, clipboard]);
 
   const openMenu = useCallback((row: TreeRowModel | null, anchor: HTMLElement, point: { x: number; y: number }, focus: TreeFocusController) => {
     const item = itemFromRow(row);
+    if (item && row && !selection.includes(row.id)) setSelection([row.id]);
     setNotice(null);
     setMenuState({ anchor, point, item, row, parent: destinationFor(row, item, backend.kind === "collection"), focus, targetId: row?.id ?? null });
-  }, [backend.kind]);
+  }, [backend.kind, selection]);
 
   const beginEdit = useCallback(async (kind: FolderInlineEdit["kind"], item: FolderItem | null, directory: string, focus: TreeFocusController, cancelFocusId?: string | HTMLElement | null) => {
     const editDirectory = backend.kind === "collection" ? "" : kind === "rename" && item ? parentOfItem(item) : directory;
@@ -197,11 +189,12 @@ export function useFolderActions({
     else current.focus.row(current.cancelId, current.cancelId !== null);
   }, [editFocus]);
 
-  const operationFailed = useCallback((message: string, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>) => {
-    setNotice({ message, ...(item ? { allowPermanent: item } : {}), ...(row ? { row } : {}), ...(focus ? { focus } : {}), ...(focusTargets ? { focusTargets } : {}) });
+  const operationFailed = useCallback((message: string, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>, errorId?: string) => {
+    setNoticeExpanded(false);
+    setNotice({ message, errorId, ...(item ? { allowPermanent: item } : {}), ...(row ? { row } : {}), ...(focus ? { focus } : {}), ...(focusTargets ? { focusTargets } : {}) });
   }, []);
 
-  const reportResults = useCallback((results: Array<{ path: string; error?: { code: string; message: string } }>, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>) => {
+  const reportResults = useCallback((results: Array<{ path: string; error?: { code: string; message: string; id?: string } }>, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>) => {
     const failures = results.filter((result) => result.error);
     if (!failures.length) return true;
     const trashUnavailable = failures.find((result) => result.error?.code === "trash_unavailable");
@@ -209,31 +202,45 @@ export function useFolderActions({
       operationFailed(`${trashUnavailable.error?.message ?? "휴지통으로 이동할 수 없습니다."} 영구 삭제를 선택할 수 있습니다.`, item, row, focus, focusTargets);
       return false;
     }
-    const message = failures.length === 1
-      ? failures[0].error!.message
-      : `${failures.length}개 실패: ${failures.map((failure) => failure.error!.message).join(" · ")}`;
-    operationFailed(message);
+    const details = failures.map((failure) => ({ path: failure.path, message: failure.error!.code === "conflict" && !failure.error!.id ? "같은 이름이 있습니다" : failure.error!.message }));
+    const errorId = failures.every((failure) => failure.error?.id === failures[0].error?.id) ? failures[0].error?.id : undefined;
+    if (results.length === 1) {
+      const message = failures[0].error!.code === "conflict" && !errorId ? `${details[0].path}: ${details[0].message}` : details[0].message;
+      operationFailed(message, undefined, undefined, undefined, undefined, errorId);
+      return false;
+    }
+    if (details.length === 1) {
+      operationFailed(`1개 실패: ${details[0].path}: ${details[0].message}`, undefined, undefined, undefined, undefined, errorId);
+      return false;
+    }
+    const mixed = details.some((failure) => failure.message !== details[0].message);
+    setNoticeExpanded(false);
+    setNotice({ message: `${details.length}개 실패${mixed ? "" : `: ${details[0].message}`}`, failures: details, mixed, errorId });
     return false;
   }, [operationFailed]);
 
-  const flushBefore = useCallback(async (item: FolderItem) => {
-    if (await flushEditors(backend.editorAddress(item.path))) return true;
+  const flushPaths = useCallback(async (paths: string[]) => {
+    const results = await Promise.all(paths.map((path) => flushEditors(backend.editorAddress(path))));
+    if (results.every(Boolean)) return true;
     operationFailed("편집 중인 내용을 저장하지 못해 작업을 취소했습니다.");
     return false;
   }, [backend, operationFailed]);
+  const flushBefore = useCallback((item: FolderItem) => flushPaths([item.path]), [flushPaths]);
 
-  const runTrash = useCallback(async (item: FolderItem, permanent: boolean, row: TreeRowModel, focus: TreeFocusController, focusTargets: Array<string | null>) => {
+  const runTrash = useCallback(async (item: FolderItem, paths: string[], permanent: boolean, row: TreeRowModel, focus: TreeFocusController, focusTargets: Array<string | null>) => {
     if (operationRunning.current) return;
     const remove = permanent ? backend.actions.permanentDelete : backend.actions.trash;
     if (!remove) return;
+    setNotice(null);
     operationRunning.current = true;
     try {
-      if (!(await flushBefore(item))) {
+      if (!(await flushPaths(paths))) {
         focus.row(row.id);
         return;
       }
-      const results = await remove([item.path]);
-      const succeeded = reportResults(results, permanent ? undefined : item, row, focus, focusTargets);
+      const results = await remove(paths);
+      const succeeded = reportResults(results, permanent || paths.length > 1 ? undefined : item, row, focus, focusTargets);
+      if (succeeded) setSelection([]);
       if (succeeded) focus.afterDelete(focusTargets);
       else focus.row(row.id);
     } catch (cause) {
@@ -243,7 +250,7 @@ export function useFolderActions({
     } finally {
       operationRunning.current = false;
     }
-  }, [backend.actions.permanentDelete, backend.actions.trash, flushBefore, operationFailed, reportResults]);
+  }, [backend.actions.permanentDelete, backend.actions.trash, flushPaths, operationFailed, reportResults]);
 
   const confirmDialog = useCallback(() => {
     if (!dialog) return;
@@ -253,11 +260,12 @@ export function useFolderActions({
       current.focus.row(current.row.id);
       return;
     }
-    void runTrash(current.item, current.action === "permanent", current.row, current.focus, current.focusTargets);
+    void runTrash(current.item, current.paths, current.action === "permanent", current.row, current.focus, current.focusTargets);
   }, [dialog, runTrash]);
 
   const commitInline = useCallback(async (name: string) => {
     if (!inlineEdit || operationRunning.current) return;
+    setNotice(null);
     const current = inlineEdit;
     const action = current.kind === "rename" ? backend.actions.rename
       : current.kind === "directory" ? backend.actions.createDirectory
@@ -288,7 +296,7 @@ export function useFolderActions({
       setInlineEdit(null);
       setEditFocus(null);
       if (current.kind === "file") openItem({ name, path, kind: "file", ext: extensionOf(name), size: 0, modified: "" });
-      editFocus?.focus.row(rowId(path, backend.kind === "collection"), true);
+      editFocus?.focus.row(rowId(path, backend.kind === "collection"), true, current.kind === "rename");
     } catch (cause) {
       const error = toCoreError(cause);
       setInlineEdit((currentEdit) => currentEdit ? {
@@ -312,39 +320,44 @@ export function useFolderActions({
     }
   }, [backend.actions.absolutePath, backend.actions.relativePath, operationFailed]);
 
-  const executePaste = useCallback(async (destination: string) => {
-    if (operationRunning.current || !clipboard || clipboard.root !== backend.identity) return;
-    const action = clipboard.mode === "cut" ? backend.actions.move : backend.actions.copy;
+  const transferPaths = useCallback(async (paths: string[], destination: string, mode: "copy" | "cut") => {
+    if (operationRunning.current) return;
+    const action = mode === "cut" ? backend.actions.move : backend.actions.copy;
     if (!action) return;
-    const cached = clipboard;
+    setNotice(null);
     operationRunning.current = true;
     try {
-      if (cached.mode === "cut" && !(await flushEditors(backend.editorAddress(cached.path)))) {
-        operationFailed("편집 중인 내용을 저장하지 못해 이동을 취소했습니다.");
-        return;
-      }
-      const results = await action([cached.path], destination);
+      if (!(await flushPaths(paths))) return;
+      const results = await action(paths, destination);
       const succeeded = results.filter((result) => !result.error).map((result) => result.path);
-      if (cached.mode === "cut" && succeeded.includes(cached.path)) setClipboard(store, null);
+      const currentClipboard = getClipboard(store);
+      if (mode === "cut" && currentClipboard?.mode === "cut" && currentClipboard.root === backend.identity) {
+        const remaining = currentClipboard.paths.filter((path) => !succeeded.some((success) => path === success || path.startsWith(`${success}/`)));
+        setClipboard(store, remaining.length ? { ...currentClipboard, paths: remaining } : null);
+      }
       reportResults(results);
     } catch (cause) {
       operationFailed(toCoreError(cause).message);
     } finally {
       operationRunning.current = false;
     }
-  }, [backend, clipboard, operationFailed, reportResults, store]);
+  }, [backend, flushPaths, operationFailed, reportResults, store]);
+  const executePaste = useCallback((destination: string) => {
+    if (clipboard?.root === backend.identity) void transferPaths(clipboard.paths, destination, clipboard.mode);
+  }, [backend.identity, clipboard, transferPaths]);
 
   const createDuplicate = useCallback(async (item: FolderItem, destination: string) => {
     if (operationRunning.current || !backend.actions.copy) return;
+    setNotice(null);
     operationRunning.current = true;
     try {
-      reportResults(await backend.actions.copy([item.path], destination));
+      if (await flushBefore(item)) reportResults(await backend.actions.copy([item.path], destination));
     } catch (cause) {
       operationFailed(toCoreError(cause).message);
     } finally {
       operationRunning.current = false;
     }
-  }, [backend.actions.copy, operationFailed, reportResults]);
+  }, [backend.actions.copy, flushBefore, operationFailed, reportResults]);
 
   const beginCreateFile = useCallback((directory = "", focus?: TreeFocusController | null, cancelFocusId?: string | HTMLElement | null) => {
     const controller = focus ?? getFocusController();
@@ -355,10 +368,13 @@ export function useFolderActions({
   const menuItems = useMemo((): MenuEntry[] => {
     if (!menuState) return [];
     const { item, parent, row, focus } = menuState;
+    const paths = pathsFor(row);
+    const single = paths.length === 1;
+    const deletedIds = paths.map((path) => rowId(path, backend.kind === "collection"));
     const restoreId = row ? row.node.content === undefined ? menuState.targetId : row.parentId : createCancelFocusId;
     const capabilities = backend.capabilities;
     const items: MenuEntry[] = [];
-    if (item) items.push({
+    if (item && single) items.push({
       id: "open",
       label: item.kind === "dir" && isExpanded(item.path) ? "접기" : item.kind === "dir" ? "펼치기" : "열기",
       onSelect: () => openItem(item),
@@ -366,47 +382,56 @@ export function useFolderActions({
     if (capabilities.createFile) items.push({ id: "new-file", label: backend.kind === "collection" ? "새 문서" : "새 파일", onSelect: () => void beginEdit("file", null, parent, focus, restoreId) });
     if (capabilities.createDirectory) items.push({ id: "new-folder", label: "새 폴더", shortcut: "Ctrl+Shift+N", onSelect: () => void beginEdit("directory", null, parent, focus, restoreId) });
     if (item && (capabilities.rename || capabilities.trash || capabilities.permanentDelete || capabilities.copy || capabilities.move)) items.push({ id: "separator-top", type: "separator" });
-    if (item && capabilities.rename) items.push({ id: "rename", label: "이름 바꾸기", shortcut: "F2", onSelect: () => void beginEdit("rename", item, parentOfItem(item), focus, menuState.targetId) });
-    if (item && capabilities.trash) items.push({ id: "trash", label: "휴지통으로 이동", shortcut: "Delete", danger: true, onSelect: () => setDialog({ action: "trash", item, row: row!, focus, focusTargets: focus.deletionTargets(row!) }) });
-    else if (item && capabilities.permanentDelete) items.push({ id: "permanent", label: "영구 삭제", shortcut: "Delete", danger: true, onSelect: () => setDialog({ action: "permanent", item, row: row!, focus, focusTargets: focus.deletionTargets(row!) }) });
-    if (item && capabilities.trash && capabilities.permanentDelete) items.push({ id: "permanent", label: "영구 삭제", shortcut: "Shift+Delete", danger: true, onSelect: () => setDialog({ action: "permanent", item, row: row!, focus, focusTargets: focus.deletionTargets(row!) }) });
+    if (item && single && capabilities.rename) items.push({ id: "rename", label: "이름 바꾸기", shortcut: "F2", onSelect: () => void beginEdit("rename", item, parentOfItem(item), focus, menuState.targetId) });
+    if (item && capabilities.trash) items.push({ id: "trash", label: "휴지통으로 이동", shortcut: "Delete", danger: true, onSelect: () => setDialog({ action: "trash", item, paths, row: row!, focus, focusTargets: focus.deletionTargets(row!, deletedIds) }) });
+    else if (item && capabilities.permanentDelete) items.push({ id: "permanent", label: "영구 삭제", shortcut: "Delete", danger: true, onSelect: () => setDialog({ action: "permanent", item, paths, row: row!, focus, focusTargets: focus.deletionTargets(row!, deletedIds) }) });
+    if (item && capabilities.trash && capabilities.permanentDelete) items.push({ id: "permanent", label: "영구 삭제", shortcut: "Shift+Delete", danger: true, onSelect: () => setDialog({ action: "permanent", item, paths, row: row!, focus, focusTargets: focus.deletionTargets(row!, deletedIds) }) });
     if (item && (capabilities.move || capabilities.copy)) items.push({ id: "separator-clipboard", type: "separator" });
-    if (item && capabilities.move) items.push({ id: "cut", label: "잘라내기", shortcut: "Ctrl+X", onSelect: () => setClipboard(store, { root: backend.identity, path: item.path, mode: "cut" }) });
-    if (item && capabilities.copy) items.push({ id: "copy", label: "복사", shortcut: "Ctrl+C", onSelect: () => setClipboard(store, { root: backend.identity, path: item.path, mode: "copy" }) });
+    if (item && capabilities.move) items.push({ id: "cut", label: "잘라내기", shortcut: "Ctrl+X", onSelect: () => setClipboard(store, { root: backend.identity, paths, mode: "cut" }) });
+    if (item && capabilities.copy) items.push({ id: "copy", label: "복사", shortcut: "Ctrl+C", onSelect: () => setClipboard(store, { root: backend.identity, paths, mode: "copy" }) });
     if (clipboard?.root === backend.identity && (capabilities.move || capabilities.copy)) items.push({ id: "paste", label: "붙여넣기", shortcut: "Ctrl+V", onSelect: () => void executePaste(parent) });
-    if (item && capabilities.duplicate) items.push({ id: "duplicate", label: "사본 만들기", onSelect: () => void createDuplicate(item, parentOfItem(item)) });
-    if (item && (capabilities.absolutePath || capabilities.relativePath || capabilities.reveal)) items.push({ id: "separator-path", type: "separator" });
-    if (item && capabilities.absolutePath) items.push({ id: "absolute-path", label: "경로 복사", onSelect: () => void copyPath(item, true) });
-    if (item && capabilities.relativePath) items.push({ id: "relative-path", label: "상대 경로 복사", onSelect: () => void copyPath(item, false) });
-    if (item && capabilities.reveal) items.push({ id: "reveal", label: "파일 관리자에서 보기", onSelect: () => void backend.actions.reveal?.(item.path).catch((cause) => operationFailed(toCoreError(cause).message)) });
+    if (item && single && capabilities.duplicate) items.push({ id: "duplicate", label: "사본 만들기", onSelect: () => void createDuplicate(item, parentOfItem(item)) });
+    if (item && single && (capabilities.absolutePath || capabilities.relativePath || capabilities.reveal)) items.push({ id: "separator-path", type: "separator" });
+    if (item && single && capabilities.absolutePath) items.push({ id: "absolute-path", label: "경로 복사", onSelect: () => void copyPath(item, true) });
+    if (item && single && capabilities.relativePath) items.push({ id: "relative-path", label: "상대 경로 복사", onSelect: () => void copyPath(item, false) });
+    if (item && single && capabilities.reveal) items.push({ id: "reveal", label: "파일 관리자에서 보기", onSelect: () => void backend.actions.reveal?.(item.path).catch((cause) => operationFailed(toCoreError(cause).message)) });
     if (items.length) items.push({ id: "refresh-separator", type: "separator" });
     items.push({ id: "refresh", label: "새로 고침", shortcut: "F5", onSelect: () => refreshDirectory(parent) });
-    if (item && capabilities.properties) items.push({ id: "properties", label: "속성", onSelect: () => setDialog({ action: "properties", item, row: row!, focus, focusTargets: focus.deletionTargets(row!) }) });
+    if (item && single && capabilities.properties) items.push({ id: "properties", label: "속성", onSelect: () => setDialog({ action: "properties", item, paths, row: row!, focus, focusTargets: focus.deletionTargets(row!) }) });
     return items;
-  }, [backend.actions, backend.capabilities, backend.identity, backend.kind, beginEdit, clipboard, copyPath, createCancelFocusId, createDuplicate, executePaste, isExpanded, menuState, openItem, operationFailed, refreshDirectory, store]);
+  }, [backend.actions, backend.capabilities, backend.identity, backend.kind, beginEdit, clipboard, copyPath, createCancelFocusId, createDuplicate, executePaste, isExpanded, menuState, openItem, operationFailed, pathsFor, refreshDirectory, store]);
 
   const commandKeyDown = useCallback((row: TreeRowModel | null, event: KeyboardEvent<HTMLElement>, focus: TreeFocusController): boolean => {
-    const target = itemFromRow(row);
-    const parent = destinationFor(row, target, backend.kind === "collection");
+    const ids = selection.length ? selection : row ? [row.id] : [];
+    const targetRows = focus.rows(ids);
+    const targetRow = targetRows[0] ?? null;
+    const target = itemFromRow(targetRow);
+    const paths = targetRows.flatMap((entry) => itemFromRow(entry)?.path ?? []);
+    const parent = destinationFor(row, itemFromRow(row), backend.kind === "collection");
     const key = event.key;
-    if (key === "F2" && target && backend.capabilities.rename) {
-      void beginEdit("rename", target, parentOfItem(target), focus, row?.id);
+    if (key === "F2" && target && paths.length === 1 && backend.capabilities.rename) {
+      void beginEdit("rename", target, parentOfItem(target), focus, targetRow?.id);
       return true;
     }
     if (key === "Delete" && target && !event.shiftKey && backend.capabilities.trash) {
-      setDialog({ action: "trash", item: target, row: row!, focus, focusTargets: focus.deletionTargets(row!) });
+      setDialog({ action: "trash", item: target, paths, row: targetRow!, focus, focusTargets: focus.deletionTargets(row ?? targetRow!, ids) });
       return true;
     }
     if (key === "Delete" && target && !event.shiftKey && backend.capabilities.permanentDelete) {
-      setDialog({ action: "permanent", item: target, row: row!, focus, focusTargets: focus.deletionTargets(row!) });
+      setDialog({ action: "permanent", item: target, paths, row: targetRow!, focus, focusTargets: focus.deletionTargets(row ?? targetRow!, ids) });
       return true;
     }
     if (key === "Delete" && target && event.shiftKey && backend.capabilities.permanentDelete) {
-      setDialog({ action: "permanent", item: target, row: row!, focus, focusTargets: focus.deletionTargets(row!) });
+      setDialog({ action: "permanent", item: target, paths, row: targetRow!, focus, focusTargets: focus.deletionTargets(row ?? targetRow!, ids) });
       return true;
     }
-    if (key === "Escape" && clipboard?.root === backend.identity && clipboard.mode === "cut") {
-      setClipboard(store, null);
+    if (key === "Escape" && notice) {
+      setNotice(null);
+      return true;
+    }
+    if (key === "Escape" && (selection.length || (clipboard?.root === backend.identity && clipboard.mode === "cut"))) {
+      setSelection([]);
+      if (clipboard?.root === backend.identity && clipboard.mode === "cut") setClipboard(store, null);
       return true;
     }
     if (event.ctrlKey && event.shiftKey && key.toLowerCase() === "n" && backend.capabilities.createDirectory) {
@@ -418,11 +443,11 @@ export function useFolderActions({
       return true;
     }
     if (event.ctrlKey && key.toLowerCase() === "c" && target && backend.capabilities.copy) {
-      setClipboard(store, { root: backend.identity, path: target.path, mode: "copy" });
+      setClipboard(store, { root: backend.identity, paths, mode: "copy" });
       return true;
     }
     if (event.ctrlKey && key.toLowerCase() === "x" && target && backend.capabilities.move) {
-      setClipboard(store, { root: backend.identity, path: target.path, mode: "cut" });
+      setClipboard(store, { root: backend.identity, paths, mode: "cut" });
       return true;
     }
     if (event.ctrlKey && key.toLowerCase() === "v" && clipboard?.root === backend.identity && (backend.capabilities.move || backend.capabilities.copy)) {
@@ -436,7 +461,7 @@ export function useFolderActions({
       return true;
     }
     return false;
-  }, [backend.capabilities, backend.identity, backend.kind, beginEdit, clipboard, executePaste, openMenu, refreshDirectory, store]);
+  }, [backend.capabilities, backend.identity, backend.kind, beginEdit, clipboard, executePaste, openMenu, refreshDirectory, selection, store, notice]);
 
   const inlineRow = useCallback((directory: string, beforePath?: string) => {
     if (!inlineEdit || inlineEdit.directory !== directory) return null;
@@ -459,7 +484,7 @@ export function useFolderActions({
     : [];
   const dialogElement: ReactNode = dialog && dialogHost ? <Dialog
     host={dialogHost}
-    title={dialog.action === "properties" ? "속성" : dialog.item.name}
+    title={dialog.action === "properties" ? "속성" : dialog.paths.length > 1 ? `${dialog.paths.length}개 항목` : dialog.item.name}
     body={dialog.action === "properties"
       ? <dl className="ks-properties">{dialogProperties.map((property) => <Fragment key={property.label}><dt>{property.label}</dt><dd>{property.value}</dd></Fragment>)}</dl>
       : dialog.action === "trash" ? undefined : <span>되돌릴 수 없습니다.</span>}
@@ -470,14 +495,19 @@ export function useFolderActions({
     onConfirm={confirmDialog}
   /> : null;
 
-  const noticeNode = notice ? <Notice role="alert" actions={notice.allowPermanent ? [<Button key="permanent" onClick={() => {
+  const dismissNotice = () => {
+    setNotice(null);
+    getFocusController()?.visibleRow(null);
+  };
+  const closeNotice = <Button key="close" onClick={dismissNotice}>닫기</Button>;
+  const noticeNode = notice ? <Notice role="alert" onDismiss={dismissNotice} errorId={notice.errorId} details={noticeExpanded && notice.failures ? notice.failures.map((failure) => <div key={failure.path}>{failure.path}{notice.mixed ? `: ${failure.message}` : ""}</div>) : undefined} actions={notice.failures ? [<Button key="details" onClick={() => setNoticeExpanded((current) => !current)}>{noticeExpanded ? "접기" : "펼치기"}</Button>, closeNotice] : notice.allowPermanent ? [<Button key="permanent" onClick={() => {
     const item = notice.allowPermanent!;
     const row = notice.row;
     const focus = notice.focus;
     const focusTargets = notice.focusTargets;
     setNotice(null);
-    if (row && focus) setDialog({ action: "permanent", item, row, focus, focusTargets: focusTargets ?? focus.deletionTargets(row) });
-  }}>영구 삭제</Button>] : undefined}>{notice.message}</Notice> : null;
+    if (row && focus) setDialog({ action: "permanent", item, paths: [item.path], row, focus, focusTargets: focusTargets ?? focus.deletionTargets(row) });
+  }}>영구 삭제</Button>, closeNotice] : [closeNotice]}>{notice.message}</Notice> : null;
 
   return {
     backend,
@@ -491,6 +521,10 @@ export function useFolderActions({
     dialogElement,
     noticeNode,
     isCutPath,
+    selection,
+    setSelection,
+    pathsFor,
+    transferPaths,
     menuTargetId: menuState?.targetId ?? null,
   };
 }

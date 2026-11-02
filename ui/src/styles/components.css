@@ -136,6 +136,8 @@
   flex-shrink: 0;
   white-space: nowrap;
 }
+.ks-notice-details { flex: 1 0 100%; max-height: calc(var(--ks-control-height) * 6); overflow-y: auto; }
+.ks-notice-details > div + div { margin-block-start: var(--ks-space-1); }
 
 .ks-status-text {
   color: var(--ks-color-muted);

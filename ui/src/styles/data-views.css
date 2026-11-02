@@ -1,5 +1,8 @@
 .ks-list-row:focus-visible, .ks-table-row:focus-visible, .ks-data-tree .ks-row:focus-visible, .ks-file-tree-list:focus-visible, .ks-file-tree-list .ks-row:focus-visible, .ks-feed-entry.is-selectable:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
 .ks-file-tree-list .ks-row[data-menu-target] { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); }
+.ks-file-tree-list .ks-file-tree-row.is-open-file { box-shadow: inset var(--ks-focus-width) 0 var(--ks-color-accent); }
+.ks-file-tree-list [data-drop-state="valid"], .ks-file-tree-list[data-drop-state="valid"] { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); }
+.ks-file-tree-list [data-drop-state="invalid"], .ks-file-tree-list[data-drop-state="invalid"] { outline: var(--ks-focus-width) solid var(--ks-color-danger); outline-offset: calc(-1 * var(--ks-focus-width)); }
 .ks-file-tree-list .ks-tree-virtual-row[data-menu-target] .ks-file-tree-empty { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); border-radius: var(--ks-radius-small); }
 .ks-badge { display: inline-block; flex: 0 0 auto; padding-inline: var(--ks-space-2); border-radius: var(--ks-radius-large); background: var(--ks-color-hover); color: var(--ks-color-text); font-size: var(--ks-type-meta); line-height: var(--ks-line-body); white-space: nowrap; }
 .ks-view-badges { display: inline-flex; flex-wrap: wrap; gap: var(--ks-space-1); min-width: 0; }
@@ -89,3 +92,8 @@
 .ks-table-delta.flat { color: var(--ks-color-muted); }
 .ks-table-delta.up, .ks-table-delta.down { background: color-mix(in srgb, currentColor 12%, transparent); }
 .ks-table-sparkline { width: calc(var(--ks-space-6) * 2 + var(--ks-space-4)); height: var(--ks-space-5); fill: currentColor; stroke: currentColor; }
+
+.ks-file-tree-list .ks-file-tree-row.is-open-file:focus-visible,
+.ks-file-tree-list .ks-file-tree-row.is-open-file[data-menu-target] {
+  box-shadow: inset calc(var(--ks-focus-width) * 2) 0 var(--ks-color-accent);
+}

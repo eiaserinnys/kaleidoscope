@@ -191,6 +191,7 @@ impl WebHost for TauriWebHost {
         let load_id = id.to_string();
         let load_page = page.clone();
         let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
+            .disable_drag_drop_handler()
             .on_navigation(allowed)
             .on_page_load(move |view, payload| {
                 let loading = matches!(payload.event(), PageLoadEvent::Started);
