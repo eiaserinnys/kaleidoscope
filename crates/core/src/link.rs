@@ -17,13 +17,11 @@ use crate::registry_events;
 use crate::storage::{self, LinkFile};
 use crate::Inner;
 
-pub(crate) const NOT_CONNECTED_MESSAGE: &str =
-    "kaleidoscope 서버에 연결되어 있지 않아 앱을 가져올 수 없습니다.";
-
 pub(crate) fn registry_error_to_core(error: RegistryError, message: &str) -> CoreError {
     match error {
         RegistryError::Validation(error) => error,
         RegistryError::Failure(detail) => CoreError {
+            id: None,
             code: ErrorCode::Server,
             message: message.into(),
             details: vec![one_line(&detail)],
@@ -35,6 +33,7 @@ pub(crate) fn registry_error_to_core(error: RegistryError, message: &str) -> Cor
 
 pub(crate) fn server_error(message: &str, details: Vec<String>) -> CoreError {
     CoreError {
+        id: None,
         code: ErrorCode::Server,
         message: message.into(),
         details,
@@ -193,7 +192,7 @@ pub(crate) fn import_app(
             ..
         } => {
             let Some(link_file) = link_file else {
-                return Err(server_error(NOT_CONNECTED_MESSAGE, Vec::new()));
+                return Err(kaleidoscope_contract::errors::APP_IMPORT_SERVER_NOT_CONNECTED());
             };
             let received = inner.registry.upload(
                 &link_file.server_url,
@@ -227,7 +226,7 @@ pub(crate) fn import_app(
             Ok(reply)
         }
         LinkStatus::Pairing { .. } | LinkStatus::Offline { .. } | LinkStatus::Revoked { .. } => {
-            Err(server_error(NOT_CONNECTED_MESSAGE, Vec::new()))
+            Err(kaleidoscope_contract::errors::APP_IMPORT_SERVER_NOT_CONNECTED())
         }
     }
 }

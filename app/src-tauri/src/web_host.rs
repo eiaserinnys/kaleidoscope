@@ -31,6 +31,7 @@ pub struct TauriWebHost {
 
 fn fail(error: impl std::fmt::Display) -> CoreError {
     CoreError {
+        id: None,
         code: ErrorCode::Io,
         message: "웹 화면을 조작하지 못했습니다.".into(),
         details: vec![error.to_string()],

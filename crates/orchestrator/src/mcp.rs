@@ -804,6 +804,7 @@ pub(super) fn json_result(value: Value) -> CallToolResult {
     CallToolResult::success(vec![ContentBlock::text(value.to_string())])
 }
 pub(super) fn json_error(error: CoreError) -> CallToolResult {
+    super::log_core_error(&error, "mcp");
     CallToolResult::error(vec![ContentBlock::text(
         serde_json::to_string(&error).unwrap(),
     )])

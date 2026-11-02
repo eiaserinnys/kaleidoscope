@@ -58,6 +58,7 @@ impl McpServer {
                 .is_some_and(kaleidoscope_contract::builtin::is_builtin)
         {
             return Ok(json_error(CoreError {
+                id: None,
                 code: ErrorCode::UnsupportedApp,
                 message: "기본 앱은 로컬 시험 쉘에서 미리 봅니다".into(),
                 details: vec![],
@@ -169,6 +170,7 @@ impl McpServer {
                         SourceStatus::Failed {
                             message: message.clone(),
                             has_value: false,
+                            id: None,
                         },
                     );
                     source_results
@@ -249,6 +251,7 @@ impl McpServer {
                                     SourceStatus::Failed {
                                         message: message.clone(),
                                         has_value: false,
+                                        id: None,
                                     },
                                 );
                                 source_results.insert(
@@ -272,6 +275,7 @@ impl McpServer {
                             SourceStatus::Failed {
                                 message: message.clone(),
                                 has_value: false,
+                                id: None,
                             },
                         );
                         source_results
@@ -287,6 +291,7 @@ impl McpServer {
                                 SourceStatus::Failed {
                                     message: message.clone(),
                                     has_value: false,
+                                    id: None,
                                 },
                             );
                             source_results
@@ -299,6 +304,7 @@ impl McpServer {
                                 SourceStatus::Failed {
                                     message: error.message.clone(),
                                     has_value: false,
+                                    id: error.id.clone(),
                                 },
                             );
                             source_results.insert(
@@ -349,6 +355,7 @@ impl McpServer {
                                 SourceStatus::Failed {
                                     message: message.clone(),
                                     has_value: false,
+                                    id: None,
                                 },
                             );
                             source_results.insert(
@@ -383,6 +390,7 @@ impl McpServer {
                                     SourceStatus::Failed {
                                         message: message.into(),
                                         has_value: false,
+                                        id: None,
                                     },
                                 );
                                 source_results.insert(
@@ -398,6 +406,7 @@ impl McpServer {
                                 SourceStatus::Failed {
                                     message: message.clone(),
                                     has_value: false,
+                                    id: error.id.clone(),
                                 },
                             );
                             source_results
@@ -416,7 +425,7 @@ impl McpServer {
             let value = match status {
                 SourceStatus::Ready { updated_at } => json!({"state":"ready", "updated_at":updated_at,
                     "updated_time":chrono::DateTime::parse_from_rfc3339(updated_at).ok().map(|at| at.with_timezone(&chrono::Local).format("%H:%M").to_string()), "stale":false,"message":null}),
-                SourceStatus::Failed { message, .. } => json!({"state":"failed","updated_at":null,"updated_time":null,"stale":false,"message":message}),
+                SourceStatus::Failed { message, id, .. } => json!({"state":"failed","updated_at":null,"updated_time":null,"stale":false,"message":message,"id":id}),
                 SourceStatus::Loading { .. } => json!({"state":"loading","updated_at":null,"updated_time":null,"stale":false,"message":null}),
                 SourceStatus::LoginRequired { .. } => json!({"state":"login_required","updated_at":null,"updated_time":null,"stale":false,"message":null}),
                 SourceStatus::Idle {} => json!({"state":"idle","updated_at":null,"updated_time":null,"stale":false,"message":null}),
@@ -459,6 +468,7 @@ impl McpServer {
                         Binding::Expr(_) => evaluated.get(&pointer).cloned().unwrap_or_else(|| {
                             BindingValue::Failed {
                                 message: "계산 결과가 없습니다".into(),
+                                id: None,
                                 retry: Vec::new(),
                             }
                         }),
@@ -614,7 +624,7 @@ fn preview_storage(
                     kaleidoscope_contract::data::storage_refs(expr).contains(&entry.id)
                 });
             if used {
-                return Err(CoreError { code: ErrorCode::InvalidRequest, message: "작업 전용 저장 항목을 미리 보려면 workspace_id 또는 window_id가 필요합니다.".into(), details: vec![entry.id.clone()] });
+                return Err(CoreError { id: None, code: ErrorCode::InvalidRequest, message: "작업 전용 저장 항목을 미리 보려면 workspace_id 또는 window_id가 필요합니다.".into(), details: vec![entry.id.clone()] });
             }
             continue;
         }
@@ -648,6 +658,7 @@ fn preview_storage(
 
 fn preview_error(message: &str) -> CallToolResult {
     json_error(CoreError {
+        id: None,
         code: ErrorCode::InvalidRequest,
         message: message.into(),
         details: Vec::new(),
@@ -672,9 +683,12 @@ fn binding_result(
             output["truncated"] = json!(truncated);
         }
         BindingValue::Loading {} => output["status"] = json!("loading"),
-        BindingValue::Failed { message, retry } => {
+        BindingValue::Failed { message, id, retry } => {
             output["status"] = json!("failed");
             output["message"] = json!(message);
+            if let Some(id) = id {
+                output["id"] = json!(id);
+            }
             output["retry"] = json!(retry);
         }
         BindingValue::LoginRequired { permission } => {

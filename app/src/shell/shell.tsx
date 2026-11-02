@@ -385,6 +385,7 @@ export function Shell({ store }: { store: ShellStore }) {
             actions={[
               <Button key="close" onClick={() => setNotice(null)}>닫기</Button>,
             ]}
+            errorId={notice.id}
           data-ks-overlay
             role="alert"
           >

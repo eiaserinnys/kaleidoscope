@@ -200,6 +200,7 @@ async fn post_core(State(state): State<AppState>, body: Bytes) -> Response {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(CoreError {
+                    id: None,
                     code: ErrorCode::InvalidRequest,
                     message: "요청 형식이 올바르지 않습니다.".into(),
                     details: Vec::new(),
@@ -218,6 +219,7 @@ async fn post_core(State(state): State<AppState>, body: Bytes) -> Response {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(CoreError {
+                    id: None,
                     code: ErrorCode::Io,
                     message: "코어 명령을 실행할 수 없습니다.".into(),
                     details: Vec::new(),

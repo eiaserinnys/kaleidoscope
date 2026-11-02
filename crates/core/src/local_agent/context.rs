@@ -159,6 +159,7 @@ pub(super) fn resolve(
             Err(message) => {
                 snapshot.phase = LocalAgentPhase::Failed;
                 snapshot.failure = Some(AgentFailure {
+                    id: None,
                     code: ErrorCode::InvalidRequest,
                     message,
                     command: None,

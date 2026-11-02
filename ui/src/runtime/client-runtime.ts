@@ -190,7 +190,7 @@ export class ClientRuntime {
         ? await this.store.call({ op: "files.pick", window_id: this.data.windowId, accept: spec.accept, multiple: spec.multiple ?? false })
         : await this.files.pick(spec.accept, spec.multiple ?? false);
       return this.action(spec.client, { cancelled: result.cancelled, files: result.files } as unknown as JsonValue, scope?.item, undefined, scope);
-    } catch (error) { this.data.setNotice(toCoreError(error).message); return false; }
+    } catch (error) { this.data.setNotice(toCoreError(error)); return false; }
   }
 
   async save(spec: SaveFileSpec, name: string, scope?: ItemScope): Promise<boolean> {
@@ -198,7 +198,7 @@ export class ClientRuntime {
       const native = this.store.nativeFiles ? await this.store.call({ op: "export.begin", window_id: this.data.windowId, suggested_name: name, mime: spec.mime }) : null;
       const result = native ? { cancelled: native.cancelled, ...(native.sink_id ? { sink: native.sink_id } : {}) } : await this.files.save(name, spec.mime);
       return this.action(spec.client, result as JsonValue, scope?.item, undefined, scope);
-    } catch (error) { this.data.setNotice(toCoreError(error).message); return false; }
+    } catch (error) { this.data.setNotice(toCoreError(error)); return false; }
   }
 
   surface(message: { phase: string; id: string; generation: number; canvas?: OffscreenCanvas; css_width?: number; css_height?: number; dpr?: number; visible?: boolean }) {
@@ -255,7 +255,7 @@ export class ClientRuntime {
       delete this.ownWrites[entry];
       this.pendingRevisions[entry] = read.result.revision;
       this.send({ type: "ks-sandbox-storage-sync", entry, content: read.result.content, revision: read.result.revision });
-    } catch (error) { this.data.setNotice(toCoreError(error).message); }
+    } catch (error) { this.data.setNotice(toCoreError(error)); }
   }
 
   private receive = (event: MessageEvent) => {
@@ -295,7 +295,7 @@ export class ClientRuntime {
     } else if (message.type === "ks-sandbox-state-set" && message.patch && typeof message.patch === "object") {
       const state = this.store.getSnapshot()?.shared.windows.find((window) => window.id === this.data.windowId)?.state ?? {};
       const patch = Object.fromEntries(Object.entries(message.patch).filter(([key]) => this.client.state_keys.includes(key))) as Record<string, JsonValue>;
-      void this.store.call({ op: "window.set_state", window_id: this.data.windowId, state: { ...state, ...patch } }).catch((error) => this.data.setNotice(toCoreError(error).message));
+      void this.store.call({ op: "window.set_state", window_id: this.data.windowId, state: { ...state, ...patch } }).catch((error) => this.data.setNotice(toCoreError(error)));
     } else if ((message.type === "ks-sandbox-storage-get" || message.type === "ks-sandbox-storage-set") && this.client.storage_entries.includes(message.entry)) {
       const task = this.writes.catch(() => undefined).then(async () => {
         if (message.type === "ks-sandbox-storage-get" || !(message.entry in this.revisions)) {
@@ -416,8 +416,8 @@ export class ClientRuntime {
     this.snapshots.clear();
     this.beginClosing();
     await this.flush();
-    await this.files.dispose().catch((error) => this.data.setNotice(toCoreError(error).message));
-    if (this.store.nativeFiles || this.blobFiles.size) await this.store.call({ op: "client.release", window_id: this.data.windowId }).catch((error) => this.data.setNotice(toCoreError(error).message));
+    await this.files.dispose().catch((error) => this.data.setNotice(toCoreError(error)));
+    if (this.store.nativeFiles || this.blobFiles.size) await this.store.call({ op: "client.release", window_id: this.data.windowId }).catch((error) => this.data.setNotice(toCoreError(error)));
     this.unregister?.();
     this.unsubscribeStorage?.();
     this.unsubscribeVisibility?.();

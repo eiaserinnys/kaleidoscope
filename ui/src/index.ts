@@ -1,5 +1,5 @@
 export { AppWindowContent } from "./render/app-window-content";
-export { Button, EmptyState, IconButton, Notice, StatusText } from "./components/primitives";
+export { Button, EmptyState, ErrorId, ErrorNotice, IconButton, Notice, StatusText } from "./components/primitives";
 export {
   ArrowUp,
   ArrowDown,

@@ -981,6 +981,7 @@ fn storage_success_json<T: serde::de::DeserializeOwned>(
         let conflict: StorageConflict =
             serde_json::from_slice(&body).map_err(|e| RegistryError::Failure(e.to_string()))?;
         return Err(RegistryError::Validation(CoreError {
+            id: None,
             code: ErrorCode::Conflict,
             message: "저장 항목이 읽은 뒤 바뀌었습니다.".into(),
             details: vec![format!(

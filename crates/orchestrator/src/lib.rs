@@ -34,6 +34,21 @@ use serde_json::{json, Value};
 use tokio::sync::{broadcast, Mutex as AsyncMutex};
 use uuid::Uuid;
 
+pub(crate) fn log_core_error(error: &CoreError, status: &str) {
+    let class = serde_json::to_value(error.code)
+        .expect("error class serializes")
+        .as_str()
+        .expect("error class is a string")
+        .to_owned();
+    eprintln!(
+        "[오류] {} 분류={} 상태={} {}",
+        error.id.as_deref().unwrap_or("-"),
+        class,
+        status,
+        error.message,
+    );
+}
+
 #[cfg(test)]
 fn test_definition(raw: &str) -> String {
     let definition: Value = serde_json::from_str(raw).unwrap();

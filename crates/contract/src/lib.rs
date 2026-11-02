@@ -212,6 +212,7 @@ pub mod builtin;
 pub mod client;
 pub mod conversation;
 pub mod data;
+pub mod errors;
 pub mod file_name;
 pub mod local_agent;
 pub mod registry;
@@ -4950,6 +4951,10 @@ pub enum FileOpResult {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
 pub struct CoreError {
+    /// 장소와 원인을 가리키는 에러코드. 등록부(`errors`)의 코드다. 옛 서버와 옛 쉘이 보낸 오류에는 없다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub id: Option<String>,
     pub code: ErrorCode,
     /// 사람이 읽는 한국어 설명.
     pub message: String,
@@ -5034,6 +5039,7 @@ impl CoreError {
     /// 기본 설명을 단 오류.
     pub fn new(code: ErrorCode) -> Self {
         CoreError {
+            id: None,
             code,
             message: code.default_message().to_string(),
             details: Vec::new(),
@@ -5043,10 +5049,25 @@ impl CoreError {
     /// 기본 설명과 걸린 것 목록을 단 오류.
     pub fn with_details(code: ErrorCode, details: Vec<String>) -> Self {
         CoreError {
+            id: None,
             code,
             message: code.default_message().to_string(),
             details,
         }
+    }
+
+    pub(crate) fn registered(id: &str, code: ErrorCode, message: String) -> Self {
+        Self {
+            id: Some(id.to_string()),
+            code,
+            message,
+            details: Vec::new(),
+        }
+    }
+
+    pub fn and_details(mut self, details: Vec<String>) -> Self {
+        self.details.extend(details);
+        self
     }
 }
 
@@ -6549,11 +6570,41 @@ mod tests {
     #[test]
     fn error_serializes_with_snake_case_code() {
         let err = CoreError {
+            id: None,
             code: ErrorCode::PathOutsideRoot,
             message: "고른 폴더 밖 경로입니다".into(),
             details: vec![],
         };
         let json = serde_json::to_value(&err).unwrap();
         assert_eq!(json["code"], "path_outside_root");
+    }
+
+    #[test]
+    fn legacy_core_error_without_id_deserializes_and_omits_id_when_serialized() {
+        let error: CoreError = serde_json::from_value(serde_json::json!({
+            "code": "path_outside_root",
+            "message": "고른 폴더 밖 경로입니다",
+            "details": []
+        }))
+        .unwrap();
+
+        assert_eq!(error.id, None);
+        assert!(!serde_json::to_value(error)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .contains_key("id"));
+    }
+
+    #[test]
+    fn legacy_agent_failure_without_id_deserializes() {
+        let failure: local_agent::AgentFailure = serde_json::from_value(serde_json::json!({
+            "code": "local_agent_failed",
+            "message": "에이전트 명령이 실패했습니다",
+            "command": null
+        }))
+        .unwrap();
+
+        assert_eq!(failure.id, None);
     }
 }

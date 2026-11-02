@@ -1,28 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { CoreError, CoreEvent, CoreRequest, CoreTransport, ReplyFor, RequestFor } from "@kaleidoscope/ui";
-
-function isCoreError(value: unknown): value is CoreError {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Record<string, unknown>;
-  return typeof candidate.code === "string"
-    && typeof candidate.message === "string"
-    && Array.isArray(candidate.details);
-}
+import { toCoreError, type CoreEvent, type CoreRequest, type CoreTransport, type ReplyFor, type RequestFor } from "@kaleidoscope/ui";
 
 export function createTauriTransport(): CoreTransport {
   return {
     nativeFiles: true,
     async bytes(request, body) {
       try { return await invoke<ArrayBuffer>("core_bytes", body ?? new ArrayBuffer(0), { headers: { "x-ks-operation": request.op, "x-ks-window": request.window_id, "x-ks-handle": encodeURIComponent(request.handle), "x-ks-offset": String(request.offset ?? 0) } }); }
-      catch (error) { if (isCoreError(error)) throw error; throw { code: "io", message: String(error), details: [] } satisfies CoreError; }
+      catch (error) { throw toCoreError(error); }
     },
     async call<K extends CoreRequest["op"]>(request: RequestFor<K>): Promise<ReplyFor<K>> {
       try {
         return await invoke<ReplyFor<K>>("core", { request });
       } catch (error) {
-        if (isCoreError(error)) throw error;
-        throw { code: "io", message: String(error), details: [] } satisfies CoreError;
+        throw toCoreError(error);
       }
     },
 

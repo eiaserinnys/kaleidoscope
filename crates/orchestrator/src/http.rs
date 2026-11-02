@@ -216,6 +216,7 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     bool::from(ha.ct_eq(&hb))
 }
 pub(super) fn error_response(status: StatusCode, error: CoreError) -> Response {
+    super::log_core_error(&error, &status.as_u16().to_string());
     (status, Json(error)).into_response()
 }
 

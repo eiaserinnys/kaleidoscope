@@ -18,7 +18,7 @@ const folderApp: AppDefinition = {
   sources: { pictures: { kind: "folder", permission: "media", recursive: false, extensions: [] } },
   ui: { type: "list", items: { expr: "$data.pictures.{ \"key\": path, \"title\": name }" } },
 };
-const failed = { status: "failed" as const, message: "이 기기에서 폴더를 골라야 합니다", retry: ["pictures"] };
+const failed = { status: "failed" as const, id: "FILE_ACCESS_FOLDER_NOT_CHOSEN", message: "이 기기에서 폴더를 골라야 합니다", retry: ["pictures"] };
 
 it("폴더를 고르지 않은 폴더 원천은 폴더 선택을 보이고, 고르면 그 원천을 다시 받는다", async () => {
   const seed = makeTestSeed({ definitions: [folderApp] });
@@ -28,6 +28,9 @@ it("폴더를 고르지 않은 폴더 원천은 폴더 선택을 보이고, 고�
     ? Promise.resolve({ op: "data.attach", view: { sources: { pictures: { state: "failed", message: failed.message, has_value: false } }, values: { "/ui/items": failed } } } as CoreReply) as never
     : original(request as never));
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  expect(await screen.findByText("폴더를 선택해 주세요")).toBeTruthy();
+  expect(screen.queryByText("FILE_ACCESS_FOLDER_NOT_CHOSEN")).toBeNull();
+  expect(screen.queryByText(failed.message)).toBeNull();
   const pick = await screen.findByRole("button", { name: "폴더 선택" });
   expect(screen.queryByRole("button", { name: "다시 받기" })).toBeNull();
   fireEvent.click(pick);
