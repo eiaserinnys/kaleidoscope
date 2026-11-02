@@ -84,3 +84,20 @@ it("비율 바인딩이 바뀌면 실제 캔버스를 세로와 정사각 무대
     vi.unstubAllGlobals();
   }
 });
+
+it("세로 영상의 좁은 창 무대는 정사각 이상으로 유지하고 영상 비율은 보존한다", () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 498, height: 498 } as DOMRect);
+  const original = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "transferControlToOffscreen");
+  Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", { configurable: true, value: () => ({}) });
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  try {
+    const view = render(<CanvasBlock block={{ type: "canvas", surface: "preview", aspect_ratio: 9 / 16 }} pointer="/ui" />);
+    expect(view.container.firstElementChild?.getAttribute("style")).toContain("--ks-canvas-ratio: 1");
+    expect(view.container.querySelector("canvas")?.style.height).toBe("498px");
+    expect(view.container.querySelector("canvas")?.style.width).toBe("280.125px");
+  } finally {
+    if (original) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", original);
+    else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
+    vi.unstubAllGlobals();
+  }
+});

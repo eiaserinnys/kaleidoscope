@@ -70,7 +70,7 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     const y = Math.max(0, Math.min(1, (event.clientY - bounds.top - rect.current.y) / rect.current.height));
     void data.act(`${pointer}/on_pointer`, { phase, pointer_id: event.pointerId, x, y, buttons: event.buttons, shift: event.shiftKey, alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey });
   };
-  return <div ref={root} className="ks-canvas" role="img" aria-label={text || "캔버스"} style={{ "--ks-canvas-ratio": aspect } as CSSProperties}
+  return <div ref={root} className="ks-canvas" role="img" aria-label={text || "캔버스"} style={{ "--ks-canvas-ratio": aspect ? Math.max(aspect, 1) : undefined } as CSSProperties}
     onPointerDown={(event) => pointerEvent("down", event)} onPointerMove={(event) => pointerEvent("move", event)}
     onPointerUp={(event) => pointerEvent("up", event)} onPointerCancel={(event) => pointerEvent("cancel", event)} />;
 }
