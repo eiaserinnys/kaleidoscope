@@ -1,23 +1,30 @@
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import type { AppDefinition, Binding, BindingValue, DataView, PickFilesSpec, SaveFileSpec, SourceStatus } from "../contract/contract";
+import type { AppDefinition, Binding, BindingValue, DataView, PickFilesSpec, SaveFileSpec, ShellSnapshot, SourceStatus } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { CLIENT_OUTPUT_MAX_BYTES } from "../contract/limits";
 import { toCoreError } from "../core/core-transport";
 import { shareStructure, useShellSelector, type ShellStore } from "../core/shell-store";
 import { ClientRuntime } from "../runtime/client-runtime";
 import { useBlockRenderProbe } from "../render/render-probe";
-import { useWindowStateValue } from "./window-state";
+import { isWindowVisible, useWindowStateValue } from "./window-state";
 
 const loading: BindingValue = { status: "loading" };
 const emptySources: Record<string, SourceStatus> = {};
 const lifecycle = new WeakMap<ShellStore, Map<string, Promise<void>>>();
+
+function recoveryVisible(snapshot: ShellSnapshot | null, windowId: string) {
+  if (!snapshot || !isWindowVisible(snapshot, windowId)) return false;
+  const window = snapshot.shared.windows.find((item) => item.id === windowId);
+  return !!window && !snapshot.shared.windows.some((item) => item.desktop_id === window.desktop_id && !item.minimized && item.maximized && item.z > window.z);
+}
 
 function enqueue(store: ShellStore, id: string, task: () => Promise<void>) {
   let queues = lifecycle.get(store);
   if (!queues) { queues = new Map(); lifecycle.set(store, queues); }
   const next = (queues.get(id) ?? Promise.resolve()).catch(() => undefined).then(task);
   queues.set(id, next);
-  void next.finally(() => { if (queues?.get(id) === next) queues.delete(id); });
+  const cleanup = () => { if (queues?.get(id) === next) queues.delete(id); };
+  void next.then(cleanup, cleanup);
   return next;
 }
 
@@ -33,15 +40,19 @@ export class WindowData {
   private notice: string | null = null;
   private noticeRole: "alert" | "status" = "alert";
   private unsubscribe?: () => void;
+  private unsubscribeLink?: () => void;
   private active = false;
   private pending: DataView[] = [];
   private initialized = false;
+  private attached = false;
   private mounts = 0;
   private ready: Promise<void> = Promise.resolve();
   private runtime: ClientRuntime | null = null;
   private clientFailed = false;
   private clientGeneration = 0;
   private clientListeners = new Set<() => void>();
+  private mediaGeneration = 0;
+  private mediaListeners = new Set<() => void>();
   private shareListeners = new Set<() => void>();
   private shareSequence = 0;
   private dormantPointers = new Set<string>();
@@ -85,6 +96,8 @@ export class WindowData {
   failClient = (message: string) => { this.clientFailed = true; this.setNotice(message); };
   subscribeClient = (listener: () => void) => { this.clientListeners.add(listener); return () => this.clientListeners.delete(listener); };
   getClientGeneration = () => this.clientGeneration;
+  subscribeMedia = (listener: () => void) => { this.mediaListeners.add(listener); return () => this.mediaListeners.delete(listener); };
+  getMediaGeneration = () => this.mediaGeneration;
   subscribeClientShare = (listener: () => void) => { this.shareListeners.add(listener); return () => this.shareListeners.delete(listener); };
   getClientShareSequence = () => this.shareSequence;
   notifyClientShare = () => { this.shareSequence += 1; this.shareListeners.forEach((listener) => listener()); };
@@ -93,13 +106,21 @@ export class WindowData {
     this.restarting = true;
     const previous = this.runtime; this.runtime = null;
     if (previous) await previous.stop();
+    if (!this.active) { this.restarting = false; return; }
     this.surfaces.clear();
     this.clientFailed = false; this.setNotice(null);
     this.publishClient(Object.fromEntries(Object.entries(this.definition.client.outputs).map(([name, output]) => [name, output.default])));
     const runtime = new ClientRuntime(this.store, this, this.definition, this.definition.client);
     this.runtime = runtime; this.clientGeneration += 1; this.clientListeners.forEach((listener) => listener());
-    void runtime.start(); this.restarting = false;
+    this.startRuntime(runtime); this.restarting = false;
   };
+
+  private startRuntime(runtime: ClientRuntime) {
+    const generation = this.mediaGeneration;
+    void runtime.start().then(() => {
+      if (this.active && this.runtime === runtime && this.clientFailed && generation !== this.mediaGeneration) void this.restartClient();
+    });
+  }
 
   private merge(view: DataView) {
     for (const [pointer, value] of Object.entries(view.values)) {
@@ -124,6 +145,24 @@ export class WindowData {
     this.active = true;
     this.initialized = false;
     this.pending = [];
+    const connectedKey = () => {
+      const link = this.store.getSnapshot()?.link;
+      return link?.state === "connected" ? `${link.mode}:${link.server_url}` : null;
+    };
+    let previousLink = connectedKey();
+    let pendingMedia = false;
+    this.unsubscribeLink = this.store.subscribe(() => {
+      const nextLink = connectedKey();
+      if (nextLink && nextLink !== previousLink) pendingMedia = true;
+      if (nextLink && pendingMedia && recoveryVisible(this.store.getSnapshot(), this.windowId)) {
+        pendingMedia = false;
+        this.mediaCache.clear();
+        this.mediaGeneration += 1;
+        this.mediaListeners.forEach((listener) => listener());
+        if (this.initialized && this.definition.client && (this.clientFailed || !this.runtime)) void this.restartClient();
+      }
+      previousLink = nextLink;
+    });
     this.unsubscribe = this.store.subscribeEvents((event) => {
       if (event.event !== "data.update" || event.window_id !== this.windowId) return;
       if (!this.initialized) this.pending.push(event.view); else this.merge(event.view);
@@ -133,6 +172,7 @@ export class WindowData {
       try {
         const reply = await this.store.call({ op: "data.attach", window_id: this.windowId, dormant: [...this.dormantPointers] });
         if (!this.active || mount !== this.mounts) return;
+        this.attached = true;
         this.merge(reply.view);
         this.initialized = true;
         this.pending.forEach((view) => this.merge(view));
@@ -141,7 +181,7 @@ export class WindowData {
           const runtime = new ClientRuntime(this.store, this, this.definition, this.definition.client);
           this.runtime = runtime;
           for (const surface of this.surfaces.values()) runtime.surface({ phase: "attach", ...surface });
-          void runtime.start();
+          this.startRuntime(runtime);
         }
       } catch (error) { if (this.active) this.setNotice(toCoreError(error).message); }
     });
@@ -152,8 +192,10 @@ export class WindowData {
     globalThis.window.addEventListener("focus", onFocus);
     return () => {
       this.active = false;
+      this.attached = false;
       this.mediaCache.clear();
       this.unsubscribe?.();
+      this.unsubscribeLink?.();
       globalThis.window.removeEventListener("focus", onFocus);
       const runtime = this.runtime; this.runtime = null;
       enqueue(this.store, this.windowId, async () => { if (runtime) await runtime.stop(); await this.store.call({ op: "data.detach", window_id: this.windowId }).catch(() => undefined); });
@@ -161,6 +203,33 @@ export class WindowData {
   }
 
   syncClient = () => this.runtime?.sync();
+
+  retry = async () => {
+    await this.ready;
+    if (!this.active) return;
+    await enqueue(this.store, this.windowId, async () => {
+      if (!this.active) return;
+      const alreadyAttached = this.attached;
+      const wasInitialized = this.initialized;
+      this.initialized = false;
+      this.pending = [];
+      try {
+        const reply = await this.store.call({ op: "data.attach", window_id: this.windowId, dormant: [...this.dormantPointers] });
+        this.merge(reply.view);
+        this.attached = true;
+        this.initialized = true;
+        if (alreadyAttached) await this.store.call({ op: "data.detach", window_id: this.windowId });
+      } catch (error) {
+        this.initialized = wasInitialized;
+        throw error;
+      } finally {
+        if (this.initialized) {
+          this.pending.forEach((view) => this.merge(view));
+          this.pending = [];
+        }
+      }
+    });
+  };
 
   setDormant = (pointer: string, dormant: boolean) => {
     if (this.dormantPointers.has(pointer) === dormant) return;

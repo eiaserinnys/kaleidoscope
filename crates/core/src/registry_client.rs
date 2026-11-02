@@ -24,6 +24,7 @@ fn raw_app_value_item_url(url: &str, app: &str, key: &str) -> Result<reqwest::Ur
     address
         .path_segments_mut()
         .map_err(|_| RegistryError::Failure("앱 저장소 주소를 만들 수 없습니다.".into()))?
+        .pop_if_empty()
         .extend(key.split('/'));
     Ok(address)
 }

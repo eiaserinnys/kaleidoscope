@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { MediaRef } from "../contract/contract";
 import { toCoreError } from "../core/core-transport";
 import { useWindowData } from "./window-data";
@@ -7,12 +7,14 @@ type MediaResult = { status: "loading" } | { status: "ready"; url: string } | { 
 
 export function useMedia(media: MediaRef | null, maxPx: number): MediaResult & { retry: () => void } {
   const data = useWindowData();
+  const generation = useSyncExternalStore(data.subscribeMedia, data.getMediaGeneration, data.getMediaGeneration);
   const requestSize = Math.ceil(maxPx * (globalThis.devicePixelRatio || 1));
   const key = media ? JSON.stringify([media, requestSize]) : "";
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<{ key: string; attempt: number; value: MediaResult }>({ key: "", attempt: -1, value: { status: "loading" } });
   useEffect(() => {
     if (!media) return;
+    if (result.key === key && result.attempt === attempt && result.value.status === "ready") return;
     let active = true;
     let request = data.mediaCache.get(key);
     if (!request) {
@@ -27,7 +29,7 @@ export function useMedia(media: MediaRef | null, maxPx: number): MediaResult & {
       (error: unknown) => { if (active) setResult({ key, attempt, value: { status: "failed", message: toCoreError(error).message } }); },
     );
     return () => { active = false; };
-  }, [data, key, requestSize, attempt]);
+  }, [data, key, requestSize, attempt, generation]);
   const value = result.key === key && result.attempt === attempt ? result.value : { status: "loading" as const };
   return { ...value, retry: () => setAttempt((current) => current + 1) };
 }

@@ -3,9 +3,16 @@ use super::*;
 use axum::extract::{Extension, State};
 use kaleidoscope_contract::worker::BuiltinRuntimeSpec;
 
+fn invalid(message: &str) -> CoreError {
+    CoreError {
+        message: message.into(),
+        ..CoreError::new(ErrorCode::InvalidRequest)
+    }
+}
+
 fn definition(spec: &BuiltinRuntimeSpec) -> Result<AppDefinition, CoreError> {
     if !kaleidoscope_contract::builtin::is_builtin(&spec.app_id) || spec.version == 0 {
-        return Err(CoreError::new(ErrorCode::InvalidRequest));
+        return Err(invalid("기본 앱 실행 설정이 올바르지 않습니다."));
     }
     let storage_version = if spec
         .storage
@@ -77,10 +84,10 @@ impl AppState {
                         )
                 })
             })
-            .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?;
+            .ok_or_else(|| invalid("앱에 선언되지 않은 저장소 항목입니다."))?;
         let key = super::app_storage::resolve_key(entry, workspace)?;
         if id_or_key != entry.id && id_or_key != entry.key && id_or_key != key {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(invalid("앱 저장소 키가 작업과 일치하지 않습니다."));
         }
         Ok((entry.clone(), key))
     }
@@ -104,7 +111,7 @@ impl AppState {
                             .is_ok_and(|resolved| resolved == prefix)
                 })
             })
-            .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?;
+            .ok_or_else(|| invalid("앱에 선언되지 않은 문서 모음입니다."))?;
         Ok((entry.clone(), prefix.to_string()))
     }
 
@@ -137,12 +144,12 @@ impl AppState {
                     })
                 })
             })
-            .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?;
+            .ok_or_else(|| invalid("앱에 선언되지 않은 문서 모음입니다."))?;
         let prefix = super::app_storage::resolve_key(entry, workspace)?;
         let doc = key
             .strip_prefix(&prefix)
             .and_then(|tail| tail.strip_prefix('/'))
-            .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))?
+            .ok_or_else(|| invalid("앱 저장소 키가 올바르지 않습니다."))?
             .to_string();
         Ok((entry.clone(), prefix, doc))
     }

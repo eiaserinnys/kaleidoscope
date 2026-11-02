@@ -23,6 +23,8 @@ const runtime = vi.hoisted(() => {
     setNotice: vi.fn(),
     subscribeClient: vi.fn(() => () => undefined),
     getClientGeneration: vi.fn(() => 0),
+    subscribeMedia: vi.fn(() => () => undefined),
+    getMediaGeneration: vi.fn(() => 0),
   });
   state.data = {
     windowId: "window-1",
@@ -35,6 +37,8 @@ const runtime = vi.hoisted(() => {
     setNotice: (...args: unknown[]) => state.setNotice(...args),
     subscribeClient: (...args: unknown[]) => state.subscribeClient(...args),
     getClientGeneration: (...args: unknown[]) => state.getClientGeneration(...args),
+    subscribeMedia: (...args: unknown[]) => state.subscribeMedia(...args),
+    getMediaGeneration: (...args: unknown[]) => state.getMediaGeneration(...args),
   };
   return state;
 });

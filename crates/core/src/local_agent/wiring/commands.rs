@@ -16,8 +16,12 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             let c = windows
                 .get(&window_id)
                 .ok_or_else(|| error::make(ErrorCode::NotFound))?;
-            let ctx = context::resolve(inner, &window_id, &c.generation)?
-                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+            let ctx = context::resolve(inner, &window_id, &c.generation)?.ok_or_else(|| {
+                error::with_message(
+                    ErrorCode::InvalidRequest,
+                    "에이전트 대화창 설정을 찾을 수 없습니다.",
+                )
+            })?;
             Ok(CoreReply::LocalAgentAttach {
                 snapshot: merged(&ctx, c.worker.as_ref(), c.snapshot.as_ref()),
             })
@@ -38,8 +42,12 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             window_id,
             spec_hash,
         } => {
-            let ctx = context::resolve(inner, &window_id, "")?
-                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+            let ctx = context::resolve(inner, &window_id, "")?.ok_or_else(|| {
+                error::with_message(
+                    ErrorCode::InvalidRequest,
+                    "에이전트 대화창 설정을 찾을 수 없습니다.",
+                )
+            })?;
             if ctx.snapshot.phase != LocalAgentPhase::AwaitingPermission
                 || ctx
                     .snapshot
@@ -47,7 +55,10 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                     .as_ref()
                     .is_none_or(|e| e.spec_hash != spec_hash)
             {
-                return Err(error::make(ErrorCode::InvalidRequest));
+                return Err(error::with_message(
+                    ErrorCode::InvalidRequest,
+                    "현재 에이전트 실행 요청을 확인할 수 없습니다.",
+                ));
             }
             let mut state = inner.state.lock().unwrap();
             state.device.local_agent_access.push(LocalAgentAccess {
@@ -133,8 +144,12 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
         } => {
             let _guard = inner.local_agents.gate.lock().unwrap();
             let worker = worker(inner, &window_id, &generation)?;
-            let ctx = context::resolve(inner, &window_id, &generation)?
-                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+            let ctx = context::resolve(inner, &window_id, &generation)?.ok_or_else(|| {
+                error::with_message(
+                    ErrorCode::InvalidRequest,
+                    "에이전트 대화창 설정을 찾을 수 없습니다.",
+                )
+            })?;
             let key = format!("local-agent:{window_id}");
             let (all, visuals_sent) =
                 share::capture_for_send(inner, &ctx.workspace, &key, &attachments);
@@ -163,8 +178,12 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             item_id,
             attachment_id,
         } => {
-            context::resolve(inner, &window_id, "")?
-                .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+            context::resolve(inner, &window_id, "")?.ok_or_else(|| {
+                error::with_message(
+                    ErrorCode::InvalidRequest,
+                    "에이전트 대화창 설정을 찾을 수 없습니다.",
+                )
+            })?;
             let (mime, bytes, _) = super::super::attachment_bytes(
                 &context::record_dir(inner, &window_id),
                 &item_id,
@@ -197,7 +216,10 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             .map_err(|e| error::io_error(&e))?;
             Ok(CoreReply::LocalAgentAttachmentOpen {})
         }
-        _ => Err(error::make(ErrorCode::InvalidRequest)),
+        _ => Err(error::with_message(
+            ErrorCode::InvalidRequest,
+            "에이전트 명령이 올바르지 않습니다.",
+        )),
     }
 }
 use sha2::Digest;

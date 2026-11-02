@@ -78,7 +78,14 @@ mod tests {
                 {"type":"button","label":"표시","on_click":[{"set_state":"choice","value":{"expr":"$data.visible.name"}}]}
             ]}
         }).to_string()).unwrap();
-        let mut runtime = Runtime::new(1, definition, BTreeMap::new(), true, Default::default());
+        let mut runtime = Runtime::new(
+            1,
+            definition,
+            BTreeMap::new(),
+            true,
+            false,
+            Default::default(),
+        );
         runtime.dormant = vec!["/ui/children/0".into()];
         assert_eq!(live_sources(&runtime), BTreeSet::from(["visible".into()]));
         runtime.dormant.clear();

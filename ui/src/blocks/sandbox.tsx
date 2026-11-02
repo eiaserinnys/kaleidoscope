@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { Notice, StatusText } from "../components/primitives";
@@ -17,18 +17,23 @@ import { useShellSelector } from "../core/shell-store";
 type SandboxData = Extract<Block, { type: "sandbox" }>;
 
 export function SandboxBlock({ block, context, pointer }: { block: SandboxData; context: BlockContext; pointer: string }) {
+  const data = useWindowData();
+  const mediaGeneration = useSyncExternalStore(data.subscribeMedia, data.getMediaGeneration, data.getMediaGeneration);
+  const previousMediaGeneration = useRef(mediaGeneration);
   const bound = useBinding(`${pointer}/value`, block.value ?? null);
   const boundStatus = bound.status;
   const boundValue = bound.status === "ready" ? bound.value : null;
   const [rawHtml, setRawHtml] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const readSequence = useRef(0);
   const permission = block.file?.permission;
   const fileState = useWindowStateValue(context, block.file && typeof block.file.path !== "string" ? block.file.path.state : null);
   const path = block.file ? resolveFilePath(block.file, fileState) : null;
   const grantValue = useWindowGrant(context, permission ?? "");
   const grant = permission ? grantValue?.root_path : null;
   const read = useCallback(async () => {
+    const sequence = ++readSequence.current;
     try {
       let text = "";
       if (block.asset !== undefined) {
@@ -44,11 +49,15 @@ export function SandboxBlock({ block, context, pointer }: { block: SandboxData; 
         const reply = await context.store.call({ op: "storage.get", window_id: context.window.id, entry: block.document.entry });
         if (reply.op === "storage.get" && typeof reply.result.content === "string") text = reply.result.content;
       } else if (block.value !== undefined && boundStatus === "ready" && typeof boundValue === "string") text = boundValue;
-      setRawHtml(text); setError(null);
-    } catch (reason) { setError(toCoreError(reason).message); }
-    finally { setLoading(false); }
+      if (sequence === readSequence.current) { setRawHtml(text); setError(null); }
+    } catch (reason) { if (sequence === readSequence.current) setError(toCoreError(reason).message); }
+    finally { if (sequence === readSequence.current) setLoading(false); }
   }, [block.asset, block.file, block.document, block.value, boundStatus, boundValue, context.store, context.window.id, permission, path, grant]);
   useEffect(() => { void read(); }, [read]);
+  useEffect(() => {
+    if (previousMediaGeneration.current !== mediaGeneration && block.asset !== undefined && (error !== null || loading)) void read();
+    previousMediaGeneration.current = mediaGeneration;
+  }, [mediaGeneration, block.asset, error, loading, read]);
   useEffect(() => {
     if (!block.file) return;
     const refresh = () => { void read(); };
