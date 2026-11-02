@@ -58,6 +58,7 @@ function storageFolderDefinition(readOnly = true): AppDefinition {
 
 function storageFolderTabsDefinition(): AppDefinition {
   const definition = storageFolderDefinition();
+  (definition.ui as Extract<Block, { type: "folder" }> & { header: boolean }).header = false;
   definition.ui = {
     type: "tabs",
     tabs: [
@@ -364,6 +365,44 @@ describe("folder block", () => {
     await screen.findByRole("tree", { name: "문서" });
     expect(document.querySelector(".ks-file-tree-header")).toBeNull();
     expect(screen.queryByText("문서", { exact: true })).toBeNull();
+  });
+
+  it("shows the collection header without a split pane by default", async () => {
+    setup(storageFolderDefinition(), (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "storage.list"
+        ? { op: "storage.list", result: { bucket_id: "folder-storage-test", items: [] } }
+        : originalCall(request));
+    });
+    await screen.findByRole("tree", { name: "문서" });
+    expect(document.querySelector(".ks-file-tree-header")?.textContent).toContain("문서");
+  });
+
+  it("hides the file-root header when explicitly disabled", async () => {
+    const definition = fileFolderDefinition();
+    (definition.ui as Extract<Block, { type: "folder" }> & { header: boolean }).header = false;
+    setup(definition);
+    await screen.findByRole("tree");
+    expect(document.querySelector(".ks-file-tree-header")).toBeNull();
+  });
+
+  it.each([true, false])("ordinary tabs preserve the child folder collapse control (header=%s)", async (header) => {
+    const definition = storageFolderDefinition();
+    definition.ui = { type: "split", direction: "row", children: [
+      { type: "tabs", header, tabs: [{ label: "문서 탭", child: definition.ui }] },
+      { type: "text", value: "다른 패널" },
+    ] };
+    setup(definition, (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "storage.list"
+        ? { op: "storage.list", result: { bucket_id: "folder-storage-test", items: [] } }
+        : originalCall(request));
+    });
+    await screen.findByRole("tree", { name: "문서" });
+    expect(screen.getAllByRole("button", { name: "목록 접기" })).toHaveLength(1);
+    expect(document.querySelector(".ks-file-tree .ks-file-tree-collapse button")).toBe(screen.getByRole("button", { name: "목록 접기" }));
+    fireEvent.click(screen.getByRole("button", { name: "목록 접기" }));
+    expect(screen.getByRole("button", { name: "목록 펼치기" })).toBeTruthy();
   });
 
   it("refreshes a visible collection on matching storage changes and defers hidden updates", async () => {

@@ -46,7 +46,7 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
     const next = (current + (event.key === "ArrowRight" ? 1 : -1) + block.tabs.length) % block.tabs.length;
     setFocused(next); refs.current[next]?.focus();
   };
-  const collapsed = block.header !== false && Boolean(pane?.collapsed);
+  const collapsed = Boolean(block.collapsible && pane?.collapsed);
   const showHeader = block.header !== false && !collapsed;
   useLayoutEffect(() => {
     if (!restoreToggleFocus.current) return;
@@ -58,7 +58,7 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
     restoreToggleFocus.current = true;
     pane?.toggle();
   };
-  const renderChild = (tabIndex: number) => <SplitPaneContext.Provider value={null}>
+  const renderChild = (tabIndex: number) => <SplitPaneContext.Provider value={block.collapsible ? null : pane}>
     {renderBlock(block.tabs[tabIndex].child, context, `${pointer}/tabs/${tabIndex}/child`)}
   </SplitPaneContext.Provider>;
   return <div className={`ks-data-tabs${collapsed ? " is-collapsed" : ""}`} ref={tabsRef}>
@@ -67,7 +67,7 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
       <div className="ks-data-tab-list" role="tablist">
         {block.tabs.map((tab, n) => <button className={`ks-button ks-button-default${n === index ? " is-selected" : ""}`} role="tab" aria-selected={n === index} tabIndex={n === focused ? 0 : -1} key={n} ref={(element) => { refs.current[n] = element; }} onFocus={() => setFocused(n)} onKeyDown={(event) => keyDown(event, n)} onClick={() => select(n)}>{tab.label}</button>)}
       </div>
-      {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
+      {block.collapsible && pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
     </div> : null}
     {block.tabs.map((_, tabIndex) => <DormantPointer
       dormant={collapsed || tabIndex !== index}

@@ -1350,6 +1350,13 @@ pub enum Block {
     /// PC 전체 권한은 탐색기만 받는다. `read_only`는 쓰기 UI를 보이지 않게 한다.
     Folder {
         root: FolderRoot,
+        /// 거짓이면 폴더 머리 줄을 숨긴다.
+        #[serde(
+            default = "default_tabs_header",
+            skip_serializing_if = "skip_default_tabs_header"
+        )]
+        #[ts(optional, as = "Option<bool>")]
+        header: bool,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         #[ts(optional, as = "Option<Vec<String>>")]
         extensions: Vec<String>,
@@ -1528,6 +1535,10 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "skip_default_tabs_keep_mounted")]
         #[ts(optional, as = "Option<bool>")]
         keep_mounted: bool,
+        /// 참이면 분할 칸의 접기와 펼치기를 탭이 맡는다.
+        #[serde(default, skip_serializing_if = "is_false")]
+        #[ts(optional, as = "Option<bool>")]
+        collapsible: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         selected: Option<StateRef>,
@@ -2012,6 +2023,8 @@ enum RawBlock {
     },
     Folder {
         root: FolderRoot,
+        #[serde(default = "default_tabs_header")]
+        header: bool,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         extensions: Vec<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2162,6 +2175,8 @@ enum RawBlock {
         header: bool,
         #[serde(default, skip_serializing_if = "skip_default_tabs_keep_mounted")]
         keep_mounted: bool,
+        #[serde(default)]
+        collapsible: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         selected: Option<StateRef>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2651,12 +2666,14 @@ impl From<RawBlock> for Block {
             },
             RawBlock::Folder {
                 root,
+                header,
                 extensions,
                 selected,
                 on_select,
                 read_only,
             } => Block::Folder {
                 root,
+                header,
                 extensions,
                 selected,
                 on_select,
@@ -2742,12 +2759,14 @@ impl From<RawBlock> for Block {
                 tabs,
                 header,
                 keep_mounted,
+                collapsible,
                 selected,
                 on_change,
             } => Block::Tabs {
                 tabs,
                 header,
                 keep_mounted,
+                collapsible,
                 selected,
                 on_change,
             },
@@ -5469,6 +5488,39 @@ mod tests {
                 .and_then(JsonValue::as_f64),
             Some(0.0)
         );
+    }
+
+    #[test]
+    fn folder_header_and_collapsible_tabs_are_explicit_v13_options() {
+        let mut app = serde_json::json!({
+            "id": "folder-tabs-options", "name": "옵션 검사",
+            "requires": { "blocks": 13, "modules": { "files": 1 } },
+            "permissions": [{ "module": "files", "id": "docs", "access": "read", "label": "문서" }],
+            "state": {},
+            "ui": { "type": "tabs", "collapsible": true, "tabs": [
+                { "label": "문서", "child": { "type": "folder", "root": { "permission": "docs" }, "header": false } }
+            ] }
+        });
+        let definition = validate::parse_app_definition(&app.to_string()).unwrap();
+        let encoded = serde_json::to_value(&definition).unwrap();
+        assert_eq!(encoded["ui"]["collapsible"], true);
+        assert_eq!(encoded["ui"]["tabs"][0]["child"]["header"], false);
+
+        app["ui"]["collapsible"] = serde_json::json!(false);
+        app["ui"]["tabs"][0]["child"]["header"] = serde_json::json!(true);
+        let defaults = validate::parse_app_definition(&app.to_string()).unwrap();
+        let encoded = serde_json::to_value(defaults).unwrap();
+        assert!(encoded["ui"].get("collapsible").is_none());
+        assert!(encoded["ui"]["tabs"][0]["child"].get("header").is_none());
+
+        app["requires"]["blocks"] = serde_json::json!(12);
+        assert!(validate::parse_app_definition(&app.to_string()).is_err());
+        app["ui"]["tabs"][0]["child"] = serde_json::json!({ "type": "text", "value": "내용" });
+        assert!(validate::parse_app_definition(&app.to_string()).is_err());
+        app["requires"]["blocks"] = serde_json::json!(13);
+        app["ui"]["collapsible"] = serde_json::json!(true);
+        app["ui"]["header"] = serde_json::json!(false);
+        assert!(validate::parse_app_definition(&app.to_string()).is_err());
     }
 
     #[test]

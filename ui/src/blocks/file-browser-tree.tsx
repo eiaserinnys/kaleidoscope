@@ -26,6 +26,7 @@ export interface FileBrowserTreeProps {
   permission: string;
   permissionLabel: string;
   extensions: string[];
+  header?: boolean;
   selectedPath: string | null;
   onSelect: (path: string, entry?: FolderEntry) => void | Promise<unknown>;
   canCreate: boolean;
@@ -67,6 +68,7 @@ export function FileBrowserTree({
   permission,
   permissionLabel,
   extensions,
+  header = true,
   selectedPath,
   onSelect,
   canCreate,
@@ -567,12 +569,12 @@ export function FileBrowserTree({
         </div>
       ) : (
         <>
-          <FolderTreeHeader label={rootName}>
+          {header ? <FolderTreeHeader label={rootName}>
             {(canCreate || (actionsEnabled && backend.capabilities.createFile)) && !(collection && entriesByDirectory[""]?.length === 0)
               ? <IconButton aria-label={collection ? "새 문서" : "새 파일"} onClick={() => actionsEnabled ? void actions.beginCreateFile("", focusController.current) : void beginCreate()}><FilePlus /></IconButton> : null}
             {!collection && scope === "folder" ? <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}><FolderOpen /></IconButton> : null}
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
-          </FolderTreeHeader>
+          </FolderTreeHeader> : null}
           <TreeView
             className="ks-file-tree-list"
             expanded={expanded}

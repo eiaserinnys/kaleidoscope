@@ -18,12 +18,12 @@
 .ks-data-stack-item:not(.is-fill) > .ks-data-stack { height: auto; }
 .ks-data-stack-item:not(.is-fill) > .ks-data-view { height: auto; overflow: visible; }
 .ks-data-tabs { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
-.ks-data-tab-header { display: flex; width: 100%; min-width: 0; flex: 0 0 auto; align-items: center; gap: var(--ks-space-2); padding-inline: var(--ks-space-3); }
-.ks-data-tab-list { display: flex; min-width: 0; flex: 1 1 auto; gap: var(--ks-space-1); overflow-x: auto; padding-block: var(--ks-space-2); }
+.ks-data-tab-header { container-type: inline-size; display: flex; width: 100%; min-width: 0; flex: 0 0 auto; align-items: center; gap: var(--ks-space-2); padding-inline: var(--ks-space-3); }
+.ks-data-tab-list { display: flex; min-width: 0; flex: 1 1 auto; gap: var(--ks-space-1); overflow-x: auto; padding-block: var(--ks-space-2); padding-inline: var(--ks-space-1); margin-inline: calc(-1 * var(--ks-space-1)); }
 .ks-data-tab-panel { padding-inline: var(--ks-space-3); }
 .ks-data-tab-list .ks-button { flex: 0 0 auto; font-size: var(--ks-type-meta); white-space: nowrap; }
 .ks-data-tab-panel { flex: 1 1 auto; min-height: 0; overflow: auto; padding-block-end: var(--ks-space-3); }
-.ks-data-tabs.is-collapsed { justify-content: center; }
+@container (max-width: 150px) { .ks-data-tab-list .ks-button { padding-inline: var(--ks-space-2); } }
 .ks-data-tabs.is-collapsed > .ks-file-tree-expand { display: grid; width: var(--ks-icon-button-size); height: var(--ks-icon-button-size); flex: 0 0 var(--ks-icon-button-size); place-items: center; }
 .ks-data-tab-panel:has(> .ks-file-tree),
 .ks-data-tab-panel:has(> .ks-file-tree-ungranted),

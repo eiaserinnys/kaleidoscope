@@ -43,7 +43,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     let mut details = validate(&definition);
     if uses_v13_field && definition.requires.blocks < 13 {
         details.push(
-            "tabs.header, tabs.keep_mounted, state_migrate와 opens.set_state는 블록 세트 13판이라 requires.blocks가 13 이상이어야 합니다"
+            "tabs.header, tabs.keep_mounted, tabs.collapsible, state_migrate와 opens.set_state는 블록 세트 13판이라 requires.blocks가 13 이상이어야 합니다"
                 .into(),
         );
     }
@@ -106,7 +106,9 @@ fn uses_tabs_v13_field(value: &Value) -> bool {
     match value {
         Value::Object(object) => {
             let uses_field = object.get("type").and_then(Value::as_str) == Some("tabs")
-                && (object.contains_key("header") || object.contains_key("keep_mounted"));
+                && (object.contains_key("header")
+                    || object.contains_key("keep_mounted")
+                    || object.contains_key("collapsible"));
             uses_field || object.values().any(uses_tabs_v13_field)
         }
         Value::Array(values) => values.iter().any(uses_tabs_v13_field),
@@ -2205,10 +2207,15 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         }
         Block::Tabs {
             tabs,
+            header,
+            collapsible,
             selected,
             on_change,
             ..
         } => {
+            if *collapsible && !*header {
+                details.push(format!("{at}: tabs.collapsible은 header가 있을 때만 쓸 수 있습니다"));
+            }
             if tabs.is_empty() {
                 details.push(format!("{at}: tabs에는 탭이 하나 이상 필요합니다"));
             }

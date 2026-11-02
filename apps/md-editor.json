@@ -34,6 +34,7 @@
     "children": [
       {
         "type": "tabs",
+        "collapsible": true,
         "keep_mounted": true,
         "selected": { "state": "source" },
         "on_change": { "set_state": "source" },
@@ -42,6 +43,7 @@
             "label": "서버",
             "child": {
               "type": "folder",
+              "header": false,
               "root": { "entry": "documents" },
               "extensions": ["md"],
               "selected": { "state": "current_document" },

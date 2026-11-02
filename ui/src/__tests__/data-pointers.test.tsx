@@ -89,7 +89,7 @@ it("탭이 분할 칸 접기를 맡고 접힌 패널을 유지하며 반대쪽 �
   const definition: AppDefinition = {
     id: "collapsed-tabs", name: "접힌 탭 시험", requires: { blocks: 13, modules: {} }, permissions: [],
     state: { selected: 0 },
-    ui: { type: "tabs", selected: { state: "selected" }, tabs: [
+    ui: { type: "tabs", collapsible: true, selected: { state: "selected" }, tabs: [
       { label: "서버", child: { type: "text", value: "서버 내용" } },
       { label: "내 폴더", child: { type: "text", value: "폴더 내용" } },
     ] },

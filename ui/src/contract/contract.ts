@@ -264,7 +264,11 @@ sizes?: Array<number>, children: Array<Block>, } | { "type": "tree", items?: Bin
 /**
  * 보일 파일 확장자(점 없이, 소문자). 비어 있으면 모든 파일. 폴더는 늘 보인다.
  */
-extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "folder", root: FolderRoot, extensions?: Array<string>, selected?: StateRef, on_select?: Actions, read_only?: boolean, } | { "type": "markdown", file?: FileRef, document?: DocumentRef, value?: Binding, read_only?: boolean, } | { "type": "html_view", document?: DocumentRef, file?: FileRef, value?: Binding, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "chat", permission?: string, root?: FolderRef, agents?: Binding, selected?: StateRef, on_select?: SetState, } | { "type": "web_view", 
+extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "folder", root: FolderRoot, 
+/**
+ * 거짓이면 폴더 머리 줄을 숨긴다.
+ */
+header?: boolean, extensions?: Array<string>, selected?: StateRef, on_select?: Actions, read_only?: boolean, } | { "type": "markdown", file?: FileRef, document?: DocumentRef, value?: Binding, read_only?: boolean, } | { "type": "html_view", document?: DocumentRef, file?: FileRef, value?: Binding, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "chat", permission?: string, root?: FolderRef, agents?: Binding, selected?: StateRef, on_select?: SetState, } | { "type": "web_view", 
 /**
  * 열 주소. 상태에서 읽거나(`{ "state": "url" }`) 정의에 적는다(`"https://example.com"`).
  */
@@ -292,7 +296,11 @@ view?: StateRef,
 /**
  * (5판) 보기 방식을 바꾸면 그 값을 쓸 상태 키.
  */
-on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, wrap?: boolean, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, header?: boolean, keep_mounted?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": "toolbar", start: Array<Block>, end?: Array<Block>, } | { "type": "section", title: Binding, 
+on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, wrap?: boolean, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, header?: boolean, keep_mounted?: boolean, 
+/**
+ * 참이면 분할 칸의 접기와 펼치기를 탭이 맡는다.
+ */
+collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": "toolbar", start: Array<Block>, end?: Array<Block>, } | { "type": "section", title: Binding, 
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
