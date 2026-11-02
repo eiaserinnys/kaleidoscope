@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useContext, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useDormant, useWindowData } from "../data/window-data";
@@ -9,6 +9,7 @@ import { renderBlock } from "../render/render-block";
 import { patchWindowState, useWindowStateValue, useWindowVisible } from "../data/window-state";
 import { eventModifiers } from "../runtime/shortcuts";
 import { formatClockTime, isClock, useClockPosition } from "../data/clock";
+import { SplitPaneContext } from "./split-pane-context";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 
@@ -20,12 +21,18 @@ export function StackBlock({ block, context, pointer }: Props<"stack">) {
 }
 
 export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
+  const pane = useContext(SplitPaneContext);
   const [local, setLocal] = useState(0);
   const [focused, setFocused] = useState(0);
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
   const selected = useWindowStateValue(context, block.selected?.state ?? null);
   const value = block.selected ? selected : local;
   const index = typeof value === "number" && value >= 0 && value < block.tabs.length ? value : 0;
+  const [visited, setVisited] = useState(() => new Set([index]));
+  useEffect(() => {
+    if (!block.keep_mounted) return;
+    setVisited((previous) => previous.has(index) ? previous : new Set(previous).add(index));
+  }, [block.keep_mounted, index]);
   const select = (next: number) => {
     if (!block.selected) setLocal(next);
     if (block.on_change) void patchWindowState(context, { [block.on_change.set_state]: next });
@@ -36,13 +43,27 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
     const next = (current + (event.key === "ArrowRight" ? 1 : -1) + block.tabs.length) % block.tabs.length;
     setFocused(next); refs.current[next]?.focus();
   };
-  return <div className="ks-data-tabs"><div className="ks-data-tab-list" role="tablist">
+  const showHeader = block.header !== false && !pane?.collapsed;
+  return <div className="ks-data-tabs">{showHeader ? <div className="ks-data-tab-list" role="tablist">
     {block.tabs.map((tab, n) => <button className={`ks-button ks-button-default${n === index ? " is-selected" : ""}`} role="tab" aria-selected={n === index} tabIndex={n === focused ? 0 : -1} key={n} ref={(element) => { refs.current[n] = element; }} onFocus={() => setFocused(n)} onKeyDown={(event) => keyDown(event, n)} onClick={() => select(n)}>{tab.label}</button>)}
-  </div>{block.tabs.map((_, tabIndex) => <DormantPointer
+  </div> : null}{block.tabs.map((_, tabIndex) => <DormantPointer
     dormant={tabIndex !== index}
     key={tabIndex}
     pointer={`${pointer}/tabs/${tabIndex}`}
-  />)}<div className="ks-data-tab-panel" role="tabpanel">{renderBlock(block.tabs[index].child, context, `${pointer}/tabs/${index}/child`)}</div></div>;
+  />)}{block.keep_mounted ? block.tabs.map((tab, tabIndex) => {
+    const selectedTab = tabIndex === index;
+    if (!selectedTab && !visited.has(tabIndex)) return null;
+    return <div
+      aria-label={showHeader ? undefined : tab.label}
+      className="ks-data-tab-panel"
+      hidden={!selectedTab}
+      inert={!selectedTab}
+      key={tabIndex}
+      role="tabpanel"
+    >{renderBlock(tab.child, context, `${pointer}/tabs/${tabIndex}/child`)}</div>;
+  }) : <div aria-label={showHeader ? undefined : block.tabs[index].label} className="ks-data-tab-panel" role="tabpanel">
+    {renderBlock(block.tabs[index].child, context, `${pointer}/tabs/${index}/child`)}
+  </div>}</div>;
 }
 
 export function ToolbarBlock({ block, context, pointer }: Props<"toolbar">) {

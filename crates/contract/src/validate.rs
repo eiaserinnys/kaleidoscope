@@ -31,10 +31,17 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         return Err(crate::errors::APP_DEFINITION_REQUIRES_NEWER_SHELL());
     }
 
+    let uses_tabs_v13_field = uses_tabs_v13_field(&value);
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
 
     let mut details = validate(&definition);
+    if uses_tabs_v13_field && definition.requires.blocks < 13 {
+        details.push(
+            "tabs.header와 tabs.keep_mounted는 블록 세트 13판이라 requires.blocks가 13 이상이어야 합니다"
+                .into(),
+        );
+    }
     if !cached && definition.agent.is_none() {
         data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
             if matches!(block, Block::Chat { .. }) && !block.is_local_agent_chat() {
@@ -90,6 +97,18 @@ fn requires_unsupported(value: &Value) -> bool {
     })
 }
 
+fn uses_tabs_v13_field(value: &Value) -> bool {
+    match value {
+        Value::Object(object) => {
+            let uses_field = object.get("type").and_then(Value::as_str) == Some("tabs")
+                && (object.contains_key("header") || object.contains_key("keep_mounted"));
+            uses_field || object.values().any(uses_tabs_v13_field)
+        }
+        Value::Array(values) => values.iter().any(uses_tabs_v13_field),
+        _ => false,
+    }
+}
+
 fn validate(definition: &AppDefinition) -> Vec<String> {
     let mut details = Vec::new();
     if !valid_id(&definition.id) {
@@ -97,6 +116,15 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
     }
     if definition.name.trim().is_empty() {
         details.push("앱 이름이 비어 있습니다".into());
+    }
+
+    for (key, expression) in &definition.state_migrate {
+        validate_state_key(key, definition, &mut details, "state_migrate");
+        if let Err(error) = parse_expr(expression) {
+            details.push(format!(
+                "state_migrate.{key}: JSONata 식을 읽을 수 없습니다: {error}"
+            ));
+        }
     }
 
     if !definition.assets.is_empty() {
@@ -205,6 +233,15 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
             ));
         }
         validate_state_key(&opens.state, definition, &mut details, "opens");
+        for key in opens.set_state.keys() {
+            validate_state_key(key, definition, &mut details, "opens.set_state");
+            if key == &opens.state {
+                details.push(format!(
+                    "opens.set_state: 경로 상태 키 {}와 겹칠 수 없습니다",
+                    opens.state
+                ));
+            }
+        }
     }
 
     if let Some(storage) = &definition.storage {
@@ -2165,6 +2202,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             tabs,
             selected,
             on_change,
+            ..
         } => {
             if tabs.is_empty() {
                 details.push(format!("{at}: tabs에는 탭이 하나 이상 필요합니다"));

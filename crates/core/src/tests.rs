@@ -36,6 +36,7 @@ mod server_switch_tests;
 mod share_capture_tests;
 
 const MD_EDITOR: &str = include_str!("../../../apps/md-editor.json");
+const MD_EDITOR_V3: &str = include_str!("tests/fixtures/md-editor-v3.json");
 const MD_VIEWER: &str = include_str!("../../contract/fixtures/md-viewer.json");
 const WEB_BROWSER: &str = include_str!("../../../apps/web-browser.json");
 
@@ -257,7 +258,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
         ("agent", 3),
         ("slackbot", 2),
         ("explorer", 3),
-        ("md-editor", 3),
+        ("md-editor", 4),
         ("html-report", 2),
         ("web-browser", 1),
         ("calculator", 2),
@@ -451,6 +452,70 @@ fn builtin_window_state_survives_restart_at_the_same_version() {
 }
 
 #[test]
+fn builtin_md_editor_v3_window_migrates_current_file_on_restart() {
+    let temp = TempDir::new().unwrap();
+    let data_dir = temp.path().join("data");
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(&data_dir, vec![], &host);
+    let (_, desktop) = active_ids(&core);
+    let window_id = open_window(&core, &desktop, "md-editor");
+    let old_definition: kaleidoscope_contract::AppDefinition =
+        serde_json::from_str(MD_EDITOR_V3).unwrap();
+    {
+        let mut state = core.inner.state.lock().unwrap();
+        let app = state
+            .shared
+            .apps
+            .iter_mut()
+            .find(|app| app.id == "md-editor")
+            .unwrap();
+        app.current_version = 3;
+        state
+            .shared
+            .app_versions
+            .retain(|version| version.app_id != "md-editor");
+        state.shared.app_versions.push(AppVersion {
+            app_id: "md-editor".into(),
+            version: 3,
+            definition: old_definition,
+            created_at: "old-v3".into(),
+        });
+        let window = state
+            .shared
+            .windows
+            .iter_mut()
+            .find(|window| window.id == window_id)
+            .unwrap();
+        window.app_version = 3;
+        window.state = BTreeMap::from([("current_file".into(), json!("notes/a.md"))]);
+        crate::storage::save_state(&data_dir, &state.shared, &state.device).unwrap();
+    }
+    core.shutdown();
+    drop(core);
+
+    let reopened = open_core(&data_dir, vec![], &host);
+    let snapshot = snapshot(&reopened);
+    let app = snapshot
+        .shared
+        .apps
+        .iter()
+        .find(|app| app.id == "md-editor")
+        .unwrap();
+    let window = snapshot
+        .shared
+        .windows
+        .iter()
+        .find(|window| window.id == window_id)
+        .unwrap();
+    assert_eq!(app.current_version, 4);
+    assert_eq!(window.app_version, 4);
+    assert_eq!(window.state.get("source").and_then(Value::as_f64), Some(1.0));
+    assert_eq!(window.state.get("current_file"), Some(&json!("notes/a.md")));
+    assert_eq!(window.state.get("current_document"), Some(&json!(null)));
+    reopened.shutdown();
+}
+
+#[test]
 fn registry_events_remove_personal_apps_but_preserve_builtins() {
     let temp = TempDir::new().unwrap();
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
@@ -501,7 +566,7 @@ fn registry_events_remove_personal_apps_but_preserve_builtins() {
     assert!(state
         .apps
         .iter()
-        .any(|app| app.id == "md-editor" && app.current_version == 3 && app.name != "바뀐 이름"));
+        .any(|app| app.id == "md-editor" && app.current_version == 4 && app.name != "바뀐 이름"));
 }
 
 #[test]
@@ -2080,7 +2145,8 @@ fn app_import_rejects_a_definition_path_outside_the_picked_folder() {
     let host = Arc::new(FakeHost::default());
     let core = open_core(&temp.path().join("data"), vec![], &host);
     let mut definition: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
-    definition["ui"]["children"][1]["file"]["path"] = json!("../secret.md");
+    definition["ui"]["children"][1]["tabs"][1]["child"]["file"]["path"] =
+        json!("../secret.md");
 
     let error = expect_error(
         core.handle(CoreRequest::AppImport {
@@ -2396,12 +2462,11 @@ fn import_seeds_versions_migrates_window_state_and_rejects_newer_requirements() 
 
     let mut definition: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
     definition["name"] = json!("마크다운 편집기 새 버전");
-    // 상태 키를 바꾸므로 예제의 opens(current_file을 가리킴)는 뺀다.
-    definition.as_object_mut().unwrap().remove("opens");
-    definition["state"] = json!({"new_key": "default"});
+    definition["state"] = json!({"source": 0, "current_file": null, "current_document": null});
+    definition["state_migrate"] = json!({"source": "$state.current_file != null ? 1 : 0"});
     definition["ui"] = json!({
-        "type": "markdown_view",
-        "file": { "permission": "docs", "path": "readme.md" }
+        "type": "markdown",
+        "file": { "permission": "docs", "path": { "state": "current_file" } }
     });
     import(&core, &definition.to_string());
 
@@ -2420,8 +2485,12 @@ fn import_seeds_versions_migrates_window_state_and_rejects_newer_requirements() 
         .find(|window| window.id == window_id)
         .unwrap();
     assert_eq!(window.app_version, 2);
-    assert_eq!(window.state.get("new_key"), Some(&json!("default")));
-    assert!(!window.state.contains_key("current_file"));
+    assert_eq!(
+        window.state.get("source").and_then(Value::as_f64),
+        Some(1.0)
+    );
+    assert_eq!(window.state.get("current_file"), Some(&json!("old.md")));
+    assert_eq!(window.state.get("current_document"), Some(&json!(null)));
     assert!(snapshot
         .device
         .grants
@@ -2800,6 +2869,10 @@ fn registry_events_update_cache_dedupe_versions_and_order_open_requests() {
     let mut next_definition: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
     next_definition["name"] = json!("레지스트리 편집기");
     next_definition.as_object_mut().unwrap().remove("opens");
+    next_definition
+        .as_object_mut()
+        .unwrap()
+        .remove("state_migrate");
     next_definition["state"] = json!({"new_key": "기본값"});
     next_definition["ui"] = json!({
         "type": "markdown_view",
@@ -3008,8 +3081,10 @@ fn regression_unlinked_import_persists_removed_folder_grants() {
     next_definition["permissions"] = json!([
         { "module": "files", "id": "manuals", "access": "readwrite", "label": "문서 폴더" }
     ]);
-    next_definition["ui"]["children"][0]["root"]["permission"] = json!("manuals");
-    next_definition["ui"]["children"][1]["file"]["permission"] = json!("manuals");
+    next_definition["ui"]["children"][0]["tabs"][1]["child"]["root"]["permission"] =
+        json!("manuals");
+    next_definition["ui"]["children"][1]["tabs"][1]["child"]["file"]["permission"] =
+        json!("manuals");
     next_definition["opens"]["permission"] = json!("manuals");
     import(&core, &next_definition.to_string());
     assert!(snapshot(&core).device.grants.is_empty());
@@ -3043,8 +3118,10 @@ fn connected_import_persists_removed_folder_grants() {
     next_definition["permissions"] = json!([
         { "module": "files", "id": "manuals", "access": "readwrite", "label": "문서 폴더" }
     ]);
-    next_definition["ui"]["children"][0]["root"]["permission"] = json!("manuals");
-    next_definition["ui"]["children"][1]["file"]["permission"] = json!("manuals");
+    next_definition["ui"]["children"][0]["tabs"][1]["child"]["root"]["permission"] =
+        json!("manuals");
+    next_definition["ui"]["children"][1]["tabs"][1]["child"]["file"]["permission"] =
+        json!("manuals");
     next_definition["opens"]["permission"] = json!("manuals");
     let definition_json = next_definition.to_string();
     client

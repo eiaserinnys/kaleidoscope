@@ -257,10 +257,13 @@ test("파일 트리 행의 공통화 전후 모습을 비교한다", async ({ pa
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/?preview=md-editor");
     const app = page.getByTestId("app-window-md-editor");
+    await app.getByRole("tab", { name: "내 폴더" }).click();
     await app.getByRole("button", { name: "문서 폴더 고르기" }).click();
     await app.getByRole("treeitem", { name: "notes" }).click();
     await app.getByRole("treeitem", { name: "README.md" }).click();
     await expect(app.getByRole("treeitem", { name: "README.md" })).toHaveAttribute("aria-current", "page");
+    const folderTree = app.locator(".ks-split-pane").first().locator(".ks-data-tab-panel:visible .ks-file-tree");
+    await expect(folderTree).toHaveCount(1);
     await page.evaluate((css) => {
       const style = document.createElement("style");
       style.id = "old-file-tree-css";
@@ -269,13 +272,13 @@ test("파일 트리 행의 공통화 전후 모습을 비교한다", async ({ pa
       document.querySelectorAll(".ks-file-tree-row").forEach((row) => row.classList.remove("ks-row"));
     }, baselineCss);
     await capture(page, `file-tree-before-${width}`);
-    const before = await app.locator(".ks-file-tree").screenshot();
+    const before = await folderTree.screenshot();
     await page.evaluate(() => {
       document.getElementById("old-file-tree-css")?.remove();
       document.querySelectorAll(".ks-file-tree-row").forEach((row) => row.classList.add("ks-row"));
     });
     await capture(page, `file-tree-after-${width}`);
-    const after = await app.locator(".ks-file-tree").screenshot();
+    const after = await folderTree.screenshot();
     expect(after).toEqual(before);
   }
 });

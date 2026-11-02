@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use kaleidoscope_contract::registry::RegistryApp;
 use kaleidoscope_contract::{
-    errors, App, AppDefinition, AppVersion, CoreError, CoreReply, SharedState,
+    errors, migrate_window_state, App, AppDefinition, AppVersion, CoreError, CoreReply, SharedState,
 };
 
 use crate::state_commands::timestamp;
@@ -221,19 +221,13 @@ fn apply_version(state: &mut CoreState, app: App, version: AppVersion, replace_h
             let old_permissions = definition_for(&state.shared, &app.id, old_version)
                 .map(|old| app_definition::permission_modules(&old))
                 .unwrap_or_default();
-            let mut next_state = definition.state.clone();
-            for (key, value) in &old_state {
-                if next_state.contains_key(key) {
-                    next_state.insert(key.clone(), value.clone());
-                }
-            }
             let window = state
                 .shared
                 .windows
                 .iter_mut()
                 .find(|window| window.id == window_id)
                 .unwrap();
-            window.state = next_state;
+            window.state = migrate_window_state(definition, &old_state);
             window.app_version = version.version;
             window.updated_at = version.created_at.clone();
             old_permissions_by_window.insert(window_id, old_permissions);
