@@ -150,6 +150,33 @@ jobs:
             $data = @{ pids = $pids; remaining = $alive; passed = $true } | ConvertTo-Json -Compress
             Add-Content -Encoding utf8 $eventPath "{`"step`":`"local-agent.shell-exit-processes`",`"data`":$data}"
           } finally { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
+      - name: 파일 쓰기 명령 시나리오
+        shell: pwsh
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-files-write-appdata'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-files-write-localappdata'
+          $env:KALEIDOSCOPE_E2E_OUT = Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/files-write'
+          $env:KALEIDOSCOPE_E2E_PICK_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-files-write-docs'
+          $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-files-write-webview'
+          New-Item -ItemType Directory -Force $env:APPDATA, $env:LOCALAPPDATA, $env:KALEIDOSCOPE_E2E_OUT, $env:KALEIDOSCOPE_E2E_PICK_FOLDER | Out-Null
+          $appPath = Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe'
+          $app = Start-Process -FilePath $appPath -ArgumentList @('--e2e-scenario=files-write', "--e2e-out=$env:KALEIDOSCOPE_E2E_OUT") -PassThru
+          try {
+            $deadline = (Get-Date).AddMinutes(2)
+            while ((Get-Date) -lt $deadline) {
+              $app.Refresh()
+              if ($app.HasExited) { break }
+              Start-Sleep -Milliseconds 200
+            }
+            $app.Refresh()
+            if (-not $app.HasExited) { throw '파일 쓰기 E2E 시간 초과' }
+            if ($app.ExitCode -ne 0) { throw "파일 쓰기 E2E 실패: $($app.ExitCode)" }
+            $eventPath = Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl'
+            $events = Get-Content $eventPath | ForEach-Object { $_ | ConvertFrom-Json }
+            foreach ($step in @('files-write.case-only-rename', 'files-write.file-busy-recovery', 'files-write.trash', 'files-write.reveal', 'complete')) {
+              if (-not ($events | Where-Object { $_.step -eq $step })) { throw "파일 쓰기 단계 로그 누락: $step" }
+            }
+          } finally { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
       - name: 캡처와 로그 보존
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -26,6 +26,7 @@ use crate::storage::LinkFile;
 use crate::{Core, CoreConfig, CoreError, Host};
 
 mod client_files_tests;
+mod file_write_tests;
 mod layout_sync_tests;
 mod pc_tests;
 mod profiler_concurrency_tests;
