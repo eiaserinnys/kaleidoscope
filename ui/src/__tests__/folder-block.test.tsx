@@ -1,11 +1,12 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import { normalizeBlock } from "../render/render-block";
-import { collectionFolderCapabilities, fileFolderCapabilities } from "../blocks/folder-backend";
+import { createCollectionFolderBackend, createFileFolderBackend } from "../blocks/folder-backend";
 import { grantFor, makeTestSeed } from "./fixtures";
 
 afterEach(() => {
@@ -13,12 +14,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function fileFolderDefinition(): AppDefinition {
+function fileFolderDefinition(access: "read" | "readwrite" = "read", readOnly = true): AppDefinition {
   return {
     id: "folder-files-test",
     name: "파일 폴더 시험",
     requires: { blocks: 13, modules: { files: 1 } },
-    permissions: [{ module: "files", id: "docs", access: "read", label: "문서" }],
+    permissions: [{ module: "files", id: "docs", access, label: "문서" }],
     state: { selected: null },
     ui: {
       type: "folder",
@@ -26,12 +27,12 @@ function fileFolderDefinition(): AppDefinition {
       extensions: ["md"],
       selected: { state: "selected" },
       on_select: { set_state: "selected" },
-      read_only: true,
+      read_only: readOnly,
     } as unknown as Block,
   };
 }
 
-function storageFolderDefinition(): AppDefinition {
+function storageFolderDefinition(readOnly = true): AppDefinition {
   return {
     id: "folder-storage-test",
     name: "저장소 폴더 시험",
@@ -50,16 +51,16 @@ function storageFolderDefinition(): AppDefinition {
       extensions: ["md"],
       selected: { state: "selected" },
       on_select: { set_state: "selected" },
-      read_only: true,
+      read_only: readOnly,
     } as unknown as Block,
   };
 }
 
-function setup(definition: AppDefinition, configure?: (transport: ReturnType<typeof createFakeTransport>) => void) {
+function setup(definition: AppDefinition, configure?: (transport: ReturnType<typeof createFakeTransport>) => void, files: Record<string, string> = { "notes/guide.md": "# Guide", "skip.txt": "skip" }) {
   const seed = makeTestSeed({
     definitions: [definition],
     grants: definition.id === "folder-files-test" ? [grantFor("viewer-window", "docs")] : [],
-    files: { "notes/guide.md": "# Guide", "skip.txt": "skip" },
+    files,
   });
   seed.snapshot.supported = { blocks: 13, modules: { files: 2, storage: 3 } };
   seed.snapshot.shared.windows[0].state = { selected: null };
@@ -73,11 +74,52 @@ function setup(definition: AppDefinition, configure?: (transport: ReturnType<typ
 }
 
 describe("folder block", () => {
+  it("이름 입력을 바깥 클릭으로 닫으면 누른 대상에 키보드 포커스를 남기고 Escape만 원래 행으로 돌린다", async () => {
+    const user = userEvent.setup();
+    setup(fileFolderDefinition("readwrite", false), undefined, { "a.md": "# a", "b.md": "# b", "notes/guide.md": "# 안내" });
+    render(<textarea aria-label="편집기" />);
+    await screen.findByRole("treeitem", { name: "a.md" });
+    const targets = [
+      () => screen.getByRole("treeitem", { name: "b.md" }),
+      () => screen.getByRole("treeitem", { name: "notes" }),
+      () => screen.getByRole("tree"),
+      () => screen.getByRole("textbox", { name: "편집기" }),
+    ];
+    for (const mode of ["rename", "create"] as const) {
+      for (const target of targets) {
+        await user.click(screen.getByRole("treeitem", { name: "a.md" }));
+        await user.keyboard(mode === "rename" ? "{F2}" : "{Control>}{Shift>}n{/Shift}{/Control}");
+        await screen.findByRole("textbox", { name: mode === "rename" ? "이름 바꾸기" : "새 폴더 이름" });
+        await user.click(target());
+        await waitFor(() => expect(screen.queryByRole("textbox", { name: mode === "rename" ? "이름 바꾸기" : "새 폴더 이름" })).toBeNull());
+        expect(document.activeElement).toBe(target());
+        const name = target().getAttribute("data-tree-id");
+        if (name === "b.md" || name === "notes") {
+          await user.keyboard("{F2}");
+          expect((await screen.findByRole("textbox", { name: "이름 바꾸기" }) as HTMLInputElement).value).toBe(name);
+          await user.keyboard("{Escape}");
+          expect(document.activeElement).toBe(target());
+          await user.keyboard("{Control>}x{/Control}");
+          expect(target().className).toContain("is-cut");
+          await user.keyboard("{Escape}{Delete}");
+          await screen.findByRole("dialog", { name });
+          await user.keyboard("{Escape}");
+        }
+      }
+    }
+  });
+
   it("reports read and mutation capabilities from the folder root", () => {
-    expect(fileFolderCapabilities(true, "folder", false)).toMatchObject({ createFile: true, rename: true, reveal: true, absolutePath: true });
-    expect(fileFolderCapabilities(true, "pc", false).createFile).toBe(false);
-    expect(fileFolderCapabilities(true, "folder", true).rename).toBe(false);
-    expect(collectionFolderCapabilities()).toMatchObject({ createFile: false, rename: false, permanentDelete: false, properties: false });
+    const store = createShellStore(createFakeTransport(makeTestSeed()));
+    const writable = createFileFolderBackend({ store, windowId: "viewer-window", permission: "docs", appId: "test", rootPath: "/docs", writable: true, scope: "folder", readOnly: false });
+    const pc = createFileFolderBackend({ store, windowId: "viewer-window", permission: "docs", appId: "test", rootPath: "", writable: true, scope: "pc", readOnly: false });
+    const readOnly = createFileFolderBackend({ store, windowId: "viewer-window", permission: "docs", appId: "test", rootPath: "/docs", writable: true, scope: "folder", readOnly: true });
+    const collection = createCollectionFolderBackend({ store, windowId: "viewer-window", entry: "documents", appId: "test", prefix: "docs", markdown: true, readOnly: true });
+    expect(writable.capabilities).toMatchObject({ createFile: true, rename: true, reveal: true, absolutePath: true });
+    expect(pc.capabilities.createFile).toBe(false);
+    expect(readOnly.capabilities.rename).toBe(false);
+    expect(collection.capabilities).toMatchObject({ createFile: false, rename: false, permanentDelete: false, properties: true });
+    store.dispose();
   });
 
   it("lists a file root through the shared tree, expands with arrows, and selects a file", async () => {
@@ -129,6 +171,162 @@ describe("folder block", () => {
     await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.selected).toBe("notes/guide.md"));
   });
 
+  it("opens write actions from the file row without changing the active selection", async () => {
+    const { store } = setup(fileFolderDefinition("readwrite", false));
+    const notes = await screen.findByRole("treeitem", { name: "notes" });
+    fireEvent.keyDown(notes, { key: "ArrowRight" });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+
+    fireEvent.contextMenu(guide);
+
+    expect(await screen.findByRole("menuitem", { name: "이름 바꾸기" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "휴지통으로 이동" })).toBeTruthy();
+    expect(guide.hasAttribute("data-menu-target")).toBe(true);
+    expect(store.getSnapshot()?.shared.windows[0].state.selected).toBeNull();
+  });
+
+  it("exposes file-root creation and preserves an expanded folder's children during F2", async () => {
+    setup(fileFolderDefinition("readwrite", false));
+    const createFile = await screen.findByRole("button", { name: "새 파일" });
+    fireEvent.click(createFile);
+    const rootInput = await screen.findByRole("textbox", { name: "새 파일 이름" }) as HTMLInputElement;
+    await waitFor(() => expect(rootInput.selectionEnd).toBe("새 파일".length));
+
+    fireEvent.keyDown(rootInput, { key: "Escape" });
+    const notes = await screen.findByRole("treeitem", { name: "notes" });
+    fireEvent.keyDown(notes, { key: "ArrowRight" });
+    await screen.findByRole("treeitem", { name: "guide.md" });
+    fireEvent.keyDown(notes, { key: "F2" });
+
+    expect(await screen.findByRole("textbox", { name: "이름 바꾸기" })).toBeTruthy();
+    expect(screen.getByRole("treeitem", { name: "guide.md" })).toBeTruthy();
+  });
+
+  it("copies a folder to its parent and reports the backend operation", async () => {
+    const { call } = setup(fileFolderDefinition("readwrite", false));
+    const notes = await screen.findByRole("treeitem", { name: "notes" });
+    fireEvent.contextMenu(notes);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "사본 만들기" }));
+
+    await waitFor(() => expect(call).toHaveBeenCalledWith({
+      op: "files.copy", window_id: "viewer-window", permission: "docs", paths: ["notes"], destination: "",
+    }));
+  });
+
+  it("clears the shell clipboard with Escape from a focused tree row", async () => {
+    setup(fileFolderDefinition("readwrite", false));
+    const notes = await screen.findByRole("treeitem", { name: "notes" });
+    fireEvent.keyDown(notes, { key: "ArrowRight" });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+    fireEvent.keyDown(guide, { key: "x", ctrlKey: true });
+
+    await waitFor(() => expect(guide.className).toContain("is-cut"));
+    fireEvent.keyDown(guide, { key: "Escape" });
+    await waitFor(() => expect(guide.className).not.toContain("is-cut"));
+  });
+
+  it("복사 뒤 Escape를 눌러도 붙여넣기를 유지한다", async () => {
+    const { call } = setup(fileFolderDefinition("readwrite", false));
+    const notes = await screen.findByRole("treeitem", { name: "notes" });
+    fireEvent.keyDown(notes, { key: "c", ctrlKey: true });
+    fireEvent.keyDown(notes, { key: "Escape" });
+    fireEvent.keyDown(notes, { key: "v", ctrlKey: true });
+    await waitFor(() => expect(call).toHaveBeenCalledWith({
+      op: "files.copy", window_id: "viewer-window", permission: "docs", paths: ["notes"], destination: "notes",
+    }));
+  });
+
+  it("하위 경로 문서의 이름 입력을 루트 행에 표시하고 원래 부모에 옮긴다", async () => {
+    const { call } = setup(storageFolderDefinition(false), (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "storage.list"
+        ? { op: "storage.list", result: { bucket_id: "folder-storage-test", items: [{ doc: "notes/guide.md", revision: "rev-1", updated_at: "2026-11-02T00:00:00Z", byte_size: 7 as unknown as bigint }] } }
+        : originalCall(request));
+    });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+    fireEvent.keyDown(guide, { key: "F2" });
+    const input = await screen.findByRole("textbox", { name: "이름 바꾸기" });
+    fireEvent.change(input, { target: { value: "renamed.md" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(call).toHaveBeenCalledWith({
+      op: "storage.move", window_id: "viewer-window", entry: "documents", from: "notes/guide.md", to: "notes/renamed.md", expected_revision: "rev-1",
+    }));
+  });
+
+  it("shows a writable server collection's empty action and uses extension-aware document naming", async () => {
+    setup(storageFolderDefinition(false), (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "storage.list"
+        ? { op: "storage.list", result: { bucket_id: "folder-storage-test", items: [] } }
+        : originalCall(request));
+    });
+
+    const newDocument = await screen.findByRole("button", { name: "새 문서" });
+    fireEvent.click(newDocument);
+    const input = await screen.findByRole("textbox", { name: "새 문서 이름" }) as HTMLInputElement;
+    await waitFor(() => expect(input.selectionEnd).toBe("새 문서".length));
+    fireEvent.change(input, { target: { value: "보고서.txt" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect((await screen.findByRole("alert")).textContent).toContain(".md 파일만 볼 수 있습니다.");
+    expect(screen.getByRole("textbox", { name: "새 문서 이름" })).toBeTruthy();
+  });
+
+  it("uses the same create and rename menu for collection documents", async () => {
+    const { call } = setup(storageFolderDefinition(false), (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => {
+        if (request.op === "storage.list") return {
+          op: "storage.list",
+          result: { bucket_id: "folder-storage-test", items: [{ doc: "guide.md", revision: "rev-1", updated_at: "2026-11-02T00:00:00Z", byte_size: 7 as unknown as bigint }] },
+        };
+        return originalCall(request);
+      });
+    });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+
+    fireEvent.contextMenu(guide);
+
+    expect(await screen.findByRole("menuitem", { name: "새 문서" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "이름 바꾸기" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "상대 경로 복사" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "영구 삭제" })).toBeTruthy();
+    expect(call).toHaveBeenCalledWith({ op: "storage.list", window_id: "viewer-window", entry: "documents" });
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    fireEvent.keyDown(guide, { key: "Delete" });
+    const dialog = await screen.findByRole("dialog", { name: "guide.md" });
+    expect(dialog.textContent).toContain("되돌릴 수 없습니다.");
+    expect(within(dialog).getAllByRole("button")).toHaveLength(2);
+    expect(within(dialog).getByRole("button", { name: "취소" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "영구 삭제" })).toBeTruthy();
+  });
+
+  it("shows one properties close button and restores focus to its menu target", async () => {
+    setup(fileFolderDefinition("readwrite", false));
+    const notes = await screen.findByRole("treeitem", { name: "notes" });
+    fireEvent.keyDown(notes, { key: "ArrowRight" });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+    fireEvent.contextMenu(guide);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "속성" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "속성" });
+    expect(within(dialog).getAllByRole("button").map((button) => button.textContent)).toEqual(["닫기"]);
+    fireEvent.click(within(dialog).getByRole("button", { name: "닫기" }));
+
+    await waitFor(() => expect(document.activeElement).toBe(guide));
+  });
+
+  it("labels an empty expanded folder without using an interactive row", async () => {
+    setup(fileFolderDefinition("readwrite", false), undefined, { "empty/.hidden": "ignored" });
+    const empty = await screen.findByRole("treeitem", { name: "empty" });
+    fireEvent.keyDown(empty, { key: "ArrowRight" });
+
+    const label = await screen.findByText("비어 있음");
+    expect(label.closest(".ks-row")).toBeNull();
+    expect(label.closest("[data-tree-row]")?.getAttribute("data-tree-row")).toBe("empty:empty");
+  });
+
   it("refreshes a visible collection on matching storage changes and defers hidden updates", async () => {
     let documents = ["notes/guide.md"];
     let listError = false;
@@ -161,14 +359,14 @@ describe("folder block", () => {
       transport.emit({ event: "storage.update", window_id: "other-window", update: { kind: "changed", changed: { bucket_id: "folder-storage-test", item: { entry_id: "documents", key: "documents/notes/renamed.md", kind: "md", revision: "rev-2", exists: true } } } });
       transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "folder-storage-test", item: { entry_id: "other", key: "other.md", kind: "md", revision: "rev-2", exists: true } } } });
     });
-    expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(1);
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(2));
 
     documents = ["notes/changed.md"];
     await act(async () => {
       transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "folder-storage-test", item: { entry_id: "documents", key: "documents/notes/changed.md", kind: "md", revision: "rev-2", exists: true } } } });
     });
     await waitFor(() => expect(document.querySelector('[data-tree-id="doc:notes/changed.md"]')).toBeTruthy());
-    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(2));
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(3));
 
     documents = ["notes/renamed.md"];
     const hidden = structuredClone(store.getSnapshot()!);
@@ -177,20 +375,20 @@ describe("folder block", () => {
     await act(async () => {
       transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "folder-storage-test", item: { entry_id: "documents", key: "documents/notes/renamed.md", kind: "md", revision: "rev-2", exists: true } } } });
     });
-    expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(2);
+    expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(3);
 
     const visible = structuredClone(hidden);
     visible.shared.windows[0].minimized = false;
     await act(async () => { transport.emit({ event: "state.changed", snapshot: visible }); });
     await waitFor(() => expect(document.querySelector('[data-tree-id="doc:notes/renamed.md"]')).toBeTruthy());
-    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(3));
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(4));
 
     documents = ["notes/moved.md"];
     await act(async () => {
       transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "moved", moved: { bucket_id: "folder-storage-test", entry_id: "documents", from_doc: "notes/renamed.md", to_doc: "notes/moved.md", revision: "rev-3" } } });
     });
     await waitFor(() => expect(document.querySelector('[data-tree-id="doc:notes/moved.md"]')).toBeTruthy());
-    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(4));
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(5));
 
     listError = true;
     await act(async () => {
@@ -198,7 +396,7 @@ describe("folder block", () => {
     });
     expect((await screen.findByRole("alert")).textContent).toContain("저장소 다시 읽기 실패");
     expect(document.querySelector('[data-tree-id="doc:notes/moved.md"]')).toBeTruthy();
-    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(5));
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(6));
   });
 
   it("normalizes both legacy file-tree shapes into the folder renderer", () => {

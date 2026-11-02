@@ -8,6 +8,7 @@ export interface TreeRowProps {
   start: number;
   selected: boolean;
   focused: boolean;
+  menuTarget?: boolean;
   measure: (element: Element | null) => void;
   onFocus: (id: string) => void;
   onKeyDown: (row: TreeRowModel, event: KeyboardEvent<HTMLButtonElement>) => void;
@@ -16,12 +17,13 @@ export interface TreeRowProps {
   onDoubleClick?: (row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => void;
 }
 
-function TreeRowView({ row, index, start, selected, focused, measure, onFocus, onKeyDown, onActivate, onContextMenu, onDoubleClick }: TreeRowProps) {
+function TreeRowView({ row, index, start, selected, focused, menuTarget = false, measure, onFocus, onKeyDown, onActivate, onContextMenu, onDoubleClick }: TreeRowProps) {
   const { node } = row;
   return <div
     className="ks-tree-virtual-row"
     data-index={index}
     data-tree-row={row.id}
+    data-menu-target={menuTarget && node.content !== undefined ? "" : undefined}
     ref={measure}
     style={{
       position: "absolute",
@@ -42,7 +44,8 @@ function TreeRowView({ row, index, start, selected, focused, measure, onFocus, o
       aria-posinset={row.position}
       aria-selected={node.ariaSelectable === false ? undefined : selected}
       aria-setsize={row.setSize}
-      className={`ks-row ks-file-tree-row${selected ? " is-selected" : ""}`}
+      className={`ks-row ks-file-tree-row${selected ? " is-selected" : ""}${node.rowClassName ? ` ${node.rowClassName}` : ""}`}
+      data-menu-target={menuTarget && node.content === undefined ? "" : undefined}
       data-index={index}
       data-tree-id={row.id}
       data-file-path={typeof node.data === "object" && node.data !== null && "filePath" in node.data ? String(node.data.filePath) : undefined}

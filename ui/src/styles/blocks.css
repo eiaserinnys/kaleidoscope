@@ -140,6 +140,10 @@
   background: var(--ks-color-selection);
 }
 
+.ks-file-tree-row.is-cut {
+  opacity: 0.56;
+}
+
 .ks-row:hover {
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
@@ -147,6 +151,17 @@
 .ks-file-tree-create-row {
   padding-block: 0;
   border-block-width: 0;
+}
+
+.ks-file-tree-create-row:hover { background-image: none; cursor: default; }
+
+.ks-file-tree-empty {
+  display: flex;
+  min-height: var(--ks-control-height);
+  align-items: center;
+  gap: var(--ks-space-2);
+  padding: var(--ks-space-1) var(--ks-space-2);
+  cursor: default;
 }
 
 .ks-file-tree-icon {
@@ -617,6 +632,10 @@
 }
 
 .ks-agent-chat-history {
+  /* 입력창의 글자별 칼럼 레이아웃이 긴 대화를 함께 다시 배치하지 않도록 분리한다. */
+  contain: strict;
+  /* 크기 격리로 고유 높이가 0이 되므로 높이가 정해지지 않은 자리의 최소 기록 높이를 준다. */
+  contain-intrinsic-block-size: calc(var(--ks-pane-min-size) * 2);
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;

@@ -153,7 +153,10 @@ fn move_one(
         .is_dir()
         && destination_path.starts_with(&source)
     {
-        return Err(error::make(ErrorCode::PathOutsideRoot));
+        return Err(error::with_message(
+            ErrorCode::InvalidRequest,
+            "폴더를 자기 안으로 옮기거나 복사할 수 없습니다.",
+        ));
     }
     let name = source
         .file_name()
@@ -217,7 +220,10 @@ fn copy_one(
         .map_err(|error| io_error(&error))?
         .is_dir();
     if source_is_dir && destination_path.starts_with(&source) {
-        return Err(error::make(ErrorCode::PathOutsideRoot));
+        return Err(error::with_message(
+            ErrorCode::InvalidRequest,
+            "폴더를 자기 안으로 옮기거나 복사할 수 없습니다.",
+        ));
     }
     let name = source
         .file_name()

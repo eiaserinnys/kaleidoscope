@@ -106,10 +106,11 @@ export function useRoving<T extends { key: string }>(items: T[], selected: unkno
   };
   return { focus: entryIndex, setFocus, keyDown };
 }
-export function keepRovingRow(virtual: Virtualizer<HTMLDivElement, Element>, index: number) {
+export function keepRovingRow(virtual: Virtualizer<HTMLDivElement, Element>, index: number, pinnedIndex?: number) {
   virtual.setOptions({ ...virtual.options, rangeExtractor: (range) => {
     const visible = defaultRangeExtractor(range);
     if (!visible.includes(index) && index >= 0 && index < range.count) visible.push(index);
+    if (pinnedIndex !== undefined && !visible.includes(pinnedIndex) && pinnedIndex >= 0 && pinnedIndex < range.count) visible.push(pinnedIndex);
     return visible.sort((a, b) => a - b);
   } });
 }

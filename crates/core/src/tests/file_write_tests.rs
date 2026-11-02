@@ -243,9 +243,28 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
     assert!(matches!(
         &results[0],
         kaleidoscope_contract::FileOpResult::Error { error, .. }
-            if error.code == ErrorCode::PathOutsideRoot
+            if error.code == ErrorCode::InvalidRequest
+                && error.message == "폴더를 자기 안으로 옮기거나 복사할 수 없습니다."
     ));
     assert!(root.join("notes/sub").is_dir());
+
+    let CoreReply::FilesCopy { results } = core
+        .handle(CoreRequest::FilesCopy {
+            window_id: window.clone(),
+            permission: "docs".into(),
+            paths: vec!["notes".into()],
+            destination: "notes/sub".into(),
+        })
+        .unwrap()
+    else {
+        panic!("unexpected reply")
+    };
+    assert!(matches!(
+        &results[0],
+        kaleidoscope_contract::FileOpResult::Error { error, .. }
+            if error.code == ErrorCode::InvalidRequest
+                && error.message == "폴더를 자기 안으로 옮기거나 복사할 수 없습니다."
+    ));
 
     let CoreReply::FilesMove { results } = core
         .handle(CoreRequest::FilesMove {
