@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 
-it("프레임 호버와 포인터 이동은 부모에게 상태를 보내지 않는다", async () => {
+it("프레임 호버는 부모 상태를 바꾸지 않고 Tab은 선택한 요소가 있을 때만 처리한다", async () => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   vi.stubGlobal("MutationObserver", class { observe() {} disconnect() {} });
   if (!globalThis.CSS) vi.stubGlobal("CSS", {});
@@ -13,6 +13,17 @@ it("프레임 호버와 포인터 이동은 부모에게 상태를 보내지 않
   document.querySelector("p")!.dispatchEvent(new MouseEvent("pointermove", { bubbles: true }));
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   expect(send).not.toHaveBeenCalled();
+  const freeTab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+  document.querySelector("button")!.dispatchEvent(freeTab);
+  expect(freeTab.defaultPrevented).toBe(false);
+  expect(send).not.toHaveBeenCalled();
+  window.dispatchEvent(new MessageEvent("message", { source: window.parent, data: { type: "ks-html-select-number", n: 1 } }));
+  send.mockClear();
+  const selectedTab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+  document.querySelector("button")!.dispatchEvent(selectedTab);
+  expect(selectedTab.defaultPrevented).toBe(true);
+  expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-html-key", key: "Tab" }), "*");
+  window.dispatchEvent(new MessageEvent("message", { source: window.parent, data: { type: "ks-html-select-number", n: null } }));
   window.dispatchEvent(new MessageEvent("message", { source: window.parent, data: { type: "ks-html-theme", tokens: { "--ks-color-accent": "#abcdef" } } }));
   expect(document.documentElement.style.getPropertyValue("--ks-color-accent")).toBe("#abcdef");
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));

@@ -177,6 +177,7 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   if (mode !== "select") return;
+  if (event.key === "Tab" && !selected) return;
   if (event.key === "Enter" && !event.shiftKey && selected && !selected.children.length && selected.textContent?.trim()) { event.preventDefault(); startEdit(selected); return; }
   if (["Escape", "Enter", "Tab", "Delete", "Backspace"].includes(event.key) || (event.altKey && ["ArrowUp", "ArrowDown"].includes(event.key)) || (event.ctrlKey && ["d", "z", "y"].includes(event.key.toLowerCase()))) {
     event.preventDefault(); event.stopPropagation();

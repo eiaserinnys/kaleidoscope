@@ -29,7 +29,10 @@ export function applyEdit(root: Document, edit: HtmlEdit): void {
       if (element instanceof HTMLElement) edit.after ? element.style.setProperty(edit.prop, edit.after) : element.style.removeProperty(edit.prop);
       break;
     case "text":
-      if (element) element.textContent = edit.after;
+      if (element) {
+        element.textContent = edit.after;
+        if (element instanceof HTMLElement && edit.after.includes("\n")) element.style.whiteSpace = "pre-line";
+      }
       break;
     case "remove":
       element?.remove();
