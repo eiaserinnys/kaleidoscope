@@ -624,15 +624,73 @@ fn read_entities<T: for<'de> Deserialize<'de>>(
     };
     rows.into_iter()
         .map(|raw| {
-            serde_json::from_str(&raw).map_err(|_| errors::SERVER_LAYOUT_ENTITIES_READ_FAILED())
+            serde_json::from_str(&raw).map_err(|error| {
+                errors::SERVER_LAYOUT_ENTITIES_JSON_PARSE_FAILED()
+                    .and_details(vec![error.to_string()])
+            })
         })
         .collect()
 }
 
-fn layout_report_save_db_error(_: rusqlite::Error) -> CoreError {
-    errors::SERVER_LAYOUT_REPORT_SAVE_FAILED()
+fn layout_report_save_db_error(error: rusqlite::Error) -> CoreError {
+    errors::SERVER_LAYOUT_REPORT_SAVE_FAILED().and_details(vec![error.to_string()])
 }
 
-fn layout_entities_read_db_error(_: rusqlite::Error) -> CoreError {
-    errors::SERVER_LAYOUT_ENTITIES_READ_FAILED()
+fn layout_entities_read_db_error(error: rusqlite::Error) -> CoreError {
+    errors::SERVER_LAYOUT_ENTITIES_READ_FAILED().and_details(vec![error.to_string()])
+}
+
+#[cfg(test)]
+mod error_detail_tests {
+    use super::*;
+
+    #[test]
+    fn entity_sql_and_json_failures_have_distinct_codes_and_keep_details() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE workspaces(data TEXT NOT NULL); INSERT INTO workspaces VALUES ('not json');",
+        )
+        .unwrap();
+
+        let json_error = read_entities::<kaleidoscope_contract::Workspace>(
+            &db,
+            "SELECT data FROM workspaces",
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(
+            json_error.id.as_deref(),
+            Some("SERVER_LAYOUT_ENTITIES_JSON_PARSE_FAILED")
+        );
+        assert!(!json_error.details.is_empty());
+
+        let sql_error = read_entities::<kaleidoscope_contract::Workspace>(
+            &db,
+            "SELECT data FROM missing_table",
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(
+            sql_error.id.as_deref(),
+            Some("SERVER_LAYOUT_ENTITIES_READ_FAILED")
+        );
+        assert!(!sql_error.details.is_empty());
+    }
+
+    #[test]
+    fn report_save_and_entity_sql_helpers_keep_the_database_error() {
+        let report_error = rusqlite::Error::InvalidQuery;
+        let report_detail = report_error.to_string();
+        assert_eq!(
+            layout_report_save_db_error(report_error).details,
+            vec![report_detail]
+        );
+
+        let entity_error = rusqlite::Error::InvalidQuery;
+        let entity_detail = entity_error.to_string();
+        assert_eq!(
+            layout_entities_read_db_error(entity_error).details,
+            vec![entity_detail]
+        );
+    }
 }

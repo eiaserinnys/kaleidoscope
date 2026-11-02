@@ -20,11 +20,11 @@ error_catalog! { ENTRIES;
         message: "작업 ID {workspace_id}: 지울 작업이 없습니다. 작업 목록을 새로고침한 뒤 다시 시도하세요.",
         fix: "작업 목록을 새로고침하세요"
     }
-    DESK_WORKSPACE_DELETE_ACTIVE_DESKTOP_MISSING(workspace_id) {
+    DESK_WORKSPACE_DELETE_ACTIVE_DESKTOP_MISSING(workspace_name) {
         class: NotFound,
         place: "작업 삭제 뒤 활성 데스크톱 선택",
         cause: "남은 작업에 활성 데스크톱이 없다",
-        message: "작업 ID {workspace_id}: 사용할 데스크톱이 없습니다. 작업 상태를 새로고침한 뒤 다시 시도하세요.",
+        message: "작업 {workspace_name}: 사용할 데스크톱이 없습니다. 작업 상태를 새로고침한 뒤 다시 시도하세요.",
         fix: "작업 상태를 새로고침하세요"
     }
     DESK_WORKSPACE_ACTIVATE_NOT_FOUND(workspace_id) {
@@ -34,11 +34,11 @@ error_catalog! { ENTRIES;
         message: "작업 ID {workspace_id}: 전환할 작업이 없습니다. 작업 목록을 새로고침한 뒤 다시 시도하세요.",
         fix: "작업 목록을 새로고침하세요"
     }
-    DESK_WORKSPACE_ACTIVATE_DESKTOP_MISSING(workspace_id) {
+    DESK_WORKSPACE_ACTIVATE_DESKTOP_MISSING(workspace_name) {
         class: NotFound,
         place: "작업 전환",
         cause: "전환할 작업에 데스크톱이 없다",
-        message: "작업 ID {workspace_id}: 전환할 데스크톱이 없습니다. 작업 상태를 새로고침한 뒤 다시 시도하세요.",
+        message: "작업 {workspace_name}: 전환할 데스크톱이 없습니다. 작업 상태를 새로고침한 뒤 다시 시도하세요.",
         fix: "작업 상태를 새로고침하세요"
     }
     DESK_DESKTOP_CREATE_WORKSPACE_NOT_FOUND(workspace_id) {
@@ -69,11 +69,11 @@ error_catalog! { ENTRIES;
         message: "마지막 데스크톱은 지울 수 없습니다. 새 데스크톱을 먼저 만드세요.",
         fix: "새 데스크톱을 만든 뒤 삭제하세요"
     }
-    DESK_DESKTOP_DELETE_REPLACEMENT_MISSING(workspace_id) {
+    DESK_DESKTOP_DELETE_REPLACEMENT_MISSING(workspace_name) {
         class: NotFound,
         place: "데스크톱 삭제 뒤 활성 데스크톱 선택",
         cause: "지운 데스크톱을 대신할 데스크톱이 없다",
-        message: "작업 ID {workspace_id}: 선택할 데스크톱이 없습니다. 작업 상태를 새로고침한 뒤 다시 시도하세요.",
+        message: "작업 {workspace_name}: 삭제 뒤 선택할 데스크톱이 없습니다. 작업 상태를 새로고침한 뒤 다시 시도하세요.",
         fix: "작업 상태를 새로고침하세요"
     }
     DESK_DESKTOP_ACTIVATE_NOT_FOUND(desktop_id) {
@@ -290,7 +290,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "클라이언트 이진 데이터 동작 선택",
         cause: "요청한 이진 데이터 동작을 코어가 지원하지 않는다",
-        message: "이진 데이터 동작 {operation}을 처리할 수 없습니다. 앱이 지원되는 동작을 사용하도록 고친 뒤 다시 시도하세요.",
+        message: "이진 데이터 요청에 처리할 수 없는 동작이 있습니다: {operation}. 앱 정의의 동작 이름을 지원 목록에 맞춘 뒤 다시 시도하세요.",
         fix: "앱이 지원되는 이진 데이터 동작을 사용하게 고치세요"
     }
     DESK_EXTERNAL_OPEN_URL_INVALID() {
@@ -391,11 +391,11 @@ error_catalog! { ENTRIES;
         message: "창 ID {window_id}: 내 PC 접근을 허용할 창이 없습니다. 작업 화면을 새로고침한 뒤 다시 시도하세요.",
         fix: "작업 화면을 새로고침하세요"
     }
-    DESK_PC_ACCESS_APP_VERSION_NOT_FOUND(app_id, version) {
+    DESK_PC_ACCESS_APP_VERSION_NOT_FOUND(app_name, app_id, version) {
         class: NotFound,
         place: "내 PC 접근 허용",
         cause: "창에서 사용하는 앱 버전 정의가 없다",
-        message: "앱 ID {app_id}, 버전 {version}: 내 PC 권한을 확인할 앱 정의가 없습니다. 앱을 다시 가져온 뒤 시도하세요.",
+        message: "앱 {app_name} (ID {app_id}), 버전 {version}: 내 PC 권한을 확인할 앱 정의가 없습니다. 앱을 다시 가져온 뒤 시도하세요.",
         fix: "앱을 다시 가져오세요"
     }
     DESK_PC_ACCESS_PERMISSION_UNDECLARED(permission) {

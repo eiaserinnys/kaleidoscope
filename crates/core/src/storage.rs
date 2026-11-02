@@ -94,7 +94,9 @@ pub(crate) fn load_file<T: DeserializeOwned + Default>(
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(T::default()),
-        Err(_) => return Err(errors::DESK_LOCAL_STATE_READ_FAILED()),
+        Err(error) => {
+            return Err(errors::DESK_LOCAL_STATE_READ_FAILED().and_details(vec![error.to_string()]));
+        }
     };
 
     match serde_json::from_slice(&bytes) {
@@ -165,37 +167,41 @@ fn save_device(data_dir: &Path, device: &DeviceState) -> Result<(), CoreError> {
 }
 
 pub(crate) fn save_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), CoreError> {
-    let bytes = serde_json::to_vec_pretty(value)
-        .map_err(|_| errors::DESK_LOCAL_STATE_SERIALIZE_FAILED())?;
+    let bytes = serde_json::to_vec_pretty(value).map_err(|error| {
+        errors::DESK_LOCAL_STATE_SERIALIZE_FAILED().and_details(vec![error.to_string()])
+    })?;
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("state.json");
     let temp_path = path.with_file_name(format!(".{file_name}.tmp-{}", Uuid::new_v4()));
     fs::write(&temp_path, bytes).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::NotFound {
+        let mapped = if error.kind() == std::io::ErrorKind::NotFound {
             errors::DESK_LOCAL_STATE_TEMP_WRITE_NOT_FOUND()
         } else {
             errors::DESK_LOCAL_STATE_TEMP_WRITE_FAILED()
-        }
+        };
+        mapped.and_details(vec![error.to_string()])
     })?;
     if let Err(error) = fs::rename(&temp_path, path) {
         let _ = fs::remove_file(&temp_path);
-        return Err(if error.kind() == std::io::ErrorKind::NotFound {
+        let mapped = if error.kind() == std::io::ErrorKind::NotFound {
             errors::DESK_LOCAL_STATE_REPLACE_NOT_FOUND()
         } else {
             errors::DESK_LOCAL_STATE_REPLACE_FAILED()
-        });
+        };
+        return Err(mapped.and_details(vec![error.to_string()]));
     }
     Ok(())
 }
 
 fn recovery_rename_error(error: std::io::Error) -> CoreError {
-    if error.kind() == std::io::ErrorKind::NotFound {
+    let mapped = if error.kind() == std::io::ErrorKind::NotFound {
         errors::DESK_LOCAL_STATE_RECOVERY_RENAME_NOT_FOUND()
     } else {
         errors::DESK_LOCAL_STATE_RECOVERY_RENAME_FAILED()
-    }
+    };
+    mapped.and_details(vec![error.to_string()])
 }
 
 #[derive(Default)]

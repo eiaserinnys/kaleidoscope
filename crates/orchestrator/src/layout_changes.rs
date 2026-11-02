@@ -401,6 +401,18 @@ fn sort_changes(changes: &mut LayoutChanges) {
     changes.deleted_windows.sort();
 }
 
-fn layout_change_db_error(_: rusqlite::Error) -> CoreError {
-    errors::SERVER_LAYOUT_CHANGE_APPLY_FAILED()
+fn layout_change_db_error(error: rusqlite::Error) -> CoreError {
+    errors::SERVER_LAYOUT_CHANGE_APPLY_FAILED().and_details(vec![error.to_string()])
+}
+
+#[cfg(test)]
+mod error_detail_tests {
+    use super::*;
+
+    #[test]
+    fn layout_change_database_error_is_preserved_in_details() {
+        let error = rusqlite::Error::InvalidQuery;
+        let original = error.to_string();
+        assert_eq!(layout_change_db_error(error).details, vec![original]);
+    }
 }

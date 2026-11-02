@@ -115,7 +115,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 let active = state.shared.workspaces.first().unwrap();
                 state.device.active_workspace_id = Some(active.id.clone());
                 let desktop_id = active_desktop(state, &active.id).ok_or_else(|| {
-                    errors::DESK_WORKSPACE_DELETE_ACTIVE_DESKTOP_MISSING(&active.id)
+                    errors::DESK_WORKSPACE_DELETE_ACTIVE_DESKTOP_MISSING(&active.name)
                 })?;
                 state
                     .device
@@ -132,7 +132,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .find(|workspace| workspace.id == workspace_id)
                 .ok_or_else(|| errors::DESK_WORKSPACE_ACTIVATE_NOT_FOUND(&workspace_id))?;
             let desktop_id = active_desktop(state, &workspace.id)
-                .ok_or_else(|| errors::DESK_WORKSPACE_ACTIVATE_DESKTOP_MISSING(&workspace.id))?;
+                .ok_or_else(|| errors::DESK_WORKSPACE_ACTIVATE_DESKTOP_MISSING(&workspace.name))?;
             state.device.active_workspace_id = Some(workspace.id.clone());
             state
                 .device
@@ -214,6 +214,13 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .is_some_and(|active| active == &desktop_id);
             let active_workspace =
                 state.device.active_workspace_id.as_deref() == Some(deleted.workspace_id.as_str());
+            let workspace_name = state
+                .shared
+                .workspaces
+                .iter()
+                .find(|workspace| workspace.id == deleted.workspace_id)
+                .map(|workspace| workspace.name.clone())
+                .unwrap_or_else(|| deleted.workspace_id.clone());
             let window_ids = state
                 .shared
                 .windows
@@ -253,7 +260,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                     .filter(|desktop| desktop.workspace_id == deleted.workspace_id)
                     .min_by_key(|desktop| desktop.position.abs_diff(deleted.position))
                     .ok_or_else(|| {
-                        errors::DESK_DESKTOP_DELETE_REPLACEMENT_MISSING(&deleted.workspace_id)
+                        errors::DESK_DESKTOP_DELETE_REPLACEMENT_MISSING(&workspace_name)
                     })?;
                 state
                     .device

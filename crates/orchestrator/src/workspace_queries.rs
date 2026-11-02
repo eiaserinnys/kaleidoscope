@@ -148,10 +148,51 @@ impl AppState {
     }
 }
 
-fn layout_snapshot_db_error(_: rusqlite::Error) -> CoreError {
-    errors::SERVER_LAYOUT_SNAPSHOT_READ_FAILED()
+fn layout_snapshot_db_error(error: rusqlite::Error) -> CoreError {
+    errors::SERVER_LAYOUT_SNAPSHOT_READ_FAILED().and_details(vec![error.to_string()])
 }
 
-fn layout_report_list_db_error(_: rusqlite::Error) -> CoreError {
-    errors::SERVER_LAYOUT_REPORT_LIST_FAILED()
+fn layout_report_list_db_error(error: rusqlite::Error) -> CoreError {
+    let detail = error.to_string();
+    let is_json_error = matches!(
+        &error,
+        rusqlite::Error::FromSqlConversionFailure(_, _, source)
+            if source.as_ref().downcast_ref::<serde_json::Error>().is_some()
+    );
+    if is_json_error {
+        errors::SERVER_LAYOUT_REPORT_LIST_JSON_PARSE_FAILED().and_details(vec![detail])
+    } else {
+        errors::SERVER_LAYOUT_REPORT_LIST_FAILED().and_details(vec![detail])
+    }
+}
+
+#[cfg(test)]
+mod error_detail_tests {
+    use super::*;
+
+    #[test]
+    fn layout_snapshot_database_error_is_preserved_in_details() {
+        let error = rusqlite::Error::InvalidQuery;
+        let original = error.to_string();
+        assert_eq!(layout_snapshot_db_error(error).details, vec![original]);
+    }
+
+    #[test]
+    fn layout_report_list_json_failure_has_a_distinct_code_and_original_detail() {
+        let json_error = serde_json::from_str::<DeviceLayout>("{").unwrap_err();
+        let sqlite_error = rusqlite::Error::FromSqlConversionFailure(
+            3,
+            rusqlite::types::Type::Text,
+            Box::new(json_error),
+        );
+        let original = sqlite_error.to_string();
+
+        let error = layout_report_list_db_error(sqlite_error);
+
+        assert_eq!(
+            error.id.as_deref(),
+            Some("SERVER_LAYOUT_REPORT_LIST_JSON_PARSE_FAILED")
+        );
+        assert_eq!(error.details, vec![original]);
+    }
 }

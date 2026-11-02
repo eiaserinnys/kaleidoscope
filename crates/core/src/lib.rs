@@ -1020,8 +1020,17 @@ impl Core {
             .ok_or_else(|| errors::DESK_PC_ACCESS_WINDOW_NOT_FOUND(window_id))?;
         let app_id = window.app_id.clone();
         let app_version = window.app_version;
+        let app_name = state
+            .shared
+            .apps
+            .iter()
+            .find(|app| app.id == app_id)
+            .map(|app| app.name.as_str())
+            .unwrap_or(app_id.as_str());
         let definition = app_commands::definition_for(&state.shared, &app_id, app_version)
-            .ok_or_else(|| errors::DESK_PC_ACCESS_APP_VERSION_NOT_FOUND(&app_id, app_version))?;
+            .ok_or_else(|| {
+                errors::DESK_PC_ACCESS_APP_VERSION_NOT_FOUND(app_name, &app_id, app_version)
+            })?;
         if !definition.permissions.iter().any(|p| matches!(p,
             kaleidoscope_contract::PermissionDecl::Files { id, scope: FilesScope::Pc, .. } if id == permission)) {
             return Err(errors::DESK_PC_ACCESS_PERMISSION_UNDECLARED(permission));

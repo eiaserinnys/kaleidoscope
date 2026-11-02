@@ -160,6 +160,13 @@ error_catalog! { ENTRIES;
         message: "서버에서 작업, 데스크톱 또는 창 정보를 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
         fix: "서버 저장소 상태를 확인하세요"
     }
+    SERVER_LAYOUT_ENTITIES_JSON_PARSE_FAILED() {
+        class: Server,
+        place: "계정 배치 JSON 해석",
+        cause: "저장된 작업, 데스크톱 또는 창 정보가 올바른 JSON이 아니다",
+        message: "저장된 작업 배치 정보의 JSON 형식이 올바르지 않습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
     SERVER_LAYOUT_REPORT_DEVICE_NOT_FOUND() {
         class: Server,
         place: "기기 배치 보고 저장",
@@ -300,6 +307,13 @@ error_catalog! { ENTRIES;
         message: "기기 배치 보고 목록을 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
         fix: "서버 저장소 상태를 확인하세요"
     }
+    SERVER_LAYOUT_REPORT_LIST_JSON_PARSE_FAILED() {
+        class: Server,
+        place: "기기 배치 보고 JSON 해석",
+        cause: "저장된 기기 배치 보고가 올바른 JSON이 아니다",
+        message: "기기 배치 보고의 JSON 형식이 올바르지 않습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
     SERVER_LAYOUT_WORKSPACE_CONNECTION_STATE_READ_FAILED() {
         class: Server,
         place: "작업 상세의 기기 연결 상태 읽기",
@@ -334,6 +348,48 @@ error_catalog! { ENTRIES;
         cause: "배치 동기화 상태를 저장하는 동안 저장 경로가 사라졌다",
         message: "로컬 배치 동기화 상태를 저장할 경로가 사라졌습니다. 서버 연결 상태를 새로고침한 뒤 다시 시도하세요.",
         fix: "서버 연결 상태를 새로고침하세요"
+    }
+    SERVER_LAYOUT_SYNC_STATE_RECOVERY_RENAME_NOT_FOUND() {
+        class: NotFound,
+        place: "손상된 로컬 배치 동기화 상태 보관",
+        cause: "손상된 동기화 상태 파일이 보관 중 사라졌다",
+        message: "손상된 로컬 배치 동기화 상태 파일을 찾지 못했습니다. 서버 연결 상태를 새로고침한 뒤 다시 시도하세요.",
+        fix: "서버 연결 상태를 새로고침하세요"
+    }
+    SERVER_LAYOUT_SYNC_STATE_RECOVERY_RENAME_FAILED() {
+        class: Io,
+        place: "손상된 로컬 배치 동기화 상태 보관",
+        cause: "손상된 동기화 상태 파일을 보관 이름으로 바꾸지 못했다",
+        message: "손상된 로컬 배치 동기화 상태 파일을 보관하지 못했습니다. 저장 폴더 권한과 디스크 상태를 확인하세요.",
+        fix: "저장 폴더 권한과 디스크 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_SYNC_STATE_TEMP_WRITE_NOT_FOUND() {
+        class: NotFound,
+        place: "로컬 배치 동기화 임시 파일 쓰기",
+        cause: "임시 동기화 상태 파일을 쓸 경로가 없다",
+        message: "로컬 배치 동기화 임시 파일을 쓸 위치가 없습니다. 저장 폴더를 확인한 뒤 다시 시도하세요.",
+        fix: "저장 폴더가 있는지 확인하세요"
+    }
+    SERVER_LAYOUT_SYNC_STATE_TEMP_WRITE_FAILED() {
+        class: Io,
+        place: "로컬 배치 동기화 임시 파일 쓰기",
+        cause: "임시 동기화 상태 파일을 쓰지 못했다",
+        message: "로컬 배치 동기화 임시 파일을 쓰지 못했습니다. 디스크 공간과 저장 폴더 권한을 확인하세요.",
+        fix: "디스크 공간과 저장 폴더 권한을 확인하세요"
+    }
+    SERVER_LAYOUT_SYNC_STATE_REPLACE_NOT_FOUND() {
+        class: NotFound,
+        place: "로컬 배치 동기화 상태 파일 교체",
+        cause: "임시 동기화 상태 파일이나 저장 폴더가 없다",
+        message: "로컬 배치 동기화 상태 파일을 교체할 위치가 없습니다. 저장 폴더를 확인한 뒤 다시 시도하세요.",
+        fix: "저장 폴더가 있는지 확인하세요"
+    }
+    SERVER_LAYOUT_SYNC_STATE_REPLACE_FAILED() {
+        class: Io,
+        place: "로컬 배치 동기화 상태 파일 교체",
+        cause: "임시 동기화 상태 파일을 저장 파일로 바꾸지 못했다",
+        message: "로컬 배치 동기화 상태 파일을 교체하지 못했습니다. 디스크 공간과 저장 폴더 권한을 확인하세요.",
+        fix: "디스크 공간과 저장 폴더 권한을 확인하세요"
     }
     SERVER_LAYOUT_SYNC_STATE_REMOVE_FAILED() {
         class: Io,
