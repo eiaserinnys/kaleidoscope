@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowUp, ChevronDown, ChevronRight, X } from "../../components/icons";
 import { Menu } from "../../components/menu";
 import { IconButton } from "../../components/primitives";
@@ -13,7 +13,7 @@ export function Target({ selection, choose }: { selection: FrameSelection; choos
   return <div className="ks-html-target">
     <nav className="ks-html-crumbs" aria-label="부모 경로">
       {ancestors.length > 2 ? <><button type="button" className="ks-html-crumb" aria-label="전체 경로" onClick={(event) => setAnchor(event.currentTarget)}>…</button><span aria-hidden="true">›</span></> : null}
-      {shown.map((item) => <span key={item.n}><button type="button" className="ks-html-crumb" onClick={() => choose(item.n)}>{item.label}</button><span aria-hidden="true"> ›</span></span>)}
+      {shown.map((item) => <Fragment key={item.n}><button type="button" className="ks-html-crumb" onClick={() => choose(item.n)}>{item.label}</button><span aria-hidden="true">›</span></Fragment>)}
     </nav>
     <div className={`ks-html-target-name${quote ? " is-quote" : ""}`}>{quote ? `“${selection.anchor.quote?.exact ?? ""}”` : selection.name ?? selection.anchor.label}</div>
     <IconButton aria-label="선택 해제" onClick={() => choose(null)}><X size="inline" /></IconButton>

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { NumberField } from "../blocks/html-document/fields";
+import { ColorField, NumberField } from "../blocks/html-document/fields";
 
 afterEach(cleanup);
 
@@ -22,4 +22,17 @@ it("숫자를 끄는 동안 부모를 갱신하지 않고 놓을 때 한 번 확
   pointer("pointerup", 20);
   expect(commit).toHaveBeenCalledTimes(1);
   expect(commit).toHaveBeenCalledWith("font-size", "20px");
+});
+
+it("값을 고치지 않고 칸을 떠나면 편집을 만들지 않고 색 견본 변경을 표시한다", () => {
+  const commit = vi.fn(); const preview = vi.fn(); const focus = vi.fn();
+  const { rerender } = render(<><NumberField label="크기" prop="font-size" value="15" preview={preview} commit={commit} /><ColorField label="배경" prop="background-color" value="rgb(59, 91, 219)" focus={focus} commit={commit} /></>);
+  const number = screen.getByRole("textbox", { name: "크기" });
+  fireEvent.focus(number); fireEvent.blur(number);
+  const color = screen.getByRole("textbox", { name: "배경" });
+  fireEvent.focus(color);
+  rerender(<><NumberField label="크기" prop="font-size" value="15" preview={preview} commit={commit} /><ColorField label="배경" prop="background-color" value="rgb(217, 72, 15)" focus={focus} commit={commit} /></>);
+  expect(color).toHaveProperty("value", "#d9480f");
+  fireEvent.blur(color);
+  expect(commit).not.toHaveBeenCalled();
 });

@@ -21,7 +21,7 @@ export function NumberField({ label, prop, value, step = 1, min, max, unit, span
   const [draft, setDraft] = useState(value);
   const [invalid, setInvalid] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  const focused = useRef(false); const cancelled = useRef(false);
+  const focused = useRef(false); const cancelled = useRef(false); const initial = useRef(value);
   const drag = useRef<{ x: number; base: number; value: string; moved: boolean } | null>(null);
   useEffect(() => { if (!focused.current && !drag.current) { setDraft(value); setInvalid(false); } }, [value]);
   const clamp = (n: number) => round(Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n)));
@@ -33,7 +33,7 @@ export function NumberField({ label, prop, value, step = 1, min, max, unit, span
   };
   const apply = (text: string) => {
     if (!valid(text)) { setInvalid(true); setDraft(value); return; }
-    setInvalid(false); commit(prop, cssValue(prop, text));
+    setInvalid(false); initial.current = text; commit(prop, cssValue(prop, text));
   };
   const onDown = (event: PointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
@@ -62,10 +62,10 @@ export function NumberField({ label, prop, value, step = 1, min, max, unit, span
       const base = Number.parseFloat(draft); const delta = event.key === "ArrowUp" ? 1 : -1;
       const next = String(clamp((Number.isFinite(base) ? base : 0) + delta * step * (event.shiftKey ? 10 : 1)));
       setDraft(next); apply(next);
-    } else if (event.key === "Enter") { event.preventDefault(); apply(draft); event.currentTarget.blur(); }
+    } else if (event.key === "Enter") { event.preventDefault(); if (draft !== initial.current) apply(draft); event.currentTarget.blur(); }
     else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelled.current = true; setDraft(value); setInvalid(false); event.currentTarget.blur(); }
   };
-  const field = <input ref={input} className={box} aria-label={label} aria-invalid={invalid || undefined} value={draft} onFocus={() => { focused.current = true; cancelled.current = false; }} onChange={(event) => setDraft(event.target.value)} onBlur={() => { focused.current = false; if (!cancelled.current && !drag.current) apply(draft); }} onKeyDown={onKey} {...(box ? { onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: onCancel } : {})} />;
+  const field = <input ref={input} className={box} aria-label={label} aria-invalid={invalid || undefined} value={draft} onFocus={() => { focused.current = true; cancelled.current = false; initial.current = draft; }} onChange={(event) => setDraft(event.target.value)} onBlur={() => { focused.current = false; if (!cancelled.current && !drag.current && draft !== initial.current) apply(draft); }} onKeyDown={onKey} {...(box ? { onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: onCancel } : {})} />;
   if (box) return field;
   return <label className={`ks-html-prop is-number ${span}`}><span className="ks-html-prop-label" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onCancel}>{label}</span>{field}{unit ? <span className="ks-html-prop-unit">{unit}</span> : null}</label>;
 }
@@ -85,12 +85,12 @@ type ColorProps = { label: string; prop: string; value: string; span?: string; r
 export function ColorField({ label, prop, value, span = "", readOnly, focus, commit }: ColorProps) {
   const textId = useId();
   const color = hexColor(value); const [draft, setDraft] = useState(color ?? "없음"); const [invalid, setInvalid] = useState(false);
-  const focused = useRef(false); const cancelled = useRef(false);
-  useEffect(() => { if (!focused.current) setDraft(color ?? "없음"); }, [color]);
+  const cancelled = useRef(false); const initial = useRef(draft);
+  useEffect(() => { const next = color ?? "없음"; setDraft(next); initial.current = next; }, [color]);
   const apply = (text: string) => {
     const next = text.trim() === "없음" ? "transparent" : text.trim();
     if (typeof CSS !== "undefined" && typeof CSS.supports === "function" && !CSS.supports(prop, next)) { setInvalid(true); setDraft(color ?? "없음"); return; }
-    setInvalid(false); commit(prop, next);
+    setInvalid(false); initial.current = text; commit(prop, next);
   };
-  return <label className={`ks-html-prop ${span}`} data-color={prop} htmlFor={textId}>{label ? <span className="ks-html-prop-label">{label}</span> : null}<input aria-label={`${label || "글자 색"} 선택`} className={`ks-html-swatch${!color || readOnly ? " is-empty" : ""}`} type="color" value={color ?? "#000000"} disabled={Boolean(readOnly)} onFocus={() => focus(prop)} onChange={(event) => { setDraft(event.target.value); commit(prop, event.target.value); }} /><input id={textId} aria-label={label || "글자 색"} aria-invalid={invalid || undefined} readOnly={Boolean(readOnly)} value={readOnly ?? draft} onFocus={() => { focused.current = true; cancelled.current = false; focus(prop); }} onChange={(event) => setDraft(event.target.value)} onBlur={() => { focused.current = false; if (!readOnly && !cancelled.current) apply(draft); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); apply(draft); event.currentTarget.blur(); } else if (event.key === "Escape") { event.stopPropagation(); cancelled.current = true; setDraft(color ?? "없음"); setInvalid(false); event.currentTarget.blur(); } }} /></label>;
+  return <label className={`ks-html-prop ${span}`} data-color={prop} htmlFor={textId}>{label ? <span className="ks-html-prop-label">{label}</span> : null}<input aria-label={`${label || "글자 색"} 선택`} className={`ks-html-swatch${!color || readOnly ? " is-empty" : ""}`} type="color" value={color ?? "#000000"} disabled={Boolean(readOnly)} onFocus={() => focus(prop)} onChange={(event) => { setDraft(event.target.value); commit(prop, event.target.value); }} /><input id={textId} aria-label={label || "글자 색"} aria-invalid={invalid || undefined} readOnly={Boolean(readOnly)} value={readOnly ?? draft} onFocus={() => { cancelled.current = false; initial.current = draft; focus(prop); }} onChange={(event) => setDraft(event.target.value)} onBlur={() => { if (!readOnly && !cancelled.current && draft !== initial.current) apply(draft); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); if (draft !== initial.current) apply(draft); event.currentTarget.blur(); } else if (event.key === "Escape") { event.stopPropagation(); cancelled.current = true; setDraft(color ?? "없음"); setInvalid(false); event.currentTarget.blur(); } }} /></label>;
 }
