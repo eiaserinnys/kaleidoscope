@@ -1,5 +1,6 @@
 use super::*;
 use base64::engine::general_purpose::STANDARD;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Default)]
 pub(super) struct PixelStats {
