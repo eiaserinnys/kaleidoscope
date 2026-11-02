@@ -16,10 +16,12 @@ fn parsed(value: &Value) -> kaleidoscope_contract::AppDefinition {
 
 fn rejects(value: &Value, fragment: &str) {
     let error = parse_app_definition(&value.to_string()).expect_err("잘못된 정의가 통과했습니다");
-    assert!(
-        error.details.iter().any(|detail| detail.contains(fragment)),
-        "{error:?}"
-    );
+    let contains = if error.id.as_deref() == Some("APP_DEFINITION_FORMAT_INVALID") {
+        error.message.contains(fragment)
+    } else {
+        error.details.iter().any(|detail| detail.contains(fragment))
+    };
+    assert!(contains, "{error:?}");
 }
 
 #[test]

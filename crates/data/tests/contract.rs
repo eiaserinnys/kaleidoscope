@@ -124,6 +124,7 @@ fn source_meta_is_available_without_waiting_for_source_value() {
         SourceStatus::Failed {
             message: "실패".into(),
             has_value: false,
+            id: None,
         },
     )]);
     let values = app.evaluate_with_data_meta(
@@ -201,6 +202,7 @@ fn source_status_is_scoped_to_each_expression_and_actions_are_ordered() {
         SourceStatus::Failed {
             message: "failed".into(),
             has_value: false,
+            id: None,
         },
     )]);
     let values = app.evaluate(&state, &data, &statuses);

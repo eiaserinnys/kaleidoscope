@@ -35,7 +35,7 @@ export type AgentControlKind = { "kind": "select", options: Array<ControlChoiceG
 
 export type AgentControlValue = string | boolean;
 
-export type AgentFailure = { code: ErrorCode, message: string, command: string | null, };
+export type AgentFailure = { id?: string, code: ErrorCode, message: string, command: string | null, };
 
 /**
  * 앱의 대화 제공자. 바인딩은 리터럴 또는 `$storage`, `$storage_meta`만 읽는다.
@@ -242,7 +242,7 @@ export type Binding = StateRef | ExprRef | ClientRef | ItemRef | ParentItemRef |
 /**
  * 식 바인딩 하나의 값. `status`로 가른다. 규칙은 이 모듈 머리글의 「원천의 상태와 값의 상태」에 있다.
  */
-export type BindingValue = { "status": "ready", value: JsonValue, } | { "status": "loading", } | { "status": "failed", message: string, retry: Array<string>, } | { "status": "login_required", permission: string, };
+export type BindingValue = { "status": "ready", value: JsonValue, } | { "status": "loading", } | { "status": "failed", message: string, id?: string, retry: Array<string>, } | { "status": "login_required", permission: string, };
 
 /**
  * 블록. 블록 세트 4판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
@@ -450,7 +450,11 @@ export type ConversationUpload = { name: string, mime: string, data_base64: stri
 /**
  * 명령의 실패.
  */
-export type CoreError = { code: ErrorCode, 
+export type CoreError = { 
+/**
+ * 장소와 원인을 가리키는 에러코드. 등록부(`errors`)의 코드다. 옛 서버와 옛 쉘이 보낸 오류에는 없다.
+ */
+id?: string, code: ErrorCode, 
 /**
  * 사람이 읽는 한국어 설명.
  */
@@ -1047,7 +1051,7 @@ export type SourceState = "idle" | "loading" | "ready" | "failed" | "login_requi
 /**
  * 원천 하나의 상태. `state`로 가른다.
  */
-export type SourceStatus = { "state": "idle", } | { "state": "loading", has_value: boolean, } | { "state": "ready", updated_at: string, } | { "state": "failed", message: string, has_value: boolean, } | { "state": "login_required", permission: string, };
+export type SourceStatus = { "state": "idle", } | { "state": "loading", has_value: boolean, } | { "state": "ready", updated_at: string, } | { "state": "failed", message: string, has_value: boolean, id?: string, } | { "state": "login_required", permission: string, };
 
 export type SplitDirection = "row" | "column";
 

@@ -58,7 +58,9 @@ pub(crate) fn permission(
         .permissions
         .iter()
         .find(|permission| permission.id() == permission_id)
-        .ok_or_else(|| error::make(ErrorCode::PermissionDenied))?;
+        .ok_or_else(|| {
+            kaleidoscope_contract::errors::FILE_ACCESS_PERMISSION_UNDECLARED(permission_id)
+        })?;
     let access = match permission {
         PermissionDecl::Files { access, .. } => *access,
         // 연결 권한으로는 파일을 다루지 않는다.
@@ -70,7 +72,7 @@ pub(crate) fn permission(
         }
     };
     if write && access != FileAccess::Readwrite {
-        return Err(error::make(ErrorCode::PermissionDenied));
+        return Err(kaleidoscope_contract::errors::FILE_WRITE_READ_ONLY_PERMISSION(permission_id));
     }
     Ok(access)
 }
@@ -221,14 +223,16 @@ pub(crate) fn granted_root(
 ) -> Result<PathBuf, CoreError> {
     permission(state, window_id, permission_id, write)?;
     if scope(state, window_id, permission_id)? == FilesScope::Pc {
-        return Err(error::make(ErrorCode::NotGranted));
+        return Err(kaleidoscope_contract::errors::FILE_ACCESS_FOLDER_NOT_CHOSEN(permission_id));
     }
     let grant = state
         .device
         .grants
         .iter()
         .find(|grant| grant.window_id == window_id && grant.permission == permission_id)
-        .ok_or_else(|| error::make(ErrorCode::NotGranted))?;
+        .ok_or_else(|| {
+            kaleidoscope_contract::errors::FILE_ACCESS_FOLDER_NOT_CHOSEN(permission_id)
+        })?;
     let stored_root = PathBuf::from(&grant.root_path);
     let root = fs::canonicalize(&stored_root).map_err(|error| error::io_error(&error))?;
     if root != stored_root || !root.is_dir() {

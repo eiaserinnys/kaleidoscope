@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 enum Status {
     Loading,
     Ready,
-    Failed(String),
+    Failed { message: String, id: Option<String> },
 }
 pub(super) struct Slot {
     value: Option<StorageReadReply>,
@@ -90,8 +90,9 @@ impl Runtime {
     pub(super) fn has_failed_storage(&self) -> bool {
         self.storage
             .values()
-            .any(|slot| matches!(slot.status, Status::Failed(_)))
-            || (self.storage_meta.needed && matches!(self.storage_meta.status, Status::Failed(_)))
+            .any(|slot| matches!(slot.status, Status::Failed { .. }))
+            || (self.storage_meta.needed
+                && matches!(self.storage_meta.status, Status::Failed { .. }))
     }
 
     pub(super) fn storage_values(&self) -> (BTreeMap<String, Value>, BTreeMap<String, Value>) {
@@ -121,9 +122,10 @@ impl Runtime {
         let mut loading = false;
         for status in statuses {
             match status {
-                Status::Failed(message) => {
+                Status::Failed { message, id } => {
                     return Some(BindingValue::Failed {
                         message: message.clone(),
+                        id: id.clone(),
                         retry: Vec::new(),
                     })
                 }
@@ -172,11 +174,12 @@ impl Runtime {
                         permission: permission.clone(),
                     },
                 ),
-                Some(SourceStatus::Failed { message, .. }) => (
+                Some(SourceStatus::Failed { message, id, .. }) => (
                     2,
                     SourceStatus::Failed {
                         message: message.clone(),
                         has_value,
+                        id: id.clone(),
                     },
                 ),
                 Some(SourceStatus::Loading { .. }) => (1, SourceStatus::Loading { has_value }),
@@ -196,10 +199,11 @@ impl Runtime {
             Some(BindingValue::Loading {}) => {
                 source.status = SourceStatus::Loading { has_value: false }
             }
-            Some(BindingValue::Failed { message, .. }) => {
+            Some(BindingValue::Failed { message, id, .. }) => {
                 source.status = SourceStatus::Failed {
                     message,
                     has_value: false,
+                    id,
                 }
             }
             None if data_problem.is_some() => source.status = data_problem.unwrap(),
@@ -220,8 +224,10 @@ impl Runtime {
             }
         }
         match self.storage_problem(&names, meta) {
-            Some(BindingValue::Failed { message, .. }) => {
-                Some(error::with_message(ErrorCode::Server, &message))
+            Some(BindingValue::Failed { message, id, .. }) => {
+                let mut error = error::with_message(ErrorCode::Server, &message);
+                error.id = id;
+                Some(error)
             }
             Some(_) => Some(error::make(ErrorCode::Unavailable)),
             None => None,
@@ -234,7 +240,11 @@ impl Runtime {
             .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
         match (&slot.status, &slot.value) {
             (Status::Ready, Some(value)) => Ok(value.revision.clone()),
-            (Status::Failed(message), _) => Err(error::with_message(ErrorCode::Server, message)),
+            (Status::Failed { message, id }, _) => {
+                let mut error = error::with_message(ErrorCode::Server, message);
+                error.id = id.clone();
+                Err(error)
+            }
             _ => Err(error::make(ErrorCode::Unavailable)),
         }
     }
@@ -483,7 +493,10 @@ pub(super) fn load(inner: &Arc<Inner>, window: &str, selected: Option<&str>) {
                     }
                     Err(err) => {
                         slot.value = None;
-                        slot.status = Status::Failed(err.message);
+                        slot.status = Status::Failed {
+                            message: err.message,
+                            id: err.id,
+                        };
                     }
                 }
                 replan(&inner, &window, runtime, Some(&entry))
@@ -519,7 +532,10 @@ pub(super) fn load(inner: &Arc<Inner>, window: &str, selected: Option<&str>) {
                     }
                     Err(err) => {
                         meta.value = None;
-                        meta.status = Status::Failed(err.message);
+                        meta.status = Status::Failed {
+                            message: err.message,
+                            id: err.id,
+                        };
                     }
                 }
                 replan(&inner, &window, runtime, None)

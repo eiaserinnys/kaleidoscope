@@ -90,6 +90,8 @@ it("클라이언트에 내용 크기와 가시성, 종료를 전달한다", asyn
   const post = vi.spyOn(frame.contentWindow!, "postMessage");
   window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token: "00000000-0000-4000-8000-000000000000", type: "ks-sandbox-ready" } }));
   expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-lifecycle", lifecycle: expect.objectContaining({ phase: "ready", visible: true, viewport: expect.objectContaining({ width: 400, height: 300 }) }) }), "*");
+  runtime.surface({ phase: "attach", id: "tile", generation: 1, canvas: {} as OffscreenCanvas, css_width: 100, css_height: 100, dpr: 1, visible: true });
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-surface", phase: "attach", id: "tile", visible: true }), "*", expect.any(Array));
   post.mockClear();
   bounds.mockReturnValue({ width: 500, height: 350 } as DOMRect);
   resized(); resized(); resized();
@@ -99,6 +101,10 @@ it("클라이언트에 내용 크기와 가시성, 종료를 전달한다", asyn
   current = snapshot(false); listeners.forEach((listener) => listener());
   await new Promise((resolve) => requestAnimationFrame(resolve));
   expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-lifecycle", lifecycle: expect.objectContaining({ phase: "change", visible: false }) }), "*");
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-surface", phase: "visibility", id: "tile", visible: false }), "*");
+  current = snapshot(true); listeners.forEach((listener) => listener());
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-surface", phase: "visibility", id: "tile", visible: true }), "*");
   post.mockClear();
   const beforeClose = flushSandboxes("window-1");
   expect(post.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ type: "ks-client-lifecycle", lifecycle: expect.objectContaining({ phase: "closing" }) }));

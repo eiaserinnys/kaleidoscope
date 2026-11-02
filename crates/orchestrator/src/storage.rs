@@ -299,6 +299,7 @@ pub(super) fn db_error(error: rusqlite::Error) -> CoreError {
 }
 pub(super) fn server_error(message: &str) -> CoreError {
     CoreError {
+        id: None,
         code: ErrorCode::Server,
         message: message.to_string(),
         details: vec![],

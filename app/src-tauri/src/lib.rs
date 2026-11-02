@@ -185,6 +185,7 @@ async fn core(request: CoreRequest, core: State<'_, Arc<Core>>) -> Result<CoreRe
     .await
     .unwrap_or_else(|_| {
         Err(CoreError {
+            id: None,
             code: ErrorCode::Io,
             message: "코어 작업이 중단되었습니다.".into(),
             details: Vec::new(),

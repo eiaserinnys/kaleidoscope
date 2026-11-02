@@ -1,4 +1,5 @@
 import type { MouseEvent, ReactNode } from "react";
+import type { CoreError } from "../contract/contract";
 
 export interface ButtonProps {
   className?: string,
@@ -80,7 +81,7 @@ export function EmptyState({
   action,
 }: {
   icon: ReactNode;
-  text?: string;
+  text?: ReactNode;
   action?: ReactNode;
 }) {
   return (
@@ -95,20 +96,30 @@ export function EmptyState({
 export function Notice({
   children,
   actions,
+  errorId,
   role = "status",
   "data-ks-overlay": overlay,
 }: {
   children: ReactNode;
   actions?: [ReactNode] | [ReactNode, ReactNode];
+  errorId?: string | null;
   role?: "alert" | "status";
   "data-ks-overlay"?: boolean;
 }) {
   return (
     <div className="ks-notice" data-ks-overlay={overlay || undefined} role={role}>
-      <span className="ks-notice-message">{children}</span>
+      <span className="ks-notice-message">{children}{errorId ? <> <ErrorId id={errorId} /></> : null}</span>
       {actions ? <span className="ks-notice-actions">{actions}</span> : null}
     </div>
   );
+}
+
+export function ErrorId({ id }: { id: string }) {
+  return <code className="ks-error-id">{id}</code>;
+}
+
+export function ErrorNotice({ error, actions }: { error: CoreError; actions?: [ReactNode] | [ReactNode, ReactNode] }) {
+  return <Notice role="alert" errorId={error.id} actions={actions}>{error.message}</Notice>;
 }
 
 export function StatusText({ children }: { children: ReactNode }) {

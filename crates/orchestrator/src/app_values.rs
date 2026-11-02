@@ -41,6 +41,7 @@ fn content_size(kind: StorageKind, content: &Value) -> Result<(), CoreError> {
 
 fn conflict(revision: Option<&str>) -> CoreError {
     CoreError {
+        id: None,
         code: ErrorCode::Conflict,
         message: "저장 항목이 다른 곳에서 바뀌었습니다.".into(),
         details: vec![format!("current_revision={}", revision.unwrap_or("null"))],

@@ -39,6 +39,32 @@ it("HTTP와 기기 보관 요청은 바이트를 전송 목록에 담는다", ()
   vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
 });
 
+it("표면 가시 변화를 알리고 이전 세대의 detach는 새 표면을 지우지 않는다", () => {
+  vi.useFakeTimers();
+  const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험" });
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
+  const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
+  vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  new Function(code)();
+  const sdk = (window as unknown as { kaleidoscope: { surfaces: { on: (id: string, listener: (surface: any) => void) => void } } }).kaleidoscope;
+  const seen: any[] = [];
+  sdk.surfaces.on("tile", (surface) => seen.push(surface));
+  const send = (data: object) => window.dispatchEvent(new MessageEvent("message", { source: window, data: { type: "ks-client-surface", id: "tile", ...data } }));
+  send({ phase: "attach", generation: 1, canvas: {}, css_width: 100, css_height: 100, dpr: 1, visible: false });
+  expect(seen[0].visible).toBe(false);
+  const changed = vi.fn(); seen[0].resize.addEventListener("resize", changed);
+  send({ phase: "visibility", generation: 1, visible: true });
+  expect(seen[0].visible).toBe(true);
+  expect(changed).toHaveBeenCalledTimes(1);
+  send({ phase: "attach", generation: 2, canvas: {}, css_width: 100, css_height: 100, dpr: 1, visible: true });
+  send({ phase: "detach", generation: 1 });
+  expect(seen).toHaveLength(2);
+  send({ phase: "detach", generation: 2 });
+  expect(seen.at(-1)).toBeNull();
+  vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+});
+
 it("부모 프레임 정책은 HTTP 주소로의 이동을 허용하지 않는다", () => {
   expect(tauriConfig.app.security.csp).toContain("frame-src data: blob:");
   expect(tauriConfig.app.security.csp).not.toContain("frame-src 'self'");

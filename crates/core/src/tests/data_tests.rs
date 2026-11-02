@@ -614,6 +614,44 @@ fn oauth_requires_login_and_media_is_resized_and_cached() {
 }
 
 #[test]
+fn remote_asset_without_server_reports_media_load_error() {
+    use kaleidoscope_contract::data::{AssetMediaRef, MediaRef};
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let definition = json!({
+        "id":"remote-media-app",
+        "name":"원격 미디어",
+        "requires":{"blocks":4,"modules":{"assets":1}},
+        "permissions":[],
+        "state":{},
+        "assets":[{"id":"remote-image","version":1}],
+        "ui":{"type":"media","kind":"audio","src":{"asset":"remote-image"}}
+    })
+    .to_string();
+    let core = open_core(temp.path(), vec![definition], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "remote-media-app");
+
+    let error = expect_error(
+        core.handle(CoreRequest::DataMedia {
+            window_id: window,
+            media: MediaRef::Asset(AssetMediaRef {
+                asset: "remote-image".into(),
+                version: None,
+                crop: None,
+            }),
+            max_px: None,
+        }),
+        ErrorCode::Server,
+    );
+    assert_eq!(error.id.as_deref(), Some("MEDIA_LOAD_SERVER_NOT_CONNECTED"));
+    assert_eq!(
+        error.message,
+        "kaleidoscope 서버에 연결되어 있지 않아 미디어를 불러올 수 없습니다. 서버를 연결한 뒤 다시 시도하세요."
+    );
+}
+
+#[test]
 fn explicit_null_and_absent_action_value_are_distinct() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
@@ -681,7 +719,7 @@ fn failed_relay_has_retry_and_read_permission_rejects_post() {
     while Instant::now() < deadline {
         if let Ok(CoreEvent::DataUpdate { view, .. }) = rx.recv_timeout(Duration::from_millis(100))
         {
-            if matches!(view.values.get("/ui/children/0/items"),Some(BindingValue::Failed{message,retry}) if message.contains("500") && retry == &vec!["items".to_owned()])
+            if matches!(view.values.get("/ui/children/0/items"),Some(BindingValue::Failed{message,retry,..}) if message.contains("500") && retry == &vec!["items".to_owned()])
             {
                 failed = true;
                 break;
@@ -764,6 +802,7 @@ fn closing_window_discards_pending_fetch() {
             dormant: vec![]
         }),
         Err(CoreError {
+            id: None,
             code: ErrorCode::NotFound,
             ..
         })
@@ -1700,6 +1739,17 @@ fn folder_and_file_sources_must_protect_data_dir() {
     fs::write(root.join("private-data/link.json"), "{}").unwrap();
     let (_, desktop) = active_ids(&core);
     let window = open_window(&core, &desktop, "data-app");
+    let unselected_plan = SourcePlan::Folder {
+        permission: "docs".into(),
+        dir: String::new(),
+        recursive: false,
+        extensions: vec![],
+    };
+    assert!(matches!(
+        crate::data_sources::fetch(&core.inner, &window, &unselected_plan, SourceFormat::Json),
+        Err(crate::connections::RequestError::Core(error))
+            if error.id.as_deref() == Some("FILE_ACCESS_FOLDER_NOT_CHOSEN")
+    ));
     pick_folder(&core, &window);
     for recursive in [false, true] {
         let plan = SourcePlan::Folder {

@@ -3,7 +3,7 @@ import { AppSettings } from "../settings/app-settings";
 import { WindowDataProvider, useWindowData, useDormant } from "../data/window-data";
 import { ClientShareSignal, WindowNotice } from "../data/window-notice";
 import type { BlockContext, WindowIdentity } from "../blocks/block-context";
-import { Notice, StatusText } from "../components/primitives";
+import { ErrorNotice, Notice, StatusText } from "../components/primitives";
 import type { ShellStore } from "../core/shell-store";
 import type { Rect } from "../contract/contract";
 import { useShellSelector } from "../core/shell-store";
@@ -41,7 +41,7 @@ export const AppWindowContent = memo(function AppWindowContent({
   if (!store.getSnapshot()) {
     const error = store.getError();
     return error
-      ? <div className="ks-app-content-error"><Notice role="alert">{error.message}</Notice></div>
+      ? <div className="ks-app-content-error"><ErrorNotice error={error} /></div>
       : <div className="ks-app-content-loading"><StatusText>불러오는 중</StatusText></div>;
   }
   if (!window) return <div className="ks-app-content-error"><Notice role="alert">앱 창을 찾을 수 없습니다</Notice></div>;

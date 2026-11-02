@@ -7,7 +7,7 @@ import { documentEditorSession } from "../blocks/document-editor-session";
 import { useBinding } from "../data/window-data";
 import { DataState } from "../components/data-state";
 import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronRight, LoaderCircle, Plus, RotateCcw, X } from "../components/icons";
-import { Button, IconButton, Notice, StatusText } from "../components/primitives";
+import { Button, ErrorNotice, IconButton, Notice, StatusText } from "../components/primitives";
 import { Select, Toggle, equalOption, optionValue } from "../components/select-toggle";
 import { TextInput } from "../components/text-input";
 import { SettingsEntrySession } from "./settings-entry-session";
@@ -124,7 +124,7 @@ function SettingsEntry({ context, entry, index, open, onProblem }: { context: Bl
       <Button key="reload" onClick={() => void session.reload().then(restoreFocus)}>다시 불러오기</Button>,
       <Button key="overwrite" variant="emphasis" onClick={() => void session.overwrite().then(restoreFocus)}>덮어쓰기</Button>,
     ]}>다른 곳에서 바뀌었습니다</Notice> : null}
-    {state.error ? <div id={`${id}-error`}><Notice role="alert" actions={state.error.code === "invalid_request" ? undefined : [<Button key="retry" onClick={() => void session.retry()}>다시 시도</Button>]}>{state.error.message}</Notice></div> : null}
+    {state.error ? <div id={`${id}-error`}><ErrorNotice error={state.error} actions={state.error.code === "invalid_request" ? undefined : [<Button key="retry" onClick={() => void session.retry()}>다시 시도</Button>]}/></div> : null}
   </div>;
 }
 

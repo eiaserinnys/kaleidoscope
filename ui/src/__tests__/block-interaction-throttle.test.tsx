@@ -59,6 +59,7 @@ beforeEach(() => {
   runtime.act.mockClear();
   runtime.act.mockImplementation((pointer: string, event: unknown) => { runtime.calls.push({ pointer, event }); return Promise.resolve(true); });
   runtime.bindings = {
+    "/ui/surface": "surface",
     "/ui/value": 0,
     "/ui/duration": 10,
     "/ui/position": { position: 1, sampled_at: 1000, rate: 1, running: true, duration: 10 },

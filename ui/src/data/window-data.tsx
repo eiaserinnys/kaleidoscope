@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import type { AppDefinition, Binding, BindingValue, DataView, EventModifiers, PickFilesSpec, SaveFileSpec, ShellSnapshot, SourceStatus } from "../contract/contract";
+import type { AppDefinition, Binding, BindingValue, CoreError, DataView, EventModifiers, PickFilesSpec, SaveFileSpec, ShellSnapshot, SourceStatus } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { CLIENT_OUTPUT_MAX_BYTES } from "../contract/limits";
 import { toCoreError } from "../core/core-transport";
@@ -43,6 +43,7 @@ export class WindowData {
   private sourceListeners = new Set<() => void>();
   private noticeListeners = new Set<() => void>();
   private notice: string | null = null;
+  private noticeId: string | null = null;
   private noticeRole: "alert" | "status" = "alert";
   private unsubscribe?: () => void;
   private unsubscribeLink?: () => void;
@@ -65,7 +66,7 @@ export class WindowData {
   private dormantScheduled = false;
   private restarting = false;
   private surfaceGeneration = 0;
-  private surfaces = new Map<string, { id: string; generation: number; canvas: OffscreenCanvas; css_width: number; css_height: number; dpr: number }>();
+  private surfaces = new Map<string, { id: string; generation: number; canvas: OffscreenCanvas; css_width: number; css_height: number; dpr: number; visible: boolean }>();
 
   constructor(readonly store: ShellStore, readonly windowId: string, readonly definition: AppDefinition) {
     for (const [name, output] of Object.entries(definition.client?.outputs ?? {})) this.clientValues[name] = { status: "ready", value: output.default };
@@ -95,9 +96,15 @@ export class WindowData {
   getSourceMeta = () => this.sourceMeta;
   subscribeNotice = (listener: () => void) => { this.noticeListeners.add(listener); return () => this.noticeListeners.delete(listener); };
   getNotice = () => this.notice;
+  getNoticeId = () => this.noticeId;
   getNoticeRole = () => this.noticeRole;
-  setNotice = (message: string | null) => { this.notice = message; this.noticeRole = "alert"; this.noticeListeners.forEach((listener) => listener()); };
-  setStatus = (message: string) => { this.notice = message; this.noticeRole = "status"; this.noticeListeners.forEach((listener) => listener()); };
+  setNotice = (problem: CoreError | string | null) => {
+    this.notice = typeof problem === "string" || problem === null ? problem : problem.message;
+    this.noticeId = typeof problem === "string" || problem === null ? null : problem.id ?? null;
+    this.noticeRole = "alert";
+    this.noticeListeners.forEach((listener) => listener());
+  };
+  setStatus = (message: string) => { this.notice = message; this.noticeId = null; this.noticeRole = "status"; this.noticeListeners.forEach((listener) => listener()); };
   getClientFailed = () => this.clientFailed;
   failClient = (message: string) => { this.clientFailed = true; this.setNotice(message); };
   subscribeClient = (listener: () => void) => { this.clientListeners.add(listener); return () => this.clientListeners.delete(listener); };
@@ -189,7 +196,7 @@ export class WindowData {
           for (const surface of this.surfaces.values()) runtime.surface({ phase: "attach", ...surface });
           this.startRuntime(runtime);
         }
-      } catch (error) { if (this.active) this.setNotice(toCoreError(error).message); }
+      } catch (error) { if (this.active) this.setNotice(toCoreError(error)); }
     });
     const onFocus = () => {
       const names = Object.entries(this.definition.sources ?? {}).filter(([, source]) => source.kind === "file" || source.kind === "folder").map(([name]) => name);
@@ -249,7 +256,7 @@ export class WindowData {
       void this.ready.then(async () => {
         if (!this.active || mount !== this.mounts || !this.initialized) return;
         try { await this.store.call({ op: "data.dormant", window_id: this.windowId, dormant: [...this.dormantPointers] }); }
-        catch (error) { if (this.active && mount === this.mounts) this.setNotice(toCoreError(error).message); }
+        catch (error) { if (this.active && mount === this.mounts) this.setNotice(toCoreError(error)); }
       });
     });
   };
@@ -262,10 +269,20 @@ export class WindowData {
     if (!group.size) this.dormantInstances.delete(pointer);
   };
 
-  attachSurface = (id: string, canvas: OffscreenCanvas, css_width: number, css_height: number, dpr: number) => {
-    const surface = { id, generation: ++this.surfaceGeneration, canvas, css_width, css_height, dpr };
+  attachSurface = (id: string, canvas: OffscreenCanvas, css_width: number, css_height: number, dpr: number, visible: boolean) => {
+    if (this.surfaces.has(id)) {
+      this.setNotice(`표면 "${id}"이 이 창에 이미 있습니다. 각 캔버스에 서로 다른 표면 이름을 지정하세요. [SHELL_CANVAS_DUPLICATE_SURFACE]`);
+      return undefined;
+    }
+    const surface = { id, generation: ++this.surfaceGeneration, canvas, css_width, css_height, dpr, visible };
     this.surfaces.set(id, surface); this.runtime?.surface({ phase: "attach", ...surface });
     return surface.generation;
+  };
+  setSurfaceVisible = (id: string, generation: number, visible: boolean) => {
+    const surface = this.surfaces.get(id);
+    if (!surface || surface.generation !== generation || surface.visible === visible) return;
+    surface.visible = visible;
+    this.runtime?.surface({ phase: "visibility", id, generation, visible });
   };
   resizeSurface = (id: string, generation: number, css_width: number, css_height: number, dpr: number) => {
     const surface = this.surfaces.get(id);
@@ -319,15 +336,15 @@ export class WindowData {
       await this.ready;
       await this.store.call({ op: "data.act", window_id: this.windowId, pointer, event, ...(item === undefined ? {} : { item }), ...(modifiers === undefined ? {} : { modifiers }) });
       return true;
-    } catch (error) { this.setNotice(toCoreError(error).message); return false; }
+    } catch (error) { this.setNotice(toCoreError(error)); return false; }
   };
   refresh = async (sources: string[]) => {
     try { await this.ready; await this.store.call({ op: "data.refresh", window_id: this.windowId, sources }); }
-    catch (error) { this.setNotice(toCoreError(error).message); }
+    catch (error) { this.setNotice(toCoreError(error)); }
   };
   login = async (permission: string) => {
     try { await this.store.call({ op: "connection.login", window_id: this.windowId, permission }); }
-    catch (error) { this.setNotice(toCoreError(error).message); }
+    catch (error) { this.setNotice(toCoreError(error)); }
   };
 }
 

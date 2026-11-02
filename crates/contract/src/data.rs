@@ -1098,7 +1098,13 @@ pub enum SourceStatus {
     /// 받았다.
     Ready { updated_at: String },
     /// 받다가 실패했다. 이전 값이 있으면 식은 그 값으로 계산된다.
-    Failed { message: String, has_value: bool },
+    Failed {
+        message: String,
+        has_value: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        id: Option<String>,
+    },
     /// 연결이 기기 로그인(`oauth`)인데 이 기기에 로그인 정보가 없거나 원천이 401을 돌려줬다.
     LoginRequired { permission: String },
 }
@@ -1117,6 +1123,9 @@ pub enum BindingValue {
     /// `retry`는 `data.refresh`에 넘길 원천 이름이다. 식 오류면 빈 배열이다.
     Failed {
         message: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        id: Option<String>,
         #[serde(default)]
         retry: Vec<String>,
     },
