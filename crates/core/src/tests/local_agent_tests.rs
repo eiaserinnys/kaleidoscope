@@ -98,7 +98,9 @@ fn missing_command_fails() {
     let path = dir.path().join(format!("agent{}", std::env::consts::EXE_SUFFIX));
     cfg.spec.command = path.to_string_lossy().into_owned();
     let worker = WorkerHandle::start(cfg, Arc::new(|_| {})); wait(&worker, LocalAgentPhase::Failed);
-    assert!(worker.snapshot().failure.unwrap().message.contains("agent"));
+    let failure = worker.snapshot().failure.unwrap();
+    assert_eq!(failure.id.as_deref(), Some("AGENT_START_COMMAND_NOT_FOUND"));
+    assert!(failure.message.contains("agent"));
     std::fs::copy(agent_binary(), path).unwrap(); worker.retry().unwrap(); wait(&worker, LocalAgentPhase::Ready);
     assert!(worker.retry().is_err());
 }
@@ -118,9 +120,16 @@ fn authentication_filters_terminal_and_unlisted_methods() {
             .collect::<Vec<_>>(),
         vec!["login"]
     );
-    assert!(worker.authenticate("terminal").is_err());
+    assert_eq!(
+        worker.authenticate("terminal").unwrap_err().id.as_deref(),
+        Some("AGENT_AUTHENTICATE_METHOD_NOT_FOUND")
+    );
     worker.authenticate("login").unwrap();
     wait(&worker, LocalAgentPhase::Ready);
+    assert_eq!(
+        worker.authenticate("login").unwrap_err().id.as_deref(),
+        Some("AGENT_AUTHENTICATE_PHASE_INVALID")
+    );
 }
 
 fn until(mut test: impl FnMut() -> bool) {
@@ -152,6 +161,14 @@ fn permission_choices_and_cancel() {
         worker.send(prompt("p", "permission")).unwrap();
         until(|| !worker.snapshot().permissions.is_empty());
         let p = worker.snapshot().permissions[0].clone();
+        assert_eq!(
+            worker
+                .answer_permission(&p.id, "unknown-option")
+                .unwrap_err()
+                .id
+                .as_deref(),
+            Some("AGENT_PERMISSION_REPLY_OPTION_NOT_FOUND")
+        );
         worker.answer_permission(&p.id, choice).unwrap();
         until(|| {
             worker
@@ -160,7 +177,14 @@ fn permission_choices_and_cancel() {
                 .iter()
                 .any(|i| i.kind == ConversationItemKind::Notice)
         });
-        assert!(worker.answer_permission(&p.id, choice).is_err());
+        assert_eq!(
+            worker
+                .answer_permission(&p.id, choice)
+                .unwrap_err()
+                .id
+                .as_deref(),
+            Some("AGENT_PERMISSION_REPLY_REQUEST_NOT_FOUND")
+        );
         wait(&worker, LocalAgentPhase::Ready);
         let log = calls(dir.path());
         assert!(log
@@ -318,14 +342,20 @@ fn legacy_model_and_config_controls_restore() {
 }
 #[test]
 fn bad_protocol_and_early_exit_fail_without_restart() {
-    for scenario in ["invalid", "exit"] {
+    for scenario in ["invalid", "exit", "error_data"] {
         let dir = tempfile::tempdir().unwrap();
         let worker = WorkerHandle::start(config(dir.path(), scenario), Arc::new(|_| {}));
         wait(&worker, LocalAgentPhase::Failed);
         let failure = worker.snapshot().failure.unwrap();
-        assert!(failure.message.contains(&failure.command.unwrap()));
+        assert_eq!(failure.id.as_deref(), Some("AGENT_ACP_PROTOCOL_FAILED"));
+        assert_eq!(
+            failure.command.as_deref(),
+            Some(agent_binary().to_str().unwrap())
+        );
         if scenario == "invalid" {
             assert!(failure.message.contains("JSON"));
+        } else if scenario == "error_data" {
+            assert!(failure.message.contains("agent-supplied detail"));
         }
         std::thread::sleep(Duration::from_millis(150));
         assert_eq!(worker.snapshot().phase, LocalAgentPhase::Failed);
@@ -459,6 +489,22 @@ fn config_values_restore_and_auth_allowlist_is_enforced() {
     let dir = tempfile::tempdir().unwrap();
     let worker = WorkerHandle::start(config(dir.path(), ""), Arc::new(|_| {}));
     wait(&worker, LocalAgentPhase::Ready);
+    assert_eq!(
+        worker
+            .configure("missing", AgentControlValue::Boolean(true))
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("AGENT_CONTROL_UPDATE_ID_NOT_FOUND")
+    );
+    assert_eq!(
+        worker
+            .configure("toggle", AgentControlValue::String("true".into()))
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("AGENT_CONTROL_UPDATE_VALUE_INVALID")
+    );
     worker
         .configure("toggle", AgentControlValue::Boolean(true))
         .unwrap();
@@ -485,7 +531,18 @@ fn config_values_restore_and_auth_allowlist_is_enforced() {
     let worker = WorkerHandle::start(cfg, Arc::new(|_| {}));
     wait(&worker, LocalAgentPhase::LoginRequired);
     assert!(worker.snapshot().auth_methods.is_empty());
-    assert!(worker.authenticate("login").is_err());
+    assert_eq!(
+        worker
+            .configure("toggle", AgentControlValue::Boolean(true))
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("AGENT_CONTROL_UPDATE_PHASE_INVALID")
+    );
+    assert_eq!(
+        worker.authenticate("login").unwrap_err().id.as_deref(),
+        Some("AGENT_AUTHENTICATE_METHOD_NOT_FOUND")
+    );
 }
 #[test]
 fn cwd_change_does_not_load_old_session() {

@@ -1,13 +1,14 @@
 //! 창의 현재 정의와 기기 권한을 실행 입력으로 해석한다.
 use super::{McpHttp, WorkerConfig};
-use crate::{app_commands, data_runtime, error, files, Inner};
+use crate::{app_commands, data_runtime, files, Inner};
 use kaleidoscope_contract::{
     data::{self, BindingValue},
+    errors,
     local_agent::{
         agent_spec_hash, validate_agent_specs, AgentChoice, AgentFailure, ExecutionConsent,
         LocalAgentPhase, LocalAgentSnapshot,
     },
-    Block, CoreError, ErrorCode,
+    Block, CoreError,
 };
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -52,16 +53,18 @@ pub(super) fn resolve(
         .windows
         .iter()
         .find(|w| w.id == id)
-        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        .ok_or_else(|| errors::AGENT_CONTEXT_WINDOW_NOT_FOUND(id))?;
     let desktop = state
         .shared
         .desktops
         .iter()
         .find(|d| d.id == window.desktop_id)
-        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        .ok_or_else(|| errors::AGENT_CONTEXT_DESKTOP_NOT_FOUND(&window.desktop_id))?;
     let definition =
         app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(|| {
+                errors::AGENT_CONTEXT_APP_VERSION_NOT_FOUND(&window.app_id, window.app_version)
+            })?;
     let mut found = None;
     data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
         if let Block::Chat {
@@ -158,10 +161,11 @@ pub(super) fn resolve(
             Ok(specs) => specs,
             Err(message) => {
                 snapshot.phase = LocalAgentPhase::Failed;
+                let failure = errors::AGENT_SPEC_INVALID(message);
                 snapshot.failure = Some(AgentFailure {
-                    id: None,
-                    code: ErrorCode::InvalidRequest,
-                    message,
+                    id: failure.id,
+                    code: failure.code,
+                    message: failure.message,
                     command: None,
                 });
                 return Ok(Some(Context {

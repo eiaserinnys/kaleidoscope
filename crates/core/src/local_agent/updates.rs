@@ -37,6 +37,11 @@ pub(super) enum Command {
 pub(super) struct PendingPermission {
     pub(super) responder: Responder<RequestPermissionResponse>,
 }
+pub(super) enum AnswerResult {
+    Answered,
+    RequestNotFound,
+    OptionNotFound,
+}
 pub(super) struct State {
     pub(super) snapshot: WorkerSnapshot,
     pub(super) record: record::Record,
@@ -396,17 +401,26 @@ pub(super) fn answer(
     owner: &Arc<Shared>,
     id: &str,
     option: Option<&str>,
-) -> Result<bool, agent_client_protocol::Error> {
+) -> Result<AnswerResult, agent_client_protocol::Error> {
     let mut state = owner.state.lock().unwrap();
-    let Some(index) =
-        state.snapshot.permissions.iter().position(|p| {
-            p.id == id && option.is_none_or(|id| p.options.iter().any(|o| o.id == id))
-        })
+    let Some(index) = state
+        .snapshot
+        .permissions
+        .iter()
+        .position(|permission| permission.id == id)
     else {
-        return Ok(false);
+        return Ok(AnswerResult::RequestNotFound);
     };
+    if option.is_some_and(|option_id| {
+        !state.snapshot.permissions[index]
+            .options
+            .iter()
+            .any(|choice| choice.id == option_id)
+    }) {
+        return Ok(AnswerResult::OptionNotFound);
+    }
     let Some(pending) = state.responders.remove(id) else {
-        return Ok(false);
+        return Ok(AnswerResult::RequestNotFound);
     };
     let prompt = state.snapshot.permissions.remove(index);
     let label = option
@@ -437,7 +451,7 @@ pub(super) fn answer(
     }
     (owner.emit)(event);
     (owner.emit)(LocalAgentUpdate::Permissions { permissions });
-    Ok(true)
+    Ok(AnswerResult::Answered)
 }
 pub(super) fn cancel_permissions(owner: &Arc<Shared>) {
     let ids: Vec<_> = owner

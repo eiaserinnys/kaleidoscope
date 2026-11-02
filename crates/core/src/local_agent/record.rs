@@ -1,12 +1,13 @@
 //! 창마다 이 기기에 남기는 대화 기록과 첨부.
-use crate::{error, storage};
+use crate::storage;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::{
     conversation::{
         ConversationAttachment, ConversationItem, ConversationItemKind, ConversationUpload,
     },
+    errors,
     local_agent::AgentControlValue,
-    CoreError, ErrorCode,
+    CoreError,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -38,7 +39,14 @@ impl Record {
             .unwrap_or_default()
     }
     pub fn save(&self, dir: &Path) -> Result<(), CoreError> {
-        std::fs::create_dir_all(dir).map_err(|e| error::io_error(&e))?;
+        std::fs::create_dir_all(dir).map_err(|e| {
+            let reason = e.to_string();
+            if e.kind() == std::io::ErrorKind::NotFound {
+                errors::AGENT_RECORD_DIRECTORY_NOT_FOUND(reason)
+            } else {
+                errors::AGENT_RECORD_DIRECTORY_CREATE_FAILED(reason)
+            }
+        })?;
         storage::save_atomic(&dir.join("record.json"), self)
     }
     pub fn item(
@@ -66,12 +74,26 @@ impl Record {
     ) -> Result<(ConversationAttachment, PathBuf), CoreError> {
         let bytes = STANDARD
             .decode(&upload.data_base64)
-            .map_err(|_| error::make(ErrorCode::InvalidRequest))?;
+            .map_err(|_| errors::AGENT_ATTACHMENT_DATA_INVALID())?;
         let id = Uuid::new_v4().to_string();
         let folder = dir.join("attachments");
-        std::fs::create_dir_all(&folder).map_err(|e| error::io_error(&e))?;
+        std::fs::create_dir_all(&folder).map_err(|e| {
+            let reason = e.to_string();
+            if e.kind() == std::io::ErrorKind::NotFound {
+                errors::AGENT_ATTACHMENT_DIRECTORY_NOT_FOUND(reason)
+            } else {
+                errors::AGENT_ATTACHMENT_DIRECTORY_CREATE_FAILED(reason)
+            }
+        })?;
         let path = folder.join(&id);
-        std::fs::write(&path, bytes).map_err(|e| error::io_error(&e))?;
+        std::fs::write(&path, bytes).map_err(|e| {
+            let reason = e.to_string();
+            if e.kind() == std::io::ErrorKind::NotFound {
+                errors::AGENT_ATTACHMENT_WRITE_NOT_FOUND(reason)
+            } else {
+                errors::AGENT_ATTACHMENT_WRITE_FAILED(reason)
+            }
+        })?;
         self.attachments.insert(
             id.clone(),
             StoredAttachment {
@@ -110,8 +132,15 @@ pub(crate) fn attachment_bytes(
         .attachments
         .get(attachment_id)
         .filter(|a| a.item_id == item_id)
-        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+        .ok_or_else(|| errors::AGENT_ATTACHMENT_NOT_FOUND(item_id, attachment_id))?;
     let path = dir.join("attachments").join(&a.filename);
-    let bytes = std::fs::read(&path).map_err(|e| error::io_error(&e))?;
+    let bytes = std::fs::read(&path).map_err(|e| {
+        let reason = e.to_string();
+        if e.kind() == std::io::ErrorKind::NotFound {
+            errors::AGENT_ATTACHMENT_READ_NOT_FOUND(reason)
+        } else {
+            errors::AGENT_ATTACHMENT_READ_FAILED(reason)
+        }
+    })?;
     Ok((a.mime.clone(), bytes, path))
 }
