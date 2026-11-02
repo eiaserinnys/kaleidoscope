@@ -3031,6 +3031,7 @@ fn layout_report_sends_sanitized_initial_state_and_debounces_changes() {
     core.handle(CoreRequest::LinkUnlink {}).unwrap();
 }
 
+mod conversation_http_tests;
 mod data_tests;
 mod oauth_tests;
 mod web_tests;

@@ -43,6 +43,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const [nextBefore, setNextBefore] = useState<string | undefined>();
   const [loadError, setLoadError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [loadingChoices, setLoadingChoices] = useState(false);
@@ -63,7 +64,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const historyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const startRef = useRef<HTMLDivElement>(null);
-  const focusAfterLogin = useRef(false);
+  const restoreFocus = useRef(false);
   const followTail = useRef(true);
   const loadGeneration = useRef(0);
   const threadId = useRef<string | null>(null);
@@ -140,13 +141,13 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     setAttachments((current) => [...files, ...current]);
   }, []);
 
-  const load = useCallback(async (initialEvents: CoreEvent[] = [], profile?: string) => {
+  const load = useCallback(async (initialEvents: CoreEvent[] = [], profile?: string, quiet = false) => {
     if (!connected || !workspaceId || !hasProvider) return;
     const generation = ++loadGeneration.current;
     const events = initialEvents;
     conversationQueue.current = events;
     setCreating(false);
-    setLoading(true);
+    if (!quiet) setLoading(true);
     setLoadError(null);
     setLoginRequired(false);
     setBindingConflict(false);
@@ -209,10 +210,10 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   }), [applyConversation, context.store, workspaceId, hasProvider, providerEntry, windowId, restoreDraft, handleError, load]);
 
   useLayoutEffect(() => {
-    if (!focusAfterLogin.current || loading || loginRequired || loadError || bindingConflict) return;
+    if (!restoreFocus.current || loading || loginRequired || loadError || bindingConflict) return;
     const target = agent ? inputRef.current : startRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");
-    if (target) { target.focus(); focusAfterLogin.current = false; }
-  }, [agent, loading, loginRequired, loadError, bindingConflict, models]);
+    if (target) { target.focus(); restoreFocus.current = false; }
+  }, [agent, loading, loginRequired, loadError, bindingConflict, models, switching]);
 
   const loadOlder = useConversationHistory({
     historyRef, nextBefore, enabled: hasProvider && Boolean(agent) && !loading && !loginRequired && !loadError && !bindingConflict,
@@ -240,19 +241,19 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
 
   const switchConversation = async (selection: { profile?: string; model?: string }) => {
     if (!thread || switching || busy) return;
+    restoreFocus.current = true;
     setSwitching(true);
-    setLoadError(null);
+    setSwitchError(null);
     try {
       const reply = await context.store.call({ op: "conversation.switch", window_id: windowId, ...selection });
       if (reply.op !== "conversation.switch") return;
       setThread(reply.thread);
       setAgent(true);
       setNotices(reply.notices);
-      setPendingSwitch(null);
-      await load([], reply.thread.profile?.id);
+      await load([], reply.thread.profile?.id, true);
     } catch (reason) {
       const error = toCoreError(reason);
-      if (!handleError(error)) setLoadError(error.message);
+      if (!handleError(error)) setSwitchError(error.message);
     } finally {
       setSwitching(false);
     }
@@ -351,7 +352,9 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         disabled={selectorsDisabled || modelOptions.length === 0}
         onChange={selectModel}
       />
-      {agent && busy ? <span className="ks-agent-chat-change-hint">답변이 끝난 뒤 바꿀 수 있습니다</span> : null}
+      {agent && switching
+        ? <span className="ks-agent-chat-change-hint">바꾸는 중</span>
+        : agent && busy ? <span className="ks-agent-chat-change-hint">답변이 끝난 뒤 바꿀 수 있습니다</span> : null}
     </div>
   );
 
@@ -414,7 +417,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   }
   if (!workspaceId) return null;
   if (loading) return <div className="ks-agent-chat-state"><StatusText>불러오는 중</StatusText></div>;
-  if (loginRequired && provider) return <DataState value={{ status: "login_required", permission: provider.permission }} onLogin={() => { focusAfterLogin.current = true; void load(); }} />;
+  if (loginRequired && provider) return <DataState value={{ status: "login_required", permission: provider.permission }} onLogin={() => { restoreFocus.current = true; void load(); }} />;
   if (bindingConflict) return <div className="ks-agent-chat-state"><Notice role="alert">저장된 대화와 제공자의 대화가 다릅니다.</Notice></div>;
   if (loadError) {
     return (
@@ -440,6 +443,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     <section className="ks-agent-chat" ref={shareRef}>
       {selectorRow}
       {notices.length ? <Notice>{notices.join("\n")}</Notice> : null}
+      {switchError ? <Notice role="alert">{switchError}</Notice> : null}
       <ChatHistory
         items={items}
         pending={pending}
@@ -475,7 +479,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
           title={`${pendingSwitch.label}(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.`}
           ok="바꾸기"
           onCancel={() => setPendingSwitch(null)}
-          onConfirm={() => void switchConversation({ ...(pendingSwitch.profile ? { profile: pendingSwitch.profile } : {}), ...(pendingSwitch.model ? { model: pendingSwitch.model } : {}) })}
+          onConfirm={() => { setPendingSwitch(null); void switchConversation({ ...(pendingSwitch.profile ? { profile: pendingSwitch.profile } : {}), ...(pendingSwitch.model ? { model: pendingSwitch.model } : {}) }); }}
         /> : null;
       })() : null}
     </section>
