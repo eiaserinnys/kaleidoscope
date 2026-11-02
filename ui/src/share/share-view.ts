@@ -52,6 +52,8 @@ export async function prepareShareForSend(store: ShellStore): Promise<void> {
   );
   if (targets.length === 0) return;
 
+  await twoFrames();
+
   let frozen = false;
   try {
     const reply = await store.call({ op: "share.freeze" });

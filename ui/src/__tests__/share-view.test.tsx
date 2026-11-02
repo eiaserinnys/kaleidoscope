@@ -111,7 +111,8 @@ it("가린 창만 고정 중 드러내 캡처하고 캡처 실패에도 해제�
     useShareView({ windowId: "target", root, enabled: true, store });
     useEffect(() => {
       if (!root.current) return;
-      return registerWebSurface(root.current, "target", store, () => undefined);
+      const registration = registerWebSurface(root.current, "target", store, () => undefined);
+      return () => registration.unregister();
     }, []);
     return <div className="ks-desktop-canvas">
       <section className="ks-window" data-minimized="true" style={{ zIndex: 1 }}><div ref={root} /></section>
@@ -144,8 +145,57 @@ it("보이는 대상이 없으면 고정과 추가 캡처를 생략한다", asyn
   }
   render(<Probe />);
   await act(async () => {});
+  const requestFrame = vi.fn((callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 0));
+  vi.stubGlobal("requestAnimationFrame", requestFrame);
   await act(async () => { await prepareShareForSend(store); });
   expect(call.mock.calls.map(([request]) => request.op)).toEqual(["share.view"]);
+  expect(requestFrame).not.toHaveBeenCalled();
+});
+
+it("가린 대상이 있으면 두 프레임을 기다린 뒤 화면을 고정한다", async () => {
+  layout();
+  vi.spyOn(visible, "describeVisible").mockReturnValue({ text: "가린 창", visual: true });
+  const timeline: string[] = [];
+  const call = vi.fn(async (request: { op: string }) => {
+    timeline.push(request.op);
+    return request.op === "share.freeze"
+      ? { op: "share.freeze", frozen: true } as const
+      : { op: request.op } as never;
+  });
+  const store = { call } as unknown as ShellStore;
+  function Probe() {
+    const root = useRef<HTMLDivElement>(null);
+    useShareView({ windowId: "target", root, enabled: true, store });
+    return <section className="ks-window" data-minimized="true"><div ref={root} /></section>;
+  }
+
+  render(<Probe />);
+  await act(async () => { await new Promise<void>((resolve) => setTimeout(resolve, 10)); });
+  timeline.length = 0;
+
+  const frames: FrameRequestCallback[] = [];
+  let requestedFrames = 0;
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    requestedFrames += 1;
+    if (requestedFrames <= 2) frames.push(callback);
+    else queueMicrotask(() => callback(performance.now()));
+    return requestedFrames;
+  });
+
+  const pending = prepareShareForSend(store);
+  await vi.waitFor(() => expect(frames).toHaveLength(1));
+  expect(call).not.toHaveBeenCalledWith({ op: "share.freeze" });
+  timeline.push("frame-1");
+  frames.shift()!(performance.now());
+
+  await vi.waitFor(() => expect(frames).toHaveLength(1));
+  expect(call).not.toHaveBeenCalledWith({ op: "share.freeze" });
+  timeline.push("frame-2");
+  frames.shift()!(performance.now());
+
+  await pending;
+  expect(timeline.indexOf("frame-1")).toBeLessThan(timeline.indexOf("frame-2"));
+  expect(timeline.indexOf("frame-2")).toBeLessThan(timeline.indexOf("share.freeze"));
 });
 
 it("화면 고정에 실패하면 숨김 상태를 만들지 않는다", async () => {
