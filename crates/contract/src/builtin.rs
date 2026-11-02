@@ -68,7 +68,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         name: "마크다운 편집기",
         version: 4,
         updated_at: "2026-11-02T00:00:00Z",
-        blocks: 13,
+        blocks: 15,
         modules: &[("files", 3), ("storage", 3)],
         assets: &[],
     },
