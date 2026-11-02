@@ -249,6 +249,7 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
         validate_agent_provider(agent, definition, &mut details);
     }
 
+    validate_v14_definition(definition, &mut details);
     validate_worker(definition, &mut details);
     validate_sources(definition, &mut details);
     validate_client(definition, &mut details);
@@ -256,10 +257,23 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
     let mut web_views = 0;
     let mut local_agent_blocks = 0;
     let mut surfaces = HashSet::new();
+    let mut anchors = HashSet::new();
     data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
-        if let Block::Canvas { surface, .. } = block {
-            if surface.trim().is_empty() || !surfaces.insert(surface.clone()) {
+        if let Block::Canvas {
+            surface: Binding::Literal(value),
+            ..
+        } = block
+        {
+            if value
+                .as_str()
+                .is_none_or(|name| name.trim().is_empty() || !surfaces.insert(name.to_owned()))
+            {
                 details.push(format!("{pointer}: canvas 표면 이름이 비었거나 중복됩니다"));
+            }
+        }
+        if let Block::Anchor { id, .. } = block {
+            if id.trim().is_empty() || !anchors.insert(id.clone()) {
+                details.push(format!("{pointer}: anchor id가 비었거나 중복됩니다: {id}"));
             }
         }
         if matches!(block, Block::WebView { .. }) {
@@ -291,11 +305,100 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
     details
 }
 
+fn validate_v14_definition(definition: &AppDefinition, details: &mut Vec<String>) {
+    if (definition.shortcuts.is_some()
+        || definition.messages.is_some()
+        || definition.locale.is_some())
+        && definition.requires.blocks < 14
+    {
+        details.push("shortcuts, messages와 locale은 블록 세트 14판이 필요합니다".into());
+    }
+    if definition.shortcuts.is_some() {
+        validate_module_version("client", 2, definition, details, "/shortcuts");
+    }
+    let mut shortcuts = HashSet::new();
+    for (index, shortcut) in definition.shortcuts.iter().flatten().enumerate() {
+        let mut modifiers: Vec<String> = shortcut
+            .modifiers
+            .iter()
+            .map(|m| format!("{m:?}"))
+            .collect();
+        modifiers.sort();
+        modifiers.dedup();
+        if !shortcuts.insert((shortcut.code.clone(), modifiers)) {
+            details.push(format!(
+                "/shortcuts: 단축키가 중복됩니다: {}",
+                shortcut.code
+            ));
+        }
+        validate_actions(
+            &shortcut.action,
+            definition,
+            details,
+            &format!("/shortcuts/{index}/action"),
+        );
+    }
+    if definition.messages.is_some() || definition.locale.is_some() {
+        match &definition.locale {
+            Some(locale) => {
+                validate_state_key(&locale.state, definition, details, "/locale/state");
+                let language = definition.state.get(&locale.state).and_then(Value::as_str);
+                if !language.is_some_and(|language| {
+                    definition
+                        .messages
+                        .as_ref()
+                        .is_some_and(|messages| messages.contains_key(language))
+                }) {
+                    details.push(
+                        "/locale/state: 기본 언어에 해당하는 messages 사전이 필요합니다".into(),
+                    );
+                }
+            }
+            None => details.push("/locale: messages의 기본 언어 상태가 필요합니다".into()),
+        }
+        if let Some(dictionaries) = &definition.messages {
+            let keys: HashSet<&String> = dictionaries
+                .values()
+                .flat_map(|messages| messages.keys())
+                .collect();
+            for (language, messages) in dictionaries {
+                for key in &keys {
+                    if !messages.contains_key(*key) {
+                        details.push(format!("/messages/{language}: 번역 키가 없습니다: {key}"));
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn validate_client(definition: &AppDefinition, details: &mut Vec<String>) {
     let Some(client) = &definition.client else {
         return;
     };
     validate_module_version("client", 1, definition, details, "/client");
+    if client.http_permissions.is_some()
+        || client.device_storage.is_some()
+        || client.capabilities.is_some()
+    {
+        validate_module_version("client", 2, definition, details, "/client");
+        if definition.requires.blocks < 14 {
+            details.push("/client: 새 필드는 블록 세트 14판이 필요합니다".into());
+        }
+    }
+    if let Some(permissions) = &client.http_permissions {
+        validate_module_version("http", 2, definition, details, "/client/http_permissions");
+        for permission in permissions {
+            validate_permission_module(
+                permission,
+                "http",
+                definition,
+                details,
+                "/client/http_permissions",
+            );
+        }
+    }
+
     if !definition.assets.iter().any(|asset| asset == &client.entry) {
         details.push("/client/entry: 선언된 자산과 판이 일치해야 합니다".into());
     }
@@ -349,6 +452,53 @@ fn validate_ui_binding(
     details: &mut Vec<String>,
     at: &str,
 ) {
+    if matches!(binding, Binding::Item(_) | Binding::ParentItem(_)) {
+        if at.ends_with("/save_file/suggested_name") {
+            details.push(format!("{at}: 항목 바인딩은 동작의 값에 쓸 수 없습니다"));
+            return;
+        }
+        let mut depth = 0;
+        data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
+            if matches!(block, Block::Repeat { .. }) {
+                let template = format!("{pointer}/template");
+                if at == template || at.starts_with(&format!("{template}/")) {
+                    depth += 1;
+                }
+            }
+        });
+        let needed = if matches!(binding, Binding::ParentItem(_)) {
+            2
+        } else {
+            1
+        };
+        if depth < needed {
+            let name = if needed == 2 { "parent_item" } else { "item" };
+            details.push(format!(
+                "{at}: {name}은 해당 repeat.template 범위에서만 쓸 수 있습니다"
+            ));
+        }
+        if definition.requires.blocks < 14 {
+            details.push(format!("{at}: 항목 바인딩은 블록 세트 14판이 필요합니다"));
+        }
+        return;
+    }
+    if let Binding::Message(reference) = binding {
+        if definition.requires.blocks < 14 {
+            details.push(format!("{at}: message는 블록 세트 14판이 필요합니다"));
+        }
+        if definition.messages.as_ref().is_none_or(|messages| {
+            messages.is_empty()
+                || messages
+                    .values()
+                    .any(|dictionary| !dictionary.contains_key(&reference.message))
+        }) {
+            details.push(format!(
+                "{at}: 모든 언어에 메시지 키가 필요합니다: {}",
+                reference.message
+            ));
+        }
+        return;
+    }
     if let Binding::Client(reference) = binding {
         if !(at == "/ui" || at.starts_with("/ui/"))
             || definition.requires.blocks < 12
@@ -380,7 +530,10 @@ fn validate_control_binding(
     details: &mut Vec<String>,
     at: &str,
 ) {
-    if matches!(binding, Binding::State(_) | Binding::Client(_)) {
+    if matches!(
+        binding,
+        Binding::State(_) | Binding::Client(_) | Binding::Item(_) | Binding::ParentItem(_)
+    ) {
         validate_ui_binding(binding, definition, details, at);
     } else {
         details.push(format!("{at}: 상태나 클라이언트 출력 바인딩이 필요합니다"));
@@ -654,7 +807,10 @@ fn validate_agent_provider(
         let window_dependent = match binding {
             Binding::State(_) => true,
             Binding::Expr(expr) => agent_expr_uses_runtime_variable(&expr.expr),
-            Binding::Client(_) => true,
+            Binding::Client(_)
+            | Binding::Item(_)
+            | Binding::ParentItem(_)
+            | Binding::Message(_) => true,
             Binding::Literal(_) => false,
         };
         if window_dependent {
@@ -742,7 +898,9 @@ fn static_binding_value<'a>(
     match binding {
         Binding::Literal(value) => Some(value),
         Binding::State(reference) => definition.state.get(&reference.state),
-        Binding::Client(_) => None,
+        Binding::Client(_) | Binding::Item(_) | Binding::ParentItem(_) | Binding::Message(_) => {
+            None
+        }
         Binding::Expr(expr) => {
             let reference = expr.expr.strip_prefix("$storage.")?;
             if reference.is_empty() || reference.contains('.') || reference.contains('[') {
@@ -918,10 +1076,16 @@ fn validate_binding_shape(
         Binding::Client(_) => details.push(format!(
             "{at}: 이 자리에는 클라이언트 바인딩을 쓸 수 없습니다"
         )),
+        Binding::Item(_) | Binding::ParentItem(_) | Binding::Message(_) => details.push(format!(
+            "{at}: 이 자리에는 화면 전용 바인딩을 쓸 수 없습니다"
+        )),
         Binding::Literal(Value::Object(object))
             if object.contains_key("state")
                 || object.contains_key("expr")
-                || object.contains_key("client") =>
+                || object.contains_key("client")
+                || object.contains_key("item")
+                || object.contains_key("parent_item")
+                || object.contains_key("message") =>
         {
             details.push(format!(
                 "{at}: 바인딩 모양이 틀렸습니다. 상태는 {{\"state\": \"키\"}}, 식은 {{\"expr\": \"식\"}} 하나만 씁니다"
@@ -1160,7 +1324,7 @@ fn validate_client_action(
     file: bool,
 ) {
     let click = at.ends_with("/on_click") || at.ends_with("/on_click/0");
-    if !at.starts_with("/ui/")
+    if !(at.starts_with("/ui/") || (!file && at.starts_with("/shortcuts/")))
         || (file && !click)
         || definition.requires.blocks < 12
         || definition
@@ -1301,7 +1465,85 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             block.type_name()
         ));
     }
+    let uses_v14_fields = match block {
+        Block::Canvas { surface, .. } => !matches!(surface, Binding::Literal(Value::String(_))),
+        Block::Timeline {
+            viewport,
+            on_viewport,
+            controls,
+            ..
+        } => viewport.is_some() || on_viewport.is_some() || controls.is_some(),
+        Block::Stack { wrap, .. } => wrap.is_some(),
+        Block::Slider { value, .. } => {
+            let initial = match value {
+                Binding::Client(reference) => definition
+                    .client
+                    .as_ref()
+                    .and_then(|client| client.outputs.get(&reference.client))
+                    .map(|output| &output.default),
+                _ => static_binding_value(value, definition),
+            };
+            initial.is_some_and(|value| {
+                serde_json::from_value::<crate::client::Clock>(value.clone()).is_ok()
+            })
+        }
+        Block::Section { actions, .. } => actions.is_some(),
+        Block::Text {
+            format,
+            on_click,
+            on_double_click,
+            ..
+        } => {
+            matches!(format, crate::DisplayTextFormat::Time)
+                || on_click.is_some()
+                || on_double_click.is_some()
+        }
+        Block::Input {
+            min,
+            max,
+            step,
+            format,
+            commit,
+            focus,
+            on_cancel,
+            ..
+        } => {
+            min.is_some()
+                || max.is_some()
+                || step.is_some()
+                || format.is_some()
+                || commit.is_some()
+                || focus.is_some()
+                || on_cancel.is_some()
+        }
+        Block::Button {
+            variant, pressed, ..
+        } => matches!(variant, crate::ButtonVariant::Chip) || pressed.is_some(),
+        _ => false,
+    };
+    if uses_v14_fields && definition.requires.blocks < 14 {
+        details.push(format!("{at}: 새 필드는 블록 세트 14판이 필요합니다"));
+    }
     match block {
+        Block::Repeat { key, grid, .. } => {
+            if key.trim().is_empty() {
+                details.push(format!("{at}: repeat.key가 필요합니다"));
+            }
+            if matches!(
+                grid,
+                Some(crate::RepeatGrid {
+                    columns: crate::RepeatColumns::Count(0)
+                })
+            ) {
+                details.push(format!("{at}: repeat grid.columns는 양수여야 합니다"));
+            }
+        }
+        Block::Progress { max, .. } => {
+            if !max.is_finite() || *max <= 0.0 {
+                details.push(format!("{at}: progress max는 양수여야 합니다"));
+            }
+        }
+        Block::When { .. } | Block::Dialog { .. } | Block::Tour { .. } | Block::Anchor { .. } => {}
         Block::Canvas { aspect_ratio, .. } => {
             if definition.client.is_none() {
                 details.push(format!("{at}: canvas에는 client 선언이 필요합니다"));
@@ -1457,7 +1699,10 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             step,
             ..
         } => {
-            validate_control_binding(value, definition, details, at);
+            if !matches!(value, Binding::Literal(clock) if serde_json::from_value::<crate::client::Clock>(clock.clone()).is_ok())
+            {
+                validate_control_binding(value, definition, details, at);
+            }
             if !min.is_finite() || !max.is_finite() || min >= max {
                 details.push(format!("{at}: slider의 min과 max가 올바르지 않습니다"));
             }
@@ -1629,11 +1874,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             match root {
                 FolderRoot::Files { permission } => {
                     validate_permission_declared_module(
-                        permission,
-                        "files",
-                        definition,
-                        details,
-                        at,
+                        permission, "files", definition, details, at,
                     );
                     match find_permission(definition, permission) {
                         Some(PermissionDecl::Files {
@@ -1643,7 +1884,9 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                         Some(PermissionDecl::Files { .. }) => details.push(format!(
                             "{at}: folder의 파일 root 권한은 folder 범위여야 합니다"
                         )),
-                        Some(_) => details.push(format!("{at}: folder의 root는 files 권한이어야 합니다")),
+                        Some(_) => {
+                            details.push(format!("{at}: folder의 root는 files 권한이어야 합니다"))
+                        }
                         None => {}
                     }
                     for extension in extensions {

@@ -168,7 +168,31 @@ pub enum Binding {
     State(StateRef),
     Expr(ExprRef),
     Client(ClientRef),
+    Item(ItemRef),
+    ParentItem(ParentItemRef),
+    Message(MessageRef),
     Literal(JsonValue),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ItemRef {
+    pub item: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ParentItemRef {
+    pub parent_item: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct MessageRef {
+    pub message: String,
 }
 
 /// 창에서 실행하는 클라이언트가 발행한 값.
@@ -1123,7 +1147,15 @@ pub struct MediaData {
 pub fn ui_bindings(definition: &AppDefinition) -> Vec<(String, &Binding)> {
     let mut out = all_ui_bindings(definition)
         .into_iter()
-        .filter(|(_, binding)| !matches!(binding, Binding::Client(_)))
+        .filter(|(_, binding)| {
+            !matches!(
+                binding,
+                Binding::Client(_)
+                    | Binding::Item(_)
+                    | Binding::ParentItem(_)
+                    | Binding::Message(_)
+            )
+        })
         .collect::<Vec<_>>();
     if let Some(client) = &definition.client {
         out.extend(
@@ -1148,7 +1180,13 @@ pub fn ui_bindings(definition: &AppDefinition) -> Vec<(String, &Binding)> {
             _ => None,
         };
         if let Some((save, pointer)) = save {
-            if !matches!(save.suggested_name, Binding::Client(_)) {
+            if !matches!(
+                save.suggested_name,
+                Binding::Client(_)
+                    | Binding::Item(_)
+                    | Binding::ParentItem(_)
+                    | Binding::Message(_)
+            ) {
                 out.push((pointer, &save.suggested_name));
             }
         }
@@ -1185,6 +1223,17 @@ pub fn ui_actions(definition: &AppDefinition) -> Vec<(String, &Actions)> {
             client.commands.iter().map(|(name, action)| {
                 (format!("/client/commands/{}", escape_pointer(name)), action)
             }),
+        );
+    }
+    if let Some(shortcuts) = &definition.shortcuts {
+        out.extend(
+            shortcuts
+                .iter()
+                .enumerate()
+                .filter_map(|(index, shortcut)| {
+                    (!local_actions(&shortcut.action))
+                        .then(|| (format!("/shortcuts/{index}/action"), &shortcut.action))
+                }),
         );
     }
     out
@@ -1236,6 +1285,10 @@ pub fn walk_blocks<'a>(block: &'a Block, pointer: &str, visit: &mut dyn FnMut(&s
 /// 블록의 바로 아래 블록과 그 자리.
 pub fn child_blocks<'a>(block: &'a Block, pointer: &str) -> Vec<(String, &'a Block)> {
     match block {
+        Block::Repeat { template, .. } => vec![(format!("{pointer}/template"), template.as_ref())],
+        Block::When { child, .. } | Block::Dialog { child, .. } | Block::Anchor { child, .. } => {
+            vec![(format!("{pointer}/child"), child.as_ref())]
+        }
         Block::Split { children, .. } | Block::Stack { children, .. } => children
             .iter()
             .enumerate()
@@ -1256,7 +1309,16 @@ pub fn child_blocks<'a>(block: &'a Block, pointer: &str) -> Vec<(String, &'a Blo
                     .map(|(index, child)| (format!("{pointer}/end/{index}"), child)),
             )
             .collect(),
-        Block::Section { child, .. } => vec![(format!("{pointer}/child"), child.as_ref())],
+        Block::Section { child, actions, .. } => actions
+            .iter()
+            .flatten()
+            .enumerate()
+            .map(|(index, action)| (format!("{pointer}/actions/{index}"), action))
+            .chain(std::iter::once((
+                format!("{pointer}/child"),
+                child.as_ref(),
+            )))
+            .collect(),
         _ => Vec::new(),
     }
 }
@@ -1289,12 +1351,56 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         };
     }
     match block {
+        Block::Repeat {
+            items, follow_key, ..
+        } => {
+            bind!("items", items);
+            if let Some(value) = follow_key {
+                bind!("follow_key", value);
+            }
+        }
+        Block::When { value, .. } => bind!("value", value),
+        Block::Dialog {
+            open,
+            title,
+            on_close,
+            ..
+        } => {
+            bind!("open", open);
+            bind!("title", title);
+            act!("on_close", on_close);
+        }
+        Block::Tour {
+            open,
+            step,
+            steps,
+            on_step,
+            on_close,
+        } => {
+            bind!("open", open);
+            bind!("step", step);
+            for (index, item) in steps.iter().enumerate() {
+                bind!(format!("steps/{index}/title"), &item.title);
+                bind!(format!("steps/{index}/body"), &item.body);
+            }
+            act!("on_step", on_step);
+            act!("on_close", on_close);
+        }
+        Block::Progress { value, label, .. } => {
+            bind!("value", value);
+            if let Some(label) = label {
+                bind!("label", label);
+            }
+        }
+        Block::Anchor { .. } => {}
         Block::Canvas {
+            surface,
             aspect_ratio,
             description,
             on_pointer,
             ..
         } => {
+            bind!("surface", surface);
             if let Some(value) = aspect_ratio {
                 bind!("aspect_ratio", value);
             }
@@ -1316,8 +1422,16 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             on_seek,
             on_select,
             on_edit,
+            viewport,
+            on_viewport,
             ..
         } => {
+            if let Some(value) = viewport {
+                bind!("viewport", value);
+            }
+            if let Some(action) = on_viewport {
+                act!("on_viewport", action);
+            }
             bind!("duration", duration);
             bind!("position", position);
             bind!("tracks", tracks);
@@ -1448,13 +1562,39 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
                 act!("on_select", on_select);
             }
         }
-        Block::Text { value, .. } => bind!("value", value),
+        Block::Text {
+            value,
+            on_click,
+            on_double_click,
+            ..
+        } => {
+            bind!("value", value);
+            if let Some(action) = on_click {
+                act!("on_click", action);
+            }
+            if let Some(action) = on_double_click {
+                act!("on_double_click", action);
+            }
+        }
         Block::Input {
             value,
             on_change,
             on_submit,
+            min,
+            max,
+            step,
+            focus,
+            on_cancel,
             ..
         } => {
+            for (name, value) in [("min", min), ("max", max), ("step", step), ("focus", focus)] {
+                if let Some(value) = value {
+                    bind!(name, value);
+                }
+            }
+            if let Some(action) = on_cancel {
+                act!("on_cancel", action);
+            }
             bind!("value", value);
             act!("on_change", on_change);
             if let Some(on_submit) = on_submit {
@@ -1483,8 +1623,12 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             on_click,
             confirm,
             disabled,
+            pressed,
             ..
         } => {
+            if let Some(value) = pressed {
+                bind!("pressed", value);
+            }
             bind!("label", label);
             if let Some(icon) = icon {
                 bind!("icon", icon);
@@ -1515,7 +1659,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         | Block::HtmlView { value: None, .. }
         | Block::WebView { .. }
         | Block::Explorer { .. }
-        | Block::Folder { on_select: None, .. }
+        | Block::Folder {
+            on_select: None, ..
+        }
         | Block::Stack { .. }
         | Block::Tabs { .. }
         | Block::Toolbar { .. } => {}

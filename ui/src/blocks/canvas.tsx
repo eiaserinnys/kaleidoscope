@@ -27,6 +27,7 @@ export function surfaceDpr(width: number, height: number, dpr: number) {
 
 export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointer: string }) {
   const data = useWindowData();
+  const surface = typeof block.surface === "string" ? block.surface : "";
   const generation = useSyncExternalStore(data.subscribeClient, data.getClientGeneration, data.getClientGeneration);
   const serialSend = useMemo(() => createSerialSend((value: Record<string, string | number | boolean>) => data.act(`${pointer}/on_pointer`, value)), [data, pointer]);
   const root = useRef<HTMLDivElement>(null);
@@ -48,7 +49,7 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
   useEffect(() => () => flushMove(), [data, pointer, serialSend]);
   useEffect(() => {
     const host = root.current;
-    if (!host) return;
+    if (!host || !surface) return;
     const element = document.createElement("canvas");
     host.appendChild(element);
     if (!element.transferControlToOffscreen) { data.setNotice("이 환경은 캔버스 전송을 지원하지 않습니다"); element.remove(); return; }
@@ -63,14 +64,14 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
       if (attachedGeneration === undefined) {
         element.width = Math.max(1, Math.round(next.width * dpr));
         element.height = Math.max(1, Math.round(next.height * dpr));
-        attachedGeneration = data.attachSurface(block.surface, element.transferControlToOffscreen(), next.width, next.height, dpr);
-      } else data.resizeSurface(block.surface, attachedGeneration, next.width, next.height, dpr);
+        attachedGeneration = data.attachSurface(surface, element.transferControlToOffscreen(), next.width, next.height, dpr);
+      } else data.resizeSurface(surface, attachedGeneration, next.width, next.height, dpr);
     };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(host);
-    return () => { observer.disconnect(); if (attachedGeneration !== undefined) data.detachSurface(block.surface, attachedGeneration); element.remove(); };
-  }, [block.surface, aspect, block.fit, data, generation]);
+    return () => { observer.disconnect(); if (attachedGeneration !== undefined) data.detachSurface(surface, attachedGeneration); element.remove(); };
+  }, [surface, aspect, block.fit, data, generation]);
 
   const pointerEvent = (phase: "down" | "move" | "up" | "cancel", event: PointerEvent<HTMLDivElement>) => {
     if (!block.on_pointer || !root.current) return;
