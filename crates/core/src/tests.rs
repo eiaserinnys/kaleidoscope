@@ -509,7 +509,10 @@ fn builtin_md_editor_v3_window_migrates_current_file_on_restart() {
         .unwrap();
     assert_eq!(app.current_version, 4);
     assert_eq!(window.app_version, 4);
-    assert_eq!(window.state.get("source").and_then(Value::as_f64), Some(1.0));
+    assert_eq!(
+        window.state.get("source").and_then(Value::as_f64),
+        Some(1.0)
+    );
     assert_eq!(window.state.get("current_file"), Some(&json!("notes/a.md")));
     assert_eq!(window.state.get("current_document"), Some(&json!(null)));
     reopened.shutdown();
@@ -1718,9 +1721,9 @@ impl RegistryClient for FakeRegistryClient {
         assert_eq!(key, "settings/agents");
         let mut stored = self.storage_value.lock().unwrap();
         if stored.as_ref().map(|v| &v.1) != request.expected_revision.0.as_ref() {
-            return Err(RegistryError::Validation(CoreError::new(
-                ErrorCode::Conflict,
-            )));
+            return Err(RegistryError::Validation(
+                kaleidoscope_contract::errors::STORAGE_APP_VALUE_WRITE_CONFLICT(key),
+            ));
         }
         let revision = storage_revision(request.kind, &request.content).unwrap();
         *stored = Some((request.content.clone(), revision.clone()));
@@ -1758,16 +1761,16 @@ impl RegistryClient for FakeRegistryClient {
         _: &str,
         _: &str,
         _: &str,
-        _: &str,
+        entry_id: &str,
         workspace: &str,
         request: &kaleidoscope_contract::app_storage::StorageWriteRequest,
     ) -> Result<kaleidoscope_contract::app_storage::StorageWriteReply, RegistryError> {
         *self.storage_workspace.lock().unwrap() = workspace.into();
         let mut stored = self.storage_value.lock().unwrap();
         if stored.as_ref().map(|v| &v.1) != request.expected_revision.0.as_ref() {
-            return Err(RegistryError::Validation(CoreError::new(
-                ErrorCode::Conflict,
-            )));
+            return Err(RegistryError::Validation(
+                kaleidoscope_contract::errors::STORAGE_ITEM_WRITE_CONFLICT(entry_id),
+            ));
         }
         let revision = kaleidoscope_contract::app_storage::storage_revision(
             kaleidoscope_contract::app_storage::StorageKind::Json,
@@ -2145,8 +2148,7 @@ fn app_import_rejects_a_definition_path_outside_the_picked_folder() {
     let host = Arc::new(FakeHost::default());
     let core = open_core(&temp.path().join("data"), vec![], &host);
     let mut definition: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
-    definition["ui"]["children"][1]["tabs"][1]["child"]["file"]["path"] =
-        json!("../secret.md");
+    definition["ui"]["children"][1]["tabs"][1]["child"]["file"]["path"] = json!("../secret.md");
 
     let error = expect_error(
         core.handle(CoreRequest::AppImport {
@@ -3025,12 +3027,8 @@ fn connected_import_uploads_and_preserves_server_validation_error() {
         42
     );
 
-    let expected = CoreError {
-        id: None,
-        code: ErrorCode::UnsupportedApp,
-        message: "서버 검사 실패 원문".into(),
-        details: vec!["requires.blocks=99".into()],
-    };
+    let expected = kaleidoscope_contract::errors::DESK_APP_IMPORT_UNSUPPORTED_SHELL()
+        .and_details(vec!["requires.blocks=99".into()]);
     client
         .uploads
         .lock()

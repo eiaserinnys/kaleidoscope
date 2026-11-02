@@ -461,6 +461,16 @@ export type ConversationUpload = { name: string, mime: string, data_base64: stri
 
 /**
  * 명령의 실패.
+ *
+ * ```compile_fail
+ * use kaleidoscope_contract::{CoreError, ErrorCode};
+ * let _ = CoreError { id: None, code: ErrorCode::Server, message: String::new(), details: vec![] };
+ * ```
+ *
+ * ```compile_fail
+ * use kaleidoscope_contract::{CoreError, ErrorCode};
+ * let _ = CoreError::new(ErrorCode::Server);
+ * ```
  */
 export type CoreError = { 
 /**

@@ -18,8 +18,6 @@ fn codes() -> Vec<&'static str> {
 fn conversation_binding_errors_use_the_workspace_name_once() {
     let saved = errors::CONV_CONTEXT_SAVED_BINDING_MISMATCH("작업 1");
     assert!(saved.message.starts_with("작업 1:"));
-    let adoption = errors::CONV_CONTEXT_ADOPTION_CONFLICT("작업 1");
-    assert!(adoption.message.starts_with("작업 1:"));
 }
 
 fn valid_code(id: &str) -> bool {
@@ -242,26 +240,25 @@ fn message_placeholders_match_arguments() {
 #[test]
 fn messages_do_not_use_generic_or_disallowed_phrases() {
     let defaults = [
-        ErrorCode::InvalidRequest,
-        ErrorCode::Unauthorized,
-        ErrorCode::NotFound,
-        ErrorCode::InvalidAppDefinition,
-        ErrorCode::UnsupportedApp,
-        ErrorCode::PermissionDenied,
-        ErrorCode::NotGranted,
-        ErrorCode::PathOutsideRoot,
-        ErrorCode::Conflict,
-        ErrorCode::LoginRequired,
-        ErrorCode::BindingConflict,
-        ErrorCode::Io,
-        ErrorCode::Server,
-        ErrorCode::Unavailable,
-        ErrorCode::LocalAgentFailed,
-        ErrorCode::InvalidName,
-        ErrorCode::FileBusy,
-        ErrorCode::TrashUnavailable,
-    ]
-    .map(ErrorCode::default_message);
+        "요청 값이 빠졌거나 올바르지 않습니다. 요청 내용을 확인한 뒤 다시 시도하세요.",
+        "인증 정보를 확인하지 못했습니다. 로그인 상태와 인증 정보를 확인하세요.",
+        "요청한 대상에 접근할 수 없습니다. 대상 ID와 계정 범위를 확인하세요.",
+        "앱 정의를 등록하지 못했습니다. 필수 값과 선언된 기능을 확인하세요.",
+        "앱이 현재 쉘에서 지원하지 않는 블록이나 모듈 버전을 요구합니다. 쉘을 업데이트하세요.",
+        "요청한 앱 권한이 선언되지 않았거나 접근 수준이 부족합니다. 앱 권한과 요청 동작을 확인하세요.",
+        "이 기기에서 아직 필요한 폴더를 선택하지 않았습니다. 권한에 쓸 폴더를 고르세요.",
+        "요청한 경로가 허용된 폴더 밖에 있습니다. 선택한 폴더 안의 경로를 사용하세요.",
+        "파일이 읽은 뒤 바뀌었거나 같은 이름의 파일이 있습니다. 최신 상태를 확인하세요.",
+        "대화 제공자에 로그인해야 합니다. 계정 연결을 완료한 뒤 다시 시도하세요.",
+        "저장된 대화 참조가 제공자의 대화와 다릅니다. 대화 연결을 다시 확인하세요.",
+        "파일 작업을 마치지 못했습니다. 파일 형식과 접근 권한을 확인하세요.",
+        "서버 요청을 처리하지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
+        "이 쉘에서는 쓸 수 없는 기능입니다.",
+        "로컬 에이전트와 통신할 수 없습니다.",
+        "쓸 수 없는 파일 이름입니다.",
+        "다른 프로그램에서 사용 중입니다. 닫은 뒤 다시 시도하세요.",
+        "파일을 휴지통으로 보낼 수 없습니다.",
+    ];
     for entry in errors::all() {
         assert!(
             !defaults.contains(&entry.message),

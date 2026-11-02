@@ -144,7 +144,7 @@ struct FakeWebHost {
 impl crate::WebHost for FakeWebHost {
     fn attach(&self, id: &str, url: &str) -> Result<kaleidoscope_contract::WebPage, CoreError> {
         if url == "http://tauri.localhost/" {
-            return Err(CoreError::new(ErrorCode::InvalidRequest));
+            return Err(kaleidoscope_contract::errors::WEB_ATTACH_URL_INVALID());
         }
         self.calls
             .lock()

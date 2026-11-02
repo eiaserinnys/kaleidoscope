@@ -159,9 +159,9 @@ fn rejected_batch_clears_sent_pending() {
         .layout_change_replies
         .lock()
         .unwrap()
-        .push_back(Err(RegistryError::Validation(CoreError::new(
-            ErrorCode::InvalidRequest,
-        ))));
+        .push_back(Err(RegistryError::Validation(
+            kaleidoscope_contract::errors::SERVER_LAYOUT_CHANGE_BODY_INVALID(),
+        )));
     crate::registry_events::apply_event(
         &core.inner,
         0,
