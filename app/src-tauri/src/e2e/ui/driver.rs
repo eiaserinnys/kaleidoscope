@@ -113,7 +113,7 @@ pub(super) fn wait_place(
     )
 }
 
-pub(super) fn evaluate(app: &AppHandle, body: &str) -> Result<Value, String> {
+pub(crate) fn evaluate(app: &AppHandle, body: &str) -> Result<Value, String> {
     let main = app.get_webview("main").ok_or("main webview not found")?;
     let script = format!(
         "(()=>{{try{{return JSON.stringify((()=>{{{body}}})());}}catch(e){{return JSON.stringify({{__error:String(e)}});}}}})()"
@@ -143,7 +143,7 @@ pub(super) fn action(app: &AppHandle, body: &str, label: &str) -> Result<(), Str
     }
 }
 
-pub(super) fn wait_dom(app: &AppHandle, body: &str, label: &str) -> Result<(), String> {
+pub(crate) fn wait_dom(app: &AppHandle, body: &str, label: &str) -> Result<(), String> {
     wait_until(label, || Ok(evaluate(app, body)? == json!(true)))
 }
 

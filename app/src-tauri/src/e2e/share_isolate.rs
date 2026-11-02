@@ -1,6 +1,5 @@
 //! 실제 에이전트 입력 경로로 같이 보기 격리 캡처를 검증한다.
 use super::*;
-use base64::{engine::general_purpose::STANDARD, Engine as _};
 use kaleidoscope_core::kaleidoscope_contract::local_agent::{LocalAgentPhase, LocalAgentSnapshot};
 use kaleidoscope_core::{crop_share_capture_png, WebHost};
 use std::cmp::min;
@@ -215,7 +214,7 @@ pub(super) fn scenario(
     set_phase(app, out, &agent_window_id, "prepare-web-covered")?;
     restore(core, &a_id)?;
     ui::wait_dom(app, &format!("return document.querySelector('[data-testid=\\\"app-window-{A_ID}\\\"]')?.dataset.minimized==='false';"), "A restored")?;
-    assert_restored_scroll(app, &a_id, out, log)?;
+    assert_restored_scroll(app, &a_id, log)?;
     record(
         log,
         "share.minimized-text",

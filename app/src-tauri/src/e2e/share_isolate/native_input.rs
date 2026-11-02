@@ -1,5 +1,6 @@
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEINPUT,
+    SendInput, INPUT, INPUT_0, INPUT_MOUSE, KEYEVENTF_KEYUP, MOUSEEVENTF_LEFTDOWN,
+    MOUSEEVENTF_LEFTUP, MOUSEINPUT,
 };
 use windows::Win32::UI::WindowsAndMessaging::SetCursorPos;
 
@@ -56,7 +57,7 @@ pub(super) fn click_and_key(x: i32, y: i32, key: u16) -> Result<(), String> {
                     ki: windows::Win32::UI::Input::KeyboardAndMouse::KEYBDINPUT {
                         wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(key),
                         wScan: 0,
-                        dwFlags: windows::Win32::UI::Input::KEYEVENTF_KEYUP,
+                        dwFlags: KEYEVENTF_KEYUP,
                         time: 0,
                         dwExtraInfo: 0,
                     },

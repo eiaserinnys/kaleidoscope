@@ -1,4 +1,5 @@
 use super::*;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 
 #[derive(Debug, Default)]
 pub(super) struct PixelStats {
@@ -121,7 +122,7 @@ pub(super) fn assert_png(
     Ok(stats)
 }
 
-pub(super) fn protected_bounds(app: &AppHandle, agent_window_id: &str) -> Result<Value, String> {
+pub(super) fn protected_bounds(app: &AppHandle, _agent_window_id: &str) -> Result<Value, String> {
     let window = app.get_window("main").ok_or("main window not found")?;
     let position = window.inner_position().map_err(|error| error.to_string())?;
     let size = window.inner_size().map_err(|error| error.to_string())?;
@@ -277,7 +278,6 @@ pub(super) fn shell_capture(app: &AppHandle) -> Result<(Vec<u8>, f64), String> {
 pub(super) fn assert_restored_scroll(
     app: &AppHandle,
     window_id: &str,
-    out: &Path,
     log: &mut File,
 ) -> Result<(), String> {
     let view = ui::latest_share_view(window_id).ok_or("share.view missing after restoring A")?;
