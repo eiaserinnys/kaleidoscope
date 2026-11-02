@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Block, ConversationAttachment, ConversationEvent, ConversationItem, ConversationModel, ConversationProfile, ConversationThread, CoreEvent, CoreError, ConversationUpload } from "../contract/contract";
+import type { Block, ConversationAttachment, ConversationEvent, ConversationItem, ConversationModel, ConversationProfile, ConversationThread, CoreEvent, CoreError, ConversationUpload, ShellSnapshot } from "../contract/contract";
 import { useConversationHistory } from "./conversation-history";
 import { DataState } from "../components/data-state";
 import { Button, EmptyState, Notice, StatusText } from "../components/primitives";
 import { MessageSquare } from "../components/icons";
 import { toCoreError } from "../core/core-transport";
-import type { LegacyBlockContext as BlockContext } from "./block-context";
+import type { BlockContext } from "./block-context";
+import { useShellSelector } from "../core/shell-store";
 import { useShareDescriber } from "../share/visible";
 import { flushShareViews } from "../share/share-view";
 import { HistoryAttachmentView, ImagePreview, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
@@ -25,15 +26,10 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const hasProvider = Boolean(provider);
   const providerEntry = provider?.thread_entry;
   const appVersion = context.window.app_version;
-  const desktop = context.snapshot.shared.desktops.find((item) => item.id === context.window.desktop_id);
-  const workspaceId = desktop?.workspace_id ?? "";
-  const connected = context.snapshot.link.state === "connected";
-  const sharedWindows = context.snapshot.sharing.flatMap((id) => {
-    const shared = context.snapshot.shared.windows.find((item) => item.id === id);
-    if (!shared || !context.snapshot.shared.desktops.some((item) => item.id === shared.desktop_id && item.workspace_id === workspaceId)) return [];
-    const name = context.snapshot.shared.app_versions.find((item) => item.app_id === shared.app_id && item.version === shared.app_version)?.definition.name ?? shared.app_id;
-    return [{ id, name }];
-  });
+  const workspaceId = useShellSelector(context.store, (snapshot) =>
+    snapshot?.shared.desktops.find((item) => item.id === context.window.desktop_id)?.workspace_id ?? "");
+  const connected = useShellSelector(context.store, (snapshot) => snapshot?.link.state === "connected");
+  const sharedWindows = useShellSelector(context.store, (snapshot) => selectSharedWindows(snapshot, workspaceId), sameSharedWindows);
   const [agent, setAgent] = useState(false);
   const [items, setItems] = useState<ConversationItem[]>([]);
   const [models, setModels] = useState<ConversationModel[]>([]);
@@ -484,6 +480,20 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
       })() : null}
     </section>
   );
+}
+
+function selectSharedWindows(snapshot: ShellSnapshot | null, workspaceId: string): Array<{ id: string; name: string }> {
+  if (!snapshot) return [];
+  return snapshot.sharing.flatMap((id) => {
+    const shared = snapshot.shared.windows.find((item) => item.id === id);
+    if (!shared || !snapshot.shared.desktops.some((item) => item.id === shared.desktop_id && item.workspace_id === workspaceId)) return [];
+    const name = snapshot.shared.app_versions.find((item) => item.app_id === shared.app_id && item.version === shared.app_version)?.definition.name ?? shared.app_id;
+    return [{ id, name }];
+  });
+}
+
+function sameSharedWindows(left: Array<{ id: string; name: string }>, right: Array<{ id: string; name: string }>): boolean {
+  return left.length === right.length && left.every((item, index) => item.id === right[index].id && item.name === right[index].name);
 }
 
 export function modelAvailabilityDescription(model: { reason?: string; resets_at?: string }, now = new Date()): string {

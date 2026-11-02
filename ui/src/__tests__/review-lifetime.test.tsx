@@ -25,7 +25,7 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>) {
   });
   const store = { call, getSnapshot: () => snapshot, getError: () => null, subscribe: () => () => {}, subscribeEvents: (fn: (event: CoreEvent) => void) => { listeners.add(fn); return () => listeners.delete(fn); }, ready: Promise.resolve(), dispose: () => {} } as unknown as ShellStore;
   const window = snapshot.shared.windows[0];
-  const context = { store, snapshot, window, definition };
+  const context = { store, window: { id: window.id, app_id: window.app_id, app_version: window.app_version, desktop_id: window.desktop_id }, definition };
   const view = render(<WindowDataProvider store={store} windowId={window.id} definition={definition}><AgentChatBlock block={{ type: "chat" }} context={context} /></WindowDataProvider>);
   return { call, window, rerender: () => view.rerender(<WindowDataProvider store={store} windowId={window.id} definition={definition}><AgentChatBlock block={{ type: "chat" }} context={{ ...context, definition: structuredClone(definition) }} /></WindowDataProvider>), emit: (event: CoreEvent) => act(() => { listeners.forEach((fn) => fn(event)); }) };
 }
