@@ -17,16 +17,22 @@ use tauri::{AppHandle, Manager};
 mod local_agent;
 mod ui;
 mod update;
+#[cfg(windows)]
+mod share_freeze;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ScenarioKind {
     WebView,
+    #[cfg(windows)]
+    ShareFreeze,
     Update,
     LocalAgent,
 }
 
 fn scenario_kind(name: Option<&str>) -> ScenarioKind {
     match name {
+        #[cfg(windows)]
+        Some("share-freeze") => ScenarioKind::ShareFreeze,
         Some("update" | "update-reject") => ScenarioKind::Update,
         Some("local-agent") => ScenarioKind::LocalAgent,
         _ => ScenarioKind::WebView,
@@ -473,6 +479,8 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
             }
         }) {
             Ok(mut log) => match match selected {
+                #[cfg(windows)]
+                ScenarioKind::ShareFreeze => share_freeze::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::WebView => scenario(&app, &core, &out, &mut log),
                 ScenarioKind::Update => update::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::LocalAgent => local_agent::scenario(&core, &out, &mut log),
