@@ -24,6 +24,32 @@ fn rejects(value: &Value, fragment: &str) {
     assert!(contains, "{error:?}");
 }
 
+fn named_block(kind: &str, name: &str) -> Value {
+    match kind {
+        "canvas" => json!({"type":"canvas", "surface":name, "aspect_ratio":1}),
+        "anchor" => json!({"type":"anchor", "id":name, "child":{"type":"text","value":"표적"}}),
+        _ => panic!("unknown block kind: {kind}"),
+    }
+}
+
+fn when(child: Value) -> Value {
+    json!({"type":"when", "value":true, "child":child})
+}
+
+fn named_block_definition(ui: Value, kind: &str) -> Value {
+    let mut app = definition(ui);
+    if kind == "canvas" {
+        app["requires"]["modules"] = json!({"assets":1,"client":1});
+        app["assets"] = json!([{"id":"renderer","version":1}]);
+        app["client"] = json!({
+            "runtime":"javascript", "entry":{"id":"renderer","version":1},
+            "inputs":{}, "outputs":{}, "actions":[], "commands":{},
+            "state_keys":[], "storage_entries":[]
+        });
+    }
+    app
+}
+
 #[test]
 fn nested_templates_roundtrip_and_walk_all_sources() {
     let ui = json!({"type":"section", "title":{"message":"title"},
@@ -207,6 +233,52 @@ fn duplicate_anchor_and_invalid_locale_are_rejected() {
     app["ui"] = json!({"type":"text","value":{"message":"title"}});
     app["locale"]["state"] = json!("missing");
     rejects(&app, "missing");
+}
+
+#[test]
+fn canvas_surfaces_and_anchor_ids_are_unique_only_when_when_scopes_overlap() {
+    for kind in ["canvas", "anchor"] {
+        let make = |ui| named_block_definition(ui, kind);
+        let item = || named_block(kind, "stage");
+
+        parsed(&make(json!({"type":"stack","direction":"column","children":[
+            when(item()), when(item())
+        ]})));
+
+        let outside_vs_when = make(json!({"type":"stack","direction":"column","children":[
+            when(item()), item()
+        ]}));
+        let duplicate_detail = if kind == "canvas" {
+            "/ui/children/1: canvas 표면 이름이 비었거나 중복됩니다".to_owned()
+        } else {
+            "/ui/children/1: anchor id가 비었거나 중복됩니다: stage".to_owned()
+        };
+        rejects(&outside_vs_when, &duplicate_detail);
+
+        let same_when = make(when(json!({"type":"stack","direction":"column","children":[
+            item(), item()
+        ]})));
+        let duplicate_detail = if kind == "canvas" {
+            "/ui/child/children/1: canvas 표면 이름이 비었거나 중복됩니다".to_owned()
+        } else {
+            "/ui/child/children/1: anchor id가 비었거나 중복됩니다: stage".to_owned()
+        };
+        rejects(&same_when, &duplicate_detail);
+
+        parsed(&make(when(json!({"type":"stack","direction":"column","children":[
+            when(item()), when(item())
+        ]}))));
+
+        let parent_vs_nested = make(when(json!({"type":"stack","direction":"column","children":[
+            item(), when(item())
+        ]})));
+        let duplicate_detail = if kind == "canvas" {
+            "/ui/child/children/1/child: canvas 표면 이름이 비었거나 중복됩니다".to_owned()
+        } else {
+            "/ui/child/children/1/child: anchor id가 비었거나 중복됩니다: stage".to_owned()
+        };
+        rejects(&parent_vs_nested, &duplicate_detail);
+    }
 }
 
 #[test]

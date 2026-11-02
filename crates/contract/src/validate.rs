@@ -1,7 +1,7 @@
 //! 앱 정의 검사. 쉘의 코어와 오케스트레이터가 이 한 곳의 검사를 같이 쓴다.
 //! 규칙은 [`AppDefinition`]의 doc 주석에 있다.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde_json::Value;
 
@@ -293,10 +293,13 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
 
     let mut web_views = 0;
     let mut local_agent_blocks = 0;
-    let mut surfaces = HashSet::new();
-    let mut anchors = HashSet::new();
+    let mut when_pointers = Vec::new();
+    let mut named_blocks = Vec::new();
     let mut repeat_templates: Vec<String> = Vec::new();
     data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
+        if matches!(block, Block::When { .. }) {
+            when_pointers.push(pointer.to_owned());
+        }
         if matches!(block, Block::Repeat { .. }) {
             repeat_templates.push(format!("{pointer}/template"));
         }
@@ -317,16 +320,18 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
             ..
         } = block
         {
-            if value
-                .as_str()
-                .is_none_or(|name| name.trim().is_empty() || !surfaces.insert(name.to_owned()))
-            {
-                details.push(format!("{pointer}: canvas 표면 이름이 비었거나 중복됩니다"));
+            match value.as_str() {
+                Some(name) if !name.trim().is_empty() => {
+                    named_blocks.push((false, name.to_owned(), pointer.to_owned()));
+                }
+                _ => details.push(format!("{pointer}: canvas 표면 이름이 비었거나 중복됩니다")),
             }
         }
         if let Block::Anchor { id, .. } = block {
-            if id.trim().is_empty() || !anchors.insert(id.clone()) {
+            if id.trim().is_empty() {
                 details.push(format!("{pointer}: anchor id가 비었거나 중복됩니다: {id}"));
+            } else {
+                named_blocks.push((true, id.clone(), pointer.to_owned()));
             }
         }
         if matches!(block, Block::WebView { .. }) {
@@ -337,6 +342,39 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
         }
         validate_block(block, definition, &mut details, pointer);
     });
+    let named_blocks: Vec<_> = named_blocks
+        .into_iter()
+        .map(|(is_anchor, name, pointer)| {
+            let when_ancestors = when_pointers
+                .iter()
+                .filter(|when_pointer| {
+                    let child_pointer = format!("{when_pointer}/child");
+                    pointer == child_pointer
+                        || pointer
+                            .strip_prefix(&child_pointer)
+                            .is_some_and(|rest| rest.starts_with('/'))
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            (is_anchor, name, pointer, when_ancestors)
+        })
+        .collect();
+    let mut earlier_scopes: HashMap<(bool, String), Vec<Vec<String>>> = HashMap::new();
+    for (is_anchor, name, pointer, when_ancestors) in named_blocks {
+        let earlier = earlier_scopes.entry((is_anchor, name.clone())).or_default();
+        let duplicate = earlier.iter().any(|prior_when_ancestors| {
+            when_ancestors.starts_with(prior_when_ancestors)
+                || prior_when_ancestors.starts_with(&when_ancestors)
+        });
+        if duplicate {
+            if is_anchor {
+                details.push(format!("{pointer}: anchor id가 비었거나 중복됩니다: {name}"));
+            } else {
+                details.push(format!("{pointer}: canvas 표면 이름이 비었거나 중복됩니다"));
+            }
+        }
+        earlier.push(when_ancestors);
+    }
     if web_views > 1 {
         details.push(format!(
             "web_view는 정의에 하나까지 둘 수 있습니다(지금 {web_views}개)"

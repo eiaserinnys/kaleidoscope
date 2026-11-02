@@ -68,6 +68,7 @@
       },
       "completed": { "default": 0 },
       "wide": { "default": false },
+      "narrow": { "default": false },
       "viewport": { "default": { "start": 0, "end": 3600 } },
       "tracks": {
         "default": [
@@ -130,6 +131,15 @@
                     ]
                   }
                 },
+                {
+                  "type": "when",
+                  "value": { "client": "wide" },
+                  "child": {
+                    "type": "anchor",
+                    "id": "responsive-stage",
+                    "child": { "type": "canvas", "surface": "meeting-stage", "aspect_ratio": 4 }
+                  }
+                },
                 { "type": "text", "value": { "message": "edit_hint" } },
                 {
                   "type": "repeat",
@@ -169,6 +179,15 @@
                     ]
                   }
                 },
+                {
+                  "type": "when",
+                  "value": { "client": "narrow" },
+                  "child": {
+                    "type": "anchor",
+                    "id": "responsive-stage",
+                    "child": { "type": "canvas", "surface": "meeting-stage", "aspect_ratio": 4 }
+                  }
+                },
                 { "type": "progress", "value": { "client": "completed" }, "max": 3, "label": { "message": "completion" } },
                 { "type": "when", "value": { "client": "wide" }, "child": { "type": "text", "value": { "message": "wide_note" } } }
               ]
@@ -205,7 +224,7 @@
         "open": { "state": "tour_open" },
         "step": { "state": "tour_step" },
         "steps": [
-          { "key": "agenda", "target": "agenda-section", "title": { "message": "tour_agenda_title" }, "body": { "message": "tour_agenda_body" } },
+          { "key": "agenda", "target": "responsive-stage", "title": { "message": "tour_agenda_title" }, "body": { "message": "tour_agenda_body" } },
           { "key": "timeline", "target": "timeline-section", "title": { "message": "tour_timeline_title" }, "body": { "message": "tour_timeline_body" } }
         ],
         "on_step": [{ "set_state": "tour_step", "value": { "expr": "$event" } }],
