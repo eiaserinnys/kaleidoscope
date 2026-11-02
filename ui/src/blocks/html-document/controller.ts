@@ -229,7 +229,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     } catch (reason) { setError(toCoreError(reason).message); }
     finally { setSaving(false); }
   }, [edits, entry, latest, patchState, refreshList, refreshThread, store, windowId]);
-  const choose = useCallback((name: string, rev: number) => { if (dirtyRef.current) { setPendingChange({ name, rev }); return; } setActive({ name, rev }); patchState(name, rev); }, [patchState]);
+  const choose = useCallback((name: string, rev: number) => { if (activeRef.current?.name === name && activeRef.current.rev === rev) return; if (dirtyRef.current) { setPendingChange({ name, rev }); return; } setActive({ name, rev }); patchState(name, rev); }, [patchState]);
   const confirmChange = useCallback(() => { if (!pendingChange) return; setActive(pendingChange); patchState(pendingChange.name, pendingChange.rev); setPendingChange(null); }, [patchState, pendingChange]);
   const share = useCallback((includeText: boolean) => {
     if (!active) return `[${context.definition.name || "HTML 보기"}]`;

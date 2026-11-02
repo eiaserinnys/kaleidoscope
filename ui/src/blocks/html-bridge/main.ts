@@ -7,6 +7,8 @@ let mode: "select" | "view" | "readonly" = "readonly";
 let selected: Element | null = null;
 let hover: Element | null = null;
 let comments: FrameComment[] = [];
+let located: { comment: FrameComment; result: ReturnType<typeof resolveAnchor> }[] = [];
+let anchorsDirty = true;
 let editing: { element: HTMLElement; before: string } | null = null;
 let frame = 0;
 let lastResults = "";
@@ -23,7 +25,7 @@ shadow.innerHTML = `<style>
 const layer = shadow.querySelector("#layer")!;
 document.documentElement.append(host);
 const resize = new ResizeObserver(() => schedule());
-const mutation = new MutationObserver(() => { visible(); schedule(); });
+const mutation = new MutationObserver(() => { anchorsDirty = true; visible(); schedule(); });
 let observing = false;
 function visible() { send({ type: "ks-html-visible-text", text: document.body?.innerText || "" }); }
 function schedule() { if (!frame) frame = requestAnimationFrame(draw); }
@@ -43,9 +45,10 @@ function outline(element: Element | null, name: string) {
 function draw() {
   frame = 0; layer.replaceChildren();
   outline(mode === "select" ? hover : null, "hover"); outline(mode === "select" ? selected : null, "selected");
+  if (anchorsDirty) { located = comments.map((comment) => ({ comment, result: resolveAnchor(document, comment.anchor, comment.sameRevision) })); anchorsDirty = false; }
   const results: Record<string, "exact" | "moved" | "orphan"> = {}; const ranges: Range[] = [];
-  for (const comment of comments) {
-    const result = resolveAnchor(document, comment.anchor, comment.sameRevision); results[comment.id] = result.status;
+  for (const { comment, result } of located) {
+    results[comment.id] = result.status;
     if (!result.element) continue;
     if (result.range) ranges.push(result.range);
     const rect = result.range?.getBoundingClientRect() ?? result.element.getBoundingClientRect();
@@ -129,7 +132,7 @@ window.addEventListener("message", (event: MessageEvent<ParentToFrame>) => {
   const data = event.data;
   if (data.type === "ks-html-mode") { mode = data.mode; hover = null; schedule(); }
   else if (data.type === "ks-html-select-number") select(data.n === null ? null : findNumber(document, data.n));
-  else if (data.type === "ks-html-comments") { comments = data.comments; schedule(); }
+  else if (data.type === "ks-html-comments") { comments = data.comments; anchorsDirty = true; schedule(); }
   else if (data.type === "ks-html-edit") { applyEdit(document, data.edit); visible(); schedule(); }
   else if (data.type === "ks-html-focus-comment") { const comment = comments.find((item) => item.id === data.id); if (comment) resolveAnchor(document, comment.anchor, comment.sameRevision).element?.scrollIntoView({ block: "center" }); }
 });
