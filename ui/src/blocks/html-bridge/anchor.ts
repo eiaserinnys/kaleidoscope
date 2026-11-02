@@ -69,12 +69,12 @@ export function resolveAnchor(doc: Document, anchor: HtmlAnchor, sameRevision = 
     const text = doc.body.textContent ?? ""; const quote = anchor.quote; const matches: { start: number; end: number; errors: number }[] = [];
     let index = text.indexOf(quote.exact);
     while (index >= 0) { matches.push({ start: index, end: index + quote.exact.length, errors: 0 }); index = text.indexOf(quote.exact, index + 1); }
-    const exactCount = matches.length;
     if (!matches.length && quote.exact.length >= 12) matches.push(...search(text, quote.exact, Math.floor(quote.exact.length * 0.2)));
     if (!matches.length) return orphan();
+    const fullMatches = matches.filter((item) => item.errors === 0 && text.slice(Math.max(0, item.start - quote.prefix.length), item.start) === quote.prefix && text.slice(item.end, item.end + quote.suffix.length) === quote.suffix);
     const ranked = matches.map((item) => ({ ...item, score: contextScore(text, item.start, item.end, anchor) + 2 * (1 - item.errors / quote.exact.length) })).sort((a, b) => b.score - a.score);
-    if (ranked.length > 1 && ranked[0].score - ranked[1].score < 0.05) return orphan();
-    const best = ranked[0];
+    if (fullMatches.length !== 1 && ranked.length > 1 && ranked[0].score - ranked[1].score < 0.05) return orphan();
+    const best = fullMatches.length === 1 ? fullMatches[0] : ranked[0];
     if (best.errors && 1 - best.errors / quote.exact.length < 0.8) return orphan();
     const fullContext = text.slice(Math.max(0, best.start - quote.prefix.length), best.start) === quote.prefix && text.slice(best.end, best.end + quote.suffix.length) === quote.suffix;
     if (quote.exact.length < 12 && !fullContext) return orphan();
@@ -82,7 +82,7 @@ export function resolveAnchor(doc: Document, anchor: HtmlAnchor, sameRevision = 
     if (!range) return orphan();
     const node = range.commonAncestorContainer;
     const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
-    return { status: exactCount === 1 && fullContext ? "exact" : "moved", element, range };
+    return { status: fullMatches.length === 1 ? "exact" : "moved", element, range };
   }
   const query = (selector: string): Element[] => { try { return [...doc.querySelectorAll(selector)]; } catch { return []; } };
   if (sameRevision) {

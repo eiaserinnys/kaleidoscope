@@ -55,7 +55,8 @@ describe("리비전에서 커멘트 다시 찾기", () => {
     const anchor = createAnchor(p, range);
     const next = parse("<p>다른 곳 선택한 글 끝</p><p>앞 문맥 선택한 글 뒤 문맥</p>");
     const result = resolveAnchor(next, anchor);
-    expect(result.status === "orphan" || result.element === next.querySelectorAll("p")[1]).toBe(true);
+    expect(result.status).toBe("exact");
+    expect(result.element).toBe(next.querySelectorAll("p")[1]);
   });
   it("글 없는 이미지는 src를 비교하고 식별자가 없는 빈 div는 고아로 둔다", () => {
     const old = parse('<main><img src="data:image/png;base64,YQ=="><div></div></main>');
