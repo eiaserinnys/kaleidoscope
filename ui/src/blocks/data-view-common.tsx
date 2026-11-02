@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { defaultRangeExtractor, useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
+import { defaultRangeExtractor, measureElement, observeElementOffset, observeElementRect, useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import type { Badge as BadgeValue, Group } from "../contract/contract";
 import { Badge, isBadge } from "../components/badge";
 import { DataIcon } from "../components/data-icons";
@@ -29,7 +29,35 @@ export function dateText(value: unknown) {
 export function useVirtualRows(count: number, estimate: number, supplied?: RefObject<HTMLDivElement | null>) {
   const local = useRef<HTMLDivElement>(null);
   const scroll = supplied ?? local;
-  const virtual = useVirtualizer({ count, getScrollElement: () => scroll.current, estimateSize: () => estimate, overscan: 4, initialRect: { width: 800, height: 480 } });
+  const position = useRef(0);
+  const hidden = useRef(false);
+  const virtual = useVirtualizer({
+    count, getScrollElement: () => scroll.current, estimateSize: () => estimate, overscan: 4,
+    initialRect: { width: 800, height: 480 },
+    // display:none은 행의 실제 크기가 아니다. 숨김 중의 0을 캐시하면
+    // 다시 그리지 않은 앞쪽 행들이 계속 높이 0으로 남는다.
+    measureElement: (element, entry, instance) => {
+      if (!instance.scrollElement?.clientHeight) {
+        const index = instance.indexFromElement(element);
+        return instance.itemSizeCache.get(instance.options.getItemKey(index)) ?? instance.options.estimateSize(index);
+      }
+      return measureElement(element, entry, instance);
+    },
+    observeElementOffset: (instance, callback) => observeElementOffset(instance, (offset, scrolling) => {
+      if (!instance.scrollElement?.clientHeight) return;
+      position.current = offset;
+      callback(offset, scrolling);
+    }),
+    observeElementRect: (instance, callback) => observeElementRect(instance, (rect) => {
+      if (!rect.height) { hidden.current = true; return; }
+      if (hidden.current) {
+        hidden.current = false;
+        const offset = instance.getTotalSize() <= rect.height ? 0 : position.current;
+        instance.scrollToOffset(offset);
+      }
+      callback(rect);
+    }),
+  });
   return { scroll, virtual };
 }
 export function useRoving<T extends { key: string }>(items: T[], selected: unknown, scroll: RefObject<HTMLDivElement | null>, virtual?: Virtualizer<HTMLDivElement, Element>, rowOf?: (index: number) => number) {

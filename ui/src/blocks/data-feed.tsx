@@ -138,7 +138,7 @@ function FeedReady({ block, context, pointer, value }: { block: Extract<Block, {
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
   });
-  const vrows = virtual.getVirtualItems(); const first = virtual.getVirtualItemForOffset(scroll.current?.scrollTop ?? 0)?.index ?? 0;
+  const vrows = virtual.getVirtualItems(); const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
   const heading = block.grouped ? rows.slice(0, first + 1).reverse().find((r) => r.kind === "heading") : undefined;
   return <div className="ks-data-view ks-feed" ref={scroll} role="feed" onScroll={(e) => { const el = e.currentTarget; const line = parseFloat(getComputedStyle(el).lineHeight) || 21; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight <= line; }}>
     {heading?.kind === "heading" && first > 0 && <div className="ks-view-sticky"><GroupHeading title={heading.title} meta={heading.meta} /></div>}

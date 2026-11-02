@@ -53,7 +53,7 @@ function ListReady({ block, pointer, value }: { block: Extract<Block, { type: "l
   if (!items.length) return <NoItems />;
   const choose = (item: ListItem) => { if (block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue); };
   const virtualRows = virtual.getVirtualItems();
-  const first = virtual.getVirtualItemForOffset(scroll.current?.scrollTop ?? 0)?.index ?? 0;
+  const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
   const currentHeading = block.grouped ? rows.slice(0, first + 1).reverse().find((row) => row.kind === "heading") : undefined;
   return <div className={`ks-data-view ks-list${grid ? " is-grid" : ""}`} ref={scroll} role="listbox" aria-label="목록">
     {currentHeading?.kind === "heading" && first > 0 ? <div className="ks-view-sticky"><GroupHeading title={currentHeading.title} meta={currentHeading.meta} /></div> : null}
