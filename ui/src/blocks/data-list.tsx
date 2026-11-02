@@ -6,7 +6,7 @@ import { validColor } from "../components/badge";
 import { isMedia, MediaThumbnail } from "../components/media-thumbnail";
 import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
-import { Badges, GroupHeading, NoItems, VirtualSurface, groups, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
+import { Badges, DEFAULT_VIRTUAL_ROW_ESTIMATE, GroupHeading, NoItems, VirtualSurface, groups, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
 
 const validItem = (v: unknown): v is ListItem => isObject(v) && typeof v.key === "string" && typeof v.title === "string";
 type Row = { kind: "heading"; title: string; meta?: string } | { kind: "items"; items: ListItem[]; start: number };
@@ -43,7 +43,7 @@ function ListReady({ block, pointer, value }: { block: Extract<Block, { type: "l
     }
     return result;
   }, [grouped, block.grouped, grid, columns]);
-  const { virtual } = useVirtualRows(rows.length, grid ? 220 : 40, scroll);
+  const { virtual } = useVirtualRows(rows.length, grid ? 220 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll);
   const rowOf = (index: number) => Math.max(0, rows.findIndex((row) => row.kind === "items" && index >= row.start && index < row.start + row.items.length));
   const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
   const selected = selectedValue.status === "ready" ? selectedValue.value : null;

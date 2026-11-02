@@ -7,6 +7,7 @@ import { shareStructure, useShellSelector, type ShellStore } from "../core/shell
 import { ClientRuntime } from "../runtime/client-runtime";
 import { useBlockRenderProbe } from "../render/render-probe";
 import { isWindowVisible, useWindowStateValue } from "./window-state";
+import { itemPath, useItemScope, type ItemScope } from "./item-scope";
 
 const loading: BindingValue = { status: "loading" };
 const emptySources: Record<string, SourceStatus> = {};
@@ -56,6 +57,7 @@ export class WindowData {
   private shareListeners = new Set<() => void>();
   private shareSequence = 0;
   private dormantPointers = new Set<string>();
+  private dormantInstances = new Map<string, Map<object, boolean>>();
   private dormantScheduled = false;
   private restarting = false;
   private surfaceGeneration = 0;
@@ -80,7 +82,7 @@ export class WindowData {
       if (encoded === undefined || new TextEncoder().encode(encoded).byteLength > CLIENT_OUTPUT_MAX_BYTES) { this.setNotice(`클라이언트 출력이 올바르지 않거나 너무 큽니다: ${name}`); continue; }
       const previous = this.clientValues[name];
       if (previous?.status === "ready" && JSON.stringify(previous.value) === encoded) continue;
-      this.clientValues[name] = { status: "ready", value };
+      this.clientValues[name] = { status: "ready", value: previous?.status === "ready" ? shareStructure(previous.value, value) : value };
       this.listeners.get(`@client/${name}`)?.forEach((listener) => listener());
     }
   };
@@ -248,6 +250,14 @@ export class WindowData {
     });
   };
 
+  setInstanceDormant = (pointer: string, instance: object, dormant: boolean | null) => {
+    let group = this.dormantInstances.get(pointer);
+    if (!group) { group = new Map(); this.dormantInstances.set(pointer, group); }
+    if (dormant === null) group.delete(instance); else group.set(instance, dormant);
+    this.setDormant(pointer, [...group.values()].every(Boolean));
+    if (!group.size) this.dormantInstances.delete(pointer);
+  };
+
   attachSurface = (id: string, canvas: OffscreenCanvas, css_width: number, css_height: number, dpr: number) => {
     const surface = { id, generation: ++this.surfaceGeneration, canvas, css_width, css_height, dpr };
     this.surfaces.set(id, surface); this.runtime?.surface({ phase: "attach", ...surface });
@@ -289,16 +299,17 @@ export class WindowData {
     return binding as JsonValue;
   }
 
-  act = async (pointer: string, event: JsonValue, item?: JsonValue) => {
+  act = async (pointer: string, event: JsonValue, item?: JsonValue, scope?: ItemScope) => {
     try {
+      if (scope) item = scope.item;
       const action = this.localAction(pointer);
       if (action) {
-        if (typeof action.client === "string") return this.runtime?.action(action.client, event, item, action.args as JsonValue | undefined) ?? false;
-        if (action.pick_files) return await this.runtime?.pick(action.pick_files as PickFilesSpec) ?? false;
+        if (typeof action.client === "string") return this.runtime?.action(action.client, event, item, action.args as JsonValue | undefined, scope) ?? false;
+        if (action.pick_files) return await this.runtime?.pick(action.pick_files as PickFilesSpec, scope) ?? false;
         if (action.save_file) {
           const spec = action.save_file as SaveFileSpec;
           const raw = this.localBinding(`${pointer}${Array.isArray(this.definitionAt(pointer)) ? "/0" : ""}/save_file/suggested_name`, spec.suggested_name);
-          return await this.runtime?.save(spec, typeof raw === "string" ? raw : "") ?? false;
+          return await this.runtime?.save(spec, typeof raw === "string" ? raw : "", scope) ?? false;
         }
       }
       await this.ready;
@@ -334,26 +345,39 @@ function ClientRuntimeSync({ data }: { data: WindowData }) {
   return null;
 }
 
-export function useWindowData(): WindowData {
+export function useOptionalWindowData(): WindowData | null {
   const value = useContext(WindowDataContext);
+  const scope = useItemScope();
+  return useMemo(() => {
+    if (!value || !scope) return value;
+    const proxy = Object.create(value) as WindowData;
+    proxy.act = (pointer, event, item) => value.act(pointer, event, item, scope);
+    return proxy;
+  }, [value, scope]);
+}
+
+export function useWindowData(): WindowData {
+  const value = useOptionalWindowData();
   if (!value) throw new Error("창 데이터가 연결되지 않았습니다");
   return value;
 }
 
-export function useOptionalWindowData(): WindowData | null {
-  return useContext(WindowDataContext);
-}
-
 export function useDormant(pointer: string, dormant: boolean) {
-  const data = useOptionalWindowData();
+  const data = useContext(WindowDataContext);
+  const scope = useItemScope();
   useEffect(() => {
+    if (scope) {
+      data?.setInstanceDormant(pointer, scope.instance, dormant);
+      return () => data?.setInstanceDormant(pointer, scope.instance, null);
+    }
     data?.setDormant(pointer, dormant);
     return () => data?.setDormant(pointer, true);
-  }, [data, dormant, pointer]);
+  }, [data, dormant, pointer, scope?.instance]);
 }
 
 export function useBinding(pointer: string, binding: Binding): BindingValue {
   useBlockRenderProbe();
+  const scope = useItemScope();
   const context = useContext(DataContext);
   if (!context) throw new Error("창 데이터가 연결되지 않았습니다");
   const localName = binding !== null && typeof binding === "object" && !Array.isArray(binding) && Object.keys(binding).length === 1 && "client" in binding && typeof binding.client === "string" ? binding.client : null;
@@ -364,10 +388,17 @@ export function useBinding(pointer: string, binding: Binding): BindingValue {
   const value = useSyncExternalStore((listener) => context.data.subscribeValue(key, listener), () => context.data.getValue(key), () => loading);
   const stateBinding = useMemo<BindingValue>(() => ({ status: "ready", value: (stateValue as JsonValue) ?? null }), [stateValue]);
   const literalBinding = useMemo<BindingValue>(() => ({ status: "ready", value: binding as JsonValue }), [binding]);
+  const itemBinding = useMemo<BindingValue>(() => {
+    if (binding && typeof binding === "object" && !Array.isArray(binding) && Object.keys(binding).length === 1) {
+      if ("item" in binding && typeof binding.item === "string") return { status: "ready", value: itemPath(scope?.item, binding.item) };
+      if ("parent_item" in binding && typeof binding.parent_item === "string") return { status: "ready", value: itemPath(scope?.parent_item, binding.parent_item) };
+    }
+    return literalBinding;
+  }, [binding, scope, literalBinding]);
   if (localName !== null) return value;
   if (binding !== null && typeof binding === "object" && !Array.isArray(binding)) {
     if (stateKey !== null) return stateBinding;
     if (isExpression) return value;
   }
-  return literalBinding;
+  return itemBinding;
 }

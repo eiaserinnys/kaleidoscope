@@ -6,6 +6,7 @@ import { DataIcon } from "../components/data-icons";
 import { EmptyState } from "../components/primitives";
 
 export const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+export const DEFAULT_VIRTUAL_ROW_ESTIMATE = 40;
 export function asArray(value: unknown): unknown[] { return value == null ? [] : Array.isArray(value) ? value : [value]; }
 export function groups<T>(value: unknown, grouped: boolean, valid: (item: unknown) => item is T): Group<T>[] {
   const values = asArray(value);
@@ -26,33 +27,34 @@ export function dateText(value: unknown) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(date);
 }
-export function useVirtualRows(count: number, estimate: number, supplied?: RefObject<HTMLDivElement | null>) {
+export function useVirtualRows(count: number, estimate: number, supplied?: RefObject<HTMLDivElement | null>, horizontal = false) {
   const local = useRef<HTMLDivElement>(null);
   const scroll = supplied ?? local;
   const position = useRef(0);
   const hidden = useRef(false);
   const virtual = useVirtualizer({
-    count, getScrollElement: () => scroll.current, estimateSize: () => estimate, overscan: 4,
+    count, getScrollElement: () => scroll.current, estimateSize: () => estimate, overscan: 4, horizontal,
     initialRect: { width: 800, height: 480 },
     // display:none은 행의 실제 크기가 아니다. 숨김 중의 0을 캐시하면
     // 다시 그리지 않은 앞쪽 행들이 계속 높이 0으로 남는다.
     measureElement: (element, entry, instance) => {
-      if (!instance.scrollElement?.clientHeight) {
+      if (!(horizontal ? instance.scrollElement?.clientWidth : instance.scrollElement?.clientHeight)) {
         const index = instance.indexFromElement(element);
         return instance.itemSizeCache.get(instance.options.getItemKey(index)) ?? instance.options.estimateSize(index);
       }
       return measureElement(element, entry, instance);
     },
     observeElementOffset: (instance, callback) => observeElementOffset(instance, (offset, scrolling) => {
-      if (!instance.scrollElement?.clientHeight) return;
+      if (!(horizontal ? instance.scrollElement?.clientWidth : instance.scrollElement?.clientHeight)) return;
       position.current = offset;
       callback(offset, scrolling);
     }),
     observeElementRect: (instance, callback) => observeElementRect(instance, (rect) => {
-      if (!rect.height) { hidden.current = true; return; }
+      const size = horizontal ? rect.width : rect.height;
+      if (!size) { hidden.current = true; return; }
       if (hidden.current) {
         hidden.current = false;
-        const offset = instance.getTotalSize() <= rect.height ? 0 : position.current;
+        const offset = instance.getTotalSize() <= size ? 0 : position.current;
         instance.scrollToOffset(offset);
       }
       callback(rect);
