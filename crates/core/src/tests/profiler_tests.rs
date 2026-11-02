@@ -429,6 +429,42 @@ fn profiler_bounds_inputs_and_spans_and_clear_resets_them() {
 }
 
 #[test]
+fn profiler_distinguishes_unsupported_method_from_unknown_path() {
+    let dir = TempDir::new().unwrap();
+    let core = open_core(dir.path(), vec![], &Arc::new(FakeHost::default()));
+
+    let method_error = crate::profiler::request(
+        &core.inner,
+        HttpMethod::Get,
+        "/clear",
+        &BTreeMap::new(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(
+        method_error.id.as_deref(),
+        Some("DATA_PROFILER_METHOD_NOT_ALLOWED")
+    );
+    assert_eq!(method_error.code, ErrorCode::InvalidRequest);
+    assert!(method_error.message.contains("GET"));
+    assert!(method_error.message.contains("/clear"));
+
+    let path_error = crate::profiler::request(
+        &core.inner,
+        HttpMethod::Post,
+        "/unknown",
+        &BTreeMap::new(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(
+        path_error.id.as_deref(),
+        Some("DATA_PROFILER_ROUTE_NOT_FOUND")
+    );
+    assert_eq!(path_error.code, ErrorCode::InvalidRequest);
+}
+
+#[test]
 fn identical_binding_expressions_are_aggregated_with_first_pointer() {
     let profiler = crate::profiler::Profiler::default();
     profiler.binding("sample", "견본", "/first", "$state.value", Some(1.234));
@@ -466,7 +502,7 @@ fn action_preserves_completed_state_when_later_step_fails() {
         dormant: vec![],
     })
     .unwrap();
-    assert!(core
+    let error = core
         .handle(CoreRequest::DataAct {
             window_id: window.clone(),
             pointer: "/ui/on_click".into(),
@@ -474,7 +510,11 @@ fn action_preserves_completed_state_when_later_step_fails() {
             item: Value::Null,
             modifiers: None,
         })
-        .is_err());
+        .unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("DATA_ACT_STEP_INVALID"));
+    assert_eq!(error.code, ErrorCode::InvalidRequest);
+    assert!(error.message.contains("/ui/on_click"));
+    assert!(error.message.contains("중단"), "{}", error.message);
     let state = snapshot(&core)
         .shared
         .windows
