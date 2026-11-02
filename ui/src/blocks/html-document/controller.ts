@@ -228,7 +228,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     try {
       await store.call({ op: "storage.write", window_id: windowId, entry, doc: path, content: html, expected_revision: null });
       cache.current.set(path, html);
-      await writeThreadChange(store, windowId, entry, current.name, { kind: "revision", rev, meta: { title: note.trim() || `v${rev}`, ...(note.trim() ? { note: note.trim() } : {}), author: "user", base_rev: current.rev, edits } });
+      await writeThreadChange(store, windowId, entry, current.name, { kind: "revision", rev, meta: { ...(note.trim() ? { title: note.trim(), note: note.trim() } : {}), author: "user", base_rev: current.rev, edits } });
       setUndo([]); setRedo([]); setActive({ name: current.name, rev }); patchState(current.name, rev); await refreshList(); await refreshThread(current.name); setError(null);
     } catch (reason) { setError(toCoreError(reason).message); }
     finally { setSaving(false); }

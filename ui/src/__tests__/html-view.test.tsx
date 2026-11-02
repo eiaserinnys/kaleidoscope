@@ -108,4 +108,9 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   const request = sent[0]; if (request.op !== "conversation.send") throw new Error("전송 명령 누락");
   expect(request.window_id).toBe("agent-window"); expect(request.text).toContain("시안/thread.json"); expect(request.text).toContain("색을 바꿔 주세요");
   expect(request.text).not.toContain("저장 안 한 수정");
+  await user.click(screen.getByRole("button", { name: "요소 다듬기" }));
+  await user.click(screen.getByRole("button", { name: "새 리비전으로 저장" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "리비전" }).textContent).toBe("v3"));
+  const savedThread = JSON.parse(files.get("시안/thread.json")!.content);
+  expect(savedThread.revisions["3"].title).toBeUndefined();
 });
