@@ -3,15 +3,13 @@ export interface ThrottledSend<T> {
   flush(): void;
 }
 
-export function createSerialSend<T>(send: (value: T) => Promise<unknown> | unknown): (value: T) => void {
+export function createSerialSend<T>(send: (value: T) => Promise<unknown> | unknown): (value: T, options: { coalesce: boolean }) => void {
   let active = false;
-  let hasPending = false;
-  let pending!: T;
+  const pending: Array<{ value: T; coalesce: boolean }> = [];
 
   const drain = () => {
-    if (active || !hasPending) return;
-    const value = pending;
-    hasPending = false;
+    if (active || pending.length === 0) return;
+    const { value } = pending.shift()!;
     active = true;
     let result: Promise<unknown> | unknown;
     try {
@@ -27,9 +25,10 @@ export function createSerialSend<T>(send: (value: T) => Promise<unknown> | unkno
     });
   };
 
-  return (value) => {
-    pending = value;
-    hasPending = true;
+  return (value, { coalesce }) => {
+    const last = pending.at(-1);
+    if (coalesce && last?.coalesce) last.value = value;
+    else pending.push({ value, coalesce });
     drain();
   };
 }

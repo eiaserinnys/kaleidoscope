@@ -99,7 +99,7 @@ export function SliderBlock({ block, pointer }: Props<"slider">) {
   const [draft, setDraft] = useState(current);
   const dragging = useRef(false);
   const serialSend = useMemo(() => createSerialSend((next: number) => data.act(`${pointer}/on_change`, next)), [data, pointer]);
-  const throttled = useMemo(() => createThrottledSend(serialSend, 100), [serialSend]);
+  const throttled = useMemo(() => createThrottledSend((next: number) => serialSend(next, { coalesce: true }), 100), [serialSend]);
   useEffect(() => () => throttled.flush(), [throttled]);
   useEffect(() => { if (!dragging.current) setDraft(current); }, [current]);
   const finish = () => { throttled.flush(); dragging.current = false; };
@@ -123,7 +123,7 @@ export function ColorBlock({ block, pointer }: Props<"color">) {
   const [color, setColor] = useState(current);
   const dragging = useRef(false);
   const serialSend = useMemo(() => createSerialSend((next: string) => data.act(`${pointer}/on_change`, next)), [data, pointer]);
-  const throttled = useMemo(() => createThrottledSend(serialSend, 100), [serialSend]);
+  const throttled = useMemo(() => createThrottledSend((next: string) => serialSend(next, { coalesce: true }), 100), [serialSend]);
   useEffect(() => () => throttled.flush(), [throttled]);
   useEffect(() => { if (!dragging.current) setColor(current); }, [current]);
   const change = (next: string, nativeType: string) => {
