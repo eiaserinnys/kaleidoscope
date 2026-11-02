@@ -1,0 +1,49 @@
+name: Share freeze spike
+on:
+  push:
+    branches: [feat/share-isolated-capture]
+jobs:
+  measure:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+      - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1
+        with:
+          shared-key: share-freeze-spike
+          cache-on-failure: true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir app build
+      - run: cargo build -p kaleidoscope-app --release --features tauri/custom-protocol,e2e
+      - name: 측정
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:GITHUB_WORKSPACE 'freeze-results'
+          New-Item -ItemType Directory $out | Out-Null
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'freeze-appdata'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'freeze-local'
+          $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'freeze-webview'
+          New-Item -ItemType Directory $env:APPDATA,$env:LOCALAPPDATA | Out-Null
+          $rec = Start-Process pwsh -ArgumentList @('-NoProfile','-File',"$env:GITHUB_WORKSPACE/app/e2e-windows/freeze-record.ps1",$out) -PassThru -RedirectStandardError "$out/recorder-error.txt"
+          $app = Start-Process 'target/release/kaleidoscope-app.exe' -ArgumentList @('--e2e-scenario=share-freeze',"--e2e-out=$out") -PassThru
+          try {
+            if(-not $app.WaitForExit(120000)){throw '측정 앱 시간 초과'}
+            if($app.ExitCode -ne 0){throw "측정 실패 $($app.ExitCode)"}
+            if(-not $rec.WaitForExit(10000)){throw '기록기 시간 초과'}
+            if($rec.ExitCode -ne 0){throw '기록기 실패'}
+          } finally {
+            Stop-Process -Id $app.Id,$rec.Id -Force -ErrorAction SilentlyContinue
+          }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: share-freeze-measurements
+          path: freeze-results/

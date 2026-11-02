@@ -1,0 +1,185 @@
+//! 정지 화면 아래 렌더링과 복원을 측정하는 전용 시나리오.
+use super::*;
+#[path = "freeze_native.rs"]
+mod native;
+
+fn ui(app: &AppHandle, body: &str) -> Result<Value, String> {
+    let script=format!("(()=>{{try{{return JSON.stringify((()=>{{{body}}})());}}catch(e){{return JSON.stringify({{error:String(e)}});}}}})()");
+    let (tx, rx) = mpsc::channel();
+    app.get_webview("main")
+        .ok_or("main 없음")?
+        .eval_with_callback(script, move |v| {
+            let _ = tx.send(v);
+        })
+        .map_err(|e| e.to_string())?;
+    let raw = rx
+        .recv_timeout(Duration::from_secs(5))
+        .map_err(|e| e.to_string())?;
+    let text: String = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    let v: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    if v.get("error").is_some() {
+        return Err(v.to_string());
+    }
+    Ok(v)
+}
+fn on_ui<T: Send + 'static>(
+    app: &AppHandle,
+    f: impl FnOnce(isize) -> T + Send + 'static,
+) -> Result<T, String> {
+    let hwnd = app
+        .get_window("main")
+        .ok_or("main 없음")?
+        .hwnd()
+        .map_err(|e| e.to_string())?
+        .0 as isize;
+    let (tx, rx) = mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(f(hwnd));
+    })
+    .map_err(|e| e.to_string())?;
+    rx.recv_timeout(Duration::from_secs(5))
+        .map_err(|e| e.to_string())
+}
+fn frames(app: &AppHandle, n: u32) -> Result<Value, String> {
+    ui(app,&format!("window.spikeDone=false; window.spikeStart=performance.now(); let n={n}; function step(){{if(--n<=0){{window.spikeMs=performance.now()-window.spikeStart;window.spikeDone=true;}}else requestAnimationFrame(step);}} requestAnimationFrame(step);return true;"))?;
+    let end = Instant::now() + Duration::from_secs(5);
+    while ui(app, "return window.spikeDone;")? != json!(true) {
+        if Instant::now() > end {
+            return Err("rAF 시간 초과".into());
+        }
+        thread::sleep(Duration::from_millis(2));
+    }
+    ui(app,"return {ms:window.spikeMs,raf:window.spikeRaf,focus:document.hasFocus(),active:document.activeElement?.id};")
+}
+fn capture(app: &AppHandle, out: &Path, name: &str) -> Result<u128, String> {
+    use kaleidoscope_core::WebHost;
+    let t = Instant::now();
+    let host = super::super::web_host::TauriWebHost::new(app.clone());
+    let (bytes, _) = host
+        .capture_shell()
+        .map_err(|e| format!("{e:?}"))?
+        .ok_or("빈 캡처")?;
+    fs::write(out.join(format!("{name}.png")), bytes).map_err(|e| e.to_string())?;
+    Ok(t.elapsed().as_millis())
+}
+pub(super) fn scenario(
+    app: &AppHandle,
+    core: &Core,
+    out: &Path,
+    log: &mut File,
+) -> Result<(), String> {
+    thread::sleep(Duration::from_secs(3));
+    let snap = match call(core, CoreRequest::StateGet {})? {
+        CoreReply::StateGet { snapshot } => snapshot,
+        _ => return Err("snapshot 없음".into()),
+    };
+    let workspace = snap.device.active_workspace_id.ok_or("작업 없음")?;
+    let desktop = snap
+        .device
+        .active_desktop_ids
+        .get(&workspace)
+        .ok_or("데스크톱 없음")?
+        .clone();
+    let def = json!({"id":"spike-html","name":"정지 화면 시험","requires":{"blocks":10,"modules":{}},"permissions":[],"state":{},"ui":{"type":"html_view","value":"<html><body style='margin:0;background:rgb(17,153,51);height:1800px'>IFRAME GREEN</body></html>"}});
+    call(
+        core,
+        CoreRequest::AppImport {
+            definition_json: def.to_string(),
+        },
+    )?;
+    call(
+        core,
+        CoreRequest::WindowOpen {
+            desktop_id: desktop.clone(),
+            app_id: "spike-html".into(),
+            rect: Some(Rect {
+                x: 40,
+                y: 40,
+                width: 600,
+                height: 420,
+            }),
+        },
+    )?;
+    thread::sleep(Duration::from_secs(2));
+    ui(
+        app,
+        r#"window.spikeRaf=0;function tick(){window.spikeRaf++;requestAnimationFrame(tick);}requestAnimationFrame(tick);const a=document.querySelector('[data-testid="app-window-spike-html"]');window.spikeA=a; const b=document.createElement('div'); b.id='spikeB';b.style='position:fixed;left:20px;top:90px;width:680px;height:470px;background:rgb(221,34,102);z-index:999999'; const i=document.createElement('input');i.id='spikeInput';b.append(i); document.body.append(b);i.focus();return {iframe:!!a.querySelector('iframe'),focus:document.hasFocus(),raf:window.spikeRaf};"#,
+    )?;
+    frames(app, 2)?;
+    fs::write(out.join("record.request"), b"").map_err(|e| e.to_string())?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !out.join("record.ready").exists() {
+        if Instant::now() > deadline {
+            return Err("기록기 대기 실패".into());
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    for count in [1, 2] {
+        for wait in [1, 2, 3] {
+            let tag = format!("c{count}-f{wait}");
+            let total = Instant::now();
+            let before = on_ui(app, |_| native::foreground())?;
+            let start = Instant::now();
+            on_ui(app, |hwnd| native::begin(hwnd, 5000))??;
+            let freeze = start.elapsed().as_millis();
+            let start = Instant::now();
+            let hidden=ui(app,"document.querySelector('#spikeB').style.visibility='hidden';window.spikeA.hidden=false;return window.spikeRaf;")?;
+            let hide_ms = start.elapsed().as_millis();
+            let mut shots = Vec::new();
+            for index in 0..count {
+                let state = frames(app, wait)?;
+                let ms = capture(app, out, &format!("{tag}-{index}"))?;
+                shots.push(json!({"state":state,"capture_ms":ms}));
+            }
+            let start = Instant::now();
+            ui(
+                app,
+                "document.querySelector('#spikeB').style.visibility='';return true;",
+            )?;
+            let restored = frames(app, wait)?;
+            let restore_ms = start.elapsed().as_millis();
+            let start = Instant::now();
+            on_ui(app, |_| {
+                native::flush();
+                native::end();
+                native::flush();
+            })?;
+            record(
+                log,
+                "freeze.measure",
+                json!({"tag":tag,"count":count,"wait":wait,"freeze_ms":freeze,"hide_ms":hide_ms,"raf_before":hidden,"captures":shots,"restore":restored,"restore_ms":restore_ms,"unfreeze_ms":start.elapsed().as_millis(),"total_ms":total.elapsed().as_millis(),"foreground_kept":before==on_ui(app,|_|native::foreground())?}),
+            )?;
+            thread::sleep(Duration::from_millis(300));
+        }
+    }
+    // DOM hidden 최소화 후 iframe 재등장을 프레임마다 측정한다.
+    ui(app, "window.spikeA.hidden=true;return true;")?;
+    frames(app, 2)?;
+    on_ui(app, |h| native::begin(h, 5000))??;
+    ui(app,"document.querySelector('#spikeB').style.visibility='hidden';window.spikeA.hidden=false;return true;")?;
+    for n in 1..=3 {
+        let state = frames(app, 1)?;
+        let ms = capture(app, out, &format!("minimized-frame-{n}"))?;
+        record(
+            log,
+            "minimized",
+            json!({"frame":n,"state":state,"capture_ms":ms}),
+        )?;
+    }
+    ui(app,"window.spikeA.hidden=true;document.querySelector('#spikeB').style.visibility='';return true;")?;
+    frames(app, 2)?;
+    on_ui(app, |_| {
+        native::flush();
+        native::end();
+    })?;
+    let t = Instant::now();
+    on_ui(app, |h| native::begin(h, 700))??;
+    thread::sleep(Duration::from_millis(1000));
+    record(
+        log,
+        "timer",
+        json!({"elapsed_ms":t.elapsed().as_millis(),"still_active":on_ui(app,|_|native::active())?}),
+    )?;
+    fs::write(out.join("record.stop"), b"").map_err(|e| e.to_string())?;
+    record(log, "complete", json!({"ok":true}))
+}
