@@ -12,3 +12,8 @@ it("스냅은 픽셀 문턱 안의 가장 가까운 시간으로 이동하며 Sh
   expect(snapTime(2.16, { points: [2], threshold_px: 8 }, 100, false)).toBe(2.16);
   expect(snapTime(2.06, { points: [2], threshold_px: 8 }, 100, true)).toBe(2.06);
 });
+
+it("8배 확대에서도 눈금은 최소 0.5초 간격이다", async () => {
+  const { rulerStep } = await import("../blocks/timeline");
+  expect(rulerStep(10, 8)).toBe(0.5);
+});

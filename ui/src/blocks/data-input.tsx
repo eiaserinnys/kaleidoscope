@@ -35,14 +35,10 @@ export function InputBlock({ block, pointer }: Props<"input">) {
   const edited = useRef(false);
   const pending = useRef(0);
   const latest = useRef({ current, focused });
-  const lastCurrent = useRef(current);
-  const changedWhilePending = useRef(false);
   const requestSequence = useRef(0);
   const latestFailed = useRef(false);
   latest.current = { current, focused };
   useEffect(() => {
-    if (lastCurrent.current !== current && pending.current > 0) changedWhilePending.current = true;
-    lastCurrent.current = current;
     if (!focused && pending.current === 0) setDraft(current == null ? "" : String(current));
   }, [current, focused]);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
@@ -55,14 +51,13 @@ export function InputBlock({ block, pointer }: Props<"input">) {
   const send = (value: string) => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
-    if (pending.current === 0) changedWhilePending.current = false;
     pending.current += 1;
     const sequence = ++requestSequence.current;
     void data.act(`${pointer}/on_change`, eventValue(value)).then((success) => {
       if (sequence === requestSequence.current) latestFailed.current = !success;
     }).finally(() => {
       pending.current -= 1;
-      if (pending.current === 0 && !latestFailed.current && changedWhilePending.current && !latest.current.focused) {
+      if (pending.current === 0 && !latestFailed.current && !latest.current.focused) {
         const value = latest.current.current;
         setDraft(value == null ? "" : String(value));
       }

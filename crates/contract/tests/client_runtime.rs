@@ -198,3 +198,18 @@ fn new_control_fields_require_block_set_twelve() {
         assert!(!accepted(&app), "{block}");
     }
 }
+
+#[test]
+fn canvas_ratio_accepts_declared_binding_and_rejects_invalid_literals() {
+    assert!(accepted(&definition(
+        json!({"type":"canvas","surface":"preview","aspect_ratio":{"client":"value"}})
+    )));
+    assert!(!accepted(&definition(
+        json!({"type":"canvas","surface":"preview","aspect_ratio":{"client":"missing"}})
+    )));
+    for ratio in [json!(0), json!(-1), json!("wide")] {
+        assert!(!accepted(&definition(
+            json!({"type":"canvas","surface":"preview","aspect_ratio":ratio})
+        )));
+    }
+}

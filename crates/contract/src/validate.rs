@@ -1305,7 +1305,8 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             if definition.client.is_none() {
                 details.push(format!("{at}: canvas에는 client 선언이 필요합니다"));
             }
-            if aspect_ratio.is_some_and(|ratio| !ratio.is_finite() || ratio <= 0.0) {
+            if matches!(aspect_ratio, Some(Binding::Literal(value)) if value.as_f64().is_none_or(|ratio| !ratio.is_finite() || ratio <= 0.0))
+            {
                 details.push(format!("{at}: aspect_ratio는 유한한 양수여야 합니다"));
             }
         }

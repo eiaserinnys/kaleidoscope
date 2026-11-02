@@ -36,3 +36,14 @@ it("라벨 입력과 묶음 선택지를 기존 선택기로 표시한다", () =
   fireEvent.click(screen.getByRole("menuitem", { name: "누아르" }));
   expect(runtime.act).toHaveBeenCalledWith("/select/on_change", "a");
 });
+
+it("자동 숫자로 정규화된 값이 이전과 같아도 흐린 입력 초안을 비운다", async () => {
+  runtime.values = { bpm: null };
+  const input = { type: "input", label: "BPM", kind: "number", value: { client: "bpm" }, on_change: { client: "bpm" } };
+  render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+  const field = screen.getByRole("spinbutton", { name: "BPM" }) as HTMLInputElement;
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value: "-5" } });
+  fireEvent.blur(field);
+  await vi.waitFor(() => expect(field.value).toBe(""));
+});

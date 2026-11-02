@@ -988,7 +988,7 @@ pub enum Block {
         surface: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        aspect_ratio: Option<f64>,
+        aspect_ratio: Option<Binding>,
         #[serde(default)]
         #[ts(optional, as = "Option<client::CanvasFit>")]
         fit: client::CanvasFit,
@@ -1572,7 +1572,7 @@ enum RawBlock {
     Canvas {
         surface: String,
         #[serde(default)]
-        aspect_ratio: Option<f64>,
+        aspect_ratio: Option<Binding>,
         #[serde(default)]
         fit: client::CanvasFit,
         #[serde(default)]

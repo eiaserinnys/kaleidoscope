@@ -29,7 +29,7 @@ export function snapTime(time: number, snap: Snap | null, pixelsPerSecond: numbe
 
 export function rulerStep(seconds: number, zoom: number): number {
   const wanted = seconds / Math.max(1, 5 * zoom);
-  return [0.25, 0.5, 1, 2, 5, 10, 15, 30, 60].find((step) => step >= wanted) ?? 60;
+  return [0.5, 1, 2, 5, 10, 15, 30, 60].find((step) => step >= wanted) ?? 60;
 }
 
 export function rulerTime(seconds: number): string {
@@ -146,7 +146,7 @@ export function TimelineBlock({ block, pointer }: { block: TimelineData; pointer
     <div className="ks-timeline-layout"><div className="ks-timeline-labels"><div className="ks-timeline-ruler-label"><IconButton aria-label="축소" disabled={zoom <= 1} onClick={() => setZoom((value) => Math.max(1, value / 2))}><DataIcon name="minus" size="inline" /></IconButton><IconButton aria-label="확대" disabled={zoom >= 32} onClick={() => setZoom((value) => Math.min(32, value * 2))}><DataIcon name="plus" size="inline" /></IconButton></div>{trackData.map((track) => <div key={track.id}><span>{track.label ?? track.id}</span>{track.locked ? <DataIcon name="lock" size="inline" /> : null}</div>)}</div>
       <div className="ks-timeline-scroll" ref={scroll}><div className="ks-timeline-body" ref={body} style={{ width: `${zoom * 100}%` }}>
         <div className="ks-timeline-ruler" ref={ruler} role="slider" aria-label="재생 위치" aria-valuemin={0} aria-valuemax={Math.round(seconds * 100) / 100} aria-valuenow={Math.round(currentTime * 100) / 100} tabIndex={block.on_seek ? 0 : -1} onKeyDown={(event) => { if (!block.on_seek || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return; event.preventDefault(); const increment = event.shiftKey ? 0.1 : snapValue?.step && snapValue.step > 0 ? snapValue.step : 1; void data.act(`${pointer}/on_seek`, Math.max(0, Math.min(seconds, currentTime + (event.key === "ArrowRight" ? increment : -increment)))); }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); seek(event); }} onPointerMove={(event) => { if (event.buttons) seek(event); }}>
-          {rulerTicks.map((tick) => <span key={tick} style={{ left: percent(tick) }}>{rulerTime(tick)}</span>)}
+          {rulerTicks.map((tick) => <span key={tick} className={seconds > 0 && tick / seconds >= 0.96 ? "is-end" : undefined} style={{ left: percent(tick) }}>{rulerTime(tick)}</span>)}
         </div>
         {tickData.map((tick, index) => <span key={index} className="ks-timeline-tick" style={{ left: percent(tick) }} />)}
         {trackData.map((track) => <div className="ks-timeline-track" key={track.id}>

@@ -29,6 +29,8 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
   const generation = useSyncExternalStore(data.subscribeClient, data.getClientGeneration, data.getClientGeneration);
   const root = useRef<HTMLDivElement>(null);
   const rect = useRef<Rect>({ x: 0, y: 0, width: 0, height: 0 });
+  const ratio = useBinding(`${pointer}/aspect_ratio`, block.aspect_ratio ?? null);
+  const aspect = ratio.status === "ready" && typeof ratio.value === "number" && Number.isFinite(ratio.value) && ratio.value > 0 ? ratio.value : undefined;
   const description = useBinding(`${pointer}/description`, block.description ?? null);
   const text = description.status === "ready" && typeof description.value === "string" ? description.value : "";
   useShareDescriber(root, () => ({ text, visual: true }));
@@ -42,7 +44,7 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     const update = () => {
       const bounds = host.getBoundingClientRect();
       if (bounds.width <= 0 || bounds.height <= 0) return;
-      const next = canvasRect(bounds.width, bounds.height, block.aspect_ratio, block.fit ?? "contain");
+      const next = canvasRect(bounds.width, bounds.height, aspect, block.fit ?? "contain");
       rect.current = next;
       Object.assign(element.style, { left: `${next.x}px`, top: `${next.y}px`, width: `${next.width}px`, height: `${next.height}px` });
       const dpr = surfaceDpr(next.width, next.height, window.devicePixelRatio || 1);
@@ -56,7 +58,7 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     const observer = new ResizeObserver(update);
     observer.observe(host);
     return () => { observer.disconnect(); if (attachedGeneration !== undefined) data.detachSurface(block.surface, attachedGeneration); element.remove(); };
-  }, [block.surface, block.aspect_ratio, block.fit, data, generation]);
+  }, [block.surface, aspect, block.fit, data, generation]);
 
   const pointerEvent = (phase: "down" | "move" | "up" | "cancel", event: PointerEvent<HTMLDivElement>) => {
     if (!block.on_pointer || !root.current) return;
@@ -68,7 +70,7 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     const y = Math.max(0, Math.min(1, (event.clientY - bounds.top - rect.current.y) / rect.current.height));
     void data.act(`${pointer}/on_pointer`, { phase, pointer_id: event.pointerId, x, y, buttons: event.buttons, shift: event.shiftKey, alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey });
   };
-  return <div ref={root} className="ks-canvas" role="img" aria-label={text || "캔버스"} style={{ "--ks-canvas-ratio": block.aspect_ratio } as CSSProperties}
+  return <div ref={root} className="ks-canvas" role="img" aria-label={text || "캔버스"} style={{ "--ks-canvas-ratio": aspect } as CSSProperties}
     onPointerDown={(event) => pointerEvent("down", event)} onPointerMove={(event) => pointerEvent("move", event)}
     onPointerUp={(event) => pointerEvent("up", event)} onPointerCancel={(event) => pointerEvent("cancel", event)} />;
 }

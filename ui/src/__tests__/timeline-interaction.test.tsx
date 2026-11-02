@@ -42,3 +42,10 @@ it("시간축과 구간을 키보드로 탐색하고 편집한다", () => {
   fireEvent.keyDown(item, { key: "ArrowRight" });
   expect(runtime.act).toHaveBeenCalledWith("/ui/on_edit", expect.objectContaining({ phase: "commit", kind: "move" }));
 });
+
+it("오른쪽 끝에 있는 눈금만 끝 맞춤한다", () => {
+  const view = render(<TimelineBlock block={{ ...block, duration: 14.02 }} pointer="/ui" />);
+  expect(screen.getByText("00:10.0").className).not.toContain("is-end");
+  view.rerender(<TimelineBlock block={{ ...block, duration: 10 }} pointer="/ui" />);
+  expect(screen.getByText("00:10.0").className).toContain("is-end");
+});

@@ -1155,10 +1155,14 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
     }
     match block {
         Block::Canvas {
+            aspect_ratio,
             description,
             on_pointer,
             ..
         } => {
+            if let Some(value) = aspect_ratio {
+                bind!("aspect_ratio", value);
+            }
             if let Some(value) = description {
                 bind!("description", value);
             }

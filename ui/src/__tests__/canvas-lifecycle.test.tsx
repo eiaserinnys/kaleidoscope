@@ -7,7 +7,7 @@ const data = vi.hoisted(() => ({
   subscribeClient: () => () => {}, getClientGeneration: () => 0,
   attachSurface: vi.fn(() => 1), detachSurface: vi.fn(), resizeSurface: vi.fn(), setNotice: vi.fn(), act: vi.fn(),
 }));
-vi.mock("../data/window-data", () => ({ useWindowData: () => data, useBinding: () => ({ status: "ready", value: "표면" }) }));
+vi.mock("../data/window-data", () => ({ useWindowData: () => data, useBinding: (_pointer: string, value: unknown) => ({ status: "ready", value }) }));
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -64,5 +64,23 @@ it("숨겨진 캔버스는 마지막 크기를 유지하고 처음부터 숨겨�
     if (originalTransfer) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", originalTransfer);
     else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
     globalThis.ResizeObserver = previousObserver;
+  }
+});
+
+it("비율 바인딩이 바뀌면 실제 캔버스를 세로와 정사각 무대에 맞춘다", () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 640, height: 360 } as DOMRect);
+  const original = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "transferControlToOffscreen");
+  Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", { configurable: true, value: () => ({}) });
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  try {
+    const view = render(<CanvasBlock block={{ type: "canvas", surface: "preview", aspect_ratio: 9 / 16 }} pointer="/ui" />);
+    expect(view.container.querySelector("canvas")?.style.width).toBe("202.5px");
+    expect(view.container.querySelector("canvas")?.style.height).toBe("360px");
+    view.rerender(<CanvasBlock block={{ type: "canvas", surface: "preview", aspect_ratio: 1 }} pointer="/ui" />);
+    expect(view.container.querySelector("canvas")?.style.width).toBe("360px");
+  } finally {
+    if (original) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", original);
+    else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
+    vi.unstubAllGlobals();
   }
 });
