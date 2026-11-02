@@ -67,15 +67,14 @@ async fn webhook_requires_configured_token_and_enabled_entry() {
             .unwrap()
     };
     let response = router(state.clone()).oneshot(request()).await.unwrap();
-    let (status, error) = webhook_error(response).await;
+    let (status, missing_secret_error) = webhook_error(response).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(error.code, ErrorCode::Unauthorized);
+    assert_eq!(missing_secret_error.code, ErrorCode::Unauthorized);
     assert_eq!(
-        error.id.as_deref(),
-        Some("WORKER_WEBHOOK_SECRET_NOT_CONFIGURED")
+        missing_secret_error.id.as_deref(),
+        Some("WORKER_WEBHOOK_TOKEN_INVALID")
     );
-    assert!(error.message.contains("시크릿"));
-    assert!(!error.message.contains("test-token"));
+    assert!(!missing_secret_error.message.contains("시크릿"));
     state
         .lock_db()
         .unwrap()
@@ -85,12 +84,9 @@ async fn webhook_requires_configured_token_and_enabled_entry() {
         )
         .unwrap();
     let response = router(state.clone()).oneshot(request()).await.unwrap();
-    let (status, error) = webhook_error(response).await;
+    let (status, empty_secret_error) = webhook_error(response).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(
-        error.id.as_deref(),
-        Some("WORKER_WEBHOOK_SECRET_NOT_CONFIGURED")
-    );
+    assert_eq!(empty_secret_error, missing_secret_error);
     state
         .set_app_secret(&account, "worker-test", "token", "test-token")
         .unwrap();
@@ -105,11 +101,11 @@ async fn webhook_requires_configured_token_and_enabled_entry() {
         )
         .await
         .unwrap();
-    let (status, error) = webhook_error(response).await;
+    let (status, invalid_token_error) = webhook_error(response).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(error.id.as_deref(), Some("WORKER_WEBHOOK_TOKEN_INVALID"));
-    assert!(!error.message.contains("test-token"));
-    assert!(!error.message.contains("wrong-token"));
+    assert_eq!(invalid_token_error, missing_secret_error);
+    assert!(!invalid_token_error.message.contains("test-token"));
+    assert!(!invalid_token_error.message.contains("wrong-token"));
     let response = router(state)
         .oneshot(
             Request::builder()

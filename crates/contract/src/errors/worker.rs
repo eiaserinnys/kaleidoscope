@@ -212,9 +212,9 @@ error_catalog! { ENTRIES;
     WORKER_WEBHOOK_TOKEN_INVALID(app_id) {
         class: Unauthorized,
         place: "워커 웹훅 인증",
-        cause: "요청에 포함된 인증값이 서버에 저장된 시크릿과 일치하지 않는다",
-        message: "앱 ID {app_id}: 웹훅 인증값이 저장된 시크릿과 맞지 않습니다. 저장된 시크릿에 맞는 인증값으로 다시 요청하세요.",
-        fix: "요청 인증값을 서버에 저장된 웹훅 시크릿과 맞추세요"
+        cause: "요청을 웹훅 인증할 수 없다",
+        message: "앱 ID {app_id}: 웹훅 인증에 실패했습니다. 인증값을 확인해 다시 요청하세요.",
+        fix: "인증값을 확인한 뒤 다시 요청하세요"
     }
     WORKER_WEBHOOK_BODY_ENCODING_INVALID(app_id) {
         class: InvalidRequest,

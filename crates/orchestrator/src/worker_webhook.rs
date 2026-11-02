@@ -97,9 +97,12 @@ async fn invoke_inner(
             .get("x-kaleidoscope-webhook-token")
             .and_then(|v| v.to_str().ok());
         let Some(expected) = stored.as_deref().filter(|value| !value.is_empty()) else {
-            return Err(
-                kaleidoscope_contract::errors::WORKER_WEBHOOK_SECRET_NOT_CONFIGURED(&app, &secret),
-            );
+            let error =
+                kaleidoscope_contract::errors::WORKER_WEBHOOK_SECRET_NOT_CONFIGURED(&app, &secret);
+            super::log_core_error(&error, "401");
+            return Err(kaleidoscope_contract::errors::WORKER_WEBHOOK_TOKEN_INVALID(
+                &app,
+            ));
         };
         let valid = [
             token.as_deref(),
