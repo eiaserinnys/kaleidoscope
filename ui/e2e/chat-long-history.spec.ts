@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 
 const captureDirectory = "/tmp/ks-chat-long-history-captures";
 
@@ -13,6 +13,27 @@ async function openLongHistory(page: Page, width = 1100) {
   await expect(assistants(history).last()).toBeVisible();
   await expect(chat.getByRole("textbox", { name: "메시지" })).toBeVisible();
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  await waitForFrames(page);
+  return { chat, history };
+}
+
+async function openSectionChat(page: Page) {
+  const appDefinition = JSON.parse(await readFile(new URL("../../examples/workspace-pas.json", import.meta.url), "utf8")) as Record<string, unknown>;
+  appDefinition.ui = { type: "section", title: "대화", child: { type: "chat" } };
+  const appSource = `export default ${JSON.stringify(appDefinition)}`;
+  await page.route((url) => url.pathname.endsWith("/examples/workspace-pas.json"), (route) => route.fulfill({
+    status: 200,
+    contentType: "application/javascript",
+    body: appSource,
+  }));
+  await page.setViewportSize({ width: 1132, height: 732 });
+  await page.goto("/?preview=workspace-pas&conversation=ready&history=200");
+  await page.addStyleTag({ content: ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }" });
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  const chat = page.getByTestId("app-window-workspace-pas");
+  const history = chat.getByRole("log", { name: "대화 기록" });
+  await expect(assistants(history).last()).toBeVisible();
+  await expect(chat.getByRole("textbox", { name: "메시지" })).toBeVisible();
   await waitForFrames(page);
   return { chat, history };
 }
@@ -96,6 +117,20 @@ test("긴 기록은 입력창이 여러 줄로 커져도 대화 기록 밖에서
   expect(typedValue).toBe("첫째 줄 입력\n둘째 줄 입력\n셋째 줄 입력");
   expect(grownInputHeight).toBeGreaterThan(initialInputHeight);
   expect(Math.abs(await bottomGap(history))).toBeLessThanOrEqual(1);
+});
+
+test("section 안 chat은 기록 높이를 확보하고 내부 스크롤과 입력창을 보인다", async ({ page }) => {
+  const { chat, history } = await openSectionChat(page);
+  const input = chat.getByRole("textbox", { name: "메시지" });
+  const dimensions = await history.evaluate((element) => {
+    const minimumSize = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ks-pane-min-size"));
+    return { minimumHeight: minimumSize * 2, clientHeight: element.clientHeight, scrollHeight: element.scrollHeight };
+  });
+
+  expect(dimensions.clientHeight).toBeGreaterThanOrEqual(dimensions.minimumHeight);
+  expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight);
+  await expect(input).toBeVisible();
+  await expect(input).toBeInViewport();
 });
 
 test("위로 읽는 동안 스트리밍은 scrollTop과 보이는 말풍선 위치를 유지한다", async ({ page }) => {
