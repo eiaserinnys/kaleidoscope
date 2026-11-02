@@ -29,7 +29,7 @@ const CommentCard = memo(function CommentCard({ comment, index, status, selected
     if (await change({ kind: "reply", id: comment.id, reply: { id: `r-${crypto.randomUUID()}`, role: "user", rev, body: value.trim(), created_at: new Date().toISOString() } })) setReply("");
   };
   return <article className="ks-html-comment" data-status={comment.status} id={`ks-html-comment-${comment.id}`}>
-    <button className="ks-html-comment-target" onClick={() => focus(comment.id)}><Badge value={String(index + 1)} /><Badge value={labels[comment.status]} />{status === "moved" ? <Badge value="옮겨 찾음" /> : null}<span>{comment.anchor.quote?.exact || comment.anchor.text || comment.anchor.label}</span></button>
+    <button className="ks-html-comment-target" onClick={() => focus(comment.id)}><Badge value={String(index + 1)} /><Badge value={labels[comment.status]} />{status === "moved" ? <Badge value="옮겨 찾음" /> : null}{status === "orphan" ? <Badge value={`v${comment.rev}`} /> : null}<span>{comment.anchor.quote?.exact || comment.anchor.text || comment.anchor.label}</span></button>
     <p>{comment.comment}</p>
     {comment.replies.map((item) => <p key={item.id} className="ks-html-reply">{item.role === "agent" ? "에이전트" : "나"}: {item.body}</p>)}
     <TextInput aria-label={`답글 ${index + 1}`} placeholder="답글 입력" persistent commitOnBlur={false} syncWhileFocused cancelOnEscape value={reply} onEdit={setReply} onCommit={(value) => void submit(value)} onCancel={() => { setReply(""); return ""; }} />

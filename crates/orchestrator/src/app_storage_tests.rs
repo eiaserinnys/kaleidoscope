@@ -575,7 +575,7 @@ async fn mcp_storage_tools_and_workspace_context_use_declared_account_data() {
     let account = state.mcp_account_id().unwrap();
     add_device(&state, "device-a", &account, "token-a");
     state
-        .publish_app(&definition(), "test", false, None)
+        .publish_app(&definition_with_collection(), "test", false, None)
         .unwrap();
     let workspaces = vec![
         Workspace {
@@ -665,6 +665,11 @@ async fn mcp_storage_tools_and_workspace_context_use_declared_account_data() {
     assert_eq!(note["kind"], "md");
     assert_eq!(note["revision"], Value::Null);
     assert!(note.get("content").is_none());
+    assert!(context["app_data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|item| item["entry_id"] != "docs"));
     let reset = decode(
         server
             .reset_app_storage(Parameters(

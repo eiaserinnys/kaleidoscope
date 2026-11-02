@@ -34,7 +34,9 @@ describe("리비전에서 커멘트 다시 찾기", () => {
     next.querySelector(".cta")!.textContent = "지금 시작";
     const plans = next.querySelector(".plans")!; plans.prepend(next.querySelector(".plan.best")!);
     expect(resolveAnchor(next, button).element).toBe(next.querySelector(".cta"));
-    expect(resolveAnchor(next, card).element).toBe(next.querySelector(".plan.best"));
+    const movedCard = resolveAnchor(next, card);
+    expect(movedCard.element).toBe(next.querySelector(".plan.best"));
+    expect(movedCard.status).toBe("moved");
     const renamed = parse(sample); renamed.querySelector(".cta")!.className = "action";
     expect(resolveAnchor(renamed, button).element).toBe(renamed.querySelector(".action"));
   });

@@ -234,8 +234,8 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const share = useCallback((includeText: boolean) => {
     if (!active) return `[${context.definition.name || "HTML 보기"}]`;
     const lines = [`[${context.definition.name || "HTML 보기"}: ${active.name} - v${active.rev}/${latest}]`, `저장: entry ${entry}, ${active.name}/r${active.rev}.html, ${active.name}/thread.json`];
-    if (selection) lines.push(`고른 요소: ${selection.anchor.selector} "${selection.anchor.text}"`);
-    if (edits.length) {
+    if (includeText && selection) lines.push(`고른 요소: ${selection.anchor.selector} "${selection.anchor.text}"`);
+    if (includeText && edits.length) {
       lines.push(`저장 안 한 수정 ${edits.length}건:`);
       edits.forEach((edit) => {
         if ("prop" in edit) lines.push(`- ${edit.selector} ${edit.prop} ${edit.before} → ${edit.after}`);

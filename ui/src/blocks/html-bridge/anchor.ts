@@ -92,7 +92,7 @@ export function resolveAnchor(doc: Document, anchor: HtmlAnchor, sameRevision = 
   const selected = query(anchor.selector);
   if (selected.length === 1 && numText(selected[0]) === anchor.tag) {
     const text = textOf(selected[0]);
-    if ((text && text === anchor.text) || (!text && !anchor.text && anchor.selector_stable)) return { status: "exact", element: selected[0] };
+    if ((text && text === anchor.text) || (!text && !anchor.text && anchor.selector_stable)) return { status: pathOf(selected[0]) === anchor.path ? "exact" : "moved", element: selected[0] };
     if (anchor.selector_stable) return { status: "moved", element: selected[0] };
   }
   const candidates = [...doc.querySelectorAll(anchor.tag)];

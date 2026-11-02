@@ -12,6 +12,9 @@ impl AppState {
             };
             let listed = self.list_app_storage(&account_id, &app.app.id, Some(workspace_id))?;
             for entry in &storage.entries {
+                if entry.collection {
+                    continue;
+                }
                 let contextual_workspace =
                     entry.key.contains("{workspace_id}").then_some(workspace_id);
                 let key = super::app_storage::resolve_key(entry, contextual_workspace)?;
