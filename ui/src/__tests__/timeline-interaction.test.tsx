@@ -87,6 +87,65 @@ it("확대 단추와 휠은 포인터 아래 시각을 유지하고 축소·맞�
   expect(runtime.act).toHaveBeenLastCalledWith("/ui/on_viewport", { start: 0, end: 100 });
 });
 
+it("스크롤된 현재 구간의 포인터 시각을 기준으로 확대한다", () => {
+  let next = 0;
+  const frames = new Map<number, FrameRequestCallback>();
+  vi.stubGlobal("requestAnimationFrame", (fn: FrameRequestCallback) => { frames.set(++next, fn); return next; });
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    const width = this.classList.contains("ks-timeline-body") ? 250 : 100;
+    return { left: 0, width } as DOMRect;
+  });
+  const view = render(<TimelineBlock block={{ ...viewportBlock, viewport: { start: 0, end: 40 } }} pointer="/ui" context={context} />);
+  const scroll = view.container.querySelector(".ks-timeline-scroll")!;
+  Object.defineProperty(scroll, "clientWidth", { configurable: true, value: 100 });
+  scroll.scrollLeft = 50;
+  fireEvent.scroll(scroll);
+  fireEvent.wheel(scroll, { deltaY: -100, clientX: 50 });
+  act(() => { for (const [id, callback] of [...frames]) { frames.delete(id); callback(0); } });
+
+  const viewportCalls = runtime.act.mock.calls.filter(([pointer]) => pointer === "/ui/on_viewport");
+  const zoomed = viewportCalls.at(-1)?.[1] as { start: number; end: number };
+  expect(zoomed.start + (zoomed.end - zoomed.start) * 0.5).toBeCloseTo(40);
+});
+
+it("자동 따라가기가 옮긴 화면 구간을 확대 기준으로 사용한다", () => {
+  let next = 0;
+  const frames = new Map<number, FrameRequestCallback>();
+  vi.stubGlobal("requestAnimationFrame", (fn: FrameRequestCallback) => { frames.set(++next, fn); return next; });
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains("ks-timeline-scroll") ? 100 : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    const width = this.classList.contains("ks-timeline-body") ? 250 : 100;
+    return { left: 0, width } as DOMRect;
+  });
+  runtime.bindings["/ui/position"] = { position: 80, sampled_at: 0, rate: 0, running: true, duration: 100 };
+  const view = render(<TimelineBlock block={{ ...viewportBlock, viewport: { start: 0, end: 40 } }} pointer="/ui" context={context} />);
+  fireEvent.wheel(view.container.querySelector(".ks-timeline-scroll")!, { deltaY: -100, clientX: 50 });
+  act(() => {
+    const [id, callback] = [...frames][0];
+    frames.delete(id);
+    callback(0);
+  });
+
+  const viewportCalls = runtime.act.mock.calls.filter(([pointer]) => pointer === "/ui/on_viewport");
+  const zoomed = viewportCalls.at(-1)?.[1] as { start: number; end: number };
+  expect(zoomed.start + (zoomed.end - zoomed.start) * 0.5).toBeCloseTo(30);
+  view.unmount();
+});
+
+it("새 viewport 기능을 쓰지 않는 6분 시간축은 60초 눈금을 유지한다", () => {
+  const view = render(<TimelineBlock block={{ ...block, duration: 360 }} pointer="/ui" context={context} />);
+  expect(view.container.querySelectorAll(".ks-timeline-ruler > span")).toHaveLength(7);
+});
+
+it("새 viewport 기능을 쓰는 6분 시간축은 겹침 완화 눈금을 쓴다", () => {
+  const view = render(<TimelineBlock block={{ ...viewportBlock, duration: 360, viewport: { start: 0, end: 360 } }} pointer="/ui" context={context} />);
+  expect(view.container.querySelectorAll(".ks-timeline-ruler > span")).toHaveLength(4);
+});
+
 it("Shift 휠은 구간 길이를 유지하며 가로로 이동한다", () => {
   let next = 0;
   const frames = new Map<number, FrameRequestCallback>();

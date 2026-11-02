@@ -21,6 +21,7 @@ type Marker = { id: string; time: number; label?: string; movable?: boolean };
 type Edit = { phase: "preview" | "commit" | "cancel"; kind: "move" | "resize_start" | "resize_end" | "move_marker"; id: string; track: string | null; start: number; end: number };
 type Gesture = { pointerId: number; x: number; width: number; original: Edit; current: Edit };
 type TimelineData = Extract<Block, { type: "timeline" }>;
+const LEGACY_RULER_STEPS = [0.5, 1, 2, 5, 10, 15, 30, 60];
 const RULER_STEPS = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 14400, 21600, 28800, 43200, 86400];
 
 export function snapTime(time: number, snap: Snap | null, pixelsPerSecond: number, disabled: boolean): number {
@@ -31,8 +32,9 @@ export function snapTime(time: number, snap: Snap | null, pixelsPerSecond: numbe
   return nearest !== null && Math.abs(nearest - time) * pixelsPerSecond <= (snap.threshold_px ?? 8) ? nearest : time;
 }
 
-export function rulerStep(seconds: number, zoom: number): number {
+export function rulerStep(seconds: number, zoom: number, viewportControls = false): number {
   const wanted = seconds / Math.max(1, 5 * zoom);
+  if (!viewportControls) return LEGACY_RULER_STEPS.find((step) => step >= wanted) ?? 60;
   return RULER_STEPS.find((step) => step >= wanted) ?? Math.ceil(wanted / 86400) * 86400;
 }
 
@@ -89,6 +91,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   const gesture = useRef<Gesture | null>(null), previewFrame = useRef<number | null>(null), pendingPreview = useRef<{ edit: Edit; modifiers: EventModifiers } | null>(null);
   const seekFrame = useRef<number | null>(null), pendingSeek = useRef<number | null>(null);
   const viewportFrame = useRef<number | null>(null), pendingViewport = useRef<TimelineViewport | null>(null);
+  const scrollHandler = useRef<(() => void) | null>(null);
   const wheelHandler = useRef<((event: globalThis.WheelEvent) => void) | null>(null);
   const [localViewport, setLocalViewport] = useState<TimelineViewport | null>(null), [draftViewport, setDraftViewport] = useState<TimelineViewport | null>(null), [preview, setPreview] = useState<Edit | null>(null);
   const seconds = duration.status === "ready" && typeof duration.value === "number" && Number.isFinite(duration.value) ? Math.max(0, duration.value) : 0;
@@ -147,6 +150,24 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     pendingViewport.current = normalized;
     if (viewportFrame.current === null) viewportFrame.current = requestAnimationFrame(flushViewport);
   };
+  const viewportFromScroll = (): TimelineViewport | null => {
+    const scroller = scroll.current, content = body.current;
+    const contentWidth = content?.getBoundingClientRect().width ?? 0;
+    if (!scroller || !content || contentWidth <= 0 || scroller.clientWidth <= 0 || seconds <= 0) return null;
+    const styles = getComputedStyle(scroller);
+    const padding = (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.paddingRight) || 0);
+    const width = scroller.clientWidth - padding;
+    if (width <= 0) return null;
+    const start = scroller.scrollLeft / contentWidth * seconds;
+    const span = width / contentWidth * seconds;
+    return clampViewport({ start, end: start + span }, seconds);
+  };
+  const syncViewportFromScroll = () => {
+    const scrolled = viewportFromScroll();
+    if (scrolled && canChangeViewport && !sameViewport(currentViewport.current, scrolled)) changeViewport(scrolled);
+    return scrolled ?? currentViewport.current;
+  };
+  scrollHandler.current = syncViewportFromScroll;
   useEffect(() => {
     if (!hasViewportBinding || !draftViewport || !sameViewport(boundViewport, draftViewport)) return;
     draftViewportRef.current = null;
@@ -161,8 +182,13 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     const element = scroll.current;
     if (!element) return;
     const listener = (event: globalThis.WheelEvent) => wheelHandler.current?.(event);
+    const onScroll = () => scrollHandler.current?.();
     element.addEventListener("wheel", listener, { passive: false });
-    return () => element.removeEventListener("wheel", listener);
+    element.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      element.removeEventListener("wheel", listener);
+      element.removeEventListener("scroll", onScroll);
+    };
   }, [duration.status, tracks.status]);
   useLayoutEffect(() => {
     const scroller = scroll.current, content = body.current;
@@ -181,8 +207,13 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
       if (clock?.running && scroll.current && body.current) {
         const viewport = scroll.current, x = ratio * body.current.getBoundingClientRect().width;
         const relative = x - viewport.scrollLeft;
-        if (relative > viewport.clientWidth * 0.85) viewport.scrollLeft += (relative - viewport.clientWidth * 0.75) * 0.2;
-        else if (relative < 0) viewport.scrollLeft += (relative - viewport.clientWidth * 0.1) * 0.2;
+        if (relative > viewport.clientWidth * 0.85) {
+          viewport.scrollLeft += (relative - viewport.clientWidth * 0.75) * 0.2;
+          syncViewportFromScroll();
+        } else if (relative < 0) {
+          viewport.scrollLeft += (relative - viewport.clientWidth * 0.1) * 0.2;
+          syncViewportFromScroll();
+        }
       }
       if (clock?.running) frame = requestAnimationFrame(draw);
     };
@@ -276,12 +307,12 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   if (duration.status !== "ready") return <DataState value={duration} />;
   if (tracks.status !== "ready") return <DataState value={tracks} />;
   const percent = (value: number) => `${seconds ? value / seconds * 100 : 0}%`;
-  const step = rulerStep(seconds, zoom);
+  const step = rulerStep(seconds, zoom, block.controls !== undefined || hasViewportBinding);
   const rulerTicks = Array.from({ length: Math.floor(seconds / step) + 1 }, (_, index) => index * step);
   const currentTime = clock ? clockPosition(clock, performance.timeOrigin + performance.now()) : typeof rawPosition === "number" ? rawPosition : 0;
   const zoomBy = (factor: number, pointerFraction?: number) => {
     if (!canChangeViewport || seconds <= 0) return;
-    const current = currentViewport.current;
+    const current = syncViewportFromScroll();
     const span = current.end - current.start;
     const fraction = pointerFraction ?? (currentTime - current.start) / span;
     const anchorTime = pointerFraction === undefined ? currentTime : current.start + fraction * span;
@@ -298,7 +329,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     const fraction = Math.max(0, Math.min(1, (event.clientX - (bounds?.left ?? 0) - (scroll.current?.clientLeft ?? 0) - paddingLeft) / width));
     if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
       const delta = event.shiftKey ? event.deltaY : event.deltaX;
-      const current = currentViewport.current;
+      const current = syncViewportFromScroll();
       const span = current.end - current.start;
       changeViewport(clampViewport({ start: current.start + delta / width * span, end: current.end + delta / width * span }, seconds));
     } else {

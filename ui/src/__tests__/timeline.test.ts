@@ -15,12 +15,14 @@ it("스냅은 픽셀 문턱 안의 가장 가까운 시간으로 이동하며 Sh
 
 it("8배 확대에서도 눈금은 최소 0.5초 간격이다", async () => {
   const { rulerStep } = await import("../blocks/timeline");
-  expect(rulerStep(10, 8)).toBe(0.5);
+  expect(rulerStep(10, 8, true)).toBe(0.5);
 });
 
-it("긴 전체 구간에는 읽을 수 있는 눈금을 두고 확대하면 간격을 줄인다", () => {
-  const fullStep = rulerStep(28_800, 1);
+it("새 viewport 기능을 쓰면 긴 구간 눈금을 줄이고, 기존 6분 간격은 유지한다", () => {
+  const fullStep = rulerStep(28_800, 1, true);
   expect(fullStep).toBeGreaterThan(60);
   expect(Math.floor(28_800 / fullStep) + 1).toBeLessThanOrEqual(6);
-  expect(rulerStep(28_800, 8)).toBeLessThan(fullStep);
+  expect(rulerStep(28_800, 8, true)).toBeLessThan(fullStep);
+  expect(rulerStep(360, 1)).toBe(60);
+  expect(rulerStep(360, 1, true)).toBe(120);
 });
