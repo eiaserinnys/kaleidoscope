@@ -265,7 +265,17 @@ pub(super) fn scenario(
         wait_share_view(&a_id, false, Some("A_VISIBLE_MARKER"))?;
         set_scroll_to_bottom(app, &a_id, log)?;
         minimize(core, &a_id)?;
-        let minimized_view = wait_share_view(&a_id, true, Some("A_VISIBLE_MARKER"))?;
+        call(
+            core,
+            CoreRequest::WindowSetState {
+                window_id: a_id.clone(),
+                state: std::collections::BTreeMap::from([(
+                    "share_code".into(),
+                    json!(surface_code(true)),
+                )]),
+            },
+        )?;
+        let minimized_view = wait_share_view(&a_id, true, Some("MINIMIZED_NEW_MARKER"))?;
         let images = expect_images(
             send_prompt(
                 app,
@@ -286,11 +296,11 @@ pub(super) fn scenario(
         restore(core, &a_id)?;
         ui::wait_dom(app, &format!("return document.querySelector('[data-testid=\\\"app-window-{A_ID}\\\"]')?.dataset.minimized==='false';"), "A restored")?;
         assert_restored_scroll(app, &a_id, log)?;
-        let text_sent = prompt_contains(&image_dir, "minimized A", "A_VISIBLE_MARKER")?;
+        let text_sent = prompt_contains(&image_dir, "minimized A", "MINIMIZED_NEW_MARKER")?;
         record(
             log,
             "share.minimized-text",
-            json!({"window_id":a_id,"view_contains_marker":minimized_view.text.contains("A_VISIBLE_MARKER"),"prompt_contains_marker":text_sent,"occluded":minimized_view.occluded,"passed":text_sent}),
+            json!({"window_id":a_id,"view_contains_marker":minimized_view.text.contains("MINIMIZED_NEW_MARKER"),"prompt_contains_marker":text_sent,"occluded":minimized_view.occluded,"passed":text_sent}),
         )?;
         if !text_sent {
             return Err("minimized A text did not reach the agent".into());

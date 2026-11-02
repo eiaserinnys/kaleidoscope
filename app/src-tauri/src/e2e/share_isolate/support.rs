@@ -123,11 +123,10 @@ pub(super) fn surface_definition(
         )
     };
     let mut blocks = vec![json!({"type":"html_view","value":content})];
+    let mut state = json!({});
     if scrollable {
-        let code = (1..=240)
-            .map(|line| format!("line {line:03}: share capture scroll marker\n"))
-            .collect::<String>();
-        blocks.push(json!({"type":"code","value":code,"read_only":true}));
+        state = json!({"share_code": surface_code(false)});
+        blocks.push(json!({"type":"code","value":{"state":"share_code"},"read_only":true}));
     }
     let sizes = if scrollable { vec![88, 12] } else { vec![100] };
     let ui = if scrollable {
@@ -140,9 +139,19 @@ pub(super) fn surface_definition(
         "name": name,
         "requires": { "blocks": 11, "modules": {} },
         "permissions": [],
-        "state": {},
+        "state": state,
         "ui": ui
     })
+}
+
+pub(super) fn surface_code(minimized: bool) -> String {
+    let mut code = if minimized {
+        "MINIMIZED_NEW_MARKER\n".to_owned()
+    } else {
+        String::new()
+    };
+    code.extend((1..=240).map(|line| format!("line {line:03}: share capture scroll marker\n")));
+    code
 }
 
 pub(super) fn agent_definition(out: &Path) -> Value {
