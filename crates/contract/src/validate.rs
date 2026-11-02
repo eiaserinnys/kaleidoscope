@@ -31,14 +31,19 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         return Err(crate::errors::APP_DEFINITION_REQUIRES_NEWER_SHELL());
     }
 
-    let uses_tabs_v13_field = uses_tabs_v13_field(&value);
+    let uses_v13_field = uses_tabs_v13_field(&value)
+        || value.get("state_migrate").is_some()
+        || value
+            .get("opens")
+            .and_then(Value::as_object)
+            .is_some_and(|opens| opens.contains_key("set_state"));
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
 
     let mut details = validate(&definition);
-    if uses_tabs_v13_field && definition.requires.blocks < 13 {
+    if uses_v13_field && definition.requires.blocks < 13 {
         details.push(
-            "tabs.header와 tabs.keep_mounted는 블록 세트 13판이라 requires.blocks가 13 이상이어야 합니다"
+            "tabs.header, tabs.keep_mounted, state_migrate와 opens.set_state는 블록 세트 13판이라 requires.blocks가 13 이상이어야 합니다"
                 .into(),
         );
     }

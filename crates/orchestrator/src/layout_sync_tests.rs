@@ -587,6 +587,7 @@ async fn app_version_moves_saved_windows_before_sending_open() {
         .unwrap();
     let mut definition: Value = serde_json::from_str(&test_definition(EDITOR)).unwrap();
     definition["name"] = json!("편집기 새 버전");
+    definition["requires"]["blocks"] = json!(13);
     definition["state"] = json!({"current_file":null,"source":0,"added":7});
     definition["state_migrate"] = json!({"source":"$state.current_file != null ? 1 : 0"});
     let mut events = state.0.events.subscribe();

@@ -69,6 +69,7 @@ fn explorer_opens_and_reuses_editor_with_folder_grant() {
         1
     );
     assert_eq!(window.state["current_file"], json!("a.MD"));
+    assert_eq!(window.state["source"], json!(1));
     assert_eq!(
         snapshot(&core)
             .device

@@ -1,9 +1,10 @@
-import { useContext, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useDormant, useWindowData } from "../data/window-data";
 import { DataState } from "../components/data-state";
-import { ChevronDown, ChevronRight } from "../components/icons";
+import { ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen } from "../components/icons";
+import { IconButton } from "../components/primitives";
 import { MarkdownText } from "./markdown-text";
 import { renderBlock } from "../render/render-block";
 import { patchWindowState, useWindowStateValue, useWindowVisible } from "../data/window-state";
@@ -25,6 +26,8 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
   const [local, setLocal] = useState(0);
   const [focused, setFocused] = useState(0);
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const restoreToggleFocus = useRef(false);
   const selected = useWindowStateValue(context, block.selected?.state ?? null);
   const value = block.selected ? selected : local;
   const index = typeof value === "number" && value >= 0 && value < block.tabs.length ? value : 0;
@@ -43,27 +46,49 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
     const next = (current + (event.key === "ArrowRight" ? 1 : -1) + block.tabs.length) % block.tabs.length;
     setFocused(next); refs.current[next]?.focus();
   };
-  const showHeader = block.header !== false && !pane?.collapsed;
-  return <div className="ks-data-tabs">{showHeader ? <div className="ks-data-tab-list" role="tablist">
-    {block.tabs.map((tab, n) => <button className={`ks-button ks-button-default${n === index ? " is-selected" : ""}`} role="tab" aria-selected={n === index} tabIndex={n === focused ? 0 : -1} key={n} ref={(element) => { refs.current[n] = element; }} onFocus={() => setFocused(n)} onKeyDown={(event) => keyDown(event, n)} onClick={() => select(n)}>{tab.label}</button>)}
-  </div> : null}{block.tabs.map((_, tabIndex) => <DormantPointer
-    dormant={tabIndex !== index}
-    key={tabIndex}
-    pointer={`${pointer}/tabs/${tabIndex}`}
-  />)}{block.keep_mounted ? block.tabs.map((tab, tabIndex) => {
-    const selectedTab = tabIndex === index;
-    if (!selectedTab && !visited.has(tabIndex)) return null;
-    return <div
-      aria-label={showHeader ? undefined : tab.label}
-      className="ks-data-tab-panel"
-      hidden={!selectedTab}
-      inert={!selectedTab}
+  const collapsed = block.header !== false && Boolean(pane?.collapsed);
+  const showHeader = block.header !== false && !collapsed;
+  useLayoutEffect(() => {
+    if (!restoreToggleFocus.current) return;
+    restoreToggleFocus.current = false;
+    const selector = collapsed ? ".ks-file-tree-expand button" : ".ks-file-tree-collapse button";
+    tabsRef.current?.querySelector<HTMLButtonElement>(selector)?.focus();
+  }, [collapsed]);
+  const togglePane = () => {
+    restoreToggleFocus.current = true;
+    pane?.toggle();
+  };
+  const renderChild = (tabIndex: number) => <SplitPaneContext.Provider value={null}>
+    {renderBlock(block.tabs[tabIndex].child, context, `${pointer}/tabs/${tabIndex}/child`)}
+  </SplitPaneContext.Provider>;
+  return <div className={`ks-data-tabs${collapsed ? " is-collapsed" : ""}`} ref={tabsRef}>
+    {collapsed ? <span className="ks-file-tree-expand"><IconButton aria-label="목록 펼치기" onClick={togglePane}><PanelLeftOpen /></IconButton></span> : null}
+    {showHeader ? <div className="ks-data-tab-header">
+      <div className="ks-data-tab-list" role="tablist">
+        {block.tabs.map((tab, n) => <button className={`ks-button ks-button-default${n === index ? " is-selected" : ""}`} role="tab" aria-selected={n === index} tabIndex={n === focused ? 0 : -1} key={n} ref={(element) => { refs.current[n] = element; }} onFocus={() => setFocused(n)} onKeyDown={(event) => keyDown(event, n)} onClick={() => select(n)}>{tab.label}</button>)}
+      </div>
+      {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
+    </div> : null}
+    {block.tabs.map((_, tabIndex) => <DormantPointer
+      dormant={collapsed || tabIndex !== index}
       key={tabIndex}
-      role="tabpanel"
-    >{renderBlock(tab.child, context, `${pointer}/tabs/${tabIndex}/child`)}</div>;
-  }) : <div aria-label={showHeader ? undefined : block.tabs[index].label} className="ks-data-tab-panel" role="tabpanel">
-    {renderBlock(block.tabs[index].child, context, `${pointer}/tabs/${index}/child`)}
-  </div>}</div>;
+      pointer={`${pointer}/tabs/${tabIndex}`}
+    />)}
+    {block.keep_mounted ? block.tabs.map((tab, tabIndex) => {
+      const selectedTab = tabIndex === index;
+      if (!selectedTab && !visited.has(tabIndex)) return null;
+      return <div
+        aria-label={showHeader ? undefined : tab.label}
+        className="ks-data-tab-panel"
+        hidden={!selectedTab || collapsed}
+        inert={!selectedTab || collapsed}
+        key={tabIndex}
+        role="tabpanel"
+      >{renderChild(tabIndex)}</div>;
+    }) : <div aria-label={showHeader ? undefined : block.tabs[index].label} className="ks-data-tab-panel" hidden={collapsed} inert={collapsed} role="tabpanel">
+      {renderChild(index)}
+    </div>}
+  </div>;
 }
 
 export function ToolbarBlock({ block, context, pointer }: Props<"toolbar">) {

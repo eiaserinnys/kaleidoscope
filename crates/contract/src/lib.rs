@@ -5642,6 +5642,32 @@ mod tests {
     }
 
     #[test]
+    fn u6_state_migration_and_open_state_require_block_set_13() {
+        let mut definition = serde_json::json!({
+            "id": "u6-state-version", "name": "상태 판 검사",
+            "requires": { "blocks": 12, "modules": { "files": 3 } },
+            "permissions": [{ "module": "files", "id": "docs", "access": "readwrite", "label": "문서" }],
+            "state": { "source": 0, "current_file": null },
+            "ui": { "type": "text", "value": "시험" }
+        });
+
+        definition["state_migrate"] = serde_json::json!({ "source": "$state.current_file != null ? 1 : 0" });
+        assert!(validate::parse_app_definition(&definition.to_string()).is_err());
+        definition["requires"]["blocks"] = serde_json::json!(13);
+        assert!(validate::parse_app_definition(&definition.to_string()).is_ok());
+
+        definition.as_object_mut().unwrap().remove("state_migrate");
+        definition["requires"]["blocks"] = serde_json::json!(12);
+        definition["opens"] = serde_json::json!({
+            "extensions": ["md"], "permission": "docs", "state": "current_file",
+            "set_state": { "source": 1 }
+        });
+        assert!(validate::parse_app_definition(&definition.to_string()).is_err());
+        definition["requires"]["blocks"] = serde_json::json!(13);
+        assert!(validate::parse_app_definition(&definition.to_string()).is_ok());
+    }
+
+    #[test]
     fn legacy_chat_is_cached_but_new_upload_is_rejected() {
         let legacy = include_str!("../tests/legacy-workspace-pas.json");
         assert!(validate::parse_cached_app_definition(legacy).is_ok());

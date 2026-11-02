@@ -123,6 +123,10 @@ assets?: Array<AssetDep>, permissions: Array<PermissionDecl>,
  */
 state: { [key in string]: JsonValue }, 
 /**
+ * 앱 판을 올려 기존 창을 옮길 때, 옛 상태에 없는 키의 값을 계산하는 JSONata 식.
+ */
+state_migrate?: { [key in string]: string },
+/**
  * (블록 세트 3판) 이 앱이 여는 파일. 탐색기(`explorer` 블록)에서 이 확장자의 파일을 열면 이 앱의 창이
  * 뜬다. 규칙은 `files.open`에 있다.
  */
@@ -848,7 +852,11 @@ permission: string,
 /**
  * 연 파일의 경로(그 폴더 기준 상대 경로)를 쓸 상태 키. 블록은 이 키로 그 파일을 연다.
  */
-state: string, };
+state: string,
+/**
+ * 파일을 열 때 경로와 함께 창 상태에 쓸 값.
+ */
+set_state?: { [key in string]: JsonValue }, };
 
 export type ParentItemRef = { parent_item: string, };
 

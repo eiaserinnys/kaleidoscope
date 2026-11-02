@@ -56,6 +56,28 @@ function storageFolderDefinition(readOnly = true): AppDefinition {
   };
 }
 
+function storageFolderTabsDefinition(): AppDefinition {
+  const definition = storageFolderDefinition();
+  definition.ui = {
+    type: "tabs",
+    tabs: [
+      { label: "서버", child: definition.ui },
+      { label: "다른 탭", child: { type: "text", value: "다른 탭 내용" } },
+    ],
+  };
+  return definition;
+}
+
+function storageFolderSplitDefinition(): AppDefinition {
+  const definition = storageFolderDefinition();
+  definition.ui = {
+    type: "split",
+    direction: "row",
+    children: [definition.ui, { type: "text", value: "다른 패널" }],
+  };
+  return definition;
+}
+
 function setup(definition: AppDefinition, configure?: (transport: ReturnType<typeof createFakeTransport>) => void, files: Record<string, string> = { "notes/guide.md": "# Guide", "skip.txt": "skip" }) {
   const seed = makeTestSeed({
     definitions: [definition],
@@ -142,7 +164,7 @@ describe("folder block", () => {
   });
 
   it("lists and selects flat documents from a declared storage collection", async () => {
-    const { store, call } = setup(storageFolderDefinition(), (transport) => {
+    const { store, call } = setup(storageFolderSplitDefinition(), (transport) => {
       const originalCall = transport.call.bind(transport);
       vi.spyOn(transport, "call").mockImplementation(async (request) => {
         if (request.op === "storage.list") {
@@ -165,6 +187,7 @@ describe("folder block", () => {
       if (!row) throw new Error("저장소 문서 행이 나타나지 않았습니다");
       return row;
     });
+    expect(document.querySelector(".ks-file-tree-header")).toBeTruthy();
     expect(guide.getAttribute("aria-level")).toBe("1");
     expect(call).toHaveBeenCalledWith({ op: "storage.list", window_id: "viewer-window", entry: "documents" });
     fireEvent.click(guide);
@@ -325,6 +348,22 @@ describe("folder block", () => {
     const label = await screen.findByText("비어 있음");
     expect(label.closest(".ks-row")).toBeNull();
     expect(label.closest("[data-tree-row]")?.getAttribute("data-tree-row")).toBe("empty:empty");
+  });
+
+  it("does not repeat the collection label inside a tab panel", async () => {
+    setup(storageFolderTabsDefinition(), (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => {
+        if (request.op === "storage.list") {
+          return { op: "storage.list", result: { bucket_id: "folder-storage-test", items: [] } };
+        }
+        return originalCall(request);
+      });
+    });
+
+    await screen.findByRole("tree", { name: "문서" });
+    expect(document.querySelector(".ks-file-tree-header")).toBeNull();
+    expect(screen.queryByText("문서", { exact: true })).toBeNull();
   });
 
   it("refreshes a visible collection on matching storage changes and defers hidden updates", async () => {

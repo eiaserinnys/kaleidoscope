@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -84,7 +85,7 @@ it("방문한 탭은 숨겨 유지해 접힘 상태를 이어 간다", async () 
   store.dispose();
 });
 
-it("접힌 분할 칸에서는 탭 줄을 숨기고 선택된 탭 이름을 패널에 준다", () => {
+it("탭이 분할 칸 접기를 맡고 접힌 패널을 유지하며 반대쪽 단추로 포커스를 옮긴다", async () => {
   const definition: AppDefinition = {
     id: "collapsed-tabs", name: "접힌 탭 시험", requires: { blocks: 13, modules: {} }, permissions: [],
     state: { selected: 0 },
@@ -102,14 +103,46 @@ it("접힌 분할 칸에서는 탭 줄을 숨기고 선택된 탭 이름을 패�
     window: seed.snapshot.shared.windows[0],
     definition,
   };
+  function CollapsibleTabs() {
+    const [collapsed, setCollapsed] = useState(false);
+    return <SplitPaneContext.Provider value={{ collapsed, toggle: () => setCollapsed((value) => !value) }}>
+      <TabsBlock block={definition.ui as Extract<AppDefinition["ui"], { type: "tabs" }>} context={context} pointer="/ui" />
+    </SplitPaneContext.Provider>;
+  }
   render(<windowData.WindowDataProvider store={store} windowId={context.window.id} definition={definition}>
-    <SplitPaneContext.Provider value={{ collapsed: true, toggle: () => undefined }}>
+    <CollapsibleTabs />
+  </windowData.WindowDataProvider>);
+
+  expect(screen.getByRole("tablist")).toBeTruthy();
+  const panel = document.querySelector<HTMLElement>('[role="tabpanel"]');
+  expect(panel?.hidden).toBe(false);
+  await userEvent.click(screen.getByRole("button", { name: "목록 접기" }));
+  expect(screen.queryByRole("tablist")).toBeNull();
+  expect(panel?.hidden).toBe(true);
+  expect(panel?.textContent).toContain("서버 내용");
+  await userEvent.click(screen.getByRole("button", { name: "목록 펼치기" }));
+  expect(panel?.hidden).toBe(false);
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "목록 접기" }));
+  store.dispose();
+});
+
+it("머리 없는 탭은 분할 칸 접기 단추를 그리지 않는다", () => {
+  const definition: AppDefinition = {
+    id: "headless-split-tabs", name: "머리 없는 분할 탭", requires: { blocks: 13, modules: {} }, permissions: [], state: {},
+    ui: { type: "tabs", header: false, tabs: [
+      { label: "내용", child: { type: "text", value: "내용" } },
+    ] },
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  const store = createShellStore(createFakeTransport(seed));
+  const context = { store, snapshot: seed.snapshot, window: seed.snapshot.shared.windows[0], definition };
+  render(<windowData.WindowDataProvider store={store} windowId={context.window.id} definition={definition}>
+    <SplitPaneContext.Provider value={{ collapsed: false, toggle: () => undefined }}>
       <TabsBlock block={definition.ui as Extract<AppDefinition["ui"], { type: "tabs" }>} context={context} pointer="/ui" />
     </SplitPaneContext.Provider>
   </windowData.WindowDataProvider>);
-
-  expect(screen.queryByRole("tablist")).toBeNull();
-  expect(screen.getByRole("tabpanel", { name: "서버" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "목록 접기" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "목록 펼치기" })).toBeNull();
   store.dispose();
 });
 
