@@ -30,6 +30,7 @@ pub(crate) struct Client {
     pub info: ConnectionInfo,
     pub base_path: String,
     pub(crate) logins: Arc<Logins>,
+    pub(crate) profiler: crate::profiler::Profiler,
 }
 
 impl Client {
@@ -53,6 +54,7 @@ impl Client {
             info,
             base_path: base_path.into(),
             logins: inner.login_store.clone(),
+            profiler: inner.profiler.clone(),
         })
     }
     pub fn new(
@@ -75,6 +77,7 @@ impl Client {
             info,
             base_path: base_path.to_string(),
             logins: inner.login_store.clone(),
+            profiler: inner.profiler.clone(),
         })
     }
 
@@ -108,6 +111,8 @@ impl Client {
         query: &BTreeMap<String, String>,
         body: Option<&impl Serialize>,
     ) -> Result<Option<T>, CoreError> {
+        let target = self.network_target(&method, path);
+        let started = Instant::now();
         let response = self.send(
             method,
             path,
@@ -119,11 +124,18 @@ impl Client {
             false,
             None,
         )?;
-        if response.status().as_u16() == 404 {
+        let status = response.status();
+        let response = if status.as_u16() == 404 {
+            response
+        } else {
+            Self::status(response)?
+        };
+        let body = response.bytes().map_err(server)?;
+        self.record_network(&target, status.as_u16(), body.len(), started);
+        if status.as_u16() == 404 {
             return Ok(None);
         }
-        let response = Self::status(response)?;
-        response.json().map(Some).map_err(server)
+        serde_json::from_slice(&body).map(Some).map_err(server)
     }
 
     /// 제공자는 오래 걸리는 일에 504 `pending`으로 답하고 일을 뒤에서 계속한다.
@@ -140,14 +152,15 @@ impl Client {
                 serde_json::to_value(body).map_err(|_| error::make(ErrorCode::InvalidRequest))
             })
             .transpose()?;
+        let target = self.network_target(&method, path);
         let started = Instant::now();
         loop {
+            let attempt = Instant::now();
             let response = self.send(method.clone(), path, query, body.clone(), false, None)?;
-            if response.status().as_u16() == 404 {
-                return Ok(None);
-            }
-            if response.status().as_u16() == 504 {
+            let status = response.status();
+            if status.as_u16() == 504 {
                 let bytes = response.bytes().map_err(server)?;
+                self.record_network(&target, 504, bytes.len(), attempt);
                 if matches!(
                     serde_json::from_slice::<ConversationErrorEnvelope>(&bytes),
                     Ok(envelope) if envelope.error.code == ConversationErrorCode::Pending
@@ -163,12 +176,23 @@ impl Client {
                 }
                 return Err(error::make(ErrorCode::Server));
             }
-            let response = Self::status(response)?;
-            return response.json().map(Some).map_err(server);
+            let response = if status.as_u16() == 404 {
+                response
+            } else {
+                Self::status(response)?
+            };
+            let bytes = response.bytes().map_err(server)?;
+            self.record_network(&target, status.as_u16(), bytes.len(), attempt);
+            if status.as_u16() == 404 {
+                return Ok(None);
+            }
+            return serde_json::from_slice(&bytes).map(Some).map_err(server);
         }
     }
 
     pub fn bytes(&self, path: &str) -> Result<(String, String, Vec<u8>), CoreError> {
+        let target = self.network_target(&reqwest::Method::GET, path);
+        let started = Instant::now();
         let mut response = Self::status(self.send(
             reqwest::Method::GET,
             path,
@@ -177,6 +201,7 @@ impl Client {
             false,
             None,
         )?)?;
+        let status = response.status().as_u16();
         let mime = response
             .headers()
             .get(reqwest::header::CONTENT_TYPE)
@@ -212,10 +237,41 @@ impl Client {
             .take(kaleidoscope_contract::AGENT_ATTACHMENT_MAX_BYTES + 1)
             .read_to_end(&mut bytes)
             .map_err(server)?;
+        self.record_network(&target, status, bytes.len(), started);
         if bytes.len() as u64 > kaleidoscope_contract::AGENT_ATTACHMENT_MAX_BYTES {
             return Err(error::make(ErrorCode::InvalidRequest));
         }
         Ok((name, mime, bytes))
+    }
+
+    fn network_target(&self, method: &reqwest::Method, path: &str) -> String {
+        let base_path = self.base_path.trim_end_matches('/');
+        let path = path.strip_prefix(base_path).unwrap_or(path);
+        let path = path
+            .split('/')
+            .map(|segment| {
+                if uuid::Uuid::parse_str(segment).is_ok() {
+                    "{id}"
+                } else {
+                    segment
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("/");
+        format!("{method} {path}")
+    }
+
+    fn record_network(&self, target: &str, status: u16, bytes: usize, started: Instant) {
+        self.profiler.span(
+            "network",
+            target,
+            "",
+            "",
+            started.elapsed().as_secs_f64() * 1000.0,
+            0,
+            0,
+            &format!("상태 {status}, 응답 {:.1}KB", bytes as f64 / 1024.0),
+        );
     }
 
     pub fn send(
@@ -233,17 +289,15 @@ impl Client {
         {
             return Err(error::make(ErrorCode::PermissionDenied));
         }
-        let client = reqwest::blocking::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(if stream { None } else { Some(REQUEST_TIMEOUT) })
-            .build()
-            .map_err(server)?;
+        let client = crate::http_client::shared()?;
         let send = |token: &str| {
             let mut request = client
                 .request(method.clone(), format!("{}{}", self.info.base_url, path))
                 .bearer_auth(token)
                 .query(query);
+            if !stream {
+                request = request.timeout(REQUEST_TIMEOUT);
+            }
             if let Some(body) = &body {
                 request = request.json(body);
             }

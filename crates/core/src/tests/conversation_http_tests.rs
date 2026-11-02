@@ -86,6 +86,7 @@ fn client(base: String, temp: &TempDir) -> Client {
         },
         base_path: "/v1".into(),
         logins,
+        profiler: Default::default(),
     }
 }
 

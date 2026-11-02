@@ -167,7 +167,7 @@ test("코드와 미디어를 넓은 폭과 400px에서 캡처한다", async ({ b
     await page.screenshot({ path: info.outputPath(`media-audio-${width}.png`) });
     await page.goto("/?preview=md-editor");
     await page.getByRole("button", { name: "문서 폴더 고르기" }).click();
-    await page.getByRole("button", { name: "Kaleidoscope.md" }).click();
+    await page.getByRole("treeitem", { name: "Kaleidoscope.md" }).click();
     await expect(page.getByRole("textbox", { name: "마크다운 편집기" })).toBeVisible();
     await page.screenshot({ path: info.outputPath(`markdown-${width}.png`) });
     await context.close();
