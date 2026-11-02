@@ -405,13 +405,6 @@ error_catalog! { ENTRIES;
         message: "앱에 연결 {connection} 권한이 없어 서버가 요청을 중계하지 않았습니다. 앱의 연결 권한을 확인하세요.",
         fix: "앱의 연결 권한을 확인하세요"
     }
-    CONN_REGISTRY_STORAGE_CONFLICT() {
-        class: Conflict,
-        place: "앱 저장소 응답 확인",
-        cause: "앱 저장소 값이 읽은 뒤 바뀌었다",
-        message: "앱 저장 항목이 읽은 뒤 바뀌었습니다. 최신 값을 다시 읽고 수정 내용을 적용하세요.",
-        fix: "최신 값을 다시 읽으세요"
-    }
     CONN_REGISTRY_STORAGE_RESPONSE_INVALID() {
         class: Unavailable,
         place: "앱 저장소 응답 확인",

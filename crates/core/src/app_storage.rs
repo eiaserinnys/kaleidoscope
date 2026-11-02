@@ -86,7 +86,7 @@ pub(crate) fn map_error(inner: &Arc<Inner>, file: &LinkFile, err: RegistryError)
             kaleidoscope_contract::errors::STORAGE_SERVER_UNAUTHORIZED()
         }
         RegistryError::NotFound => kaleidoscope_contract::errors::STORAGE_SERVER_NOT_FOUND(),
-        RegistryError::Failure(detail) => {
+        RegistryError::Failure { detail, .. } => {
             kaleidoscope_contract::errors::STORAGE_SERVER_REQUEST_FAILED().and_details(vec![detail
                 .lines()
                 .next()
