@@ -216,3 +216,27 @@ it("화면 고정에 실패하면 숨김 상태를 만들지 않는다", async (
   expect(call.mock.calls.map(([request]) => request.op)).toEqual(["share.view", "share.freeze"]);
   expect(document.documentElement.dataset.shareIsolating).toBeUndefined();
 });
+
+it("동시에 보낸 준비는 앞의 해제가 끝난 뒤 다음 고정을 시작한다", async () => {
+  layout();
+  vi.spyOn(visible, "describeVisible").mockReturnValue({ text: "가린 창", visual: true });
+  const operations: string[] = [];
+  const call = vi.fn(async (request: { op: string }) => {
+    operations.push(request.op);
+    return request.op === "share.freeze"
+      ? { op: "share.freeze", frozen: true } as const
+      : { op: request.op } as never;
+  });
+  const store = { call } as unknown as ShellStore;
+  function Probe() {
+    const root = useRef<HTMLDivElement>(null);
+    useShareView({ windowId: "target", root, enabled: true, store });
+    return <section className="ks-window" data-minimized="true"><div ref={root} /></section>;
+  }
+  render(<Probe />);
+  await act(async () => {});
+  operations.length = 0;
+  await act(async () => { await Promise.all([prepareShareForSend(store), prepareShareForSend(store)]); });
+  const gates = operations.filter((op) => op === "share.freeze" || op === "share.unfreeze");
+  expect(gates).toEqual(["share.freeze", "share.unfreeze", "share.freeze", "share.unfreeze"]);
+});

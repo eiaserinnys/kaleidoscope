@@ -43,7 +43,15 @@ async function twoFrames(): Promise<void> {
   await nextFrame();
 }
 
-export async function prepareShareForSend(store: ShellStore): Promise<void> {
+let prepareTail: Promise<void> = Promise.resolve();
+
+export function prepareShareForSend(store: ShellStore): Promise<void> {
+  const run = prepareTail.then(() => prepareOnce(store)).catch(() => undefined);
+  prepareTail = run;
+  return run;
+}
+
+async function prepareOnce(store: ShellStore): Promise<void> {
   await flushShareViews();
   const targets = Array.from(active.entries()).filter(([, entry]) =>
     entry.element.getClientRects().length > 0

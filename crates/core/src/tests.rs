@@ -32,6 +32,7 @@ mod pc_tests;
 mod profiler_concurrency_tests;
 mod profiler_tests;
 mod server_switch_tests;
+mod share_capture_tests;
 
 const MD_EDITOR: &str = include_str!("../../../apps/md-editor.json");
 const MD_VIEWER: &str = include_str!("../../contract/fixtures/md-viewer.json");

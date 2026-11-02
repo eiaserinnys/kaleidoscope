@@ -596,6 +596,7 @@ pub(crate) fn capture_for_send(
     conversation: &str,
     existing: &[ConversationUpload],
 ) -> (Vec<ConversationUpload>, Vec<(String, String)>) {
+    let mut isolated = std::mem::take(&mut *inner.isolated_captures.lock().unwrap());
     let candidates = {
         let state = inner.state.lock().unwrap();
         let active_workspace = state.device.active_workspace_id.clone();
@@ -665,8 +666,7 @@ pub(crate) fn capture_for_send(
         if attachments.len() >= AGENT_ATTACHMENTS_MAX {
             break;
         }
-        let isolated = inner.isolated_captures.lock().unwrap().remove(&id);
-        let png = if let Some(capture) = isolated {
+        let png = if let Some(capture) = isolated.remove(&id) {
             prepare_png(&capture.bytes, capture.crop).or_else(|| {
                 eprintln!("같이 보기 격리 PNG를 처리하지 못했습니다.");
                 None
