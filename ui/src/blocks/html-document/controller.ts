@@ -9,7 +9,7 @@ import { htmlViewSource, sanitizeFragment } from "../html-view-frame";
 import { applyEdit, findNumber, invertEdit, numberElements, serializeOriginal, type HtmlEdit } from "../html-bridge/edit";
 import type { AnchorStatus, FrameSelection, FrameToParent, ParentToFrame } from "../html-bridge/frame-protocol";
 import { emptyThread, readThread, writeThreadChange } from "./storage";
-import { listRevisions, type Comment, type Thread, type ThreadChange } from "./thread";
+import { anchorRevision, listRevisions, type Comment, type Thread, type ThreadChange } from "./thread";
 
 type HtmlBlock = Extract<Block, { type: "html_view" }> & { document: DocumentRef };
 const nOf = (element: Element | null) => element ? Number(element.getAttribute("data-ks-n")) || null : null;
@@ -111,7 +111,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     void load(); return () => { readSequence.current++; };
   }, [active?.name, active?.rev, entry, refreshThread, store, windowId]);
   const comments = useMemo(() => active ? thread.comments.filter((comment) => comment.rev <= active.rev) : [], [thread, active]);
-  const frameComments = useMemo(() => comments.map((comment, index) => ({ id: comment.id, anchor: comment.anchor, number: index + 1, sameRevision: comment.rev === active?.rev && !dirty })), [active?.rev, comments, dirty]);
+  const frameComments = useMemo(() => comments.map((comment, index) => ({ id: comment.id, anchor: comment.anchor, number: index + 1, sameRevision: anchorRevision(comment) === active?.rev && !dirty })), [active?.rev, comments, dirty]);
   useEffect(() => { send({ type: "ks-html-comments", comments: frameComments }); }, [frameComments, send]);
   useEffect(() => { send({ type: "ks-html-mode", mode }); }, [mode, send]);
   const writeChange = useCallback(async (change: ThreadChange) => {
@@ -207,7 +207,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   }, [frameComments, keyAction, mode, record, send]);
   const addComment = useCallback(async (body: string) => {
     const current = activeRef.current; if (!current || !selection || !body.trim()) return false;
-    const comment: Comment = { id: makeId("c"), rev: current.rev, status: "needs_agent_review", anchor: selection.anchor, comment: body.trim(), created_at: new Date().toISOString(), resolved_rev: null, replies: [] };
+    const comment: Comment = { id: makeId("c"), rev: current.rev, anchor_rev: current.rev, status: "needs_agent_review", anchor: selection.anchor, comment: body.trim(), created_at: new Date().toISOString(), resolved_rev: null, replies: [] };
     return writeChange({ kind: "add", comment });
   }, [selection, writeChange]);
   const edits = useMemo(() => undo.map((edit) => {
@@ -243,7 +243,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
       });
     }
     const open = comments.map((comment, index) => ({ comment, index })).filter(({ comment }) => comment.status !== "resolved");
-    if (open.length) { lines.push(`미해결 커멘트 ${open.length}건:`); open.forEach(({ comment, index }) => lines.push(`- ${comment.id} #${index + 1} [${comment.status === "needs_agent_review" ? "검토 요청" : "답변 도착"}] v${comment.rev}, ${results[comment.id] === "orphan" ? "못 찾음" : "제자리"}: ${comment.anchor.label} "${comment.anchor.quote?.exact ?? comment.anchor.text}": ${comment.comment}`)); }
+    if (open.length) { lines.push(`미해결 커멘트 ${open.length}건:`); open.forEach(({ comment, index }) => lines.push(`- ${comment.id} #${index + 1} [${comment.status === "needs_agent_review" ? "검토 요청" : "답변 도착"}] v${comment.rev}${anchorRevision(comment) !== comment.rev ? `, 앵커 v${anchorRevision(comment)}` : ""}, ${results[comment.id] === "orphan" ? "못 찾음" : "제자리"}: ${comment.anchor.label} "${comment.anchor.quote?.exact ?? comment.anchor.text}": ${comment.comment}`)); }
     if (includeText && text) lines.push(text);
     return lines.join("\n");
   }, [active, comments, context.definition.name, edits, entry, latest, results, selection, text]);

@@ -31,7 +31,7 @@ const CommentCard = memo(function CommentCard({ comment, index, status, selected
     <div className="ks-html-actions">
       <Button disabled={saving || !reply.trim()} onClick={() => void submit(reply)}>답글</Button>
       <Button disabled={saving} onClick={() => void change({ kind: "status", id: comment.id, status: comment.status === "resolved" ? "needs_agent_review" : "resolved", resolved_rev: comment.status === "resolved" ? null : rev })}>{comment.status === "resolved" ? "다시 열기" : "해결"}</Button>
-      {status === "orphan" ? <Button disabled={saving || !selected} onClick={() => { if (selected) void change({ kind: "anchor", id: comment.id, anchor: selected.anchor }); }}>여기로 옮기기</Button> : null}
+      {status === "orphan" ? <Button disabled={saving || !selected} onClick={() => { if (selected) void change({ kind: "anchor", id: comment.id, anchor: selected.anchor, anchor_rev: rev }); }}>여기로 옮기기</Button> : null}
       <Button disabled={saving} onClick={() => void change({ kind: "delete", id: comment.id })}>삭제</Button>
     </div>
   </article>;
