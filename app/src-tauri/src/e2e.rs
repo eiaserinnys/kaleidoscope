@@ -15,18 +15,24 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
 mod local_agent;
+#[cfg(windows)]
+mod share_isolate;
 mod ui;
 mod update;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ScenarioKind {
     WebView,
+    #[cfg(windows)]
+    ShareIsolate,
     Update,
     LocalAgent,
 }
 
 fn scenario_kind(name: Option<&str>) -> ScenarioKind {
     match name {
+        #[cfg(windows)]
+        Some("share-isolate") => ScenarioKind::ShareIsolate,
         Some("update" | "update-reject") => ScenarioKind::Update,
         Some("local-agent") => ScenarioKind::LocalAgent,
         _ => ScenarioKind::WebView,
@@ -58,6 +64,10 @@ pub(crate) fn setting(name: &str) -> Option<std::ffi::OsString> {
 
 pub(crate) fn observe_ui(request: &CoreRequest) {
     ui::observe(request);
+}
+
+pub(crate) fn complete_ui(request: &CoreRequest, elapsed_ms: u128) {
+    ui::complete(request, elapsed_ms);
 }
 
 const IPC_TEST: &str = r#"
@@ -473,6 +483,8 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
             }
         }) {
             Ok(mut log) => match match selected {
+                #[cfg(windows)]
+                ScenarioKind::ShareIsolate => share_isolate::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::WebView => scenario(&app, &core, &out, &mut log),
                 ScenarioKind::Update => update::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::LocalAgent => local_agent::scenario(&core, &out, &mut log),
@@ -501,6 +513,11 @@ mod tests {
     fn local_agent_setting_selects_process_lifetime_scenario() {
         assert_eq!(scenario_kind(Some("local-agent")), ScenarioKind::LocalAgent);
         assert_eq!(scenario_kind(Some("update")), ScenarioKind::Update);
+        #[cfg(windows)]
+        assert_eq!(
+            scenario_kind(Some("share-isolate")),
+            ScenarioKind::ShareIsolate
+        );
         assert_eq!(scenario_kind(None), ScenarioKind::WebView);
     }
 

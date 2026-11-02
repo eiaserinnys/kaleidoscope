@@ -114,6 +114,14 @@ pub trait WebHost: Send + Sync + 'static {
     fn capture_shell(&self) -> Result<Option<(Vec<u8>, f64)>, CoreError> {
         Ok(None)
     }
+    /// 화면의 현재 구성을 고정해 격리 캡처 중 외부에 변화가 보이지 않게 한다.
+    fn freeze(&self) -> Result<bool, CoreError> {
+        Ok(false)
+    }
+    /// `freeze`로 고정한 화면을 원상 복구한다.
+    fn unfreeze(&self) -> Result<(), CoreError> {
+        Ok(())
+    }
     fn detach(&self, window_id: &str) -> Result<(), CoreError>;
 }
 
@@ -189,6 +197,7 @@ pub(crate) struct Inner {
     pub(crate) local_agents: local_agent::LocalAgents,
     pub(crate) conversation_streams: conversation_stream::Streams,
     pub(crate) conversation_sends: Mutex<HashSet<String>>,
+    pub(crate) isolated_captures: Mutex<HashMap<String, share::IsolatedCapture>>,
     pub(crate) connections: Mutex<Vec<kaleidoscope_contract::registry::ConnectionInfo>>,
     pub(crate) login_store: Arc<logins::Logins>,
     pub(crate) login_in_progress: Mutex<HashSet<String>>,
@@ -365,6 +374,7 @@ impl Core {
             local_agents: local_agent::LocalAgents::default(),
             conversation_streams: conversation_stream::Streams::default(),
             conversation_sends: Mutex::new(HashSet::new()),
+            isolated_captures: Mutex::new(HashMap::new()),
             connections: Mutex::new(Vec::new()),
             login_store,
             login_in_progress: Mutex::new(HashSet::new()),
@@ -659,6 +669,9 @@ impl Core {
             CoreRequest::ShareView { window_id, view } => {
                 share::view(&self.inner, &window_id, view)
             }
+            CoreRequest::ShareFreeze {} => Ok(share::freeze(&self.inner)),
+            CoreRequest::ShareCapture { window_id } => share::capture(&self.inner, &window_id),
+            CoreRequest::ShareUnfreeze {} => Ok(share::unfreeze(&self.inner)),
             CoreRequest::UpdateRestart {} => self.restart_for_update(),
             CoreRequest::DataAttach { window_id, dormant } => {
                 data_runtime::attach(&self.inner, &window_id, Some(dormant))

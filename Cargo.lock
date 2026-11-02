@@ -2239,6 +2239,7 @@ version = "0.6.4"
 dependencies = [
  "base64 0.22.1",
  "dirs",
+ "image",
  "kaleidoscope-core",
  "kaleidoscope-orchestrator",
  "serde_json",

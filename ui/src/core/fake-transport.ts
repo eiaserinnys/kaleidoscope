@@ -405,6 +405,12 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   async function callRequest(request: CoreRequest): Promise<CoreReply> {
     calls.push(clone(request));
     switch (request.op) {
+      case "share.freeze":
+        return { op: "share.freeze", frozen: false };
+      case "share.capture":
+        return { op: "share.capture", captured: false };
+      case "share.unfreeze":
+        return { op: "share.unfreeze" };
       case "share.set": {
         const window = findWindow(request.window_id);
         if (snapshot.sharing.includes(request.window_id) === request.on) return { op: "share.set" };

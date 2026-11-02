@@ -17,7 +17,7 @@ test("작업 표시줄에서 창을 복원하고 최대화와 이전 크기로 �
   await expect(taskbarItem).toHaveAttribute("data-state", "active");
 
   await window.getByRole("button", { name: "창 최소화" }).click();
-  await expect(window).toBeHidden();
+  await expect(window).toHaveAttribute("data-minimized", "true");
   await expect(page.locator(".ks-taskbar")).toHaveCount(1);
   await expect(taskbarItem).toHaveAttribute("data-state", "minimized");
   await taskbarItem.click({ button: "right" });
@@ -69,7 +69,7 @@ test("작업 표시줄에서 창을 복원하고 최대화와 이전 크기로 �
   await expect(window).toHaveAttribute("data-maximized", "false");
 
   await taskbarItem.click();
-  await expect(window).toBeHidden();
+  await expect(window).toHaveAttribute("data-minimized", "true");
   await expect(taskbarItem).toHaveAttribute("data-state", "minimized");
   await taskbarItem.click();
   await expect(window).toBeVisible();

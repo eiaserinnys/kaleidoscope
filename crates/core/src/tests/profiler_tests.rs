@@ -125,6 +125,7 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
         view: kaleidoscope_contract::VisibleView {
             text: text.clone(),
             visual: false,
+            occluded: false,
             image_base64: None,
             bounds: Rect {
                 x: 0,

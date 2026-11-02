@@ -581,6 +581,9 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::ConnectionLogin { .. }
         | CoreRequest::ShareSet { .. }
         | CoreRequest::ShareView { .. }
+        | CoreRequest::ShareFreeze {}
+        | CoreRequest::ShareCapture { .. }
+        | CoreRequest::ShareUnfreeze {}
         | CoreRequest::UpdateRestart {} => Err(error::make(ErrorCode::InvalidRequest)),
         _ => Err(error::make(ErrorCode::InvalidRequest)),
     }
