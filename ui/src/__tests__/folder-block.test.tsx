@@ -5,7 +5,7 @@ import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import { normalizeBlock } from "../render/render-block";
-import { collectionFolderCapabilities, fileFolderCapabilities } from "../blocks/folder-backend";
+import { createCollectionFolderBackend, createFileFolderBackend } from "../blocks/folder-backend";
 import { grantFor, makeTestSeed } from "./fixtures";
 
 afterEach(() => {
@@ -13,12 +13,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function fileFolderDefinition(): AppDefinition {
+function fileFolderDefinition(access: "read" | "readwrite" = "read", readOnly = true): AppDefinition {
   return {
     id: "folder-files-test",
     name: "파일 폴더 시험",
     requires: { blocks: 13, modules: { files: 1 } },
-    permissions: [{ module: "files", id: "docs", access: "read", label: "문서" }],
+    permissions: [{ module: "files", id: "docs", access, label: "문서" }],
     state: { selected: null },
     ui: {
       type: "folder",
@@ -26,12 +26,12 @@ function fileFolderDefinition(): AppDefinition {
       extensions: ["md"],
       selected: { state: "selected" },
       on_select: { set_state: "selected" },
-      read_only: true,
+      read_only: readOnly,
     } as unknown as Block,
   };
 }
 
-function storageFolderDefinition(): AppDefinition {
+function storageFolderDefinition(readOnly = true): AppDefinition {
   return {
     id: "folder-storage-test",
     name: "저장소 폴더 시험",
@@ -50,7 +50,7 @@ function storageFolderDefinition(): AppDefinition {
       extensions: ["md"],
       selected: { state: "selected" },
       on_select: { set_state: "selected" },
-      read_only: true,
+      read_only: readOnly,
     } as unknown as Block,
   };
 }
@@ -74,10 +74,16 @@ function setup(definition: AppDefinition, configure?: (transport: ReturnType<typ
 
 describe("folder block", () => {
   it("reports read and mutation capabilities from the folder root", () => {
-    expect(fileFolderCapabilities(true, "folder", false)).toMatchObject({ createFile: true, rename: true, reveal: true, absolutePath: true });
-    expect(fileFolderCapabilities(true, "pc", false).createFile).toBe(false);
-    expect(fileFolderCapabilities(true, "folder", true).rename).toBe(false);
-    expect(collectionFolderCapabilities()).toMatchObject({ createFile: false, rename: false, permanentDelete: false, properties: false });
+    const store = createShellStore(createFakeTransport(makeTestSeed()));
+    const writable = createFileFolderBackend({ store, windowId: "viewer-window", permission: "docs", appId: "test", rootPath: "/docs", writable: true, scope: "folder", readOnly: false });
+    const pc = createFileFolderBackend({ store, windowId: "viewer-window", permission: "docs", appId: "test", rootPath: "", writable: true, scope: "pc", readOnly: false });
+    const readOnly = createFileFolderBackend({ store, windowId: "viewer-window", permission: "docs", appId: "test", rootPath: "/docs", writable: true, scope: "folder", readOnly: true });
+    const collection = createCollectionFolderBackend({ store, windowId: "viewer-window", entry: "documents", appId: "test", prefix: "docs", markdown: true, readOnly: true });
+    expect(writable.capabilities).toMatchObject({ createFile: true, rename: true, reveal: true, absolutePath: true });
+    expect(pc.capabilities.createFile).toBe(false);
+    expect(readOnly.capabilities.rename).toBe(false);
+    expect(collection.capabilities).toMatchObject({ createFile: false, rename: false, permanentDelete: false, properties: true });
+    store.dispose();
   });
 
   it("lists a file root through the shared tree, expands with arrows, and selects a file", async () => {
@@ -129,6 +135,40 @@ describe("folder block", () => {
     await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.selected).toBe("notes/guide.md"));
   });
 
+  it("opens write actions from the file row without changing the active selection", async () => {
+    const { store } = setup(fileFolderDefinition("readwrite", false));
+    const notes = await screen.findByRole("treeitem", { name: "notes" });
+    fireEvent.keyDown(notes, { key: "ArrowRight" });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+
+    fireEvent.contextMenu(guide);
+
+    expect(await screen.findByRole("menuitem", { name: "이름 바꾸기" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "휴지통으로 삭제" })).toBeTruthy();
+    expect(store.getSnapshot()?.shared.windows[0].state.selected).toBeNull();
+  });
+
+  it("uses the same create and rename menu for collection documents", async () => {
+    const { call } = setup(storageFolderDefinition(false), (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => {
+        if (request.op === "storage.list") return {
+          op: "storage.list",
+          result: { bucket_id: "folder-storage-test", items: [{ doc: "guide.md", revision: "rev-1", updated_at: "2026-11-02T00:00:00Z", byte_size: 7 as unknown as bigint }] },
+        };
+        return originalCall(request);
+      });
+    });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+
+    fireEvent.contextMenu(guide);
+
+    expect(await screen.findByRole("menuitem", { name: "새 문서" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "이름 바꾸기" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /영구 삭제/ })).toBeTruthy();
+    expect(call).toHaveBeenCalledWith({ op: "storage.list", window_id: "viewer-window", entry: "documents" });
+  });
+
   it("refreshes a visible collection on matching storage changes and defers hidden updates", async () => {
     let documents = ["notes/guide.md"];
     let listError = false;
@@ -161,14 +201,14 @@ describe("folder block", () => {
       transport.emit({ event: "storage.update", window_id: "other-window", update: { kind: "changed", changed: { bucket_id: "folder-storage-test", item: { entry_id: "documents", key: "documents/notes/renamed.md", kind: "md", revision: "rev-2", exists: true } } } });
       transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "folder-storage-test", item: { entry_id: "other", key: "other.md", kind: "md", revision: "rev-2", exists: true } } } });
     });
-    expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(1);
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(2));
 
     documents = ["notes/changed.md"];
     await act(async () => {
       transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "folder-storage-test", item: { entry_id: "documents", key: "documents/notes/changed.md", kind: "md", revision: "rev-2", exists: true } } } });
     });
     await waitFor(() => expect(document.querySelector('[data-tree-id="doc:notes/changed.md"]')).toBeTruthy());
-    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(2));
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(3));
 
     documents = ["notes/renamed.md"];
     const hidden = structuredClone(store.getSnapshot()!);
@@ -177,20 +217,20 @@ describe("folder block", () => {
     await act(async () => {
       transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "folder-storage-test", item: { entry_id: "documents", key: "documents/notes/renamed.md", kind: "md", revision: "rev-2", exists: true } } } });
     });
-    expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(2);
+    expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(3);
 
     const visible = structuredClone(hidden);
     visible.shared.windows[0].minimized = false;
     await act(async () => { transport.emit({ event: "state.changed", snapshot: visible }); });
     await waitFor(() => expect(document.querySelector('[data-tree-id="doc:notes/renamed.md"]')).toBeTruthy());
-    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(3));
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(4));
 
     documents = ["notes/moved.md"];
     await act(async () => {
       transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "moved", moved: { bucket_id: "folder-storage-test", entry_id: "documents", from_doc: "notes/renamed.md", to_doc: "notes/moved.md", revision: "rev-3" } } });
     });
     await waitFor(() => expect(document.querySelector('[data-tree-id="doc:notes/moved.md"]')).toBeTruthy());
-    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(4));
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(5));
 
     listError = true;
     await act(async () => {
@@ -198,7 +238,7 @@ describe("folder block", () => {
     });
     expect((await screen.findByRole("alert")).textContent).toContain("저장소 다시 읽기 실패");
     expect(document.querySelector('[data-tree-id="doc:notes/moved.md"]')).toBeTruthy();
-    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(5));
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(6));
   });
 
   it("normalizes both legacy file-tree shapes into the folder renderer", () => {

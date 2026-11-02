@@ -10,6 +10,7 @@ export interface MenuItem {
   danger?: boolean;
   checked?: boolean;
   description?: string;
+  shortcut?: string;
 }
 
 export interface MenuHeading {
@@ -27,11 +28,12 @@ export type MenuEntry = MenuItem | MenuSeparator | MenuHeading;
 
 export interface MenuProps {
   anchor: HTMLElement;
+  anchorPoint?: { x: number; y: number };
   items: MenuEntry[];
   onClose: () => void;
 }
 
-export function Menu({ anchor, items, onClose }: MenuProps) {
+export function Menu({ anchor, anchorPoint, items, onClose }: MenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [position, setPosition] = useState({ left: 0, top: 0 });
@@ -45,13 +47,14 @@ export function Menu({ anchor, items, onClose }: MenuProps) {
       : 0;
     const maxLeft = Math.max(window.innerWidth - menuWidth - viewportInset, viewportInset);
     const menuHeight = menu?.getBoundingClientRect().height ?? 0;
-    const belowTop = rect.bottom;
-    const aboveTop = rect.top - menuHeight;
+    const belowTop = anchorPoint?.y ?? rect.bottom;
+    const aboveTop = anchorPoint ? anchorPoint.y - menuHeight : rect.top - menuHeight;
+    const anchorLeft = anchorPoint?.x ?? rect.left;
     const fitsBelow = belowTop >= viewportInset
       && belowTop + menuHeight <= window.innerHeight - viewportInset;
-    const fitsAbove = aboveTop >= viewportInset && rect.top <= window.innerHeight - viewportInset;
+    const fitsAbove = aboveTop >= viewportInset && (anchorPoint !== undefined || rect.top <= window.innerHeight - viewportInset);
     setPosition({
-      left: Math.min(Math.max(rect.left, viewportInset), maxLeft),
+      left: Math.min(Math.max(anchorLeft, viewportInset), maxLeft),
       top: fitsBelow
         ? belowTop
         : fitsAbove
@@ -99,7 +102,7 @@ export function Menu({ anchor, items, onClose }: MenuProps) {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [anchor, onClose]);
+  }, [anchor, anchorPoint, onClose]);
 
   return createPortal(
     <div
@@ -137,10 +140,11 @@ export function Menu({ anchor, items, onClose }: MenuProps) {
             itemRefs.current[index] = element;
           }}
           role="menuitem"
+          aria-keyshortcuts={item.shortcut?.replace(/\bCtrl\b/g, "Control")}
           type="button"
         >
           <span className="ks-menu-item-copy"><span className="ks-menu-item-label">{item.label}</span>{item.description ? <span className="ks-menu-item-description">{item.description}</span> : null}</span>
-          {item.checked ? <span aria-hidden="true" className="ks-menu-check">✓</span> : null}
+          {item.checked ? <span aria-hidden="true" className="ks-menu-check">✓</span> : item.shortcut ? <span aria-hidden="true" className="ks-menu-shortcut">{item.shortcut}</span> : null}
         </button>
       ))}
     </div>,

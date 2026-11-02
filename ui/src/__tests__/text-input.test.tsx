@@ -27,6 +27,14 @@ describe("TextInput", () => {
     expect(input.selectionEnd).toBe("작업 1".length);
   });
 
+  it("selects a renamed filename without its final extension", () => {
+    render(<TextInput aria-label="이름" selectBeforeExtension value="draft.md" onCommit={vi.fn()} onCancel={vi.fn()} />);
+
+    const input = screen.getByRole("textbox", { name: "이름" }) as HTMLInputElement;
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(5);
+  });
+
   it("commits the edited value with Enter", async () => {
     const user = userEvent.setup();
     const onCommit = vi.fn();

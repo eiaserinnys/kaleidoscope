@@ -4,21 +4,32 @@ export interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElemen
   size?: "compact";
   persistent?: boolean;
   commitOnBlur?: boolean;
+  cancelOnBlur?: boolean;
   syncWhileFocused?: boolean;
   cancelOnEscape?: boolean;
+  selectBeforeExtension?: boolean;
   value: string;
   onEdit?: (value: string) => void;
   onCommit: (value: string) => void;
   onCancel: () => void | string;
 }
 
-export function TextInput({ size, value, persistent = false, commitOnBlur = true, syncWhileFocused = false, cancelOnEscape = false, onEdit, onCommit, onCancel, onFocus, ...props }: TextInputProps) {
+export function TextInput({ size, value, persistent = false, commitOnBlur = true, cancelOnBlur = false, syncWhileFocused = false, cancelOnEscape = false, selectBeforeExtension = false, onEdit, onCommit, onCancel, onFocus, ...props }: TextInputProps) {
   const [draft, setDraft] = useState(value);
   const finished = useRef(false);
   const focused = useRef(false);
   const baseline = useRef(value);
   const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (!persistent) inputRef.current?.select(); }, [persistent]);
+  useEffect(() => {
+    const input = inputRef.current;
+    if (persistent || !input) return;
+    if (!selectBeforeExtension) {
+      input.select();
+      return;
+    }
+    const dot = input.value.lastIndexOf(".");
+    input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
+  }, [persistent, selectBeforeExtension]);
   useEffect(() => { if (persistent && (!focused.current || syncWhileFocused)) setDraft(value); }, [persistent, syncWhileFocused, value]);
   const finish = () => {
     if (!persistent && finished.current) return;
@@ -33,8 +44,12 @@ export function TextInput({ size, value, persistent = false, commitOnBlur = true
   };
   return <input {...props} autoFocus={!persistent} className={`ks-text-input${size === "compact" ? " ks-text-input-compact" : ""}`}
     ref={inputRef} value={draft}
-    onFocus={(event) => { focused.current = true; baseline.current = value; onFocus?.(event); }}
-    onBlur={() => { focused.current = false; if (commitOnBlur) finish(); }}
+    onFocus={(event) => {
+      focused.current = true;
+      baseline.current = value;
+      onFocus?.(event);
+    }}
+    onBlur={() => { focused.current = false; if (commitOnBlur) finish(); else if (cancelOnBlur) cancel(); }}
     onChange={(event) => { setDraft(event.currentTarget.value); onEdit?.(event.currentTarget.value); }}
     onKeyDown={(event) => {
       if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); finish(); }

@@ -42,7 +42,7 @@ function TreeRowView({ row, index, start, selected, focused, measure, onFocus, o
       aria-posinset={row.position}
       aria-selected={node.ariaSelectable === false ? undefined : selected}
       aria-setsize={row.setSize}
-      className={`ks-row ks-file-tree-row${selected ? " is-selected" : ""}`}
+      className={`ks-row ks-file-tree-row${selected ? " is-selected" : ""}${node.rowClassName ? ` ${node.rowClassName}` : ""}`}
       data-index={index}
       data-tree-id={row.id}
       data-file-path={typeof node.data === "object" && node.data !== null && "filePath" in node.data ? String(node.data.filePath) : undefined}

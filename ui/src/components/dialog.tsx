@@ -27,7 +27,7 @@ export function Dialog({ host, title, body, ok, danger, onCancel, onConfirm }: {
       if (restore.current) previous?.focus();
     };
   }, [host, onCancel]);
-  return createPortal(<div className="ks-dialog-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+  return createPortal(<div className="ks-dialog-overlay" data-ks-overlay onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
     <div className="ks-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root}>
       <div className="ks-dialog-title" id={titleId}>{title}</div>
       {body != null ? <div className="ks-dialog-body">{body}</div> : null}

@@ -84,6 +84,12 @@ export async function flushEditors(address?: EditorAddress): Promise<boolean> {
   return results.every(Boolean);
 }
 
+export function editorRevision(address: EditorAddress): string | null | undefined {
+  const path = address.kind === "file" ? address.path : address.doc;
+  const session = [...activeSessions].find((item) => item.matches(address) && item.getSnapshot().path === path);
+  return session?.getSnapshot().revision;
+}
+
 export class FileEditorSession {
   private snapshot: FileEditorSnapshot = {
     path: null,

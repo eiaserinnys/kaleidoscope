@@ -140,6 +140,10 @@
   background: var(--ks-color-selection);
 }
 
+.ks-file-tree-row.is-cut {
+  opacity: 0.56;
+}
+
 .ks-row:hover {
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }

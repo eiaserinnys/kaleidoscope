@@ -33,6 +33,7 @@ function sameNode(left: TreeRowModel["node"], right: TreeRowModel["node"]): bool
     && left.selectable === right.selectable
     && left.ariaSelectable === right.ariaSelectable
     && left.currentOnSelection === right.currentOnSelection
+    && left.rowClassName === right.rowClassName
     && sameValue(left.leading, right.leading)
     && sameValue(left.meta, right.meta)
     && sameValue(left.trailing, right.trailing)
@@ -67,11 +68,12 @@ export interface TreeViewProps {
   emptyContent?: ReactNode;
   onExpandedChange: (id: string, expanded: boolean) => void;
   onActivate: (row: TreeRowModel, activation: TreeActivation) => void;
-  onContextMenu?: (row: TreeRowModel, target: HTMLElement) => void;
+  onContextMenu?: (row: TreeRowModel | null, target: HTMLElement, point: { x: number; y: number }) => void;
+  onCommandKeyDown?: (row: TreeRowModel | null, event: KeyboardEvent<HTMLElement>) => boolean;
   onDoubleClick?: (row: TreeRowModel, target: HTMLElement) => void;
 }
 
-export function TreeView({ nodes, expanded, selectedId, label, className, emptyContent, onExpandedChange, onActivate, onContextMenu, onDoubleClick }: TreeViewProps) {
+export function TreeView({ nodes, expanded, selectedId, label, className, emptyContent, onExpandedChange, onActivate, onContextMenu, onCommandKeyDown, onDoubleClick }: TreeViewProps) {
   const previousRows = useRef(new Map<string, TreeRowModel>());
   const flat = useMemo(() => {
     const nextRows = new Map<string, TreeRowModel>();
@@ -105,8 +107,8 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     virtual.scrollToIndex(flat.indexOf(next), { align: "auto" });
   }, [flat, treeRows, virtual]);
 
-  const handlers = useRef({ onActivate, onContextMenu, onDoubleClick, onExpandedChange, treeRows, expanded, moveFocus });
-  handlers.current = { onActivate, onContextMenu, onDoubleClick, onExpandedChange, treeRows, expanded, moveFocus };
+  const handlers = useRef({ onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, expanded, moveFocus });
+  handlers.current = { onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, expanded, moveFocus };
 
   const onFocus = useCallback((id: string) => setFocusId(id), []);
   const activate = useCallback((row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => {
@@ -115,7 +117,8 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
   const contextMenu = useCallback((row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => {
     if (!handlers.current.onContextMenu) return;
     event.preventDefault();
-    handlers.current.onContextMenu(row, event.currentTarget);
+    event.stopPropagation();
+    handlers.current.onContextMenu(row, event.currentTarget, { x: event.clientX, y: event.clientY });
   }, []);
   const doubleClick = useCallback((row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => handlers.current.onDoubleClick?.(row, event.currentTarget), []);
 
@@ -150,7 +153,13 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
       }
     } else if (event.key === "Enter") {
       handlers.current.onActivate(row, { source: "enter", target: event.currentTarget });
-    } else return;
+    } else {
+      if (handlers.current.onCommandKeyDown?.(row, event)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
   }, []);
@@ -172,6 +181,23 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     className={className}
     ref={scrollRef}
     role="tree"
+    onContextMenu={(event) => {
+      if (!handlers.current.onContextMenu) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target || target.closest("[data-tree-id]") || target.closest("input, textarea, [contenteditable='true']")) return;
+      event.preventDefault();
+      const rowId = target.closest<HTMLElement>("[data-tree-row]")?.dataset.treeRow;
+      const row = flat.find((candidate) => candidate.id === rowId);
+      const rowData = row?.node.data as { directoryPath?: string } | undefined;
+      handlers.current.onContextMenu(row?.node.content === undefined || rowData?.directoryPath ? row ?? null : null, event.target as HTMLElement, { x: event.clientX, y: event.clientY });
+    }}
+    onKeyDown={(event) => {
+      if (!handlers.current.onCommandKeyDown || event.target !== event.currentTarget) return;
+      if (handlers.current.onCommandKeyDown(null, event)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }}
   >
     {flat.length === 0 && emptyContent}
     <VirtualSurface virtual={virtual}>
