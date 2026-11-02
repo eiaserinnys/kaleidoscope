@@ -534,6 +534,7 @@ fn benchmark(inner: &std::sync::Arc<crate::Inner>) -> Result<(), kaleidoscope_co
             pointer: "/ui/children/24/on_click".into(),
             event: Value::Null,
             item: Value::Null,
+            modifiers: None,
         })?;
         core.flush_storage()?;
         inner.profiler.merge(&core.inner.profiler);

@@ -199,6 +199,7 @@ fn action_uses_current_state_after_a_waiting_call() {
             pointer: "/ui/on_click".into(),
             event: Value::Null,
             item: Value::Null,
+            modifiers: None,
         })
     });
     let deadline = Instant::now() + Duration::from_secs(5);

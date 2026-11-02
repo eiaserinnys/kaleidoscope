@@ -32,6 +32,38 @@ fn definition() -> Value {
 }
 
 #[tokio::test]
+async fn preview_uses_default_locale_and_marks_repeat_values() {
+    let server = McpServer::new(AppState::in_memory("secret"));
+    let definition = json!({"id":"repeat-preview", "name":"반복 미리보기", "requires":{"blocks":14,"modules":{}},
+    "permissions":[], "state":{"language":"ko"}, "locale":{"state":"language"},
+    "messages":{"ko":{"title":"제목"},"en":{"title":"Title"}},
+    "ui":{"type":"repeat","key":"id","items":[],"template":{"type":"stack","direction":"column","children":[
+        {"type":"text","value":{"message":"title"}},{"type":"text","value":{"item":"name"}}
+    ]}}});
+    let value = result_value(server.preview_app_result(args(definition)).await.unwrap());
+    let values = value["values"].as_array().unwrap();
+    assert!(values
+        .iter()
+        .any(|item| item["pointer"] == "/ui/template/children/0/value"
+            && item["value"]
+                .as_str()
+                .is_some_and(|text| text.contains("제목"))));
+    assert!(values
+        .iter()
+        .any(|item| item["pointer"] == "/ui/template/children/1/value"
+            && item["value"].as_str() == Some("null")));
+    assert_eq!(
+        value["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|note| note.as_str().is_some_and(|text| text.contains("반복 항목")))
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
 async fn preview_uses_client_output_default_without_running_script() {
     let server = McpServer::new(AppState::in_memory("secret"));
     let definition = json!({"id":"client-preview", "name":"클라이언트 미리보기", "requires":{"blocks":12,"modules":{"assets":1,"client":1}},

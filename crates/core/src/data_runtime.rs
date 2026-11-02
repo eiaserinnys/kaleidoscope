@@ -240,7 +240,11 @@ impl Runtime {
                             .unwrap_or(Value::Null),
                     ),
                     Binding::Literal(value) => Some(value.clone()),
-                    Binding::Expr(_) | Binding::Client(_) => None,
+                    Binding::Expr(_)
+                    | Binding::Client(_)
+                    | Binding::Item(_)
+                    | Binding::ParentItem(_)
+                    | Binding::Message(_) => None,
                 };
                 if let Some(value) = value {
                     values.insert(

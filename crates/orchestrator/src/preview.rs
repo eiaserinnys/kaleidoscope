@@ -445,6 +445,12 @@ impl McpServer {
                 "클라이언트 출력은 기본값으로 표시하며 실제 값은 창의 런타임에서 계산합니다".into(),
             );
         }
+        if kaleidoscope_contract::data::all_ui_bindings(&definition)
+            .iter()
+            .any(|(_, binding)| matches!(binding, Binding::Item(_) | Binding::ParentItem(_)))
+        {
+            notes.push("반복 항목 값은 창의 런타임에서 계산합니다".into());
+        }
         let values = kaleidoscope_contract::data::all_ui_bindings(&definition)
             .into_iter()
             .map(|(pointer, binding)| {
@@ -467,6 +473,22 @@ impl McpServer {
                                 .map(|output| output.default.clone())
                                 .unwrap_or(Value::Null),
                         },
+                        Binding::Item(_) | Binding::ParentItem(_) => {
+                            BindingValue::Ready { value: Value::Null }
+                        }
+                        Binding::Message(reference) => {
+                            let locale = definition.locale.as_ref().expect("검사된 locale");
+                            let language = definition.state[&locale.state]
+                                .as_str()
+                                .expect("검사된 기본 언어");
+                            BindingValue::Ready {
+                                value: Value::String(
+                                    definition.messages.as_ref().expect("검사된 메시지")[language]
+                                        [&reference.message]
+                                        .clone(),
+                                ),
+                            }
+                        }
                         Binding::Literal(value) => BindingValue::Ready {
                             value: value.clone(),
                         },

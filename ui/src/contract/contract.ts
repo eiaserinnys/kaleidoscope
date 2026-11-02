@@ -148,6 +148,14 @@ worker?: WorkerDecl,
  */
 client?: ClientDecl, 
 /**
+ * 앱의 창 단축키.
+ */
+shortcuts?: Array<Shortcut>, 
+/**
+ * 언어별 메시지 사전.
+ */
+messages?: { [key in string]: { [key in string]: string } }, locale?: StateRef, 
+/**
  * 창 안을 채우는 블록 트리의 뿌리.
  */
 ui: Block, };
@@ -229,7 +237,7 @@ export type Badge = string | { text: string, color?: string, };
  * - `{ "expr": "JSONata 식" }`: 코어가 계산한 값. 규칙은 이 모듈 머리글에 있다.
  * - 그 밖의 JSON: 그대로의 값. `state`나 `expr` 하나만 가진 객체는 리터럴로 쓸 수 없다(검사가 거부한다).
  */
-export type Binding = StateRef | ExprRef | ClientRef | JsonValue;
+export type Binding = StateRef | ExprRef | ClientRef | ItemRef | ParentItemRef | MessageRef | JsonValue;
 
 /**
  * 식 바인딩 하나의 값. `status`로 가른다. 규칙은 이 모듈 머리글의 「원천의 상태와 값의 상태」에 있다.
@@ -244,7 +252,7 @@ export type BindingValue = { "status": "ready", value: JsonValue, } | { "status"
  * 데이터 블록은 그 상태를 그 자리에 보인다. 4판 블록은 쉘의 토큰과 공통 부품만으로 그리고, 앱이 색이나 크기를
  * 정하지 않는다(항목의 `color`와 배지 색만 예외).
  */
-export type Block = { "type": "canvas", surface: string, aspect_ratio?: Binding, fit?: CanvasFit, description?: Binding, on_pointer?: Actions, } | { "type": "timeline", duration: Binding, position: Binding, tracks: Binding, markers?: Binding, ticks?: Binding, selection?: Binding, snap?: Binding, read_only?: boolean, on_seek?: Actions, on_select?: Actions, on_edit?: Actions, } | { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: Binding, on_change: Actions, label?: string, min: number, max: number, step?: number, } | { "type": "color", value: Binding, on_change: Actions, label?: string, disabled?: Binding, } | { "type": "split", direction: SplitDirection, 
+export type Block = { "type": "repeat", items: Binding, key: string, layout?: RepeatLayout, grid?: RepeatGrid, virtual?: boolean, follow_key?: Binding, follow_pause_ms?: number, template: Block, } | { "type": "when", value: Binding, child: Block, } | { "type": "dialog", open: Binding, title: Binding, child: Block, on_close: Actions, } | { "type": "tour", open: Binding, step: Binding, steps: Array<TourStep>, on_step: Actions, on_close: Actions, } | { "type": "anchor", id: string, child: Block, } | { "type": "progress", value: Binding, max: number, label?: Binding, } | { "type": "canvas", surface: Binding, aspect_ratio?: Binding, fit?: CanvasFit, description?: Binding, on_pointer?: Actions, } | { "type": "timeline", viewport?: Binding, on_viewport?: Actions, controls?: boolean, duration: Binding, position: Binding, tracks: Binding, markers?: Binding, ticks?: Binding, selection?: Binding, snap?: Binding, read_only?: boolean, on_seek?: Actions, on_select?: Actions, on_edit?: Actions, } | { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: Binding, on_change: Actions, label?: string, min: number, max: number, step?: number, } | { "type": "color", value: Binding, on_change: Actions, label?: string, disabled?: Binding, } | { "type": "split", direction: SplitDirection, 
 /**
  * 자식마다의 상대 크기. 없으면 똑같이 나눈다.
  */
@@ -280,11 +288,11 @@ view?: StateRef,
 /**
  * (5판) 보기 방식을 바꾸면 그 값을 쓸 상태 키.
  */
-on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, selected?: StateRef, on_change?: SetState, } | { "type": "toolbar", start: Array<Block>, end?: Array<Block>, } | { "type": "section", title: Binding, 
+on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, wrap?: boolean, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, selected?: StateRef, on_change?: SetState, } | { "type": "toolbar", start: Array<Block>, end?: Array<Block>, } | { "type": "section", title: Binding, 
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
-meta?: Binding, collapsible?: boolean, collapsed?: boolean, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: Binding, on_select?: Actions, } | { "type": "properties", fields: Array<PropertyField>, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
+meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: Binding, on_select?: Actions, } | { "type": "properties", fields: Array<PropertyField>, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
 /**
  * (블록 세트 7판) 본문 문단(`body`가 배열일 때)을 같은 너비의 칸으로 나란히 놓는다. 창이 좁아 칸마다
  * 최소 너비를 지킬 수 없으면 위아래로 쌓는다. 예: 여러 문단 비교.
@@ -298,9 +306,9 @@ copy?: boolean,
 /**
  * (블록 세트 10판) 대댓글과 긴 항목의 접기·펴기를 켠다.
  */
-collapsible?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", value: Binding, format?: TextFormat, style?: TextStyle, } | { "type": "input", value: Binding, on_change: Actions, label?: string, kind?: InputKind, multiline?: boolean, rows?: number, placeholder?: string, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: string, style?: SelectStyle, placeholder?: string, } | { "type": "toggle", value: Binding, on_change: Actions, label: string, } | { "type": "button", label: Binding, icon?: Binding, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code", value?: Binding, file?: FileRef, language?: CodeLanguage, read_only?: boolean, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "button_grid", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
+collapsible?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", on_click?: Actions, on_double_click?: Actions, value: Binding, format?: DisplayTextFormat, style?: TextStyle, } | { "type": "input", min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: string, kind?: InputKind, multiline?: boolean, rows?: number, placeholder?: string, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: string, style?: SelectStyle, placeholder?: string, } | { "type": "toggle", value: Binding, on_change: Actions, label: string, } | { "type": "button", pressed?: Binding, label: Binding, icon?: Binding, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code", value?: Binding, file?: FileRef, language?: CodeLanguage, read_only?: boolean, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "button_grid", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
 
-export type ButtonVariant = "default" | "primary" | "danger" | "ghost";
+export type ButtonVariant = "default" | "primary" | "danger" | "ghost" | "chip";
 
 /**
  * 연결을 부른다. 응답이 2xx가 아니면 실패다. 응답 본문은 쓰지 않는다(바뀐 것은 `refresh`로 다시 받는다).
@@ -330,9 +338,22 @@ export type ChartSeries = { key: string, name: string, points: Array<ChartPoint>
 
 export type ClientAction = { client: string, args?: JsonValue, };
 
-export type ClientDecl = { runtime: ClientRuntime, entry: AssetDep, inputs: { [key in string]: Binding }, outputs: { [key in string]: ClientOutput }, actions: Array<string>, commands: { [key in string]: Actions }, state_keys: Array<string>, storage_entries: Array<string>, };
+export type ClientActionContext = { event: JsonValue, item?: JsonValue, args?: JsonValue, modifiers?: EventModifiers, };
+
+export type ClientBridgeReply = { "type": "ks-client-reply", requestId: string, result?: JsonValue | ArrayBuffer | { bytes: ArrayBuffer; mime: string }, error?: string, };
+
+/**
+ * 격리 클라이언트와 호스트 사이의 요청.
+ */
+export type ClientBridgeRequest = { "type": "ks-client-http-read", requestId: string, permission: string, path: string, query: { [key in string]: JsonValue }, } | { "type": "ks-client-blob-put", requestId: string, key: string, fileId?: string, bytes?: ArrayBuffer, } | { "type": "ks-client-blob-open", requestId: string, key: string, } | { "type": "ks-client-blob-remove", requestId: string, key: string, } | { "type": "ks-client-blob-list", requestId: string, prefix: string, } | { "type": "ks-client-save-prompt", requestId: string, suggested_name: string, mime: string, } | { "type": "ks-client-can-share", requestId: string, file_id: string, } | { "type": "ks-client-share", requestId: string, file_id: string, title: string, } | { "type": "ks-client-keep-awake", requestId: string, enabled: boolean, };
+
+export type ClientCapability = "share" | "keep_awake";
+
+export type ClientDecl = { runtime: ClientRuntime, entry: AssetDep, inputs: { [key in string]: Binding }, outputs: { [key in string]: ClientOutput }, actions: Array<string>, commands: { [key in string]: Actions }, state_keys: Array<string>, storage_entries: Array<string>, http_permissions?: Array<string>, device_storage?: DeviceStorage, capabilities?: Array<ClientCapability>, };
 
 export type ClientFile = { id: string, name: string, size: bigint, mime: string, };
+
+export type ClientLifecycle = { visible: boolean, focused: boolean, viewport: ClientViewport, phase: LifecyclePhase, };
 
 export type ClientOutput = { default: JsonValue, };
 
@@ -342,6 +363,8 @@ export type ClientOutput = { default: JsonValue, };
 export type ClientRef = { client: string, };
 
 export type ClientRuntime = "javascript";
+
+export type ClientViewport = { width: number, height: number, coarse_pointer: boolean, };
 
 export type Clock = { position: number, sampled_at: number, rate: number, running: boolean, duration: number, };
 
@@ -445,7 +468,7 @@ export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } |
 /**
  * 코어의 응답. `op`는 명령과 같다.
  */
-export type CoreReply = { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "profiler.report", } | { "op": "files.pick", cancelled: boolean, files: Array<ClientFile>, } | { "op": "export.begin", cancelled: boolean, sink_id: string | null, } | { "op": "export.close", } | { "op": "export.abort", } | { "op": "client.release", } | { "op": "client.command", } | { "op": "conversation.apply_status", status: ConversationApplyStatus, } | { "op": "conversation.apply_retry", } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.minimize", window: AppWindow, } | { "op": "window.maximize", window: AppWindow, } | { "op": "window.restore", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "link.start", user_code: string, expires_at: string, } | { "op": "link.use_local", } | { "op": "link.sync_local_to_remote", result: TransferResult, } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.allow_pc", access: PcAccess, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, } | { "op": "files.mkdir", path: string, } | { "op": "files.rename", from: string, to: string, } | { "op": "files.move", results: Array<FileOpResult>, } | { "op": "files.copy", results: Array<FileOpResult>, } | { "op": "files.remove", results: Array<FileOpResult>, } | { "op": "files.reveal", } | { "op": "files.path", text: string, } | { "op": "files.open", window: AppWindow, } | { "op": "web.attach", page: WebPage, } | { "op": "web.place", } | { "op": "web.navigate", } | { "op": "external.open", } | { "op": "web.history", } | { "op": "web.capture", 
+export type CoreReply = { "op": "client.http_read", bytes: Array<number>, mime: string, } | { "op": "client.blob_put", } | { "op": "client.blob_open", file: ClientFile | null, } | { "op": "client.blob_remove", } | { "op": "client.blob_list", keys: Array<string>, } | { "op": "files.save_prompt", file_id: string | null, } | { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "profiler.report", } | { "op": "files.pick", cancelled: boolean, files: Array<ClientFile>, } | { "op": "export.begin", cancelled: boolean, sink_id: string | null, } | { "op": "export.close", } | { "op": "export.abort", } | { "op": "client.release", } | { "op": "client.command", } | { "op": "conversation.apply_status", status: ConversationApplyStatus, } | { "op": "conversation.apply_retry", } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.minimize", window: AppWindow, } | { "op": "window.maximize", window: AppWindow, } | { "op": "window.restore", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "link.start", user_code: string, expires_at: string, } | { "op": "link.use_local", } | { "op": "link.sync_local_to_remote", result: TransferResult, } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.allow_pc", access: PcAccess, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, } | { "op": "files.mkdir", path: string, } | { "op": "files.rename", from: string, to: string, } | { "op": "files.move", results: Array<FileOpResult>, } | { "op": "files.copy", results: Array<FileOpResult>, } | { "op": "files.remove", results: Array<FileOpResult>, } | { "op": "files.reveal", } | { "op": "files.path", text: string, } | { "op": "files.open", window: AppWindow, } | { "op": "web.attach", page: WebPage, } | { "op": "web.place", } | { "op": "web.navigate", } | { "op": "external.open", } | { "op": "web.history", } | { "op": "web.capture", 
 /**
  * `data:image/png;base64,...`. 찍지 못하면 null.
  */
@@ -454,7 +477,7 @@ image: string | null, } | { "op": "web.detach", } | { "op": "conversation.get", 
 /**
  * 화면이 코어에 보내는 명령. `op`로 가른다. 응답은 같은 `op`의 [`CoreReply`]다.
  */
-export type CoreRequest = { "op": "state.get", } | { "op": "conversation.apply_status", window_id: string, } | { "op": "conversation.apply_retry", window_id: string, } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.minimize", window_id: string, } | { "op": "window.maximize", window_id: string, } | { "op": "window.restore", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", server_url?: string, } | { "op": "link.use_local", } | { "op": "link.sync_local_to_remote", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.pick", window_id: string, accept: Array<FileAccept>, multiple: boolean, } | { "op": "export.begin", window_id: string, suggested_name: string, mime: string, } | { "op": "export.close", window_id: string, sink_id: string, } | { "op": "export.abort", window_id: string, sink_id: string, } | { "op": "client.release", window_id: string, } | { "op": "client.command", window_id: string, name: string, event: JsonValue, } | { "op": "files.allow_pc", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "files.mkdir", window_id: string, permission: string, parent: string, name: string, } | { "op": "files.rename", window_id: string, permission: string, path: string, name: string, } | { "op": "files.move", window_id: string, permission: string, paths: Array<string>, destination: string, } | { "op": "files.copy", window_id: string, permission: string, paths: Array<string>, destination: string, } | { "op": "files.remove", window_id: string, permission: string, paths: Array<string>, permanent: boolean, } | { "op": "files.reveal", window_id: string, permission: string, path: string, } | { "op": "files.path", window_id: string, permission: string, path: string, } | { "op": "files.open", window_id: string, permission: string, path: string, app_id: string, rect?: Rect, } | { "op": "web.attach", window_id: string, url: string, } | { "op": "web.place", window_id: string, bounds: Rect | null, } | { "op": "web.navigate", window_id: string, url: string, } | { "op": "external.open", window_id?: string, url: string, } | { "op": "web.history", window_id: string, action: WebHistoryAction, } | { "op": "web.capture", window_id: string, } | { "op": "web.detach", window_id: string, } | { "op": "conversation.get", window_id: string, profile?: string, } | { "op": "conversation.history", window_id: string, before: string, } | { "op": "conversation.create", window_id: string, model: string, profile?: string, } | { "op": "conversation.switch", window_id: string, profile?: string, model?: string, } | { "op": "conversation.send", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "op": "conversation.attachment", window_id: string, item_id: string, attachment_id: string, } | { "op": "conversation.attachment_open", window_id: string, item_id: string, attachment_id: string, } | { "op": "storage.get", window_id: string, entry: string, doc?: string, } | { "op": "storage.list", window_id: string, entry: string, } | { "op": "storage.write", window_id: string, entry: string, doc?: string, content: JsonValue, expected_revision?: ExpectedRevision, } | { "op": "storage.reset", window_id: string, entry: string, doc?: string, expected_revision?: ExpectedRevision, } | { "op": "storage.move", window_id: string, entry: string, from: string, to: string, expected_revision: string, } | { "op": "data.attach", window_id: string, dormant?: Array<string>, } | { "op": "data.dormant", window_id: string, dormant: Array<string>, } | { "op": "data.detach", window_id: string, } | { "op": "data.act", window_id: string, pointer: string, event?: JsonValue, item?: JsonValue, } | { "op": "data.refresh", window_id: string, sources?: Array<string>, } | { "op": "data.media", window_id: string, media: MediaRef, max_px?: number, } | { "op": "connection.login", window_id: string, permission: string, } | { "op": "share.set", window_id: string, on: boolean, } | { "op": "share.view", window_id: string, view: VisibleView, } | { "op": "share.freeze", } | { "op": "share.capture", window_id: string, } | { "op": "share.unfreeze", } | { "op": "local_agent.attach", window_id: string, } | { "op": "local_agent.detach", window_id: string, } | { "op": "local_agent.allow", window_id: string, spec_hash: string, } | { "op": "local_agent.retry", window_id: string, generation: string, } | { "op": "local_agent.authenticate", window_id: string, generation: string, method_id: string, } | { "op": "local_agent.configure", window_id: string, generation: string, control_id: string, value: AgentControlValue, } | { "op": "local_agent.send", window_id: string, generation: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "op": "local_agent.cancel", window_id: string, generation: string, } | { "op": "local_agent.permission", window_id: string, generation: string, request_id: string, option_id: string, } | { "op": "local_agent.attachment", window_id: string, item_id: string, attachment_id: string, } | { "op": "local_agent.attachment_open", window_id: string, item_id: string, attachment_id: string, } | { "op": "update.restart", } | { "op": "profiler.report", inputs: Array<UiInputSample>, frames: Array<UiFrameSample>, };
+export type CoreRequest = { "op": "state.get", } | { "op": "conversation.apply_status", window_id: string, } | { "op": "conversation.apply_retry", window_id: string, } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.minimize", window_id: string, } | { "op": "window.maximize", window_id: string, } | { "op": "window.restore", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", server_url?: string, } | { "op": "link.use_local", } | { "op": "link.sync_local_to_remote", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "client.http_read", window_id: string, permission: string, path: string, query: { [key in string]: JsonValue }, } | { "op": "client.blob_put", window_id: string, key: string, file_id?: string, bytes?: Array<number>, } | { "op": "client.blob_open", window_id: string, key: string, } | { "op": "client.blob_remove", window_id: string, key: string, } | { "op": "client.blob_list", window_id: string, prefix: string, } | { "op": "files.save_prompt", window_id: string, suggested_name: string, mime: string, } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.pick", window_id: string, accept: Array<FileAccept>, multiple: boolean, } | { "op": "export.begin", window_id: string, suggested_name: string, mime: string, } | { "op": "export.close", window_id: string, sink_id: string, } | { "op": "export.abort", window_id: string, sink_id: string, } | { "op": "client.release", window_id: string, } | { "op": "client.command", window_id: string, name: string, event: JsonValue, } | { "op": "files.allow_pc", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "files.mkdir", window_id: string, permission: string, parent: string, name: string, } | { "op": "files.rename", window_id: string, permission: string, path: string, name: string, } | { "op": "files.move", window_id: string, permission: string, paths: Array<string>, destination: string, } | { "op": "files.copy", window_id: string, permission: string, paths: Array<string>, destination: string, } | { "op": "files.remove", window_id: string, permission: string, paths: Array<string>, permanent: boolean, } | { "op": "files.reveal", window_id: string, permission: string, path: string, } | { "op": "files.path", window_id: string, permission: string, path: string, } | { "op": "files.open", window_id: string, permission: string, path: string, app_id: string, rect?: Rect, } | { "op": "web.attach", window_id: string, url: string, } | { "op": "web.place", window_id: string, bounds: Rect | null, } | { "op": "web.navigate", window_id: string, url: string, } | { "op": "external.open", window_id?: string, url: string, } | { "op": "web.history", window_id: string, action: WebHistoryAction, } | { "op": "web.capture", window_id: string, } | { "op": "web.detach", window_id: string, } | { "op": "conversation.get", window_id: string, profile?: string, } | { "op": "conversation.history", window_id: string, before: string, } | { "op": "conversation.create", window_id: string, model: string, profile?: string, } | { "op": "conversation.switch", window_id: string, profile?: string, model?: string, } | { "op": "conversation.send", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "op": "conversation.attachment", window_id: string, item_id: string, attachment_id: string, } | { "op": "conversation.attachment_open", window_id: string, item_id: string, attachment_id: string, } | { "op": "storage.get", window_id: string, entry: string, doc?: string, } | { "op": "storage.list", window_id: string, entry: string, } | { "op": "storage.write", window_id: string, entry: string, doc?: string, content: JsonValue, expected_revision?: ExpectedRevision, } | { "op": "storage.reset", window_id: string, entry: string, doc?: string, expected_revision?: ExpectedRevision, } | { "op": "storage.move", window_id: string, entry: string, from: string, to: string, expected_revision: string, } | { "op": "data.attach", window_id: string, dormant?: Array<string>, } | { "op": "data.dormant", window_id: string, dormant: Array<string>, } | { "op": "data.detach", window_id: string, } | { "op": "data.act", window_id: string, pointer: string, event?: JsonValue, item?: JsonValue, modifiers?: EventModifiers, } | { "op": "data.refresh", window_id: string, sources?: Array<string>, } | { "op": "data.media", window_id: string, media: MediaRef, max_px?: number, } | { "op": "connection.login", window_id: string, permission: string, } | { "op": "share.set", window_id: string, on: boolean, } | { "op": "share.view", window_id: string, view: VisibleView, } | { "op": "share.freeze", } | { "op": "share.capture", window_id: string, } | { "op": "share.unfreeze", } | { "op": "local_agent.attach", window_id: string, } | { "op": "local_agent.detach", window_id: string, } | { "op": "local_agent.allow", window_id: string, spec_hash: string, } | { "op": "local_agent.retry", window_id: string, generation: string, } | { "op": "local_agent.authenticate", window_id: string, generation: string, method_id: string, } | { "op": "local_agent.configure", window_id: string, generation: string, control_id: string, value: AgentControlValue, } | { "op": "local_agent.send", window_id: string, generation: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "op": "local_agent.cancel", window_id: string, generation: string, } | { "op": "local_agent.permission", window_id: string, generation: string, request_id: string, option_id: string, } | { "op": "local_agent.attachment", window_id: string, item_id: string, attachment_id: string, } | { "op": "local_agent.attachment_open", window_id: string, item_id: string, attachment_id: string, } | { "op": "update.restart", } | { "op": "profiler.report", inputs: Array<UiInputSample>, frames: Array<UiFrameSample>, };
 
 /**
  * 이미지에서 보일 부분. 원본 가로와 세로에 대한 비율(0~1)이고 `x`, `y`는 왼쪽 위다.
@@ -513,6 +536,10 @@ pc_access: Array<PcAccess>,
  */
 local_agent_access: Array<LocalAgentAccess>, };
 
+export type DeviceStorage = { prefixes: Array<string>, };
+
+export type DisplayTextFormat = "plain" | "markdown" | "time";
+
 /**
  * 저장소 문서를 참조한다. `entry`는 앱의 저장 항목 id이고, 문서 모음에서는 `doc`에 문서 이름을 준다.
  */
@@ -527,6 +554,8 @@ export type EnsureThreadReply = { thread: ConversationThread, created: boolean, 
 export type EnsureThreadRequest = { title: string, selected_model: string, model_order: Array<string>, profile: string, collection: string, initial_instruction: string, instructions: string, };
 
 export type ErrorCode = "invalid_request" | "unauthorized" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "login_required" | "binding_conflict" | "io" | "server" | "unavailable" | "local_agent_failed" | "invalid_name" | "file_busy" | "trash_unavailable";
+
+export type EventModifiers = { shift: boolean, alt: boolean, ctrl: boolean, meta: boolean, };
 
 export type ExecutionConsent = { spec_hash: string, name: string, command: string, args: Array<string>, env: { [key in string]: string }, };
 
@@ -702,11 +731,21 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type ImageFit = "contain" | "cover";
 
+export type InputCommit = "debounce" | "blur" | "submit";
+
+export type InputFormat = { kind: InputFormatKind, digits: number, };
+
+export type InputFormatKind = "decimal";
+
 export type InputKind = "text" | "search" | "number";
+
+export type ItemRef = { item: string, };
 
 export type JsonValueType = "object" | "array" | "string" | "number" | "integer" | "boolean" | "null";
 
 export type KeypadButton = { key: string, label: string, sublabel?: string, icon?: string, variant?: ButtonVariant, span?: number, disabled?: boolean, shortcut?: string, };
+
+export type LifecyclePhase = "ready" | "change" | "closing";
 
 export type LinkStatus = { "state": "unlinked", } | { "state": "pairing", server_url: string, 
 /**
@@ -778,6 +817,8 @@ export type MediaRef = ResourceMediaRef | AssetMediaRef;
 
 export type MessageReceipt = { request_id: string, status: ReceiptStatus, error?: ConversationError, };
 
+export type MessageRef = { message: string, };
+
 export type MetricAlign = "start" | "end";
 
 export type MetricItem = { key?: string, label: string, value: MetricValue, unit?: string, subtext?: string, tone?: MetricTone, align?: MetricAlign, featured?: boolean, badge?: Badge, image?: MediaRef, };
@@ -804,6 +845,8 @@ permission: string,
  * 연 파일의 경로(그 폴더 기준 상대 경로)를 쓸 상태 키. 블록은 이 키로 그 파일을 연다.
  */
 state: string, };
+
+export type ParentItemRef = { parent_item: string, };
 
 export type PatchThreadRequest = { title?: string, archived?: boolean, model?: string, model_order?: Array<string>, instructions?: string, };
 
@@ -881,6 +924,14 @@ export type Rect = { x: number, y: number, width: number, height: number, };
  * 원천을 다시 받는다. 빈 배열이면 모든 원천이다. 받기를 마칠 때까지 기다린다(실패해도 동작은 이어 간다).
  */
 export type RefreshAction = { refresh: Array<string>, };
+
+export type RepeatAuto = "auto";
+
+export type RepeatColumns = number | RepeatAuto;
+
+export type RepeatGrid = { columns: RepeatColumns, };
+
+export type RepeatLayout = "row" | "column" | "grid";
 
 /**
  * 앱이 필요로 하는 블록 세트와 모듈의 버전.
@@ -968,6 +1019,13 @@ sharing: Array<string>,
  * (10판) 이 쉘 자신의 새 판 받기 상태. 코어의 메모리에만 있다.
  */
 update: UpdateStatus, };
+
+/**
+ * 앱 창에 등록하는 키 조합.
+ */
+export type Shortcut = { code: string, modifiers: Array<ShortcutModifier>, action: Actions, };
+
+export type ShortcutModifier = "shift" | "alt" | "ctrl" | "meta" | "primary";
 
 export type SortSpec = { field: string, desc?: boolean, };
 
@@ -1121,7 +1179,11 @@ export type TimelineMarker = { id: string, time: number, label?: string, movable
 
 export type TimelineTrack = { id: string, label?: string, locked?: boolean, items: Array<TimelineItem>, waveform?: Waveform, };
 
+export type TimelineViewport = { start: number, end: number, };
+
 export type Tone = "neutral" | "accent" | "success" | "warning" | "danger";
+
+export type TourStep = { key: string, target: string, title: Binding, body: Binding, };
 
 export type TransferResult = { imported: number, skipped: Array<string>, };
 

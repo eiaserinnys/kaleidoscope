@@ -546,6 +546,9 @@ impl CompiledApp {
             }
             Binding::Expr(_) => self.eval(pointer, vars),
             Binding::Client(_) => Err("클라이언트 값은 코어에서 읽을 수 없습니다".into()),
+            Binding::Item(_) => Err("반복 항목 값은 코어에서 읽을 수 없습니다".into()),
+            Binding::ParentItem(_) => Err("부모 반복 항목 값은 코어에서 읽을 수 없습니다".into()),
+            Binding::Message(_) => Err("메시지는 코어에서 읽을 수 없습니다".into()),
         }
     }
 
