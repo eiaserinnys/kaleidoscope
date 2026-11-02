@@ -72,7 +72,7 @@ export function Menu({ anchor, anchorPoint, items, onClose }: MenuProps) {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (menuRef.current?.contains(target) || anchor.contains(target)) return;
+      if (menuRef.current?.contains(target) || (anchorPoint === undefined && anchor.contains(target))) return;
       onClose();
     };
 
@@ -132,6 +132,7 @@ export function Menu({ anchor, anchorPoint, items, onClose }: MenuProps) {
           key={item.id}
           onClick={() => {
             if (item.disabled) return;
+            anchor.focus();
             item.onSelect?.();
             onClose();
           }}

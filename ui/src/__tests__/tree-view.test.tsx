@@ -1,7 +1,9 @@
 import { memo, useState } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { KeyboardEvent } from "react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TreeView } from "../components/tree/tree-view";
+import type { TreeFocusController } from "../components/tree/tree-view";
 import type { TreeNode, TreeRowModel } from "../components/tree/tree-model";
 
 const renderedRows = vi.hoisted(() => new Map<string, number>());
@@ -61,6 +63,96 @@ afterEach(() => {
 });
 
 describe("공용 가상 트리", () => {
+  it("빈 트리에 Tab으로 들어오고 빈 공간 클릭 뒤 root 단축키를 처리한다", () => {
+    const onCommandKeyDown = vi.fn((_row: TreeRowModel | null, _event: KeyboardEvent<HTMLElement>, _focus: TreeFocusController) => true);
+    const { rerender } = render(<div style={{ height: "480px" }}><TreeView
+      className="ks-file-tree-list"
+      expanded={new Set()}
+      label="빈 트리"
+      nodes={[]}
+      onActivate={() => {}}
+      onCommandKeyDown={onCommandKeyDown}
+      onExpandedChange={() => {}}
+    /></div>);
+
+    const tree = screen.getByRole("tree", { name: "빈 트리" });
+    expect(tree.tabIndex).toBe(0);
+    fireEvent.click(tree);
+    expect(document.activeElement).toBe(tree);
+    fireEvent.keyDown(tree, { key: "n", ctrlKey: true, shiftKey: true });
+    expect(onCommandKeyDown.mock.calls[0]?.[0]).toBeNull();
+    expect(onCommandKeyDown.mock.calls[0]?.[1].key).toBe("n");
+    expect(onCommandKeyDown.mock.calls[0]?.[2]).toMatchObject({ row: expect.any(Function), afterDelete: expect.any(Function) });
+
+    rerender(<div style={{ height: "480px" }}><TreeView
+      className="ks-file-tree-list"
+      expanded={new Set()}
+      label="빈 트리"
+      nodes={[{ id: "row", label: "행" }]}
+      onActivate={() => {}}
+      onCommandKeyDown={onCommandKeyDown}
+      onExpandedChange={() => {}}
+    /></div>);
+    expect(screen.getByRole("tree", { name: "빈 트리" }).tabIndex).toBe(-1);
+  });
+
+  it("가상 범위 밖의 인라인 입력 행으로 스크롤하고 입력에 포커스한다", async () => {
+    const scrollTo = vi.fn(function (this: HTMLElement, options: ScrollToOptions | number) {
+      if (typeof options === "object" && options.top !== undefined) this.scrollTop = options.top;
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: scrollTo });
+    const nodes: TreeNode[] = [
+      ...Array.from({ length: 80 }, (_, index) => ({ id: `row-${index}`, label: `행 ${index}` })),
+      { id: "edit-row", label: "새 파일", selectable: false, interactiveContent: true, content: <input aria-label="새 파일 이름" /> },
+    ];
+    render(<div style={{ height: "240px" }}><TreeView
+      className="ks-file-tree-list"
+      expanded={new Set()}
+      label="긴 트리"
+      nodes={nodes}
+      onActivate={() => {}}
+      onExpandedChange={() => {}}
+    /></div>);
+
+    await waitFor(() => expect(document.querySelector('[data-tree-row="edit-row"]')).toBeTruthy());
+    const input = await screen.findByRole("textbox", { name: "새 파일 이름" });
+    expect(scrollTo).toHaveBeenCalled();
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("삭제 뒤 다음 행에 포커스를 돌려준다", async () => {
+    let focus: TreeFocusController | null = null;
+    let removeMiddle: (() => void) | null = null;
+    let activated: TreeRowModel | null = null;
+    function Harness() {
+      const [nodes, setNodes] = useState<TreeNode[]>([
+        { id: "first", label: "첫 행" },
+        { id: "middle", label: "가운데 행" },
+        { id: "next", label: "다음 행" },
+      ]);
+      removeMiddle = () => setNodes((current) => current.filter((node) => node.id !== "middle"));
+      return <div style={{ height: "240px" }}><TreeView
+        className="ks-file-tree-list"
+        expanded={new Set()}
+        label="삭제 포커스 트리"
+        nodes={nodes}
+        onActivate={(row) => { activated = row; }}
+        onExpandedChange={() => {}}
+        onFocusController={(controller) => { focus = controller; }}
+      /></div>;
+    }
+    render(<Harness />);
+    const middle = await screen.findByRole("treeitem", { name: "가운데 행" });
+    fireEvent.click(middle);
+    await waitFor(() => expect(activated).not.toBeNull());
+    const targets = focus!.deletionTargets(activated!);
+
+    act(() => removeMiddle!());
+    act(() => focus!.afterDelete(targets));
+
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("treeitem", { name: "다음 행" })));
+  });
+
   it("수천 행 중 보이는 행만 그리고 선택 변경은 다른 행을 다시 그리지 않는다", async () => {
     Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: vi.fn() });
     render(<Harness />);

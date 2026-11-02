@@ -14,6 +14,7 @@ export interface FolderCapabilities {
   permanentDelete: boolean;
   reveal: boolean;
   absolutePath: boolean;
+  relativePath: boolean;
   properties: boolean;
 }
 export interface FolderOperationResult {
@@ -35,6 +36,7 @@ export interface FolderActions {
   permanentDelete?: (paths: string[]) => Promise<FolderOperationResult[]>;
   reveal?: (path: string) => Promise<void>;
   absolutePath?: (path: string) => Promise<string>;
+  relativePath?: (path: string) => Promise<string>;
   properties?: (item: FolderItem) => Array<{ label: string; value: string }>;
 }
 
@@ -65,6 +67,7 @@ function capabilities(actions: FolderActions): FolderCapabilities {
     permanentDelete: Boolean(actions.permanentDelete),
     reveal: Boolean(actions.reveal),
     absolutePath: Boolean(actions.absolutePath),
+    relativePath: Boolean(actions.relativePath),
     properties: Boolean(actions.properties),
   };
 }
@@ -110,6 +113,7 @@ export function createFileFolderBackend({
     return reply.entries.map((entry) => ({ ...entry, ext: extensionOf(entry.name) }));
   };
   const actions: FolderActions = {
+    relativePath: async (path) => path,
     properties: (item) => [
       { label: "이름", value: item.name },
       { label: "종류", value: item.kind === "dir" ? "폴더" : item.ext ? `${item.ext.toUpperCase()} 파일` : "파일" },
@@ -202,6 +206,7 @@ export function createCollectionFolderBackend({
     });
   };
   const actions: FolderActions = {};
+  actions.relativePath = async (path) => path;
   actions.properties = (item) => [
     { label: "이름", value: item.name },
     { label: "종류", value: item.ext ? `${item.ext.toUpperCase()} 문서` : "문서" },

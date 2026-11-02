@@ -5,7 +5,7 @@ import { Button, IconButton, StatusText } from "../components/primitives";
 import { FilePlus, FileText, FolderOpen, PanelLeftClose, PanelLeftOpen } from "../components/icons";
 import { TextInput } from "../components/text-input";
 import { TreeView } from "../components/tree/tree-view";
-import type { TreeActivation } from "../components/tree/tree-view";
+import type { TreeActivation, TreeFocusController } from "../components/tree/tree-view";
 import type { TreeNode, TreeRowModel } from "../components/tree/tree-model";
 import type { BlockContext } from "./block-context";
 import { SplitPaneContext } from "./split-pane-context";
@@ -86,6 +86,7 @@ export function FileBrowserTree({
 }: FileBrowserTreeProps) {
   const pane = useContext(SplitPaneContext);
   const treeRef = useRef<HTMLDivElement>(null);
+  const focusController = useRef<TreeFocusController | null>(null);
   const restoreToggleFocus = useRef(false);
   const { store, window } = context;
   const grant = useWindowGrant(context, permission) ?? null;
@@ -427,6 +428,7 @@ export function FileBrowserTree({
     prepareDirectory,
     openItem,
     isExpanded,
+    getFocusController: () => focusController.current,
   });
 
   const visible = useCallback((entry: FolderEntry) => mode === "folders" ? entry.kind === "dir" : entry.kind === "dir"
@@ -464,10 +466,13 @@ export function FileBrowserTree({
       for (const entry of (entriesByDirectory[directory] ?? []).filter(visible)) {
         if (actionsEnabled && actions.inlineEdit?.kind === "rename" && actions.inlineEdit.path === entry.path) {
           rows.push({
-            id: `rename:${entry.path}`,
+            id: collection ? `doc:${entry.path}` : entry.path,
             label: `이름 바꾸기 ${entry.name}`,
+            expandable: entry.kind === "dir",
             selectable: false,
+            interactiveContent: true,
             content: actions.inlineRow(directory, entry.path),
+            children: !collection && entry.kind === "dir" ? buildDirectory(entry.path) : [],
           });
           continue;
         }
@@ -491,16 +496,19 @@ export function FileBrowserTree({
           id: `folder-edit:${directory}`,
           label: actions.inlineEdit.initialName,
           selectable: false,
+          interactiveContent: true,
           content: actions.inlineRow(directory),
         });
       }
-      if (!collection && directory && expanded.has(directory) && Object.hasOwn(entriesByDirectory, directory) && entriesByDirectory[directory].length === 0) {
+      if (actionsEnabled && !collection && directory && expanded.has(directory) && Object.hasOwn(entriesByDirectory, directory)
+        && entriesByDirectory[directory].length === 0
+        && !(actions.inlineEdit && actions.inlineEdit.directory === directory)) {
         rows.push({
           id: `empty:${directory}`,
-          label: "폴더가 비어 있습니다",
+          label: "비어 있음",
           selectable: false,
           data: { directoryPath: directory },
-          content: <div className="ks-row ks-file-tree-row">폴더가 비어 있습니다</div>,
+          content: <div className="ks-file-tree-empty"><span aria-hidden="true" className="ks-file-tree-icon" /><span className="ks-view-meta">비어 있음</span></div>,
         });
       }
       return rows;
@@ -527,9 +535,9 @@ export function FileBrowserTree({
     else void selectFile(entry.path, entry);
   }, [mode, onFileEnter, selectFile, selectFolder, selectedPath, setDirectoryExpanded]);
 
-  const contextMenu = useCallback((row: TreeRowModel | null, target: HTMLElement, point: { x: number; y: number }) => {
+  const contextMenu = useCallback((row: TreeRowModel | null, target: HTMLElement, point: { x: number; y: number }, focus: TreeFocusController) => {
     if (actionsEnabled) {
-      actions.onContextMenu(row, target, point);
+      actions.onContextMenu(row, target, point, focus);
       return;
     }
     if (!row) return;
@@ -539,8 +547,8 @@ export function FileBrowserTree({
     onFileContextMenu(target, entry.path);
   }, [actions, actionsEnabled, onFileContextMenu, selectFile]);
 
-  const commandKeyDown = useCallback((row: TreeRowModel | null, event: KeyboardEvent<HTMLElement>) => {
-    return actionsEnabled ? actions.commandKeyDown(row, event) : false;
+  const commandKeyDown = useCallback((row: TreeRowModel | null, event: KeyboardEvent<HTMLElement>, focus: TreeFocusController) => {
+    return actionsEnabled ? actions.commandKeyDown(row, event, focus) : false;
   }, [actions, actionsEnabled]);
 
   const doubleClick = useCallback((row: TreeRowModel, target: HTMLElement) => {
@@ -560,7 +568,7 @@ export function FileBrowserTree({
       ) : (
         <>
           <FolderTreeHeader label={rootName}>
-            {canCreate ? <IconButton aria-label="새 파일" onClick={() => void beginCreate()}><FilePlus /></IconButton> : null}
+            {(canCreate || (actionsEnabled && backend.capabilities.createFile)) ? <IconButton aria-label="새 파일" onClick={() => actionsEnabled ? void actions.beginCreateFile("", focusController.current) : void beginCreate()}><FilePlus /></IconButton> : null}
             {!collection && scope === "folder" ? <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}><FolderOpen /></IconButton> : null}
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
           </FolderTreeHeader>
@@ -569,11 +577,16 @@ export function FileBrowserTree({
             expanded={expanded}
             label={mode === "folders" ? "폴더 목록" : "파일 목록"}
             nodes={nodes}
+            emptyContent={actionsEnabled && collection && backend.capabilities.createFile
+              ? <Button onClick={() => actions.beginCreateFile("", focusController.current)}>새 문서</Button>
+              : undefined}
             onActivate={activate}
             onContextMenu={actionsEnabled || onFileContextMenu ? contextMenu : undefined}
             onCommandKeyDown={actionsEnabled ? commandKeyDown : undefined}
             onDoubleClick={onFileDoubleClick ? doubleClick : undefined}
             onExpandedChange={setDirectoryExpanded}
+            onFocusController={(controller) => { focusController.current = controller; }}
+            menuTargetId={actions.menuTargetId}
             selectedId={collection && selectedPath ? `doc:${selectedPath}` : selectedPath}
           />
           {actionError ? <FolderTreeError message={actionError} /> : null}

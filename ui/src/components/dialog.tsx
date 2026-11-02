@@ -2,7 +2,7 @@ import { useId, useLayoutEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./primitives";
 
-export function Dialog({ host, title, body, ok, danger, onCancel, onConfirm }: { host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; onCancel: () => void; onConfirm: () => void }) {
+export function Dialog({ host, title, body, ok, danger, showCancel = true, onCancel, onConfirm }: { host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; onCancel: () => void; onConfirm: () => void }) {
   const titleId = useId();
   const root = useRef<HTMLDivElement>(null);
   const restore = useRef(true);
@@ -31,7 +31,7 @@ export function Dialog({ host, title, body, ok, danger, onCancel, onConfirm }: {
     <div className="ks-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root}>
       <div className="ks-dialog-title" id={titleId}>{title}</div>
       {body != null ? <div className="ks-dialog-body">{body}</div> : null}
-      <div className="ks-dialog-actions"><Button onClick={onCancel}>취소</Button><span className={`ks-dialog-confirm${danger ? " is-danger" : ""}`}><Button onClick={() => { restore.current = false; onConfirm(); }} variant={danger ? "default" : "emphasis"}>{ok}</Button></span></div>
+      <div className="ks-dialog-actions">{showCancel ? <Button onClick={onCancel}>취소</Button> : null}<span className={`ks-dialog-confirm${danger ? " is-danger" : ""}`}><Button onClick={() => { restore.current = false; onConfirm(); }} variant={danger ? "default" : "emphasis"}>{ok}</Button></span></div>
     </div>
   </div>, host);
 }

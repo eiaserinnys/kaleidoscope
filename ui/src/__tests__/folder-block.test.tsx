@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
@@ -55,11 +55,11 @@ function storageFolderDefinition(readOnly = true): AppDefinition {
   };
 }
 
-function setup(definition: AppDefinition, configure?: (transport: ReturnType<typeof createFakeTransport>) => void) {
+function setup(definition: AppDefinition, configure?: (transport: ReturnType<typeof createFakeTransport>) => void, files: Record<string, string> = { "notes/guide.md": "# Guide", "skip.txt": "skip" }) {
   const seed = makeTestSeed({
     definitions: [definition],
     grants: definition.id === "folder-files-test" ? [grantFor("viewer-window", "docs")] : [],
-    files: { "notes/guide.md": "# Guide", "skip.txt": "skip" },
+    files,
   });
   seed.snapshot.supported = { blocks: 13, modules: { files: 2, storage: 3 } };
   seed.snapshot.shared.windows[0].state = { selected: null };
@@ -144,8 +144,67 @@ describe("folder block", () => {
     fireEvent.contextMenu(guide);
 
     expect(await screen.findByRole("menuitem", { name: "이름 바꾸기" })).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: "휴지통으로 삭제" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "휴지통으로 이동" })).toBeTruthy();
+    expect(guide.hasAttribute("data-menu-target")).toBe(true);
     expect(store.getSnapshot()?.shared.windows[0].state.selected).toBeNull();
+  });
+
+  it("exposes file-root creation and preserves an expanded folder's children during F2", async () => {
+    setup(fileFolderDefinition("readwrite", false));
+    const createFile = await screen.findByRole("button", { name: "새 파일" });
+    fireEvent.click(createFile);
+    const rootInput = await screen.findByRole("textbox", { name: "새 파일 이름" }) as HTMLInputElement;
+    await waitFor(() => expect(rootInput.selectionEnd).toBe("새 파일".length));
+
+    fireEvent.keyDown(rootInput, { key: "Escape" });
+    const notes = await screen.findByRole("treeitem", { name: "notes" });
+    fireEvent.keyDown(notes, { key: "ArrowRight" });
+    await screen.findByRole("treeitem", { name: "guide.md" });
+    fireEvent.keyDown(notes, { key: "F2" });
+
+    expect(await screen.findByRole("textbox", { name: "이름 바꾸기" })).toBeTruthy();
+    expect(screen.getByRole("treeitem", { name: "guide.md" })).toBeTruthy();
+  });
+
+  it("copies a folder to its parent and reports the backend operation", async () => {
+    const { call } = setup(fileFolderDefinition("readwrite", false));
+    const notes = await screen.findByRole("treeitem", { name: "notes" });
+    fireEvent.contextMenu(notes);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "사본 만들기" }));
+
+    await waitFor(() => expect(call).toHaveBeenCalledWith({
+      op: "files.copy", window_id: "viewer-window", permission: "docs", paths: ["notes"], destination: "",
+    }));
+  });
+
+  it("clears the shell clipboard with Escape from a focused tree row", async () => {
+    setup(fileFolderDefinition("readwrite", false));
+    const notes = await screen.findByRole("treeitem", { name: "notes" });
+    fireEvent.keyDown(notes, { key: "ArrowRight" });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+    fireEvent.keyDown(guide, { key: "x", ctrlKey: true });
+
+    await waitFor(() => expect(guide.className).toContain("is-cut"));
+    fireEvent.keyDown(guide, { key: "Escape" });
+    await waitFor(() => expect(guide.className).not.toContain("is-cut"));
+  });
+
+  it("shows a writable server collection's empty action and uses extension-aware document naming", async () => {
+    setup(storageFolderDefinition(false), (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "storage.list"
+        ? { op: "storage.list", result: { bucket_id: "folder-storage-test", items: [] } }
+        : originalCall(request));
+    });
+
+    const newDocument = await screen.findByRole("button", { name: "새 문서" });
+    fireEvent.click(newDocument);
+    const input = await screen.findByRole("textbox", { name: "새 문서 이름" }) as HTMLInputElement;
+    await waitFor(() => expect(input.selectionEnd).toBe("새 문서".length));
+    fireEvent.change(input, { target: { value: "보고서.txt" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect((await screen.findByRole("alert")).textContent).toContain(".md 파일만 볼 수 있습니다.");
+    expect(screen.getByRole("textbox", { name: "새 문서 이름" })).toBeTruthy();
   });
 
   it("uses the same create and rename menu for collection documents", async () => {
@@ -165,8 +224,43 @@ describe("folder block", () => {
 
     expect(await screen.findByRole("menuitem", { name: "새 문서" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "이름 바꾸기" })).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: /영구 삭제/ })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "상대 경로 복사" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "영구 삭제" })).toBeTruthy();
     expect(call).toHaveBeenCalledWith({ op: "storage.list", window_id: "viewer-window", entry: "documents" });
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    fireEvent.keyDown(guide, { key: "Delete" });
+    const dialog = await screen.findByRole("dialog", { name: "guide.md" });
+    expect(dialog.textContent).toContain("되돌릴 수 없습니다.");
+    expect(within(dialog).getAllByRole("button")).toHaveLength(2);
+    expect(within(dialog).getByRole("button", { name: "취소" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "영구 삭제" })).toBeTruthy();
+  });
+
+  it("shows one properties close button and restores focus to its menu target", async () => {
+    setup(fileFolderDefinition("readwrite", false));
+    const notes = await screen.findByRole("treeitem", { name: "notes" });
+    fireEvent.keyDown(notes, { key: "ArrowRight" });
+    const guide = await screen.findByRole("treeitem", { name: "guide.md" });
+    fireEvent.contextMenu(guide);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "속성" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "속성" });
+    expect(within(dialog).getAllByRole("button").map((button) => button.textContent)).toEqual(["닫기"]);
+    fireEvent.click(within(dialog).getByRole("button", { name: "닫기" }));
+
+    await waitFor(() => expect(document.activeElement).toBe(guide));
+  });
+
+  it("labels an empty expanded folder without using an interactive row", async () => {
+    setup(fileFolderDefinition("readwrite", false), undefined, { "empty/.hidden": "ignored" });
+    const empty = await screen.findByRole("treeitem", { name: "empty" });
+    fireEvent.keyDown(empty, { key: "ArrowRight" });
+
+    const label = await screen.findByText("비어 있음");
+    expect(label.closest(".ks-row")).toBeNull();
+    expect(label.closest("[data-tree-row]")?.getAttribute("data-tree-row")).toBe("empty:empty");
   });
 
   it("refreshes a visible collection on matching storage changes and defers hidden updates", async () => {
