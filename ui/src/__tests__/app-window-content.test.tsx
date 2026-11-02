@@ -24,7 +24,7 @@ afterEach(() => {
 
 it("기존 블록 이름을 정본 이름과 모드로 정규화한다", () => {
   const aliases = [
-    [{ type: "file_tree", root: { permission: "docs" }, extensions: [], selected: { state: "file" }, on_select: { set_state: "file" } }, { type: "tree", root: { permission: "docs" }, extensions: [], by: "children", selected: { state: "file" }, on_select: { set_state: "file" } }],
+    [{ type: "file_tree", root: { permission: "docs" }, extensions: [], selected: { state: "file" }, on_select: { set_state: "file" } }, { type: "folder", root: { permission: "docs" }, extensions: [], selected: { state: "file" }, on_select: { set_state: "file" }, read_only: true, legacyTreeRoot: true }],
     [{ type: "markdown_editor", file: { permission: "docs", path: "README.md" } }, { type: "markdown", file: { permission: "docs", path: "README.md" } }],
     [{ type: "markdown_view", value: "# 제목" }, { type: "markdown", value: "# 제목", read_only: true }],
     [{ type: "code_editor", file: { permission: "docs", path: "main.rs" } }, { type: "code", file: { permission: "docs", path: "main.rs" } }],

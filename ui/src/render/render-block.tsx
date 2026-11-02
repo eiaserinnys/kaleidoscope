@@ -1,8 +1,7 @@
 import { memo, type ReactNode } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "../blocks/block-context";
-import { FileTreeBlock } from "../blocks/file-tree";
-import type { FileTreeBlockData } from "../blocks/file-tree";
+import { FolderBlock } from "../blocks/folder";
 import { MarkdownEditorBlock } from "../blocks/markdown-editor";
 import { MarkdownViewBlock } from "../blocks/markdown-view";
 import { HtmlViewBlock } from "../blocks/html-view";
@@ -57,9 +56,10 @@ function BlockContent({ block: normalized, context, pointer }: { block: Block; c
     case "split":
       return <SplitBlock block={normalized} context={context} pointer={pointer} />;
     case "tree":
-      if (normalized.root) return <FileTreeBlock block={normalized as FileTreeBlockData} context={context} />;
       if (normalized.items !== undefined) return <TreeBlock block={normalized as DataTreeBlockData} context={context} pointer={pointer} />;
       return <div className="ks-unknown-block" role="alert">지원하지 않는 tree 블록 구성</div>;
+    case "folder":
+      return <FolderBlock block={normalized} context={context} pointer={pointer} />;
     case "markdown":
       return normalized.read_only || normalized.value !== undefined
         ? <MarkdownViewBlock block={normalized} context={context} pointer={pointer} />
@@ -112,11 +112,15 @@ export function normalizeBlock(block: Block): Block {
   const type = raw.type;
   if (type === "interactive_html") return { ...raw, type: "sandbox" } as Block;
   if (type === "textarea") return { ...raw, type: "input", multiline: true } as Block;
-  if (type === "file_tree") return {
-    type: "tree", root: raw.root as Extract<Block, { type: "tree" }>["root"], extensions: raw.extensions as string[],
-    by: "children", selected: raw.selected as Extract<Block, { type: "tree" }>["selected"],
-    on_select: { set_state: (raw.on_select as { set_state: string }).set_state },
-  } as Block;
+  if (type === "file_tree" || (type === "tree" && raw.root !== undefined)) return {
+    type: "folder",
+    root: raw.root as { permission: string },
+    extensions: raw.extensions as string[],
+    selected: raw.selected as Extract<Block, { type: "folder" }>["selected"],
+    on_select: raw.on_select as Extract<Block, { type: "folder" }>["on_select"],
+    read_only: true,
+    legacyTreeRoot: true,
+  } as unknown as Block;
   if (type === "markdown_editor") return { type: "markdown", file: raw.file as never, document: raw.document as never } as Block;
   if (type === "markdown_view") return { type: "markdown", file: raw.file as never, document: raw.document as never, value: raw.value as never, read_only: true } as Block;
   if (type === "code_editor") return { type: "code", file: raw.file as never, language: raw.language as never, wrap: raw.wrap as never } as Block;

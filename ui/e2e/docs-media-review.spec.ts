@@ -9,7 +9,7 @@ async function conflict(page: Page, kind: "code" | "markdown") {
   } else {
     await page.goto("/?preview=md-editor");
     await page.getByRole("button", { name: "문서 폴더 고르기" }).click();
-    await page.getByRole("button", { name: "README.md", exact: true }).click();
+    await page.getByRole("treeitem", { name: "README.md", exact: true }).click();
   }
   const editor = page.getByRole("textbox", { name: kind === "code" ? "코드 편집기" : "마크다운 편집기" });
   await expect(editor).toBeVisible();

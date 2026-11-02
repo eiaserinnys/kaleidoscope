@@ -22,6 +22,7 @@ function actionSlots(block: Block, pointer = "/ui"): Set<string> {
   switch (block.type) {
     case "button_grid": add("on_press"); break;
     case "tree": if (block.items !== undefined) add("on_select", block.on_select !== undefined); break;
+    case "folder": add("on_select", block.on_select !== undefined); break;
     case "map": case "chart": case "list": case "table": case "feed": add("on_select", block.on_select !== undefined); break;
     case "input": add("on_change"); add("on_submit", block.on_submit !== undefined); break;
     case "select": case "toggle": case "slider": case "color": add("on_change"); break;

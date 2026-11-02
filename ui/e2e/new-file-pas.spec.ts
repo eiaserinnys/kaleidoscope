@@ -10,7 +10,7 @@ test("creates a markdown file and cancels without writing", async ({ page }) => 
   const fileName = editor.getByRole("textbox", { name: "새 파일 이름" });
   await fileName.fill("회의 메모");
   await fileName.press("Enter");
-  const createdFile = editor.getByRole("button", { name: "회의 메모.md" });
+  const createdFile = editor.getByRole("treeitem", { name: "회의 메모.md" });
   await expect(createdFile).toHaveAttribute("aria-current", "page");
   const content = editor.locator(".cm-content");
   await expect(content).toBeVisible();
@@ -29,7 +29,7 @@ test("creates a markdown file and cancels without writing", async ({ page }) => 
 
   await editor.getByRole("textbox", { name: "새 파일 이름" }).press("Escape");
   await expect(editor.getByRole("textbox", { name: "새 파일 이름" })).toHaveCount(0);
-  await expect(editor.getByRole("button", { name: "회의 메모.md" })).toHaveCount(1);
+  await expect(editor.getByRole("treeitem", { name: "회의 메모.md" })).toHaveCount(1);
   await editor.getByRole("button", { name: "새 파일" }).click();
   const cancelledName = editor.getByRole("textbox", { name: "새 파일 이름" });
   await cancelledName.fill("취소");
@@ -41,7 +41,7 @@ test("matches the new-file input row height to a file row", async ({ page }) => 
   await page.goto("/?preview=md-editor");
   const editor = page.getByTestId("app-window-md-editor");
   await editor.getByRole("button", { name: "문서 폴더 고르기" }).click();
-  const fileRow = editor.getByRole("button", { name: "README.md" });
+  const fileRow = editor.getByRole("treeitem", { name: "README.md" });
   await expect(fileRow).toBeVisible();
   await editor.getByRole("button", { name: "새 파일" }).click();
   const createRow = editor.locator(".ks-file-tree-create-row");
