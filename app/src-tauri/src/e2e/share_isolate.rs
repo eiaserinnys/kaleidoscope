@@ -170,7 +170,11 @@ pub(super) fn scenario(
     start_recorder(app, out, &agent_window_id)?;
     let mut failed = false;
     let mut focus_results = Vec::<(String, bool)>::new();
-    let web_over = layout.web;
+    // 자식 웹뷰의 일부를 기록 보호 영역에 남겨 덮개 아래 표시를 측정한다.
+    let web_over = Rect {
+        x: layout.web.x - (layout.web.width / 3) as i32,
+        ..layout.web
+    };
     macro_rules! check {
         ($id:expr, $body:block) => {{
             let result: Result<(), String> = (|| $body)();
