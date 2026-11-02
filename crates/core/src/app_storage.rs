@@ -61,11 +61,11 @@ pub(crate) fn context(
     if !matches!(state.link, LinkStatus::Connected { .. }) {
         return Err(error::with_message(
             ErrorCode::Unavailable,
-            "서버에 연결되어 있지 않습니다.",
+            "서버에 연결되어 있지 않습니다",
         ));
     }
     let link = inner.link_file.lock().unwrap().clone().ok_or_else(|| {
-        error::with_message(ErrorCode::Unavailable, "서버에 연결되어 있지 않습니다.")
+        error::with_message(ErrorCode::Unavailable, "서버에 연결되어 있지 않습니다")
     })?;
     Ok(Context {
         app: window.app_id.clone(),

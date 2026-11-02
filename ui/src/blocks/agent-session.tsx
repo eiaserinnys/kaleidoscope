@@ -4,6 +4,7 @@ import { Button, EmptyState, IconButton, Notice, StatusText } from "../component
 import { Folder, FolderOpen, MessageSquare } from "../components/icons";
 import { Select, Toggle } from "../components/select-toggle";
 import { toCoreError } from "../core/core-transport";
+import { useShellSelector, type ShellStore } from "../core/shell-store";
 import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { readWindowState, useWindowGrant } from "../data/window-state";
@@ -16,8 +17,21 @@ import { useFrameCoalesced } from "./frame-coalesced";
 
 export type AgentSessionBlockData = Extract<Block, { type: "chat" }> & { permission: string; root: { permission: string }; agents: NonNullable<Extract<Block, { type: "chat" }>["agents"]>; selected: NonNullable<Extract<Block, { type: "chat" }>["selected"]>; on_select: SetState };
 
+const agentLifecycle = new WeakMap<ShellStore, Map<string, Promise<unknown>>>();
+
+function enqueueAgent<T>(store: ShellStore, windowId: string, task: () => Promise<T>): Promise<T> {
+  let queues = agentLifecycle.get(store);
+  if (!queues) { queues = new Map(); agentLifecycle.set(store, queues); }
+  const next = (queues.get(windowId) ?? Promise.resolve()).catch(() => undefined).then(task);
+  queues.set(windowId, next);
+  const cleanup = () => { if (queues?.get(windowId) === next) queues.delete(windowId); };
+  void next.then(cleanup, cleanup);
+  return next;
+}
+
 export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: AgentSessionBlockData; context: BlockContext; pointer?: string }) {
   const windowId = context.window.id;
+  const connected = useShellSelector(context.store, (state) => state?.link.state === "connected");
   const data = useWindowData();
   const rootGrant = useWindowGrant(context, block.root.permission);
   const agentsBinding = useBinding(`${pointer}/agents`, block.agents);
@@ -79,7 +93,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
     });
     setSnapshot(null);
     setLoadError(null);
-    void context.store.call({ op: "local_agent.attach", window_id: windowId }).then((reply) => {
+    void enqueueAgent(context.store, windowId, () => context.store.call({ op: "local_agent.attach", window_id: windowId })).then((reply) => {
       if (!active) return;
       if (reply.op !== "local_agent.attach") throw new Error("에이전트 상태를 불러오지 못했습니다");
       generationRef.current = reply.snapshot.generation;
@@ -94,7 +108,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
       unsubscribe();
       coalescedText.cancel();
       generationRef.current = null;
-      void context.store.call({ op: "local_agent.detach", window_id: windowId }).catch(() => undefined);
+      void enqueueAgent(context.store, windowId, () => context.store.call({ op: "local_agent.detach", window_id: windowId })).catch(() => undefined);
     };
   }, [applyUpdate, coalescedText, context.store, windowId]);
 
@@ -184,8 +198,10 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
 
   const retryLoading = async () => {
     try {
-      await data.retry();
-      const reply = await context.store.call({ op: "local_agent.attach", window_id: windowId });
+      const reply = await enqueueAgent(context.store, windowId, async () => {
+        await data.retry();
+        return context.store.call({ op: "local_agent.attach", window_id: windowId });
+      });
       if (reply.op !== "local_agent.attach") throw new Error("에이전트 상태를 불러오지 못했습니다");
       generationRef.current = reply.snapshot.generation;
       setSnapshot(reply.snapshot);
@@ -198,7 +214,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
   if (loadError) main = <div className="ks-agent-session-state"><Notice role="alert" actions={retryAction}>{loadError}</Notice></div>;
   else if (!snapshot) main = <div className="ks-agent-session-state"><StatusText>불러오는 중</StatusText></div>;
   else if (snapshot.phase === "choosing_agent") main = <div className="ks-agent-session-state">{snapshot.agents.length === 0 && agentsBinding.status === "failed"
-    ? <Notice role="alert" actions={retryAction}>{agentsBinding.message}</Notice>
+    ? <Notice role="alert" actions={connected ? retryAction : undefined}>{agentsBinding.message}</Notice>
     : snapshot.agents.length === 0 && agentsBinding.status === "loading"
       ? <StatusText>불러오는 중</StatusText>
       : <EmptyState icon={<MessageSquare size="empty" />} text="에이전트를 골라 주세요" />}</div>;

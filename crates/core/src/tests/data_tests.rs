@@ -1152,7 +1152,7 @@ fn path_change_failed_fetch_clears_prior_value() {
 }
 
 #[test]
-fn unavailable_storage_never_looks_like_a_null_default() {
+fn app_storage_unavailable_never_looks_like_a_null_default() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
     let definition = json!({
@@ -1174,7 +1174,7 @@ fn unavailable_storage_never_looks_like_a_null_default() {
         crate::app_storage::read(&core.inner, &window, "choice")
             .unwrap_err()
             .message,
-        "서버에 연결되어 있지 않습니다."
+        "서버에 연결되어 있지 않습니다"
     );
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),

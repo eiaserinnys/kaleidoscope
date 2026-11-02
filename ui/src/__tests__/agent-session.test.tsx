@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentSessionBlock, type AgentSessionBlockData } from "../blocks/agent-session";
@@ -43,8 +44,10 @@ function localAgent(phase: LocalAgentSnapshot["phase"]): LocalAgentSnapshot {
   };
 }
 
-function setup(agent = localAgent("ready"), respond?: (request: CoreRequest) => Promise<CoreReply>, view: DataView = { values: {}, sources: {} }, appDefinition = definition, failFirstAttach = false) {
+function setup(agent = localAgent("ready"), respond?: (request: CoreRequest) => Promise<CoreReply>, view: DataView = { values: {}, sources: {} }, appDefinition = definition, failFirstAttach = false, connected = false, offline = false) {
   const base = makeTestSnapshot({ definitions: [appDefinition] });
+  if (connected) base.link = { state: "connected", mode: "remote", server_url: "https://example.test", device_name: "시험" };
+  if (offline) base.link = { state: "offline", mode: "remote", server_url: "https://example.test", device_name: "시험", reason: "연결이 끊겼습니다" };
   const listeners = new Set<(event: CoreEvent) => void>();
   let dataAttempts = 0;
   let agentAttempts = 0;
@@ -106,7 +109,7 @@ describe("기기 로컬 에이전트 화면", () => {
     const state = setup(empty, undefined, {
       values: { "/ui/agents": { status: "failed", message: "저장소를 읽지 못했습니다", retry: [] } },
       sources: {},
-    }, failedDefinition);
+    }, failedDefinition, false, true);
 
     expect((await screen.findByRole("alert")).textContent).toContain("저장소를 읽지 못했습니다");
     fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
@@ -116,6 +119,38 @@ describe("기기 로컬 에이전트 화면", () => {
     expect(button.disabled).toBe(true);
     fireEvent.click(button);
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("서버 연결이 없으면 저장소 오류의 다시 시도를 표시하지 않는다", async () => {
+    const failedDefinition = { ...definition, ui: { ...definition.ui, agents: { expr: "$storage.agents" } } } as AppDefinition;
+    const empty = { ...localAgent("choosing_agent"), agents: [] };
+    setup(empty, undefined, { values: { "/ui/agents": { status: "failed", message: "서버에 연결되어 있지 않습니다", retry: [] } }, sources: {} }, failedDefinition, false, false, true);
+    expect(await screen.findByText("서버에 연결되어 있지 않습니다")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "다시 시도" })).toBeNull();
+  });
+
+  it("빠른 재마운트는 앞선 분리가 끝난 뒤 다시 붙인다", async () => {
+    const base = makeTestSnapshot({ definitions: [definition] });
+    let releaseDetach!: () => void;
+    const detached = new Promise<void>((resolve) => { releaseDetach = resolve; });
+    const listeners = new Set<(event: CoreEvent) => void>();
+    const call = vi.fn(async (request: CoreRequest): Promise<CoreReply> => {
+      if (request.op === "data.attach") return { op: "data.attach", view: { values: {}, sources: {} } };
+      if (request.op === "data.detach") return { op: "data.detach" };
+      if (request.op === "local_agent.attach") return { op: "local_agent.attach", snapshot: localAgent("choosing_agent") };
+      if (request.op === "local_agent.detach") { await detached; return { op: "local_agent.detach" }; }
+      return { op: request.op } as CoreReply;
+    });
+    const store = { call, getSnapshot: () => base, getError: () => null, subscribe: () => () => undefined, subscribeEvents: (listener: (event: CoreEvent) => void) => { listeners.add(listener); return () => listeners.delete(listener); }, ready: Promise.resolve(), dispose: () => undefined } as unknown as ShellStore;
+    const window = base.shared.windows[0];
+    const context = { store, window: { id: window.id, app_id: window.app_id, app_version: window.app_version, desktop_id: window.desktop_id }, definition };
+    render(<StrictMode><WindowDataProvider store={store} windowId={window.id} definition={definition}><AgentSessionBlock block={definition.ui as AgentSessionBlockData} context={context} /></WindowDataProvider></StrictMode>);
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "local_agent.detach")).toHaveLength(1));
+    expect(call.mock.calls.filter(([request]) => request.op === "local_agent.attach")).toHaveLength(1);
+    await act(async () => { releaseDetach(); });
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "local_agent.attach")).toHaveLength(2));
+    act(() => { listeners.forEach((listener) => listener({ event: "local_agent.update", window_id: window.id, generation: "generation-2", update: { type: "snapshot", snapshot: { ...localAgent("ready"), generation: "generation-2" } } })); });
+    expect(await screen.findByRole("textbox", { name: "메시지" })).toBeTruthy();
   });
 
   it.each([
