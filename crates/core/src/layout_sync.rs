@@ -92,7 +92,7 @@ fn run(inner: Arc<Inner>, generation: u64, epoch: u64) {
                 link::token_rejected(&inner, file);
                 return;
             }
-            Err(RegistryError::Failure(_)) | Err(RegistryError::NotFound) => {
+            Err(RegistryError::Failure { .. }) | Err(RegistryError::NotFound) => {
                 for _ in 0..LAYOUT_RETRY_SECS {
                     if !is_active(&inner, generation, epoch) {
                         return;

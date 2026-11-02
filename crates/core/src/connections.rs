@@ -6,14 +6,15 @@ use std::time::Duration;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::{
     data::{self, HttpMethod},
+    errors,
     registry::{
         ConnectionAccept, ConnectionInfo, ConnectionKind, ConnectionReply, ConnectionRequest,
     },
     validate::valid_request_path,
-    CoreError, ErrorCode, FileAccess, LinkStatus, PermissionDecl,
+    CoreError, FileAccess, LinkStatus, PermissionDecl,
 };
 
-use crate::{app_commands, error, Inner};
+use crate::{app_commands, Inner};
 
 pub(crate) trait LoginStore: Send + Sync {
     fn token(&self, connection: &str) -> Option<String>;
@@ -49,10 +50,10 @@ pub(crate) fn request(
             .windows
             .iter()
             .find(|item| item.id == window_id)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(errors::CONN_REQUEST_WINDOW_NOT_FOUND)?;
         let definition =
             app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(errors::CONN_REQUEST_APP_NOT_FOUND)?;
         definition
             .permissions
             .iter()
@@ -69,10 +70,10 @@ pub(crate) fn request(
             .windows
             .iter()
             .find(|item| item.id == window_id)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(errors::CONN_REQUEST_WINDOW_NOT_FOUND)?;
         let definition =
             app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(errors::CONN_REQUEST_APP_NOT_FOUND)?;
         match definition
             .permissions
             .iter()
@@ -86,7 +87,7 @@ pub(crate) fn request(
     };
     if let Some((base_url, paths)) = public {
         if method != HttpMethod::Get || body.is_some() {
-            return Err(error::make(ErrorCode::PermissionDenied).into());
+            return Err(errors::CONN_REQUEST_HTTP_READ_ONLY().into());
         }
         let limit = if matches!(accept, ConnectionAccept::Bytes) {
             data::MEDIA_MAX_BYTES
@@ -94,7 +95,11 @@ pub(crate) fn request(
             data::SOURCE_MAX_BYTES
         };
         let response = kaleidoscope_data::public_http::get(&base_url, &paths, path, &query, limit)
-            .map_err(server)?;
+            .map_err(|detail| {
+                let mut error = errors::CONN_REQUEST_PUBLIC_HTTP_FAILED();
+                error.details.push(detail);
+                RequestError::Core(error)
+            })?;
         let mut reply = ConnectionReply {
             status: response.status,
             rate_limit: response.rate_limit,
@@ -106,7 +111,11 @@ pub(crate) fn request(
         match accept {
             ConnectionAccept::Bytes => reply.data_base64 = Some(STANDARD.encode(response.bytes)),
             ConnectionAccept::Text => {
-                reply.text = Some(String::from_utf8(response.bytes).map_err(server)?)
+                reply.text = Some(String::from_utf8(response.bytes).map_err(|detail| {
+                    let mut error = errors::CONN_REQUEST_PUBLIC_TEXT_INVALID();
+                    error.details.push(detail.to_string());
+                    RequestError::Core(error)
+                })?)
             }
             ConnectionAccept::Json => match serde_json::from_slice(&response.bytes) {
                 Ok(value) => reply.json = Some(value),
@@ -133,18 +142,50 @@ pub(crate) fn request(
             );
             let file = inner.link_file.lock().unwrap().clone();
             let Some(file) = file.filter(|_| connected) else {
-                return Err(error::with_message(
-                    ErrorCode::Server,
-                    "서버에 연결되어 있지 않습니다",
-                )
-                .into());
+                return Err(errors::CONN_REQUEST_RELAY_DISCONNECTED(&connection).into());
             };
             inner
                 .registry
                 .connection_request(&file.server_url, &file.token, &connection, &req)
                 .map_err(|err| {
-                    error::with_message(ErrorCode::Server, &format!("연결 요청 실패: {err:?}"))
-                        .into()
+                    let host = reqwest::Url::parse(&file.server_url)
+                        .ok()
+                        .and_then(|url| url.host_str().map(str::to_owned))
+                        .unwrap_or_else(|| "알 수 없는 서버".into());
+                    match err {
+                        crate::registry_client::RegistryError::Validation(mut error) => {
+                            error.code = kaleidoscope_contract::ErrorCode::Server;
+                            RequestError::Core(error)
+                        }
+                        crate::registry_client::RegistryError::Unauthorized => {
+                            let mut error = errors::CONN_REQUEST_RELAY_REJECTED(&connection, &host);
+                            error.details = vec![format!("HTTP 401; host={host}")];
+                            RequestError::Core(error)
+                        }
+                        crate::registry_client::RegistryError::NotFound => {
+                            let mut error = errors::CONN_REQUEST_RELAY_REJECTED(&connection, &host);
+                            error.details = vec![format!("HTTP 404; host={host}")];
+                            RequestError::Core(error)
+                        }
+                        crate::registry_client::RegistryError::Failure { stage, detail } => {
+                            let mut error = match stage {
+                                crate::registry_client::FailureStage::Send => {
+                                    errors::CONN_REQUEST_RELAY_UNREACHABLE(&connection, &host)
+                                }
+                                crate::registry_client::FailureStage::Status => {
+                                    errors::CONN_REQUEST_RELAY_REJECTED(&connection, &host)
+                                }
+                                crate::registry_client::FailureStage::Read => {
+                                    errors::CONN_REQUEST_RELAY_RESPONSE_READ_FAILED(
+                                        &connection,
+                                        &host,
+                                    )
+                                }
+                            };
+                            error.details = vec![detail];
+                            RequestError::Core(error)
+                        }
+                    }
                 })
         }
         ConnectionKind::Oauth => {
@@ -180,17 +221,17 @@ pub(crate) fn login(
             .windows
             .iter()
             .find(|window| window.id == window_id)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(errors::CONN_LOGIN_WINDOW_NOT_FOUND)?;
         let definition =
             app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(errors::CONN_LOGIN_APP_NOT_FOUND)?;
         match definition
             .permissions
             .iter()
             .find(|decl| decl.id() == permission)
         {
             Some(PermissionDecl::Connection { connection, .. }) => connection.clone(),
-            _ => return Err(error::make(ErrorCode::PermissionDenied)),
+            _ => return Err(errors::CONN_LOGIN_PERMISSION_MISSING()),
         }
     };
     let info = inner
@@ -200,17 +241,14 @@ pub(crate) fn login(
         .iter()
         .find(|info| info.name == connection_name)
         .cloned()
-        .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+        .ok_or_else(errors::CONN_LOGIN_CONNECTION_MISSING)?;
     if info.kind != ConnectionKind::Oauth {
-        return Err(error::make(ErrorCode::InvalidRequest));
+        return Err(errors::CONN_LOGIN_NOT_OAUTH());
     }
     {
         let mut active = inner.login_in_progress.lock().unwrap();
         if !active.insert(connection_name.clone()) {
-            return Err(error::with_message(
-                ErrorCode::InvalidRequest,
-                "이미 로그인하는 중입니다",
-            ));
+            return Err(errors::CONN_LOGIN_ALREADY_RUNNING(&connection_name));
         }
     }
     let result = crate::oauth::login(
@@ -247,10 +285,10 @@ pub(crate) fn authorize(
             .windows
             .iter()
             .find(|window| window.id == window_id)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+            .ok_or_else(errors::CONN_AUTHORIZE_WINDOW_NOT_FOUND)?;
         let definition =
             app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(errors::CONN_AUTHORIZE_APP_NOT_FOUND)?;
         let declaration = definition
             .permissions
             .iter()
@@ -259,10 +297,10 @@ pub(crate) fn authorize(
             connection, access, ..
         }) = declaration
         else {
-            return Err(error::make(ErrorCode::PermissionDenied));
+            return Err(errors::CONN_AUTHORIZE_PERMISSION_MISSING());
         };
         if method != HttpMethod::Get && *access != FileAccess::Readwrite {
-            return Err(error::make(ErrorCode::PermissionDenied));
+            return Err(errors::CONN_AUTHORIZE_READ_ONLY());
         }
         (window.app_id.clone(), connection.clone())
     };
@@ -273,17 +311,14 @@ pub(crate) fn authorize(
         .iter()
         .find(|info| info.name == connection)
         .cloned()
-        .ok_or_else(|| error::with_message(ErrorCode::Server, "서버에 없는 연결입니다"))?;
+        .ok_or_else(|| errors::CONN_AUTHORIZE_CONNECTION_MISSING(&connection))?;
     if !valid_request_path(path)
         || (!info.paths.is_empty() && !info.paths.iter().any(|prefix| path.starts_with(prefix)))
     {
-        return Err(error::with_message(
-            ErrorCode::PermissionDenied,
-            "허용하지 않은 연결 경로입니다",
-        ));
+        return Err(errors::CONN_AUTHORIZE_PATH_DENIED(&connection));
     }
     if method != HttpMethod::Get && !info.writable {
-        return Err(error::make(ErrorCode::PermissionDenied));
+        return Err(errors::CONN_AUTHORIZE_WRITE_DENIED(&connection));
     }
     Ok((app_id, info))
 }
@@ -293,8 +328,17 @@ fn oauth_request(
     token: &str,
     request: &ConnectionRequest,
 ) -> Result<ConnectionReply, RequestError> {
-    let client = crate::http_client::shared().map_err(|error| server(&error.message))?;
-    let method = reqwest::Method::from_bytes(request.method.as_str().as_bytes()).map_err(server)?;
+    let client = crate::http_client::shared().map_err(|detail| {
+        let mut error = errors::CONN_REQUEST_OAUTH_CLIENT_FAILED(&info.name);
+        error.details.push(detail.message);
+        RequestError::Core(error)
+    })?;
+    let method =
+        reqwest::Method::from_bytes(request.method.as_str().as_bytes()).map_err(|detail| {
+            let mut error = errors::CONN_REQUEST_OAUTH_METHOD_INVALID(&info.name);
+            error.details.push(detail.to_string());
+            RequestError::Core(error)
+        })?;
     let mut builder = client
         .request(method, format!("{}{}", info.base_url, request.path))
         .bearer_auth(token)
@@ -303,8 +347,22 @@ fn oauth_request(
     if let Some(body) = &request.body {
         builder = builder.json(body);
     }
-    let mut response = builder.send().map_err(server)?;
+    let mut response = builder.send().map_err(|detail| {
+        let host = detail
+            .url()
+            .and_then(|url| url.host_str())
+            .unwrap_or("알 수 없는 서버")
+            .to_owned();
+        let mut error = errors::CONN_REQUEST_OAUTH_UNREACHABLE(&info.name, &host);
+        error.details = vec![format!("{}; host={host}", detail.without_url())];
+        RequestError::Core(error)
+    })?;
     let status = response.status().as_u16();
+    let response_host = response
+        .url()
+        .host_str()
+        .unwrap_or("알 수 없는 서버")
+        .to_owned();
     let rate_limit = kaleidoscope_data::rate_limit::rate_limit(status, response.headers());
     let mime = response
         .headers()
@@ -320,9 +378,14 @@ fn oauth_request(
     (&mut response)
         .take(limit + 1)
         .read_to_end(&mut bytes)
-        .map_err(server)?;
+        .map_err(|detail| {
+            let mut error =
+                errors::CONN_REQUEST_OAUTH_RESPONSE_READ_FAILED(&info.name, &response_host);
+            error.details = vec![format!("{}; host={response_host}", detail)];
+            RequestError::Core(error)
+        })?;
     if bytes.len() as u64 > limit {
-        return Err(error::with_message(ErrorCode::Io, "응답이 너무 큽니다").into());
+        return Err(errors::CONN_REQUEST_OAUTH_RESPONSE_TOO_LARGE(&info.name).into());
     }
     let mut reply = ConnectionReply {
         status,
@@ -334,7 +397,13 @@ fn oauth_request(
     };
     match request.accept {
         ConnectionAccept::Bytes => reply.data_base64 = Some(STANDARD.encode(bytes)),
-        ConnectionAccept::Text => reply.text = Some(String::from_utf8(bytes).map_err(server)?),
+        ConnectionAccept::Text => {
+            reply.text = Some(String::from_utf8(bytes).map_err(|detail| {
+                let mut error = errors::CONN_REQUEST_OAUTH_RESPONSE_TEXT_INVALID(&info.name);
+                error.details.push(detail.to_string());
+                RequestError::Core(error)
+            })?)
+        }
         ConnectionAccept::Json => match serde_json::from_slice(&bytes) {
             Ok(value) => reply.json = Some(value),
             Err(_) => reply.text = Some(String::from_utf8_lossy(&bytes).into_owned()),
@@ -343,21 +412,10 @@ fn oauth_request(
     Ok(reply)
 }
 
-fn server(error: impl std::fmt::Display) -> RequestError {
-    error::with_message(ErrorCode::Server, &error.to_string()).into()
-}
-
 pub(crate) fn response_error(reply: &ConnectionReply) -> CoreError {
-    let body = reply
-        .text
-        .clone()
-        .or_else(|| reply.json.as_ref().map(|value| value.to_string()))
-        .unwrap_or_default();
-    let excerpt: String = body.chars().take(200).collect();
-    error::with_message(
-        ErrorCode::Server,
-        &format!("HTTP {}: {}", reply.status, excerpt),
-    )
+    let mut error = errors::CONN_REQUEST_SERVER_RESPONSE_FAILED();
+    error.details = vec![format!("HTTP {}", reply.status)];
+    error
 }
 
 #[cfg(test)]
@@ -397,5 +455,46 @@ mod rate_limit_tests {
         let reply = oauth_request(&info, "token", &request).unwrap();
         assert_eq!(reply.rate_limit.unwrap().retry_after_secs, Some(7));
         server.join().unwrap();
+    }
+
+    #[test]
+    fn oauth_network_error_does_not_expose_query_parameters() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        drop(listener);
+        let info = ConnectionInfo {
+            name: "github".into(),
+            kind: ConnectionKind::Oauth,
+            base_url: format!("http://{address}"),
+            writable: false,
+            paths: vec![],
+            issuer: None,
+            scopes: None,
+            resource: None,
+        };
+        let request = ConnectionRequest {
+            app_id: "test".into(),
+            method: HttpMethod::Get,
+            path: "/items".into(),
+            query: [("api_key".into(), "query-secret".into())].into(),
+            body: None,
+            accept: ConnectionAccept::Json,
+        };
+
+        let error = match oauth_request(&info, "header-secret", &request) {
+            Ok(_) => panic!("연결이 끊긴 주소는 요청에 실패해야 합니다"),
+            Err(RequestError::Core(error)) => error,
+            Err(RequestError::Login(_)) => {
+                panic!("네트워크 오류가 로그인 필요 오류가 되면 안 됩니다")
+            }
+            Err(RequestError::RateLimited { .. }) => {
+                panic!("연결 거절은 속도 제한 오류가 되면 안 됩니다")
+            }
+        };
+        let rendered = format!("{} {:?}", error.message, error.details);
+
+        assert!(!rendered.contains("api_key"));
+        assert!(!rendered.contains("query-secret"));
+        assert!(!rendered.contains("header-secret"));
     }
 }

@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use kaleidoscope_contract::{data, registry::ConnectionInfo, CoreError, ErrorCode};
+use kaleidoscope_contract::{data, errors, registry::ConnectionInfo, CoreError};
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -15,7 +15,6 @@ use uuid::Uuid;
 const CALLBACK_REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 
 use crate::{
-    error,
     logins::{LoginEntry, Logins},
     Host,
 };
@@ -59,48 +58,71 @@ pub(crate) enum FlowError {
     Server,
 }
 
-fn client() -> Result<Client, CoreError> {
+fn client(connection: &str) -> Result<Client, CoreError> {
     Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(data::CONNECTION_TIMEOUT_SECS))
         .build()
-        .map_err(server)
+        .map_err(|detail| {
+            let mut error = errors::CONN_LOGIN_OAUTH_CLIENT_FAILED(connection);
+            error.details.push(detail.to_string());
+            error
+        })
 }
 
 fn issuer_for(info: &ConnectionInfo) -> Result<String, CoreError> {
     if let Some(issuer) = &info.issuer {
         return Ok(issuer.trim_end_matches('/').to_string());
     }
-    let base = Url::parse(&info.base_url).map_err(server)?;
+    let base =
+        Url::parse(&info.base_url).map_err(|_| errors::CONN_LOGIN_OAUTH_URL_INVALID(&info.name))?;
     Ok(base.origin().ascii_serialization())
 }
 
-fn discover(http: &Client, issuer: &str) -> Result<Metadata, CoreError> {
-    let url = format!(
+fn discover(http: &Client, connection: &str, issuer: &str) -> Result<Metadata, CoreError> {
+    let url = Url::parse(&format!(
         "{}/.well-known/oauth-authorization-server",
         issuer.trim_end_matches('/')
-    );
-    http.get(url)
-        .send()
-        .map_err(server)?
-        .error_for_status()
-        .map_err(server)?
-        .json()
-        .map_err(server)
+    ))
+    .map_err(|_| errors::CONN_LOGIN_OAUTH_URL_INVALID(connection))?;
+    let host = url.host_str().unwrap_or("알 수 없는 서버").to_owned();
+    let response = http.get(url).send().map_err(|detail| {
+        let mut error = errors::CONN_LOGIN_OAUTH_DISCOVERY_UNREACHABLE(connection, &host);
+        error.details = vec![format!("{}; host={host}", detail.without_url())];
+        error
+    })?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let mut error = errors::CONN_LOGIN_OAUTH_DISCOVERY_REJECTED(connection, &host);
+        error.details = vec![format!("HTTP {status}; host={host}")];
+        return Err(error);
+    }
+    response.json().map_err(|detail| {
+        let mut error = errors::CONN_LOGIN_OAUTH_METADATA_INVALID(connection, &host);
+        error.details = vec![format!("{}; host={host}", detail.without_url())];
+        error
+    })
 }
 
-fn endpoints(metadata: Metadata) -> Result<Endpoints, CoreError> {
+fn endpoints(metadata: Metadata, connection: &str, host: &str) -> Result<Endpoints, CoreError> {
     if !metadata
         .code_challenge_methods_supported
         .iter()
         .any(|method| method == "S256")
     {
-        return Err(error::make(ErrorCode::Server));
+        return Err(errors::CONN_LOGIN_OAUTH_METHOD_UNSUPPORTED(connection));
     }
+    let parse_endpoint = |value: &str| {
+        Url::parse(value).map_err(|_| {
+            let mut error = errors::CONN_LOGIN_OAUTH_METADATA_INVALID(connection, host);
+            error.details = vec![format!("OAuth endpoint is invalid; host={host}")];
+            error
+        })
+    };
     Ok(Endpoints {
-        authorization: Url::parse(&metadata.authorization_endpoint).map_err(server)?,
-        token: Url::parse(&metadata.token_endpoint).map_err(server)?,
-        registration: Url::parse(&metadata.registration_endpoint).map_err(server)?,
+        authorization: parse_endpoint(&metadata.authorization_endpoint)?,
+        token: parse_endpoint(&metadata.token_endpoint)?,
+        registration: parse_endpoint(&metadata.registration_endpoint)?,
     })
 }
 
@@ -127,9 +149,13 @@ pub(crate) fn login_with_timeout(
     timeout: Duration,
 ) -> Result<(), CoreError> {
     let issuer = issuer_for(info)?;
-    let http = client()?;
-    let metadata = discover(&http, &issuer)?;
-    let endpoints = endpoints(metadata)?;
+    let http = client(&info.name)?;
+    let metadata = discover(&http, &info.name, &issuer)?;
+    let issuer_host = Url::parse(&issuer)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+        .unwrap_or_else(|| "알 수 없는 서버".into());
+    let endpoints = endpoints(metadata, &info.name, &issuer_host)?;
     let deadline = Instant::now() + timeout;
     let previous = logins
         .entry(&info.name)
@@ -150,7 +176,14 @@ pub(crate) fn login_with_timeout(
         };
         let redirect_uri = format!(
             "http://127.0.0.1:{}/callback",
-            listener.local_addr().map_err(server)?.port()
+            listener
+                .local_addr()
+                .map_err(|detail| {
+                    let mut error = errors::CONN_LOGIN_CALLBACK_LISTENER_FAILED(&info.name);
+                    error.details.push(detail.to_string());
+                    error
+                })?
+                .port()
         );
         let verifier = verifier();
         let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
@@ -171,11 +204,13 @@ pub(crate) fn login_with_timeout(
                 query.append_pair("resource", resource);
             }
         }
-        host.open_url(authorization.as_str()).map_err(|error| {
-            if error.kind() == std::io::ErrorKind::Unsupported {
-                error::make(ErrorCode::Unavailable)
+        host.open_url(authorization.as_str()).map_err(|detail| {
+            if detail.kind() == std::io::ErrorKind::Unsupported {
+                errors::CONN_LOGIN_BROWSER_UNAVAILABLE(&info.name)
             } else {
-                server(error)
+                let mut error = errors::CONN_LOGIN_BROWSER_OPEN_FAILED(&info.name);
+                error.details.push(detail.to_string());
+                error
             }
         })?;
 
@@ -183,17 +218,14 @@ pub(crate) fn login_with_timeout(
         let callback = match wait_for_callback(&listener, &state, remaining) {
             Ok(callback) => callback,
             Err(FlowError::Timeout) => {
-                return Err(error::with_message(
-                    ErrorCode::InvalidRequest,
-                    "로그인을 마치지 않았습니다",
-                ));
+                return Err(errors::CONN_LOGIN_CALLBACK_TIMEOUT(&info.name));
             }
             Err(FlowError::InvalidClient) if attempt == 0 => {
                 logins.clear_client(&info.name, &issuer);
                 continue;
             }
             Err(FlowError::InvalidClient | FlowError::Server) => {
-                return Err(error::make(ErrorCode::Server));
+                return Err(errors::CONN_LOGIN_CALLBACK_INVALID(&info.name));
             }
         };
         let code = match callback {
@@ -211,7 +243,17 @@ pub(crate) fn login_with_timeout(
                 let mut entry = logins.entry(&info.name).unwrap_or(LoginEntry {
                     issuer: issuer.clone(),
                     client_id: Some(client_id),
-                    redirect_port: Some(listener.local_addr().map_err(server)?.port()),
+                    redirect_port: Some(
+                        listener
+                            .local_addr()
+                            .map_err(|detail| {
+                                let mut error =
+                                    errors::CONN_LOGIN_CALLBACK_LISTENER_FAILED(&info.name);
+                                error.details.push(detail.to_string());
+                                error
+                            })?
+                            .port(),
+                    ),
                     access_token: None,
                     refresh_token: None,
                     expires_at: None,
@@ -223,15 +265,18 @@ pub(crate) fn login_with_timeout(
                 logins.store(&info.name, entry)?;
                 return Ok(());
             }
-            Err(ExchangeError::InvalidClient) if attempt == 0 => {
+            Err(ExchangeError::InvalidClient { .. }) if attempt == 0 => {
                 logins.clear_client(&info.name, &issuer);
             }
-            Err(ExchangeError::InvalidClient | ExchangeError::Server) => {
-                return Err(error::make(ErrorCode::Server));
+            Err(error) => {
+                return Err(exchange_error_to_core(error, &info.name));
             }
         }
     }
-    Err(error::make(ErrorCode::Server))
+    Err(errors::CONN_LOGIN_CODE_EXCHANGE_RESPONSE_INVALID(
+        &info.name,
+        &issuer_host,
+    ))
 }
 
 fn register(
@@ -242,8 +287,19 @@ fn register(
     issuer: &str,
     logins: &Logins,
 ) -> Result<(TcpListener, String), CoreError> {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(server)?;
-    let port = listener.local_addr().map_err(server)?.port();
+    let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|detail| {
+        let mut error = errors::CONN_LOGIN_CALLBACK_LISTENER_FAILED(&info.name);
+        error.details.push(detail.to_string());
+        error
+    })?;
+    let port = listener
+        .local_addr()
+        .map_err(|detail| {
+            let mut error = errors::CONN_LOGIN_CALLBACK_LISTENER_FAILED(&info.name);
+            error.details.push(detail.to_string());
+            error
+        })?
+        .port();
     let redirect_uri = format!("http://127.0.0.1:{port}/callback");
     let mut body = json!({
         "client_name": format!("kaleidoscope ({device_name})"),
@@ -259,16 +315,42 @@ fn register(
         .post(endpoints.registration.clone())
         .json(&body)
         .send()
-        .map_err(server)?
-        .error_for_status()
-        .map_err(server)?
-        .json::<Value>()
-        .map_err(server)?;
+        .map_err(|detail| {
+            let host = endpoints
+                .registration
+                .host_str()
+                .unwrap_or("알 수 없는 서버");
+            let mut error = errors::CONN_LOGIN_CLIENT_REGISTER_UNREACHABLE(&info.name, host);
+            error.details = vec![format!("{}; host={host}", detail.without_url())];
+            error
+        })?;
+    let registration_host = response
+        .url()
+        .host_str()
+        .unwrap_or("알 수 없는 서버")
+        .to_owned();
+    if !response.status().is_success() {
+        let status = response.status();
+        let mut error = errors::CONN_LOGIN_CLIENT_REGISTER_REJECTED(&info.name, &registration_host);
+        error.details = vec![format!("HTTP {status}; host={registration_host}")];
+        return Err(error);
+    }
+    let response: Value = response.json().map_err(|detail| {
+        let mut error =
+            errors::CONN_LOGIN_CLIENT_REGISTER_RESPONSE_INVALID(&info.name, &registration_host);
+        error.details = vec![format!(
+            "{}; host={registration_host}",
+            detail.without_url()
+        )];
+        error
+    })?;
     let client_id = response
         .get("client_id")
         .and_then(Value::as_str)
         .filter(|id| !id.is_empty())
-        .ok_or_else(|| error::make(ErrorCode::Server))?
+        .ok_or_else(|| {
+            errors::CONN_LOGIN_CLIENT_REGISTER_RESPONSE_INVALID(&info.name, &registration_host)
+        })?
         .to_string();
     logins.update_client(&info.name, issuer, client_id.clone(), port)?;
     Ok((listener, client_id))
@@ -282,8 +364,22 @@ fn verifier() -> String {
 }
 
 enum ExchangeError {
-    InvalidClient,
-    Server,
+    InvalidClient {
+        status: reqwest::StatusCode,
+        host: String,
+    },
+    Unreachable {
+        host: String,
+        detail: String,
+    },
+    Rejected {
+        status: reqwest::StatusCode,
+        host: String,
+    },
+    ResponseInvalid {
+        host: String,
+        detail: String,
+    },
 }
 
 fn exchange_code(
@@ -294,6 +390,7 @@ fn exchange_code(
     code: &str,
     verifier: &str,
 ) -> Result<RefreshedTokens, ExchangeError> {
+    let host = endpoint.host_str().unwrap_or("알 수 없는 서버").to_owned();
     let response = http
         .post(endpoint.clone())
         .form(&[
@@ -304,8 +401,12 @@ fn exchange_code(
             ("code_verifier", verifier),
         ])
         .send()
-        .map_err(|_| ExchangeError::Server)?;
+        .map_err(|detail| ExchangeError::Unreachable {
+            host: host.clone(),
+            detail: detail.without_url().to_string(),
+        })?;
     if !response.status().is_success() {
+        let status = response.status();
         let invalid_client = response
             .json::<Value>()
             .ok()
@@ -317,14 +418,23 @@ fn exchange_code(
             })
             .is_some_and(|error| error == "invalid_client");
         return Err(if invalid_client {
-            ExchangeError::InvalidClient
+            ExchangeError::InvalidClient { status, host }
         } else {
-            ExchangeError::Server
+            ExchangeError::Rejected { status, host }
         });
     }
-    let response: TokenResponse = response.json().map_err(|_| ExchangeError::Server)?;
+    let response: TokenResponse =
+        response
+            .json()
+            .map_err(|detail| ExchangeError::ResponseInvalid {
+                host: host.clone(),
+                detail: detail.without_url().to_string(),
+            })?;
     if response.access_token.is_empty() {
-        return Err(ExchangeError::Server);
+        return Err(ExchangeError::ResponseInvalid {
+            host,
+            detail: "OAuth 서버가 빈 access token을 반환했습니다".into(),
+        });
     }
     Ok(RefreshedTokens {
         access_token: response.access_token,
@@ -333,9 +443,30 @@ fn exchange_code(
     })
 }
 
+fn exchange_error_to_core(error: ExchangeError, connection: &str) -> CoreError {
+    match error {
+        ExchangeError::InvalidClient { status, host }
+        | ExchangeError::Rejected { status, host } => {
+            let mut error = errors::CONN_LOGIN_CODE_EXCHANGE_REJECTED(connection, &host);
+            error.details = vec![format!("HTTP {status}; host={host}")];
+            error
+        }
+        ExchangeError::Unreachable { host, detail } => {
+            let mut error = errors::CONN_LOGIN_CODE_EXCHANGE_UNREACHABLE(connection, &host);
+            error.details = vec![format!("{detail}; host={host}")];
+            error
+        }
+        ExchangeError::ResponseInvalid { host, detail } => {
+            let mut error = errors::CONN_LOGIN_CODE_EXCHANGE_RESPONSE_INVALID(connection, &host);
+            error.details = vec![format!("{detail}; host={host}")];
+            error
+        }
+    }
+}
+
 pub(crate) fn refresh_access_token(entry: &LoginEntry) -> Option<RefreshedTokens> {
-    let http = client().ok()?;
-    let metadata = discover(&http, &entry.issuer).ok()?;
+    let http = client("OAuth").ok()?;
+    let metadata = discover(&http, "OAuth", &entry.issuer).ok()?;
     let token_endpoint = Url::parse(&metadata.token_endpoint).ok()?;
     let refresh_token = entry.refresh_token.as_deref()?;
     let client_id = entry.client_id.as_deref()?;
@@ -460,8 +591,4 @@ fn respond(stream: &mut TcpStream, status: u16, message: &str) {
         body.len()
     );
     let _ = stream.flush();
-}
-
-fn server(error: impl std::fmt::Display) -> CoreError {
-    error::with_message(ErrorCode::Server, &error.to_string())
 }

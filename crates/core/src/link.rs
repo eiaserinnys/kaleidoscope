@@ -8,10 +8,9 @@ use chrono::{DateTime, Utc};
 use kaleidoscope_contract::registry::{
     DeviceEvent, DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartRequest,
 };
-use kaleidoscope_contract::{CoreError, CoreReply, ErrorCode, LinkStatus};
+use kaleidoscope_contract::{errors, CoreError, CoreReply, ErrorCode, LinkStatus};
 
 use crate::app_commands;
-use crate::error;
 use crate::registry_client::{parse_event_line, RegistryError};
 use crate::registry_events;
 use crate::storage::{self, LinkFile};
@@ -20,7 +19,7 @@ use crate::Inner;
 pub(crate) fn registry_error_to_core(error: RegistryError, message: &str) -> CoreError {
     match error {
         RegistryError::Validation(error) => error,
-        RegistryError::Failure(detail) => CoreError {
+        RegistryError::Failure { detail, .. } => CoreError {
             id: None,
             code: ErrorCode::Server,
             message: message.into(),
@@ -53,10 +52,10 @@ pub(crate) fn start(
         .unwrap_or_else(|| inner.server_url.clone());
     let server_url = server_url.trim().trim_end_matches('/').to_string();
     if server_url.is_empty() {
-        return Err(error::make(ErrorCode::InvalidRequest));
+        return Err(errors::CONN_LINK_START_URL_INVALID());
     }
     let url =
-        reqwest::Url::parse(&server_url).map_err(|_| error::make(ErrorCode::InvalidRequest))?;
+        reqwest::Url::parse(&server_url).map_err(|_| errors::CONN_LINK_START_URL_INVALID())?;
     if !matches!(url.scheme(), "http" | "https")
         || url.host_str().is_none()
         || !url.username().is_empty()
@@ -64,7 +63,7 @@ pub(crate) fn start(
         || url.query().is_some()
         || url.fragment().is_some()
     {
-        return Err(error::make(ErrorCode::InvalidRequest));
+        return Err(errors::CONN_LINK_START_URL_INVALID());
     }
     if let Some(file) = crate::server_switch::saved_remote(inner, &server_url)? {
         let generation = inner.generation.fetch_add(1, Ordering::SeqCst) + 1;
@@ -84,13 +83,38 @@ pub(crate) fn start(
             },
         )
         .map_err(|error| {
-            let detail = match error {
-                RegistryError::Failure(detail) => vec![one_line(&detail)],
-                RegistryError::Unauthorized => vec!["HTTP 401".into()],
-                RegistryError::NotFound => vec!["HTTP 404".into()],
-                RegistryError::Validation(error) => vec![error.message],
-            };
-            server_error("kaleidoscope 서버에 닿지 않습니다", detail)
+            let host = url.host_str().unwrap_or("알 수 없는 서버");
+            match error {
+                RegistryError::Validation(mut error) => {
+                    error.code = ErrorCode::Server;
+                    error
+                }
+                RegistryError::Unauthorized => {
+                    let mut error = errors::CONN_LINK_START_REJECTED(host);
+                    error.details = vec![format!("HTTP 401; host={host}")];
+                    error
+                }
+                RegistryError::NotFound => {
+                    let mut error = errors::CONN_LINK_START_REJECTED(host);
+                    error.details = vec![format!("HTTP 404; host={host}")];
+                    error
+                }
+                RegistryError::Failure { stage, detail } => {
+                    let mut error = match stage {
+                        crate::registry_client::FailureStage::Send => {
+                            errors::CONN_LINK_START_UNREACHABLE(host)
+                        }
+                        crate::registry_client::FailureStage::Status => {
+                            errors::CONN_LINK_START_REJECTED(host)
+                        }
+                        crate::registry_client::FailureStage::Read => {
+                            errors::CONN_LINK_START_RESPONSE_READ_FAILED(host)
+                        }
+                    };
+                    error.details = vec![detail];
+                    error
+                }
+            }
         })?;
 
     let generation = inner.generation.fetch_add(1, Ordering::SeqCst) + 1;
@@ -194,6 +218,10 @@ pub(crate) fn import_app(
             let Some(link_file) = link_file else {
                 return Err(kaleidoscope_contract::errors::APP_IMPORT_SERVER_NOT_CONNECTED());
             };
+            let host = reqwest::Url::parse(&link_file.server_url)
+                .ok()
+                .and_then(|url| url.host_str().map(str::to_owned))
+                .unwrap_or_else(|| "알 수 없는 서버".into());
             let received = inner.registry.upload(
                 &link_file.server_url,
                 &link_file.token,
@@ -203,14 +231,28 @@ pub(crate) fn import_app(
                 Ok(received) => received,
                 Err(RegistryError::Unauthorized) => {
                     token_rejected(inner, link_file);
-                    return Err(server_error("기기 연결이 거부되었습니다.", Vec::new()));
+                    let mut error = errors::CONN_LINK_IMPORT_UNAUTHORIZED(&host);
+                    error.details = vec![format!("HTTP 401; host={host}")];
+                    return Err(error);
                 }
                 Err(RegistryError::Validation(error)) => return Err(error),
-                Err(error) => {
-                    return Err(registry_error_to_core(
-                        error,
-                        "kaleidoscope 서버에 닿지 않습니다",
-                    ))
+                Err(RegistryError::NotFound) => {
+                    return Err(errors::CONN_LINK_IMPORT_NOT_FOUND(&host));
+                }
+                Err(RegistryError::Failure { stage, detail }) => {
+                    let mut error = match stage {
+                        crate::registry_client::FailureStage::Send => {
+                            errors::CONN_LINK_IMPORT_UNREACHABLE(&host)
+                        }
+                        crate::registry_client::FailureStage::Status => {
+                            errors::CONN_LINK_IMPORT_REJECTED(&host)
+                        }
+                        crate::registry_client::FailureStage::Read => {
+                            errors::CONN_LINK_IMPORT_RESPONSE_READ_FAILED(&host)
+                        }
+                    };
+                    error.details = vec![detail];
+                    return Err(error);
                 }
             };
             let reply = CoreReply::AppImport {
@@ -491,7 +533,7 @@ fn emit_state(inner: &Arc<Inner>) {
 
 fn registry_failure_line(error: RegistryError) -> String {
     match error {
-        RegistryError::Failure(message) => one_line(&message),
+        RegistryError::Failure { detail, .. } => one_line(&detail),
         RegistryError::Unauthorized => "기기 연결이 거부되었습니다".into(),
         RegistryError::NotFound => "연결 정보를 찾을 수 없습니다".into(),
         RegistryError::Validation(error) => one_line(&error.message),
