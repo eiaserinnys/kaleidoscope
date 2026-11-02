@@ -1,5 +1,11 @@
-import { expect, it, vi } from "vitest";
+import { File as NodeFile } from "node:buffer";
+import { afterEach, expect, it, vi } from "vitest";
 import { BrowserFiles } from "../runtime/client-files";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 it("브라우저 출력은 오프셋 쓰기를 보존하고 취소한 출력은 내려받지 않는다", async () => {
   if (!URL.createObjectURL) URL.createObjectURL = () => "";
@@ -21,4 +27,15 @@ it("브라우저 출력은 오프셋 쓰기를 보존하고 취소한 출력은 
   await files.abort(second.sink!);
   expect(click).toHaveBeenCalledTimes(1);
   vi.restoreAllMocks();
+});
+
+it("save_prompt 출력은 닫은 뒤 같은 창의 파일 읽기 대상으로 남는다", async () => {
+  vi.stubGlobal("File", NodeFile);
+  const files = new BrowserFiles();
+  const save = await files.savePrompt("메모.txt", "text/plain");
+  expect(save.cancelled).toBe(false);
+  await files.write(save.sink!, 0, new TextEncoder().encode("저장 내용").buffer);
+  await files.close(save.sink!);
+  expect(new TextDecoder().decode(await files.read(save.sink!))).toBe("저장 내용");
+  await files.dispose();
 });

@@ -1,9 +1,10 @@
 use super::*;
 use kaleidoscope_contract::data::FileAccept;
+use std::sync::Mutex;
 
 struct FileHost {
     input: PathBuf,
-    output: PathBuf,
+    output: Arc<Mutex<Option<PathBuf>>>,
 }
 impl Host for FileHost {
     fn pick_folder(&self) -> Option<PathBuf> {
@@ -13,7 +14,7 @@ impl Host for FileHost {
         Some(vec![self.input.clone()])
     }
     fn pick_save_file(&self, _: &str, _: &str) -> Option<PathBuf> {
-        Some(self.output.clone())
+        self.output.lock().unwrap().clone()
     }
 }
 
@@ -26,9 +27,10 @@ fn picked_files_and_offset_exports_are_scoped_and_abort_preserves_destination() 
     fs::write(&output, "이전".as_bytes()).unwrap();
     let definition = json!({"id":"files-client","name":"파일 시험","requires":{"blocks":12,"modules":{"assets":1,"client":1}},"permissions":[],"state":{},
         "assets":[{"id":"entry","version":1}],"client":{"runtime":"javascript","entry":{"id":"entry","version":1}},"ui":{"type":"text","value":"시험"}}).to_string();
+    let save_path = Arc::new(Mutex::new(Some(output.clone())));
     let host = Arc::new(FileHost {
         input,
-        output: output.clone(),
+        output: save_path.clone(),
     });
     let core = Core::open(
         CoreConfig {
@@ -101,7 +103,7 @@ fn picked_files_and_offset_exports_are_scoped_and_abort_preserves_destination() 
     core.client_write_export(&window, &sink, 0, b"discard")
         .unwrap();
     core.handle(CoreRequest::ExportAbort {
-        window_id: window,
+        window_id: window.clone(),
         sink_id: sink,
     })
     .unwrap();
@@ -114,4 +116,45 @@ fn picked_files_and_offset_exports_are_scoped_and_abort_preserves_destination() 
             .count(),
         0
     );
+
+    let CoreReply::FilesSavePrompt {
+        file_id: Some(file_id),
+    } = core
+        .handle(CoreRequest::FilesSavePrompt {
+            window_id: window.clone(),
+            suggested_name: "share.bin".into(),
+            mime: "application/octet-stream".into(),
+        })
+        .unwrap()
+    else {
+        panic!("files.save_prompt");
+    };
+    core.client_write_export(&window, &file_id, 0, b"shared output")
+        .unwrap();
+    assert_eq!(fs::read(&output).unwrap(), b"abcd");
+    core.handle(CoreRequest::ExportClose {
+        window_id: window.clone(),
+        sink_id: file_id.clone(),
+    })
+    .unwrap();
+    assert_eq!(fs::read(&output).unwrap(), b"shared output");
+    assert_eq!(
+        core.client_read_file(&window, &file_id).unwrap(),
+        b"shared output"
+    );
+    assert!(core.client_read_file("other", &file_id).is_err());
+
+    *save_path.lock().unwrap() = None;
+    let CoreReply::FilesSavePrompt { file_id } = core
+        .handle(CoreRequest::FilesSavePrompt {
+            window_id: window,
+            suggested_name: "cancelled.bin".into(),
+            mime: "application/octet-stream".into(),
+        })
+        .unwrap()
+    else {
+        panic!("files.save_prompt cancellation");
+    };
+    assert_eq!(file_id, None);
+    assert_eq!(fs::read(&output).unwrap(), b"shared output");
 }

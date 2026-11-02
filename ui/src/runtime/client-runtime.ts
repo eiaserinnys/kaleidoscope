@@ -9,6 +9,7 @@ import { isWindowVisible } from "../data/window-state";
 import { clientSource } from "../blocks/sandbox-frame";
 import { registerSandboxFlush } from "../blocks/sandbox-flush";
 import { BrowserFiles } from "./client-files";
+import { ClientHostServices } from "./client-host-services";
 
 type Client = NonNullable<AppDefinition["client"]>;
 const escapePointer = (value: string) => value.replace(/~/g, "~0").replace(/\//g, "~1");
@@ -40,6 +41,7 @@ export class ClientRuntime {
   private previousInputs: Record<string, string> = {};
   private surfaces = new Map<string, { message: Record<string, unknown>; sent: boolean; sentVisible?: boolean }>();
   private files = new BrowserFiles();
+  private hostServices: ClientHostServices;
   private blobFiles = new Set<string>();
   private stopping?: Promise<void>;
   private shareText = "";
@@ -51,7 +53,9 @@ export class ClientRuntime {
   private host: HTMLElement | null = null;
   private snapshots = new Map<string, (image: string) => void>();
 
-  constructor(private store: ShellStore, private data: WindowData, private definition: AppDefinition, private client: Client) {}
+  constructor(private store: ShellStore, private data: WindowData, private definition: AppDefinition, private client: Client) {
+    this.hostServices = new ClientHostServices(client, store, data.windowId, this.files, () => this.isHostVisible());
+  }
 
   async start() {
     try {
@@ -65,7 +69,7 @@ export class ClientRuntime {
       frame.setAttribute("sandbox", "allow-scripts");
       frame.setAttribute("allow", "autoplay");
       frame.setAttribute("title", "클라이언트 런타임");
-      frame.srcdoc = clientSource(script, { token: this.token, state, stateKeys: this.client.state_keys, storageEntries: this.client.storage_entries, inputs: this.inputs() });
+      frame.srcdoc = clientSource(script, { token: this.token, state, stateKeys: this.client.state_keys, storageEntries: this.client.storage_entries, inputs: this.inputs(), capabilities: this.client.capabilities ?? [], actions: this.client.actions });
       frame.addEventListener("load", () => {
         if (this.loaded) { this.ready = false; this.token = ""; this.data.failClient("클라이언트 프레임이 이동했습니다"); void this.stop(); }
         else this.loaded = true;
@@ -96,6 +100,7 @@ export class ClientRuntime {
       this.observeHost(this.data.clientHost);
       window.addEventListener("focus", this.scheduleLifecycle);
       window.addEventListener("blur", this.scheduleLifecycle);
+      document.addEventListener("visibilitychange", this.onDocumentVisibilityChange);
     } catch (error) { if (!this.stopped) this.data.failClient(toCoreError(error).message); }
   }
 
@@ -105,6 +110,7 @@ export class ClientRuntime {
     if (visible === this.pingVisible) return;
     this.pingVisible = visible;
     if (!visible) {
+      this.hostServices.releaseWakeLock();
       if (this.ping) clearInterval(this.ping);
       this.ping = undefined;
       return;
@@ -116,6 +122,15 @@ export class ClientRuntime {
       this.send({ type: "ks-client-ping" });
     }, CLIENT_PING_TIMEOUT_SECS * 500);
   };
+
+  private onDocumentVisibilityChange = () => {
+    if (document.visibilityState !== "visible") this.hostServices.releaseWakeLock();
+    else this.scheduleLifecycle();
+  };
+
+  private isHostVisible() {
+    return document.visibilityState === "visible" && isWindowVisible(this.store.getSnapshot(), this.data.windowId) && !this.data.clientDormant;
+  }
 
   observeHost(host: HTMLElement | null) {
     this.observer?.disconnect();
@@ -137,6 +152,7 @@ export class ClientRuntime {
     const snapshot = this.store.getSnapshot();
     const current = snapshot?.shared.windows.find((item) => item.id === this.data.windowId);
     const visible = isWindowVisible(snapshot, this.data.windowId) && !this.data.clientDormant;
+    if (!visible) this.hostServices.releaseWakeLock();
     for (const [id, surface] of this.surfaces) this.syncSurfaceVisibility(id, surface);
     const focused = visible && document.hasFocus() && !!current && !snapshot?.shared.windows.some((item) => item.desktop_id === current.desktop_id && !item.minimized && item.z > current.z);
     const rect = this.host?.getBoundingClientRect();
@@ -189,6 +205,7 @@ export class ClientRuntime {
       const result = this.store.nativeFiles
         ? await this.store.call({ op: "files.pick", window_id: this.data.windowId, accept: spec.accept, multiple: spec.multiple ?? false })
         : await this.files.pick(spec.accept, spec.multiple ?? false);
+      for (const file of result.files) this.hostServices.registerFile(file);
       return this.action(spec.client, { cancelled: result.cancelled, files: result.files } as unknown as JsonValue, scope?.item, undefined, scope);
     } catch (error) { this.data.setNotice(toCoreError(error)); return false; }
   }
@@ -292,6 +309,31 @@ export class ClientRuntime {
     else if (message.type === "ks-client-command") {
       if (typeof message.name !== "string" || !Object.hasOwn(this.client.commands, message.name)) this.reply(message.requestId, undefined, "선언되지 않은 클라이언트 명령입니다");
       else void this.store.call({ op: "client.command", window_id: this.data.windowId, name: message.name, event: message.event ?? null }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+    } else if (message.type === "ks-client-save-prompt") {
+      const task = async () => {
+        if (typeof message.suggested_name !== "string" || typeof message.mime !== "string") throw new Error("저장할 파일 이름과 형식이 필요합니다");
+        let fileId: string | null;
+        if (this.store.nativeFiles) {
+          const reply = await this.store.call({ op: "files.save_prompt", window_id: this.data.windowId, suggested_name: message.suggested_name, mime: message.mime });
+          if (reply.op !== "files.save_prompt") throw new Error("저장 대화상자 응답이 올바르지 않습니다");
+          fileId = reply.file_id;
+        } else {
+          const result = await this.files.savePrompt(message.suggested_name, message.mime);
+          fileId = result.cancelled ? null : result.sink ?? null;
+        }
+        if (fileId) this.hostServices.registerFile({ id: fileId, name: message.suggested_name, mime: message.mime });
+        this.reply(message.requestId, fileId);
+      };
+      void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+    } else if (message.type === "ks-client-can-share") {
+      if (!this.hostServices.hasCapability("share")) this.reply(message.requestId, undefined, "앱에 share capability가 선언되지 않았습니다");
+      else void this.hostServices.canShare(message.file_id).then((result) => this.reply(message.requestId, result)).catch(() => this.reply(message.requestId, false));
+    } else if (message.type === "ks-client-share") {
+      if (!this.hostServices.hasCapability("share")) this.reply(message.requestId, undefined, "앱에 share capability가 선언되지 않았습니다");
+      else void this.hostServices.share(message.file_id, message.title).then((result) => this.reply(message.requestId, result)).catch(() => this.reply(message.requestId, { status: "failed" }));
+    } else if (message.type === "ks-client-keep-awake") {
+      if (!this.hostServices.hasCapability("keep_awake")) this.reply(message.requestId, undefined, "앱에 keep_awake capability가 선언되지 않았습니다");
+      else void this.hostServices.keepAwake(message.enabled === true).then((result) => this.reply(message.requestId, result)).catch(() => this.reply(message.requestId, false));
     } else if (message.type === "ks-sandbox-state-set" && message.patch && typeof message.patch === "object") {
       const state = this.store.getSnapshot()?.shared.windows.find((window) => window.id === this.data.windowId)?.state ?? {};
       const patch = Object.fromEntries(Object.entries(message.patch).filter(([key]) => this.client.state_keys.includes(key))) as Record<string, JsonValue>;
@@ -344,7 +386,7 @@ export class ClientRuntime {
       };
       void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
     } else if (message.type === "ks-client-blob-open") {
-      void this.store.call({ op: "client.blob_open", window_id: this.data.windowId, key: message.key }).then(({ file }) => { if (file) this.blobFiles.add(file.id); this.reply(message.requestId, file); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+      void this.store.call({ op: "client.blob_open", window_id: this.data.windowId, key: message.key }).then(({ file }) => { if (file) { this.blobFiles.add(file.id); this.hostServices.registerFile(file); } this.reply(message.requestId, file); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
     } else if (message.type === "ks-client-blob-remove") {
       void this.store.call({ op: "client.blob_remove", window_id: this.data.windowId, key: message.key }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
     } else if (message.type === "ks-client-blob-list") {
@@ -359,11 +401,12 @@ export class ClientRuntime {
       const result = this.store.nativeFiles
         ? this.store.call({ op: message.type === "ks-client-file-close" ? "export.close" : "export.abort", window_id: this.data.windowId, sink_id: message.sink })
         : message.type === "ks-client-file-close" ? this.files.close(message.sink) : this.files.abort(message.sink);
-      void result.then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
+      void result.then(() => { if (message.type === "ks-client-file-abort") this.hostServices.removeFile(message.sink); this.reply(message.requestId, null); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error).message));
     }
   };
 
   private beginClosing() {
+    this.hostServices.releaseWakeLock();
     if (this.ready && !this.closingNotified) {
       this.closingNotified = true;
       this.sendLifecycle("closing");
@@ -416,6 +459,7 @@ export class ClientRuntime {
     this.snapshots.clear();
     this.beginClosing();
     await this.flush();
+    this.hostServices.dispose();
     await this.files.dispose().catch((error) => this.data.setNotice(toCoreError(error)));
     if (this.store.nativeFiles || this.blobFiles.size) await this.store.call({ op: "client.release", window_id: this.data.windowId }).catch((error) => this.data.setNotice(toCoreError(error)));
     this.unregister?.();
@@ -427,6 +471,7 @@ export class ClientRuntime {
     this.observer?.disconnect();
     window.removeEventListener("focus", this.scheduleLifecycle);
     window.removeEventListener("blur", this.scheduleLifecycle);
+    document.removeEventListener("visibilitychange", this.onDocumentVisibilityChange);
     window.removeEventListener("message", this.receive);
     const container = this.frame?.parentElement;
     this.frame?.remove();

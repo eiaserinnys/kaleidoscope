@@ -45,6 +45,7 @@ export function createHttpTransport(baseUrl: string): CoreTransport {
   }
 
   return {
+    nativeFiles: true,
     call,
     async bytes(request, body) {
       const response = await fetch(`${base}/bytes`, { method: "POST", headers: { "content-type": "application/octet-stream", "x-ks-operation": request.op, "x-ks-window": request.window_id, "x-ks-handle": encodeURIComponent(request.handle), "x-ks-offset": String(request.offset ?? 0) }, body: body ?? new ArrayBuffer(0) });
