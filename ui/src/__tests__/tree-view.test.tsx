@@ -96,4 +96,52 @@ describe("공용 가상 트리", () => {
     expect(renderedRows.get("dir-0")).toBe(before);
     expect(unchanged.getAttribute("aria-expanded")).toBe("false");
   });
+
+  it("포커스 행이 가상 창 밖으로 나가도 포커스와 roving tab stop을 유지한다", async () => {
+    render(<Harness />);
+    const tree = screen.getByRole("tree", { name: "큰 트리" });
+    const first = await screen.findByRole("treeitem", { name: "item-0-0" });
+    first.focus();
+    tree.scrollTop = 20_000;
+    fireEvent.scroll(tree);
+
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: "item-0-0" })).toBeTruthy());
+    expect(document.activeElement).toBe(first);
+    expect(first.tabIndex).toBe(0);
+  });
+
+  it("보조 행을 트리 항목과 키보드 이동에서 제외하고 안의 입력은 유지한다", async () => {
+    const nodes: TreeNode[] = [
+      { id: "first", label: "첫 행" },
+      { id: "creating", label: "새 파일", selectable: false, interactiveContent: true, content: <input aria-label="새 파일 이름" /> },
+      { id: "last", label: "마지막 행" },
+    ];
+    const { rerender } = render(<div style={{ height: "480px" }}><TreeView
+      className="ks-file-tree-list"
+      expanded={new Set()}
+      label="입력 트리"
+      nodes={nodes}
+      onActivate={() => {}}
+      onExpandedChange={() => {}}
+    /></div>);
+    const tree = screen.getByRole("tree", { name: "입력 트리" });
+    expect(tree.getAttribute("aria-rowcount")).toBe("2");
+    expect(screen.getAllByRole("treeitem")).toHaveLength(2);
+    const first = screen.getByRole("treeitem", { name: "첫 행" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("treeitem", { name: "마지막 행" })));
+    const input = screen.getByRole("textbox", { name: "새 파일 이름" });
+    input.focus();
+    expect(document.activeElement).toBe(input);
+    rerender(<div style={{ height: "480px" }}><TreeView
+      className="ks-file-tree-list"
+      expanded={new Set()}
+      label="입력 트리"
+      nodes={nodes}
+      onActivate={() => {}}
+      onExpandedChange={() => {}}
+    /></div>);
+    expect(screen.getByRole("textbox", { name: "새 파일 이름" })).toBeTruthy();
+  });
 });

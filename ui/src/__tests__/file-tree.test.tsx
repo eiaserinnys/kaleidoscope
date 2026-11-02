@@ -127,8 +127,8 @@ describe("file_tree block", () => {
       expect(directories).toContain("notes/sub");
     });
     const creationRow = input.closest<HTMLElement>('[data-tree-row="creating:notes/sub"]');
-    expect(creationRow?.querySelector('[role="treeitem"] input[aria-label="새 파일 이름"]')).toBe(input);
-    expect(creationRow?.querySelector('[role="treeitem"]')?.getAttribute("aria-level")).toBe("3");
+    expect(creationRow?.querySelector('[aria-label="새 파일 이름"]')).toBe(input);
+    expect(creationRow?.querySelector('[role="treeitem"]')).toBeNull();
     expect(await screen.findByRole("treeitem", { name: "기존.md" })).toBeTruthy();
   });
 

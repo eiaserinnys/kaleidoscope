@@ -1,16 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Block, FolderEntry } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { FileText } from "../components/icons";
 import { TreeView, type TreeActivation } from "../components/tree/tree-view";
 import type { TreeNode, TreeRowModel } from "../components/tree/tree-model";
 import { NoItems } from "./data-view-common";
-import { FileBrowserTree } from "./file-browser-tree";
+import { FileBrowserTree, FolderTreeError, FolderTreeHeader } from "./file-browser-tree";
 import { useDormant, useOptionalWindowData } from "../data/window-data";
 import { patchWindowState, useWindowStateValue, useWindowVisible } from "../data/window-state";
 import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
 import { StatusText } from "../components/primitives";
+import { IconButton } from "../components/primitives";
+import { PanelLeftClose, PanelLeftOpen } from "../components/icons";
+import { SplitPaneContext } from "./split-pane-context";
 import { collectionFolderCapabilities, type FolderBackend } from "./folder-backend";
 import { useShellSelector } from "../core/shell-store";
 
@@ -31,7 +34,6 @@ function collectionTree(items: FolderEntry[], extensions: string[]): TreeNode[] 
       selectable: true,
       currentOnSelection: true,
       leading: <FileText size="inline" />,
-      meta: new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(item.modified)),
     }))
     .sort((left, right) => left.label.localeCompare(right.label, "ko"));
 }
@@ -41,7 +43,8 @@ export function FolderBlock({ block, context, pointer }: { block: FolderBlockDat
   const selectedValue = useWindowStateValue(context, block.selected?.state ?? null);
   const selected = typeof selectedValue === "string" ? selectedValue : null;
   const legacy = Boolean(block.legacyTreeRoot);
-  useDormant(pointer, false);
+  const windowVisible = useWindowVisible(context);
+  useDormant(pointer, !windowVisible);
 
   const selectItem = useCallback((path: string, item: JsonValue) => {
     if (legacy) {
@@ -99,10 +102,16 @@ function CollectionFolder({ block, context, onSelect, selected }: {
 }) {
   const entry = "entry" in block.root ? block.root.entry : "";
   const windowVisible = useWindowVisible(context);
+  const pane = useContext(SplitPaneContext);
+  const treeRef = useRef<HTMLDivElement>(null);
+  const restoreToggleFocus = useRef(false);
   const [items, setItems] = useState<FolderEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const nodes = useMemo(() => collectionTree(items, block.extensions ?? []), [items, block.extensions]);
+  const treeNodes = useMemo(() => error
+    ? [{ id: "collection-error", label: error, selectable: false, content: <FolderTreeError message={error} /> }, ...nodes]
+    : nodes, [error, nodes]);
   const label = context.definition.storage?.entries.find((item) => item.id === entry)?.label ?? entry;
   const workspaceId = useShellSelector(context.store, (snapshot) => snapshot?.shared.desktops
     .find((desktop) => desktop.id === context.window.desktop_id)?.workspace_id ?? "");
@@ -112,7 +121,7 @@ function CollectionFolder({ block, context, onSelect, selected }: {
     let bucketId = context.window.app_id;
     return {
       get identity() { return `storage:${bucketId}:${prefix}`; },
-      capabilities: collectionFolderCapabilities(Boolean(block.read_only)),
+      capabilities: collectionFolderCapabilities(),
       list: async (parent) => {
         if (parent) return [];
         const reply = await context.store.call({ op: "storage.list", window_id: context.window.id, entry });
@@ -143,19 +152,45 @@ function CollectionFolder({ block, context, onSelect, selected }: {
   }, [backend]);
 
   const wasWindowVisible = useRef(false);
+  const refreshPending = useRef(false);
   useEffect(() => {
     if (!windowVisible) {
       wasWindowVisible.current = false;
       return;
     }
-    if (!wasWindowVisible.current) {
+    if (refreshPending.current || !wasWindowVisible.current) {
       wasWindowVisible.current = true;
+      refreshPending.current = false;
       void refresh();
     }
     const onFocus = () => void refresh();
     globalThis.window.addEventListener("focus", onFocus);
     return () => globalThis.window.removeEventListener("focus", onFocus);
   }, [refresh, windowVisible]);
+
+  useEffect(() => context.store.subscribeEvents((event) => {
+    if (event.event !== "storage.update" || event.window_id !== context.window.id) return;
+    const matchesEntry = event.update.kind === "changed"
+      ? event.update.changed.item.entry_id === entry
+      : event.update.kind === "moved" && event.update.moved.entry_id === entry;
+    if (!matchesEntry) return;
+    if (!windowVisible) {
+      refreshPending.current = true;
+      return;
+    }
+    void refresh();
+  }), [context.store, context.window.id, entry, refresh, windowVisible]);
+
+  useLayoutEffect(() => {
+    if (!restoreToggleFocus.current) return;
+    restoreToggleFocus.current = false;
+    treeRef.current?.querySelector<HTMLButtonElement>(pane?.collapsed ? ".ks-file-tree-expand button" : ".ks-file-tree-collapse button")?.focus();
+  }, [pane?.collapsed]);
+
+  const togglePane = () => {
+    restoreToggleFocus.current = true;
+    pane?.toggle();
+  };
 
   const activate = useCallback((row: TreeRowModel, _action: TreeActivation) => {
     const item = row.node.data as FolderEntry | undefined;
@@ -164,19 +199,23 @@ function CollectionFolder({ block, context, onSelect, selected }: {
   }, [block.on_select, onSelect]);
 
   const selectedId = selected ? `doc:${selected}` : null;
-  const emptyContent = error ? <span className="ks-inline-error" role="alert">{error}</span> : loading ? <StatusText>불러오는 중</StatusText> : <NoItems />;
-  return <div className="ks-file-tree">
-    <div className="ks-file-tree-header"><span className="ks-file-tree-root-name" title={label}>{label}</span></div>
-    <TreeView
-      className="ks-file-tree-list"
-      emptyContent={emptyContent}
-      expanded={EMPTY_EXPANDED}
-      label={label}
-      nodes={nodes}
-      onActivate={activate}
-      onExpandedChange={NO_EXPANSION}
-      selectedId={selectedId}
-    />
+  const emptyContent = loading ? <StatusText>불러오는 중</StatusText> : <NoItems />;
+  return <div className={`ks-file-tree${pane?.collapsed ? " is-collapsed" : ""}`} ref={treeRef}>
+    {pane?.collapsed ? <span className="ks-file-tree-expand"><IconButton aria-label="목록 펼치기" onClick={togglePane}><PanelLeftOpen /></IconButton></span> : <>
+      <FolderTreeHeader label={label}>
+        {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
+      </FolderTreeHeader>
+      <TreeView
+        className="ks-file-tree-list"
+        emptyContent={emptyContent}
+        expanded={EMPTY_EXPANDED}
+        label={label}
+        nodes={treeNodes}
+        onActivate={activate}
+        onExpandedChange={NO_EXPANSION}
+        selectedId={selectedId}
+      />
+    </>}
   </div>;
 }
 

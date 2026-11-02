@@ -46,6 +46,17 @@ function extensionOf(name: string): string {
 
 const defaultFileIcon = (_entry: FolderEntry) => <FileText size="inline" />;
 
+export function FolderTreeHeader({ label, children }: { label: string; children?: ReactNode }) {
+  return <div className="ks-file-tree-header">
+    <span className="ks-file-tree-root-name" title={label}>{label}</span>
+    {children}
+  </div>;
+}
+
+export function FolderTreeError({ message }: { message: string }) {
+  return <span className="ks-inline-error" role="alert">{message}</span>;
+}
+
 export function FileBrowserTree({
   context,
   permission,
@@ -299,7 +310,7 @@ export function FileBrowserTree({
         id: `loading:${directory}`, label: "불러오는 중", selectable: false, content: <StatusText>불러오는 중</StatusText>,
       });
       if (directory && errors[directory]) rows.push({
-        id: `error:${directory}`, label: errors[directory], selectable: false, content: <span className="ks-inline-error" role="alert">{errors[directory]}</span>,
+        id: `error:${directory}`, label: errors[directory], selectable: false, content: <FolderTreeError message={errors[directory]} />,
       });
       if (creating?.directory === directory) rows.push({
         id: `creating:${directory}`,
@@ -340,7 +351,7 @@ export function FileBrowserTree({
     if (loadingDirectories.has("") && !Object.hasOwn(entriesByDirectory, "")) root.push({
       id: "loading:", label: "불러오는 중", selectable: false, content: <StatusText>불러오는 중</StatusText>,
     });
-    if (errors[""]) root.push({ id: "error:", label: errors[""], selectable: false, content: <span className="ks-inline-error" role="alert">{errors[""]}</span> });
+    if (errors[""]) root.push({ id: "error:", label: errors[""], selectable: false, content: <FolderTreeError message={errors[""]} /> });
     return [...root, ...buildDirectory("")];
   }, [commitCreate, creating, entriesByDirectory, errors, fileIcon, loadingDirectories, mode, visible]);
 
@@ -377,16 +388,15 @@ export function FileBrowserTree({
       ) : !hasRoot ? (
         <div className="ks-file-tree-ungranted">
           <Button onClick={pickFolder}>{permissionLabel} 고르기</Button>
-          {actionError ? <span className="ks-inline-error" role="alert">{actionError}</span> : null}
+          {actionError ? <FolderTreeError message={actionError} /> : null}
         </div>
       ) : (
         <>
-          <div className="ks-file-tree-header">
-            <span className="ks-file-tree-root-name" title={rootName}>{rootName}</span>
+          <FolderTreeHeader label={rootName}>
             {canCreate ? <IconButton aria-label="새 파일" onClick={() => void beginCreate()}><FilePlus /></IconButton> : null}
             {scope === "folder" ? <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}><FolderOpen /></IconButton> : null}
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
-          </div>
+          </FolderTreeHeader>
           <TreeView
             className="ks-file-tree-list"
             expanded={expanded}
@@ -398,7 +408,7 @@ export function FileBrowserTree({
             onExpandedChange={setDirectoryExpanded}
             selectedId={selectedPath}
           />
-          {actionError ? <span className="ks-inline-error" role="alert">{actionError}</span> : null}
+          {actionError ? <FolderTreeError message={actionError} /> : null}
         </>
       )}
     </div>

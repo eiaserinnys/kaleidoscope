@@ -3064,12 +3064,35 @@ pub struct FolderRef {
 }
 
 /// 블록 세트 13판 폴더 뿌리. 기기 파일 권한 또는 앱 저장소의 문서 모음이다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
 #[serde(untagged)]
 #[ts(export, export_to = "contract.ts")]
 pub enum FolderRoot {
     Files { permission: String },
     Collection { entry: String },
+}
+
+impl<'de> Deserialize<'de> for FolderRoot {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let object = value.as_object().ok_or_else(|| {
+            <D::Error as serde::de::Error>::custom("folder root는 객체여야 합니다")
+        })?;
+        match (object.len(), object.get("permission"), object.get("entry")) {
+            (1, Some(serde_json::Value::String(permission)), None) => {
+                Ok(Self::Files { permission: permission.clone() })
+            }
+            (1, None, Some(serde_json::Value::String(entry))) => {
+                Ok(Self::Collection { entry: entry.clone() })
+            }
+            _ => Err(<D::Error as serde::de::Error>::custom(
+                "folder root는 permission 또는 entry 하나만 가져야 합니다",
+            )),
+        }
+    }
 }
 
 /// (블록 세트 5판) 탐색기 오른쪽 칸의 보기 방식. 창 상태에는 이 문자열로 둔다.
@@ -4276,6 +4299,11 @@ mod tests {
 
     #[test]
     fn folder_contract_keeps_legacy_tree_wire_and_uses_block_set_thirteen() {
+        assert!(
+            serde_json::from_value::<FolderRoot>(serde_json::json!({"permission":"docs","entry":"documents"})).is_err(),
+            "파일 권한과 저장소 뿌리를 한 값에 함께 두면 거부한다",
+        );
+
         let legacy_file_tree: Block = serde_json::from_str(
             r#"{"type":"file_tree","root":{"permission":"docs"},"extensions":["md"],"selected":{"state":"selected"},"on_select":{"set_state":"selected"}}"#,
         )

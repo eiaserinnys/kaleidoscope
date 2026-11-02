@@ -55,11 +55,6 @@ export function fileFolderCapabilities(writable: boolean, scope: "folder" | "pc"
   });
 }
 
-export function collectionFolderCapabilities(readOnly: boolean): FolderCapabilities {
-  return capabilities({
-    createFile: !readOnly,
-    rename: !readOnly,
-    permanentDelete: !readOnly,
-    properties: true,
-  });
+export function collectionFolderCapabilities(): FolderCapabilities {
+  return capabilities({});
 }

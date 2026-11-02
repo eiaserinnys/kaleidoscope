@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { isValidElement } from "react";
-import { useVirtualRows, VirtualSurface } from "../../blocks/data-view-common";
+import { keepRovingRow, useVirtualRows, VirtualSurface } from "../../blocks/data-view-common";
 import type { TreeNode, TreeRowModel } from "./tree-model";
 import { flattenTreeModel } from "./tree-model";
 import { TreeRow } from "./tree-row";
@@ -84,26 +84,29 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     previousRows.current = nextRows;
     return stable;
   }, [nodes, expanded]);
+  const treeRows = useMemo(() => flat.filter((row) => row.node.content === undefined), [flat]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [pendingFocus, setPendingFocus] = useState<string | null>(null);
-  const selectedRow = flat.find((row) => row.node.selectable !== false && row.node.id === selectedId);
-  const preferredFocus = selectedRow?.id ?? flat[0]?.id ?? null;
-  const effectiveFocus = flat.some((row) => row.id === focusId) ? focusId : preferredFocus;
+  const selectedRow = treeRows.find((row) => row.node.selectable !== false && row.node.id === selectedId);
+  const preferredFocus = selectedRow?.id ?? treeRows[0]?.id ?? null;
+  const effectiveFocus = treeRows.some((row) => row.id === focusId) ? focusId : preferredFocus;
   const token = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ks-control-height"));
   if (!Number.isFinite(token) || token <= 0) throw new Error("트리 행 높이 토큰 --ks-control-height을 읽을 수 없습니다");
   const { virtual } = useVirtualRows(flat.length, token, scrollRef);
+  const focusIndex = effectiveFocus === null ? -1 : flat.findIndex((row) => row.id === effectiveFocus);
+  keepRovingRow(virtual, focusIndex);
 
   const moveFocus = useCallback((index: number) => {
-    const next = flat[Math.max(0, Math.min(flat.length - 1, index))];
+    const next = treeRows[Math.max(0, Math.min(treeRows.length - 1, index))];
     if (!next) return;
     setFocusId(next.id);
     setPendingFocus(next.id);
     virtual.scrollToIndex(flat.indexOf(next), { align: "auto" });
-  }, [flat, virtual]);
+  }, [flat, treeRows, virtual]);
 
-  const handlers = useRef({ onActivate, onContextMenu, onDoubleClick, onExpandedChange, flat, expanded, moveFocus });
-  handlers.current = { onActivate, onContextMenu, onDoubleClick, onExpandedChange, flat, expanded, moveFocus };
+  const handlers = useRef({ onActivate, onContextMenu, onDoubleClick, onExpandedChange, treeRows, expanded, moveFocus });
+  handlers.current = { onActivate, onContextMenu, onDoubleClick, onExpandedChange, treeRows, expanded, moveFocus };
 
   const onFocus = useCallback((id: string) => setFocusId(id), []);
   const activate = useCallback((row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => {
@@ -128,20 +131,21 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
   }, [flat, selectedRow, virtual]);
 
   const keyDown = useCallback((row: TreeRowModel, event: KeyboardEvent<HTMLButtonElement>) => {
-    const { flat, expanded, moveFocus } = handlers.current;
-    const index = flat.findIndex((item) => item.id === row.id);
+    const { treeRows, expanded, moveFocus } = handlers.current;
+    const index = treeRows.findIndex((item) => item.id === row.id);
+    if (index < 0) return;
     if (event.key === "ArrowDown") moveFocus(index + 1);
     else if (event.key === "ArrowUp") moveFocus(index - 1);
     else if (event.key === "ArrowRight" && row.hasChildren) {
       if (!expanded.has(row.id)) handlers.current.onExpandedChange(row.id, true);
       else {
-        const child = flat[index + 1];
+        const child = treeRows[index + 1];
         if (child?.parentId === row.id) moveFocus(index + 1);
       }
     } else if (event.key === "ArrowLeft") {
       if (row.expanded) handlers.current.onExpandedChange(row.id, false);
       else if (row.parentId) {
-        const parentIndex = flat.findIndex((item) => item.id === row.parentId);
+        const parentIndex = treeRows.findIndex((item) => item.id === row.parentId);
         if (parentIndex >= 0) moveFocus(parentIndex);
       }
     } else if (event.key === "Enter") {
@@ -164,7 +168,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
   const virtualRows = virtual.getVirtualItems();
   return <div
     aria-label={label}
-    aria-rowcount={flat.length}
+    aria-rowcount={treeRows.length}
     className={className}
     ref={scrollRef}
     role="tree"

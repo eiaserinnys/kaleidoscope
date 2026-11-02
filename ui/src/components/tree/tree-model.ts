@@ -31,10 +31,13 @@ export interface TreeRowModel {
 export function flattenTreeModel(nodes: TreeNode[], expanded: ReadonlySet<string>): TreeRowModel[] {
   const rows: TreeRowModel[] = [];
   const visit = (siblings: TreeNode[], parentId: string | null, depth: number) => {
-    siblings.forEach((node, siblingIndex) => {
+    const treeSiblings = siblings.filter((node) => node.content === undefined);
+    let position = 0;
+    siblings.forEach((node) => {
       const children = node.children ?? [];
       const hasChildren = Boolean(node.expandable || children.length);
       const isExpanded = expanded.has(node.id);
+      const treePosition = node.content === undefined ? ++position : 0;
       rows.push({
         id: node.id,
         node,
@@ -42,8 +45,8 @@ export function flattenTreeModel(nodes: TreeNode[], expanded: ReadonlySet<string
         depth,
         expanded: isExpanded,
         hasChildren,
-        position: siblingIndex + 1,
-        setSize: siblings.length,
+        position: treePosition,
+        setSize: treeSiblings.length,
         indent: depth ? `calc(${Array.from({ length: depth }, () => "var(--ks-space-4)").join(" + ")})` : undefined,
       });
       if (isExpanded && children.length) visit(children, node.id, depth + 1);

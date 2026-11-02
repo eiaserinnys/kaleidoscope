@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
@@ -77,8 +77,7 @@ describe("folder block", () => {
     expect(fileFolderCapabilities(true, "folder", false)).toMatchObject({ createFile: true, rename: true, reveal: true, absolutePath: true });
     expect(fileFolderCapabilities(true, "pc", false).createFile).toBe(false);
     expect(fileFolderCapabilities(true, "folder", true).rename).toBe(false);
-    expect(collectionFolderCapabilities(false)).toMatchObject({ createFile: true, permanentDelete: true, properties: true });
-    expect(collectionFolderCapabilities(true).createFile).toBe(false);
+    expect(collectionFolderCapabilities()).toMatchObject({ createFile: false, rename: false, permanentDelete: false, properties: false });
   });
 
   it("lists a file root through the shared tree, expands with arrows, and selects a file", async () => {
@@ -128,6 +127,78 @@ describe("folder block", () => {
     expect(call).toHaveBeenCalledWith({ op: "storage.list", window_id: "viewer-window", entry: "documents" });
     fireEvent.click(guide);
     await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.selected).toBe("notes/guide.md"));
+  });
+
+  it("refreshes a visible collection on matching storage changes and defers hidden updates", async () => {
+    let documents = ["notes/guide.md"];
+    let listError = false;
+    const { store, transport, call } = setup(storageFolderDefinition(), (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => {
+        if (request.op === "storage.list") {
+          if (listError) throw { code: "io", message: "저장소 다시 읽기 실패", details: [] };
+          return {
+            op: "storage.list",
+            result: {
+              bucket_id: "folder-storage-test",
+              items: documents.map((doc) => ({
+                doc,
+                revision: "rev-1",
+                updated_at: "2026-11-02T00:00:00Z",
+                byte_size: 7 as unknown as bigint,
+              })),
+            },
+          };
+        }
+        return originalCall(request);
+      });
+    });
+    await waitFor(() => expect(document.querySelector('[data-tree-id="doc:notes/guide.md"]')).toBeTruthy());
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(1));
+
+    documents = ["notes/renamed.md"];
+    await act(async () => {
+      transport.emit({ event: "storage.update", window_id: "other-window", update: { kind: "changed", changed: { bucket_id: "folder-storage-test", item: { entry_id: "documents", key: "documents/notes/renamed.md", kind: "md", revision: "rev-2", exists: true } } } });
+      transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "folder-storage-test", item: { entry_id: "other", key: "other.md", kind: "md", revision: "rev-2", exists: true } } } });
+    });
+    expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(1);
+
+    documents = ["notes/changed.md"];
+    await act(async () => {
+      transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "folder-storage-test", item: { entry_id: "documents", key: "documents/notes/changed.md", kind: "md", revision: "rev-2", exists: true } } } });
+    });
+    await waitFor(() => expect(document.querySelector('[data-tree-id="doc:notes/changed.md"]')).toBeTruthy());
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(2));
+
+    documents = ["notes/renamed.md"];
+    const hidden = structuredClone(store.getSnapshot()!);
+    hidden.shared.windows[0].minimized = true;
+    await act(async () => { transport.emit({ event: "state.changed", snapshot: hidden }); });
+    await act(async () => {
+      transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "folder-storage-test", item: { entry_id: "documents", key: "documents/notes/renamed.md", kind: "md", revision: "rev-2", exists: true } } } });
+    });
+    expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(2);
+
+    const visible = structuredClone(hidden);
+    visible.shared.windows[0].minimized = false;
+    await act(async () => { transport.emit({ event: "state.changed", snapshot: visible }); });
+    await waitFor(() => expect(document.querySelector('[data-tree-id="doc:notes/renamed.md"]')).toBeTruthy());
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(3));
+
+    documents = ["notes/moved.md"];
+    await act(async () => {
+      transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "moved", moved: { bucket_id: "folder-storage-test", entry_id: "documents", from_doc: "notes/renamed.md", to_doc: "notes/moved.md", revision: "rev-3" } } });
+    });
+    await waitFor(() => expect(document.querySelector('[data-tree-id="doc:notes/moved.md"]')).toBeTruthy());
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(4));
+
+    listError = true;
+    await act(async () => {
+      transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "folder-storage-test", item: { entry_id: "documents", key: "documents/notes/moved.md", kind: "md", revision: "rev-4", exists: true } } } });
+    });
+    expect((await screen.findByRole("alert")).textContent).toContain("저장소 다시 읽기 실패");
+    expect(document.querySelector('[data-tree-id="doc:notes/moved.md"]')).toBeTruthy();
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(5));
   });
 
   it("normalizes both legacy file-tree shapes into the folder renderer", () => {

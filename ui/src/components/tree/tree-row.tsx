@@ -33,12 +33,8 @@ function TreeRowView({ row, index, start, selected, focused, measure, onFocus, o
     } as CSSProperties}
   >
     {node.content !== undefined ? <div
-      aria-disabled={node.interactiveContent ? undefined : "true"}
-      aria-level={row.depth + 1}
       className="ks-file-tree-entry"
       data-index={index}
-      role="treeitem"
-      tabIndex={-1}
     >{node.content}</div> : <button
       aria-current={node.currentOnSelection && selected ? "page" : undefined}
       aria-expanded={row.hasChildren ? row.expanded : undefined}

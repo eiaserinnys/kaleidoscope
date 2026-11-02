@@ -110,7 +110,7 @@ export function describeVisible(root: HTMLElement): { text: string; visual: bool
         ? Number(item.dataset.index) + 1
         : item.getAttribute("aria-rowindex") ?? item.getAttribute("aria-posinset") ?? (item.dataset.index === undefined ? 0 : Number(item.dataset.index) + 1));
       const positions = indexed.map(position).filter(Boolean);
-      const total = Number((role === "tree" ? node.getAttribute("aria-rowcount") : null) ?? indexed[0]?.getAttribute("aria-setsize") ?? indexed.length);
+      const total = Number((role === "tree" || group.label === "표" ? node.getAttribute("aria-rowcount") : null) ?? indexed[0]?.getAttribute("aria-setsize") ?? indexed.length);
       if (positions.length) { newline(); append(`[${group.label}, 전체 ${total}${group.unit} 중 ${Math.min(...positions)}~${Math.max(...positions)}번째]`); newline(); }
       else { newline(); append(`[${group.label}, 전체 ${total}${group.unit}]`); newline(); }
     }
