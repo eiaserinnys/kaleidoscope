@@ -81,7 +81,7 @@
         "forecast_days": "1",
         "timezone": "UTC"
       },
-      "refresh_secs": 300
+      "refresh_secs": 900
     },
     "air": {
       "kind": "request",
@@ -101,7 +101,7 @@
         "forecast_days": "1",
         "timezone": "UTC"
       },
-      "refresh_secs": 300
+      "refresh_secs": 1800
     },
     "wiki": {
       "kind": "request",
@@ -122,8 +122,7 @@
         },
         "srlimit": "8",
         "format": "json"
-      },
-      "refresh_secs": 600
+      }
     }
   },
   "ui": {
