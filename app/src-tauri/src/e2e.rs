@@ -187,6 +187,18 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
         json!({"visible": core.shell_visible()}),
     )?;
     main.unminimize().map_err(|error| error.to_string())?;
+    let until = Instant::now() + Duration::from_secs(5);
+    while !core.shell_visible() && Instant::now() < until {
+        thread::sleep(Duration::from_millis(20));
+    }
+    if !core.shell_visible() {
+        return Err("복원 뒤 코어가 보이지 않는 상태입니다".into());
+    }
+    record(
+        log,
+        "shell.restored",
+        json!({"visible": core.shell_visible()}),
+    )?;
     let snapshot = match call(core, CoreRequest::StateGet {})? {
         CoreReply::StateGet { snapshot } => snapshot,
         reply => return Err(format!("unexpected state response: {reply:?}")),

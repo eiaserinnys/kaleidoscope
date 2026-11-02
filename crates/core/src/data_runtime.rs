@@ -509,12 +509,13 @@ fn restored_ready(runtime: &Runtime, name: &str) -> bool {
 
 fn should_prepare_after_plan(
     runtime: &Runtime,
+    live: &BTreeSet<String>,
     name: &str,
     changed: bool,
     fetch_missing: bool,
 ) -> bool {
     (changed || (fetch_missing && !runtime.data.contains_key(name)))
-        && liveness::source_live(runtime, name)
+        && liveness::source_live(runtime, live, name)
         && liveness::deps_ready(runtime, name)
         && !runtime.sources[name].in_flight
         && !restored_ready(runtime, name)
@@ -735,7 +736,13 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                         Some(until)
                     }
                     (Some(key), Ok(_), None) if fetched => {
-                        inner.data_runtimes.gates.lock().unwrap().remove(key);
+                        let mut gates = inner.data_runtimes.gates.lock().unwrap();
+                        if gates
+                            .get(key)
+                            .is_some_and(|gate| gate.until <= chrono::Utc::now())
+                        {
+                            gates.remove(key);
+                        }
                         None
                     }
                     _ => None,
@@ -836,6 +843,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                         }
                     }
                     let mut changed_sources = BTreeSet::from([job.name.clone()]);
+                    let live = liveness::live_sources(runtime);
                     for name in runtime.compiled.source_order().to_vec() {
                         if name == job.name {
                             continue;
@@ -847,7 +855,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                         if changed || runtime.sources[&name].status != old_status {
                             changed_sources.insert(name.clone());
                         }
-                        if should_prepare_after_plan(runtime, &name, changed, false) {
+                        if should_prepare_after_plan(runtime, &live, &name, changed, false) {
                             if let Some(next) =
                                 prepare(&inner.data_runtimes, runtime, &job.window, &name, false)
                             {
@@ -933,12 +941,13 @@ pub(crate) fn attach(
         runtime.state = window.state.clone();
         runtime.attached += 1;
         let names = runtime.compiled.source_order().to_vec();
+        let live = liveness::live_sources(runtime);
         let mut pending = Vec::new();
         for name in names {
             let plan = runtime.plan_source(&name);
             let changed = set_plan(&inner.data_runtimes, runtime, &name, plan);
             runtime.apply_source_storage_status(&name);
-            if should_prepare_after_plan(runtime, &name, changed, true) {
+            if should_prepare_after_plan(runtime, &live, &name, changed, true) {
                 if let Some(job) = prepare(&inner.data_runtimes, runtime, window_id, &name, false) {
                     pending.push(job);
                 }
@@ -1111,6 +1120,7 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                 .collect();
             runtime.state = window.state.clone();
             let names = runtime.compiled.source_order().to_vec();
+            let live = liveness::live_sources(runtime);
             let mut changed_sources = BTreeSet::new();
             for name in names {
                 let source = &runtime.definition.sources[&name];
@@ -1142,7 +1152,7 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                 if changed || runtime.sources[&name].status != old_status {
                     changed_sources.insert(name.clone());
                 }
-                if should_prepare_after_plan(runtime, &name, changed, false) {
+                if should_prepare_after_plan(runtime, &live, &name, changed, false) {
                     if let Some(job) = prepare(&inner.data_runtimes, runtime, id, &name, false) {
                         pending.push(job);
                     }
@@ -1516,7 +1526,13 @@ mod freshness_tests {
             runtime.sources["stories"].status,
             SourceStatus::Ready { .. }
         ));
-        assert!(!should_prepare_after_plan(&runtime, "stories", true, true));
+        assert!(!should_prepare_after_plan(
+            &runtime,
+            &liveness::live_sources(&runtime),
+            "stories",
+            true,
+            true
+        ));
         let selected = runtime.selected_for(&BTreeSet::new(), &BTreeSet::from(["stories".into()]));
         let incremental = runtime.view_selected(&selected);
         assert_eq!(incremental.values, runtime.view().values);

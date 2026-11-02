@@ -187,6 +187,90 @@ fn 한도에_걸린_연결의_다른_원천도_관문이_열릴_때까지_대기
 }
 
 #[test]
+fn 한도_응답_뒤_늦게_온_성공은_대기_관문을_지우지_않는다() {
+    use kaleidoscope_contract::registry::{ConnectionKind, RateLimitHint};
+    let definition = json!({"id":"same-host-race","name":"연결 경쟁 시험","requires":{"blocks":4,"modules":{"connection":1}},
+        "permissions":[{"module":"connection","id":"api","connection":"example","access":"read","label":"API"}],"state":{},
+        "sources":{"limited":{"kind":"request","permission":"api","path":"/new"},"slow":{"kind":"request","permission":"api","path":"/old"}},
+        "ui":{"type":"stack","direction":"column","children":[{"type":"text","value":{"expr":"$data.limited"}},{"type":"text","value":{"expr":"$data.slow"}}]}}).to_string();
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let mut limited = response(429, json!({"error":"limit"}));
+    limited.rate_limit = Some(RateLimitHint {
+        retry_after_secs: Some(3),
+    });
+    client.connection_replies.lock().unwrap().extend([
+        ("/new".into(), limited),
+        ("/old".into(), response(200, json!("slow success"))),
+    ]);
+    let (release_slow, wait_slow) = mpsc::channel();
+    let (release_limited, wait_limited) = mpsc::channel();
+    *client.connection_pause.lock().unwrap() = Some(wait_slow);
+    *client.connection_pause_new.lock().unwrap() = Some(wait_limited);
+    let core = open_core_with_client(temp.path(), vec![definition], &host, client.clone());
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "same-host-race");
+    mark_connected(&core);
+    *core.inner.connections.lock().unwrap() = vec![info(ConnectionKind::Relay)];
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+        dormant: vec![],
+    })
+    .unwrap();
+    wait_until(|| client.connection_requests.lock().unwrap().len() == 2);
+    release_limited.send(()).unwrap();
+    wait_until(|| {
+        let CoreReply::DataAttach { view } = core
+            .handle(CoreRequest::DataAttach {
+                window_id: window.clone(),
+                dormant: vec![],
+            })
+            .unwrap()
+        else {
+            return false;
+        };
+        view.source_meta["limited"].message.is_some()
+    });
+    client
+        .connection_replies
+        .lock()
+        .unwrap()
+        .insert("/new".into(), response(200, json!("retry success")));
+    release_slow.send(()).unwrap();
+    wait_until(|| {
+        crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/1/value")
+            == Some(BindingValue::Ready {
+                value: json!("slow success"),
+            })
+    });
+    core.handle(CoreRequest::DataRefresh {
+        window_id: window.clone(),
+        sources: vec!["limited".into()],
+    })
+    .unwrap();
+    thread::sleep(Duration::from_millis(200));
+    assert_eq!(
+        client.connection_requests.lock().unwrap().len(),
+        2,
+        "대기 중 새로고침은 추가 요청을 보내지 않는다"
+    );
+    wait_until(|| {
+        crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/value")
+            == Some(BindingValue::Ready {
+                value: json!("retry success"),
+            })
+    });
+    assert_eq!(client.connection_requests.lock().unwrap().len(), 3);
+    core.handle(CoreRequest::DataRefresh {
+        window_id: window,
+        sources: vec!["limited".into()],
+    })
+    .unwrap();
+    wait_until(|| client.connection_requests.lock().unwrap().len() == 4);
+}
+
+#[test]
 fn 두_창이_같은_한도에서_깨어나도_재시도는_한_번만_나간다() {
     use kaleidoscope_contract::registry::{ConnectionKind, RateLimitHint};
     let temp = TempDir::new().unwrap();

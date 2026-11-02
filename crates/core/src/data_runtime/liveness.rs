@@ -86,8 +86,8 @@ pub(super) fn live_sources(runtime: &Runtime) -> BTreeSet<String> {
     live
 }
 
-pub(super) fn source_live(runtime: &Runtime, name: &str) -> bool {
-    runtime.attached > 0 && runtime.visible && live_sources(runtime).contains(name)
+pub(super) fn source_live(runtime: &Runtime, live: &BTreeSet<String>, name: &str) -> bool {
+    runtime.attached > 0 && runtime.visible && live.contains(name)
 }
 
 pub(super) fn deps_ready(runtime: &Runtime, name: &str) -> bool {

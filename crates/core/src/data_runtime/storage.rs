@@ -241,8 +241,10 @@ fn replan(
 ) -> Vec<Job> {
     let mut pending = Vec::new();
     let mut changed_sources = BTreeSet::new();
+    let live = liveness::live_sources(runtime);
     for name in runtime.compiled.source_order().to_vec() {
-        let (changed, previous, job) = replan_source(&inner.data_runtimes, runtime, id, &name);
+        let (changed, previous, job) =
+            replan_source(&inner.data_runtimes, runtime, &live, id, &name);
         if let Some(job) = job {
             pending.push(job);
         }
@@ -283,6 +285,7 @@ fn replan(
 fn replan_source(
     manager: &DataRuntimes,
     runtime: &mut Runtime,
+    live: &BTreeSet<String>,
     id: &str,
     name: &str,
 ) -> (bool, SourceStatus, Option<Job>) {
@@ -290,7 +293,7 @@ fn replan_source(
     let plan = runtime.plan_source(name);
     let changed = set_plan(manager, runtime, name, plan);
     runtime.apply_source_storage_status(name);
-    let job = if should_prepare_after_plan(runtime, name, changed, false) {
+    let job = if should_prepare_after_plan(runtime, live, name, changed, false) {
         prepare(manager, runtime, id, name, false)
     } else {
         None
@@ -380,7 +383,8 @@ mod freshness_tests {
         }
 
         set_route(&mut runtime, "two");
-        let (changed, _, job) = replan_source(&manager, &mut runtime, "window", "item");
+        let live = liveness::live_sources(&runtime);
+        let (changed, _, job) = replan_source(&manager, &mut runtime, &live, "window", "item");
         assert!(changed);
         assert_eq!(
             job.unwrap().plan,
@@ -392,7 +396,7 @@ mod freshness_tests {
         );
 
         set_route(&mut runtime, "one");
-        let (changed, _, job) = replan_source(&manager, &mut runtime, "window", "item");
+        let (changed, _, job) = replan_source(&manager, &mut runtime, &live, "window", "item");
         assert!(changed);
         assert!(job.is_none());
         assert_eq!(runtime.data["item"], cached_value);
