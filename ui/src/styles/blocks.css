@@ -600,14 +600,18 @@
 }
 
 .ks-agent-chat-history {
-  display: flex;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
-  flex-direction: column;
-  gap: var(--ks-space-3);
   overflow: auto;
   padding: var(--ks-space-4) var(--ks-space-3);
+}
+
+.ks-agent-chat-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--ks-space-3);
 }
 
 .ks-agent-chat-user {
@@ -673,6 +677,10 @@
 .ks-agent-chat-input {
   display: block;
   flex: 1 1 auto;
+  field-sizing: content;
+  height: auto;
+  max-height: calc(8lh + 2 * var(--ks-space-1) + 2 * var(--ks-line-width));
+  overflow-y: auto;
   font-family: inherit;
   padding: var(--ks-space-1) var(--ks-space-2);
   resize: none;

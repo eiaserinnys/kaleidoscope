@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Block, ConversationAttachment, ConversationEvent, ConversationItem, CoreEvent, CoreRequest, LocalAgentSnapshot, SetState } from "../contract/contract";
 import { Button, EmptyState, IconButton, Notice, StatusText } from "../components/primitives";
 import { Folder, FolderOpen, MessageSquare } from "../components/icons";
@@ -11,6 +11,7 @@ import { flushShareViews } from "../share/share-view";
 import { HistoryAttachmentView, ImagePreview, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
 import { ChatComposer } from "./chat-composer";
 import { ChatHistory } from "./chat-history";
+import { useFrameCoalesced } from "./frame-coalesced";
 
 export type AgentSessionBlockData = Extract<Block, { type: "chat" }> & { permission: string; root: { permission: string }; agents: NonNullable<Extract<Block, { type: "chat" }>["agents"]>; selected: NonNullable<Extract<Block, { type: "chat" }>["selected"]>; on_select: SetState };
 
@@ -28,16 +29,25 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const generationRef = useRef<string | null>(null);
   const followTail = useRef(true);
+  const coalescedText = useFrameCoalesced(({ generation, update }: { generation: string; update: ConversationEvent }) => {
+    setSnapshot((current) => current?.generation === generation ? applyConversation(current, update) : current);
+  });
   useShareDescriber(shareRef, () => ({ text: "[채팅]", visual: false }));
 
   const applyUpdate = useCallback((event: Extract<CoreEvent, { event: "local_agent.update" }>) => {
     const update = event.update;
     if (update.type === "snapshot") {
+      coalescedText.cancel();
       generationRef.current = update.snapshot.generation;
       setSnapshot(update.snapshot);
       return;
     }
     if (generationRef.current !== event.generation) return;
+    if (update.type === "conversation" && update.update.kind === "text") {
+      coalescedText.schedule({ generation: event.generation, update: update.update });
+      return;
+    }
+    coalescedText.flush();
     setSnapshot((current) => {
       if (!current || current.generation !== event.generation) return current;
       if (update.type === "state") return {
@@ -52,11 +62,12 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
       if (update.type === "queue") return { ...current, queued: update.queued };
       return applyConversation(current, update.update);
     });
-  }, []);
+  }, [coalescedText]);
 
   useEffect(() => {
     let active = true;
     const buffered: Extract<CoreEvent, { event: "local_agent.update" }>[] = [];
+    coalescedText.cancel();
     generationRef.current = null;
     const unsubscribe = context.store.subscribeEvents((event) => {
       if (event.event !== "local_agent.update" || event.window_id !== windowId) return;
@@ -78,10 +89,11 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
     return () => {
       active = false;
       unsubscribe();
+      coalescedText.cancel();
       generationRef.current = null;
       void context.store.call({ op: "local_agent.detach", window_id: windowId }).catch(() => undefined);
     };
-  }, [applyUpdate, context.store, windowId]);
+  }, [applyUpdate, coalescedText, context.store, windowId]);
 
   const withLatestGeneration = useCallback((request: CoreRequest): CoreRequest => {
     if (generationRef.current && "generation" in request) return { ...request, generation: generationRef.current };
@@ -154,10 +166,6 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
   />, [context.store, windowId]);
 
   const closePreview = useCallback(() => setPreview(null), []);
-  useLayoutEffect(() => {
-    const history = historyRef.current;
-    if (history && followTail.current) history.scrollTop = history.scrollHeight;
-  }, [snapshot?.history, snapshot?.queued, snapshot?.text, snapshot?.activity]);
   const folderName = snapshot?.folder_name
     ?? context.snapshot.device.grants.find((grant) => grant.window_id === windowId && grant.permission === block.root.permission)?.root_name
     ?? null;
@@ -220,11 +228,7 @@ export function AgentSessionBlock({ block, context, pointer = "/ui" }: { block: 
         busy={snapshot.activity.busy}
         tool={snapshot.activity.tool}
         historyRef={historyRef}
-        onScroll={(event) => {
-          const history = event.currentTarget;
-          const threshold = Number.parseFloat(getComputedStyle(history).getPropertyValue("--ks-space-6")) || 0;
-          followTail.current = history.scrollHeight - history.clientHeight - history.scrollTop <= threshold;
-        }}
+        followTail={followTail}
         renderAttachment={renderAttachment}
         renderPendingAttachment={(_attachment, _index) => null}
         footer={<>{queued}{permissions}{actionError ? <Notice role="alert">{actionError}</Notice> : null}{snapshot.phase === "ended" ? <StatusText>대화가 끝났습니다</StatusText> : null}</>}

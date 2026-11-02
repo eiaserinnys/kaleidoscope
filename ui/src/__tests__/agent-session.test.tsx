@@ -76,6 +76,16 @@ function setup(agent = localAgent("ready"), respond?: (request: CoreRequest) => 
 afterEach(() => cleanup());
 
 describe("기기 로컬 에이전트 화면", () => {
+  it("같은 프레임의 text 뒤에 답이 끝나면 보류한 진행 글을 되살리지 않는다", async () => {
+    const state = setup(localAgent("ready"));
+    await screen.findByRole("textbox", { name: "메시지" });
+    state.emit({ event: "local_agent.update", window_id: state.window.id, generation: "generation-1", update: { type: "conversation", update: { kind: "text", stream_id: "stream-1", text: "보류할 진행문" } } });
+    state.emit({ event: "local_agent.update", window_id: state.window.id, generation: "generation-1", update: { type: "conversation", update: { kind: "item", item: { id: "assistant-finished", kind: "assistant", text: "완료된 답", at: "2026-10-30T00:00:00Z", attachments: [] } } } });
+    expect(await screen.findByText("완료된 답")).toBeTruthy();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+    expect(screen.queryByText("보류할 진행문")).toBeNull();
+  });
+
   it("에이전트 목록을 읽지 못하면 오류를 보이고 선택 단추를 비활성화한다", async () => {
     const failedDefinition = {
       ...definition,

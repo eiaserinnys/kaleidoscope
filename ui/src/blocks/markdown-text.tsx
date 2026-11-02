@@ -1,9 +1,12 @@
 import ReactMarkdown from "react-markdown";
+import { memo } from "react";
 import remarkGfm from "remark-gfm";
 import { useOptionalWindowData } from "../data/window-data";
 import { toCoreError } from "../core/core-transport";
 
-export function MarkdownText({ children }: { children: string }) {
+const remarkPlugins = [remarkGfm];
+
+export const MarkdownText = memo(function MarkdownText({ children }: { children: string }) {
   const data = useOptionalWindowData();
   return (
     <div className="ks-markdown-text">
@@ -22,10 +25,10 @@ export function MarkdownText({ children }: { children: string }) {
           ),
           img: ({ alt }) => <span className="ks-markdown-image-alt">{alt ?? ""}</span>,
         }}
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={remarkPlugins}
       >
         {children}
       </ReactMarkdown>
     </div>
   );
-}
+});

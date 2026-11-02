@@ -248,12 +248,15 @@ export class WindowData {
 }
 
 const DataContext = createContext<{ data: WindowData } | null>(null);
+const WindowDataContext = createContext<WindowData | null>(null);
 
 export function WindowDataProvider({ store, windowId, definition, children }: { store: ShellStore; windowId: string; definition: AppDefinition; children: ReactNode }) {
   const data = useMemo(() => new WindowData(store, windowId, definition), [store, windowId, definition]);
   const context = useMemo(() => ({ data }), [data]);
   useEffect(() => data.mount(), [data]);
-  return <DataContext.Provider value={context}><ClientRuntimeSync data={data} />{children}</DataContext.Provider>;
+  return <WindowDataContext.Provider value={data}>
+    <DataContext.Provider value={context}><ClientRuntimeSync data={data} />{children}</DataContext.Provider>
+  </WindowDataContext.Provider>;
 }
 
 function ClientRuntimeSync({ data }: { data: WindowData }) {
@@ -263,13 +266,13 @@ function ClientRuntimeSync({ data }: { data: WindowData }) {
 }
 
 export function useWindowData(): WindowData {
-  const value = useContext(DataContext);
+  const value = useContext(WindowDataContext);
   if (!value) throw new Error("창 데이터가 연결되지 않았습니다");
-  return value.data;
+  return value;
 }
 
 export function useOptionalWindowData(): WindowData | null {
-  return useContext(DataContext)?.data ?? null;
+  return useContext(WindowDataContext);
 }
 
 export function useDormant(pointer: string, dormant: boolean) {

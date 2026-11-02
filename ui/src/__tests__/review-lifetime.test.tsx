@@ -56,7 +56,7 @@ describe('감수 수명 재현', () => {
     await screen.findByRole('textbox', {name: '메시지'});
     state.emit({event: 'conversation.update', thread_id: 'thread-1', update: {kind: 'activity', busy: true, tool: '계속 작업'}});
     state.emit({event: 'conversation.update', thread_id: 'thread-1', update: {kind: 'text', stream_id: 's', text: '아직 작성 중인 답'}});
-    expect(screen.getByText('아직 작성 중인 답')).toBeTruthy();
+    expect(await screen.findByText('아직 작성 중인 답')).toBeTruthy();
     state.rerender();
     await screen.findByRole('textbox', {name: '메시지'});
     expect(screen.queryByText('아직 작성 중인 답')).toBeTruthy();
@@ -102,7 +102,7 @@ describe('감수 수명 재현', () => {
     fireEvent.click(screen.getByRole('button', {name: '다시 시도'}));
     expect(await screen.findByText('진행 중')).toBeTruthy();
     state.emit({event: 'conversation.update', thread_id: 'thread-1', update: {kind: 'text', stream_id: 's', text: ''}});
-    expect(screen.getByText('생각 중입니다… · 문서 읽기')).toBeTruthy();
+    expect(await screen.findByText('생각 중입니다… · 문서 읽기')).toBeTruthy();
   });
   it('가짜 코어는 열린 스트림을 재조회해도 snapshot을 다시 보내지 않는다', async () => {
     const snapshot = makeTestSnapshot({ definitions: [definition] });
