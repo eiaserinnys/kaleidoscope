@@ -82,7 +82,6 @@ class TableWidget extends WidgetType {
   constructor(readonly node: SyntaxNode, readonly state: EditorState) { super(); }
   toDOM(view: EditorView) {
     const wrap = document.createElement("div");
-    wrap.className = "ks-live-table-wrap";
     const table = document.createElement("table");
     table.className = "ks-live-table";
     const parts = children(this.node);

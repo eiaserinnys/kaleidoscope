@@ -85,6 +85,7 @@ const agentPhases = ["choosing_agent", "choosing_folder", "awaiting_permission",
 const agentPhase = agentPhases.find((phase) => phase === agentHarnessParams.get("agent-phase")) ?? "choosing_agent";
 const agentSelected = agentPhase === "choosing_agent" ? null : "agent-b";
 const agentFolderName = agentHarnessParams.has("short-folder") ? "프로젝트" : "프로젝트-앱-데이터-동기화-실험-long-folder-name";
+const longCommandArgument = "workspace-component-wrap-check-".repeat(10);
 const fakeLocalAgent: LocalAgentSnapshot = {
   generation: `harness-${agentPhase}`,
   phase: agentPhase,
@@ -92,7 +93,7 @@ const fakeLocalAgent: LocalAgentSnapshot = {
   selected: agentSelected,
   folder_name: agentSelected ? agentFolderName : null,
   execution: agentPhase === "awaiting_permission" ? {
-    spec_hash: "harness-spec-hash", name: "Agent B", command: "npx", args: ["-y", "@agentclientprotocol/agent-b-acp"], env: { OPENAI_API_KEY: "example-value-for-ellipsis" },
+    spec_hash: "harness-spec-hash", name: "Agent B", command: "npx", args: ["-y", "@agentclientprotocol/agent-b-acp", "--workspace", longCommandArgument], env: { OPENAI_API_KEY: "example-value-for-ellipsis" },
   } : null,
   auth_methods: agentPhase === "login_required" ? [{ id: "chat-gpt", name: "ChatGPT 로그인", description: "" }] : [],
   controls: [
@@ -112,7 +113,7 @@ const fakeLocalAgent: LocalAgentSnapshot = {
     id: "permission-read-file", title: "파일 읽기", options: [{ id: "allow-once", label: "한 번 허용", kind: "allow_once" }, { id: "deny", label: "거부", kind: "deny" }],
   }] : [],
   queued: agentPhase === "responding" ? [{ id: "queued-harness", text: "그리고 최근 변경도 확인해 줘", attachments: [] }] : [],
-  failure: agentPhase === "failed" ? { code: "local_agent_failed", message: "에이전트를 시작하지 못했습니다", command: "npx agent-b-acp" } : null,
+  failure: agentPhase === "failed" ? { code: "local_agent_failed", message: "에이전트를 시작하지 못했습니다", command: `npx ${longCommandArgument}` } : null,
 };
 
 function makeWindow(definition: AppDefinition, id: string, z: number): AppWindow {
@@ -176,6 +177,12 @@ const sampleDocument = `# kaleidoscope 작업 메모
 
     const workspace = "kaleidoscope";
     console.log(workspace);
+
+| 항목 | 상태 | 다음 동작 | 담당 | 날짜 | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| 긴 표 | 준비 중 | 좁은 창에서 줄바꿈 확인 | 테스트 | 오늘 | 표 셀 내용이 폭을 밀어내지 않습니다 |
+
+    const longLine = "창 폭을 넘길 만큼 충분히 긴 코드 줄이라도 편집기 전체에 가로 스크롤을 만들지 않습니다";
 
 [프로젝트 안내](https://example.com) · ![표식 아이콘](marker.png)
 `;

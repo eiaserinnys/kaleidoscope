@@ -44,7 +44,7 @@ export function CodeEditorBlock({ block, context }: { block: CodeEditorBlockData
     {state.error ? <Notice role="alert">{state.error}</Notice> : null}
     {state.conflict ? <EditorConflict session={session} /> : null}
     <div className="ks-editor-content">
-      <EditableCode key={`${state.contentIdentity}:${state.lineSeparator}`} path={state.path ?? path} contentIdentity={state.contentIdentity} language={codeLanguageForPath(state.path ?? path, block.language)} text={state.text} session={session} wrap={!!block.wrap} />
+      <EditableCode key={`${state.contentIdentity}:${state.lineSeparator}`} path={state.path ?? path} contentIdentity={state.contentIdentity} language={codeLanguageForPath(state.path ?? path, block.language)} text={state.text} session={session} wrap={block.wrap !== false} />
       {state.status !== "saved" && !state.error && !state.conflict ? <span aria-label={state.status === "saving" ? "저장 중" : "저장 대기"} className="ks-editor-save-indicator" role="status" /> : null}
     </div>
   </div>;

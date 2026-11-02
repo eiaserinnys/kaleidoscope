@@ -430,8 +430,6 @@
   min-height: 100%;
   padding: var(--ks-space-4);
   white-space: pre-wrap;
-  word-break: keep-all;
-  overflow-wrap: anywhere;
 }
 
 .ks-editor-view .cm-line {
@@ -456,8 +454,6 @@
   color: var(--ks-color-text);
   font-size: var(--ks-type-document);
   line-height: var(--ks-line-document);
-  overflow-wrap: anywhere;
-  word-break: keep-all;
   /* 글 블록, 흐름 본문, 속성 값은 pre-wrap이다. 렌더된 요소 사이 줄바꿈이 빈 줄로 보이지 않게 끊는다. */
   white-space: normal;
 }
@@ -508,10 +504,17 @@
 }
 
 .ks-markdown-text pre {
-  overflow: auto;
   border-radius: var(--ks-radius-small);
   background: var(--ks-color-code);
   padding: var(--ks-space-3);
+  tab-size: 4;
+}
+
+.ks-code-line {
+  --ks-code-hang: min(var(--ks-code-indent, 0ch), 50%);
+  display: block;
+  padding-inline-start: var(--ks-code-hang);
+  text-indent: calc(-1 * var(--ks-code-hang));
 }
 
 .ks-markdown-text pre code {
@@ -633,8 +636,6 @@
   line-height: var(--ks-line-document);
   padding: var(--ks-space-2) var(--ks-space-3);
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: keep-all;
 }
 
 .ks-agent-chat-user.is-pending {
@@ -777,12 +778,10 @@
 .ks-agent-session-command {
   display: block;
   max-width: 100%;
-  overflow: auto;
   background: var(--ks-color-code);
   border-radius: var(--ks-radius-small);
   font-family: var(--ks-font-code);
   padding: var(--ks-space-2);
-  white-space: pre;
 }
 
 .ks-agent-session-env {
@@ -860,7 +859,6 @@
 .ks-editor-view .ks-live-code-start { border-start-start-radius: var(--ks-radius-small); border-start-end-radius: var(--ks-radius-small); }
 .ks-editor-view .ks-live-code-end { border-end-start-radius: var(--ks-radius-small); border-end-end-radius: var(--ks-radius-small); }
 .ks-editor-view .ks-live-rule { display: block; border-block-start: var(--ks-line-width) solid var(--ks-color-border); }
-.ks-live-table-wrap { overflow-x: auto; }
 .ks-live-task {
   display: inline-grid;
   width: 1em;

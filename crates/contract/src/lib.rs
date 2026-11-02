@@ -1696,7 +1696,8 @@ pub enum Block {
     // ----- 블록 세트 4판: 문서와 미디어 -----
     /// 코드와 설정 파일의 편집기 또는 읽기 전용 보기다. `file`과 `value` 가운데 하나를 쓴다.
     /// `file`은 기본으로 편집하고 `read_only`면 읽기 전용이다. `value`는 읽기 전용이다.
-    /// `language`가 없으면 확장자로 정하며, `follow`와 `wrap`은 보기 모양을 고른다.
+    /// `language`가 없으면 확장자로 정하며 `follow`는 따라가기를 고른다. `wrap`을 생략하면 창 폭에서 줄바꿈하고,
+    /// `false`면 줄바꿈하지 않는다.
     Code {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -1713,9 +1714,9 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "is_false")]
         #[ts(optional, as = "Option<bool>")]
         follow: bool,
-        #[serde(default, skip_serializing_if = "is_false")]
-        #[ts(optional, as = "Option<bool>")]
-        wrap: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        wrap: Option<bool>,
     },
     /// (4판) 이미지 하나. `src`는 [`data::MediaRef`]이고 그 `crop`대로 자른다. `zoom`이면 휠과 단추로 확대하고
     /// 끌어서 옮기며, 두 번 누르면 맞춤으로 돌아간다. 이미지가 없으면 빈 상태를 보인다.
@@ -2299,8 +2300,8 @@ enum RawBlock {
         read_only: bool,
         #[serde(default, skip_serializing_if = "is_false")]
         follow: bool,
-        #[serde(default, skip_serializing_if = "is_false")]
-        wrap: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        wrap: Option<bool>,
     },
     /// (4판) 이미지 하나. `src`는 [`data::MediaRef`]이고 그 `crop`대로 자른다. `zoom`이면 휠과 단추로 확대하고
     /// 끌어서 옮기며, 두 번 누르면 맞춤으로 돌아간다. 이미지가 없으면 빈 상태를 보인다.
@@ -2384,8 +2385,8 @@ enum RawBlock {
         file: FileRef,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         language: Option<CodeLanguage>,
-        #[serde(default, skip_serializing_if = "is_false")]
-        wrap: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        wrap: Option<bool>,
     },
     /// 이전 코드 보기 이름.
     CodeView {
@@ -2397,8 +2398,8 @@ enum RawBlock {
         language: Option<CodeLanguage>,
         #[serde(default, skip_serializing_if = "is_false")]
         follow: bool,
-        #[serde(default, skip_serializing_if = "is_false")]
-        wrap: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        wrap: Option<bool>,
     },
     /// 이전 제공자 대화 이름.
     AgentChat {},
@@ -5081,6 +5082,22 @@ mod tests {
             (
                 r#"{"type":"markdown_view","value":{"state":"body"}}"#,
                 r#"{"type":"markdown","value":{"state":"body"},"read_only":true}"#,
+            ),
+            (
+                r#"{"type":"code_editor","file":{"permission":"files","path":{"state":"path"}}}"#,
+                r#"{"type":"code","file":{"permission":"files","path":{"state":"path"}}}"#,
+            ),
+            (
+                r#"{"type":"code_editor","file":{"permission":"files","path":{"state":"path"}},"wrap":false}"#,
+                r#"{"type":"code","file":{"permission":"files","path":{"state":"path"}},"wrap":false}"#,
+            ),
+            (
+                r#"{"type":"code","value":{"state":"body"}}"#,
+                r#"{"type":"code","value":{"state":"body"}}"#,
+            ),
+            (
+                r#"{"type":"code","value":{"state":"body"},"wrap":false}"#,
+                r#"{"type":"code","value":{"state":"body"},"wrap":false}"#,
             ),
             (
                 r#"{"type":"code_editor","file":{"permission":"files","path":{"state":"path"}},"wrap":true}"#,

@@ -1,0 +1,22 @@
+/* 쉘의 글 줄바꿈 규칙 정본. 글은 창이 정한 폭 안에서 줄바꿈하고 가로 스크롤을 만들지 않는다. 한 줄에 두는 제목, 칩, 메타, 표 칸은 말줄임으로 끊는다. 읽는 글을 그리는 새 블록은 여기에 더한다. */
+.ks-markdown-text,
+.ks-editor-view .cm-content,
+.ks-agent-chat-user,
+.ks-agent-chat-notice,
+.ks-agent-chat-working,
+.ks-agent-session-command,
+.ks-agent-session-permission > span,
+.ks-notice-message,
+.ks-data-text,
+.ks-dialog-body,
+.ks-properties dd,
+.ks-feed-body,
+.ks-html-comment p {
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.ks-markdown-text pre,
+.ks-agent-session-command {
+  white-space: pre-wrap;
+}

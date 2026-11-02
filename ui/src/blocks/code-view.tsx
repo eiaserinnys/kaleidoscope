@@ -24,7 +24,7 @@ export function CodeViewBlock({ block, context, pointer }: { block: CodeViewBloc
 function BoundCodeView({ block, pointer }: { block: CodeViewBlockData; pointer: string }) {
   const value = useBinding(`${pointer}/value`, block.value ?? null);
   if (value.status !== "ready") return <DataState value={value} />;
-  return <ReadOnlyCode text={codeViewText(value.value)} language={codeLanguageForPath(null, block.language)} follow={!!block.follow} wrap={!!block.wrap} />;
+  return <ReadOnlyCode text={codeViewText(value.value)} language={codeLanguageForPath(null, block.language)} follow={!!block.follow} wrap={block.wrap !== false} />;
 }
 function FileCodeView({ block, file, context }: { block: CodeViewBlockData; file: FileRef; context: BlockContext }) {
   const stateValue = useWindowStateValue(context, typeof file.path === "string" ? null : file.path.state);
@@ -52,7 +52,7 @@ function FileCodeView({ block, file, context }: { block: CodeViewBlockData; file
   if (path === null) return <div className="ks-code-view" ref={emptyShareRef} />;
   if (loading) return <div className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
   if (error) return <div className="ks-editor-error"><Notice role="alert">{error}</Notice></div>;
-  return <ReadOnlyCode path={path} text={text} language={codeLanguageForPath(path, block.language)} follow={!!block.follow} wrap={!!block.wrap} />;
+  return <ReadOnlyCode path={path} text={text} language={codeLanguageForPath(path, block.language)} follow={!!block.follow} wrap={block.wrap !== false} />;
 }
 function ReadOnlyCode({ text, language, follow, wrap, path = null }: { text: string; language: CodeLanguage; follow: boolean; wrap: boolean; path?: string | null }) {
   const host = useRef<HTMLDivElement>(null);
