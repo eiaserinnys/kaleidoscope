@@ -118,6 +118,7 @@ fn messages_do_not_use_generic_or_disallowed_phrases() {
             entry.id
         );
         for forbidden in [
+            "`",
             "명령을 처리할 수 없습니다",
             "요청한 항목을 찾을 수 없습니다",
             "이거나 ",
