@@ -379,7 +379,7 @@ fn file_write_commands_reject_links() {
     assert!(matches!(
         &results[0],
         kaleidoscope_contract::FileOpResult::Error { error, .. }
-            if error.code == ErrorCode::PermissionDenied
+            if error.code == ErrorCode::PathOutsideRoot
     ));
     assert!(root.join("target.txt").exists());
 }

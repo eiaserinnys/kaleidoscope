@@ -314,7 +314,7 @@ fn reject_links(root: &Path, relative: &str) -> Result<(), CoreError> {
         current.push(part);
         match fs::symlink_metadata(&current) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(error::make(ErrorCode::PermissionDenied))
+                return Err(error::make(ErrorCode::PathOutsideRoot))
             }
             Ok(_) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -343,7 +343,7 @@ fn path_exists(path: &Path) -> Result<bool, CoreError> {
 fn copy_entry(source: &Path, destination: &Path) -> Result<(), CoreError> {
     let metadata = fs::symlink_metadata(source).map_err(|error| io_error(&error))?;
     if metadata.file_type().is_symlink() {
-        return Err(error::make(ErrorCode::PermissionDenied));
+        return Err(error::make(ErrorCode::PathOutsideRoot));
     }
     if metadata.is_dir() {
         fs::create_dir(destination).map_err(|error| io_error(&error))?;

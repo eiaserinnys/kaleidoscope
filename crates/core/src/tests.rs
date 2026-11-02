@@ -2318,7 +2318,12 @@ fn state_changes_emit_one_snapshot_event_and_file_reads_failures_emit_none() {
         expected_revision: None,
     })
     .unwrap();
-    assert!(events.lock().unwrap().is_empty());
+    {
+        let mut emitted = events.lock().unwrap();
+        assert_eq!(emitted.len(), 1);
+        assert!(matches!(emitted[0], CoreEvent::FilesChanged { .. }));
+        emitted.clear();
+    }
     core.handle(CoreRequest::WindowClose { window_id }).unwrap();
     check_one(&events);
 
