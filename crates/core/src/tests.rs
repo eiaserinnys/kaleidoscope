@@ -25,6 +25,7 @@ use crate::registry_client::{RegistryClient, RegistryError};
 use crate::storage::LinkFile;
 use crate::{Core, CoreConfig, CoreError, Host};
 
+mod client_blobs_tests;
 mod client_files_tests;
 mod file_write_tests;
 mod layout_sync_tests;

@@ -208,6 +208,9 @@ async fn core_bytes(
     let operation = header("x-ks-operation")?;
     let window = header("x-ks-window")?;
     let handle = header("x-ks-handle")?;
+    let handle = percent_encoding::percent_decode_str(&handle)
+        .decode_utf8_lossy()
+        .into_owned();
     let offset = request
         .headers()
         .get("x-ks-offset")
@@ -228,6 +231,9 @@ async fn core_bytes(
                 &bytes,
             )
             .map(|()| Vec::new()),
+        "client.http_read" | "client.blob_put" => {
+            core.client_binary(&operation, &window, &handle, &bytes)
+        }
         _ => Err(CoreError::new(ErrorCode::InvalidRequest)),
     })
     .await
