@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import type { FolderEntry } from "../contract/contract";
+import type { CoreError, FolderEntry } from "../contract/contract";
 import { toCoreError } from "../core/core-transport";
-import { Button, IconButton, StatusText } from "../components/primitives";
+import { Button, ErrorId, IconButton, StatusText } from "../components/primitives";
 import { FilePlus, FileText, FolderOpen, PanelLeftClose, PanelLeftOpen } from "../components/icons";
 import { TextInput } from "../components/text-input";
 import { END_ACTION_ID, TreeView } from "../components/tree/tree-view";
@@ -18,7 +18,7 @@ import { useFolderDrag } from "./folder-drag";
 interface CreatingFile {
   directory: string;
   initialName: string;
-  error: string | null;
+  error: CoreError | null;
   attempt: number;
 }
 
@@ -38,8 +38,8 @@ export interface FileBrowserTreeProps {
   onFileDoubleClick?: (anchor: HTMLElement, path: string) => void;
   onFileEnter?: (anchor: HTMLElement, path: string) => void;
   onFileContextMenu?: (anchor: HTMLElement, path: string) => void;
-  actionError?: string | null;
-  onActionError?: (error: string | null) => void;
+  actionError?: CoreError | null;
+  onActionError?: (error: CoreError | null) => void;
   backend?: FolderBackend;
   backendLabel?: string;
   actionsEnabled?: boolean;
@@ -60,8 +60,8 @@ export function FolderTreeHeader({ label, children }: { label: string; children?
   </div>;
 }
 
-export function FolderTreeError({ message }: { message: string }) {
-  return <span className="ks-inline-error" role="alert">{message}</span>;
+export function FolderTreeError({ error }: { error: CoreError }) {
+  return <span className="ks-inline-error" role="alert">{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</span>;
 }
 
 export function FileBrowserTree({
@@ -120,8 +120,8 @@ export function FileBrowserTree({
   const entriesByDirectoryRef = useRef(entriesByDirectory);
   entriesByDirectoryRef.current = entriesByDirectory;
   const [loadingDirectories, setLoadingDirectories] = useState<Set<string>>(() => new Set());
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [localActionError, setLocalActionError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, CoreError>>({});
+  const [localActionError, setLocalActionError] = useState<CoreError | null>(null);
   const [creating, setCreating] = useState<CreatingFile | null>(null);
   const currentRoot = useRef<string>(`${backend.identity}\0${activeRoot ?? "<none>"}`);
   const staleDirectories = useRef(new Set<string>());
@@ -130,7 +130,7 @@ export function FileBrowserTree({
   expandedRef.current = expanded;
   const actionError = externalActionError ?? localActionError;
 
-  const reportActionError = useCallback((error: string | null) => {
+  const reportActionError = useCallback((error: CoreError | null) => {
     setLocalActionError(error);
     onActionError?.(error);
   }, [onActionError]);
@@ -161,7 +161,7 @@ export function FileBrowserTree({
       }
     } catch (error) {
       if (currentRoot.current === `${backend.identity}\0${activeRoot}`) {
-        setErrors((current) => ({ ...current, [directory]: toCoreError(error).message }));
+        setErrors((current) => ({ ...current, [directory]: toCoreError(error) }));
       }
     } finally {
       if (currentRoot.current === `${backend.identity}\0${activeRoot}`) {
@@ -325,7 +325,7 @@ export function FileBrowserTree({
     try {
       await store.call({ op: "files.pick_folder", window_id: window.id, permission });
     } catch (error) {
-      reportActionError(toCoreError(error).message);
+      reportActionError(toCoreError(error));
     }
   };
 
@@ -375,7 +375,7 @@ export function FileBrowserTree({
       setCreating((current) => current ? {
         ...current,
         initialName: name,
-        error: coreError.code === "conflict" ? "같은 이름의 파일이 있습니다" : coreError.message,
+        error: coreError,
         attempt: current.attempt + 1,
       } : current);
     }
@@ -386,7 +386,7 @@ export function FileBrowserTree({
     try {
       await onSelect(path, entry);
     } catch (error) {
-      reportActionError(toCoreError(error).message);
+      reportActionError(toCoreError(error));
     }
   }, [onSelect, reportActionError]);
 
@@ -395,7 +395,7 @@ export function FileBrowserTree({
     try {
       await onSelect(path, entry);
     } catch (error) {
-      reportActionError(toCoreError(error).message);
+      reportActionError(toCoreError(error));
     }
   }, [onSelect, reportActionError]);
 
@@ -465,7 +465,7 @@ export function FileBrowserTree({
         id: `loading:${directory}`, label: "불러오는 중", selectable: false, content: <StatusText>불러오는 중</StatusText>,
       });
       if (directory && errors[directory]) rows.push({
-        id: `error:${directory}`, label: errors[directory], selectable: false, content: <FolderTreeError message={errors[directory]} />,
+        id: `error:${directory}`, label: errors[directory].message, selectable: false, content: <FolderTreeError error={errors[directory]} />,
       });
       if (creating?.directory === directory) rows.push({
         id: `creating:${directory}`,
@@ -483,7 +483,7 @@ export function FileBrowserTree({
               value={creating.initialName}
             />
           </div>
-          {creating.error ? <span className="ks-inline-error" role="alert">{creating.error}</span> : null}
+          {creating.error ? <FolderTreeError error={creating.error} /> : null}
         </div>,
       });
       for (const entry of (entriesByDirectory[directory] ?? []).filter(visible)) {
@@ -540,7 +540,7 @@ export function FileBrowserTree({
     if (loadingDirectories.has("") && !Object.hasOwn(entriesByDirectory, "")) root.push({
       id: "loading:", label: "불러오는 중", selectable: false, content: <StatusText>불러오는 중</StatusText>,
     });
-    if (errors[""]) root.push({ id: "error:", label: errors[""], selectable: false, content: <FolderTreeError message={errors[""]} /> });
+    if (errors[""]) root.push({ id: "error:", label: errors[""].message, selectable: false, content: <FolderTreeError error={errors[""]} /> });
     return [...root, ...buildDirectory("")];
   }, [actions, actionsEnabled, collection, commitCreate, creating, entriesByDirectory, errors, expanded, fileIcon, loadingDirectories, mode, visible]);
 
@@ -586,7 +586,7 @@ export function FileBrowserTree({
       ) : !hasRoot ? (
         <div className="ks-file-tree-ungranted">
           <Button onClick={pickFolder}>{permissionLabel} 고르기</Button>
-          {actionError ? <FolderTreeError message={actionError} /> : null}
+          {actionError ? <FolderTreeError error={actionError} /> : null}
         </div>
       ) : (
         <>
@@ -616,7 +616,7 @@ export function FileBrowserTree({
             menuTargetId={actions.menuTargetId}
             selectedId={collection && selectedPath ? `doc:${selectedPath}` : selectedPath}
           />
-          {actionError ? <FolderTreeError message={actionError} /> : null}
+          {actionError ? <FolderTreeError error={actionError} /> : null}
           {actionsEnabled ? actions.noticeNode : null}
         </>
       )}

@@ -85,7 +85,7 @@ function SettingsEntry({ context, entry, index, open, onProblem }: { context: Bl
     const frame = requestAnimationFrame(() => { row.current?.querySelector<HTMLElement>(".cm-content")?.focus(); focusDocument.current = false; });
     return () => cancelAnimationFrame(frame);
   }, [expanded, documentState?.loaded]);
-  useEffect(() => { onProblem(entry.id, state.conflict || documentState?.conflict ? "다른 곳에서 바뀌었습니다" : state.error?.message ?? documentState?.error ?? null); }, [entry.id, state.conflict, state.error, documentState?.conflict, documentState?.error]);
+  useEffect(() => { onProblem(entry.id, state.conflict || documentState?.conflict ? "다른 곳에서 바뀌었습니다" : state.error?.message ?? documentState?.error?.message ?? null); }, [entry.id, state.conflict, state.error, documentState?.conflict, documentState?.error]);
   useEffect(() => {
     void session.load();
     const unsubscribe = context.store.subscribeEvents((event) => {

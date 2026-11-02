@@ -1,4 +1,5 @@
 import type { CoreError, CoreEvent, FileOpResult, FolderEntry } from "../contract/contract";
+import { SHELL_FILE_COPY_REPLY_INVALID, SHELL_FILE_LIST_REPLY_INVALID, SHELL_FILE_MOVE_REPLY_INVALID, SHELL_FILE_PATH_REPLY_INVALID, SHELL_FILE_REMOVE_REPLY_INVALID, SHELL_FILE_STORAGE_LIST_REPLY_INVALID, SHELL_FILE_STORAGE_RENAME_REVISION_MISSING, SHELL_FILE_STORAGE_REMOVE_REVISION_MISSING } from "../contract/shell-errors";
 import { toCoreError } from "../core/core-transport";
 import type { ShellStore } from "../core/shell-store";
 import type { EditorAddress } from "./file-editor-session";
@@ -109,7 +110,7 @@ export function createFileFolderBackend({
   const canWrite = writable && scope === "folder" && !readOnly;
   const list: FolderBackend["list"] = async (directory) => {
     const reply = await store.call({ op: "files.list", window_id: windowId, permission, dir: directory });
-    if (reply.op !== "files.list") throw new Error("파일 목록 응답이 올바르지 않습니다");
+    if (reply.op !== "files.list") throw SHELL_FILE_LIST_REPLY_INVALID();
     return reply.entries.map((entry) => ({ ...entry, ext: extensionOf(entry.name) }));
   };
   const actions: FolderActions = {
@@ -124,7 +125,7 @@ export function createFileFolderBackend({
   actions.reveal = async (path) => { await store.call({ op: "files.reveal", window_id: windowId, permission, path }); };
   actions.absolutePath = async (path) => {
     const reply = await store.call({ op: "files.path", window_id: windowId, permission, path });
-    if (reply.op !== "files.path") throw new Error("파일 경로 응답이 올바르지 않습니다");
+    if (reply.op !== "files.path") throw SHELL_FILE_PATH_REPLY_INVALID();
     return reply.text;
   };
   if (canWrite) {
@@ -139,22 +140,22 @@ export function createFileFolderBackend({
     };
     actions.move = async (paths, destination) => {
       const reply = await store.call({ op: "files.move", window_id: windowId, permission, paths, destination });
-      if (reply.op !== "files.move") throw new Error("파일 이동 응답이 올바르지 않습니다");
+      if (reply.op !== "files.move") throw SHELL_FILE_MOVE_REPLY_INVALID();
       return asResults(reply.results);
     };
     actions.copy = async (paths, destination) => {
       const reply = await store.call({ op: "files.copy", window_id: windowId, permission, paths, destination });
-      if (reply.op !== "files.copy") throw new Error("파일 복사 응답이 올바르지 않습니다");
+      if (reply.op !== "files.copy") throw SHELL_FILE_COPY_REPLY_INVALID();
       return asResults(reply.results);
     };
     actions.trash = async (paths) => {
       const reply = await store.call({ op: "files.remove", window_id: windowId, permission, paths, permanent: false });
-      if (reply.op !== "files.remove") throw new Error("파일 삭제 응답이 올바르지 않습니다");
+      if (reply.op !== "files.remove") throw SHELL_FILE_REMOVE_REPLY_INVALID();
       return asResults(reply.results);
     };
     actions.permanentDelete = async (paths) => {
       const reply = await store.call({ op: "files.remove", window_id: windowId, permission, paths, permanent: true });
-      if (reply.op !== "files.remove") throw new Error("파일 삭제 응답이 올바르지 않습니다");
+      if (reply.op !== "files.remove") throw SHELL_FILE_REMOVE_REPLY_INVALID();
       return asResults(reply.results);
     };
   }
@@ -190,7 +191,7 @@ export function createCollectionFolderBackend({
   const list: FolderBackend["list"] = async (parent) => {
     if (parent) return [];
     const reply = await store.call({ op: "storage.list", window_id: windowId, entry });
-    if (reply.op !== "storage.list") throw new Error("문서 모음 응답이 올바르지 않습니다");
+    if (reply.op !== "storage.list") throw SHELL_FILE_STORAGE_LIST_REPLY_INVALID();
     bucketId = reply.result.bucket_id;
     return reply.result.items.map((item) => {
       const name = item.doc.split("/").at(-1) ?? item.doc;
@@ -221,7 +222,7 @@ export function createCollectionFolderBackend({
     actions.rename = async (item, name) => {
       const slash = item.path.lastIndexOf("/");
       const to = slash >= 0 ? `${item.path.slice(0, slash + 1)}${name}` : name;
-      if (!item.revision) throw new Error("문서 판을 확인하지 못했습니다. 목록을 새로 고친 뒤 다시 시도하세요");
+      if (!item.revision) throw SHELL_FILE_STORAGE_RENAME_REVISION_MISSING();
       await store.call({ op: "storage.move", window_id: windowId, entry, from: item.path, to, expected_revision: item.revision });
     };
     actions.permanentDelete = async (paths) => {
@@ -230,7 +231,7 @@ export function createCollectionFolderBackend({
       for (const path of paths) {
         const item = items.find((candidate) => candidate.path === path);
         if (!item?.revision) {
-          results.push({ path, error: { code: "not_found", message: "문서 판을 확인하지 못했습니다. 목록을 새로 고친 뒤 다시 시도하세요", details: [] } });
+          results.push({ path, error: SHELL_FILE_STORAGE_REMOVE_REVISION_MISSING() });
           continue;
         }
         try {

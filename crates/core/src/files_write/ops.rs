@@ -1,13 +1,23 @@
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use kaleidoscope_contract::{
     file_name::check_file_name, CoreError, CoreReply, ErrorCode, FileChange, FileOpResult,
-    FilesScope,
 };
 
-use crate::{error, files, CoreState, Inner};
+use crate::{files, Inner};
+
+mod copy;
+mod helpers;
+
+use copy::{copy_entry, copy_name, remove_entry};
+use helpers::{
+    destination_dir, is_file_busy_code, join_relative, map_create_file_error,
+    map_create_folder_error, named_error, path_exists, protect_data_ancestor, reject_links,
+    resolve_mutation_path, result_to_op, selected_roots,
+};
+pub(super) use helpers::{file_system_error, readable_path, successful_changes};
 
 pub(super) fn write(
     inner: &Inner,
@@ -28,24 +38,51 @@ pub(super) fn write(
             let current = match fs::read(&resolved) {
                 Ok(bytes) => bytes,
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                    return Err(error::make(ErrorCode::Conflict));
+                    return Err(kaleidoscope_contract::errors::FILE_SAVE_FILE_DELETED(path)
+                        .and_details(vec![error.to_string()]));
                 }
-                Err(error) => return Err(io_error(&error)),
+                Err(error) => {
+                    return Err(file_system_error(
+                        &error,
+                        || kaleidoscope_contract::errors::FILE_SAVE_FILE_DELETED(path),
+                        || kaleidoscope_contract::errors::FILE_SAVE_READ_BUSY(path),
+                        || kaleidoscope_contract::errors::FILE_SAVE_READ_IO(path),
+                    ));
+                }
             };
             if files::revision(&current) != expected {
-                return Err(error::make(ErrorCode::Conflict));
+                return Err(kaleidoscope_contract::errors::FILE_SAVE_REVISION_CHANGED(
+                    path,
+                ));
             }
-            fs::write(&resolved, text.as_bytes()).map_err(|error| io_error(&error))?;
+            fs::write(&resolved, text.as_bytes()).map_err(|error| {
+                file_system_error(
+                    &error,
+                    || kaleidoscope_contract::errors::FILE_SAVE_WRITE_NOT_FOUND(path),
+                    || kaleidoscope_contract::errors::FILE_SAVE_WRITE_BUSY(path),
+                    || kaleidoscope_contract::errors::FILE_SAVE_WRITE_IO(path),
+                )
+            })?;
         }
         None => {
             let mut file = OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .open(&resolved)
-                .map_err(|error| map_create_error(&error))?;
+                .map_err(|error| map_create_file_error(&error, path))?;
             use std::io::Write;
-            file.write_all(text.as_bytes())
-                .map_err(|error| io_error(&error))?;
+            file.write_all(text.as_bytes()).map_err(|error| {
+                file_system_error(
+                    &error,
+                    || {
+                        kaleidoscope_contract::errors::FILE_CREATE_FILE_CONTENT_WRITE_NOT_FOUND(
+                            path,
+                        )
+                    },
+                    || kaleidoscope_contract::errors::FILE_CREATE_FILE_CONTENT_WRITE_BUSY(path),
+                    || kaleidoscope_contract::errors::FILE_CREATE_FILE_CONTENT_WRITE_IO(path),
+                )
+            })?;
         }
     }
     Ok(CoreReply::FilesWrite {
@@ -63,18 +100,29 @@ pub(super) fn mkdir(
     check_file_name(name).map_err(|message| named_error(message))?;
     let parent_path = files::resolve_path(&inner.data_dir, root, parent, true, false)?;
     if !fs::metadata(&parent_path)
-        .map_err(|error| io_error(&error))?
+        .map_err(|error| {
+            file_system_error(
+                &error,
+                || {
+                    kaleidoscope_contract::errors::FILE_CREATE_FOLDER_PARENT_METADATA_NOT_FOUND(
+                        parent,
+                    )
+                },
+                || kaleidoscope_contract::errors::FILE_CREATE_FOLDER_PARENT_METADATA_BUSY(parent),
+                || kaleidoscope_contract::errors::FILE_CREATE_FOLDER_PARENT_METADATA_IO(parent),
+            )
+        })?
         .is_dir()
     {
-        return Err(error::make(ErrorCode::InvalidRequest));
+        return Err(kaleidoscope_contract::errors::FILE_CREATE_PARENT_NOT_FOLDER(parent));
     }
     reject_links(root, parent)?;
     let path = join_relative(parent, name);
     let target = files::resolve_path(&inner.data_dir, root, &path, false, true)?;
     if path_exists(&target)? {
-        return Err(error::make(ErrorCode::Conflict));
+        return Err(kaleidoscope_contract::errors::FILE_CREATE_FOLDER_NAME_TAKEN(name));
     }
-    fs::create_dir(&target).map_err(|error| map_create_error(&error))?;
+    fs::create_dir(&target).map_err(|error| map_create_folder_error(&error, name))?;
     Ok(path)
 }
 
@@ -85,7 +133,7 @@ pub(super) fn rename(
     name: &str,
 ) -> Result<FileChange, CoreError> {
     if path.is_empty() {
-        return Err(error::make(ErrorCode::PermissionDenied));
+        return Err(kaleidoscope_contract::errors::FILE_RENAME_ROOT_DENIED());
     }
     check_file_name(name).map_err(|message| named_error(message))?;
     let source = resolve_mutation_path(inner, root, path)?;
@@ -95,13 +143,20 @@ pub(super) fn rename(
     let target = files::resolve_path(&inner.data_dir, root, &to, false, true)?;
     reject_links(root, &to)?;
     if path_exists(&target)? && fs::canonicalize(&target).ok() != Some(source.clone()) {
-        return Err(error::make(ErrorCode::Conflict));
+        return Err(kaleidoscope_contract::errors::FILE_RENAME_NAME_TAKEN(name));
     }
     let destination = target
         .parent()
-        .ok_or_else(|| error::make(ErrorCode::PathOutsideRoot))?
+        .ok_or_else(|| kaleidoscope_contract::errors::FILE_PATH_OUTSIDE_ROOT(&to))?
         .join(name);
-    fs::rename(&source, &destination).map_err(|error| io_error(&error))?;
+    fs::rename(&source, &destination).map_err(|error| {
+        file_system_error(
+            &error,
+            || kaleidoscope_contract::errors::FILE_RENAME_APPLY_NOT_FOUND(path),
+            || kaleidoscope_contract::errors::FILE_RENAME_APPLY_BUSY(path),
+            || kaleidoscope_contract::errors::FILE_RENAME_APPLY_IO(path),
+        )
+    })?;
     Ok(FileChange {
         from: Some(path.into()),
         to: Some(to),
@@ -144,32 +199,43 @@ fn move_one(
     destination_path: &Path,
 ) -> Result<FileChange, CoreError> {
     if path.is_empty() {
-        return Err(error::make(ErrorCode::PermissionDenied));
+        return Err(kaleidoscope_contract::errors::FILE_MOVE_ROOT_DENIED());
     }
     let source = resolve_mutation_path(inner, root, path)?;
     protect_data_ancestor(inner, &source)?;
     if fs::metadata(&source)
-        .map_err(|error| io_error(&error))?
+        .map_err(|error| {
+            file_system_error(
+                &error,
+                || kaleidoscope_contract::errors::FILE_MOVE_SOURCE_METADATA_NOT_FOUND(path),
+                || kaleidoscope_contract::errors::FILE_MOVE_SOURCE_METADATA_BUSY(path),
+                || kaleidoscope_contract::errors::FILE_MOVE_SOURCE_METADATA_IO(path),
+            )
+        })?
         .is_dir()
         && destination_path.starts_with(&source)
     {
-        return Err(error::with_message(
-            ErrorCode::InvalidRequest,
-            "폴더를 자기 안으로 옮기거나 복사할 수 없습니다.",
-        ));
+        return Err(kaleidoscope_contract::errors::FILE_MOVE_INTO_SELF(path));
     }
     let name = source
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| error::make(ErrorCode::InvalidName))?;
+        .ok_or_else(|| named_error("파일 이름을 읽을 수 없습니다"))?;
     check_file_name(name).map_err(|message| named_error(message))?;
     let to = join_relative(destination, name);
     let target = files::resolve_path(&inner.data_dir, root, &to, false, true)?;
     reject_links(root, &to)?;
     if path_exists(&target)? && fs::canonicalize(&target).ok() != Some(source.clone()) {
-        return Err(error::make(ErrorCode::Conflict));
+        return Err(kaleidoscope_contract::errors::FILE_MOVE_NAME_TAKEN(&to));
     }
-    fs::rename(&source, &target).map_err(|error| io_error(&error))?;
+    fs::rename(&source, &target).map_err(|error| {
+        file_system_error(
+            &error,
+            || kaleidoscope_contract::errors::FILE_MOVE_APPLY_NOT_FOUND(path),
+            || kaleidoscope_contract::errors::FILE_MOVE_APPLY_BUSY(path),
+            || kaleidoscope_contract::errors::FILE_MOVE_APPLY_IO(path),
+        )
+    })?;
     Ok(FileChange {
         from: Some(path.into()),
         to: Some(to),
@@ -212,23 +278,27 @@ fn copy_one(
     destination_path: &Path,
 ) -> Result<FileChange, CoreError> {
     if path.is_empty() {
-        return Err(error::make(ErrorCode::PermissionDenied));
+        return Err(kaleidoscope_contract::errors::FILE_COPY_ROOT_DENIED());
     }
     let source = resolve_mutation_path(inner, root, path)?;
     protect_data_ancestor(inner, &source)?;
     let source_is_dir = fs::metadata(&source)
-        .map_err(|error| io_error(&error))?
+        .map_err(|error| {
+            file_system_error(
+                &error,
+                || kaleidoscope_contract::errors::FILE_COPY_SOURCE_METADATA_NOT_FOUND(path),
+                || kaleidoscope_contract::errors::FILE_COPY_SOURCE_METADATA_BUSY(path),
+                || kaleidoscope_contract::errors::FILE_COPY_SOURCE_METADATA_IO(path),
+            )
+        })?
         .is_dir();
     if source_is_dir && destination_path.starts_with(&source) {
-        return Err(error::with_message(
-            ErrorCode::InvalidRequest,
-            "폴더를 자기 안으로 옮기거나 복사할 수 없습니다.",
-        ));
+        return Err(kaleidoscope_contract::errors::FILE_COPY_INTO_SELF(path));
     }
     let name = source
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| error::make(ErrorCode::InvalidName))?;
+        .ok_or_else(|| named_error("파일 이름을 읽을 수 없습니다"))?;
     let target_name = if path_exists(&destination_path.join(name))? {
         copy_name(&source, name, destination_path)?
     } else {
@@ -266,23 +336,31 @@ fn remove_one(
     permanent: bool,
 ) -> Result<FileChange, CoreError> {
     if path.is_empty() {
-        return Err(error::make(ErrorCode::PermissionDenied));
+        return Err(kaleidoscope_contract::errors::FILE_REMOVE_ROOT_DENIED());
     }
     let source = resolve_mutation_path(inner, root, path)?;
     protect_data_ancestor(inner, &source)?;
     if permanent {
-        remove_entry(&source).map_err(|error| io_error(&error))?;
+        remove_entry(&source).map_err(|error| {
+            file_system_error(
+                &error,
+                || kaleidoscope_contract::errors::FILE_REMOVE_PERMANENT_NOT_FOUND(path),
+                || kaleidoscope_contract::errors::FILE_REMOVE_PERMANENT_BUSY(path),
+                || kaleidoscope_contract::errors::FILE_REMOVE_PERMANENT_IO(path),
+            )
+        })?;
     } else if let Err(error) = trash::delete(&source) {
+        let reason = error.to_string();
         let code = match error {
-            trash::Error::Os { code, .. }
-                if files::operation_io_error(&io::Error::from_raw_os_error(code)).code
-                    == ErrorCode::FileBusy =>
-            {
-                ErrorCode::FileBusy
-            }
+            trash::Error::Os { code, .. } if is_file_busy_code(code) => ErrorCode::FileBusy,
             _ => ErrorCode::TrashUnavailable,
         };
-        return Err(error::make(code));
+        return Err(if code == ErrorCode::FileBusy {
+            kaleidoscope_contract::errors::FILE_REMOVE_TRASH_BUSY(path).and_details(vec![reason])
+        } else {
+            kaleidoscope_contract::errors::FILE_REMOVE_TRASH_UNAVAILABLE(path)
+                .and_details(vec![reason])
+        });
     }
     Ok(FileChange {
         from: Some(path.into()),
@@ -290,198 +368,42 @@ fn remove_one(
     })
 }
 
-fn destination_dir(inner: &Inner, root: &Path, destination: &str) -> Result<PathBuf, CoreError> {
-    let path = files::resolve_path(&inner.data_dir, root, destination, true, false)?;
-    reject_links(root, destination)?;
-    if !fs::metadata(&path)
-        .map_err(|error| io_error(&error))?
-        .is_dir()
-    {
-        return Err(error::make(ErrorCode::InvalidRequest));
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_system_error_uses_callers_not_found_and_io_codes() {
+        let missing = io::Error::from(io::ErrorKind::NotFound);
+        let mapped = file_system_error(
+            &missing,
+            || kaleidoscope_contract::errors::FILE_SAVE_WRITE_NOT_FOUND("note.md"),
+            || kaleidoscope_contract::errors::FILE_SAVE_WRITE_BUSY("note.md"),
+            || kaleidoscope_contract::errors::FILE_SAVE_WRITE_IO("note.md"),
+        );
+        assert_eq!(mapped.id.as_deref(), Some("FILE_SAVE_WRITE_NOT_FOUND"));
+        assert_eq!(mapped.code, ErrorCode::NotFound);
+        assert_eq!(mapped.details, vec![missing.to_string()]);
+
+        let denied = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
+        let mapped = file_system_error(
+            &denied,
+            || kaleidoscope_contract::errors::FILE_SAVE_WRITE_NOT_FOUND("note.md"),
+            || kaleidoscope_contract::errors::FILE_SAVE_WRITE_BUSY("note.md"),
+            || kaleidoscope_contract::errors::FILE_SAVE_WRITE_IO("note.md"),
+        );
+        assert_eq!(mapped.id.as_deref(), Some("FILE_SAVE_WRITE_IO"));
+        assert_eq!(mapped.code, ErrorCode::Io);
+        assert_eq!(mapped.details, vec![denied.to_string()]);
     }
-    Ok(path)
-}
 
-pub(super) fn readable_path(
-    inner: &Inner,
-    state: &CoreState,
-    window: &str,
-    permission: &str,
-    path: &str,
-) -> Result<PathBuf, CoreError> {
-    files::permission(state, window, permission, false)?;
-    if files::scope(state, window, permission)? == FilesScope::Pc {
-        files::pc_access(state, window, permission)?;
-        return Ok(files::pc_resolve(inner, path)?.1);
+    #[test]
+    fn selected_roots_omits_descendants_without_changing_order() {
+        let paths = vec![
+            "folder/child.txt".to_string(),
+            "other.txt".to_string(),
+            "folder".to_string(),
+        ];
+        assert_eq!(selected_roots(&paths), vec!["other.txt", "folder"]);
     }
-    let root = files::granted_root(state, window, permission, false)?;
-    files::resolve_path(&inner.data_dir, &root, path, true, false)
-}
-
-fn resolve_mutation_path(inner: &Inner, root: &Path, path: &str) -> Result<PathBuf, CoreError> {
-    reject_links(root, path)?;
-    files::resolve_path(&inner.data_dir, root, path, false, false)
-}
-
-fn reject_links(root: &Path, relative: &str) -> Result<(), CoreError> {
-    if relative.is_empty() {
-        return Ok(());
-    }
-    let mut current = root.to_path_buf();
-    for part in relative.split('/') {
-        current.push(part);
-        match fs::symlink_metadata(&current) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(error::make(ErrorCode::PathOutsideRoot))
-            }
-            Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-            Err(error) => return Err(io_error(&error)),
-        }
-    }
-    Ok(())
-}
-
-fn protect_data_ancestor(inner: &Inner, path: &Path) -> Result<(), CoreError> {
-    let protected = fs::canonicalize(&inner.data_dir).map_err(|error| io_error(&error))?;
-    if protected.starts_with(path) {
-        return Err(error::make(ErrorCode::PermissionDenied));
-    }
-    Ok(())
-}
-
-fn path_exists(path: &Path) -> Result<bool, CoreError> {
-    match fs::symlink_metadata(path) {
-        Ok(_) => Ok(true),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(io_error(&error)),
-    }
-}
-
-fn copy_entry(source: &Path, destination: &Path) -> Result<(), CoreError> {
-    let metadata = fs::symlink_metadata(source).map_err(|error| io_error(&error))?;
-    if metadata.file_type().is_symlink() {
-        return Err(error::make(ErrorCode::PathOutsideRoot));
-    }
-    if metadata.is_dir() {
-        fs::create_dir(destination).map_err(|error| io_error(&error))?;
-        for entry in fs::read_dir(source).map_err(|error| io_error(&error))? {
-            let entry = entry.map_err(|error| io_error(&error))?;
-            let target = destination.join(entry.file_name());
-            copy_entry(&entry.path(), &target)?;
-        }
-    } else {
-        let mut input = File::open(source).map_err(|error| io_error(&error))?;
-        let mut output = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(destination)
-            .map_err(|error| io_error(&error))?;
-        io::copy(&mut input, &mut output).map_err(|error| io_error(&error))?;
-    }
-    Ok(())
-}
-
-fn copy_name(source: &Path, name: &str, destination: &Path) -> Result<String, CoreError> {
-    let is_dir = fs::metadata(source)
-        .map_err(|error| io_error(&error))?
-        .is_dir();
-    let (stem, extension) = if is_dir {
-        (name, None)
-    } else if let Some(index) = name.rfind('.').filter(|index| *index > 0) {
-        (&name[..index], Some(&name[index..]))
-    } else {
-        (name, None)
-    };
-    let suffix = |index: usize| {
-        if index == 1 {
-            " - 복사본".to_string()
-        } else {
-            format!(" - 복사본 ({index})")
-        }
-    };
-    for index in 1.. {
-        let candidate = format!("{}{}{}", stem, suffix(index), extension.unwrap_or(""));
-        check_file_name(&candidate).map_err(|message| named_error(message))?;
-        if !path_exists(&destination.join(&candidate))? {
-            return Ok(candidate);
-        }
-    }
-    unreachable!()
-}
-
-fn remove_entry(path: &Path) -> io::Result<()> {
-    if fs::symlink_metadata(path)?.is_dir() {
-        fs::remove_dir_all(path)
-    } else {
-        fs::remove_file(path)
-    }
-}
-
-fn join_relative(parent: &str, name: &str) -> String {
-    if parent.is_empty() {
-        name.into()
-    } else {
-        format!("{parent}/{name}")
-    }
-}
-
-fn selected_roots(paths: &[String]) -> Vec<&str> {
-    paths
-        .iter()
-        .enumerate()
-        .filter_map(|(index, path)| {
-            let selected_ancestor = paths.iter().enumerate().any(|(other_index, ancestor)| {
-                index != other_index && is_descendant_path(path, ancestor)
-            });
-            (!selected_ancestor).then_some(path.as_str())
-        })
-        .collect()
-}
-
-fn is_descendant_path(path: &str, ancestor: &str) -> bool {
-    if ancestor.is_empty() {
-        return !path.is_empty();
-    }
-    path.strip_prefix(ancestor)
-        .is_some_and(|suffix| suffix.starts_with('/'))
-}
-
-pub(super) fn successful_changes(results: &[FileOpResult]) -> Vec<FileChange> {
-    results
-        .iter()
-        .filter_map(|result| match result {
-            FileOpResult::Ok { ok, .. } => Some(ok.clone()),
-            FileOpResult::Error { .. } => None,
-        })
-        .collect()
-}
-
-fn result_to_op(path: &str, result: Result<FileChange, CoreError>) -> FileOpResult {
-    match result {
-        Ok(ok) => FileOpResult::Ok {
-            path: path.into(),
-            ok,
-        },
-        Err(error) => FileOpResult::Error {
-            path: path.into(),
-            error,
-        },
-    }
-}
-
-fn named_error(message: &str) -> CoreError {
-    error::with_message(ErrorCode::InvalidName, message)
-}
-
-fn map_create_error(error: &io::Error) -> CoreError {
-    if error.kind() == io::ErrorKind::AlreadyExists {
-        error::make(ErrorCode::Conflict)
-    } else {
-        io_error(error)
-    }
-}
-
-fn io_error(error: &io::Error) -> CoreError {
-    files::operation_io_error(error)
 }

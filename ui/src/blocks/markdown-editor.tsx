@@ -3,7 +3,7 @@ import { useShareDescriber } from "../share/visible";
 import { describeEditor } from "../share/editor";
 import { EditorView } from "@codemirror/view";
 import type { Block, DocumentRef, FileRef } from "../contract/contract";
-import { Notice, StatusText } from "../components/primitives";
+import { ErrorNotice, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
 import { FileEditorSession, type FileEditorSnapshot } from "./file-editor-session";
@@ -85,12 +85,12 @@ function EditorContent({ path, session, state }: { path: string; session: FileEd
     return <div className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
   }
   if (state.error && state.revision === null && !state.dirty) {
-    return <div className="ks-editor-error"><Notice role="alert">{state.error}</Notice></div>;
+    return <div className="ks-editor-error"><ErrorNotice error={state.error} /></div>;
   }
 
   return (
     <div className="ks-markdown-editor">
-      {state.error ? <Notice role="alert">{state.error}</Notice> : null}
+      {state.error ? <ErrorNotice error={state.error} /> : null}
       {state.conflict ? <EditorConflict session={session} /> : null}
       <div className="ks-editor-content">
         <CodeEditor

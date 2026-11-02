@@ -64,7 +64,16 @@ fn picked_files_and_offset_exports_are_scoped_and_abort_preserves_destination() 
         core.client_read_file(&window, &files[0].id).unwrap(),
         "음원".as_bytes()
     );
-    assert!(core.client_read_file("other", &files[0].id).is_err());
+    let error = core.client_read_file("other", &files[0].id).unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("FILE_CLIENT_INPUT_NOT_OWNED"));
+    assert_eq!(
+        error.code,
+        kaleidoscope_contract::ErrorCode::PermissionDenied
+    );
+    assert!(error
+        .details
+        .iter()
+        .any(|detail| detail.contains(&files[0].id)));
     let CoreReply::ExportBegin {
         sink_id: Some(sink),
         ..
@@ -80,13 +89,19 @@ fn picked_files_and_offset_exports_are_scoped_and_abort_preserves_destination() 
     };
     core.client_write_export(&window, &sink, 2, b"cd").unwrap();
     core.client_write_export(&window, &sink, 0, b"ab").unwrap();
-    assert!(core
+    let error = core
         .handle(CoreRequest::ExportTruncate {
             window_id: "other".into(),
             sink_id: sink.clone(),
-            size: 0
+            size: 0,
         })
-        .is_err());
+        .unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("FILE_CLIENT_EXPORT_ID_NOT_OWNED"));
+    assert_eq!(
+        error.code,
+        kaleidoscope_contract::ErrorCode::PermissionDenied
+    );
+    assert!(error.details.iter().any(|detail| detail.contains(&sink)));
     core.handle(CoreRequest::ExportTruncate {
         window_id: window.clone(),
         sink_id: sink.clone(),

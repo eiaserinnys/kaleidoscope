@@ -12,7 +12,6 @@ mod conversation_send;
 mod conversation_stream;
 mod data_runtime;
 mod data_sources;
-mod error;
 mod files;
 mod files_write;
 mod http_client;

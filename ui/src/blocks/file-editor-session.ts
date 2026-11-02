@@ -1,4 +1,5 @@
 import type { CoreError } from "../contract/contract";
+import { SHELL_FILE_MARKDOWN_STORAGE_INVALID } from "../contract/shell-errors";
 import { toCoreError, type CoreTransport } from "../core/core-transport";
 import type { ShellStore } from "../core/shell-store";
 
@@ -13,7 +14,7 @@ export interface FileEditorSnapshot {
   loaded: boolean;
   dirty: boolean;
   conflict: CoreError | null;
-  error: string | null;
+  error: CoreError | null;
   lineSeparator: "\n" | "\r\n";
 }
 
@@ -46,7 +47,7 @@ export function createDocumentEditorTarget(transport: Pick<CoreTransport, "call"
     conflictMessage: "다른 곳에서 바뀌었습니다",
     async read(path) {
       const { result } = await transport.call({ op: "storage.get", window_id: windowId, entry, ...(collection ? { doc: path } : {}) });
-      if (result.kind !== "md" || typeof result.content !== "string") throw new Error("마크다운 문서가 아닙니다");
+      if (result.kind !== "md" || typeof result.content !== "string") throw SHELL_FILE_MARKDOWN_STORAGE_INVALID({ entry });
       return { text: result.content, revision: result.revision };
     },
     async write(path, text, revision) {
@@ -247,7 +248,7 @@ export class FileEditorSession {
       return true;
     } catch (error) {
       if (version === this.readVersion) {
-        this.update({ loaded: true, dirty: false, error: toCoreError(error).message });
+        this.update({ loaded: true, dirty: false, error: toCoreError(error) });
       }
       return false;
     }
@@ -306,7 +307,7 @@ export class FileEditorSession {
       if (coreError.code === "conflict") {
         this.update({ status: "unsaved", conflict: coreError, error: null });
       } else {
-        this.update({ status: "unsaved", error: coreError.message });
+        this.update({ status: "unsaved", error: coreError });
       }
       return false;
     }
@@ -356,7 +357,7 @@ export class FileEditorSession {
       });
       await this.followPendingPath();
     } catch (error) {
-      if (this.snapshot.path === path) this.update({ status: "unsaved", error: toCoreError(error).message });
+      if (this.snapshot.path === path) this.update({ status: "unsaved", error: toCoreError(error) });
     }
   }
 
@@ -382,7 +383,7 @@ export class FileEditorSession {
       if (this.snapshot.path !== path) return;
       const coreError = toCoreError(error);
       if (coreError.code === "conflict") this.update({ status: "unsaved", conflict: coreError, error: null });
-      else this.update({ status: "unsaved", error: coreError.message });
+      else this.update({ status: "unsaved", error: coreError });
     }
   }
 
@@ -414,7 +415,7 @@ export class FileEditorSession {
         this.update({ error: null });
       }
     } catch (error) {
-      if (version === this.readVersion && this.snapshot.path === path && !this.snapshot.dirty) this.update({ error: toCoreError(error).message });
+      if (version === this.readVersion && this.snapshot.path === path && !this.snapshot.dirty) this.update({ error: toCoreError(error) });
     }
   }
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Binding, Block, DocumentRef, FileRef } from "../contract/contract";
-import { Notice, StatusText } from "../components/primitives";
+import { ErrorNotice, Notice, StatusText } from "../components/primitives";
 import { DataState } from "../components/data-state";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
@@ -46,7 +46,7 @@ function DocumentMarkdownViewBlock({ document, context }: { document: DocumentRe
   useEffect(() => { void session.open(path); }, [path, session]);
   if (path === null) return <article className="ks-markdown-view" ref={shareRef} />;
   if (!state.loaded) return <div className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (state.error) return <div className="ks-markdown-error"><Notice role="alert">{state.error}</Notice></div>;
+  if (state.error) return <div className="ks-markdown-error"><ErrorNotice error={state.error} /></div>;
   return <article className="ks-markdown-view" ref={shareRef}><MarkdownText>{state.text}</MarkdownText></article>;
 }
 

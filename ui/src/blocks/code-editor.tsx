@@ -6,7 +6,7 @@ import { describeEditor } from "../share/editor";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { search, searchKeymap } from "@codemirror/search";
 import type { Block } from "../contract/contract";
-import { Notice, StatusText } from "../components/primitives";
+import { ErrorNotice, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
 import { FileEditorSession } from "./file-editor-session";
@@ -39,9 +39,9 @@ export function CodeEditorBlock({ block, context }: { block: CodeEditorBlockData
   if (!root) return <FileGrant context={context} permission={block.file.permission} />;
   if (path === null) return <div className="ks-markdown-editor" ref={emptyShareRef} />;
   if (!state.loaded) return <div className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (state.error && state.revision === null) return <div className="ks-editor-error"><Notice role="alert">{state.error}</Notice></div>;
+  if (state.error && state.revision === null) return <div className="ks-editor-error"><ErrorNotice error={state.error} /></div>;
   return <div className="ks-markdown-editor">
-    {state.error ? <Notice role="alert">{state.error}</Notice> : null}
+    {state.error ? <ErrorNotice error={state.error} /> : null}
     {state.conflict ? <EditorConflict session={session} /> : null}
     <div className="ks-editor-content">
       <EditableCode key={`${state.contentIdentity}:${state.lineSeparator}`} path={state.path ?? path} contentIdentity={state.contentIdentity} language={codeLanguageForPath(state.path ?? path, block.language)} text={state.text} session={session} wrap={block.wrap !== false} />

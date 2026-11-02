@@ -1,11 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use kaleidoscope_contract::{
-    CoreError, CoreEvent, CoreReply, CoreRequest, ErrorCode, FileChange, FilesScope,
-};
+use kaleidoscope_contract::{CoreError, CoreEvent, CoreReply, CoreRequest, FileChange, FilesScope};
 
-use crate::{error, files, CoreState, Inner};
+use crate::{files, CoreState, Inner};
 
 mod ops;
 
@@ -125,14 +123,21 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             CoreRequest::FilesReveal {
                 window_id: _,
                 permission: _,
-                path: _,
+                path,
             },
             Authorization::DisplayPath(text),
         ) => {
             inner
                 .attachment_opener
                 .reveal(Path::new(&text))
-                .map_err(|error| files::operation_io_error(&error))?;
+                .map_err(|error| {
+                    ops::file_system_error(
+                        &error,
+                        || kaleidoscope_contract::errors::FILE_REVEAL_OPEN_NOT_FOUND(&path),
+                        || kaleidoscope_contract::errors::FILE_REVEAL_OPEN_BUSY(&path),
+                        || kaleidoscope_contract::errors::FILE_REVEAL_OPEN_IO(&path),
+                    )
+                })?;
             Ok(CoreReply::FilesReveal {})
         }
         (
@@ -143,7 +148,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             },
             Authorization::DisplayPath(text),
         ) => Ok(CoreReply::FilesPath { text }),
-        _ => Err(error::make(ErrorCode::InvalidRequest)),
+        _ => Err(kaleidoscope_contract::errors::FILE_WRITE_REQUEST_INVALID()),
     }
 }
 
@@ -208,7 +213,7 @@ fn authorize(
             };
             Ok(Authorization::DisplayPath(text))
         }
-        _ => Err(error::make(ErrorCode::InvalidRequest)),
+        _ => Err(kaleidoscope_contract::errors::FILE_WRITE_REQUEST_INVALID()),
     }
 }
 
@@ -225,7 +230,9 @@ fn writable_root(
 ) -> Result<Authorization, CoreError> {
     files::permission(state, window, permission, true)?;
     if files::scope(state, window, permission)? == FilesScope::Pc {
-        return Err(error::make(ErrorCode::PermissionDenied));
+        return Err(kaleidoscope_contract::errors::FILE_PC_SCOPE_NOT_SUPPORTED(
+            permission,
+        ));
     }
     let grant_root = grant_root_path(state, window, permission)?;
     let root = files::granted_root(state, window, permission, true)?;
@@ -239,7 +246,7 @@ fn grant_root_path(state: &CoreState, window: &str, permission: &str) -> Result<
         .iter()
         .find(|grant| grant.window_id == window && grant.permission == permission)
         .map(|grant| grant.root_path.clone())
-        .ok_or_else(|| error::make(ErrorCode::NotGranted))
+        .ok_or_else(|| kaleidoscope_contract::errors::FILE_ACCESS_FOLDER_NOT_CHOSEN(permission))
 }
 
 fn display_path(path: &str) -> String {

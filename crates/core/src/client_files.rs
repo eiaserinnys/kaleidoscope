@@ -8,11 +8,16 @@ use std::sync::Mutex;
 use kaleidoscope_contract::{
     client::{ClientFile, CLIENT_PICK_FILE_MAX_BYTES},
     data::FileAccept,
-    CoreError, ErrorCode,
+    CoreError,
 };
 use uuid::Uuid;
 
-use crate::{app_commands, error, Inner};
+use crate::Inner;
+
+mod access;
+mod error;
+use access::require_client;
+use error::{export_error, export_not_owned, input_not_owned};
 
 struct Input {
     window: String,
@@ -31,23 +36,6 @@ pub(crate) struct ClientFiles {
     outputs: Mutex<HashMap<String, Output>>,
 }
 
-fn require_client(inner: &Inner, id: &str) -> Result<(), CoreError> {
-    let state = inner.state.lock().unwrap();
-    let window = state
-        .shared
-        .windows
-        .iter()
-        .find(|window| window.id == id)
-        .ok_or_else(|| error::make(ErrorCode::NotFound))?;
-    let definition =
-        app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-            .ok_or_else(|| error::make(ErrorCode::NotFound))?;
-    if definition.client.is_none() {
-        return Err(error::make(ErrorCode::PermissionDenied));
-    }
-    Ok(())
-}
-
 pub(crate) fn pick(
     inner: &Inner,
     window: &str,
@@ -64,14 +52,35 @@ pub(crate) fn pick(
         .into_iter()
         .take(if multiple { usize::MAX } else { 1 })
     {
-        let metadata = fs::metadata(&path).map_err(|error| error::io_error(&error))?;
-        if !metadata.is_file() || metadata.len() > CLIENT_PICK_FILE_MAX_BYTES {
-            return Err(error::make(ErrorCode::InvalidRequest));
+        let metadata = fs::metadata(&path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                kaleidoscope_contract::errors::FILE_CLIENT_PICK_NOT_FOUND(
+                    &path.display().to_string(),
+                )
+                .and_details(vec![error.to_string()])
+            } else {
+                kaleidoscope_contract::errors::FILE_CLIENT_PICK_IO(&path.display().to_string())
+                    .and_details(vec![error.to_string()])
+            }
+        })?;
+        if !metadata.is_file() {
+            return Err(kaleidoscope_contract::errors::FILE_CLIENT_PICK_NOT_FILE(
+                &path.display().to_string(),
+            ));
+        }
+        if metadata.len() > CLIENT_PICK_FILE_MAX_BYTES {
+            return Err(kaleidoscope_contract::errors::FILE_CLIENT_PICK_TOO_LARGE(
+                &path.display().to_string(),
+            ));
         }
         let name = path
             .file_name()
             .and_then(|name| name.to_str())
-            .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?
+            .ok_or_else(|| {
+                kaleidoscope_contract::errors::FILE_CLIENT_PICK_NAME_INVALID(
+                    &path.display().to_string(),
+                )
+            })?
             .to_string();
         let extension = path
             .extension()
@@ -115,14 +124,37 @@ pub(crate) fn read(inner: &Inner, window: &str, id: &str) -> Result<Vec<u8>, Cor
     let input = inputs
         .get(id)
         .filter(|input| input.window == window)
-        .ok_or_else(|| error::make(ErrorCode::PermissionDenied))?;
-    let file = File::open(&input.path).map_err(|error| error::io_error(&error))?;
+        .ok_or_else(|| input_not_owned(id))?;
+    let name = input
+        .path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("선택한 파일");
+    let file = File::open(&input.path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            kaleidoscope_contract::errors::FILE_CLIENT_READ_NOT_FOUND(name)
+                .and_details(vec![error.to_string()])
+        } else {
+            kaleidoscope_contract::errors::FILE_CLIENT_READ_IO(name)
+                .and_details(vec![error.to_string()])
+        }
+    })?;
     let mut bytes = Vec::new();
     file.take(CLIENT_PICK_FILE_MAX_BYTES + 1)
         .read_to_end(&mut bytes)
-        .map_err(|error| error::io_error(&error))?;
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                kaleidoscope_contract::errors::FILE_CLIENT_READ_NOT_FOUND(name)
+                    .and_details(vec![error.to_string()])
+            } else {
+                kaleidoscope_contract::errors::FILE_CLIENT_READ_IO(name)
+                    .and_details(vec![error.to_string()])
+            }
+        })?;
     if bytes.len() as u64 > CLIENT_PICK_FILE_MAX_BYTES {
-        return Err(error::make(ErrorCode::InvalidRequest));
+        return Err(kaleidoscope_contract::errors::FILE_CLIENT_READ_TOO_LARGE(
+            name,
+        ));
     }
     Ok(bytes)
 }
@@ -136,7 +168,7 @@ pub(crate) fn input_path(inner: &Inner, window: &str, id: &str) -> Result<PathBu
         .get(id)
         .filter(|input| input.window == window)
         .map(|input| input.path.clone())
-        .ok_or_else(|| error::make(ErrorCode::PermissionDenied))
+        .ok_or_else(|| input_not_owned(id))
 }
 
 pub(crate) fn register(
@@ -144,14 +176,39 @@ pub(crate) fn register(
     window: &str,
     path: PathBuf,
 ) -> Result<ClientFile, CoreError> {
-    let metadata = fs::metadata(&path).map_err(|e| error::io_error(&e))?;
-    if !metadata.is_file() || metadata.len() > CLIENT_PICK_FILE_MAX_BYTES {
-        return Err(error::make(ErrorCode::InvalidRequest));
+    let metadata = fs::metadata(&path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            kaleidoscope_contract::errors::FILE_CLIENT_REGISTER_NOT_FOUND(
+                &path.display().to_string(),
+            )
+            .and_details(vec![error.to_string()])
+        } else {
+            kaleidoscope_contract::errors::FILE_CLIENT_REGISTER_IO(&path.display().to_string())
+                .and_details(vec![error.to_string()])
+        }
+    })?;
+    if !metadata.is_file() {
+        return Err(
+            kaleidoscope_contract::errors::FILE_CLIENT_REGISTER_NOT_FILE(
+                &path.display().to_string(),
+            ),
+        );
+    }
+    if metadata.len() > CLIENT_PICK_FILE_MAX_BYTES {
+        return Err(
+            kaleidoscope_contract::errors::FILE_CLIENT_REGISTER_TOO_LARGE(
+                &path.display().to_string(),
+            ),
+        );
     }
     let name = path
         .file_name()
         .and_then(|s| s.to_str())
-        .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?
+        .ok_or_else(|| {
+            kaleidoscope_contract::errors::FILE_CLIENT_REGISTER_NAME_INVALID(
+                &path.display().to_string(),
+            )
+        })?
         .to_owned();
     let mime = mime_guess::from_path(&path)
         .first_or_octet_stream()
@@ -203,14 +260,23 @@ fn begin_with_retention(
     };
     let parent = target
         .parent()
-        .ok_or_else(|| error::make(ErrorCode::InvalidRequest))?;
+        .ok_or_else(|| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_TARGET_INVALID(name))?;
     let id = Uuid::new_v4().to_string();
     let temp = parent.join(format!(".kaleidoscope-{id}.tmp"));
     let file = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&temp)
-        .map_err(|error| error::io_error(&error))?;
+        .map_err(|error| {
+            export_error(
+                &error,
+                name,
+                |name| {
+                    kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_TEMP_CREATE_NOT_FOUND(name)
+                },
+                |name| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_TEMP_CREATE_IO(name),
+            )
+        })?;
     inner.client_files.outputs.lock().unwrap().insert(
         id.clone(),
         Output {
@@ -235,12 +301,26 @@ pub(crate) fn write(
     let output = outputs
         .get_mut(id)
         .filter(|output| output.window == window)
-        .ok_or_else(|| error::make(ErrorCode::PermissionDenied))?;
+        .ok_or_else(|| export_not_owned(id))?;
+    let name = output
+        .target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("내보내는 파일");
     output
         .file
         .seek(SeekFrom::Start(offset))
         .and_then(|_| output.file.write_all(bytes))
-        .map_err(|error| error::io_error(&error))
+        .map_err(|error| {
+            export_error(
+                &error,
+                name,
+                |name| {
+                    kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_CONTENT_WRITE_NOT_FOUND(name)
+                },
+                |name| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_CONTENT_WRITE_IO(name),
+            )
+        })
 }
 
 pub(crate) fn truncate(inner: &Inner, window: &str, id: &str, size: u64) -> Result<(), CoreError> {
@@ -248,11 +328,20 @@ pub(crate) fn truncate(inner: &Inner, window: &str, id: &str, size: u64) -> Resu
     let output = outputs
         .get_mut(id)
         .filter(|output| output.window == window)
-        .ok_or_else(|| error::make(ErrorCode::PermissionDenied))?;
-    let position = output
-        .file
-        .stream_position()
-        .map_err(|error| error::io_error(&error))?;
+        .ok_or_else(|| export_not_owned(id))?;
+    let name = output
+        .target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("내보내는 파일");
+    let position = output.file.stream_position().map_err(|error| {
+        export_error(
+            &error,
+            name,
+            |name| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_TRUNCATE_NOT_FOUND(name),
+            |name| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_TRUNCATE_IO(name),
+        )
+    })?;
     output
         .file
         .set_len(size)
@@ -262,15 +351,28 @@ pub(crate) fn truncate(inner: &Inner, window: &str, id: &str, size: u64) -> Resu
                 .seek(SeekFrom::Start(position.min(size)))
                 .map(|_| ())
         })
-        .map_err(|error| error::io_error(&error))
+        .map_err(|error| {
+            export_error(
+                &error,
+                name,
+                |name| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_TRUNCATE_NOT_FOUND(name),
+                |name| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_TRUNCATE_IO(name),
+            )
+        })
 }
 
 pub(crate) fn finish(inner: &Inner, window: &str, id: &str, commit: bool) -> Result<(), CoreError> {
     let mut outputs = inner.client_files.outputs.lock().unwrap();
     if outputs.get(id).is_none_or(|output| output.window != window) {
-        return Err(error::make(ErrorCode::PermissionDenied));
+        return Err(export_not_owned(id));
     }
     let mut output = outputs.remove(id).unwrap();
+    let name = output
+        .target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("내보내는 파일")
+        .to_string();
     let input = output.retain_on_commit.then(|| Input {
         window: output.window.clone(),
         path: output.target.clone(),
@@ -279,17 +381,34 @@ pub(crate) fn finish(inner: &Inner, window: &str, id: &str, commit: bool) -> Res
         if let Err(error) = output.file.flush() {
             drop(output.file);
             let _ = fs::remove_file(&output.temp);
-            return Err(error::io_error(&error));
+            return Err(export_error(
+                &error,
+                &name,
+                |name| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_FLUSH_NOT_FOUND(name),
+                |name| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_FLUSH_IO(name),
+            ));
         }
     }
     drop(output.file);
     if commit {
         if let Err(error) = fs::rename(&output.temp, &output.target) {
             let _ = fs::remove_file(&output.temp);
-            return Err(error::io_error(&error));
+            return Err(export_error(
+                &error,
+                &name,
+                |name| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_RENAME_NOT_FOUND(name),
+                |name| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_RENAME_IO(name),
+            ));
         }
     } else {
-        fs::remove_file(&output.temp).map_err(|error| error::io_error(&error))?;
+        fs::remove_file(&output.temp).map_err(|error| {
+            export_error(
+                &error,
+                &name,
+                |name| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_CANCEL_NOT_FOUND(name),
+                |name| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_CANCEL_IO(name),
+            )
+        })?;
     }
     drop(outputs);
     if commit {

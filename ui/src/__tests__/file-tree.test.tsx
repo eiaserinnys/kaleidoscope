@@ -145,7 +145,9 @@ describe("file_tree block", () => {
     fireEvent.change(input, { target: { value: "notes.md" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
-    expect((await screen.findByRole("alert")).textContent).toContain("같은 이름의 파일이 있습니다");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("파일 이름 notes.md: 같은 이름의 항목이 있어 만들지 못했습니다. 다른 이름을 입력하세요.");
+    expect(alert.textContent).toContain("FILE_CREATE_FILE_NAME_TAKEN");
     expect((screen.getByRole("textbox", { name: "새 파일 이름" }) as HTMLInputElement).value).toBe("notes.md");
     expect(transport.getFiles()["notes.md"]).toBe("already here");
   });

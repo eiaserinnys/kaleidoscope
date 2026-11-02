@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Column, ExplorerView, FileEntry, SortSpec } from "../contract/contract";
-import { EmptyState, IconButton, StatusText } from "../components/primitives";
+import type { Column, CoreError, ExplorerView, FileEntry, SortSpec } from "../contract/contract";
+import { EmptyState, ErrorId, IconButton, StatusText } from "../components/primitives";
 import { ArrowUp, ChevronRight, Download, File, FileCode, FileImage, FileText, Folder, FolderOpen, HardDrive, Image, LayoutGrid, List, Monitor, Music, Video } from "../components/icons";
 import { toCoreError } from "../core/core-transport";
 import { TableView, type Row } from "./data-table";
@@ -107,7 +107,7 @@ export function ExplorerContent({
   scope: "folder" | "pc";
   folder: string;
   view: ExplorerView;
-  actionError: string | null;
+  actionError: CoreError | null;
   onNavigate: (folder: string) => void;
   onViewChange: (view: ExplorerView) => void;
   onActivateFile: (anchor: HTMLElement, path: string) => void;
@@ -116,9 +116,9 @@ export function ExplorerContent({
   const { store, window } = context;
   const [entries, setEntries] = useState<FileEntry[] | null>(null);
   const [pcRoots, setPcRoots] = useState<FileEntry[]>([]);
-  const [pcRootsError, setPcRootsError] = useState<string | null>(null);
+  const [pcRootsError, setPcRootsError] = useState<CoreError | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<CoreError | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const requestId = useRef(0);
   const pcRootsLoaded = useRef(false);
@@ -156,7 +156,7 @@ export function ExplorerContent({
       if ((coreError.code === "not_found" || coreError.code === "invalid_request") && directory !== "") {
         onNavigateRef.current("");
       } else {
-        setError(coreError.message);
+        setError(coreError);
       }
     } finally {
       if (request === requestId.current && folderRef.current === directory && rootPathRef.current === requestedRoot) setLoading(false);
@@ -175,7 +175,7 @@ export function ExplorerContent({
         setPcRootsError(null);
       }
     }).catch((cause) => {
-      if (rootPathRef.current === requestedRoot) setPcRootsError(toCoreError(cause).message);
+      if (rootPathRef.current === requestedRoot) setPcRootsError(toCoreError(cause));
     });
   }, [folder, permission, rootPath, scope, store, window.id]);
 
@@ -270,9 +270,9 @@ export function ExplorerContent({
         <IconButton aria-label="자세히 보기" pressed={view === "details"} onClick={() => onViewChange("details")}><List /></IconButton>
       </div>
     </div>
-    {actionError ? <div className="ks-inline-error" role="alert">{actionError}</div> : null}
-    {pcRootsError ? <div className="ks-inline-error" role="alert">{pcRootsError}</div> : null}
-    {error ? <div className="ks-inline-error" role="alert">{error}</div>
+    {actionError ? <div className="ks-inline-error" role="alert">{actionError.message}{actionError.id ? <> <ErrorId id={actionError.id} /></> : null}</div> : null}
+    {pcRootsError ? <div className="ks-inline-error" role="alert">{pcRootsError.message}{pcRootsError.id ? <> <ErrorId id={pcRootsError.id} /></> : null}</div> : null}
+    {error ? <div className="ks-inline-error" role="alert">{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</div>
       : !visible && loading ? <StatusText>불러오는 중</StatusText>
       : visible && sortedEntries.length === 0 ? <div className="ks-explorer-empty"><EmptyState icon={<FolderOpen size="empty" />} text="빈 폴더" /></div>
           : view === "icons" ? <div aria-label="폴더 내용" className="ks-data-view ks-explorer-icons" ref={grid} role="listbox">

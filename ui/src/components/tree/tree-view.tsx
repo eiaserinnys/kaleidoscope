@@ -5,6 +5,7 @@ import type { TreeNode, TreeRowModel } from "./tree-model";
 import { flattenTreeModel } from "./tree-model";
 import { TreeRow } from "./tree-row";
 import type { ReactNode } from "react";
+import { SHELL_TREE_CONTROL_HEIGHT_MISSING } from "../../contract/shell-errors";
 
 function sameValue(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
@@ -128,7 +129,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
   const preferredFocus = selectedRow?.id ?? treeRows[0]?.id ?? null;
   const effectiveFocus = treeRows.some((row) => row.id === focusId) ? focusId : preferredFocus;
   const token = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ks-control-height"));
-  if (!Number.isFinite(token) || token <= 0) throw new Error("트리 행 높이 토큰 --ks-control-height을 읽을 수 없습니다");
+  if (!Number.isFinite(token) || token <= 0) throw SHELL_TREE_CONTROL_HEIGHT_MISSING();
   const interactiveIndex = flat.findIndex((row) => row.node.interactiveContent);
   const itemKey = useCallback((index: number) => flat[index].id, [flat]);
   const { virtual } = useVirtualRows(flat.length, token, scrollRef, false, itemKey);
