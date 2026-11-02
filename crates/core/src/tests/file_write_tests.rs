@@ -422,12 +422,41 @@ fn missing_granted_folder_keeps_not_found_class_and_os_diagnostic() {
             dir: String::new(),
         })
         .unwrap_err();
-    assert_eq!(error.id.as_deref(), Some("FILE_ACCESS_ROOT_CHANGED"));
+    assert_eq!(error.id.as_deref(), Some("FILE_ACCESS_ROOT_NOT_FOUND"));
     assert_eq!(error.code, ErrorCode::NotFound);
+    assert_eq!(
+        error.message,
+        "파일 권한 docs: 선택한 폴더를 찾을 수 없습니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요."
+    );
     assert!(error
         .details
         .iter()
         .any(|detail| detail.contains("No such file")));
+}
+
+#[test]
+fn replaced_granted_folder_keeps_path_outside_root_class() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("documents");
+    fs::create_dir(&root).unwrap();
+    let host = Arc::new(FakeHost::default());
+    let (core, window) = writable_core(&temp, &root, &host);
+    fs::remove_dir(&root).unwrap();
+    fs::write(&root, "not a folder").unwrap();
+
+    let error = core
+        .handle(CoreRequest::FilesList {
+            window_id: window,
+            permission: "docs".into(),
+            dir: String::new(),
+        })
+        .unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("FILE_ACCESS_ROOT_CHANGED"));
+    assert_eq!(error.code, ErrorCode::PathOutsideRoot);
+    assert_eq!(
+        error.message,
+        "파일 권한 docs: 선택한 위치가 폴더가 아니거나 다른 곳을 가리킵니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요."
+    );
 }
 
 #[test]

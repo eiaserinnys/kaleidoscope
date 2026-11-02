@@ -82,12 +82,49 @@ fn catalog_metadata_is_non_empty() {
 }
 
 #[test]
+fn file_errors_do_not_recommend_absent_explorer_controls() {
+    for entry in errors::all().filter(|entry| entry.id.starts_with("FILE_")) {
+        for phrase in ["새로 고침", "폴더 선택", "목록"] {
+            assert!(!entry.message.contains(phrase), "{} message", entry.id);
+            assert!(!entry.fix.contains(phrase), "{} fix", entry.id);
+        }
+    }
+}
+
+#[test]
+fn file_root_and_new_file_errors_explain_their_distinct_causes() {
+    let missing_root = errors::FILE_ACCESS_ROOT_NOT_FOUND("docs");
+    assert_eq!(missing_root.code, ErrorCode::NotFound);
+    assert_eq!(
+        missing_root.message,
+        "파일 권한 docs: 선택한 폴더를 찾을 수 없습니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요."
+    );
+
+    let changed_root = errors::FILE_ACCESS_ROOT_CHANGED("docs");
+    assert_eq!(changed_root.code, ErrorCode::PathOutsideRoot);
+    assert_eq!(
+        changed_root.message,
+        "파일 권한 docs: 선택한 위치가 폴더가 아니거나 다른 곳을 가리킵니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요."
+    );
+
+    assert_eq!(
+        errors::FILE_CREATE_FILE_OPEN_NOT_FOUND("docs/new.md").message,
+        "파일 docs/new.md: 새 파일을 만들 위치를 찾지 못했습니다. 대상 폴더가 있는지 확인한 뒤 앱을 다시 열거나 폴더를 다시 고르세요."
+    );
+}
+
+#[test]
 fn file_reviewed_errors_keep_their_existing_error_classes() {
     let cases = [
         (
+            "FILE_ACCESS_ROOT_NOT_FOUND",
+            errors::FILE_ACCESS_ROOT_NOT_FOUND("docs"),
+            ErrorCode::NotFound,
+        ),
+        (
             "FILE_ACCESS_ROOT_CHANGED",
             errors::FILE_ACCESS_ROOT_CHANGED("docs"),
-            ErrorCode::NotFound,
+            ErrorCode::PathOutsideRoot,
         ),
         (
             "FILE_COPY_NAME_TAKEN",

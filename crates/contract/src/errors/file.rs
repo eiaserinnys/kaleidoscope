@@ -4,7 +4,7 @@ error_catalog! { ENTRIES;
         place: "파일 접근 권한 검사",
         cause: "앱 정의에 파일 권한이 선언되지 않았다",
         message: "파일 권한 {permission}: 앱 정의 permissions에 선언되지 않았습니다. 앱 정의 permissions에 추가하세요.",
-        fix: "앱 정의의 files 권한 목록을 확인하세요"
+        fix: "앱 정의 permissions에 files 권한을 선언하세요"
     }
     FILE_WRITE_READ_ONLY_PERMISSION(permission) {
         class: PermissionDenied,
@@ -17,8 +17,8 @@ error_catalog! { ENTRIES;
         class: NotGranted,
         place: "기기 폴더 접근 검사",
         cause: "이 앱 창에서 파일 권한의 폴더를 고르지 않았다",
-        message: "파일 권한 {permission}: 이 기기에서 사용할 폴더가 없습니다. 앱에서 ‘폴더 선택’을 눌러 지정하세요.",
-        fix: "앱에서 ‘폴더 선택’을 눌러 지정하세요"
+        message: "파일 권한 {permission}: 이 앱에서 사용할 폴더가 없습니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요.",
+        fix: "대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요"
     }
     FILE_ACCESS_WINDOW_NOT_FOUND() {
         class: NotFound,
@@ -41,44 +41,51 @@ error_catalog! { ENTRIES;
         message: "앱 정의 permissions의 {permission} 항목이 files 모듈이 아닙니다. 이 항목의 모듈을 files로 바꾸세요.",
         fix: "앱 정의 permissions에서 {permission}의 모듈을 files로 바꾸세요"
     }
-    FILE_ACCESS_ROOT_CHANGED(permission) {
+    FILE_ACCESS_ROOT_NOT_FOUND(permission) {
         class: NotFound,
         place: "선택한 폴더 검사",
-        cause: "선택한 폴더가 더는 같은 위치의 폴더가 아니다",
-        message: "파일 권한 {permission}: 선택한 폴더가 바뀌었거나 더는 폴더가 아닙니다. 앱에서 ‘폴더 선택’을 눌러 다시 지정하세요.",
-        fix: "앱에서 ‘폴더 선택’을 눌러 다시 지정하세요"
+        cause: "선택한 폴더 경로가 사라졌다",
+        message: "파일 권한 {permission}: 선택한 폴더를 찾을 수 없습니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요.",
+        fix: "대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요"
+    }
+    FILE_ACCESS_ROOT_CHANGED(permission) {
+        class: PathOutsideRoot,
+        place: "선택한 폴더 검사",
+        cause: "선택한 경로가 다른 위치를 가리키거나 폴더가 아니다",
+        message: "파일 권한 {permission}: 선택한 위치가 폴더가 아니거나 다른 곳을 가리킵니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요.",
+        fix: "대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요"
     }
     FILE_LIST_DIRECTORY_IO(path) {
         class: Io,
-        place: "파일 목록 읽기",
+        place: "폴더 내용 읽기",
         cause: "폴더를 읽지 못했다",
-        message: "폴더 {path}: 파일 목록을 읽지 못했습니다. 파일 목록에서 새로 고침을 선택하세요.",
-        fix: "파일 목록에서 새로 고침을 선택하세요"
+        message: "폴더 {path}: 내용을 읽지 못했습니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요.",
+        fix: "대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요"
     }
     FILE_LIST_DIRECTORY_NOT_FOUND(path) {
         class: NotFound,
-        place: "파일 목록 읽기",
-        cause: "목록을 읽으려는 폴더가 사라졌다",
-        message: "폴더 {path}: 찾을 수 없습니다. 파일 목록에서 새로 고침을 선택하세요.",
-        fix: "파일 목록에서 새로 고침을 선택하세요"
+        place: "폴더 내용 읽기",
+        cause: "읽으려는 폴더가 사라졌다",
+        message: "폴더 {path}: 찾을 수 없습니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요.",
+        fix: "대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요"
     }
     FILE_LIST_ENTRY_IO(path) {
         class: Io,
-        place: "파일 목록 항목 읽기",
-        cause: "목록 항목 정보를 읽지 못했다",
-        message: "폴더 {path}: 안의 항목 정보를 읽지 못했습니다. 파일 목록에서 새로 고침을 선택하세요.",
-        fix: "파일 목록에서 새로 고침을 선택하세요"
+        place: "폴더 항목 정보 읽기",
+        cause: "항목 정보를 읽지 못했다",
+        message: "폴더 {path}: 안의 항목 정보를 읽지 못했습니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요.",
+        fix: "대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요"
     }
     FILE_LIST_ENTRY_NOT_FOUND(path) {
         class: NotFound,
-        place: "파일 목록 항목 읽기",
-        cause: "목록을 읽는 중 폴더가 사라졌다",
-        message: "폴더 {path}: 읽는 동안 바뀌었습니다. 파일 목록에서 새로 고침을 선택하세요.",
-        fix: "파일 목록에서 새로 고침을 선택하세요"
+        place: "폴더 항목 정보 읽기",
+        cause: "항목을 읽는 중 사라졌다",
+        message: "폴더 {path}: 읽는 동안 항목이 사라졌습니다. 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요.",
+        fix: "폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요"
     }
     FILE_LIST_NAME_NOT_TEXT(path) {
         class: Io,
-        place: "파일 목록 항목 이름 읽기",
+        place: "폴더 항목 이름 읽기",
         cause: "항목 이름이 UTF-8 문자열이 아니다",
         message: "폴더 {path}: 안에 이름을 읽을 수 없는 항목이 있습니다. 파일 관리자에서 그 항목의 이름을 바꾸세요.",
         fix: "파일 관리자에서 항목 이름을 바꾸세요"
@@ -87,8 +94,8 @@ error_catalog! { ENTRIES;
         class: NotFound,
         place: "파일 읽기",
         cause: "읽으려는 파일이 없다",
-        message: "파일 {path}: 찾을 수 없습니다. 파일 목록에서 새로 고침을 선택한 뒤 파일을 다시 여세요.",
-        fix: "파일 목록에서 새로 고침을 선택한 뒤 파일을 다시 여세요"
+        message: "파일 {path}: 찾을 수 없습니다. 파일이 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요.",
+        fix: "파일이 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요"
     }
     FILE_READ_IO(path) {
         class: Io,
@@ -163,9 +170,9 @@ error_catalog! { ENTRIES;
     FILE_CREATE_FILE_OPEN_NOT_FOUND(path) {
         class: NotFound,
         place: "새 파일 열기",
-        cause: "작업 중 대상이 사라졌다",
-        message: "파일 {path}: 파일이 이미 없어 새 파일을 열지 못했습니다. 파일 관리자에서 경로를 확인하세요.",
-        fix: "파일 관리자에서 경로를 확인하세요"
+        cause: "새 파일을 만들 상위 폴더가 사라졌다",
+        message: "파일 {path}: 새 파일을 만들 위치를 찾지 못했습니다. 대상 폴더가 있는지 확인한 뒤 앱을 다시 열거나 폴더를 다시 고르세요.",
+        fix: "대상 폴더가 있는지 확인한 뒤 앱을 다시 열거나 폴더를 다시 고르세요"
     }
     FILE_CREATE_FILE_OPEN_BUSY(path) {
         class: FileBusy,
@@ -640,8 +647,8 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "폴더 만들기 위치 검사",
         cause: "폴더를 만들 위치가 폴더가 아니다",
-        message: "폴더 {path} 안에 새 폴더를 만들 수 없습니다. 파일 목록에서 폴더를 선택하세요.",
-        fix: "폴더를 선택하세요"
+        message: "폴더 {path} 안에는 새 폴더를 만들 수 없습니다. 다른 폴더를 대상으로 다시 시도하세요.",
+        fix: "다른 폴더를 대상으로 다시 시도하세요"
     }
     FILE_SAVE_FILE_DELETED(name) {
         class: Conflict,
@@ -731,8 +738,8 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "파일 작업 대상 검사",
         cause: "대상 위치가 폴더가 아니다",
-        message: "대상 {path}: 폴더가 아닙니다. 파일 목록에서 폴더를 선택하세요.",
-        fix: "대상 폴더를 선택하세요"
+        message: "대상 {path}: 폴더가 아닙니다. 다른 폴더를 대상으로 다시 시도하세요.",
+        fix: "다른 폴더를 대상으로 다시 시도하세요"
     }
     FILE_REMOVE_ROOT_DENIED() {
         class: PermissionDenied,

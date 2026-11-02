@@ -446,7 +446,7 @@ mod error_mapping_tests {
 
     #[test]
     fn preserves_registered_file_root_error_and_details() {
-        let original = errors::FILE_ACCESS_ROOT_CHANGED("files").and_details(vec![
+        let original = errors::FILE_ACCESS_ROOT_NOT_FOUND("files").and_details(vec![
             "The system cannot find the path specified (os error 3)".into(),
         ]);
         let original_id = original.id.clone();

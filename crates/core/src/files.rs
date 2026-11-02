@@ -268,7 +268,7 @@ pub(crate) fn granted_root(
     let stored_root = PathBuf::from(&grant.root_path);
     let root = fs::canonicalize(&stored_root).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
-            kaleidoscope_contract::errors::FILE_ACCESS_ROOT_CHANGED(permission_id)
+            kaleidoscope_contract::errors::FILE_ACCESS_ROOT_NOT_FOUND(permission_id)
                 .and_details(vec![error.to_string()])
         } else {
             kaleidoscope_contract::errors::FILE_PATH_IO(&stored_root.display().to_string())
