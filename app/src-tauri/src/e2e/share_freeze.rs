@@ -174,12 +174,81 @@ pub(super) fn scenario(
     })?;
     let t = Instant::now();
     on_ui(app, |h| native::begin(h, 700))??;
-    thread::sleep(Duration::from_millis(1000));
+    while on_ui(app, |_| native::active())? && t.elapsed() < Duration::from_secs(3) {
+        thread::sleep(Duration::from_millis(10));
+    }
     record(
         log,
         "timer",
         json!({"elapsed_ms":t.elapsed().as_millis(),"still_active":on_ui(app,|_|native::active())?}),
     )?;
+
+    ui(app,"window.spikeClicks=0;document.querySelector('#spikeInput').addEventListener('pointerdown',()=>window.spikeClicks++);return true;")?;
+    on_ui(app, |h| native::begin(h, 5000))??;
+    let fg = on_ui(app, |_| native::foreground())?;
+    on_ui(app, native::click)?;
+    frames(app, 2)?;
+    record(
+        log,
+        "input",
+        json!({"ui":ui(app,"return {clicks:window.spikeClicks,focus:document.hasFocus(),active:document.activeElement?.id};")?,"foreground_kept":fg==on_ui(app, |_| native::foreground())?}),
+    )?;
+    on_ui(app, |_| native::end())?;
+
+    // 화면 상태기계가 관리하지 않는 같은 호스트의 자식 웹뷰로 숨김 API 자체를 잰다.
+    use kaleidoscope_core::WebHost;
+    let host = super::super::web_host::TauriWebHost::new(app.clone());
+    host.attach("spike-child", "https://example.com/")
+        .map_err(|e| format!("{e:?}"))?;
+    thread::sleep(Duration::from_secs(3));
+    let child = app.get_webview("web-spike-child").ok_or("자식 없음")?;
+    child.eval("document.body.style.background='rgb(17,153,51)';document.body.innerHTML='CHILD GREEN';").map_err(|e|e.to_string())?;
+    thread::sleep(Duration::from_millis(200));
+    for delay in [0, 16, 32, 64] {
+        host.place("spike-child", None)
+            .map_err(|e| format!("{e:?}"))?;
+        let t = Instant::now();
+        let hidden = host.capture("spike-child").map_err(|e| format!("{e:?}"))?;
+        let hidden_ms = t.elapsed().as_millis();
+        if let Some(bytes) = hidden.as_ref() {
+            fs::write(out.join(format!("child-hidden-{delay}.png")), bytes)
+                .map_err(|e| e.to_string())?;
+        }
+        on_ui(app, |h| native::begin(h, 5000))??;
+        let t = Instant::now();
+        host.place(
+            "spike-child",
+            Some(Rect {
+                x: 50,
+                y: 100,
+                width: 500,
+                height: 300,
+            }),
+        )
+        .map_err(|e| format!("{e:?}"))?;
+        let place_ms = t.elapsed().as_millis();
+        thread::sleep(Duration::from_millis(delay));
+        let t = Instant::now();
+        let shown = host.capture("spike-child").map_err(|e| format!("{e:?}"))?;
+        let capture_ms = t.elapsed().as_millis();
+        if let Some(bytes) = shown.as_ref() {
+            fs::write(out.join(format!("child-shown-{delay}.png")), bytes)
+                .map_err(|e| e.to_string())?;
+        }
+        host.place("spike-child", None)
+            .map_err(|e| format!("{e:?}"))?;
+        frames(app, 2)?;
+        on_ui(app, |_| {
+            native::flush();
+            native::end();
+        })?;
+        record(
+            log,
+            "child",
+            json!({"delay_ms":delay,"hidden_ms":hidden_ms,"hidden_bytes":hidden.as_ref().map(Vec::len),"place_ms":place_ms,"capture_ms":capture_ms,"shown_bytes":shown.as_ref().map(Vec::len)}),
+        )?;
+    }
+    host.detach("spike-child").map_err(|e| format!("{e:?}"))?;
     fs::write(out.join("record.stop"), b"").map_err(|e| e.to_string())?;
     record(log, "complete", json!({"ok":true}))
 }
