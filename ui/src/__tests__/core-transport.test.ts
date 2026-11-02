@@ -7,4 +7,16 @@ describe("core error conversion", () => {
     expect(isCoreError(unavailable)).toBe(true);
     expect(toCoreError(unavailable)).toEqual(unavailable);
   });
+
+  it.each(["unauthorized", "local_agent_failed"] as const)("preserves the %s error instead of stringifying it", (code) => {
+    const error = { code, message: "접근이 거부되었습니다", details: [] };
+    expect(isCoreError(error)).toBe(true);
+    expect(toCoreError(error)).toEqual(error);
+    expect(toCoreError(error).message).not.toContain("[object Object]");
+  });
+
+  it("uses a string message from an unfamiliar error object", () => {
+    expect(toCoreError({ message: "네트워크 연결이 끊겼습니다" }).message)
+      .toContain("네트워크 연결이 끊겼습니다");
+  });
 });

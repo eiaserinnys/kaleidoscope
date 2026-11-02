@@ -114,6 +114,14 @@
   font-size: var(--ks-type-body);
 }
 
+.ks-error-id {
+  color: var(--ks-color-muted);
+  font-family: var(--ks-font-code);
+  font-size: var(--ks-type-meta);
+  line-height: var(--ks-line-body);
+  overflow-wrap: anywhere;
+}
+
 .ks-notice-actions {
   display: inline-flex;
   max-width: 100%;

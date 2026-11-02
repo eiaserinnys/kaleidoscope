@@ -118,9 +118,12 @@ pub(crate) fn get(
             if kaleidoscope_contract::builtin::is_bundled_asset(&media.asset, version) {
                 return Err(error::make(ErrorCode::NotFound));
             }
-            let link = inner.link_file.lock().unwrap().clone().ok_or_else(|| {
-                error::with_message(ErrorCode::Server, "서버에 연결되어 있지 않습니다")
-            })?;
+            let link = inner
+                .link_file
+                .lock()
+                .unwrap()
+                .clone()
+                .ok_or_else(|| kaleidoscope_contract::errors::SERVER_CALL_NOT_CONNECTED())?;
             use sha2::{Digest, Sha256};
             let namespace = format!(
                 "{:x}",
@@ -135,10 +138,7 @@ pub(crate) fn get(
                     inner.state.lock().unwrap().link,
                     kaleidoscope_contract::LinkStatus::Connected { .. }
                 ) {
-                    return Err(error::with_message(
-                        ErrorCode::Server,
-                        "서버에 연결되어 있지 않습니다",
-                    ));
+                    return Err(kaleidoscope_contract::errors::SERVER_CALL_NOT_CONNECTED());
                 }
                 let download = inner
                     .registry

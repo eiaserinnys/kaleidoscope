@@ -566,6 +566,7 @@ fn set_plan(manager: &DataRuntimes, runtime: &mut Runtime, name: &str, plan: Sou
             SourcePlan::Invalid(message) => SourceStatus::Failed {
                 message: message.clone(),
                 has_value: false,
+                id: None,
             },
             _ => SourceStatus::Idle {},
         };
@@ -848,6 +849,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                             source.status = SourceStatus::Failed {
                                 message: err.message,
                                 has_value: runtime.data.contains_key(&job.name),
+                                id: err.id,
                             }
                         }
                     }
@@ -1530,6 +1532,7 @@ mod freshness_tests {
         source.status = SourceStatus::Failed {
             message: "오류".into(),
             has_value: true,
+            id: None,
         };
         let meta = &runtime.source_meta()["item"];
         assert!(meta.stale && meta.updated_at.is_some());

@@ -681,7 +681,7 @@ fn failed_relay_has_retry_and_read_permission_rejects_post() {
     while Instant::now() < deadline {
         if let Ok(CoreEvent::DataUpdate { view, .. }) = rx.recv_timeout(Duration::from_millis(100))
         {
-            if matches!(view.values.get("/ui/children/0/items"),Some(BindingValue::Failed{message,retry}) if message.contains("500") && retry == &vec!["items".to_owned()])
+            if matches!(view.values.get("/ui/children/0/items"),Some(BindingValue::Failed{message,retry,..}) if message.contains("500") && retry == &vec!["items".to_owned()])
             {
                 failed = true;
                 break;
@@ -764,6 +764,7 @@ fn closing_window_discards_pending_fetch() {
             dormant: vec![]
         }),
         Err(CoreError {
+            id: None,
             code: ErrorCode::NotFound,
             ..
         })
@@ -1700,6 +1701,17 @@ fn folder_and_file_sources_must_protect_data_dir() {
     fs::write(root.join("private-data/link.json"), "{}").unwrap();
     let (_, desktop) = active_ids(&core);
     let window = open_window(&core, &desktop, "data-app");
+    let unselected_plan = SourcePlan::Folder {
+        permission: "docs".into(),
+        dir: String::new(),
+        recursive: false,
+        extensions: vec![],
+    };
+    assert!(matches!(
+        crate::data_sources::fetch(&core.inner, &window, &unselected_plan, SourceFormat::Json),
+        Err(crate::connections::RequestError::Core(error))
+            if error.id.as_deref() == Some("FILE_ACCESS_FOLDER_NOT_CHOSEN")
+    ));
     pick_folder(&core, &window);
     for recursive in [false, true] {
         let plan = SourcePlan::Folder {

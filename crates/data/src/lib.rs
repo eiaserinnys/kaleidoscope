@@ -378,8 +378,8 @@ impl CompiledApp {
                 let failed: Vec<_> = missing
                     .iter()
                     .filter_map(|name| match statuses.get(*name) {
-                        Some(SourceStatus::Failed { message, .. }) => {
-                            Some(((*name).clone(), message.clone()))
+                        Some(SourceStatus::Failed { message, id, .. }) => {
+                            Some(((*name).clone(), message.clone(), id.clone()))
                         }
                         _ => None,
                     })
@@ -392,7 +392,8 @@ impl CompiledApp {
                 } else if !failed.is_empty() {
                     BindingValue::Failed {
                         message: failed[0].1.clone(),
-                        retry: failed.into_iter().map(|(name, _)| name).collect(),
+                        id: failed[0].2.clone(),
+                        retry: failed.into_iter().map(|(name, _, _)| name).collect(),
                     }
                 } else if loading {
                     BindingValue::Loading {}
@@ -402,6 +403,7 @@ impl CompiledApp {
                         Ok(value) => BindingValue::Ready { value },
                         Err(message) => BindingValue::Failed {
                             message,
+                            id: None,
                             retry: Vec::new(),
                         },
                     };

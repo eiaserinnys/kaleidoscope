@@ -22,6 +22,7 @@ fn fail(owner: &Shared, reason: &str) {
     let mut s = owner.state.lock().unwrap();
     s.snapshot.phase = LocalAgentPhase::Failed;
     s.snapshot.failure = Some(AgentFailure {
+        id: None,
         code: ErrorCode::LocalAgentFailed,
         command: Some(owner.config.spec.command.clone()),
         message: format!("{}: {reason}", owner.config.spec.command),
@@ -311,6 +312,7 @@ async fn session_loop(
                     Err(e) => {
                         let mut s = owner.state.lock().unwrap();
                         s.snapshot.failure = Some(AgentFailure {
+                            id: None,
                             code: ErrorCode::LoginRequired,
                             message: e.message,
                             command: Some(owner.config.spec.command.clone()),

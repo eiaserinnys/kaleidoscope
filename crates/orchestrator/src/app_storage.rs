@@ -314,6 +314,7 @@ pub(super) fn validate_storage_publish(
         Ok(())
     } else {
         Err(CoreError {
+            id: None,
             code: ErrorCode::InvalidAppDefinition,
             message: "저장 항목 선언이 기존 저장값과 호환되지 않습니다.".into(),
             details: errors,
@@ -463,6 +464,7 @@ impl AppState {
         let current_revision = old.as_ref().map(|(_, _, revision)| revision.clone());
         if current_revision != expected_revision {
             return Err(CoreError {
+                id: None,
                 code: ErrorCode::Conflict,
                 message: "저장 항목이 다른 곳에서 바뀌었습니다.".into(),
                 details: vec![format!(
@@ -537,6 +539,7 @@ impl AppState {
         let current_revision = old.as_ref().map(|(_, _, revision)| revision.clone());
         if current_revision != expected_revision {
             return Err(CoreError {
+                id: None,
                 code: ErrorCode::Conflict,
                 message: "저장 항목이 다른 곳에서 바뀌었습니다.".into(),
                 details: vec![format!(

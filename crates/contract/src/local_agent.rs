@@ -171,6 +171,9 @@ pub struct ControlChoice {
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct AgentFailure {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub id: Option<String>,
     pub code: ErrorCode,
     pub message: String,
     pub command: Option<String>,

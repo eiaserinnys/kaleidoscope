@@ -254,6 +254,7 @@ pub(super) fn move_document(
 
 fn conflict(current: Option<&str>) -> CoreError {
     CoreError {
+        id: None,
         code: ErrorCode::Conflict,
         message: "저장 항목이 다른 곳에서 바뀌었습니다.".into(),
         details: vec![format!("current_revision={}", current.unwrap_or("null"))],

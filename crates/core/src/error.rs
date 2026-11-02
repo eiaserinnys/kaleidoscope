@@ -6,6 +6,7 @@ pub(crate) fn make(code: ErrorCode) -> CoreError {
 
 pub(crate) fn with_message(code: ErrorCode, message: &str) -> CoreError {
     CoreError {
+        id: None,
         message: message.to_string(),
         code,
         details: Vec::new(),
