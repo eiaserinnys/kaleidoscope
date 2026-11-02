@@ -167,8 +167,17 @@ async function setupChatWindow() {
   await store.ready;
   await waitFor(() => expect(document.querySelector('[data-window-id="window-b"]')).not.toBeNull());
   await screen.findByRole("textbox", { name: "메시지" });
+  await settleRenders();
   calls.length = 0;
   return { store, transport, snapshot };
+}
+
+async function settleRenders() {
+  let seen = -1;
+  while (seen !== calls.length) {
+    seen = calls.length;
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+  }
 }
 
 async function setState(store: ReturnType<typeof createShellStore>, windowId: string, key: string, value: JsonValue) {
