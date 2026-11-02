@@ -2,12 +2,11 @@ use chrono::{SecondsFormat, Utc};
 use uuid::Uuid;
 
 use kaleidoscope_contract::{
-    AppWindow, CoreError, CoreReply, CoreRequest, Desktop, ErrorCode, Rect, Workspace,
+    errors, AppWindow, CoreError, CoreReply, CoreRequest, Desktop, Rect, Workspace,
     WINDOW_STATE_MAX_BYTES,
 };
 
 use crate::app_commands;
-use crate::error;
 use crate::CoreState;
 
 pub(crate) fn timestamp() -> String {
@@ -62,7 +61,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .workspaces
                 .iter_mut()
                 .find(|workspace| workspace.id == workspace_id)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_WORKSPACE_RENAME_NOT_FOUND(&workspace_id))?;
             workspace.name = name;
             workspace.updated_at = timestamp();
             Ok(CoreReply::WorkspaceRename {
@@ -71,14 +70,14 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         }
         CoreRequest::WorkspaceDelete { workspace_id } => {
             if state.shared.workspaces.len() <= 1 {
-                return Err(error::make(ErrorCode::InvalidRequest));
+                return Err(errors::DESK_WORKSPACE_DELETE_LAST());
             }
             let workspace = state
                 .shared
                 .workspaces
                 .iter()
                 .find(|workspace| workspace.id == workspace_id)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_WORKSPACE_DELETE_NOT_FOUND(&workspace_id))?;
             let deleting_active =
                 state.device.active_workspace_id.as_deref() == Some(workspace.id.as_str());
             let desktop_ids = state
@@ -116,7 +115,9 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 let active = state.shared.workspaces.first().unwrap();
                 state.device.active_workspace_id = Some(active.id.clone());
                 let desktop_id = active_desktop(state, &active.id)
-                    .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                    .ok_or_else(|| {
+                        errors::DESK_WORKSPACE_DELETE_ACTIVE_DESKTOP_MISSING(&active.id)
+                    })?;
                 state
                     .device
                     .active_desktop_ids
@@ -130,9 +131,11 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .workspaces
                 .iter()
                 .find(|workspace| workspace.id == workspace_id)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_WORKSPACE_ACTIVATE_NOT_FOUND(&workspace_id))?;
             let desktop_id = active_desktop(state, &workspace.id)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| {
+                    errors::DESK_WORKSPACE_ACTIVATE_DESKTOP_MISSING(&workspace.id)
+                })?;
             state.device.active_workspace_id = Some(workspace.id.clone());
             state
                 .device
@@ -147,7 +150,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .iter()
                 .any(|workspace| workspace.id == workspace_id)
             {
-                return Err(error::make(ErrorCode::NotFound));
+                return Err(errors::DESK_DESKTOP_CREATE_WORKSPACE_NOT_FOUND(&workspace_id));
             }
             let position = state
                 .shared
@@ -181,7 +184,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .desktops
                 .iter_mut()
                 .find(|desktop| desktop.id == desktop_id)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_DESKTOP_RENAME_NOT_FOUND(&desktop_id))?;
             desktop.name = name;
             desktop.updated_at = timestamp();
             Ok(CoreReply::DesktopRename {
@@ -195,7 +198,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .iter()
                 .find(|desktop| desktop.id == desktop_id)
                 .cloned()
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_DESKTOP_DELETE_NOT_FOUND(&desktop_id))?;
             let desktop_count = state
                 .shared
                 .desktops
@@ -203,7 +206,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .filter(|desktop| desktop.workspace_id == deleted.workspace_id)
                 .count();
             if desktop_count <= 1 {
-                return Err(error::make(ErrorCode::InvalidRequest));
+                return Err(errors::DESK_DESKTOP_DELETE_LAST());
             }
             let deleting_active = state
                 .device
@@ -250,7 +253,9 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                     .iter()
                     .filter(|desktop| desktop.workspace_id == deleted.workspace_id)
                     .min_by_key(|desktop| desktop.position.abs_diff(deleted.position))
-                    .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                    .ok_or_else(|| {
+                        errors::DESK_DESKTOP_DELETE_REPLACEMENT_MISSING(&deleted.workspace_id)
+                    })?;
                 state
                     .device
                     .active_desktop_ids
@@ -268,7 +273,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .iter()
                 .find(|desktop| desktop.id == desktop_id)
                 .cloned()
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_DESKTOP_ACTIVATE_NOT_FOUND(&desktop_id))?;
             state.device.active_workspace_id = Some(desktop.workspace_id.clone());
             state
                 .device
@@ -287,17 +292,19 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .iter()
                 .find(|desktop| desktop.id == desktop_id)
                 .cloned()
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_WINDOW_OPEN_DESKTOP_NOT_FOUND(&desktop_id))?;
             let app = state
                 .shared
                 .apps
                 .iter()
                 .find(|app| app.id == app_id)
                 .cloned()
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_WINDOW_OPEN_APP_NOT_FOUND(&app_id))?;
             let definition =
                 app_commands::definition_for(&state.shared, &app.id, app.current_version)
-                    .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                    .ok_or_else(|| {
+                        errors::DESK_WINDOW_OPEN_APP_VERSION_NOT_FOUND(&app.id, app.current_version)
+                    })?;
             let windows = state
                 .shared
                 .windows
@@ -348,7 +355,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .windows
                 .iter_mut()
                 .find(|window| window.id == window_id)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_WINDOW_SET_RECT_NOT_FOUND(&window_id))?;
             window.rect = rect;
             window.maximized = false;
             window.updated_at = timestamp();
@@ -363,7 +370,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .iter()
                 .find(|window| window.id == window_id)
                 .map(|window| window.desktop_id.clone())
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_WINDOW_RAISE_NOT_FOUND(&window_id))?;
             let z = state
                 .shared
                 .windows
@@ -392,7 +399,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .windows
                 .iter_mut()
                 .find(|window| window.id == window_id)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_WINDOW_MINIMIZE_NOT_FOUND(&window_id))?;
             window.minimized = true;
             window.updated_at = timestamp();
             Ok(CoreReply::WindowMinimize {
@@ -406,7 +413,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .iter()
                 .find(|window| window.id == window_id)
                 .map(|window| window.desktop_id.clone())
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_WINDOW_MAXIMIZE_NOT_FOUND(&window_id))?;
             let z = state
                 .shared
                 .windows
@@ -437,7 +444,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .iter()
                 .find(|window| window.id == window_id)
                 .map(|window| window.desktop_id.clone())
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_WINDOW_RESTORE_NOT_FOUND(&window_id))?;
             let z = state
                 .shared
                 .windows
@@ -468,7 +475,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .iter()
                 .find(|window| window.id == window_id)
                 .map(|window| window.desktop_id.clone())
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_WINDOW_CLOSE_NOT_FOUND(&window_id))?;
             let before = state.shared.windows.len();
             state.shared.windows.retain(|window| window.id != window_id);
             if state.shared.windows.len() != before {
@@ -515,16 +522,21 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .iter()
                 .find(|window| window.id == window_id)
                 .map(|window| (window.app_id.clone(), window.app_version))
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
+                .ok_or_else(|| errors::DESK_WINDOW_STATE_WINDOW_NOT_FOUND(&window_id))?;
             let definition = app_commands::definition_for(&state.shared, &app_id, app_version)
-                .ok_or_else(|| error::make(ErrorCode::NotFound))?;
-            if next.keys().any(|key| !definition.state.contains_key(key)) {
-                return Err(error::make(ErrorCode::InvalidRequest));
+                .ok_or_else(|| {
+                    errors::DESK_WINDOW_STATE_APP_VERSION_NOT_FOUND(&app_id, app_version)
+                })?;
+            if let Some(key) = next.keys().find(|key| !definition.state.contains_key(*key)) {
+                return Err(errors::DESK_WINDOW_STATE_KEY_NOT_DECLARED(&window_id, key));
             }
-            let bytes =
-                serde_json::to_vec(&next).map_err(|_| error::make(ErrorCode::InvalidRequest))?;
+            let bytes = serde_json::to_vec(&next)
+                .map_err(|_| errors::DESK_WINDOW_STATE_SERIALIZATION_FAILED(&window_id))?;
             if bytes.len() > WINDOW_STATE_MAX_BYTES {
-                return Err(error::make(ErrorCode::InvalidRequest));
+                return Err(errors::DESK_WINDOW_STATE_TOO_LARGE(
+                    &window_id,
+                    WINDOW_STATE_MAX_BYTES,
+                ));
             }
             let window = state
                 .shared
@@ -544,7 +556,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::LinkCancel {}
         | CoreRequest::LinkUnlink {}
         | CoreRequest::LinkUseLocal {}
-        | CoreRequest::LinkSyncLocalToRemote {} => Err(error::make(ErrorCode::Server)),
+        | CoreRequest::LinkSyncLocalToRemote {} => Err(errors::DESK_LINK_COMMAND_UNHANDLED()),
         CoreRequest::StateGet {}
         | CoreRequest::ConversationApplyStatus { .. }
         | CoreRequest::ConversationApplyRetry { .. }
@@ -591,8 +603,8 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::ShareFreeze {}
         | CoreRequest::ShareCapture { .. }
         | CoreRequest::ShareUnfreeze {}
-        | CoreRequest::UpdateRestart {} => Err(error::make(ErrorCode::InvalidRequest)),
-        _ => Err(error::make(ErrorCode::InvalidRequest)),
+        | CoreRequest::UpdateRestart {} => Err(errors::DESK_STATE_COMMAND_UNHANDLED()),
+        _ => Err(errors::DESK_STATE_COMMAND_UNHANDLED()),
     }
 }
 

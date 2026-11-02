@@ -104,4 +104,207 @@ error_catalog! { ENTRIES;
         message: "서버 {host}의 자료 이관 응답을 읽지 못했습니다. 잠시 뒤 다시 시도하세요.",
         fix: "잠시 뒤 다시 시도하세요"
     }
+    SERVER_LAYOUT_REPORT_BODY_INVALID() {
+        class: InvalidRequest,
+        place: "기기 배치 보고 요청 읽기",
+        cause: "요청 본문이 기기 배치 형식에 맞지 않는다",
+        message: "기기 배치 보고 형식이 올바르지 않습니다. 쉘을 업데이트한 뒤 다시 보고하세요.",
+        fix: "쉘을 업데이트하세요"
+    }
+    SERVER_LAYOUT_CHANGE_BODY_INVALID() {
+        class: InvalidRequest,
+        place: "기기 배치 변경 요청 읽기",
+        cause: "요청 본문이 배치 변경 형식에 맞지 않는다",
+        message: "기기 배치 변경 형식이 올바르지 않습니다. 쉘을 업데이트한 뒤 다시 보내세요.",
+        fix: "쉘을 업데이트하세요"
+    }
+    SERVER_LAYOUT_CHANGE_SHARING_ID_INVALID(id) {
+        class: InvalidRequest,
+        place: "기기 배치 변경의 공유 창 검사",
+        cause: "공유 대상 창 id가 비었거나 허용 길이를 넘는다",
+        message: "공유 창 ID가 올바르지 않습니다: {id}. 현재 창 ID를 사용해 다시 보내세요.",
+        fix: "현재 창 ID를 사용하세요"
+    }
+    SERVER_LAYOUT_CHANGE_CONTEXT_TOO_LARGE(max_bytes) {
+        class: InvalidRequest,
+        place: "기기 배치 변경의 공유 문맥 검사",
+        cause: "공유 문맥 글이 허용 크기를 넘는다",
+        message: "공유 문맥이 {max_bytes}바이트 제한을 넘었습니다. 글을 줄인 뒤 다시 보내세요.",
+        fix: "공유 문맥 글을 허용 크기 안으로 줄이세요"
+    }
+    SERVER_LAYOUT_CHANGE_STATE_SERIALIZATION_FAILED() {
+        class: InvalidRequest,
+        place: "기기 배치 변경의 창 상태 검사",
+        cause: "창 상태를 JSON으로 만들지 못했다",
+        message: "창 상태를 읽을 수 있는 형식으로 만들지 못했습니다. 쉘을 업데이트한 뒤 다시 보내세요.",
+        fix: "쉘을 업데이트하세요"
+    }
+    SERVER_LAYOUT_CHANGE_STATE_TOO_LARGE(max_bytes) {
+        class: InvalidRequest,
+        place: "기기 배치 변경의 창 상태 크기 검사",
+        cause: "창 상태가 허용 크기를 넘는다",
+        message: "창 상태가 {max_bytes}바이트 제한을 넘었습니다. 상태 항목을 줄인 뒤 다시 보내세요.",
+        fix: "창 상태 항목을 허용 크기 안으로 줄이세요"
+    }
+    SERVER_LAYOUT_ENTITIES_TABLE_UNSUPPORTED() {
+        class: Server,
+        place: "계정 배치 정보 읽기",
+        cause: "서버가 알지 못하는 배치 정보 종류를 읽으려 했다",
+        message: "서버가 작업, 데스크톱 또는 창 정보를 읽지 못했습니다. 서버 상태를 확인하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_ENTITIES_READ_FAILED() {
+        class: Server,
+        place: "계정 배치 정보 읽기",
+        cause: "저장된 작업, 데스크톱 또는 창 정보를 읽지 못했다",
+        message: "서버에서 작업, 데스크톱 또는 창 정보를 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_REPORT_DEVICE_NOT_FOUND() {
+        class: Server,
+        place: "기기 배치 보고 저장",
+        cause: "배치를 보고한 연결 기기를 찾지 못했다",
+        message: "배치를 보고한 기기를 찾지 못했습니다. 기기를 다시 연결한 뒤 보고하세요.",
+        fix: "기기를 다시 연결하세요"
+    }
+    SERVER_LAYOUT_REPORT_SAVE_FAILED() {
+        class: Server,
+        place: "기기 배치 보고 저장",
+        cause: "기기 배치 보고를 저장하지 못했다",
+        message: "기기 배치를 저장하지 못했습니다. 서버 저장소 상태를 확인한 뒤 다시 보고하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_REPORT_SERIALIZATION_FAILED() {
+        class: Server,
+        place: "기기 배치 보고 저장",
+        cause: "기기 배치를 저장 형식으로 만들지 못했다",
+        message: "기기 배치를 저장 형식으로 만들지 못했습니다. 쉘을 업데이트한 뒤 다시 보고하세요.",
+        fix: "쉘을 업데이트하세요"
+    }
+    SERVER_LAYOUT_INDEX_REFRESH_FAILED() {
+        class: Server,
+        place: "기기별 작업 목록 갱신",
+        cause: "기기 배치에서 작업 목록을 갱신하지 못했다",
+        message: "기기별 작업 목록을 갱신하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_CHANGE_DEVICE_NOT_FOUND() {
+        class: Server,
+        place: "기기 배치 변경 적용",
+        cause: "변경을 보낸 연결 기기를 찾지 못했다",
+        message: "배치 변경을 보낸 기기를 찾지 못했습니다. 기기를 다시 연결한 뒤 변경을 보내세요.",
+        fix: "기기를 다시 연결하세요"
+    }
+    SERVER_LAYOUT_CHANGE_APPLY_FAILED() {
+        class: Server,
+        place: "기기 배치 변경 적용",
+        cause: "기기 배치 변경을 저장하거나 적용하지 못했다",
+        message: "기기 배치 변경을 적용하지 못했습니다. 서버 저장소 상태를 확인한 뒤 다시 보내세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_WORKSPACE_SERIALIZATION_FAILED() {
+        class: Server,
+        place: "작업 배치 변경 저장",
+        cause: "작업 배치를 저장 형식으로 만들지 못했다",
+        message: "작업 배치를 저장 형식으로 만들지 못했습니다. 작업 정보를 확인한 뒤 다시 보내세요.",
+        fix: "작업 정보를 확인하세요"
+    }
+    SERVER_LAYOUT_DESKTOP_SERIALIZATION_FAILED() {
+        class: Server,
+        place: "데스크톱 배치 변경 저장",
+        cause: "데스크톱 배치를 저장 형식으로 만들지 못했다",
+        message: "데스크톱 배치를 저장 형식으로 만들지 못했습니다. 데스크톱 정보를 확인한 뒤 다시 보내세요.",
+        fix: "데스크톱 정보를 확인하세요"
+    }
+    SERVER_LAYOUT_WINDOW_SERIALIZATION_FAILED() {
+        class: Server,
+        place: "창 배치 변경 저장",
+        cause: "창 배치를 저장 형식으로 만들지 못했다",
+        message: "창 배치를 저장 형식으로 만들지 못했습니다. 창 정보를 확인한 뒤 다시 보내세요.",
+        fix: "창 정보를 확인하세요"
+    }
+    SERVER_LAYOUT_CANONICAL_ENTITY_INVALID() {
+        class: Server,
+        place: "저장된 배치 항목 읽기",
+        cause: "저장한 작업, 데스크톱 또는 창 정보를 해석하지 못했다",
+        message: "서버에 저장된 배치 정보를 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_CHILD_RELATION_UNSUPPORTED() {
+        class: Server,
+        place: "배치 항목 관계 조회",
+        cause: "서버가 알지 못하는 작업과 데스크톱 또는 창 관계를 조회하려 했다",
+        message: "서버가 배치 항목의 관계를 읽지 못했습니다. 서버 상태를 확인하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_CHILD_RELATION_READ_FAILED() {
+        class: Server,
+        place: "배치 항목 관계 조회",
+        cause: "작업, 데스크톱 또는 창의 관계를 읽지 못했다",
+        message: "서버에서 배치 항목의 관계를 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_WORKSPACE_LOOKUP_FAILED() {
+        class: Server,
+        place: "작업 존재 확인",
+        cause: "작업이 현재 계정에 있는지 확인하지 못했다",
+        message: "작업 정보를 확인하지 못했습니다. 서버 저장소 상태를 확인한 뒤 다시 시도하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_DESKTOP_LOOKUP_FAILED() {
+        class: Server,
+        place: "데스크톱 존재 확인",
+        cause: "데스크톱이 현재 계정에 있는지 확인하지 못했다",
+        message: "데스크톱 정보를 확인하지 못했습니다. 서버 저장소 상태를 확인한 뒤 다시 시도하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_SNAPSHOT_DEVICE_LOOKUP_FAILED() {
+        class: Server,
+        place: "기기 배치 스냅샷 만들기",
+        cause: "스냅샷을 받을 기기의 계정을 확인하지 못했다",
+        message: "기기 배치 스냅샷을 만들지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_REPORT_LIST_FAILED() {
+        class: Server,
+        place: "기기 배치 보고 목록 읽기",
+        cause: "저장된 기기 배치 보고를 읽지 못했다",
+        message: "기기 배치 보고 목록을 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_WORKSPACE_CONNECTION_STATE_READ_FAILED() {
+        class: Server,
+        place: "작업 상세의 기기 연결 상태 읽기",
+        cause: "기기 연결 상태를 읽지 못했다",
+        message: "작업에 연결된 기기 상태를 읽지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
+        fix: "서버 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_SYNC_STATE_READ_FAILED() {
+        class: Io,
+        place: "로컬 배치 동기화 상태 읽기",
+        cause: "배치 동기화 상태 파일을 읽지 못했다",
+        message: "로컬 배치 동기화 상태를 읽지 못했습니다. 파일 권한과 디스크 상태를 확인하세요.",
+        fix: "파일 권한과 디스크 상태를 확인하세요"
+    }
+    SERVER_LAYOUT_SYNC_STATE_READ_NOT_FOUND() {
+        class: NotFound,
+        place: "로컬 배치 동기화 상태 읽기",
+        cause: "동기화 상태 파일이 읽는 동안 사라졌다",
+        message: "로컬 배치 동기화 상태 파일이 없습니다. 서버 연결을 새로고침한 뒤 다시 시도하세요.",
+        fix: "서버 연결을 새로고침하세요"
+    }
+    SERVER_LAYOUT_SYNC_STATE_SAVE_FAILED() {
+        class: Io,
+        place: "로컬 배치 동기화 상태 저장",
+        cause: "배치 동기화 상태 파일을 저장하지 못했다",
+        message: "로컬 배치 동기화 상태를 저장하지 못했습니다. 디스크 공간과 저장 폴더 권한을 확인하세요.",
+        fix: "디스크 공간과 저장 폴더 권한을 확인하세요"
+    }
+    SERVER_LAYOUT_SYNC_STATE_REMOVE_FAILED() {
+        class: Io,
+        place: "로컬 배치 동기화 상태 삭제",
+        cause: "배치 동기화 상태 파일을 삭제하지 못했다",
+        message: "로컬 배치 동기화 상태를 지우지 못했습니다. 파일 권한과 디스크 상태를 확인하세요.",
+        fix: "파일 권한과 디스크 상태를 확인하세요"
+    }
 }
