@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
@@ -73,6 +74,41 @@ function setup(definition: AppDefinition, configure?: (transport: ReturnType<typ
 }
 
 describe("folder block", () => {
+  it("이름 입력을 바깥 클릭으로 닫으면 누른 대상에 키보드 포커스를 남기고 Escape만 원래 행으로 돌린다", async () => {
+    const user = userEvent.setup();
+    setup(fileFolderDefinition("readwrite", false), undefined, { "a.md": "# a", "b.md": "# b", "notes/guide.md": "# 안내" });
+    render(<textarea aria-label="편집기" />);
+    await screen.findByRole("treeitem", { name: "a.md" });
+    const targets = [
+      () => screen.getByRole("treeitem", { name: "b.md" }),
+      () => screen.getByRole("treeitem", { name: "notes" }),
+      () => screen.getByRole("tree"),
+      () => screen.getByRole("textbox", { name: "편집기" }),
+    ];
+    for (const mode of ["rename", "create"] as const) {
+      for (const target of targets) {
+        await user.click(screen.getByRole("treeitem", { name: "a.md" }));
+        await user.keyboard(mode === "rename" ? "{F2}" : "{Control>}{Shift>}n{/Shift}{/Control}");
+        await screen.findByRole("textbox", { name: mode === "rename" ? "이름 바꾸기" : "새 폴더 이름" });
+        await user.click(target());
+        await waitFor(() => expect(screen.queryByRole("textbox", { name: mode === "rename" ? "이름 바꾸기" : "새 폴더 이름" })).toBeNull());
+        expect(document.activeElement).toBe(target());
+        const name = target().getAttribute("data-tree-id");
+        if (name === "b.md" || name === "notes") {
+          await user.keyboard("{F2}");
+          expect((await screen.findByRole("textbox", { name: "이름 바꾸기" }) as HTMLInputElement).value).toBe(name);
+          await user.keyboard("{Escape}");
+          expect(document.activeElement).toBe(target());
+          await user.keyboard("{Control>}x{/Control}");
+          expect(target().className).toContain("is-cut");
+          await user.keyboard("{Escape}{Delete}");
+          await screen.findByRole("dialog", { name });
+          await user.keyboard("{Escape}");
+        }
+      }
+    }
+  });
+
   it("reports read and mutation capabilities from the folder root", () => {
     const store = createShellStore(createFakeTransport(makeTestSeed()));
     const writable = createFileFolderBackend({ store, windowId: "viewer-window", permission: "docs", appId: "test", rootPath: "/docs", writable: true, scope: "folder", readOnly: false });

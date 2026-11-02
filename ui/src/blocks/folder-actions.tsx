@@ -8,7 +8,7 @@ import { FileText, FolderOpen } from "../components/icons";
 import { Dialog } from "../components/dialog";
 import { Menu, type MenuEntry } from "../components/menu";
 import { Button, Notice } from "../components/primitives";
-import { TextInput } from "../components/text-input";
+import { TextInput, type TextInputCancelReason } from "../components/text-input";
 import type { FolderBackend, FolderItem } from "./folder-backend";
 import { editorRevision, flushEditors } from "./file-editor-session";
 
@@ -85,7 +85,7 @@ export interface FolderInlineEdit {
 export function FolderInlineRow({ edit, onCommit, onCancel }: {
   edit: FolderInlineEdit;
   onCommit: (name: string) => void;
-  onCancel: () => void;
+  onCancel: (reason?: TextInputCancelReason) => void;
 }) {
   const label = edit.kind === "rename" ? "이름 바꾸기"
     : edit.kind === "directory" ? "새 폴더 이름"
@@ -185,11 +185,11 @@ export function useFolderActions({
 
   const [editFocus, setEditFocus] = useState<{ focus: TreeFocusController; cancelId: string | null } | null>(null);
 
-  const cancelInline = useCallback(() => {
+  const cancelInline = useCallback((reason?: TextInputCancelReason) => {
     const current = editFocus;
     setInlineEdit(null);
     setEditFocus(null);
-    current?.focus.row(current.cancelId);
+    if (reason !== "blur") current?.focus.row(current.cancelId);
   }, [editFocus]);
 
   const operationFailed = useCallback((message: string, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>) => {
