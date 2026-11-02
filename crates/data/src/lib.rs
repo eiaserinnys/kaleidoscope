@@ -16,7 +16,7 @@ use kaleidoscope_contract::{
         SourceStatus,
     },
     validate::{valid_relative_path, valid_request_path},
-    AppDefinition,
+    AppDefinition, StringOrStateRef,
 };
 use serde_json::Value;
 
@@ -85,6 +85,7 @@ pub enum Step {
     },
     SetStorage {
         entry: String,
+        doc: Option<String>,
         value: Value,
     },
     Refresh {
@@ -464,6 +465,17 @@ impl CompiledApp {
                     }),
                     Action::SetStorage(set_storage) => Ok(Step::SetStorage {
                         entry: set_storage.set_storage.entry.clone(),
+                        doc: match &set_storage.set_storage.doc {
+                            Some(StringOrStateRef::String(doc)) => Some(doc.clone()),
+                            Some(StringOrStateRef::State(state)) => Some(
+                                env.state
+                                    .get(&state.state)
+                                    .and_then(Value::as_str)
+                                    .ok_or("set_storage doc 상태는 문자열이어야 합니다")?
+                                    .to_owned(),
+                            ),
+                            None => None,
+                        },
                         value: match &set_storage.set_storage.value {
                             Some(binding) => self.binding(
                                 binding,

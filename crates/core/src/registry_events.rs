@@ -145,12 +145,19 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             );
             crate::conversation_reconcile::storage_changed(inner, &app_id, Some(&entry));
         }
+        DeviceEvent::StorageMoved { app_id, moved } => {
+            emit_storage_update(
+                inner,
+                &app_id,
+                kaleidoscope_contract::app_storage::StorageUpdate::Moved { moved },
+            );
+        }
         DeviceEvent::AppValuesSnapshot {
             app_id,
             bucket_id,
             items,
         } => {
-            let items = raw_value_items(inner, &app_id, items);
+            let items = raw_value_items(inner, &app_id, items, false);
             emit_storage_update(
                 inner,
                 &app_id,
@@ -168,7 +175,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             bucket_id,
             item,
         } => {
-            for item in raw_value_items(inner, &app_id, vec![item]) {
+            for item in raw_value_items(inner, &app_id, vec![item], true) {
                 let entry = item.entry_id.clone();
                 emit_storage_update(
                     inner,
@@ -181,6 +188,23 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                     },
                 );
                 crate::conversation_reconcile::storage_changed(inner, &app_id, Some(&entry));
+            }
+        }
+        DeviceEvent::AppValueMoved {
+            app_id,
+            bucket_id,
+            from_key,
+            to_key,
+            revision,
+        } => {
+            if let Some(moved) =
+                raw_storage_move(inner, &app_id, bucket_id, &from_key, &to_key, revision)
+            {
+                emit_storage_update(
+                    inner,
+                    &app_id,
+                    kaleidoscope_contract::app_storage::StorageUpdate::Moved { moved },
+                );
             }
         }
         DeviceEvent::LayoutSnapshot {
@@ -281,8 +305,9 @@ fn raw_value_items(
     inner: &Inner,
     app_id: &str,
     items: Vec<kaleidoscope_contract::app_storage::AppValueMeta>,
+    include_collections: bool,
 ) -> Vec<kaleidoscope_contract::app_storage::StorageItemMeta> {
-    use kaleidoscope_contract::app_storage::{storage_key_matches, StorageItemMeta};
+    use kaleidoscope_contract::app_storage::{storage_entry_key_matches, StorageItemMeta};
     let state = inner.state.lock().unwrap();
     let Some(app) = state.shared.apps.iter().find(|app| app.id == app_id) else {
         return vec![];
@@ -300,7 +325,8 @@ fn raw_value_items(
             let entry = storage
                 .entries
                 .iter()
-                .find(|entry| storage_key_matches(&entry.key, &item.key))?;
+                .find(|entry| storage_entry_key_matches(entry, &item.key))
+                .filter(|entry| include_collections || !entry.collection)?;
             let exists = item.revision.is_some();
             Some(StorageItemMeta {
                 entry_id: entry.id.clone(),
@@ -311,6 +337,44 @@ fn raw_value_items(
             })
         })
         .collect()
+}
+
+fn raw_storage_move(
+    inner: &Inner,
+    app_id: &str,
+    bucket_id: String,
+    from_key: &str,
+    to_key: &str,
+    revision: String,
+) -> Option<kaleidoscope_contract::app_storage::StorageMoved> {
+    use kaleidoscope_contract::app_storage::collection_key_matches_template;
+    let state = inner.state.lock().unwrap();
+    let app = state.shared.apps.iter().find(|app| app.id == app_id)?;
+    let definition = app_commands::definition_for(&state.shared, app_id, app.current_version)?;
+    let entries = definition.storage?.entries;
+    let entry = entries.iter().find(|entry| {
+        entry.collection
+            && collection_key_matches_template(&entry.key, from_key)
+            && collection_key_matches_template(&entry.key, to_key)
+    })?;
+    let prefix_segments = entry.key.split('/').count();
+    let from_doc = from_key
+        .split('/')
+        .skip(prefix_segments)
+        .collect::<Vec<_>>()
+        .join("/");
+    let to_doc = to_key
+        .split('/')
+        .skip(prefix_segments)
+        .collect::<Vec<_>>()
+        .join("/");
+    Some(kaleidoscope_contract::app_storage::StorageMoved {
+        bucket_id,
+        entry_id: entry.id.clone(),
+        from_doc,
+        to_doc,
+        revision,
+    })
 }
 
 fn emit_storage_update(

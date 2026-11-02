@@ -695,13 +695,17 @@ fn validate_exprs(definition: &AppDefinition, details: &mut Vec<String>) {
             }
         }
         for entry in data::storage_refs(expr) {
-            if definition
+            let storage_entry = definition
                 .storage
                 .as_ref()
-                .is_none_or(|storage| !storage.entries.iter().any(|item| item.id == entry))
-            {
+                .and_then(|storage| storage.entries.iter().find(|item| item.id == entry));
+            if storage_entry.is_none() {
                 details.push(format!(
                     "{pointer}: 식이 없는 저장 항목을 읽습니다: $storage.{entry}"
+                ));
+            } else if storage_entry.is_some_and(|item| item.collection) {
+                details.push(format!(
+                    "{pointer}: 문서 모음은 $storage 식에 포함되지 않습니다: $storage.{entry}"
                 ));
             }
         }
@@ -873,9 +877,30 @@ fn validate_actions(
                             details.push(format!("{at}: set_storage가 사용하는 storage 모듈을 requires.modules에 선언해야 합니다"));
                         }
                         let spec = &set_storage.set_storage;
-                        match definition.storage.as_ref().and_then(|storage| {
+                        let storage_entry = definition.storage.as_ref().and_then(|storage| {
                             storage.entries.iter().find(|entry| entry.id == spec.entry)
-                        }) {
+                        });
+                        match storage_entry {
+                            Some(entry) if entry.collection => match &spec.doc {
+                                None => details.push(format!(
+                                    "{at}: 문서 모음에 쓰려면 doc이 필요합니다: {}",
+                                    spec.entry
+                                )),
+                                Some(crate::StringOrStateRef::String(doc)) => {
+                                    if !crate::app_storage::valid_collection_doc(doc) {
+                                        details.push(format!(
+                                            "{at}: set_storage의 doc 경로가 올바르지 않습니다"
+                                        ));
+                                    }
+                                }
+                                Some(crate::StringOrStateRef::State(state)) => {
+                                    validate_state_key(&state.state, definition, details, &at);
+                                }
+                            },
+                            Some(_) if spec.doc.is_some() => details.push(format!(
+                                "{at}: 고정 저장 항목에는 doc을 쓸 수 없습니다: {}",
+                                spec.entry
+                            )),
                             Some(_) => {}
                             None => details
                                 .push(format!("{at}: 없는 저장 항목에 씁니다: {}", spec.entry)),
@@ -1384,7 +1409,9 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                         .find(|entry| entry.id == document.entry)
                 });
                 match entry {
-                    Some(entry) if entry.kind == StorageKind::Json => {}
+                    Some(entry) if entry.kind == StorageKind::Json => {
+                        validate_document_ref(document, entry, definition, details, at);
+                    }
                     Some(_) => details.push(format!(
                         "{at}: html_view는 json 저장소 항목만 읽을 수 있습니다: {}",
                         document.entry
@@ -1747,7 +1774,9 @@ fn validate_markdown_binding(
                     .find(|entry| entry.id == document.entry)
             });
             match entry {
-                Some(entry) if entry.kind == StorageKind::Md => {}
+                Some(entry) if entry.kind == StorageKind::Md => {
+                    validate_document_ref(document, entry, definition, details, at);
+                }
                 Some(_) => details.push(format!(
                     "{at}: document는 md 저장 항목이어야 합니다: {}",
                     document.entry
@@ -1761,6 +1790,34 @@ fn validate_markdown_binding(
         }
         (Some(_), Some(_)) => details.push(format!("{at}: file과 document를 함께 쓸 수 없습니다")),
         (None, None) => details.push(format!("{at}: file과 document 가운데 하나가 필요합니다")),
+    }
+}
+
+fn validate_document_ref(
+    document: &crate::DocumentRef,
+    entry: &crate::app_storage::StorageEntryDecl,
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+    at: &str,
+) {
+    match (entry.collection, &document.doc) {
+        (true, None) => details.push(format!(
+            "{at}: document 모음에는 doc이 필요합니다: {}",
+            document.entry
+        )),
+        (false, Some(_)) => details.push(format!(
+            "{at}: 고정 document에는 doc을 쓸 수 없습니다: {}",
+            document.entry
+        )),
+        (true, Some(crate::StringOrStateRef::String(doc))) => {
+            if !crate::app_storage::valid_collection_doc(doc) {
+                details.push(format!("{at}: document의 doc 경로가 올바르지 않습니다"));
+            }
+        }
+        (true, Some(crate::StringOrStateRef::State(state))) => {
+            validate_state_key(&state.state, definition, details, at);
+        }
+        (false, None) => {}
     }
 }
 

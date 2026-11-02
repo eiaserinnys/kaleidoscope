@@ -1,6 +1,6 @@
 //! 기본 앱이 정의와 기본값을 기기에 둔 채 사용하는 원시 값 저장소.
 use super::*;
-use axum::extract::{Extension, Path, State};
+use axum::extract::{Extension, Path, Query, State};
 use kaleidoscope_contract::app_storage::{
     self as contract, AppValueList, AppValueMeta, AppValueRead, AppValueWrite, StorageKind,
 };
@@ -38,6 +38,28 @@ fn conflict(revision: Option<&str>) -> CoreError {
 }
 
 impl AppState {
+    pub(super) fn list_app_value_collection(
+        &self,
+        account: &str,
+        app_id: &str,
+        prefix: &str,
+        workspace: Option<&str>,
+    ) -> Result<contract::CollectionListReply, CoreError> {
+        let (entry, resolved) = self.builtin_collection_prefix(app_id, prefix, workspace)?;
+        let db = self.lock_db()?;
+        let mut tx = db.unchecked_transaction().map_err(db_error)?;
+        super::app_storage::check_workspace_owner(&tx, account, workspace)?;
+        let result = super::collection_storage::list(
+            &tx,
+            &super::app_storage::bucket_id(account, app_id),
+            &resolved,
+            &entry.id,
+            entry.kind,
+        )?;
+        tx.set_drop_behavior(rusqlite::DropBehavior::Rollback);
+        Ok(result)
+    }
+
     pub(super) fn delete_workspace_values(
         tx: &Transaction<'_>,
         account: &str,
@@ -123,13 +145,53 @@ impl AppState {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn read_app_value(
         &self,
         account: &str,
         app_id: &str,
         key: &str,
     ) -> Result<AppValueRead, CoreError> {
+        self.read_app_value_with_workspace(account, app_id, key, None)
+    }
+
+    pub(super) fn read_app_value_with_workspace(
+        &self,
+        account: &str,
+        app_id: &str,
+        key: &str,
+        workspace: Option<&str>,
+    ) -> Result<AppValueRead, CoreError> {
         validate(app_id, key)?;
+        if let Ok((entry, prefix, doc)) = self.builtin_collection_for_key(app_id, key, workspace) {
+            let db = self.lock_db()?;
+            let mut tx = db.unchecked_transaction().map_err(db_error)?;
+            super::app_storage::check_workspace_owner(&tx, account, workspace)?;
+            let bucket_id = super::app_storage::bucket_id(account, app_id);
+            let value =
+                match super::collection_storage::read(&tx, &bucket_id, &prefix, &doc, &entry) {
+                    Ok(value) => value,
+                    Err(error) if error.code == ErrorCode::NotFound => {
+                        tx.set_drop_behavior(rusqlite::DropBehavior::Rollback);
+                        return Ok(AppValueRead {
+                            bucket_id,
+                            exists: false,
+                            kind: None,
+                            content: None,
+                            revision: None,
+                        });
+                    }
+                    Err(error) => return Err(error),
+                };
+            tx.set_drop_behavior(rusqlite::DropBehavior::Rollback);
+            return Ok(AppValueRead {
+                bucket_id,
+                exists: value.exists,
+                kind: Some(value.kind),
+                content: Some(value.content),
+                revision: value.revision,
+            });
+        }
         let db = self.lock_db()?;
         let bucket_id = super::app_storage::bucket_id(account, app_id);
         let item = super::app_storage::load_item(&db, &bucket_id, key)?;
@@ -163,6 +225,16 @@ impl AppState {
     ) -> Result<String, CoreError> {
         validate(app_id, key)?;
         content_size(kind, &content)?;
+        if let Ok((entry, prefix, doc)) = self.builtin_collection_for_key(app_id, key, workspace) {
+            if kind != entry.kind {
+                return Err(CoreError::new(ErrorCode::InvalidRequest));
+            }
+            let (reply, account, update) = super::collection_storage::write(
+                self, account, app_id, &entry, &prefix, &doc, workspace, content, expected,
+            )?;
+            super::app_storage_http::send_storage_update(self, app_id, &account, update);
+            return Ok(reply.revision);
+        }
         let (entry, resolved) = self.builtin_entry(app_id, key, workspace)?;
         if resolved != key || kind != entry.kind {
             return Err(CoreError::new(ErrorCode::InvalidRequest));
@@ -226,7 +298,18 @@ impl AppState {
         Ok(revision)
     }
 
+    #[cfg(test)]
     pub(super) fn reset_app_value(
+        &self,
+        account: &str,
+        app_id: &str,
+        key: &str,
+        expected: Option<String>,
+    ) -> Result<(), CoreError> {
+        self.reset_app_value_with_workspace(account, app_id, key, expected, None)
+    }
+
+    pub(super) fn reset_app_value_with_workspace(
         &self,
         account: &str,
         app_id: &str,
@@ -235,6 +318,13 @@ impl AppState {
         workspace: Option<&str>,
     ) -> Result<(), CoreError> {
         validate(app_id, key)?;
+        if let Ok((entry, prefix, doc)) = self.builtin_collection_for_key(app_id, key, workspace) {
+            let (_, account, update) = super::collection_storage::reset(
+                self, account, app_id, &entry, &prefix, &doc, workspace, expected,
+            )?;
+            super::app_storage_http::send_storage_update(self, app_id, &account, update);
+            return Ok(());
+        }
         let (entry, resolved) = self.builtin_entry(app_id, key, workspace)?;
         if resolved != key {
             return Err(CoreError::new(ErrorCode::InvalidRequest));
@@ -292,6 +382,41 @@ impl AppState {
     }
 }
 
+pub(super) fn move_collection(
+    state: &AppState,
+    account: &str,
+    app_id: &str,
+    request: contract::AppValueMoveRequest,
+    workspace: Option<&str>,
+) -> Result<contract::CollectionMoveReply, CoreError> {
+    if request.operation != "move" {
+        return Err(CoreError::new(ErrorCode::InvalidRequest));
+    }
+    validate(app_id, &request.from_key)?;
+    validate(app_id, &request.to_key)?;
+    let (entry, prefix, from_doc) =
+        state.builtin_collection_for_key(app_id, &request.from_key, workspace)?;
+    let (target_entry, target_prefix, to_doc) =
+        state.builtin_collection_for_key(app_id, &request.to_key, workspace)?;
+    if entry.id != target_entry.id || prefix != target_prefix {
+        return Err(CoreError::new(ErrorCode::InvalidRequest));
+    }
+    let request = contract::CollectionMove {
+        from: from_doc,
+        to: to_doc,
+        expected_revision: request.expected_revision,
+    };
+    let (reply, account, update) = super::collection_storage::move_document(
+        state, account, app_id, &entry, &prefix, &request, workspace,
+    )?;
+    let from_key = format!("{prefix}/{}", request.from);
+    let to_key = format!("{prefix}/{}", request.to);
+    super::app_storage_http::send_raw_storage_move(
+        state, app_id, &account, update, from_key, to_key,
+    );
+    Ok(reply)
+}
+
 fn response_error(error: CoreError) -> Response {
     if error.code == ErrorCode::Conflict {
         let current_revision = error
@@ -319,12 +444,55 @@ pub(super) async fn list(
     State(state): State<AppState>,
     Extension(device): Extension<(String, String)>,
     Path(app_id): Path<String>,
+    Query(query): Query<AppValueListQuery>,
 ) -> Response {
-    match state
-        .device_account_id(&device.0)
-        .and_then(|account| state.list_app_values(&account, &app_id))
-    {
+    match state.device_account_id(&device.0).and_then(|account| {
+        if let Some(prefix) = query.prefix.as_deref() {
+            state
+                .list_app_value_collection(&account, &app_id, prefix, query.workspace_id.as_deref())
+                .map(|items| {
+                    serde_json::to_value(items).map_err(|_| CoreError::new(ErrorCode::Server))
+                })
+                .and_then(|value| value)
+        } else {
+            state.list_app_values(&account, &app_id).and_then(|items| {
+                serde_json::to_value(items).map_err(|_| CoreError::new(ErrorCode::Server))
+            })
+        }
+    }) {
         Ok(items) => Json(items).into_response(),
+        Err(error) => response_error(error),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct AppValueListQuery {
+    prefix: Option<String>,
+    workspace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct AppValueMoveQuery {
+    workspace_id: Option<String>,
+}
+
+pub(super) async fn move_collection_http(
+    State(state): State<AppState>,
+    Extension(device): Extension<(String, String)>,
+    Path(app_id): Path<String>,
+    Query(query): Query<AppValueMoveQuery>,
+    Json(request): Json<contract::AppValueMoveRequest>,
+) -> Response {
+    match state.device_account_id(&device.0).and_then(|account| {
+        move_collection(
+            &state,
+            &account,
+            &app_id,
+            request,
+            query.workspace_id.as_deref(),
+        )
+    }) {
+        Ok(reply) => Json(reply).into_response(),
         Err(error) => response_error(error),
     }
 }
@@ -332,11 +500,11 @@ pub(super) async fn read(
     State(state): State<AppState>,
     Extension(device): Extension<(String, String)>,
     Path((app_id, key)): Path<(String, String)>,
+    Query(query): Query<AppValueMoveQuery>,
 ) -> Response {
-    match state
-        .device_account_id(&device.0)
-        .and_then(|account| state.read_app_value(&account, &app_id, &key))
-    {
+    match state.device_account_id(&device.0).and_then(|account| {
+        state.read_app_value_with_workspace(&account, &app_id, &key, query.workspace_id.as_deref())
+    }) {
         Ok(value) => Json(value).into_response(),
         Err(error) => response_error(error),
     }
@@ -366,10 +534,17 @@ pub(super) async fn reset(
     State(state): State<AppState>,
     Extension(device): Extension<(String, String)>,
     Path((app_id, key)): Path<(String, String)>,
+    Query(query): Query<AppValueMoveQuery>,
     Json(request): Json<contract::StorageResetRequest>,
 ) -> Response {
     match state.device_account_id(&device.0).and_then(|account| {
-        state.reset_app_value(&account, &app_id, &key, request.expected_revision.0, None)
+        state.reset_app_value_with_workspace(
+            &account,
+            &app_id,
+            &key,
+            request.expected_revision.0,
+            query.workspace_id.as_deref(),
+        )
     }) {
         Ok(()) => Json(contract::StorageResetReply { revision: None }).into_response(),
         Err(error) => response_error(error),

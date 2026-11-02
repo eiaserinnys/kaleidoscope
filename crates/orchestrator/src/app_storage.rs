@@ -37,6 +37,145 @@ fn declared_entry<'a>(
         .ok_or_else(|| CoreError::new(ErrorCode::InvalidRequest))
 }
 
+impl AppState {
+    pub(super) fn list_app_storage_collection(
+        &self,
+        account_id: &str,
+        app_id: &str,
+        entry_id: &str,
+        workspace_id: Option<&str>,
+    ) -> Result<contract::CollectionListReply, CoreError> {
+        let db = self.lock_db()?;
+        let definition =
+            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let entry = declared_entry(&definition, entry_id)?;
+        if !entry.collection {
+            return Err(CoreError::new(ErrorCode::InvalidRequest));
+        }
+        let prefix = resolve_key(entry, workspace_id)?;
+        let mut tx = db.unchecked_transaction().map_err(db_error)?;
+        check_workspace_owner(&tx, account_id, workspace_id)?;
+        let bucket = bucket_id(account_id, app_id);
+        let result = super::collection_storage::list(&tx, &bucket, &prefix, entry_id, entry.kind)?;
+        tx.set_drop_behavior(rusqlite::DropBehavior::Rollback);
+        Ok(result)
+    }
+
+    pub(super) fn read_app_storage_document(
+        &self,
+        account_id: &str,
+        app_id: &str,
+        entry_id: &str,
+        doc: &str,
+        workspace_id: Option<&str>,
+    ) -> Result<contract::StorageReadReply, CoreError> {
+        let db = self.lock_db()?;
+        let definition =
+            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let entry = declared_entry(&definition, entry_id)?;
+        if !entry.collection {
+            return Err(CoreError::new(ErrorCode::InvalidRequest));
+        }
+        let prefix = resolve_key(entry, workspace_id)?;
+        let mut tx = db.unchecked_transaction().map_err(db_error)?;
+        check_workspace_owner(&tx, account_id, workspace_id)?;
+        let bucket = bucket_id(account_id, app_id);
+        let result = super::collection_storage::read(&tx, &bucket, &prefix, doc, entry)?;
+        tx.set_drop_behavior(rusqlite::DropBehavior::Rollback);
+        Ok(result)
+    }
+
+    pub(super) fn write_app_storage_document(
+        &self,
+        account_id: &str,
+        app_id: &str,
+        entry_id: &str,
+        doc: &str,
+        workspace_id: Option<&str>,
+        content: Value,
+        expected_revision: Option<String>,
+    ) -> Result<(contract::StorageWriteReply, String, StorageUpdate), CoreError> {
+        let db = self.lock_db()?;
+        let definition =
+            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let entry = declared_entry(&definition, entry_id)?.clone();
+        if !entry.collection {
+            return Err(CoreError::new(ErrorCode::InvalidRequest));
+        }
+        let prefix = resolve_key(&entry, workspace_id)?;
+        drop(db);
+        super::collection_storage::write(
+            self,
+            account_id,
+            app_id,
+            &entry,
+            &prefix,
+            doc,
+            workspace_id,
+            content,
+            expected_revision,
+        )
+    }
+
+    pub(super) fn reset_app_storage_document(
+        &self,
+        account_id: &str,
+        app_id: &str,
+        entry_id: &str,
+        doc: &str,
+        workspace_id: Option<&str>,
+        expected_revision: Option<String>,
+    ) -> Result<(contract::StorageResetReply, String, StorageUpdate), CoreError> {
+        let db = self.lock_db()?;
+        let definition =
+            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let entry = declared_entry(&definition, entry_id)?.clone();
+        if !entry.collection {
+            return Err(CoreError::new(ErrorCode::InvalidRequest));
+        }
+        let prefix = resolve_key(&entry, workspace_id)?;
+        drop(db);
+        super::collection_storage::reset(
+            self,
+            account_id,
+            app_id,
+            &entry,
+            &prefix,
+            doc,
+            workspace_id,
+            expected_revision,
+        )
+    }
+
+    pub(super) fn move_app_storage_document(
+        &self,
+        account_id: &str,
+        app_id: &str,
+        entry_id: &str,
+        request: &contract::CollectionMove,
+        workspace_id: Option<&str>,
+    ) -> Result<(contract::CollectionMoveReply, String, StorageUpdate), CoreError> {
+        let db = self.lock_db()?;
+        let definition =
+            current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
+        let entry = declared_entry(&definition, entry_id)?.clone();
+        if !entry.collection {
+            return Err(CoreError::new(ErrorCode::InvalidRequest));
+        }
+        let prefix = resolve_key(&entry, workspace_id)?;
+        drop(db);
+        super::collection_storage::move_document(
+            self,
+            account_id,
+            app_id,
+            &entry,
+            &prefix,
+            request,
+            workspace_id,
+        )
+    }
+}
+
 pub(super) fn resolve_key(
     entry: &contract::StorageEntryDecl,
     workspace_id: Option<&str>,
@@ -146,7 +285,7 @@ pub(super) fn validate_storage_publish(
         let entry_id = previous_storage
             .entries
             .iter()
-            .find(|entry| contract::storage_key_matches(&entry.key, &key))
+            .find(|entry| contract::storage_entry_key_matches(entry, &key))
             .map(|entry| entry.id.clone())
             .unwrap_or_else(|| "unknown".into());
         stored.push(contract::StoredStorageEntry {
@@ -201,6 +340,9 @@ impl AppState {
         let id = bucket_id(account_id, app_id);
         let mut items = Vec::new();
         for entry in &entries.entries {
+            if entry.collection {
+                continue;
+            }
             if entry.key.contains("{workspace_id}") && workspace_id.is_none() {
                 continue;
             }
@@ -240,6 +382,9 @@ impl AppState {
         let definition =
             current_definition(&db, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
         let entry = declared_entry(&definition, entry_id)?;
+        if entry.collection {
+            return Err(CoreError::new(ErrorCode::InvalidRequest));
+        }
         let key = resolve_key(entry, workspace_id)?;
         let mut tx = db.unchecked_transaction().map_err(db_error)?;
         check_workspace_owner(&tx, account_id, workspace_id)?;
@@ -297,6 +442,9 @@ impl AppState {
         let definition =
             current_definition(&tx, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
         let entry = declared_entry(&definition, entry_id)?.clone();
+        if entry.collection {
+            return Err(CoreError::new(ErrorCode::InvalidRequest));
+        }
         let key = resolve_key(&entry, workspace_id)?;
         check_workspace_owner(&tx, account_id, workspace_id)?;
         contract::validate_storage_content(&entry, &content)
@@ -370,6 +518,9 @@ impl AppState {
         let definition =
             current_definition(&tx, app_id)?.ok_or_else(|| CoreError::new(ErrorCode::NotFound))?;
         let entry = declared_entry(&definition, entry_id)?.clone();
+        if entry.collection {
+            return Err(CoreError::new(ErrorCode::InvalidRequest));
+        }
         let key = resolve_key(&entry, workspace_id)?;
         check_workspace_owner(&tx, account_id, workspace_id)?;
         let id = bucket_id(account_id, app_id);
@@ -500,9 +651,16 @@ impl AppState {
                 .map_err(|error| server_error(&format!("앱 정의를 읽을 수 없습니다: {error}")))?;
             let Some(entry) = definition.storage.as_ref().and_then(|storage| {
                 storage.entries.iter().find(|entry| {
-                    entry.key.contains("{workspace_id}")
-                        && contract::storage_key_matches(&entry.key, &key)
-                        && entry.key.replace("{workspace_id}", workspace_id) == key
+                    if !entry.key.contains("{workspace_id}") {
+                        return false;
+                    }
+                    let resolved = entry.key.replace("{workspace_id}", workspace_id);
+                    if entry.collection {
+                        key.strip_prefix(&format!("{resolved}/"))
+                            .is_some_and(contract::valid_collection_doc)
+                    } else {
+                        resolved == key && contract::storage_key_matches(&entry.key, &key)
+                    }
                 })
             }) else {
                 continue;
@@ -547,9 +705,31 @@ impl AppState {
                 .ok()
                 .is_some_and(|devices| devices.contains(device_id));
         }
+        if matches!(
+            event,
+            DeviceEvent::StorageMoved { .. } | DeviceEvent::AppValueMoved { .. }
+        ) && !self
+            .0
+            .collection_devices
+            .lock()
+            .ok()
+            .is_some_and(|devices| devices.contains(device_id))
+        {
+            return false;
+        }
+        if matches!(event, DeviceEvent::AppValueMoved { .. }) {
+            return self
+                .0
+                .app_value_devices
+                .lock()
+                .ok()
+                .is_some_and(|devices| devices.contains(device_id));
+        }
         !matches!(
             event,
-            DeviceEvent::StorageSnapshot { .. } | DeviceEvent::StorageChanged { .. }
+            DeviceEvent::StorageSnapshot { .. }
+                | DeviceEvent::StorageChanged { .. }
+                | DeviceEvent::StorageMoved { .. }
         ) || self
             .0
             .storage_devices

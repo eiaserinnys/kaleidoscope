@@ -43,6 +43,12 @@
 //! | `GET /api/device/app-storage/{app_id}/items/{entry_id}?workspace_id=...` | 같음 | 없음 | 200 [`crate::app_storage::StorageReadReply`] | 400 선언되지 않은 항목이나 workspace, 401, 404 |
 //! | `PUT /api/device/app-storage/{app_id}/items/{entry_id}?workspace_id=...` | 같음 | [`crate::app_storage::StorageWriteRequest`] | 200 [`crate::app_storage::StorageWriteReply`] | 400 값 검사, 401, 404, 409 현재 revision, 413 |
 //! | `DELETE /api/device/app-storage/{app_id}/items/{entry_id}?workspace_id=...` | 같음 | [`crate::app_storage::StorageResetRequest`] | 200 [`crate::app_storage::StorageResetReply`] | 400 형식, 401, 404, 409 현재 revision |
+//! | `GET /api/device/app-storage/{app_id}/collections/{entry_id}?workspace_id=...` | 같음 | 없음 | 200 [`crate::app_storage::CollectionListReply`] | 400 선언된 모음이나 workspace가 아님, 401, 404 |
+//! | `GET`/`PUT`/`DELETE /api/device/app-storage/{app_id}/collections/{entry_id}/document?workspace_id=...&doc=...` | 같음 | 쓰기와 삭제는 기존 저장 요청 | 200 읽기/쓰기/삭제 응답 | 400 형식, 401, 404, 409 현재 revision |
+//! | `POST /api/device/app-storage/{app_id}/collections/{entry_id}/move?workspace_id=...` | 같음 | [`crate::app_storage::CollectionMove`] | 200 [`crate::app_storage::CollectionMoveReply`] | 400 형식, 401, 404, 409 revision 또는 대상 충돌 |
+//! | `GET /api/device/app-values/{app_id}?prefix=...&workspace_id=...` | 같음 | 없음 | 200 [`crate::app_storage::CollectionListReply`] | 400 선언된 기본 앱 모음이 아님, 401, 404 |
+//! | `GET`/`PUT`/`DELETE /api/device/app-values/{app_id}/{key}` | 같음 | 쓰기와 삭제는 기존 저장 요청 | 200 읽기/쓰기/삭제 응답 | 400 형식, 401, 404, 409 현재 revision |
+//! | `POST /api/device/app-values/{app_id}` | 같음 | [`crate::app_storage::AppValueMoveRequest`] | 200 [`crate::app_storage::CollectionMoveReply`] | 400 형식, 401, 404, 409 revision 또는 대상 충돌 |
 //! | `PUT /api/device/shares/{window_id}` | 같음 | [`ShareUpload`] | 200 `{}` | 400 글이 너무 김이나 형식, 401 |
 //! | `DELETE /api/device/shares/{window_id}` | 같음 | 없음 | 200 `{}`(없어도) | 401 |
 //! | `POST /api/device/connections/{name}/request` | 같음 | [`ConnectionRequest`] | 200 [`ConnectionReply`] | 400 경로나 메서드, 401, 403 앱이 선언하지 않음이나 쓰기 불가, 404 없는 연결, 413 너무 큼, 502 원천에 닿지 못함, 504 시간 초과 |
@@ -246,7 +252,7 @@
 //!   토큰이 만료됐거나 원천이 401이면 리프레시 토큰이 있을 때 한 번 바꿔 보고, 안 되면 로그인 정보의 토큰을 지우고
 //!   그 원천을 `login_required`로 둔다.
 //!
-//! # 앱 저장소 (8판, 모듈 `storage` 1판)
+//! # 앱 저장소와 문서 모음 (11판, 모듈 `storage` 3판)
 //! 앱 정의의 [`crate::app_storage::StorageDecl`]이 저장할 항목, kind, 기본값, 스키마를 선언한다. 저장 칸은 계정 × 앱이며
 //! 워크스페이스 전용 키에는 `{workspace_id}`를 쓴다. 계정 id는 API 인자나 저장 본문에 없다. 서버는 기기 요청에서
 //! 기기 토큰의 계정을, MCP 요청에서 MCP principal의 계정을 해석한다.
@@ -259,10 +265,16 @@
 //!   충돌은 409와 [`crate::app_storage::StorageConflict::current_revision`]이다.
 //! - 기본값으로 되돌리기: 같은 항목 경로의 `DELETE`, 본문은 [`crate::app_storage::StorageResetRequest`].
 //!   revision 비교를 통과하면 저장 행을 지우고 기본값으로 돌아가며, 응답은 [`crate::app_storage::StorageResetReply`]다.
+//! - 문서 모음: `collection: true`인 항목은 `kind: md`, `presentation: hidden`, 빈 문자열 기본값을 쓰며 schema,
+//!   choices, agent_context는 없다. 선언 `key`가 prefix이고, 그 아래 상대 경로마다 본문과 revision이 있는 문서 행 하나를 둔다.
+//!   모음 목록은 본문 없이 경로, revision, 수정 시각, UTF-8 크기를 돌려준다. 문서 읽기/쓰기/삭제는 위 `document` 경로에서
+//!   `doc` 쿼리로 지정하며, 이름 변경은 한 트랜잭션에서 키만 옮겨 본문과 revision을 유지한다. 대상 키가 있으면 409다.
+//!   기본 앱은 같은 동작을 원시 `app-values` 경로로 제공한다. 내장 서버와 원격 서버는 같은 DB 계약을 쓴다.
 //! - 저장 항목 변경은 `storage.changed`에 metadata만 담고 본문은 싣지 않는다. 연결 직후 `storage.snapshot`은
 //!   현재 계정 × 앱 칸의 항목 metadata를 보낸다. 기기에서 쓰는 코어는 `storage.update`로 화면에 전달한다.
 //!   서버는 이벤트 스트림의 지원 범위에 `storage: 1`을 보낸 기기에만 두 이벤트를 보낸다. 저장소 모듈을 모르는
 //!   옛 쉘에는 새 이벤트 variant를 보내지 않는다.
+//!   이름 변경은 `storage.moved` 또는 기본 앱의 `app_value.moved` metadata 이벤트로 보내며 본문은 싣지 않는다.
 //! - 앱을 새 버전으로 올릴 때 저장값이 있는 선언의 `id`, key, kind가 바뀌거나 기존 값이 새 schema를 통과하지 못하면
 //!   올리기를 거부한다. revision은 md 원문 UTF-8 바이트 또는 키를 정렬한 JSON 직렬화 바이트의 SHA-256이다.
 //!
@@ -290,12 +302,14 @@ pub const REGISTRY_HEADER: &str = "x-kaleidoscope-registry";
 /// 기기 토큰을 쓴 MCP 호출의 작업 기본값.
 pub const WORKSPACE_HEADER: &str = "x-kaleidoscope-workspace";
 /// 이 빌드가 아는 레지스트리 판.
-pub const REGISTRY_VERSION: u32 = 10;
+pub const REGISTRY_VERSION: u32 = 11;
 pub const APP_VALUES_REGISTRY_VERSION: u32 = 10;
 /// 배치를 동기화하는 레지스트리 판. 서버는 [`REGISTRY_HEADER`]가 이 값 이상인 연결과 배치를 맞춘다.
 pub const LAYOUT_SYNC_REGISTRY_VERSION: u32 = 6;
 /// 앱 저장소 동기화를 받을 수 있는 최소 레지스트리 판.
 pub const STORAGE_REGISTRY_VERSION: u32 = 8;
+/// 문서 모음과 이동 이벤트를 지원하는 레지스트리 판.
+pub const COLLECTION_REGISTRY_VERSION: u32 = 11;
 
 /// 서버가 보내는 주석 줄 간격.
 pub const PING_INTERVAL_SECS: u64 = 15;
@@ -594,6 +608,19 @@ pub enum DeviceEvent {
         app_id: String,
         bucket_id: String,
         item: crate::app_storage::AppValueMeta,
+    },
+    #[serde(rename = "storage.moved")]
+    StorageMoved {
+        app_id: String,
+        moved: crate::app_storage::StorageMoved,
+    },
+    #[serde(rename = "app_value.moved")]
+    AppValueMoved {
+        app_id: String,
+        bucket_id: String,
+        from_key: String,
+        to_key: String,
+        revision: String,
     },
     /// 서버 정본의 워크스페이스, 데스크톱, 창 전체. 동기화하는 연결에만 스냅샷들 바로 뒤에 한 번 보낸다(6판).
     #[serde(rename = "layout.snapshot")]

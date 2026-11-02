@@ -39,7 +39,10 @@ pub fn router(state: AppState) -> Router {
             post(super::worker_http::device_invoke),
         )
         .route("/assets/{id}/{version}", get(super::assets::device_get))
-        .route("/app-values/{app_id}", get(super::app_values::list))
+        .route(
+            "/app-values/{app_id}",
+            get(super::app_values::list).post(super::app_values::move_collection_http),
+        )
         .route(
             "/app-values/{app_id}/{*key}",
             get(super::app_values::read)
@@ -61,6 +64,23 @@ pub fn router(state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(
                     kaleidoscope_contract::app_storage::STORAGE_COMMAND_BODY_MAX_BYTES,
                 )),
+        )
+        .route(
+            "/app-storage/{app_id}/collections/{entry_id}",
+            get(super::app_storage_http::device_collection_list),
+        )
+        .route(
+            "/app-storage/{app_id}/collections/{entry_id}/document",
+            get(super::app_storage_http::device_collection_read)
+                .put(super::app_storage_http::device_collection_write)
+                .delete(super::app_storage_http::device_collection_reset)
+                .layer(DefaultBodyLimit::max(
+                    kaleidoscope_contract::app_storage::STORAGE_COMMAND_BODY_MAX_BYTES,
+                )),
+        )
+        .route(
+            "/app-storage/{app_id}/collections/{entry_id}/move",
+            post(super::app_storage_http::device_collection_move),
         )
         .route("/events", get(device_events))
         .route("/layout", axum::routing::put(super::layouts::put_layout))

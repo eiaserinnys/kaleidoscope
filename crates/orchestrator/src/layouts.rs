@@ -370,8 +370,20 @@ impl AppState {
                     let entry = definition.storage?.entries.into_iter().find(|entry| {
                         kaleidoscope_contract::app_storage::storage_key_matches(
                             &entry.key, &item.key,
+                        ) || kaleidoscope_contract::app_storage::storage_entry_key_matches(
+                            entry, &item.key,
                         )
                     })?;
+                    if entry.collection
+                        && !self
+                            .0
+                            .collection_devices
+                            .lock()
+                            .ok()
+                            .is_some_and(|devices| devices.contains(device_id))
+                    {
+                        return None;
+                    }
                     DeviceEvent::StorageChanged {
                         app_id,
                         changed: kaleidoscope_contract::app_storage::StorageChanged {

@@ -54,6 +54,42 @@ fn worker_action_evaluates_arguments_in_event_context() {
         }
     );
 }
+
+#[test]
+fn set_storage_resolves_collection_doc_from_window_state() {
+    let mut definition = serde_json::to_value(fixture()).unwrap();
+    definition["requires"]["modules"]["storage"] = json!(3);
+    definition["storage"] = json!({"entries":[{
+        "id":"docs", "key":"documents", "kind":"md", "collection":true,
+        "default":"", "label":"문서", "presentation":"hidden"
+    }]});
+    definition["ui"]["children"][0]["on_select"] = json!([{
+        "set_storage":{"entry":"docs","doc":{"state":"selected"},"value":{"expr":"$event"}}
+    }]);
+    let app = CompiledApp::compile(&serde_json::from_value(definition).unwrap());
+    let state = map(json!({"path":null,"selected":"draft.md"}));
+    let empty = BTreeMap::new();
+    let event = json!("문서 본문");
+    let item = Value::Null;
+    let env = Env {
+        state: &state,
+        data: &empty,
+        data_meta: &empty,
+        storage: &empty,
+        storage_meta: &empty,
+        event: &event,
+        item: &item,
+    };
+    assert_eq!(
+        app.action_step("/ui/children/0/on_select", 0, &env)
+            .unwrap(),
+        Step::SetStorage {
+            entry: "docs".into(),
+            doc: Some("draft.md".into()),
+            value: event,
+        }
+    );
+}
 fn map(value: Value) -> BTreeMap<String, Value> {
     serde_json::from_value(value).unwrap()
 }
@@ -294,6 +330,7 @@ fn storage_values_flow_through_expressions_source_plans_and_actions() {
             .unwrap(),
         Step::SetStorage {
             entry: "selection".into(),
+            doc: None,
             value: json!("model-sol")
         }
     );

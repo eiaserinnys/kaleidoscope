@@ -23,6 +23,19 @@ fn definition() -> String {
     serde_json::to_string(&value).unwrap()
 }
 
+fn definition_with_collection() -> String {
+    let mut value: Value = serde_json::from_str(&definition()).unwrap();
+    value["requires"]["modules"]["storage"] = json!(3);
+    value["storage"]["entries"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+            "id":"docs", "key":"documents", "kind":"md", "collection":true,
+            "default":"", "label":"문서", "presentation":"hidden"
+        }));
+    serde_json::to_string(&value).unwrap()
+}
+
 fn add_device(state: &AppState, id: &str, account_id: &str, token: &str) {
     state.lock_db().unwrap().execute(
         "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,?1,?2,?3,'now')",
@@ -244,6 +257,179 @@ async fn device_storage_http_reads_defaults_cas_writes_and_resets() {
     assert_eq!(after_reset["content"], "default");
 }
 
+#[tokio::test]
+async fn collection_http_lists_reads_writes_moves_and_resets_document_rows() {
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    add_device(&state, "device-a", &account, "token-a");
+    add_device(&state, "device-b", &account, "token-b");
+    state
+        .publish_app(&definition_with_collection(), "test", false, None)
+        .unwrap();
+    let supported = Supported::current();
+    let _stream_a = state
+        .stream_with_registry(
+            "device-a".into(),
+            Some(supported.clone()),
+            registry::COLLECTION_REGISTRY_VERSION,
+        )
+        .unwrap();
+    let _stream_b = state
+        .stream_with_registry(
+            "device-b".into(),
+            Some(supported),
+            registry::COLLECTION_REGISTRY_VERSION,
+        )
+        .unwrap();
+    let list_path = "/api/device/app-storage/storage-test/collections/docs";
+    let doc_query = "doc=%ED%9A%8C%EC%9D%98%EB%A1%9D.md";
+
+    let (status, empty) = request(&state, "token-a", "GET", list_path, json!({})).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(empty["items"].as_array().unwrap().len(), 0);
+
+    let body = "한글 문서";
+    let (status, created) = request(
+        &state,
+        "token-a",
+        "PUT",
+        &format!("{list_path}/document?{doc_query}"),
+        json!({"content":body,"expected_revision":null}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let revision = created["revision"].as_str().unwrap();
+
+    let (status, listing) = request(&state, "token-a", "GET", list_path, json!({})).await;
+    assert_eq!(status, StatusCode::OK);
+    let listed = &listing["items"][0];
+    assert_eq!(listed["doc"], "회의록.md");
+    assert_eq!(listed["revision"], revision);
+    assert_eq!(listed["byte_size"], body.len());
+    assert!(listed.get("content").is_none());
+    assert!(listed["updated_at"].as_str().is_some());
+
+    let (status, conflict) = request(
+        &state,
+        "token-b",
+        "PUT",
+        &format!("{list_path}/document?{doc_query}"),
+        json!({"content":"stale","expected_revision":null}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(conflict["current_revision"], revision);
+
+    let mut broadcasts = state.0.events.subscribe();
+    let moved_to = "renamed.md";
+    let (status, moved) = request(
+        &state,
+        "token-a",
+        "POST",
+        &format!("{list_path}/move"),
+        json!({"from":"회의록.md","to":moved_to,"expected_revision":revision}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(moved["revision"], revision);
+    let broadcast = broadcasts.try_recv().unwrap();
+    assert!(matches!(broadcast.event, DeviceEvent::StorageMoved { .. }));
+    assert!(state
+        .event_for_broadcast("device-a", broadcast.clone())
+        .is_some());
+    assert!(state.event_for_broadcast("device-b", broadcast).is_some());
+
+    let renamed_query = "doc=renamed.md";
+    let (status, read) = request(
+        &state,
+        "token-b",
+        "GET",
+        &format!("{list_path}/document?{renamed_query}"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(read["content"], body);
+    assert_eq!(read["revision"], revision);
+
+    let (_, occupied) = request(
+        &state,
+        "token-a",
+        "PUT",
+        &format!("{list_path}/document?doc=occupied.md"),
+        json!({"content":"occupied","expected_revision":null}),
+    )
+    .await;
+    assert!(occupied["revision"].as_str().is_some());
+    let (status, _) = request(
+        &state,
+        "token-a",
+        "POST",
+        &format!("{list_path}/move"),
+        json!({"from":moved_to,"to":"occupied.md","expected_revision":revision}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+
+    let (status, reset) = request(
+        &state,
+        "token-a",
+        "DELETE",
+        &format!("{list_path}/document?{renamed_query}"),
+        json!({"expected_revision":revision}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(reset["revision"], Value::Null);
+    let (status, _) = request(
+        &state,
+        "token-a",
+        "GET",
+        &format!("{list_path}/document?{renamed_query}"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[test]
+fn collection_documents_keep_the_one_mebibyte_markdown_limit() {
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    state
+        .publish_app(&definition_with_collection(), "test", false, None)
+        .unwrap();
+
+    let max_size = kaleidoscope_contract::app_storage::STORAGE_MD_MAX_BYTES;
+    let accepted = "x".repeat(max_size);
+    let (reply, _, _) = state
+        .write_app_storage_document(
+            &account,
+            "storage-test",
+            "docs",
+            "limit.md",
+            None,
+            json!(accepted),
+            None,
+        )
+        .unwrap();
+    assert!(!reply.revision.is_empty());
+
+    let over_limit = "x".repeat(max_size + 1);
+    let error = state
+        .write_app_storage_document(
+            &account,
+            "storage-test",
+            "docs",
+            "too-large.md",
+            None,
+            json!(over_limit),
+            None,
+        )
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidRequest);
+}
+
 #[path = "app_storage_regression_tests.rs"]
 mod regression_tests;
 
@@ -419,6 +605,7 @@ async fn mcp_storage_tools_and_workspace_context_use_declared_account_data() {
         server
             .list_app_storage(Parameters(super::mcp::app_storage_tools::AppStorageArgs {
                 app_id: "storage-test".into(),
+                entry_id: None,
                 workspace_id: None,
             }))
             .await
@@ -432,6 +619,7 @@ async fn mcp_storage_tools_and_workspace_context_use_declared_account_data() {
                     app_id: "storage-test".into(),
                     entry_id: Some("title".into()),
                     key: None,
+                    doc: None,
                     workspace_id: None,
                 },
             ))
@@ -446,6 +634,7 @@ async fn mcp_storage_tools_and_workspace_context_use_declared_account_data() {
                     app_id: "storage-test".into(),
                     entry_id: Some("title".into()),
                     key: None,
+                    doc: None,
                     kind: None,
                     workspace_id: None,
                     content: json!("from-mcp"),
@@ -483,6 +672,7 @@ async fn mcp_storage_tools_and_workspace_context_use_declared_account_data() {
                     app_id: "storage-test".into(),
                     entry_id: Some("title".into()),
                     key: None,
+                    doc: None,
                     workspace_id: None,
                     expected_revision: written["revision"].as_str().map(str::to_string),
                 },
