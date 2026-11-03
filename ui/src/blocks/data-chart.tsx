@@ -112,7 +112,7 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
           <div className="ks-chart-x-axis" aria-hidden="true">{geometry.axes.map(({ label, index, left, transform }) => <span key={`${label}-${index}`} style={{ left, transform }}>{label}</span>)}</div>
         </div>
       </div>
-      <table className="ks-chart-accessible"><caption>차트 데이터</caption><thead><tr><th>시점</th>{series.map((entry) => <th key={entry.key}>{entry.name}</th>)}</tr></thead><tbody>{geometry.rows.map((row) => <tr key={row.label}><th>{row.label}</th>{row.values.map((value, index) => <td key={series[index].key}>{value}</td>)}</tr>)}</tbody></table>
+      <table className="ks-accessible-hidden"><caption>차트 데이터</caption><thead><tr><th>시점</th>{series.map((entry) => <th key={entry.key}>{entry.name}</th>)}</tr></thead><tbody>{geometry.rows.map((row) => <tr key={row.label}><th>{row.label}</th>{row.values.map((value, index) => <td key={series[index].key}>{value}</td>)}</tr>)}</tbody></table>
     </div>
   </div>;
 }
