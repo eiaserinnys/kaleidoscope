@@ -22,7 +22,7 @@ it("샌드박스 저장이 실패하면 닫지 않고 성공할 때까지 기다
   await store.ready;
   const window = screen.getByTestId("app-window-md-editor");
   fireEvent.click(within(window).getByRole("button", { name: "창 닫기" }));
-  await screen.findByText("저장하지 못한 내용이 있어 창을 닫지 않았습니다");
+  await screen.findByText("저장하지 못한 내용이 있어 창을 닫지 않았습니다. 내용을 저장한 뒤 다시 닫으세요.");
   expect(transport.getCalls().some((call) => call.op === "window.close")).toBe(false);
   fireEvent.click(within(window).getByRole("button", { name: "창 닫기" }));
   await waitFor(() => expect(finish).toBeDefined());
