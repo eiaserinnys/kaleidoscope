@@ -306,7 +306,7 @@ view?: StateRef,
  */
 on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, wrap?: boolean,
 /**
- * (17판) 창 가운데 세로 기둥에 자식을 놓는다. 폭과 넘침 처리는 쉘이 정한다.
+ * (18판) 창 가운데 세로 기둥에 자식을 놓는다. 폭과 넘침 처리는 쉘이 정한다.
  */
 place?: StackPlace, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, header?: boolean, keep_mounted?: boolean,
 /**
@@ -332,11 +332,11 @@ copy?: boolean,
  */
 collapsible?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", on_click?: Actions, on_double_click?: Actions, value: Binding, format?: DisplayTextFormat, style?: TextStyle, } | { "type": "input", min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, kind?: InputKind, multiline?: boolean, rows?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, style?: SelectStyle, placeholder?: Binding,
 /**
- * (17판) 참이면 이 고르기를 사용할 수 없다.
+ * (18판) 참이면 이 고르기를 사용할 수 없다.
  */
 disabled?: Binding, } | { "type": "toggle", value: Binding, on_change: Actions, label: Binding,
 /**
- * (17판) 참이면 이 켜고 끄기를 사용할 수 없다.
+ * (18판) 참이면 이 켜고 끄기를 사용할 수 없다.
  */
 disabled?: Binding, } | { "type": "notice", message: Binding, error_id?: Binding, kind?: NoticeKind, actions: Array<NoticeAction>, } | { "type": "button", pressed?: Binding, label: Binding, icon?: Binding, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code", value?: Binding, file?: FileRef, language?: CodeLanguage, read_only?: boolean, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "button_grid", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
 
