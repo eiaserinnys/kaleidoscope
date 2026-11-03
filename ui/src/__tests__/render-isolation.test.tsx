@@ -1044,6 +1044,68 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
   });
 
+  it("자동 열 수가 바뀌어도 미리보기 캔버스가 유지되고 크기를 다시 알린다", async () => {
+    mockVirtualLayout();
+    let width = 900;
+    const observers: { callback: ResizeObserverCallback; targets: Set<Element> }[] = [];
+    vi.stubGlobal("ResizeObserver", class {
+      entry: { callback: ResizeObserverCallback; targets: Set<Element> };
+      constructor(callback: ResizeObserverCallback) { this.entry = { callback, targets: new Set() }; observers.push(this.entry); }
+      observe(target: Element) { this.entry.targets.add(target); }
+      disconnect() { this.entry.targets.clear(); }
+      unobserve(target: Element) { this.entry.targets.delete(target); }
+    });
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => width);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => ({ width, height: width / 2 } as DOMRect));
+    const rows = [{ id: "a", surface: "preview-a" }, { id: "b", surface: "preview-b" }];
+    const definition: AppDefinition = {
+      id: "auto-preview-isolation", name: "자동 열 미리보기", requires: { blocks: 19, modules: { assets: 1, client: 1 } },
+      permissions: [], state: { rows }, assets: [{ id: "script", version: 1 }],
+      client: { runtime: "javascript", entry: { id: "script", version: 1 }, inputs: {}, outputs: {}, actions: [], commands: {}, state_keys: [], storage_entries: [] },
+      ui: { type: "repeat", key: "id", items: { state: "rows" }, layout: "grid", grid: { columns: "auto" }, template: {
+        type: "button", label: { item: "id" }, preview: { type: "canvas", surface: { item: "surface" }, aspect_ratio: 2 }, on_click: [],
+      } },
+    };
+    const snapshot = makeTestSnapshot({ definitions: [definition] });
+    snapshot.shared.windows[0].id = "window-auto-preview";
+    snapshot.shared.windows[0].state = { rows };
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const call = transport.call.bind(transport);
+    vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "data.media"
+      ? { op: "data.media", media: { mime: "text/javascript", data_base64: btoa(""), width: null, height: null } } as CoreReply
+      : call(request));
+    const messages = vi.spyOn(ClientRuntime.prototype, "surface");
+    const originalTransfer = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "transferControlToOffscreen");
+    Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", { configurable: true, value: () => ({}) });
+    const store = createShellStore(transport);
+    const view = render(<Shell store={store} />);
+    await store.ready;
+    const grid = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>('[data-testid="app-window-auto-preview-isolation"] .ks-repeat');
+      expect(found?.querySelectorAll(".ks-canvas")).toHaveLength(2);
+      return found!;
+    });
+    grid.style.setProperty("--ks-pane-min-size", "160px");
+    grid.style.setProperty("--ks-space-3", "12px");
+    grid.style.padding = "0px";
+    const resize = async (next: number) => {
+      width = next;
+      await act(async () => { observers.filter(({ targets }) => [...targets].some((target) => target === grid || target.classList.contains("ks-canvas"))).forEach(({ callback }) => callback([], {} as ResizeObserver)); });
+    };
+    await resize(900);
+    const before = [...grid.querySelectorAll(".ks-canvas")];
+    await resize(340);
+    expect(grid.querySelector<HTMLElement>(".ks-repeat-content")?.style.gridTemplateColumns).toBe("repeat(2, minmax(0, 1fr))");
+    expect([...grid.querySelectorAll(".ks-canvas")]).toEqual(before);
+    expect(messages.mock.calls.some(([message]) => message.id === "preview-a" && message.phase === "resize" && message.css_width === 340)).toBe(true);
+    await resize(900);
+    expect([...grid.querySelectorAll(".ks-canvas")]).toEqual(before);
+    view.unmount(); store.dispose();
+    if (originalTransfer) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", originalTransfer);
+    else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
+    vi.unstubAllGlobals();
+  });
+
   it("숨긴 반복 영역은 행 값이 바뀌어도 다시 그리지 않는다", async () => {
     const hiddenRepeat: AppDefinition = {
       id: "hidden-repeat-isolation", name: "숨긴 반복 격리", requires: { blocks: 14, modules: {} }, permissions: [],

@@ -14,9 +14,10 @@ export function useMedia(media: MediaRef | null, maxPx: number): MediaResult & {
   const [result, setResult] = useState<{ key: string; attempt: number; value: MediaResult }>({ key: "", attempt: -1, value: { status: "loading" } });
   useEffect(() => {
     if (!media) return;
-    if (result.key === key && result.attempt === attempt && result.value.status === "ready") return;
-    let active = true;
     let request = data.mediaCache.get(key);
+    // 크기가 돌아오면 캐시된 요청에도 연결해 앞선 크기의 늦은 결과를 덮는다.
+    if (!request && result.key === key && result.attempt === attempt && result.value.status === "ready") return;
+    let active = true;
     if (!request) {
       request = data.store.call({ op: "data.media", window_id: data.windowId, media, max_px: requestSize })
         .then((reply) => `data:${reply.media.mime};base64,${reply.media.data_base64}`);

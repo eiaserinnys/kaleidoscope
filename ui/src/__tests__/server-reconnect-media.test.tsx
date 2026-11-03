@@ -5,6 +5,8 @@ import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { WindowDataProvider } from "../data/window-data";
 import { useMedia } from "../data/use-media";
+import { useLayoutEffect } from "react";
+import { useWindowData } from "../data/window-data";
 import { AppWindowContent } from "../render/app-window-content";
 import { makeTestSeed } from "./fixtures";
 
@@ -43,7 +45,7 @@ function setup(definition: AppDefinition, mime: string, content: string) {
     if (covered) snapshot.shared.windows.push({ ...snapshot.shared.windows[0], id: "cover", z: snapshot.shared.windows[0].z + 1, maximized: true });
     transport.emit({ event: "state.changed", snapshot });
   });
-  return { store, calls, reconnect, setHidden, setCovered, windowId: seed.snapshot.shared.windows[0].id };
+  return { store, transport, calls, reconnect, setHidden, setCovered, windowId: seed.snapshot.shared.windows[0].id };
 }
 
 it("이미지 자산은 재연결 시 실패한 요청을 다시 읽는다", async () => {
@@ -53,6 +55,50 @@ it("이미지 자산은 재연결 시 실패한 요청을 다시 읽는다", asy
   await screen.findByText("서버에 연결되어 있지 않습니다");
   state.reconnect();
   await screen.findByText("data:image/png;base64,aW1hZ2U=");
+  state.store.dispose();
+});
+
+it("이미 받은 이미지는 연결이 복구되어도 다시 요청하지 않는다", async () => {
+  const state = setup(base, "image/png", "image");
+  await state.store.ready;
+  state.reconnect();
+  function Image() { const result = useMedia({ asset: "sample", version: 1 }, 100); return <div>{result.status === "ready" ? result.url : "불러오는 중"}</div>; }
+  render(<WindowDataProvider store={state.store} windowId={state.windowId} definition={base}><Image /></WindowDataProvider>);
+  await screen.findByText("data:image/png;base64,aW1hZ2U=");
+  act(() => {
+    const snapshot = structuredClone(state.store.getSnapshot()) as ShellSnapshot;
+    snapshot.link = offline;
+    state.transport.emit({ event: "state.changed", snapshot });
+  });
+  state.reconnect();
+  await act(async () => { await Promise.resolve(); });
+  expect(state.calls.mock.calls.filter(([request]) => request.op === "data.media")).toHaveLength(1);
+  state.store.dispose();
+});
+
+it("이미지 크기가 돌아오는 렌더 중 앞선 크기 응답이 와도 원래 그림을 복구한다", async () => {
+  const state = setup(base, "image/png", "image");
+  let resolveLarge: ((url: string) => void) | undefined;
+  let returning = false;
+  const smallKey = JSON.stringify([{ asset: "sample", version: 1 }, 512]);
+  const largeKey = JSON.stringify([{ asset: "sample", version: 1 }, 1024]);
+  const pending = { then: (resolve: (url: string) => void) => { resolveLarge = resolve; } } as unknown as Promise<string>;
+  function Image({ size }: { size: number }) {
+    const data = useWindowData();
+    if (!data.mediaCache.has(smallKey)) data.mediaCache.set(smallKey, Promise.resolve("작은 그림"));
+    if (!data.mediaCache.has(largeKey)) data.mediaCache.set(largeKey, pending);
+    const result = useMedia({ asset: "sample", version: 1 }, size);
+    useLayoutEffect(() => { if (size === 512 && returning) resolveLarge?.("큰 그림"); }, [size]);
+    return <div>{result.status === "ready" ? result.url : "불러오는 중"}</div>;
+  }
+  const draw = (size: number) => <WindowDataProvider store={state.store} windowId={state.windowId} definition={base}><Image size={size} /></WindowDataProvider>;
+  const view = render(draw(512));
+  await screen.findByText("작은 그림");
+  view.rerender(draw(1024));
+  await waitFor(() => expect(resolveLarge).toBeTypeOf("function"));
+  returning = true;
+  view.rerender(draw(512));
+  await waitFor(() => expect(screen.getByText("작은 그림")).toBeTruthy());
   state.store.dispose();
 });
 
