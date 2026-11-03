@@ -1,4 +1,4 @@
-import { useCallback, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { ItemMenuEntry } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { openContextMenu, writeMenuClipboard } from "../components/context-menu";
@@ -23,6 +23,13 @@ export function useItemMenu(entries: ItemMenuEntry[] | undefined, pointer: strin
   const data = useWindowData();
   const parent = useItemScope();
   const [pending, setPending] = useState<Pending | null>(null);
+  const restoreAnchor = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (!pending && restoreAnchor.current) {
+      restoreAnchor.current.focus({ preventScroll: true });
+      restoreAnchor.current = null;
+    }
+  }, [pending]);
   const run = useCallback((entry: Pending) => {
     const scope = { item: entry.item, parent_item: parent?.item, key: entry.key, index: 0, instance: entry.anchor };
     void data.act(`${pointer}/item_menu/${entry.index}/on_select`, entry.key, entry.item, undefined, scope);
@@ -48,7 +55,7 @@ export function useItemMenu(entries: ItemMenuEntry[] | undefined, pointer: strin
   const confirm = useCallback(() => {
     if (!pending) return;
     run(pending);
-    pending.anchor.focus({ preventScroll: true });
+    restoreAnchor.current = pending.anchor;
     setPending(null);
   }, [pending, run]);
   return { open, dialog: pending ? <ItemScopeProvider value={{ item: pending.item, parent_item: parent?.item, key: pending.key, index: 0, instance: pending.anchor }}><Confirmation pending={pending} pointer={pointer} onCancel={close} onConfirm={confirm} /></ItemScopeProvider> : null };

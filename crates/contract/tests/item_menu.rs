@@ -115,6 +115,14 @@ fn item_menu_copy_text_rejects_expressions() {
 }
 
 #[test]
+fn item_menu_confirmation_body_accepts_item_bindings() {
+    for binding in [json!({"item":"title"}), json!({"parent_item":"title"})] {
+        let ui = json!({"type":"list", "items":[], "item_menu":[{"label":"지우기", "on_select":{"set_state":"selected"}, "confirm":{"title":"지울까요?", "body":binding}}]});
+        parse_app_definition(&definition(ui, 19).to_string()).expect("confirmation body should accept item scope");
+    }
+}
+
+#[test]
 fn schema_exposes_item_menu_entry() {
     let schema = app_definition_schema().to_string();
     assert!(schema.contains("item_menu"));

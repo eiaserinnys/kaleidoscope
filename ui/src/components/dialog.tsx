@@ -20,7 +20,7 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const background = host.querySelectorAll<HTMLElement>(inertSelector);
     background.forEach((element) => { element.setAttribute("inert", ""); });
-    if (!windowModal) root.current?.querySelector<HTMLButtonElement>(".ks-dialog-confirm button")?.focus();
+    if (!windowModal) root.current?.querySelector<HTMLButtonElement>(danger ? ".ks-dialog-actions > button" : ".ks-dialog-confirm button")?.focus();
     if (!windowModal) document.addEventListener("keydown", onKey);
     return () => {
       if (!windowModal) document.removeEventListener("keydown", onKey);
@@ -33,7 +33,7 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
         }
       } else if (restore.current) previous?.focus();
     };
-  }, [host, onCancel, inertSelector, windowModal]);
+  }, [host, onCancel, inertSelector, windowModal, danger]);
   useLayoutEffect(() => {
     if (windowModal && active) root.current?.focus({ preventScroll: true });
   }, [windowModal, active]);

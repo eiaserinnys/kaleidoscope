@@ -51,13 +51,29 @@ for (const { block, role, name, copy, expected } of cases) {
 }
 
 it("확인 메뉴는 승인할 때만 실행한다", async () => {
-  const calls = setup({ type: "list", items: [{ key: "a", title: "목록" }], item_menu: [{ label: "보관", danger: true, confirm: { title: "보관할까요?", ok: "보관" }, on_select: { set_state: "choice" } }] });
-  fireEvent.contextMenu(await screen.findByRole("option", { name: "목록" }));
+  const calls = setup({ type: "list", items: [{ key: "a", title: "목록" }], item_menu: [{ label: "보관", danger: true, confirm: { title: "보관할까요?", ok: "보관", body: { item: "title" } }, on_select: { set_state: "choice" } }] });
+  const row = await screen.findByRole("option", { name: "목록" });
+  fireEvent.contextMenu(row);
   fireEvent.click(await screen.findByRole("menuitem", { name: "보관" }));
   const dialog = await screen.findByRole("dialog", { name: "보관할까요?" });
+  expect(within(dialog).getByText("목록")).toBeTruthy();
+  expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "취소" }));
   expect(calls.mock.calls.filter(([request]) => request.op === "data.act")).toHaveLength(0);
   fireEvent.click(within(dialog).getByRole("button", { name: "보관" }));
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a" })));
+  await waitFor(() => expect(document.activeElement).toBe(row));
+});
+
+it("확인 메뉴 취소와 Escape는 행으로 초점을 돌린다", async () => {
+  setup({ type: "list", items: [{ key: "a", title: "목록" }], item_menu: [{ label: "보관", danger: true, confirm: { title: "보관할까요?" }, on_select: { set_state: "choice" } }] });
+  const row = await screen.findByRole("option", { name: "목록" });
+  for (const action of ["cancel", "escape"]) {
+    fireEvent.contextMenu(row);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "보관" }));
+    if (action === "cancel") fireEvent.click(await screen.findByRole("button", { name: "취소" }));
+    else fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(document.activeElement).toBe(row));
+  }
 });
 
 it("메뉴 copy_text는 우클릭한 행의 항목 값을 쓴다", async () => {

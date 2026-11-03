@@ -840,7 +840,12 @@ fn validate_ui_binding(
                 message: MessageKey::Item(_)
             })
     ) {
-        if at.strip_suffix("/copy_text").is_some_and(is_item_menu_action) {
+        let menu_confirm_body = at.strip_suffix("/confirm/body").is_some_and(|entry| {
+            entry.rsplit_once('/').is_some_and(|(menu, index)| {
+                menu.ends_with("/item_menu") && !index.is_empty() && index.bytes().all(|byte| byte.is_ascii_digit())
+            })
+        });
+        if menu_confirm_body || at.strip_suffix("/copy_text").is_some_and(is_item_menu_action) {
             return;
         }
         if at.ends_with("/save_file/suggested_name") {

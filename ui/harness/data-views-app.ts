@@ -13,7 +13,7 @@ export const dataViewsApp: AppDefinition = {
   permissions: [{ id: "media", module: "files", access: "read", label: "그림" }],
   state: { tab: 0, choice: null, feed: entries, cards_open: false },
   ui: { type: "tabs", selected: { state: "tab" }, on_change: { set_state: "tab" }, tabs: [
-    { label: "긴 목록", child: { type: "list", items, selected: { state: "choice" }, on_select: { set_state: "choice" }, item_menu: [{ label: "주소 복사", on_select: { copy_text: { item: "url" } } }] } },
+    { label: "긴 목록", child: { type: "list", items, selected: { state: "choice" }, on_select: { set_state: "choice" }, item_menu: [{ label: "주소 복사", on_select: { copy_text: { item: "url" } } }, { label: "지우기", danger: true, confirm: { title: "지울까요?", body: { item: "title" }, ok: "지우기" }, on_select: { copy_text: { item: "url" } } }] } },
     { label: "격자 시험", child: { type: "list", layout: "grid", items: grid, selected: { state: "choice" }, on_select: { set_state: "choice" } } },
     { label: "표 시험", child: { type: "table", rows, columns: [
       { field: "name", label: "이름", width: "wide" },
