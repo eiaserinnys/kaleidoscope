@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { useBinding, useDormant } from "../data/window-data";
@@ -48,6 +48,7 @@ function RepeatReady({ block, context, pointer, entries, parent, follow }: {
   block: Repeat; context: BlockContext; pointer: string; entries: Entry[]; parent?: JsonValue; follow: JsonValue;
 }) {
   const scroll = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState<{ element: HTMLDivElement; margin: number } | null>(null);
   const [columns, setColumns] = useState(1);
   const [resume, setResume] = useState(0);
   const pauseUntil = useRef(0);
@@ -55,6 +56,39 @@ function RepeatReady({ block, context, pointer, entries, parent, follow }: {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layout = block.layout ?? "column";
   const horizontal = layout === "row";
+  useLayoutEffect(() => {
+    const root = scroll.current;
+    if (!block.virtual || !root) return;
+    let observed: HTMLElement | null = null;
+    const update = () => {
+      let element: HTMLElement | null = root;
+      while (element) {
+        const style = getComputedStyle(element);
+        const overflow = horizontal ? style.overflowX : style.overflowY;
+        const clientSize = horizontal ? element.clientWidth : element.clientHeight;
+        const scrollSize = horizontal ? element.scrollWidth : element.scrollHeight;
+        if (/^(auto|scroll|overlay)$/.test(overflow) && clientSize > 0 && scrollSize > clientSize + 1) break;
+        element = element.parentElement;
+      }
+      element ??= root;
+      if (observed !== element) {
+        observed?.removeEventListener("scroll", update);
+        observed = element;
+        observed.addEventListener("scroll", update, { passive: true });
+      }
+      const rootRect = root.getBoundingClientRect(), scrollRect = element.getBoundingClientRect();
+      const margin = element === root ? 0 : horizontal
+        ? rootRect.left - scrollRect.left + element.scrollLeft - element.clientLeft
+        : rootRect.top - scrollRect.top + element.scrollTop - element.clientTop;
+      const target = element as HTMLDivElement;
+      setViewport((previous) => previous?.element === target && Math.abs(previous.margin - margin) < 0.5
+        ? previous : { element: target, margin });
+    };
+    update();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    for (let element: HTMLElement | null = root; element; element = element.parentElement) observer?.observe(element);
+    return () => { observer?.disconnect(); observed?.removeEventListener("scroll", update); };
+  }, [block.virtual, horizontal, entries.length]);
   useEffect(() => {
     if (layout !== "grid" || !scroll.current) return;
     const element = scroll.current;
@@ -71,7 +105,7 @@ function RepeatReady({ block, context, pointer, entries, parent, follow }: {
   }, [layout, block.grid?.columns]);
   const rowSize = layout === "grid" ? columns : 1;
   const itemKey = useCallback((index: number) => entries[index].key, [entries]);
-  const { virtual } = useVirtualRows(Math.ceil(entries.length / rowSize), DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, horizontal, layout === "grid" ? undefined : itemKey);
+  const { virtual } = useVirtualRows(Math.ceil(entries.length / rowSize), DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, horizontal, layout === "grid" ? undefined : itemKey, viewport);
   const followIndex = entries.findIndex((entry) => entry.key === follow);
   useEffect(() => {
     if (followIndex < 0 || Date.now() < pauseUntil.current) return;
@@ -95,7 +129,7 @@ function RepeatReady({ block, context, pointer, entries, parent, follow }: {
     {block.virtual ? <div style={horizontal ? { width: virtual.getTotalSize(), height: "100%", position: "relative" } : { height: virtual.getTotalSize(), width: "100%", position: "relative" }}>
       {virtual.getVirtualItems().map((virtualRow) => <div key={virtualRow.key} data-index={virtualRow.index} ref={virtual.measureElement}
         className={layout === "grid" ? "ks-repeat-grid-row" : undefined}
-        style={{ position: "absolute", top: 0, left: 0, ...(horizontal ? { height: "100%", transform: `translateX(${virtualRow.start}px)` } : { width: "100%", transform: `translateY(${virtualRow.start}px)` }), ...gridStyle }}>
+        style={{ position: "absolute", top: 0, left: 0, ...(horizontal ? { height: "100%", transform: `translateX(${virtualRow.start - (viewport?.margin ?? 0)}px)` } : { width: "100%", transform: `translateY(${virtualRow.start - (viewport?.margin ?? 0)}px)` }), ...gridStyle }}>
         {entries.slice(virtualRow.index * rowSize, (virtualRow.index + 1) * rowSize).map(row)}
       </div>)}
     </div> : <div className="ks-repeat-content" style={gridStyle}>{entries.map(row)}</div>}

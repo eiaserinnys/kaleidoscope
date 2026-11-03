@@ -115,7 +115,7 @@ describe("client runtime visibility ping", () => {
     await runtime.start();
 
     for (let tick = 0; tick < 3; tick++) {
-      now += CLIENT_PING_TIMEOUT_SECS * 500;
+      now += CLIENT_PING_TIMEOUT_SECS * 500 + 20;
       await vi.advanceTimersByTimeAsync(CLIENT_PING_TIMEOUT_SECS * 500);
     }
     expect(failClient).toHaveBeenCalledWith(shellErrors.SHELL_CLIENT_UNRESPONSIVE());

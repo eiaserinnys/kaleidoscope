@@ -308,6 +308,11 @@
 .ks-tour-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--ks-space-2); }
 .ks-client-frames { position: fixed; left: 0; top: 0; width: 2px; height: 2px; opacity: 0; pointer-events: none; }
 .ks-client-frames iframe { width: 2px; height: 2px; border: 0; }
+.ks-canvas { position: relative; width: 100%; height: auto; aspect-ratio: var(--ks-canvas-native-ratio, 16 / 9); min-height: 0; overflow: hidden; background: var(--ks-color-on-color-dark); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); }
+.ks-canvas canvas { position: absolute; display: block; box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-border); }
+:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel, .ks-data-stack-item.is-fill) > .ks-canvas,
+:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel, .ks-data-stack-item.is-fill) > .ks-anchor > .ks-canvas,
+:where(.ks-split-pane, .ks-data-tab-panel) > .ks-data-section > .ks-data-section-child > .ks-canvas { height: 100%; min-height: var(--ks-pane-min-size); aspect-ratio: auto; }
 @container ks-data-window (max-width: 560px) {
   .ks-data-toolbar:has(> .ks-data-toolbar-group.is-end .ks-select-field) > .ks-data-toolbar-group { flex: 1 1 100%; }
   .ks-split-row:has(.ks-canvas) { display: flex; flex-direction: column; overflow-y: auto; }
@@ -315,10 +320,11 @@
   .ks-split-row:has(.ks-canvas) > .ks-split-pane:has(.ks-canvas) { order: -1; min-height: calc(var(--ks-pane-min-size) * 2); }
   .ks-split-row:has(.ks-canvas) > .ks-split-handle { display: none; }
   .ks-split-row:has(.ks-canvas) > .ks-split-pane:not(:has(.ks-canvas)) { border-top: var(--ks-line-width) solid var(--ks-color-border); padding-top: var(--ks-space-2); }
-  .ks-data-window .ks-canvas { height: auto; aspect-ratio: var(--ks-canvas-ratio, 16 / 9); }
+  .ks-data-window .ks-canvas { height: auto; aspect-ratio: var(--ks-canvas-native-ratio, 16 / 9); }
+  .ks-data-window :where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel, .ks-data-stack-item.is-fill) > .ks-canvas,
+  .ks-data-window :where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel, .ks-data-stack-item.is-fill) > .ks-anchor > .ks-canvas,
+  .ks-data-window :where(.ks-split-pane, .ks-data-tab-panel) > .ks-data-section > .ks-data-section-child > .ks-canvas { height: auto; aspect-ratio: var(--ks-canvas-ratio, 16 / 9); }
 }
-.ks-canvas { position: relative; width: 100%; height: 100%; min-height: var(--ks-pane-min-size); overflow: hidden; background: var(--ks-color-on-color-dark); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); }
-.ks-canvas canvas { position: absolute; display: block; box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-border); }
 .ks-timeline { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .ks-timeline-layout { display: flex; min-height: 0; overflow: hidden; }
 .ks-timeline-labels { flex: 0 0 clamp(calc(var(--ks-space-6) * 2), 22cqw, calc(var(--ks-space-6) * 4)); overflow: hidden; }

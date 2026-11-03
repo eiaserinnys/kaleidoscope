@@ -4,13 +4,14 @@ const entries = Array.from({ length: 35 }, (_, index) => ({ key: String(index), 
 const items = Array.from({ length: 1000 }, (_, index) => ({ key: String(index), title: `항목 ${index + 1}` }));
 const grid = Array.from({ length: 24 }, (_, index) => ({ key: String(index), title: `그림 ${index + 1}`, image: { permission: "media", path: index % 2 ? "shapes.png" : "landscape.png" } }));
 const rows = Array.from({ length: 70 }, (_, index) => ({ key: String(index), name: `행 ${index + 1}`, status: "길게 표시되는 진행 상태 배지", a: index, b: index + 1, c: index + 2, d: index + 3, e: index + 4 }));
+const surfaceCards = Array.from({ length: 240 }, (_, index) => ({ key: String(index), surface: `sample-${index}`, title: `견본 ${index + 1}`, aspect: index === 0 ? 9 / 16 : 1.6 }));
 
 export const dataViewsApp: AppDefinition = {
   id: "data-views-test",
   name: "보기 시험",
   requires: { blocks: 7, modules: { files: 1 } },
   permissions: [{ id: "media", module: "files", access: "read", label: "그림" }],
-  state: { tab: 0, choice: null, feed: entries },
+  state: { tab: 0, choice: null, feed: entries, cards_open: false },
   ui: { type: "tabs", selected: { state: "tab" }, on_change: { set_state: "tab" }, tabs: [
     { label: "긴 목록", child: { type: "list", items, selected: { state: "choice" }, on_select: { set_state: "choice" } } },
     { label: "격자 시험", child: { type: "list", layout: "grid", items: grid, selected: { state: "choice" }, on_select: { set_state: "choice" } } },
@@ -36,6 +37,24 @@ export const dataViewsApp: AppDefinition = {
         { key: "dialogue-3", name: "화자 하나", color: "#6d4c9a", meta: "id-003", body: ["그 열쇠를 찾았어.", "I found the key."] },
         { key: "dialogue-4", name: "화자 셋", color: "#a05245", meta: "id-004", body: ["짧은 글", "한쪽 칸에서만 여러 줄로 이어지는 긴 시험 문장입니다. 좁은 화면에서는 이 문단이 길어져도 반대쪽 문단의 내용이 깨지거나 옆으로 밀리지 않고 위아래로 쌓여야 합니다."] },
       ] },
+    ] } },
+    { label: "중첩 표면 시험", child: { type: "stack", direction: "column", children: [
+      { type: "button", label: "견본 열기", on_click: [{ set_state: "cards_open", value: { expr: "$not($state.cards_open)" } }] },
+      { type: "repeat", key: "key", items: [{ key: "group", items: surfaceCards }], virtual: false, template: {
+        type: "stack", direction: "column", children: [
+          { type: "text", value: "견본 모음" },
+          { type: "when", value: { state: "cards_open" }, child: {
+            type: "repeat", key: "key", items: { item: "items" }, layout: "grid", grid: { columns: 3 }, virtual: true,
+            template: { type: "stack", direction: "column", children: [
+              { type: "canvas", surface: { item: "surface" }, aspect_ratio: { item: "aspect" } },
+              { type: "text", value: { item: "title" } },
+            ] },
+          } },
+        ],
+      } },
+    ] } },
+    { label: "채움 표면 시험", child: { type: "stack", direction: "column", fill: 0, children: [
+      { type: "anchor", id: "stage", child: { type: "canvas", surface: "stage", aspect_ratio: 9 / 16 } }, { type: "text", value: "도구" },
     ] } },
   ] },
 };
