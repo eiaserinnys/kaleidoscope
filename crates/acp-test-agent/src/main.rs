@@ -205,7 +205,10 @@ fn main() {
                         .unwrap();
                     }
                 }
-                if text.contains("fail-turn") {
+                if text.contains("end-mid-turn") {
+                    update(json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"종료 전 응답"}}));
+                    return;
+                } else if text.contains("fail-turn") {
                     update(
                         json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"OLD"}}),
                     );

@@ -85,7 +85,7 @@ export class AgentSession {
       if (spec) this.spec = spec;
       await this.history.load();
       const process = await this.host.process.attach({ key: "main" });
-      if (!process || process.exit) return false;
+      if (!process) return false;
       this.handle = process.handle;
       this.after = process.after;
       this.cwd = process.cwd;
@@ -105,7 +105,7 @@ export class AgentSession {
       if (this.state.initialized && this.state.capabilities.http && this.state.servicesUsed !== this.tools) this.state.restartPending = true;
       this.publish();
       await this.drain();
-      await this.pump();
+      if (this.state.phase !== "failed") await this.pump();
       return true;
     });
   }
@@ -298,9 +298,13 @@ export class AgentSession {
     for (;;) {
       const result = await this.host.process.read({ handle: this.handle, after: this.after, max_bytes: 65536 });
       if (!result.bytes.length) {
-        if (result.exit && this.state.phase !== "failed") {
+        if (result.exit) {
+          if (this.state.stream.id && this.state.stream.text) {
+            await this.history.append([{ id: this.state.stream.id, kind: "assistant", text: `${this.state.stream.text}\n\n(응답 중단됨)`, at: this.host.now(), attachments: [] }]);
+          }
           const error = agentError("AGENT_PROCESS_EXITED", this.spec?.name ?? "프로그램");
-          this.state = { ...this.state, phase: "failed", failure: { id: error.id, code: error.code, message: error.message, reason: error.message } };
+          this.state = { ...this.state, stream: { id: null, text: "" }, permissions: [], tools: [], phase: "failed", failure: { id: error.id, code: error.code, message: error.message, reason: error.message } };
+          await this.checkpoint();
           this.publish();
         }
         return;
@@ -332,7 +336,7 @@ export class AgentSession {
       this.after = result.next;
       await this.checkpoint();
       this.publish();
-      await this.pump();
+      if (!result.exit) await this.pump();
     }
   }
 

@@ -10,19 +10,22 @@ function fixture(scenario: string) {
   const blobs = new Map<string, Uint8Array>();
   let child: ReturnType<typeof spawn> | undefined;
   let checkpoint: any = null, after = 0, buffer = Buffer.alloc(0), ready = (_handle: string) => {};
+  let exit: { code: number | null } | null = null, attached = true;
   let view: any;
   const writes: any[] = [];
   const processPort = {
     onReady: (listener: (handle: string) => void) => { ready = listener; }, onServicesChanged() {},
     start: async () => {
+      checkpoint = null; after = 0; buffer = Buffer.alloc(0); exit = null;
       child = spawn(binary!, [], { env: { ...process.env, TEST_SCENARIO: scenario }, stdio: ["pipe", "pipe", "pipe"] });
-      child.stdout!.on("data", (chunk: Buffer) => { buffer = Buffer.concat([buffer, chunk]); ready("test"); });
+      child.stdout!.on("data", (chunk: Buffer) => { buffer = Buffer.concat([buffer, chunk]); if (attached) ready("test"); });
+      child.on("close", (code) => { exit = { code }; if (attached) ready("test"); });
       return { handle: "test", cwd: "/tmp", services: { tools: null } };
     },
-    attach: async () => child ? { handle: "test", after, checkpoint: structuredClone(checkpoint), cwd: "/tmp", services: { tools: null }, exit: null } : null,
+    attach: async () => { attached = true; return child ? { handle: "test", after, checkpoint: structuredClone(checkpoint), cwd: "/tmp", services: { tools: null }, exit } : null; },
     read: async ({ after: cursor, max_bytes }: any) => {
       const bytes = buffer.subarray(cursor - after, cursor - after + max_bytes);
-      return { bytes, next: cursor + bytes.length, stderr_tail: [], exit: null };
+      return { bytes, next: cursor + bytes.length, stderr_tail: [], exit };
     },
     ack: async (state: any) => { buffer = buffer.subarray(state.after - after); after = state.after; checkpoint = structuredClone(state.checkpoint); },
     write: async (state: any) => {
@@ -42,7 +45,30 @@ function fixture(scenario: string) {
     const end = Date.now() + 10000;
     while (!predicate()) { if (Date.now() > end) throw new Error(`ACP 시험 대기 초과: ${JSON.stringify(view)}`); await new Promise((resolve) => setTimeout(resolve, 10)); }
   }
-  return { host, writes, waitFor, view: () => view, pid: () => child?.pid, close: () => child?.kill() };
+  return { host, writes, waitFor, view: () => view, pid: () => child?.pid, pause: () => { attached = false; }, exited: () => exit !== null, close: () => child?.kill() };
+}
+
+for (const framePresent of [true, false]) {
+  test(`실제 ACP 종료 뒤 ${framePresent ? "열린" : "재연결한"} 프레임에서 응답 기록을 보존한다`, async (t) => {
+    const f = fixture("");
+    t.after(f.close);
+    const spec = { name: "시험", command: binary!, args: [], env: {} };
+    const first = new AgentSession(f.host as any);
+    await first.start(spec);
+    await f.waitFor(() => f.view()?.phase === "ready");
+    if (!framePresent) f.pause();
+    await first.send({ id: "one", text: "end-mid-turn", attachments: [] });
+    await f.waitFor(() => f.exited());
+    const active = framePresent ? first : new AgentSession(f.host as any);
+    if (!framePresent) await active.attach(spec);
+    await f.waitFor(() => f.view()?.phase === "failed");
+    await active.retry();
+    await f.waitFor(() => f.view()?.phase === "ready");
+    const item = f.view().items.find((entry: any) => entry.kind === "assistant");
+    assert.ok(item?.text.includes("종료 전 응답"));
+    assert.ok(item?.text.includes("중단"));
+    assert.equal(f.writes.filter((entry) => entry.method === "session/prompt").length, 1);
+  });
 }
 
 test("실제 가짜 ACP 프로세스의 승인 중 재접속과 큐", async (t) => {

@@ -6,14 +6,14 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 function fixture() {
   const blobs = new Map<string, Uint8Array>();
-  let checkpoint: unknown = null, after = 0, buffer = new Uint8Array(), handle = "p1", tools: string | null = "http://tools/old";
+  let checkpoint: unknown = null, after = 0, buffer = new Uint8Array(), handle = "p1", tools: string | null = "http://tools/old", exited = false;
   let nextUuid = 0;
   let callback = (_handle: string) => {}, serviceCallback = (_handle: string) => {};
   const writes: any[] = [], snapshots: any[] = [];
   const process = {
-    attach: async () => ({ handle, after, checkpoint, cwd: "/work", services: { tools }, exit: null }),
-    start: async () => { handle = "p2"; after = 0; checkpoint = null; buffer = new Uint8Array(); tools = "http://tools/new"; return { handle, cwd: "/work", services: { tools } }; },
-    read: async ({ after: cursor }: any) => ({ bytes: Array.from(buffer.slice(cursor - after)), next: after + buffer.length, exit: null, stderr_tail: [] }),
+    attach: async () => ({ handle, after, checkpoint, cwd: "/work", services: { tools }, exit: exited ? { code: 1 } : null }),
+    start: async () => { handle = "p2"; after = 0; checkpoint = null; buffer = new Uint8Array(); tools = "http://tools/new"; exited = false; return { handle, cwd: "/work", services: { tools } }; },
+    read: async ({ after: cursor }: any) => ({ bytes: Array.from(buffer.slice(cursor - after)), next: after + buffer.length, exit: exited ? { code: 1 } : null, stderr_tail: [] }),
     ack: async (value: any) => { buffer = buffer.slice(value.after - after); after = value.after; checkpoint = structuredClone(value.checkpoint); },
     write: async ({ bytes, checkpoint: next }: any) => { writes.push(JSON.parse(decoder.decode(bytes))); checkpoint = structuredClone(next); },
     stop: async () => {}, file_uri: async (key: string) => `file:///${key}`,
@@ -27,15 +27,41 @@ function fixture() {
     publish: (value: any) => { snapshots.push(structuredClone(value)); },
     uuid: () => `generation-${++nextUuid}`, now: () => "now",
   };
-  async function emit(message: unknown) {
+  async function emit(message: unknown, notify = true) {
     const bytes = encoder.encode(`${JSON.stringify(message)}\n`);
     const next = new Uint8Array(buffer.length + bytes.length);
     next.set(buffer); next.set(bytes, buffer.length); buffer = next;
-    callback(handle);
+    if (notify) callback(handle);
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   async function revokeTools() { tools = null; serviceCallback(handle); await new Promise((resolve) => setTimeout(resolve, 0)); }
-  return { host, writes, snapshots, emit, revokeTools, getCheckpoint: () => checkpoint, blobKeys: () => [...blobs.keys()] };
+  async function exit(notify: boolean) { exited = true; if (notify) callback(handle); await new Promise((resolve) => setTimeout(resolve, 0)); }
+  return { host, writes, snapshots, emit, exit, revokeTools, getCheckpoint: () => checkpoint, blobKeys: () => [...blobs.keys()] };
+}
+
+for (const framePresent of [true, false]) {
+  test(`응답 중 프로세스 종료 시 ${framePresent ? "열린 프레임" : "다시 붙은 프레임"}에서 남은 글을 중단 기록으로 보존한다`, async () => {
+    const f = fixture();
+    const spec = { name: "시험", command: "agent", args: [], env: {} };
+    const first = new AgentSession(f.host as any);
+    await first.attach(spec);
+    await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: { loadSession: true } } });
+    await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "session" } });
+    await first.send({ id: "one", text: "질문", attachments: [] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const chunk = (text: string) => ({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } } } });
+    await f.emit(chunk("앞부분 "));
+    await f.emit(chunk("마지막"), false);
+    await f.exit(framePresent);
+    const active = framePresent ? first : new AgentSession(f.host as any);
+    if (!framePresent) await active.attach(spec);
+    assert.equal(f.snapshots.at(-1).phase, "failed");
+    await active.retry();
+    const item = f.snapshots.at(-1).items.find((entry: any) => entry.kind === "assistant");
+    assert.ok(item?.text.includes("앞부분 마지막"));
+    assert.ok(item?.text.includes("중단"));
+    assert.equal(f.writes.filter((entry) => entry.method === "session/prompt").length, 1);
+  });
 }
 
 test("같은 프로세스에 다시 붙으면 진행 중인 승인과 큐를 복원한다", async () => {
