@@ -64,7 +64,7 @@ test("같은 프로세스에 다시 붙으면 진행 중인 승인과 큐를 복
   await f.emit({ jsonrpc: "2.0", id: firstPrompt.id, result: { stopReason: "end_turn" } });
   const prompts = f.writes.filter((message) => message.method === "session/prompt");
   assert.equal(prompts.length, 2);
-  assert.equal(prompts[1].params.prompt.some((part: any) => part.text === "안내문"), false);
+  assert.equal(prompts[1].params.prompt.some((part: any) => part.text?.startsWith("안내문")), false);
 });
 
 test("응답 중 도구 주소가 바뀌면 턴을 마친 뒤 프로세스를 바꾸고 같은 세션을 load한다", async () => {
@@ -124,7 +124,10 @@ test("큐를 순서대로 보내고 첫 말에만 지침과 같이 보기 및 �
   await session.send({ id: "two", text: "다음 말", attachments: [] });
   const first = f.writes.find((message) => message.method === "session/prompt");
   assert.deepEqual(first.params.prompt.map((block: any) => block.type), ["text", "text", "text", "image", "resource_link"]);
+  assert.ok(first.params.prompt[0].text.includes("MCP 도구"));
   assert.equal(first.params.prompt[4].uri, "file:///attachments/one-1");
+  assert.equal(JSON.stringify(f.getCheckpoint()).includes("안내문"), false);
+  assert.equal(JSON.stringify(f.getCheckpoint()).includes("AQI="), false);
   assert.equal(f.writes.filter((message) => message.method === "session/prompt").length, 1);
   await f.emit({ jsonrpc: "2.0", id: first.id, result: { stopReason: "end_turn" } });
   const prompts = f.writes.filter((message) => message.method === "session/prompt");

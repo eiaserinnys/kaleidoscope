@@ -278,7 +278,7 @@ export class AgentSession {
 
   private async request(kind: string, method: string, parameters: Record<string, unknown>): Promise<void> {
     const { _control, ...params } = parameters;
-    const [next, id] = reserveRequest(this.state, kind, _control ?? params);
+    const [next, id] = reserveRequest(this.state, kind, _control ?? null);
     await this.write({ jsonrpc: "2.0", id, method, params }, next);
   }
 
@@ -367,7 +367,11 @@ export class AgentSession {
     const [queued, ...queue] = this.state.queue;
     const prepared = await this.host.prepare(queued.id, queued.attachments.length, queued.attachments.reduce((sum, item) => sum + item.size, 0));
     const content: Record<string, unknown>[] = [];
-    if (!this.state.guideSent) content.push({ type: "text", text: await this.host.instructions() });
+    if (!this.state.guideSent) {
+      const guide = await this.host.instructions();
+      const tools = this.state.capabilities.http && this.tools ? "MCP 도구가 연결되어 있습니다." : "현재 MCP 도구를 사용할 수 없습니다.";
+      content.push({ type: "text", text: `${guide}\n${tools}` });
+    }
     if (prepared.text) content.push({ type: "text", text: prepared.text });
     if (queued.text) content.push({ type: "text", text: queued.text });
     const allAttachments: Array<{ id: string; name: string; mime: string; key: string; bytes?: Uint8Array }> = [
