@@ -92,13 +92,19 @@ impl AppState {
         request: ConnectionRequest,
         access: FileAccess,
     ) -> Result<(ConnectionReply, usize), (StatusCode, CoreError)> {
-        if request.method != HttpMethod::Get
-            && (access != FileAccess::Readwrite || !connection.info.writable)
-        {
-            return Err((
-                StatusCode::FORBIDDEN,
-                errors::CONN_RELAY_WRITE_DENIED(&connection.info.name),
-            ));
+        if request.method != HttpMethod::Get {
+            if access != FileAccess::Readwrite {
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    errors::CONN_RELAY_APP_WRITE_DENIED(&connection.info.name),
+                ));
+            }
+            if !connection.info.writable {
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    errors::CONN_RELAY_CONNECTION_WRITE_DENIED(&connection.info.name),
+                ));
+            }
         }
         if !valid_request_path(&request.path)
             || (!connection.info.paths.is_empty()
@@ -206,7 +212,10 @@ impl AppState {
                 if bytes.len().saturating_add(chunk.len()) > max_bytes {
                     return Err((
                         StatusCode::PAYLOAD_TOO_LARGE,
-                        errors::CONN_RELAY_RESPONSE_TOO_LARGE(&connection_name),
+                        errors::CONN_RELAY_RESPONSE_TOO_LARGE(
+                            &connection_name,
+                            kaleidoscope_contract::size::format_byte_limit(max_bytes as u64),
+                        ),
                     ));
                 }
                 bytes.extend_from_slice(&chunk);

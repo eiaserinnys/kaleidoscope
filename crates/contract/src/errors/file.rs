@@ -41,14 +41,14 @@ error_catalog! { ENTRIES;
         message: "앱 정의 permissions의 {permission} 항목이 files 모듈이 아닙니다. 이 항목의 모듈을 files로 바꾸세요.",
         fix: "앱 정의 permissions에서 {permission}의 모듈을 files로 바꾸세요"
     }
-    FILE_ACCESS_ROOT_NOT_FOUND(permission) {
+    FILE_ACCESS_ROOT_NOT_FOUND(path) {
         class: NotFound,
         place: "선택한 폴더 검사",
         cause: "선택한 폴더 경로가 사라졌다",
         message: "선택한 폴더를 찾을 수 없습니다. 옮겨졌거나 지워졌으면 폴더를 다시 고르거나 앱을 다시 여세요. 폴더: {path}",
         fix: "폴더를 다시 고르거나 앱을 다시 여세요"
     }
-    FILE_ACCESS_ROOT_CHANGED(permission) {
+    FILE_ACCESS_ROOT_CHANGED(path) {
         class: PathOutsideRoot,
         place: "선택한 폴더 검사",
         cause: "선택한 경로가 다른 위치를 가리키거나 폴더가 아니다",
@@ -104,12 +104,12 @@ error_catalog! { ENTRIES;
         message: "파일 {path}: 읽지 못했습니다. 파일 관리자에서 파일이 열리는지 확인하세요.",
         fix: "파일 관리자에서 파일이 열리는지 확인하세요"
     }
-    FILE_READ_TOO_LARGE(path) {
+    FILE_READ_TOO_LARGE(path, limit) {
         class: Io,
         place: "파일 크기 검사",
         cause: "파일이 읽기 한도보다 크다",
-        message: "파일 {path}: 5MB를 넘어 읽을 수 없습니다. 더 작은 파일을 선택하세요.",
-        fix: "5MB 이하의 파일을 선택하세요"
+        message: "파일 {path}: 허용 크기 {limit}보다 커서 읽을 수 없습니다. 더 작은 파일을 선택하세요.",
+        fix: "{limit} 이하의 파일을 선택하세요"
     }
     FILE_READ_NOT_TEXT(path) {
         class: Io,
@@ -769,7 +769,7 @@ error_catalog! { ENTRIES;
         message: "경로 {path}: 파일이 아닙니다. 파일을 선택해 다시 여세요.",
         fix: "파일을 선택하세요"
     }
-    FILE_OPEN_APP_NOT_FOUND() {
+    FILE_OPEN_APP_NOT_FOUND(app_id) {
         class: NotFound,
         place: "파일 열기 앱 찾기",
         cause: "파일을 열 앱이 등록되어 있지 않다",
@@ -783,7 +783,7 @@ error_catalog! { ENTRIES;
         message: "파일을 열 앱의 정의가 이 쉘에 없습니다. 앱 정의 가져오기로 앱을 다시 가져오세요.",
         fix: "앱 정의 가져오기로 다시 가져오거나 에이전트에게 앱을 다시 올려 달라고 하세요"
     }
-    FILE_OPEN_APP_CANNOT_OPEN() {
+    FILE_OPEN_APP_CANNOT_OPEN(app_id) {
         class: InvalidRequest,
         place: "파일 열기 확장자 검사",
         cause: "앱이 이 파일 확장자를 열도록 선언하지 않았다",
@@ -853,12 +853,12 @@ error_catalog! { ENTRIES;
         message: "선택한 항목 {name}: 파일이 아닙니다. 파일을 선택하세요.",
         fix: "일반 파일을 선택하세요"
     }
-    FILE_CLIENT_PICK_TOO_LARGE(name) {
+    FILE_CLIENT_PICK_TOO_LARGE(name, limit) {
         class: InvalidRequest,
         place: "앱 파일 크기 검사",
         cause: "선택한 파일이 읽기 한도를 넘었다",
-        message: "선택한 파일 {name}: 512MB를 넘어 전달할 수 없습니다. 더 작은 파일을 선택하세요.",
-        fix: "512MB 이하의 파일을 선택하세요"
+        message: "선택한 파일 {name}: 허용 크기 {limit}보다 커서 전달할 수 없습니다. 더 작은 파일을 선택하세요.",
+        fix: "{limit} 이하의 파일을 선택하세요"
     }
     FILE_CLIENT_PICK_NAME_INVALID(path) {
         class: InvalidRequest,
@@ -888,12 +888,12 @@ error_catalog! { ENTRIES;
         message: "선택한 파일 {name}: 찾을 수 없습니다. 파일 선택 창에서 다시 선택하세요.",
         fix: "파일을 다시 선택하세요"
     }
-    FILE_CLIENT_READ_TOO_LARGE(name) {
+    FILE_CLIENT_READ_TOO_LARGE(name, limit) {
         class: InvalidRequest,
         place: "앱 파일 크기 검사",
         cause: "고른 뒤 파일 크기가 읽기 한도를 넘었다",
-        message: "선택한 파일 {name}: 512MB를 넘어 읽을 수 없습니다. 더 작은 파일을 선택하세요.",
-        fix: "512MB 이하의 파일을 선택하세요"
+        message: "선택한 파일 {name}: 허용 크기 {limit}보다 커서 읽을 수 없습니다. 더 작은 파일을 선택하세요.",
+        fix: "{limit} 이하의 파일을 선택하세요"
     }
     FILE_CLIENT_READ_IO(name) {
         class: Io,
@@ -909,12 +909,12 @@ error_catalog! { ENTRIES;
         message: "앱에 전달할 항목 {path}: 파일이 아닙니다. 파일을 선택하세요.",
         fix: "일반 파일을 선택하세요"
     }
-    FILE_CLIENT_REGISTER_TOO_LARGE(path) {
+    FILE_CLIENT_REGISTER_TOO_LARGE(path, limit) {
         class: InvalidRequest,
         place: "앱 파일 등록 크기 검사",
         cause: "등록할 파일이 읽기 한도를 넘었다",
-        message: "앱에 전달할 파일 {path}: 512MB를 넘어 전달할 수 없습니다. 더 작은 파일을 선택하세요.",
-        fix: "512MB 이하의 파일을 선택하세요"
+        message: "앱에 전달할 파일 {path}: 허용 크기 {limit}보다 커서 전달할 수 없습니다. 더 작은 파일을 선택하세요.",
+        fix: "{limit} 이하의 파일을 선택하세요"
     }
     FILE_CLIENT_REGISTER_NAME_INVALID(path) {
         class: InvalidRequest,

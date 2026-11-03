@@ -611,7 +611,7 @@ pub fn validate_storage_content(
             if bytes.len() > STORAGE_JSON_MAX_BYTES {
                 Err(crate::errors::STORAGE_WRITE_JSON_TOO_LARGE(
                     &entry.key,
-                    STORAGE_JSON_MAX_BYTES,
+                    crate::size::format_byte_limit((STORAGE_JSON_MAX_BYTES) as u64),
                 ))
             } else {
                 Ok(())
@@ -624,7 +624,7 @@ pub fn validate_storage_content(
             {
                 Err(crate::errors::STORAGE_WRITE_MD_TOO_LARGE(
                     &entry.key,
-                    STORAGE_MD_MAX_BYTES,
+                    crate::size::format_byte_limit((STORAGE_MD_MAX_BYTES) as u64),
                 ))
             } else {
                 Ok(())

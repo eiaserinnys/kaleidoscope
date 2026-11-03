@@ -174,14 +174,14 @@ error_catalog! { ENTRIES;
         message: "저장 항목 {key}의 값을 JSON으로 만들지 못했습니다. JSON으로 표현할 수 있는 값으로 바꾼 뒤 다시 저장하세요.",
         fix: "JSON으로 표현할 수 있는 값으로 바꾸세요"
     }
-    STORAGE_WRITE_JSON_TOO_LARGE(key, max_bytes) {
+    STORAGE_WRITE_JSON_TOO_LARGE(key, limit) {
         class: InvalidRequest,
         place: "저장소 JSON 항목 검사",
         cause: "직렬화한 JSON 값이 허용 크기를 넘는다",
         message: "저장 항목 {key}의 JSON 값이 허용 크기 {limit}보다 큽니다. 값을 줄인 뒤 다시 저장하세요.",
         fix: "저장할 JSON 값을 허용 크기 안으로 줄이세요"
     }
-    STORAGE_WRITE_MD_TOO_LARGE(key, max_bytes) {
+    STORAGE_WRITE_MD_TOO_LARGE(key, limit) {
         class: InvalidRequest,
         place: "저장소 Markdown 항목 검사",
         cause: "Markdown 원문이 허용 크기를 넘는다",
@@ -209,21 +209,35 @@ error_catalog! { ENTRIES;
         message: "서버에 이 앱이나 저장 항목이 없습니다. 앱이 서버에서 지워졌을 수 있습니다. 앱 열기에서 앱이 있는지 확인하세요.",
         fix: "앱 열기에서 앱이 있는지 확인하세요"
     }
-    STORAGE_SERVER_REQUEST_FAILED() {
+    STORAGE_SERVER_REQUEST_SEND_FAILED() {
         class: Server,
-        place: "저장소 서버 요청",
-        cause: "서버 요청이 네트워크 또는 서버 오류로 끝났다",
-        message: "서버와 저장소 요청을 주고받지 못했습니다. 서버 연결 상태를 확인한 뒤 다시 시도하세요.",
+        place: "저장소 서버 요청 전송",
+        cause: "서버에 저장소 요청을 보내지 못했다",
+        message: "서버에 저장소 요청을 보내지 못했습니다. 서버 연결 상태를 확인한 뒤 다시 시도하세요.",
         fix: "서버 연결 상태를 확인하고 다시 시도하세요"
     }
-    STORAGE_WINDOW_NOT_FOUND(window_id) {
+    STORAGE_SERVER_REQUEST_STATUS_FAILED() {
+        class: Server,
+        place: "저장소 서버 응답 확인",
+        cause: "서버가 저장소 요청에 실패 응답을 보냈다",
+        message: "서버가 저장소 요청에 실패 응답을 보냈습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "에이전트에게 이 오류 코드를 전하세요"
+    }
+    STORAGE_SERVER_REQUEST_READ_FAILED() {
+        class: Server,
+        place: "저장소 서버 응답 읽기",
+        cause: "서버의 저장소 응답을 읽지 못했다",
+        message: "서버의 저장소 응답을 읽지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "에이전트에게 이 오류 코드를 전하세요"
+    }
+    STORAGE_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "창 저장소 접근",
         cause: "저장소를 열 창이 현재 상태에 없다",
         message: "저장소를 열 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
-    STORAGE_DESKTOP_NOT_FOUND(desktop_id) {
+    STORAGE_DESKTOP_NOT_FOUND() {
         class: NotFound,
         place: "창 저장소 작업 확인",
         cause: "창의 데스크톱이 현재 상태에 없다",
@@ -545,7 +559,7 @@ error_catalog! { ENTRIES;
         message: "저장 키 {key}: 앱 선언에서 허용하지 않는 형식입니다. 앱에 선언된 저장 키를 사용하세요.",
         fix: "앱에 선언된 저장 키를 사용하세요"
     }
-    STORAGE_APP_VALUE_JSON_TOO_LARGE(key, max_bytes) {
+    STORAGE_APP_VALUE_JSON_TOO_LARGE(key, limit) {
         class: InvalidRequest,
         place: "기본 앱 JSON 저장값 크기 검사",
         cause: "기본 앱 JSON 저장값이 허용 크기를 넘는다",
@@ -559,7 +573,7 @@ error_catalog! { ENTRIES;
         message: "저장 항목 {key}의 JSON 값을 만들지 못했습니다. JSON으로 표현할 수 있는 값으로 바꿔 다시 저장하세요.",
         fix: "JSON으로 표현할 수 있는 값으로 바꾸세요"
     }
-    STORAGE_APP_VALUE_MD_TOO_LARGE(key, max_bytes) {
+    STORAGE_APP_VALUE_MD_TOO_LARGE(key, limit) {
         class: InvalidRequest,
         place: "기본 앱 Markdown 저장값 크기 검사",
         cause: "기본 앱 Markdown 저장값이 허용 크기를 넘는다",
@@ -804,7 +818,7 @@ error_catalog! { ENTRIES;
         message: "저장 문서 {doc}: 초기화 revision이 없습니다. 문서를 다시 읽고 revision과 함께 요청하세요.",
         fix: "문서를 다시 읽고 revision을 보내세요"
     }
-    STORAGE_DOCUMENT_MOVE_NAME_INVALID() {
+    STORAGE_DOCUMENT_MOVE_NAME_INVALID(from, to) {
         class: InvalidRequest,
         place: "저장 문서 이름 변경 요청",
         cause: "원본 또는 대상 문서 이름이 허용된 형식이 아니다",

@@ -97,7 +97,7 @@ error_catalog! { ENTRIES;
         message: "원천 {source}: 읽는 동안 파일이 사라졌습니다. 파일 관리자에서 경로를 확인하세요. 파일: {path}",
         fix: "파일 관리자에서 경로를 확인하세요"
     }
-    DATA_SOURCE_FILE_TOO_LARGE(source, path) {
+    DATA_SOURCE_FILE_TOO_LARGE(source, limit, path) {
         class: Io,
         place: "파일 원천 읽기",
         cause: "원천 파일이 허용 크기를 넘었다",
@@ -167,28 +167,28 @@ error_catalog! { ENTRIES;
         message: "바인딩 경로 {pointer}의 JSONata 식 계산에 실패했습니다. 식과 입력값을 확인하세요. 원인: {reason}",
         fix: "표시된 바인딩의 식을 고치세요"
     }
-    DATA_ACT_WINDOW_NOT_FOUND(window) {
+    DATA_ACT_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "앱 동작 실행",
         cause: "동작을 실행할 창이 없다",
         message: "앱 동작을 실행할 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
-    DATA_ACT_STATE_WINDOW_NOT_FOUND(window) {
+    DATA_ACT_STATE_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "앱 동작 상태 변경",
         cause: "상태를 바꾸려는 앱 창이 없다",
         message: "상태를 바꿀 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
-    DATA_ACT_STORAGE_WINDOW_NOT_FOUND(window) {
+    DATA_ACT_STORAGE_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "앱 동작 저장 항목 쓰기",
         cause: "저장 항목을 쓰려는 앱 창이 없다",
         message: "저장 항목을 쓸 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
-    DATA_ACT_BUTTON_GRID_EXPR_NOT_READY(pointer) {
+    DATA_ACT_BUTTON_GRID_EXPR_NOT_READY() {
         class: InvalidRequest,
         place: "단추 묶음 동작 실행",
         cause: "단추 목록 식의 결과가 준비되지 않았다",
@@ -216,14 +216,14 @@ error_catalog! { ENTRIES;
         message: "단추 묶음 {pointer}에서 선택값을 읽지 못했습니다. 단추를 다시 선택하세요.",
         fix: "단추를 다시 선택하세요"
     }
-    DATA_ACT_BUTTON_GRID_KEY_NOT_FOUND(pointer, key) {
+    DATA_ACT_BUTTON_GRID_KEY_NOT_FOUND(key) {
         class: InvalidRequest,
         place: "단추 묶음 선택 처리",
         cause: "선택한 키와 일치하는 단추가 없다",
         message: "누른 단추가 목록에 더 이상 없습니다: {key}. 바뀐 목록에서 다시 누르세요.",
         fix: "바뀐 목록에서 다시 누르세요"
     }
-    DATA_ACT_BUTTON_GRID_KEY_DISABLED(pointer, key) {
+    DATA_ACT_BUTTON_GRID_KEY_DISABLED(key) {
         class: InvalidRequest,
         place: "단추 묶음 선택 처리",
         cause: "선택한 단추가 비활성화되어 있다",
@@ -237,14 +237,14 @@ error_catalog! { ENTRIES;
         message: "앱 정의의 동작 경로 {pointer}: 실행할 동작이 없습니다. 동작을 연결한 뒤 다시 시도하세요.",
         fix: "앱 정의에서 동작 연결을 확인하세요"
     }
-    DATA_ACT_ACTION_WINDOW_MISSING(window) {
+    DATA_ACT_ACTION_WINDOW_MISSING() {
         class: InvalidRequest,
         place: "앱 동작 조회",
         cause: "동작을 조회하는 사이 앱 창이 사라졌다",
         message: "동작을 찾는 사이 창이 사라졌습니다. 앱 열기에서 앱을 다시 여세요.",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
-    DATA_ACT_ACTION_WINDOW_NOT_FOUND(window) {
+    DATA_ACT_ACTION_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "앱 동작 요청 확인",
         cause: "동작 요청을 받은 앱 창이 없다",
@@ -265,14 +265,14 @@ error_catalog! { ENTRIES;
         message: "동작 경로 {pointer}의 계산이나 검사가 실패했습니다. 앱 정의의 동작 설정과 입력값을 확인하세요. 원인: {reason}",
         fix: "앱 정의의 동작 설정과 입력값을 확인하세요"
     }
-    DATA_ACT_WORKER_WINDOW_NOT_FOUND(window, action) {
+    DATA_ACT_WORKER_WINDOW_NOT_FOUND(action) {
         class: NotFound,
         place: "서버 작업 동작 실행",
         cause: "동작을 실행할 창이 없다",
         message: "워커 동작 {action}: 실행할 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
-    DATA_ACT_WORKER_DESKTOP_NOT_FOUND(window, action) {
+    DATA_ACT_WORKER_DESKTOP_NOT_FOUND(action) {
         class: NotFound,
         place: "서버 작업 동작 실행",
         cause: "동작을 실행할 작업 공간이 없다",
@@ -309,8 +309,8 @@ error_catalog! { ENTRIES;
     }
     DATA_ACT_WORKER_RESPONSE_READ_FAILED(action) {
         class: Server,
-        place: "서버 작업 응답 읽기",
-        cause: "서버 작업 응답을 읽지 못했다",
+        place: "워커 동작 응답 읽기",
+        cause: "워커 동작의 서버 응답을 읽지 못했다",
         message: "워커 동작 {action}: 서버 응답을 읽지 못했습니다. 동작은 실행됐을 수 있으니 결과를 확인한 뒤 다시 시도하세요.",
         fix: "결과를 확인한 뒤 다시 시도하세요"
     }
@@ -335,7 +335,7 @@ error_catalog! { ENTRIES;
         message: "앱 동작의 상태 키 {key}: 앱 정의 state에 없습니다. 앱 정의 state에 이 키를 더하세요.",
         fix: "앱 정의 state에 이 키를 더하세요"
     }
-    DATA_ACT_STATE_TOO_LARGE() {
+    DATA_ACT_STATE_TOO_LARGE(limit) {
         class: InvalidRequest,
         place: "앱 동작 상태 변경",
         cause: "상태 변경 뒤 창 상태가 허용 크기를 넘었다",
@@ -356,28 +356,28 @@ error_catalog! { ENTRIES;
         message: "연결 권한 {permission}: 요청 한도에 도달했습니다. 잠시 뒤 다시 시도하세요.",
         fix: "잠시 뒤 다시 시도하세요"
     }
-    DATA_RUNTIME_ATTACH_WINDOW_NOT_FOUND(window) {
+    DATA_RUNTIME_ATTACH_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "데이터 화면 연결",
         cause: "연결할 앱 창이 없다",
         message: "데이터를 연결할 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
-    DATA_RUNTIME_ATTACH_APP_NOT_FOUND(window) {
+    DATA_RUNTIME_ATTACH_APP_NOT_FOUND() {
         class: NotFound,
         place: "데이터 화면 연결",
         cause: "창의 앱 정의가 없다",
         message: "이 창의 앱 정의가 이 쉘에 없어 데이터를 표시할 수 없습니다. 앱 정의 가져오기로 앱을 다시 가져오세요.",
         fix: "앱 정의 가져오기로 다시 가져오거나 에이전트에게 앱을 다시 올려 달라고 하세요"
     }
-    DATA_RUNTIME_DORMANT_WINDOW_NOT_FOUND(window) {
+    DATA_RUNTIME_DORMANT_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "데이터 화면 상태 변경",
         cause: "상태를 바꿀 앱 창이 없다",
         message: "데이터 화면 상태를 바꿀 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
-    DATA_RUNTIME_REFRESH_WINDOW_NOT_FOUND(window) {
+    DATA_RUNTIME_REFRESH_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "데이터 원천 새로고침",
         cause: "원천을 새로고침할 앱 창이 없다",
@@ -440,7 +440,7 @@ error_catalog! { ENTRIES;
         message: "프로파일러가 벤치마크 창을 열지 못했습니다. 프로파일러를 다시 실행하세요.",
         fix: "프로파일러를 다시 실행하세요"
     }
-    DATA_CLIENT_BLOB_WINDOW_NOT_FOUND(window) {
+    DATA_CLIENT_BLOB_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "앱 파일 보관",
         cause: "파일을 보관할 앱 창이 없다",
@@ -545,11 +545,11 @@ error_catalog! { ENTRIES;
         message: "보관 키 {key}에 파일 내용을 복사하지 못했습니다. 디스크 공간과 읽기 전용 여부를 확인하세요.",
         fix: "디스크 공간과 읽기 전용 여부를 확인하세요"
     }
-    DATA_CLIENT_BLOB_TOO_LARGE(key) {
+    DATA_CLIENT_BLOB_TOO_LARGE(key, limit) {
         class: InvalidRequest,
         place: "앱 파일 보관 크기 검사",
         cause: "보관할 파일이 허용 크기를 넘었다",
-        message: "보관 키 {key}에 넣을 파일이 512MB를 넘습니다. 더 작은 파일을 선택하세요.",
+        message: "보관 키 {key}에 넣을 파일이 허용 크기 {limit}보다 큽니다. 더 작은 파일을 선택하세요.",
         fix: "더 작은 파일을 선택하세요"
     }
     DATA_CLIENT_BLOB_FLUSH_NOT_FOUND(key) {
@@ -622,7 +622,7 @@ error_catalog! { ENTRIES;
         message: "보관 위치 {prefix}의 파일 종류를 확인하지 못했습니다. 파일 관리자에서 쉘 데이터 폴더가 열리는지 확인하세요.",
         fix: "파일 관리자에서 쉘 데이터 폴더가 열리는지 확인하세요"
     }
-    DATA_CLIENT_HTTP_WINDOW_NOT_FOUND(window) {
+    DATA_CLIENT_HTTP_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "공개 HTTPS 읽기",
         cause: "요청을 보낼 앱 창이 없다",

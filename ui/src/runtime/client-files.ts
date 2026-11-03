@@ -4,6 +4,7 @@ import * as shellErrors from "../contract/shell-errors";
 
 const FILE_LIMIT = CLIENT_PICK_FILE_MAX_BYTES;
 const BLOB_LIMIT = 64 * 1024 * 1024;
+const formatByteLimit = (bytes: number) => `${bytes / (1024 * 1024)}MB`;
 type Sink = { name: string; mime: string; stream?: FileSystemWritableFileStream; handle?: FileSystemFileHandle; bytes?: Uint8Array<ArrayBuffer>; retainOnClose?: boolean };
 type PickerWindow = Window & { showSaveFilePicker?: (options: { suggestedName: string; types?: { description: string; accept: Record<string, string[]> }[] }) => Promise<FileSystemFileHandle> };
 
@@ -21,7 +22,7 @@ export class BrowserFiles {
       input.addEventListener("change", () => {
         const selected = Array.from(input.files ?? []); input.remove();
         const oversized = selected.find((file) => file.size > FILE_LIMIT);
-        if (oversized) { reject(shellErrors.SHELL_CLIENT_FILE_PICK_TOO_LARGE({ name: oversized.name, limit: "512MB" })); return; }
+        if (oversized) { reject(shellErrors.SHELL_CLIENT_FILE_PICK_TOO_LARGE({ name: oversized.name, limit: formatByteLimit(FILE_LIMIT) })); return; }
         const files = selected.map((file) => { const id = crypto.randomUUID(); this.files.set(id, file); return { id, name: file.name, size: file.size, mime: file.type || "application/octet-stream" }; });
         resolve({ cancelled: !files.length, files });
       }, { once: true });
@@ -32,7 +33,7 @@ export class BrowserFiles {
   async read(id: string): Promise<ArrayBuffer> {
     const file = this.files.get(id);
     if (!file) throw { ...shellErrors.SHELL_CLIENT_FILE_NOT_FOUND(), details: [id] };
-    if (file.size > FILE_LIMIT) throw shellErrors.SHELL_CLIENT_FILE_READ_TOO_LARGE({ name: file.name, limit: "512MB" });
+    if (file.size > FILE_LIMIT) throw shellErrors.SHELL_CLIENT_FILE_READ_TOO_LARGE({ name: file.name, limit: formatByteLimit(FILE_LIMIT) });
     return file.arrayBuffer();
   }
 

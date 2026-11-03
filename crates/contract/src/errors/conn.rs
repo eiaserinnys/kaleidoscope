@@ -92,8 +92,8 @@ error_catalog! { ENTRIES;
     }
     CONN_LINK_IMPORT_NOT_FOUND(host) {
         class: Server,
-        place: "연결된 서버에서 앱 가져오기",
-        cause: "서버에 요청한 앱이 없다",
+        place: "연결된 서버에 앱 올리기",
+        cause: "서버에 앱을 올리는 경로가 없다",
         message: "kaleidoscope 서버 {host}에 앱을 받을 곳이 없습니다. 서버가 쉘보다 옛 판일 수 있습니다. 서버를 업데이트하세요.",
         fix: "서버를 업데이트하세요"
     }
@@ -195,14 +195,14 @@ error_catalog! { ENTRIES;
         message: "연결 {connection}의 응답을 글자로 읽지 못했습니다. 서버 응답 형식을 확인하세요.",
         fix: "서버 응답 형식을 확인하세요"
     }
-    CONN_REQUEST_OAUTH_RESPONSE_TOO_LARGE(connection) {
+    CONN_REQUEST_OAUTH_RESPONSE_TOO_LARGE(connection, limit) {
         class: Io,
         place: "OAuth 연결 응답 읽기",
         cause: "응답이 허용 크기를 넘었다",
         message: "연결 {connection}의 응답이 허용 크기 {limit}보다 커서 읽지 못했습니다. 앱 정의의 요청 범위를 줄이세요.",
         fix: "앱 정의의 요청 범위를 줄이세요"
     }
-    CONN_REQUEST_SERVER_RESPONSE_FAILED() {
+    CONN_REQUEST_SERVER_RESPONSE_FAILED(permission) {
         class: Server,
         place: "연결 요청 응답 확인",
         cause: "원격 서버가 요청을 실패로 응답했다",
@@ -356,21 +356,21 @@ error_catalog! { ENTRIES;
         message: "이 창의 앱 정의가 이 쉘에 없어 로그인하지 못했습니다. 앱 정의 가져오기로 앱을 다시 가져오세요.",
         fix: "앱 정의 가져오기로 다시 가져오거나 에이전트에게 앱을 다시 올려 달라고 하세요"
     }
-    CONN_LOGIN_PERMISSION_MISSING() {
+    CONN_LOGIN_PERMISSION_MISSING(permission) {
         class: PermissionDenied,
         place: "연결 로그인",
         cause: "앱에 연결 로그인 권한이 없다",
         message: "연결 권한 {permission}: 앱 정의 permissions에 연결 권한으로 선언되지 않았습니다. 앱 정의 permissions에 선언하세요.",
         fix: "앱 정의 permissions에 연결 권한을 선언하세요"
     }
-    CONN_LOGIN_CONNECTION_MISSING() {
+    CONN_LOGIN_CONNECTION_MISSING(connection) {
         class: InvalidRequest,
         place: "연결 로그인",
         cause: "앱에 선언된 연결 정보가 설정되어 있지 않다",
         message: "연결 {connection} 설정을 찾지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
         fix: "set_connection으로 연결을 등록하세요"
     }
-    CONN_LOGIN_NOT_OAUTH() {
+    CONN_LOGIN_NOT_OAUTH(connection) {
         class: InvalidRequest,
         place: "연결 로그인",
         cause: "선택한 연결이 OAuth 연결이 아니다",
@@ -398,14 +398,14 @@ error_catalog! { ENTRIES;
         message: "이 창의 앱 정의가 이 쉘에 없어 연결 권한을 확인하지 못했습니다. 앱 정의 가져오기로 앱을 다시 가져오세요.",
         fix: "앱 정의 가져오기로 다시 가져오거나 에이전트에게 앱을 다시 올려 달라고 하세요"
     }
-    CONN_AUTHORIZE_PERMISSION_MISSING() {
+    CONN_AUTHORIZE_PERMISSION_MISSING(permission) {
         class: PermissionDenied,
         place: "연결 권한 확인",
         cause: "앱에 요청된 연결 권한이 없다",
         message: "연결 권한 {permission}: 앱 정의 permissions에 연결 권한으로 선언되지 않았습니다. 앱 정의 permissions에 선언하세요.",
         fix: "앱 정의 permissions에 연결 권한을 선언하세요"
     }
-    CONN_AUTHORIZE_READ_ONLY() {
+    CONN_AUTHORIZE_READ_ONLY(permission) {
         class: PermissionDenied,
         place: "연결 권한 확인",
         cause: "읽기 전용 권한으로 쓰기 요청을 했다",
@@ -461,12 +461,19 @@ error_catalog! { ENTRIES;
         message: "연결({connection})은 서버 중계를 사용하지 않습니다. 앱 정의의 연결 권한이 서버 중계 연결을 가리키게 고치세요.",
         fix: "앱 정의의 연결 권한이 서버 중계 연결을 가리키게 고치세요"
     }
-    CONN_RELAY_WRITE_DENIED(connection) {
+    CONN_RELAY_APP_WRITE_DENIED(connection) {
         class: PermissionDenied,
-        place: "연결 중계 권한 확인",
-        cause: "앱 또는 연결이 쓰기를 허용하지 않는다",
-        message: "연결({connection})에 쓰기 요청을 보낼 수 없습니다. 앱 정의 permissions의 access가 readwrite인지, 연결의 writable이 켜졌는지 확인하세요.",
-        fix: "앱 정의의 access와 연결의 writable을 확인하세요"
+        place: "연결 중계 앱 권한 확인",
+        cause: "앱 권한이 쓰기를 허용하지 않는다",
+        message: "연결({connection})에 쓰기 요청을 보낼 수 없습니다. 앱 정의 permissions의 access를 readwrite로 바꾸세요.",
+        fix: "앱 정의 permissions의 access를 readwrite로 바꾸세요"
+    }
+    CONN_RELAY_CONNECTION_WRITE_DENIED(connection) {
+        class: PermissionDenied,
+        place: "연결 중계 설정 확인",
+        cause: "연결 설정이 쓰기를 허용하지 않는다",
+        message: "연결({connection})에 쓰기 요청을 보낼 수 없습니다. 연결의 writable을 켜세요.",
+        fix: "연결의 writable을 켜세요"
     }
     CONN_RELAY_PATH_INVALID(connection) {
         class: InvalidRequest,
@@ -524,7 +531,7 @@ error_catalog! { ENTRIES;
         message: "연결 {connection}의 서버 {host} 응답을 읽지 못했습니다. 잠시 뒤 다시 시도하세요.",
         fix: "잠시 뒤 다시 시도하세요"
     }
-    CONN_RELAY_RESPONSE_TOO_LARGE(connection) {
+    CONN_RELAY_RESPONSE_TOO_LARGE(connection, limit) {
         class: InvalidRequest,
         place: "연결 중계 응답 읽기",
         cause: "응답이 허용 크기를 넘었다",
@@ -580,35 +587,35 @@ error_catalog! { ENTRIES;
         message: "연결 설정을 저장 형식으로 바꾸지 못했습니다. 서버 로그에서 이 오류 코드를 찾으세요.",
         fix: "서버 로그에서 이 오류 코드를 찾으세요"
     }
-    CONN_SETTING_PATHS_INVALID() {
+    CONN_SETTING_PATHS_INVALID(name) {
         class: Server,
         place: "연결 경로 설정 읽기",
         cause: "저장된 연결 경로 목록을 읽지 못했다",
         message: "연결 {name}: 저장된 허용 경로를 읽지 못했습니다. set_connection으로 연결을 다시 저장하세요.",
         fix: "set_connection으로 연결을 다시 저장하세요"
     }
-    CONN_SETTING_HEADERS_INVALID() {
+    CONN_SETTING_HEADERS_INVALID(name) {
         class: Server,
         place: "연결 헤더 설정 읽기",
         cause: "저장된 연결 헤더를 읽지 못했다",
         message: "연결 {name}: 저장된 헤더를 읽지 못했습니다. set_connection으로 연결을 다시 저장하세요.",
         fix: "set_connection으로 연결을 다시 저장하세요"
     }
-    CONN_SETTING_LIST_PATHS_INVALID() {
+    CONN_SETTING_LIST_PATHS_INVALID(name) {
         class: Server,
         place: "연결 목록의 경로 설정 읽기",
         cause: "목록에 든 연결의 허용 경로를 읽지 못했다",
         message: "연결 {name}: 저장된 허용 경로를 읽지 못했습니다. set_connection으로 연결을 다시 저장하세요.",
         fix: "set_connection으로 연결을 다시 저장하세요"
     }
-    CONN_SETTING_LIST_HEADERS_INVALID() {
+    CONN_SETTING_LIST_HEADERS_INVALID(name) {
         class: Server,
         place: "연결 목록의 헤더 설정 읽기",
         cause: "목록에 든 연결의 헤더를 읽지 못했다",
         message: "연결 {name}: 저장된 헤더를 읽지 못했습니다. set_connection으로 연결을 다시 저장하세요.",
         fix: "set_connection으로 연결을 다시 저장하세요"
     }
-    CONN_SETTING_KIND_INVALID() {
+    CONN_SETTING_KIND_INVALID(kind) {
         class: Server,
         place: "연결 종류 읽기",
         cause: "저장된 연결 종류를 알 수 없다",
@@ -650,21 +657,21 @@ error_catalog! { ENTRIES;
         message: "OAuth 연결에는 사용자 지정 중계 헤더를 설정할 수 없습니다. 헤더 설정을 비우세요.",
         fix: "사용자 지정 헤더 설정을 비우세요"
     }
-    CONN_SETTING_HEADER_NAME_INVALID() {
+    CONN_SETTING_HEADER_NAME_INVALID(name) {
         class: InvalidRequest,
         place: "연결 헤더 설정 확인",
         cause: "헤더 이름이 올바르지 않다",
         message: "연결 헤더 이름이 올바르지 않습니다: {name}. HTTP 헤더 이름을 고치세요.",
         fix: "HTTP 헤더 이름을 고치세요"
     }
-    CONN_SETTING_HEADER_RESERVED() {
+    CONN_SETTING_HEADER_RESERVED(name) {
         class: InvalidRequest,
         place: "연결 헤더 설정 확인",
         cause: "연결이 관리하는 헤더 이름을 지정했다",
         message: "연결에서 직접 설정할 수 없는 헤더 이름입니다: {name}. host, content-length, connection, transfer-encoding 외의 이름을 쓰세요.",
         fix: "host, content-length, connection, transfer-encoding 외의 이름을 사용하세요"
     }
-    CONN_SETTING_HEADER_VALUE_INVALID() {
+    CONN_SETTING_HEADER_VALUE_INVALID(name) {
         class: InvalidRequest,
         place: "연결 헤더 설정 확인",
         cause: "헤더 값에 허용되지 않는 문자가 있다",
