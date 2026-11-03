@@ -272,7 +272,7 @@ fn layout_changes_posts_and_classifies_responses() {
     let request = worker.join().unwrap();
     assert!(request.starts_with(&format!("POST {DEVICE_LAYOUT_CHANGES_PATH} ")));
     assert!(request.contains("\"deleted_windows\":[\"window\"]"));
-    let expected_error = CoreError::new(ErrorCode::InvalidRequest);
+    let expected_error = kaleidoscope_contract::errors::SERVER_LAYOUT_CHANGE_BODY_INVALID();
     let (url, worker) = server(
         "400 Bad Request",
         serde_json::to_string(&expected_error).unwrap(),

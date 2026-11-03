@@ -1,4 +1,39 @@
 error_catalog! { ENTRIES;
+    CONN_SETTING_SAVE_DATABASE_FAILED(name) {
+        class: Server,
+        place: "연결 설정 저장",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "연결 {name}: 설정을 서버 저장소에 저장하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    CONN_SETTING_DELETE_DATABASE_FAILED(name) {
+        class: Server,
+        place: "연결 설정 삭제",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "연결 {name}: 설정을 서버 저장소에서 지우지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    CONN_SETTING_READ_DATABASE_FAILED(name) {
+        class: Server,
+        place: "연결 설정 읽기",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "연결 {name}: 설정을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    CONN_SETTING_LIST_DATABASE_FAILED() {
+        class: Server,
+        place: "연결 설정 목록 조회",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "연결 목록을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    CONN_PAIR_APPROVE_DATABASE_FAILED() {
+        class: Server,
+        place: "기기 연결 승인",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "기기 연결을 승인하면서 기기 정보를 서버 저장소에 저장하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
     CONN_LINK_START_URL_INVALID() {
         class: InvalidRequest,
         place: "서버 연결 시작",

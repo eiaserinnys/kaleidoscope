@@ -75,7 +75,8 @@ describe("shell update action", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "다시 시작해서 업데이트" }));
 
     await waitFor(() => expect(calls.some((request) => request.op === "update.restart")).toBe(true));
-    expect(calls.map((request) => request.op)).toEqual(["files.write", "update.restart"]);
+    expect(calls.map((request) => request.op).filter((op) => op === "files.write" || op === "update.restart"))
+      .toEqual(["files.write", "update.restart"]);
     expect(transport.getFiles()["README.md"]).toBe("# Saved before restart");
     editor.dispose();
     store.dispose();

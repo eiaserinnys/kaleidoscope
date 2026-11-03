@@ -25,7 +25,7 @@ test("creates a markdown file and cancels without writing", async ({ page }) => 
   const duplicateName = editor.getByRole("textbox", { name: "새 파일 이름" });
   await duplicateName.fill("회의 메모.md");
   await duplicateName.press("Enter");
-  await expect(editor.getByRole("alert")).toContainText("같은 이름의 파일이 있습니다");
+  await expect(editor.getByRole("alert")).toContainText("같은 이름의 항목이 있어 만들지 못했습니다");
   await expect(editor.getByRole("textbox", { name: "새 파일 이름" })).toHaveValue("회의 메모.md");
 
   await editor.getByRole("textbox", { name: "새 파일 이름" }).press("Escape");

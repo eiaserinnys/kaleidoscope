@@ -73,7 +73,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "앱 미리 보기 작업 확인",
         cause: "지정한 작업이 창에 연결된 작업과 다르다",
-        message: "요청한 작업 ID {workspace_id}와 창에 연결된 작업 ID {window_workspace_id}가 다릅니다. 창에 연결된 작업 ID를 지정하세요.",
+        message: "요청한 작업 ID: {workspace_id}, 창에 연결된 작업 ID: {window_workspace_id}. 두 작업이 다릅니다. 창에 연결된 작업 ID를 지정하세요.",
         fix: "창에 연결된 작업 ID를 지정하세요"
     }
     APP_PREVIEW_WORKSPACE_NOT_FOUND(workspace_id) {

@@ -104,13 +104,6 @@ error_catalog! { ENTRIES;
         message: "{workspace}: 저장된 대화 연결 정보가 현재 설정과 맞지 않습니다. 에이전트에게 이 오류 코드를 전하세요.",
         fix: "에이전트에게 이 오류 코드를 전하세요"
     }
-    CONV_CONTEXT_ADOPTION_CONFLICT(workspace) {
-        class: BindingConflict,
-        place: "기존 대화 연결 복구",
-        cause: "제공자가 저장된 대화를 현재 작업에 연결하지 않았다",
-        message: "{workspace}: 제공자가 저장된 대화를 현재 작업에 연결하지 않았습니다. 대화 연결을 확인하세요.",
-        fix: "대화 연결을 확인하세요"
-    }
     CONV_CONTEXT_ADOPTED_THREAD_MISMATCH(saved_thread, returned_thread) {
         class: BindingConflict,
         place: "기존 대화 연결 복구",

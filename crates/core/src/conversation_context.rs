@@ -333,18 +333,6 @@ impl Context {
                     kaleidoscope_contract::errors::CONV_CONTEXT_ADOPTION_NOT_FOUND(
                         &self.workspace.name,
                     )
-                })
-                .map_err(|e| {
-                    if e.code == ErrorCode::Conflict {
-                        let mut error =
-                            kaleidoscope_contract::errors::CONV_CONTEXT_ADOPTION_CONFLICT(
-                                &self.workspace.name,
-                            );
-                        error.details.push(format!("제공자 대화 ID: {id}"));
-                        error
-                    } else {
-                        e
-                    }
                 })?;
             reply.thread
         };

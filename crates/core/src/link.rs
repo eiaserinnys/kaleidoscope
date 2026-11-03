@@ -16,29 +16,6 @@ use crate::registry_events;
 use crate::storage::{self, LinkFile};
 use crate::Inner;
 
-pub(crate) fn registry_error_to_core(error: RegistryError, message: &str) -> CoreError {
-    match error {
-        RegistryError::Validation(error) => error,
-        RegistryError::Failure { detail, .. } => CoreError {
-            id: None,
-            code: ErrorCode::Server,
-            message: message.into(),
-            details: vec![one_line(&detail)],
-        },
-        RegistryError::Unauthorized => server_error("기기 연결이 거부되었습니다.", Vec::new()),
-        RegistryError::NotFound => server_error("연결 코드를 찾을 수 없습니다.", Vec::new()),
-    }
-}
-
-pub(crate) fn server_error(message: &str, details: Vec<String>) -> CoreError {
-    CoreError {
-        id: None,
-        code: ErrorCode::Server,
-        message: message.into(),
-        details,
-    }
-}
-
 fn one_line(message: &str) -> String {
     message.lines().next().unwrap_or(message).trim().to_string()
 }

@@ -46,7 +46,7 @@ async function open(page: Page) {
 }
 
 async function blurOnTree(app: Locator, page: Page, editor: Locator) {
-  const box = await app.locator(".ks-file-tree-list").boundingBox();
+  const box = await app.getByRole("tree", { name: "파일 목록" }).boundingBox();
   if (!box) throw new Error("파일 목록을 찾지 못했습니다");
   await page.mouse.click(box.x + box.width / 2, box.y + box.height - 12);
   await expect.poll(async () => (await snapshot(editor)).focused).toBe(false);

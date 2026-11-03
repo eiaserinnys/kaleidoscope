@@ -92,7 +92,7 @@ impl AppState {
                     timestamp()
                 ],
             )
-            .map_err(db_error)?;
+            .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::CONN_SETTING_SAVE_DATABASE_FAILED(&info.name)))?;
         self.broadcast_connections()?;
         Ok((info, header_names))
     }
@@ -121,7 +121,12 @@ impl AppState {
                 "DELETE FROM connections WHERE account_id=?1 AND name=?2",
                 params![account_id, name],
             )
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::CONN_SETTING_DELETE_DATABASE_FAILED(name),
+                )
+            })?;
         if deleted > 0 {
             self.broadcast_connections()?;
         }
@@ -146,7 +151,7 @@ impl AppState {
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
             )
             .optional()
-            .map_err(db_error)?;
+            .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::CONN_SETTING_READ_DATABASE_FAILED(name)))?;
         row.map(
             |(kind, base_url, writable, paths, headers, issuer, scopes, resource, description)| {
                 let kind = parse_kind(&kind)?;
@@ -177,7 +182,7 @@ impl AppState {
         let db = self.lock_db()?;
         let mut statement = db
             .prepare("SELECT name,kind,base_url,writable,paths,headers,issuer,scopes,resource,description FROM connections WHERE account_id=?1 ORDER BY name")
-            .map_err(db_error)?;
+            .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::CONN_SETTING_LIST_DATABASE_FAILED()))?;
         let rows = statement
             .query_map([account_id], |row| {
                 Ok((
@@ -193,7 +198,12 @@ impl AppState {
                     row.get::<_, String>(9)?,
                 ))
             })
-            .map_err(db_error)?;
+            .map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::CONN_SETTING_LIST_DATABASE_FAILED(),
+                )
+            })?;
         rows.map(|row| {
             let (
                 name,
@@ -206,7 +216,12 @@ impl AppState {
                 scopes,
                 resource,
                 description,
-            ) = row.map_err(db_error)?;
+            ) = row.map_err(|error| {
+                db_error_with(
+                    error,
+                    kaleidoscope_contract::errors::CONN_SETTING_LIST_DATABASE_FAILED(),
+                )
+            })?;
             Ok(ConnectionRecord {
                 info: ConnectionInfo {
                     name,

@@ -225,7 +225,7 @@ for (const mode of ["포커스 없음", "다른 줄 포커스"] as const) {
 test("렌더 줄에서 편집기 밖으로 끌고 놓아도 선택과 키보드 이동이 이어진다", async ({ page }) => {
   const { app, editor } = await open(page);
   const point = await glyph(editor, "글자들이");
-  const tree = await app.locator(".ks-file-tree-list").boundingBox();
+  const tree = await app.getByRole("tree", { name: "파일 목록" }).boundingBox();
   if (!tree) throw new Error("파일 목록을 찾지 못했습니다");
   await page.mouse.move(point.x, point.y);
   await page.mouse.down();

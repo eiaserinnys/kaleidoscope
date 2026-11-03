@@ -5049,8 +5049,19 @@ pub enum FileOpResult {
 }
 
 /// 명령의 실패.
+///
+/// ```compile_fail
+/// use kaleidoscope_contract::{CoreError, ErrorCode};
+/// let _ = CoreError { id: None, code: ErrorCode::Server, message: String::new(), details: vec![] };
+/// ```
+///
+/// ```compile_fail
+/// use kaleidoscope_contract::{CoreError, ErrorCode};
+/// let _ = CoreError::new(ErrorCode::Server);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export, export_to = "contract.ts")]
+#[non_exhaustive]
 pub struct CoreError {
     /// 장소와 원인을 가리키는 에러코드. 등록부(`errors`)의 코드다. 옛 서버와 옛 쉘이 보낸 오류에는 없다.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -5106,79 +5117,7 @@ pub enum ErrorCode {
     TrashUnavailable,
 }
 
-impl ErrorCode {
-    /// 코드마다의 기본 한국어 설명.
-    pub fn default_message(self) -> &'static str {
-        match self {
-            ErrorCode::InvalidRequest => {
-                "요청 값이 빠졌거나 올바르지 않습니다. 요청 내용을 확인한 뒤 다시 시도하세요."
-            }
-            ErrorCode::Unauthorized => {
-                "인증 정보를 확인하지 못했습니다. 로그인 상태와 인증 정보를 확인하세요."
-            }
-            ErrorCode::NotFound => {
-                "요청한 대상에 접근할 수 없습니다. 대상 ID와 계정 범위를 확인하세요."
-            }
-            ErrorCode::InvalidAppDefinition => {
-                "앱 정의를 등록하지 못했습니다. 필수 값과 선언된 기능을 확인하세요."
-            }
-            ErrorCode::UnsupportedApp => {
-                "앱이 현재 쉘에서 지원하지 않는 블록이나 모듈 버전을 요구합니다. 쉘을 업데이트하세요."
-            }
-            ErrorCode::PermissionDenied => {
-                "요청한 앱 권한이 선언되지 않았거나 접근 수준이 부족합니다. 앱 권한과 요청 동작을 확인하세요."
-            }
-            ErrorCode::NotGranted => {
-                "이 기기에서 아직 필요한 폴더를 선택하지 않았습니다. 권한에 쓸 폴더를 고르세요."
-            }
-            ErrorCode::PathOutsideRoot => {
-                "요청한 경로가 허용된 폴더 밖에 있습니다. 선택한 폴더 안의 경로를 사용하세요."
-            }
-            ErrorCode::Conflict => {
-                "파일이 읽은 뒤 바뀌었거나 같은 이름의 파일이 있습니다. 최신 상태를 확인하세요."
-            }
-            ErrorCode::LoginRequired => {
-                "대화 제공자에 로그인해야 합니다. 계정 연결을 완료한 뒤 다시 시도하세요."
-            }
-            ErrorCode::BindingConflict => {
-                "저장된 대화 참조가 제공자의 대화와 다릅니다. 대화 연결을 다시 확인하세요."
-            }
-            ErrorCode::Io => {
-                "파일 작업을 마치지 못했습니다. 파일 형식과 접근 권한을 확인하세요."
-            }
-            ErrorCode::Server => {
-                "서버 요청을 처리하지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요."
-            }
-            ErrorCode::Unavailable => "이 쉘에서는 쓸 수 없는 기능입니다.",
-            ErrorCode::LocalAgentFailed => "로컬 에이전트와 통신할 수 없습니다.",
-            ErrorCode::InvalidName => "쓸 수 없는 파일 이름입니다.",
-            ErrorCode::FileBusy => "다른 프로그램에서 사용 중입니다. 닫은 뒤 다시 시도하세요.",
-            ErrorCode::TrashUnavailable => "파일을 휴지통으로 보낼 수 없습니다.",
-        }
-    }
-}
-
 impl CoreError {
-    /// 기본 설명을 단 오류.
-    pub fn new(code: ErrorCode) -> Self {
-        CoreError {
-            id: None,
-            code,
-            message: code.default_message().to_string(),
-            details: Vec::new(),
-        }
-    }
-
-    /// 기본 설명과 걸린 것 목록을 단 오류.
-    pub fn with_details(code: ErrorCode, details: Vec<String>) -> Self {
-        CoreError {
-            id: None,
-            code,
-            message: code.default_message().to_string(),
-            details,
-        }
-    }
-
     pub(crate) fn registered(id: &str, code: ErrorCode, message: String) -> Self {
         Self {
             id: Some(id.to_string()),
@@ -5435,17 +5374,20 @@ mod tests {
         let definition = validate::parse_app_definition(raw).expect("HTML 보기 정의");
         assert_eq!(definition.ui.introduced_in(), 6);
         let entry = &definition.storage.as_ref().unwrap().entries[0];
-        assert!(app_storage::validate_storage_content(
-            entry,
-            &serde_json::json!("<p>one</p>")
-        )
-        .is_ok());
+        assert!(
+            app_storage::validate_storage_content(entry, &serde_json::json!("<p>one</p>")).is_ok()
+        );
         assert!(validate::parse_app_definition(
             &raw.replace("\"entry\":\"drafts\"", "\"entry\":\"missing\"")
         )
         .is_err());
-        assert!(validate::parse_app_definition(&raw.replace("\"storage\":3", "\"storage\":1")).is_err());
-        assert!(validate::parse_app_definition(&raw.replace("\"collection\":true", "\"collection\":false")).is_err());
+        assert!(
+            validate::parse_app_definition(&raw.replace("\"storage\":3", "\"storage\":1")).is_err()
+        );
+        assert!(validate::parse_app_definition(
+            &raw.replace("\"collection\":true", "\"collection\":false")
+        )
+        .is_err());
         assert!(
             validate::parse_app_definition(&raw.replace("\"blocks\":6", "\"blocks\":5")).is_err()
         );
@@ -6496,7 +6438,7 @@ mod tests {
             r#"{"event":"web.update","window_id":"x","page":{"url":"https://example.com/","title":"Example","loading":false,"can_go_back":true,"can_go_forward":false}}"#
         );
         assert_eq!(
-            serde_json::to_value(CoreError::new(ErrorCode::Unavailable)).unwrap()["code"],
+            serde_json::to_value(errors::WEB_REQUEST_HOST_UNAVAILABLE()).unwrap()["code"],
             "unavailable"
         );
     }
@@ -6957,12 +6899,7 @@ mod tests {
 
     #[test]
     fn error_serializes_with_snake_case_code() {
-        let err = CoreError {
-            id: None,
-            code: ErrorCode::PathOutsideRoot,
-            message: "고른 폴더 밖 경로입니다".into(),
-            details: vec![],
-        };
+        let err = errors::FILE_ACCESS_ROOT_CHANGED("docs");
         let json = serde_json::to_value(&err).unwrap();
         assert_eq!(json["code"], "path_outside_root");
     }

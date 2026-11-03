@@ -101,7 +101,7 @@ impl AppState {
                 "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,?2,?3,?4,?5)",
                 params![id, pairing.device_name, account_id, sha256_hex(token.as_bytes()), now],
             )
-            .map_err(db_error)?;
+            .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::CONN_PAIR_APPROVE_DATABASE_FAILED()))?;
         if let Some(entry) = pairings.get_mut(&device_code) {
             entry.approved = Some((id.clone(), token));
         }

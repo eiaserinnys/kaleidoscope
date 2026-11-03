@@ -182,16 +182,9 @@ impl McpServer {
                     source_results.insert(name.clone(), json!({"state":"idle"}));
                 }
                 SourcePlan::Invalid(message) => {
-                    statuses.insert(
-                        name.clone(),
-                        SourceStatus::Failed {
-                            message: message.clone(),
-                            has_value: false,
-                            id: None,
-                        },
-                    );
-                    source_results
-                        .insert(name.clone(), json!({"state":"failed","message":message}));
+                    let error =
+                        kaleidoscope_contract::errors::DATA_SOURCE_PLAN_INVALID(name, message);
+                    preview_failure(&mut statuses, &mut source_results, name, error, None);
                 }
                 SourcePlan::File { .. } | SourcePlan::Folder { .. } => {
                     statuses.insert(name.clone(), SourceStatus::Idle {});
@@ -219,6 +212,10 @@ impl McpServer {
                         .find(|decl| decl.id() == permission)
                     {
                         let base_url = base_url.clone();
+                        let host = reqwest::Url::parse(&base_url)
+                            .ok()
+                            .and_then(|url| url.host_str().map(str::to_owned))
+                            .unwrap_or_else(|| "알 수 없는 서버".into());
                         let paths = paths.clone();
                         let source_format = match definition.sources.get(name) {
                             Some(SourceDecl::Request { format, .. }) => *format,
@@ -236,17 +233,24 @@ impl McpServer {
                         .await;
                         let result = result
                             .map_err(|error| error.to_string())
-                            .and_then(|value| value);
+                            .and_then(|value| value)
+                            .map_err(|reason| {
+                                kaleidoscope_contract::errors::DATA_PREVIEW_PUBLIC_REQUEST_FAILED(
+                                    name,
+                                )
+                                .and_details(vec![reason])
+                            });
                         let value = result.and_then(|response| {
                             if !(200..300).contains(&response.status) {
-                                return Err(format!("HTTP {}", response.status));
+                                return Err(kaleidoscope_contract::errors::DATA_PREVIEW_PUBLIC_STATUS_FAILED(name)
+                                    .and_details(vec![format!("HTTP {}; host={host}", response.status)]));
                             }
                             match source_format {
                                 SourceFormat::Json => serde_json::from_slice(&response.bytes)
-                                    .map_err(|error| error.to_string()),
+                                    .map_err(|error| kaleidoscope_contract::errors::DATA_PREVIEW_PUBLIC_JSON_INVALID(name).and_details(vec![error.to_string()])),
                                 SourceFormat::Text => String::from_utf8(response.bytes)
                                     .map(Value::String)
-                                    .map_err(|error| error.to_string()),
+                                    .map_err(|error| kaleidoscope_contract::errors::DATA_PREVIEW_PUBLIC_TEXT_INVALID(name).and_details(vec![error.to_string()])),
                             }
                         });
                         match value {
@@ -262,18 +266,13 @@ impl McpServer {
                                 source_results
                                     .insert(name.clone(), json!({"state":"ready","bytes":bytes}));
                             }
-                            Err(message) => {
-                                statuses.insert(
-                                    name.clone(),
-                                    SourceStatus::Failed {
-                                        message: message.clone(),
-                                        has_value: false,
-                                        id: None,
-                                    },
-                                );
-                                source_results.insert(
-                                    name.clone(),
-                                    json!({"state":"failed","message":message}),
+                            Err(error) => {
+                                preview_failure(
+                                    &mut statuses,
+                                    &mut source_results,
+                                    name,
+                                    error,
+                                    None,
                                 );
                             }
                         }
@@ -286,48 +285,25 @@ impl McpServer {
                         .iter()
                         .find(|decl| decl.id() == permission)
                     else {
-                        let message = format!("원천 권한을 찾을 수 없습니다: {permission}");
-                        statuses.insert(
-                            name.clone(),
-                            SourceStatus::Failed {
-                                message: message.clone(),
-                                has_value: false,
-                                id: None,
-                            },
-                        );
-                        source_results
-                            .insert(name.clone(), json!({"state":"failed","message":message}));
+                        let error =
+                            kaleidoscope_contract::errors::DATA_PREVIEW_PERMISSION_NOT_FOUND(
+                                &permission,
+                            );
+                        preview_failure(&mut statuses, &mut source_results, name, error, None);
                         continue;
                     };
                     let connection_record = match self.state.connection(connection) {
                         Ok(Some(record)) => record,
                         Ok(None) => {
-                            let message = format!("서버에 등록되지 않은 연결: {connection}");
-                            statuses.insert(
-                                name.clone(),
-                                SourceStatus::Failed {
-                                    message: message.clone(),
-                                    has_value: false,
-                                    id: None,
-                                },
-                            );
-                            source_results
-                                .insert(name.clone(), json!({"state":"failed","message":message}));
+                            let error =
+                                kaleidoscope_contract::errors::DATA_PREVIEW_CONNECTION_NOT_FOUND(
+                                    connection,
+                                );
+                            preview_failure(&mut statuses, &mut source_results, name, error, None);
                             continue;
                         }
                         Err(error) => {
-                            statuses.insert(
-                                name.clone(),
-                                SourceStatus::Failed {
-                                    message: error.message.clone(),
-                                    has_value: false,
-                                    id: error.id.clone(),
-                                },
-                            );
-                            source_results.insert(
-                                name.clone(),
-                                json!({"state":"failed","message":error.message}),
-                            );
+                            preview_failure(&mut statuses, &mut source_results, name, error, None);
                             continue;
                         }
                     };
@@ -343,6 +319,22 @@ impl McpServer {
                         Some(SourceDecl::Request { format, .. }) => *format,
                         _ => SourceFormat::Json,
                     };
+                    let host = reqwest::Url::parse(&connection_record.info.base_url)
+                        .ok()
+                        .and_then(|url| url.host_str().map(str::to_owned))
+                        .unwrap_or_else(|| "알 수 없는 서버".into());
+                    let sensitive: Vec<String> = query
+                        .iter()
+                        .flat_map(|(key, value)| [key.clone(), value.clone()])
+                        .chain(connection_record.headers.values().cloned())
+                        .chain(
+                            connection_record
+                                .headers
+                                .values()
+                                .flat_map(|value| value.split_whitespace().map(str::to_owned)),
+                        )
+                        .filter(|value| !value.is_empty())
+                        .collect();
                     let request = ConnectionRequest {
                         app_id: definition.id.clone(),
                         method: HttpMethod::Get,
@@ -365,19 +357,30 @@ impl McpServer {
                                 .text
                                 .or_else(|| reply.json.map(|value| value.to_string()))
                                 .unwrap_or_default();
-                            let excerpt: String = body.chars().take(200).collect();
-                            let message = format!("HTTP {}: {excerpt}", reply.status);
-                            statuses.insert(
-                                name.clone(),
-                                SourceStatus::Failed {
-                                    message: message.clone(),
-                                    has_value: false,
-                                    id: None,
-                                },
-                            );
-                            source_results.insert(
-                                name,
-                                json!({"state":"failed","message":message,"bytes":bytes}),
+                            let excerpt = sensitive.iter().fold(body, |text, secret| {
+                                let mut url =
+                                    reqwest::Url::parse("https://example.invalid/").unwrap();
+                                url.query_pairs_mut().append_pair("value", secret);
+                                let encoded = url.query().unwrap().strip_prefix("value=").unwrap();
+                                text.replace(secret, "[가림]")
+                                    .replace(encoded, "[가림]")
+                                    .replace(&encoded.replace('+', "%20"), "[가림]")
+                            });
+                            let excerpt: String = excerpt.chars().take(200).collect();
+                            let error =
+                                kaleidoscope_contract::errors::DATA_PREVIEW_RELAY_STATUS_FAILED(
+                                    &name,
+                                )
+                                .and_details(vec![format!(
+                                    "HTTP {}; host={host}; 응답: {excerpt}",
+                                    reply.status
+                                )]);
+                            preview_failure(
+                                &mut statuses,
+                                &mut source_results,
+                                &name,
+                                error,
+                                Some(bytes),
                             );
                         }
                         Ok((reply, bytes)) => {
@@ -401,33 +404,23 @@ impl McpServer {
                                 );
                                 source_results.insert(name, json!({"state":"ready","bytes":bytes}));
                             } else {
-                                let message = "JSON을 읽을 수 없습니다";
-                                statuses.insert(
-                                    name.clone(),
-                                    SourceStatus::Failed {
-                                        message: message.into(),
-                                        has_value: false,
-                                        id: None,
-                                    },
-                                );
-                                source_results.insert(
-                                    name,
-                                    json!({"state":"failed","message":message,"bytes":bytes}),
+                                let error =
+                                    kaleidoscope_contract::errors::DATA_PREVIEW_RELAY_JSON_INVALID(
+                                        &name,
+                                    );
+                                preview_failure(
+                                    &mut statuses,
+                                    &mut source_results,
+                                    &name,
+                                    error,
+                                    Some(bytes),
                                 );
                             }
                         }
                         Err((status, error)) => {
-                            let message = format!("HTTP {}: {}", status.as_u16(), error.message);
-                            statuses.insert(
-                                name.clone(),
-                                SourceStatus::Failed {
-                                    message: message.clone(),
-                                    has_value: false,
-                                    id: error.id.clone(),
-                                },
-                            );
-                            source_results
-                                .insert(name, json!({"state":"failed","message":message}));
+                            let error =
+                                error.and_details(vec![format!("HTTP {}", status.as_u16())]);
+                            preview_failure(&mut statuses, &mut source_results, &name, error, None);
                         }
                     }
                 }
@@ -449,7 +442,7 @@ impl McpServer {
             };
             (name.clone(), value)
         }).collect();
-        let evaluated = compiled.evaluate_with_data_meta(
+        let mut evaluated = compiled.evaluate_with_data_meta(
             &state,
             &data,
             &storage,
@@ -458,6 +451,16 @@ impl McpServer {
             &statuses,
             None,
         );
+        for (pointer, value) in &mut evaluated {
+            if let BindingValue::Failed { message, id, retry } = value {
+                if id.is_none() && retry.is_empty() {
+                    let error =
+                        kaleidoscope_contract::errors::DATA_BINDING_EXPR_FAILED(pointer, &*message);
+                    *message = error.message;
+                    *id = error.id;
+                }
+            }
+        }
         let mut blocks = Vec::new();
         kaleidoscope_contract::data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
             let block_type = serde_json::to_value(block)
@@ -480,46 +483,49 @@ impl McpServer {
         let values = kaleidoscope_contract::data::all_ui_bindings(&definition)
             .into_iter()
             .map(|(pointer, binding)| {
-                let result =
-                    match binding {
-                        Binding::Expr(_) => evaluated.get(&pointer).cloned().unwrap_or_else(|| {
-                            BindingValue::Failed {
-                                message: "계산 결과가 없습니다".into(),
-                                id: None,
-                                retry: Vec::new(),
-                            }
-                        }),
-                        Binding::State(reference) => BindingValue::Ready {
-                            value: state.get(&reference.state).cloned().unwrap_or(Value::Null),
-                        },
-                        Binding::Client(reference) => BindingValue::Ready {
-                            value: definition
-                                .client
-                                .as_ref()
-                                .and_then(|client| client.outputs.get(&reference.client))
-                                .map(|output| output.default.clone())
-                                .unwrap_or(Value::Null),
-                        },
-                        Binding::Item(_) | Binding::ParentItem(_) => {
-                            BindingValue::Ready { value: Value::Null }
+                let result = match binding {
+                    Binding::Expr(_) => evaluated.get(&pointer).cloned().unwrap_or_else(|| {
+                        let error =
+                            kaleidoscope_contract::errors::DATA_PREVIEW_BINDING_RESULT_MISSING(
+                                &pointer,
+                            );
+                        BindingValue::Failed {
+                            message: error.message,
+                            id: error.id,
+                            retry: Vec::new(),
                         }
-                        Binding::Message(reference) => {
-                            let locale = definition.locale.as_ref().expect("검사된 locale");
-                            let language = definition.state[&locale.state]
-                                .as_str()
-                                .expect("검사된 기본 언어");
-                            BindingValue::Ready {
-                                value: Value::String(
-                                    definition.messages.as_ref().expect("검사된 메시지")[language]
-                                        [&reference.message]
-                                        .clone(),
-                                ),
-                            }
+                    }),
+                    Binding::State(reference) => BindingValue::Ready {
+                        value: state.get(&reference.state).cloned().unwrap_or(Value::Null),
+                    },
+                    Binding::Client(reference) => BindingValue::Ready {
+                        value: definition
+                            .client
+                            .as_ref()
+                            .and_then(|client| client.outputs.get(&reference.client))
+                            .map(|output| output.default.clone())
+                            .unwrap_or(Value::Null),
+                    },
+                    Binding::Item(_) | Binding::ParentItem(_) => {
+                        BindingValue::Ready { value: Value::Null }
+                    }
+                    Binding::Message(reference) => {
+                        let locale = definition.locale.as_ref().expect("검사된 locale");
+                        let language = definition.state[&locale.state]
+                            .as_str()
+                            .expect("검사된 기본 언어");
+                        BindingValue::Ready {
+                            value: Value::String(
+                                definition.messages.as_ref().expect("검사된 메시지")[language]
+                                    [&reference.message]
+                                    .clone(),
+                            ),
                         }
-                        Binding::Literal(value) => BindingValue::Ready {
-                            value: value.clone(),
-                        },
-                    };
+                    }
+                    Binding::Literal(value) => BindingValue::Ready {
+                        value: value.clone(),
+                    },
+                };
                 let block = blocks
                     .iter()
                     .filter(|(block_pointer, _)| {
@@ -551,6 +557,29 @@ impl McpServer {
         }
         Ok(json_result(response))
     }
+}
+
+fn preview_failure(
+    statuses: &mut BTreeMap<String, SourceStatus>,
+    results: &mut BTreeMap<String, Value>,
+    name: &str,
+    error: CoreError,
+    bytes: Option<usize>,
+) {
+    statuses.insert(
+        name.to_owned(),
+        SourceStatus::Failed {
+            message: error.message.clone(),
+            has_value: false,
+            id: error.id.clone(),
+        },
+    );
+    let mut result =
+        json!({"state":"failed", "message":error.message, "id":error.id, "details":error.details});
+    if let Some(bytes) = bytes {
+        result["bytes"] = json!(bytes);
+    }
+    results.insert(name.to_owned(), result);
 }
 
 fn preview_window_state(

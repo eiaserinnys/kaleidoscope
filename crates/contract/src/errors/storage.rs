@@ -1,4 +1,158 @@
 error_catalog! { ENTRIES;
+    STORAGE_DEFINITION_READ_DATABASE_FAILED(app_id) {
+        class: Server,
+        place: "저장소용 앱 정의 조회",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "앱 {app_id}: 저장소 작업에 필요한 앱 정의를 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_DOCUMENT_LIST_DATABASE_FAILED(entry_id) {
+        class: Server,
+        place: "저장소 문서 목록 조회",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "저장 항목 {entry_id}: 문서 목록을 읽기 위한 서버 저장소 작업을 시작하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_DOCUMENT_READ_DATABASE_FAILED(doc) {
+        class: Server,
+        place: "저장소 문서 읽기",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "문서 {doc}: 문서를 읽기 위한 서버 저장소 작업을 시작하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_WORKSPACE_CHECK_DATABASE_FAILED() {
+        class: Server,
+        place: "저장소 작업 접근 확인",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "저장 항목의 작업 접근을 서버 저장소에서 확인하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_ITEM_LOAD_DATABASE_FAILED(key) {
+        class: Server,
+        place: "저장 항목 불러오기",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "저장 항목 {key}: 값을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_PUBLISH_CHECK_DATABASE_FAILED(app_id) {
+        class: Server,
+        place: "앱 등록 전 저장 항목 확인",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "앱 {app_id}: 앱 등록 전 저장 항목을 서버 저장소에서 확인하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_ITEM_LIST_DATABASE_FAILED(app_id) {
+        class: Server,
+        place: "저장 항목 목록 조회",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "앱 {app_id}: 저장 항목 목록을 읽기 위한 서버 저장소 작업을 시작하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_ITEM_READ_DATABASE_FAILED(entry_id) {
+        class: Server,
+        place: "저장 항목 읽기",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "저장 항목 {entry_id}: 값을 읽기 위한 서버 저장소 작업을 시작하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_ITEM_WRITE_DATABASE_FAILED(entry_id) {
+        class: Server,
+        place: "저장 항목 쓰기",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "저장 항목 {entry_id}: 값을 서버 저장소에 쓰지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_ITEM_RESET_DATABASE_FAILED(entry_id) {
+        class: Server,
+        place: "저장 항목 초기화",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "저장 항목 {entry_id}: 값을 서버 저장소에서 초기화하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_SNAPSHOT_LIST_DATABASE_FAILED(app) {
+        class: Server,
+        place: "저장 항목 스냅샷 조회",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "앱 {app}: 저장 항목 목록을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_WORKSPACE_DELETE_DATABASE_FAILED() {
+        class: Server,
+        place: "작업 삭제 시 저장 항목 정리",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "작업을 지우면서 저장 항목을 서버 저장소에서 정리하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_APP_VALUE_DOCUMENT_LIST_DATABASE_FAILED(prefix) {
+        class: Server,
+        place: "기본 앱 문서 목록 조회",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "문서 모음 {prefix}: 목록을 읽기 위한 서버 저장소 작업을 시작하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_APP_VALUES_WORKSPACE_DELETE_DATABASE_FAILED() {
+        class: Server,
+        place: "작업 삭제 시 기본 앱 저장값 정리",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "작업을 지우면서 기본 앱의 저장값을 서버 저장소에서 정리하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_APP_VALUES_LIST_DATABASE_FAILED(app_id) {
+        class: Server,
+        place: "기본 앱 저장값 목록 조회",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "앱 {app_id}: 저장값 목록을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_APP_VALUE_DOCUMENT_READ_DATABASE_FAILED(key) {
+        class: Server,
+        place: "기본 앱 문서 읽기",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "저장 항목 {key}: 문서를 읽기 위한 서버 저장소 작업을 시작하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_APP_VALUE_WRITE_DATABASE_FAILED(key) {
+        class: Server,
+        place: "기본 앱 저장값 쓰기",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "저장 항목 {key}: 값을 서버 저장소에 쓰지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_APP_VALUE_RESET_DATABASE_FAILED(key) {
+        class: Server,
+        place: "기본 앱 저장값 초기화",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "저장 항목 {key}: 값을 서버 저장소에서 초기화하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_COLLECTION_LIST_DATABASE_FAILED(prefix) {
+        class: Server,
+        place: "문서 모음 목록 조회",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "문서 모음 {prefix}: 목록을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_COLLECTION_WRITE_DATABASE_FAILED(doc) {
+        class: Server,
+        place: "문서 모음 쓰기",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "문서 {doc}: 내용을 서버 저장소에 쓰지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_COLLECTION_RESET_DATABASE_FAILED(doc) {
+        class: Server,
+        place: "문서 모음 초기화",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "문서 {doc}: 내용을 서버 저장소에서 초기화하지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
+    STORAGE_COLLECTION_MOVE_DATABASE_FAILED(doc) {
+        class: Server,
+        place: "문서 모음 이름 변경",
+        cause: "서버 저장소의 SQL 작업이 실패했다",
+        message: "문서 {doc}: 이름을 서버 저장소에서 바꾸지 못했습니다. 서버 저장소 상태를 확인하세요.",
+        fix: "서버 저장소 상태를 확인하세요"
+    }
     STORAGE_WRITE_SCHEMA_MISMATCH(key, reason) {
         class: InvalidRequest,
         place: "저장소 내용 검사",
