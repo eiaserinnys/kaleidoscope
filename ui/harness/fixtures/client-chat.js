@@ -1,8 +1,6 @@
 (() => {
   const client = window.kaleidoscope;
   const report = (name, event) => parent.postMessage({ type: "chat-test-call", name, event }, "*");
-  const image = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jOk0AAAAASUVORK5CYII="), (value) => value.charCodeAt(0));
-
   const snapshot = () => client.chat.publish("thread", {
     kind: "snapshot",
     items: [
@@ -60,9 +58,9 @@
     client.chat.publish("thread", { kind: "event", event: { kind: "activity", busy: false, tool: null } });
   });
 
-  client.handle("attachment", ({ event }) => {
+  client.handle("attachment", async ({ event }) => {
     report("attachment", event);
-    const bytes = event.attachment_id === "image-1" ? image.buffer : new TextEncoder().encode("시험 첨부 내용").buffer;
+    const bytes = event.attachment_id === "image-1" ? await client.assets.bytes("client-chat-image") : new TextEncoder().encode("fixture attachment").buffer;
     const mime = event.attachment_id === "image-1" ? "image/png" : "text/plain";
     client.chat.publish("thread", { kind: "attachment", request_id: event.request_id, mime, bytes });
   });

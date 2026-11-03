@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 27판, 261103)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 28판, 261103)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -240,7 +240,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 27;
+pub const CONTRACT_VERSION: u32 = 28;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -269,8 +269,9 @@ pub const CONTRACT_VERSION: u32 = 27;
 /// - 15판: `tabs.header`, `tabs.keep_mounted`, `tabs.collapsible`, `folder.header`, `state_migrate`, `opens.set_state`.
 /// - 16판: 탭과 입력 블록 라벨, `dialog.close_label`, `dialog.cancel_label`, `tour.labels`의 바인딩.
 ///   평문 문자열은 이전 판과 같은 wire 모양이다.
-/// - 17판: 클라이언트 process 실행 권한, 클라이언트 채널과 대화 블록의 `client` 및 `footer`.
-pub const BLOCK_SET_VERSION: u32 = 17;
+/// - 17판: 클라이언트 process 실행 권한.
+/// - 18판: 클라이언트 채널과 대화 블록의 `client` 및 `footer`.
+pub const BLOCK_SET_VERSION: u32 = 18;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -287,6 +288,9 @@ pub const BLOCK_SET_VERSION: u32 = 17;
 /// - `connection` 2판: 계정마다 연결 이름을 등록한다.
 /// - `local_agent` 1판: 앱이 선언한 ACP 실행 명세로 이 기기에서 로컬 에이전트와 대화한다.
 /// - `client` 1판: 창별 격리 프레임의 로직과 로컬 출력.
+/// - `client` 2판: HTTP 권한, 기기 저장소와 기본 런타임 기능.
+/// - `client` 3판: 로컬 process 실행 권한.
+/// - `client` 4판: 채팅 채널과 앱 작성 지침·같이 보기 준비 기능.
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("files", 3),
     ("agent", 3),
@@ -298,7 +302,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("http", 2),
     ("worker", 1),
     ("profiler", 1),
-    ("client", 3),
+    ("client", 4),
     ("process", 1),
 ];
 
@@ -1480,11 +1484,11 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_select: Option<SetState>,
-        /// (블록 세트 17판) 대화 기록과 입력을 클라이언트 채널 및 동작에 연결한다.
+        /// (블록 세트 18판) 대화 기록과 입력을 클라이언트 채널 및 동작에 연결한다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         client: Option<client::ChatClient>,
-        /// (블록 세트 17판) 기록과 입력 사이에 그릴 앱 정의 블록.
+        /// (블록 세트 18판) 기록과 입력 사이에 그릴 앱 정의 블록.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         footer: Option<Box<Block>>,
@@ -3205,7 +3209,7 @@ impl Block {
             Block::Markdown { .. } => 1,
             Block::Chat {
                 client: Some(_), ..
-            } => 17,
+            } => 18,
             Block::Chat { .. } if !self.is_local_agent_chat() => 2,
             Block::Chat { .. } => 8,
             Block::Map { .. } => 10,
@@ -5671,7 +5675,7 @@ mod tests {
         });
         let definition = validate::parse_app_definition(&definition.to_string())
             .expect("U6 필드를 사용하는 정의는 유효하다");
-        assert_eq!(CONTRACT_VERSION, 27);
+        assert_eq!(CONTRACT_VERSION, 28);
         let Block::Tabs {
             header,
             keep_mounted,

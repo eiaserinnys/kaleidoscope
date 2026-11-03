@@ -26,7 +26,7 @@ pub struct ClientDecl {
     pub inputs: BTreeMap<String, Binding>,
     #[serde(default)]
     pub outputs: BTreeMap<String, ClientOutput>,
-    /// (블록 세트 17판) `window.kaleidoscope.chat.publish`가 보낼 수 있는 채널.
+    /// (블록 세트 18판, client 4판) `window.kaleidoscope.chat.publish`가 보낼 수 있는 채널.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(optional, as = "Option<Vec<String>>")]
     pub channels: Vec<String>,
@@ -52,7 +52,7 @@ pub struct ClientDecl {
     pub capabilities: Option<Vec<ClientCapability>>,
 }
 
-/// (블록 세트 17판) `chat` 블록이 클라이언트 채널과 사용자 조작을 연결한다.
+/// (블록 세트 18판, client 4판) `chat` 블록이 클라이언트 채널과 사용자 조작을 연결한다.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]

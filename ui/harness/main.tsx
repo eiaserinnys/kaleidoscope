@@ -40,9 +40,9 @@ const agentApp = agentJson as unknown as AppDefinition;
 const clientChatScriptUrl = URL.createObjectURL(new Blob([clientChatSource], { type: "text/javascript" }));
 const clientChatApp = {
   id: "client-chat-test", name: "클라이언트 채팅 시험",
-  requires: { blocks: 17, modules: { assets: 1, client: 3 } },
+  requires: { blocks: 18, modules: { assets: 1, client: 4 } },
   permissions: [], state: {},
-  assets: [{ id: "client-chat-fixture", version: 1 }],
+  assets: [{ id: "client-chat-fixture", version: 1 }, { id: "client-chat-image", version: 1 }],
   client: {
     runtime: "javascript", entry: { id: "client-chat-fixture", version: 1 }, inputs: {},
     outputs: { footer: { default: "도구 승인 기본값" } }, channels: ["thread"],
@@ -173,7 +173,7 @@ const initialSnapshot: ShellSnapshot = {
   windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(htmlReport, "html-report-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4), makeWindow(gallery, "gallery-window", 5), makeWindow(dataViewsApp, "views-window", 6), makeWindow(storageDocument, "storage-window", 7), agentWindow, makeWindow(clientChatApp, "client-chat-window", 8), ...previewDefinitions.map((definition, index) => makeWindow(definition, `${definition.id}-window`, 9 + index))],
   },
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [], pc_access: [], local_agent_access: [], process_access: [] },
-  supported: { blocks: 17, modules: { assets: 1, client: 3, files: 1, storage: 1 } },
+  supported: { blocks: 18, modules: { assets: 1, client: 4, files: 1, storage: 1 } },
   link: { state: "unlinked" },
   sharing: [],
   update: { state: "unavailable" },
@@ -272,7 +272,7 @@ const fakeTransport = createFakeTransport({
   storage: [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }],
   localAgent: fakeLocalAgent,
   data: { sources: { pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [{ kind: "file", name: "tone.wav", path: "tone.wav", ext: "wav", size: 128044, modified: timestamp }, { kind: "file", name: "tone-second.wav", path: "tone-second.wav", ext: "wav", size: 128044, modified: timestamp }] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
-  media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone, "client-chat-fixture": clientChatScriptUrl },
+  media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone, "client-chat-fixture": clientChatScriptUrl, "client-chat-image": sampleOne },
   folder: { root_path: "/fake/docs", root_name: "문서" },
   conversation: conversationMode || pasMode ? {
     thread: conversationMode === "start" || conversationMode === "login-start" || pasMode === "empty" ? null : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false },
