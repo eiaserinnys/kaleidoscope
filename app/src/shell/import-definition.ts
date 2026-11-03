@@ -1,4 +1,4 @@
-import type { Rect, ShellStore } from "@kaleidoscope/ui";
+import { SHELL_APP_IMPORT_REPLY_INVALID, type Rect, type ShellStore } from "@kaleidoscope/ui";
 
 export async function importAppDefinition(
   store: ShellStore,
@@ -9,7 +9,7 @@ export async function importAppDefinition(
   const snapshot = store.getSnapshot();
   const reply = await store.call({ op: "app.import", definition_json: definitionJson });
   if (reply.op !== "app.import") {
-    throw { code: "io", message: "앱 가져오기 응답이 올바르지 않습니다", details: [] };
+    throw SHELL_APP_IMPORT_REPLY_INVALID();
   }
 
   const alreadyOpen = snapshot?.shared.windows.some((window) =>

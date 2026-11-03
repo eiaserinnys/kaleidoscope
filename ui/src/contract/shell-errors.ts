@@ -1,6 +1,14 @@
 // 생성물이다. `cargo test -p kaleidoscope-contract`가 crates/contract/src/errors/shell.rs에서 만든다. 손으로 고치지 않는다.
 import type { CoreError } from "./contract";
 
+export const SHELL_APP_IMPORT_REPLY_INVALID = (): CoreError => ({ id: "SHELL_APP_IMPORT_REPLY_INVALID", code: "io", message: `앱 정의를 가져온 결과를 확인하지 못했습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.`, details: [] });
+export const SHELL_WINDOW_CLOSE_UNSAVED = (): CoreError => ({ id: "SHELL_WINDOW_CLOSE_UNSAVED", code: "io", message: `저장하지 못한 내용이 있어 창을 닫지 않았습니다. 내용을 저장한 뒤 다시 닫으세요.`, details: [] });
+export const SHELL_UPDATE_RESTART_UNSAVED = (): CoreError => ({ id: "SHELL_UPDATE_RESTART_UNSAVED", code: "io", message: `저장하지 못한 편집이 있어 다시 시작하지 않았습니다. 내용을 저장한 뒤 다시 시작하세요.`, details: [] });
+export const SHELL_STATE_REPLY_INVALID = (): CoreError => ({ id: "SHELL_STATE_REPLY_INVALID", code: "io", message: `쉘 상태를 불러오지 못했습니다. 쉘을 다시 시작하세요.`, details: [] });
+export const SHELL_HTTP_EXTERNAL_SCHEME_INVALID = (): CoreError => ({ id: "SHELL_HTTP_EXTERNAL_SCHEME_INVALID", code: "invalid_request", message: `이 링크는 웹 주소가 아니라 열 수 없습니다. HTTP 또는 HTTPS 주소를 사용하세요.`, details: [] });
+export const SHELL_HTTP_ERROR_REPLY_INVALID = (): CoreError => ({ id: "SHELL_HTTP_ERROR_REPLY_INVALID", code: "io", message: `코어의 오류 응답을 읽지 못했습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.`, details: [] });
+export const SHELL_HTTP_REQUEST_FAILED = (): CoreError => ({ id: "SHELL_HTTP_REQUEST_FAILED", code: "io", message: `코어가 요청에 실패 응답을 보냈습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.`, details: [] });
+export const SHELL_EDITOR_DOCUMENT_DELETED = (): CoreError => ({ id: "SHELL_EDITOR_DOCUMENT_DELETED", code: "conflict", message: `편집 중인 문서가 삭제되어 저장하지 못했습니다. 내용을 복사해 다른 문서에 저장하세요.`, details: [] });
 export const SHELL_THREAD_READ_INVALID = (args: { name: string }): CoreError => ({ id: "SHELL_THREAD_READ_INVALID", code: "invalid_request", message: `문서 ${args.name}의 커멘트 기록을 읽지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.`, details: [] });
 export const SHELL_CALL_UNEXPECTED_FAILURE = (args: { reason: string }): CoreError => ({ id: "SHELL_CALL_UNEXPECTED_FAILURE", code: "io", message: `쉘에서 예상하지 못한 오류가 났습니다. 다시 시도하세요. 원인: ${args.reason}`, details: [] });
 export const SHELL_IPC_OPERATION_HEADER_INVALID = (): CoreError => ({ id: "SHELL_IPC_OPERATION_HEADER_INVALID", code: "invalid_request", message: `파일을 주고받지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.`, details: [] });
@@ -27,7 +35,7 @@ export const SHELL_HTML_COMMENT_THREAD_REPLY_INVALID = (): CoreError => ({ id: "
 export const SHELL_HTML_COMMENT_SAVE_CONFLICT = (): CoreError => ({ id: "SHELL_HTML_COMMENT_SAVE_CONFLICT", code: "conflict", message: `HTML 문서 커멘트가 다른 창의 변경과 충돌해 저장되지 않았습니다. 잠시 뒤 다시 저장하세요.`, details: [] });
 export const SHELL_APP_WINDOW_NOT_FOUND = (): CoreError => ({ id: "SHELL_APP_WINDOW_NOT_FOUND", code: "not_found", message: `앱 창이 사라져 내용을 표시할 수 없습니다. 이 창을 닫고 앱을 다시 여세요.`, details: [] });
 export const SHELL_APP_VERSION_NOT_FOUND = (): CoreError => ({ id: "SHELL_APP_VERSION_NOT_FOUND", code: "not_found", message: `앱 정의를 찾을 수 없어 창을 표시하지 못했습니다. 이 창을 닫고 앱을 다시 여세요.`, details: [] });
-export const SHELL_WINDOW_DATA_CONTEXT_MISSING = (): CoreError => ({ id: "SHELL_WINDOW_DATA_CONTEXT_MISSING", code: "io", message: `창 데이터가 연결되지 않아 화면을 그릴 수 없습니다. 쉘을 다시 열어 보세요.`, details: [] });
+export const SHELL_WINDOW_DATA_CONTEXT_MISSING = (): CoreError => ({ id: "SHELL_WINDOW_DATA_CONTEXT_MISSING", code: "io", message: `창 데이터가 연결되지 않아 화면을 그릴 수 없습니다. 쉘을 다시 시작하세요.`, details: [] });
 export const SHELL_CLIENT_BINDING_DATA_CONTEXT_MISSING = (): CoreError => ({ id: "SHELL_CLIENT_BINDING_DATA_CONTEXT_MISSING", code: "io", message: `화면 값의 데이터 연결을 찾지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.`, details: [] });
 export const SHELL_MEDIA_PLAYBACK_UNSUPPORTED = (): CoreError => ({ id: "SHELL_MEDIA_PLAYBACK_UNSUPPORTED", code: "io", message: `이 파일의 미디어 데이터를 재생할 수 없습니다. 지원되는 파일로 다시 시도하세요.`, details: [] });
 export const SHELL_CLIENT_SCRIPT_ASSET_INVALID = (): CoreError => ({ id: "SHELL_CLIENT_SCRIPT_ASSET_INVALID", code: "io", message: `앱 실행 파일의 형식이 올바르지 않습니다. JavaScript 자산으로 앱을 다시 올리세요.`, details: [] });
@@ -47,9 +55,9 @@ export const SHELL_CLIENT_FRAME_CAN_SHARE_CAPABILITY_UNDECLARED = (): CoreError 
 export const SHELL_CLIENT_FRAME_SHARE_CAPABILITY_UNDECLARED = (): CoreError => ({ id: "SHELL_CLIENT_FRAME_SHARE_CAPABILITY_UNDECLARED", code: "permission_denied", message: `앱 정의에 share capability가 없어 파일을 공유할 수 없습니다. 앱 정의의 capabilities에 share를 추가하세요.`, details: [] });
 export const SHELL_CLIENT_FRAME_KEEP_AWAKE_CAPABILITY_UNDECLARED = (): CoreError => ({ id: "SHELL_CLIENT_FRAME_KEEP_AWAKE_CAPABILITY_UNDECLARED", code: "permission_denied", message: `앱 정의에 keep_awake capability가 없어 화면을 켜 둘 수 없습니다. 앱 정의의 capabilities에 keep_awake를 추가하세요.`, details: [] });
 export const SHELL_CLIENT_ASSET_UNDECLARED = (args: { asset_id: string }): CoreError => ({ id: "SHELL_CLIENT_ASSET_UNDECLARED", code: "invalid_request", message: `앱 자산 ${args.asset_id}: 앱 정의에 없습니다. 앱 정의의 자산 목록을 확인하세요.`, details: [] });
-export const SHELL_CLIENT_HTTP_TRANSPORT_UNAVAILABLE = (): CoreError => ({ id: "SHELL_CLIENT_HTTP_TRANSPORT_UNAVAILABLE", code: "io", message: `이 쉘에서는 앱이 공개 자료를 읽을 수 없습니다. 최신 쉘로 업데이트한 뒤 다시 시도하세요.`, details: [] });
+export const SHELL_CLIENT_HTTP_TRANSPORT_UNAVAILABLE = (): CoreError => ({ id: "SHELL_CLIENT_HTTP_TRANSPORT_UNAVAILABLE", code: "io", message: `이 쉘에서는 앱이 공개 자료를 읽을 수 없습니다. 쉘을 업데이트한 뒤 다시 시도하세요.`, details: [] });
 export const SHELL_CLIENT_BLOB_INPUT_INVALID = (): CoreError => ({ id: "SHELL_CLIENT_BLOB_INPUT_INVALID", code: "io", message: `앱 파일 쓰기 요청에는 파일 또는 파일 내용 하나만 지정해야 합니다. 앱 코드를 고치세요.`, details: [] });
-export const SHELL_CLIENT_BLOB_TRANSPORT_UNAVAILABLE = (): CoreError => ({ id: "SHELL_CLIENT_BLOB_TRANSPORT_UNAVAILABLE", code: "io", message: `이 쉘에서는 파일을 앱 저장 항목에 쓸 수 없습니다. 최신 쉘로 업데이트한 뒤 다시 시도하세요.`, details: [] });
+export const SHELL_CLIENT_BLOB_TRANSPORT_UNAVAILABLE = (): CoreError => ({ id: "SHELL_CLIENT_BLOB_TRANSPORT_UNAVAILABLE", code: "io", message: `이 쉘에서는 파일을 앱 저장 항목에 쓸 수 없습니다. 쉘을 업데이트한 뒤 다시 시도하세요.`, details: [] });
 export const SHELL_CLIENT_BLOB_BYTES_REQUIRED = (): CoreError => ({ id: "SHELL_CLIENT_BLOB_BYTES_REQUIRED", code: "io", message: `저장할 파일 내용을 읽지 못했습니다. 파일을 다시 선택한 뒤 저장하세요.`, details: [] });
 export const SHELL_CLIENT_FILE_SIZE_INVALID = (args: { size: string }): CoreError => ({ id: "SHELL_CLIENT_FILE_SIZE_INVALID", code: "invalid_request", message: `앱이 넘긴 파일 크기 ${args.size}: 0 이상의 정수가 아닙니다. 앱 코드를 고치세요.`, details: [] });
 export const SHELL_CLIENT_OUTPUT_SERIALIZE_FAILED = (args: { name: string }): CoreError => ({ id: "SHELL_CLIENT_OUTPUT_SERIALIZE_FAILED", code: "invalid_request", message: `앱 출력 ${args.name}: JSON으로 바꿀 수 없습니다. 앱 코드를 고치세요.`, details: [] });
@@ -73,12 +81,12 @@ export const SHELL_CHAT_ATTACHMENT_COUNT_EXCEEDED = (args: { limit: string }): C
 export const SHELL_CHAT_ATTACHMENT_TOO_LARGE = (args: { name: string; limit: string }): CoreError => ({ id: "SHELL_CHAT_ATTACHMENT_TOO_LARGE", code: "invalid_request", message: `첨부 파일 크기 초과: ${args.name}. 허용 크기는 ${args.limit}입니다. 더 작은 파일을 고르세요.`, details: [] });
 export const SHELL_CHAT_ATTACHMENT_TOTAL_TOO_LARGE = (args: { limit: string }): CoreError => ({ id: "SHELL_CHAT_ATTACHMENT_TOTAL_TOO_LARGE", code: "invalid_request", message: `첨부 파일 합계 허용 크기는 ${args.limit}입니다. 파일 수나 크기를 줄이세요.`, details: [] });
 export const SHELL_FILE_LIST_REPLY_INVALID = (): CoreError => ({ id: "SHELL_FILE_LIST_REPLY_INVALID", code: "io", message: `파일 목록 응답이 쉘이 예상한 형식과 다릅니다. 파일 목록에서 새로 고침을 선택하세요.`, details: [] });
-export const SHELL_FILE_PATH_REPLY_INVALID = (): CoreError => ({ id: "SHELL_FILE_PATH_REPLY_INVALID", code: "io", message: `파일 경로 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.`, details: [] });
-export const SHELL_FILE_MOVE_REPLY_INVALID = (): CoreError => ({ id: "SHELL_FILE_MOVE_REPLY_INVALID", code: "io", message: `파일 이동 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.`, details: [] });
-export const SHELL_FILE_COPY_REPLY_INVALID = (): CoreError => ({ id: "SHELL_FILE_COPY_REPLY_INVALID", code: "io", message: `파일 복사 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.`, details: [] });
-export const SHELL_FILE_REMOVE_REPLY_INVALID = (): CoreError => ({ id: "SHELL_FILE_REMOVE_REPLY_INVALID", code: "io", message: `파일 삭제 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.`, details: [] });
+export const SHELL_FILE_PATH_REPLY_INVALID = (): CoreError => ({ id: "SHELL_FILE_PATH_REPLY_INVALID", code: "io", message: `파일 경로 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 업데이트한 뒤 다시 시도하세요.`, details: [] });
+export const SHELL_FILE_MOVE_REPLY_INVALID = (): CoreError => ({ id: "SHELL_FILE_MOVE_REPLY_INVALID", code: "io", message: `파일 이동 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 업데이트한 뒤 다시 시도하세요.`, details: [] });
+export const SHELL_FILE_COPY_REPLY_INVALID = (): CoreError => ({ id: "SHELL_FILE_COPY_REPLY_INVALID", code: "io", message: `파일 복사 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 업데이트한 뒤 다시 시도하세요.`, details: [] });
+export const SHELL_FILE_REMOVE_REPLY_INVALID = (): CoreError => ({ id: "SHELL_FILE_REMOVE_REPLY_INVALID", code: "io", message: `파일 삭제 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 업데이트한 뒤 다시 시도하세요.`, details: [] });
 export const SHELL_FILE_STORAGE_LIST_REPLY_INVALID = (): CoreError => ({ id: "SHELL_FILE_STORAGE_LIST_REPLY_INVALID", code: "io", message: `저장 문서 목록 응답이 쉘이 예상한 형식과 다릅니다. 저장 문서 목록에서 새로 고침을 선택하세요.`, details: [] });
-export const SHELL_FILE_STORAGE_RENAME_REVISION_MISSING = (): CoreError => ({ id: "SHELL_FILE_STORAGE_RENAME_REVISION_MISSING", code: "io", message: `저장 문서 이름을 바꾸는 데 필요한 판 정보를 받지 못했습니다. 쉘을 새 판으로 올리세요.`, details: [] });
+export const SHELL_FILE_STORAGE_RENAME_REVISION_MISSING = (): CoreError => ({ id: "SHELL_FILE_STORAGE_RENAME_REVISION_MISSING", code: "io", message: `저장 문서 이름을 바꾸는 데 필요한 판 정보를 받지 못했습니다. 쉘을 업데이트하세요.`, details: [] });
 export const SHELL_FILE_STORAGE_REMOVE_REVISION_MISSING = (): CoreError => ({ id: "SHELL_FILE_STORAGE_REMOVE_REVISION_MISSING", code: "not_found", message: `삭제할 저장 문서 판 정보를 찾지 못했습니다. 저장 문서 목록에서 대상을 확인하세요.`, details: [] });
 export const SHELL_FILE_MARKDOWN_STORAGE_INVALID = (args: { entry: string }): CoreError => ({ id: "SHELL_FILE_MARKDOWN_STORAGE_INVALID", code: "io", message: `저장 항목 ${args.entry}: 값이 마크다운 문서가 아닙니다. 앱 정의 storage.entries에서 이 항목의 kind를 md로 고치세요.`, details: [] });
 export const SHELL_FILE_EXTENSION_NOT_ALLOWED = (args: { name: string; extensions: string }): CoreError => ({ id: "SHELL_FILE_EXTENSION_NOT_ALLOWED", code: "invalid_request", message: `파일 이름 (${args.name})의 확장자가 허용되지 않습니다. 허용되는 확장자 (${args.extensions})에 맞춰 이름을 고치세요.`, details: [] });

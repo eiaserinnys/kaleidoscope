@@ -1,4 +1,60 @@
 error_catalog! { ENTRIES;
+    SHELL_APP_IMPORT_REPLY_INVALID() {
+        class: Io,
+        place: "앱 정의 가져오기 응답",
+        cause: "가져오기 응답의 종류가 예상과 다르다",
+        message: "앱 정의를 가져온 결과를 확인하지 못했습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.",
+        fix: "쉘을 다시 시작한 뒤 다시 시도하세요"
+    }
+    SHELL_WINDOW_CLOSE_UNSAVED() {
+        class: Io,
+        place: "창 닫기 전 저장",
+        cause: "열린 내용의 저장을 마치지 못했다",
+        message: "저장하지 못한 내용이 있어 창을 닫지 않았습니다. 내용을 저장한 뒤 다시 닫으세요.",
+        fix: "내용을 저장한 뒤 다시 닫으세요"
+    }
+    SHELL_UPDATE_RESTART_UNSAVED() {
+        class: Io,
+        place: "업데이트 재시작 전 저장",
+        cause: "편집 중인 내용의 저장을 마치지 못했다",
+        message: "저장하지 못한 편집이 있어 다시 시작하지 않았습니다. 내용을 저장한 뒤 다시 시작하세요.",
+        fix: "내용을 저장한 뒤 다시 시작하세요"
+    }
+    SHELL_STATE_REPLY_INVALID() {
+        class: Io,
+        place: "쉘 초기 상태 응답",
+        cause: "상태 응답의 종류가 예상과 다르다",
+        message: "쉘 상태를 불러오지 못했습니다. 쉘을 다시 시작하세요.",
+        fix: "쉘을 다시 시작하세요"
+    }
+    SHELL_HTTP_EXTERNAL_SCHEME_INVALID() {
+        class: InvalidRequest,
+        place: "브라우저 외부 주소 열기",
+        cause: "외부 주소가 HTTP 또는 HTTPS가 아니다",
+        message: "이 링크는 웹 주소가 아니라 열 수 없습니다. HTTP 또는 HTTPS 주소를 사용하세요.",
+        fix: "HTTP 또는 HTTPS 주소를 사용하세요"
+    }
+    SHELL_HTTP_ERROR_REPLY_INVALID() {
+        class: Io,
+        place: "코어 HTTP 오류 응답 읽기",
+        cause: "코어의 오류 응답이 예상한 형식과 다르다",
+        message: "코어의 오류 응답을 읽지 못했습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.",
+        fix: "쉘을 다시 시작한 뒤 다시 시도하세요"
+    }
+    SHELL_HTTP_REQUEST_FAILED() {
+        class: Io,
+        place: "코어 HTTP 요청",
+        cause: "코어가 요청에 실패 응답을 보냈다",
+        message: "코어가 요청에 실패 응답을 보냈습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.",
+        fix: "쉘을 다시 시작한 뒤 다시 시도하세요"
+    }
+    SHELL_EDITOR_DOCUMENT_DELETED() {
+        class: Conflict,
+        place: "편집 중인 문서 삭제",
+        cause: "저장하지 않은 문서가 삭제됐다",
+        message: "편집 중인 문서가 삭제되어 저장하지 못했습니다. 내용을 복사해 다른 문서에 저장하세요.",
+        fix: "내용을 복사해 다른 문서에 저장하세요"
+    }
     SHELL_THREAD_READ_INVALID(name) {
         class: InvalidRequest,
         place: "HTML 문서 커멘트 기록 읽기",

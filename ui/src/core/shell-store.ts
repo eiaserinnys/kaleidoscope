@@ -1,4 +1,5 @@
 import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector";
+import { SHELL_STATE_REPLY_INVALID } from "../contract/shell-errors";
 import type { CoreError, CoreEvent, ShellSnapshot } from "../contract/contract";
 import { toCoreError, type CoreTransport } from "./core-transport";
 import { useBlockRenderProbe } from "../render/render-probe";
@@ -38,7 +39,7 @@ export function createShellStore(transport: CoreTransport): ShellStore {
   let stopUiTiming: () => void = () => undefined;
 
   const ready = transport.call({ op: "state.get" }).then((reply) => {
-    if (reply.op !== "state.get") throw { code: "io", message: "코어 상태 응답이 올바르지 않습니다", details: [] } satisfies CoreError;
+    if (reply.op !== "state.get") throw SHELL_STATE_REPLY_INVALID();
     snapshot = shareShellSnapshot(snapshot, reply.snapshot);
     error = null;
     if (!disposed) stopUiTiming = startUiTiming((inputs, frames) => transport.call({ op: "profiler.report", inputs, frames }), isResponding);
