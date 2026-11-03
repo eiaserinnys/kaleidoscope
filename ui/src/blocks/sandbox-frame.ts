@@ -30,6 +30,11 @@ function bridgeSource(init: SandboxInit): string {
     let state = { ...config.state }, nextRequest = 0, shareText = '', shareImage = '', shareCanvas = null, explicitText = false;
     const stateListeners = new Set(), storageListeners = new Map(), grantListeners = new Map(), pending = new Map(), pendingWrites = new Set();
     const send = (type, body = {}, transfer) => transfer ? parent.postMessage({ token, type, ...body }, '*', transfer) : parent.postMessage({ token, type, ...body }, '*');
+    document.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      const text = getSelection()?.toString() || '';
+      if (text) send('ks-sandbox-context-menu', { x: event.clientX, y: event.clientY, text });
+    });
     const lifecycleListeners = new Set(), pendingLifecycle = new Set(), processListeners = new Set(), processServicesListeners = new Set();
     let lifecycle = null;
     const inputListeners = new Set(), handlers = new Map(), surfaceListeners = new Map(), surfaces = new Map();

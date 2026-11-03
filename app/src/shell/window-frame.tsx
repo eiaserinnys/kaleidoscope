@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { IconButton, Maximize2, Minus, Minimize2, ScreenShare, Settings, X, useShareView, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
+import { IconButton, Maximize2, Minus, Minimize2, ScreenShare, Settings, X, openContextMenu, useShareView, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
 import { ProcessConsent } from "./process-consent";
 
@@ -57,6 +57,19 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
   const previewRef = useRef<Rect | null>(null);
   const [preview, setPreview] = useState<Rect | null>(null);
   const displayRect = isMaximized ? usableWindowArea(area) : fitWindowRect(preview ?? appWindow.rect, area);
+  const toggleShare = () => void onCall({ op: "share.set", window_id: appWindow.id, on: !sharing });
+  const toggleSettings = () => { if (settingsOpen) closeSettings(); else { setSettingsVisited(true); setSettingsOpen(true); } };
+  const changeSize = () => isMaximized ? onRestore(appWindow.id) : onMaximize(appWindow.id);
+  const closeWindow = () => void onCall({ op: "window.close", window_id: appWindow.id });
+  const titleMenu: MenuEntry[] = [
+    ...(shareable ? [{ id: "share", label: sharing ? "같이 보기 끄기" : "같이 보기", checked: sharing, onSelect: toggleShare }] : []),
+    ...(hasSettings && settingsAvailable ? [{ id: "settings", label: "앱 설정", onSelect: toggleSettings }] : []),
+    ...((shareable || (hasSettings && settingsAvailable)) ? [{ type: "separator" as const, id: "window-separator" }] : []),
+    { id: "minimize", label: "창 최소화", onSelect: () => onMinimize(appWindow.id) },
+    { id: "maximize", label: isMaximized ? "이전 크기로 복원" : "창 최대화", onSelect: changeSize },
+    { type: "separator", id: "close-separator" },
+    { id: "close", label: "창 닫기", onSelect: closeWindow },
+  ];
 
   useEffect(() => { if (!hasSettings) { setSettingsOpen(false); setSettingsProblem(null); } }, [hasSettings]);
 
@@ -173,7 +186,9 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
       <div className="ks-window-frame" ref={setFrameHost}>
         <header
           className={`ks-window-titlebar${isTop ? " ks-window-titlebar-active" : ""}`}
+          onContextMenu={(event) => openContextMenu(event, titleMenu)}
           onPointerDown={(event) => {
+            if (event.button !== 0) return;
             if (event.target instanceof Element && event.target.closest("button")) return;
             if (isMaximized) return;
             beginGesture("move", event);
@@ -190,19 +205,19 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
             {windowHeader?.meta ? <span className="ks-window-title-meta" title={windowHeader.meta}>{windowHeader.meta}</span> : null}
           </div>
           <div className="ks-window-title-actions">
-          {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} tone="share" pressed={sharing} onClick={() => void onCall({ op: "share.set", window_id: appWindow.id, on: !sharing })}><ScreenShare /></IconButton> : null}
-          {hasSettings && settingsAvailable ? <span ref={settingsButton}><IconButton aria-label={settingsProblem ? `앱 설정: ${typeof settingsProblem === "string" ? settingsProblem : settingsProblem.message}` : "앱 설정"} pressed={settingsOpen} onClick={() => { if (settingsOpen) closeSettings(); else { setSettingsVisited(true); setSettingsOpen(true); } }}><Settings /></IconButton></span> : null}
+          {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} tone="share" pressed={sharing} onClick={toggleShare}><ScreenShare /></IconButton> : null}
+          {hasSettings && settingsAvailable ? <span ref={settingsButton}><IconButton aria-label={settingsProblem ? `앱 설정: ${typeof settingsProblem === "string" ? settingsProblem : settingsProblem.message}` : "앱 설정"} pressed={settingsOpen} onClick={toggleSettings}><Settings /></IconButton></span> : null}
           <IconButton aria-label="창 최소화" title="창 최소화" onClick={() => onMinimize(appWindow.id)}><Minus /></IconButton>
           <IconButton
             aria-label={isMaximized ? "이전 크기로 복원" : "창 최대화"}
             title={isMaximized ? "이전 크기로 복원" : "창 최대화"}
-            onClick={() => (isMaximized ? onRestore(appWindow.id) : onMaximize(appWindow.id))}
+            onClick={changeSize}
           >
             {isMaximized ? <Minimize2 /> : <Maximize2 />}
           </IconButton>
           <IconButton
             aria-label="창 닫기"
-            onClick={() => void onCall({ op: "window.close", window_id: appWindow.id })}
+            onClick={closeWindow}
             title="창 닫기"
           >
             <X />

@@ -151,6 +151,12 @@ const isPinEvent = (event: Event) => {
   const first = event.composedPath()[0];
   return first === host || (first instanceof Element && first.classList.contains("ks-o-pin"));
 };
+document.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  if (locked) return;
+  const text = getSelection()?.toString() ?? "";
+  if (text) send({ type: "ks-html-context-menu", x: event.clientX, y: event.clientY, text });
+});
 document.addEventListener("pointerdown", (event) => { if (locked) { event.preventDefault(); event.stopPropagation(); } }, true);
 document.addEventListener("mousedown", (event) => {
   if (locked) { event.preventDefault(); event.stopPropagation(); return; }

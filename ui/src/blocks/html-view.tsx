@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { Binding, Block, FileRef } from "../contract/contract";
 import { Notice, StatusText } from "../components/primitives";
 import { DataState } from "../components/data-state";
+import { openFrameContextMenu } from "../components/context-menu";
 import { toCoreError } from "../core/core-transport";
 import { useShareDescriber } from "../share/visible";
 import { useBinding } from "../data/window-data";
@@ -33,8 +34,9 @@ function BoundHtmlViewBlock({ binding, pointer, context }: { binding: Binding; p
   useLayoutEffect(() => { setVisibleText(""); }, [rawHtml]);
   useLayoutEffect(() => {
     const receive = (event: MessageEvent) => {
-      if (event.source !== frame.current?.contentWindow || event.data?.type !== "ks-html-visible-text" || typeof event.data.text !== "string") return;
-      setVisibleText(event.data.text);
+      if (event.source !== frame.current?.contentWindow) return;
+      if (event.data?.type === "ks-html-context-menu" && typeof event.data.x === "number" && typeof event.data.y === "number" && typeof event.data.text === "string" && event.data.text && frame.current) openFrameContextMenu(frame.current, event.data);
+      else if (event.data?.type === "ks-html-visible-text" && typeof event.data.text === "string") setVisibleText(event.data.text);
     };
     window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);
   }, []);
@@ -60,8 +62,9 @@ function FileHtmlViewBlock({ file, context }: { file: FileRef; context: BlockCon
   useLayoutEffect(() => { setVisibleText(""); }, [rawHtml]);
   useLayoutEffect(() => {
     const receive = (event: MessageEvent) => {
-      if (event.source !== frame.current?.contentWindow || event.data?.type !== "ks-html-visible-text" || typeof event.data.text !== "string") return;
-      setVisibleText(event.data.text);
+      if (event.source !== frame.current?.contentWindow) return;
+      if (event.data?.type === "ks-html-context-menu" && typeof event.data.x === "number" && typeof event.data.y === "number" && typeof event.data.text === "string" && event.data.text && frame.current) openFrameContextMenu(frame.current, event.data);
+      else if (event.data?.type === "ks-html-visible-text" && typeof event.data.text === "string") setVisibleText(event.data.text);
     };
     window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);
   }, []);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   Button,
+  ContextMenuHost,
   SHELL_WINDOW_CLOSE_UNSAVED,
   SHELL_UPDATE_RESTART_UNSAVED,
   BUILTIN_APP_IDS,
@@ -276,6 +277,7 @@ export function Shell({ store }: { store: ShellStore }) {
 
   return (
     <main className="app-root">
+      <ContextMenuHost onError={setNotice} />
       <header className="ks-shell-bar">
         <div className="ks-workspace-control">
           {renamingWorkspaceId === activeWorkspace.id ? (

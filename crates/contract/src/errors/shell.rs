@@ -666,4 +666,19 @@ error_catalog! { ENTRIES;
         message: "클립보드에 쓰지 못했습니다. 클립보드 권한을 확인한 뒤 다시 누르세요. 원인: {reason}",
         fix: "클립보드 권한을 확인한 뒤 다시 누르세요"
     }
+    SHELL_MENU_CLIPBOARD_WRITE_FAILED(item, reason) {
+        class: Io,
+        place: "메뉴 클립보드 쓰기",
+        cause: "브라우저가 메뉴의 클립보드 쓰기를 거부했다",
+        message: "{item} 항목을 클립보드에 쓰지 못했습니다. 클립보드 권한을 확인한 뒤 다시 시도하세요. 원인: {reason}",
+        fix: "클립보드 권한을 확인한 뒤 다시 시도하세요"
+    }
+    SHELL_MENU_CLIPBOARD_READ_FAILED(reason) {
+        class: Io,
+        place: "메뉴 붙여넣기 클립보드 읽기",
+        cause: "브라우저가 메뉴의 클립보드 읽기를 거부했다",
+        message: "붙여넣을 글을 클립보드에서 읽지 못했습니다. 클립보드 권한을 확인한 뒤 다시 시도하세요. 원인: {reason}",
+        fix: "클립보드 권한을 확인한 뒤 다시 시도하세요"
+    }
+
 }

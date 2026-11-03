@@ -581,6 +581,18 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("제목 줄 메뉴를 열고 닫아도 창 블록을 다시 그리지 않는다", async () => {
+    const { store } = await setup();
+    const titlebar = document.querySelector<HTMLElement>(".ks-window-titlebar")!;
+    fireEvent.contextMenu(titlebar, { clientX: 50, clientY: 50 });
+    expect(screen.getByRole("menuitem", { name: "창 닫기" })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    await settleRenders();
+    expect(countFor("window-a")).toBe(0);
+    expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
   it("실제 대화상자가 열린 동안 창 단축키를 막고 닫은 뒤 다시 허용한다", async () => {
     const dialogShortcut: AppDefinition = {
       id: "dialog-shortcut", name: "대화상자 단축키", requires: { blocks: 14, modules: {} }, permissions: [],

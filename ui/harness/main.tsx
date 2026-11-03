@@ -4,6 +4,7 @@ import type { App, AppDefinition, AppVersion, AppWindow, LocalAgentSnapshot, She
 import type { WindowData } from "../src/data/window-data";
 import {
   AppWindowContent,
+  ContextMenuHost,
   createFakeTransport,
   createHttpTransport,
   createShellStore,
@@ -386,6 +387,7 @@ function Harness() {
 
   return (
     <main className="ks-harness">
+      <ContextMenuHost />
       <header className="ks-harness-header">
         <h1>kaleidoscope</h1>
         <span>블록 검수 창</span>

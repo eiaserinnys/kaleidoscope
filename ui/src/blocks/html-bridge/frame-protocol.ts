@@ -24,6 +24,7 @@ export interface FrameComment { id: string; anchor: HtmlAnchor; number: number; 
 export type FrameToParent =
   | { type: "ks-html-ready" }
   | { type: "ks-html-visible-text"; text: string }
+  | { type: "ks-html-context-menu"; x: number; y: number; text: string }
   | { type: "ks-html-select"; selection: FrameSelection | null }
   | { type: "ks-html-anchor-results"; results: Record<string, AnchorStatus> }
   | { type: "ks-html-select-comment"; id: string }
