@@ -210,14 +210,20 @@ export class AppClient {
       : `에이전트 ${this.selected?.name ?? ""}의 응답을 읽지 못했습니다. 에이전트 프로그램을 업데이트한 뒤 다시 시도하세요. 원인: ${failure.reason}`;
     const controls = (this.view?.controls ?? []).map((control) => ({ ...control, is_select: control.kind === "select", is_boolean: control.kind === "boolean", checked: control.value === true }));
     const output = {
+      show_start: !chat,
       show_loading: this.stage === "loading", show_agents: this.stage === "agents" && this.agents.length > 0,
       show_empty: this.stage === "agents" && this.agents.length === 0, show_folder: this.stage === "folder",
       show_starting: this.stage === "session" && (!phase || phase === "starting"), show_login: this.stage === "session" && phase === "login",
       show_failed: this.stage === "error" || (this.stage === "session" && phase === "failed"), show_chat: chat,
       show_retry: this.retry, show_back: this.agents.length > 1,
+      show_selected: !!this.selected && this.stage !== "agents" && this.stage !== "loading",
+      show_single: !!this.selected && this.agents.length <= 1,
+      show_picked_folder: !!this.folder && this.stage !== "folder" && this.stage !== "agents" && this.stage !== "loading",
+      show_login_error: phase === "login" && !!failure,
+      show_pick_folder: this.stage === "folder" && !this.retry,
       agents: this.agents.map(({ id, name }) => ({ id, label: name })), agent_options: this.agents.map(({ id, name }) => ({ value: id, label: name })),
       selected: this.selected?.id ?? null, agent_label: this.agents.length > 1 ? `← ${this.selected?.name ?? ""}` : this.selected?.name ?? "",
-      folder_label: this.folder ?? "폴더 선택", window_title: this.selected?.name ?? "에이전트", window_meta: this.folder,
+      folder_label: this.folder ?? "폴더 선택", window_title: chat ? this.selected?.name ?? "에이전트" : "에이전트", window_meta: chat ? this.folder : null,
       settings_available: chat, busy: !!this.view?.busy, controls,
       permissions: this.view?.permissions ?? [], auth_methods: this.view?.authMethods ?? [],
       has_error: !!(this.error || failure), error_message: message, error_id: this.error?.id ?? failure?.id ?? null,

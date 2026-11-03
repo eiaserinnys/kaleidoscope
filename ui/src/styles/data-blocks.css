@@ -18,6 +18,9 @@
 .ks-data-stack-item { flex: 0 0 auto; min-width: 0; min-height: 0; }
 .ks-data-stack-item:empty { display: none; }
 .ks-data-stack-item.is-fill { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; }
+.ks-data-stack-item:has(> .ks-data-stack.is-center) { flex: 1 1 auto; }
+.ks-data-stack-item:not(.is-fill) > .ks-data-stack.is-center { height: 100%; }
+.ks-data-stack.gap-small > .ks-data-stack-item > .ks-repeat:not(.is-grid) > .ks-repeat-content { gap: var(--ks-space-2); }
 .ks-data-stack-item.is-fill:has(> .ks-split) { min-height: var(--ks-pane-min-size); }
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column { height: auto; min-height: 100%; }
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column > .ks-data-stack-item.is-fill { flex: 0 0 auto; overflow: visible; }
