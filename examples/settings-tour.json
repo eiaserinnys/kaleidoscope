@@ -17,99 +17,103 @@
     "advanced_settings": { "kind": "file", "permission": "settings", "path": "advanced.json" }
   },
   "ui": {
-    "type": "stack",
-    "direction": "column",
-    "children": [
-      {
-        "type": "anchor",
-        "id": "advanced-toggle",
-        "child": {
-          "type": "toggle",
-          "label": "고급 설정",
+    "type": "section",
+    "title": null,
+    "child": {
+      "type": "stack",
+      "direction": "column",
+      "children": [
+        {
+          "type": "anchor",
+          "id": "advanced-toggle",
+          "child": {
+            "type": "toggle",
+            "label": "고급 설정",
+            "value": { "state": "advanced" },
+            "on_change": { "set_state": "advanced" }
+          }
+        },
+        {
+          "type": "anchor",
+          "id": "dialog-button",
+          "child": {
+            "type": "button",
+            "label": "파일 설정 안내",
+            "on_click": [{ "set_state": "dialog_open", "value": true }]
+          }
+        },
+        {
+          "type": "anchor",
+          "id": "guide-button",
+          "child": {
+            "type": "button",
+            "label": "처음 사용 안내",
+            "on_click": [
+              { "set_state": "tour_open", "value": true },
+              { "set_state": "tour_step", "value": "advanced" }
+            ]
+          }
+        },
+        {
+          "type": "when",
           "value": { "state": "advanced" },
-          "on_change": { "set_state": "advanced" }
-        }
-      },
-      {
-        "type": "anchor",
-        "id": "dialog-button",
-        "child": {
-          "type": "button",
-          "label": "파일 설정 안내",
-          "on_click": [{ "set_state": "dialog_open", "value": true }]
-        }
-      },
-      {
-        "type": "anchor",
-        "id": "guide-button",
-        "child": {
-          "type": "button",
-          "label": "처음 사용 안내",
-          "on_click": [
-            { "set_state": "tour_open", "value": true },
+          "child": {
+            "type": "anchor",
+            "id": "advanced-theme",
+            "child": {
+              "type": "text",
+              "value": { "expr": "'테마: ' & $data.advanced_settings.theme" }
+            }
+          }
+        },
+        {
+          "type": "dialog",
+          "open": { "state": "dialog_open" },
+          "title": "파일 설정",
+          "child": {
+            "type": "text",
+            "value": "고급 설정은 접혀 있을 때 원천을 읽지 않습니다."
+          },
+          "on_close": [{ "set_state": "dialog_open", "value": false }]
+        },
+        {
+          "type": "tour",
+          "open": { "state": "tour_open" },
+          "step": { "state": "tour_step" },
+          "steps": [
+            {
+              "key": "advanced",
+              "target": "advanced-toggle",
+              "title": "고급 설정",
+              "body": "필요할 때 설정 내용을 펼칩니다."
+            },
+            {
+              "key": "theme",
+              "target": "advanced-theme",
+              "title": "설정 값",
+              "body": "값은 선택한 표본 파일에서 읽습니다."
+            },
+            {
+              "key": "dialog",
+              "target": "dialog-button",
+              "title": "도움말",
+              "body": "대화상자는 닫기와 Escape로 돌아옵니다."
+            },
+            {
+              "key": "guide",
+              "target": "guide-button",
+              "title": "안내 마치기",
+              "body": "다음 안내는 이 단추에서 다시 열 수 있습니다."
+            }
+          ],
+          "on_step": [{ "set_state": "tour_step", "value": { "expr": "$event" } }],
+          "on_close": [
+            { "set_state": "tour_open", "value": false },
+            { "set_state": "tour_result", "value": { "expr": "$event" } },
             { "set_state": "tour_step", "value": "advanced" }
           ]
         }
-      },
-      {
-        "type": "when",
-        "value": { "state": "advanced" },
-        "child": {
-          "type": "anchor",
-          "id": "advanced-theme",
-          "child": {
-            "type": "text",
-            "value": { "expr": "'테마: ' & $data.advanced_settings.theme" }
-          }
-        }
-      },
-      {
-        "type": "dialog",
-        "open": { "state": "dialog_open" },
-        "title": "파일 설정",
-        "child": {
-          "type": "text",
-          "value": "고급 설정은 접혀 있을 때 원천을 읽지 않습니다."
-        },
-        "on_close": [{ "set_state": "dialog_open", "value": false }]
-      },
-      {
-        "type": "tour",
-        "open": { "state": "tour_open" },
-        "step": { "state": "tour_step" },
-        "steps": [
-          {
-            "key": "advanced",
-            "target": "advanced-toggle",
-            "title": "고급 설정",
-            "body": "필요할 때 설정 내용을 펼칩니다."
-          },
-          {
-            "key": "theme",
-            "target": "advanced-theme",
-            "title": "설정 값",
-            "body": "값은 선택한 표본 파일에서 읽습니다."
-          },
-          {
-            "key": "dialog",
-            "target": "dialog-button",
-            "title": "도움말",
-            "body": "대화상자는 닫기와 Escape로 돌아옵니다."
-          },
-          {
-            "key": "guide",
-            "target": "guide-button",
-            "title": "안내 마치기",
-            "body": "다음 안내는 이 단추에서 다시 열 수 있습니다."
-          }
-        ],
-        "on_step": [{ "set_state": "tour_step", "value": { "expr": "$event" } }],
-        "on_close": [
-          { "set_state": "tour_open", "value": false },
-          { "set_state": "tour_result", "value": { "expr": "$event" } },
-          { "set_state": "tour_step", "value": "advanced" }
-        ]
-      }
-    ]
+      ]
+    }
   }
 }

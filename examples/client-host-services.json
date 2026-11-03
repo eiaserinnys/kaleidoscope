@@ -18,14 +18,18 @@
     "capabilities": ["share", "keep_awake"]
   },
   "ui": {
-    "type": "stack",
-    "direction": "column",
-    "children": [
-      { "type": "button", "label": "텍스트 저장", "on_click": { "client": "save" } },
-      { "type": "button", "label": "텍스트 공유", "on_click": { "client": "share" } },
-      { "type": "button", "label": "화면 켜짐 유지", "on_click": { "client": "keep_awake_on" } },
-      { "type": "button", "label": "화면 켜짐 해제", "on_click": { "client": "keep_awake_off" } },
-      { "type": "text", "value": { "client": "status" } }
-    ]
+    "type": "section",
+    "title": null,
+    "child": {
+      "type": "stack",
+      "direction": "column",
+      "children": [
+        { "type": "button", "label": "텍스트 저장", "on_click": { "client": "save" } },
+        { "type": "button", "label": "텍스트 공유", "on_click": { "client": "share" } },
+        { "type": "button", "label": "화면 켜짐 유지", "on_click": { "client": "keep_awake_on" } },
+        { "type": "button", "label": "화면 켜짐 해제", "on_click": { "client": "keep_awake_off" } },
+        { "type": "text", "value": { "client": "status" } }
+      ]
+    }
   }
 }
