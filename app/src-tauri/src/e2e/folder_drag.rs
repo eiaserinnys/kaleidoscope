@@ -2,6 +2,9 @@
 use super::share_isolate::native_input;
 use super::*;
 
+mod native_windows;
+mod retry;
+
 pub(super) fn external_drop_guard(app: &AppHandle, log: &mut File) -> Result<(), String> {
     ui::wait_dom(
         app,
@@ -99,30 +102,133 @@ pub(super) fn scenario(
         &format!("{query} return !!a && !!b;"),
         "folder drag rows",
     )?;
-    let bounds = ui::evaluate(app, &format!("{query} const point=e=>{{const r=e.getBoundingClientRect();return {{x:r.left+r.width/2,y:r.top+r.height/2}}}};return {{from:point(a),to:point(b)}};"))?;
-    let window = app.get_window("main").ok_or("main window missing")?;
-    window.set_focus().map_err(|error| error.to_string())?;
-    let origin = window.inner_position().map_err(|error| error.to_string())?;
-    let scale = window.scale_factor().map_err(|error| error.to_string())?;
-    let point = |name: &str| -> Result<(i32, i32), String> {
-        let x = bounds[name]["x"].as_f64().ok_or("row x missing")?;
-        let y = bounds[name]["y"].as_f64().ok_or("row y missing")?;
-        Ok((
-            origin.x + (x * scale).round() as i32,
-            origin.y + (y * scale).round() as i32,
-        ))
+    let mut first_attempt: Option<Value> = None;
+    for attempt in 0..=1 {
+        ui::evaluate(app, include_str!("drag-events.js"))?;
+        let bounds = ui::evaluate(app, &format!("{query} const point=e=>{{const r=e.getBoundingClientRect();return {{x:r.left+r.width/2,y:r.top+r.height/2}}}};return {{from:point(a),to:point(b)}};"))?;
+        let window = app.get_window("main").ok_or("main window missing")?;
+        focus_for_drag(app, log).map_err(|e| format!("{e}; first_attempt: {first_attempt:?}"))?;
+        let origin = window.inner_position().map_err(|error| error.to_string())?;
+        let scale = window.scale_factor().map_err(|error| error.to_string())?;
+        let point = |name: &str| -> Result<(i32, i32), String> {
+            let x = bounds[name]["x"].as_f64().ok_or("row x missing")?;
+            let y = bounds[name]["y"].as_f64().ok_or("row y missing")?;
+            Ok((
+                origin.x + (x * scale).round() as i32,
+                origin.y + (y * scale).round() as i32,
+            ))
+        };
+        let from = point("from")?;
+        let to = point("to")?;
+        probe(app, core, "before_press", &bounds, from, to)?;
+        let input = native_input::drag(from, to, || {
+            probe(app, core, "before_release", &bounds, from, to)
+        });
+        let after = probe(app, core, "after_release", &bounds, from, to);
+        let input = input.and(after);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while input.is_ok()
+            && Instant::now() < deadline
+            && !folder.join("drag-destination/drag-me.md").exists()
+        {
+            thread::sleep(Duration::from_millis(100));
+        }
+        let trace = ui::evaluate(app, "const t=window.__ksE2eDrag;t?.dispose();return t;")?;
+        let source_exists = folder.join("drag-me.md").exists();
+        let destination = folder.join("drag-destination/drag-me.md");
+        let moved = !source_exists && destination.is_file();
+        // 관측기가 없거나 손상된 경우를 이벤트 0개로 바꾸어 읽지 않는다.
+        let no_events = trace["events"].as_array().is_some_and(Vec::is_empty)
+            && trace["counts"]
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty);
+        let diagnostics = json!({"attempt": attempt + 1, "retried": attempt > 0,
+            "bounds": bounds, "trace": trace, "first_attempt": first_attempt.clone()});
+        record(log, "files-write.drag.trace", diagnostics.clone())?;
+        if let Err(error) = input {
+            return Err(format!(
+                "native drag input failed: {error}; diagnostics: {diagnostics}"
+            ));
+        }
+        if moved {
+            return record(
+                log,
+                "files-write.drag",
+                json!({"passed": true,
+                "source_absent": true, "destination_exists": true,
+                "retried": attempt > 0, "first_attempt": first_attempt}),
+            );
+        }
+        if retry::allow_retry(attempt, no_events, source_exists, destination.exists()) {
+            first_attempt = Some(diagnostics);
+            continue;
+        }
+        return Err(format!(
+            "native drag did not move the file; diagnostics: {diagnostics}"
+        ));
+    }
+    Err("native drag exhausted its two attempts".into())
+}
+
+// DOM에 창 UUID가 없으므로 코어의 app_id와 z를 대조해 실제 id를 함께 남긴다.
+fn probe(
+    app: &AppHandle,
+    core: &Core,
+    stage: &str,
+    bounds: &Value,
+    from: (i32, i32),
+    to: (i32, i32),
+) -> Result<(), String> {
+    let native = native_windows::capture(from, to);
+    let snapshot = match call(core, CoreRequest::StateGet {})? {
+        CoreReply::StateGet { snapshot } => snapshot,
+        reply => return Err(format!("unexpected probe state: {reply:?}")),
     };
-    native_input::drag(point("from")?, point("to")?)?;
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while Instant::now() < deadline && !folder.join("drag-destination/drag-me.md").exists() {
-        thread::sleep(Duration::from_millis(100));
-    }
-    if folder.join("drag-me.md").exists() || !folder.join("drag-destination/drag-me.md").is_file() {
-        return Err(format!("native drag did not move the file: {bounds}"));
-    }
+    let windows = serde_json::to_string(&snapshot.shared.windows).map_err(|e| e.to_string())?;
+    let stage = serde_json::to_string(stage).map_err(|e| e.to_string())?;
+    ui::evaluate(
+        app,
+        &format!("window.__ksE2eDrag.sample({stage}, {bounds}, {windows}); window.__ksE2eDrag.samples.at(-1).native = {native}; return true;"),
+    )?;
+    Ok(())
+}
+
+// 최상위 창 활성화만으로는 WebView2 입력 포커스가 옮겨지지 않는다.
+// 포커스 요청은 한 번만 보내고 상태를 관찰한다. 실패하면 LEFTDOWN을 보내지 않는다.
+fn focus_for_drag(app: &AppHandle, log: &mut File) -> Result<(), String> {
+    let started = Instant::now();
+    let mut checks = 0;
+    let mut unfocused_checks = 0;
+    let result: Result<(), String> = (|| {
+        app.get_window("main")
+            .ok_or("main window missing")?
+            .set_focus()
+            .map_err(|e| e.to_string())?;
+        app.get_webview("main")
+            .ok_or("main webview missing")?
+            .set_focus()
+            .map_err(|e| e.to_string())?;
+        loop {
+            checks += 1;
+            if ui::evaluate(app, "return document.hasFocus();")? == json!(true) {
+                return Ok(());
+            }
+            unfocused_checks += 1;
+            if started.elapsed() >= Duration::from_secs(10) {
+                return Err("main webview did not acquire input focus within 10 seconds; drag was not attempted".into());
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+    })();
     record(
         log,
-        "files-write.drag",
-        json!({"passed": true, "source_absent": true, "destination_exists": true}),
-    )
+        "files-write.drag.focus",
+        json!({
+            "passed": result.is_ok(), "elapsed_ms": started.elapsed().as_millis(),
+            "checks": checks, "unfocused_checks": unfocused_checks,
+            "wait_needed": unfocused_checks > 0, "focus_requests": 1,
+            "error": result.as_ref().err(),
+        }),
+    )?;
+    result
 }
