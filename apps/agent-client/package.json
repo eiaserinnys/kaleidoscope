@@ -6,7 +6,9 @@
   "license": "MIT",
   "scripts": {
     "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=60000 --test-concurrency=2 test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "node scripts/build.mjs",
+    "verify": "node scripts/build.mjs --check"
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "2.4.0",

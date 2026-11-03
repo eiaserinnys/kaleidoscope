@@ -86,5 +86,16 @@
     "byte_size": 363,
     "created_at": "2026-10-31T00:00:00Z",
     "path": "weather/thunderstorm.svg"
+  },
+  {
+    "id": "builtin-agent-client",
+    "version": 1,
+    "format": "javascript",
+    "sha256": "8286c2392923beccea4d4ad0e8f97d1b3700f96f883a76b7f0c08f5c80cfae18",
+    "source": "apps/agent-client",
+    "license": "MIT",
+    "byte_size": 21426,
+    "created_at": "2026-11-03T00:00:00Z",
+    "path": "agent/client.js"
   }
 ]
