@@ -4,10 +4,10 @@ import { join } from "node:path";
 
 const output = process.env.KS_BLOCKS_E1_CAPTURE_DIR;
 const scenes = [
-  { id: "blocks-17-01", label: "01-center" },
-  { id: "blocks-17-04", label: "04-error" },
-  { id: "blocks-17-05", label: "05-loading" },
-  { id: "blocks-17-06", label: "06-folder" },
+  { id: "blocks-18-01", label: "01-center" },
+  { id: "blocks-18-04", label: "04-error" },
+  { id: "blocks-18-05", label: "05-loading" },
+  { id: "blocks-18-06", label: "06-folder" },
 ];
 
 async function capture(page: Page, id: string, mode: string) {
@@ -34,15 +34,15 @@ async function fitSmallWindow(page: Page) {
 async function assertScene(page: Page, id: string) {
   const app = page.getByTestId(`app-window-${id}`);
   await expect(app.locator(".ks-data-stack.is-center")).toBeVisible();
-  if (id === "blocks-17-01") {
+  if (id === "blocks-18-01") {
     const buttons = app.locator(".ks-data-button");
     await expect(buttons).toHaveCount(4);
     for (let index = 0; index < 4; index += 1) await expect(buttons.nth(index)).toBeVisible();
-  } else if (id === "blocks-17-04") {
+  } else if (id === "blocks-18-04") {
     await expect(app.getByRole("alert")).toContainText("저장 항목 agents: 값을 읽기 위한 서버 저장소 작업을 시작하지 못했습니다.");
     await expect(app.getByText("STORAGE_ITEM_READ_DATABASE_FAILED")).toBeVisible();
     await expect(app.getByRole("button", { name: "다시 시도" })).toBeVisible();
-  } else if (id === "blocks-17-05") {
+  } else if (id === "blocks-18-05") {
     await expect(app.getByRole("status", { name: "불러오는 중" }).locator("i")).toHaveCount(3);
     await expect(app.locator(".ks-notice")).toHaveCount(0);
   } else {
@@ -51,7 +51,7 @@ async function assertScene(page: Page, id: string) {
   }
 }
 
-test("블록 17의 네 시작 화면을 넓은 창, 최소 창, 다크 모드에서 그린다", async ({ page }) => {
+test("블록 18의 네 시작 화면을 넓은 창, 최소 창, 다크 모드에서 그린다", async ({ page }) => {
   for (const scene of scenes) {
     await page.emulateMedia({ colorScheme: "light" });
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -79,9 +79,9 @@ test("블록 17의 네 시작 화면을 넓은 창, 최소 창, 다크 모드에
 
 test("공용 선택기와 단추의 긴 글은 잘리고 기존 화면의 짧은 글은 그대로 보인다", async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 720 });
-  await page.goto("/?preview=blocks-17-ellipsis");
+  await page.goto("/?preview=blocks-18-ellipsis");
   await hideHarnessDevPanel(page);
-  const app = page.getByTestId("app-window-blocks-17-ellipsis");
+  const app = page.getByTestId("app-window-blocks-18-ellipsis");
   const choice = app.locator(".ks-select-choice-label");
   const buttonLabel = app.locator(".ks-data-button .ks-truncate-label");
   await expect(choice).toContainText("프로젝트-자료-정리-창-말줄임-시험-선택지");
@@ -97,13 +97,13 @@ test("공용 선택기와 단추의 긴 글은 잘리고 기존 화면의 짧은
     expect(item.overflow).toBe("ellipsis");
     expect(item.whiteSpace).toBe("nowrap");
   }
-  await capture(page, "blocks-17-ellipsis", "after-wide");
+  await capture(page, "blocks-18-ellipsis", "after-wide");
 
   await page.addStyleTag({ content: `
     .ks-truncate-label, .ks-select-choice-label { min-width: initial; overflow: visible; text-overflow: clip; white-space: normal; }
     .ks-select-button { max-width: initial; min-width: initial; }
   ` });
-  await capture(page, "blocks-17-ellipsis", "before-wide");
+  await capture(page, "blocks-18-ellipsis", "before-wide");
 
   await page.setViewportSize({ width: 400, height: 280 });
   await page.goto("/?preview=data-controls");

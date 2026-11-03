@@ -2,9 +2,9 @@ import type { AppDefinition } from "../../src/contract/contract";
 
 const definitions = [
   {
-    id: "blocks-17-01",
+    id: "blocks-18-01",
     name: "가운데 단추 기둥",
-    requires: { blocks: 17, modules: {} },
+    requires: { blocks: 18, modules: {} },
     permissions: [],
     state: { selection: "" },
     ui: {
@@ -15,9 +15,9 @@ const definitions = [
     },
   },
   {
-    id: "blocks-17-04",
+    id: "blocks-18-04",
     name: "오류 안내",
-    requires: { blocks: 17, modules: {} },
+    requires: { blocks: 18, modules: {} },
     permissions: [],
     state: { retry: false },
     ui: {
@@ -31,9 +31,9 @@ const definitions = [
     },
   },
   {
-    id: "blocks-17-05",
+    id: "blocks-18-05",
     name: "로딩 안내",
-    requires: { blocks: 17, modules: {} },
+    requires: { blocks: 18, modules: {} },
     permissions: [],
     state: {},
     ui: {
@@ -42,9 +42,9 @@ const definitions = [
     },
   },
   {
-    id: "blocks-17-06",
+    id: "blocks-18-06",
     name: "폴더 고르기",
-    requires: { blocks: 17, modules: {} },
+    requires: { blocks: 18, modules: {} },
     permissions: [],
     state: { folder: null },
     ui: {
@@ -56,9 +56,9 @@ const definitions = [
     },
   },
   {
-    id: "blocks-17-ellipsis",
+    id: "blocks-18-ellipsis",
     name: "말줄임 시험",
-    requires: { blocks: 17, modules: {} },
+    requires: { blocks: 18, modules: {} },
     permissions: [],
     state: { choice: "프로젝트-자료-정리-창-말줄임-시험-선택지", pressed: false },
     ui: {
@@ -77,4 +77,4 @@ const definitions = [
   },
 ] as unknown as AppDefinition[];
 
-export const blockSet17Fixtures = definitions;
+export const blockSet18Fixtures = definitions;

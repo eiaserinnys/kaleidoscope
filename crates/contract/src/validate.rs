@@ -37,7 +37,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
             .get("opens")
             .and_then(Value::as_object)
             .is_some_and(|opens| opens.contains_key("set_state"));
-    let uses_new_chat_client_fields = uses_block_set_18_fields(&value);
+    let uses_new_chat_client_fields = uses_block_set_18_chat_fields(&value);
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
 
@@ -56,7 +56,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     if uses_new_chat_client_fields && definition.requires.blocks < 18 {
         details.push("client.channels와 chat.client, chat.footer는 블록 세트 18판이라 requires.blocks가 18 이상이어야 합니다".into());
     }
-    if uses_block_set_17_fields(&definition.ui) && definition.requires.blocks < 18 {
+    if uses_block_set_18_ui_fields(&definition.ui) && definition.requires.blocks < 18 {
         details.push(
             "stack.place, select.disabled, toggle.disabled와 notice는 블록 세트 18판이라 requires.blocks가 18 이상이어야 합니다".into(),
         );
@@ -138,7 +138,7 @@ fn uses_versioned_block_fields(value: &Value) -> bool {
     }
 }
 
-fn uses_block_set_18_fields(value: &Value) -> bool {
+fn uses_block_set_18_chat_fields(value: &Value) -> bool {
     let client_channels = value
         .get("client")
         .and_then(Value::as_object)
@@ -199,7 +199,7 @@ fn uses_block_set_16_bindings(ui: &Block) -> bool {
     uses_new_binding
 }
 
-fn uses_block_set_17_fields(ui: &Block) -> bool {
+fn uses_block_set_18_ui_fields(ui: &Block) -> bool {
     let mut uses_new_field = false;
     data::walk_blocks(ui, "/ui", &mut |_, block| {
         uses_new_field |= match block {

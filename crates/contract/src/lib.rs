@@ -291,7 +291,7 @@ pub const BLOCK_SET_VERSION: u32 = 18;
 /// - `client` 1판: 창별 격리 프레임의 로직과 로컬 출력.
 /// - `client` 2판: HTTP 권한, 기기 저장소와 기본 런타임 기능.
 /// - `client` 3판: 로컬 process 실행 권한.
-/// - `client` 4판: 채팅 채널, 앱 작성 지침·같이 보기 준비 기능, 앱 정의에서 선언한 폴더 권한의 선택과 grant 변경 알림.
+/// - `client` 4판: 채팅 채널과 앱 작성 지침·같이 보기 준비 기능, 앱 정의에서 선언한 폴더 권한의 선택과 grant 변경 알림.
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("files", 3),
     ("agent", 3),
@@ -1574,7 +1574,7 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         wrap: Option<bool>,
-        /// (17판) 창 가운데 세로 기둥에 자식을 놓는다. 폭과 넘침 처리는 쉘이 정한다.
+        /// (18판) 창 가운데 세로 기둥에 자식을 놓는다. 폭과 넘침 처리는 쉘이 정한다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         place: Option<StackPlace>,
@@ -1790,7 +1790,7 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         placeholder: Option<Binding>,
-        /// (17판) 참이면 이 고르기를 사용할 수 없다.
+        /// (18판) 참이면 이 고르기를 사용할 수 없다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         disabled: Option<Binding>,
@@ -1800,12 +1800,12 @@ pub enum Block {
         value: Binding,
         on_change: Actions,
         label: Binding,
-        /// (17판) 참이면 이 켜고 끄기를 사용할 수 없다.
+        /// (18판) 참이면 이 켜고 끄기를 사용할 수 없다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         disabled: Option<Binding>,
     },
-    /// (17판) 일반 상태, 오류, 로딩 안내와 선택 동작을 보여준다.
+    /// (18판) 일반 상태, 오류, 로딩 안내와 선택 동작을 보여준다.
     Notice {
         message: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3237,7 +3237,7 @@ impl Block {
     /// 이 블록이 처음 생긴 블록 세트 판. 정의의 `requires.blocks`는 쓴 블록의 이 값 이상이어야 한다.
     pub fn introduced_in(&self) -> u32 {
         match self {
-            Block::Notice { .. } => 17,
+            Block::Notice { .. } => 18,
             Block::Repeat { .. }
             | Block::When { .. }
             | Block::Dialog { .. }
