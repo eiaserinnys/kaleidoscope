@@ -500,7 +500,7 @@ fn storage_defaults_only_apply_before_a_link() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://example.test".into(),
         device_name: "test".into(),
-        reason: "offline".into(),
+        reason: None,
     };
     assert_eq!(
         crate::app_storage::read(&core.inner, &window, "agents")

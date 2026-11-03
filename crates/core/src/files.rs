@@ -259,7 +259,9 @@ pub(crate) fn granted_root(
 ) -> Result<PathBuf, CoreError> {
     permission(state, window_id, permission_id, write)?;
     if scope(state, window_id, permission_id)? == FilesScope::Pc {
-        return Err(kaleidoscope_contract::errors::FILE_ACCESS_FOLDER_NOT_CHOSEN(permission_id));
+        return Err(
+            kaleidoscope_contract::errors::FILE_ACCESS_PC_SCOPE_FOLDER_REQUIRED(permission_id),
+        );
     }
     let grant = state
         .device

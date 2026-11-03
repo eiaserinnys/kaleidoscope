@@ -166,6 +166,29 @@ fn request_failure_does_not_expose_url_query_keys() {
 }
 
 #[test]
+fn event_connection_reports_builtin_registration_send_failure() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    drop(listener);
+    let result =
+        HttpRegistryClient::new().open_events(&format!("http://{address}"), "secret-token");
+    match result {
+        Err(RegistryError::Validation(error)) => {
+            assert_eq!(
+                error.id.as_deref(),
+                Some("CONN_BUILTIN_REGISTER_SEND_FAILED")
+            );
+            assert!(error
+                .details
+                .iter()
+                .any(|detail| detail.contains("host=127.0.0.1")));
+            assert!(!format!("{error:?}").contains("secret-token"));
+        }
+        _ => panic!("기본 앱 등록의 전송 오류가 나오지 않았습니다"),
+    }
+}
+
+#[test]
 fn events_send_supported_header() {
     let server = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = server.local_addr().unwrap();

@@ -5,7 +5,7 @@ import { ClientShareSignal, WindowNotice } from "../data/window-notice";
 import type { BlockContext, WindowIdentity } from "../blocks/block-context";
 import { ErrorNotice, StatusText } from "../components/primitives";
 import type { ShellStore } from "../core/shell-store";
-import type { Rect } from "../contract/contract";
+import type { CoreError, Rect } from "../contract/contract";
 import { useShellSelector } from "../core/shell-store";
 import { registerAppShortcuts } from "../runtime/shortcuts";
 import { renderBlock } from "./render-block";
@@ -26,7 +26,7 @@ export const AppWindowContent = memo(function AppWindowContent({
   settingsOpen?: boolean;
   settingsVisited?: boolean;
   onSettingsClose?: () => void;
-  onSettingsProblem?: (message: string | null) => void;
+  onSettingsProblem?: (problem: CoreError | string | null) => void;
 }) {
   const window = useShellSelector(store, (snapshot) => {
     const item = snapshot?.shared.windows.find((candidate) => candidate.id === windowId);
@@ -70,7 +70,7 @@ function AppShortcuts({ context, active }: { context: BlockContext; active: bool
 }
 
 function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, onSettingsProblem }: {
-  context: BlockContext; settingsOpen: boolean; settingsVisited: boolean; onSettingsClose: () => void; onSettingsProblem?: (message: string | null) => void;
+  context: BlockContext; settingsOpen: boolean; settingsVisited: boolean; onSettingsClose: () => void; onSettingsProblem?: (problem: CoreError | string | null) => void;
 }) {
   const data = useWindowData();
   const hasSettings = context.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false;

@@ -47,7 +47,7 @@ function localAgent(phase: LocalAgentSnapshot["phase"]): LocalAgentSnapshot {
 function setup(agent = localAgent("ready"), respond?: (request: CoreRequest) => Promise<CoreReply>, view: DataView = { values: {}, sources: {} }, appDefinition = definition, failFirstAttach = false, connected = false, offline = false) {
   const base = makeTestSnapshot({ definitions: [appDefinition] });
   if (connected) base.link = { state: "connected", mode: "remote", server_url: "https://example.test", device_name: "시험" };
-  if (offline) base.link = { state: "offline", mode: "remote", server_url: "https://example.test", device_name: "시험", reason: "연결이 끊겼습니다" };
+  if (offline) base.link = { state: "offline", mode: "remote", server_url: "https://example.test", device_name: "시험", reason: null };
   const listeners = new Set<(event: CoreEvent) => void>();
   let dataAttempts = 0;
   let agentAttempts = 0;

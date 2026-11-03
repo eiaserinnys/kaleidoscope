@@ -134,7 +134,7 @@ const windows: AppWindow[] = settingsPreview ? [{ id: "settings-window", desktop
 
 function linkStatus(state: string | null): LinkStatus {
   switch (state) {
-    case "embedded-offline": return { state: "offline", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC", reason: "연결하는 중" };
+    case "embedded-offline": return { state: "offline", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC", reason: null };
     case "embedded": return { state: "connected", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC" };
     case "pairing": return {
       state: "pairing",
@@ -151,7 +151,7 @@ function linkStatus(state: string | null): LinkStatus {
       state: "offline", mode: "remote",
       server_url: "https://kaleidoscope.example",
       device_name: "Office PC",
-      reason: "서버 응답 없음",
+      reason: { id: "CONN_EVENTS_SEND_FAILED", code: "server", message: "서버 응답 없음", details: [] },
     };
     case "revoked": return { state: "revoked", server_url: "https://kaleidoscope.example" };
     default: return { state: "unlinked" };

@@ -3047,7 +3047,7 @@ fn connected_import_uploads_and_preserves_server_validation_error() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
-        reason: "offline".into(),
+        reason: None,
     };
     let error = expect_error(
         core.handle(CoreRequest::AppImport {

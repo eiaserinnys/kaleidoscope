@@ -83,6 +83,9 @@ fn catalog_metadata_is_non_empty() {
 fn file_errors_do_not_recommend_absent_explorer_controls() {
     for entry in errors::all().filter(|entry| entry.id.starts_with("FILE_")) {
         for phrase in ["새로 고침", "폴더 선택", "목록"] {
+            if entry.id == "FILE_ACCESS_FOLDER_NOT_CHOSEN" && phrase == "폴더 선택" {
+                continue;
+            }
             assert!(!entry.message.contains(phrase), "{} message", entry.id);
             assert!(!entry.fix.contains(phrase), "{} fix", entry.id);
         }
@@ -291,7 +294,7 @@ fn storage_schema_mismatch_message_includes_validation_reason() {
     assert_eq!(error.id.as_deref(), Some("STORAGE_WRITE_SCHEMA_MISMATCH"));
     assert_eq!(
         error.message,
-        "저장 항목 settings.theme의 값이 앱 선언과 맞지 않습니다. 값을 고쳐 다시 저장하세요. 원인: JSON path /color: expected string"
+        "저장 항목 settings.theme: 값이 앱 선언과 맞지 않습니다. 값을 고쳐 다시 저장하세요. 원인: JSON path /color: expected string"
     );
     assert!(error.details.is_empty());
 }
@@ -326,17 +329,17 @@ fn storage_validation_reasons_identify_value_and_fixable_cause() {
         (
             json!({"type":"boolean"}),
             json!("no"),
-            Err("값 전체는 boolean 형식이어야 합니다."),
+            Err("값 전체는 참거짓 형식이어야 합니다."),
         ),
         (
             json!({"type":["boolean","string"]}),
             json!(3),
-            Err("값 전체는 boolean 또는 string 형식이어야 합니다."),
+            Err("값 전체는 참거짓 또는 글 형식이어야 합니다."),
         ),
         (
             json!({"type":"object","properties":{"enabled":{"type":"boolean"}}}),
             json!({"enabled":"no"}),
-            Err("/enabled는 boolean 형식이어야 합니다."),
+            Err("/enabled는 참거짓 형식이어야 합니다."),
         ),
         (
             json!({"type":"string","enum":["yes"]}),

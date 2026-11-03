@@ -19,6 +19,18 @@ fn pc_access_allows_root_listing() {
     let core = open_core(temp.path(), vec![pc_explorer()], &host);
     let (_, desktop) = active_ids(&core);
     let window_id = open_window(&core, &desktop, "test-explorer");
+    let error = crate::files::granted_root(
+        &core.inner.state.lock().unwrap(),
+        &window_id,
+        "folder",
+        false,
+    )
+    .unwrap_err();
+    assert_eq!(error.code, ErrorCode::NotGranted);
+    assert_eq!(
+        error.id.as_deref(),
+        Some("FILE_ACCESS_PC_SCOPE_FOLDER_REQUIRED")
+    );
     expect_error(
         core.handle(CoreRequest::FilesAllowPc {
             window_id: "missing".into(),

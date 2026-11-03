@@ -311,7 +311,7 @@ impl Core {
                     mode: file.mode,
                     server_url: file.server_url.clone(),
                     device_name: file.device_name.clone(),
-                    reason: "연결하는 중".into(),
+                    reason: None,
                 }
             }
         });

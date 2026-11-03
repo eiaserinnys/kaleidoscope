@@ -79,7 +79,7 @@ fn offline_changes_wait_for_snapshot_and_changed_during_send_stays_pending() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test".into(),
-        reason: "끊김".into(),
+        reason: None,
     };
     core.handle(CoreRequest::WorkspaceRename {
         workspace_id: id.clone(),

@@ -1310,7 +1310,7 @@ fn app_storage_unavailable_never_looks_like_a_null_default() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
-        reason: "offline".into(),
+        reason: None,
     };
     let error = crate::app_storage::read(&core.inner, &window, "choice").unwrap_err();
     assert_eq!(error.id.as_deref(), Some("STORAGE_SERVER_NOT_CONNECTED"));
@@ -1354,7 +1354,7 @@ fn storage_failed_while_offline_is_reloaded_after_connecting() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
-        reason: "offline".into(),
+        reason: None,
     };
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
@@ -1393,7 +1393,7 @@ fn hidden_window_reloads_failed_storage_when_it_becomes_visible() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
-        reason: "offline".into(),
+        reason: None,
     };
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
@@ -1443,7 +1443,7 @@ fn source_failed_while_offline_is_retried_after_connecting() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
-        reason: "offline".into(),
+        reason: None,
     };
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
@@ -1488,7 +1488,7 @@ fn hidden_window_retries_failed_source_when_it_becomes_visible() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
-        reason: "offline".into(),
+        reason: None,
     };
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
@@ -1552,7 +1552,7 @@ fn reconnect_replaces_in_flight_source_and_discards_its_late_failure() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
-        reason: "offline".into(),
+        reason: None,
     };
     crate::data_runtime::state_changed(&core.inner);
     mark_connected(&core);
@@ -1607,7 +1607,7 @@ fn storage_binding_drops_unlinked_defaults_when_the_link_goes_offline() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
-        reason: "offline".into(),
+        reason: None,
     };
     let event = {
         let state = core.inner.state.lock().unwrap();

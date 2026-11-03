@@ -18,6 +18,46 @@ function setup(block: Block) {
 }
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+it("미디어의 폴더 미선택 오류에서 폴더를 고르면 다시 받는다", async () => {
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "read", label: "문서" }], state: {}, ui: { type: "media", src: { permission: "docs", path: "file.wav" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  let selected = false;
+  const calls = vi.spyOn(transport, "call").mockImplementation((request) => {
+    if (request.op === "data.media") return selected
+      ? Promise.resolve({ op: "data.media", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } } as never)
+      : Promise.reject({ code: "not_granted", id: "FILE_ACCESS_FOLDER_NOT_CHOSEN", message: "폴더를 고르세요", details: [] });
+    if (request.op === "files.pick_folder") { selected = true; return Promise.resolve({ op: "files.pick_folder", grant: { permission: "docs" } } as never); }
+    return original(request as never);
+  });
+  render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  fireEvent.click(await screen.findByRole("button", { name: "폴더 선택" }));
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "files.pick_folder", permission: "docs" })));
+  await waitFor(() => expect((screen.getByRole("button", { name: "재생" }) as HTMLButtonElement).disabled).toBe(false));
+});
+
+it("폴더 선택이 실패한 뒤 다른 미디어를 열면 새 오류를 보인다", async () => {
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "read", label: "문서" }], state: {}, ui: { type: "media", src: { expr: "$state.track" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => {
+    if (request.op === "files.pick_folder") return Promise.reject({ code: "server", id: "FILE_PICK_FAILED", message: "선택 실패", details: [] });
+    if (request.op === "data.media") return Promise.reject("path" in request.media && request.media.path === "first.wav"
+      ? { code: "not_granted", id: "FILE_ACCESS_FOLDER_NOT_CHOSEN", message: "폴더 선택", details: [] }
+      : { code: "not_found", id: "MEDIA_LOAD_NOT_FOUND", message: "다른 파일 없음", details: [] });
+    return original(request as never);
+  });
+  render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  const send = (path: string) => act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/src": { status: "ready", value: { permission: "docs", path } } } } }));
+  await screen.findByRole("button", { name: "재생" });
+  send("first.wav");
+  fireEvent.click(await screen.findByRole("button", { name: "폴더 선택" }));
+  await screen.findByText("FILE_PICK_FAILED");
+  send("second.wav");
+  await screen.findByText("MEDIA_LOAD_NOT_FOUND");
+  expect(screen.queryByText("FILE_PICK_FAILED")).toBeNull();
+});
+
 it("빈 상태는 아이콘이 없으면 아이콘 칸을 두지 않고 전달된 아이콘은 표시한다", () => {
   const view = render(<EmptyState text="알림" action={<button>다시 받기</button>} />);
   expect(view.container.querySelector(".ks-empty-state-icon")).toBeNull();
@@ -154,6 +194,42 @@ it("이미지 요청 실패를 알리고 다시 받으면 성공한다", async (
   fireEvent.click(screen.getByRole("button", { name: "다시 받기" }));
   await waitFor(() => expect(result.container.querySelector(".ks-image-frame img")).toBeTruthy());
   expect(calls).toBe(2);
+});
+
+it("이미지 폴더 미선택 오류는 넓은 칸과 작은 칸에서 폴더를 고른 뒤 다시 받는다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  for (const width of [500, 200]) {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width, height: 400 } as DOMRect);
+    const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "read", label: "그림" }], state: {}, ui: { type: "image", src: { permission: "docs", path: "image.png" } } };
+    const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+    const original = transport.call.bind(transport);
+    let selected = false;
+    const calls = vi.spyOn(transport, "call").mockImplementation((request) => {
+      if (request.op === "files.pick_folder") { selected = true; return Promise.resolve({ op: "files.pick_folder", grant: { permission: "docs" } } as never); }
+      if (request.op === "data.media") return selected ? Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "YQ==", width: 1, height: 1 } } as never) : Promise.reject({ id: "FILE_ACCESS_FOLDER_NOT_CHOSEN", code: "not_granted", message: "폴더 선택", details: [] });
+      return original(request as never);
+    });
+    const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+    fireEvent.click(await screen.findByRole("button", { name: "폴더 선택" }));
+    await waitFor(() => expect(view.container.querySelector(".ks-image-frame img")).toBeTruthy());
+    expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "files.pick_folder", permission: "docs" }));
+    view.unmount();
+    vi.restoreAllMocks();
+  }
+});
+
+it("이미지 오류의 전체 문구가 칸을 넘으면 원문을 툴팁에 둔 짧은 표시로 바뀐다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    return { left: 0, top: 0, right: 500, bottom: this.classList.contains("ks-empty-state-action") ? 440 : 400, width: 500, height: 400 } as DOMRect;
+  });
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "image", src: { permission: "docs", path: "image.png" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media" ? Promise.reject({ id: "FILE_PATH_NOT_FOUND", code: "not_found", message: "긴 경로 오류", details: [] }) : original(request as never));
+  render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  expect((await screen.findByText("이미지를 불러오지 못했습니다")).getAttribute("title")).toBe("긴 경로 오류");
+  expect(screen.getByRole("button", { name: "다시 받기" })).toBeTruthy();
 });
 
 it("재생 실패를 알리고 원천 변경 뒤 조작부를 복구한다", async () => {

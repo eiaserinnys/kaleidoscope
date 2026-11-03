@@ -982,7 +982,8 @@ impl RegistryClient for HttpRegistryClient {
         token: &str,
     ) -> Result<Box<dyn BufRead + Send>, RegistryError> {
         let registration = self
-            .requests()?
+            .requests()
+            .map_err(registration_failure)?
             .post(format!(
                 "{server_url}{}",
                 kaleidoscope_contract::registry::DEVICE_BUILTIN_SPECS_PATH
@@ -990,14 +991,15 @@ impl RegistryClient for HttpRegistryClient {
             .bearer_auth(token)
             .json(&crate::builtin::builtin_runtime_specs())
             .send()
-            .map_err(request_failure)?;
+            .map_err(request_failure)
+            .map_err(registration_failure)?;
         if registration.status().as_u16() == 403 {
             eprintln!("기본 앱 실행 선언은 서버의 주 계정 기기에서만 등록할 수 있습니다.");
         } else if registration.status().as_u16() != 404 {
             let host = response_host(&registration);
             let status = registration.status();
             let body = registration.bytes().unwrap_or_default();
-            check_status(status, &body, &host)?;
+            check_status(status, &body, &host).map_err(registration_failure)?;
         }
         let response = self
             .events()?
@@ -1093,6 +1095,20 @@ fn check_status(status: reqwest::StatusCode, body: &[u8], host: &str) -> Result<
     }
 }
 
+fn registration_failure(error: RegistryError) -> RegistryError {
+    match error {
+        RegistryError::Failure { stage, detail } => {
+            let error = match stage {
+                FailureStage::Send => errors::CONN_BUILTIN_REGISTER_SEND_FAILED(),
+                FailureStage::Status => errors::CONN_BUILTIN_REGISTER_STATUS_FAILED(),
+                FailureStage::Read => errors::CONN_BUILTIN_REGISTER_READ_FAILED(),
+            };
+            RegistryError::Validation(error.and_details(vec![detail]))
+        }
+        other => other,
+    }
+}
+
 fn request_failure(error: reqwest::Error) -> RegistryError {
     let host = error
         .url()
@@ -1165,12 +1181,9 @@ mod tests {
 
     #[test]
     fn raw_app_value_item_url_removes_empty_base_path_segment() {
-        let address = raw_app_value_item_url(
-            "http://127.0.0.1:4219/",
-            "md-editor",
-            "documents/a.md",
-        )
-        .unwrap();
+        let address =
+            raw_app_value_item_url("http://127.0.0.1:4219/", "md-editor", "documents/a.md")
+                .unwrap();
 
         assert_eq!(
             address.as_str(),

@@ -17,8 +17,15 @@ error_catalog! { ENTRIES;
         class: NotGranted,
         place: "기기 폴더 접근 검사",
         cause: "이 앱 창에서 파일 권한의 폴더를 고르지 않았다",
-        message: "파일 권한 {permission}: 이 앱에서 사용할 폴더가 없습니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요.",
-        fix: "대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요"
+        message: "파일 권한 {permission}: 아직 폴더를 고르지 않았습니다. 폴더 선택을 누르세요.",
+        fix: "폴더 선택을 누르세요"
+    }
+    FILE_ACCESS_PC_SCOPE_FOLDER_REQUIRED(permission) {
+        class: NotGranted,
+        place: "기기 폴더 접근 검사",
+        cause: "PC 범위 파일 권한에는 선택한 폴더가 없다",
+        message: "파일 권한 {permission}: PC 범위에는 선택한 폴더가 없어 이 파일 동작을 사용할 수 없습니다. 앱 정의에서 폴더 범위 권한을 사용하세요.",
+        fix: "앱 정의에서 폴더 범위 파일 권한을 사용하세요"
     }
     FILE_ACCESS_WINDOW_NOT_FOUND() {
         class: NotFound,

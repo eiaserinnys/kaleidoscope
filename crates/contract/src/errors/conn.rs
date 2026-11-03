@@ -1,4 +1,60 @@
 error_catalog! { ENTRIES;
+    CONN_BUILTIN_REGISTER_SEND_FAILED() {
+        class: Server,
+        place: "기본 앱 실행 선언 등록 요청",
+        cause: "기본 앱 실행 선언 등록 요청을 보내지 못했다",
+        message: "서버에 기본 앱 실행 선언을 보내지 못했습니다. 서버와 네트워크 연결을 확인하세요.",
+        fix: "서버와 네트워크 연결을 확인하세요"
+    }
+    CONN_BUILTIN_REGISTER_STATUS_FAILED() {
+        class: Server,
+        place: "기본 앱 실행 선언 등록 응답",
+        cause: "서버가 기본 앱 실행 선언을 거부했다",
+        message: "서버가 기본 앱 실행 선언을 받지 못했습니다. 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "서버 로그에서 이 오류 코드를 찾으세요"
+    }
+    CONN_BUILTIN_REGISTER_READ_FAILED() {
+        class: Server,
+        place: "기본 앱 실행 선언 등록 응답 읽기",
+        cause: "기본 앱 실행 선언의 서버 응답을 읽지 못했다",
+        message: "기본 앱 실행 선언의 서버 응답을 읽지 못했습니다. 계속되면 쉘과 서버를 업데이트하세요.",
+        fix: "쉘과 서버를 업데이트하세요"
+    }
+    CONN_EVENTS_SEND_FAILED() {
+        class: Server,
+        place: "서버 이벤트 연결 요청",
+        cause: "이벤트 연결 요청을 보내지 못했다",
+        message: "서버에 이벤트 연결 요청을 보내지 못했습니다. 서버와 네트워크 연결을 확인하세요.",
+        fix: "서버와 네트워크 연결을 확인하세요"
+    }
+    CONN_EVENTS_STATUS_FAILED() {
+        class: Server,
+        place: "서버 이벤트 연결 응답",
+        cause: "서버가 이벤트 연결 요청을 거부했다",
+        message: "서버가 이벤트 연결 요청을 거부했습니다. 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "서버 로그에서 이 오류 코드를 찾으세요"
+    }
+    CONN_EVENTS_READ_FAILED() {
+        class: Server,
+        place: "서버 이벤트 읽기",
+        cause: "서버 이벤트 응답을 읽지 못했다",
+        message: "서버의 이벤트를 읽지 못해 연결이 끊겼습니다. 서버와 네트워크 연결을 확인하세요.",
+        fix: "서버와 네트워크 연결을 확인하세요"
+    }
+    CONN_EVENTS_ENDED() {
+        class: Server,
+        place: "서버 이벤트 읽기",
+        cause: "서버 이벤트 연결이 끝났다",
+        message: "서버의 이벤트 연결이 끝났습니다. 서버와 네트워크 연결을 확인하세요.",
+        fix: "서버와 네트워크 연결을 확인하세요"
+    }
+    CONN_EVENTS_NOT_FOUND() {
+        class: Server,
+        place: "서버 이벤트 연결 요청",
+        cause: "서버에 이벤트 연결 경로가 없다",
+        message: "서버에서 이벤트 연결 경로를 찾지 못했습니다. 쉘과 서버를 업데이트하세요.",
+        fix: "쉘과 서버를 업데이트하세요"
+    }
     CONN_SETTING_SAVE_DATABASE_FAILED(name) {
         class: Server,
         place: "연결 설정 저장",

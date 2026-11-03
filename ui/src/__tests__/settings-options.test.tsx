@@ -16,8 +16,8 @@ function setup(entry: StorageEntryDecl, stored?: JsonValue) {
   const original = transport.call.bind(transport);
   const spy = vi.spyOn(transport, "call");
   const store = createShellStore(transport);
-  render(<AppWindowContent store={store} windowId="editor-window" settingsOpen settingsVisited />);
-  return { spy, original };
+  const view = render(<AppWindowContent store={store} windowId="editor-window" settingsOpen settingsVisited />);
+  return { spy, original, store, view };
 }
 const entry = (schema: StorageEntryDecl["schema"], value: JsonValue): StorageEntryDecl => ({ id: "option", key: "option", label: "선택", kind: "json", schema, default: value, presentation: "settings" });
 
@@ -87,4 +87,22 @@ it("목록 저장 검사가 실패하면 각 조작과 오류를 연결한다", 
   const add = screen.getByRole("textbox", { name: "선택 추가" });
   expect(add.getAttribute("aria-invalid")).toBe("true");
   expect(add.getAttribute("aria-describedby")).toBe(error.parentElement?.id);
+});
+
+it("설정을 닫으면 저장 오류와 코드가 창 알림에 남는다", async () => {
+  const { spy, original, store, view } = setup(entry({ type: "boolean" }, false));
+  spy.mockImplementation(async (request) => {
+    if (request.op === "storage.write") throw { id: "STORAGE_WRITE_SCHEMA_MISMATCH", code: "invalid_request", message: "저장 오류", details: [] };
+    return original(request);
+  });
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("switch", { name: "선택" }));
+  await screen.findByText("STORAGE_WRITE_SCHEMA_MISMATCH");
+  view.rerender(<AppWindowContent store={store} windowId="editor-window" settingsOpen={false} settingsVisited />);
+  await waitFor(() => expect(view.container.querySelector(".ks-data-window-notice")?.textContent).toContain("STORAGE_WRITE_SCHEMA_MISMATCH"));
+  expect(view.container.querySelectorAll(".ks-data-window-notice .ks-notice")).toHaveLength(1);
+  view.rerender(<AppWindowContent store={store} windowId="editor-window" settingsOpen settingsVisited />);
+  spy.mockImplementation((request) => original(request));
+  await user.click(await screen.findByRole("switch", { name: "선택" }));
+  await waitFor(() => expect(view.container.querySelector(".ks-data-window-notice")?.textContent).not.toContain("STORAGE_WRITE_SCHEMA_MISMATCH"));
 });

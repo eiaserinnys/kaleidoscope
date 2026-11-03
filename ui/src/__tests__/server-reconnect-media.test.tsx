@@ -11,7 +11,7 @@ import { makeTestSeed } from "./fixtures";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); document.querySelector(".ks-client-frames")?.remove(); });
 
 const base: AppDefinition = { id: "reconnect-test", name: "연결 시험", requires: { blocks: 12, modules: { assets: 1 } }, permissions: [], state: {}, assets: [{ id: "sample", version: 1 }], ui: { type: "text", value: "시험" } };
-const offline = { state: "offline", mode: "remote", server_url: "http://test", device_name: "시험", reason: "연결하는 중" } as const;
+const offline = { state: "offline", mode: "remote", server_url: "http://test", device_name: "시험", reason: null } as const;
 const connected = { state: "connected", mode: "remote", server_url: "http://test", device_name: "시험" } as const;
 
 function setup(definition: AppDefinition, mime: string, content: string) {

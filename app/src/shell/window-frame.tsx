@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { IconButton, Maximize2, Minus, Minimize2, Notice, ScreenShare, Settings, X, useShareView, type ShellStore, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
+import { IconButton, Maximize2, Minus, Minimize2, ScreenShare, Settings, X, useShareView, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
 
 export interface WindowFrameProps {
@@ -15,7 +15,7 @@ export interface WindowFrameProps {
   onMaximize: (windowId: string) => void;
   onRestore: (windowId: string) => void;
   window: AppWindow;
-  children: ReactNode | ((settingsOpen: boolean, closeSettings: () => void, reportProblem: (message: string | null) => void, visited: boolean) => ReactNode);
+  children: ReactNode | ((settingsOpen: boolean, closeSettings: () => void, reportProblem: (problem: CoreError | string | null) => void, visited: boolean) => ReactNode);
 }
 
 type Gesture = {
@@ -34,7 +34,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
   const contentRef = useRef<HTMLDivElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsVisited, setSettingsVisited] = useState(false);
-  const [settingsProblem, setSettingsProblem] = useState<string | null>(null);
+  const [settingsProblem, setSettingsProblem] = useState<CoreError | string | null>(null);
   const settingsButton = useRef<HTMLSpanElement>(null);
   const closeSettings = useCallback(() => { setSettingsOpen(false); requestAnimationFrame(() => settingsButton.current?.querySelector<HTMLButtonElement>("button")?.focus()); }, []);
   const isMaximized = Boolean(appWindow.maximized);
@@ -176,7 +176,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
           <span className="ks-window-title" title={appName}>{appName}</span>
           <div className="ks-window-title-actions">
           {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} tone="share" pressed={sharing} onClick={() => void onCall({ op: "share.set", window_id: appWindow.id, on: !sharing })}><ScreenShare /></IconButton> : null}
-          {hasSettings ? <span ref={settingsButton}><IconButton aria-label={settingsProblem ? `앱 설정: ${settingsProblem}` : "앱 설정"} pressed={settingsOpen} onClick={() => { if (settingsOpen) closeSettings(); else { setSettingsVisited(true); setSettingsOpen(true); } }}><Settings /></IconButton></span> : null}
+          {hasSettings ? <span ref={settingsButton}><IconButton aria-label={settingsProblem ? `앱 설정: ${typeof settingsProblem === "string" ? settingsProblem : settingsProblem.message}` : "앱 설정"} pressed={settingsOpen} onClick={() => { if (settingsOpen) closeSettings(); else { setSettingsVisited(true); setSettingsOpen(true); } }}><Settings /></IconButton></span> : null}
           <IconButton aria-label="창 최소화" title="창 최소화" onClick={() => onMinimize(appWindow.id)}><Minus /></IconButton>
           <IconButton
             aria-label={isMaximized ? "이전 크기로 복원" : "창 최대화"}
@@ -196,7 +196,6 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
         </header>
         <div className="ks-window-content" ref={contentRef}>
           {typeof children === "function" ? children(settingsOpen, closeSettings, setSettingsProblem, settingsVisited) : children}
-          {settingsProblem && !settingsOpen ? <div className="ks-window-settings-notice" data-ks-share-skip><Notice role="alert" data-ks-overlay>{settingsProblem}</Notice></div> : null}
         </div>
       </div>
       {!isMaximized ? <div
