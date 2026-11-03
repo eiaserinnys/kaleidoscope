@@ -346,6 +346,34 @@ fn consent_and_checkpoint_follow_the_window() {
 }
 
 #[cfg(windows)]
+fn windows_process_diagnostics(
+    core: &Core,
+    window: &str,
+    handle: &str,
+    work: &Path,
+    requested_at: std::time::SystemTime,
+    started: Instant,
+    spawn_returned: Duration,
+) -> String {
+    let files: Vec<_> = fs::read_dir(work)
+        .map(|entries| entries.filter_map(Result::ok).map(|entry| entry.file_name()).collect())
+        .unwrap_or_default();
+    let output = core.handle(CoreRequest::ProcessRead {
+        window_id: window.into(),
+        handle: handle.into(),
+        after: 0,
+        max_bytes: 64 * 1024,
+    });
+    match output {
+        Ok(CoreReply::ProcessRead { bytes, stderr_tail, exit, .. }) => format!(
+            "요청 시각: {requested_at:?}, 경과: {:?}, 시작 응답: {spawn_returned:?}\n파일 목록: {files:?}\nstdout:\n{}\nstderr:\n{}\n종료: {exit:?}",
+            started.elapsed(), String::from_utf8_lossy(&bytes), String::from_utf8_lossy(&stderr_tail)
+        ),
+        other => format!("출력 조회 실패: {other:?}, 요청 시각: {requested_at:?}, 경과: {:?}, 시작 응답: {spawn_returned:?}, 파일 목록: {files:?}", started.elapsed()),
+    }
+}
+
+#[cfg(windows)]
 #[test]
 fn windows_process_cmd_terminates_descendants_in_unicode_cwd() {
     let temp = TempDir::new().unwrap();
@@ -391,6 +419,8 @@ fn windows_process_cmd_terminates_descendants_in_unicode_cwd() {
     };
     let owner = core.clone();
     let start_window = window.clone();
+    let requested_at = std::time::SystemTime::now();
+    let started = Instant::now();
     let task = thread::spawn(move || {
         owner
             .handle(CoreRequest::ProcessStart {
@@ -416,11 +446,14 @@ fn windows_process_cmd_terminates_descendants_in_unicode_cwd() {
     else {
         panic!("시작 결과")
     };
+    let spawn_returned = started.elapsed();
     let deadline = Instant::now() + Duration::from_secs(30);
     while !work.join("child.pid").exists() {
-        assert!(Instant::now() < deadline, "자손 시작 시간 초과");
+        assert!(Instant::now() < deadline, "자손 시작 시간 초과\n{}", windows_process_diagnostics(&core, &window, &handle, &work, requested_at, started, spawn_returned));
         thread::sleep(Duration::from_millis(50));
     }
+    let diagnostics = windows_process_diagnostics(&core, &window, &handle, &work, requested_at, started, spawn_returned);
+    eprintln!("자손 확인 진단:\n{diagnostics}");
     let pid = fs::read_to_string(work.join("child.pid")).unwrap();
     let cwd = fs::read_to_string(work.join("cwd.txt")).unwrap();
     assert_eq!(
@@ -443,7 +476,7 @@ fn windows_process_cmd_terminates_descendants_in_unicode_cwd() {
         }
         assert!(
             Instant::now() < deadline,
-            "자손 프로세스가 남았습니다: {pid}"
+            "자손 프로세스가 남았습니다: {pid}\n{diagnostics}"
         );
         thread::sleep(Duration::from_millis(100));
     }
