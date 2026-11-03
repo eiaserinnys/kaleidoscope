@@ -23,7 +23,7 @@
 
 /* 프레임과 레일 */
 .ks-html-content { position: relative; display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; }
-.ks-html-content iframe { flex: 1 1 0; width: 0; min-width: 0; border: 0; background: var(--ks-color-surface); }
+.ks-html-content iframe { flex: 1 1 0; width: 0; min-width: 0; border: 0; background: var(--ks-color-surface-solid); }
 .ks-html-content iframe:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
 .ks-html-rail { display: flex; flex: 0 0 calc(var(--ks-space-6) * 8); flex-direction: column; min-width: 0; min-height: 0; border-inline-start: var(--ks-line-width) solid var(--ks-color-border); background: var(--ks-color-surface); }
 /* 스크롤바 칸을 늘 비워 두고 안쪽 여백에서 그만큼 뺀다. 스크롤이 생겨도 칸 폭과 오른쪽 가장자리가 그대로다. */
@@ -128,5 +128,5 @@
   .ks-html-rail-body { flex: 0 0 auto; overflow: visible; scrollbar-gutter: auto; }
   .ks-html-rail-foot { padding-inline-end: calc(var(--ks-space-3) - var(--ks-space-2)); }
 }
-.ks-sandbox { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; background: var(--ks-color-surface); }
-.ks-sandbox iframe { width: 100%; height: 100%; flex: 1 1 auto; min-width: 0; min-height: 0; border: 0; background: var(--ks-color-surface); }
+.ks-sandbox { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; background: var(--ks-color-surface-solid); }
+.ks-sandbox iframe { width: 100%; height: 100%; flex: 1 1 auto; min-width: 0; min-height: 0; border: 0; background: var(--ks-color-surface-solid); }

@@ -40,4 +40,9 @@
 .ks-data-button-card-action.ks-button:hover:not(:disabled) { background-image: none; }
 .ks-data-button-card-action.ks-button:focus-visible { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: var(--ks-focus-offset); }
 .ks-data-button-card-action.ks-button:disabled { opacity: 1; }
+.ks-data-button-card-failure { position: relative; z-index: 2; display: flex; min-width: 0; align-items: center; gap: var(--ks-space-1); color: var(--ks-color-text); }
+.ks-data-button-card.is-disabled:has(.ks-data-button-card-failure) { opacity: 1; }
+.ks-data-button-card.is-disabled:has(.ks-data-button-card-failure) .ks-data-button-card-preview { opacity: .56; }
+.ks-data-button-failure-item { display: inline-flex; max-width: 100%; min-width: 0; flex-direction: column; align-items: flex-start; gap: var(--ks-space-1); }
+.ks-data-button-failure-item > .ks-data-state-compact { width: 100%; min-width: 0; }
 .ks-data-button:not(.has-preview) > :is(.ks-button, .ks-icon-button)[aria-disabled="true"] { opacity: .56; cursor: default; }

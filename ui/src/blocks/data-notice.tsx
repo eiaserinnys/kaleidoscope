@@ -1,5 +1,5 @@
 import type { Block } from "../contract/contract";
-import { DataState } from "../components/data-state";
+import { BindingFailureNotice, DataState } from "../components/data-state";
 import { Button, Notice } from "../components/primitives";
 import { useBinding, useWindowData } from "../data/window-data";
 
@@ -13,7 +13,7 @@ function NoticeActionButton({ action, pointer, index }: { action: Extract<Block,
   const data = useWindowData();
   const label = useBinding(`${pointer}/actions/${index}/label`, action.label);
   const text = label.status === "ready" ? display(label.value) : "";
-  return <Button disabled={label.status !== "ready"} onClick={() => { void data.act(`${pointer}/actions/${index}/on_click`, null); }}><span className="ks-truncate-label">{text}</span></Button>;
+  return <><Button disabled={label.status !== "ready"} onClick={() => { void data.act(`${pointer}/actions/${index}/on_click`, null); }}><span className="ks-truncate-label">{text}</span></Button><BindingFailureNotice value={label} /></>;
 }
 
 export function NoticeBlock({ block, pointer }: Props) {

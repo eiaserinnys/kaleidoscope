@@ -155,13 +155,13 @@ it("image preview의 포커스 가능한 자식은 inert이고 탭 순서에는 
   const image = { type: "image", src: { asset: "sample" } };
   const button = { type: "button", label: "견본", preview: image, on_click: { client: "choose" } };
   const view = render(<ButtonBlock block={button as never} context={{} as never} pointer="/button" />);
-  const content = view.container.querySelector(".ks-data-button-card-content") as HTMLDivElement;
+  const preview = view.container.querySelector(".ks-data-button-card-preview") as HTMLDivElement;
   const cardButton = screen.getByRole("button", { name: "견본" });
   const tabStops = [...view.container.querySelectorAll("button")].filter((item) => !item.closest("[inert]") && !item.disabled);
 
-  expect(content.hasAttribute("inert")).toBe(true);
-  expect(content.querySelectorAll("button")).toHaveLength(2);
+  expect(preview.hasAttribute("inert")).toBe(true);
+  expect(preview.querySelectorAll("button")).toHaveLength(2);
   expect(cardButton.closest(".ks-data-button-card")).toBeTruthy();
-  expect(content.contains(cardButton)).toBe(false);
+  expect(preview.contains(cardButton)).toBe(false);
   expect(tabStops).toEqual([cardButton]);
 });

@@ -3,6 +3,7 @@ import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useDormant, useWindowData } from "../data/window-data";
 import { Dialog } from "../components/dialog";
+import { BindingFailureNotice } from "../components/data-state";
 import { renderBlock } from "../render/render-block";
 
 export type DialogBlockData = Extract<Block, { type: "dialog" }>;
@@ -58,7 +59,7 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
     {isOpen && host ? <Dialog
       host={host}
       title={titleText}
-      body={renderBlock(block.child, context, childPointer)}
+      body={<>{renderBlock(block.child, context, childPointer)}<BindingFailureNotice value={title} /><BindingFailureNotice value={closeLabel} /><BindingFailureNotice value={cancelLabel} /></>}
       ok={closeText}
       danger={block.danger}
       showCancel={hasConfirm}

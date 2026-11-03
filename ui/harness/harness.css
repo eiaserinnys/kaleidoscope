@@ -1,4 +1,5 @@
 body {
+  background-color: var(--ks-color-background);
   padding: var(--ks-space-4);
 }
 
@@ -43,11 +44,12 @@ body {
   display: grid;
   height: 72vh;
   min-width: 0;
-  grid-template-rows: var(--ks-control-height) minmax(0, 1fr);
+  grid-template-rows: var(--ks-window-titlebar-height) minmax(0, 1fr);
   overflow: hidden;
-  border: var(--ks-line-width) solid var(--ks-color-border);
-  border-radius: var(--ks-radius-large);
-  background: var(--ks-color-surface);
+  border: var(--ks-line-width) solid var(--ks-color-glass-edge);
+  border-radius: var(--ks-radius-window);
+  background: var(--ks-material-window-body);
+  box-shadow: var(--ks-shadow-window);
 }
 
 .ks-harness-window.is-hidden { display: none; }
@@ -57,7 +59,8 @@ body {
   min-width: 0;
   align-items: center;
   gap: var(--ks-space-2);
-  border-block-end: var(--ks-line-width) solid var(--ks-color-border);
+  border-block-end: var(--ks-line-width) solid var(--ks-color-divider);
+  background: transparent;
   font-size: var(--ks-type-title);
   font-weight: 600;
   padding-inline: var(--ks-space-3);
@@ -67,6 +70,7 @@ body {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  background: var(--ks-material-window-body);
 }
 
 .ks-harness-loading {

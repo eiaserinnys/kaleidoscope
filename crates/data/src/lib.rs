@@ -394,6 +394,7 @@ impl CompiledApp {
                         message: failed[0].1.clone(),
                         id: failed[0].2.clone(),
                         retry: failed.into_iter().map(|(name, _, _)| name).collect(),
+                        details: None,
                     }
                 } else if loading {
                     BindingValue::Loading {}
@@ -405,6 +406,7 @@ impl CompiledApp {
                             message,
                             id: None,
                             retry: Vec::new(),
+                            details: None,
                         },
                     };
                     observe(binding, started.elapsed().as_secs_f64() * 1000.0);

@@ -66,7 +66,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-export const ICON_SIZE = { control: 18, inline: 16, empty: 32, tile: 32 } as const;
+export const ICON_SIZE = { control: 17, inline: 15, chrome: 14, empty: 32, tile: 32 } as const;
 export type IconSize = keyof typeof ICON_SIZE;
 
 interface IconProps {
@@ -82,7 +82,6 @@ function renderIcon(
 ) {
   return (
     <Icon
-      absoluteStrokeWidth
       aria-hidden="true"
       className={className}
       size={ICON_SIZE[size]}

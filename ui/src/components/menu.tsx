@@ -29,11 +29,12 @@ export type MenuEntry = MenuItem | MenuSeparator | MenuHeading;
 export interface MenuProps {
   anchor: HTMLElement;
   anchorPoint?: { x: number; y: number };
+  keyboardRect?: { left: number; top: number; bottom: number };
   items: MenuEntry[];
   onClose: () => void;
 }
 
-export function Menu({ anchor, anchorPoint, items, onClose }: MenuProps) {
+export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: MenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [position, setPosition] = useState({ left: 0, top: 0 });
@@ -47,19 +48,17 @@ export function Menu({ anchor, anchorPoint, items, onClose }: MenuProps) {
       : 0;
     const maxLeft = Math.max(window.innerWidth - menuWidth - viewportInset, viewportInset);
     const menuHeight = menu?.getBoundingClientRect().height ?? 0;
-    const belowTop = anchorPoint?.y ?? rect.bottom;
-    const aboveTop = anchorPoint ? anchorPoint.y - menuHeight : rect.top - menuHeight;
-    const anchorLeft = anchorPoint?.x ?? rect.left;
+    const belowTop = keyboardRect?.bottom ?? anchorPoint?.y ?? rect.bottom;
+    const aboveTop = keyboardRect ? keyboardRect.top - menuHeight : anchorPoint ? anchorPoint.y - menuHeight : rect.top - menuHeight;
+    const anchorLeft = keyboardRect?.left ?? anchorPoint?.x ?? rect.left;
     const fitsBelow = belowTop >= viewportInset
       && belowTop + menuHeight <= window.innerHeight - viewportInset;
-    const fitsAbove = aboveTop >= viewportInset && (anchorPoint !== undefined || rect.top <= window.innerHeight - viewportInset);
+    const fitsAbove = aboveTop >= viewportInset && (keyboardRect !== undefined || anchorPoint !== undefined || rect.top <= window.innerHeight - viewportInset);
+    const preferredTop = fitsBelow ? belowTop : fitsAbove ? aboveTop : window.innerHeight - viewportInset - menuHeight;
+    const maxTop = Math.max(window.innerHeight - menuHeight - viewportInset, viewportInset);
     setPosition({
       left: Math.min(Math.max(anchorLeft, viewportInset), maxLeft),
-      top: fitsBelow
-        ? belowTop
-        : fitsAbove
-          ? aboveTop
-          : Math.max(viewportInset, window.innerHeight - viewportInset - menuHeight),
+      top: Math.min(Math.max(preferredTop, viewportInset), maxTop),
     });
     const checked = menu?.querySelector<HTMLButtonElement>('[aria-current="true"]');
     if (menu && checked) menu.scrollTop = checked.offsetTop - (menu.clientHeight - checked.offsetHeight) / 2;
@@ -72,7 +71,7 @@ export function Menu({ anchor, anchorPoint, items, onClose }: MenuProps) {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (menuRef.current?.contains(target) || (anchorPoint === undefined && anchor.contains(target))) return;
+      if (menuRef.current?.contains(target) || (anchorPoint === undefined && keyboardRect === undefined && anchor.contains(target))) return;
       onClose();
     };
 
@@ -102,7 +101,7 @@ export function Menu({ anchor, anchorPoint, items, onClose }: MenuProps) {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [anchor, anchorPoint, onClose]);
+  }, [anchor, anchorPoint, keyboardRect, onClose]);
 
   return createPortal(
     <div

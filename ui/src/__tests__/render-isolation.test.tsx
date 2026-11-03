@@ -155,6 +155,20 @@ const localizedDefinition: AppDefinition = {
   },
 };
 
+const messageItemIsolationDefinition: AppDefinition = {
+  id: "message-item-isolation",
+  name: "자료 키 렌더 격리",
+  requires: { blocks: 19, modules: {} },
+  permissions: [],
+  state: { language: "en", unrelated: "initial", rows: [{ id: "row", label_key: "ready" }] },
+  messages: { en: { ready: "Ready" }, ko: { ready: "준비" } },
+  locale: { state: "language" },
+  ui: {
+    type: "repeat", items: { state: "rows" }, key: "id", virtual: false,
+    template: { type: "text", value: { message: { item: "label_key" } } },
+  },
+};
+
 const localizedLabelsDefinition: AppDefinition = {
   id: "localized-controls",
   name: "다국어 컨트롤",
@@ -781,6 +795,25 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     for (let i = 0; i < 10; i += 1) await setState(store, "window-a", "first", `changed-${i}`);
     expect(calls.filter((call) => call.windowId === "window-a").map((call) => call.pointer)).toEqual(Array(10).fill("/ui/children/0"));
     expect(document.body.textContent).toContain("changed-9");
+    store.dispose();
+  });
+
+  it("메시지 키 라벨은 무관한 상태와 다른 창 변경에서 다시 그리지 않고 코어도 추가 호출하지 않는다", async () => {
+    const { store, transport } = await setup([messageItemIsolationDefinition], {
+      language: "en", unrelated: "initial", rows: [{ id: "row", label_key: "ready" }],
+    });
+    expect(screen.getAllByText("Ready")).toHaveLength(2);
+
+    for (const [windowId, value] of [["window-a", "same-window"], ["window-b", "other-window"]]) {
+      calls.length = 0;
+      const before = transport.getCalls().length;
+      await setState(store, windowId, "unrelated", value);
+      await settleRenders();
+      expect(calls).toEqual([]);
+      expect(transport.getCalls().slice(before).map((call) => call.op)).toEqual(["window.set_state"]);
+    }
+
+    expect(screen.getAllByText("Ready")).toHaveLength(2);
     store.dispose();
   });
 

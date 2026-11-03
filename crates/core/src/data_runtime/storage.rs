@@ -134,6 +134,7 @@ impl Runtime {
                         message: message.clone(),
                         id: id.clone(),
                         retry: Vec::new(),
+                        details: None,
                     })
                 }
                 Status::Loading => loading = true,

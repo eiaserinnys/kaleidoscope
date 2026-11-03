@@ -5,12 +5,12 @@ import { ICON_NAMES } from "../contract/limits";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import type { BlockContext } from "./block-context";
 import { useBinding, useWindowData } from "../data/window-data";
-import { DataState } from "../components/data-state";
+import { BindingFailureNotice, DataState, isMessageBindingFailure } from "../components/data-state";
 import { DataIcon } from "../components/data-icons";
 import { Dialog } from "../components/dialog";
 import { X } from "../components/icons";
 import { Select, Toggle } from "../components/select-toggle";
-import { Button, IconButton } from "../components/primitives";
+import { Button, ErrorId, IconButton } from "../components/primitives";
 import { display } from "./data-layout";
 import { asArray } from "./data-view-common";
 import { createSerialSend, createThrottledSend } from "../data/throttled-send";
@@ -153,7 +153,7 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     />}
     {block.kind === "search" && draft ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" onClick={() => { markChanged(""); sendDraft(""); }}><X size="inline" /></IconButton></span> : null}
   </div>;
-  return hasLabel ? <label className="ks-field ks-input-field"><span className="ks-field-label" data-ks-share-skip="">{labelText}</span>{input}</label> : input;
+  return hasLabel ? <><label className="ks-field ks-input-field"><span className="ks-field-label" data-ks-share-skip="">{labelText}</span>{input}</label><BindingFailureNotice value={label} /></> : input;
 }
 
 function decimalDigits(digits: number): number { return Math.max(0, Math.min(20, Math.trunc(digits))); }
@@ -244,14 +244,14 @@ function SliderControl({ block, pointer, current }: {
   const hasLabel = block.label != null;
   const labelText = hasLabel ? bindingText(label) : "";
   const { draft, change, finish, holding } = useLocalDraft(current, pointer);
-  return <label className="ks-field ks-slider-field">
+  return <><label className="ks-field ks-slider-field">
     {hasLabel ? <span className="ks-field-label" data-ks-share-skip="">{labelText}</span> : null}
     <input type="range" className="ks-slider" aria-label={labelText || bindingName(block.value, "슬라이더")} min={block.min} max={block.max} step={block.step ?? 1} value={draft}
       onPointerDown={() => { holding.current = true; }} onPointerUp={() => finish()} onPointerCancel={() => finish()} onBlur={() => finish()}
       onKeyDown={() => { holding.current = true; }} onKeyUp={() => finish()}
       onChange={(event) => { const next = Number(event.currentTarget.value); change(next); if (event.nativeEvent.type === "change") finish(); }} />
     <span className="ks-slider-value" data-ks-share-skip="">{draft}</span>
-  </label>;
+  </label><BindingFailureNotice value={label} /></>;
 }
 
 export function ColorBlock({ block, pointer }: Props<"color">) {
@@ -264,12 +264,12 @@ export function ColorBlock({ block, pointer }: Props<"color">) {
   const current = typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "#000000";
   const unavailable = disabled.status !== "ready" || Boolean(disabled.value);
   const { draft: color, change, finish, holding } = useLocalDraft(current, pointer);
-  return <label className={`ks-field ks-color-field${unavailable ? " is-disabled" : ""}`}>
+  return <><label className={`ks-field ks-color-field${unavailable ? " is-disabled" : ""}`}>
     {hasLabel ? <span className="ks-field-label" data-ks-share-skip="">{labelText}</span> : null}
     <span className="ks-color-control"><input className="ks-color-input" type="color" aria-label={labelText || bindingName(block.value, "색상")} value={color} disabled={unavailable}
       onPointerDown={() => { holding.current = true; }} onPointerUp={() => finish()} onPointerCancel={() => finish()} onBlur={() => finish()} onKeyDown={() => { holding.current = true; }} onKeyUp={() => finish()}
       onChange={(event) => { change(event.currentTarget.value.toLowerCase()); if (event.nativeEvent.type === "change") finish(); }} /><span className="ks-color-code" data-ks-share-skip="">{color}</span></span>
-  </label>;
+  </label><BindingFailureNotice value={label} /></>;
 }
 export function SelectBlock({ block, pointer }: Props<"select">) {
   const data = useWindowData();
@@ -291,7 +291,7 @@ export function SelectBlock({ block, pointer }: Props<"select">) {
   });
   const props = { value: value.status === "ready" ? value.value : null, placeholder: placeholderText, segmented: block.style === "segmented", label: labelText, disabled: disabled.status !== "ready" || Boolean(disabled.value), onChange: (next: JsonValue) => { void data.act(`${pointer}/on_change`, next); } };
   const select = hasGroups ? <Select {...props} groups={groups} /> : <Select {...props} items={entries.filter(validOption)} />;
-  return hasLabel ? <label className="ks-field ks-select-field"><span className="ks-field-label" data-ks-share-skip="">{labelText}</span>{select}</label> : select;
+  return hasLabel ? <><label className="ks-field ks-select-field"><span className="ks-field-label" data-ks-share-skip="">{labelText}</span>{select}</label><BindingFailureNotice value={label} /></> : select;
 }
 
 export function ToggleBlock({ block, pointer }: Props<"toggle">) {
@@ -299,7 +299,7 @@ export function ToggleBlock({ block, pointer }: Props<"toggle">) {
   const value = useBinding(`${pointer}/value`, block.value);
   const label = useBinding(`${pointer}/label`, block.label);
   const disabled = useBinding(`${pointer}/disabled`, block.disabled ?? false);
-  return <Toggle checked={value.status === "ready" && Boolean(value.value)} disabled={value.status !== "ready" || disabled.status !== "ready" || Boolean(disabled.value)} label={block.label != null ? bindingText(label) : undefined} labelVisible={block.label != null} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} />;
+  return <><Toggle checked={value.status === "ready" && Boolean(value.value)} disabled={value.status !== "ready" || disabled.status !== "ready" || Boolean(disabled.value)} label={block.label != null ? bindingText(label) : undefined} labelVisible={block.label != null} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} /><BindingFailureNotice value={label} /></>;
 }
 
 export function ButtonBlock({ block, context, pointer }: Props<"button">) {
@@ -323,7 +323,12 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const close = useCallback(() => setConfirm(false), []);
   const labelText = label.status === "ready" && typeof label.value === "string" ? label.value : "";
   const prefixText = block.prefix !== undefined ? bindingText(prefix) : "";
-  const accessibleName = prefixText ? `${prefixText}: ${labelText}` : labelText;
+  const labelFailure = isMessageBindingFailure(label) ? label : null;
+  const prefixFailure = isMessageBindingFailure(prefix) ? prefix : null;
+  const bindingFailure = labelFailure ?? prefixFailure;
+  const accessibleName = bindingFailure
+    ? [labelText, bindingFailure.id].filter(Boolean).join(": ")
+    : prefixText ? `${prefixText}: ${labelText}` : labelText;
   const iconText = icon.status === "ready" && typeof icon.value === "string" ? icon.value : "";
   const pressedValue = block.pressed !== undefined && pressed.status === "ready" ? Boolean(pressed.value) : undefined;
   useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
@@ -342,7 +347,7 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
       copyTimer.current = setTimeout(() => { setCopySucceeded(false); copyTimer.current = null; }, 1500);
     }
   };
-  const unavailable = disabled.status !== "ready" || Boolean(disabled.value);
+  const unavailable = disabled.status !== "ready" || Boolean(disabled.value) || bindingFailure !== null;
   useLayoutEffect(() => {
     if (!busy && !unavailable && restoreAfterAction.current) {
       restoreAfterAction.current = false;
@@ -354,7 +359,7 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const buttonLabel = prefixText
     ? <><span className="ks-data-button-prefix">{prefixText}</span><span className="ks-data-button-label is-emphasized ks-truncate-label">{labelText}</span></>
     : <span className="ks-data-button-label ks-truncate-label">{labelText}</span>;
-  const contents = <>{hasIcon ? <DataIcon name={copied ? "check" : iconText} /> : null}{!block.icon_only ? buttonLabel : null}</>;
+  const contents = <>{bindingFailure ? <DataIcon name="triangle-alert" /> : hasIcon ? <DataIcon name={copied ? "check" : iconText} /> : null}{!block.icon_only ? buttonLabel : null}</>;
   const onClick = (event: MouseEvent<HTMLButtonElement>) => {
     if (busyRef.current) return;
     const modifiers = eventModifiers(event);
@@ -363,17 +368,21 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   };
   const host = opener.current?.closest<HTMLElement>(".ks-data-window");
   const status = <span aria-live="polite" className="ks-accessible-hidden" role="status">{copied ? "복사했습니다" : ""}</span>;
+  const previewFailure = bindingFailure ? <span aria-label={bindingFailure.message} className="ks-data-button-card-failure" role="alert">
+    <DataIcon name="triangle-alert" size="inline" /><ErrorId id={bindingFailure.id} />
+  </span> : null;
   const dialog = confirm && block.confirm && host
     ? <Dialog host={host} title={block.confirm.title} ok={block.confirm.ok ?? labelText} danger={block.variant === "danger"} onCancel={close} onConfirm={() => void run(true, confirmModifiers.current)} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} />
     : null;
   const className = `ks-data-button is-${block.variant ?? "default"}`;
   if (block.preview) return <div ref={setOpener} className={`${className} has-preview`}>
     <div className={`ks-data-button-card${pressedValue ? " is-selected" : ""}${busy || unavailable ? " is-disabled" : ""}`} title={previewError ?? undefined}>
-      <div className="ks-data-button-card-content" aria-hidden="true" inert>
-        <div className="ks-data-button-card-preview"><PreviewContext.Provider value={setPreviewError}>{renderBlock(block.preview, context, `${pointer}/preview`)}</PreviewContext.Provider></div>
-        <div className="ks-data-button-card-label">
-          {prefixText ? <><span className="ks-data-button-prefix">{prefixText}</span><wbr /></> : null}
-          <span className="ks-data-button-label is-emphasized">{labelText}</span>
+      <div className="ks-data-button-card-content">
+        <div className="ks-data-button-card-preview" aria-hidden="true" inert><PreviewContext.Provider value={setPreviewError}>{renderBlock(block.preview, context, `${pointer}/preview`)}</PreviewContext.Provider></div>
+        <div aria-hidden={bindingFailure ? undefined : true} className={`ks-data-button-card-label${bindingFailure ? " is-failure" : ""}`}>
+          {!bindingFailure && prefixText ? <><span className="ks-data-button-prefix">{prefixText}</span><wbr /></> : null}
+          {!bindingFailure ? <span className="ks-data-button-label is-emphasized">{labelText}</span> : null}
+          {previewFailure}
         </div>
       </div>
       <Button aria-label={accessibleName} className="ks-data-button-card-action" aria-pressed={pressedValue} disabled={unavailable} aria-disabled={busy || undefined} onClick={onClick}>
@@ -382,11 +391,16 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
     </div>
     {status}{dialog}
   </div>;
-  return <span ref={setOpener} className={className}>{block.icon_only
+  const control = <span ref={setOpener} className={className}>{block.icon_only
     ? <IconButton aria-label={accessibleName} pressed={pressedValue} disabled={unavailable} aria-disabled={busy || undefined} onClick={onClick}>{contents}</IconButton>
     : <Button aria-label={accessibleName} aria-pressed={pressedValue} variant={block.variant === "primary" ? "emphasis" : "default"} disabled={unavailable} aria-disabled={busy || undefined} onClick={onClick}>{contents}</Button>}
     {status}{dialog}
   </span>;
+  return bindingFailure
+    ? <div aria-label={bindingFailure.message} className="ks-data-button-failure-item" role="alert" title={bindingFailure.message}>
+      {control}<div className="ks-data-state-compact"><ErrorId id={bindingFailure.id} /></div>
+    </div>
+    : control;
 }
 
 function copyTextAction(actions: unknown): boolean {

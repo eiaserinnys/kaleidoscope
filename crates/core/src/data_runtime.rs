@@ -388,7 +388,7 @@ impl Runtime {
         values: &mut BTreeMap<String, kaleidoscope_contract::data::BindingValue>,
     ) {
         for binding in self.compiled.binding_dependencies() {
-            let Some(kaleidoscope_contract::data::BindingValue::Failed { message, id, retry }) =
+            let Some(kaleidoscope_contract::data::BindingValue::Failed { message, id, retry, .. }) =
                 values.get_mut(&binding.pointer)
             else {
                 continue;
@@ -1583,6 +1583,7 @@ mod freshness_tests {
                 message: "expected value".into(),
                 id: None,
                 retry: Vec::new(),
+                details: None,
             },
         )]);
 

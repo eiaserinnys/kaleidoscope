@@ -1,7 +1,14 @@
 @import "pretendard/dist/web/variable/pretendardvariable.css";
+@import "@fontsource-variable/dm-sans";
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
+@import "@fontsource-variable/noto-serif-kr";
 
 :root {
-  --ks-font-family: "Pretendard Variable", "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+  --ks-font-hangul: "Pretendard Variable";
+  --ks-font-family: "DM Sans Variable", var(--ks-font-hangul), "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+  --ks-font-display: "Instrument Serif", "Noto Serif KR Variable", "Noto Serif KR", serif;
+  --ks-font-label: var(--ks-font-family);
   --ks-font-code: "Cascadia Mono", Consolas, monospace;
 
   --ks-type-page: 20px;
@@ -19,9 +26,12 @@
   --ks-space-4: 16px;
   --ks-space-5: 24px;
   --ks-space-6: 32px;
-  --ks-radius-small: 6px;
-  --ks-radius-large: 10px;
+  --ks-radius-small: 7px;
+  --ks-radius-large: 12px;
+  --ks-radius-window: 16px;
+  --ks-radius-bar: 20px;
   --ks-control-height: 32px;
+  --ks-window-titlebar-height: 40px;
   --ks-icon-button-size: 28px;
   --ks-split-handle-size: 16px;
   --ks-pane-min-size: 160px;
@@ -37,57 +47,107 @@
   --ks-desktop-tab-min-width: 104px;
   --ks-window-min-width: 360px;
   --ks-window-min-height: 240px;
-  --ks-shadow-popover: 0 var(--ks-space-2) var(--ks-space-4) rgb(25 35 48 / 18%);
-  --ks-shadow-window: 0 var(--ks-space-4) var(--ks-space-6) rgb(15 20 28 / 24%);
+  --ks-shadow-popover: 0 14px 40px rgb(74 47 96 / 15%);
+  --ks-shadow-window: 0 24px 55px -24px rgb(75 55 91 / 25%), 0 3px 8px rgb(82 64 95 / 4%), inset 0 0 0 1px rgb(255 255 255 / 20%);
+  --ks-shadow-bar: 0 7px 21px rgb(73 50 77 / 9%), inset 0 0 0 1px rgb(255 255 255 / 20%);
+  --ks-shadow-selected: inset 0 0 0 1px rgb(255 255 255 / 53%), 0 2px 7px rgb(98 78 116 / 6%);
+  --ks-blur-bar: 18px;
+  --ks-blur-popover: 30px;
+  --ks-blur-overlay: 9px;
+  --ks-letter-label: 0.06em;
 
   color-scheme: light;
-  --ks-color-share: #18763a;
+  --ks-color-share: #4a6d43;
   --ks-color-warning: #a66a00;
-  --ks-color-background: #f4f6f9;
-  --ks-color-surface: #ffffff;
-  --ks-color-surface-raised: #fafbfd;
-  --ks-color-border: #d9dee7;
-  --ks-color-text: #222935;
-  --ks-color-on-color-dark: #222935;
+  --ks-color-background: #e4dde3;
+  --ks-color-surface: rgb(255 255 255 / 36%);
+  --ks-color-surface-raised: rgb(255 255 255 / 50%);
+  --ks-color-surface-solid: #f7f3f7;
+  --ks-color-border: rgb(73 57 89 / 14%);
+  --ks-color-divider: rgb(122 92 137 / 8%);
+  --ks-color-glass-edge: rgb(255 255 255 / 72%);
+  --ks-color-text: #302a36;
+  --ks-color-on-color-dark: #302a36;
   --ks-color-on-color-light: #ffffff;
-  --ks-color-muted: #626b78;
-  --ks-color-hover: rgb(34 41 53 / 7%);
-  --ks-color-accent: #315da8;
+  --ks-color-muted: #675a70;
+  --ks-color-hover: rgb(104 81 120 / 8%);
+  --ks-color-accent: #6f569a;
+  --ks-color-accent-soft: #a58cbb;
   --ks-color-accent-contrast: #ffffff;
-  --ks-color-selection: #e4ecfb;
-  --ks-color-focus: #4c7ed1;
+  --ks-color-selection: rgb(216 198 229 / 45%);
+  --ks-color-selected-surface: rgb(250 247 253 / 58%);
+  --ks-color-focus: #8c6aaf;
   --ks-color-danger: #a9363d;
   --ks-color-danger-contrast: #ffffff;
-  --ks-color-danger-surface: #fff0f0;
-  --ks-color-notice: #edf3ff;
-  --ks-color-code: #f0f2f6;
-  --ks-color-scroll-thumb: #a4aebb;
+  --ks-color-danger-surface: rgb(252 232 236 / 72%);
+  --ks-color-notice: rgb(246 240 251 / 78%);
+  --ks-color-code: rgb(210 191 226 / 24%);
+  --ks-color-scroll-thumb: rgb(120 100 140 / 32%);
+  --ks-color-window-active-edge: rgb(145 170 130 / 47%);
+  --ks-material-window: rgb(251 250 251 / 16%);
+  --ks-material-window-body: rgb(251 250 251 / 48%);
+  --ks-material-shellbar: linear-gradient(180deg, rgb(248 245 243 / 19%), transparent);
+  --ks-material-bar: rgb(249 245 244 / 18%);
+  --ks-material-popover: rgb(249 244 249 / 80%);
+  --ks-material-dialog: rgb(248 242 249 / 87%);
+  --ks-material-overlay: rgb(110 82 117 / 10%);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --ks-color-share: #64c982;
+    --ks-color-share: #9fc394;
     --ks-color-warning: #f2c66d;
-    --ks-color-background: #15191f;
-    --ks-color-surface: #1d232b;
-    --ks-color-surface-raised: #252c36;
-    --ks-color-border: #3b4552;
-    --ks-color-text: #e7ebf2;
-    --ks-color-muted: #a5afbe;
-    --ks-color-hover: rgb(231 235 242 / 9%);
-    --ks-color-accent: #94b5ff;
-    --ks-color-accent-contrast: #15203a;
-    --ks-color-selection: #2b3a58;
-    --ks-color-focus: #94b5ff;
+    --ks-color-background: #1d1822;
+    --ks-color-surface: rgb(255 255 255 / 7%);
+    --ks-color-surface-raised: rgb(255 255 255 / 11%);
+    --ks-color-surface-solid: #2a2230;
+    --ks-color-border: rgb(230 214 240 / 13%);
+    --ks-color-divider: rgb(230 214 240 / 8%);
+    --ks-color-glass-edge: rgb(255 255 255 / 16%);
+    --ks-color-text: #ece3f2;
+    --ks-color-muted: #b8a7c5;
+    --ks-color-hover: rgb(231 220 239 / 8%);
+    --ks-color-accent: #c6aee3;
+    --ks-color-accent-soft: #a47dba;
+    --ks-color-accent-contrast: #241b2c;
+    --ks-color-selection: rgb(164 125 186 / 22%);
+    --ks-color-selected-surface: rgb(164 125 186 / 18%);
+    --ks-color-focus: #b99bd8;
     --ks-color-danger: #ff9ba1;
-    --ks-color-danger-contrast: #15203a;
-    --ks-color-danger-surface: #3a2227;
-    --ks-color-notice: #26334b;
-    --ks-color-code: #252c36;
-    --ks-color-scroll-thumb: #5b6675;
-    --ks-shadow-popover: 0 var(--ks-space-2) var(--ks-space-4) rgb(0 0 0 / 45%);
-    --ks-shadow-window: 0 var(--ks-space-4) var(--ks-space-6) rgb(0 0 0 / 55%);
+    --ks-color-danger-contrast: #241b2c;
+    --ks-color-danger-surface: rgb(90 40 52 / 55%);
+    --ks-color-notice: rgb(65 51 76 / 80%);
+    --ks-color-code: rgb(255 255 255 / 7%);
+    --ks-color-scroll-thumb: rgb(220 200 235 / 26%);
+    --ks-color-window-active-edge: rgb(140 165 133 / 50%);
+    --ks-material-window: rgb(251 250 251 / 8%);
+    --ks-material-window-body: rgb(39 32 45 / 76%);
+    --ks-material-shellbar: linear-gradient(180deg, rgb(29 24 34 / 30%), transparent);
+    --ks-material-bar: rgb(77 55 95 / 27%);
+    --ks-material-popover: rgb(65 51 76 / 91%);
+    --ks-material-dialog: rgb(65 51 76 / 91%);
+    --ks-material-overlay: rgb(10 6 14 / 25%);
+    --ks-shadow-popover: 0 14px 40px rgb(0 0 0 / 40%);
+    --ks-shadow-window: 0 24px 55px -24px rgb(0 0 0 / 55%), 0 3px 8px rgb(0 0 0 / 20%), inset 0 0 0 1px rgb(255 255 255 / 6%);
+    --ks-shadow-bar: 0 7px 21px rgb(0 0 0 / 35%), inset 0 0 0 1px rgb(255 255 255 / 6%);
+    --ks-shadow-selected: inset 0 0 0 1px rgb(255 255 255 / 8%);
+  }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  :root {
+    --ks-material-window-body: rgb(251 250 251 / 80%);
+    --ks-material-popover: rgb(249 244 249 / 95%);
+    --ks-material-dialog: rgb(248 242 249 / 95%);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ks-material-window-body: rgb(39 32 45 / 88%);
+      --ks-material-popover: rgb(65 51 76 / 95%);
+      --ks-material-dialog: rgb(65 51 76 / 95%);
+    }
   }
 }
 
