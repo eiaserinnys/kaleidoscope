@@ -811,7 +811,7 @@
   padding: var(--ks-space-2);
 }
 
-.ks-agent-session-env, .ks-process-env {
+.ks-agent-session-env {
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
@@ -819,6 +819,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.ks-process-env { max-width: 100%; min-width: 0; font-family: var(--ks-font-code); white-space: pre-wrap; }
 
 .ks-agent-session-permissions,
 .ks-agent-session-permission-actions {

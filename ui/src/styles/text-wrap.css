@@ -6,6 +6,8 @@
 .ks-agent-chat-working,
 .ks-agent-session-command,
 .ks-process-command,
+.ks-process-env,
+.ks-window-consent-overlay .ks-dialog-title,
 .ks-agent-session-permission > span,
 .shell-server-guide,
 .shell-server-meta,
