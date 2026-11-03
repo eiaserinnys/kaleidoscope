@@ -111,7 +111,7 @@ export function Notice({
   "data-ks-overlay"?: boolean;
 }) {
   return (
-    <div className="ks-notice" data-ks-overlay={overlay || undefined} role={role} onKeyDown={onDismiss ? (event) => {
+    <div className={`ks-notice${actions && actions.length > 1 ? " has-multiple-actions" : ""}`} data-ks-overlay={overlay || undefined} role={role} onKeyDown={onDismiss ? (event) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();

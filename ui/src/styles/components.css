@@ -114,6 +114,11 @@
   font-size: var(--ks-type-body);
 }
 
+.ks-notice.has-multiple-actions .ks-notice-message {
+  min-width: min(100%, calc(var(--ks-space-6) * 6));
+  flex-basis: calc(var(--ks-space-6) * 6);
+}
+
 .ks-error-id {
   color: var(--ks-color-muted);
   font-family: var(--ks-font-code);
@@ -268,6 +273,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: var(--ks-line-body);
   white-space: nowrap;
 }
 

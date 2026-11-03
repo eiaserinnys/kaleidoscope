@@ -1,8 +1,9 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 const output = process.env.KS_BLOCKS_E1_CAPTURE_DIR;
+const reviewOutput = process.env.KS_BLOCKS_E1_REVIEW_CAPTURE_DIR;
 const scenes = [
   { id: "blocks-18-01", label: "01-center" },
   { id: "blocks-18-04", label: "04-error" },
@@ -14,6 +15,24 @@ async function capture(page: Page, id: string, mode: string) {
   if (!output) return;
   mkdirSync(output, { recursive: true });
   await page.getByTestId(`app-window-${id}`).screenshot({ path: join(output, `${id}-${mode}.png`) });
+}
+
+async function captureReview(page: Page, selector: string, name: string) {
+  if (!reviewOutput) return;
+  mkdirSync(reviewOutput, { recursive: true });
+  await page.locator(selector).screenshot({ path: join(reviewOutput, `${name}.png`) });
+}
+
+async function openReviewPage(browser: Browser, url: string) {
+  const context = await browser.newContext({
+    baseURL: "http://127.0.0.1:5173",
+    viewport: { width: 1440, height: 900 },
+    deviceScaleFactor: 2,
+  });
+  const page = await context.newPage();
+  await page.goto(url);
+  await hideHarnessDevPanel(page);
+  return { context, page };
 }
 
 async function hideHarnessDevPanel(page: Page) {
@@ -112,9 +131,100 @@ test("공용 선택기와 단추의 긴 글은 잘리고 기존 화면의 짧은
   await expect(existing.getByRole("button", { name: "실행" })).toBeVisible();
   await expect(existing.getByRole("button", { name: "삭제" })).toBeVisible();
   await capture(page, "data-controls", "after-narrow");
-  await page.addStyleTag({ content: `
-    .ks-truncate-label, .ks-select-choice-label { min-width: initial; overflow: visible; text-overflow: clip; white-space: normal; }
-    .ks-select-button { max-width: initial; min-width: initial; }
-  ` });
+  await page.addStyleTag({ content: ".ks-truncate-label, .ks-select-choice-label { display: contents !important; overflow: visible !important; }" });
   await capture(page, "data-controls", "before-narrow");
+});
+
+test("말줄임 라벨은 본문 줄 높이를 쓰고 버튼·고르기 높이는 유지한다", async ({ browser }) => {
+  const { context, page } = await openReviewPage(browser, "/?preview=blocks-18-truncate-glyphs");
+  try {
+    const app = page.getByTestId("app-window-blocks-18-truncate-glyphs");
+    const selectors = [".ks-data-button .ks-truncate-label", ".ks-select-choice-label"];
+    const metrics = await Promise.all(selectors.map((selector) => app.locator(selector).evaluate((node) => {
+      const control = node.closest("button");
+      return {
+        lineHeight: getComputedStyle(node).lineHeight,
+        bodyLineHeight: getComputedStyle(document.body).lineHeight,
+        controlHeight: control ? getComputedStyle(control).height : null,
+        tokenControlHeight: getComputedStyle(document.documentElement).getPropertyValue("--ks-control-height").trim(),
+      };
+    })));
+    for (const metric of metrics) {
+      expect(metric.lineHeight).toBe(metric.bodyLineHeight);
+      expect(metric.controlHeight).toBe(metric.tokenControlHeight);
+    }
+    await captureReview(page, '[data-testid="app-window-blocks-18-truncate-glyphs"] .ks-data-button > button', "truncate-button-antigravity-actual-2x");
+    await captureReview(page, '[data-testid="app-window-blocks-18-truncate-glyphs"] .ks-select-button', "truncate-select-opus-actual-2x");
+    await page.addStyleTag({ content: ".ks-truncate-label, .ks-select-choice-label { display: contents !important; overflow: visible !important; }" });
+    await captureReview(page, '[data-testid="app-window-blocks-18-truncate-glyphs"] .ks-data-button > button', "truncate-button-antigravity-bare-text-2x");
+    await captureReview(page, '[data-testid="app-window-blocks-18-truncate-glyphs"] .ks-select-button', "truncate-select-opus-bare-text-2x");
+
+    await page.goto("/?preview=workspace-pas&conversation=start");
+    await hideHarnessDevPanel(page);
+    const chat = page.getByTestId("app-window-workspace-pas");
+    const place = chat.getByRole("button", { name: "실행 위치" });
+    await expect(place).toContainText("eiaserinnys");
+    await captureReview(page, '[data-testid="app-window-workspace-pas"] .ks-agent-chat-toolbar [aria-label="실행 위치"]', "pas-node-select-actual-2x");
+    await page.addStyleTag({ content: ".ks-select-choice-label { display: contents !important; overflow: visible !important; }" });
+    await captureReview(page, '[data-testid="app-window-workspace-pas"] .ks-agent-chat-toolbar [aria-label="실행 위치"]', "pas-node-select-bare-text-2x");
+  } finally {
+    await context.close();
+  }
+});
+
+test("여러 동작이 있는 오류 안내는 글 폭을 지키고 단추를 아래로 감싼다", async ({ browser }) => {
+  const { context, page } = await openReviewPage(browser, "/?preview=blocks-18-04-multiple-actions");
+  try {
+    const app = page.getByTestId("app-window-blocks-18-04-multiple-actions");
+    const assertWrapped = async () => {
+      const message = await app.locator(".ks-notice-message").boundingBox();
+      const actions = await app.locator(".ks-notice-actions").boundingBox();
+      expect(message).not.toBeNull();
+      expect(actions).not.toBeNull();
+      expect(actions!.y).toBeGreaterThanOrEqual(message!.y + message!.height);
+    };
+    await expect(app.getByRole("alert")).toContainText("AGENT_PROCESS_SPAWN_NOT_FOUND");
+    await assertWrapped();
+    await captureReview(page, '[data-testid="app-window-blocks-18-04-multiple-actions"]', "notice-multiple-actions-wide-2x");
+
+    await fitSmallWindow(page);
+    const box = await app.boundingBox();
+    expect(box?.width).toBe(360);
+    expect(box?.height).toBe(240);
+    await assertWrapped();
+    await captureReview(page, '[data-testid="app-window-blocks-18-04-multiple-actions"]', "notice-multiple-actions-narrow-2x");
+  } finally {
+    await context.close();
+  }
+});
+
+test("여러 동작이 있는 notice에서 가짜 코어가 두 동작을 처리한다", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?preview=blocks-18-04-multiple-actions");
+  await hideHarnessDevPanel(page);
+  const app = page.getByTestId("app-window-blocks-18-04-multiple-actions");
+  const message = app.locator(".ks-notice").first().locator(".ks-notice-message");
+  await app.getByRole("button", { name: "다시 시도" }).click();
+  await expect(message).toContainText("다시 시도 요청을 보냈습니다.");
+  await app.getByRole("button", { name: "설치 안내 열기" }).click();
+  await expect(message).toContainText("설치 안내를 열었습니다.");
+  await expect(page.getByText("명령을 처리할 수 없습니다.")).toHaveCount(0);
+});
+
+test("에이전트 오류 알림의 기존 단추 배치를 보존한다", async ({ browser }) => {
+  const { context, page } = await openReviewPage(browser, "/?preview=agent&agent-phase=failed");
+  try {
+    const app = page.getByTestId("app-window-agent");
+    const notice = app.getByRole("alert");
+    await expect(notice).toBeVisible();
+    const message = await notice.locator(".ks-notice-message").boundingBox();
+    const actions = await notice.locator(".ks-notice-actions").boundingBox();
+    expect(message).not.toBeNull();
+    expect(actions).not.toBeNull();
+    expect(actions!.x).toBeGreaterThanOrEqual(message!.x + message!.width);
+    expect(Math.abs(actions!.y + actions!.height / 2 - (message!.y + message!.height / 2))).toBeLessThanOrEqual(1);
+    await captureReview(page, '[data-testid="app-window-agent"]', "agent-error-notice-single-action-2x");
+  } finally {
+    await context.close();
+  }
 });

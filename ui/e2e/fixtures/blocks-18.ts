@@ -8,10 +8,13 @@ const definitions = [
     permissions: [],
     state: { selection: "" },
     ui: {
-      type: "stack", direction: "column", gap: "medium", place: "center",
-      children: ["Claude Code", "Codex", "Gemini CLI", "Antigravity"].map((label) => ({
-        type: "button", label, on_click: [{ set_state: "selection", value: label }],
-      })),
+      type: "stack", direction: "column", gap: "large", place: "center",
+      children: [{
+        type: "stack", direction: "column", gap: "small",
+        children: ["Claude Code", "Codex", "Gemini CLI", "Antigravity"].map((label) => ({
+          type: "button", label, on_click: [{ set_state: "selection", value: label }],
+        })),
+      }],
     },
   },
   {
@@ -48,10 +51,44 @@ const definitions = [
     permissions: [],
     state: { folder: null },
     ui: {
-      type: "stack", direction: "column", gap: "medium", place: "center",
+      type: "stack", direction: "column", gap: "large", place: "center",
       children: [
         { type: "button", label: "Claude Code", icon: "arrow-left", on_click: { set_state: "folder", value: null } },
-        { type: "button", label: "폴더 선택", variant: "primary", on_click: [{ set_state: "folder", value: "프로젝트" }] },
+        {
+          type: "stack", direction: "column", gap: "small",
+          children: [{ type: "button", label: "폴더 선택", variant: "primary", on_click: [{ set_state: "folder", value: "프로젝트" }] }],
+        },
+      ],
+    },
+  },
+  {
+    id: "blocks-18-04-multiple-actions",
+    name: "여러 동작 오류 안내",
+    requires: { blocks: 18, modules: {} },
+    permissions: [],
+    state: { message: "에이전트 Claude Code를 시작하지 못했습니다. 실행 파일 claude를 찾을 수 없습니다. 설치한 뒤 다시 시도하세요." },
+    ui: {
+      type: "stack", direction: "column", gap: "large", place: "center",
+      children: [{
+        type: "notice", kind: "error", message: { state: "message" }, error_id: "AGENT_PROCESS_SPAWN_NOT_FOUND",
+        actions: [
+          { label: "다시 시도", on_click: { set_state: "message", value: "다시 시도 요청을 보냈습니다." } },
+          { label: "설치 안내 열기", on_click: { set_state: "message", value: "설치 안내를 열었습니다." } },
+        ],
+      }],
+    },
+  },
+  {
+    id: "blocks-18-truncate-glyphs",
+    name: "말줄임 글자 높이 확인",
+    requires: { blocks: 18, modules: {} },
+    permissions: [],
+    state: { choice: "Opus" },
+    ui: {
+      type: "stack", direction: "column", gap: "small", place: "center",
+      children: [
+        { type: "select", value: { state: "choice" }, on_change: { set_state: "choice" }, options: ["Opus"] },
+        { type: "button", label: "Antigravity", on_click: [{ set_state: "choice", value: "Opus" }] },
       ],
     },
   },

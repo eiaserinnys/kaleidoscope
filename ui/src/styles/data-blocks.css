@@ -171,7 +171,7 @@
 .ks-data-toggle[aria-checked="true"] .ks-data-toggle-thumb { transform: translateX(var(--ks-space-4)); }
 .ks-data-toggle:disabled { cursor: default; opacity: .56; }
 .ks-data-button > .ks-button { gap: var(--ks-space-2); }
-.ks-truncate-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-truncate-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; line-height: var(--ks-line-body); white-space: nowrap; }
 .ks-select-button { max-width: 100%; min-width: 0; }
 .ks-data-button.is-chip > .ks-button,
 .ks-data-button.is-chip > .ks-icon-button { border-radius: var(--ks-space-4); }
