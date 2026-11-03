@@ -93,6 +93,7 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
     let focused: HTMLElement | null = null;
     let contentRoot: HTMLElement = content;
     let focusPath: Array<{ ancestor: HTMLElement; controlIndex: number }> = [];
+    let inContent = false;
     let restore = false;
     let pointer = false;
     const visibleControls = (within: ParentNode) => Array.from(within.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'))
@@ -104,14 +105,15 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       const target = event.target;
       if (!(target instanceof HTMLElement) || target.classList.contains("ks-window-content")) return;
       focused = target;
+      inContent = content.contains(target);
       contentRoot = content.querySelector<HTMLElement>(".ks-data-window-body")?.firstElementChild as HTMLElement | null ?? content;
       focusPath = [];
-      for (let ancestor = target.parentElement; ancestor && ancestor !== contentRoot; ancestor = ancestor.parentElement) {
+      for (let ancestor = target.parentElement; ancestor && content.contains(ancestor) && ancestor !== contentRoot; ancestor = ancestor.parentElement) {
         focusPath.push({ ancestor, controlIndex: visibleControls(ancestor).indexOf(target) });
       }
       restore = false;
     };
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((changes) => {
       const active = document.activeElement;
       const lost = active === document.body || (active instanceof HTMLElement && active.classList.contains("ks-window-content") && scope.contains(active));
       if (focused && !scope.contains(focused)) { focused = null; restore = lost; }
@@ -119,12 +121,32 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       // 포인터로 시작한 화면 전환에는 키보드 초점 테두리를 만들지 않는다.
       if (pointer) { restore = false; return; }
       let target: HTMLElement | undefined;
-      for (const { ancestor, controlIndex } of focusPath) {
-        if (ancestor === contentRoot || !scope.contains(ancestor)) continue;
-        const controls = visibleControls(ancestor);
-        if (!controls.length) continue;
-        target = controls[Math.max(0, controlIndex)] ?? controls[controls.length - 1];
-        break;
+      const collection = inContent ? focusPath.find(({ ancestor }) => ancestor.matches('.ks-repeat-content, .ks-agent-attachment-list, [role="list"], [role="listbox"]')) : undefined;
+      const group = collection && content.contains(collection.ancestor) ? collection.ancestor : null;
+      const addedToGroup = group && changes.some((change) => change.target === group && change.addedNodes.length > 0);
+      const addedElsewhere = !group && changes.some((change) => content.contains(change.target) && change.addedNodes.length > 0);
+      if (collection && group && !addedToGroup) {
+        const controls = visibleControls(group);
+        if (controls.length) {
+          target = controls[Math.max(0, collection.controlIndex)] ?? controls[controls.length - 1];
+        } else {
+          const visible = visibleControls(content);
+          target = visible.find((element) => element.classList.contains("ks-agent-chat-input"))
+            ?? visible.filter((element) => Boolean(element.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+          if (!target) {
+            const windowContent = content.closest<HTMLElement>(".ks-window-content") ?? content;
+            if (!windowContent.hasAttribute("tabindex")) windowContent.tabIndex = -1;
+            windowContent.classList.add("ks-focus-rescue-empty");
+            windowContent.addEventListener("blur", () => windowContent.classList.remove("ks-focus-rescue-empty"), { once: true });
+            target = windowContent;
+          }
+        }
+      } else if (collection && !group && !addedElsewhere && collection.ancestor.classList.contains("ks-agent-attachment-list")) {
+        const parent = focusPath.find(({ ancestor }) => content.contains(ancestor));
+        if (parent) {
+          const controls = visibleControls(parent.ancestor);
+          target = controls[Math.max(0, parent.controlIndex)] ?? controls[controls.length - 1];
+        }
       }
       const visible = visibleControls(content);
       target ??= visible.find((element) => element.classList.contains("ks-button-emphasis"))

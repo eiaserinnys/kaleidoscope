@@ -203,6 +203,8 @@ button {
   outline-offset: var(--ks-focus-offset);
 }
 
+.ks-focus-rescue-empty:focus-visible { outline: none; }
+
 .ks-app-window-content,
 .ks-app-content-loading,
 .ks-app-content-error {

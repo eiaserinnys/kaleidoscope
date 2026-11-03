@@ -86,6 +86,73 @@ describe("app definition renderer", () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("option", { name: "Beta" })));
   });
 
+  async function focusFixture(markup: string) {
+    const definition: AppDefinition = {
+      id: "focus-fixture", name: "초점 시험", requires: { blocks: 14, modules: {} },
+      permissions: [], state: {}, ui: { type: "text", value: "시험" },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    const { container } = render(<AppWindowContent store={store} windowId="viewer-window" />);
+    await screen.findByText("시험");
+    const body = container.querySelector(".ks-data-window-body")!;
+    const fixture = document.createElement("div");
+    fixture.innerHTML = markup;
+    body.append(fixture);
+    return fixture;
+  }
+
+  it("같은 부모에서 가지가 바뀌면 새 화면의 강조 단추로 초점을 옮긴다", async () => {
+    const fixture = await focusFixture('<div><div role="list"><button>에이전트 하나</button></div><button>뒤로</button></div>');
+    const parent = fixture.firstElementChild!;
+    const first = screen.getByRole("button", { name: "에이전트 하나" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "Enter" });
+    const next = document.createElement("button");
+    next.className = "ks-button-emphasis";
+    next.textContent = "폴더 선택";
+    parent.replaceChild(next, first.parentElement!);
+    await waitFor(() => expect(document.activeElement).toBe(next));
+  });
+
+  it("모음에 새 조작이 함께 들어오면 이웃 대신 새 화면의 강조 단추로 옮긴다", async () => {
+    const fixture = await focusFixture('<div role="list"><button>이전 항목</button><button>남은 항목</button></div><button class="ks-button-emphasis">다음 화면</button>');
+    const group = fixture.firstElementChild!;
+    const first = screen.getByRole("button", { name: "이전 항목" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "Enter" });
+    const replacement = document.createElement("button");
+    replacement.textContent = "새 항목";
+    group.replaceChild(replacement, first);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "다음 화면" })));
+  });
+
+  it("승인 목록이 비면 말풍선 대신 대화 입력칸으로 초점을 옮긴다", async () => {
+    await focusFixture('<div><button>내 말풍선</button><div role="list"><button>허용</button></div></div><textarea class="ks-agent-chat-input" aria-label="메시지"></textarea>');
+    const allow = screen.getByRole("button", { name: "허용" });
+    allow.focus();
+    fireEvent.keyDown(allow, { key: "Enter" });
+    allow.parentElement!.removeChild(allow);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "메시지" })));
+  });
+
+  it("마지막 목록 항목을 지우면 뒤의 강조 단추가 아닌 앞 조작에 초점을 둔다", async () => {
+    const fixture = await focusFixture('<button>앞 조작</button><div role="list"><button>마지막 지우기</button></div><button class="ks-button-emphasis">올리기</button>');
+    const remove = screen.getByRole("button", { name: "마지막 지우기" });
+    remove.focus();
+    fireEvent.keyDown(remove, { key: "Enter" });
+    fixture.children[1].removeChild(remove);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "앞 조작" })));
+  });
+
+  it("빈 목록 앞에 조작이 없으면 창 내용에 테두리 없이 초점을 둔다", async () => {
+    const fixture = await focusFixture('<div role="list"><button>마지막 지우기</button></div><button class="ks-button-emphasis">올리기</button>');
+    const remove = screen.getByRole("button", { name: "마지막 지우기" });
+    remove.focus();
+    fireEvent.keyDown(remove, { key: "Enter" });
+    fixture.firstElementChild!.removeChild(remove);
+    await waitFor(() => expect(document.activeElement?.classList.contains("ks-focus-rescue-empty")).toBe(true));
+  });
+
   it("shows an unknown block error while rendering its sibling block", async () => {
     const definition: AppDefinition = {
       ...mdEditorDefinition,
