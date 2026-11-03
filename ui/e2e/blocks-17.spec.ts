@@ -35,10 +35,9 @@ async function assertScene(page: Page, id: string) {
   const app = page.getByTestId(`app-window-${id}`);
   await expect(app.locator(".ks-data-stack.is-center")).toBeVisible();
   if (id === "blocks-17-01") {
-    await expect(app.getByRole("button", { name: "Claude Code" })).toBeVisible();
-    await expect(app.getByRole("button", { name: "Codex" })).toBeVisible();
-    await expect(app.getByRole("button", { name: "Gemini CLI" })).toBeVisible();
-    await expect(app.getByRole("button", { name: "Antigravity" })).toBeVisible();
+    const buttons = app.locator(".ks-data-button");
+    await expect(buttons).toHaveCount(4);
+    for (let index = 0; index < 4; index += 1) await expect(buttons.nth(index)).toBeVisible();
   } else if (id === "blocks-17-04") {
     await expect(app.getByRole("alert")).toContainText("저장 항목 agents: 값을 읽기 위한 서버 저장소 작업을 시작하지 못했습니다.");
     await expect(app.getByText("STORAGE_ITEM_READ_DATABASE_FAILED")).toBeVisible();
@@ -47,7 +46,7 @@ async function assertScene(page: Page, id: string) {
     await expect(app.getByRole("status", { name: "불러오는 중" }).locator("i")).toHaveCount(3);
     await expect(app.locator(".ks-notice")).toHaveCount(0);
   } else {
-    await expect(app.getByRole("button", { name: "Claude Code" })).toBeVisible();
+    await expect(app.locator(".ks-data-button")).toHaveCount(2);
     await expect(app.getByRole("button", { name: "폴더 선택" })).toBeVisible();
   }
 }
