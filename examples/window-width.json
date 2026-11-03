@@ -1,0 +1,27 @@
+{
+  "id": "window-width",
+  "name": "창 너비 조건",
+  "description": "창 본문 너비에 맞는 내용을 표시합니다.",
+  "requires": { "blocks": 19, "modules": {} },
+  "permissions": [],
+  "state": {},
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "children": [
+      { "type": "when", "min_width": 600, "max_width": 899, "child": { "type": "text", "value": "기준 배치" } },
+      { "type": "when", "max_width": 599, "child": { "type": "text", "value": "좁은 배치" } },
+      { "type": "when", "min_width": 900, "child": { "type": "text", "value": "넓은 배치" } }
+    ]
+  },
+  "settings": {
+    "ui": {
+      "type": "stack",
+      "direction": "column",
+      "children": [
+        { "type": "when", "min_width": 600, "child": { "type": "text", "value": "설정의 넓은 분기" } },
+        { "type": "when", "max_width": 599, "child": { "type": "text", "value": "설정의 좁은 분기" } }
+      ]
+    }
+  }
+}

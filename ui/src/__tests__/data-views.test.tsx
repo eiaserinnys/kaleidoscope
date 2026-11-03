@@ -15,8 +15,8 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
-function setup(ui: Block, state: AppDefinition["state"] = {}) {
-  const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 4, modules: {} }, permissions: [], state, ui };
+function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4) {
+  const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks, modules: {} }, permissions: [], state, ui };
   const seed = makeTestSeed({ definitions: [definition] });
   seed.snapshot.shared.windows[0].state = { ...state };
   const transport = createFakeTransport(seed);
@@ -79,6 +79,18 @@ it("omits empty properties and renders formatted values", async () => {
   expect(await screen.findByText("hello")).toBeTruthy();
   expect(screen.getByText("진행")).toBeTruthy();
   expect(screen.queryByText("빈 값")).toBeNull();
+});
+it("resolves property label bindings and shows valid color swatches in rows", async () => {
+  setup({ type: "properties", layout: "rows", fields: [
+    { label: { state: "palette_label" }, value: { state: "colors" }, format: "swatches" },
+  ] }, { palette_label: "팔레트", colors: ["#abc", "#123456", "red", 3] }, 19);
+  const label = await screen.findByText("팔레트");
+  const properties = label.closest("dl")!;
+  expect(properties.classList.contains("is-rows")).toBe(true);
+  expect(within(properties).getAllByRole("img")).toHaveLength(2);
+  expect(within(properties).getByRole("img", { name: "#abc" }).getAttribute("title")).toBe("#abc");
+  expect(within(properties).getByRole("img", { name: "#123456" }).getAttribute("title")).toBe("#123456");
+  expect(within(properties).queryByText("red")).toBeNull();
 });
 it("builds a path tree, opens its selected ancestors and supports keys", async () => {
   const { calls } = setup({ type: "tree", by: "path", items: [{ key: "a", path: "폴더/하나" }, { key: "b", path: "폴더/둘" }], selected: { state: "choice" }, on_select: { set_state: "choice" } }, { choice: "a" });

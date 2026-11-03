@@ -1,0 +1,21 @@
+{
+  "id": "properties-rows",
+  "name": "속성 표",
+  "description": "이름과 색 견본을 두 열로 보여 줍니다.",
+  "requires": { "blocks": 19, "modules": {} },
+  "permissions": [],
+  "state": {
+    "palette_label": "색상",
+    "colors": ["#4158d0", "#ee7724", "#1b9b79"],
+    "version_label": "버전",
+    "version": "19판"
+  },
+  "ui": {
+    "type": "properties",
+    "layout": "rows",
+    "fields": [
+      { "label": { "state": "palette_label" }, "value": { "state": "colors" }, "format": "swatches" },
+      { "label": { "state": "version_label" }, "value": { "state": "version" } }
+    ]
+  }
+}

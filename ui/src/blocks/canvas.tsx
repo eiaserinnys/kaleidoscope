@@ -4,6 +4,7 @@ import { useBinding, useWindowData } from "../data/window-data";
 import { createSerialSend } from "../data/throttled-send";
 import { useShareDescriber } from "../share/visible";
 import * as shellErrors from "../contract/shell-errors";
+import { progressIndicator } from "./progress";
 
 type Rect = { x: number; y: number; width: number; height: number };
 type CanvasBlockData = Extract<Block, { type: "canvas" }>;
@@ -39,6 +40,8 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
   const moveFrame = useRef<number | null>(null);
   const pendingMove = useRef<Record<string, string | number | boolean> | null>(null);
   const description = useBinding(`${pointer}/description`, block.description ?? null);
+  const loading = useBinding(`${pointer}/loading`, block.loading ?? false);
+  const isLoading = loading.status === "ready" && loading.value === true;
   const text = description.status === "ready" && typeof description.value === "string" ? description.value : "";
   useShareDescriber(root, () => ({ text, visual: true }));
   const flushMove = () => {
@@ -100,7 +103,10 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     flushMove();
     serialSend(value, { coalesce: false });
   };
-  return <div ref={root} className="ks-canvas" role="img" aria-label={text || "캔버스"} style={{ "--ks-canvas-ratio": aspect ? Math.max(aspect, 1) : undefined, "--ks-canvas-native-ratio": aspect } as CSSProperties}
+  const label = text || "캔버스";
+  return <div ref={root} className="ks-canvas" role="img" aria-label={isLoading ? `${label}, 불러오는 중` : label} aria-busy={isLoading || undefined} style={{ "--ks-canvas-ratio": aspect ? Math.max(aspect, 1) : undefined, "--ks-canvas-native-ratio": aspect } as CSSProperties}
     onPointerDown={(event) => pointerEvent("down", event)} onPointerMove={(event) => pointerEvent("move", event)}
-    onPointerUp={(event) => pointerEvent("up", event)} onPointerCancel={(event) => pointerEvent("cancel", event)} />;
+    onPointerUp={(event) => pointerEvent("up", event)} onPointerCancel={(event) => pointerEvent("cancel", event)}>
+    {isLoading ? <div className="ks-canvas-loading" aria-hidden="true">{progressIndicator(null, 1, null)}</div> : null}
+  </div>;
 }
