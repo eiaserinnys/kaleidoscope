@@ -4,12 +4,23 @@ use kaleidoscope_contract::{
     client::{ClientFile, DeviceStorageScope, CLIENT_PICK_FILE_MAX_BYTES},
     errors, CoreError,
 };
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     io::{Read, Write},
     path::{Component, Path, PathBuf},
 };
 use uuid::Uuid;
+
+fn window_storage_root(archive: &Path, app_id: &str, window_id: &str) -> PathBuf {
+    let app_key = format!("{:x}", Sha256::digest(app_id.as_bytes()));
+    let window_key = format!("{:x}", Sha256::digest(window_id.as_bytes()));
+    archive
+        .join("client-blobs")
+        .join(".windows")
+        .join(app_key)
+        .join(window_key)
+}
 
 fn location(inner: &Inner, window: &str, key: &str) -> Result<(PathBuf, PathBuf), CoreError> {
     let state = inner.state.lock().unwrap();
@@ -43,15 +54,10 @@ fn location(inner: &Inner, window: &str, key: &str) -> Result<(PathBuf, PathBuf)
     if !prefixes.iter().any(|prefix| key.starts_with(prefix)) {
         return Err(errors::DATA_CLIENT_BLOB_PREFIX_DENIED(key, &window.app_id));
     }
+    let archive = server_switch::active_archive(inner);
     let root = match storage.scope {
-        DeviceStorageScope::App => server_switch::active_archive(inner)
-            .join("client-blobs")
-            .join(&window.app_id),
-        DeviceStorageScope::Window => server_switch::active_archive(inner)
-            .join("client-blobs")
-            .join(".windows")
-            .join(&window.app_id)
-            .join(&window.id),
+        DeviceStorageScope::App => archive.join("client-blobs").join(&window.app_id),
+        DeviceStorageScope::Window => window_storage_root(&archive, &window.app_id, &window.id),
     };
     Ok((root.clone(), root.join(key)))
 }
@@ -99,11 +105,7 @@ pub(crate) fn file_uri(inner: &Inner, window_id: &str, key: &str) -> Result<Stri
 }
 
 pub(crate) fn remove_window_storage(archive: &Path, app_id: &str, window_id: &str) {
-    let path = archive
-        .join("client-blobs")
-        .join(".windows")
-        .join(app_id)
-        .join(window_id);
+    let path = window_storage_root(archive, app_id, window_id);
     if let Err(error) = fs::remove_dir_all(path) {
         if error.kind() != std::io::ErrorKind::NotFound {
             eprintln!("삭제된 창 저장소를 지우지 못했습니다: {error}");

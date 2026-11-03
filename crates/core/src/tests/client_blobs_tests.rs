@@ -1,4 +1,5 @@
 use super::*;
+use sha2::{Digest, Sha256};
 
 fn window_definition(id: &str) -> String {
     let mut value: serde_json::Value = serde_json::from_str(&definition(id)).unwrap();
@@ -28,11 +29,13 @@ fn window_storage_path(core: &Core, window_id: &str) -> PathBuf {
         .iter()
         .find(|window| window.id == window_id)
         .unwrap();
+    let app_key = format!("{:x}", Sha256::digest(window.app_id.as_bytes()));
+    let window_key = format!("{:x}", Sha256::digest(window_id.as_bytes()));
     crate::server_switch::active_archive(&core.inner)
         .join("client-blobs")
         .join(".windows")
-        .join(&window.app_id)
-        .join(window_id)
+        .join(app_key)
+        .join(window_key)
 }
 
 fn definition(id: &str) -> String {
@@ -289,6 +292,47 @@ fn deleting_a_window_removes_only_its_window_storage() {
     assert!(second_root.exists());
     let file = open(&core, &second, "cache/item").expect("other window retains its blob");
     assert_eq!(core.client_read_file(&second, &file.id).unwrap(), b"second");
+    core.shutdown();
+}
+
+#[test]
+fn deleting_window_with_absolute_id_keeps_storage_outside_windows_root() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(
+        temp.path(),
+        vec![window_definition("absolute-window-id")],
+        &Arc::new(FakeHost::default()),
+    );
+    let (_, desktop) = active_ids(&core);
+    let original_id = open_window(&core, &desktop, "absolute-window-id");
+    let outside = temp.path().join("outside-window-storage");
+    std::fs::create_dir_all(&outside).unwrap();
+    let marker = outside.join("keep.txt");
+    std::fs::write(&marker, b"keep").unwrap();
+    let malicious_id = outside.to_string_lossy().into_owned();
+
+    {
+        let mut state = core.inner.state.lock().unwrap();
+        state
+            .shared
+            .windows
+            .iter_mut()
+            .find(|window| window.id == original_id)
+            .unwrap()
+            .id = malicious_id.clone();
+    }
+    crate::process_host::state_changed(&core.inner);
+    put(&core, &malicious_id, "cache/item", b"window data".to_vec()).unwrap();
+
+    core.handle(CoreRequest::WindowClose {
+        window_id: malicious_id,
+    })
+    .unwrap();
+
+    assert!(
+        marker.exists(),
+        "outside storage must survive window deletion"
+    );
     core.shutdown();
 }
 
