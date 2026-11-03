@@ -791,7 +791,7 @@ fn shared_view_baselines_survive_core_restart() {
     assert!(first.0.contains("새로 같이 봄"));
     crate::share::mark_sent_text(&core.inner, "thread", first.1);
     let (attachments, visuals) =
-        crate::share::capture_for_send(&core.inner, &workspace, "thread", &[]);
+        crate::share::capture_for_send(&core.inner, &workspace, "thread", 0, 0);
     assert_eq!(attachments.len(), 1);
     crate::share::mark_sent_visuals(&core.inner, "thread", visuals);
 
@@ -845,7 +845,7 @@ fn shared_view_baselines_survive_core_restart() {
             .contains("그대로")
     );
     let (same_attachments, _) =
-        crate::share::capture_for_send(&reopened.inner, &workspace, "thread", &[]);
+        crate::share::capture_for_send(&reopened.inner, &workspace, "thread", 0, 0);
     assert!(same_attachments.is_empty());
 
     reopened
@@ -871,7 +871,7 @@ fn shared_view_baselines_survive_core_restart() {
 
     *host.png.lock().unwrap() = test_png_with_blue(8, 8, 200);
     let (changed_attachments, visuals) =
-        crate::share::capture_for_send(&reopened.inner, &workspace, "thread", &[]);
+        crate::share::capture_for_send(&reopened.inner, &workspace, "thread", 0, 0);
     assert_eq!(changed_attachments.len(), 1);
     crate::share::mark_sent_visuals(&reopened.inner, "thread", visuals);
 
@@ -1107,7 +1107,7 @@ fn shared_image_is_attached_without_a_web_host() {
     .unwrap();
     core.handle(CoreRequest::ShareView { window_id, view })
         .unwrap();
-    let (attachments, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", &[]);
+    let (attachments, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", 0, 0);
     assert_eq!(attachments.len(), 1);
     assert_eq!(attachments[0].name, "같이 보기 - 마크다운 편집기.png");
     assert_eq!(attachments[0].mime, "image/png");
@@ -1161,7 +1161,7 @@ fn shared_image_accepts_only_png_within_ten_mebibytes() {
     })
     .unwrap();
     assert!(
-        crate::share::capture_for_send(&core.inner, &workspace, "test", &[])
+        crate::share::capture_for_send(&core.inner, &workspace, "test", 0, 0)
             .0
             .is_empty()
     );
@@ -1174,7 +1174,7 @@ fn shared_image_accepts_only_png_within_ten_mebibytes() {
     })
     .unwrap();
     assert!(
-        crate::share::capture_for_send(&core.inner, &workspace, "test", &[])
+        crate::share::capture_for_send(&core.inner, &workspace, "test", 0, 0)
             .0
             .is_empty()
     );
@@ -1225,7 +1225,7 @@ fn shared_image_falls_back_when_native_capture_is_unavailable() {
     };
     core.handle(CoreRequest::ShareView { window_id, view })
         .unwrap();
-    let (attachments, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", &[]);
+    let (attachments, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", 0, 0);
     assert_eq!(host.shell_captures.load(Ordering::SeqCst), 1);
     assert_eq!(attachments.len(), 1);
     let image = image::load_from_memory(&STANDARD.decode(&attachments[0].data_base64).unwrap())
@@ -1306,7 +1306,7 @@ fn occluded_share_uses_isolated_capture_once_even_when_minimized() {
     .unwrap();
     assert_eq!(core.inner.isolated_captures.lock().unwrap().len(), 1);
 
-    let (attachments, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", &[]);
+    let (attachments, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", 0, 0);
     assert_eq!(attachments.len(), 1);
     let image = image::load_from_memory(&STANDARD.decode(&attachments[0].data_base64).unwrap())
         .unwrap()
@@ -1314,7 +1314,7 @@ fn occluded_share_uses_isolated_capture_once_even_when_minimized() {
     assert_eq!(image.get_pixel(0, 0).0[2], 29);
     assert!(core.inner.isolated_captures.lock().unwrap().is_empty());
 
-    let (second, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", &[]);
+    let (second, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", 0, 0);
     assert!(second.is_empty());
     assert_eq!(host.shell_captures.load(Ordering::SeqCst), 2);
     assert_eq!(host.freeze_calls.load(Ordering::SeqCst), 1);
@@ -1367,7 +1367,7 @@ fn occluded_share_skips_native_capture_and_uses_view_image() {
         },
     })
     .unwrap();
-    let (attachments, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", &[]);
+    let (attachments, _) = crate::share::capture_for_send(&core.inner, &workspace, "test", 0, 0);
     assert_eq!(host.shell_captures.load(Ordering::SeqCst), 0);
     assert_eq!(attachments.len(), 1);
     let image = image::load_from_memory(&STANDARD.decode(&attachments[0].data_base64).unwrap())
@@ -1482,7 +1482,7 @@ fn conversation_capture_respects_visual_baseline() {
         },
     })
     .unwrap();
-    let (first, visuals) = crate::share::capture_for_send(&core.inner, &workspace_id, "test", &[]);
+    let (first, visuals) = crate::share::capture_for_send(&core.inner, &workspace_id, "test", 0, 0);
     assert_eq!(first.len(), 2);
     for attachment in &first {
         let image = image::load_from_memory(&STANDARD.decode(&attachment.data_base64).unwrap())
@@ -1515,7 +1515,7 @@ fn conversation_capture_respects_visual_baseline() {
     })
     .unwrap();
     let (after_minimize, _) =
-        crate::share::capture_for_send(&core.inner, &workspace_id, "test", &[]);
+        crate::share::capture_for_send(&core.inner, &workspace_id, "test", 0, 0);
     assert_eq!(after_minimize.len(), 1);
     assert_eq!(host.shell_captures.load(Ordering::SeqCst), 1);
     assert_eq!(host.web_captures.load(Ordering::SeqCst), 2);

@@ -2,6 +2,7 @@
 mod app_commands;
 mod app_storage;
 mod attachment;
+mod client_services;
 pub mod builtin;
 mod connections;
 mod conversation;
@@ -205,6 +206,7 @@ pub(crate) struct Inner {
     pub(crate) data_runtimes: data_runtime::DataRuntimes,
     pub(crate) local_agents: local_agent::LocalAgents,
     pub(crate) processes: process_host::Processes,
+    pub(crate) client_services: client_services::ClientServices,
     pub(crate) conversation_streams: conversation_stream::Streams,
     pub(crate) conversation_sends: Mutex<HashSet<String>>,
     pub(crate) isolated_captures: Mutex<HashMap<String, share::IsolatedCapture>>,
@@ -393,6 +395,7 @@ impl Core {
             data_runtimes: data_runtime::DataRuntimes::default(),
             local_agents: local_agent::LocalAgents::default(),
             processes: process_host::Processes::default(),
+            client_services: client_services::ClientServices::default(),
             conversation_streams: conversation_stream::Streams::default(),
             conversation_sends: Mutex::new(HashSet::new()),
             isolated_captures: Mutex::new(HashMap::new()),
@@ -790,6 +793,7 @@ impl Core {
                 })?;
                 Ok(CoreReply::ExternalOpen {})
             }
+            request @ (CoreRequest::HostInstructions { .. } | CoreRequest::ContextPrepare { .. } | CoreRequest::ContextCommit { .. }) => client_services::handle(&self.inner, request),
             CoreRequest::ShareSet { window_id, on } => share::set(&self.inner, &window_id, on),
             CoreRequest::ShareView { window_id, view } => {
                 share::view(&self.inner, &window_id, view)
@@ -1135,6 +1139,7 @@ impl Inner {
         conversation_stream::state_changed(self);
         local_agent::state_changed(self);
         process_host::state_changed(self);
+        client_services::state_changed(self);
     }
 }
 

@@ -92,8 +92,11 @@ pub(crate) fn send(
         }
     }
     let conversation = format!("{}\0{}", ctx.storage.app, ctx.workspace.id);
-    let (attachments, visuals) =
-        share::capture_for_send(inner, &ctx.workspace.id, &conversation, &uploads);
+    let (captured, visuals) = share::capture_for_send(
+        inner, &ctx.workspace.id, &conversation, uploads.len(), total,
+    );
+    let mut attachments = uploads.clone();
+    attachments.extend(captured);
     let plan = share::prepare_text(inner, &ctx.workspace.id, &conversation);
     let (body, context, sent_views) = match plan {
         Some((block, views)) => (text.trim().to_string(), Some(block), Some(views)),

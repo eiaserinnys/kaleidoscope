@@ -4235,6 +4235,13 @@ pub enum CoreRequest {
     #[serde(rename = "share.unfreeze")]
     ShareUnfreeze {},
 
+    #[serde(rename = "host.instructions")]
+    HostInstructions { window_id: String, kind: String },
+    #[serde(rename = "context.prepare")]
+    ContextPrepare { window_id: String, request_id: String, channel: String, attachments: client::ContextAttachments },
+    #[serde(rename = "context.commit")]
+    ContextCommit { window_id: String, ticket: String },
+
     /// 프로세스 명령. 허용 응답은 쉘에서만 보낸다.
     #[serde(rename = "process.start")]
     ProcessStart { window_id: String, key: String, permission: String, spec: process::ProcessSpec, cwd_permission: String, #[serde(default)] services: Vec<String> },
@@ -4927,6 +4934,12 @@ pub enum CoreReply {
 
     #[serde(rename = "process.start")]
     ProcessStart { result: process::ProcessStartResult },
+    #[serde(rename = "host.instructions")]
+    HostInstructions { text: String, hash: String },
+    #[serde(rename = "context.prepare")]
+    ContextPrepare { text: Option<String>, images: Vec<client::ContextImage>, ticket: String },
+    #[serde(rename = "context.commit")]
+    ContextCommit {},
     #[serde(rename = "process.respond_permission")]
     ProcessRespondPermission {},
     #[serde(rename = "process.attach")]
@@ -5144,6 +5157,8 @@ pub enum CoreEvent {
     /// 프로세스 출력을 읽거나 종료를 확인할 수 있다.
     #[serde(rename = "process.ready")]
     ProcessReady { window_id: String, handle: String },
+    #[serde(rename = "process.services_changed")]
+    ProcessServicesChanged { window_id: String, handle: String },
     /// (계약 20판) 로컬 에이전트 창의 상태 변경. 세대가 다른 업데이트는 화면이 넘긴다.
     #[serde(rename = "local_agent.update")]
     LocalAgentUpdate {

@@ -1,13 +1,14 @@
 //! 창과 실행 권한에 묶인 기기 프로세스 호스트.
 mod stream;
+mod relay;
 use crate::{app_commands, files, Inner};
 use kaleidoscope_contract::{
     errors,
     process::{spec_hash, ProcessAccess, ProcessSnapshot, ProcessStartResult},
-    CoreError, CoreEvent, CoreReply, CoreRequest, PermissionDecl,
+    CoreError, CoreEvent, CoreReply, CoreRequest, PermissionDecl, LinkStatus,
 };
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     sync::{mpsc, Arc, Mutex},
 };
 use stream::{Input, Running, READ_LIMIT};
@@ -22,6 +23,7 @@ pub(crate) struct Processes {
     running: Mutex<HashMap<String, Arc<Running>>>,
     pending: Mutex<HashMap<String, Pending>>,
     start: Mutex<()>,
+    relay: Mutex<Option<relay::Relay>>,
 }
 
 fn context(
@@ -29,7 +31,7 @@ fn context(
     window: &str,
     permission: &str,
     cwd_permission: &str,
-) -> Result<(String, std::path::PathBuf), CoreError> {
+) -> Result<(String, std::path::PathBuf, String), CoreError> {
     let state = inner.state.lock().unwrap();
     let item = state
         .shared
@@ -63,31 +65,36 @@ fn context(
             permission,
         ));
     }
+    let workspace = state.shared.desktops.iter().find(|d| d.id == item.desktop_id)
+        .ok_or_else(errors::PROCESS_START_DESKTOP_MISSING)?.workspace_id.clone();
     Ok((
         item.app_id.clone(),
         files::granted_root(&state, window, cwd_permission, false)?,
+        workspace,
     ))
 }
 
 fn find(inner: &Inner, window: &str, handle: &str) -> Option<Arc<Running>> {
+    let scope = crate::server_switch::active_archive(inner);
     inner
         .processes
         .running
         .lock()
         .unwrap()
         .get(handle)
-        .filter(|p| p.window == window)
+        .filter(|p| p.window == window && *p.scope.lock().unwrap() == scope)
         .cloned()
 }
 
 fn by_key(inner: &Inner, window: &str, key: &str) -> Option<Arc<Running>> {
+    let scope = crate::server_switch::active_archive(inner);
     inner
         .processes
         .running
         .lock()
         .unwrap()
         .values()
-        .find(|p| p.window == window && p.key == key)
+        .find(|p| p.window == window && p.key == key && *p.scope.lock().unwrap() == scope)
         .cloned()
 }
 
@@ -98,7 +105,7 @@ fn snapshot(p: &Running) -> ProcessSnapshot {
         after: state.after,
         checkpoint: state.checkpoint.clone(),
         cwd: p.cwd.clone(),
-        services: BTreeMap::new(),
+        services: p.services.lock().unwrap().clone(),
         exit: state.exit.clone(),
     }
 }
@@ -113,17 +120,17 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             cwd_permission,
             services,
         } => {
-            if !services.is_empty() {
-                return Err(errors::PROCESS_START_SERVICES_UNSUPPORTED());
+            if let Some(service) = services.iter().find(|service| service.as_str() != "tools") {
+                return Err(errors::PROCESS_START_SERVICE_UNKNOWN(service));
             }
-            let (app_id, _) = context(inner, &window_id, &permission, &cwd_permission)?;
+            let (app_id, _, _) = context(inner, &window_id, &permission, &cwd_permission)?;
             if let Some(p) = by_key(inner, &window_id, &key) {
                 if p.state.lock().unwrap().exit.is_none() {
                     return Ok(CoreReply::ProcessStart {
                         result: ProcessStartResult::Started {
                             handle: p.handle.clone(),
                             cwd: p.cwd.clone(),
-                            services: BTreeMap::new(),
+                            services: p.services.lock().unwrap().clone(),
                         },
                     });
                 }
@@ -168,7 +175,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                     });
                 }
                 let _guard = inner.processes.start.lock().unwrap();
-                let (current_app, _) = context(inner, &window_id, &permission, &cwd_permission)?;
+                let (current_app, _, _) = context(inner, &window_id, &permission, &cwd_permission)?;
                 if current_app != app_id {
                     return Err(errors::PROCESS_START_APP_CHANGED());
                 }
@@ -185,25 +192,42 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 }
             }
             let _guard = inner.processes.start.lock().unwrap();
-            let (_, cwd) = context(inner, &window_id, &permission, &cwd_permission)?;
+            let (_, cwd, workspace) = context(inner, &window_id, &permission, &cwd_permission)?;
             if let Some(p) = by_key(inner, &window_id, &key) {
                 if p.state.lock().unwrap().exit.is_none() {
                     return Ok(CoreReply::ProcessStart {
                         result: ProcessStartResult::Started {
                             handle: p.handle.clone(),
                             cwd: p.cwd.clone(),
-                            services: BTreeMap::new(),
+                            services: p.services.lock().unwrap().clone(),
                         },
                     });
                 }
                 inner.processes.running.lock().unwrap().remove(&p.handle);
+                revoke(inner, &p.handle);
                 p.stop();
             }
-            let p = Running::launch(inner, window_id, key, permission, spec, cwd)?;
+            let scope = crate::server_switch::active_archive(inner);
+            let p = Running::launch(inner, window_id, key, permission, spec, cwd, scope)?;
+            if services.iter().any(|service| service == "tools") {
+                let connected = matches!(inner.state.lock().unwrap().link, LinkStatus::Connected { .. });
+                let link = if connected { inner.link_file.lock().unwrap().clone().filter(|link| !link.revoked) } else { None };
+                let address = if let Some(link) = link {
+                    let mut relay = inner.processes.relay.lock().unwrap();
+                    if relay.is_none() {
+                        match relay::Relay::new() {
+                            Ok(created) => *relay = Some(created),
+                            Err(error) => { p.stop(); return Err(error); }
+                        }
+                    }
+                    Some(relay.as_ref().unwrap().bind(&p.handle, &link.server_url, &link.token, &workspace))
+                } else { None };
+                p.services.lock().unwrap().insert("tools".into(), address);
+            }
             let result = ProcessStartResult::Started {
                 handle: p.handle.clone(),
                 cwd: p.cwd.clone(),
-                services: BTreeMap::new(),
+                services: p.services.lock().unwrap().clone(),
             };
             inner
                 .processes
@@ -321,6 +345,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             let p =
                 find(inner, &window_id, &handle).ok_or_else(errors::PROCESS_STOP_HANDLE_MISSING)?;
             inner.processes.running.lock().unwrap().remove(&handle);
+            revoke(inner, &handle);
             p.stop();
             Ok(CoreReply::ProcessStop {})
         }
@@ -330,6 +355,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
 
 pub(crate) fn state_changed(inner: &Arc<Inner>) {
     let _guard = inner.processes.start.lock().unwrap();
+    let scope = crate::server_switch::active_archive(inner);
     {
         let state = inner.state.lock().unwrap();
         inner.processes.pending.lock().unwrap().retain(|_, pending| {
@@ -341,12 +367,14 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
     let invalid: Vec<String> = {
         let state = inner.state.lock().unwrap();
         inner.processes.running.lock().unwrap().iter().filter_map(|(handle, p)| {
+            if *p.scope.lock().unwrap() != scope { return None; }
             let valid = state.shared.windows.iter().find(|w| w.id == p.window).and_then(|w| app_commands::definition_for(&state.shared, &w.app_id, w.app_version)).is_some_and(|d| d.permissions.iter().any(|permission| matches!(permission, PermissionDecl::Process { id, .. } if id == &p.permission)) && d.client.as_ref().and_then(|c| c.process_permissions.as_ref()).is_some_and(|ids| ids.contains(&p.permission)));
             (!valid).then(|| handle.clone())
         }).collect()
     };
     for handle in invalid {
         if let Some(p) = inner.processes.running.lock().unwrap().remove(&handle) {
+            revoke(inner, &handle);
             p.stop();
         }
     }
@@ -364,6 +392,35 @@ pub(crate) fn shutdown(inner: &Arc<Inner>) {
         .map(|(_, p)| p)
         .collect();
     for p in processes {
+        revoke(inner, &p.handle);
         p.stop();
+    }
+    inner.processes.relay.lock().unwrap().take();
+}
+
+fn revoke(inner: &Inner, handle: &str) {
+    if let Some(relay) = inner.processes.relay.lock().unwrap().as_ref() { relay.revoke(handle); }
+}
+
+pub(crate) fn rebind_unlinked(inner: &Inner, old_scope: &std::path::Path) {
+    let new_scope = crate::server_switch::active_archive(inner);
+    for process in inner.processes.running.lock().unwrap().values() {
+        let mut scope = process.scope.lock().unwrap();
+        if scope.as_path() == old_scope { *scope = new_scope.clone(); }
+    }
+}
+
+pub(crate) fn server_changed(inner: &Arc<Inner>) {
+    let _guard = inner.processes.start.lock().unwrap();
+    if let Some(relay) = inner.processes.relay.lock().unwrap().as_ref() { relay.revoke_all(); }
+    let processes: Vec<_> = inner.processes.running.lock().unwrap().values().cloned().collect();
+    for process in processes {
+        let mut services = process.services.lock().unwrap();
+        if let Some(tools) = services.get_mut("tools") {
+            if tools.take().is_some() {
+                drop(services);
+                inner.emit(&CoreEvent::ProcessServicesChanged { window_id: process.window.clone(), handle: process.handle.clone() });
+            }
+        }
     }
 }

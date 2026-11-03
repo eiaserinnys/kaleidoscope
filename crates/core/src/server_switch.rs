@@ -69,8 +69,10 @@ pub(crate) fn activate(
         return Err(errors::SERVER_SWITCH_CANCELLED());
     }
     crate::local_agent::server_changed(inner);
+    crate::process_host::server_changed(inner);
     crate::data_runtime::server_changed(inner);
     crate::client_files::release_all(inner);
+    crate::client_services::server_changed(inner);
     let mut state = inner.state.lock().unwrap();
     inner.save_state_locked(&state, false, false, false)?;
     if !link::is_current(inner, generation) {

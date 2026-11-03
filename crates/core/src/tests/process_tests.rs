@@ -2,6 +2,18 @@ use super::*;
 use kaleidoscope_contract::process::{ProcessSpec, ProcessStartResult};
 
 #[test]
+fn tools_service_is_supported_before_window_validation() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
+    let error = core.handle(CoreRequest::ProcessStart {
+        window_id: "missing".into(), key: "main".into(), permission: "run".into(),
+        cwd_permission: "work".into(), services: vec!["tools".into()],
+        spec: ProcessSpec { name: "시험".into(), command: "cat".into(), args: vec![], env: BTreeMap::new() },
+    }).unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("PROCESS_START_WINDOW_MISSING"));
+}
+
+#[test]
 fn binary_process_write_identifies_each_invalid_checkpoint() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
@@ -435,4 +447,63 @@ fn windows_process_cmd_terminates_descendants_in_unicode_cwd() {
         );
         thread::sleep(Duration::from_millis(100));
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn tool_services_follow_process_window_and_server_lifetimes() {
+    use kaleidoscope_contract::{process::spec_hash, ServerMode};
+    let temp = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(folder.path().into()));
+    let definition = json!({
+        "id":"process-services-fixture", "name":"서비스 시험", "requires":{"blocks":17,"modules":{"assets":1,"client":3,"process":1,"files":1}},
+        "permissions":[{"module":"process","id":"run","label":"실행"},{"module":"files","id":"work","label":"작업","access":"readwrite"}],
+        "assets":[{"id":"client-code","version":1}], "client":{"runtime":"javascript","entry":{"id":"client-code","version":1},"process_permissions":["run"]},
+        "ui":{"type":"text","value":"시험"}
+    });
+    let core = open_core(temp.path(), vec![definition.to_string()], &host);
+    let (_, desktop) = active_ids(&core);
+    let link = LinkFile { revoked: false, mode: ServerMode::Remote, format: 1,
+        server_url: "http://127.0.0.1:1".into(), device_id: "device".into(), device_name: "시험".into(), token: "secret-device-token".into() };
+    *core.inner.link_file.lock().unwrap() = Some(link.clone());
+    core.inner.state.lock().unwrap().link = LinkStatus::Connected { mode: ServerMode::Remote, server_url: link.server_url.clone(), device_name: "시험".into() };
+    let spec = ProcessSpec { name: "시험".into(), command: "cat".into(), args: vec![], env: BTreeMap::new() };
+    core.inner.state.lock().unwrap().device.process_access.push(kaleidoscope_contract::process::ProcessAccess {
+        app_id: "process-services-fixture".into(), permission: "run".into(), spec_hash: spec_hash(&spec), granted_at: "시험".into(),
+    });
+    let start = |key: &str| {
+        let window = open_window(&core, &desktop, "process-services-fixture");
+        core.handle(CoreRequest::FilesPickFolder { window_id: window.clone(), permission: "work".into() }).unwrap();
+        let reply = core.handle(CoreRequest::ProcessStart { window_id: window.clone(), key: key.into(), permission: "run".into(), cwd_permission: "work".into(), spec: spec.clone(), services: vec!["tools".into()] }).unwrap();
+        let serialized = serde_json::to_string(&reply).unwrap();
+        assert!(!serialized.contains("secret-device-token"));
+        let CoreReply::ProcessStart { result: ProcessStartResult::Started { handle, services, .. } } = reply else { panic!("실행 결과가 없다") };
+        let url = services["tools"].clone().unwrap();
+        let attached = core.handle(CoreRequest::ProcessAttach { window_id: window.clone(), key: key.into() }).unwrap();
+        assert!(!serde_json::to_string(&attached).unwrap().contains("secret-device-token"));
+        assert!(matches!(attached, CoreReply::ProcessAttach { process: Some(snapshot) } if snapshot.services["tools"].as_deref() == Some(url.as_str())));
+        (window, handle, url)
+    };
+    let http = reqwest::blocking::Client::new();
+    let (window, handle, old) = start("stop");
+    core.handle(CoreRequest::ProcessStop { window_id: window, handle }).unwrap();
+    assert_eq!(http.get(&old).send().unwrap().status(), 403);
+    let (window, _, old) = start("close");
+    core.handle(CoreRequest::WindowClose { window_id: window }).unwrap();
+    assert_eq!(http.get(&old).send().unwrap().status(), 403);
+    let (window, handle, old) = start("switch");
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| { if let CoreEvent::ProcessServicesChanged { window_id, handle } = event { let _ = tx.send((window_id.clone(), handle.clone(), serde_json::to_string(event).unwrap())); } }));
+    let replacement = LinkFile { server_url: "http://127.0.0.1:2".into(), ..link.clone() };
+    crate::server_switch::activate(&core.inner, replacement, 0).unwrap();
+    let (event_window, event_handle, event) = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert_eq!((event_window, event_handle), (window.clone(), handle));
+    assert!(!event.contains("secret-device-token"));
+    assert_eq!(http.get(&old).send().unwrap().status(), 403);
+    crate::server_switch::activate(&core.inner, link, 0).unwrap();
+    let restored = core.handle(CoreRequest::ProcessAttach { window_id: window, key: "switch".into() }).unwrap();
+    assert!(matches!(restored, CoreReply::ProcessAttach { process: Some(process) } if process.services["tools"].is_none()));
+    core.shutdown();
 }

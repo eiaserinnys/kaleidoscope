@@ -152,6 +152,9 @@ pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
         return Ok(CoreReply::LinkUnlink {});
     }
     crate::share::clear_server_before_unlink(inner);
+    let previous_scope = crate::server_switch::active_archive(inner);
+    crate::process_host::server_changed(inner);
+    crate::client_services::server_changed(inner);
     let changed = {
         let mut state = inner.state.lock().unwrap();
         inner.generation.fetch_add(1, Ordering::SeqCst);
@@ -163,6 +166,7 @@ pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
         inner.link_connecting.store(false, Ordering::SeqCst);
         set_link_locked(&mut state, LinkStatus::Unlinked {})
     };
+    crate::process_host::rebind_unlinked(inner, &previous_scope);
     if changed {
         inner.layout_signal.notify();
         emit_state(inner);
@@ -516,6 +520,7 @@ pub(crate) fn token_rejected(inner: &Arc<Inner>, mut file: LinkFile) {
         )
     };
     if changed {
+        crate::process_host::server_changed(inner);
         emit_state(inner);
     }
 }

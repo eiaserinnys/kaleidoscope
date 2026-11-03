@@ -1,4 +1,6 @@
 error_catalog! { ENTRIES;
+    SHELL_CLIENT_INSTRUCTIONS_CAPABILITY_UNDECLARED() { class: PermissionDenied, place: "클라이언트 지침 요청", cause: "앱이 지침 기능을 선언하지 않았다", message: "앱이 지침 읽기 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.", fix: "client.capabilities에 instructions를 선언하세요" }
+    SHELL_CLIENT_CONTEXT_CAPABILITY_UNDECLARED() { class: PermissionDenied, place: "클라이언트 같이 보기 요청", cause: "앱이 같이 보기 기능을 선언하지 않았다", message: "앱이 같이 보기 준비 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.", fix: "client.capabilities에 context_capture를 선언하세요" }
     SHELL_APP_IMPORT_REPLY_INVALID() {
         class: Io,
         place: "앱 정의 가져오기 응답",

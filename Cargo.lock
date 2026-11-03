@@ -2300,8 +2300,10 @@ name = "kaleidoscope-core"
 version = "0.1.0"
 dependencies = [
  "agent-client-protocol",
+ "axum",
  "base64 0.22.1",
  "chrono",
+ "futures-util",
  "image",
  "kaleidoscope-contract",
  "kaleidoscope-data",
