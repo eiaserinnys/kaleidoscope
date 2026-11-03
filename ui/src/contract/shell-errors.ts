@@ -22,9 +22,6 @@ export const SHELL_IPC_OPERATION_UNSUPPORTED = (): CoreError => ({ id: "SHELL_IP
 export const SHELL_IPC_CORE_TASK_INTERRUPTED = (): CoreError => ({ id: "SHELL_IPC_CORE_TASK_INTERRUPTED", code: "io", message: `쉘 코어 작업이 중단되어 요청을 마치지 못했습니다. 다시 시도하세요.`, details: [] });
 export const SHELL_IPC_BYTES_TASK_INTERRUPTED = (): CoreError => ({ id: "SHELL_IPC_BYTES_TASK_INTERRUPTED", code: "io", message: `파일 작업이 중단되어 요청을 마치지 못했습니다. 다시 시도하세요.`, details: [] });
 export const SHELL_CONVERSATION_ATTACHMENT_REPLY_INVALID = (): CoreError => ({ id: "SHELL_CONVERSATION_ATTACHMENT_REPLY_INVALID", code: "io", message: `대화 첨부를 읽지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.`, details: [] });
-export const SHELL_AGENT_SESSION_ATTACH_REPLY_INVALID = (): CoreError => ({ id: "SHELL_AGENT_SESSION_ATTACH_REPLY_INVALID", code: "io", message: `로컬 에이전트 상태를 읽지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.`, details: [] });
-export const SHELL_AGENT_SESSION_ATTACHMENT_REPLY_INVALID = (): CoreError => ({ id: "SHELL_AGENT_SESSION_ATTACHMENT_REPLY_INVALID", code: "io", message: `로컬 에이전트 첨부를 읽지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.`, details: [] });
-export const SHELL_AGENT_SESSION_FAILURE_DETAILS_MISSING = (): CoreError => ({ id: "SHELL_AGENT_SESSION_FAILURE_DETAILS_MISSING", code: "local_agent_failed", message: `로컬 에이전트가 실패했지만 원인을 받지 못했습니다. 에이전트를 다시 시도하세요.`, details: [] });
 export const SHELL_CANVAS_TRANSFER_UNSUPPORTED = (): CoreError => ({ id: "SHELL_CANVAS_TRANSFER_UNSUPPORTED", code: "unavailable", message: `이 환경은 캔버스 화면을 연결할 수 없습니다. 지원되는 쉘에서 다시 여세요.`, details: [] });
 export const SHELL_MARKDOWN_VALUE_NOT_TEXT = (): CoreError => ({ id: "SHELL_MARKDOWN_VALUE_NOT_TEXT", code: "invalid_request", message: `마크다운 값은 글이어야 합니다. 앱 정의에서 마크다운 값에 글을 연결하세요.`, details: [] });
 export const SHELL_HTML_VALUE_NOT_TEXT = (): CoreError => ({ id: "SHELL_HTML_VALUE_NOT_TEXT", code: "invalid_request", message: `HTML 값은 글이어야 합니다. 앱 정의에서 HTML 값에 글을 연결하세요.`, details: [] });

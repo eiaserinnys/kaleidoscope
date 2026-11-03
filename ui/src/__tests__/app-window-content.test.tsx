@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -31,7 +31,6 @@ it("기존 블록 이름을 정본 이름과 모드로 정규화한다", () => {
     [{ type: "code_editor", file: { permission: "docs", path: "main.rs" } }, { type: "code", file: { permission: "docs", path: "main.rs" } }],
     [{ type: "code_view", value: "fn main() {}" }, { type: "code", value: "fn main() {}", read_only: true }],
     [{ type: "agent_chat" }, { type: "chat" }],
-    [{ type: "agent_session", permission: "run", root: { permission: "work" }, agents: [], selected: { state: "agent" }, on_select: { set_state: "agent" } }, { type: "chat", permission: "run", root: { permission: "work" }, agents: [], selected: { state: "agent" }, on_select: { set_state: "agent" } }],
     [{ type: "keypad", columns: 4, buttons: [], on_press: { set_state: "value" } }, { type: "button_grid", columns: 4, buttons: [], on_press: { set_state: "value" } }],
   ] as const;
   for (const [legacy, canonical] of aliases) expect(normalizeBlock(legacy as unknown as Block)).toEqual(canonical);
@@ -62,6 +61,29 @@ describe("app definition renderer", () => {
     first.focus();
     await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { visible: false } }); });
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "다음" })));
+  });
+
+  it("목록 항목을 키보드로 지우면 강조 단추 대신 다음 항목으로 초점을 옮긴다", async () => {
+    const definition: AppDefinition = {
+      id: "focus-list-test", name: "목록 초점", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { items: [{ key: "a", title: "Alpha" }, { key: "b", title: "Beta" }, { key: "c", title: "Gamma" }] },
+      ui: { type: "stack", direction: "column", children: [
+        { type: "list", items: { state: "items" } },
+        { type: "button", label: "올리기", variant: "primary", on_click: [{ set_state: "unused" }] },
+      ] },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    render(<AppWindowContent store={store} windowId="viewer-window" />);
+    const alpha = await screen.findByRole("option", { name: "Alpha" });
+    alpha.focus();
+    fireEvent.keyDown(alpha, { key: "Delete" });
+    await act(async () => {
+      await store.call({ op: "window.set_state", window_id: "viewer-window", state: {
+        items: [{ key: "b", title: "Beta" }, { key: "c", title: "Gamma" }],
+      } });
+    });
+
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("option", { name: "Beta" })));
   });
 
   it("shows an unknown block error while rendering its sibling block", async () => {

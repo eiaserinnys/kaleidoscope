@@ -43,10 +43,11 @@ def capture(sb, app, name):
              'rect':{'x':20, 'y':20, 'width':620, 'height':680}})
 
 def main():
-    with tempfile.TemporaryDirectory(prefix='ks-agent-f-') as directory:
+    address, ui_lock = sandbox.acquire_ui_address()
+    with tempfile.TemporaryDirectory(prefix='ks-agent-f-') as directory, ui_lock:
         folder = Path(directory) / '작업폴더'
         folder.mkdir()
-        sb = sandbox.Sandbox(ROOT, OUT, folder)
+        sb = sandbox.Sandbox(ROOT, OUT, folder, address)
         spawn = sb._spawn
         def local_spawn(name, command, **env):
             if name in ('server', 'bridge'):

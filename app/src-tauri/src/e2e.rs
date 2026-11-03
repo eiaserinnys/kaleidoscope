@@ -17,7 +17,6 @@ use tauri::{AppHandle, Manager};
 mod files_write;
 #[cfg(windows)]
 mod folder_drag;
-mod local_agent;
 #[cfg(windows)]
 mod share_isolate;
 mod ui;
@@ -29,7 +28,6 @@ enum ScenarioKind {
     #[cfg(windows)]
     ShareIsolate,
     Update,
-    LocalAgent,
     FilesWrite,
 }
 
@@ -38,7 +36,6 @@ fn scenario_kind(name: Option<&str>) -> ScenarioKind {
         #[cfg(windows)]
         Some("share-isolate") => ScenarioKind::ShareIsolate,
         Some("update" | "update-reject") => ScenarioKind::Update,
-        Some("local-agent") => ScenarioKind::LocalAgent,
         Some("files-write") => ScenarioKind::FilesWrite,
         _ => ScenarioKind::WebView,
     }
@@ -515,7 +512,6 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
                 ScenarioKind::ShareIsolate => share_isolate::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::WebView => scenario(&app, &core, &out, &mut log),
                 ScenarioKind::Update => update::scenario(&app, &core, &out, &mut log),
-                ScenarioKind::LocalAgent => local_agent::scenario(&core, &out, &mut log),
                 ScenarioKind::FilesWrite => match setting("PICK_FOLDER") {
                     Some(folder) => {
                         files_write::scenario(&app, &core, &PathBuf::from(folder), &mut log)
@@ -544,8 +540,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn local_agent_setting_selects_process_lifetime_scenario() {
-        assert_eq!(scenario_kind(Some("local-agent")), ScenarioKind::LocalAgent);
+    fn scenario_setting_selects_file_and_update_scenarios() {
         assert_eq!(scenario_kind(Some("files-write")), ScenarioKind::FilesWrite);
         assert_eq!(scenario_kind(Some("update")), ScenarioKind::Update);
         #[cfg(windows)]

@@ -504,7 +504,6 @@ pub(super) fn load(inner: &Arc<Inner>, window: &str, selected: Option<&str>) {
                 replan(&inner, &window, runtime, Some(&entry))
             };
             jobs(&inner, pending);
-            crate::local_agent::data_changed(&inner, &window);
             inner.layout_signal.notify();
         });
     }
@@ -543,7 +542,6 @@ pub(super) fn load(inner: &Arc<Inner>, window: &str, selected: Option<&str>) {
                 replan(&inner, &window, runtime, None)
             };
             jobs(&inner, pending);
-            crate::local_agent::data_changed(&inner, &window);
             inner.layout_signal.notify();
         });
     }
@@ -590,7 +588,6 @@ pub(super) fn written(
         replan(inner, window, runtime, Some(entry))
     };
     jobs(inner, pending);
-    crate::local_agent::data_changed(inner, window);
     inner.layout_signal.notify();
 }
 

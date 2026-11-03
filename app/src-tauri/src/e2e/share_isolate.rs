@@ -1,6 +1,5 @@
 //! 실제 에이전트 입력 경로로 같이 보기 격리 캡처를 검증한다.
 use super::*;
-use kaleidoscope_core::kaleidoscope_contract::local_agent::{LocalAgentPhase, LocalAgentSnapshot};
 use kaleidoscope_core::{crop_share_capture_png, WebHost};
 use std::cmp::min;
 use std::time::{Duration, Instant};
@@ -97,7 +96,7 @@ pub(super) fn scenario(
             false,
         ),
     )?;
-    import_definition(core, agent_definition(out))?;
+    import_definition(core, agent_definition(out, &agent_bin))?;
     let mut web_browser: Value =
         serde_json::from_str(include_str!("../../../../apps/web-browser.json"))
             .map_err(|error| error.to_string())?;
@@ -121,6 +120,20 @@ pub(super) fn scenario(
         json!({"window_id":web_id,"url":web_page.url}),
     )?;
     let agent_window_id = open_window(core, &desktop_id, AGENT_APP_ID, layout.agent)?;
+    let (permission_tx, permission_rx) = mpsc::channel();
+    let permission_window_id = agent_window_id.clone();
+    core.subscribe(Box::new(move |event| {
+        if let CoreEvent::ProcessPermission {
+            window_id,
+            request_id,
+            spec,
+        } = event
+        {
+            if window_id == permission_window_id {
+                let _ = permission_tx.send((request_id, spec));
+            }
+        }
+    }));
     let grant = match call(
         core,
         CoreRequest::FilesPickFolder {
@@ -136,21 +149,26 @@ pub(super) fn scenario(
     {
         return Err(format!("unexpected agent folder grant: {grant:?}"));
     }
-    let ready = wait_agent_phase(core, &agent_window_id, LocalAgentPhase::AwaitingPermission)?;
-    let spec_hash = ready
-        .execution
-        .as_ref()
-        .ok_or("execution consent is missing")?
-        .spec_hash
-        .clone();
+    let (request_id, spec) = permission_rx
+        .recv_timeout(WINDOW_READY_TIMEOUT)
+        .map_err(|error| format!("process permission request did not arrive: {error}"))?;
+    if spec.command
+        != agent_bin
+            .join("fake-agent.cmd")
+            .to_string_lossy()
+            .into_owned()
+    {
+        return Err(format!("unexpected test agent command: {}", spec.command));
+    }
     call(
         core,
-        CoreRequest::LocalAgentAllow {
+        CoreRequest::ProcessRespondPermission {
             window_id: agent_window_id.clone(),
-            spec_hash,
+            request_id,
+            allow: true,
         },
     )?;
-    wait_agent_phase(core, &agent_window_id, LocalAgentPhase::Ready)?;
+    wait_agent_process(core, &agent_window_id)?;
     ui::wait_dom(app, &format!("return !!document.querySelector('[data-testid=\\\"app-window-{A_ID}\\\"] iframe') && !!document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');"), "share windows rendered")?;
     share(core, &a_id, true)?;
     ui::wait_dom(

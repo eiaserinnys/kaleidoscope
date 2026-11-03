@@ -8,8 +8,8 @@ use serde_json::Value;
 use crate::app_storage::{self, StorageKind};
 use crate::data::{self, Action, Actions, Binding, MessageKey, SourceDecl};
 use crate::{
-    local_agent, AgentProvider, AppDefinition, Block, CoreError, FileAccess, FileRef, FilesScope,
-    FolderRoot, PathValue, PermissionDecl, UrlValue, BLOCK_SET_VERSION, MODULE_VERSIONS,
+    AgentProvider, AppDefinition, Block, CoreError, FileAccess, FileRef, FilesScope, FolderRoot,
+    PathValue, PermissionDecl, UrlValue, BLOCK_SET_VERSION, MODULE_VERSIONS,
 };
 
 /// 앱 정의 JSON 원문을 읽고 검사한다. 통과하면 정의를, 걸리면 `unsupported_app`이나
@@ -26,6 +26,10 @@ pub fn parse_cached_app_definition(definition_json: &str) -> Result<AppDefinitio
 fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition, CoreError> {
     let value: Value = serde_json::from_str(definition_json)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_JSON_INVALID(&parse_error))?;
+
+    if let Some(error) = removed_local_agent_error(&value) {
+        return Err(error);
+    }
 
     if requires_unsupported(&value) {
         return Err(crate::errors::APP_DEFINITION_REQUIRES_NEWER_SHELL());
@@ -131,10 +135,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     }
     if !cached && definition.agent.is_none() {
         data::walk_definition_blocks(&definition, &mut |pointer, block| {
-            if matches!(block, Block::Chat { .. })
-                && !block.is_local_agent_chat()
-                && !block.is_client_chat()
-            {
+            if matches!(block, Block::Chat { .. }) && !block.is_client_chat() {
                 details.push(format!("{pointer}: chat에는 대화 제공자가 필요합니다"));
             }
         });
@@ -145,6 +146,50 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         Err(crate::errors::APP_DEFINITION_WHEN_CONDITION_MISSING().and_details(details))
     } else {
         Err(crate::errors::APP_DEFINITION_CHECK_FAILED().and_details(details))
+    }
+}
+
+fn removed_local_agent_error(value: &Value) -> Option<CoreError> {
+    if value.pointer("/requires/modules/local_agent").is_some() {
+        return Some(crate::errors::APP_DEFINITION_REMOVED_LOCAL_AGENT_MODULE());
+    }
+    if value
+        .get("permissions")
+        .and_then(Value::as_array)
+        .is_some_and(|permissions| {
+            permissions.iter().any(|permission| {
+                permission.get("module").and_then(Value::as_str) == Some("local_agent")
+            })
+        })
+    {
+        return Some(crate::errors::APP_DEFINITION_REMOVED_LOCAL_AGENT_PERMISSION());
+    }
+    removed_block_error(value.get("ui")?)
+}
+
+fn removed_block_error(value: &Value) -> Option<CoreError> {
+    match value {
+        Value::Object(object) => {
+            match object.get("type").and_then(Value::as_str) {
+                Some("agent_session") => {
+                    return Some(crate::errors::APP_DEFINITION_REMOVED_AGENT_SESSION_BLOCK());
+                }
+                Some("chat")
+                    if ["permission", "root", "agents", "selected", "on_select"]
+                        .iter()
+                        .any(|field| object.contains_key(*field)) =>
+                {
+                    return Some(crate::errors::APP_DEFINITION_REMOVED_CHAT_LOCAL_FIELDS());
+                }
+                _ => {}
+            }
+            object
+                .iter()
+                .filter(|(key, _)| !matches!(key.as_str(), "value" | "items" | "buttons"))
+                .find_map(|(_, child)| removed_block_error(child))
+        }
+        Value::Array(values) => values.iter().find_map(removed_block_error),
+        _ => None,
     }
 }
 
@@ -235,9 +280,8 @@ fn uses_chat_client_fields(value: &Value) -> bool {
 fn uses_block_set_16_bindings(definition: &AppDefinition) -> bool {
     let mut uses_new_binding = false;
     data::walk_definition_blocks(definition, &mut |_, block| {
-        let needs_block_set_16 = |binding: &Binding| {
-            !matches!(binding, Binding::Literal(Value::String(_)))
-        };
+        let needs_block_set_16 =
+            |binding: &Binding| !matches!(binding, Binding::Literal(Value::String(_)));
         uses_new_binding |= match block {
             Block::Tabs { tabs, .. } => tabs.iter().any(|tab| needs_block_set_16(&tab.label)),
             Block::Toggle { label, .. } => needs_block_set_16(label),
@@ -542,12 +586,17 @@ fn validate(definition: &AppDefinition) -> ValidationResult {
     validate_client(definition, &mut details);
 
     let mut web_views = 0;
-    let mut local_agent_blocks = 0;
     let mut when_pointers = Vec::new();
     let mut named_blocks = Vec::new();
     let mut repeat_templates: Vec<String> = Vec::new();
     data::walk_definition_blocks(definition, &mut |pointer, block| {
-        if let Block::When { value, min_width, max_width, .. } = block {
+        if let Block::When {
+            value,
+            min_width,
+            max_width,
+            ..
+        } = block
+        {
             when_pointers.push(pointer.to_owned());
             if value.is_none() && min_width.is_none() && max_width.is_none() {
                 missing_when_condition = true;
@@ -593,9 +642,6 @@ fn validate(definition: &AppDefinition) -> ValidationResult {
         if matches!(block, Block::WebView { .. }) {
             web_views += 1;
         }
-        if block.is_local_agent_chat() {
-            local_agent_blocks += 1;
-        }
         validate_block(block, definition, &mut details, pointer);
     });
     let named_blocks: Vec<_> = named_blocks
@@ -624,7 +670,9 @@ fn validate(definition: &AppDefinition) -> ValidationResult {
         });
         if duplicate {
             if is_anchor {
-                details.push(format!("{pointer}: anchor id가 비었거나 중복됩니다: {name}"));
+                details.push(format!(
+                    "{pointer}: anchor id가 비었거나 중복됩니다: {name}"
+                ));
             } else {
                 details.push(format!("{pointer}: canvas 표면 이름이 비었거나 중복됩니다"));
             }
@@ -634,11 +682,6 @@ fn validate(definition: &AppDefinition) -> ValidationResult {
     if web_views > 1 {
         details.push(format!(
             "web_view는 정의에 하나까지 둘 수 있습니다(지금 {web_views}개)"
-        ));
-    }
-    if local_agent_blocks > 1 {
-        details.push(format!(
-            "로컬 에이전트 chat 블록은 앱 정의에 하나까지 둘 수 있습니다(지금 {local_agent_blocks}개)"
         ));
     }
 
@@ -727,20 +770,48 @@ fn validate_client(definition: &AppDefinition, details: &mut Vec<String>) {
         return;
     };
     validate_module_version("client", 1, definition, details, "/client");
-    if client.capabilities.as_ref().is_some_and(|capabilities| capabilities.iter().any(|capability| matches!(capability, crate::client::ClientCapability::Instructions | crate::client::ClientCapability::ContextCapture))) {
+    if client.capabilities.as_ref().is_some_and(|capabilities| {
+        capabilities.iter().any(|capability| {
+            matches!(
+                capability,
+                crate::client::ClientCapability::Instructions
+                    | crate::client::ClientCapability::ContextCapture
+            )
+        })
+    }) {
         validate_module_version("client", 4, definition, details, "/client/capabilities");
         if definition.requires.blocks < 18 {
-            details.push("/client/capabilities: 지침과 같이 보기 준비는 블록 세트 18판이 필요합니다".into());
+            details.push(
+                "/client/capabilities: 지침과 같이 보기 준비는 블록 세트 18판이 필요합니다".into(),
+            );
         }
     }
     if let Some(permissions) = &client.process_permissions {
-        validate_module_version("client", 3, definition, details, "/client/process_permissions");
-        validate_module_version("process", 1, definition, details, "/client/process_permissions");
+        validate_module_version(
+            "client",
+            3,
+            definition,
+            details,
+            "/client/process_permissions",
+        );
+        validate_module_version(
+            "process",
+            1,
+            definition,
+            details,
+            "/client/process_permissions",
+        );
         if definition.requires.blocks < 17 {
             details.push("/client/process_permissions: 블록 세트 17판이 필요합니다".into());
         }
         for permission in permissions {
-            validate_permission_module(permission, "process", definition, details, "/client/process_permissions");
+            validate_permission_module(
+                permission,
+                "process",
+                definition,
+                details,
+                "/client/process_permissions",
+            );
         }
     }
     if client.http_permissions.is_some()
@@ -2584,33 +2655,31 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             )),
         },
         Block::Chat {
-            permission,
-            root,
-            agents,
-            selected,
-            on_select,
             client: chat_client,
             footer,
         } => {
             if let Some(chat_client) = chat_client {
-                if permission.is_some()
-                    || root.is_some()
-                    || agents.is_some()
-                    || selected.is_some()
-                    || on_select.is_some()
-                {
-                    details.push(format!("{at}: chat.client은 제공자 모드와 로컬 에이전트 모드 필드와 함께 쓸 수 없습니다"));
-                }
                 if definition.agent.is_some() {
-                    details.push(format!("{at}: chat.client은 앱의 대화 제공자 설정과 함께 쓸 수 없습니다"));
+                    details.push(format!(
+                        "{at}: chat.client은 앱의 대화 제공자 설정과 함께 쓸 수 없습니다"
+                    ));
                 }
                 validate_module_version("client", 4, definition, details, at);
                 let Some(client) = &definition.client else {
-                    details.push(format!("{at}: chat.client에는 앱 정의의 client가 필요합니다"));
+                    details.push(format!(
+                        "{at}: chat.client에는 앱 정의의 client가 필요합니다"
+                    ));
                     return;
                 };
-                if !client.channels.iter().any(|channel| channel == &chat_client.channel) {
-                    details.push(format!("{at}/client/channel: 선언되지 않은 client 채널입니다: {}", chat_client.channel));
+                if !client
+                    .channels
+                    .iter()
+                    .any(|channel| channel == &chat_client.channel)
+                {
+                    details.push(format!(
+                        "{at}/client/channel: 선언되지 않은 client 채널입니다: {}",
+                        chat_client.channel
+                    ));
                 }
                 for (field, action) in [
                     ("on_send", &chat_client.on_send),
@@ -2622,53 +2691,15 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                     }
                 }
             } else if footer.is_some() {
-                details.push(format!("{at}: chat.footer에는 chat.client 연결이 필요합니다"));
-            } else if !block.is_local_agent_chat() {
+                details.push(format!(
+                    "{at}: chat.footer에는 chat.client 연결이 필요합니다"
+                ));
+            } else {
                 if !definition.requires.modules.contains_key("agent") {
                     details.push(format!(
                         "{at}: chat이 사용하는 agent 모듈을 requires.modules에 선언해야 합니다"
                     ));
                 }
-            } else if let (
-                Some(permission),
-                Some(root),
-                Some(agents),
-                Some(selected),
-                Some(on_select),
-            ) = (permission, root, agents, selected, on_select)
-            {
-                validate_module_version("local_agent", 1, definition, details, at);
-                validate_permission_module(permission, "local_agent", definition, details, at);
-                validate_permission_module(&root.permission, "files", definition, details, at);
-                match find_permission(definition, &root.permission) {
-                    Some(PermissionDecl::Files {
-                        access: FileAccess::Readwrite,
-                        scope: FilesScope::Folder,
-                        ..
-                    }) => {}
-                    Some(PermissionDecl::Files { .. }) => details.push(format!(
-                        "{at}: chat의 root 권한은 folder 범위의 readwrite여야 합니다"
-                    )),
-                    Some(_) => details.push(format!("{at}: chat의 root는 files 권한이어야 합니다")),
-                    None => {}
-                }
-                if selected.state != on_select.set_state {
-                    details.push(format!(
-                        "{at}: chat의 selected와 on_select는 같은 상태 키를 써야 합니다"
-                    ));
-                }
-                validate_state_key(&selected.state, definition, details, at);
-                validate_state_key(&on_select.set_state, definition, details, at);
-                if matches!(agents, crate::data::Binding::Client(_)) {
-                    details.push(format!("{at}/agents: 코어에서 실행하는 에이전트 설정에는 클라이언트 출력을 쓸 수 없습니다"));
-                }
-                if let crate::data::Binding::Literal(value) = agents {
-                    if let Err(error) = local_agent::validate_agent_specs(value) {
-                        details.push(format!("{at}/agents: {error}"));
-                    }
-                }
-            } else {
-                details.push(format!("{at}: 로컬 에이전트 chat 블록은 permission, root, agents, selected, on_select를 모두 선언해야 합니다"));
             }
         }
         Block::WebView {
@@ -2747,7 +2778,8 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 details.push(format!("{at}: tabs에는 탭이 하나 이상 필요합니다"));
             }
             for tab in tabs {
-                if matches!(&tab.label, Binding::Literal(Value::String(label)) if label.trim().is_empty()) {
+                if matches!(&tab.label, Binding::Literal(Value::String(label)) if label.trim().is_empty())
+                {
                     details.push(format!("{at}: 탭 이름이 비어 있습니다"));
                 }
             }
@@ -2889,13 +2921,20 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 ));
             }
         }
-        Block::Toggle { value, disabled, .. } => {
+        Block::Toggle {
+            value, disabled, ..
+        } => {
             validate_control_binding(value, definition, details, at);
             if let Some(disabled) = disabled {
                 validate_control_binding(disabled, definition, details, at);
             }
         }
-        Block::Notice { message, error_id, actions, .. } => {
+        Block::Notice {
+            message,
+            error_id,
+            actions,
+            ..
+        } => {
             validate_ui_binding(message, definition, details, at);
             if let Some(error_id) = error_id {
                 validate_ui_binding(error_id, definition, details, at);
@@ -2903,7 +2942,12 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             for (index, action) in actions.iter().enumerate() {
                 let action_at = format!("{at}/actions/{index}");
                 validate_ui_binding(&action.label, definition, details, &action_at);
-                validate_actions(&action.on_click, definition, details, &format!("{action_at}/on_click"));
+                validate_actions(
+                    &action.on_click,
+                    definition,
+                    details,
+                    &format!("{action_at}/on_click"),
+                );
             }
         }
         Block::Button {

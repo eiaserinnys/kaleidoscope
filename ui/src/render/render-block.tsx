@@ -17,8 +17,6 @@ import type { DataTreeBlockData } from "../blocks/data-tree";
 import { FeedBlock } from "../blocks/data-feed";
 import { AgentChatBlock } from "../blocks/agent-chat";
 import type { AgentChatBlockData } from "../blocks/agent-chat";
-import { AgentSessionBlock } from "../blocks/agent-session";
-import type { AgentSessionBlockData } from "../blocks/agent-session";
 import { ClientChatBlock, type ClientChatBlockData } from "../blocks/client-chat";
 import { WebViewBlock } from "../blocks/web-view";
 import { ExplorerBlock } from "../blocks/explorer";
@@ -87,9 +85,7 @@ function BlockContent({ block: normalized, context, pointer }: { block: Block; c
     case "chat":
       return normalized.client
         ? <ClientChatBlock block={normalized as ClientChatBlockData} context={context} pointer={pointer} />
-        : normalized.permission !== undefined || normalized.root !== undefined || normalized.agents !== undefined || normalized.selected !== undefined || normalized.on_select !== undefined
-          ? <AgentSessionBlock block={normalized as AgentSessionBlockData} context={context} pointer={pointer} />
-          : <AgentChatBlock block={normalized as AgentChatBlockData} context={context} />;
+        : <AgentChatBlock block={normalized as AgentChatBlockData} context={context} />;
     case "stack": return <StackBlock block={normalized} context={context} pointer={pointer} />;
     case "tabs": return <TabsBlock block={normalized} context={context} pointer={pointer} />;
     case "toolbar": return <ToolbarBlock block={normalized} context={context} pointer={pointer} />;
@@ -145,10 +141,6 @@ export function normalizeBlock(block: Block): Block {
   if (type === "code_editor") return { type: "code", file: raw.file as never, language: raw.language as never, wrap: raw.wrap as never } as Block;
   if (type === "code_view") return { type: "code", value: raw.value as never, file: raw.file as never, language: raw.language as never, read_only: true, follow: raw.follow as never, wrap: raw.wrap as never } as Block;
   if (type === "agent_chat") return { type: "chat" };
-  if (type === "agent_session") return {
-    type: "chat", permission: raw.permission as string, root: raw.root as never, agents: raw.agents as never,
-    selected: raw.selected as never, on_select: raw.on_select as never,
-  } as Block;
   if (type === "keypad") return { type: "button_grid", columns: raw.columns as number, buttons: raw.buttons as never, on_press: raw.on_press as never };
   return block;
 }

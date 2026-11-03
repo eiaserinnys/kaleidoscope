@@ -2,8 +2,8 @@
 mod app_commands;
 mod app_storage;
 mod attachment;
-mod client_services;
 pub mod builtin;
+mod client_services;
 mod connections;
 mod conversation;
 mod conversation_context;
@@ -204,7 +204,6 @@ pub(crate) struct Inner {
     pub(crate) conversation_reconcile: conversation_reconcile::Runtime,
     pub(crate) layout_signal: LayoutSignal,
     pub(crate) data_runtimes: data_runtime::DataRuntimes,
-    pub(crate) local_agents: local_agent::LocalAgents,
     pub(crate) processes: process_host::Processes,
     pub(crate) client_services: client_services::ClientServices,
     pub(crate) conversation_streams: conversation_stream::Streams,
@@ -257,7 +256,6 @@ impl Drop for Core {
     fn drop(&mut self) {
         if self.owner {
             process_host::shutdown(&self.inner);
-            local_agent::shutdown(&self.inner);
             if let Err(err) = self.flush_storage() {
                 eprintln!("상태를 저장할 수 없습니다: {}", err.message);
             }
@@ -306,6 +304,15 @@ impl Core {
             };
             mapped.and_details(vec![error.to_string()])
         })?;
+        match fs::remove_dir_all(config.data_dir.join("local-agent")) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(errors::DESK_LEGACY_AGENT_DATA_DIRECTORY_REMOVE_FAILED(
+                    error.to_string(),
+                ));
+            }
+        }
 
         let link_file = server_switch::startup_link(&config)?;
         let link = link_file.as_ref().map_or(LinkStatus::Unlinked {}, |file| {
@@ -399,7 +406,6 @@ impl Core {
                 changed: Condvar::new(),
             },
             data_runtimes: data_runtime::DataRuntimes::default(),
-            local_agents: local_agent::LocalAgents::default(),
             processes: process_host::Processes::with_windows(process_windows),
             client_services: client_services::ClientServices::default(),
             conversation_streams: conversation_stream::Streams::default(),
@@ -412,7 +418,6 @@ impl Core {
         });
         process_host::initialize_window_storage_archive(&inner);
         storage::start_flusher(&inner);
-        local_agent::start_events(&inner);
         {
             let state = inner.state.lock().unwrap();
             storage::save_state(&inner.data_dir, &state.shared, &state.device)?;
@@ -526,11 +531,27 @@ impl Core {
                 Ok(result)
             }
             "process.write" => {
-                let size = body.get(..4).and_then(|head| <[u8; 4]>::try_from(head).ok()).map(u32::from_be_bytes).ok_or_else(errors::PROCESS_WRITE_HEADER_MISSING)? as usize;
-                let checkpoint = body.get(4..4 + size).ok_or_else(errors::PROCESS_WRITE_CHECKPOINT_TRUNCATED)?;
-                let checkpoint = serde_json::from_slice(checkpoint).map_err(|_| errors::PROCESS_WRITE_CHECKPOINT_JSON_INVALID())?;
+                let size = body
+                    .get(..4)
+                    .and_then(|head| <[u8; 4]>::try_from(head).ok())
+                    .map(u32::from_be_bytes)
+                    .ok_or_else(errors::PROCESS_WRITE_HEADER_MISSING)?
+                    as usize;
+                let checkpoint = body
+                    .get(4..4 + size)
+                    .ok_or_else(errors::PROCESS_WRITE_CHECKPOINT_TRUNCATED)?;
+                let checkpoint = serde_json::from_slice(checkpoint)
+                    .map_err(|_| errors::PROCESS_WRITE_CHECKPOINT_JSON_INVALID())?;
                 let bytes = body[4 + size..].to_vec();
-                process_host::handle(&self.inner, CoreRequest::ProcessWrite { window_id: window.into(), handle: handle.into(), bytes, checkpoint })?;
+                process_host::handle(
+                    &self.inner,
+                    CoreRequest::ProcessWrite {
+                        window_id: window.into(),
+                        handle: handle.into(),
+                        bytes,
+                        checkpoint,
+                    },
+                )?;
                 Ok(Vec::new())
             }
             _ => Err(errors::DESK_CLIENT_BINARY_OPERATION_UNKNOWN(operation)),
@@ -630,19 +651,6 @@ impl Core {
             | CoreRequest::ProcessCloseInput { .. }
             | CoreRequest::ProcessStop { .. }
             | CoreRequest::ProcessFileUri { .. }) => process_host::handle(&self.inner, request),
-            request @ (CoreRequest::LocalAgentAttach { .. }
-            | CoreRequest::LocalAgentDetach { .. }
-            | CoreRequest::LocalAgentAllow { .. }
-            | CoreRequest::LocalAgentRetry { .. }
-            | CoreRequest::LocalAgentAuthenticate { .. }
-            | CoreRequest::LocalAgentConfigure { .. }
-            | CoreRequest::LocalAgentSend { .. }
-            | CoreRequest::LocalAgentCancel { .. }
-            | CoreRequest::LocalAgentPermission { .. }
-            | CoreRequest::LocalAgentAttachment { .. }
-            | CoreRequest::LocalAgentAttachmentOpen { .. }) => {
-                local_agent::handle(&self.inner, request)
-            }
             CoreRequest::FilesList {
                 window_id,
                 permission,
@@ -801,7 +809,9 @@ impl Core {
                 })?;
                 Ok(CoreReply::ExternalOpen {})
             }
-            request @ (CoreRequest::HostInstructions { .. } | CoreRequest::ContextPrepare { .. } | CoreRequest::ContextCommit { .. }) => client_services::handle(&self.inner, request),
+            request @ (CoreRequest::HostInstructions { .. }
+            | CoreRequest::ContextPrepare { .. }
+            | CoreRequest::ContextCommit { .. }) => client_services::handle(&self.inner, request),
             CoreRequest::ShareSet { window_id, on } => share::set(&self.inner, &window_id, on),
             CoreRequest::ShareView { window_id, view } => {
                 share::view(&self.inner, &window_id, view)
@@ -854,7 +864,6 @@ impl Core {
     pub fn shutdown(&self) {
         client_files::release_all(&self.inner);
         process_host::shutdown(&self.inner);
-        local_agent::shutdown(&self.inner);
         if let Err(err) = self.flush_storage() {
             eprintln!("상태를 저장할 수 없습니다: {}", err.message);
         }
@@ -1145,7 +1154,6 @@ impl Inner {
         self.state_events.deliver(event, |event| self.notify(event));
         data_runtime::state_changed(self);
         conversation_stream::state_changed(self);
-        local_agent::state_changed(self);
         process_host::state_changed(self);
         client_services::state_changed(self);
     }
@@ -1168,7 +1176,5 @@ pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
         update: state.update.clone(),
     }
 }
-
-mod local_agent;
 
 mod server_switch;

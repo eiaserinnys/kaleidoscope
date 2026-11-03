@@ -1,5 +1,5 @@
 use kaleidoscope_contract::{app_definition_schema, data, validate::parse_app_definition};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 fn definition(blocks: u64, chat: Value, client: Value) -> Value {
     json!({
@@ -57,11 +57,9 @@ fn client_chat_is_block_set_18_and_client_module_4_and_footer_is_a_client_bound_
     .expect("valid client chat");
 
     let bindings = data::all_ui_bindings(&app);
-    assert!(
-        bindings
-            .iter()
-            .any(|(pointer, _)| pointer == "/ui/footer/value")
-    );
+    assert!(bindings
+        .iter()
+        .any(|(pointer, _)| pointer == "/ui/footer/value"));
 
     let old_block_set = parse_app_definition(
         &definition(
@@ -153,8 +151,9 @@ fn client_chat_requires_declared_channel_and_actions_and_rejects_other_modes() {
         .to_string(),
     )
     .expect_err("client and local agent modes cannot mix");
-    assert!(
-        error.details.iter().any(|detail| detail.contains("client")),
+    assert_eq!(
+        error.id.as_deref(),
+        Some("APP_DEFINITION_REMOVED_CHAT_LOCAL_FIELDS"),
         "{error:?}"
     );
 }

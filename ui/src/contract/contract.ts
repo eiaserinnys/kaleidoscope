@@ -20,22 +20,10 @@ export type AdditionalProperties = boolean | StorageValueSchema;
 
 export type AdoptThreadRequest = { session_id: string, first_input_is_initial_instruction: boolean, };
 
-export type AgentActivity = { busy: boolean, tool: string | null, };
-
 /**
  * TypeScript에서 대화 설정 바인딩의 창 상태 형태를 제외한다. 실행 시 공통 검사기가 식도 검사한다.
  */
 export type AgentBinding = ExprRef | string | number | boolean | null | Array<JsonValue> | ({ [key: string]: JsonValue } & { state?: never; expr?: never });
-
-export type AgentChoice = { id: string, name: string, };
-
-export type AgentControl = { id: string, label: string, category: string | null, value: AgentControlValue, kind: AgentControlKind, };
-
-export type AgentControlKind = { "kind": "select", options: Array<ControlChoiceGroup>, } | { "kind": "boolean" };
-
-export type AgentControlValue = string | boolean;
-
-export type AgentFailure = { id?: string, code: ErrorCode, message: string, command: string | null, };
 
 /**
  * 앱의 대화 제공자. 바인딩은 리터럴 또는 `$storage`, `$storage_meta`만 읽는다.
@@ -50,8 +38,6 @@ base_path: string, namespace: AgentBinding, profile: AgentBinding, collection: A
  * 현재 작업에 thread id를 저장하는 JSON 항목 id.
  */
 thread_entry: string, };
-
-export type AgentSpec = { id: string, name: string, command: string, args: Array<string>, env: { [key in string]: string }, auth_methods?: Array<string>, };
 
 /**
  * 레지스트리의 앱 항목. 버전이 쌓이고 `current_version`이 지금 쓰는 버전을 가리킨다.
@@ -86,7 +72,7 @@ current_version: number, created_at: string, updated_at: string, };
  *    - 정의에 직접 적은 경로(문자열 `path`)는 [`FileRef`]의 경로 규칙을 지킨다. 어기면 고른 폴더 밖을
  *      요구하는 정의로 보고 거부한다.
  *    - `split`의 `children`은 둘 이상이고, `sizes`가 있으면 개수가 같고 모두 0보다 크다.
- *    - `chat`의 제공자 모드를 쓰면 `requires.modules`에 `agent`가 있다. 로컬 세션 모드는 `local_agent`와 `files` 권한을 쓴다.
+ *    - `chat`은 `requires.modules`에 `agent`를 선언한다.
  *    - 쓴 블록마다 처음 생긴 판([`Block::introduced_in`]) 이상을 `requires.blocks`에 적는다.
  *      `opens`를 쓰면 `requires.blocks`가 3 이상이다.
  *    - `web_view`는 정의에 하나까지이고, 쓰면 `requires.modules`에 `web`이 있다. 정의에 직접 적은 주소는
@@ -234,8 +220,6 @@ export type AssetRecord = { meta: AssetMeta, };
 
 export type AssetUpload = { id: string, version: number, format: AssetFormat, sha256: string, source: string, license: string, data_base64: string, };
 
-export type AuthChoice = { id: string, name: string, description: string, };
-
 /**
  * 배지. 글만 쓰거나(`"진행 중"`) 색을 붙인다(`{ "text": "진행 중", "color": "#315da8" }`).
  * 색은 `#rgb`나 `#rrggbb`이고, 쉘이 글자 대비를 맞춘다.
@@ -292,7 +276,7 @@ item_menu?: Array<ItemMenuEntry>, } | { "type": "folder", root: FolderRoot,
 /**
  * (15판) 거짓이면 폴더 머리 줄을 숨긴다.
  */
-header?: boolean, extensions?: Array<string>, selected?: StateRef, on_select?: Actions, read_only?: boolean, } | { "type": "markdown", file?: FileRef, document?: DocumentRef, value?: Binding, read_only?: boolean, } | { "type": "html_view", document?: DocumentRef, file?: FileRef, value?: Binding, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "chat", permission?: string, root?: FolderRef, agents?: Binding, selected?: StateRef, on_select?: SetState, 
+header?: boolean, extensions?: Array<string>, selected?: StateRef, on_select?: Actions, read_only?: boolean, } | { "type": "markdown", file?: FileRef, document?: DocumentRef, value?: Binding, read_only?: boolean, } | { "type": "html_view", document?: DocumentRef, file?: FileRef, value?: Binding, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "chat", 
 /**
  * (블록 세트 18판) 대화 기록과 입력을 클라이언트 채널 및 동작에 연결한다.
  */
@@ -480,10 +464,6 @@ export type ContextAttachments = { count: number, bytes: number, };
 
 export type ContextImage = { name: string, mime: string, bytes: Array<number>, };
 
-export type ControlChoice = { id: string, name: string, };
-
-export type ControlChoiceGroup = { name: string | null, options: Array<ControlChoice>, };
-
 /**
  * 기기에 저장된 앱 설정의 제공자 적용 상태.
  */
@@ -555,7 +535,7 @@ details: Array<string>, };
 /**
  * 코어가 화면에 보내는 이벤트. `event`로 가른다.
  */
-export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "files.changed", root: string, changes: Array<FileChange>, } | { "event": "conversation.apply_status", app_id: string, status: ConversationApplyStatus, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, error: CoreError, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, failed: boolean, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, } | { "event": "process.permission", window_id: string, request_id: string, spec: ProcessSpec, } | { "event": "process.ready", window_id: string, handle: string, } | { "event": "process.services_changed", window_id: string, handle: string, } | { "event": "local_agent.update", window_id: string, generation: string, update: LocalAgentUpdate, };
+export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } | { "event": "files.changed", root: string, changes: Array<FileChange>, } | { "event": "conversation.apply_status", app_id: string, status: ConversationApplyStatus, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, error: CoreError, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, failed: boolean, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, } | { "event": "process.permission", window_id: string, request_id: string, spec: ProcessSpec, } | { "event": "process.ready", window_id: string, handle: string, } | { "event": "process.services_changed", window_id: string, handle: string, };
 
 /**
  * 코어의 응답. `op`는 명령과 같다.
@@ -564,12 +544,12 @@ export type CoreReply = { "op": "client.http_read", bytes: Array<number>, mime: 
 /**
  * `data:image/png;base64,...`. 찍지 못하면 null.
  */
-image: string | null, } | { "op": "web.detach", } | { "op": "conversation.get", thread: ConversationThread | null, items: Array<ConversationItem>, cursor: string, next_before?: string, models: Array<ConversationModel>, profiles: Array<ConversationProfile>, start: ConversationStart, } | { "op": "conversation.history", items: Array<ConversationItem>, next_before?: string, } | { "op": "conversation.create", thread: ConversationThread, } | { "op": "conversation.switch", thread: ConversationThread, notices: Array<string>, } | { "op": "conversation.send", } | { "op": "conversation.attachment", name: string, mime: string, data_base64: string, } | { "op": "conversation.attachment_open", } | { "op": "process.start", result: ProcessStartResult, } | { "op": "host.instructions", text: string, hash: string, } | { "op": "context.prepare", text: string | null, images: Array<ContextImage>, ticket: string, } | { "op": "context.commit", } | { "op": "process.respond_permission", } | { "op": "process.attach", process: ProcessSnapshot | null, } | { "op": "process.read", bytes: Array<number>, next: number, stderr_tail: Array<number>, exit: ProcessExit | null, } | { "op": "process.ack", } | { "op": "process.write", } | { "op": "process.close_input", } | { "op": "process.stop", } | { "op": "process.file_uri", uri: string, } | { "op": "local_agent.attach", snapshot: LocalAgentSnapshot, } | { "op": "local_agent.detach", } | { "op": "local_agent.allow", } | { "op": "local_agent.retry", } | { "op": "local_agent.authenticate", } | { "op": "local_agent.configure", } | { "op": "local_agent.send", request_id: string, queued: boolean, } | { "op": "local_agent.cancel", } | { "op": "local_agent.permission", } | { "op": "local_agent.attachment", mime: string, data_base64: string, } | { "op": "local_agent.attachment_open", } | { "op": "storage.get", result: StorageReadReply, } | { "op": "storage.list", result: CollectionListReply, } | { "op": "storage.write", revision: string, } | { "op": "storage.reset", revision: string | null, } | { "op": "storage.move", revision: string, } | { "op": "data.attach", view: DataView, } | { "op": "data.dormant", } | { "op": "data.detach", } | { "op": "data.act", } | { "op": "data.refresh", } | { "op": "data.media", media: MediaData, } | { "op": "connection.login", } | { "op": "share.set", } | { "op": "share.view", } | { "op": "share.freeze", frozen: boolean, } | { "op": "share.capture", captured: boolean, } | { "op": "share.unfreeze", } | { "op": "update.restart", };
+image: string | null, } | { "op": "web.detach", } | { "op": "conversation.get", thread: ConversationThread | null, items: Array<ConversationItem>, cursor: string, next_before?: string, models: Array<ConversationModel>, profiles: Array<ConversationProfile>, start: ConversationStart, } | { "op": "conversation.history", items: Array<ConversationItem>, next_before?: string, } | { "op": "conversation.create", thread: ConversationThread, } | { "op": "conversation.switch", thread: ConversationThread, notices: Array<string>, } | { "op": "conversation.send", } | { "op": "conversation.attachment", name: string, mime: string, data_base64: string, } | { "op": "conversation.attachment_open", } | { "op": "process.start", result: ProcessStartResult, } | { "op": "host.instructions", text: string, hash: string, } | { "op": "context.prepare", text: string | null, images: Array<ContextImage>, ticket: string, } | { "op": "context.commit", } | { "op": "process.respond_permission", } | { "op": "process.attach", process: ProcessSnapshot | null, } | { "op": "process.read", bytes: Array<number>, next: number, stderr_tail: Array<number>, exit: ProcessExit | null, } | { "op": "process.ack", } | { "op": "process.write", } | { "op": "process.close_input", } | { "op": "process.stop", } | { "op": "process.file_uri", uri: string, } | { "op": "storage.get", result: StorageReadReply, } | { "op": "storage.list", result: CollectionListReply, } | { "op": "storage.write", revision: string, } | { "op": "storage.reset", revision: string | null, } | { "op": "storage.move", revision: string, } | { "op": "data.attach", view: DataView, } | { "op": "data.dormant", } | { "op": "data.detach", } | { "op": "data.act", } | { "op": "data.refresh", } | { "op": "data.media", media: MediaData, } | { "op": "connection.login", } | { "op": "share.set", } | { "op": "share.view", } | { "op": "share.freeze", frozen: boolean, } | { "op": "share.capture", captured: boolean, } | { "op": "share.unfreeze", } | { "op": "update.restart", };
 
 /**
  * 화면이 코어에 보내는 명령. `op`로 가른다. 응답은 같은 `op`의 [`CoreReply`]다.
  */
-export type CoreRequest = { "op": "state.get", } | { "op": "conversation.apply_status", window_id: string, } | { "op": "conversation.apply_retry", window_id: string, } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.minimize", window_id: string, } | { "op": "window.maximize", window_id: string, } | { "op": "window.restore", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", server_url?: string, } | { "op": "link.use_local", } | { "op": "link.sync_local_to_remote", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "client.http_read", window_id: string, permission: string, path: string, query: { [key in string]: JsonValue }, } | { "op": "client.blob_put", window_id: string, key: string, file_id?: string, bytes?: Array<number>, } | { "op": "client.blob_open", window_id: string, key: string, } | { "op": "client.blob_remove", window_id: string, key: string, } | { "op": "client.blob_list", window_id: string, prefix: string, } | { "op": "files.save_prompt", window_id: string, suggested_name: string, mime: string, } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.pick", window_id: string, accept: Array<FileAccept>, multiple: boolean, } | { "op": "export.begin", window_id: string, suggested_name: string, mime: string, } | { "op": "export.truncate", window_id: string, sink_id: string, size: number, } | { "op": "export.close", window_id: string, sink_id: string, } | { "op": "export.abort", window_id: string, sink_id: string, } | { "op": "client.release", window_id: string, } | { "op": "client.command", window_id: string, name: string, event: JsonValue, } | { "op": "files.allow_pc", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "files.mkdir", window_id: string, permission: string, parent: string, name: string, } | { "op": "files.rename", window_id: string, permission: string, path: string, name: string, } | { "op": "files.move", window_id: string, permission: string, paths: Array<string>, destination: string, } | { "op": "files.copy", window_id: string, permission: string, paths: Array<string>, destination: string, } | { "op": "files.remove", window_id: string, permission: string, paths: Array<string>, permanent: boolean, } | { "op": "files.reveal", window_id: string, permission: string, path: string, } | { "op": "files.path", window_id: string, permission: string, path: string, } | { "op": "files.open", window_id: string, permission: string, path: string, app_id: string, rect?: Rect, } | { "op": "web.attach", window_id: string, url: string, } | { "op": "web.place", window_id: string, bounds: Rect | null, } | { "op": "web.navigate", window_id: string, url: string, } | { "op": "external.open", window_id?: string, url: string, } | { "op": "web.history", window_id: string, action: WebHistoryAction, } | { "op": "web.capture", window_id: string, } | { "op": "web.detach", window_id: string, } | { "op": "conversation.get", window_id: string, profile?: string, } | { "op": "conversation.history", window_id: string, before: string, } | { "op": "conversation.create", window_id: string, model: string, profile?: string, } | { "op": "conversation.switch", window_id: string, profile?: string, model?: string, } | { "op": "conversation.send", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "op": "conversation.attachment", window_id: string, item_id: string, attachment_id: string, } | { "op": "conversation.attachment_open", window_id: string, item_id: string, attachment_id: string, } | { "op": "storage.get", window_id: string, entry: string, doc?: string, } | { "op": "storage.list", window_id: string, entry: string, } | { "op": "storage.write", window_id: string, entry: string, doc?: string, content: JsonValue, expected_revision?: ExpectedRevision, } | { "op": "storage.reset", window_id: string, entry: string, doc?: string, expected_revision?: ExpectedRevision, } | { "op": "storage.move", window_id: string, entry: string, from: string, to: string, expected_revision: string, } | { "op": "data.attach", window_id: string, dormant?: Array<string>, } | { "op": "data.dormant", window_id: string, dormant: Array<string>, } | { "op": "data.detach", window_id: string, } | { "op": "data.act", window_id: string, pointer: string, event?: JsonValue, item?: JsonValue, modifiers?: EventModifiers, } | { "op": "data.refresh", window_id: string, sources?: Array<string>, } | { "op": "data.media", window_id: string, media: MediaRef, max_px?: number, } | { "op": "connection.login", window_id: string, permission: string, } | { "op": "share.set", window_id: string, on: boolean, } | { "op": "share.view", window_id: string, view: VisibleView, } | { "op": "share.freeze", } | { "op": "share.capture", window_id: string, } | { "op": "share.unfreeze", } | { "op": "host.instructions", window_id: string, kind: string, } | { "op": "context.prepare", window_id: string, request_id: string, channel: string, attachments: ContextAttachments, } | { "op": "context.commit", window_id: string, ticket: string, } | { "op": "process.start", window_id: string, key: string, permission: string, spec: ProcessSpec, cwd_permission: string, services: Array<string>, } | { "op": "process.respond_permission", window_id: string, request_id: string, allow: boolean, } | { "op": "process.attach", window_id: string, key: string, } | { "op": "process.read", window_id: string, handle: string, after: number, max_bytes: number, } | { "op": "process.ack", window_id: string, handle: string, after: number, checkpoint: JsonValue | null, } | { "op": "process.write", window_id: string, handle: string, bytes: Array<number>, checkpoint: JsonValue | null, } | { "op": "process.close_input", window_id: string, handle: string, } | { "op": "process.stop", window_id: string, handle: string, } | { "op": "process.file_uri", window_id: string, blob_key: string, } | { "op": "local_agent.attach", window_id: string, } | { "op": "local_agent.detach", window_id: string, } | { "op": "local_agent.allow", window_id: string, spec_hash: string, } | { "op": "local_agent.retry", window_id: string, generation: string, } | { "op": "local_agent.authenticate", window_id: string, generation: string, method_id: string, } | { "op": "local_agent.configure", window_id: string, generation: string, control_id: string, value: AgentControlValue, } | { "op": "local_agent.send", window_id: string, generation: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "op": "local_agent.cancel", window_id: string, generation: string, } | { "op": "local_agent.permission", window_id: string, generation: string, request_id: string, option_id: string, } | { "op": "local_agent.attachment", window_id: string, item_id: string, attachment_id: string, } | { "op": "local_agent.attachment_open", window_id: string, item_id: string, attachment_id: string, } | { "op": "update.restart", } | { "op": "profiler.report", inputs: Array<UiInputSample>, frames: Array<UiFrameSample>, };
+export type CoreRequest = { "op": "state.get", } | { "op": "conversation.apply_status", window_id: string, } | { "op": "conversation.apply_retry", window_id: string, } | { "op": "workspace.create", name: string, } | { "op": "workspace.rename", workspace_id: string, name: string, } | { "op": "workspace.delete", workspace_id: string, } | { "op": "workspace.activate", workspace_id: string, } | { "op": "desktop.create", workspace_id: string, name: string, } | { "op": "desktop.rename", desktop_id: string, name: string, } | { "op": "desktop.delete", desktop_id: string, } | { "op": "desktop.activate", desktop_id: string, } | { "op": "window.open", desktop_id: string, app_id: string, rect?: Rect, } | { "op": "window.set_rect", window_id: string, rect: Rect, } | { "op": "window.raise", window_id: string, } | { "op": "window.minimize", window_id: string, } | { "op": "window.maximize", window_id: string, } | { "op": "window.restore", window_id: string, } | { "op": "window.close", window_id: string, } | { "op": "window.set_state", window_id: string, state: { [key in string]: JsonValue }, } | { "op": "app.import", definition_json: string, } | { "op": "link.start", server_url?: string, } | { "op": "link.use_local", } | { "op": "link.sync_local_to_remote", } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "client.http_read", window_id: string, permission: string, path: string, query: { [key in string]: JsonValue }, } | { "op": "client.blob_put", window_id: string, key: string, file_id?: string, bytes?: Array<number>, } | { "op": "client.blob_open", window_id: string, key: string, } | { "op": "client.blob_remove", window_id: string, key: string, } | { "op": "client.blob_list", window_id: string, prefix: string, } | { "op": "files.save_prompt", window_id: string, suggested_name: string, mime: string, } | { "op": "files.pick_folder", window_id: string, permission: string, } | { "op": "files.pick", window_id: string, accept: Array<FileAccept>, multiple: boolean, } | { "op": "export.begin", window_id: string, suggested_name: string, mime: string, } | { "op": "export.truncate", window_id: string, sink_id: string, size: number, } | { "op": "export.close", window_id: string, sink_id: string, } | { "op": "export.abort", window_id: string, sink_id: string, } | { "op": "client.release", window_id: string, } | { "op": "client.command", window_id: string, name: string, event: JsonValue, } | { "op": "files.allow_pc", window_id: string, permission: string, } | { "op": "files.list", window_id: string, permission: string, dir: string, } | { "op": "files.read", window_id: string, permission: string, path: string, } | { "op": "files.write", window_id: string, permission: string, path: string, text: string, expected_revision?: string, } | { "op": "files.mkdir", window_id: string, permission: string, parent: string, name: string, } | { "op": "files.rename", window_id: string, permission: string, path: string, name: string, } | { "op": "files.move", window_id: string, permission: string, paths: Array<string>, destination: string, } | { "op": "files.copy", window_id: string, permission: string, paths: Array<string>, destination: string, } | { "op": "files.remove", window_id: string, permission: string, paths: Array<string>, permanent: boolean, } | { "op": "files.reveal", window_id: string, permission: string, path: string, } | { "op": "files.path", window_id: string, permission: string, path: string, } | { "op": "files.open", window_id: string, permission: string, path: string, app_id: string, rect?: Rect, } | { "op": "web.attach", window_id: string, url: string, } | { "op": "web.place", window_id: string, bounds: Rect | null, } | { "op": "web.navigate", window_id: string, url: string, } | { "op": "external.open", window_id?: string, url: string, } | { "op": "web.history", window_id: string, action: WebHistoryAction, } | { "op": "web.capture", window_id: string, } | { "op": "web.detach", window_id: string, } | { "op": "conversation.get", window_id: string, profile?: string, } | { "op": "conversation.history", window_id: string, before: string, } | { "op": "conversation.create", window_id: string, model: string, profile?: string, } | { "op": "conversation.switch", window_id: string, profile?: string, model?: string, } | { "op": "conversation.send", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, } | { "op": "conversation.attachment", window_id: string, item_id: string, attachment_id: string, } | { "op": "conversation.attachment_open", window_id: string, item_id: string, attachment_id: string, } | { "op": "storage.get", window_id: string, entry: string, doc?: string, } | { "op": "storage.list", window_id: string, entry: string, } | { "op": "storage.write", window_id: string, entry: string, doc?: string, content: JsonValue, expected_revision?: ExpectedRevision, } | { "op": "storage.reset", window_id: string, entry: string, doc?: string, expected_revision?: ExpectedRevision, } | { "op": "storage.move", window_id: string, entry: string, from: string, to: string, expected_revision: string, } | { "op": "data.attach", window_id: string, dormant?: Array<string>, } | { "op": "data.dormant", window_id: string, dormant: Array<string>, } | { "op": "data.detach", window_id: string, } | { "op": "data.act", window_id: string, pointer: string, event?: JsonValue, item?: JsonValue, modifiers?: EventModifiers, } | { "op": "data.refresh", window_id: string, sources?: Array<string>, } | { "op": "data.media", window_id: string, media: MediaRef, max_px?: number, } | { "op": "connection.login", window_id: string, permission: string, } | { "op": "share.set", window_id: string, on: boolean, } | { "op": "share.view", window_id: string, view: VisibleView, } | { "op": "share.freeze", } | { "op": "share.capture", window_id: string, } | { "op": "share.unfreeze", } | { "op": "host.instructions", window_id: string, kind: string, } | { "op": "context.prepare", window_id: string, request_id: string, channel: string, attachments: ContextAttachments, } | { "op": "context.commit", window_id: string, ticket: string, } | { "op": "process.start", window_id: string, key: string, permission: string, spec: ProcessSpec, cwd_permission: string, services: Array<string>, } | { "op": "process.respond_permission", window_id: string, request_id: string, allow: boolean, } | { "op": "process.attach", window_id: string, key: string, } | { "op": "process.read", window_id: string, handle: string, after: number, max_bytes: number, } | { "op": "process.ack", window_id: string, handle: string, after: number, checkpoint: JsonValue | null, } | { "op": "process.write", window_id: string, handle: string, bytes: Array<number>, checkpoint: JsonValue | null, } | { "op": "process.close_input", window_id: string, handle: string, } | { "op": "process.stop", window_id: string, handle: string, } | { "op": "process.file_uri", window_id: string, blob_key: string, } | { "op": "update.restart", } | { "op": "profiler.report", inputs: Array<UiInputSample>, frames: Array<UiFrameSample>, };
 
 /**
  * 이미지에서 보일 부분. 원본 가로와 세로에 대한 비율(0~1)이고 `x`, `y`는 왼쪽 위다.
@@ -622,11 +602,7 @@ active_desktop_ids: { [key in string]: string }, grants: Array<Grant>,
  * (계약 14판) 이 기기에서 `scope: pc` 권한을 허용한 앱과 권한. 앱마다 한 번이고 그 앱의 모든 창이 쓴다.
  * 앱의 새 버전에서도 같은 `id`의 `pc` 권한이 있으면 이어 쓴다.
  */
-pc_access: Array<PcAccess>, 
-/**
- * (계약 20판) 이 기기에서 앱 권한과 실행 명세별로 허용한 로컬 에이전트.
- */
-local_agent_access: Array<LocalAgentAccess>, process_access: Array<ProcessAccess>, };
+pc_access: Array<PcAccess>, process_access: Array<ProcessAccess>, };
 
 export type DeviceStorage = { prefixes: Array<string>, 
 /**
@@ -652,11 +628,9 @@ export type EnsureThreadReply = { thread: ConversationThread, created: boolean, 
 
 export type EnsureThreadRequest = { title: string, selected_model: string, model_order: Array<string>, profile: string, collection: string, initial_instruction: string, instructions: string, };
 
-export type ErrorCode = "invalid_request" | "unauthorized" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "login_required" | "binding_conflict" | "io" | "server" | "unavailable" | "local_agent_failed" | "invalid_name" | "file_busy" | "trash_unavailable";
+export type ErrorCode = "invalid_request" | "unauthorized" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "login_required" | "binding_conflict" | "io" | "server" | "unavailable" | "invalid_name" | "file_busy" | "trash_unavailable";
 
 export type EventModifiers = { shift: boolean, alt: boolean, ctrl: boolean, meta: boolean, };
-
-export type ExecutionConsent = { spec_hash: string, name: string, command: string, args: Array<string>, env: { [key in string]: string }, };
 
 export type ExecutionThreadRequest = { expected_execution_id: string, title: string, selected_model: string, model_order: Array<string>, profile: string, collection: string, initial_instruction: string, instructions: string, };
 
@@ -884,14 +858,6 @@ image?: MediaRef, };
 
 export type ListLayout = "rows" | "grid";
 
-export type LocalAgentAccess = { app_id: string, permission: string, spec_hash: string, granted_at: string, };
-
-export type LocalAgentPhase = "choosing_agent" | "choosing_folder" | "awaiting_permission" | "starting" | "login_required" | "ready" | "responding" | "failed" | "ended";
-
-export type LocalAgentSnapshot = { generation: string, phase: LocalAgentPhase, agents: Array<AgentChoice>, selected: string | null, folder_name: string | null, execution: ExecutionConsent | null, auth_methods: Array<AuthChoice>, controls: Array<AgentControl>, history: Array<ConversationItem>, stream_id: string | null, text: string, activity: AgentActivity, permissions: Array<PermissionPrompt>, queued: Array<QueuedMessage>, failure: AgentFailure | null, };
-
-export type LocalAgentUpdate = { "type": "snapshot", snapshot: LocalAgentSnapshot, } | { "type": "conversation", update: ConversationEvent, } | { "type": "state", phase: LocalAgentPhase, controls: Array<AgentControl>, auth_methods: Array<AuthChoice>, execution: ExecutionConsent | null, failure: AgentFailure | null, } | { "type": "permissions", permissions: Array<PermissionPrompt>, } | { "type": "queue", queued: Array<QueuedMessage>, };
-
 /**
  * `map` 블록의 지점 하나.
  */
@@ -988,8 +954,6 @@ permission: string, granted_at: string, };
  */
 export type PcRootKind = "known" | "volume";
 
-export type PermissionChoice = { id: string, label: string, kind: string, };
-
 /**
  * 앱이 쓰겠다고 선언하는 권한. 실제로 허락하는 것은 기기마다 사용자다.
  */
@@ -1009,9 +973,7 @@ connection: string, access: FileAccess,
 /**
  * 로그인을 구할 때와 오류에 보일 이름(예: "카드 보드").
  */
-label: string, } | { "module": "http", id: string, label: string, base_url: string, paths: Array<string>, } | { "module": "local_agent", id: string, label: string, } | { "module": "process", id: string, label: string, } | { "module": "profiler", id: string, label: string, };
-
-export type PermissionPrompt = { id: string, title: string, options: Array<PermissionChoice>, };
+label: string, } | { "module": "http", id: string, label: string, base_url: string, paths: Array<string>, } | { "module": "process", id: string, label: string, } | { "module": "profiler", id: string, label: string, };
 
 export type PickFilesAction = { pick_files: PickFilesSpec, };
 
@@ -1042,8 +1004,6 @@ export type PropertiesLayout = "rows";
  * 속성 한 줄.
  */
 export type PropertyField = { label: Binding, value: Binding, format?: FieldFormat, };
-
-export type QueuedMessage = { id: string, text: string, attachments: Array<ConversationAttachment>, };
 
 export type ReceiptStatus = "accepted" | "failed" | "pending";
 

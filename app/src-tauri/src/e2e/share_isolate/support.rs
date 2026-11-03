@@ -154,34 +154,22 @@ pub(super) fn surface_code(minimized: bool) -> String {
     code
 }
 
-pub(super) fn agent_definition(out: &Path) -> Value {
-    json!({
-        "id": AGENT_APP_ID,
-        "name": "Share capture agent E2E",
-        "requires": { "blocks": 11, "modules": { "files": 1, "local_agent": 1 } },
-        "permissions": [
-            { "module": "local_agent", "id": "run", "label": "Run test agent" },
-            { "module": "files", "id": "work", "access": "readwrite", "label": "Test folder" }
-        ],
-        "state": { "agent_id": AGENT_ID },
-        "ui": {
-            "type": "chat",
-            "permission": "run",
-            "root": { "permission": "work" },
-            "agents": [{
-                "id": AGENT_ID,
-                "name": "Test agent",
-                "command": "fake-agent",
-                "args": ["share"],
-                "env": {
-                    "TEST_SCENARIO": "share-images",
-                    "KALEIDOSCOPE_E2E_IMAGE_DIR": out.join("share-isolate-images").to_string_lossy()
-                }
-            }],
-            "selected": { "state": "agent_id" },
-            "on_select": { "set_state": "agent_id" }
+pub(super) fn agent_definition(out: &Path, agent_bin: &Path) -> Value {
+    let mut definition: Value = serde_json::from_str(include_str!("../../../../apps/agent.json"))
+        .expect("built-in agent app definition is valid JSON");
+    definition["id"] = json!(AGENT_APP_ID);
+    definition["name"] = json!("Share capture agent E2E");
+    definition["storage"]["entries"][0]["default"] = json!([{
+        "id": AGENT_ID,
+        "name": "Test agent",
+        "command": agent_bin.join("fake-agent.cmd").to_string_lossy(),
+        "args": ["share"],
+        "env": {
+            "TEST_SCENARIO": "share-images",
+            "KALEIDOSCOPE_E2E_IMAGE_DIR": out.join("share-isolate-images").to_string_lossy()
         }
-    })
+    }]);
+    definition
 }
 
 pub(super) fn query_layout(app: &AppHandle) -> Result<Layout, String> {
@@ -251,33 +239,27 @@ pub(super) fn wait_share_view(
     }
 }
 
-pub(super) fn wait_agent_phase(
-    core: &Core,
-    window_id: &str,
-    expected: LocalAgentPhase,
-) -> Result<LocalAgentSnapshot, String> {
+pub(super) fn wait_agent_process(core: &Core, window_id: &str) -> Result<(), String> {
     let deadline = Instant::now() + WINDOW_READY_TIMEOUT;
     loop {
-        let current = match call(
+        let process = match call(
             core,
-            CoreRequest::LocalAgentAttach {
+            CoreRequest::ProcessAttach {
                 window_id: window_id.into(),
+                key: "main".into(),
             },
         )? {
-            CoreReply::LocalAgentAttach { snapshot } => snapshot,
-            reply => return Err(format!("unexpected local_agent.attach response: {reply:?}")),
+            CoreReply::ProcessAttach { process } => process,
+            reply => return Err(format!("unexpected process.attach response: {reply:?}")),
         };
-        if current.phase == expected {
-            return Ok(current);
-        }
-        if expected == LocalAgentPhase::Ready && current.phase == LocalAgentPhase::Failed {
-            return Err(format!("test agent failed to start: {:?}", current.failure));
+        if let Some(process) = process {
+            if let Some(exit) = process.exit {
+                return Err(format!("test agent process exited: {exit:?}"));
+            }
+            return Ok(());
         }
         if Instant::now() >= deadline {
-            return Err(format!(
-                "timed out waiting for local agent {expected:?}: {:?}",
-                current.phase
-            ));
+            return Err("timed out waiting for the test agent process".into());
         }
         thread::sleep(Duration::from_millis(100));
     }

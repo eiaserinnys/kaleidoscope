@@ -246,11 +246,7 @@ function sameReferences<T>(left: readonly T[], right: readonly T[]): boolean {
 
 function containsAgentChat(block: Block): boolean {
   switch (block.type) {
-    case "chat": return block.permission === undefined
-      && block.root === undefined
-      && block.agents === undefined
-      && block.selected === undefined
-      && block.on_select === undefined;
+    case "chat": return block.client === undefined;
     case "split": case "stack": return block.children.some(containsAgentChat);
     case "tabs": return block.tabs.some((tab) => containsAgentChat(tab.child));
     case "toolbar": return [...block.start, ...(block.end ?? [])].some(containsAgentChat);

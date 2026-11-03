@@ -210,21 +210,3 @@ test("여러 동작이 있는 notice에서 가짜 코어가 두 동작을 처리
   await expect(message).toContainText("설치 안내를 열었습니다.");
   await expect(page.getByText("명령을 처리할 수 없습니다.")).toHaveCount(0);
 });
-
-test("에이전트 오류 알림의 기존 단추 배치를 보존한다", async ({ browser }) => {
-  const { context, page } = await openReviewPage(browser, "/?preview=agent&agent-phase=failed");
-  try {
-    const app = page.getByTestId("app-window-agent");
-    const notice = app.getByRole("alert");
-    await expect(notice).toBeVisible();
-    const message = await notice.locator(".ks-notice-message").boundingBox();
-    const actions = await notice.locator(".ks-notice-actions").boundingBox();
-    expect(message).not.toBeNull();
-    expect(actions).not.toBeNull();
-    expect(actions!.x).toBeGreaterThanOrEqual(message!.x + message!.width);
-    expect(Math.abs(actions!.y + actions!.height / 2 - (message!.y + message!.height / 2))).toBeLessThanOrEqual(1);
-    await captureReview(page, '[data-testid="app-window-agent"]', "agent-error-notice-single-action-2x");
-  } finally {
-    await context.close();
-  }
-});

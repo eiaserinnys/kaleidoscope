@@ -1,4 +1,11 @@
 error_catalog! { ENTRIES;
+    DESK_LEGACY_AGENT_DATA_DIRECTORY_REMOVE_FAILED(reason) {
+        class: Io,
+        place: "이전 에이전트 기록 삭제",
+        cause: "이전 실행 기록 폴더를 삭제하지 못했다",
+        message: "이전 에이전트 기록 폴더를 지우지 못했습니다. 쉘 데이터 폴더의 삭제 권한을 확인하세요. 원인: {reason}",
+        fix: "쉘 데이터 폴더의 권한을 확인한 뒤 쉘을 다시 시작하세요"
+    }
     DESK_WORKSPACE_RENAME_NOT_FOUND() {
         class: NotFound,
         place: "작업 이름 바꾸기",

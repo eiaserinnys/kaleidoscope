@@ -27,7 +27,6 @@ const errorCodes: Record<CoreError["code"], true> = {
   io: true,
   server: true,
   unavailable: true,
-  local_agent_failed: true,
   invalid_name: true,
   file_busy: true,
   trash_unavailable: true,

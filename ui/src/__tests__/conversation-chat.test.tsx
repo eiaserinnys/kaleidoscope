@@ -435,23 +435,6 @@ describe("공용 대화 부품", () => {
     expect(screen.getByRole("button", { name: "기록.png" }).classList.contains("ks-agent-attachment-image")).toBe(true);
   });
 
-  it("히스토리 첨부 캐시는 운송 범위가 다르면 분리한다", async () => {
-    const attachment = { id: "0", name: "사진.png", mime: "image/png" };
-    const loadConversation = vi.fn(async () => ({ mime: "image/png", data_base64: "YQ==" }));
-    const loadLocalAgent = vi.fn(async () => ({ mime: "image/png", data_base64: "Yg==" }));
-    render(<>
-      <HistoryAttachmentView attachment={attachment} cacheKey={["conversation", "window", "item", "0"]} load={loadConversation} open={async () => {}} onPreview={() => {}} onError={() => {}} />
-      <HistoryAttachmentView attachment={attachment} cacheKey={["local_agent", "window", "item", "0"]} load={loadLocalAgent} open={async () => {}} onPreview={() => {}} onError={() => {}} />
-    </>);
-    const buttons = await screen.findAllByRole("button", { name: "사진.png" });
-    expect(buttons).toHaveLength(2);
-    expect(buttons.map((button) => button.querySelector("img")?.getAttribute("src"))).toEqual([
-      "data:image/png;base64,YQ==", "data:image/png;base64,Yg==",
-    ]);
-    expect(loadConversation).toHaveBeenCalledTimes(1);
-    expect(loadLocalAgent).toHaveBeenCalledTimes(1);
-  });
-
   it("기존 대화의 프로필 변경은 확인 뒤 switch하고 notice를 보인다", async () => {
     const changed: ConversationThread = { ...thread, profile: { id: "profile-b", label: "키키" } };
     let current = thread;

@@ -247,6 +247,34 @@ error_catalog! { ENTRIES;
         message: "앱 정의의 requires가 이 쉘이나 서버보다 새 판을 요구합니다. 쉘에서 가져왔다면 쉘을, 서버에 올렸다면 서버를 업데이트하세요. 또는 앱 정의의 requires를 낮추세요.",
         fix: "낡은 쪽을 업데이트하거나 앱 정의의 requires를 낮추세요"
     }
+    APP_DEFINITION_REMOVED_LOCAL_AGENT_MODULE() {
+        class: InvalidAppDefinition,
+        place: "앱 정의의 모듈 선언 검사",
+        cause: "requires.modules에 제거된 local_agent 모듈이 있다",
+        message: "requires.modules.local_agent는 제거되었습니다. 실행은 process 모듈로 선언하고 대화 화면은 chat.client 모드로 바꾸세요.",
+        fix: "requires.modules에서 local_agent를 지우고 process 모듈과 chat.client를 사용하세요"
+    }
+    APP_DEFINITION_REMOVED_LOCAL_AGENT_PERMISSION() {
+        class: InvalidAppDefinition,
+        place: "앱 정의의 권한 선언 검사",
+        cause: "permissions에 제거된 local_agent 권한이 있다",
+        message: "permissions[].module=local_agent 권한은 제거되었습니다. 실행은 process 모듈로 선언하고 대화 화면은 chat.client 모드로 바꾸세요.",
+        fix: "local_agent 권한을 지우고 process 모듈과 chat.client를 사용하세요"
+    }
+    APP_DEFINITION_REMOVED_CHAT_LOCAL_FIELDS() {
+        class: InvalidAppDefinition,
+        place: "앱 정의 chat 블록 검사",
+        cause: "chat 블록에 제거된 기기 실행 필드가 있다",
+        message: "chat.permission, root, agents, selected, on_select 실행 필드는 제거되었습니다. 실행은 process 모듈로 선언하고 대화 화면은 chat.client 모드로 바꾸세요.",
+        fix: "옛 chat 실행 필드를 지우고 process 모듈과 chat.client를 사용하세요"
+    }
+    APP_DEFINITION_REMOVED_AGENT_SESSION_BLOCK() {
+        class: InvalidAppDefinition,
+        place: "앱 정의 블록 이름 검사",
+        cause: "ui에 제거된 agent_session 블록 별칭이 있다",
+        message: "ui.type=agent_session 블록은 제거되었습니다. process 모듈과 chat.client를 쓰는 chat 블록으로 정의하세요.",
+        fix: "agent_session을 chat.client 모드의 chat 블록으로 바꾸세요"
+    }
     APP_IMPORT_SERVER_NOT_CONNECTED() {
         class: Server,
         place: "쉘의 앱 가져오기",

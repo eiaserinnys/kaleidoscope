@@ -101,11 +101,6 @@
 //! 기본 앱은 리포의 apps/와 [`builtin`] 표가 정본이고 쉘과 함께 나간다.
 //! 개인 앱 삭제와 동기화는 레지스트리 9판에서 처리한다.
 //!
-//! # 계약 20판: 기기 로컬 에이전트
-//! 블록 세트 8판의 `chat` 로컬 세션 모드, 모듈 `local_agent` 1판과 `local_agent` 권한을 더했다. 화면 명령 `local_agent.*`,
-//! `local_agent.update` 이벤트, 기기별 실행 허용 기록도 계약에 포함한다. 이 모드는 제공자 `chat`의 작업 PAS와 별도로
-//! 기기에서 ACP 에이전트를 실행한다. 세부 wire DTO는 [`local_agent`]에 있다.
-//!
 //! # 계약 21판: 작업 PAS 프로필과 모델 선택
 //! `conversation.get`은 제공자 프로필 목록과 시작 기본값을 함께 돌려주고 선택 프로필로 모델을 조회한다.
 //! `conversation.create`는 선택 프로필을 받을 수 있고, `conversation.switch`는 같은 대화 기록 안에서 프로필이나 모델을 바꾼다.
@@ -218,7 +213,6 @@ pub mod conversation;
 pub mod data;
 pub mod errors;
 pub mod file_name;
-pub mod local_agent;
 pub mod process;
 pub mod registry;
 pub mod size;
@@ -291,7 +285,6 @@ pub const BLOCK_SET_VERSION: u32 = 20;
 ///   이미지와 소리 받기. 연결은 서버가 헤더를 쥐고 대신 부르는 `relay`와 이 기기가 로그인해 직접 부르는
 ///   `oauth` 두 가지다([`registry`]의 「연결」 절).
 /// - `connection` 2판: 계정마다 연결 이름을 등록한다.
-/// - `local_agent` 1판: 앱이 선언한 ACP 실행 명세로 이 기기에서 로컬 에이전트와 대화한다.
 /// - `client` 1판: 창별 격리 프레임의 로직과 로컬 출력.
 /// - `client` 2판: HTTP 권한, 기기 저장소와 기본 런타임 기능.
 /// - `client` 3판: 로컬 process 실행 권한.
@@ -303,7 +296,6 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("web", 1),
     ("connection", 2),
     ("storage", 3),
-    ("local_agent", 1),
     ("assets", 1),
     ("http", 2),
     ("worker", 1),
@@ -542,9 +534,6 @@ pub struct DeviceState {
     /// 앱의 새 버전에서도 같은 `id`의 `pc` 권한이 있으면 이어 쓴다.
     #[serde(default)]
     pub pc_access: Vec<PcAccess>,
-    /// (계약 20판) 이 기기에서 앱 권한과 실행 명세별로 허용한 로컬 에이전트.
-    #[serde(default)]
-    pub local_agent_access: Vec<local_agent::LocalAgentAccess>,
     #[serde(default)]
     pub process_access: Vec<process::ProcessAccess>,
 }
@@ -730,7 +719,7 @@ pub enum LinkStatus {
 ///    - 정의에 직접 적은 경로(문자열 `path`)는 [`FileRef`]의 경로 규칙을 지킨다. 어기면 고른 폴더 밖을
 ///      요구하는 정의로 보고 거부한다.
 ///    - `split`의 `children`은 둘 이상이고, `sizes`가 있으면 개수가 같고 모두 0보다 크다.
-///    - `chat`의 제공자 모드를 쓰면 `requires.modules`에 `agent`가 있다. 로컬 세션 모드는 `local_agent`와 `files` 권한을 쓴다.
+///    - `chat`은 `requires.modules`에 `agent`를 선언한다.
 ///    - 쓴 블록마다 처음 생긴 판([`Block::introduced_in`]) 이상을 `requires.blocks`에 적는다.
 ///      `opens`를 쓰면 `requires.blocks`가 3 이상이다.
 ///    - `web_view`는 정의에 하나까지이고, 쓰면 `requires.modules`에 `web`이 있다. 정의에 직접 적은 주소는
@@ -1102,8 +1091,6 @@ pub enum PermissionDecl {
         base_url: String,
         paths: Vec<String>,
     },
-    /// (모듈 `local_agent` 1판) 이 기기에서 선언한 ACP 에이전트 프로그램을 실행한다.
-    LocalAgent { id: String, label: String },
     /// 이 기기에서 사용자가 허용한 프로그램을 실행한다.
     Process { id: String, label: String },
     /// 이 기기에서 코어 성능 기록을 조회하고 측정한다.
@@ -1175,8 +1162,7 @@ impl PermissionDecl {
             | PermissionDecl::Connection { id, .. }
             | PermissionDecl::Http { id, .. }
             | PermissionDecl::Profiler { id, .. }
-            | PermissionDecl::Process { id, .. }
-            | PermissionDecl::LocalAgent { id, .. } => id,
+            | PermissionDecl::Process { id, .. } => id,
         }
     }
 
@@ -1186,7 +1172,6 @@ impl PermissionDecl {
             PermissionDecl::Files { .. } => "files",
             PermissionDecl::Connection { .. } => "connection",
             PermissionDecl::Http { .. } => "http",
-            PermissionDecl::LocalAgent { .. } => "local_agent",
             PermissionDecl::Process { .. } => "process",
             PermissionDecl::Profiler { .. } => "profiler",
         }
@@ -1197,8 +1182,7 @@ impl PermissionDecl {
             PermissionDecl::Files { access, .. } | PermissionDecl::Connection { access, .. } => {
                 *access
             }
-            // 로컬 에이전트 권한은 파일 접근 권한이 아니다. 기존 파일 전용 검사는 읽기 수준으로 취급한다.
-            PermissionDecl::LocalAgent { .. } | PermissionDecl::Process { .. } | PermissionDecl::Http { .. } => FileAccess::Read,
+            PermissionDecl::Process { .. } | PermissionDecl::Http { .. } => FileAccess::Read,
             PermissionDecl::Profiler { .. } => FileAccess::Readwrite,
         }
     }
@@ -1534,8 +1518,8 @@ pub enum Block {
         #[ts(optional)]
         on_select_revision: Option<SetState>,
     },
-    /// 작업 대화 또는 기기 로컬 에이전트 세션이다. 필드가 모두 없으면 작업 대화 모드이며 `requires.modules.agent`가
-    /// 필요하다. `permission`, `root`, `agents`, `selected`, `on_select`를 모두 선언하면 기기 로컬 ACP 세션 모드다.
+    /// (블록 세트 2판) 이 창이 있는 워크스페이스의 PAS와 나누는 대화다. `requires.modules`에 `agent`가 있어야 한다.
+    /// `client`를 지정하면 앱이 대화 채널과 동작을 제공한다.
     /// 제공자 모드에서 앱 정의에 `agent` provider가 있으면 `agent` 3판의 대화 제공자를 사용한다. provider가 없으면 빈 상태다.
     /// - 서버에 연결하지 않았으면 연결하라는 빈 상태를 보인다.
     /// - 대화가 없으면 모델을 고르고 시작하는 판을 보인다(`conversation.create`).
@@ -1546,21 +1530,6 @@ pub enum Block {
     ///   보낼 첨부로 쌓인다. 첨부가 있으면 글 없이도 보낸다. 기록의 사용자 말에 첨부가 보이고, 이미지는
     ///   눌러 크게 보고 다른 파일은 눌러 기기의 기본 앱으로 연다.
     Chat {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        permission: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        root: Option<FolderRef>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        agents: Option<Binding>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        selected: Option<StateRef>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        on_select: Option<SetState>,
         /// (블록 세트 18판) 대화 기록과 입력을 클라이언트 채널 및 동작에 연결한다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -2286,16 +2255,6 @@ enum RawBlock {
     ///   눌러 크게 보고 다른 파일은 눌러 기기의 기본 앱으로 연다.
     Chat {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        permission: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        root: Option<FolderRef>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        agents: Option<Binding>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        selected: Option<StateRef>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        on_select: Option<SetState>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         client: Option<client::ChatClient>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         footer: Option<Box<RawBlock>>,
@@ -2728,14 +2687,6 @@ enum RawBlock {
     },
     /// 이전 제공자 대화 이름.
     AgentChat {},
-    /// 이전 로컬 에이전트 세션 이름.
-    AgentSession {
-        permission: String,
-        root: FolderRef,
-        agents: Binding,
-        selected: StateRef,
-        on_select: SetState,
-    },
     /// 이전 계산기 격자 이름.
     Keypad {
         columns: u8,
@@ -2766,7 +2717,12 @@ impl From<RawBlock> for Block {
                 follow_pause_ms,
                 template,
             },
-            RawBlock::When { value, min_width, max_width, child } => Block::When {
+            RawBlock::When {
+                value,
+                min_width,
+                max_width,
+                child,
+            } => Block::When {
                 value,
                 min_width,
                 max_width,
@@ -2968,20 +2924,7 @@ impl From<RawBlock> for Block {
                 selected_revision,
                 on_select_revision,
             },
-            RawBlock::Chat {
-                permission,
-                root,
-                agents,
-                selected,
-                on_select,
-                client,
-                footer,
-            } => Block::Chat {
-                permission,
-                root,
-                agents,
-                selected,
-                on_select,
+            RawBlock::Chat { client, footer } => Block::Chat {
                 client,
                 footer: footer.map(|child| Box::new((*child).into())),
             },
@@ -3211,7 +3154,12 @@ impl From<RawBlock> for Block {
                 label,
                 disabled,
             },
-            RawBlock::Notice { message, error_id, kind, actions } => Block::Notice {
+            RawBlock::Notice {
+                message,
+                error_id,
+                kind,
+                actions,
+            } => Block::Notice {
                 message,
                 error_id,
                 kind,
@@ -3356,26 +3304,6 @@ impl From<RawBlock> for Block {
                 wrap,
             },
             RawBlock::AgentChat {} => Block::Chat {
-                permission: None,
-                root: None,
-                agents: None,
-                selected: None,
-                on_select: None,
-                client: None,
-                footer: None,
-            },
-            RawBlock::AgentSession {
-                permission,
-                root,
-                agents,
-                selected,
-                on_select,
-            } => Block::Chat {
-                permission: Some(permission),
-                root: Some(root),
-                agents: Some(agents),
-                selected: Some(selected),
-                on_select: Some(on_select),
                 client: None,
                 footer: None,
             },
@@ -3431,8 +3359,7 @@ impl Block {
             Block::Chat {
                 client: Some(_), ..
             } => 18,
-            Block::Chat { .. } if !self.is_local_agent_chat() => 2,
-            Block::Chat { .. } => 8,
+            Block::Chat { .. } => 2,
             Block::Map { .. } => 10,
             Block::Metrics { .. } | Block::ButtonGrid { .. } | Block::Chart { .. } => 9,
             Block::WebView { .. } | Block::Explorer { .. } => 3,
@@ -3455,32 +3382,15 @@ impl Block {
         }
     }
 
-    /// 로컬 ACP 세션 설정을 포함하는 chat인지 판단한다.
-    pub fn is_local_agent_chat(&self) -> bool {
+    /// 클라이언트 채널을 사용하는 대화 블록인지 판단한다.
+    pub fn is_client_chat(&self) -> bool {
         matches!(
             self,
             Block::Chat {
-                permission: Some(_),
+                client: Some(_),
                 ..
-            } | Block::Chat { root: Some(_), .. }
-                | Block::Chat {
-                    agents: Some(_),
-                    ..
-                }
-                | Block::Chat {
-                    selected: Some(_),
-                    ..
-                }
-                | Block::Chat {
-                    on_select: Some(_),
-                    ..
-                }
+            }
         )
-    }
-
-    /// 클라이언트 채널을 사용하는 대화 블록인지 판단한다.
-    pub fn is_client_chat(&self) -> bool {
-        matches!(self, Block::Chat { client: Some(_), .. })
     }
 
     /// JSON의 `type` 이름.
@@ -4521,23 +4431,57 @@ pub enum CoreRequest {
     #[serde(rename = "host.instructions")]
     HostInstructions { window_id: String, kind: String },
     #[serde(rename = "context.prepare")]
-    ContextPrepare { window_id: String, request_id: String, channel: String, attachments: client::ContextAttachments },
+    ContextPrepare {
+        window_id: String,
+        request_id: String,
+        channel: String,
+        attachments: client::ContextAttachments,
+    },
     #[serde(rename = "context.commit")]
     ContextCommit { window_id: String, ticket: String },
 
     /// 프로세스 명령. 허용 응답은 쉘에서만 보낸다.
     #[serde(rename = "process.start")]
-    ProcessStart { window_id: String, key: String, permission: String, spec: process::ProcessSpec, cwd_permission: String, #[serde(default)] services: Vec<String> },
+    ProcessStart {
+        window_id: String,
+        key: String,
+        permission: String,
+        spec: process::ProcessSpec,
+        cwd_permission: String,
+        #[serde(default)]
+        services: Vec<String>,
+    },
     #[serde(rename = "process.respond_permission")]
-    ProcessRespondPermission { window_id: String, request_id: String, allow: bool },
+    ProcessRespondPermission {
+        window_id: String,
+        request_id: String,
+        allow: bool,
+    },
     #[serde(rename = "process.attach")]
     ProcessAttach { window_id: String, key: String },
     #[serde(rename = "process.read")]
-    ProcessRead { window_id: String, handle: String, #[ts(type = "number")] after: u64, max_bytes: usize },
+    ProcessRead {
+        window_id: String,
+        handle: String,
+        #[ts(type = "number")]
+        after: u64,
+        max_bytes: usize,
+    },
     #[serde(rename = "process.ack")]
-    ProcessAck { window_id: String, handle: String, #[ts(type = "number")] after: u64, checkpoint: Option<serde_json::Value> },
+    ProcessAck {
+        window_id: String,
+        handle: String,
+        #[ts(type = "number")]
+        after: u64,
+        checkpoint: Option<serde_json::Value>,
+    },
     #[serde(rename = "process.write")]
-    ProcessWrite { window_id: String, handle: String, bytes: Vec<u8>, checkpoint: Option<serde_json::Value> },
+    ProcessWrite {
+        window_id: String,
+        handle: String,
+        bytes: Vec<u8>,
+        checkpoint: Option<serde_json::Value>,
+    },
     #[serde(rename = "process.close_input")]
     ProcessCloseInput { window_id: String, handle: String },
     #[serde(rename = "process.stop")]
@@ -4545,67 +4489,6 @@ pub enum CoreRequest {
     /// (클라이언트 4판) 창 범위 저장소 파일의 `file://` 주소를 돌려준다.
     #[serde(rename = "process.file_uri")]
     ProcessFileUri { window_id: String, blob_key: String },
-
-    /// (계약 20판) 기기 로컬 에이전트 창 명령. 자세한 응답과 세대 규칙은 [`local_agent`]에 있다.
-    #[serde(rename = "local_agent.attach")]
-    LocalAgentAttach { window_id: String },
-    #[serde(rename = "local_agent.detach")]
-    LocalAgentDetach { window_id: String },
-    #[serde(rename = "local_agent.allow")]
-    LocalAgentAllow {
-        window_id: String,
-        spec_hash: String,
-    },
-    #[serde(rename = "local_agent.retry")]
-    LocalAgentRetry {
-        window_id: String,
-        generation: String,
-    },
-    #[serde(rename = "local_agent.authenticate")]
-    LocalAgentAuthenticate {
-        window_id: String,
-        generation: String,
-        method_id: String,
-    },
-    #[serde(rename = "local_agent.configure")]
-    LocalAgentConfigure {
-        window_id: String,
-        generation: String,
-        control_id: String,
-        value: local_agent::AgentControlValue,
-    },
-    #[serde(rename = "local_agent.send")]
-    LocalAgentSend {
-        window_id: String,
-        generation: String,
-        request_id: String,
-        text: String,
-        attachments: Vec<conversation::ConversationUpload>,
-    },
-    #[serde(rename = "local_agent.cancel")]
-    LocalAgentCancel {
-        window_id: String,
-        generation: String,
-    },
-    #[serde(rename = "local_agent.permission")]
-    LocalAgentPermission {
-        window_id: String,
-        generation: String,
-        request_id: String,
-        option_id: String,
-    },
-    #[serde(rename = "local_agent.attachment")]
-    LocalAgentAttachment {
-        window_id: String,
-        item_id: String,
-        attachment_id: String,
-    },
-    #[serde(rename = "local_agent.attachment_open")]
-    LocalAgentAttachmentOpen {
-        window_id: String,
-        item_id: String,
-        attachment_id: String,
-    },
 
     /// (10판) 받아 둔 새 판으로 다시 시작한다. 위 「쉘 업데이트」 절.
     /// - 업데이터가 없는 쉘([`UpdateStatus::Unavailable`])이면 `unavailable`, 그 밖에 `ready`가 아니면 `invalid_request`.
@@ -5223,15 +5106,27 @@ pub enum CoreReply {
     #[serde(rename = "host.instructions")]
     HostInstructions { text: String, hash: String },
     #[serde(rename = "context.prepare")]
-    ContextPrepare { text: Option<String>, images: Vec<client::ContextImage>, ticket: String },
+    ContextPrepare {
+        text: Option<String>,
+        images: Vec<client::ContextImage>,
+        ticket: String,
+    },
     #[serde(rename = "context.commit")]
     ContextCommit {},
     #[serde(rename = "process.respond_permission")]
     ProcessRespondPermission {},
     #[serde(rename = "process.attach")]
-    ProcessAttach { process: Option<process::ProcessSnapshot> },
+    ProcessAttach {
+        process: Option<process::ProcessSnapshot>,
+    },
     #[serde(rename = "process.read")]
-    ProcessRead { bytes: Vec<u8>, #[ts(type = "number")] next: u64, stderr_tail: Vec<u8>, exit: Option<process::ProcessExit> },
+    ProcessRead {
+        bytes: Vec<u8>,
+        #[ts(type = "number")]
+        next: u64,
+        stderr_tail: Vec<u8>,
+        exit: Option<process::ProcessExit>,
+    },
     #[serde(rename = "process.ack")]
     ProcessAck {},
     #[serde(rename = "process.write")]
@@ -5242,31 +5137,6 @@ pub enum CoreReply {
     ProcessStop {},
     #[serde(rename = "process.file_uri")]
     ProcessFileUri { uri: String },
-
-    #[serde(rename = "local_agent.attach")]
-    LocalAgentAttach {
-        snapshot: local_agent::LocalAgentSnapshot,
-    },
-    #[serde(rename = "local_agent.detach")]
-    LocalAgentDetach {},
-    #[serde(rename = "local_agent.allow")]
-    LocalAgentAllow {},
-    #[serde(rename = "local_agent.retry")]
-    LocalAgentRetry {},
-    #[serde(rename = "local_agent.authenticate")]
-    LocalAgentAuthenticate {},
-    #[serde(rename = "local_agent.configure")]
-    LocalAgentConfigure {},
-    #[serde(rename = "local_agent.send")]
-    LocalAgentSend { request_id: String, queued: bool },
-    #[serde(rename = "local_agent.cancel")]
-    LocalAgentCancel {},
-    #[serde(rename = "local_agent.permission")]
-    LocalAgentPermission {},
-    #[serde(rename = "local_agent.attachment")]
-    LocalAgentAttachment { mime: String, data_base64: String },
-    #[serde(rename = "local_agent.attachment_open")]
-    LocalAgentAttachmentOpen {},
 
     #[serde(rename = "storage.get")]
     StorageGet {
@@ -5441,19 +5311,16 @@ pub enum CoreEvent {
     },
     /// 쉘이 사용자에게 실행 허용을 묻는다.
     #[serde(rename = "process.permission")]
-    ProcessPermission { window_id: String, request_id: String, spec: process::ProcessSpec },
+    ProcessPermission {
+        window_id: String,
+        request_id: String,
+        spec: process::ProcessSpec,
+    },
     /// 프로세스 출력을 읽거나 종료를 확인할 수 있다.
     #[serde(rename = "process.ready")]
     ProcessReady { window_id: String, handle: String },
     #[serde(rename = "process.services_changed")]
     ProcessServicesChanged { window_id: String, handle: String },
-    /// (계약 20판) 로컬 에이전트 창의 상태 변경. 세대가 다른 업데이트는 화면이 넘긴다.
-    #[serde(rename = "local_agent.update")]
-    LocalAgentUpdate {
-        window_id: String,
-        generation: String,
-        update: local_agent::LocalAgentUpdate,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -5534,8 +5401,6 @@ pub enum ErrorCode {
     Server,
     /// 이 쉘의 실행 환경에서는 쓸 수 없는 기능이다(개발용 HTTP 다리의 웹 화면 등).
     Unavailable,
-    /// 로컬 에이전트와의 ACP 연결 또는 프로토콜 처리에 실패했다.
-    LocalAgentFailed,
     /// 파일 이름을 만들거나 바꿀 수 없다.
     InvalidName,
     /// 다른 프로그램이 파일을 사용 중이다.
@@ -5618,10 +5483,6 @@ mod tests {
                 r#"{"type":"code","value":{"state":"body"},"read_only":true,"follow":true}"#,
             ),
             (r#"{"type":"agent_chat"}"#, r#"{"type":"chat"}"#),
-            (
-                r#"{"type":"agent_session","permission":"local_agent","root":{"permission":"files"},"agents":[],"selected":{"state":"agent"},"on_select":{"set_state":"agent"}}"#,
-                r#"{"type":"chat","permission":"local_agent","root":{"permission":"files"},"agents":[],"selected":{"state":"agent"},"on_select":{"set_state":"agent"}}"#,
-            ),
             (
                 r#"{"type":"html_view","value":{"state":"html"}}"#,
                 r#"{"type":"html_view","value":{"state":"html"}}"#,
@@ -7346,17 +7207,5 @@ mod tests {
             .as_object()
             .unwrap()
             .contains_key("id"));
-    }
-
-    #[test]
-    fn legacy_agent_failure_without_id_deserializes() {
-        let failure: local_agent::AgentFailure = serde_json::from_value(serde_json::json!({
-            "code": "local_agent_failed",
-            "message": "에이전트 명령이 실패했습니다",
-            "command": null
-        }))
-        .unwrap();
-
-        assert_eq!(failure.id, None);
     }
 }

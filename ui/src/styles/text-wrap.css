@@ -4,11 +4,9 @@
 .ks-agent-chat-user,
 .ks-agent-chat-notice,
 .ks-agent-chat-working,
-.ks-agent-session-command,
 .ks-process-command,
 .ks-process-env,
 .ks-window-consent-overlay .ks-dialog-title,
-.ks-agent-session-permission > span,
 .shell-server-guide,
 .shell-server-meta,
 .shell-server-skipped,
@@ -28,7 +26,7 @@
 }
 
 .ks-markdown-text pre,
-.ks-agent-session-command, .ks-process-command {
+.ks-process-command {
   white-space: pre-wrap;
 }
 
