@@ -51,7 +51,7 @@
           "label": { "item": "label" },
           "preview": { "type": "image", "src": { "item": "image" } },
           "pressed": { "expr": "$state.selected = $item.id" },
-          "on_click": { "set_state": "selected", "value": { "item": "id" } }
+          "on_click": [{ "set_state": "selected", "value": { "item": "id" } }]
         }
       }
     ]
