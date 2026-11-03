@@ -393,16 +393,12 @@
   touch-action: none;
 }
 
-.ks-window-titlebar-active .ks-window-title {
-  color: var(--ks-color-text);
-}
-
 .ks-window-title {
   flex: 0 0 auto;
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
-  color: var(--ks-color-muted);
+  color: var(--ks-color-text);
   font-size: var(--ks-type-title);
   font-weight: 500;
   line-height: var(--ks-line-body);
@@ -414,7 +410,7 @@
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
-  color: var(--ks-color-muted);
+  color: var(--ks-color-text);
   font-size: var(--ks-type-meta);
   line-height: var(--ks-line-body);
   text-overflow: ellipsis;

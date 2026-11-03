@@ -1,13 +1,14 @@
 @import "pretendard/dist/web/variable/pretendardvariable.css";
 @import "@fontsource-variable/dm-sans";
 @import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
 @import "@fontsource-variable/noto-serif-kr";
 
 :root {
   --ks-font-hangul: "Pretendard Variable";
   --ks-font-family: "DM Sans Variable", var(--ks-font-hangul), "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
   --ks-font-display: "Instrument Serif", "Noto Serif KR Variable", "Noto Serif KR", serif;
-  --ks-font-label: var(--ks-font-code);
+  --ks-font-label: var(--ks-font-family);
   --ks-font-code: "Cascadia Mono", Consolas, monospace;
 
   --ks-type-page: 20px;
