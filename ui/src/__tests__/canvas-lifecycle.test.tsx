@@ -47,7 +47,7 @@ it("canvas.loading은 기존 캔버스 크기와 표면 연결을 유지한다",
   const original = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "transferControlToOffscreen");
   Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", { configurable: true, value: () => ({}) });
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
-  const block = { type: "canvas", surface: "preview", loading: { state: "loading" } } as const;
+  const block = { type: "canvas", surface: "preview", description: "준비된 색상 무대", loading: { state: "loading" } } as const;
   try {
     const view = render(<CanvasBlock block={block} pointer="/ui" />);
     const root = view.container.querySelector(".ks-canvas")!;
@@ -57,7 +57,9 @@ it("canvas.loading은 기존 캔버스 크기와 표면 연결을 유지한다",
 
     data.loading = true;
     view.rerender(<CanvasBlock block={block} pointer="/ui" />);
-    expect(root.querySelector('[role="status"][aria-label="불러오는 중"]')).not.toBeNull();
+    expect(root.getAttribute("aria-label")).toBe("준비된 색상 무대, 불러오는 중");
+    expect(root.querySelector('.ks-canvas-loading .ks-data-progress.is-indeterminate[role="progressbar"]')).not.toBeNull();
+    expect(root.querySelector('[role="status"]')).toBeNull();
     expect(root.querySelector("canvas")).toBe(canvas);
     expect(data.attachSurface).toHaveBeenCalledTimes(1);
     expect(data.detachSurface).not.toHaveBeenCalled();
@@ -65,7 +67,8 @@ it("canvas.loading은 기존 캔버스 크기와 표면 연결을 유지한다",
 
     data.loading = false;
     view.rerender(<CanvasBlock block={block} pointer="/ui" />);
-    expect(root.querySelector('[role="status"]')).toBeNull();
+    expect(root.getAttribute("aria-label")).toBe("준비된 색상 무대");
+    expect(root.querySelector(".ks-canvas-loading")).toBeNull();
     expect(root.querySelector("canvas")).toBe(canvas);
     expect(data.attachSurface).toHaveBeenCalledTimes(1);
   } finally {

@@ -326,7 +326,8 @@
 .ks-canvas { position: relative; width: 100%; height: auto; aspect-ratio: var(--ks-canvas-native-ratio, 16 / 9); min-height: 0; overflow: hidden; background: var(--ks-color-on-color-dark); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); }
 .ks-canvas canvas { position: absolute; display: block; box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-border); }
 .ks-canvas-loading { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; pointer-events: none; }
-.ks-canvas-loading > .ks-data-skeleton { width: min(100%, var(--ks-pane-min-size)); }
+.ks-canvas-loading > .ks-data-progress { width: min(100%, var(--ks-pane-min-size)); background: color-mix(in srgb, var(--ks-color-on-color-light) 28%, transparent); }
+.ks-canvas-loading > .ks-data-progress > .ks-data-progress-value { background: color-mix(in srgb, var(--ks-color-on-color-light) 88%, transparent); }
 :where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel, .ks-data-stack-item.is-fill) > .ks-canvas,
 :where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel, .ks-data-stack-item.is-fill) > .ks-anchor > .ks-canvas,
 :where(.ks-split-pane, .ks-data-tab-panel) > .ks-data-section > .ks-data-section-child > .ks-canvas { height: 100%; min-height: var(--ks-pane-min-size); aspect-ratio: auto; }
