@@ -779,9 +779,9 @@ export type LinkStatus = { "state": "unlinked", } | { "state": "pairing", server
  */
 user_code: string, expires_at: string, } | { "state": "connected", mode: ServerMode, server_url: string, device_name: string, } | { "state": "offline", mode: ServerMode, server_url: string, device_name: string, 
 /**
- * 마지막으로 실패한 까닭. 사람이 읽는 한국어 한 줄.
+ * 마지막 연결 오류. 연결을 시작하는 동안에는 없다.
  */
-reason: string, } | { "state": "revoked", server_url: string, };
+reason: CoreError | null, } | { "state": "revoked", server_url: string, };
 
 /**
  * `list` 항목.

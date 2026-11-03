@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import type { AppDefinition, StorageEntryDecl } from "../contract/contract";
@@ -6,6 +6,9 @@ import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
+import { WindowDataProvider, useWindowData, type WindowData } from "../data/window-data";
+import { WindowNotice } from "../data/window-notice";
+import { AppSettings } from "../settings/app-settings";
 import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -16,8 +19,8 @@ function setup(entry: StorageEntryDecl, stored?: JsonValue) {
   const original = transport.call.bind(transport);
   const spy = vi.spyOn(transport, "call");
   const store = createShellStore(transport);
-  render(<AppWindowContent store={store} windowId="editor-window" settingsOpen settingsVisited />);
-  return { spy, original };
+  const view = render(<AppWindowContent store={store} windowId="editor-window" settingsOpen settingsVisited />);
+  return { spy, original, store, view };
 }
 const entry = (schema: StorageEntryDecl["schema"], value: JsonValue): StorageEntryDecl => ({ id: "option", key: "option", label: "선택", kind: "json", schema, default: value, presentation: "settings" });
 
@@ -87,4 +90,70 @@ it("목록 저장 검사가 실패하면 각 조작과 오류를 연결한다", 
   const add = screen.getByRole("textbox", { name: "선택 추가" });
   expect(add.getAttribute("aria-invalid")).toBe("true");
   expect(add.getAttribute("aria-describedby")).toBe(error.parentElement?.id);
+});
+
+it("설정을 닫으면 저장 오류와 코드가 창 알림에 남는다", async () => {
+  const { spy, original, store, view } = setup(entry({ type: "boolean" }, false));
+  spy.mockImplementation(async (request) => {
+    if (request.op === "storage.write") throw { id: "STORAGE_WRITE_SCHEMA_MISMATCH", code: "invalid_request", message: "저장 오류", details: [] };
+    return original(request);
+  });
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("switch", { name: "선택" }));
+  await screen.findByText("STORAGE_WRITE_SCHEMA_MISMATCH");
+  view.rerender(<AppWindowContent store={store} windowId="editor-window" settingsOpen={false} settingsVisited />);
+  await waitFor(() => expect(view.container.querySelector(".ks-data-window-notice")?.textContent).toContain("STORAGE_WRITE_SCHEMA_MISMATCH"));
+  expect(view.container.querySelectorAll(".ks-data-window-notice .ks-notice")).toHaveLength(1);
+  view.rerender(<AppWindowContent store={store} windowId="editor-window" settingsOpen settingsVisited />);
+  spy.mockImplementation((request) => original(request));
+  await user.click(await screen.findByRole("switch", { name: "선택" }));
+  await waitFor(() => expect(view.container.querySelector(".ks-data-window-notice")?.textContent).not.toContain("STORAGE_WRITE_SCHEMA_MISMATCH"));
+});
+
+it("설정 오류가 남은 뒤 다른 창 알림이 오면 설정을 닫거나 오류를 해결해도 새 알림을 유지한다", async () => {
+  const item = entry({ type: "boolean" }, false);
+  const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 6, modules: { storage: 2 } }, ui: { type: "text", value: "본문" }, storage: { entries: [item] } };
+  const seed = makeTestSeed({ definitions: [definition] });
+  const transport = createFakeTransport(seed);
+  const original = transport.call.bind(transport);
+  const spy = vi.spyOn(transport, "call").mockImplementation(async (request) => {
+    if (request.op === "storage.write") throw { id: "STORAGE_WRITE_SCHEMA_MISMATCH", code: "invalid_request", message: "저장 오류", details: [] };
+    return original(request);
+  });
+  const store = createShellStore(transport);
+  await store.ready;
+  const window = seed.snapshot.shared.windows.find((candidate) => candidate.id === "editor-window")!;
+  const context = { store, window, definition };
+  let data: WindowData;
+  function Probe() { data = useWindowData(); return null; }
+  function View({ open }: { open: boolean }) {
+    return <WindowDataProvider store={store} windowId={window.id} definition={definition}>
+      <Probe /><AppSettings context={context} open={open} onClose={() => undefined} /><div data-testid="window-notice"><WindowNotice /></div>
+    </WindowDataProvider>;
+  }
+  const view = render(<View open />);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("switch", { name: "선택" }));
+  await screen.findByText("STORAGE_WRITE_SCHEMA_MISMATCH");
+  view.rerender(<View open={false} />);
+  await waitFor(() => expect(within(screen.getByTestId("window-notice")).getByText("STORAGE_WRITE_SCHEMA_MISMATCH")).toBeTruthy());
+
+  view.rerender(<View open />);
+  act(() => data.setStatus("상태 안내"));
+  view.rerender(<View open={false} />);
+  expect(screen.getByRole("status").textContent).toContain("상태 안내");
+
+  view.rerender(<View open />);
+  act(() => data.failClient({ id: "SHELL_CLIENT_FAILED", code: "server", message: "앱 실행 오류", details: [] }));
+  view.rerender(<View open={false} />);
+  expect(screen.getByText("앱 실행 오류")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "다시 시작" })).toBeTruthy();
+
+  view.rerender(<View open />);
+  spy.mockImplementation((request) => original(request));
+  await user.click(await screen.findByRole("switch", { name: "선택" }));
+  await waitFor(() => expect(within(view.container.querySelector(".ks-app-settings") as HTMLElement).queryByText("STORAGE_WRITE_SCHEMA_MISMATCH")).toBeNull());
+  expect(screen.getByText("앱 실행 오류")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "다시 시작" })).toBeTruthy();
+  store.dispose();
 });

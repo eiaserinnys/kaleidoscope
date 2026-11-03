@@ -14,6 +14,7 @@
 .shell-server-skipped,
 .ks-notice-message,
 .ks-notice-details,
+.ks-empty-state-text,
 .ks-data-text,
 .ks-dialog-body,
 .ks-properties dd,
@@ -28,4 +29,8 @@
 .ks-markdown-text pre,
 .ks-agent-session-command, .ks-process-command {
   white-space: pre-wrap;
+}
+
+.ks-error-id {
+  overflow-wrap: normal;
 }

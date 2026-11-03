@@ -11,14 +11,10 @@ use kaleidoscope_contract::registry::{
 use kaleidoscope_contract::{errors, CoreError, CoreReply, ErrorCode, LinkStatus};
 
 use crate::app_commands;
-use crate::registry_client::{parse_event_line, RegistryError};
+use crate::registry_client::{parse_event_line, FailureStage, RegistryError};
 use crate::registry_events;
 use crate::storage::{self, LinkFile};
 use crate::Inner;
-
-fn one_line(message: &str) -> String {
-    message.lines().next().unwrap_or(message).trim().to_string()
-}
 
 pub(crate) fn start(
     inner: &Arc<Inner>,
@@ -366,7 +362,12 @@ fn run_stream(inner: Arc<Inner>, generation: u64, file: LinkFile) {
                 return;
             }
             Err(error) => {
-                set_offline(&inner, generation, &file, registry_failure_line(error));
+                set_offline(
+                    &inner,
+                    generation,
+                    &file,
+                    registry_failure(error, &file.token),
+                );
                 if !wait_before_retry(&inner, generation, delay) {
                     return;
                 }
@@ -383,7 +384,7 @@ fn run_stream(inner: Arc<Inner>, generation: u64, file: LinkFile) {
             line.clear();
             match reader.read_line(&mut line) {
                 Ok(0) => {
-                    set_offline(&inner, generation, &file, "연결이 끊겼습니다".into());
+                    set_offline(&inner, generation, &file, errors::CONN_EVENTS_ENDED());
                     break;
                 }
                 Ok(_) => {
@@ -398,7 +399,13 @@ fn run_stream(inner: Arc<Inner>, generation: u64, file: LinkFile) {
                     }
                 }
                 Err(error) => {
-                    set_offline(&inner, generation, &file, one_line(&error.to_string()));
+                    set_offline(
+                        &inner,
+                        generation,
+                        &file,
+                        errors::CONN_EVENTS_READ_FAILED()
+                            .and_details(vec![error.to_string().replace(&file.token, "[가림]")]),
+                    );
                     break;
                 }
             }
@@ -417,7 +424,26 @@ pub(crate) fn load_link(inner: &Inner) -> LinkFile {
     inner.link_file.lock().unwrap().as_ref().unwrap().clone()
 }
 
-pub(crate) fn set_offline(inner: &Arc<Inner>, generation: u64, file: &LinkFile, reason: String) {
+pub(crate) fn set_offline(
+    inner: &Arc<Inner>,
+    generation: u64,
+    file: &LinkFile,
+    mut reason: CoreError,
+) {
+    if !file.token.is_empty() {
+        reason.message = reason.message.replace(&file.token, "[가림]");
+        for detail in &mut reason.details {
+            *detail = detail.replace(&file.token, "[가림]");
+        }
+    }
+    if let Some(host) = reqwest::Url::parse(&file.server_url)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+    {
+        if !reason.details.iter().any(|detail| detail.contains("host=")) {
+            reason.details.push(format!("host={host}"));
+        }
+    }
     let changed = {
         let mut state = inner.state.lock().unwrap();
         if inner.generation.load(Ordering::SeqCst) != generation {
@@ -429,7 +455,7 @@ pub(crate) fn set_offline(inner: &Arc<Inner>, generation: u64, file: &LinkFile, 
                     mode: file.mode,
                     server_url: file.server_url.clone(),
                     device_name: file.device_name.clone(),
-                    reason: one_line(&reason),
+                    reason: Some(reason),
                 },
             )
         }
@@ -514,11 +540,41 @@ fn emit_state(inner: &Arc<Inner>) {
     inner.emit_state(&event);
 }
 
-fn registry_failure_line(error: RegistryError) -> String {
+fn registry_failure(error: RegistryError, token: &str) -> CoreError {
     match error {
-        RegistryError::Failure { detail, .. } => one_line(&detail),
-        RegistryError::Unauthorized => "기기 연결이 거부되었습니다".into(),
-        RegistryError::NotFound => "연결 정보를 찾을 수 없습니다".into(),
-        RegistryError::Validation(error) => one_line(&error.message),
+        RegistryError::Failure { stage, detail } => {
+            let error = match stage {
+                FailureStage::Send => errors::CONN_EVENTS_SEND_FAILED(),
+                FailureStage::Status => errors::CONN_EVENTS_STATUS_FAILED(),
+                FailureStage::Read => errors::CONN_EVENTS_READ_FAILED(),
+            };
+            error.and_details(vec![detail.replace(token, "[가림]")])
+        }
+        RegistryError::Unauthorized => errors::CONN_EVENTS_STATUS_FAILED(),
+        RegistryError::NotFound => errors::CONN_EVENTS_NOT_FOUND(),
+        RegistryError::Validation(error) => error,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_failures_keep_stage_and_hide_token() {
+        for (stage, id) in [
+            (FailureStage::Send, "CONN_EVENTS_SEND_FAILED"),
+            (FailureStage::Status, "CONN_EVENTS_STATUS_FAILED"),
+            (FailureStage::Read, "CONN_EVENTS_READ_FAILED"),
+        ] {
+            let error = registry_failure(
+                RegistryError::failure(stage, "host=example; secret-token"),
+                "secret-token",
+            );
+            assert_eq!(error.id.as_deref(), Some(id));
+            assert!(!error.message.contains("example"));
+            assert!(error.details[0].contains("host=example"));
+            assert!(!error.details[0].contains("secret-token"));
+        }
     }
 }

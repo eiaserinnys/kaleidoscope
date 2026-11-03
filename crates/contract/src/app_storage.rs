@@ -602,7 +602,15 @@ pub fn validate_storage_content(
                 .as_ref()
                 .ok_or_else(|| crate::errors::STORAGE_WRITE_SCHEMA_MISSING(&entry.key))?;
             validate_json_value(schema, content, "").map_err(|reason| {
-                crate::errors::STORAGE_WRITE_SCHEMA_MISMATCH(&entry.key, reason)
+                crate::errors::STORAGE_WRITE_SCHEMA_MISMATCH(
+                    if entry.label.trim().is_empty() {
+                        &entry.key
+                    } else {
+                        &entry.label
+                    },
+                    reason,
+                )
+                .and_details(vec![format!("저장 항목 키: {}", entry.key)])
             })?;
             let bytes = serde_json::to_vec(&canonicalize(content.clone())).map_err(|error| {
                 crate::errors::STORAGE_WRITE_JSON_SERIALIZATION_FAILED(&entry.key)
@@ -928,13 +936,13 @@ fn validate_json_value(schema: &StorageValueSchema, value: &Value, at: &str) -> 
         let names = types
             .iter()
             .map(|kind| match kind {
-                JsonValueType::Object => "object",
-                JsonValueType::Array => "array",
-                JsonValueType::String => "string",
-                JsonValueType::Number => "number",
-                JsonValueType::Integer => "integer",
-                JsonValueType::Boolean => "boolean",
-                JsonValueType::Null => "null",
+                JsonValueType::Object => "객체",
+                JsonValueType::Array => "목록",
+                JsonValueType::String => "글",
+                JsonValueType::Number => "숫자",
+                JsonValueType::Integer => "정수",
+                JsonValueType::Boolean => "참거짓",
+                JsonValueType::Null => "비어 있음",
             })
             .collect::<Vec<_>>()
             .join(" 또는 ");
@@ -1021,6 +1029,22 @@ fn canonicalize(value: Value) -> Value {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn schema_error_uses_label_and_korean_type_and_keeps_key_in_details() {
+        let entry: StorageEntryDecl = serde_json::from_value(json!({
+            "id":"count", "key":"settings/count", "kind":"json", "label":"표시 개수", "presentation":"settings",
+            "schema":{"type":"integer"}, "default":1
+        })).unwrap();
+        let error = validate_storage_content(&entry, &json!(1.5)).unwrap_err();
+        assert!(error.message.contains("표시 개수"));
+        assert!(error.message.contains("정수"));
+        assert!(!error.message.contains("settings/count"));
+        assert!(error
+            .details
+            .iter()
+            .any(|detail| detail.contains("settings/count")));
+    }
 
     #[test]
     fn json_storage_accepts_large_values_up_to_one_mebibyte() {

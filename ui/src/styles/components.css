@@ -119,7 +119,6 @@
   font-family: var(--ks-font-code);
   font-size: var(--ks-type-meta);
   line-height: var(--ks-line-body);
-  overflow-wrap: anywhere;
 }
 
 .ks-notice-actions {

@@ -43,7 +43,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             let (applied, state_event) = match result {
                 Ok(result) => result,
                 Err(error) => {
-                    link::set_offline(inner, generation, &link::load_link(inner), error.message);
+                    link::set_offline(inner, generation, &link::load_link(inner), error);
                     return true;
                 }
             };
@@ -71,9 +71,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                     }
                 }
                 Ok((false, _)) => return false,
-                Err(error) => {
-                    link::set_offline(inner, generation, &link::load_link(inner), error.message)
-                }
+                Err(error) => link::set_offline(inner, generation, &link::load_link(inner), error),
             }
         }
         DeviceEvent::AppPublished {
@@ -91,7 +89,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             let (applied, state_event) = match result {
                 Ok(result) => result,
                 Err(error) => {
-                    link::set_offline(inner, generation, &link::load_link(inner), error.message);
+                    link::set_offline(inner, generation, &link::load_link(inner), error);
                     return true;
                 }
             };
@@ -251,7 +249,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 }
                 Ok((false, _)) => return false,
                 Err(error) => {
-                    link::set_offline(inner, generation, &link::load_link(inner), error.message);
+                    link::set_offline(inner, generation, &link::load_link(inner), error);
                 }
             }
         }
@@ -274,9 +272,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                     }
                 }
                 Ok((None, _)) => return false,
-                Err(error) => {
-                    link::set_offline(inner, generation, &link::load_link(inner), error.message)
-                }
+                Err(error) => link::set_offline(inner, generation, &link::load_link(inner), error),
             }
         }
         DeviceEvent::ConnectionsSnapshot { connections } => {

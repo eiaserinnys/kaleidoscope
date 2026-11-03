@@ -248,7 +248,7 @@ const connectedSnapshot: ShellSnapshot = {
 const demoSnapshot: ShellSnapshot = conversationMode ? connectedSnapshot : ["ready", "empty", "loading", "load-error", "send-error"].includes(pasMode ?? "")
   ? connectedSnapshot
   : pasMode === "offline"
-    ? { ...mdViewerSnapshot, link: { state: "offline", mode: "remote", server_url: "https://kaleidoscope.example", device_name: "개발 PC", reason: "서버에 닿지 않습니다" } }
+    ? { ...mdViewerSnapshot, link: { state: "offline", mode: "remote", server_url: "https://kaleidoscope.example", device_name: "개발 PC", reason: null } }
     : mdViewerSnapshot;
 const fakeTransport = createFakeTransport({
   snapshot: demoSnapshot,

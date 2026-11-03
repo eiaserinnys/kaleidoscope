@@ -153,11 +153,11 @@ error_catalog! { ENTRIES;
         message: "문서 {doc}: 서버에서 이름을 바꾸지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
         fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
-    STORAGE_WRITE_SCHEMA_MISMATCH(key, reason) {
+    STORAGE_WRITE_SCHEMA_MISMATCH(name, reason) {
         class: InvalidRequest,
         place: "저장소 내용 검사",
         cause: "쓴 값이 항목에 선언된 JSON 스키마를 만족하지 않는다",
-        message: "저장 항목 {key}의 값이 앱 선언과 맞지 않습니다. 값을 고쳐 다시 저장하세요. 원인: {reason}",
+        message: "저장 항목 {name}: 값이 앱 선언과 맞지 않습니다. 값을 고쳐 다시 저장하세요. 원인: {reason}",
         fix: "앱 정의의 저장소 스키마와 저장하는 값을 대조해 고치세요"
     }
     STORAGE_WRITE_SCHEMA_MISSING(key) {

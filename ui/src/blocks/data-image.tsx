@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Block, MediaRef } from "../contract/contract";
 import { useBinding } from "../data/window-data";
 import { useMedia } from "../data/use-media";
-import { DataState } from "../components/data-state";
+import { DataState, useFolderPick } from "../components/data-state";
 import { DataIcon } from "../components/data-icons";
 import { cropStyle, isMedia } from "../components/media-thumbnail";
 import { Button, EmptyState, ErrorId, IconButton } from "../components/primitives";
@@ -18,14 +18,16 @@ export function ImageBlock({ block, pointer }: { block: Data; pointer: string })
   return <ImageView media={isMedia(binding.value) ? binding.value : null} fit={block.fit ?? "contain"} zoomable={!!block.zoom} />;
 }
 function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "contain" | "cover"; zoomable: boolean }) {
+  const folder = useFolderPick();
   const host = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [natural, setNatural] = useState({ width: 0, height: 0 });
+  const [overflowKey, setOverflowKey] = useState("");
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const key = media ? JSON.stringify(media) : "";
-  useEffect(() => { setScale(1); setOffset({ x: 0, y: 0 }); }, [key]);
+  useEffect(() => { setScale(1); setOffset({ x: 0, y: 0 }); folder.clear(); }, [key]);
   useEffect(() => {
     const element = host.current; if (!element) return;
     const measure = () => { const rect = element.getBoundingClientRect(); setSize({ width: rect.width, height: rect.height }); };
@@ -63,13 +65,27 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   const cropHeight = crop && crop.w > 0 && crop.h > 0 ? crop.h : 1;
   const sourceWidth = natural.width * cropWidth, sourceHeight = natural.height * cropHeight;
   const factor = sourceWidth && sourceHeight ? (fit === "cover" ? Math.max(size.width / sourceWidth, size.height / sourceHeight) : Math.min(size.width / sourceWidth, size.height / sourceHeight)) : 0;
-  const short = size.width < 258 || (size.width < 300 && size.height < 200);
   const compact = size.height < 200;
+  const failure = result.status === "failed" ? folder.error ?? result.error : null;
+  const layoutKey = JSON.stringify([key, size.width, size.height, failure?.id, failure?.message]);
+  const short = size.width < 258 || (size.width < 300 && size.height < 200) || overflowKey === layoutKey;
+  const chooseFolder = result.status === "failed" && result.error.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && media && "permission" in media;
+  const action = chooseFolder ? <Button onClick={() => folder.pick(media.permission, result.retry)}>폴더 선택</Button> : <Button onClick={result.retry}>다시 받기</Button>;
+  useLayoutEffect(() => {
+    if (!failure || short || !host.current) return;
+    const bounds = host.current.getBoundingClientRect();
+    const elements = host.current.querySelectorAll(".ks-empty-state-text, .ks-empty-state-action, .ks-empty-state-icon");
+    if ([...elements].some((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.left < bounds.left - 0.5 || rect.right > bounds.right + 0.5 || rect.top < bounds.top - 0.5 || rect.bottom > bounds.bottom + 0.5;
+    })) setOverflowKey(layoutKey);
+  }, [failure, short, layoutKey]);
   return <div className={`ks-image-view${zoomable ? " is-zoomable" : ""}`} ref={host} tabIndex={zoomable && media ? 0 : undefined} onKeyDown={onKeyDown} onPointerDown={down} onPointerMove={move} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }} onDoubleClick={() => { if (zoomable) adjust(1); }}>
     {!media ? <EmptyState icon={<DataIcon name="image" size="empty" />} />
       : result.status === "loading" ? <DataState value={{ status: "loading" }} />
       : result.status === "failed" ? short
-        ? <EmptyState text={<><span title={result.error.message}>이미지를 불러오지 못했습니다</span>{result.error.id ? <> <ErrorId id={result.error.id} /></> : null}</>} action={<Button onClick={result.retry}>다시 받기</Button>} />
+        ? <EmptyState text={<><span title={failure!.message}>이미지를 불러오지 못했습니다</span>{failure!.id ? <> <ErrorId id={failure!.id} /></> : null}</>} action={action} />
+        : chooseFolder ? <div className={compact ? "ks-data-state-compact" : "ks-data-state"}><EmptyState icon={<DataIcon name="triangle-alert" size={compact ? "inline" : "empty"} />} text={<>{failure!.message}{failure!.id ? <> <ErrorId id={failure!.id} /></> : null}</>} action={action} /></div>
         : <DataState value={{ status: "failed", id: result.error.id, message: result.error.message, retry: [] }} compact={compact} onRetry={result.retry} />
       : <div className="ks-image-frame" style={{ width: sourceWidth * factor, height: sourceHeight * factor, transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})` }}><img alt="" src={result.url} style={cropStyle(crop)} onLoad={(event) => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} draggable={false} /></div>}
     {zoomable && media && result.status === "ready" ? <div className="ks-image-controls" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>

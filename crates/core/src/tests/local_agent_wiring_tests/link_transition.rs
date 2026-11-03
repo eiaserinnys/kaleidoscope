@@ -45,7 +45,7 @@ fn reconnect_while(responding: bool) {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: file.server_url.clone(),
         device_name: file.device_name.clone(),
-        reason: "연결하는 중".into(),
+        reason: None,
     };
     emit_state(&core);
     wait_for(|| {
@@ -157,7 +157,7 @@ fn clearing_selection_while_storage_fails_stops_the_old_worker() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: file.server_url,
         device_name: file.device_name,
-        reason: "연결하는 중".into(),
+        reason: None,
     };
     emit_state(&core);
     wait_for(|| {

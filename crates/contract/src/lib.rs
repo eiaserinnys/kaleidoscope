@@ -694,8 +694,8 @@ pub enum LinkStatus {
         mode: ServerMode,
         server_url: String,
         device_name: String,
-        /// 마지막으로 실패한 까닭. 사람이 읽는 한국어 한 줄.
-        reason: String,
+        /// 마지막 연결 오류. 연결을 시작하는 동안에는 없다.
+        reason: Option<CoreError>,
     },
     /// 서버가 이 기기의 토큰을 거부했다(에이전트가 기기 연결을 끊음 등). 캐시의 앱은 그대로 쓴다.
     Revoked { server_url: String },

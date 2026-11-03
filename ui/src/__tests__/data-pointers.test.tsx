@@ -17,6 +17,20 @@ import { SplitPaneContext } from "../blocks/split-pane-context";
 beforeEach(mockVirtualLayout);
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+it("이전 설정 오류가 사라져도 뒤에 발생한 앱 오류는 남는다", () => {
+  const definition: AppDefinition = { id: "notice", name: "알림", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "text", value: "본문" } };
+  const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+  const data = new windowData.WindowData(store, "viewer-window", definition);
+  const settingsError = { id: "STORAGE_WRITE_SCHEMA_MISMATCH", code: "invalid_request" as const, message: "설정 오류", details: [] };
+  const appError = { id: "DATA_ACT_FAILED", code: "server" as const, message: "앱 오류", details: [] };
+  data.setNotice(settingsError);
+  data.setNotice(appError);
+  data.clearNoticeIf(settingsError);
+  expect(data.getNoticeId()).toBe("DATA_ACT_FAILED");
+  expect(data.getNotice()).toBe("앱 오류");
+  store.dispose();
+});
+
 it("탭의 쉬는 포인터를 붙일 때 보내고 전환마다 한 번 갱신한다", async () => {
   const definition: AppDefinition = {
     id: "dormant-tabs", name: "탭 시험", requires: { blocks: 4, modules: {} }, permissions: [], state: {},

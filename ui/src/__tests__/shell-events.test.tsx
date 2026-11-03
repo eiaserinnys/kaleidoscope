@@ -386,10 +386,12 @@ describe("shell server link control", () => {
   it("shows offline state and disables importing until reconnected", async () => {
     const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
     const transport = createFakeTransport(seed);
-    transport.setLink({ state: "offline", mode: "remote", server_url: "https://remote.example", device_name: "집", reason: "연결 끊김" });
+    transport.setLink({ state: "offline", mode: "remote", server_url: "https://remote.example", device_name: "집", reason: { id: "CONN_EVENTS_SEND_FAILED", code: "server", message: "연결 끊김", details: ["host=remote.example"] } });
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "원격 오프라인" }));
     expect(screen.getByText("연결 끊김")).toBeTruthy();
+    expect(screen.getByText("CONN_EVENTS_SEND_FAILED")).toBeTruthy();
+    expect(screen.queryByText("host=remote.example")).toBeNull();
     expect((screen.getByRole("button", { name: "내 PC 앱과 데이터 가져오기" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "서버 연결" })).toBeNull(); store.dispose();

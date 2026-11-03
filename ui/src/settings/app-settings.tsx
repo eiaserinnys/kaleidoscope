@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { ConversationApplyStatus, SelectOption, StorageEntryDecl } from "../contract/contract";
+import type { ConversationApplyStatus, CoreError, SelectOption, StorageEntryDecl } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import type { BlockContext } from "../blocks/block-context";
 import { MarkdownEditorBlock } from "../blocks/markdown-editor";
 import { documentEditorSession } from "../blocks/document-editor-session";
-import { useBinding } from "../data/window-data";
+import { useBinding, useWindowData } from "../data/window-data";
 import { DataState } from "../components/data-state";
 import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronRight, LoaderCircle, Plus, RotateCcw, X } from "../components/icons";
 import { Button, ErrorNotice, IconButton, Notice, StatusText } from "../components/primitives";
@@ -12,18 +12,27 @@ import { Select, Toggle, equalOption, optionValue } from "../components/select-t
 import { TextInput } from "../components/text-input";
 import { SettingsEntrySession } from "./settings-entry-session";
 
-export function AppSettings({ context, open, onClose, onProblem }: { context: BlockContext; open: boolean; onClose: () => void; onProblem?: (message: string | null) => void }) {
+type SettingsProblem = CoreError | string;
+export function AppSettings({ context, open, onClose, onProblem }: { context: BlockContext; open: boolean; onClose: () => void; onProblem?: (problem: SettingsProblem | null) => void }) {
+  const data = useWindowData();
   const title = useRef<HTMLHeadingElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const applyNotice = useRef<HTMLElement>(null);
   const restoreRetryFocus = useRef(false);
   const [applyStatus, setApplyStatus] = useState<ConversationApplyStatus>("applying");
   const [showApplyNotice, setShowApplyNotice] = useState(false);
-  const problems = useRef(new Map<string, string>());
-  const reportProblem = (id: string, message: string | null) => {
-    if (message) problems.current.set(id, message); else problems.current.delete(id);
+  const problems = useRef(new Map<string, SettingsProblem>());
+  const noticeOwner = useRef({}).current;
+  const wasOpen = useRef(open);
+  const showProblem = (problem: SettingsProblem | undefined) => { if (problem) data.setOwnedNotice(problem, noticeOwner); };
+  const reportProblem = (id: string, problem: SettingsProblem | null) => {
+    const previous = problems.current.get(id);
+    if (previous && previous !== problem) data.clearNoticeIf(previous, noticeOwner);
+    if (problem) problems.current.set(id, problem); else problems.current.delete(id);
     onProblem?.(problems.current.values().next().value ?? null);
+    if (!open && problem) showProblem(problem);
   };
+  useEffect(() => { if (wasOpen.current && !open) showProblem(problems.current.values().next().value); wasOpen.current = open; }, [open]);
   useEffect(() => { if (open) title.current?.focus(); }, [open]);
   useEffect(() => {
     if (!open || !restoreRetryFocus.current || applyStatus === "applying") return;
@@ -69,7 +78,7 @@ export function AppSettings({ context, open, onClose, onProblem }: { context: Bl
   </div>;
 }
 
-function SettingsEntry({ context, entry, index, open, onProblem }: { context: BlockContext; entry: StorageEntryDecl; index: number; open: boolean; onProblem: (id: string, message: string | null) => void }) {
+function SettingsEntry({ context, entry, index, open, onProblem }: { context: BlockContext; entry: StorageEntryDecl; index: number; open: boolean; onProblem: (id: string, problem: SettingsProblem | null) => void }) {
   const session = useMemo(() => new SettingsEntrySession(context.store, context.window.id, entry), [context.store, context.window.id, context.window.app_version, entry.id]);
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
   const documentSession = useMemo(() => entry.kind === "md" ? documentEditorSession(context.store, context.window.id, entry.id) : null, [context.store, context.window.id, entry.id, entry.kind]);
@@ -85,7 +94,7 @@ function SettingsEntry({ context, entry, index, open, onProblem }: { context: Bl
     const frame = requestAnimationFrame(() => { row.current?.querySelector<HTMLElement>(".cm-content")?.focus(); focusDocument.current = false; });
     return () => cancelAnimationFrame(frame);
   }, [expanded, documentState?.loaded]);
-  useEffect(() => { onProblem(entry.id, state.conflict || documentState?.conflict ? "다른 곳에서 바뀌었습니다" : state.error?.message ?? documentState?.error?.message ?? null); }, [entry.id, state.conflict, state.error, documentState?.conflict, documentState?.error]);
+  useEffect(() => { onProblem(entry.id, state.conflict || documentState?.conflict ? "다른 곳에서 바뀌었습니다" : state.error ?? documentState?.error ?? null); }, [entry.id, state.conflict, state.error, documentState?.conflict, documentState?.error]);
   useEffect(() => {
     void session.load();
     const unsubscribe = context.store.subscribeEvents((event) => {
