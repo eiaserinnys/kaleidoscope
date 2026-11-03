@@ -308,9 +308,16 @@ impl Core {
             Ok(()) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => {
-                return Err(errors::DESK_LEGACY_AGENT_DATA_DIRECTORY_REMOVE_FAILED(
-                    error.to_string(),
-                ));
+                let error =
+                    errors::DESK_LEGACY_AGENT_DATA_DIRECTORY_REMOVE_FAILED(error.to_string());
+                eprintln!(
+                    "{}: {}",
+                    error
+                        .id
+                        .as_deref()
+                        .unwrap_or("DESK_LEGACY_AGENT_DATA_DIRECTORY_REMOVE_FAILED"),
+                    error.message
+                );
             }
         }
 

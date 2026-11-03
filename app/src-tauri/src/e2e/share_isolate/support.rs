@@ -154,22 +154,37 @@ pub(super) fn surface_code(minimized: bool) -> String {
     code
 }
 
-pub(super) fn agent_definition(out: &Path, agent_bin: &Path) -> Value {
-    let mut definition: Value = serde_json::from_str(include_str!("../../../../../apps/agent.json"))
-        .expect("built-in agent app definition is valid JSON");
-    definition["id"] = json!(AGENT_APP_ID);
-    definition["name"] = json!("Share capture agent E2E");
-    definition["storage"]["entries"][0]["default"] = json!([{
+pub(super) fn write_test_agent_settings(
+    core: &Core,
+    window_id: &str,
+    out: &Path,
+    agent_bin: &Path,
+) -> Result<(), String> {
+    let agents = json!([{
         "id": AGENT_ID,
         "name": "Test agent",
-        "command": agent_bin.join("fake-agent.cmd").to_string_lossy(),
+        "command": agent_bin.join("fake-agent.cmd").to_string_lossy().into_owned(),
         "args": ["share"],
         "env": {
             "TEST_SCENARIO": "share-images",
-            "KALEIDOSCOPE_E2E_IMAGE_DIR": out.join("share-isolate-images").to_string_lossy()
+            "KALEIDOSCOPE_E2E_IMAGE_DIR": out.join("share-isolate-images").to_string_lossy().into_owned()
         }
     }]);
-    definition
+    match call(
+        core,
+        CoreRequest::StorageWrite {
+            window_id: window_id.into(),
+            entry: "agents".into(),
+            doc: None,
+            content: agents,
+            expected_revision: Default::default(),
+        },
+    )? {
+        CoreReply::StorageWrite { .. } => Ok(()),
+        reply => Err(format!(
+            "unexpected agent settings write response: {reply:?}"
+        )),
+    }
 }
 
 pub(super) fn query_layout(app: &AppHandle) -> Result<Layout, String> {

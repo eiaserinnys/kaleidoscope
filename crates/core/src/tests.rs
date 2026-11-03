@@ -36,6 +36,7 @@ mod profiler_concurrency_tests;
 mod profiler_tests;
 mod server_switch_tests;
 mod share_capture_tests;
+mod shared_state_recovery_tests;
 
 const MD_EDITOR: &str = include_str!("../../../apps/md-editor.json");
 const MD_EDITOR_V3: &str = include_str!("tests/fixtures/md-editor-v3.json");

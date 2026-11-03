@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 const A_ID: &str = "e2e-share-a";
 const B_ID: &str = "e2e-share-b";
 const WEB_APP_ID: &str = "e2e-share-web-browser";
-const AGENT_APP_ID: &str = "e2e-share-agent";
+const AGENT_APP_ID: &str = "agent";
 const AGENT_ID: &str = "test-agent";
 const WINDOW_READY_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -96,7 +96,6 @@ pub(super) fn scenario(
             false,
         ),
     )?;
-    import_definition(core, agent_definition(out, &agent_bin))?;
     let mut web_browser: Value =
         serde_json::from_str(include_str!("../../../../apps/web-browser.json"))
             .map_err(|error| error.to_string())?;
@@ -118,6 +117,14 @@ pub(super) fn scenario(
         log,
         "web.loaded",
         json!({"window_id":web_id,"url":web_page.url}),
+    )?;
+    let setup_agent_window_id = open_window(core, &desktop_id, AGENT_APP_ID, layout.agent)?;
+    write_test_agent_settings(core, &setup_agent_window_id, out, &agent_bin)?;
+    call(
+        core,
+        CoreRequest::WindowClose {
+            window_id: setup_agent_window_id,
+        },
     )?;
     let agent_window_id = open_window(core, &desktop_id, AGENT_APP_ID, layout.agent)?;
     let (permission_tx, permission_rx) = mpsc::channel();
