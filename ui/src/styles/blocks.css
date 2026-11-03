@@ -427,7 +427,7 @@
 }
 
 .ks-editor-view .cm-editor {
-  background: var(--ks-color-surface);
+  background: transparent;
   color: var(--ks-color-text);
   font-family: var(--ks-font-family);
   font-size: var(--ks-type-document);
@@ -481,8 +481,11 @@
 }
 
 .ks-markdown-text h1 {
-  font-size: 1.333em;
-  line-height: var(--ks-line-document);
+  font-family: var(--ks-font-display);
+  font-size: 1.867em;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
 .ks-markdown-text h2 {
@@ -562,11 +565,16 @@
 }
 
 .ks-markdown-text blockquote {
-  border-inline-start: var(--ks-space-1) solid var(--ks-color-border);
+  border-inline-start: 0;
   color: var(--ks-color-muted);
+  font-family: var(--ks-font-display);
+  font-size: 1.2em;
+  font-style: italic;
   margin-inline: 0;
-  padding-inline-start: var(--ks-space-3);
+  padding: 0;
 }
+
+.ks-markdown-text input[type="checkbox"] { accent-color: var(--ks-color-share); }
 
 .ks-agent-chat-state {
   width: 100%;
@@ -849,7 +857,7 @@
   font-style: italic;
 }
 
-.ks-editor-view .ks-live-heading-1 { font-size: 1.333em; font-weight: 700; }
+.ks-editor-view .ks-live-heading-1 { font-family: var(--ks-font-display); font-size: 1.867em; font-weight: 400; letter-spacing: -0.01em; line-height: 1.2; }
 .ks-editor-view .ks-live-heading-2 { font-size: 1.067em; font-weight: 700; }
 .ks-editor-view .ks-live-heading-3,
 .ks-editor-view .ks-live-heading-4,
@@ -874,9 +882,12 @@
 .ks-editor-view .ks-live-muted { color: var(--ks-color-muted); }
 .ks-editor-view .ks-live-image { font-style: italic; }
 .ks-editor-view .ks-live-quote {
-  border-inline-start: var(--ks-space-1) solid var(--ks-color-border);
+  border-inline-start: 0;
   color: var(--ks-color-muted);
-  padding-inline-start: var(--ks-space-3);
+  font-family: var(--ks-font-display);
+  font-size: 1.2em;
+  font-style: italic;
+  padding: 0;
 }
 .ks-editor-view .ks-live-quote-marker {
   color: var(--ks-color-muted);
@@ -903,7 +914,7 @@
 .ks-live-task.is-checked::after {
   width: .3em;
   height: .6em;
-  border: solid var(--ks-color-accent);
+  border: solid var(--ks-color-share);
   border-width: 0 var(--ks-focus-width) var(--ks-focus-width) 0;
   content: "";
   transform: rotate(45deg);
@@ -1009,7 +1020,7 @@ button.ks-agent-attachment-chip-preview,
   inset: 0;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--ks-color-background) 94%, transparent);
+  background: var(--ks-color-surface-solid);
 }
 
 .ks-agent-image-overlay > img {

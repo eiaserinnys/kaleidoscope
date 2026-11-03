@@ -39,7 +39,7 @@ test("작업 표시줄에서 창을 복원하고 최대화와 이전 크기로 �
   await expect(window).toHaveAttribute("data-maximized", "true");
   await expect(window.locator(".ks-window-resize-east")).toHaveCount(0);
   const titlebarIcons = await window.locator(".ks-window-title-actions svg").evaluateAll((icons) => icons.map((icon) => ({ width: icon.getAttribute("width"), className: icon.getAttribute("class") })));
-  expect(titlebarIcons.every(({ width }) => width === "18")).toBe(true);
+  expect(titlebarIcons.every(({ width }) => width === "14")).toBe(true);
   expect(titlebarIcons.some(({ className }) => className?.split(" ").includes("lucide-minus"))).toBe(true);
   expect(titlebarIcons.some(({ className }) => className?.split(" ").includes("lucide-minimize-2"))).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("window-maximized-1440x900.png") });

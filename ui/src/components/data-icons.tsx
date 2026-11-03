@@ -81,5 +81,5 @@ const icons: Record<string, LucideIcon> = {
 
 export function DataIcon({ name, size = "control" }: { name: string; size?: IconSize }) {
   const Icon = icons[name];
-  return Icon ? <Icon aria-hidden="true" size={ICON_SIZE[size]} strokeWidth={1.5} absoluteStrokeWidth /> : null;
+  return Icon ? <Icon aria-hidden="true" size={ICON_SIZE[size]} strokeWidth={1.5} /> : null;
 }

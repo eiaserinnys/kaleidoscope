@@ -1,4 +1,4 @@
-.ks-app-settings { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; background: var(--ks-color-surface); }
+.ks-app-settings { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; background: var(--ks-material-dialog); backdrop-filter: blur(var(--ks-blur-popover)); }
 .ks-app-settings[hidden], .ks-settings-document[hidden], .ks-data-window-body[hidden] { display: none; }
 .ks-app-settings h2, .ks-app-settings h3 { margin: 0; }
 .ks-app-settings h2 { font-size: var(--ks-type-title); font-weight: 600; }

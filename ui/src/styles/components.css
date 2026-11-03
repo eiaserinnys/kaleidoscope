@@ -14,6 +14,11 @@
   padding: 0 var(--ks-space-3);
 }
 
+.ks-button-quiet {
+  border-color: transparent;
+  background: transparent;
+}
+
 .ks-button:hover:not(:disabled),
 .ks-icon-button:hover:not(:disabled) {
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
@@ -191,12 +196,13 @@
   max-height: calc(100vh - 2 * var(--ks-space-3));
   flex-direction: column;
   overflow: hidden auto;
-  border: var(--ks-line-width) solid var(--ks-color-border);
-  border-radius: var(--ks-radius-small);
-  background: var(--ks-color-surface-raised);
+  border: var(--ks-line-width) solid var(--ks-color-glass-edge);
+  border-radius: var(--ks-radius-large);
+  background: var(--ks-material-popover);
   box-shadow: var(--ks-shadow-popover);
   color: var(--ks-color-text);
   padding: var(--ks-space-1) 0;
+  backdrop-filter: blur(var(--ks-blur-popover));
 }
 
 .ks-menu > * {
@@ -258,18 +264,24 @@
 }
 
 .ks-menu-group-heading {
+  font-family: var(--ks-font-label);
   color: var(--ks-color-muted);
   font-size: var(--ks-type-meta);
+  letter-spacing: var(--ks-letter-label);
   line-height: var(--ks-line-meta);
   padding: var(--ks-space-1) var(--ks-space-3);
+  text-transform: uppercase;
 }
 
 .ks-select-group-label {
   flex: 0 0 auto;
   margin-inline-start: var(--ks-space-2);
+  font-family: var(--ks-font-label);
   color: var(--ks-color-muted);
   font-size: var(--ks-type-meta);
+  letter-spacing: var(--ks-letter-label);
   line-height: var(--ks-line-meta);
+  text-transform: uppercase;
 }
 
 .ks-select-choice-label {
