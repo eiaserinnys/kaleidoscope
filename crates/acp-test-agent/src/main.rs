@@ -135,6 +135,18 @@ fn main() {
                 if scenario.contains("model_config") {
                     result["configOptions"] = json!([{"id":"new-model","name":"모델","category":"model","type":"select","currentValue":"x","options":[{"value":"x","name":"X"}]}]);
                 }
+                if scenario.contains("many_controls") {
+                    let options: Vec<Value> = (0..12)
+                        .map(|index| {
+                            if index % 2 == 0 {
+                                json!({"id":format!("option-{index}"),"name":format!("설정 항목 {index}"),"type":"select","currentValue":"a","options":[{"value":"a","name":"아주 긴 선택 값이 이어집니다"}]})
+                            } else {
+                                json!({"id":format!("option-{index}"),"name":format!("응답 중 추가 설정을 허용합니다 {index}"),"type":"boolean","currentValue":true})
+                            }
+                        })
+                        .collect();
+                    result["configOptions"] = Value::Array(options);
+                }
                 emit(json!({"jsonrpc":"2.0","id":id,"result":result}));
             }
             "session/set_config_option" => {

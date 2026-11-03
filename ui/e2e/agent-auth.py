@@ -46,10 +46,11 @@ def main():
                 browser = sb.open_page(playwright, (1100, 800))
                 page = sb.page
                 http_failures = []
+                stage = {'name':'시작'}
                 def remember_failure(response):
                     if response.status == 400 and response.url.endswith('/core'):
                         try:
-                            http_failures.append({'op':response.request.post_data_json.get('op'), 'id':response.json().get('id')})
+                            http_failures.append({'stage':stage['name'], 'op':response.request.post_data_json.get('op'), 'id':response.json().get('id')})
                         except Exception:
                             http_failures.append({'op':'확인 불가', 'id':'확인 불가'})
                 page.on('response', remember_failure)
@@ -65,16 +66,19 @@ def main():
                 login = app.get_by_role('button', name='로그인', exact=True)
                 login.wait_for(timeout=30000)
                 capture(sb, app, '09-login')
+                stage['name'] = '로그인 실패와 재시도'
                 login.click()
                 app.get_by_text('AGENT_LOGIN_AUTHENTICATE_FAILED', exact=True).wait_for(timeout=30000)
                 capture(sb, app, '10-login-failed')
                 app.get_by_role('button', name='로그인', exact=True).click()
                 box = app.get_by_role('textbox', name='메시지')
                 box.wait_for(timeout=30000)
+                stage['name'] = '응답 실패'
                 box.fill('fail-turn')
                 box.press('Enter')
                 app.get_by_text('AGENT_ACP_PROTOCOL_FAILED', exact=True).wait_for(timeout=30000)
                 capture(sb, app, '11-failed')
+                stage['name'] = '세션 다시 시도'
                 app.get_by_role('button', name='다시 시도', exact=True).click()
                 app.get_by_role('button', name='로그인', exact=True).wait_for(timeout=30000)
                 assert not app.get_by_role('dialog').count(), '같은 실행 허용을 다시 묻습니다'
@@ -83,10 +87,12 @@ def main():
                 app.get_by_role('button', name='로그인', exact=True).click()
                 box = app.get_by_role('textbox', name='메시지')
                 box.wait_for(timeout=30000)
+                stage['name'] = '대화 재개'
                 app.get_by_text('OLD', exact=True).wait_for(timeout=30000)
                 box.fill('fresh-turn')
                 box.press('Enter')
                 app.get_by_text('NEW', exact=True).wait_for(timeout=30000)
+                stage['name'] = '창 닫기'
                 sb.core({'op':'window.close', 'window_id':window_id})
                 wait(lambda: sb.window_of('agent') is None, '로그인 시험 창이 닫히지 않았습니다')
                 current = sb.mcp.call('read_app_storage', {'app_id':'agent','entry_id':'agents'})
