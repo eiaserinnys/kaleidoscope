@@ -219,6 +219,7 @@ pub mod data;
 pub mod errors;
 pub mod file_name;
 pub mod local_agent;
+pub mod process;
 pub mod registry;
 pub mod size;
 pub mod validate;
@@ -239,7 +240,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 26;
+pub const CONTRACT_VERSION: u32 = 27;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -268,7 +269,8 @@ pub const CONTRACT_VERSION: u32 = 26;
 /// - 15판: `tabs.header`, `tabs.keep_mounted`, `tabs.collapsible`, `folder.header`, `state_migrate`, `opens.set_state`.
 /// - 16판: 탭과 입력 블록 라벨, `dialog.close_label`, `dialog.cancel_label`, `tour.labels`의 바인딩.
 ///   평문 문자열은 이전 판과 같은 wire 모양이다.
-pub const BLOCK_SET_VERSION: u32 = 16;
+/// - 17판: 클라이언트의 process 실행 권한.
+pub const BLOCK_SET_VERSION: u32 = 17;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -296,7 +298,8 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("http", 2),
     ("worker", 1),
     ("profiler", 1),
-    ("client", 2),
+    ("client", 3),
+    ("process", 1),
 ];
 
 /// 지원 범위를 알리지 않는 옛 쉘(블록 세트 3판 전)이 그릴 수 있는 블록 세트 판. 서버가 그런 기기에 보낼 앱을
@@ -532,6 +535,8 @@ pub struct DeviceState {
     /// (계약 20판) 이 기기에서 앱 권한과 실행 명세별로 허용한 로컬 에이전트.
     #[serde(default)]
     pub local_agent_access: Vec<local_agent::LocalAgentAccess>,
+    #[serde(default)]
+    pub process_access: Vec<process::ProcessAccess>,
 }
 
 /// (계약 14판) 이 기기에서 앱 하나의 `scope: pc` 권한 하나를 허용한 기록. 기기 밖으로 나가지 않는다.
@@ -1046,6 +1051,8 @@ pub enum PermissionDecl {
     },
     /// (모듈 `local_agent` 1판) 이 기기에서 선언한 ACP 에이전트 프로그램을 실행한다.
     LocalAgent { id: String, label: String },
+    /// 이 기기에서 사용자가 허용한 프로그램을 실행한다.
+    Process { id: String, label: String },
     /// 이 기기에서 코어 성능 기록을 조회하고 측정한다.
     Profiler { id: String, label: String },
 }
@@ -1115,6 +1122,7 @@ impl PermissionDecl {
             | PermissionDecl::Connection { id, .. }
             | PermissionDecl::Http { id, .. }
             | PermissionDecl::Profiler { id, .. }
+            | PermissionDecl::Process { id, .. }
             | PermissionDecl::LocalAgent { id, .. } => id,
         }
     }
@@ -1126,6 +1134,7 @@ impl PermissionDecl {
             PermissionDecl::Connection { .. } => "connection",
             PermissionDecl::Http { .. } => "http",
             PermissionDecl::LocalAgent { .. } => "local_agent",
+            PermissionDecl::Process { .. } => "process",
             PermissionDecl::Profiler { .. } => "profiler",
         }
     }
@@ -1136,7 +1145,7 @@ impl PermissionDecl {
                 *access
             }
             // 로컬 에이전트 권한은 파일 접근 권한이 아니다. 기존 파일 전용 검사는 읽기 수준으로 취급한다.
-            PermissionDecl::LocalAgent { .. } | PermissionDecl::Http { .. } => FileAccess::Read,
+            PermissionDecl::LocalAgent { .. } | PermissionDecl::Process { .. } | PermissionDecl::Http { .. } => FileAccess::Read,
             PermissionDecl::Profiler { .. } => FileAccess::Readwrite,
         }
     }
@@ -4194,6 +4203,24 @@ pub enum CoreRequest {
     #[serde(rename = "share.unfreeze")]
     ShareUnfreeze {},
 
+    /// 프로세스 명령. 허용 응답은 쉘에서만 보낸다.
+    #[serde(rename = "process.start")]
+    ProcessStart { window_id: String, key: String, permission: String, spec: process::ProcessSpec, cwd_permission: String, #[serde(default)] services: Vec<String> },
+    #[serde(rename = "process.respond_permission")]
+    ProcessRespondPermission { window_id: String, request_id: String, allow: bool },
+    #[serde(rename = "process.attach")]
+    ProcessAttach { window_id: String, key: String },
+    #[serde(rename = "process.read")]
+    ProcessRead { window_id: String, handle: String, #[ts(type = "number")] after: u64, max_bytes: usize },
+    #[serde(rename = "process.ack")]
+    ProcessAck { window_id: String, handle: String, #[ts(type = "number")] after: u64, checkpoint: Option<serde_json::Value> },
+    #[serde(rename = "process.write")]
+    ProcessWrite { window_id: String, handle: String, bytes: Vec<u8>, checkpoint: Option<serde_json::Value> },
+    #[serde(rename = "process.close_input")]
+    ProcessCloseInput { window_id: String, handle: String },
+    #[serde(rename = "process.stop")]
+    ProcessStop { window_id: String, handle: String },
+
     /// (계약 20판) 기기 로컬 에이전트 창 명령. 자세한 응답과 세대 규칙은 [`local_agent`]에 있다.
     #[serde(rename = "local_agent.attach")]
     LocalAgentAttach { window_id: String },
@@ -4866,6 +4893,23 @@ pub enum CoreReply {
     #[serde(rename = "conversation.attachment_open")]
     ConversationAttachmentOpen {},
 
+    #[serde(rename = "process.start")]
+    ProcessStart { result: process::ProcessStartResult },
+    #[serde(rename = "process.respond_permission")]
+    ProcessRespondPermission {},
+    #[serde(rename = "process.attach")]
+    ProcessAttach { process: Option<process::ProcessSnapshot> },
+    #[serde(rename = "process.read")]
+    ProcessRead { bytes: Vec<u8>, #[ts(type = "number")] next: u64, stderr_tail: Vec<u8>, exit: Option<process::ProcessExit> },
+    #[serde(rename = "process.ack")]
+    ProcessAck {},
+    #[serde(rename = "process.write")]
+    ProcessWrite {},
+    #[serde(rename = "process.close_input")]
+    ProcessCloseInput {},
+    #[serde(rename = "process.stop")]
+    ProcessStop {},
+
     #[serde(rename = "local_agent.attach")]
     LocalAgentAttach {
         snapshot: local_agent::LocalAgentSnapshot,
@@ -5062,6 +5106,12 @@ pub enum CoreEvent {
         window_id: String,
         update: app_storage::StorageUpdate,
     },
+    /// 쉘이 사용자에게 실행 허용을 묻는다.
+    #[serde(rename = "process.permission")]
+    ProcessPermission { window_id: String, request_id: String, spec: process::ProcessSpec },
+    /// 프로세스 출력을 읽거나 종료를 확인할 수 있다.
+    #[serde(rename = "process.ready")]
+    ProcessReady { window_id: String, handle: String },
     /// (계약 20판) 로컬 에이전트 창의 상태 변경. 세대가 다른 업데이트는 화면이 넘긴다.
     #[serde(rename = "local_agent.update")]
     LocalAgentUpdate {
@@ -5593,7 +5643,7 @@ mod tests {
         });
         let definition = validate::parse_app_definition(&definition.to_string())
             .expect("U6 필드를 사용하는 정의는 유효하다");
-        assert_eq!(CONTRACT_VERSION, 26);
+        assert_eq!(CONTRACT_VERSION, 27);
         let Block::Tabs {
             header,
             keep_mounted,

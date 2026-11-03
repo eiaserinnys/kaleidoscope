@@ -802,7 +802,7 @@
   gap: var(--ks-space-3);
 }
 
-.ks-agent-session-command {
+.ks-agent-session-command, .ks-process-command {
   display: block;
   max-width: 100%;
   background: var(--ks-color-code);
@@ -819,6 +819,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.ks-process-env { max-width: 100%; min-width: 0; font-family: var(--ks-font-code); white-space: pre-wrap; }
 
 .ks-agent-session-permissions,
 .ks-agent-session-permission-actions {

@@ -187,6 +187,7 @@ pub(crate) fn remove_registry_app(state: &mut CoreState, app_id: &str) {
         .device
         .pc_access
         .retain(|access| access.app_id != app_id);
+    state.device.process_access.retain(|access| access.app_id != app_id);
 }
 
 fn version_app(state: &CoreState, version: &AppVersion) -> App {
@@ -206,6 +207,10 @@ fn apply_version(state: &mut CoreState, app: App, version: AppVersion, replace_h
         access.app_id != app.id || definition.permissions.iter().any(|permission| matches!(permission,
             kaleidoscope_contract::PermissionDecl::Files { id, scope: kaleidoscope_contract::FilesScope::Pc, .. }
             if id == &access.permission))
+    });
+    state.device.process_access.retain(|access| {
+        access.app_id != app.id || definition.permissions.iter().any(|permission| matches!(permission,
+            kaleidoscope_contract::PermissionDecl::Process { id, .. } if id == &access.permission))
     });
 
     if state.shared.apps.iter().any(|current| current.id == app.id) {

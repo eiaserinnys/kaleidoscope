@@ -1,7 +1,7 @@
 import type { ClientCapability } from "../contract/contract";
 import * as shellErrors from "../contract/shell-errors";
 
-type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string; inputs?: Record<string, unknown>; capabilities?: ClientCapability[]; actions?: string[]; errors?: ReturnType<typeof sandboxErrors> };
+type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string; inputs?: Record<string, unknown>; capabilities?: ClientCapability[]; actions?: string[]; processEnabled?: boolean; errors?: ReturnType<typeof sandboxErrors> };
 
 export function sandboxErrors() {
   return {
@@ -29,7 +29,7 @@ function bridgeSource(init: SandboxInit): string {
     let state = { ...config.state }, nextRequest = 0, shareText = '', shareImage = '', shareCanvas = null, explicitText = false;
     const stateListeners = new Set(), storageListeners = new Map(), pending = new Map(), pendingWrites = new Set();
     const send = (type, body = {}, transfer) => transfer ? parent.postMessage({ token, type, ...body }, '*', transfer) : parent.postMessage({ token, type, ...body }, '*');
-    const lifecycleListeners = new Set(), pendingLifecycle = new Set();
+    const lifecycleListeners = new Set(), pendingLifecycle = new Set(), processListeners = new Set();
     let lifecycle = null;
     const inputListeners = new Set(), handlers = new Map(), surfaceListeners = new Map(), surfaces = new Map();
     let activeActions = 0;
@@ -142,20 +142,36 @@ function bridgeSource(init: SandboxInit): string {
         report();
       },
     };
+    if (config.processEnabled) {
+      const call = (method, params) => clientRequest('ks-client-process', { method, params });
+      window.kaleidoscope.process = {
+        start(params) { return call('start', params); },
+        attach(params) { return call('attach', params); },
+        async read(params) { const result = await call('read', params); return { ...result, bytes: new Uint8Array(result.bytes), stderr_tail: new Uint8Array(result.stderr_tail) }; },
+        ack(params) { return call('ack', params); },
+        write(params) { const bytes = new Uint8Array(params.bytes).slice().buffer; return clientRequest('ks-client-process', { method: 'write', params: { ...params, bytes } }, [bytes]); },
+        close_input(params) { return call('close_input', params); },
+        stop(params) { return call('stop', params); },
+        onReady(listener) { processListeners.add(listener); return () => processListeners.delete(listener); },
+      };
+    }
     window.addEventListener('message', event => {
       if (event.source !== parent || !event.data) return;
       const data = event.data;
       if (data.type === 'ks-client-lifecycle') {
-        lifecycle = data.lifecycle;
+        const currentLifecycle = data.lifecycle;
+        lifecycle = currentLifecycle;
         lifecycleListeners.forEach(fn => {
-          const task = Promise.resolve().then(() => fn(lifecycle));
-          pendingLifecycle.add(task); task.then(() => pendingLifecycle.delete(task), () => pendingLifecycle.delete(task));
+          const task = Promise.resolve().then(() => fn(currentLifecycle));
+          if (currentLifecycle.phase === 'closing') pendingLifecycle.add(task);
+          task.then(() => pendingLifecycle.delete(task), () => pendingLifecycle.delete(task));
         });
       }
       if (data.type === 'ks-client-inputs') { inputs = data.inputs; inputListeners.forEach(fn => fn(inputs, data.changed)); }
       if (data.type === 'ks-client-action' && config.actions?.includes(data.name)) { const handler = handlers.get(data.name); if (handler) { activeActions += 1; Promise.resolve().then(() => handler(data.context)).catch(error => { const detail = error && typeof error === 'object' ? error : {}; send('ks-client-notice', { message: typeof detail.message === 'string' ? detail.message : String(error), error: true, errorId: detail.id, errorCode: detail.code }); }).finally(() => { activeActions -= 1; }); } }
       if (data.type === 'ks-client-ping') send('ks-client-pong');
       if (data.type === 'ks-client-reply') { const job = pending.get(data.requestId); if (job) { pending.delete(data.requestId); data.error ? job.reject(fail({ id: data.errorId, code: data.errorCode, message: data.error })) : job.resolve(data.result); } }
+      if (data.type === 'ks-process-ready') processListeners.forEach(fn => fn(data.handle));
       if (data.type === 'ks-client-surface') {
         if (data.phase === 'detach') {
           if (surfaces.get(data.id)?.generation === data.generation) { surfaces.delete(data.id); surfaceListeners.get(data.id)?.forEach(fn => fn(null)); }

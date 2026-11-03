@@ -60,6 +60,7 @@ pub mod desk;
 pub mod file;
 pub mod mcp;
 pub mod media;
+pub mod process;
 pub mod retired;
 pub mod server;
 pub mod share;
@@ -78,6 +79,7 @@ pub use desk::*;
 pub use file::*;
 pub use mcp::*;
 pub use media::*;
+pub use process::*;
 pub use server::*;
 pub use share::*;
 pub use shell::*;
@@ -95,6 +97,7 @@ pub const AREAS: &[(&str, &[ErrorEntry])] = &[
     ("CONV", conv::ENTRIES),
     ("AGENT", agent::ENTRIES),
     ("MEDIA", media::ENTRIES),
+    ("PROCESS", process::ENTRIES),
     ("WEB", web::ENTRIES),
     ("WORKER", worker::ENTRIES),
     ("ASSET", asset::ENTRIES),

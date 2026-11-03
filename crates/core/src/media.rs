@@ -336,7 +336,7 @@ pub(crate) fn get(
                 },
             )
         }
-        PermissionDecl::LocalAgent { .. } | PermissionDecl::Profiler { .. } => {
+        PermissionDecl::LocalAgent { .. } | PermissionDecl::Process { .. } | PermissionDecl::Profiler { .. } => {
             return Err(errors::MEDIA_LOAD_SOURCE_UNSUPPORTED(&media.path));
         }
     };

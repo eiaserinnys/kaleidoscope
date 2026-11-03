@@ -4,7 +4,6 @@ use std::collections::BTreeMap;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use ts_rs::TS;
 
 use crate::{conversation, ErrorCode};
@@ -249,25 +248,12 @@ pub fn validate_agent_specs(value: &serde_json::Value) -> Result<Vec<AgentSpec>,
 
 /// id와 인증 방법을 제외한 실행 내용을 정렬된 JSON으로 SHA256 해시한다.
 pub fn agent_spec_hash(spec: &AgentSpec) -> String {
-    let mut canonical = BTreeMap::new();
-    canonical.insert(
-        "args",
-        serde_json::to_value(&spec.args).expect("args serialize"),
-    );
-    canonical.insert(
-        "command",
-        serde_json::to_value(&spec.command).expect("command serialize"),
-    );
-    canonical.insert(
-        "env",
-        serde_json::to_value(&spec.env).expect("env serialize"),
-    );
-    canonical.insert(
-        "name",
-        serde_json::to_value(&spec.name).expect("name serialize"),
-    );
-    let bytes = serde_json::to_vec(&canonical).expect("execution spec serialize");
-    format!("{:x}", Sha256::digest(bytes))
+    crate::process::spec_hash(&crate::process::ProcessSpec {
+        name: spec.name.clone(),
+        command: spec.command.clone(),
+        args: spec.args.clone(),
+        env: spec.env.clone(),
+    })
 }
 
 fn valid_env_name(name: &str) -> bool {

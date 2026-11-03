@@ -1,5 +1,6 @@
 export { AppWindowContent } from "./render/app-window-content";
 export { Button, EmptyState, ErrorId, ErrorNotice, IconButton, Notice, StatusText } from "./components/primitives";
+export { Dialog } from "./components/dialog";
 export {
   ArrowUp,
   ArrowDown,
@@ -45,6 +46,7 @@ export {
   type FakeWebViewSnapshot,
 } from "./core/fake-transport";
 export { createShellStore, useShellSelector, type ShellStore } from "./core/shell-store";
+export { isWindowTop } from "./data/window-state";
 export { flushEditors } from "./blocks/file-editor-session";
 export { flushSandboxes } from "./blocks/sandbox-flush";
 export { toCoreError } from "./core/core-transport";
