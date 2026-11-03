@@ -101,7 +101,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "기본 앱 실행 설정 판 검사",
         cause: "기본 앱 실행 설정의 판이 0이다",
-        message: "기본 앱 ID {app_id}: 쉘이 보낸 실행 설정 판 {version}은 쓸 수 없습니다. 쉘을 업데이트하세요.",
+        message: "기본 앱 ID {app_id}: 쉘이 보낸 실행 설정의 판이 올바르지 않습니다. 쉘을 업데이트하세요. 받은 판: {version}",
         fix: "쉘을 업데이트하세요"
     }
     APP_BUILTIN_SPEC_STORAGE_SERIALIZE_FAILED(app_id) {
