@@ -4,6 +4,7 @@ import type { Block, TourStep } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useWindowData } from "../data/window-data";
 import { Button } from "../components/primitives";
+import { BindingFailureNotice } from "../components/data-state";
 import { registerTourShortcuts } from "../runtime/shortcuts";
 import { getAnchorElement, subscribeAnchor } from "./anchor-registry";
 
@@ -153,6 +154,7 @@ export function TourBlock({ block, context, pointer }: { block: TourBlockData; c
     >
       <div className="ks-tour-step-count">{index + 1} / {block.steps.length}</div>
       <h2 className="ks-tour-title" id={`${pointer.replaceAll("/", "-")}-tour-title`}>{titleText}</h2>
+      <BindingFailureNotice value={title} />
       {bodyText ? <div className="ks-tour-body">{bodyText}</div> : null}
       <div className="ks-tour-actions">
         <Button disabled={!previousStep} onClick={() => onStep(previousStep)}>{previousText}</Button>
@@ -161,6 +163,10 @@ export function TourBlock({ block, context, pointer }: { block: TourBlockData; c
           : <Button variant="emphasis" onClick={() => onStep(nextStep)}>{nextText}</Button>}
         <Button onClick={() => onClose("skipped")}>{skipText}</Button>
       </div>
+      <BindingFailureNotice value={previousLabel} />
+      <BindingFailureNotice value={nextLabel} />
+      <BindingFailureNotice value={doneLabel} />
+      <BindingFailureNotice value={skipLabel} />
     </section>
   </div>, host);
 }

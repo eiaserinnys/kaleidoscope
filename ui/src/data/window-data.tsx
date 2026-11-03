@@ -17,15 +17,23 @@ const lifecycle = new WeakMap<ShellStore, Map<string, Promise<void>>>();
 
 type BindingKind =
   | { kind: "state" | "client" | "expr" | "message" | "item" | "parent_item"; key: string }
+  | { kind: "message_item"; path: string }
   | { kind: "literal" };
 
 function bindingKind(binding: Binding): BindingKind {
   if (binding === null || typeof binding !== "object" || Array.isArray(binding)) return { kind: "literal" };
   const entries = Object.entries(binding);
+  if (entries.length === 1 && entries[0][0] === "message" && entries[0][1] !== null
+      && typeof entries[0][1] === "object" && !Array.isArray(entries[0][1])) {
+    const messageEntries = Object.entries(entries[0][1]);
+    if (messageEntries.length === 1 && messageEntries[0][0] === "item" && typeof messageEntries[0][1] === "string") {
+      return { kind: "message_item", path: messageEntries[0][1] };
+    }
+  }
   if (entries.length !== 1 || typeof entries[0][1] !== "string") return { kind: "literal" };
   const [kind, key] = entries[0];
-  if (["state", "client", "expr", "message", "item", "parent_item"].includes(kind)) {
-    return { kind: kind as Exclude<BindingKind, { kind: "literal" }>["kind"], key };
+  if (kind === "state" || kind === "client" || kind === "expr" || kind === "message" || kind === "item" || kind === "parent_item") {
+    return { kind, key };
   }
   return { kind: "literal" };
 }
@@ -34,6 +42,7 @@ function resolveBindingValue(
   binding: Binding,
   kind: BindingKind,
   definition: AppDefinition,
+  pointer: string,
   scope: ItemScope | null | undefined,
   value: BindingValue,
   stateValue: JsonValue | undefined,
@@ -50,8 +59,36 @@ function resolveBindingValue(
       const selectedLocale = typeof stateValue === "string" ? stateValue : defaultLocale;
       const messageValue = (typeof selectedLocale === "string" ? definition.messages?.[selectedLocale]?.[kind.key] : undefined)
         ?? (typeof defaultLocale === "string" ? definition.messages?.[defaultLocale]?.[kind.key] : undefined)
-        ?? null;
-      return { status: "ready", value: messageValue };
+        ?? undefined;
+      if (typeof messageValue === "string") return { status: "ready", value: messageValue };
+      const locale = typeof selectedLocale === "string" ? selectedLocale : typeof defaultLocale === "string" ? defaultLocale : "알 수 없음";
+      const error = shellErrors.SHELL_MESSAGE_KEY_NOT_FOUND({ locale, key: kind.key });
+      return { status: "failed", message: error.message, id: error.id, retry: [], details: [
+        `pointer: ${pointer}`, `item_path: 고정 키`, `key: ${kind.key}`, `locale: ${locale}`,
+      ] };
+    }
+    case "message_item": {
+      const itemValue = itemPath(scope?.item, kind.path);
+      const localeKey = definition.locale?.state;
+      const defaultLocale = localeKey === undefined ? null : definition.state[localeKey];
+      const selectedLocale = typeof stateValue === "string" ? stateValue : defaultLocale;
+      const locale = typeof selectedLocale === "string" ? selectedLocale : typeof defaultLocale === "string" ? defaultLocale : "알 수 없음";
+      const rowKey = scope ? String(scope.key) : "없음";
+      const commonDetails = [`pointer: ${pointer}`, `item_path: ${kind.path}`, `item_key: ${rowKey}`, `locale: ${locale}`];
+      if (itemValue === null || itemValue === undefined) {
+        const error = shellErrors.SHELL_MESSAGE_ITEM_KEY_MISSING({ path: kind.path });
+        return { status: "failed", message: error.message, id: error.id, retry: [], details: [...commonDetails, "key: 없음"] };
+      }
+      if (typeof itemValue !== "string") {
+        const error = shellErrors.SHELL_MESSAGE_ITEM_KEY_NOT_STRING({ path: kind.path });
+        return { status: "failed", message: error.message, id: error.id, retry: [], details: [...commonDetails, `key: ${JSON.stringify(itemValue)}`] };
+      }
+      const messageValue = (typeof selectedLocale === "string" ? definition.messages?.[selectedLocale]?.[itemValue] : undefined)
+        ?? (typeof defaultLocale === "string" ? definition.messages?.[defaultLocale]?.[itemValue] : undefined)
+        ?? undefined;
+      if (typeof messageValue === "string") return { status: "ready", value: messageValue };
+      const error = shellErrors.SHELL_MESSAGE_KEY_NOT_FOUND({ locale, key: itemValue });
+      return { status: "failed", message: error.message, id: error.id, retry: [], details: [...commonDetails, `key: ${itemValue}`] };
     }
     case "item":
       return { status: "ready", value: itemPath(scope?.item, kind.key) };
@@ -433,14 +470,14 @@ export class WindowData {
   private localBinding(pointer: string, binding: Binding, scope?: ItemScope): JsonValue {
     const kind = bindingKind(binding);
     const state = this.store.getSnapshot()?.shared.windows.find((window) => window.id === this.windowId)?.state;
-    const stateKey = kind.kind === "state" ? kind.key : kind.kind === "message" ? this.definition.locale?.state : undefined;
+    const stateKey = kind.kind === "state" ? kind.key : kind.kind === "message" || kind.kind === "message_item" ? this.definition.locale?.state : undefined;
     const stateValue = stateKey === undefined ? undefined : state?.[stateKey];
     const value = kind.kind === "client"
       ? this.getValue(`@client/${kind.key}`)
       : kind.kind === "expr"
         ? this.getValue(pointer)
         : loading;
-    const resolved = resolveBindingValue(binding, kind, this.definition, scope, value, stateValue);
+    const resolved = resolveBindingValue(binding, kind, this.definition, pointer, scope, value, stateValue);
     return resolved.status === "ready" ? resolved.value : null;
   }
 
@@ -543,8 +580,8 @@ export function useBinding(pointer: string, binding: Binding): BindingValue {
   const isExpression = kind.kind === "expr";
   const key = localName !== null ? `@client/${localName}` : isExpression ? pointer : "@static";
   const stateKey = kind.kind === "state" ? kind.key : null;
-  const localeKey = kind.kind === "message" ? context.data.definition.locale?.state ?? null : null;
+  const localeKey = kind.kind === "message" || kind.kind === "message_item" ? context.data.definition.locale?.state ?? null : null;
   const stateValue = useWindowStateValue({ store: context.data.store, window: { id: context.data.windowId } }, stateKey ?? localeKey);
   const value = useSyncExternalStore((listener) => context.data.subscribeValue(key, listener), () => context.data.getValue(key), () => loading);
-  return resolveBindingValue(binding, kind, context.data.definition, scope, value, stateValue as JsonValue | undefined);
+  return resolveBindingValue(binding, kind, context.data.definition, pointer, scope, value, stateValue as JsonValue | undefined);
 }

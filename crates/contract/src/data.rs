@@ -192,7 +192,15 @@ pub struct ParentItemRef {
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct MessageRef {
-    pub message: String,
+    pub message: MessageKey,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum MessageKey {
+    Key(String),
+    Item(ItemRef),
 }
 
 /// 창에서 실행하는 클라이언트가 발행한 값.
@@ -1140,6 +1148,9 @@ pub enum BindingValue {
         id: Option<String>,
         #[serde(default)]
         retry: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        details: Option<Vec<String>>,
     },
     /// 기대는 원천의 연결에 로그인해야 한다. 블록은 로그인 단추를 보이고 `connection.login`을 부른다.
     LoginRequired {

@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use serde_json::Value;
 
 use crate::app_storage::{self, StorageKind};
-use crate::data::{self, Action, Actions, Binding, SourceDecl};
+use crate::data::{self, Action, Actions, Binding, MessageKey, SourceDecl};
 use crate::{
     local_agent, AgentProvider, AppDefinition, Block, CoreError, FileAccess, FileRef, FilesScope,
     FolderRoot, PathValue, PermissionDecl, UrlValue, BLOCK_SET_VERSION, MODULE_VERSIONS,
@@ -39,6 +39,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
             .is_some_and(|opens| opens.contains_key("set_state"));
     let uses_new_chat_client_fields = uses_block_set_18_chat_fields(&value);
     let uses_block_set_19_definition_fields = uses_block_set_19_definition_fields(&value);
+    let uses_message_item_key = value.get("ui").is_some_and(uses_message_item_key);
     let uses_device_storage_scope = value.pointer("/client/device_storage/scope").is_some();
     let uses_new_dialog_footer_fields = value
         .get("ui")
@@ -70,6 +71,11 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         details.push(
             "settings와 window_title은 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다"
                 .into(),
+        );
+    }
+    if uses_message_item_key && definition.requires.blocks < 19 {
+        details.push(
+            "message.item은 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into(),
         );
     }
     if uses_block_set_18_ui_fields(&definition.ui) && definition.requires.blocks < 18 {
@@ -296,6 +302,20 @@ fn uses_block_set_19_fields(ui: &Value) -> bool {
             uses_field || object.values().any(uses_block_set_19_fields)
         }
         Value::Array(values) => values.iter().any(uses_block_set_19_fields),
+        _ => false,
+    }
+}
+
+fn uses_message_item_key(ui: &Value) -> bool {
+    match ui {
+        Value::Object(object) => {
+            let item_message = object
+                .get("message")
+                .and_then(Value::as_object)
+                .is_some_and(|message| message.len() == 1 && message.contains_key("item"));
+            item_message || object.values().any(uses_message_item_key)
+        }
+        Value::Array(values) => values.iter().any(uses_message_item_key),
         _ => false,
     }
 }
@@ -766,7 +786,14 @@ fn validate_ui_binding(
     details: &mut Vec<String>,
     at: &str,
 ) {
-    if matches!(binding, Binding::Item(_) | Binding::ParentItem(_)) {
+    if matches!(
+        binding,
+        Binding::Item(_)
+            | Binding::ParentItem(_)
+            | Binding::Message(crate::data::MessageRef {
+                message: MessageKey::Item(_)
+            })
+    ) {
         if at.ends_with("/save_file/suggested_name") {
             details.push(format!("{at}: 항목 바인딩은 동작의 값에 쓸 수 없습니다"));
             return;
@@ -794,22 +821,36 @@ fn validate_ui_binding(
         if definition.requires.blocks < 14 {
             details.push(format!("{at}: 항목 바인딩은 블록 세트 14판이 필요합니다"));
         }
+        let message_item = matches!(
+            binding,
+            Binding::Message(crate::data::MessageRef {
+                message: MessageKey::Item(_)
+            })
+        );
+        if message_item && definition.requires.blocks < 19 {
+            details.push(format!("{at}: message.item은 블록 세트 19판이 필요합니다"));
+        }
+        if message_item && definition.messages.is_none() {
+            details.push("/messages: message.item에는 언어별 messages 사전이 필요합니다".into());
+            if definition.locale.is_none() {
+                details.push("/locale: message.item에는 기본 언어 상태가 필요합니다".into());
+            }
+        }
         return;
     }
     if let Binding::Message(reference) = binding {
         if definition.requires.blocks < 14 {
             details.push(format!("{at}: message는 블록 세트 14판이 필요합니다"));
         }
-        if definition.messages.as_ref().is_none_or(|messages| {
-            messages.is_empty()
-                || messages
-                    .values()
-                    .any(|dictionary| !dictionary.contains_key(&reference.message))
-        }) {
-            details.push(format!(
-                "{at}: 모든 언어에 메시지 키가 필요합니다: {}",
-                reference.message
-            ));
+        if let MessageKey::Key(key) = &reference.message {
+            if definition.messages.as_ref().is_none_or(|messages| {
+                messages.is_empty()
+                    || messages
+                        .values()
+                        .any(|dictionary| !dictionary.contains_key(key))
+            }) {
+                details.push(format!("{at}: 모든 언어에 메시지 키가 필요합니다: {key}"));
+            }
         }
         return;
     }

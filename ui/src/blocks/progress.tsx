@@ -1,5 +1,5 @@
 import type { Block } from "../contract/contract";
-import { DataState } from "../components/data-state";
+import { BindingFailureNotice, DataState } from "../components/data-state";
 import { useBinding } from "../data/window-data";
 
 interface Props { block: Extract<Block, { type: "progress" }>; pointer: string }
@@ -26,5 +26,6 @@ export function ProgressBlock({ block, pointer }: Props) {
   return <div className="ks-data-progress-field">
     {text ? <span className="ks-data-progress-label">{text}</span> : null}
     {progressIndicator(current, block.max, text)}
+    <BindingFailureNotice value={label} />
   </div>;
 }

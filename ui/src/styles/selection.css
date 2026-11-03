@@ -35,6 +35,10 @@ textarea,
   user-select: text;
 }
 
+.ks-data-button.is-chip.has-preview {
+  user-select: text;
+}
+
 button,
 [role="button"],
 [role="tab"],

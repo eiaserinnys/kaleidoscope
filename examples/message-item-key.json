@@ -1,0 +1,62 @@
+{
+  "id": "translated-status-list",
+  "name": "번역 상태 목록",
+  "description": "자료 항목의 메시지 키를 현재 언어로 표시합니다.",
+  "requires": { "blocks": 19, "modules": {} },
+  "permissions": [],
+  "state": {
+    "locale": "en",
+    "locale_options": [
+      { "value": "en", "label": "English" },
+      { "value": "ko", "label": "한국어" }
+    ],
+    "statuses": [
+      { "code": "READY", "label_key": "status.ready" },
+      { "code": "CONNECTING", "label_key": "status.connecting" },
+      { "code": "FAILED", "label_key": "status.failed" }
+    ]
+  },
+  "messages": {
+    "en": {
+      "status.ready": "Ready",
+      "status.connecting": "Connecting",
+      "status.failed": "Failed"
+    },
+    "ko": {
+      "status.ready": "준비",
+      "status.connecting": "연결 중",
+      "status.failed": "실패"
+    }
+  },
+  "locale": { "state": "locale" },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "gap": "medium",
+    "children": [
+      {
+        "type": "toolbar",
+        "start": [
+          { "type": "select", "style": "segmented", "label": "언어", "value": { "state": "locale" }, "options": { "state": "locale_options" }, "on_change": { "set_state": "locale" } }
+        ]
+      },
+      {
+        "type": "repeat",
+        "items": { "state": "statuses" },
+        "key": "code",
+        "layout": "column",
+        "virtual": false,
+        "template": {
+          "type": "stack",
+          "direction": "row",
+          "align": "baseline",
+          "gap": "medium",
+          "children": [
+            { "type": "text", "value": { "message": { "item": "label_key" } } },
+            { "type": "text", "style": "meta", "value": { "item": "code" } }
+          ]
+        }
+      }
+    ]
+  }
+}
