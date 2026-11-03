@@ -61,7 +61,7 @@ def main():
             program = str(ROOT / 'target/debug/kaleidoscope-acp-test-agent')
             env = {'TEST_SCENARIO': 'tree', 'TEST_LOG': test_log, 'TEST_PID_LOG': pid_log}
             agents = [{'id':f'fixture{index}','name':name,'command':program,'args':[],'env':env}
-                      for index, name in enumerate(['Claude Code','Codex','Gemini CLI','Antigravity'])]
+                      for index, name in enumerate(['에이전트 하나','에이전트 둘','에이전트 셋','에이전트 넷'])]
             result = sb.mcp.call('write_app_storage', {'app_id':'agent','entry_id':'agents','content':agents})
             assert not result['is_error'], result['text']
             snapshot = sb.snapshot()
@@ -74,18 +74,23 @@ def main():
                 browser = sb.open_page(playwright, (1100, 800))
                 page = sb.page
                 app = sb.window('agent')
-                app.get_by_role('button', name='Claude Code', exact=True).wait_for(timeout=30000)
+                app.get_by_role('button', name='에이전트 하나', exact=True).wait_for(timeout=30000)
                 capture(sb, app, '01-agent-four')
-                app.get_by_role('button', name='Claude Code', exact=True).click()
+                app.get_by_role('button', name='에이전트 하나', exact=True).click()
                 app.get_by_role('button', name='폴더 선택', exact=True).wait_for()
                 assert app.locator('.ks-window-title').inner_text() == '에이전트'
                 capture(sb, app, '06-folder')
                 app.get_by_role('button', name='폴더 선택', exact=True).click()
                 dialog = app.get_by_role('dialog')
                 dialog.wait_for(timeout=30000)
+                sb.core({'op':'window.set_rect','window_id':window_id,'rect':{'x':20,'y':20,'width':360,'height':240}})
+                command = dialog.locator('.ks-process-command')
+                assert command.evaluate('element => element.scrollWidth <= element.clientWidth')
+                assert command.evaluate('element => element.parentElement.scrollWidth <= element.parentElement.clientWidth')
+                sb.core({'op':'window.set_rect','window_id':window_id,'rect':{'x':20,'y':20,'width':620,'height':680}})
                 dialog.get_by_role('button', name='허용', exact=True).click()
                 app.get_by_role('textbox', name='메시지').wait_for(timeout=30000)
-                assert app.locator('.ks-window-title').inner_text() == 'Claude Code'
+                assert app.locator('.ks-window-title').inner_text() == '에이전트 하나'
                 capture(sb, app, '12-chat')
                 app.get_by_role('button', name='앱 설정').click()
                 app.get_by_role('heading', name='앱 설정').wait_for()
