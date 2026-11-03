@@ -41,11 +41,11 @@ export type AgentFailure = { id?: string, code: ErrorCode, message: string, comm
  * 앱의 대화 제공자. 바인딩은 리터럴 또는 `$storage`, `$storage_meta`만 읽는다.
  * 창 상태 바인딩과 `$state`, `$data`, `$event`, `$item`은 사용할 수 없다.
  */
-export type AgentProvider = { protocol: ConversationProtocol, permission: string,
+export type AgentProvider = { protocol: ConversationProtocol, permission: string, 
 /**
  * 연결 base URL 아래의 안전한 상대 경로.
  */
-base_path: string, namespace: AgentBinding, profile: AgentBinding, collection: AgentBinding, model_order: AgentBinding, selected_model: AgentBinding, title_template: AgentBinding, initial_instruction_template: AgentBinding, instructions_template: AgentBinding,
+base_path: string, namespace: AgentBinding, profile: AgentBinding, collection: AgentBinding, model_order: AgentBinding, selected_model: AgentBinding, title_template: AgentBinding, initial_instruction_template: AgentBinding, instructions_template: AgentBinding, 
 /**
  * 현재 작업에 thread id를 저장하는 JSON 항목 id.
  */
@@ -56,15 +56,15 @@ export type AgentSpec = { id: string, name: string, command: string, args: Array
 /**
  * 레지스트리의 앱 항목. 버전이 쌓이고 `current_version`이 지금 쓰는 버전을 가리킨다.
  */
-export type App = {
+export type App = { 
 /**
  * 앱 정의의 `id`.
  */
-id: string,
+id: string, 
 /**
  * 지금 쓰는 버전의 정의에 있는 `name`.
  */
-name: string,
+name: string, 
 /**
  * 지금 쓰는 버전 번호.
  */
@@ -105,60 +105,60 @@ current_version: number, created_at: string, updated_at: string, };
  *      순서다. `tabs`와 `stack`에는 자식이 하나 이상 있다. `table`의 열은 하나 이상이고 `field`가 겹치지 않는다.
  *      `button`의 `icon`은 [`data::ICON_NAMES`]에 있다. `code`는 `value`와 `file` 가운데 꼭 하나를 쓴다.
  */
-export type AppDefinition = {
+export type AppDefinition = { 
 /**
  * 앱 식별자. 같은 id를 다시 가져오면 그 앱의 새 버전이 된다.
  */
-id: string,
+id: string, 
 /**
  * 화면에 보이는 이름.
  */
-name: string, description?: string, requires: Requires,
+name: string, description?: string, requires: Requires, 
 /**
  * 앱이 참조할 수 있는 자산과 고정된 판.
  */
-assets?: Array<AssetDep>, permissions: Array<PermissionDecl>,
+assets?: Array<AssetDep>, permissions: Array<PermissionDecl>, 
 /**
  * 창 상태의 키와 기본값. 창을 열 때 이 값으로 시작한다.
  */
-state: { [key in string]: JsonValue },
+state: { [key in string]: JsonValue }, 
 /**
  * (15판) 앱 판을 올려 기존 창을 옮길 때, 옛 상태에 없는 키의 값을 계산하는 JSONata 식.
  */
-state_migrate?: { [key in string]: string },
+state_migrate?: { [key in string]: string }, 
 /**
  * (블록 세트 3판) 이 앱이 여는 파일. 탐색기(`explorer` 블록)에서 이 확장자의 파일을 열면 이 앱의 창이
  * 뜬다. 규칙은 `files.open`에 있다.
  */
-opens?: OpensDecl,
+opens?: OpensDecl, 
 /**
  * (블록 세트 4판) 이름 붙인 원천. 식에서 `$data.이름`으로 읽는다. 규칙은 [`data`] 모듈 머리글에 있다.
  */
-sources?: { [key in string]: SourceDecl },
+sources?: { [key in string]: SourceDecl }, 
 /**
  * (계약 11판, 모듈 `storage` 1판) 계정 × 앱 저장소에 둘 항목과 기본값.
  */
-storage?: StorageDecl,
+storage?: StorageDecl, 
 /**
  * (계약 11판, 모듈 `agent` 3판) 앱이 사용하는 범용 대화 제공자와 저장소 바인딩.
  */
-agent?: AgentProvider,
+agent?: AgentProvider, 
 /**
  * 개인 앱 서버에서 실행할 워커.
  */
-worker?: WorkerDecl,
+worker?: WorkerDecl, 
 /**
  * 창 단위 클라이언트 로직.
  */
-client?: ClientDecl,
+client?: ClientDecl, 
 /**
  * 앱의 창 단축키.
  */
-shortcuts?: Array<Shortcut>,
+shortcuts?: Array<Shortcut>, 
 /**
  * 언어별 메시지 사전.
  */
-messages?: { [key in string]: { [key in string]: string } }, locale?: StateRef,
+messages?: { [key in string]: { [key in string]: string } }, locale?: StateRef, 
 /**
  * 창 안을 채우는 블록 트리의 뿌리.
  */
@@ -188,27 +188,27 @@ export type AppVersion = { app_id: string, version: number, definition: AppDefin
 /**
  * 앱 하나의 실행. 데스크톱 위의 창 하나다.
  */
-export type AppWindow = { id: string, desktop_id: string, app_id: string,
+export type AppWindow = { id: string, desktop_id: string, app_id: string, 
 /**
  * 이 창이 그리는 앱 버전. 앱의 새 버전을 가져오면 코어가 그 앱의 열린 창을 새 버전으로 옮긴다.
  */
-app_version: number,
+app_version: number, 
 /**
  * 데스크톱 영역 기준 위치와 크기(CSS px).
  */
-rect: Rect,
+rect: Rect, 
 /**
  * 겹침 순서. 클수록 위다. 데스크톱 안에서만 비교한다.
  */
-z: number,
+z: number, 
 /**
  * 창이 화면에서 숨겨져 있다.
  */
-minimized?: boolean,
+minimized?: boolean, 
 /**
  * 창이 데스크톱의 사용 가능 영역을 채운다. `rect`에는 이전 크기를 보존한다.
  */
-maximized?: boolean,
+maximized?: boolean, 
 /**
  * 창 상태. 키는 앱 정의의 `state`에 선언된 것뿐이다. 열린 파일 같은 것을 담는다.
  */
@@ -256,15 +256,15 @@ export type BindingValue = { "status": "ready", value: JsonValue, } | { "status"
  * 데이터 블록은 그 상태를 그 자리에 보인다. 4판 블록은 쉘의 토큰과 공통 부품만으로 그리고, 앱이 색이나 크기를
  * 정하지 않는다(항목의 `color`와 배지 색만 예외).
  */
-export type Block = { "type": "repeat", items: Binding, key: string, layout?: RepeatLayout, grid?: RepeatGrid, virtual?: boolean, follow_key?: Binding, follow_pause_ms?: number, template: Block, } | { "type": "when", value: Binding, child: Block, } | { "type": "dialog", open: Binding, title: Binding, close_label?: Binding, cancel_label?: Binding, child: Block, on_close: Actions, } | { "type": "tour", open: Binding, step: Binding, steps: Array<TourStep>, labels?: TourLabels, on_step: Actions, on_close: Actions, } | { "type": "anchor", id: string, child: Block, } | { "type": "progress", value: Binding, max: number, label?: Binding, } | { "type": "canvas", surface: Binding, aspect_ratio?: Binding, fit?: CanvasFit, description?: Binding, on_pointer?: Actions, } | { "type": "timeline", viewport?: Binding, on_viewport?: Actions, controls?: boolean, duration: Binding, position: Binding, tracks: Binding, markers?: Binding, ticks?: Binding, selection?: Binding, snap?: Binding, read_only?: boolean, on_seek?: Actions, on_select?: Actions, on_edit?: Actions, } | { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: Binding, on_change: Actions, label?: Binding, min: number, max: number, step?: number, } | { "type": "color", value: Binding, on_change: Actions, label?: Binding, disabled?: Binding, } | { "type": "split", direction: SplitDirection,
+export type Block = { "type": "repeat", items: Binding, key: string, layout?: RepeatLayout, grid?: RepeatGrid, virtual?: boolean, follow_key?: Binding, follow_pause_ms?: number, template: Block, } | { "type": "when", value: Binding, child: Block, } | { "type": "dialog", open: Binding, title: Binding, close_label?: Binding, cancel_label?: Binding, child: Block, on_close: Actions, } | { "type": "tour", open: Binding, step: Binding, steps: Array<TourStep>, labels?: TourLabels, on_step: Actions, on_close: Actions, } | { "type": "anchor", id: string, child: Block, } | { "type": "progress", value: Binding, max: number, label?: Binding, } | { "type": "canvas", surface: Binding, aspect_ratio?: Binding, fit?: CanvasFit, description?: Binding, on_pointer?: Actions, } | { "type": "timeline", viewport?: Binding, on_viewport?: Actions, controls?: boolean, duration: Binding, position: Binding, tracks: Binding, markers?: Binding, ticks?: Binding, selection?: Binding, snap?: Binding, read_only?: boolean, on_seek?: Actions, on_select?: Actions, on_edit?: Actions, } | { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: Binding, on_change: Actions, label?: Binding, min: number, max: number, step?: number, } | { "type": "color", value: Binding, on_change: Actions, label?: Binding, disabled?: Binding, } | { "type": "split", direction: SplitDirection, 
 /**
  * 자식마다의 상대 크기. 없으면 똑같이 나눈다.
  */
-sizes?: Array<number>, children: Array<Block>, } | { "type": "tree", items?: Binding,
+sizes?: Array<number>, children: Array<Block>, } | { "type": "tree", items?: Binding, 
 /**
  * 보일 파일 확장자(점 없이, 소문자). 비어 있으면 모든 파일. 폴더는 늘 보인다.
  */
-extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "folder", root: FolderRoot,
+extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "folder", root: FolderRoot, 
 /**
  * (15판) 거짓이면 폴더 머리 줄을 숨긴다.
  */
@@ -280,61 +280,61 @@ footer?: Block, } | { "type": "web_view",
 /**
  * 열 주소. 상태에서 읽거나(`{ "state": "url" }`) 정의에 적는다(`"https://example.com"`).
  */
-url: UrlValue,
+url: UrlValue, 
 /**
  * 페이지가 다른 주소로 가면 그 주소를 쓸 상태 키.
  */
-on_navigate?: SetState,
+on_navigate?: SetState, 
 /**
  * 주소창을 보일지. 거짓이면 그 자리에 페이지 제목만 보인다(정해진 사이트를 띄우는 앱).
  */
-address_bar: boolean, } | { "type": "explorer", root: FolderRef,
+address_bar: boolean, } | { "type": "explorer", root: FolderRef, 
 /**
  * (5판) 지금 보는 폴더를 읽을 상태 키. 값은 고른 폴더 기준 상대 경로이고 빈 문자열이 고른 폴더 자체다.
  */
-folder?: StateRef,
+folder?: StateRef, 
 /**
  * (5판) 보는 폴더가 바뀌면 그 경로를 쓸 상태 키.
  */
-on_folder?: SetState,
+on_folder?: SetState, 
 /**
  * (5판) 보기 방식([`ExplorerView`]의 문자열)을 읽을 상태 키.
  */
-view?: StateRef,
+view?: StateRef, 
 /**
  * (5판) 보기 방식을 바꾸면 그 값을 쓸 상태 키.
  */
-on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, wrap?: boolean,
+on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, wrap?: boolean, 
 /**
  * (18판) 창 가운데 세로 기둥에 자식을 놓는다. 폭과 넘침 처리는 쉘이 정한다.
  */
-place?: StackPlace, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, header?: boolean, keep_mounted?: boolean,
+place?: StackPlace, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, header?: boolean, keep_mounted?: boolean, 
 /**
  * (15판) 참이면 분할 칸의 접기와 펼치기를 탭이 맡는다.
  */
-collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": "toolbar", start: Array<Block>, end?: Array<Block>, } | { "type": "section", title: Binding,
+collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": "toolbar", start: Array<Block>, end?: Array<Block>, } | { "type": "section", title: Binding, 
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
-meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: Binding, on_select?: Actions, } | { "type": "properties", fields: Array<PropertyField>, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean,
+meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: Binding, on_select?: Actions, } | { "type": "properties", fields: Array<PropertyField>, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
 /**
  * (블록 세트 7판) 본문 문단(`body`가 배열일 때)을 같은 너비의 칸으로 나란히 놓는다. 창이 좁아 칸마다
  * 최소 너비를 지킬 수 없으면 위아래로 쌓는다. 예: 여러 문단 비교.
  */
-columns?: boolean,
+columns?: boolean, 
 /**
  * (블록 세트 7판) 항목의 `meta`와 본문 문단마다 복사 단추를 붙인다. 누르면 그 글을 그대로(줄바꿈 포함)
  * 클립보드에 쓴다. 단추를 눌러도 항목 고르기는 돌지 않는다.
  */
-copy?: boolean,
+copy?: boolean, 
 /**
  * (블록 세트 10판) 대댓글과 긴 항목의 접기·펴기를 켠다.
  */
-collapsible?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", on_click?: Actions, on_double_click?: Actions, value: Binding, format?: DisplayTextFormat, style?: TextStyle, } | { "type": "input", min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, kind?: InputKind, multiline?: boolean, rows?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, style?: SelectStyle, placeholder?: Binding,
+collapsible?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", on_click?: Actions, on_double_click?: Actions, value: Binding, format?: DisplayTextFormat, style?: TextStyle, } | { "type": "input", min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, kind?: InputKind, multiline?: boolean, rows?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, style?: SelectStyle, placeholder?: Binding, 
 /**
  * (18판) 참이면 이 고르기를 사용할 수 없다.
  */
-disabled?: Binding, } | { "type": "toggle", value: Binding, on_change: Actions, label: Binding,
+disabled?: Binding, } | { "type": "toggle", value: Binding, on_change: Actions, label: Binding, 
 /**
  * (18판) 참이면 이 켜고 끄기를 사용할 수 없다.
  */
@@ -432,7 +432,7 @@ export type CollectionMoveReply = { revision: string, };
 /**
  * 표의 열.
  */
-export type Column = {
+export type Column = { 
 /**
  * 행 객체의 키.
  */
@@ -505,15 +505,15 @@ export type ConversationUpload = { name: string, mime: string, data_base64: stri
  * let _ = CoreError::new(ErrorCode::Server);
  * ```
  */
-export type CoreError = {
+export type CoreError = { 
 /**
  * 장소와 원인을 가리키는 에러코드. 등록부(`errors`)의 코드다. 옛 서버와 옛 쉘이 보낸 오류에는 없다.
  */
-id?: string, code: ErrorCode,
+id?: string, code: ErrorCode, 
 /**
  * 사람이 읽는 한국어 설명.
  */
-message: string,
+message: string, 
 /**
  * 걸린 것이 여럿일 때 하나씩(앱 정의 검사 등). 없으면 빈 배열.
  */
@@ -527,7 +527,7 @@ export type CoreEvent = { "event": "state.changed", snapshot: ShellSnapshot, } |
 /**
  * 코어의 응답. `op`는 명령과 같다.
  */
-export type CoreReply = { "op": "client.http_read", bytes: Array<number>, mime: string, } | { "op": "client.blob_put", } | { "op": "client.blob_open", file: ClientFile | null, } | { "op": "client.blob_remove", } | { "op": "client.blob_list", keys: Array<string>, } | { "op": "files.save_prompt", file_id: string | null, } | { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "profiler.report", } | { "op": "files.pick", cancelled: boolean, files: Array<ClientFile>, } | { "op": "export.begin", cancelled: boolean, sink_id: string | null, } | { "op": "export.truncate", } | { "op": "export.close", } | { "op": "export.abort", } | { "op": "client.release", } | { "op": "client.command", } | { "op": "conversation.apply_status", status: ConversationApplyStatus, } | { "op": "conversation.apply_retry", } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.minimize", window: AppWindow, } | { "op": "window.maximize", window: AppWindow, } | { "op": "window.restore", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "link.start", user_code: string, expires_at: string, } | { "op": "link.use_local", } | { "op": "link.sync_local_to_remote", result: TransferResult, } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.allow_pc", access: PcAccess, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, } | { "op": "files.mkdir", path: string, } | { "op": "files.rename", from: string, to: string, } | { "op": "files.move", results: Array<FileOpResult>, } | { "op": "files.copy", results: Array<FileOpResult>, } | { "op": "files.remove", results: Array<FileOpResult>, } | { "op": "files.reveal", } | { "op": "files.path", text: string, } | { "op": "files.open", window: AppWindow, } | { "op": "web.attach", page: WebPage, } | { "op": "web.place", } | { "op": "web.navigate", } | { "op": "external.open", } | { "op": "web.history", } | { "op": "web.capture",
+export type CoreReply = { "op": "client.http_read", bytes: Array<number>, mime: string, } | { "op": "client.blob_put", } | { "op": "client.blob_open", file: ClientFile | null, } | { "op": "client.blob_remove", } | { "op": "client.blob_list", keys: Array<string>, } | { "op": "files.save_prompt", file_id: string | null, } | { "op": "state.get", snapshot: ShellSnapshot, } | { "op": "profiler.report", } | { "op": "files.pick", cancelled: boolean, files: Array<ClientFile>, } | { "op": "export.begin", cancelled: boolean, sink_id: string | null, } | { "op": "export.truncate", } | { "op": "export.close", } | { "op": "export.abort", } | { "op": "client.release", } | { "op": "client.command", } | { "op": "conversation.apply_status", status: ConversationApplyStatus, } | { "op": "conversation.apply_retry", } | { "op": "workspace.create", workspace: Workspace, desktop: Desktop, } | { "op": "workspace.rename", workspace: Workspace, } | { "op": "workspace.delete", } | { "op": "workspace.activate", } | { "op": "desktop.create", desktop: Desktop, } | { "op": "desktop.rename", desktop: Desktop, } | { "op": "desktop.delete", } | { "op": "desktop.activate", } | { "op": "window.open", window: AppWindow, } | { "op": "window.set_rect", window: AppWindow, } | { "op": "window.raise", window: AppWindow, } | { "op": "window.minimize", window: AppWindow, } | { "op": "window.maximize", window: AppWindow, } | { "op": "window.restore", window: AppWindow, } | { "op": "window.close", } | { "op": "window.set_state", window: AppWindow, } | { "op": "app.import", app: App, version: AppVersion, } | { "op": "link.start", user_code: string, expires_at: string, } | { "op": "link.use_local", } | { "op": "link.sync_local_to_remote", result: TransferResult, } | { "op": "link.cancel", } | { "op": "link.unlink", } | { "op": "files.pick_folder", grant: Grant | null, } | { "op": "files.allow_pc", access: PcAccess, } | { "op": "files.list", entries: Array<FileEntry>, } | { "op": "files.read", path: string, text: string, revision: string, } | { "op": "files.write", path: string, revision: string, } | { "op": "files.mkdir", path: string, } | { "op": "files.rename", from: string, to: string, } | { "op": "files.move", results: Array<FileOpResult>, } | { "op": "files.copy", results: Array<FileOpResult>, } | { "op": "files.remove", results: Array<FileOpResult>, } | { "op": "files.reveal", } | { "op": "files.path", text: string, } | { "op": "files.open", window: AppWindow, } | { "op": "web.attach", page: WebPage, } | { "op": "web.place", } | { "op": "web.navigate", } | { "op": "external.open", } | { "op": "web.history", } | { "op": "web.capture", 
 /**
  * `data:image/png;base64,...`. 찍지 못하면 null.
  */
@@ -546,15 +546,15 @@ export type Crop = { x: number, y: number, w: number, h: number, };
 /**
  * 창 하나의 데이터 모습. `data.attach` 응답 전체이고, `data.update`는 바뀐 것만 같은 모양으로 보낸다.
  */
-export type DataView = {
+export type DataView = { 
 /**
  * 원천 이름 → 상태.
  */
-sources: { [key in string]: SourceStatus },
+sources: { [key in string]: SourceStatus }, 
 /**
  * 원천의 마지막 성공 시각과 신선도.
  */
-source_meta?: { [key in string]: SourceMeta },
+source_meta?: { [key in string]: SourceMeta }, 
 /**
  * 식 바인딩 자리(JSON Pointer) → 값. 리터럴과 상태 바인딩은 담지 않는다(화면이 스스로 푼다).
  */
@@ -563,15 +563,15 @@ values: { [key in string]: BindingValue }, };
 /**
  * 화면 한 장. 앱 창 배치와 같이 보기 상태, 대화별 마지막 컨텍스트를 가진다.
  */
-export type Desktop = { id: string, workspace_id: string, name: string,
+export type Desktop = { id: string, workspace_id: string, name: string, 
 /**
  * 워크스페이스 안의 순서. 0부터.
  */
-position: number,
+position: number, 
 /**
  * 이 데스크톱에서 같이 보기를 켠 창 id. 켠 순서다.
  */
-sharing?: Array<string>,
+sharing?: Array<string>, 
 /**
  * 대화 키별로 이 데스크톱에서 마지막으로 보낸 창별 컨텍스트.
  */
@@ -580,16 +580,16 @@ last_sent_context?: { [key in string]: { [key in string]: SentShareContext } }, 
 /**
  * 이 기기에만 두는 상태.
  */
-export type DeviceState = { active_workspace_id: string | null,
+export type DeviceState = { active_workspace_id: string | null, 
 /**
  * 워크스페이스 id → 그 워크스페이스에서 마지막으로 본 데스크톱 id.
  */
-active_desktop_ids: { [key in string]: string }, grants: Array<Grant>,
+active_desktop_ids: { [key in string]: string }, grants: Array<Grant>, 
 /**
  * (계약 14판) 이 기기에서 `scope: pc` 권한을 허용한 앱과 권한. 앱마다 한 번이고 그 앱의 모든 창이 쓴다.
  * 앱의 새 버전에서도 같은 `id`의 `pc` 권한이 있으면 이어 쓴다.
  */
-pc_access: Array<PcAccess>,
+pc_access: Array<PcAccess>, 
 /**
  * (계약 20판) 이 기기에서 앱 권한과 실행 명세별로 허용한 로컬 에이전트.
  */
@@ -637,23 +637,23 @@ export type FeedBody = string | Array<string>;
 /**
  * `feed` 항목. 이름(색과 초상)과 본문 줄들. 본문은 줄바꿈을 지키고 글을 고르고 복사할 수 있다.
  */
-export type FeedEntry = { key: string, name?: string,
+export type FeedEntry = { key: string, name?: string, 
 /**
  * 이름의 색(`#rrggbb`).
  */
-color?: string,
+color?: string, 
 /**
  * 이름 옆의 작은 원형 초상.
  */
-image?: MediaRef, meta?: string, badges?: Array<Badge>,
+image?: MediaRef, meta?: string, badges?: Array<Badge>, 
 /**
  * 스레드 깊이(0부터). `children`으로 중첩해 넘기면 쉘이 깊이를 계산한다.
  */
-depth?: number,
+depth?: number, 
 /**
  * 본문. 문자열 하나나 문자열 배열(문단마다 하나, 예: 한국어와 영어).
  */
-body: FeedBody, tone?: Tone,
+body: FeedBody, tone?: Tone, 
 /**
  * 대댓글·하위 스레드 항목.
  */
@@ -673,19 +673,19 @@ export type FileChange = { from?: string, to?: string, };
 /**
  * 폴더 안 항목 하나.
  */
-export type FileEntry = { name: string,
+export type FileEntry = { name: string, 
 /**
  * 고른 폴더 기준 상대 경로.
  */
-path: string, kind: FileKind,
+path: string, kind: FileKind, 
 /**
  * (8판) 파일 크기(바이트). 폴더는 0.
  */
-size: number,
+size: number, 
 /**
  * (8판) 마지막으로 바뀐 시각(RFC 3339 UTC, 초까지, 예: `2026-10-30T01:02:03Z`). 읽지 못하면 빈 문자열.
  */
-modified: string,
+modified: string, 
 /**
  * (계약 14판) `scope: pc`의 내 PC 목록(빈 경로)에서만 붙는 뿌리의 종류. 그때 `path`는 뿌리의 id이고
  * `name`은 뿌리의 화면 이름, `kind`는 `dir`, `size`는 0, `modified`는 빈 문자열이다.
@@ -731,19 +731,19 @@ export type FilesScope = "folder" | "pc";
 /**
  * `folder` 원천의 항목.
  */
-export type FolderEntry = { name: string,
+export type FolderEntry = { name: string, 
 /**
  * 고른 폴더 기준 상대 경로.
  */
-path: string, kind: FileKind,
+path: string, kind: FileKind, 
 /**
  * 확장자(점 없이, 소문자). 없으면 빈 문자열.
  */
-ext: string,
+ext: string, 
 /**
  * 파일 크기(바이트). 폴더는 0.
  */
-size: number,
+size: number, 
 /**
  * 마지막으로 바뀐 시각(RFC 3339 UTC).
  */
@@ -767,15 +767,15 @@ export type Gap = "none" | "small" | "medium" | "large";
 /**
  * 이 기기에서 앱 창의 권한 하나에 고른 폴더. 기기 밖으로 나가지 않는다.
  */
-export type Grant = { window_id: string,
+export type Grant = { window_id: string, 
 /**
  * 앱 정의의 권한 `id`.
  */
-permission: string,
+permission: string, 
 /**
  * 고른 폴더의 절대 경로(이 기기의 표기 그대로).
  */
-root_path: string,
+root_path: string, 
 /**
  * 고른 폴더의 이름. 화면에 보일 때 쓴다.
  */
@@ -806,11 +806,11 @@ export type KeypadButton = { key: string, label: string, sublabel?: string, icon
 
 export type LifecyclePhase = "ready" | "change" | "closing";
 
-export type LinkStatus = { "state": "unlinked", } | { "state": "pairing", server_url: string,
+export type LinkStatus = { "state": "unlinked", } | { "state": "pairing", server_url: string, 
 /**
  * 사람이 읽고 에이전트에게 전하는 코드. 예: `123456`. 이전 서버가 주는 문자 코드도 그대로 표시한다.
  */
-user_code: string, expires_at: string, } | { "state": "connected", mode: ServerMode, server_url: string, device_name: string, } | { "state": "offline", mode: ServerMode, server_url: string, device_name: string,
+user_code: string, expires_at: string, } | { "state": "connected", mode: ServerMode, server_url: string, device_name: string, } | { "state": "offline", mode: ServerMode, server_url: string, device_name: string, 
 /**
  * 마지막 연결 오류. 연결을 시작하는 동안에는 없다.
  */
@@ -819,19 +819,19 @@ reason: CoreError | null, } | { "state": "revoked", server_url: string, };
 /**
  * `list` 항목.
  */
-export type ListItem = {
+export type ListItem = { 
 /**
  * 고르기와 비교에 쓰는 열쇠. 목록 안에서 겹치지 않는다. 고르면 `$event`가 이 값이다.
  */
-key: string, title: string, subtitle?: string,
+key: string, title: string, subtitle?: string, 
 /**
  * 오른쪽에 작게 보이는 부가 정보(시각, 개수).
  */
-meta?: string,
+meta?: string, 
 /**
  * 항목의 표시 색(`#rrggbb`). 앞의 점이나 막대로 보인다.
  */
-color?: string, badges?: Array<Badge>,
+color?: string, badges?: Array<Badge>, 
 /**
  * 줄 보기에서는 앞의 작은 그림, 격자 보기에서는 칸의 그림.
  */
@@ -855,11 +855,11 @@ export type MapPoint = { key: string, lat: number, lng: number, label?: string, 
 /**
  * `data.media` 응답의 내용.
  */
-export type MediaData = { mime: string,
+export type MediaData = { mime: string, 
 /**
  * 표준 base64.
  */
-data_base64: string,
+data_base64: string, 
 /**
  * 이미지면 보내는 그림의 가로와 세로(px). 소리와 영상은 null.
  */
@@ -895,19 +895,19 @@ export type NoticeKind = "info" | "error" | "loading";
 /**
  * 앱이 여는 파일의 선언. 예: `{ "extensions": ["md"], "permission": "docs", "state": "current_file" }`.
  */
-export type OpensDecl = {
+export type OpensDecl = { 
 /**
  * 여는 파일 확장자(점 없이, 소문자). 하나 이상.
  */
-extensions: Array<string>,
+extensions: Array<string>, 
 /**
  * 탐색기의 폴더를 이어 받을 `files` 권한 id. 파일을 열면 이 권한에 탐색기와 같은 폴더를 고른 것이 된다.
  */
-permission: string,
+permission: string, 
 /**
  * 연 파일의 경로(그 폴더 기준 상대 경로)를 쓸 상태 키. 블록은 이 키로 그 파일을 연다.
  */
-state: string,
+state: string, 
 /**
  * (15판) 파일을 열 때 경로와 함께 창 상태에 쓸 값.
  */
@@ -926,7 +926,7 @@ export type PathValue = StateRef | string;
 /**
  * (계약 14판) 이 기기에서 앱 하나의 `scope: pc` 권한 하나를 허용한 기록. 기기 밖으로 나가지 않는다.
  */
-export type PcAccess = { app_id: string,
+export type PcAccess = { app_id: string, 
 /**
  * 앱 정의의 권한 `id`.
  */
@@ -946,19 +946,19 @@ export type PermissionChoice = { id: string, label: string, kind: string, };
 /**
  * 앱이 쓰겠다고 선언하는 권한. 실제로 허락하는 것은 기기마다 사용자다.
  */
-export type PermissionDecl = { "module": "files", id: string, access: FileAccess,
+export type PermissionDecl = { "module": "files", id: string, access: FileAccess, 
 /**
  * 폴더를 고르라고 할 때 보일 이름(예: "문서 폴더"). `scope: pc`면 탐색기 경로의 맨 앞 마디 이름(예: "내 PC").
  */
-label: string,
+label: string, 
 /**
  * (모듈 `files` 2판) 없으면 `folder`다.
  */
-scope?: FilesScope, } | { "module": "connection", id: string,
+scope?: FilesScope, } | { "module": "connection", id: string, 
 /**
  * 서버에 등록한 연결 이름(소문자, 숫자, `-` 1~64자).
  */
-connection: string, access: FileAccess,
+connection: string, access: FileAccess, 
 /**
  * 로그인을 구할 때와 오류에 보일 이름(예: "카드 보드").
  */
@@ -1059,7 +1059,7 @@ export type SetState = { set_state: string, };
  * 창 상태 키 하나에 값을 쓴다. `value`를 빼면 `$event`를 쓴다. `"value": null`은 null을 쓴다(상태 비우기).
  * 예: `{ "set_state": "file", "value": { "expr": "$item.file" } }`, `{ "set_state": "conversation", "value": null }`.
  */
-export type SetStateAction = { set_state: string,
+export type SetStateAction = { set_state: string, 
 /**
  * 빠졌으면 None, 적혀 있으면 null이어도 `Some(Binding::Literal(null))`이다.
  */
@@ -1073,7 +1073,7 @@ export type SetStorageAction = { set_storage: SetStorageSpec, };
 /**
  * 저장소 쓰기 규칙. 문서 모음 항목은 `doc`으로 대상을 지정하고 고정 항목은 생략한다.
  */
-export type SetStorageSpec = { entry: string, doc?: StringOrStateRef,
+export type SetStorageSpec = { entry: string, doc?: StringOrStateRef, 
 /**
  * 빠졌으면 `$event`, 적혀 있으면 null도 값이다.
  */
@@ -1087,11 +1087,11 @@ export type SharedState = { apps: Array<App>, app_versions: Array<AppVersion>, w
 /**
  * 화면이 보는 상태 전체.
  */
-export type ShellSnapshot = { last_transfer?: TransferResult, transfer_error?: string, embedded_available: boolean, shared: SharedState, device: DeviceState, supported: Supported, link: LinkStatus,
+export type ShellSnapshot = { last_transfer?: TransferResult, transfer_error?: string, embedded_available: boolean, shared: SharedState, device: DeviceState, supported: Supported, link: LinkStatus, 
 /**
  * 같이 보기 상태가 저장된 데스크톱과 현재 살아 있는 창에서 계산한 id. 켠 순서다.
  */
-sharing: Array<string>,
+sharing: Array<string>, 
 /**
  * (10판) 이 쉘 자신의 새 판 받기 상태. 코어의 메모리에만 있다.
  */
@@ -1158,11 +1158,11 @@ export type StorageDecl = { entries: Array<StorageEntryDecl>, };
  * 앱 정의의 저장 항목. JSON 항목은 제한된 JSON Schema와 JSON 기본값을, md 항목은 문자열 기본값을 가진다.
  * `collection` 항목은 선언 키 아래의 문서를 동적으로 관리한다.
  */
-export type StorageEntryDecl = { id: string,
+export type StorageEntryDecl = { id: string, 
 /**
  * 계정 × 앱 bucket 안의 키. 유일한 치환자는 `{workspace_id}`다.
  */
-key: string, collection?: boolean, kind: StorageKind, schema?: StorageValueSchema,
+key: string, collection?: boolean, kind: StorageKind, schema?: StorageValueSchema, 
 /**
  * JSON 값 또는 UTF-8 Markdown 문자열.
  */
@@ -1234,7 +1234,7 @@ export type ThreadByKeyReply = { thread: ConversationThread, };
 
 export type ThreadInfoReply = { thread: ConversationThread, busy: boolean, tool: string | null, current_model: ThreadModel | null, };
 
-export type ThreadItemsReply = {
+export type ThreadItemsReply = { 
 /**
  * 기본값은 200, 요청 상한도 200이다. 더 읽을 때는 `next_before`를 쓴다.
  */
@@ -1273,7 +1273,7 @@ export type TreeBy = "children" | "path";
 /**
  * `tree` 항목. `by: children`이면 `children`으로 내려가고, `by: path`면 `path`를 `/`로 나눠 폴더를 만든다.
  */
-export type TreeItem = { key: string,
+export type TreeItem = { key: string, 
 /**
  * 없으면 `path`의 마지막 이름이다.
  */
@@ -1307,7 +1307,7 @@ export type UrlValue = StateRef | string;
 /**
  * (9판) 같이 보기 창에 지금 보이는 것을 화면이 옮긴 것.
  */
-export type VisibleView = {
+export type VisibleView = { 
 /**
  * 창의 내용 영역에 보이는 글. 사람과 PAS가 읽는 글이고, 서버는 줄 단위로 앞의 것과 비교한다.
  * 화면이 지키는 모양:
@@ -1320,21 +1320,21 @@ export type VisibleView = {
  * - 고른 항목은 줄 앞에 `› `, 체크 상자는 `[x] `나 `[ ] `, 입력칸은 `이름: 값`이다.
  * - [`SHARE_TEXT_MAX_BYTES`]를 넘지 않는다.
  */
-text: string,
+text: string, 
 /**
  * 이미지, 동영상, 그림판, 웹 화면처럼 글로 옮길 수 없는 것이 보이는가. 참이면 `conversation.send` 때 모습을 찍는다.
  */
-visual: boolean,
+visual: boolean, 
 /**
  * 이 창이 쉘 화면에서 온전히 보이지 않는가. 다른 창이나 오버레이와 겹치거나 최소화됐으면 참이다. 참인 창의
  * 이미지는 `share.freeze`와 `share.capture`로 그 창만 드러낸 뒤 얻는다. 오래된 화면 호출의 JSON에는 이 필드가
  * 없어도 된다.
  */
-occluded: boolean,
+occluded: boolean, 
 /**
  * 화면에서 직접 제공하는 PNG 이미지의 base64 표현.
  */
-image_base64?: string,
+image_base64?: string, 
 /**
  * 창의 내용 영역(제목 줄 아래)이 쉘 화면(메인 웹뷰) 왼쪽 위 기준 어디에 있는가(CSS px). 모습을 찍을 때 쓴다.
  */
@@ -1347,15 +1347,15 @@ export type WebHistoryAction = "back" | "forward" | "reload" | "stop";
 /**
  * 웹 화면의 지금 페이지.
  */
-export type WebPage = {
+export type WebPage = { 
 /**
  * 지금 주소. 페이지 안에서만 바뀐 주소(history.pushState)도 포함한다.
  */
-url: string,
+url: string, 
 /**
  * 문서 제목. 없으면 빈 문자열이고, 화면은 그때 주소의 호스트를 보인다.
  */
-title: string,
+title: string, 
 /**
  * 페이지를 읽는 중인가.
  */
@@ -1368,11 +1368,11 @@ export type WorkerAction = { worker: WorkerCallSpec, };
 
 export type WorkerCallSpec = { action: string, args?: Binding, };
 
-export type WorkerDecl = { runtime: WorkerRuntime, code: string, timeout_secs?: number, schedule?: WorkerScheduleDecl,
+export type WorkerDecl = { runtime: WorkerRuntime, code: string, timeout_secs?: number, schedule?: WorkerScheduleDecl, 
 /**
  * 외부 웹훅으로 워커를 실행하는 설정.
  */
-webhook?: WorkerWebhookDecl,
+webhook?: WorkerWebhookDecl, 
 /**
  * 내부 호출을 허용할 다른 앱 id 목록.
  */
@@ -1384,11 +1384,11 @@ export type WorkerScheduleDecl = { interval_secs: number, jitter_secs?: number, 
 
 export type WorkerSecretDecl = { id: string, description?: string, };
 
-export type WorkerWebhookDecl = {
+export type WorkerWebhookDecl = { 
 /**
  * 웹훅을 켜는 전역 불리언 저장 항목. 기본값은 false여야 한다.
  */
-enabled_entry?: string,
+enabled_entry?: string, 
 /**
  * 호출 토큰을 담을 워커 시크릿. 선언하면 미설정 시 호출을 거부한다.
  */
