@@ -219,11 +219,11 @@ def run():
                 new_pids = wait_until(lambda: [int(value) for value in (folder / "pids.txt").read_text().split()] if (folder / "pids.txt").exists() else None, 15, "두 번째 실행이 시작되지 않았습니다")
                 assert not app.get_by_role("dialog").count(), "같은 실행 명세를 다시 물었습니다"
                 os.kill(sb.procs[1].pid, signal.SIGINT)
-                sb.procs[1].wait(timeout=20)
                 wait_until(lambda: stopped(new_pids), 15, "쉘을 종료한 뒤 프로세스 트리가 남았습니다")
-                print("5 passed: 허용 취소, 페이지 리로드, ping 실패와 8MiB 역압, 창 닫기, 쉘 종료", flush=True)
                 browser.close()
                 browser = None
+                sb.procs[1].wait(timeout=20)
+                print("5 passed: 허용 취소, 페이지 리로드, ping 실패와 8MiB 역압, 창 닫기, 쉘 종료", flush=True)
         finally:
             if browser:
                 try:

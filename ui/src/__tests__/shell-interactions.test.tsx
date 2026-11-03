@@ -402,6 +402,7 @@ function makeStore(snapshot: ShellSnapshot, calls: CoreRequest[]): ShellStore {
     getSnapshot: () => snapshot,
     getError: () => null,
     subscribe: () => () => undefined,
+    subscribeEvents: () => () => undefined,
     ready: Promise.resolve(),
     dispose: () => undefined,
   } as unknown as ShellStore;
