@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 fn definition() -> Value {
     json!({
         "id":"process-fixture", "name":"프로세스 시험",
-        "requires":{"blocks":16,"modules":{"assets":1,"client":3,"process":1}},
+        "requires":{"blocks":17,"modules":{"assets":1,"client":3,"process":1}},
         "permissions":[{"module":"process","id":"run","label":"실행"}],
         "assets":[{"id":"client-code","version":1}],
         "client":{"runtime":"javascript","entry":{"id":"client-code","version":1},"process_permissions":["run"]},
@@ -41,7 +41,7 @@ fn process_permission_requires_declared_permission_and_versions() {
         },
         {
             let mut value = app.clone();
-            value["requires"]["blocks"] = json!(15);
+            value["requires"]["blocks"] = json!(16);
             value
         },
     ] {

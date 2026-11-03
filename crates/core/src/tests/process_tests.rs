@@ -29,7 +29,7 @@ fn window_close_stops_a_running_process_and_descendant() {
     let host = Arc::new(FakeHost::default());
     host.choose(Some(folder.path().into()));
     let definition = json!({
-        "id":"process-fixture", "name":"프로세스 시험", "requires":{"blocks":16,"modules":{"assets":1,"client":3,"process":1,"files":1}},
+        "id":"process-fixture", "name":"프로세스 시험", "requires":{"blocks":17,"modules":{"assets":1,"client":3,"process":1,"files":1}},
         "permissions":[{"module":"process","id":"run","label":"실행"},{"module":"files","id":"work","label":"작업","access":"readwrite"}],
         "assets":[{"id":"client-code","version":1}], "client":{"runtime":"javascript","entry":{"id":"client-code","version":1},"process_permissions":["run"]},
         "ui":{"type":"text","value":"시험"}
@@ -130,7 +130,7 @@ fn consent_and_checkpoint_follow_the_window() {
     let host = Arc::new(FakeHost::default());
     host.choose(Some(folder.path().into()));
     let definition = json!({
-        "id":"process-fixture", "name":"프로세스 시험", "requires":{"blocks":16,"modules":{"assets":1,"client":3,"process":1,"files":1}},
+        "id":"process-fixture", "name":"프로세스 시험", "requires":{"blocks":17,"modules":{"assets":1,"client":3,"process":1,"files":1}},
         "permissions":[{"module":"process","id":"run","label":"실행"},{"module":"files","id":"work","label":"작업","access":"readwrite"}],
         "assets":[{"id":"client-code","version":1}], "client":{"runtime":"javascript","entry":{"id":"client-code","version":1},"process_permissions":["run"]},
         "ui":{"type":"text","value":"시험"}
@@ -352,7 +352,7 @@ fn windows_process_cmd_terminates_descendants_in_unicode_cwd() {
     let host = Arc::new(FakeHost::default());
     host.choose(Some(work.clone()));
     let definition = json!({
-        "id":"process-fixture", "name":"프로세스 시험", "requires":{"blocks":16,"modules":{"assets":1,"client":3,"process":1,"files":1}},
+        "id":"process-fixture", "name":"프로세스 시험", "requires":{"blocks":17,"modules":{"assets":1,"client":3,"process":1,"files":1}},
         "permissions":[{"module":"process","id":"run","label":"실행"},{"module":"files","id":"work","label":"작업","access":"readwrite"}],
         "assets":[{"id":"client-code","version":1}], "client":{"runtime":"javascript","entry":{"id":"client-code","version":1},"process_permissions":["run"]}, "ui":{"type":"text","value":"시험"}
     });

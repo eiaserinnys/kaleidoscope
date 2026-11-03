@@ -517,8 +517,8 @@ fn validate_client(definition: &AppDefinition, details: &mut Vec<String>) {
     if let Some(permissions) = &client.process_permissions {
         validate_module_version("client", 3, definition, details, "/client/process_permissions");
         validate_module_version("process", 1, definition, details, "/client/process_permissions");
-        if definition.requires.blocks < 16 {
-            details.push("/client/process_permissions: 블록 세트 16판이 필요합니다".into());
+        if definition.requires.blocks < 17 {
+            details.push("/client/process_permissions: 블록 세트 17판이 필요합니다".into());
         }
         for permission in permissions {
             validate_permission_module(permission, "process", definition, details, "/client/process_permissions");
