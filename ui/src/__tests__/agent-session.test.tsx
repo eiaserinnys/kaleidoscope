@@ -9,7 +9,7 @@ import { createFakeTransport } from "../core/fake-transport";
 import { makeTestSeed, makeTestSnapshot } from "./fixtures";
 import { AppWindowContent } from "../render/app-window-content";
 import { createShellStore } from "../core/shell-store";
-import agentJson from "../../../apps/agent.json";
+import legacyAgentJson from "../../../crates/core/src/tests/fixtures/local-agent.json";
 
 const definition: AppDefinition = {
   id: "agent", name: "에이전트", requires: { blocks: 8, modules: { files: 1, local_agent: 1 } },
@@ -265,7 +265,7 @@ describe("기기 로컬 에이전트 화면", () => {
   });
 
   it("가짜 코어가 선택부터 실행 허용과 도구 호출까지 새 세대로 이어간다", async () => {
-    const definition = agentJson as unknown as AppDefinition;
+    const definition = legacyAgentJson as unknown as AppDefinition;
     const configuredAgents = (definition as unknown as {
       storage: {
         entries: Array<{
