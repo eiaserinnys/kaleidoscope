@@ -21,6 +21,107 @@ fn binary_process_write_identifies_each_invalid_checkpoint() {
     }
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn window_close_stops_a_running_process_and_descendant() {
+    let temp = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(folder.path().into()));
+    let definition = json!({
+        "id":"process-fixture", "name":"프로세스 시험", "requires":{"blocks":16,"modules":{"assets":1,"client":3,"process":1,"files":1}},
+        "permissions":[{"module":"process","id":"run","label":"실행"},{"module":"files","id":"work","label":"작업","access":"readwrite"}],
+        "assets":[{"id":"client-code","version":1}], "client":{"runtime":"javascript","entry":{"id":"client-code","version":1},"process_permissions":["run"]},
+        "ui":{"type":"text","value":"시험"}
+    });
+    let core = Arc::new(open_core(temp.path(), vec![definition.to_string()], &host));
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "process-fixture");
+    core.handle(CoreRequest::FilesPickFolder {
+        window_id: window.clone(),
+        permission: "work".into(),
+    })
+    .unwrap();
+    let (consent_tx, consent_rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        if let CoreEvent::ProcessPermission { request_id, .. } = event {
+            let _ = consent_tx.send(request_id.clone());
+        }
+    }));
+    let starter = core.clone();
+    let start_window = window.clone();
+    let task = thread::spawn(move || {
+        starter
+            .handle(CoreRequest::ProcessStart {
+                window_id: start_window,
+                key: "main".into(),
+                permission: "run".into(),
+                cwd_permission: "work".into(),
+                services: vec![],
+                spec: ProcessSpec {
+                    name: "시험".into(),
+                    command: "sh".into(),
+                    args: vec![
+                        "-c".into(),
+                        "sleep 120 & echo $$ $! > pids; while :; do printf 'output\\n'; done"
+                            .into(),
+                    ],
+                    env: BTreeMap::new(),
+                },
+            })
+            .unwrap()
+    });
+    core.handle(CoreRequest::ProcessRespondPermission {
+        window_id: window.clone(),
+        request_id: consent_rx.recv_timeout(Duration::from_secs(10)).unwrap(),
+        allow: true,
+    })
+    .unwrap();
+    assert!(matches!(
+        task.join().unwrap(),
+        CoreReply::ProcessStart {
+            result: ProcessStartResult::Started { .. }
+        }
+    ));
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let pids = loop {
+        if let Ok(text) = fs::read_to_string(folder.path().join("pids")) {
+            let ids: Vec<u32> = text
+                .split_whitespace()
+                .filter_map(|value| value.parse().ok())
+                .collect();
+            if ids.len() == 2 {
+                break ids;
+            }
+        }
+        assert!(Instant::now() < deadline, "자식 시작 시간 초과");
+        thread::sleep(Duration::from_millis(10));
+    };
+    core.handle(CoreRequest::WindowClose { window_id: window })
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let running: Vec<_> = pids
+            .iter()
+            .copied()
+            .filter(|pid| {
+                fs::read_to_string(format!("/proc/{pid}/stat"))
+                    .ok()
+                    .and_then(|stat| stat.split_whitespace().nth(2).map(str::to_owned))
+                    .is_some_and(|state| state != "Z")
+            })
+            .collect();
+        if running.is_empty() {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "창 닫기 뒤 남은 프로세스: {running:?}"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn consent_and_checkpoint_follow_the_window() {

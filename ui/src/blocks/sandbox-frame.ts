@@ -159,10 +159,12 @@ function bridgeSource(init: SandboxInit): string {
       if (event.source !== parent || !event.data) return;
       const data = event.data;
       if (data.type === 'ks-client-lifecycle') {
-        lifecycle = data.lifecycle;
+        const currentLifecycle = data.lifecycle;
+        lifecycle = currentLifecycle;
         lifecycleListeners.forEach(fn => {
-          const task = Promise.resolve().then(() => fn(lifecycle));
-          pendingLifecycle.add(task); task.then(() => pendingLifecycle.delete(task), () => pendingLifecycle.delete(task));
+          const task = Promise.resolve().then(() => fn(currentLifecycle));
+          if (currentLifecycle.phase === 'closing') pendingLifecycle.add(task);
+          task.then(() => pendingLifecycle.delete(task), () => pendingLifecycle.delete(task));
         });
       }
       if (data.type === 'ks-client-inputs') { inputs = data.inputs; inputListeners.forEach(fn => fn(inputs, data.changed)); }

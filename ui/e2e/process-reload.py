@@ -70,6 +70,15 @@ def stopped(pids):
     return True
 
 
+def describe_processes(pids):
+    for pid in pids:
+        try:
+            process = psutil.Process(pid)
+            print(f"프로세스 pid={pid} status={process.status()} ppid={process.ppid()} pgid={os.getpgid(pid)} cmdline={process.cmdline()}", flush=True)
+        except (psutil.NoSuchProcess, ProcessLookupError):
+            print(f"프로세스 pid={pid} 종료됨", flush=True)
+
+
 def geometry(page):
     return page.evaluate("""() => {
       const bounds = (selector) => {
@@ -193,7 +202,11 @@ def run():
                 page.screenshot(path=str(output / "restored-narrow-light.png"))
                 pids = [int(value) for value in (folder / "pids.txt").read_text().split()]
                 app.get_by_role("button", name="창 닫기").click()
-                wait_until(lambda: stopped(pids), 15, "창을 닫은 뒤 프로세스 트리가 남았습니다")
+                try:
+                    wait_until(lambda: stopped(pids), 15, "창을 닫은 뒤 프로세스 트리가 남았습니다")
+                except AssertionError:
+                    describe_processes(pids)
+                    raise
                 snapshot = sb.snapshot()
                 workspace = snapshot["device"]["active_workspace_id"]
                 desktop = snapshot["device"]["active_desktop_ids"][workspace]
