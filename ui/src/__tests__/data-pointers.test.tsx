@@ -71,6 +71,35 @@ it("탭의 쉬는 포인터를 붙일 때 보내고 전환마다 한 번 갱신�
   store.dispose();
 });
 
+it("설정을 열면 설정 트리를 깨우고 앱 본문만 재운다", async () => {
+  const definition: AppDefinition = {
+    id: "dormant-settings", name: "설정 잠금 시험", requires: { blocks: 18, modules: {} }, permissions: [], state: {},
+    settings: { ui: { type: "text", value: "설정 본문" } },
+    ui: { type: "text", value: "앱 본문" },
+  };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const store = createShellStore(transport);
+  const view = render(<AppWindowContent store={store} windowId="viewer-window" settingsOpen={false} settingsVisited />);
+
+  await waitFor(() => expect(transport.getCalls().find((call) => call.op === "data.attach")).toEqual({
+    op: "data.attach", window_id: "viewer-window", dormant: ["/settings/ui"],
+  }));
+
+  view.rerender(<AppWindowContent store={store} windowId="viewer-window" settingsOpen settingsVisited />);
+  expect(await screen.findByText("설정 본문")).toBeTruthy();
+  expect(document.querySelector(".ks-data-window-body")?.hasAttribute("hidden")).toBe(true);
+  await waitFor(() => expect(transport.getCalls().filter((call) => call.op === "data.dormant").at(-1)).toEqual({
+    op: "data.dormant", window_id: "viewer-window", dormant: ["/ui"],
+  }));
+
+  view.rerender(<AppWindowContent store={store} windowId="viewer-window" settingsOpen={false} settingsVisited />);
+  expect(await screen.findByText("앱 본문")).toBeTruthy();
+  await waitFor(() => expect(transport.getCalls().filter((call) => call.op === "data.dormant").at(-1)).toEqual({
+    op: "data.dormant", window_id: "viewer-window", dormant: ["/settings/ui"],
+  }));
+  store.dispose();
+});
+
 it("방문한 탭은 숨겨 유지해 접힘 상태를 이어 간다", async () => {
   const definition: AppDefinition = {
     id: "kept-tabs", name: "탭 유지 시험", requires: { blocks: 15, modules: {} }, permissions: [],
