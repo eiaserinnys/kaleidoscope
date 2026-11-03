@@ -123,6 +123,16 @@ describe("Menu", () => {
     expect(renderAt(40, 50, 560)).toBe(28);
   });
 
+  it("clamps an offscreen point after trying the space above it", () => {
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 600 });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("ks-menu") ? rect(0, 0, 180, 120) : rect(0, 0, 0, 0);
+    });
+    render(<Menu anchor={document.createElement("button")} anchorPoint={{ x: 5000, y: 1000 }} items={[]} onClose={() => undefined} />);
+    expect(Number.parseFloat(screen.getByRole("menu").style.top)).toBeLessThanOrEqual(480);
+    expect(Number.parseFloat(screen.getByRole("menu").style.left)).toBeLessThanOrEqual(window.innerWidth - 180);
+  });
+
   it("shows and focuses the checked item when opening a long menu", () => {
     Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get() { return this.classList.contains("ks-menu") ? 100 : 0; } });
     Object.defineProperty(HTMLElement.prototype, "offsetTop", { configurable: true, get() { return this.getAttribute("aria-current") === "true" ? 120 : 0; } });

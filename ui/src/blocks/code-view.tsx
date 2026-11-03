@@ -15,6 +15,7 @@ import { resolveFilePath } from "./file-path";
 import { codeHighlighting, codeLanguageForPath, codeViewText, languageExtension } from "./code-language";
 import { FileGrant } from "./file-grant";
 import { useWindowGrant, useWindowStateValue } from "../data/window-state";
+import { openContextMenu, writeMenuClipboard } from "../components/context-menu";
 
 export type CodeViewBlockData = Extract<Block, { type: "code" }>;
 export function CodeViewBlock({ block, context, pointer }: { block: CodeViewBlockData; context: BlockContext; pointer: string }) {
@@ -81,5 +82,5 @@ function ReadOnlyCode({ text, language, follow, wrap, path = null }: { text: str
       scroller.scrollLeft = left;
     });
   }, [text, follow]);
-  return <div className="ks-code-view" ref={host} />;
+  return <div className="ks-code-view" ref={host} onContextMenu={(event) => openContextMenu(event, [{ id: "code-copy", label: "코드 복사", onSelect: () => { void writeMenuClipboard(view.current?.state.doc.toString() ?? text, "코드 복사"); } }])} />;
 }

@@ -167,6 +167,47 @@ describe("공용 우클릭 메뉴", () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it("긴 대상의 키보드 메뉴를 스크롤 칸 안 보이는 부분을 기준으로 화면 안에 연다", () => {
+    const rect = (left: number, top: number, width: number, height: number) => ({ x: left, y: top, left, top, right: left + width, bottom: top + height, width, height, toJSON: () => ({}) });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.dataset.testid === "scroll") return rect(20, 100, 300, 300);
+      if (this.dataset.testid === "long") return rect(40, 110, 200, 900);
+      if (this.classList.contains("ks-menu")) return rect(0, 0, 120, 80);
+      return rect(0, 0, 0, 0);
+    });
+    render(<><ContextMenuHost /><div data-testid="scroll" style={{ overflowY: "auto" }}><div data-testid="long" tabIndex={0} onContextMenu={(event) => openContextMenu(event, [{ id: "copy", label: "메시지 복사" }])}>긴 글</div></div></>);
+    const scroll = screen.getByTestId("scroll");
+    Object.defineProperties(scroll, { clientWidth: { value: 300 }, clientHeight: { value: 300 } });
+    const target = screen.getByTestId("long"); target.focus(); fireEvent.keyDown(target, { key: "ContextMenu" });
+    const popup = screen.getByRole("menu");
+    expect(popup.style.left).toBe("40px");
+    expect(popup.style.top).toBe("400px");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "메시지 복사" }));
+  });
+
+  it("아래쪽 대상의 키보드 메뉴를 대상 윗변 위로 열어 대상을 가리지 않는다", () => {
+    const rect = (left: number, top: number, width: number, height: number) => ({ x: left, y: top, left, top, right: left + width, bottom: top + height, width, height, toJSON: () => ({}) });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.dataset.testid === "row") return rect(40, 700, 200, 50);
+      if (this.classList.contains("ks-menu")) return rect(0, 0, 120, 100);
+      return rect(0, 0, 0, 0);
+    });
+    render(<><ContextMenuHost /><div data-testid="row" tabIndex={0} onContextMenu={(event) => openContextMenu(event, [{ id: "copy", label: "복사 동작" }])}>행</div></>);
+    const row = screen.getByTestId("row"); row.focus(); fireEvent.keyDown(row, { key: "F10", shiftKey: true });
+    expect(screen.getByRole("menu").style.top).toBe("600px");
+  });
+
+  it("편집기 키보드 메뉴는 캐럿 줄을 기준으로 연다", () => {
+    const rect = { x: 80, y: 690, left: 80, top: 690, right: 81, bottom: 710, width: 1, height: 20, toJSON: () => ({}) };
+    render(<><ContextMenuHost /><div className="cm-editor"><div className="cm-content" contentEditable suppressContentEditableWarning tabIndex={0}>코드</div></div></>);
+    const content = document.querySelector<HTMLElement>(".cm-content")!;
+    const view = { contentDOM: content, state: { selection: { main: { from: 0, to: 0, head: 0 } }, sliceDoc: () => "", facet: () => false }, coordsAtPos: () => rect };
+    vi.spyOn(EditorView, "findFromDOM").mockReturnValue(view as unknown as EditorView);
+    content.focus(); fireEvent.keyDown(content, { key: "ContextMenu" });
+    expect(screen.getByRole("menu").style.left).toBe("80px");
+    expect(screen.getByRole("menu").style.top).toBe("710px");
+  });
+
   it("지정된 자리 항목을 열고 누른다", () => {
     const run = vi.fn();
     render(<><ContextMenuHost /><button onContextMenu={(event) => openContextMenu(event, [{ id: "site", label: "자리 동작", onSelect: run }])}>자리</button></>);

@@ -7,7 +7,7 @@ import { Menu, type MenuEntry } from "./menu";
 import { Button, Notice } from "./primitives";
 
 type MenuEvent = MouseEvent | ReactMouseEvent<HTMLElement>;
-type MenuState = { anchor: HTMLElement; point: { x: number; y: number }; entries: MenuEntry[] };
+type MenuState = { anchor: HTMLElement; point?: { x: number; y: number }; keyboardRect?: { left: number; top: number; bottom: number }; entries: MenuEntry[] };
 type MenuOptions = { anchor?: HTMLElement; anchorPoint?: { x: number; y: number }; includeText?: boolean; keyboard?: boolean };
 let current: MenuState | null = null;
 const listeners = new Set<() => void>();
@@ -21,6 +21,31 @@ const reasonText = (reason: unknown) => reason instanceof Error ? reason.message
 export async function writeMenuClipboard(text: string, itemLabel: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; }
   catch (reason) { reportError(shellErrors.SHELL_MENU_CLIPBOARD_WRITE_FAILED({ item: itemLabel, alternative: itemLabel === "잘라내기" ? "Ctrl+X로 잘라내세요" : "Ctrl+C로 복사하세요", reason: reasonText(reason) })); return false; }
+}
+
+export async function writeMenuImage(image: HTMLImageElement, _itemLabel: string): Promise<boolean> {
+  let blob: Blob;
+  try {
+    const source = await (await fetch(image.currentSrc || image.src)).blob();
+    blob = source.type === "image/png" ? source : await new Promise<Blob>((resolve, reject) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d");
+      if (!context) { reject("이미지를 변환할 수 없습니다"); return; }
+      context.drawImage(image, 0, 0);
+      canvas.toBlob((value) => value ? resolve(value) : reject("이미지를 PNG로 변환할 수 없습니다"), "image/png");
+    });
+  } catch (reason) {
+    reportError(shellErrors.SHELL_MENU_IMAGE_CONVERT_FAILED({ reason: reasonText(reason) }));
+    return false;
+  }
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    return true;
+  } catch (reason) {
+    reportError(shellErrors.SHELL_MENU_IMAGE_CLIPBOARD_WRITE_FAILED({ reason: reasonText(reason) }));
+    return false;
+  }
 }
 
 async function readMenuClipboard(): Promise<string | null> {
@@ -74,6 +99,28 @@ function textEntries(target: HTMLElement): MenuEntry[] {
   ];
 }
 
+function visibleKeyboardRect(target: HTMLElement): { left: number; top: number; bottom: number } {
+  const editor = target.closest<HTMLElement>(".cm-editor");
+  const view = editor ? EditorView.findFromDOM(editor) : null;
+  const rect = view?.coordsAtPos(view.state.selection.main.head) ?? target.getBoundingClientRect();
+  let left = 0, top = 0, right = window.innerWidth, bottom = window.innerHeight;
+  for (let parent = target.parentElement; parent; parent = parent.parentElement) {
+    const style = getComputedStyle(parent);
+    if (![style.overflowX, style.overflowY].some((value) => value === "auto" || value === "scroll" || value === "overlay")) continue;
+    const bounds = parent.getBoundingClientRect();
+    left = Math.max(left, bounds.left + parent.clientLeft);
+    top = Math.max(top, bounds.top + parent.clientTop);
+    right = Math.min(right, bounds.left + parent.clientLeft + parent.clientWidth);
+    bottom = Math.min(bottom, bounds.top + parent.clientTop + parent.clientHeight);
+    break;
+  }
+  return {
+    left: Math.max(left, Math.min(rect.left, right)),
+    top: Math.max(top, Math.min(rect.top, bottom)),
+    bottom: Math.max(top, Math.min(rect.bottom, bottom)),
+  };
+}
+
 export function openContextMenu(event: MenuEvent, siteEntries: MenuEntry[], options: MenuOptions = {}): void {
   event.preventDefault();
   const origin = event.target;
@@ -82,14 +129,11 @@ export function openContextMenu(event: MenuEvent, siteEntries: MenuEntry[], opti
   const text = options.includeText === false ? [] : textEntries(target);
   const entries: MenuEntry[] = text.length && siteEntries.length ? [...text, { id: "context-separator", type: "separator" }, ...siteEntries] : [...text, ...siteEntries];
   if (!entries.length) { closeMenu(); return; }
-  const rect = target.getBoundingClientRect();
   const keyboard = options.keyboard ?? event.detail === -1;
-  const editor = keyboard ? target.closest<HTMLElement>(".cm-editor") : null;
-  const view = editor ? EditorView.findFromDOM(editor) : null;
-  const caret = view?.coordsAtPos(view.state.selection.main.head);
-  const point = options.anchorPoint ?? (keyboard ? { x: caret?.left ?? rect.left, y: caret?.bottom ?? rect.bottom } : { x: event.clientX, y: event.clientY });
+  const point = options.anchorPoint ?? (keyboard ? undefined : { x: event.clientX, y: event.clientY });
+  const keyboardRect = keyboard && !options.anchorPoint ? visibleKeyboardRect(target) : undefined;
   const anchor = options.anchor ?? target.closest<HTMLElement>(".cm-content, [contenteditable='true'], [contenteditable='plaintext-only']") ?? target;
-  setMenu({ anchor, point, entries });
+  setMenu({ anchor, point, keyboardRect, entries });
 }
 
 type FrameContext = { requestId: number; x: number; y: number; text: string; editable?: boolean; readOnly?: boolean; password?: boolean };
@@ -127,5 +171,5 @@ export function ContextMenuHost({ onError }: { onError?: (error: CoreError) => v
     errors.add(report); document.addEventListener("contextmenu", onContextMenu); document.addEventListener("keydown", onKeyDown); window.addEventListener("blur", closeMenu);
     return () => { errors.delete(report); document.removeEventListener("contextmenu", onContextMenu); document.removeEventListener("keydown", onKeyDown); window.removeEventListener("blur", closeMenu); closeMenu(); };
   }, [onError]);
-  return <>{menu ? <Menu anchor={menu.anchor} anchorPoint={menu.point} items={menu.entries} onClose={closeMenu} /> : null}{error ? <Notice role="alert" errorId={error.id} actions={[<Button key="close" onClick={() => setError(null)}>닫기</Button>]}>{error.message}</Notice> : null}</>;
+  return <>{menu ? <Menu anchor={menu.anchor} anchorPoint={menu.point} keyboardRect={menu.keyboardRect} items={menu.entries} onClose={closeMenu} /> : null}{error ? <Notice role="alert" errorId={error.id} actions={[<Button key="close" onClick={() => setError(null)}>닫기</Button>]}>{error.message}</Notice> : null}</>;
 }
