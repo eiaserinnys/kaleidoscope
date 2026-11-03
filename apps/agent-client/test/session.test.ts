@@ -39,6 +39,32 @@ function fixture() {
   return { host, writes, snapshots, emit, exit, revokeTools, getCheckpoint: () => checkpoint, blobKeys: () => [...blobs.keys()] };
 }
 
+test("연속 응답을 읽는 동안에도 다음 말 접수를 끝낸다", async () => {
+  const f = fixture();
+  const session = new AgentSession(f.host as any);
+  await session.attach();
+  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: {} } });
+  await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "session" } });
+  await session.send({ id: "first", text: "첫 말", attachments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const read = f.host.process.read;
+  let batches = 0;
+  let accepted: Promise<void> | undefined;
+  let queuedBeforeEnd = false;
+  f.host.process.read = async (args: any) => {
+    if (++batches <= 8) {
+      await f.emit({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "응답" } } } }, false);
+      if (batches === 1) accepted = session.send({ id: "second", text: "다음 말", attachments: [] });
+      if (batches === 4) queuedBeforeEnd = f.snapshots.at(-1).queued.some((entry: any) => entry.id === "second");
+    }
+    return read(args);
+  };
+  await f.emit({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "시작" } } } });
+  while (batches <= 8) await new Promise((resolve) => setTimeout(resolve, 0));
+  await accepted;
+  assert.ok(queuedBeforeEnd, "다음 말을 응답 종료 전 대기열에 넣어야 합니다");
+});
+
 for (const framePresent of [true, false]) {
   test(`응답 중 프로세스 종료 시 ${framePresent ? "열린 프레임" : "다시 붙은 프레임"}에서 남은 글을 중단 기록으로 보존한다`, async () => {
     const f = fixture();

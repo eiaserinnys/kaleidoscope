@@ -7,6 +7,7 @@ import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import { normalizeBlock } from "../render/render-block";
+import { focusRescued, isUnclaimedFocus } from "../components/focus-rescue";
 import { grantFor, makeTestSeed, mdEditorDefinition, mdViewerDefinition } from "./fixtures";
 
 const rangeGetClientRects = Object.getOwnPropertyDescriptor(Range.prototype, "getClientRects");
@@ -37,12 +38,22 @@ it("기존 블록 이름을 정본 이름과 모드로 정규화한다", () => {
 });
 
 describe("app definition renderer", () => {
+  it("대신 옮긴 초점을 떠난 뒤 직접 다시 고르면 사용자 초점으로 남긴다", () => {
+    render(<><button>대신</button><button>직접</button></>);
+    const rescued = screen.getByRole("button", { name: "대신" });
+    focusRescued(rescued);
+    expect(isUnclaimedFocus(rescued)).toBe(true);
+    screen.getByRole("button", { name: "직접" }).focus();
+    rescued.focus();
+    expect(isUnclaimedFocus(rescued)).toBe(false);
+  });
   it("창의 포커스된 조작이 사라지면 남은 첫 조작으로 포커스를 옮긴다", async () => {
     const definition: AppDefinition = {
       id: "focus-test", name: "초점", requires: { blocks: 14, modules: {} }, permissions: [], state: { visible: true },
       ui: { type: "stack", direction: "column", children: [
         { type: "when", value: { state: "visible" }, child: { type: "button", label: "선택", on_click: [{ set_state: "visible", value: false }] } },
-        { type: "button", label: "다음", on_click: [{ set_state: "visible", value: true }] },
+        { type: "button", label: "뒤로", on_click: [{ set_state: "visible", value: true }] },
+        { type: "button", label: "다음", variant: "primary", on_click: [{ set_state: "visible", value: true }] },
       ] },
     };
     const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));

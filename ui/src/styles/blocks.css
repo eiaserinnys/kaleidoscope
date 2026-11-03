@@ -986,7 +986,7 @@ button.ks-agent-attachment-chip-preview,
   aspect-ratio: 8 / 5;
   border: 0;
   border-radius: var(--ks-radius-small);
-  background: transparent;
+  background: var(--ks-color-surface);
   padding: 0;
 }
 
@@ -995,7 +995,7 @@ button.ks-agent-attachment-chip-preview,
   width: 100%;
   height: 100%;
   border-radius: var(--ks-radius-small);
-  object-fit: contain;
+  object-fit: scale-down;
 }
 
 .ks-agent-attachment-placeholder {

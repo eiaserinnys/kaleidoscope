@@ -92,6 +92,9 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
     const scope = content.closest<HTMLElement>(".ks-window-frame") ?? content;
     let focused: HTMLElement | null = null;
     let restore = false;
+    let pointer = false;
+    const onPointer = () => { pointer = true; };
+    const onKey = () => { pointer = false; };
     const onFocus = (event: FocusEvent) => {
       const target = event.target;
       if (!(target instanceof HTMLElement) || target.classList.contains("ks-window-content")) return;
@@ -103,15 +106,25 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       const lost = active === document.body || (active instanceof HTMLElement && active.classList.contains("ks-window-content") && scope.contains(active));
       if (focused && !scope.contains(focused)) { focused = null; restore = lost; }
       if (!restore || !lost) return;
+      // 포인터로 시작한 화면 전환에는 키보드 초점 테두리를 만들지 않는다.
+      if (pointer) { restore = false; return; }
       const controls = Array.from(content.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'));
       const visible = controls.filter((element) => element.tabIndex >= 0 && !element.closest("[hidden], [inert], [aria-hidden='true']")
         && (typeof element.checkVisibility !== "function" || element.checkVisibility({ visibilityProperty: true })));
-      const target = visible.find((element) => element.classList.contains("ks-agent-chat-input")) ?? visible[0];
+      const target = visible.find((element) => element.classList.contains("ks-button-emphasis"))
+        ?? visible.find((element) => element.classList.contains("ks-agent-chat-input")) ?? visible[0];
       if (target) { restore = false; focusRescued(target); }
     });
     scope.addEventListener("focusin", onFocus);
+    scope.addEventListener("pointerdown", onPointer, true);
+    scope.addEventListener("keydown", onKey, true);
     observer.observe(scope, { childList: true, subtree: true });
-    return () => { scope.removeEventListener("focusin", onFocus); observer.disconnect(); };
+    return () => {
+      scope.removeEventListener("focusin", onFocus);
+      scope.removeEventListener("pointerdown", onPointer, true);
+      scope.removeEventListener("keydown", onKey, true);
+      observer.disconnect();
+    };
   }, [data]);
   const hasSettings = Boolean(context.definition.settings)
     || (context.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false);

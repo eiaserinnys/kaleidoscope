@@ -5,6 +5,7 @@ const rescued = new WeakSet<Element>();
 
 export function focusRescued(element: HTMLElement) {
   rescued.add(element);
+  element.addEventListener("blur", () => rescued.delete(element), { once: true });
   element.focus();
 }
 

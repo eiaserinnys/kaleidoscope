@@ -364,6 +364,13 @@ describe("대화 제공자 화면", () => {
 });
 
 describe("공용 대화 부품", () => {
+  it("생각 중은 줄 선 말과 넘어가기 전 말 뒤에 놓는다", () => {
+    render(<ChatHistory items={[]} pending={{ text: "새 말", attachments: [], afterResponse: true }} delta="" busy tool={null}
+      historyRef={createRef<HTMLDivElement>()} followTail={{ current: true }}
+      renderAttachment={() => null} renderPendingAttachment={() => null} queued={<div>줄 선 말</div>} />);
+    const rows = [...screen.getByRole("log").querySelector(".ks-agent-chat-content")!.children].map((node) => node.textContent);
+    expect(rows).toEqual(["줄 선 말", "새 말", "생각 중입니다…"]);
+  });
   it("사용자의 답을 기다리는 footer에서는 생각 중 표시를 숨긴다", () => {
     const props = {
       items: [], pending: null, delta: "", busy: true, tool: null,

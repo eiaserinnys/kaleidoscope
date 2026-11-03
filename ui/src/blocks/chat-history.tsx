@@ -61,14 +61,14 @@ export function ChatHistory({ items, pending, delta, busy, tool, historyRef, fol
       <ChatItems items={items} renderAttachment={renderAttachment} />
       {!pending?.afterResponse ? pendingRow : null}
       {delta ? <div className="ks-agent-chat-assistant"><div className="ks-agent-chat-assistant-content"><MarkdownText>{delta}</MarkdownText></div></div> : null}
+      {queued}
+      {pending?.afterResponse ? pendingRow : null}
       {(busy || pending !== null) && !delta && !hideThinking ? (
         <div className="ks-agent-chat-working">
           <ThinkingOrb aria-label="생각 중입니다" size={20} state="working" theme="auto" />
           <span>생각 중입니다…{tool ? ` · ${tool}` : ""}</span>
         </div>
       ) : null}
-      {queued}
-      {pending?.afterResponse ? pendingRow : null}
       {footer}
     </div>
   </div>;

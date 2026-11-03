@@ -336,7 +336,11 @@ export class AgentSession {
       this.after = result.next;
       await this.checkpoint();
       this.publish();
+      if (result.exit) continue;
       if (!result.exit) await this.pump();
+      // 다음 읽기를 줄 끝으로 보내 연속 응답 사이에도 보내기와 조작을 접수한다.
+      this.background(this.serial(() => this.drain()));
+      return;
     }
   }
 
