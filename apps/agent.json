@@ -306,9 +306,9 @@
                 "client": "show_starting"
               },
               "child": {
-                "type": "notice",
-                "kind": "loading",
-                "message": ""
+                "type": "progress",
+                "value": null,
+                "max": 1
               }
             },
             {
