@@ -22,7 +22,7 @@ test("여러 에이전트는 가운데 선택을 거쳐 폴더를 고르고, 실
   assert.equal(views.at(-1).show_agents, true);
   await handlers.get("choose_agent")!({ item: { id: "a" } });
   assert.equal(views.at(-1).show_folder, true);
-  assert.equal(views.at(-1).agent_label, "← A");
+  assert.equal(views.at(-1).agent_label, "A");
   assert.equal(views.at(-1).window_title, "에이전트");
   assert.equal(views.at(-1).window_meta, null);
   await handlers.get("pick_folder")!({});

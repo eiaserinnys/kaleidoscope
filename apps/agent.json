@@ -233,6 +233,7 @@
                     },
                     "child": {
                       "type": "button",
+                      "icon": "arrow-left",
                       "label": {
                         "client": "agent_label"
                       },

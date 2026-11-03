@@ -255,7 +255,7 @@ export class AppClient {
       show_login_error: phase === "login" && !!failure,
       show_pick_folder: this.stage === "folder" && !this.retry,
       agents: this.agents.map(({ id, name }) => ({ id, label: name })), agent_options: this.agents.map(({ id, name }) => ({ value: id, label: name })),
-      selected: this.selected?.id ?? null, agent_label: this.agents.length > 1 ? `← ${this.selected?.name ?? ""}` : this.selected?.name ?? "",
+      selected: this.selected?.id ?? null, agent_label: this.selected?.name ?? "",
       folder_label: this.folder ?? "폴더 선택", window_title: chat ? this.selected?.name ?? "에이전트" : "에이전트", window_meta: chat ? this.folder : null,
       settings_available: chat, busy: !!this.view?.busy, controls,
       permissions: this.view?.permissions ?? [], auth_methods: this.view?.authMethods ?? [],
