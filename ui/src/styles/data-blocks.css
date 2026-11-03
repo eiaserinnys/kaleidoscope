@@ -12,6 +12,11 @@
 .ks-data-stack.is-column:has(> .ks-data-stack-item.is-fill > .ks-split) { overflow-y: auto; }
 .ks-data-stack.is-row { flex-direction: row; }
 .ks-data-stack.is-wrap { flex-wrap: wrap; }
+.ks-data-stack.align-start { align-items: flex-start; }
+.ks-data-stack.align-center { align-items: center; }
+.ks-data-stack.align-end { align-items: flex-end; }
+.ks-data-stack.align-baseline { align-items: baseline; }
+.ks-data-stack.is-row.align-center > .ks-data-stack-item > .ks-data-text { padding-block: 0; }
 .ks-data-stack.gap-small { gap: var(--ks-space-2); }
 .ks-data-stack.gap-medium { gap: var(--ks-space-3); }
 .ks-data-stack.gap-large { gap: var(--ks-space-5); }

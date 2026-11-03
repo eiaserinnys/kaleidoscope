@@ -1,6 +1,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
+import type { BlockContext } from "../blocks/block-context";
+import { StackBlock } from "../blocks/data-layout";
 import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
@@ -9,6 +11,26 @@ import { describeVisible } from "../share/visible";
 import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+it("stack.align maps cross-axis alignment and center placement keeps precedence", () => {
+  for (const align of ["start", "center", "end", "baseline"] as const) {
+    const { container, unmount } = render(<StackBlock
+      block={{ type: "stack", direction: "row", children: [], align }}
+      context={{} as BlockContext}
+      pointer="/ui"
+    />);
+    expect(container.firstElementChild?.classList.contains(`align-${align}`)).toBe(true);
+    unmount();
+  }
+
+  const { container } = render(<StackBlock
+    block={{ type: "stack", direction: "row", children: [], place: "center", align: "baseline" }}
+    context={{} as BlockContext}
+    pointer="/ui"
+  />);
+  expect(container.firstElementChild?.classList.contains("is-center")).toBe(true);
+  expect(container.firstElementChild?.classList.contains("align-baseline")).toBe(false);
+});
 
 function setup(rows?: number) {
   const definition: AppDefinition = {

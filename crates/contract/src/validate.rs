@@ -84,7 +84,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         details.push("dialog.on_confirm과 dialog.danger는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
     }
     if uses_new_block_set_19_fields && definition.requires.blocks < 19 {
-        details.push("input.columns, button.preview, button.prefix, 동적 PropertyField.label, format swatches, properties.layout, canvas.loading, when.min_width와 when.max_width는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
+        details.push("stack.align, input.columns, button.preview, button.prefix, 동적 PropertyField.label, format swatches, properties.layout, canvas.loading, when.min_width와 when.max_width는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
     }
     if uses_device_storage_scope {
         validate_module_version(
@@ -271,6 +271,7 @@ fn uses_block_set_19_fields(ui: &Value) -> bool {
     match ui {
         Value::Object(object) => {
             let uses_field = match object.get("type").and_then(Value::as_str) {
+                Some("stack") => object.contains_key("align"),
                 Some("input") => object.contains_key("columns"),
                 Some("button") => object.contains_key("preview") || object.contains_key("prefix"),
                 Some("properties") => {

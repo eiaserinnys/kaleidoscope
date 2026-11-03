@@ -328,7 +328,11 @@ on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap,
 /**
  * (18판) 창 가운데 세로 기둥에 자식을 놓는다. 폭과 넘침 처리는 쉘이 정한다.
  */
-place?: StackPlace, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, header?: boolean, keep_mounted?: boolean, 
+place?: StackPlace,
+/**
+ * (19판) 교차축 정렬. `place:"center"`이면 가운데 배치가 정렬보다 우선한다.
+ */
+align?: StackAlign, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, header?: boolean, keep_mounted?: boolean,
 /**
  * (15판) 참이면 분할 칸의 접기와 펼치기를 탭이 맡는다.
  */
@@ -1169,6 +1173,11 @@ export type SourceState = "idle" | "loading" | "ready" | "failed" | "login_requi
 export type SourceStatus = { "state": "idle", } | { "state": "loading", has_value: boolean, } | { "state": "ready", updated_at: string, } | { "state": "failed", message: string, has_value: boolean, id?: string, } | { "state": "login_required", permission: string, };
 
 export type SplitDirection = "row" | "column";
+
+/**
+ * `stack` 자식의 교차축 정렬. 생략하면 flex의 기존 늘이기 동작을 유지한다.
+ */
+export type StackAlign = "start" | "center" | "end" | "baseline";
 
 export type StackPlace = "center";
 
