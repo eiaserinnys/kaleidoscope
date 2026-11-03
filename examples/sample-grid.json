@@ -10,17 +10,18 @@
   "permissions": [],
   "state": {
     "count": 4,
-    "selected": "sun",
     "swatches": [
       {
         "id": "sun",
         "label": "햇살이 스며드는 밝고 부드러운 원형 장식 표본 카드",
-        "image": { "asset": "builtin-weather-clear" }
+        "image": { "asset": "builtin-weather-clear" },
+        "selected": true
       },
       {
         "id": "cloud",
         "label": "옅은 구름과 여백을 살린 차분하고 은은한 회색 장식 표본 카드",
-        "image": { "asset": "builtin-weather-cloudy" }
+        "image": { "asset": "builtin-weather-cloudy" },
+        "selected": false
       }
     ]
   },
@@ -50,8 +51,8 @@
           "prefix": "색",
           "label": { "item": "label" },
           "preview": { "type": "image", "src": { "item": "image" } },
-          "pressed": { "expr": "$state.selected = $item.id" },
-          "on_click": [{ "set_state": "selected", "value": { "expr": "$item.id" } }]
+          "pressed": { "item": "selected" },
+          "on_click": [{ "set_state": "swatches", "value": { "expr": "$append([], $map($state.swatches, function($swatch) { $merge([$swatch, {'selected': $swatch.id = $item.id}]) }))" } }]
         }
       }
     ]
