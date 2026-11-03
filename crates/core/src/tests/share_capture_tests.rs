@@ -84,6 +84,61 @@ fn client_context_preserves_skipped_capture_and_request_identity() {
 }
 
 #[test]
+fn client_context_keeps_only_latest_request_and_clears_committed_content() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(CaptureTestHost {
+        png: Mutex::new(test_png(8, 8)),
+        web_captures: AtomicUsize::new(0),
+        shell_captures: AtomicUsize::new(0),
+        freeze_calls: AtomicUsize::new(0),
+        unfreeze_calls: AtomicUsize::new(0),
+    });
+    let client = json!({
+        "id":"context-fixture", "name":"맥락 시험", "requires":{"blocks":18,"modules":{"assets":1,"client":4}},
+        "assets":[{"id":"client-code","version":1}],
+        "client":{"runtime":"javascript","entry":{"id":"client-code","version":1},"capabilities":["context_capture"]},
+        "ui":{"type":"text","value":"시험"}
+    });
+    let core = Core::open_with_client(CoreConfig {
+        embedded_server: None, data_dir: temp.path().into(),
+        seed_definitions: vec![client.to_string(), test_definition(MD_EDITOR)],
+        server_url: "http://127.0.0.1:4219".into(), device_name: "시험".into(),
+    }, host, registry_client()).unwrap();
+    let (_, desktop) = active_ids(&core);
+    let source = open_window(&core, &desktop, "test-md-editor");
+    let target = open_window(&core, &desktop, "context-fixture");
+    core.handle(CoreRequest::ShareSet { window_id: source.clone(), on: true }).unwrap();
+    core.handle(CoreRequest::ShareView { window_id: source, view: kaleidoscope_contract::VisibleView {
+        text: "현재 내용".into(), visual: true, occluded: false, image_base64: None,
+        bounds: Rect { x: 0, y: 0, width: 4, height: 4 },
+    }}).unwrap();
+    let prepare = |request: &str, channel: &str| -> Value {
+        let command = serde_json::from_value(json!({"op":"context.prepare", "window_id":target,
+            "request_id":request, "channel":channel, "attachments":{"count":0,"bytes":0}})).unwrap();
+        serde_json::to_value(core.handle(command).unwrap()).unwrap()
+    };
+    let commit = |ticket: &Value| {
+        let command = serde_json::from_value(json!({"op":"context.commit", "window_id":target, "ticket":ticket})).unwrap();
+        core.handle(command)
+    };
+    let first = prepare("first", "chat");
+    let other_channel = prepare("other", "other");
+    assert_eq!(prepare("first", "chat"), first);
+    let second = prepare("second", "chat");
+    assert!(second["text"].as_str().unwrap().contains("현재 내용"));
+    assert_eq!(second["images"].as_array().unwrap().len(), 1);
+    assert_ne!(first["ticket"], second["ticket"]);
+    assert_eq!(commit(&first["ticket"]).unwrap_err().id.as_deref(), Some("SHARE_CONTEXT_TICKET_NOT_FOUND"));
+    assert_eq!(prepare("other", "other"), other_channel);
+    commit(&second["ticket"]).unwrap();
+    commit(&second["ticket"]).unwrap();
+    let after_commit = prepare("second", "chat");
+    assert!(after_commit["text"].is_null());
+    assert!(after_commit["images"].as_array().unwrap().is_empty());
+    assert_eq!(after_commit["ticket"], second["ticket"]);
+}
+
+#[test]
 fn attachment_limit_discards_unused_isolated_capture_before_next_send() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(CaptureTestHost {

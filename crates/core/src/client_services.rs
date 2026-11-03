@@ -11,16 +11,19 @@ use std::{
     sync::Mutex,
 };
 
-type RequestKey = (String, String, String);
+type RequestKey = (String, String);
 struct Prepared {
+    request_id: String,
+    ticket: String,
+    pending: Option<Pending>,
+}
+struct Pending {
     attachments: ContextAttachments,
     text: Option<String>,
     images: Vec<ContextImage>,
-    ticket: String,
     conversation: String,
     sent_text: Option<BTreeMap<String, kaleidoscope_data::share::SentView>>,
     sent_visuals: Vec<(String, String)>,
-    committed: bool,
 }
 #[derive(Default)]
 pub(crate) struct ClientServices {
@@ -85,18 +88,26 @@ pub(crate) fn handle(inner: &Inner, request: CoreRequest) -> Result<CoreReply, C
             if request_id.is_empty() || channel.is_empty() {
                 return Err(errors::SHARE_CONTEXT_ID_EMPTY());
             }
-            let key = (window_id.clone(), channel.clone(), request_id);
+            let key = (window_id.clone(), channel.clone());
             let mut prepared = inner.client_services.prepared.lock().unwrap();
-            if let Some(previous) = prepared.get(&key) {
-                if previous.attachments != attachments {
-                    return Err(errors::SHARE_CONTEXT_REQUEST_CHANGED());
+            if let Some(previous) = prepared.get(&key).filter(|entry| entry.request_id == request_id) {
+                if let Some(pending) = &previous.pending {
+                    if pending.attachments != attachments {
+                        return Err(errors::SHARE_CONTEXT_REQUEST_CHANGED());
+                    }
+                    return Ok(CoreReply::ContextPrepare {
+                        text: pending.text.clone(),
+                        images: pending.images.clone(),
+                        ticket: previous.ticket.clone(),
+                    });
                 }
                 return Ok(CoreReply::ContextPrepare {
-                    text: previous.text.clone(),
-                    images: previous.images.clone(),
+                    text: None,
+                    images: Vec::new(),
                     ticket: previous.ticket.clone(),
                 });
             }
+            prepared.remove(&key);
             let conversation = format!("client:{window_id}:{channel}");
             let (visuals, sent_visuals) = share::capture_for_send(
                 inner,
@@ -123,14 +134,16 @@ pub(crate) fn handle(inner: &Inner, request: CoreRequest) -> Result<CoreReply, C
             prepared.insert(
                 key,
                 Prepared {
-                    attachments,
-                    text: text.clone(),
-                    images: images.clone(),
+                    request_id,
                     ticket: ticket.clone(),
-                    conversation,
-                    sent_text,
-                    sent_visuals,
-                    committed: false,
+                    pending: Some(Pending {
+                        attachments,
+                        text: text.clone(),
+                        images: images.clone(),
+                        conversation,
+                        sent_text,
+                        sent_visuals,
+                    }),
                 },
             );
             Ok(CoreReply::ContextPrepare {
@@ -147,12 +160,11 @@ pub(crate) fn handle(inner: &Inner, request: CoreRequest) -> Result<CoreReply, C
                 .find(|(key, value)| key.0 == window_id && value.ticket == ticket)
                 .map(|(_, value)| value)
                 .ok_or_else(errors::SHARE_CONTEXT_TICKET_NOT_FOUND)?;
-            if !entry.committed {
-                if let Some(sent) = entry.sent_text.clone() {
-                    share::mark_sent_text(inner, &entry.conversation, sent);
+            if let Some(pending) = entry.pending.take() {
+                if let Some(sent) = pending.sent_text {
+                    share::mark_sent_text(inner, &pending.conversation, sent);
                 }
-                share::mark_sent_visuals(inner, &entry.conversation, entry.sent_visuals.clone());
-                entry.committed = true;
+                share::mark_sent_visuals(inner, &pending.conversation, pending.sent_visuals);
             }
             Ok(CoreReply::ContextCommit {})
         }
