@@ -6,18 +6,18 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::{
-    Inner,
     connections::{self, LoginStore},
     logins::Logins,
+    Inner,
 };
 use kaleidoscope_contract::{
-    CoreError,
     conversation::{ConversationErrorCode, ConversationErrorEnvelope},
     data::HttpMethod,
     registry::{ConnectionInfo, ConnectionKind},
     validate::valid_request_path,
+    CoreError,
 };
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -38,16 +38,9 @@ impl Client {
         connection: &str,
         base_path: &str,
     ) -> Result<Self, CoreError> {
-        let info = inner
-            .connections
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|item| item.name == connection)
-            .cloned()
-            .ok_or_else(|| {
-                kaleidoscope_contract::errors::CONV_HTTP_PROVIDER_UNAVAILABLE(connection)
-            })?;
+        let info = connections::find_connection(inner, connection).ok_or_else(|| {
+            kaleidoscope_contract::errors::CONV_HTTP_PROVIDER_UNAVAILABLE(connection)
+        })?;
         if info.kind != ConnectionKind::Oauth {
             return Err(
                 kaleidoscope_contract::errors::CONV_HTTP_RESTORE_CONNECTION_NOT_OAUTH(connection),

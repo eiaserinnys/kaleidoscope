@@ -1,7 +1,8 @@
 //! 창 권한을 확인한 뒤 서버 중계 또는 기기 로그인 연결로 요청한다.
 use std::io::Read;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::{
@@ -21,6 +22,70 @@ pub(crate) trait LoginStore: Send + Sync {
     fn refresh(&self, connection: &str, rejected_token: &str) -> Option<String>;
     fn invalidate(&self, connection: &str, access_token: &str);
 }
+
+pub(crate) fn find_connection(inner: &Arc<Inner>, name: &str) -> Option<ConnectionInfo> {
+    if let Some(info) = inner
+        .connections
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|info| info.name == name)
+        .cloned()
+    {
+        return Some(info);
+    }
+
+    let epoch = inner.layout_connection_epoch.load(Ordering::SeqCst);
+    if epoch == 0 || inner.connections_snapshot_epoch.load(Ordering::SeqCst) == epoch {
+        return None;
+    }
+    if !matches!(
+        inner.state.lock().unwrap().link,
+        LinkStatus::Connected { .. }
+    ) {
+        return None;
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut sequence = inner.layout_signal.sequence();
+    loop {
+        if let Some(info) = inner
+            .connections
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|info| info.name == name)
+            .cloned()
+        {
+            return Some(info);
+        }
+
+        if inner.layout_connection_epoch.load(Ordering::SeqCst) != epoch
+            || inner.connections_snapshot_epoch.load(Ordering::SeqCst) == epoch
+            || !matches!(
+                inner.state.lock().unwrap().link,
+                LinkStatus::Connected { .. }
+            )
+        {
+            break;
+        }
+
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        sequence = inner.layout_signal.wait_after(sequence, remaining);
+    }
+
+    inner
+        .connections
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|info| info.name == name)
+        .cloned()
+}
+
 #[derive(Debug)]
 pub(crate) enum RequestError {
     Core(CoreError),
@@ -234,13 +299,7 @@ pub(crate) fn login(
             _ => return Err(errors::CONN_LOGIN_PERMISSION_MISSING()),
         }
     };
-    let info = inner
-        .connections
-        .lock()
-        .unwrap()
-        .iter()
-        .find(|info| info.name == connection_name)
-        .cloned()
+    let info = find_connection(inner, &connection_name)
         .ok_or_else(errors::CONN_LOGIN_CONNECTION_MISSING)?;
     if info.kind != ConnectionKind::Oauth {
         return Err(errors::CONN_LOGIN_NOT_OAUTH());
@@ -304,13 +363,7 @@ pub(crate) fn authorize(
         }
         (window.app_id.clone(), connection.clone())
     };
-    let info = inner
-        .connections
-        .lock()
-        .unwrap()
-        .iter()
-        .find(|info| info.name == connection)
-        .cloned()
+    let info = find_connection(inner, &connection)
         .ok_or_else(|| errors::CONN_AUTHORIZE_CONNECTION_MISSING(&connection))?;
     if !valid_request_path(path)
         || (!info.paths.is_empty() && !info.paths.iter().any(|prefix| path.starts_with(prefix)))

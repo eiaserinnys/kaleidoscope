@@ -27,6 +27,7 @@ use crate::{Core, CoreConfig, CoreError, Host};
 
 mod client_blobs_tests;
 mod client_files_tests;
+mod connection_snapshot_race_tests;
 mod file_write_tests;
 mod layout_sync_tests;
 mod pc_tests;
