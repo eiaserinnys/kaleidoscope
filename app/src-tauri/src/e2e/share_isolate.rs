@@ -141,24 +141,32 @@ pub(super) fn scenario(
             }
         }
     }));
-    let grant = match call(
-        core,
-        CoreRequest::FilesPickFolder {
-            window_id: agent_window_id.clone(),
-            permission: "work".into(),
-        },
-    )? {
-        CoreReply::FilesPickFolder { grant: Some(grant) } => grant,
-        reply => return Err(format!("test work folder was not granted: {reply:?}")),
-    };
+    let agent_selector = format!("[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"]");
+    let folder_button = format!("const root=document.querySelector('{agent_selector}');return [...(root?.querySelectorAll('button') ?? [])].find(b=>b.textContent.trim()==='폴더 선택');");
+    ui::wait_dom(
+        app,
+        &format!("return !!(()=>{{{folder_button}}})();"),
+        "agent folder selection",
+    )?;
+    if ui::evaluate(app, &format!("const button=(()=>{{{folder_button}}})();if(!button)return false;button.click();return true;"))? != json!(true) {
+        return Err("could not select the agent folder".into());
+    }
+    let (request_id, spec) = permission_rx
+        .recv_timeout(WINDOW_READY_TIMEOUT)
+        .map_err(|error| format!("process permission request did not arrive: {error}"))?;
+    let shell = snapshot(core)?;
+    let grant = shell
+        .device
+        .grants
+        .iter()
+        .find(|grant| grant.window_id == agent_window_id && grant.permission == "work")
+        .ok_or("test work folder grant is missing")?;
     if Path::new(&grant.root_path)
         != fs::canonicalize(&work_folder).map_err(|error| error.to_string())?
     {
         return Err(format!("unexpected agent folder grant: {grant:?}"));
     }
-    let (request_id, spec) = permission_rx
-        .recv_timeout(WINDOW_READY_TIMEOUT)
-        .map_err(|error| format!("process permission request did not arrive: {error}"))?;
+    record(log, "agent.folder", json!({"selected":true}))?;
     if spec.command
         != agent_bin
             .join("fake-agent.cmd")
@@ -167,16 +175,36 @@ pub(super) fn scenario(
     {
         return Err(format!("unexpected test agent command: {}", spec.command));
     }
-    call(
-        core,
-        CoreRequest::ProcessRespondPermission {
-            window_id: agent_window_id.clone(),
-            request_id,
-            allow: true,
-        },
+    let consent = format!("{agent_selector} .ks-window-consent-overlay");
+    ui::wait_dom(
+        app,
+        &format!("return !!document.querySelector('{consent} .ks-dialog-confirm button');"),
+        "agent process consent",
+    )?;
+    if ui::evaluate(app, &format!("const button=document.querySelector('{consent} .ks-dialog-confirm button');if(!button)return false;button.click();return true;"))? != json!(true) {
+        return Err("could not allow the agent process".into());
+    }
+    record(
+        log,
+        "agent.permission",
+        json!({"request_id":request_id,"allowed_through_shell":true}),
     )?;
     wait_agent_process(core, &agent_window_id)?;
-    ui::wait_dom(app, &format!("return !!document.querySelector('[data-testid=\\\"app-window-{A_ID}\\\"] iframe') && !!document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"] textarea[aria-label=\\\"메시지\\\"]');"), "share windows rendered")?;
+    record(log, "agent.process", json!({"started":true}))?;
+    ui::wait_dom(
+        app,
+        &format!(
+            "return !!document.querySelector('[data-testid=\\\"app-window-{A_ID}\\\"] iframe');"
+        ),
+        "share A rendered",
+    )?;
+    let agent_ready = ui::wait_dom(app, &format!("return !!document.querySelector('{agent_selector} textarea[aria-label=\\\"메시지\\\"]') && !document.querySelector('{consent}');"), "agent chat rendered");
+    if let Err(error) = agent_ready {
+        let state = ui::evaluate(app, &format!("const root=document.querySelector('{agent_selector}');return {{text:root?.innerText ?? null,has_chat:!!root?.querySelector('textarea[aria-label=\\\"메시지\\\"]'),has_consent:!!root?.querySelector('.ks-window-consent-overlay')}};"))?;
+        record(log, "agent.not-ready", state)?;
+        return Err(error);
+    }
+    record(log, "agent.ready", json!({"chat":true}))?;
     share(core, &a_id, true)?;
     ui::wait_dom(
         app,

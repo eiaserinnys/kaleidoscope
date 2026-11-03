@@ -167,6 +167,7 @@ pub(super) fn write_test_agent_settings(
         "args": ["share"],
         "env": {
             "TEST_SCENARIO": "share-images",
+            "TEST_LOG": out.join("agent-acp.jsonl").to_string_lossy().into_owned(),
             "KALEIDOSCOPE_E2E_IMAGE_DIR": out.join("share-isolate-images").to_string_lossy().into_owned()
         }
     }]);
