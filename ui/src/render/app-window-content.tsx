@@ -89,7 +89,7 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
   useDormant("/ui", settingsOpen);
   useDormant("/settings/ui", Boolean(context.definition.settings) && !settingsOpen);
   useEffect(() => { data.setClientDormant(settingsOpen); }, [data, settingsOpen]);
-  return <div ref={data.setClientHost} className="ks-app-window-content ks-data-window" data-ks-app-id={context.window.app_id}>
+  return <div ref={data.setClientHost} className="ks-app-window-content ks-data-window" data-ks-app-id={context.window.app_id} data-window-id={context.window.id}>
     <WindowFrameBindings context={context} onWindowHeader={onWindowHeader} onSettingsAvailable={onSettingsAvailable} />
     <ClientShareSignal />
     <AppShortcuts context={context} active={!settingsOpen} />

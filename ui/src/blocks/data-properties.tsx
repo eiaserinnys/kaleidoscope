@@ -1,5 +1,5 @@
 import type { Block, PropertyField } from "../contract/contract";
-import { Badge, isBadge } from "../components/badge";
+import { Badge, isBadge, validColor } from "../components/badge";
 import { DataState } from "../components/data-state";
 import { useBinding } from "../data/window-data";
 import { MarkdownText } from "./markdown-text";
@@ -7,11 +7,17 @@ import { display } from "./data-layout";
 import { asArray, dateText } from "./data-view-common";
 
 function Property({ field, pointer }: { field: PropertyField; pointer: string }) {
-  const value = useBinding(pointer, field.value);
+  const label = useBinding(`${pointer}/label`, field.label);
+  const value = useBinding(`${pointer}/value`, field.value);
   if (value.status === "ready" && (value.value === null || value.value === "")) return null;
+  const labelContent = label.status === "ready" ? display(label.value) : <DataState value={label} compact />;
   let content;
   if (value.status === "loading") content = <div className="ks-property-loading" role="status" aria-label="불러오는 중" />;
   else if (value.status !== "ready") content = <DataState value={value} compact />;
+  else if (field.format === "swatches") {
+    const colors = Array.isArray(value.value) ? value.value.filter(validColor) : [];
+    content = <span className="ks-property-swatches">{colors.map((color, index) => <span key={index} className="ks-property-swatch" style={{ backgroundColor: color }} role="img" aria-label={color} title={color} />)}</span>;
+  }
   else if (field.format === "badge") {
     const badges = asArray(value.value);
     content = <span className="ks-view-badges">{badges.filter(isBadge).map((badge, i) => <Badge value={badge} key={i} />)}</span>;
@@ -19,8 +25,8 @@ function Property({ field, pointer }: { field: PropertyField; pointer: string })
   else if (field.format === "code") content = <code>{display(value.value)}</code>;
   else if (field.format === "date") content = dateText(value.value);
   else content = display(value.value);
-  return <><dt>{field.label as string}</dt><dd>{content}</dd></>;
+  return <><dt>{labelContent}</dt><dd>{content}</dd></>;
 }
 export function PropertiesBlock({ block, pointer }: { block: Extract<Block, { type: "properties" }>; pointer: string }) {
-  return <div className="ks-properties-container"><dl className="ks-properties">{block.fields.map((field, index) => <Property key={index} field={field} pointer={`${pointer}/fields/${index}/value`} />)}</dl></div>;
+  return <div className="ks-properties-container"><dl className={`ks-properties${block.layout === "rows" ? " is-rows" : ""}`}>{block.fields.map((field, index) => <Property key={index} field={field} pointer={`${pointer}/fields/${index}`} />)}</dl></div>;
 }

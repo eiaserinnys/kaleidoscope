@@ -6,7 +6,7 @@
     id: "day",
     label: "일정",
     items: [
-      { id: "prepare", start: 1_800, end: 5_400, label: "자료 정리", resizable: true, resize_start_only: true },
+      { id: "prepare", start: 1_800, end: 5_400, label: "원본 화면의 여백과 라벨 위치 확인 및 수정 기록 대조", resizable: true, resize_start_only: true },
       { id: "lunch", start: 8_100, end: 11_700, label: "점심", movable: false },
       { id: "review", start: 14_400, end: 19_800, label: "설계 검토", resizable: true, resize_start_only: true },
       { id: "wrap-up", start: 23_400, end: 27_000, label: "마감 점검", resizable: true, resize_start_only: true },

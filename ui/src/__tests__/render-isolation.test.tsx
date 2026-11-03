@@ -508,6 +508,67 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     expect(countFor("window-a", "/ui/children/1")).toBe(0);
     store.dispose();
   });
+  it("when 폭 조건은 첫 화면 너비를 반영하고 경계가 바뀔 때 자식만 교체한다", async () => {
+    const definition: AppDefinition = {
+      id: "when-width", name: "창 너비 조건", requires: { blocks: 19, modules: {} }, permissions: [], state: {},
+      ui: { type: "stack", direction: "column", children: [
+        { type: "when", min_width: 600, max_width: 899, child: { type: "text", value: "폭 안쪽" } },
+        { type: "text", value: "폭 조건 밖에서도 유지" },
+      ] },
+    };
+    let width = 720;
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("ks-data-window-body")) return { width, height: 500 } as DOMRect;
+      return originalRect.call(this);
+    });
+    const resizeBodies: Array<(width: number) => void> = [];
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        if (!target.classList.contains("ks-data-window-body")) return;
+        const resize = (nextWidth: number) => this.callback([{ target, contentRect: { width: nextWidth, height: 500 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
+        resizeBodies.push(resize);
+        resize(width);
+      }
+      unobserve() {}
+      disconnect() {}
+    });
+    const { store } = await setup([definition]);
+    try {
+      expect(document.querySelector(".ks-data-window-body")?.getBoundingClientRect().width).toBe(720);
+      expect(resizeBodies).toHaveLength(2);
+      expect(screen.getAllByText("폭 안쪽")).toHaveLength(2);
+      expect(screen.getAllByText("폭 조건 밖에서도 유지")).toHaveLength(2);
+      calls.length = 0;
+
+      width = 599;
+      act(() => resizeBodies.forEach((resize) => resize(width)));
+      await waitFor(() => expect(screen.queryByText("폭 안쪽")).toBeNull());
+      expect(countFor("window-a", "/ui/children/1")).toBe(0);
+
+      width = 600;
+      act(() => resizeBodies.forEach((resize) => resize(width)));
+      expect(await screen.findAllByText("폭 안쪽")).toHaveLength(2);
+      expect(countFor("window-a", "/ui/children/1")).toBe(0);
+
+      calls.length = 0;
+      width = 899;
+      act(() => resizeBodies.forEach((resize) => resize(width)));
+      expect(screen.getAllByText("폭 안쪽")).toHaveLength(2);
+      expect(calls).toHaveLength(0);
+
+      width = 900;
+      act(() => resizeBodies.forEach((resize) => resize(width)));
+      await waitFor(() => expect(screen.queryByText("폭 안쪽")).toBeNull());
+      expect(screen.getAllByText("폭 조건 밖에서도 유지")).toHaveLength(2);
+      expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    } finally {
+      store.dispose();
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    }
+  });
 
   it("단축키 처리 중 다른 창과 무관한 블록을 다시 그리지 않는다", async () => {
     const shortcutDefinition: AppDefinition = { ...definition, requires: { blocks: 14, modules: { client: 2 } }, shortcuts: [{ code: "KeyR", modifiers: [], action: { client: "reset" } }] };
@@ -766,15 +827,18 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     });
     const tourButtons = (name: string) => [...document.querySelectorAll(".ks-tour-actions button")]
       .filter((button) => button.textContent?.trim() === name);
+    const stepCounts = () => [...document.querySelectorAll(".ks-tour-step-count")].map((element) => element.textContent?.trim());
     expect(screen.getAllByRole("button", { name: "Close" })).toHaveLength(2);
     expect(screen.queryAllByRole("button", { name: "Cancel" })).toHaveLength(0);
     expect(tourButtons("Previous")).toHaveLength(2);
     expect(tourButtons("Next")).toHaveLength(2);
     expect(tourButtons("Skip")).toHaveLength(2);
+    expect(stepCounts()).toEqual(["1 / 2", "1 / 2"]);
     calls.length = 0;
 
     await setState(store, "window-a", "tour_step", "last");
     await waitFor(() => expect(tourButtons("Done")).toHaveLength(1));
+    await waitFor(() => expect(stepCounts()).toContain("2 / 2"));
     expect(tourButtons("Next")).toHaveLength(1);
     await setState(store, "window-a", "tour_step", "first");
     await waitFor(() => expect(tourButtons("Next")).toHaveLength(2));

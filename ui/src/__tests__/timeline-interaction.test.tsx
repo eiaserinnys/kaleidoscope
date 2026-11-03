@@ -50,6 +50,14 @@ it("시간축과 구간을 키보드로 탐색하고 편집한다", () => {
   expect(runtime.act).toHaveBeenCalledWith("/ui/on_edit", expect.objectContaining({ phase: "commit", kind: "move" }), undefined, { shift: true, alt: false, ctrl: false, meta: false });
 });
 
+it("시간축 구간은 잘리지 않은 접근 이름과 tooltip을 제공한다", () => {
+  const label = "오래된 기록에서 찾은 긴 구간 이름";
+  render(<TimelineBlock block={{ ...block, tracks: [{ ...block.tracks[0], items: [{ ...block.tracks[0].items[0], label }] }] }} pointer="/ui" context={context} />);
+  const item = screen.getByRole("button", { name: label });
+  expect(item.getAttribute("title")).toBe(label);
+  expect(item.querySelector(".ks-timeline-label")?.textContent).toBe(label);
+});
+
 it("오른쪽 끝에 있는 눈금만 끝 맞춤한다", () => {
   const view = render(<TimelineBlock block={{ ...block, duration: 14.02 }} pointer="/ui" context={context} />);
   expect(screen.getByText("00:10.0").className).not.toContain("is-end");

@@ -354,9 +354,10 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
             const handlers = { onPointerMove: move, onPointerUp: (event: PointerEvent<HTMLElement>) => finish("commit", eventModifiers(event)), onPointerCancel: (event: PointerEvent<HTMLElement>) => finish("cancel", eventModifiers(event)) };
             const canResizeStart = !!(item.resize_start_only || item.resizable) && !track.locked && !block.read_only;
             const canResizeEnd = !!item.resizable && !item.resize_start_only && !track.locked && !block.read_only;
-            return <div key={item.id} role="button" tabIndex={0} className={`ks-timeline-item is-${item.tone ?? "neutral"} series-${(item.series ?? 0) % 4}${!item.movable || track.locked || block.read_only ? " is-fixed" : ""}${selected.includes(item.id) ? " is-selected" : ""}${preview?.id === item.id ? " is-dragging" : ""}`} style={{ left: percent(shown.start), width: percent(shown.end - shown.start) }} onKeyDown={(event) => keyEdit(event, edit, !!item.movable && !track.locked)} onPointerDown={(event) => begin(event, edit, !!item.movable && !track.locked)} {...handlers}>
+            const label = item.label ?? item.id;
+            return <div key={item.id} role="button" tabIndex={0} aria-label={label} title={label} className={`ks-timeline-item is-${item.tone ?? "neutral"} series-${(item.series ?? 0) % 4}${!item.movable || track.locked || block.read_only ? " is-fixed" : ""}${selected.includes(item.id) ? " is-selected" : ""}${preview?.id === item.id ? " is-dragging" : ""}`} style={{ left: percent(shown.start), width: percent(shown.end - shown.start) }} onKeyDown={(event) => keyEdit(event, edit, !!item.movable && !track.locked)} onPointerDown={(event) => begin(event, edit, !!item.movable && !track.locked)} {...handlers}>
               {canResizeStart ? <span className="ks-timeline-handle is-start" onPointerDown={(event) => begin(event, { ...edit, kind: "resize_start" }, true)} {...handlers} /> : null}
-              <span>{item.label ?? item.id}</span>
+              <span className="ks-timeline-label">{label}</span>
               {canResizeEnd ? <span className="ks-timeline-handle is-end" onPointerDown={(event) => begin(event, { ...edit, kind: "resize_end" }, true)} {...handlers} /> : null}
             </div>;
           })}

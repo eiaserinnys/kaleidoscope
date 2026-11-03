@@ -6,9 +6,10 @@ import { CanvasBlock } from "../blocks/canvas";
 const data = vi.hoisted(() => ({
   subscribeClient: () => () => {}, getClientGeneration: () => 0,
   attachSurface: vi.fn(() => 1), detachSurface: vi.fn(), resizeSurface: vi.fn(), setSurfaceVisible: vi.fn(), setNotice: vi.fn(), act: vi.fn(),
-  itemSurface: "first",
+  itemSurface: "first", loading: false,
 }));
-vi.mock("../data/window-data", () => ({ useWindowData: () => data, useBinding: (_pointer: string, value: unknown) => ({ status: "ready", value: value && typeof value === "object" && "item" in value ? data.itemSurface : value }) }));
+vi.mock("../data/window-data", () => ({ useWindowData: () => data, useBinding: (pointer: string, value: unknown) => ({ status: "ready", value: pointer.endsWith("/loading") ? data.loading : value && typeof value === "object" && "item" in value ? data.itemSurface : value }) }));
+vi.mock("../data/window-state", () => ({ useWindowGrants: () => [] }));
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -33,6 +34,40 @@ it("항목의 표면이 바뀌면 이전 세대를 떼고 새 요소에 붙이�
     expect(data.detachSurface).toHaveBeenCalledWith("first", 1);
     expect(view.container.querySelector("canvas")).not.toBe(first);
     expect(data.attachSurface).toHaveBeenCalledWith("second", expect.anything(), 320, 180, expect.any(Number), false);
+  } finally {
+    if (original) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", original);
+    else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
+    vi.unstubAllGlobals();
+  }
+});
+
+it("canvas.loading은 기존 캔버스 크기와 표면 연결을 유지한다", () => {
+  vi.clearAllMocks(); data.loading = false;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 320, height: 180 } as DOMRect);
+  const original = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "transferControlToOffscreen");
+  Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", { configurable: true, value: () => ({}) });
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  const block = { type: "canvas", surface: "preview", loading: { state: "loading" } } as const;
+  try {
+    const view = render(<CanvasBlock block={block} pointer="/ui" />);
+    const root = view.container.querySelector(".ks-canvas")!;
+    const canvas = root.querySelector("canvas");
+    expect(root.querySelector('[role="status"]')).toBeNull();
+    expect(data.attachSurface).toHaveBeenCalledTimes(1);
+
+    data.loading = true;
+    view.rerender(<CanvasBlock block={block} pointer="/ui" />);
+    expect(root.querySelector('[role="status"][aria-label="불러오는 중"]')).not.toBeNull();
+    expect(root.querySelector("canvas")).toBe(canvas);
+    expect(data.attachSurface).toHaveBeenCalledTimes(1);
+    expect(data.detachSurface).not.toHaveBeenCalled();
+    expect(data.resizeSurface).not.toHaveBeenCalled();
+
+    data.loading = false;
+    view.rerender(<CanvasBlock block={block} pointer="/ui" />);
+    expect(root.querySelector('[role="status"]')).toBeNull();
+    expect(root.querySelector("canvas")).toBe(canvas);
+    expect(data.attachSurface).toHaveBeenCalledTimes(1);
   } finally {
     if (original) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", original);
     else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;

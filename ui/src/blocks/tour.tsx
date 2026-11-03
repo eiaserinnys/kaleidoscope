@@ -151,6 +151,7 @@ export function TourBlock({ block, context, pointer }: { block: TourBlockData; c
       role="region"
       style={{ left: placement?.left ?? 0, top: placement?.top ?? 0, visibility: placement ? "visible" : "hidden" }}
     >
+      <div className="ks-tour-step-count">{index + 1} / {block.steps.length}</div>
       <h2 className="ks-tour-title" id={`${pointer.replaceAll("/", "-")}-tour-title`}>{titleText}</h2>
       {bodyText ? <div className="ks-tour-body">{bodyText}</div> : null}
       <div className="ks-tour-actions">
