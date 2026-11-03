@@ -266,7 +266,9 @@ pub const CONTRACT_VERSION: u32 = 26;
 /// - 13판: 파일 또는 저장소 문서 모음을 뿌리로 하는 읽기 전용 `folder`.
 /// - 14판: `canvas.surface`, `repeat`, `when`, `dialog`, `tour`, `anchor`, `progress`와 입력·배치 확장(v0.6.12).
 /// - 15판: `tabs.header`, `tabs.keep_mounted`, `tabs.collapsible`, `folder.header`, `state_migrate`, `opens.set_state`.
-pub const BLOCK_SET_VERSION: u32 = 15;
+/// - 16판: `tabs[].label`, `toggle.label`, `slider.label`, `color.label`, `input.label`, `input.placeholder`,
+///   `select.label`, `select.placeholder`의 바인딩. 평문 문자열은 이전 판과 같은 wire 모양이다.
+pub const BLOCK_SET_VERSION: u32 = 16;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -1290,7 +1292,7 @@ pub enum Block {
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        label: Option<String>,
+        label: Option<Binding>,
         min: f64,
         max: f64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1303,7 +1305,7 @@ pub enum Block {
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        label: Option<String>,
+        label: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         disabled: Option<Binding>,
@@ -1703,7 +1705,7 @@ pub enum Block {
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        label: Option<String>,
+        label: Option<Binding>,
         #[serde(default)]
         #[ts(optional, as = "Option<InputKind>")]
         kind: InputKind,
@@ -1715,7 +1717,7 @@ pub enum Block {
         rows: Option<u8>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        placeholder: Option<String>,
+        placeholder: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_submit: Option<Actions>,
@@ -1728,19 +1730,19 @@ pub enum Block {
         options: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        label: Option<String>,
+        label: Option<Binding>,
         #[serde(default)]
         #[ts(optional, as = "Option<SelectStyle>")]
         style: SelectStyle,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        placeholder: Option<String>,
+        placeholder: Option<Binding>,
     },
     /// (4판) 켜고 끄기. 바꾸면 `on_change`가 `$event`(참이나 거짓)로 돈다.
     Toggle {
         value: Binding,
         on_change: Actions,
-        label: String,
+        label: Binding,
     },
     /// (4판) 단추. 누르면 `on_click`이 돈다(`$event`는 null). 도는 동안 단추는 쉬고, 실패하면 창 아래에 오류
     /// 한 줄이 보인다. `confirm`이 있으면 확인 대화상자에서 확인했을 때만 돈다. `icon_only`면 아이콘만 보이고
@@ -1977,7 +1979,7 @@ enum RawBlock {
         value: Binding,
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        label: Option<String>,
+        label: Option<Binding>,
         min: f64,
         max: f64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1987,7 +1989,7 @@ enum RawBlock {
         value: Binding,
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        label: Option<String>,
+        label: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         disabled: Option<Binding>,
     },
@@ -2307,7 +2309,7 @@ enum RawBlock {
         value: Binding,
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        label: Option<String>,
+        label: Option<Binding>,
         #[serde(default)]
         kind: InputKind,
         #[serde(default)]
@@ -2315,7 +2317,7 @@ enum RawBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rows: Option<u8>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        placeholder: Option<String>,
+        placeholder: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_submit: Option<Actions>,
     },
@@ -2323,13 +2325,13 @@ enum RawBlock {
         value: Binding,
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        label: Option<String>,
+        label: Option<Binding>,
         #[serde(default)]
         kind: InputKind,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rows: Option<u8>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        placeholder: Option<String>,
+        placeholder: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_submit: Option<Actions>,
     },
@@ -2340,17 +2342,17 @@ enum RawBlock {
         on_change: Actions,
         options: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        label: Option<String>,
+        label: Option<Binding>,
         #[serde(default)]
         style: SelectStyle,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        placeholder: Option<String>,
+        placeholder: Option<Binding>,
     },
     /// (4판) 켜고 끄기. 바꾸면 `on_change`가 `$event`(참이나 거짓)로 돈다.
     Toggle {
         value: Binding,
         on_change: Actions,
-        label: String,
+        label: Binding,
     },
     /// (4판) 단추. 누르면 `on_click`이 돈다(`$event`는 null). 도는 동안 단추는 쉬고, 실패하면 창 아래에 오류
     /// 한 줄이 보인다. `confirm`이 있으면 확인 대화상자에서 확인했을 때만 돈다. `icon_only`면 아이콘만 보이고
@@ -3264,7 +3266,7 @@ pub enum Gap {
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct Tab {
-    pub label: String,
+    pub label: Binding,
     pub child: Block,
 }
 

@@ -20,6 +20,9 @@ import { isClock, useClockPosition } from "../data/clock";
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 const uninitializedFocus = Symbol("uninitialized focus");
 const identityJson = <T extends JsonValue>(value: T): JsonValue => value;
+function bindingText(value: ReturnType<typeof useBinding>): string {
+  return value.status === "ready" && value.value !== null && value.value !== undefined ? display(value.value) : "";
+}
 const bindingName = (value: unknown, fallback: string) => {
   if (value && typeof value === "object") {
     if ("state" in value && typeof value.state === "string") return value.state;
@@ -32,6 +35,9 @@ export function InputBlock({ block, pointer }: Props<"input">) {
   const data = useWindowData();
   const multiline = Boolean(block.multiline || (block.rows ?? 0) >= 2);
   const bound = useBinding(`${pointer}/value`, block.value);
+  const label = useBinding(`${pointer}/label`, block.label ?? null);
+  const placeholder = useBinding(`${pointer}/placeholder`, block.placeholder ?? null);
+  const labelText = block.label === undefined ? "" : bindingText(label);
   const current = bound.status === "ready" ? bound.value : null;
   const minimum = useNumericBinding(`${pointer}/min`, block.min ?? null);
   const maximum = useNumericBinding(`${pointer}/max`, block.max ?? null);
@@ -117,7 +123,7 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     else if (block.on_submit) event.preventDefault();
     if (block.on_submit) void data.act(`${pointer}/on_submit`, toEventValue(draft));
   };
-  const props = { className: "ks-text-input", placeholder: block.placeholder, value: draft,
+  const props = { className: "ks-text-input", placeholder: block.placeholder === undefined ? undefined : bindingText(placeholder), value: draft,
     onFocus: () => { setFocused(true); holding.current = true; }, onBlur: () => {
       setFocused(false);
       if ((block.commit ?? "debounce") !== "submit") commit(draft);
@@ -143,7 +149,7 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     />}
     {block.kind === "search" && draft ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" onClick={() => { markChanged(""); sendDraft(""); }}><X size="inline" /></IconButton></span> : null}
   </div>;
-  return block.label ? <label className="ks-field ks-input-field"><span className="ks-field-label" data-ks-share-skip="">{block.label}</span>{input}</label> : input;
+  return labelText ? <label className="ks-field ks-input-field"><span className="ks-field-label" data-ks-share-skip="">{labelText}</span>{input}</label> : input;
 }
 
 function decimalDigits(digits: number): number { return Math.max(0, Math.min(20, Math.trunc(digits))); }
@@ -230,10 +236,12 @@ function SliderControl({ block, pointer, current }: {
   pointer: string;
   current: number;
 }) {
+  const label = useBinding(`${pointer}/label`, block.label ?? null);
+  const labelText = block.label === undefined ? "" : bindingText(label);
   const { draft, change, finish, holding } = useLocalDraft(current, pointer);
   return <label className="ks-field ks-slider-field">
-    {block.label ? <span className="ks-field-label" data-ks-share-skip="">{block.label}</span> : null}
-    <input type="range" className="ks-slider" aria-label={block.label ?? bindingName(block.value, "슬라이더")} min={block.min} max={block.max} step={block.step ?? 1} value={draft}
+    {labelText ? <span className="ks-field-label" data-ks-share-skip="">{labelText}</span> : null}
+    <input type="range" className="ks-slider" aria-label={labelText || bindingName(block.value, "슬라이더")} min={block.min} max={block.max} step={block.step ?? 1} value={draft}
       onPointerDown={() => { holding.current = true; }} onPointerUp={() => finish()} onPointerCancel={() => finish()} onBlur={() => finish()}
       onKeyDown={() => { holding.current = true; }} onKeyUp={() => finish()}
       onChange={(event) => { const next = Number(event.currentTarget.value); change(next); if (event.nativeEvent.type === "change") finish(); }} />
@@ -244,13 +252,15 @@ function SliderControl({ block, pointer, current }: {
 export function ColorBlock({ block, pointer }: Props<"color">) {
   const bound = useBinding(`${pointer}/value`, block.value);
   const disabled = useBinding(`${pointer}/disabled`, block.disabled ?? false);
+  const label = useBinding(`${pointer}/label`, block.label ?? null);
+  const labelText = block.label === undefined ? "" : bindingText(label);
   const value = bound.status === "ready" ? bound.value : null;
   const current = typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "#000000";
   const unavailable = disabled.status !== "ready" || Boolean(disabled.value);
   const { draft: color, change, finish, holding } = useLocalDraft(current, pointer);
   return <label className={`ks-field ks-color-field${unavailable ? " is-disabled" : ""}`}>
-    {block.label ? <span className="ks-field-label" data-ks-share-skip="">{block.label}</span> : null}
-    <span className="ks-color-control"><input className="ks-color-input" type="color" aria-label={block.label ?? bindingName(block.value, "색상")} value={color} disabled={unavailable}
+    {labelText ? <span className="ks-field-label" data-ks-share-skip="">{labelText}</span> : null}
+    <span className="ks-color-control"><input className="ks-color-input" type="color" aria-label={labelText || bindingName(block.value, "색상")} value={color} disabled={unavailable}
       onPointerDown={() => { holding.current = true; }} onPointerUp={() => finish()} onPointerCancel={() => finish()} onBlur={() => finish()} onKeyDown={() => { holding.current = true; }} onKeyUp={() => finish()}
       onChange={(event) => { change(event.currentTarget.value.toLowerCase()); if (event.nativeEvent.type === "change") finish(); }} /><span className="ks-color-code" data-ks-share-skip="">{color}</span></span>
   </label>;
@@ -259,6 +269,10 @@ export function SelectBlock({ block, pointer }: Props<"select">) {
   const data = useWindowData();
   const options = useBinding(`${pointer}/options`, block.options);
   const value = useBinding(`${pointer}/value`, block.value);
+  const label = useBinding(`${pointer}/label`, block.label ?? null);
+  const placeholder = useBinding(`${pointer}/placeholder`, block.placeholder ?? null);
+  const labelText = block.label === undefined ? undefined : bindingText(label);
+  const placeholderText = block.placeholder === undefined ? undefined : bindingText(placeholder);
   if (options.status !== "ready") return <DataState value={options} compact />;
   const entries = asArray(options.value);
   const hasGroups = entries.some(validGroup);
@@ -267,15 +281,16 @@ export function SelectBlock({ block, pointer }: Props<"select">) {
     if (validGroup(entry)) return [{ name: entry.name, options: entry.options.filter(validOption).map(toChoice) }];
     return validOption(entry) ? [{ name: "", options: [toChoice(entry)] }] : [];
   });
-  const props = { value: value.status === "ready" ? value.value : null, placeholder: block.placeholder, segmented: block.style === "segmented", label: block.label, onChange: (next: JsonValue) => { void data.act(`${pointer}/on_change`, next); } };
+  const props = { value: value.status === "ready" ? value.value : null, placeholder: placeholderText, segmented: block.style === "segmented", label: labelText, onChange: (next: JsonValue) => { void data.act(`${pointer}/on_change`, next); } };
   const select = hasGroups ? <Select {...props} groups={groups} /> : <Select {...props} items={entries.filter(validOption)} />;
-  return block.label ? <label className="ks-field ks-select-field"><span className="ks-field-label" data-ks-share-skip="">{block.label}</span>{select}</label> : select;
+  return labelText ? <label className="ks-field ks-select-field"><span className="ks-field-label" data-ks-share-skip="">{labelText}</span>{select}</label> : select;
 }
 
 export function ToggleBlock({ block, pointer }: Props<"toggle">) {
   const data = useWindowData();
   const value = useBinding(`${pointer}/value`, block.value);
-  return <Toggle checked={value.status === "ready" && Boolean(value.value)} label={block.label} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} />;
+  const label = useBinding(`${pointer}/label`, block.label);
+  return <Toggle checked={value.status === "ready" && Boolean(value.value)} label={bindingText(label)} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} />;
 }
 
 export function ButtonBlock({ block, pointer }: Props<"button">) {

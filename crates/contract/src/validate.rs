@@ -47,6 +47,11 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
                 .into(),
         );
     }
+    if uses_block_set_16_bindings(&definition.ui) && definition.requires.blocks < 16 {
+        details.push(
+            "tabs[].label, toggle.label, slider.label, color.label, input.label, input.placeholder, select.label, select.placeholder의 바인딩은 블록 세트 16판이라 requires.blocks가 16 이상이어야 합니다".into(),
+        );
+    }
     if !cached && definition.agent.is_none() {
         data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
             if matches!(block, Block::Chat { .. }) && !block.is_local_agent_chat() {
@@ -119,6 +124,33 @@ fn uses_versioned_block_fields(value: &Value) -> bool {
         Value::Array(values) => values.iter().any(uses_versioned_block_fields),
         _ => false,
     }
+}
+
+fn uses_block_set_16_bindings(ui: &Block) -> bool {
+    let mut uses_new_binding = false;
+    data::walk_blocks(ui, "/ui", &mut |_, block| {
+        let needs_block_set_16 = |binding: &Binding| {
+            !matches!(binding, Binding::Literal(Value::String(_)))
+        };
+        uses_new_binding |= match block {
+            Block::Tabs { tabs, .. } => tabs.iter().any(|tab| needs_block_set_16(&tab.label)),
+            Block::Toggle { label, .. } => needs_block_set_16(label),
+            Block::Slider { label, .. } | Block::Color { label, .. } => {
+                label.as_ref().is_some_and(needs_block_set_16)
+            }
+            Block::Input {
+                label, placeholder, ..
+            }
+            | Block::Select {
+                label, placeholder, ..
+            } => {
+                label.as_ref().is_some_and(needs_block_set_16)
+                    || placeholder.as_ref().is_some_and(needs_block_set_16)
+            }
+            _ => false,
+        };
+    });
+    uses_new_binding
 }
 
 fn validate(definition: &AppDefinition) -> Vec<String> {
@@ -2265,7 +2297,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 details.push(format!("{at}: tabs에는 탭이 하나 이상 필요합니다"));
             }
             for tab in tabs {
-                if tab.label.trim().is_empty() {
+                if matches!(&tab.label, Binding::Literal(Value::String(label)) if label.trim().is_empty()) {
                     details.push(format!("{at}: 탭 이름이 비어 있습니다"));
                 }
             }

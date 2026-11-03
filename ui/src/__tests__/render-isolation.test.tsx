@@ -19,6 +19,7 @@ import { AppWindowContent } from "../render/app-window-content";
 import { mockVirtualLayout } from "./virtual-layout";
 
 const rowRenders = vi.hoisted(() => new Map<string, number>());
+const blockWrapperRenders = vi.hoisted(() => new Map<string, number>());
 vi.mock("../components/tree/tree-row", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../components/tree/tree-row")>();
   const { memo } = await import("react");
@@ -42,7 +43,12 @@ vi.mock("../blocks/data-layout", async (importOriginal) => {
     fallbackProbe.current?.(props.context.window.id, props.pointer, "text");
     return <actual.TextBlock {...props} />;
   }
-  return { ...actual, StackBlock, TextBlock };
+  function TabsBlock(props: Parameters<typeof actual.TabsBlock>[0]) {
+    const key = `${props.context.window.id}\0${props.pointer}`;
+    blockWrapperRenders.set(key, (blockWrapperRenders.get(key) ?? 0) + 1);
+    return <actual.TabsBlock {...props} />;
+  }
+  return { ...actual, StackBlock, TextBlock, TabsBlock };
 });
 
 vi.mock("../data/window-data", async (importOriginal) => {
@@ -126,6 +132,32 @@ const localizedDefinition: AppDefinition = {
   },
 };
 
+const localizedLabelsDefinition: AppDefinition = {
+  id: "localized-controls",
+  name: "다국어 컨트롤",
+  requires: { blocks: 16, modules: {} },
+  permissions: [],
+  state: { language: "en", enabled: false, amount: 2, color: "#123456", name: "", choice: null },
+  messages: {
+    en: { overview: "Overview", enabled: "Enabled", amount: "Amount", color: "Color", name: "Name", name_hint: "Type a name", choice: "Choice", choice_hint: "Select choice" },
+    ko: { overview: "개요", enabled: "사용", amount: "양", color: "색", name: "이름", name_hint: "이름 입력", choice: "선택", choice_hint: "하나 고르기" },
+  },
+  locale: { state: "language" },
+  ui: {
+    type: "tabs", tabs: [
+      { label: { message: "overview" }, child: { type: "stack", direction: "column", children: [
+        { type: "toggle", value: { state: "enabled" }, on_change: { set_state: "enabled" }, label: { message: "enabled" } },
+        { type: "slider", value: { state: "amount" }, on_change: { set_state: "amount" }, label: { message: "amount" }, min: 0, max: 10 },
+        { type: "color", value: { state: "color" }, on_change: { set_state: "color" }, label: { message: "color" } },
+        { type: "input", value: { state: "name" }, on_change: { set_state: "name" }, label: { message: "name" }, placeholder: { message: "name_hint" } },
+        { type: "select", value: { state: "choice" }, on_change: { set_state: "choice" }, options: ["one", "two"], label: { message: "choice" }, placeholder: { message: "choice_hint" } },
+        { type: "text", value: "Stable content" },
+      ] } },
+      { label: "Other", child: { type: "text", value: "Other content" } },
+    ],
+  },
+};
+
 function testSnapshot(definitions: AppDefinition[] = [definition], firstState: Record<string, JsonValue> = { first: null, second: null, compound: null }): ShellSnapshot {
   const snapshot = makeTestSnapshot({ definitions });
   const first = snapshot.shared.windows[0];
@@ -180,6 +212,7 @@ if (!globalThis.ResizeObserver) {
 
 async function setup(definitions: AppDefinition[] = [definition], firstState: Record<string, JsonValue> = { first: null, second: null, compound: null }) {
   calls.length = 0;
+  blockWrapperRenders.clear();
   const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;
   if (probe) probe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
   else {
@@ -407,6 +440,38 @@ describe("실제 Shell의 블록 렌더 격리", () => {
       "/ui/children/0",
     ]);
     expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
+  it("탭 라벨과 입력 라벨·자리표시자가 locale을 따르며 탭 본문은 다시 그리지 않는다", async () => {
+    const { store } = await setup([localizedLabelsDefinition], {
+      language: "en", enabled: false, amount: 2, color: "#123456", name: "", choice: null,
+    });
+    expect(screen.getAllByRole("tab", { name: "Overview" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("tab", { name: "Other" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Enabled").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Amount").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Color").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Name").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Choice").length).toBeGreaterThan(0);
+    expect(screen.getAllByPlaceholderText("Type a name").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Select choice").length).toBeGreaterThan(0);
+    blockWrapperRenders.clear();
+    calls.length = 0;
+
+    await setState(store, "window-a", "language", "ko");
+
+    expect((await screen.findAllByRole("tab", { name: "개요" })).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("tab", { name: "Other" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("사용").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("양").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("색").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("이름").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("선택").length).toBeGreaterThan(0);
+    expect(screen.getAllByPlaceholderText("이름 입력").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("하나 고르기").length).toBeGreaterThan(0);
+    expect(blockWrapperRenders.get("window-a\0/ui") ?? 0).toBe(0);
+    expect(calls.some((call) => call.windowId === "window-a" && call.pointer === "/ui/tabs/0/child/children/5")).toBe(false);
     store.dispose();
   });
 

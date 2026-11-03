@@ -1368,6 +1368,11 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
                 bind!("follow_key", value);
             }
         }
+        Block::Tabs { tabs, .. } => {
+            for (index, tab) in tabs.iter().enumerate() {
+                bind!(format!("tabs/{index}/label"), &tab.label);
+            }
+        }
         Block::When { value, .. } => bind!("value", value),
         Block::Dialog {
             open,
@@ -1469,22 +1474,29 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         } => bind!("value", value),
         Block::Sandbox { value: None, .. } => {}
         Block::Slider {
-            value, on_change, ..
+            value, on_change, label, ..
         } => {
             bind!("value", value);
-            act!("on_change", on_change)
+            act!("on_change", on_change);
+            if let Some(label) = label {
+                bind!("label", label);
+            }
         }
         Block::Color {
             value,
             on_change,
             disabled,
+            label,
             ..
         } => {
             bind!("value", value);
             if let Some(disabled) = disabled {
                 bind!("disabled", disabled);
             }
-            act!("on_change", on_change)
+            act!("on_change", on_change);
+            if let Some(label) = label {
+                bind!("label", label);
+            }
         }
         Block::Metrics { items, .. } => bind!("items", items),
         Block::ButtonGrid {
@@ -1594,6 +1606,8 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             step,
             focus,
             on_cancel,
+            label,
+            placeholder,
             ..
         } => {
             for (name, value) in [("min", min), ("max", max), ("step", step), ("focus", focus)] {
@@ -1606,6 +1620,12 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
             bind!("value", value);
             act!("on_change", on_change);
+            if let Some(label) = label {
+                bind!("label", label);
+            }
+            if let Some(placeholder) = placeholder {
+                bind!("placeholder", placeholder);
+            }
             if let Some(on_submit) = on_submit {
                 act!("on_submit", on_submit);
             }
@@ -1614,17 +1634,26 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             value,
             options,
             on_change,
+            label,
+            placeholder,
             ..
         } => {
             bind!("value", value);
             bind!("options", options);
             act!("on_change", on_change);
+            if let Some(label) = label {
+                bind!("label", label);
+            }
+            if let Some(placeholder) = placeholder {
+                bind!("placeholder", placeholder);
+            }
         }
         Block::Toggle {
-            value, on_change, ..
+            value, on_change, label
         } => {
             bind!("value", value);
             act!("on_change", on_change);
+            bind!("label", label);
         }
         Block::Button {
             label,
@@ -1672,7 +1701,6 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             on_select: None, ..
         }
         | Block::Stack { .. }
-        | Block::Tabs { .. }
         | Block::Toolbar { .. } => {}
     }
     slots
