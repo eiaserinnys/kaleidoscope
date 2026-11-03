@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  testTimeout: 60_000,
+  timeout: 60_000,
   expect: { timeout: 10_000 },
   workers: 2,
   outputDir: process.env.KS_PLAYWRIGHT_OUTPUT ?? "test-results",

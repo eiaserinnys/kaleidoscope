@@ -29,9 +29,9 @@ async function conflict(page: Page, kind: "code" | "markdown") {
 }
 
 for (const kind of ["code", "markdown"] as const) {
-  test(`${kind} 충돌 안내의 두 복구 단추가 넓고 좁은 화면에서 보이고 눌린다`, async ({ browser }, info) => {
-    for (const width of [1440, 400]) {
-      for (const action of ["다시 불러오기", "덮어쓰기"]) {
+  for (const width of [1440, 400]) {
+    for (const action of ["다시 불러오기", "덮어쓰기"]) {
+      test(`${kind} 충돌 안내의 ${action} 단추가 ${width}px 화면에서 보이고 눌린다`, async ({ browser }, info) => {
         const context = await browser.newContext({ viewport: { width, height: 800 } });
         const page = await context.newPage();
         await conflict(page, kind);
@@ -49,9 +49,9 @@ for (const kind of ["code", "markdown"] as const) {
         await notice.getByRole("button", { name: action }).click();
         await expect(notice).toHaveCount(0);
         await context.close();
-      }
+      });
     }
-  });
+  }
 }
 
 test("이미지 수신 실패를 알리고 다시 받기로 복구한다", async ({ browser }, info) => {
