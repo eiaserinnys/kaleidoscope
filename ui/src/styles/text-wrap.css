@@ -32,5 +32,7 @@
 }
 
 .ks-error-id {
+  display: inline-block;
+  max-width: 100%;
   overflow-wrap: normal;
 }
