@@ -6,6 +6,10 @@
   "permissions": [],
   "state": {
     "locale": "en",
+    "locale_options": [
+      { "value": "en", "label": "English" },
+      { "value": "ko", "label": "한국어" }
+    ],
     "statuses": [
       { "code": "READY", "label_key": "status.ready" },
       { "code": "CONNECTING", "label_key": "status.connecting" },
@@ -31,12 +35,9 @@
     "gap": "medium",
     "children": [
       {
-        "type": "stack",
-        "direction": "row",
-        "gap": "small",
-        "children": [
-          { "type": "button", "label": "English", "on_click": [{ "set_state": "locale", "value": "en" }] },
-          { "type": "button", "label": "한국어", "on_click": [{ "set_state": "locale", "value": "ko" }] }
+        "type": "toolbar",
+        "start": [
+          { "type": "select", "style": "segmented", "label": "언어", "value": { "state": "locale" }, "options": { "state": "locale_options" }, "on_change": { "set_state": "locale" } }
         ]
       },
       {
@@ -50,8 +51,8 @@
           "direction": "row",
           "gap": "medium",
           "children": [
-            { "type": "text", "value": { "item": "code" } },
-            { "type": "text", "value": { "message": { "item": "label_key" } } }
+            { "type": "text", "value": { "message": { "item": "label_key" } } },
+            { "type": "text", "style": "meta", "value": { "item": "code" } }
           ]
         }
       }

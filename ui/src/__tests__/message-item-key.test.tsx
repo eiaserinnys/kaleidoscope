@@ -18,7 +18,7 @@ function definition(ui: AppDefinition["ui"] = { type: "text", value: "" }): AppD
   return {
     id: "message-item-test", name: "메시지 키 시험", requires: { blocks: 19, modules: {} }, permissions: [],
     state: { locale: "en", rows: [] },
-    messages: { en: { ready: "Ready", parent: "Parent", child: "Child" }, ko: { ready: "준비", parent: "부모", child: "자식" } },
+    messages: { en: { ready: "Ready", parent: "Parent", child: "Child", kind: "State" }, ko: { ready: "준비", parent: "부모", child: "자식", kind: "상태" } },
     locale: { state: "locale" }, ui,
   } as AppDefinition;
 }
@@ -114,20 +114,25 @@ it("자료 키 실패를 각각 구분하고 일반 단추와 미리보기 카�
     template: { type: "stack", direction: "row", children: [
       { type: "button", label: itemMessage("label_key"), on_click: [] },
       { type: "button", label: itemMessage("label_key"), preview: { type: "text", value: "미리보기" }, on_click: [] },
+      { type: "button", label: "With prefix", prefix: itemMessage("prefix_key"), on_click: [] },
     ] },
   } as never);
   app.state.rows = [
-    { id: "missing", label_key: null },
-    { id: "not-text", label_key: 3 },
-    { id: "unknown", label_key: "not-in-messages" },
+    { id: "missing", label_key: null, prefix_key: "kind" },
+    { id: "not-text", label_key: 3, prefix_key: "kind" },
+    { id: "unknown", label_key: "not-in-messages", prefix_key: "kind" },
+    { id: "prefix-failure", label_key: "ready", prefix_key: "not-in-messages" },
   ];
   const { store, windowId } = setup(app);
   render(<AppWindowContent store={store} windowId={windowId} />);
-  await waitFor(() => expect(document.querySelectorAll(".ks-error-id")).toHaveLength(6));
+  await waitFor(() => expect(document.querySelectorAll(".ks-error-id")).toHaveLength(7));
   expect(document.body.textContent).toContain("SHELL_MESSAGE_ITEM_KEY_MISSING");
   expect(document.body.textContent).toContain("SHELL_MESSAGE_ITEM_KEY_NOT_STRING");
   expect(document.body.textContent).toContain("SHELL_MESSAGE_KEY_NOT_FOUND");
-  expect(document.querySelectorAll(".ks-data-button.has-preview .ks-notice[role=alert]")).toHaveLength(3);
-  expect(document.querySelectorAll(".ks-data-button:not(.has-preview) + .ks-notice[role=alert]")).toHaveLength(3);
+  expect(document.querySelectorAll(".ks-data-button.has-preview .ks-data-button-card-failure .ks-error-id")).toHaveLength(3);
+  expect(document.querySelectorAll(".ks-data-button-failure-item > .ks-data-state-compact")).toHaveLength(4);
+  expect(document.querySelectorAll(".ks-data-button.has-preview + [role=alert], .ks-data-button:not(.has-preview) + .ks-notice[role=alert]")).toHaveLength(0);
+  const prefixFailureButton = screen.getByRole("button", { name: /With prefix: SHELL_MESSAGE_KEY_NOT_FOUND/ });
+  expect(prefixFailureButton.hasAttribute("disabled")).toBe(true);
   store.dispose();
 });

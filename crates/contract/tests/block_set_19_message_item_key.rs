@@ -77,3 +77,19 @@ fn static_message_keys_still_need_matching_entries_in_every_language() {
         .expect_err("every locale must retain the static key");
     assert!(!error.details.is_empty());
 }
+
+#[test]
+fn object_message_item_requires_messages_and_locale_at_registration() {
+    let mut value = definition(
+        repeated_label(json!({"message": {"item": "label_key"}})),
+        19,
+    );
+    let object = value.as_object_mut().unwrap();
+    object.remove("messages");
+    object.remove("locale");
+
+    let error = parse_app_definition(&value.to_string())
+        .expect_err("message.item requires message dictionaries and a selected locale");
+    assert!(error.details.iter().any(|detail| detail.starts_with("/messages:")));
+    assert!(error.details.iter().any(|detail| detail.starts_with("/locale:")));
+}

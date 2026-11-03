@@ -821,14 +821,20 @@ fn validate_ui_binding(
         if definition.requires.blocks < 14 {
             details.push(format!("{at}: 항목 바인딩은 블록 세트 14판이 필요합니다"));
         }
-        if matches!(
+        let message_item = matches!(
             binding,
             Binding::Message(crate::data::MessageRef {
                 message: MessageKey::Item(_)
             })
-        ) && definition.requires.blocks < 19
-        {
+        );
+        if message_item && definition.requires.blocks < 19 {
             details.push(format!("{at}: message.item은 블록 세트 19판이 필요합니다"));
+        }
+        if message_item && definition.messages.is_none() {
+            details.push("/messages: message.item에는 언어별 messages 사전이 필요합니다".into());
+            if definition.locale.is_none() {
+                details.push("/locale: message.item에는 기본 언어 상태가 필요합니다".into());
+            }
         }
         return;
     }

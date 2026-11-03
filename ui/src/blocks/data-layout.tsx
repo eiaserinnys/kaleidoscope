@@ -151,7 +151,10 @@ const BoundTabPanel = memo(function BoundTabPanel({ pointer, binding, showHeader
 export function TextBlock({ block, context, pointer }: Props<"text">) {
   const data = useWindowData();
   const value = useBinding(`${pointer}/value`, block.value);
-  if (value.status !== "ready") return <DataState value={value} />;
+  if (value.status !== "ready") {
+    if (isMessageBindingFailure(value)) return <div aria-label={value.message} role="alert" title={value.message}><DataState value={{ ...value, message: "" }} compact /></div>;
+    return <DataState value={value} />;
+  }
   if (block.format === "time" && isClock(value.value)) return <ClockText block={block} context={context} pointer={pointer} clock={value.value} data={data} />;
   const text = block.format === "time" && typeof value.value === "number" ? formatClockTime(value.value) : display(value.value);
   return <TextValue block={block} pointer={pointer} text={text} data={data} />;
