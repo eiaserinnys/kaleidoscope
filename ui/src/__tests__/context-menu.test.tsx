@@ -99,7 +99,7 @@ describe("공용 우클릭 메뉴", () => {
   it("프레임 편집 칸에는 붙여넣기와 모두 선택이 있다", () => {
     render(<><ContextMenuHost /><iframe title="문서" /></>);
     const frame = screen.getByTitle("문서") as HTMLIFrameElement;
-    act(() => openFrameContextMenu(frame, { x: 10, y: 20, text: "", editable: true, readOnly: false, password: false }));
+    act(() => openFrameContextMenu(frame, { requestId: 1, x: 10, y: 20, text: "", editable: true, readOnly: false, password: false }));
     expect(screen.getByRole("menuitem", { name: "붙여넣기" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "모두 선택" })).toBeTruthy();
   });
@@ -182,7 +182,7 @@ describe("공용 우클릭 메뉴", () => {
     render(<><ContextMenuHost /><iframe title="문서" /></>);
     const frame = screen.getByTitle("문서") as HTMLIFrameElement;
     const { act } = await import("@testing-library/react");
-    act(() => openFrameContextMenu(frame, { x: 10, y: 20, text: "프레임 글" }));
+    act(() => openFrameContextMenu(frame, { requestId: 1, x: 10, y: 20, text: "프레임 글" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "복사" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("프레임 글"));
   });
@@ -193,6 +193,23 @@ describe("공용 우클릭 메뉴", () => {
     render(<ContextMenuHost onError={onError} />);
     expect(await writeMenuClipboard("글", "행 복사")).toBe(false);
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ id: "SHELL_MENU_CLIPBOARD_WRITE_FAILED", message: "행 복사 작업을 하지 못했습니다. Ctrl+C로 복사하세요. 원인: 권한 거부" }));
+  });
+
+  it("잘라내기 쓰기 실패에는 Ctrl+X를 안내한다", async () => {
+    const onError = vi.fn();
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText: vi.fn().mockRejectedValue(new Error("권한 거부")) } });
+    render(<ContextMenuHost onError={onError} />);
+    expect(await writeMenuClipboard("글", "잘라내기")).toBe(false);
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "잘라내기 작업을 하지 못했습니다. Ctrl+X로 잘라내세요. 원인: 권한 거부" }));
+  });
+
+  it("프레임 명령에 메뉴 요청 번호를 돌려준다", () => {
+    const send = vi.fn();
+    render(<><ContextMenuHost /><iframe title="요청 프레임" /></>);
+    const frame = screen.getByTitle("요청 프레임") as HTMLIFrameElement;
+    act(() => openFrameContextMenu(frame, { requestId: 17, x: 0, y: 0, text: "글", editable: true }, send));
+    fireEvent.click(screen.getByRole("menuitem", { name: "모두 선택" }));
+    expect(send).toHaveBeenCalledWith({ requestId: 17, action: "selectAll" });
   });
 
   it("붙여넣기 읽기 실패에는 Ctrl+V를 안내한다", async () => {

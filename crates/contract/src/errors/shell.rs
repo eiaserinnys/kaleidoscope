@@ -666,12 +666,12 @@ error_catalog! { ENTRIES;
         message: "값을 복사하지 못했습니다. 값을 직접 골라 Ctrl+C로 복사하세요. 원인: {reason}",
         fix: "값을 직접 골라 Ctrl+C로 복사하세요"
     }
-    SHELL_MENU_CLIPBOARD_WRITE_FAILED(item, reason) {
+    SHELL_MENU_CLIPBOARD_WRITE_FAILED(item, alternative, reason) {
         class: Io,
         place: "메뉴 클립보드 쓰기",
         cause: "브라우저가 메뉴의 클립보드 쓰기를 거부했다",
-        message: "{item} 작업을 하지 못했습니다. Ctrl+C로 복사하세요. 원인: {reason}",
-        fix: "Ctrl+C로 복사하세요"
+        message: "{item} 작업을 하지 못했습니다. {alternative}. 원인: {reason}",
+        fix: "실패한 메뉴 항목에 맞는 단축키를 누르세요"
     }
     SHELL_MENU_CLIPBOARD_READ_FAILED(reason) {
         class: Io,

@@ -151,11 +151,13 @@ const isPinEvent = (event: Event) => {
   const first = event.composedPath()[0];
   return first === host || (first instanceof Element && first.classList.contains("ks-o-pin"));
 };
+let menuRequestId = 0;
 let menuTarget: HTMLElement | null = null;
 let menuField: { value: string; start: number; end: number } | null = null;
 let menuRange: Range | null = null;
 document.addEventListener("contextmenu", (event) => {
   event.preventDefault();
+  menuRequestId += 1;
   if (locked) return;
   const target = event.target instanceof Element ? event.target : null;
   const input = target?.closest("input, textarea");
@@ -167,7 +169,7 @@ document.addEventListener("contextmenu", (event) => {
   const selection = getSelection();
   menuRange = !field && menuTarget && selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
   const text = getSelection()?.toString() ?? "";
-  if (text || menuTarget) send({ type: "ks-html-context-menu", x: event.clientX, y: event.clientY, text, editable: Boolean(menuTarget), readOnly: Boolean(field && (field.readOnly || field.disabled)), password: field instanceof HTMLInputElement && field.type === "password" });
+  if (text || menuTarget) send({ type: "ks-html-context-menu", requestId: menuRequestId, x: event.clientX, y: event.clientY, text, editable: Boolean(menuTarget), readOnly: Boolean(field && (field.readOnly || field.disabled)), password: field instanceof HTMLInputElement && field.type === "password" });
 });
 document.addEventListener("pointerdown", (event) => { if (locked) { event.preventDefault(); event.stopPropagation(); } }, true);
 document.addEventListener("mousedown", (event) => {
@@ -229,7 +231,7 @@ window.addEventListener("message", (event: MessageEvent<ParentToFrame>) => {
   if (event.source !== parent || !event.data || typeof event.data !== "object") return;
   const data = event.data;
   if (data.type === "ks-html-context-command") {
-    if (locked || !menuTarget || !document.hasFocus()) return;
+    if (locked || data.requestId !== menuRequestId || !menuTarget || !document.hasFocus()) return;
     menuTarget.focus();
     if ((menuTarget instanceof HTMLInputElement || menuTarget instanceof HTMLTextAreaElement) && menuField && menuTarget.value === menuField.value) menuTarget.setSelectionRange(menuField.start, menuField.end);
     else if (menuRange) { const selection = getSelection(); selection?.removeAllRanges(); selection?.addRange(menuRange); }

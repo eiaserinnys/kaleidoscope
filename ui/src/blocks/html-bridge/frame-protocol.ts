@@ -24,14 +24,14 @@ export interface FrameComment { id: string; anchor: HtmlAnchor; number: number; 
 export type FrameToParent =
   | { type: "ks-html-ready" }
   | { type: "ks-html-visible-text"; text: string }
-  | { type: "ks-html-context-menu"; x: number; y: number; text: string; editable: boolean; readOnly: boolean; password: boolean }
+  | { type: "ks-html-context-menu"; requestId: number; x: number; y: number; text: string; editable: boolean; readOnly: boolean; password: boolean }
   | { type: "ks-html-select"; selection: FrameSelection | null }
   | { type: "ks-html-anchor-results"; results: Record<string, AnchorStatus> }
   | { type: "ks-html-select-comment"; id: string }
   | { type: "ks-html-key"; key: string; shift: boolean; alt: boolean; ctrl: boolean }
   | { type: "ks-html-text-edit"; n: number; before: string; after: string };
 export type ParentToFrame =
-  | { type: "ks-html-context-command"; action: "delete" | "insertText" | "selectAll"; text?: string }
+  | { type: "ks-html-context-command"; requestId: number; action: "delete" | "insertText" | "selectAll"; text?: string }
   | { type: "ks-html-mode"; mode: "select" | "view" }
   | { type: "ks-html-lock"; locked: boolean }
   | { type: "ks-html-select-number"; n: number | null }

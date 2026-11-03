@@ -13,9 +13,9 @@ it("프레임 편집 명령은 부모와 해당 토큰만 받는다", () => {
   const exec = vi.fn(); Object.defineProperty(document, "execCommand", { configurable: true, value: exec });
   new Function(code)();
   input.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
-  window.dispatchEvent(new MessageEvent("message", { source: window, data: { type: "ks-sandbox-context-command", token: "wrong", action: "insertText", text: "추가" } }));
+  window.dispatchEvent(new MessageEvent("message", { source: window, data: { type: "ks-sandbox-context-command", token: "wrong", requestId: 1, action: "insertText", text: "추가" } }));
   expect(exec).not.toHaveBeenCalled();
-  window.dispatchEvent(new MessageEvent("message", { source: window, data: { type: "ks-sandbox-context-command", token: "context-token", action: "insertText", text: "추가" } }));
+  window.dispatchEvent(new MessageEvent("message", { source: window, data: { type: "ks-sandbox-context-command", token: "context-token", requestId: 1, action: "insertText", text: "추가" } }));
   expect(exec).toHaveBeenCalledWith("insertText", false, "추가");
   input.remove(); vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
 });

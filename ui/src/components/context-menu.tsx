@@ -20,7 +20,7 @@ const reasonText = (reason: unknown) => reason instanceof Error ? reason.message
 
 export async function writeMenuClipboard(text: string, itemLabel: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; }
-  catch (reason) { reportError(shellErrors.SHELL_MENU_CLIPBOARD_WRITE_FAILED({ item: itemLabel, reason: reasonText(reason) })); return false; }
+  catch (reason) { reportError(shellErrors.SHELL_MENU_CLIPBOARD_WRITE_FAILED({ item: itemLabel, alternative: itemLabel === "잘라내기" ? "Ctrl+X로 잘라내세요" : "Ctrl+C로 복사하세요", reason: reasonText(reason) })); return false; }
 }
 
 async function readMenuClipboard(): Promise<string | null> {
@@ -92,18 +92,18 @@ export function openContextMenu(event: MenuEvent, siteEntries: MenuEntry[], opti
   setMenu({ anchor, point, entries });
 }
 
-type FrameContext = { x: number; y: number; text: string; editable?: boolean; readOnly?: boolean; password?: boolean };
-type FrameCommand = { action: "delete" | "insertText" | "selectAll"; text?: string };
+type FrameContext = { requestId: number; x: number; y: number; text: string; editable?: boolean; readOnly?: boolean; password?: boolean };
+type FrameCommand = { requestId: number; action: "delete" | "insertText" | "selectAll"; text?: string };
 export function openFrameContextMenu(frame: HTMLIFrameElement, data: FrameContext, send?: (command: FrameCommand) => void): void {
   const rect = frame.getBoundingClientRect();
   const copy: MenuEntry = { id: "frame-copy", label: "복사", shortcut: "Ctrl+C", disabled: !data.text || data.password, onSelect: () => { void writeMenuClipboard(data.text, "복사"); } };
   let entries: MenuEntry[] = [copy];
   if (data.editable) {
-    const all: MenuEntry = { id: "frame-all", label: "모두 선택", shortcut: "Ctrl+A", onSelect: () => send?.({ action: "selectAll" }) };
+    const all: MenuEntry = { id: "frame-all", label: "모두 선택", shortcut: "Ctrl+A", onSelect: () => send?.({ requestId: data.requestId, action: "selectAll" }) };
     entries = data.readOnly ? [copy, all] : [
-      { id: "frame-cut", label: "잘라내기", shortcut: "Ctrl+X", disabled: !data.text || data.password, onSelect: () => { void writeMenuClipboard(data.text, "잘라내기").then((ok) => { if (ok && document.activeElement === frame) send?.({ action: "delete" }); }); } },
+      { id: "frame-cut", label: "잘라내기", shortcut: "Ctrl+X", disabled: !data.text || data.password, onSelect: () => { void writeMenuClipboard(data.text, "잘라내기").then((ok) => { if (ok && document.activeElement === frame) send?.({ requestId: data.requestId, action: "delete" }); }); } },
       copy,
-      { id: "frame-paste", label: "붙여넣기", shortcut: "Ctrl+V", onSelect: () => { void readMenuClipboard().then((text) => { if (text !== null && document.activeElement === frame) send?.({ action: "insertText", text }); }); } },
+      { id: "frame-paste", label: "붙여넣기", shortcut: "Ctrl+V", onSelect: () => { void readMenuClipboard().then((text) => { if (text !== null && document.activeElement === frame) send?.({ requestId: data.requestId, action: "insertText", text }); }); } },
       { id: "frame-separator", type: "separator" }, all,
     ];
   }
