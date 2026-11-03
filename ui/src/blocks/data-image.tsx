@@ -7,6 +7,7 @@ import { DataIcon } from "../components/data-icons";
 import { cropStyle, isMedia } from "../components/media-thumbnail";
 import { Button, EmptyState, ErrorId, IconButton } from "../components/primitives";
 import { PreviewContext } from "./preview-context";
+import { openContextMenu, writeMenuImage } from "../components/context-menu";
 
 type Data = Extract<Block, { type: "image" }>;
 export function imageRequestSize(width: number, height: number, ratio: number, zoom: number): number {
@@ -94,7 +95,11 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
       return rect.left < bounds.left - 0.5 || rect.right > bounds.right + 0.5 || rect.top < bounds.top - 0.5 || rect.bottom > bounds.bottom + 0.5;
     })) setOverflowKey(layoutKey);
   }, [failure, short, layoutKey]);
-  return <div className={`ks-image-view${zoomable ? " is-zoomable" : ""}`} ref={host} tabIndex={zoomable && media ? 0 : undefined} onKeyDown={onKeyDown} onPointerDown={down} onPointerMove={move} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }} onDoubleClick={() => { if (zoomable) adjust(1); }}>
+  return <div className={`ks-image-view${zoomable ? " is-zoomable" : ""}`} ref={host} tabIndex={media && result.status === "ready" ? 0 : undefined} onContextMenu={(event) => {
+    const image = host.current?.querySelector(".ks-image-frame img");
+    if (!(image instanceof HTMLImageElement) || (event.target !== event.currentTarget && event.target !== image)) return;
+    openContextMenu(event, [{ id: "image-copy", label: "이미지 복사", onSelect: () => { void writeMenuImage(image, "이미지 복사"); } }]);
+  }} onKeyDown={onKeyDown} onPointerDown={down} onPointerMove={move} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }} onDoubleClick={() => { if (zoomable) adjust(1); }}>
     {!media ? <EmptyState icon={<DataIcon name="image" size="empty" />} />
       : result.status === "loading" ? <ImageLoading />
       : result.status === "failed" ? preview ? <PreviewFailure error={previewError!} /> : short

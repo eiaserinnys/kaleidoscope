@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { ConversationUpload, ConversationAttachment } from "../contract/contract";
 import { File as FileIcon, X } from "../components/icons";
 import { IconButton } from "../components/primitives";
+import { openContextMenu, writeMenuImage } from "../components/context-menu";
 
 export type DraftAttachment = { id: number; file: File; name: string };
 export type Preview = { src: string; name: string; trigger: HTMLElement };
@@ -34,9 +35,21 @@ function useFileUrl(file: File): string | null {
 
 type OpenPreview = (preview: Preview) => void;
 
+function AttachmentImage({ src, name, className, onPreview }: { src: string; name: string; className: string; onPreview: OpenPreview }) {
+  const open = (trigger: HTMLElement) => onPreview({ src, name, trigger });
+  return <button type="button" className={className} aria-label={name} onClick={(event) => open(event.currentTarget)} onContextMenu={(event) => {
+    const trigger = event.currentTarget;
+    const image = trigger.querySelector("img")!;
+    openContextMenu(event, [
+      { id: "image-open", label: "크게 보기", onSelect: () => open(trigger) },
+      { id: "image-copy", label: "이미지 복사", onSelect: () => { void writeMenuImage(image, "이미지 복사"); } },
+    ], { anchor: trigger });
+  }}><img src={src} alt="" /></button>;
+}
+
 export function DraftChip({ attachment, onRemove, onPreview }: { attachment: DraftAttachment; onRemove: () => void; onPreview: OpenPreview }) {
   const url = useFileUrl(attachment.file);
-  return <AttachmentChip name={attachment.name} removeLabel={`${attachment.name} 빼기`} onRemove={onRemove} preview={url ? <button type="button" className="ks-agent-attachment-chip-preview" aria-label={attachment.name} onClick={(event) => onPreview({ src: url, name: attachment.name, trigger: event.currentTarget })}><img src={url} alt="" /></button> : <span className="ks-agent-attachment-chip-preview"><FileIcon /></span>} />;
+  return <AttachmentChip name={attachment.name} removeLabel={`${attachment.name} 빼기`} onRemove={onRemove} preview={url ? <AttachmentImage src={url} name={attachment.name} className="ks-agent-attachment-chip-preview" onPreview={onPreview} /> : <span className="ks-agent-attachment-chip-preview"><FileIcon /></span>} />;
 }
 
 export function AttachmentChip({ name, preview, removeLabel, onRemove }: { name: string; preview: ReactNode; removeLabel: string; onRemove: () => void }) {
@@ -45,7 +58,7 @@ export function AttachmentChip({ name, preview, removeLabel, onRemove }: { name:
 
 export function PendingAttachment({ attachment, onPreview }: { attachment: DraftAttachment; onPreview: OpenPreview }) {
   const url = useFileUrl(attachment.file);
-  if (url) return <button type="button" className="ks-agent-attachment-image" aria-label={attachment.name} onClick={(event) => onPreview({ src: url, name: attachment.name, trigger: event.currentTarget })}><img src={url} alt="" /></button>;
+  if (url) return <AttachmentImage src={url} name={attachment.name} className="ks-agent-attachment-image" onPreview={onPreview} />;
   return <div className="ks-agent-attachment-chip"><span className="ks-agent-attachment-chip-preview"><FileIcon /></span><span className="ks-agent-attachment-name">{attachment.name}</span></div>;
 }
 
@@ -86,7 +99,7 @@ export function HistoryAttachmentView({ attachment, cacheKey, load, open, onPrev
   };
   if (attachment.mime.startsWith("image/") && !failed) {
     return src
-      ? <button type="button" className="ks-agent-attachment-image" aria-label={attachment.name} onClick={(event) => onPreview({ src, name: attachment.name, trigger: event.currentTarget })}><img src={src} alt="" /></button>
+      ? <AttachmentImage src={src} name={attachment.name} className="ks-agent-attachment-image" onPreview={onPreview} />
       : <div className="ks-agent-attachment-image ks-agent-attachment-placeholder" aria-label={attachment.name} />;
   }
   return <button type="button" className="ks-agent-attachment-chip ks-agent-attachment-file" disabled={opening} onClick={() => void handleOpen()} aria-label={attachment.name}>

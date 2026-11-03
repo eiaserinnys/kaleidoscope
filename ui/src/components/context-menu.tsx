@@ -23,6 +23,25 @@ export async function writeMenuClipboard(text: string, itemLabel: string): Promi
   catch (reason) { reportError(shellErrors.SHELL_MENU_CLIPBOARD_WRITE_FAILED({ item: itemLabel, alternative: itemLabel === "잘라내기" ? "Ctrl+X로 잘라내세요" : "Ctrl+C로 복사하세요", reason: reasonText(reason) })); return false; }
 }
 
+export async function writeMenuImage(image: HTMLImageElement, itemLabel: string): Promise<boolean> {
+  try {
+    const source = await (await fetch(image.currentSrc || image.src)).blob();
+    const blob = source.type === "image/png" ? source : await new Promise<Blob>((resolve, reject) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d");
+      if (!context) { reject("이미지를 변환할 수 없습니다"); return; }
+      context.drawImage(image, 0, 0);
+      canvas.toBlob((value) => value ? resolve(value) : reject("이미지를 PNG로 변환할 수 없습니다"), "image/png");
+    });
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    return true;
+  } catch (reason) {
+    reportError(shellErrors.SHELL_MENU_IMAGE_CLIPBOARD_WRITE_FAILED({ item: itemLabel, reason: reasonText(reason) }));
+    return false;
+  }
+}
+
 async function readMenuClipboard(): Promise<string | null> {
   try { return await navigator.clipboard.readText(); }
   catch (reason) { reportError(shellErrors.SHELL_MENU_CLIPBOARD_READ_FAILED({ reason: reasonText(reason) })); return null; }

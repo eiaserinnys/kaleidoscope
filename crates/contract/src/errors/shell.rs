@@ -673,6 +673,13 @@ error_catalog! { ENTRIES;
         message: "{item} 작업을 하지 못했습니다. {alternative}. 원인: {reason}",
         fix: "실패한 메뉴 항목에 맞는 단축키를 누르세요"
     }
+    SHELL_MENU_IMAGE_CLIPBOARD_WRITE_FAILED(item, reason) {
+        class: Io,
+        place: "메뉴 이미지 클립보드 쓰기",
+        cause: "이미지를 PNG로 변환하거나 클립보드에 쓰지 못했다",
+        message: "{item} 작업을 하지 못했습니다. 원인: {reason}",
+        fix: "원인을 확인하세요"
+    }
     SHELL_MENU_CLIPBOARD_READ_FAILED(reason) {
         class: Io,
         place: "메뉴 붙여넣기 클립보드 읽기",

@@ -12,7 +12,7 @@ import { useShareDescriber } from "../share/visible";
 import { prepareShareForSend } from "../share/share-view";
 import { HistoryAttachmentView, ImagePreview, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
 import { ChatComposer } from "./chat-composer";
-import { ChatHistory } from "./chat-history";
+import { ChatHistory, messageContextMenu } from "./chat-history";
 import { useFrameCoalesced } from "./frame-coalesced";
 import * as shellErrors from "../contract/shell-errors";
 
@@ -357,7 +357,7 @@ function QueuedPendingMessage({ message, context, windowId, onPreview, onError }
   message: LocalAgentSnapshot["queued"][number]; context: BlockContext; windowId: string;
   onPreview: (preview: Preview) => void; onError: (reason: unknown) => void;
 }) {
-  return <div className="ks-agent-chat-user is-pending">{message.text}{message.attachments.length ? <div className={`ks-agent-attachment-history${message.text ? " has-text" : ""}`}>
+  return <div className="ks-agent-chat-user is-pending" tabIndex={message.text ? 0 : undefined} onContextMenu={(event) => messageContextMenu(event, message.text)}>{message.text}{message.attachments.length ? <div className={`ks-agent-attachment-history${message.text ? " has-text" : ""}`}>
     {message.attachments.map((attachment, index) => <HistoryAttachmentView
       key={`${attachment.id}:${index}`}
       attachment={attachment}

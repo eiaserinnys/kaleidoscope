@@ -3,6 +3,7 @@ import { memo, type CSSProperties } from "react";
 import remarkGfm from "remark-gfm";
 import { useOptionalWindowData } from "../data/window-data";
 import { toCoreError } from "../core/core-transport";
+import { openContextMenu, writeMenuClipboard } from "../components/context-menu";
 
 const remarkPlugins = [remarkGfm];
 
@@ -16,7 +17,7 @@ const MarkdownPre: NonNullable<Components["pre"]> = ({ node, children: _children
     : "";
   const lines = text.replace(/\n$/, "").split(/(?<=\n)/);
 
-  return <pre {...props}><code>{lines.map((line, index) => {
+  return <pre {...props} tabIndex={0} onContextMenu={(event) => openContextMenu(event, [{ id: "code-copy", label: "코드 복사", onSelect: () => { void writeMenuClipboard(text, "코드 복사"); } }])}><code>{lines.map((line, index) => {
     let columns = 0;
     for (const char of line) {
       if (char === " ") columns += 1;
@@ -33,20 +34,30 @@ const MarkdownPre: NonNullable<Components["pre"]> = ({ node, children: _children
 
 export const MarkdownText = memo(function MarkdownText({ children }: { children: string }) {
   const data = useOptionalWindowData();
+  const externalUrl = (href: string | undefined) => {
+    if (!href) return null;
+    try { const url = new URL(href); return url.protocol === "http:" || url.protocol === "https:" ? url : null; } catch { return null; }
+  };
+  const openLink = (url: URL) => {
+    if (data) void data.store.call({ op: "external.open", window_id: data.windowId, url: url.href }).catch((error: unknown) => data.setNotice(toCoreError(error)));
+    else globalThis.window.open(url.href, "_blank", "noopener,noreferrer");
+  };
   return (
     <div className="ks-markdown-text">
       <ReactMarkdown
         components={{
           pre: MarkdownPre,
           a: ({ href, children: linkText }) => (
-            <a href={href} onClick={(event) => {
+            <a href={href} onContextMenu={(event) => {
+              const url = externalUrl(href);
+              openContextMenu(event, [
+                ...(url ? [{ id: "link-open", label: "링크 열기", onSelect: () => openLink(url) }] : []),
+                ...(href ? [{ id: "link-copy", label: "링크 주소 복사", onSelect: () => { void writeMenuClipboard(href, "링크 주소 복사"); } }] : []),
+              ]);
+            }} onClick={(event) => {
               event.preventDefault();
-              if (!href) return;
-              let url: URL;
-              try { url = new URL(href); } catch { return; }
-              if (url.protocol !== "http:" && url.protocol !== "https:") return;
-              if (data) void data.store.call({ op: "external.open", window_id: data.windowId, url: url.href }).catch((error: unknown) => data.setNotice(toCoreError(error)));
-              else globalThis.window.open(url.href, "_blank", "noopener,noreferrer");
+              const url = externalUrl(href);
+              if (url) openLink(url);
             }}>{linkText}</a>
           ),
           img: ({ alt }) => <span className="ks-markdown-image-alt">{alt ?? ""}</span>,

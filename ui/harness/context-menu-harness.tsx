@@ -7,12 +7,16 @@ import { htmlViewSource } from "../src/blocks/html-view-frame";
 import { sandboxSource } from "../src/blocks/sandbox-frame";
 import { WindowFrame } from "../../app/src/shell/window-frame";
 import { makeTestSnapshot } from "../src/__tests__/fixtures";
+import { ChatItem } from "../src/blocks/chat-history";
+import { HistoryAttachmentView, ImagePreview, type Preview } from "../src/blocks/agent-attachments";
+import type { ConversationItem } from "../src/contract/contract";
 import "../src/styles/index.css";
 import "../../app/src/shell.css";
 import "./harness.css";
 
 const html = "<html><body><p id='frame-text'>프레임에서 고를 글입니다.</p><input id='frame-input' value='원본'></body></html>";
 function Harness() {
+  const [preview, setPreview] = useState<Preview | null>(null);
   const [text, setText] = useState("abcde");
   const [number, setNumber] = useState("12345");
   const [email, setEmail] = useState("abcde@example.com");
@@ -25,6 +29,18 @@ function Harness() {
     const view = new EditorView({ state: EditorState.create({ doc: "편집기 원본" }), parent: editorRoot.current! });
     return () => view.destroy();
   }, []);
+  if (new URLSearchParams(window.location.search).has("content")) {
+    const item: ConversationItem = { id: "message", kind: "assistant", at: "2026-11-04T00:00:00Z", attachments: [], text: "[링크](https://example.com/path)\n\n```text\n첫 줄\n둘째 줄\n```" };
+    const loadPng = async () => {
+      const bytes = new Uint8Array(await (await fetch("/assets/shapes.png")).arrayBuffer());
+      return { mime: "image/png", data_base64: btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join("")) };
+    };
+    return <main className="ks-harness"><ContextMenuHost /><h1>대화</h1>
+      <div className="ks-agent-chat"><div className="ks-agent-chat-content"><ChatItem item={item} renderAttachment={() => null} />
+        <HistoryAttachmentView attachment={{ id: "image", name: "그림.png", mime: "image/png" }} cacheKey={["content-menu-harness"]} load={loadPng} open={async () => {}} onPreview={setPreview} onError={() => {}} />
+      </div></div>{preview ? <ImagePreview preview={preview} onClose={() => setPreview(null)} /> : null}
+    </main>;
+  }
   useEffect(() => {
     const receive = (event: MessageEvent) => {
       const frame = event.source === htmlFrame.current?.contentWindow ? htmlFrame.current : event.source === sandboxFrame.current?.contentWindow && event.data?.token === "context-test" ? sandboxFrame.current : null;

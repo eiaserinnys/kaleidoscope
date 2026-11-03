@@ -4,7 +4,7 @@ import type { ClientChatAttachment, ClientChatQueuedMessage } from "../data/clie
 import { useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { ChatComposer } from "./chat-composer";
-import { ChatHistory, type ChatPendingMessage } from "./chat-history";
+import { ChatHistory, messageContextMenu, type ChatPendingMessage } from "./chat-history";
 import { HistoryAttachmentView, ImagePreview, PendingAttachment, type DraftAttachment, type Preview } from "./agent-attachments";
 import { useFrameCoalesced } from "./frame-coalesced";
 import { renderBlock } from "../render/render-block";
@@ -151,7 +151,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
     onError={(reason) => setActionError(toCoreError(reason))}
   />, [channelName, context.window.id, chat.generation, requestAttachment]);
 
-  const renderQueuedMessage = useCallback((message: ClientChatQueuedMessage) => <div className="ks-agent-chat-user is-pending" key={message.id}>
+  const renderQueuedMessage = useCallback((message: ClientChatQueuedMessage) => <div className="ks-agent-chat-user is-pending" key={message.id} tabIndex={message.text ? 0 : undefined} onContextMenu={(event) => messageContextMenu(event, message.text)}>
     {message.text}
     {message.attachments.length ? <div className={`ks-agent-attachment-history${message.text ? " has-text" : ""}`}>
       {message.attachments.map((attachment) => <HistoryAttachmentView
