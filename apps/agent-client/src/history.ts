@@ -1,4 +1,5 @@
 import type { Item } from "./reducer.ts";
+import { agentError } from "./errors.ts";
 
 export interface BlobStore {
   put(key: string, bytes: Uint8Array): Promise<void>;
@@ -29,7 +30,7 @@ export class History {
     this.cachedItems = null;
     for (let index = 0; index < this.manifest.pages; index++) {
       const page = await this.blobs.read(pageKey(index));
-      if (!page) throw new Error(`기록 페이지 ${index}를 찾지 못했습니다`);
+      if (!page) throw agentError("AGENT_RECORD_PAGE_NOT_FOUND", String(index));
       this.pages.push(JSON.parse(decoder.decode(page)) as Item[]);
     }
   }

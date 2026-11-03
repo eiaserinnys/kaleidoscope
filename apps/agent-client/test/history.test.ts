@@ -30,3 +30,9 @@ test("에이전트나 작업 폴더가 바뀌면 이전 세션을 이어 쓰지 
   assert.equal(history.sessionId, null);
   assert.deepEqual(history.items, []);
 });
+
+test("기록 페이지가 없으면 위치가 담긴 오류를 반환한다", async () => {
+  const manifest = new TextEncoder().encode(JSON.stringify({ pages: 1, sessionId: null, controls: {}, identity: null, cwd: null }));
+  const history = new History({ put: async () => {}, read: async (key) => key === "record/manifest.json" ? manifest : null });
+  await assert.rejects(history.load(), (error: any) => error.id === "AGENT_RECORD_PAGE_NOT_FOUND" && error.message.includes("0"));
+});

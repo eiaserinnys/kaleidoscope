@@ -1,4 +1,5 @@
 import { AgentSession, type Host, type SessionView, type Spec } from "./session.ts";
+import { agentError } from "./errors.ts";
 
 type Agent = Spec & { id: string };
 type Action = { event?: any; item?: any; parent_item?: any };
@@ -167,13 +168,14 @@ export class AppClient {
 
   private async attachment(event: { request_id: string; attachment_id: string }): Promise<void> {
     const bytes = await this.session.attachment(`attachments/${event.attachment_id}`);
-    if (!bytes) throw Object.assign(new Error("첨부 파일을 찾지 못했습니다. 파일을 다시 보내세요."), { id: "AGENT_ATTACHMENT_NOT_FOUND", code: "not_found" });
     const item = this.view?.items.flatMap((entry) => entry.attachments).find((entry) => entry.id === event.attachment_id)
       ?? this.view?.queued.flatMap((entry) => entry.attachments).find((entry) => entry.id === event.attachment_id);
+    if (!bytes) throw agentError("AGENT_ATTACHMENT_READ_NOT_FOUND", item?.name ?? "첨부 파일");
     this.client.chat.publish("conversation", { kind: "attachment", request_id: event.request_id, mime: item?.mime ?? "application/octet-stream", bytes: Uint8Array.from(bytes).buffer });
   }
 
   private receive(view: SessionView): void {
+    const previous = this.view;
     this.view = view;
     const queue = JSON.stringify(view.queued);
     if (this.lastItems !== view.items || this.lastQueue !== queue) {
@@ -190,7 +192,18 @@ export class AppClient {
       this.lastStream = stream;
       this.lastActivity = activity;
     }
+    if (view.failure && view.phase === "failed" && (previous?.phase === "ready" || previous?.phase === "responding")) {
+      this.client.chat.publish("conversation", { kind: "error", error: {
+        id: view.failure.id, code: view.failure.code ?? "local_agent_failed", message: this.failureMessage(view.failure), details: [],
+      } });
+    }
     this.update();
+  }
+
+  private failureMessage(failure: NonNullable<SessionView["failure"]>): string {
+    return failure.message ?? (failure.id === "AGENT_LOGIN_AUTHENTICATE_FAILED"
+      ? `에이전트 ${this.selected?.name ?? ""} 로그인이 완료되지 않았습니다. 에이전트에서 로그인을 마친 뒤 다시 시도하세요. 원인: ${failure.reason}`
+      : `에이전트 ${this.selected?.name ?? ""}의 응답을 읽지 못했습니다. 에이전트 프로그램을 업데이트한 뒤 다시 시도하세요. 원인: ${failure.reason}`);
   }
 
   private showError(reason: unknown): void {
@@ -205,9 +218,7 @@ export class AppClient {
     const chat = this.stage === "session" && (phase === "ready" || phase === "responding");
     const failure = this.view?.failure;
     let message = this.error?.message ?? "";
-    if (failure) message = failure.id === "AGENT_LOGIN_AUTHENTICATE_FAILED"
-      ? `에이전트 ${this.selected?.name ?? ""} 로그인이 완료되지 않았습니다. 에이전트에서 로그인을 마친 뒤 다시 시도하세요. 원인: ${failure.reason}`
-      : `에이전트 ${this.selected?.name ?? ""}의 응답을 읽지 못했습니다. 에이전트 프로그램을 업데이트한 뒤 다시 시도하세요. 원인: ${failure.reason}`;
+    if (failure) message = this.failureMessage(failure);
     const controls = (this.view?.controls ?? []).map((control) => ({ ...control, is_select: control.kind === "select", is_boolean: control.kind === "boolean", checked: control.value === true }));
     const output = {
       show_start: !chat,

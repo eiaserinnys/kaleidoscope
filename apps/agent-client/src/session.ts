@@ -65,7 +65,12 @@ export class AgentSession {
 
   private background(task: Promise<unknown>): void {
     void task.catch((error: unknown) => {
-      this.state = { ...this.state, phase: "failed", failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason: error instanceof Error ? error.message : String(error) } };
+      const problem = error as { id?: unknown; code?: unknown; message?: unknown } | null;
+      const reason = typeof problem?.message === "string" ? problem.message : String(error);
+      const failure = typeof problem?.id === "string" && typeof problem.code === "string"
+        ? { id: problem.id, code: problem.code, message: reason, reason }
+        : { id: "AGENT_ACP_PROTOCOL_FAILED", reason };
+      this.state = { ...this.state, phase: "failed", failure };
       this.publish();
     });
   }
@@ -84,12 +89,12 @@ export class AgentSession {
       this.checkpointKeys = [this.state.streamKey, this.state.partialKey].filter((key): key is string => !!key);
       if (this.state.streamKey) {
         const bytes = await this.host.blobs.read(this.state.streamKey);
-        if (!bytes) throw new Error("진행 중인 응답을 읽지 못했습니다");
+        if (!bytes) throw agentError("AGENT_RECONNECT_STREAM_NOT_FOUND");
         this.state.stream.text = new TextDecoder().decode(bytes);
       }
       if (this.state.partialKey) {
         const bytes = await this.host.blobs.read(this.state.partialKey);
-        if (!bytes) throw new Error("에이전트 응답의 나머지 바이트를 읽지 못했습니다");
+        if (!bytes) throw agentError("AGENT_RECONNECT_PARTIAL_NOT_FOUND");
         this.state.partial = Array.from(bytes);
       }
       if (this.state.initialized && this.state.capabilities.http && this.state.servicesUsed !== this.tools) this.state.restartPending = true;
@@ -139,11 +144,12 @@ export class AgentSession {
   }
 
   private async launch(): Promise<boolean> {
-    if (!this.spec) throw new Error("실행할 에이전트를 고르세요");
+    if (!this.spec) throw agentError("AGENT_START_AGENT_NOT_SELECTED");
     const { name, command, args, env } = this.spec;
     const result = await this.host.process.start({ key: "main", permission: "run", cwd_permission: "work", spec: { name, command, args, env }, services: ["tools"] });
     if (result.status === "cancelled") return false;
-    if (!result.handle || !result.cwd) throw new Error("프로그램 실행 결과가 비었습니다");
+    if (!result.handle) throw agentError("AGENT_START_HANDLE_MISSING");
+    if (!result.cwd) throw agentError("AGENT_START_CWD_MISSING");
     this.handle = result.handle;
     this.cwd = result.cwd;
     this.after = 0;
@@ -269,7 +275,7 @@ export class AgentSession {
   }
 
   private async write(message: unknown, state: State): Promise<void> {
-    if (!this.handle) throw new Error("에이전트 프로세스가 없습니다");
+    if (!this.handle) throw agentError("AGENT_PROCESS_HANDLE_MISSING");
     const checkpoint = await this.compact(state);
     await this.host.process.write({ handle: this.handle, bytes: encodeMessage(message), checkpoint });
     this.state = state;
@@ -288,7 +294,8 @@ export class AgentSession {
       const result = await this.host.process.read({ handle: this.handle, after: this.after, max_bytes: 65536 });
       if (!result.bytes.length) {
         if (result.exit && this.state.phase !== "failed") {
-          this.state = { ...this.state, phase: "failed", failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason: "에이전트 프로세스가 종료되었습니다" } };
+          const error = agentError("AGENT_PROCESS_EXITED", this.spec?.name ?? "프로그램");
+          this.state = { ...this.state, phase: "failed", failure: { id: error.id, code: error.code, message: error.message, reason: error.message } };
           this.publish();
         }
         return;
@@ -379,7 +386,7 @@ export class AgentSession {
     ];
     for (const attachment of allAttachments) {
       const bytes = attachment.bytes ?? await this.host.blobs.read(attachment.key);
-      if (!bytes) throw new Error(`첨부 ${attachment.name}을 찾지 못했습니다`);
+      if (!bytes) throw agentError("AGENT_ATTACHMENT_READ_NOT_FOUND", attachment.name);
       if (this.state.capabilities.image && attachment.mime.startsWith("image/")) content.push({ type: "image", mimeType: attachment.mime, data: base64(bytes) });
       else {
         const key = attachment.key || `attachments/${queued.id}-${attachment.id}`;

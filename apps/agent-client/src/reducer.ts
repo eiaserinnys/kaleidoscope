@@ -1,4 +1,5 @@
 import type { InitializeResponse, NewSessionResponse, RequestPermissionRequest } from "@agentclientprotocol/sdk";
+import { agentError } from "./errors.ts";
 
 export type Attachment = { id: string; name: string; mime: string; key: string; size: number };
 export type Queued = { id: string; text: string; attachments: Attachment[] };
@@ -28,7 +29,7 @@ export type State = {
   replay: boolean;
   needsNew: boolean;
   initialized: boolean;
-  failure: { id: string; reason: string } | null;
+  failure: { id: string; reason: string; code?: string; message?: string } | null;
   completed: Item[];
   outbox: RpcReply[];
   servicesUsed: string | null;
@@ -57,7 +58,8 @@ export function enqueue(state: State, message: Queued): State {
 
 export function answerPermission(state: State, rpcId: string | number, option: string | null): State {
   const permission = state.permissions.find((p) => p.rpcId === rpcId);
-  if (!permission || (option !== null && !permission.options.some((o) => o.id === option))) throw new Error("승인 선택을 찾지 못했습니다");
+  if (!permission) throw agentError("AGENT_PERMISSION_REPLY_REQUEST_NOT_FOUND");
+  if (option !== null && !permission.options.some((o) => o.id === option)) throw agentError("AGENT_PERMISSION_REPLY_OPTION_NOT_FOUND");
   const outcome = option === null ? { outcome: "cancelled" } : { outcome: "selected", optionId: option };
   return { ...state, permissions: state.permissions.filter((p) => p.rpcId !== rpcId),
     outbox: [...state.outbox, { jsonrpc: "2.0", id: rpcId, result: { outcome } }] };

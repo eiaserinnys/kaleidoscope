@@ -106,6 +106,30 @@ test("전송 동작은 준비가 오래 걸려도 큐 수락 뒤 바로 끝난�
   assert.equal(f.writes.at(-1).method, "session/prompt");
 });
 
+test("같이 보기 준비 오류는 원래 코드와 문구를 유지한다", async () => {
+  const f = fixture();
+  f.host.prepare = async () => { throw Object.assign(new Error("같이 보기 준비 결과를 찾지 못했습니다."), { id: "SHARE_CONTEXT_TICKET_NOT_FOUND", code: "not_found" }); };
+  const session = new AgentSession(f.host as any);
+  await session.attach();
+  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: {} } });
+  await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "session" } });
+  await session.send({ id: "queued", text: "메시지", attachments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const failure = f.snapshots.at(-1).failure;
+  assert.equal(failure.id, "SHARE_CONTEXT_TICKET_NOT_FOUND");
+  assert.equal(failure.message, "같이 보기 준비 결과를 찾지 못했습니다.");
+  assert.equal(failure.code, "not_found");
+});
+
+test("실행 중인 에이전트가 종료되면 프로토콜 오류와 다른 코드를 보인다", async () => {
+  const f = fixture();
+  f.host.process.read = async () => ({ bytes: [], next: 0, exit: { code: 1 }, stderr_tail: [] });
+  const session = new AgentSession(f.host as any);
+  await session.attach({ name: "시험", command: "agent", args: [], env: {} });
+  assert.equal(f.snapshots.at(-1).failure.id, "AGENT_PROCESS_EXITED");
+  assert.ok(f.snapshots.at(-1).failure.message.includes("시험"));
+});
+
 test("큐를 순서대로 보내고 첫 말에만 지침과 같이 보기 및 첨부를 넣는다", async () => {
   const f = fixture();
   let guides = 0, commits = 0;
