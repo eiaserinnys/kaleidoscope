@@ -128,6 +128,7 @@ pub(crate) fn activate(
     };
     inner.save_state_locked(&state, true, true, true)?;
     storage::save_link(&inner.data_dir, &file)?;
+    inner.link_connecting.store(!file.revoked, Ordering::SeqCst);
     *inner.link_file.lock().unwrap() = Some(file);
     inner.connections.lock().unwrap().clear();
     inner.connections_snapshot_epoch.store(0, Ordering::SeqCst);

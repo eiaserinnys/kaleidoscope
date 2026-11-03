@@ -60,7 +60,8 @@ export function documentEditorSession(store: ShellStore, windowId: string, entry
     }
     if (update.kind === "snapshot" || (update.kind === "changed" && update.changed.item.entry_id === entry)) refresh();
   });
-  let linkState = store.getSnapshot()?.link.state;
+  const currentLink = store.getSnapshot()?.link;
+  let linkTarget = currentLink?.state === "connected" ? `${currentLink.mode}:${currentLink.server_url}` : null;
   const unsubscribeState = store.subscribe(() => {
     const snapshot = store.getSnapshot();
     if (snapshot && !snapshot.shared.windows.some((item) => item.id === windowId)) {
@@ -72,9 +73,10 @@ export function documentEditorSession(store: ShellStore, windowId: string, entry
       session.dispose();
       return;
     }
-    const next = snapshot?.link.state;
-    if (next === "connected" && linkState !== "connected") refresh();
-    linkState = next;
+    const nextLink = snapshot?.link;
+    const nextTarget = nextLink?.state === "connected" ? `${nextLink.mode}:${nextLink.server_url}` : null;
+    if (nextTarget !== null && nextTarget !== linkTarget) refresh();
+    linkTarget = nextTarget;
   });
   window.addEventListener("focus", refresh);
   window.addEventListener("online", refresh);

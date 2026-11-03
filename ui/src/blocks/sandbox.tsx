@@ -33,6 +33,10 @@ export function SandboxBlock({ block, context, pointer }: { block: SandboxData; 
   const path = block.file ? resolveFilePath(block.file, fileState) : null;
   const grantValue = useWindowGrant(context, permission ?? "");
   const grant = permission ? grantValue?.root_path : null;
+  const linkTarget = useShellSelector(context.store, (snapshot) => snapshot?.link.state === "connected"
+    ? `${snapshot.link.mode}:${snapshot.link.server_url}`
+    : null);
+  const previousLinkTarget = useRef(linkTarget);
   const read = useCallback(async () => {
     const sequence = ++readSequence.current;
     try {
@@ -55,6 +59,11 @@ export function SandboxBlock({ block, context, pointer }: { block: SandboxData; 
     finally { if (sequence === readSequence.current) setLoading(false); }
   }, [block.asset, block.file, block.document, block.value, boundStatus, boundValue, context.store, context.window.id, permission, path, grant]);
   useEffect(() => { void read(); }, [read]);
+  useEffect(() => {
+    const previous = previousLinkTarget.current;
+    previousLinkTarget.current = linkTarget;
+    if (block.document && previous !== linkTarget && linkTarget !== null) void read();
+  }, [block.document, linkTarget, read]);
   useEffect(() => {
     if (previousMediaGeneration.current !== mediaGeneration && block.asset !== undefined && (error !== null || loading)) void read();
     previousMediaGeneration.current = mediaGeneration;
@@ -105,6 +114,10 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
     const current = snapshot?.shared.windows.find((item) => item.id === context.window.id)?.state;
     return Object.fromEntries(stateKeys.filter((key) => current && key in current).map((key) => [key, current![key]]));
   }, sameState);
+  const linkTarget = useShellSelector(context.store, (snapshot) => snapshot?.link.state === "connected"
+    ? `${snapshot.link.mode}:${snapshot.link.server_url}`
+    : null);
+  const previousLinkTarget = useRef(linkTarget);
   const source = useMemo(() => {
     const token = crypto.randomUUID();
     return { token, html: sandboxSource(rawHtml, { token, state, stateKeys, storageEntries, errors: sandboxErrors() }) };
@@ -134,6 +147,15 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
     revisions.current[entry] = result.revision;
     return result.content;
   }, [readStorage]);
+  useEffect(() => {
+    const previous = previousLinkTarget.current;
+    previousLinkTarget.current = linkTarget;
+    if (storageEntries.length === 0 || previous === linkTarget || linkTarget === null) return;
+    for (const entry of storageEntries) {
+      void getStorage(entry).then((content) => send({ type: "ks-sandbox-storage-sync", entry, content }))
+        .catch((reason) => console.error("저장 항목 읽기 실패", reason));
+    }
+  }, [getStorage, linkTarget, send, storageSignature]);
   useEffect(() => registerSandboxFlush(context.window.id, () => new Promise<boolean>((resolve) => {
     const requestId = crypto.randomUUID();
     const timer = setTimeout(() => { flushes.current.delete(requestId); resolve(false); }, 5000);

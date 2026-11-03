@@ -38,6 +38,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                         .unwrap_or_default(),
                 };
                 link::set_link_locked(state, status);
+                inner.link_connecting.store(false, Ordering::SeqCst);
                 Some(epoch)
             });
             let (applied, state_event) = match result {
@@ -50,6 +51,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             let Some(epoch) = applied else {
                 return false;
             };
+            inner.layout_signal.notify();
             if let Some(event) = state_event {
                 inner.emit_state(&event);
             }
