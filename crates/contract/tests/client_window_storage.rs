@@ -1,5 +1,5 @@
 use kaleidoscope_contract::{
-    app_definition_schema, client::DeviceStorageScope, validate::parse_app_definition, CoreReply,
+    app_definition_schema, client::DeviceStorageScope, validate::{parse_app_definition, parse_cached_app_definition}, CoreReply,
     CoreRequest,
 };
 use serde_json::{json, Value};
@@ -98,5 +98,29 @@ fn process_file_uri_roundtrips_with_its_wire_name_and_uri() {
             "op": "process.file_uri",
             "uri": "file:///data/chat/%ED%95%9C%EA%B8%80%20file.bin"
         })
+    );
+}
+
+#[test]
+fn omitted_scope_survives_a_saved_definition_round_trip() {
+    let original = definition(16, 2, json!({"prefixes": ["cache/"]}));
+    let parsed = parse_app_definition(&original.to_string()).expect("app scope needs no new versions");
+    let saved = serde_json::to_value(&parsed).expect("definition serializes");
+    assert!(saved.pointer("/client/device_storage/scope").is_none());
+    let reread = parse_cached_app_definition(&saved.to_string())
+        .expect("a saved definition reads back under its own block set");
+    assert_eq!(
+        reread.client.unwrap().device_storage.unwrap().scope,
+        DeviceStorageScope::App
+    );
+
+    let window = definition(18, 4, json!({"prefixes": ["chat/"], "scope": "window"}));
+    let saved_window = serde_json::to_value(
+        parse_app_definition(&window.to_string()).expect("window storage is supported"),
+    )
+    .expect("definition serializes");
+    assert_eq!(
+        saved_window.pointer("/client/device_storage/scope"),
+        Some(&json!("window"))
     );
 }

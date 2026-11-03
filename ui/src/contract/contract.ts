@@ -600,7 +600,12 @@ pc_access: Array<PcAccess>,
  */
 local_agent_access: Array<LocalAgentAccess>, process_access: Array<ProcessAccess>, };
 
-export type DeviceStorage = { prefixes: Array<string>, scope?: DeviceStorageScope, };
+export type DeviceStorage = { prefixes: Array<string>, 
+/**
+ * 생략하면 `app`이다. 기본값은 다시 쓰지 않는다. 저장된 정의를 다시 읽을 때
+ * 생략한 필드가 명시한 필드로 바뀌어 18판 검사에 걸리지 않게 한다.
+ */
+scope?: DeviceStorageScope, };
 
 export type DeviceStorageScope = "app" | "window";
 

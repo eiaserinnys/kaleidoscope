@@ -250,7 +250,9 @@ pub struct TimelineEdit {
 #[ts(export, export_to = "contract.ts")]
 pub struct DeviceStorage {
     pub prefixes: Vec<String>,
-    #[serde(default)]
+    /// 생략하면 `app`이다. 기본값은 다시 쓰지 않는다. 저장된 정의를 다시 읽을 때
+    /// 생략한 필드가 명시한 필드로 바뀌어 18판 검사에 걸리지 않게 한다.
+    #[serde(default, skip_serializing_if = "DeviceStorageScope::is_app")]
     #[ts(optional, as = "Option<DeviceStorageScope>")]
     pub scope: DeviceStorageScope,
 }
@@ -262,6 +264,12 @@ pub enum DeviceStorageScope {
     #[default]
     App,
     Window,
+}
+
+impl DeviceStorageScope {
+    pub fn is_app(&self) -> bool {
+        matches!(self, Self::App)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
