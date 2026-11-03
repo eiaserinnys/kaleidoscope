@@ -8,7 +8,22 @@
     { "id": "builtin-weather-cloudy", "version": 1 }
   ],
   "permissions": [],
-  "state": { "count": 4, "sun_selected": true, "cloud_selected": false },
+  "state": {
+    "count": 4,
+    "selected": "sun",
+    "swatches": [
+      {
+        "id": "sun",
+        "label": "햇살이 스며드는 밝고 부드러운 원형 장식 표본 카드",
+        "image": { "asset": "builtin-weather-clear" }
+      },
+      {
+        "id": "cloud",
+        "label": "옅은 구름과 여백을 살린 차분하고 은은한 회색 장식 표본 카드",
+        "image": { "asset": "builtin-weather-cloudy" }
+      }
+    ]
+  },
   "ui": {
     "type": "stack",
     "direction": "column",
@@ -24,30 +39,20 @@
         ]
       },
       {
-        "type": "stack",
-        "direction": "row",
-        "wrap": true,
-        "gap": "small",
-        "children": [
-          {
-            "type": "button",
-            "variant": "chip",
-            "prefix": "색",
-            "label": "햇살이 스며드는 밝고 부드러운 원형 장식 표본 카드",
-            "preview": { "type": "image", "src": { "asset": "builtin-weather-clear" } },
-            "pressed": { "state": "sun_selected" },
-            "on_click": [{ "set_state": "sun_selected", "value": { "expr": "$state.sun_selected ? false : true" } }]
-          },
-          {
-            "type": "button",
-            "variant": "chip",
-            "prefix": "색",
-            "label": "옅은 구름과 여백을 살린 차분하고 은은한 회색 장식 표본 카드",
-            "preview": { "type": "image", "src": { "asset": "builtin-weather-cloudy" } },
-            "pressed": { "state": "cloud_selected" },
-            "on_click": [{ "set_state": "cloud_selected", "value": { "expr": "$state.cloud_selected ? false : true" } }]
-          }
-        ]
+        "type": "repeat",
+        "items": { "state": "swatches" },
+        "key": "id",
+        "layout": "grid",
+        "grid": { "columns": 2 },
+        "template": {
+          "type": "button",
+          "variant": "chip",
+          "prefix": "색",
+          "label": { "item": "label" },
+          "preview": { "type": "image", "src": { "item": "image" } },
+          "pressed": { "expr": "$state.selected = $item.id" },
+          "on_click": { "set_state": "selected", "value": { "item": "id" } }
+        }
       }
     ]
   }

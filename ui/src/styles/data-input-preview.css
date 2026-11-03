@@ -14,16 +14,17 @@
 .ks-data-button-label.is-emphasized { font-weight: 600; }
 .ks-data-button.has-preview { display: block; width: 100%; min-width: 0; }
 .ks-data-tab-panel .ks-data-button.has-preview { display: block; }
-.ks-data-button-card { position: relative; width: 100%; min-width: 0; overflow: hidden; border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); }
+.ks-data-button-card { position: relative; width: 100%; min-width: 0; border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); }
 .ks-data-button-card.is-selected { border-color: var(--ks-color-accent); }
 .ks-data-button-card.is-disabled { opacity: .56; }
-.ks-data-button-card-content { display: flex; min-width: 0; flex-direction: column; }
+.ks-data-button-card-content { display: flex; min-width: 0; flex-direction: column; overflow: hidden; border-radius: inherit; }
 .ks-data-button-card-preview { width: 100%; min-width: 0; pointer-events: none; }
 .ks-data-button-card-preview > .ks-canvas { border: 0; border-radius: 0; }
 .ks-data-button-card-preview > .ks-image-view { height: auto; aspect-ratio: 16 / 9; border-radius: 0; }
 .ks-data-button-card-label { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; column-gap: var(--ks-space-1); row-gap: var(--ks-space-1); padding: var(--ks-space-2); color: var(--ks-color-text); font-size: var(--ks-type-body); line-height: var(--ks-line-body); }
 .ks-data-button-card-label .ks-data-button-label { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
-.ks-data-button-card-action.ks-button { position: absolute; inset: 0; display: block; width: 100%; height: 100%; min-height: 100%; border: 0; border-radius: inherit; padding: 0; background: transparent; text-align: start; }
+.ks-data-button-card-action.ks-button { position: absolute; z-index: 1; inset: calc(-1 * var(--ks-line-width)); display: block; width: auto; height: auto; min-height: 0; border: 0; border-radius: inherit; padding: 0; background: transparent; background-image: none; text-align: start; }
 .ks-data-button-card-action.ks-button.is-selected { background: transparent; }
+.ks-data-button-card-action.ks-button:hover:not(:disabled) { background-image: none; }
 .ks-data-button-card-action.ks-button:focus-visible { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); }
 .ks-data-button-card-action.ks-button:disabled { opacity: 1; }
