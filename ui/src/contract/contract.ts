@@ -160,11 +160,11 @@ shortcuts?: Array<Shortcut>,
  */
 messages?: { [key in string]: { [key in string]: string } }, locale?: StateRef, 
 /**
- * (블록 세트 18판) 앱 설정 화면. 저장소의 `presentation: settings` 자동 폼보다 우선한다.
+ * (블록 세트 19판) 앱 설정 화면. 저장소의 `presentation: settings` 자동 폼보다 우선한다.
  */
 settings?: SettingsDecl, 
 /**
- * (블록 세트 18판) 창 제목과 메타 글. 각 창에서 바인딩을 따로 계산한다.
+ * (블록 세트 19판) 창 제목과 메타 글. 각 창에서 바인딩을 따로 계산한다.
  */
 window_title?: WindowTitleDecl, 
 /**
