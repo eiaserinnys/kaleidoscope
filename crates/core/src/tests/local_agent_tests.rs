@@ -91,6 +91,42 @@ fn prompt_stream_and_record() {
     assert!(events.iter().any(|e| matches!(e, kaleidoscope_contract::local_agent::LocalAgentUpdate::Conversation { update: kaleidoscope_contract::conversation::ConversationEvent::Text { text, .. } } if text == "안녕")));
     assert!(events.iter().any(|e| matches!(e, kaleidoscope_contract::local_agent::LocalAgentUpdate::Conversation { update: kaleidoscope_contract::conversation::ConversationEvent::Activity { tool: Some(title), .. } } if title == "도구")));
 }
+
+#[test]
+fn app_authoring_guide_is_sent_only_with_the_first_prompt() {
+    let dir = tempfile::tempdir().unwrap();
+    let worker = WorkerHandle::start(config(dir.path(), ""), Arc::new(|_| {}));
+    wait(&worker, LocalAgentPhase::Ready);
+    worker.send(prompt("first", "first request")).unwrap();
+    until(|| method_count(dir.path(), "session/prompt") == 1);
+    worker.send(prompt("second", "second request")).unwrap();
+    until(|| method_count(dir.path(), "session/prompt") == 2);
+    worker.shutdown();
+
+    let prompts: Vec<_> = calls(dir.path())
+        .into_iter()
+        .filter(|call| call["method"] == "session/prompt")
+        .collect();
+    assert_eq!(prompts.len(), 2);
+    assert_eq!(
+        prompts[0]["params"]["sessionId"],
+        prompts[1]["params"]["sessionId"]
+    );
+    assert!(
+        prompts[0]["params"]["prompt"][0]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with(kaleidoscope_contract::APP_AUTHORING_GUIDE)
+    );
+    assert!(
+        !prompts[1]["params"]["prompt"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|block| block["text"] == kaleidoscope_contract::APP_AUTHORING_GUIDE)
+    );
+}
+
 #[test]
 #[rustfmt::skip]
 fn missing_command_fails() {

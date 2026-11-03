@@ -1,5 +1,47 @@
 kaleidoscope 앱 제작 지침
-현재 작업의 데스크톱 쉘을 MCP 도구로 다룹니다. 개인 앱은 list_apps와 get_app으로 먼저 확인합니다. get_workspace로 현재 작업과 창을 확인합니다. workspace_id를 생략하면 MCP 연결의 작업을 사용합니다.
+kaleidoscope는 에이전트가 앱을 만들어 올리면 사용자가 창으로 띄워 쓰는 데스크톱 쉘입니다. 사용자가 앱을 만들거나 고쳐 달라고 하면 이 지침을 따릅니다. 앞부분은 앱의 구성과 할 수 있는 일의 경계이고, 뒷부분은 필드와 블록 참조입니다. 정확한 형식의 정본은 upload_app의 입력 스키마입니다.
+
+앱이란
+앱은 JSON 앱 정의 하나입니다. upload_app으로 서버의 레지스트리에 올리면 사용자의 쉘이 받아 창으로 띄우며, 쉘을 다시 빌드하지 않습니다. 화면은 쉘에 든 블록을 ui 트리로 엮어 그립니다. 값은 코어가 창 상태, 앱 저장소, 원천(파일, 폴더, HTTP)을 JSONata 식으로 읽어 계산하고, 블록의 이벤트에는 동작을 연결합니다.
+
+갈래 고르기
+- 블록만: 목록, 표, 입력 폼, 문서, 대시보드처럼 자료를 보여 주고 고치는 앱의 기본입니다. 로딩과 오류, 로그인 표시는 블록이 스스로 합니다. 여기서 시작하고 모자랄 때만 아래로 갑니다.
+- client와 canvas: 게임, 그림판, 실시간 시각화처럼 프레임마다 그리거나 입력에 바로 반응해야 할 때 씁니다. JavaScript 자산이 창마다 격리된 프레임에서 돌며 canvas에 그리고, 값을 내보내 다른 블록이 쓰게 합니다.
+- sandbox: 이미 있는 HTML을 화면째 띄울 때 씁니다.
+- worker: 서버에서 도는 Python 코드입니다. 주기 실행, 웹훅, 시크릿이 필요한 호출, 앱 사이 호출에 씁니다. 실행 한 번은 60초까지입니다. 쉘이 내 PC 서버에 연결돼 있으면 그 PC에서, 원격 서버에 연결돼 있으면 그 서버에서 돕니다.
+한 앱에서 섞어도 됩니다.
+
+할 수 있는 것
+- 앱을 올리고, 고치고, 지우고, 띄웁니다(upload_app, open_app, delete_app). 같은 id로 올리면 새 판이 되고 열린 창이 새 판으로 옮겨 갑니다.
+- 사용자가 창에서 고른 폴더의 파일을 읽고 씁니다(files 권한).
+- 공개 HTTPS를 읽습니다(http 권한). 로그인이나 비밀 헤더가 필요한 서비스는 서버에 연결로 등록해 부릅니다(set_connection, connection 권한).
+- 계정과 앱마다 설정과 문서를 남깁니다(storage, 항목이나 문서 하나에 1MiB까지). 기기에만 남길 큰 파일은 client의 blobs를 씁니다.
+- 이미지, HTML, 스크립트 같은 불변 자산을 올려 씁니다(upload_asset).
+- 웹 페이지를 창에 띄웁니다(web_view).
+
+할 수 없는 것
+- 쉘, 블록, 코어의 코드를 고치지 못합니다. 없는 블록이나 스키마에 없는 필드는 올릴 때 거부됩니다. 원하는 화면이 블록에 없으면 canvas나 sandbox로 그릴 수 있는지 보고, 그래도 안 되면 무엇이 안 되는지 사용자에게 말합니다.
+- 블록의 색, 크기, 여백, 글꼴을 앱이 정하지 못합니다. 쉘의 테마를 따릅니다. 모양을 직접 정해야 하면 canvas나 sandbox를 씁니다.
+- 기본 앱은 고치거나 지우지 못하고 get_app으로 정의를 읽지도 못합니다. 기본 앱의 저장소 값은 write_app_storage로 바꿀 수 있습니다. 다르게 동작해야 하면 다른 id의 새 앱으로 만듭니다.
+- 앱은 사용자가 고르지 않은 폴더의 파일에 닿지 못합니다. 폴더는 창마다, 기기마다 사용자가 그 창에서 고르며 에이전트의 작업 폴더와 별개입니다. 고른 폴더는 worker에 전달되지 않습니다.
+- 프레임 안의 코드(client, sandbox)는 바깥 네트워크에 직접 나가지 못합니다. fetch, WebSocket, 외부 스크립트와 이미지가 막혀 있습니다. 바깥 자료는 원천이나 http.read로 읽습니다. 공개 HTTPS는 앱이 선언한 경로만 읽고 사설 주소와 리다이렉트는 거부됩니다.
+- 시크릿 값을 앱 정의에 넣지 못합니다. worker 시크릿은 set_app_secret, 연결 헤더는 set_connection으로 넣습니다.
+- 사용자 대신 폴더를 고르거나 로그인하지 못합니다. 그 차례가 오면 사용자에게 무엇을 눌러야 하는지 알립니다.
+
+확인 순서
+1. 고치는 앱이면 list_apps와 get_app으로 지금 판을 받습니다.
+2. preview_app으로 식이 내는 값과 warnings를 봅니다. 화면을 그리지는 않습니다. 기기 원천은 data로 표본을 줍니다.
+3. upload_app으로 올립니다. 기본으로 창도 띄우며, 이미 올린 앱을 다시 띄울 때는 open_app을 씁니다. 응답의 open_sent_to가 0이면 창이 뜨지 않은 것입니다. note가 있으면 읽고 사용자에게 알립니다.
+4. get_workspace로 창이 떴는지 봅니다. 창마다 상태, 고른 폴더, data_errors가 나옵니다.
+5. 실제 화면은 사용자에게 확인받습니다. 위 도구로는 그려진 화면을 볼 수 없고, client 코드가 도는지와 키가 먹는지도 알 수 없습니다. 보지 못한 것은 못 봤다고 말하고, 무엇을 해 보면 되는지 짧게 알립니다.
+6. 화면을 봐야 판단할 수 있으면 사용자에게 그 창 제목 줄의 같이 보기를 켜 달라고 합니다. 켜면 사용자가 다음 말을 보낼 때 그 창에 보이는 글이 함께 오고, canvas, 이미지, 영상, 웹 화면이 보이는 창은 지금 보는 데스크톱에 있을 때 창 그림이 첨부됩니다. 보이는 글 전체는 get_shared_view로 읽습니다.
+7. 시험용 앱은 확인 뒤 지웁니다.
+
+앱을 올릴 수 없는 세션
+도구 목록에 upload_app이 없으면 앱을 올릴 수 없습니다. 쉘이 서버에 연결되어 있지 않거나 이 에이전트가 HTTP MCP를 쓰지 못하는 경우입니다. 만들었다고 말하지 말고 그 사실을 사용자에게 알립니다.
+
+참조
+도구의 workspace_id를 빼면 이 MCP 연결의 작업을 씁니다.
 앱 정의 JSON의 필드는 id, name, description, requires, permissions, state, state_migrate, sources, assets, storage, agent, client, worker, opens, shortcuts, messages, locale, ui입니다. version은 서버가 부여하며 앱 정의에 넣지 않습니다. upload_app의 입력 스키마가 정확한 형식과 최신 블록 필드의 정본입니다. 모르는 필드는 넣지 않습니다. state_migrate는 앱 판을 올릴 때 옛 상태에 없는 키의 값만 JSONata 식으로 계산하며 새 창에는 적용하지 않습니다. opens.set_state는 탐색기에서 파일을 열 때 경로와 함께 창 상태에 쓸 값을 선언합니다.
 requires.blocks는 사용하는 블록의 최소 지원 판이고 requires.modules는 사용하는 모듈별 판입니다. permissions에는 필요한 최소 권한만 선언합니다. 파일 경로는 사용자가 기기에서 고른 폴더 기준 상대 경로입니다. 다른 서비스의 주소나 데이터 모양은 앱 정의와 연결 설정에 두며 쉘 코드를 바꾸지 않습니다.
 ui는 type으로 구분하는 블록 트리입니다. 배치는 split, stack, tabs, toolbar, section을 쓰고 데이터는 list, table, tree, feed, properties, metrics, chart, map, 입력은 input, select, slider, color, toggle, button, button_grid, 문서는 markdown, code, html_view, chat, 파일은 folder, explorer, 미디어는 image, media, 웹은 web_view와 sandbox를 사용합니다. tabs.header:false는 탭 줄 없이 선택된 탭 내용만 보이고 tabs.keep_mounted:true는 방문한 탭을 숨겨 유지합니다. tabs.collapsible:true는 분할 칸의 접기를 탭 줄에서 맡으며 header:false와 함께 쓸 수 없습니다. 이 필드들, state_migrate, opens.set_state 가운데 하나를 쓰면 requires.blocks는 15 이상이어야 합니다. code의 wrap을 생략하면 창 폭에서 줄바꿈하고 false면 줄바꿈하지 않습니다. 지원 블록과 모듈의 전체 목록은 도구 스키마를 확인합니다.
@@ -25,4 +67,3 @@ storage.entries는 JSON 또는 Markdown 항목의 키, 스키마, 기본값을 �
 
 파일 권한은 files 1판에서 폴더 안 항목을 나열하고 읽고 씁니다. files 2판의 pc 범위는 읽기 전용입니다. files 3판은 readwrite + folder 권한에서 폴더 생성, 이름 변경, 이동, 복사와 삭제를 할 수 있습니다. 삭제는 기본적으로 시스템 휴지통을 사용하며, 휴지통을 사용할 수 없으면 오류로 끝납니다. 영구 삭제는 별도 요청입니다. 이름이 겹치면 덮어쓰지 않으며 복사만 자동으로 「- 복사본」 이름을 붙입니다. files.reveal과 files.path는 읽기 권한으로 쓸 수 있습니다.
 worker.webhook은 외부 POST 트리거를 선언합니다. enabled_entry는 기본값이 false인 전역 불리언 저장 항목이며, token_secret을 지정하면 미리 시크릿을 설정해야 호출할 수 있습니다. 응답을 http_response로 정하고 defer로 선언된 동작을 뒤에 실행할 수 있습니다. worker.calls에 다른 앱 id를 선언하면 파이썬에서 kaleidoscope_worker.call_app과 read_app_storage를 사용할 수 있습니다. 자기 호출, 순환 호출과 네 단계 초과 호출은 거부됩니다.
-preview_app으로 실제 상태와 표본 데이터의 식을 먼저 계산합니다. 기기 전용 원천은 표본 data를 제공합니다. upload_app으로 정의를 등록하고 open_app으로 현재 작업에 띄운 뒤 get_workspace로 결과를 확인합니다. 기본 앱은 upload_app으로 수정하거나 삭제할 수 없습니다. 시험용 앱은 확인 뒤 정리합니다.
