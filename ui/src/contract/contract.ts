@@ -328,11 +328,11 @@ on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap,
 /**
  * (18판) 창 가운데 세로 기둥에 자식을 놓는다. 폭과 넘침 처리는 쉘이 정한다.
  */
-place?: StackPlace,
+place?: StackPlace, 
 /**
  * (19판) 교차축 정렬. `place:"center"`이면 가운데 배치가 정렬보다 우선한다.
  */
-align?: StackAlign, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, header?: boolean, keep_mounted?: boolean,
+align?: StackAlign, children: Array<Block>, } | { "type": "tabs", tabs: Array<Tab>, header?: boolean, keep_mounted?: boolean, 
 /**
  * (15판) 참이면 분할 칸의 접기와 펼치기를 탭이 맡는다.
  */
