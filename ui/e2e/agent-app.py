@@ -115,7 +115,26 @@ def main():
                 assert Path(pid_log).read_text(encoding='utf-8').split() == pids
                 records = [json.loads(line) for line in Path(test_log).read_text(encoding='utf-8').splitlines()]
                 assert sum(item.get('method') == 'session/prompt' for item in records) == 1
-                print('4 passed: 선택과 폴더, 실행 허용, 설정, 승인 중 실제 리로드와 중복 없는 전송', flush=True)
+                box = app.get_by_role('textbox', name='메시지')
+                box.fill('stream')
+                box.press('Enter')
+                wait(lambda: '[00]' in app.locator('.ks-agent-chat-assistant').last.inner_text(), '스트리밍이 시작되지 않았습니다')
+                assert app.get_by_role('button', name='멈춤', exact=True).is_visible()
+                page.reload(wait_until='domcontentloaded')
+                app = sb.window('agent')
+                app.get_by_role('textbox', name='메시지').wait_for(timeout=30000)
+                assert app.get_by_role('button', name='멈춤', exact=True).is_visible()
+                assert Path(pid_log).read_text(encoding='utf-8').split() == pids
+                box = app.get_by_role('textbox', name='메시지')
+                box.fill('fresh-turn')
+                box.press('Enter')
+                expected = ''.join(f'[{index:02d}]' for index in range(80))
+                wait(lambda: any(expected in item for item in app.locator('.ks-agent-chat-assistant').all_inner_texts()), '스트리밍 답변이 빠지거나 중복됐습니다')
+                app.get_by_text('NEW', exact=True).wait_for(timeout=30000)
+                records = [json.loads(line) for line in Path(test_log).read_text(encoding='utf-8').splitlines()]
+                assert sum(item.get('method') == 'session/prompt' for item in records) == 3
+                assert Path(pid_log).read_text(encoding='utf-8').split() == pids
+                print('6 passed: 선택과 폴더, 실행 허용, 설정, 승인과 스트리밍 중 실제 리로드, 큐와 중복 없는 전송', flush=True)
                 print('pids:', pids, 'console:', sb.console[-10:], flush=True)
                 browser.close()
                 browser = None

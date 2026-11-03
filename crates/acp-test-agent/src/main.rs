@@ -192,6 +192,12 @@ fn main() {
                         json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"NEW"}}),
                     );
                     emit(json!({"jsonrpc":"2.0","id":id,"result":{"stopReason":"end_turn"}}));
+                } else if text.contains("stream") {
+                    for index in 0..80 {
+                        update(json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("[{index:02}]")}}));
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                    emit(json!({"jsonrpc":"2.0","id":id,"result":{"stopReason":"end_turn"}}));
                 } else if text.contains("permission") {
                     pending = id;
                     emit(
