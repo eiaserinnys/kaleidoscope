@@ -28,10 +28,10 @@
     { "code": "KeyZ", "modifiers": ["primary"], "action": { "client": "undo" } },
     { "code": "KeyY", "modifiers": ["primary"], "action": { "client": "redo" } }
   ],
-  "ui": { "type": "stack", "direction": "column", "children": [
+  "ui": { "type": "section", "title": null, "child": { "type": "stack", "direction": "column", "children": [
     { "type": "text", "value": { "client": "result" } },
     { "type": "text", "value": { "client": "lifecycle" } },
     { "type": "input", "placeholder": "메모", "value": { "state": "note" }, "on_change": { "set_state": "note" } },
     { "type": "button", "label": "선택", "on_click": { "client": "click" } }
-  ] }
+  ] } }
 }
