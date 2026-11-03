@@ -31,7 +31,7 @@
 .ks-data-button-card-preview > .ks-canvas { border: 0; border-radius: 0; }
 .ks-data-button-card-preview > .ks-image-view { height: auto; aspect-ratio: 16 / 9; border-radius: 0; }
 .ks-data-button-card-label { flex: 1; min-width: 0; padding: var(--ks-space-2); color: var(--ks-color-text); font-size: var(--ks-type-body); line-height: var(--ks-line-body); }
-.ks-data-button-card-label.is-failure { min-height: calc(var(--ks-type-body) * var(--ks-line-body)); }
+.ks-data-button-card-label.is-failure { min-height: calc(var(--ks-type-body) * var(--ks-line-body) + 2 * var(--ks-space-2)); }
 .ks-data-button-card-label .ks-data-button-prefix { margin-inline-end: var(--ks-space-2); }
 .ks-data-button-card-label .ks-data-button-label { min-width: 0; white-space: normal; }
 .ks-data-button-card-action.ks-button { position: absolute; z-index: 1; inset: calc(-1 * var(--ks-focus-width)); display: block; width: auto; height: auto; min-height: 0; border: 0; border-radius: inherit; padding: 0; background: transparent; background-image: none; text-align: start; }
