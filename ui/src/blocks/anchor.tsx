@@ -27,5 +27,5 @@ export function AnchorBlock({ block, context, pointer }: { block: AnchorBlockDat
     };
   }, [block.id, context.window.id]);
 
-  return <div ref={root} style={{ display: "contents" }}>{renderBlock(block.child, context, `${pointer}/child`)}</div>;
+  return <div ref={root} className="ks-anchor" style={{ display: "contents" }}>{renderBlock(block.child, context, `${pointer}/child`)}</div>;
 }

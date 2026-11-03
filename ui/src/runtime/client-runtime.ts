@@ -119,10 +119,17 @@ export class ClientRuntime {
     }
     // 숨겨진 동안의 시간은 응답 제한에 포함하지 않는다.
     this.lastPong = Date.now();
+    let lastTick = this.lastPong;
+    const interval = CLIENT_PING_TIMEOUT_SECS * 500;
     this.ping = setInterval(() => {
-      if (Date.now() - this.lastPong > CLIENT_PING_TIMEOUT_SECS * 1000) { this.data.failClient(shellErrors.SHELL_CLIENT_UNRESPONSIVE()); void this.stop(); return; }
+      const now = Date.now();
+      // 호스트가 긴 작업으로 타이머를 제때 실행하지 못한 시간은 앱의 응답 대기에 넣지 않는다.
+      // 브라우저의 50ms 미만 타이머 흔들림은 정상 간격으로 취급한다.
+      if (now - lastTick > interval + 50) this.lastPong = now;
+      lastTick = now;
+      if (now - this.lastPong > CLIENT_PING_TIMEOUT_SECS * 1000) { this.data.failClient(shellErrors.SHELL_CLIENT_UNRESPONSIVE()); void this.stop(); return; }
       this.send({ type: "ks-client-ping" });
-    }, CLIENT_PING_TIMEOUT_SECS * 500);
+    }, interval);
   };
 
   private onDocumentVisibilityChange = () => {
@@ -280,8 +287,10 @@ export class ClientRuntime {
   private receive = (event: MessageEvent) => {
     if (!this.token || event.source !== this.frame?.contentWindow || event.origin !== "null" || event.data?.token !== this.token) return;
     const message = event.data;
-    if (message.type === "ks-sandbox-ready") { this.ready = true; this.lastPong = Date.now(); this.sendLifecycle("ready"); this.sync(); for (const id of this.surfaces.keys()) this.sendSurface(id); for (const entry of this.client.storage_entries) void this.syncStorage(entry); }
-    else if (message.type === "ks-client-pong") this.lastPong = Date.now();
+    // 인증된 프레임의 모든 메시지는 프레임이 동작 중이라는 증거다.
+    this.lastPong = Date.now();
+    if (message.type === "ks-sandbox-ready") { this.ready = true; this.sendLifecycle("ready"); this.sync(); for (const id of this.surfaces.keys()) this.sendSurface(id); for (const entry of this.client.storage_entries) void this.syncStorage(entry); }
+    else if (message.type === "ks-client-pong") return;
     else if (message.type === "ks-sandbox-storage-applied" && this.client.storage_entries.includes(message.entry) && this.pendingRevisions[message.entry] === message.revision) {
       this.revisions[message.entry] = message.revision; delete this.pendingRevisions[message.entry];
     }

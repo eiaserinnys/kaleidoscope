@@ -100,7 +100,7 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     flushMove();
     serialSend(value, { coalesce: false });
   };
-  return <div ref={root} className="ks-canvas" role="img" aria-label={text || "캔버스"} style={{ "--ks-canvas-ratio": aspect ? Math.max(aspect, 1) : undefined } as CSSProperties}
+  return <div ref={root} className="ks-canvas" role="img" aria-label={text || "캔버스"} style={{ "--ks-canvas-ratio": aspect ? Math.max(aspect, 1) : undefined, "--ks-canvas-native-ratio": aspect } as CSSProperties}
     onPointerDown={(event) => pointerEvent("down", event)} onPointerMove={(event) => pointerEvent("move", event)}
     onPointerUp={(event) => pointerEvent("up", event)} onPointerCancel={(event) => pointerEvent("cancel", event)} />;
 }
