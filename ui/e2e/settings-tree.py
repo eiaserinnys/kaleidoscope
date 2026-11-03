@@ -188,7 +188,11 @@ def main():
                 for label in ["Fast mode", "Ultracode"]:
                     assert app.get_by_role("switch", name=label, exact=True).is_enabled(), label
 
-                long_model = "claude-opus-4-1-2025-long-model-name"
+                model_block = next(
+                    block for block in definition["settings"]["ui"]["children"]
+                    if block.get("label") == "Model"
+                )
+                long_model = max((option["value"] for option in model_block["options"]), key=len)
                 long_folder = "kaleidoscope-workspace-with-a-very-long-project-folder-name-for-ellipsis"
                 sb.set_state(window_id, {
                     "long_values": True,
@@ -238,7 +242,8 @@ def main():
                 wait_until(lambda: "두 번째 창 제목" in page.locator(".ks-window-title").all_text_contents(), 15, "두 번째 창 제목 바인딩이 갱신되지 않았습니다")
                 titles = page.locator(".ks-window-title").all_text_contents()
                 metas = page.locator(".ks-window-title-meta").all_text_contents()
-                assert "Claude Code" in titles and "두 번째 창 제목" in titles, titles
+                initial_title = definition["client"]["outputs"]["title"]["default"]
+                assert initial_title in titles and "두 번째 창 제목" in titles, titles
                 assert "kaleidoscope-workspace" in metas and "두 번째 창의 별도 작업 공간" in metas, metas
 
                 long_title = "두 번째 창에서 사용하는 매우 긴 제목 값"
