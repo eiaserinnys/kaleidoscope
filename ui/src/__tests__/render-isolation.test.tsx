@@ -519,16 +519,17 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     let width = 720;
     const originalRect = HTMLElement.prototype.getBoundingClientRect;
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("ks-data-window")) return { width, height: 500 } as DOMRect;
       if (this.classList.contains("ks-data-window-body")) return { width, height: 500 } as DOMRect;
       return originalRect.call(this);
     });
-    const resizeBodies: Array<(width: number) => void> = [];
+    const resizeWindows: Array<(width: number) => void> = [];
     vi.stubGlobal("ResizeObserver", class {
       constructor(private readonly callback: ResizeObserverCallback) {}
       observe(target: Element) {
-        if (!target.classList.contains("ks-data-window-body")) return;
+        if (!target.classList.contains("ks-data-window")) return;
         const resize = (nextWidth: number) => this.callback([{ target, contentRect: { width: nextWidth, height: 500 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
-        resizeBodies.push(resize);
+        resizeWindows.push(resize);
         resize(width);
       }
       unobserve() {}
@@ -537,29 +538,29 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     const { store } = await setup([definition]);
     try {
       expect(document.querySelector(".ks-data-window-body")?.getBoundingClientRect().width).toBe(720);
-      expect(resizeBodies).toHaveLength(2);
+      expect(resizeWindows).toHaveLength(2);
       expect(screen.getAllByText("폭 안쪽")).toHaveLength(2);
       expect(screen.getAllByText("폭 조건 밖에서도 유지")).toHaveLength(2);
       calls.length = 0;
 
       width = 599;
-      act(() => resizeBodies.forEach((resize) => resize(width)));
+      act(() => resizeWindows.forEach((resize) => resize(width)));
       await waitFor(() => expect(screen.queryByText("폭 안쪽")).toBeNull());
       expect(countFor("window-a", "/ui/children/1")).toBe(0);
 
       width = 600;
-      act(() => resizeBodies.forEach((resize) => resize(width)));
+      act(() => resizeWindows.forEach((resize) => resize(width)));
       expect(await screen.findAllByText("폭 안쪽")).toHaveLength(2);
       expect(countFor("window-a", "/ui/children/1")).toBe(0);
 
       calls.length = 0;
       width = 899;
-      act(() => resizeBodies.forEach((resize) => resize(width)));
+      act(() => resizeWindows.forEach((resize) => resize(width)));
       expect(screen.getAllByText("폭 안쪽")).toHaveLength(2);
       expect(calls).toHaveLength(0);
 
       width = 900;
-      act(() => resizeBodies.forEach((resize) => resize(width)));
+      act(() => resizeWindows.forEach((resize) => resize(width)));
       await waitFor(() => expect(screen.queryByText("폭 안쪽")).toBeNull());
       expect(screen.getAllByText("폭 조건 밖에서도 유지")).toHaveLength(2);
       expect(countFor("window-a", "/ui/children/1")).toBe(0);

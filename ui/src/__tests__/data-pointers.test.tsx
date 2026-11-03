@@ -100,6 +100,62 @@ it("설정을 열면 설정 트리를 깨우고 앱 본문만 재운다", async 
   store.dispose();
 });
 
+it("설정이 열려도 when 폭 조건은 창 너비를 유지하고 본문 상태에 끌려가지 않는다", async () => {
+  const definition: AppDefinition = {
+    id: "when-width-settings", name: "설정 폭 조건", requires: { blocks: 19, modules: {} }, permissions: [], state: {},
+    settings: { ui: { type: "stack", direction: "column", children: [
+      { type: "when", min_width: 600, child: { type: "text", value: "설정의 넓은 분기" } },
+      { type: "when", max_width: 599, child: { type: "text", value: "설정의 좁은 분기" } },
+    ] } },
+    ui: { type: "text", value: "앱 본문" },
+  };
+  const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+  let settingsOpen = true;
+  const originalRect = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    if (this.classList.contains("ks-data-window")) return { width: 720, height: 500 } as DOMRect;
+    if (this.classList.contains("ks-data-window-body")) return { width: settingsOpen ? 0 : 720, height: 500 } as DOMRect;
+    return originalRect.call(this);
+  });
+  const observers: Array<{ targets: Set<Element>; emit: (target: Element) => void }> = [];
+  vi.stubGlobal("ResizeObserver", class {
+    targets = new Set<Element>();
+    constructor(private readonly callback: ResizeObserverCallback) { observers.push(this); }
+    observe(target: Element) {
+      this.targets.add(target);
+      this.emit(target);
+    }
+    emit(target: Element) {
+      const width = target instanceof HTMLElement && target.classList.contains("ks-data-window-body") && settingsOpen ? 0 : 720;
+      this.callback([{ target, contentRect: { width, height: 500 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
+    }
+    unobserve(target: Element) { this.targets.delete(target); }
+    disconnect() { this.targets.clear(); }
+  });
+  const notify = () => observers.forEach((observer) => observer.targets.forEach((target) => observer.emit(target)));
+  try {
+    const view = render(<AppWindowContent store={store} windowId="viewer-window" settingsOpen settingsVisited />);
+    await waitFor(() => expect(view.container.querySelector(".ks-settings-custom")?.textContent).toContain("설정의 넓은 분기"));
+    expect(view.container.querySelector(".ks-settings-custom")?.textContent).not.toContain("설정의 좁은 분기");
+
+    settingsOpen = false;
+    view.rerender(<AppWindowContent store={store} windowId="viewer-window" settingsOpen={false} settingsVisited />);
+    act(notify);
+    expect(view.container.querySelector(".ks-settings-custom")?.textContent).toContain("설정의 넓은 분기");
+    expect(view.container.querySelector(".ks-settings-custom")?.textContent).not.toContain("설정의 좁은 분기");
+
+    settingsOpen = true;
+    view.rerender(<AppWindowContent store={store} windowId="viewer-window" settingsOpen settingsVisited />);
+    act(notify);
+    expect(view.container.querySelector(".ks-settings-custom")?.textContent).toContain("설정의 넓은 분기");
+    expect(view.container.querySelector(".ks-settings-custom")?.textContent).not.toContain("설정의 좁은 분기");
+    store.dispose();
+  } finally {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
 it("방문한 탭은 숨겨 유지해 접힘 상태를 이어 간다", async () => {
   const definition: AppDefinition = {
     id: "kept-tabs", name: "탭 유지 시험", requires: { blocks: 15, modules: {} }, permissions: [],

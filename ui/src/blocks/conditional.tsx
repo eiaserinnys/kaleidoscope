@@ -19,7 +19,7 @@ export function WhenBlock({ block, context, pointer }: { block: WhenBlockData; c
     }
     const host = Array.from(document.querySelectorAll<HTMLElement>(".ks-data-window[data-window-id]"))
       .find((element) => element.dataset.windowId === context.window.id);
-    const body = host?.querySelector<HTMLElement>(".ks-data-window-body");
+    const content = host;
     const update = (width: number) => {
       const matches = (block.min_width === undefined || width >= block.min_width)
         && (block.max_width === undefined || width <= block.max_width);
@@ -27,13 +27,13 @@ export function WhenBlock({ block, context, pointer }: { block: WhenBlockData; c
       widthMatchesRef.current = matches;
       setWidthMatches(matches);
     };
-    if (!body) return;
-    update(body.getBoundingClientRect().width);
+    if (!content) return;
+    update(content.getBoundingClientRect().width);
     const observer = new ResizeObserver((entries) => {
-      const entry = entries.find((candidate) => candidate.target === body);
+      const entry = entries.find((candidate) => candidate.target === content);
       if (entry) update(entry.contentRect.width);
     });
-    observer.observe(body);
+    observer.observe(content);
     return () => observer.disconnect();
   }, [block.max_width, block.min_width, context.window.id, hasWidthCondition]);
   const valueMatches = block.value === undefined || (value.status === "ready" && value.value === true);
