@@ -16,6 +16,7 @@ import {
   type Rect,
 } from "@kaleidoscope/ui";
 import { WindowFrame } from "./window-frame";
+import { windowMenuEntries } from "./window-menu";
 
 export interface DesktopAreaProps {
   activeDesktopId: string;
@@ -159,12 +160,7 @@ const TaskbarItem = memo(function TaskbarItem({ window, isTop, store, onAct, set
       event.preventDefault();
       setWindowMenu({
         anchor: event.currentTarget,
-        entries: [
-          { id: "window-toggle", label: window.minimized ? "복원" : "최소화", onSelect: () => onAct(window.id, window.minimized ? "window.raise" : "window.minimize") },
-          { id: "window-size", label: window.maximized ? "이전 크기로 복원" : "최대화", onSelect: () => onAct(window.id, window.maximized ? "window.restore" : "window.maximize") },
-          { id: "window-separator", type: "separator" },
-          { id: "window-close", label: "창 닫기", danger: true, onSelect: () => onAct(window.id, "window.close") },
-        ],
+        entries: windowMenuEntries(window, { minimize: () => onAct(window.id, "window.minimize"), raise: () => onAct(window.id, "window.raise"), maximize: () => onAct(window.id, "window.maximize"), restore: () => onAct(window.id, "window.restore"), close: () => onAct(window.id, "window.close") }),
       });
     }}
     title={title}

@@ -1,0 +1,203 @@
+{
+ "id": "ctx-menu-test",
+ "name": "우클릭 시험",
+ "requires": {
+  "blocks": 19,
+  "modules": {
+   "files": 3,
+   "storage": 3
+  }
+ },
+ "permissions": [
+  {
+   "module": "files",
+   "id": "docs",
+   "access": "readwrite",
+   "label": "시험 폴더"
+  }
+ ],
+ "state": {
+  "title": "abcde",
+  "body": "여러 줄 본문\n둘째 줄",
+  "count": "12345",
+  "picked": null
+ },
+ "storage": {
+  "entries": [
+   {
+    "id": "memo",
+    "key": "memo",
+    "kind": "md",
+    "default": "# 메모\n\n편집할 마크다운 본문입니다.",
+    "label": "메모",
+    "presentation": "hidden"
+   },
+   {
+    "id": "opt",
+    "key": "settings/opt",
+    "kind": "json",
+    "label": "자동 저장",
+    "presentation": "settings",
+    "schema": {
+     "type": "boolean"
+    },
+    "default": false
+   }
+  ]
+ },
+ "ui": {
+  "type": "tabs",
+  "tabs": [
+   {
+    "label": "입력",
+    "child": {
+     "type": "section",
+     "title": "쓰기",
+     "child": {
+      "type": "stack",
+      "direction": "column",
+      "gap": "small",
+      "children": [
+       {
+        "type": "input",
+        "label": "제목",
+        "value": {
+         "state": "title"
+        },
+        "on_change": {
+         "set_state": "title"
+        }
+       },
+       {
+        "type": "input",
+        "label": "본문",
+        "multiline": true,
+        "rows": 4,
+        "value": {
+         "state": "body"
+        },
+        "on_change": {
+         "set_state": "body"
+        }
+       },
+       {
+        "type": "text",
+        "value": "읽고 복사할 본문 글입니다.",
+        "format": "markdown",
+        "style": "body"
+       },
+       {
+        "type": "feed",
+        "entries": [
+         {
+          "key": "n1",
+          "name": "작성자",
+          "body": "피드에서 복사할 글"
+         }
+        ]
+       },
+       {
+        "type": "list",
+        "items": [
+         {
+          "key": "1",
+          "title": "목록 항목",
+          "value": "설명"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   },
+   {
+    "label": "마크다운",
+    "child": {
+     "type": "split",
+     "direction": "row",
+     "sizes": [
+      50,
+      50
+     ],
+     "children": [
+      {
+       "type": "markdown",
+       "document": {
+        "entry": "memo"
+       }
+      },
+      {
+       "type": "markdown",
+       "document": {
+        "entry": "memo"
+       },
+       "read_only": true
+      }
+     ]
+    }
+   },
+   {
+    "label": "코드",
+    "child": {
+     "type": "split",
+     "direction": "row",
+     "sizes": [
+      50,
+      50
+     ],
+     "children": [
+      {
+       "type": "code",
+       "file": {
+        "permission": "docs",
+        "path": "a.ts"
+       },
+       "language": "typescript"
+      },
+      {
+       "type": "code",
+       "value": "const 읽기 = 1;\nconsole.log(읽기);",
+       "language": "typescript"
+      }
+     ]
+    }
+   },
+   {
+    "label": "HTML",
+    "child": {
+     "type": "split",
+     "direction": "row",
+     "sizes": [
+      50,
+      50
+     ],
+     "children": [
+      {
+       "type": "html_view",
+       "value": "<html><body><p id='hv'>HTML 보기에서 고를 글입니다.</p></body></html>"
+      },
+      {
+       "type": "sandbox",
+       "value": "<html><body><p id='sb'>샌드박스에서 고를 글입니다.</p><input id='sbin' value='프레임 입력칸'></body></html>"
+      }
+     ]
+    }
+   },
+   {
+    "label": "폴더",
+    "child": {
+     "type": "folder",
+     "root": {
+      "permission": "docs"
+     },
+     "selected": {
+      "state": "picked"
+     },
+     "on_select": {
+      "set_state": "picked"
+     }
+    }
+   }
+  ]
+ }
+}

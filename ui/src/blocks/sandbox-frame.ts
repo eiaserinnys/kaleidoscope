@@ -30,6 +30,21 @@ function bridgeSource(init: SandboxInit): string {
     let state = { ...config.state }, nextRequest = 0, shareText = '', shareImage = '', shareCanvas = null, explicitText = false;
     const stateListeners = new Set(), storageListeners = new Map(), grantListeners = new Map(), pending = new Map(), pendingWrites = new Set();
     const send = (type, body = {}, transfer) => transfer ? parent.postMessage({ token, type, ...body }, '*', transfer) : parent.postMessage({ token, type, ...body }, '*');
+    let menuTarget = null, menuField = null, menuRange = null, menuRequestId = 0;
+    document.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      menuRequestId += 1;
+      const target = event.target instanceof Element ? event.target : null;
+      const input = target?.closest('input, textarea');
+      const field = input instanceof HTMLTextAreaElement || (input instanceof HTMLInputElement && ['text', 'search', 'url', 'email', 'tel', 'password', 'number'].includes(input.type)) ? input : null;
+      const content = target?.closest('[contenteditable]');
+      menuTarget = field || (content?.isContentEditable ? content : null);
+      menuField = field && field.selectionStart !== null && field.selectionEnd !== null ? { value: field.value, start: field.selectionStart, end: field.selectionEnd } : null;
+      const selection = getSelection();
+      menuRange = !field && menuTarget && selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+      const text = getSelection()?.toString() || '';
+      if (text || menuTarget) send('ks-sandbox-context-menu', { requestId: menuRequestId, x: event.clientX, y: event.clientY, text, editable: !!menuTarget, readOnly: !!(field && (field.readOnly || field.disabled)), password: field instanceof HTMLInputElement && field.type === 'password' });
+    });
     const lifecycleListeners = new Set(), pendingLifecycle = new Set(), processListeners = new Set(), processServicesListeners = new Set();
     let lifecycle = null;
     const inputListeners = new Set(), handlers = new Map(), surfaceListeners = new Map(), surfaces = new Map();
@@ -191,6 +206,15 @@ function bridgeSource(init: SandboxInit): string {
     window.addEventListener('message', event => {
       if (event.source !== parent || !event.data) return;
       const data = event.data;
+      if (data.type === 'ks-sandbox-context-command' && data.token === token && data.requestId === menuRequestId && menuTarget && document.hasFocus()) {
+        menuTarget.focus();
+        if ((menuTarget instanceof HTMLInputElement || menuTarget instanceof HTMLTextAreaElement) && menuField && menuTarget.value === menuField.value) menuTarget.setSelectionRange(menuField.start, menuField.end);
+        else if (menuRange) { const selection = getSelection(); selection?.removeAllRanges(); selection?.addRange(menuRange); }
+        if (data.action === 'selectAll') {
+          if (menuTarget instanceof HTMLInputElement || menuTarget instanceof HTMLTextAreaElement) menuTarget.select();
+          else { const range = document.createRange(); range.selectNodeContents(menuTarget); const selection = getSelection(); selection?.removeAllRanges(); selection?.addRange(range); }
+        } else if (data.action === 'delete' || data.action === 'insertText') document.execCommand(data.action, false, data.action === 'insertText' ? data.text : undefined);
+      }
       if (data.type === 'ks-client-lifecycle') {
         const currentLifecycle = data.lifecycle;
         lifecycle = currentLifecycle;

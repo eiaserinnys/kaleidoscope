@@ -10,6 +10,7 @@ import type { BlockContext } from "./block-context";
 import { FileGrant } from "./file-grant";
 import { resolveFilePath } from "./file-path";
 import { sandboxErrors, sandboxSource } from "./sandbox-frame";
+import { openFrameContextMenu } from "../components/context-menu";
 import { registerSandboxFlush } from "./sandbox-flush";
 import { patchWindowState, useWindowGrant, useWindowStateValue } from "../data/window-state";
 import { useShellSelector } from "../core/shell-store";
@@ -179,7 +180,9 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
     const receive = (event: MessageEvent) => {
       if (!active.current || event.source !== frame.current?.contentWindow || !["null", ""].includes(event.origin) || !event.data || event.data.token !== source.token) return;
       const data = event.data;
-      if (data.type === "ks-sandbox-ready") {
+      if (data.type === "ks-sandbox-context-menu" && typeof data.x === "number" && typeof data.y === "number" && typeof data.text === "string" && (data.text || data.editable) && frame.current) {
+        openFrameContextMenu(frame.current, data, (command) => send({ type: "ks-sandbox-context-command", token: source.token, ...command }));
+      } else if (data.type === "ks-sandbox-ready") {
         send({ type: "ks-sandbox-state-sync", state: JSON.parse(stateJson) });
         for (const entry of storageEntries) void getStorage(entry).then((content) => send({ type: "ks-sandbox-storage-sync", entry, content })).catch((reason) => console.error("저장 항목 읽기 실패", reason));
       } else if (data.type === "ks-sandbox-flushed" && typeof data.requestId === "string") {
