@@ -331,6 +331,7 @@ describe("folder block", () => {
     const drop = () => { fireEvent.dragStart(a, { dataTransfer }); fireEvent.dragOver(target, { dataTransfer }); fireEvent.drop(target, { dataTransfer }); };
     drop();
     const alert = await screen.findByRole("alert");
+    await waitFor(() => expect(screen.getByRole("tree").contains(document.activeElement)).toBe(true));
     if (dismiss === "재시도") { failed = false; drop(); }
     else if (dismiss === "Escape") fireEvent.keyDown(target, { key: "Escape" });
     else if (dismiss === "펼친 뒤 Escape") {
