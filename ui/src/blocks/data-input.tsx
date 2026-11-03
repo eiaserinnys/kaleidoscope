@@ -308,11 +308,28 @@ export function ButtonBlock({ block, pointer }: Props<"button">) {
   const body = useBinding(`${pointer}/confirm/body`, block.confirm?.body ?? null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [copySucceeded, setCopySucceeded] = useState(false);
   const opener = useRef<HTMLSpanElement>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoreAfterAction = useRef(false);
   const confirmModifiers = useRef<ReturnType<typeof eventModifiers> | undefined>(undefined);
   const close = useCallback(() => setConfirm(false), []);
-  const run = async (restore: boolean, modifiers?: ReturnType<typeof eventModifiers>) => { restoreAfterAction.current = restore; setConfirm(false); setBusy(true); await data.act(`${pointer}/on_click`, null, undefined, modifiers); setBusy(false); };
+  const labelText = label.status === "ready" && typeof label.value === "string" ? label.value : "";
+  const iconText = icon.status === "ready" && typeof icon.value === "string" ? icon.value : "";
+  const pressedValue = block.pressed !== undefined && pressed.status === "ready" ? Boolean(pressed.value) : undefined;
+  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
+  const run = async (restore: boolean, modifiers?: ReturnType<typeof eventModifiers>) => {
+    restoreAfterAction.current = restore;
+    setConfirm(false);
+    setBusy(true);
+    const succeeded = await data.act(`${pointer}/on_click`, null, undefined, modifiers);
+    setBusy(false);
+    if (succeeded && copyTextAction(block.on_click) && (ICON_NAMES as readonly string[]).includes(iconText)) {
+      setCopySucceeded(true);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => { setCopySucceeded(false); copyTimer.current = null; }, 1500);
+    }
+  };
   const unavailable = disabled.status !== "ready" || Boolean(disabled.value);
   useLayoutEffect(() => {
     if (!busy && !unavailable && restoreAfterAction.current) {
@@ -323,11 +340,19 @@ export function ButtonBlock({ block, pointer }: Props<"button">) {
   const labelText = label.status === "ready" && typeof label.value === "string" ? label.value : "";
   const iconText = icon.status === "ready" && typeof icon.value === "string" ? icon.value : "";
   const pressedValue = block.pressed !== undefined && pressed.status === "ready" ? Boolean(pressed.value) : undefined;
-  const contents = <>{(ICON_NAMES as readonly string[]).includes(iconText) ? <DataIcon name={iconText} /> : null}{!block.icon_only ? <span className="ks-truncate-label">{labelText}</span> : null}</>;
+  const hasIcon = (ICON_NAMES as readonly string[]).includes(iconText);
+  const copied = copySucceeded && copyTextAction(block.on_click) && hasIcon;
+  const contents = <>{hasIcon ? <DataIcon name={copied ? "check" : iconText} /> : null}{!block.icon_only ? <span className="ks-truncate-label">{labelText}</span> : null}</>;
   const host = opener.current?.closest<HTMLElement>(".ks-data-window");
   return <span ref={opener} className={`ks-data-button is-${block.variant ?? "default"}`}>{block.icon_only
     ? <IconButton aria-label={labelText} pressed={pressedValue} disabled={busy || unavailable} onClick={(event) => { const modifiers = eventModifiers(event); if (block.confirm) { confirmModifiers.current = modifiers; setConfirm(true); } else void run(false, modifiers); }}>{contents}</IconButton>
     : <Button aria-pressed={pressedValue} variant={block.variant === "primary" ? "emphasis" : "default"} disabled={busy || unavailable} onClick={(event) => { const modifiers = eventModifiers(event); if (block.confirm) { confirmModifiers.current = modifiers; setConfirm(true); } else void run(false, modifiers); }}>{contents}</Button>}
+    {copied ? <span aria-live="polite" className="ks-accessible-hidden" role="status">복사했습니다</span> : null}
     {confirm && block.confirm && host ? <Dialog host={host} title={block.confirm.title} ok={block.confirm.ok ?? labelText} danger={block.variant === "danger"} onCancel={close} onConfirm={() => void run(true, confirmModifiers.current)} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} /> : null}
   </span>;
+}
+
+function copyTextAction(actions: unknown): boolean {
+  const isCopy = (action: unknown) => action !== null && typeof action === "object" && "copy_text" in action;
+  return Array.isArray(actions) ? actions.length === 1 && isCopy(actions[0]) : isCopy(actions);
 }

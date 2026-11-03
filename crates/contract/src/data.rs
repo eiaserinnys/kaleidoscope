@@ -437,6 +437,8 @@ pub enum Actions {
     PickFiles(PickFilesAction),
     SaveFile(SaveFileAction),
     Many(Vec<Action>),
+    // CopyText는 맨 끝에 둔다. Binding이 어떤 값이든 받아 앞에 두면 길이 1 배열을 순서 필드로 읽는다.
+    CopyText(CopyTextAction),
 }
 
 /// 동작 하나.
@@ -452,6 +454,8 @@ pub enum Action {
     Client(ClientAction),
     PickFiles(PickFilesAction),
     SaveFile(SaveFileAction),
+    // CopyText는 맨 끝에 둔다. Binding이 어떤 값이든 받아 앞에 두면 길이 1 배열을 순서 필드로 읽는다.
+    CopyText(CopyTextAction),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
@@ -495,6 +499,14 @@ pub struct PickFilesSpec {
 #[ts(export, export_to = "contract.ts")]
 pub struct SaveFileAction {
     pub save_file: SaveFileSpec,
+}
+
+/// 바인딩이 낸 글을 이 기기의 클립보드에 쓴다. 단독으로 쓴다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct CopyTextAction {
+    pub copy_text: Binding,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
@@ -1174,29 +1186,31 @@ pub fn ui_bindings(definition: &AppDefinition) -> Vec<(String, &Binding)> {
         );
     }
     for (pointer, actions) in all_ui_actions(definition) {
-        let save = match actions {
+        let binding = match actions {
             Actions::SaveFile(save) => Some((
-                &save.save_file,
+                &save.save_file.suggested_name,
                 format!("{pointer}/save_file/suggested_name"),
             )),
+            Actions::CopyText(copy) => Some((&copy.copy_text, format!("{pointer}/copy_text"))),
             Actions::Many(list) if list.len() == 1 => match &list[0] {
                 Action::SaveFile(save) => Some((
-                    &save.save_file,
+                    &save.save_file.suggested_name,
                     format!("{pointer}/0/save_file/suggested_name"),
                 )),
+                Action::CopyText(copy) => Some((&copy.copy_text, format!("{pointer}/0/copy_text"))),
                 _ => None,
             },
             _ => None,
         };
-        if let Some((save, pointer)) = save {
+        if let Some((binding, pointer)) = binding {
             if !matches!(
-                save.suggested_name,
+                binding,
                 Binding::Client(_)
                     | Binding::Item(_)
                     | Binding::ParentItem(_)
                     | Binding::Message(_)
             ) {
-                out.push((pointer, &save.suggested_name));
+                out.push((pointer, binding));
             }
         }
     }
@@ -1250,11 +1264,17 @@ pub fn ui_actions(definition: &AppDefinition) -> Vec<(String, &Actions)> {
 
 pub fn local_actions(actions: &Actions) -> bool {
     match actions {
-        Actions::Client(_) | Actions::PickFiles(_) | Actions::SaveFile(_) => true,
+        Actions::Client(_)
+        | Actions::PickFiles(_)
+        | Actions::SaveFile(_)
+        | Actions::CopyText(_) => true,
         Actions::Many(list) => list.iter().any(|action| {
             matches!(
                 action,
-                Action::Client(_) | Action::PickFiles(_) | Action::SaveFile(_)
+                Action::Client(_)
+                    | Action::PickFiles(_)
+                    | Action::SaveFile(_)
+                    | Action::CopyText(_)
             )
         }),
         Actions::One(_) => false,
@@ -1898,7 +1918,7 @@ pub fn action_bindings(action: &Action) -> Vec<(String, &Binding)> {
             .iter()
             .map(|args| ("worker/args".to_string(), args))
             .collect(),
-        Action::Client(_) | Action::PickFiles(_) => Vec::new(),
+        Action::Client(_) | Action::PickFiles(_) | Action::CopyText(_) => Vec::new(),
         Action::SaveFile(action) => vec![(
             "save_file/suggested_name".into(),
             &action.save_file.suggested_name,

@@ -95,3 +95,5 @@ export const SHELL_FILE_MARKDOWN_STORAGE_INVALID = (args: { entry: string }): Co
 export const SHELL_FILE_EXTENSION_NOT_ALLOWED = (args: { name: string; extensions: string }): CoreError => ({ id: "SHELL_FILE_EXTENSION_NOT_ALLOWED", code: "invalid_request", message: `파일 이름 (${args.name})의 확장자가 허용되지 않습니다. 허용되는 확장자 (${args.extensions})에 맞춰 이름을 고치세요.`, details: [] });
 export const SHELL_FILE_EDITOR_SAVE_FAILED = (): CoreError => ({ id: "SHELL_FILE_EDITOR_SAVE_FAILED", code: "io", message: `편집 중인 내용을 저장하지 못해 파일 작업을 취소했습니다. 편집기에 표시된 오류를 확인하세요.`, details: [] });
 export const SHELL_TREE_CONTROL_HEIGHT_MISSING = (): CoreError => ({ id: "SHELL_TREE_CONTROL_HEIGHT_MISSING", code: "io", message: `트리 행 높이 설정을 읽지 못했습니다. 쉘 스타일에서 행 높이를 설정하세요.`, details: [] });
+export const SHELL_COPY_TEXT_EMPTY = (): CoreError => ({ id: "SHELL_COPY_TEXT_EMPTY", code: "invalid_request", message: `복사할 글이 없습니다. 앱 정의의 copy_text 값이 빈 글이 아닌지 확인하세요.`, details: [] });
+export const SHELL_COPY_TEXT_WRITE_FAILED = (args: { reason: string }): CoreError => ({ id: "SHELL_COPY_TEXT_WRITE_FAILED", code: "io", message: `클립보드에 쓰지 못했습니다. 원인: ${args.reason}`, details: [] });

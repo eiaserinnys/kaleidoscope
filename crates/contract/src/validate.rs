@@ -1342,6 +1342,20 @@ fn validate_actions(
                 &format!("{at}/save_file/suggested_name"),
             );
         }
+        Actions::CopyText(action) => {
+            if definition.requires.blocks < 19 {
+                details.push(
+                    "글 복사 동작은 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다"
+                        .into(),
+                );
+            }
+            validate_ui_binding(
+                &action.copy_text,
+                definition,
+                details,
+                &format!("{at}/copy_text"),
+            );
+        }
         Actions::Many(list) => {
             if list.is_empty() {
                 details.push(format!("{at}: 동작 목록이 비어 있습니다"));
@@ -1383,6 +1397,23 @@ fn validate_actions(
                             definition,
                             details,
                             &format!("{at}/save_file/suggested_name"),
+                        );
+                    }
+                    Action::CopyText(action) => {
+                        if list.len() != 1 {
+                            details.push(format!("{at}: 글 복사 동작은 단독으로 써야 합니다"));
+                        }
+                        if definition.requires.blocks < 19 {
+                            details.push(
+                                "글 복사 동작은 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다"
+                                    .into(),
+                            );
+                        }
+                        validate_ui_binding(
+                            &action.copy_text,
+                            definition,
+                            details,
+                            &format!("{at}/copy_text"),
                         );
                     }
                     Action::Worker(worker) => {

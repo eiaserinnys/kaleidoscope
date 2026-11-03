@@ -5,13 +5,13 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * 동작 하나.
  */
-export type Action = SetStateAction | RefreshAction | CallAction | SetStorageAction | WorkerAction | ClientAction | PickFilesAction | SaveFileAction;
+export type Action = SetStateAction | RefreshAction | CallAction | SetStorageAction | WorkerAction | ClientAction | PickFilesAction | SaveFileAction | CopyTextAction;
 
 /**
  * 블록 이벤트에 거는 동작. 상태 키 하나에 이벤트 값을 쓰는 짧은 꼴(`{ "set_state": "키" }`)이나 동작 목록이다.
  * 목록은 코어가 순서대로 실행하고, 하나가 실패하면 거기서 멈춘다(앞에서 쓴 상태는 그대로 둔다).
  */
-export type Actions = SetState | ClientAction | PickFilesAction | SaveFileAction | Array<Action>;
+export type Actions = SetState | ClientAction | PickFilesAction | SaveFileAction | Array<Action> | CopyTextAction;
 
 /**
  * 추가 객체 필드를 금지하거나 각 값에 적용할 스키마를 지정한다.
@@ -491,6 +491,11 @@ export type ConversationStart = { profile: string, model: string | null, };
 export type ConversationThread = { id: string, external: ExternalKey, title: string, model: ThreadModel, profile?: ThreadProfile, execution_id?: string, created_at: string, archived: boolean, };
 
 export type ConversationUpload = { name: string, mime: string, data_base64: string, };
+
+/**
+ * 바인딩이 낸 글을 이 기기의 클립보드에 쓴다. 단독으로 쓴다.
+ */
+export type CopyTextAction = { copy_text: Binding, };
 
 /**
  * 명령의 실패.

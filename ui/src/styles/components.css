@@ -149,6 +149,8 @@
   line-height: var(--ks-line-body);
 }
 
+.ks-accessible-hidden { position: absolute; width: var(--ks-line-width); height: var(--ks-line-width); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
 .ks-inline-error {
   display: block;
   color: var(--ks-color-danger);

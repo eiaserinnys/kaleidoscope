@@ -419,7 +419,10 @@ impl CompiledApp {
         self.actions.get(pointer).map(|a| match a {
             Actions::One(_) => 1,
             Actions::Many(a) => a.len(),
-            Actions::Client(_) | Actions::PickFiles(_) | Actions::SaveFile(_) => 0,
+            Actions::Client(_)
+            | Actions::PickFiles(_)
+            | Actions::SaveFile(_)
+            | Actions::CopyText(_) => 0,
         })
     }
 
@@ -444,7 +447,10 @@ impl CompiledApp {
                 let action = actions.get(index).ok_or("없는 동작 단계입니다")?;
                 let base = format!("{pointer}/{index}");
                 match action {
-                    Action::Client(_) | Action::PickFiles(_) | Action::SaveFile(_) => {
+                    Action::Client(_)
+                    | Action::PickFiles(_)
+                    | Action::SaveFile(_)
+                    | Action::CopyText(_) => {
                         Err("클라이언트 동작은 코어에서 실행할 수 없습니다".into())
                     }
                     Action::Worker(worker) => Ok(Step::Worker {

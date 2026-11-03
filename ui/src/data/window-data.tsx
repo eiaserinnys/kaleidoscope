@@ -379,7 +379,7 @@ export class WindowData {
   private localAction(pointer: string): Record<string, unknown> | null {
     let current = this.definitionAt(pointer);
     if (Array.isArray(current)) current = current.length === 1 ? current[0] : null;
-    if (current && typeof current === "object" && ("client" in current || "pick_files" in current || "save_file" in current)) return current as Record<string, unknown>;
+    if (current && typeof current === "object" && ("client" in current || "pick_files" in current || "save_file" in current || "copy_text" in current)) return current as Record<string, unknown>;
     return null;
   }
 
@@ -403,6 +403,18 @@ export class WindowData {
           const spec = action.save_file as SaveFileSpec;
           const raw = this.localBinding(`${pointer}${Array.isArray(this.definitionAt(pointer)) ? "/0" : ""}/save_file/suggested_name`, spec.suggested_name);
           return await this.runtime?.save(spec, typeof raw === "string" ? raw : "", scope) ?? false;
+        }
+        if ("copy_text" in action) {
+          const arrayPrefix = Array.isArray(this.definitionAt(pointer)) ? "/0" : "";
+          const raw = this.localBinding(`${pointer}${arrayPrefix}/copy_text`, action.copy_text as Binding);
+          if (typeof raw !== "string" || raw.length === 0) throw shellErrors.SHELL_COPY_TEXT_EMPTY();
+          try {
+            await navigator.clipboard.writeText(raw);
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
+            throw shellErrors.SHELL_COPY_TEXT_WRITE_FAILED({ reason });
+          }
+          return true;
         }
       }
       await this.ready;

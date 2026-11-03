@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 28판, 261103)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 30판, 261103)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -127,6 +127,12 @@
 //! 앱 판을 올릴 때 옛 상태에 없는 키의 값을 계산하는 `state_migrate`, 파일을 열 때 경로와 같이 쓰는 `opens.set_state`,
 //! 방문한 탭을 유지하는 `tabs.keep_mounted`와 탭 줄을 숨기는 `tabs.header`를 더한다. 새 필드는 블록 세트 15판이다.
 //!
+//! # 계약 29판: 범용 중앙·안내 블록과 폴더 선택 API
+//! 블록 세트 18판의 `stack.place`, `notice`, 선택·토글 비활성 바인딩과 client 4판의 폴더 선택 API를 더한다.
+//!
+//! # 계약 30판: `copy_text` 동작
+//! 블록 세트 20판의 단독 동작 `copy_text`가 바인딩이 낸 글을 기기 클립보드에 쓴다.
+//!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
 //! - 코어는 이벤트 채널 하나로 [`CoreEvent`]를 보낸다.
@@ -240,7 +246,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 28;
+pub const CONTRACT_VERSION: u32 = 30;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -272,7 +278,8 @@ pub const CONTRACT_VERSION: u32 = 28;
 /// - 17판: 클라이언트 process 실행 권한.
 /// - 18판: 클라이언트 채널과 대화 블록의 `client` 및 `footer`, 도구 중계, 지침과 같이 보기 준비, 창 범위 기기 저장소와
 ///   `process.file_uri`, stack 가운데 배치, notice, select와 toggle의 비활성 바인딩.
-pub const BLOCK_SET_VERSION: u32 = 18;
+/// - 20판: 단독 `copy_text` 동작으로 바인딩이 낸 글을 기기 클립보드에 쓴다.
+pub const BLOCK_SET_VERSION: u32 = 20;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -5775,7 +5782,7 @@ mod tests {
         });
         let definition = validate::parse_app_definition(&definition.to_string())
             .expect("U6 필드를 사용하는 정의는 유효하다");
-        assert_eq!(CONTRACT_VERSION, 28);
+        assert_eq!(CONTRACT_VERSION, 29);
         let Block::Tabs {
             header,
             keep_mounted,
