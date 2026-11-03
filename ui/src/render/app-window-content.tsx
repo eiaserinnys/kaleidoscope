@@ -8,6 +8,7 @@ import type { ShellStore } from "../core/shell-store";
 import type { CoreError, Rect } from "../contract/contract";
 import { useShellSelector } from "../core/shell-store";
 import { registerAppShortcuts } from "../runtime/shortcuts";
+import { focusRescued } from "../components/focus-rescue";
 import { renderBlock } from "./render-block";
 import * as shellErrors from "../contract/shell-errors";
 
@@ -106,7 +107,7 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       const visible = controls.filter((element) => element.tabIndex >= 0 && !element.closest("[hidden], [inert], [aria-hidden='true']")
         && (typeof element.checkVisibility !== "function" || element.checkVisibility({ visibilityProperty: true })));
       const target = visible.find((element) => element.classList.contains("ks-agent-chat-input")) ?? visible[0];
-      if (target) { restore = false; target.focus(); }
+      if (target) { restore = false; focusRescued(target); }
     });
     scope.addEventListener("focusin", onFocus);
     observer.observe(scope, { childList: true, subtree: true });
