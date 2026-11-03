@@ -22,6 +22,11 @@ it("샌드박스의 올바른 토큰을 가진 선택 복사만 메뉴로 연다
   expect(screen.queryByRole("menu")).toBeNull();
   send("00000000-0000-4000-8000-000000000001");
   expect(screen.getByRole("menuitem", { name: "복사" })).toBeTruthy();
+  fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+  const post = vi.spyOn(frame.contentWindow!, "postMessage");
+  act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token: "00000000-0000-4000-8000-000000000001", type: "ks-sandbox-context-menu", x: 10, y: 20, text: "", editable: true, readOnly: false, password: false } })));
+  fireEvent.click(screen.getByRole("menuitem", { name: "모두 선택" }));
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-sandbox-context-command", action: "selectAll", token: "00000000-0000-4000-8000-000000000001" }), "*");
   store.dispose();
 });
 

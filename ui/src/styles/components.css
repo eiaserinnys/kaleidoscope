@@ -234,6 +234,7 @@
 .ks-menu-item:hover:not(:disabled),
 .ks-menu-item:focus-visible:not(:disabled) {
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
+  outline-offset: calc(-1 * var(--ks-focus-width));
 }
 
 .ks-menu-item:disabled {

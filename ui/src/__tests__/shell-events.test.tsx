@@ -77,6 +77,10 @@ describe("shell core events", () => {
     expect(editorItem.getAttribute("data-state")).toBe("minimized");
     expect(calls).toHaveBeenCalledWith({ op: "window.minimize", window_id: "editor-window" });
 
+    fireEvent.contextMenu(editorItem);
+    expect(screen.getByRole("menuitem", { name: "복원" })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+
     fireEvent.click(editorItem);
     await waitFor(() => expect(editorWindow.getAttribute("data-minimized")).toBe("false"));
     expect(editorItem.getAttribute("data-state")).toBe("active");
@@ -84,7 +88,9 @@ describe("shell core events", () => {
     fireEvent.contextMenu(editorItem);
     const menu = screen.getByRole("menu");
     expect(menu.getAttribute("role")).toBe("menu");
-    fireEvent.click(screen.getByRole("menuitem", { name: "최대화" }));
+    expect(screen.getByRole("menuitem", { name: "창 최소화" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "창 닫기" }).classList.contains("ks-menu-item-danger")).toBe(false);
+    fireEvent.click(screen.getByRole("menuitem", { name: "창 최대화" }));
     await waitFor(() => expect(editorWindow.getAttribute("data-maximized")).toBe("true"));
     expect(editorWindow.querySelector(".ks-window-resize-east")).toBeNull();
     expect(calls).toHaveBeenCalledWith({ op: "window.maximize", window_id: "editor-window" });

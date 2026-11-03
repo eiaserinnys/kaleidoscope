@@ -11,7 +11,7 @@ import "../src/styles/index.css";
 import "../../app/src/shell.css";
 import "./harness.css";
 
-const html = "<html><body><p id='frame-text'>프레임에서 고를 글입니다.</p></body></html>";
+const html = "<html><body><p id='frame-text'>프레임에서 고를 글입니다.</p><input id='frame-input' value='원본'></body></html>";
 function Harness() {
   const [text, setText] = useState("abcde");
   const [number, setNumber] = useState("12345");
@@ -28,7 +28,7 @@ function Harness() {
   useEffect(() => {
     const receive = (event: MessageEvent) => {
       const frame = event.source === htmlFrame.current?.contentWindow ? htmlFrame.current : event.source === sandboxFrame.current?.contentWindow && event.data?.token === "context-test" ? sandboxFrame.current : null;
-      if (frame && (event.data?.type === "ks-html-context-menu" || event.data?.type === "ks-sandbox-context-menu")) openFrameContextMenu(frame, event.data);
+      if (frame && (event.data?.type === "ks-html-context-menu" || event.data?.type === "ks-sandbox-context-menu")) openFrameContextMenu(frame, event.data, (command) => frame.contentWindow?.postMessage({ type: event.data.type === "ks-html-context-menu" ? "ks-html-context-command" : "ks-sandbox-context-command", token: "context-test", ...command }, "*"));
     };
     window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);
   }, []);

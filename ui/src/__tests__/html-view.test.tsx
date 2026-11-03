@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import type { AppDefinition, CoreRequest } from "../contract/contract";
@@ -103,6 +103,11 @@ it("값 HTML 프레임의 선택 복사 요청을 공용 메뉴로 연다", asyn
   const frame = await screen.findByTitle("미리보기") as HTMLIFrameElement;
   act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, data: { type: "ks-html-context-menu", x: 12, y: 18, text: "프레임 글" } })));
   expect(screen.getByRole("menuitem", { name: "복사" })).toBeTruthy();
+  fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+  const post = vi.spyOn(frame.contentWindow!, "postMessage");
+  act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, data: { type: "ks-html-context-menu", x: 12, y: 18, text: "", editable: true, readOnly: false, password: false } })));
+  fireEvent.click(screen.getByRole("menuitem", { name: "모두 선택" }));
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-html-context-command", action: "selectAll" }), "*");
 });
 
 it("값 HTML의 같이 보기는 숨긴 글과 스크립트를 빼고 프레임의 보이는 글을 받는다", async () => {

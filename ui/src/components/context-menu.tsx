@@ -43,7 +43,11 @@ function textEntries(target: HTMLElement): MenuEntry[] {
   }
   const readonly = field ? field.readOnly || field.disabled : view ? view.state.facet(EditorState.readOnly) : false;
   const password = field instanceof HTMLInputElement && field.type === "password";
+  const savedField = field && field.selectionStart !== null && field.selectionEnd !== null
+    ? { value: field.value, start: field.selectionStart, end: field.selectionEnd } : null;
   const capturedRange = !field && !view && selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+  const restoreField = () => { if (field && savedField && field.value === savedField.value) field.setSelectionRange(savedField.start, savedField.end); };
+  const hasFocus = () => view ? view.hasFocus : field ? document.activeElement === field : Boolean(content && (document.activeElement === content || content.contains(document.activeElement)));
   const restoreContent = () => {
     if (capturedRange && selection) { selection.removeAllRanges(); selection.addRange(capturedRange); }
   };
@@ -55,7 +59,7 @@ function textEntries(target: HTMLElement): MenuEntry[] {
     if (view) view.dispatch(view.state.replaceSelection(text));
     else { restoreContent(); document.execCommand("insertText", false, text); }
   };
-  const copy: MenuEntry = { id: "text-copy", label: "복사", shortcut: "Ctrl+C", disabled: !selectedText || password, onSelect: () => { void writeMenuClipboard(selectedText, "복사"); } };
+  const copy: MenuEntry = { id: "text-copy", label: "복사", shortcut: "Ctrl+C", disabled: !selectedText || password, onSelect: () => { restoreField(); void writeMenuClipboard(selectedText, "복사"); } };
   const all: MenuEntry = { id: "text-all", label: "모두 선택", shortcut: "Ctrl+A", onSelect: () => {
     if (view) view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
     else if (field) field.select();
@@ -63,9 +67,9 @@ function textEntries(target: HTMLElement): MenuEntry[] {
   } };
   if (readonly) return [copy, all];
   return [
-    { id: "text-cut", label: "잘라내기", shortcut: "Ctrl+X", disabled: !selectedText || password, onSelect: () => { void writeMenuClipboard(selectedText, "잘라내기").then((ok) => { if (ok) remove(); }); } },
+    { id: "text-cut", label: "잘라내기", shortcut: "Ctrl+X", disabled: !selectedText || password, onSelect: () => { restoreField(); void writeMenuClipboard(selectedText, "잘라내기").then((ok) => { if (ok && hasFocus()) remove(); }); } },
     copy,
-    { id: "text-paste", label: "붙여넣기", shortcut: "Ctrl+V", onSelect: () => { void readMenuClipboard().then((text) => { if (text !== null) insert(text); }); } },
+    { id: "text-paste", label: "붙여넣기", shortcut: "Ctrl+V", onSelect: () => { restoreField(); void readMenuClipboard().then((text) => { if (text !== null && hasFocus()) insert(text); }); } },
     { id: "text-separator", type: "separator" }, all,
   ];
 }
@@ -80,16 +84,30 @@ export function openContextMenu(event: MenuEvent, siteEntries: MenuEntry[], opti
   if (!entries.length) { closeMenu(); return; }
   const rect = target.getBoundingClientRect();
   const keyboard = options.keyboard ?? event.detail === -1;
-  const point = options.anchorPoint ?? (keyboard ? { x: rect.left, y: rect.bottom } : { x: event.clientX, y: event.clientY });
+  const editor = keyboard ? target.closest<HTMLElement>(".cm-editor") : null;
+  const view = editor ? EditorView.findFromDOM(editor) : null;
+  const caret = view?.coordsAtPos(view.state.selection.main.head);
+  const point = options.anchorPoint ?? (keyboard ? { x: caret?.left ?? rect.left, y: caret?.bottom ?? rect.bottom } : { x: event.clientX, y: event.clientY });
   const anchor = options.anchor ?? target.closest<HTMLElement>(".cm-content, [contenteditable='true'], [contenteditable='plaintext-only']") ?? target;
   setMenu({ anchor, point, entries });
 }
 
-export function openFrameContextMenu(frame: HTMLIFrameElement, data: { x: number; y: number; text: string }): void {
+type FrameContext = { x: number; y: number; text: string; editable?: boolean; readOnly?: boolean; password?: boolean };
+type FrameCommand = { action: "delete" | "insertText" | "selectAll"; text?: string };
+export function openFrameContextMenu(frame: HTMLIFrameElement, data: FrameContext, send?: (command: FrameCommand) => void): void {
   const rect = frame.getBoundingClientRect();
-  openContextMenu(new MouseEvent("contextmenu", { cancelable: true }), [
-    { id: "frame-copy", label: "복사", shortcut: "Ctrl+C", onSelect: () => { void writeMenuClipboard(data.text, "복사"); } },
-  ], { anchor: frame, anchorPoint: { x: rect.left + data.x, y: rect.top + data.y }, includeText: false });
+  const copy: MenuEntry = { id: "frame-copy", label: "복사", shortcut: "Ctrl+C", disabled: !data.text || data.password, onSelect: () => { void writeMenuClipboard(data.text, "복사"); } };
+  let entries: MenuEntry[] = [copy];
+  if (data.editable) {
+    const all: MenuEntry = { id: "frame-all", label: "모두 선택", shortcut: "Ctrl+A", onSelect: () => send?.({ action: "selectAll" }) };
+    entries = data.readOnly ? [copy, all] : [
+      { id: "frame-cut", label: "잘라내기", shortcut: "Ctrl+X", disabled: !data.text || data.password, onSelect: () => { void writeMenuClipboard(data.text, "잘라내기").then((ok) => { if (ok && document.activeElement === frame) send?.({ action: "delete" }); }); } },
+      copy,
+      { id: "frame-paste", label: "붙여넣기", shortcut: "Ctrl+V", onSelect: () => { void readMenuClipboard().then((text) => { if (text !== null && document.activeElement === frame) send?.({ action: "insertText", text }); }); } },
+      { id: "frame-separator", type: "separator" }, all,
+    ];
+  }
+  openContextMenu(new MouseEvent("contextmenu", { cancelable: true }), entries, { anchor: frame, anchorPoint: { x: rect.left + data.x, y: rect.top + data.y }, includeText: false });
 }
 
 export function ContextMenuHost({ onError }: { onError?: (error: CoreError) => void }) {
@@ -106,8 +124,8 @@ export function ContextMenuHost({ onError }: { onError?: (error: CoreError) => v
       target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: rect.left, clientY: rect.bottom, detail: -1 }));
     };
     const report = (value: CoreError) => { if (onError) onError(value); else setError(value); };
-    errors.add(report); document.addEventListener("contextmenu", onContextMenu); document.addEventListener("keydown", onKeyDown);
-    return () => { errors.delete(report); document.removeEventListener("contextmenu", onContextMenu); document.removeEventListener("keydown", onKeyDown); closeMenu(); };
+    errors.add(report); document.addEventListener("contextmenu", onContextMenu); document.addEventListener("keydown", onKeyDown); window.addEventListener("blur", closeMenu);
+    return () => { errors.delete(report); document.removeEventListener("contextmenu", onContextMenu); document.removeEventListener("keydown", onKeyDown); window.removeEventListener("blur", closeMenu); closeMenu(); };
   }, [onError]);
   return <>{menu ? <Menu anchor={menu.anchor} anchorPoint={menu.point} items={menu.entries} onClose={closeMenu} /> : null}{error ? <Notice role="alert" errorId={error.id} actions={[<Button key="close" onClick={() => setError(null)}>닫기</Button>]}>{error.message}</Notice> : null}</>;
 }

@@ -2,6 +2,24 @@ import { expect, it, vi } from "vitest";
 import { sandboxSource } from "../blocks/sandbox-frame";
 import tauriConfig from "../../../app/src-tauri/tauri.conf.json";
 
+it("프레임 편집 명령은 부모와 해당 토큰만 받는다", () => {
+  vi.useFakeTimers();
+  const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "context-token" });
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
+  const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
+  const input = document.createElement("input"); input.value = "abc"; document.body.append(input); input.focus();
+  vi.spyOn(document, "hasFocus").mockReturnValue(true);
+  const exec = vi.fn(); Object.defineProperty(document, "execCommand", { configurable: true, value: exec });
+  new Function(code)();
+  input.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  window.dispatchEvent(new MessageEvent("message", { source: window, data: { type: "ks-sandbox-context-command", token: "wrong", action: "insertText", text: "추가" } }));
+  expect(exec).not.toHaveBeenCalled();
+  window.dispatchEvent(new MessageEvent("message", { source: window, data: { type: "ks-sandbox-context-command", token: "context-token", action: "insertText", text: "추가" } }));
+  expect(exec).toHaveBeenCalledWith("insertText", false, "추가");
+  input.remove(); vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+});
+
 it("선언된 지침과 같이 보기 요청은 프레임을 통해 전달된다", () => {
   vi.useFakeTimers();
   const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험", capabilities: ["instructions", "context_capture"] as any });

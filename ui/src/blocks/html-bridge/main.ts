@@ -151,11 +151,23 @@ const isPinEvent = (event: Event) => {
   const first = event.composedPath()[0];
   return first === host || (first instanceof Element && first.classList.contains("ks-o-pin"));
 };
+let menuTarget: HTMLElement | null = null;
+let menuField: { value: string; start: number; end: number } | null = null;
+let menuRange: Range | null = null;
 document.addEventListener("contextmenu", (event) => {
   event.preventDefault();
   if (locked) return;
+  const target = event.target instanceof Element ? event.target : null;
+  const input = target?.closest("input, textarea");
+  const field = input instanceof HTMLTextAreaElement || (input instanceof HTMLInputElement && ["text", "search", "url", "email", "tel", "password", "number"].includes(input.type)) ? input : null;
+  const content = target?.closest<HTMLElement>("[contenteditable]");
+  const inlineEdit = Boolean(editing && content === editing.element);
+  menuTarget = inlineEdit ? null : field ?? (content?.isContentEditable ? content : null);
+  menuField = field && field.selectionStart !== null && field.selectionEnd !== null ? { value: field.value, start: field.selectionStart, end: field.selectionEnd } : null;
+  const selection = getSelection();
+  menuRange = !field && menuTarget && selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
   const text = getSelection()?.toString() ?? "";
-  if (text) send({ type: "ks-html-context-menu", x: event.clientX, y: event.clientY, text });
+  if (text || menuTarget) send({ type: "ks-html-context-menu", x: event.clientX, y: event.clientY, text, editable: Boolean(menuTarget), readOnly: Boolean(field && (field.readOnly || field.disabled)), password: field instanceof HTMLInputElement && field.type === "password" });
 });
 document.addEventListener("pointerdown", (event) => { if (locked) { event.preventDefault(); event.stopPropagation(); } }, true);
 document.addEventListener("mousedown", (event) => {
@@ -216,7 +228,17 @@ window.addEventListener("scroll", schedule, true); window.addEventListener("resi
 window.addEventListener("message", (event: MessageEvent<ParentToFrame>) => {
   if (event.source !== parent || !event.data || typeof event.data !== "object") return;
   const data = event.data;
-  if (data.type === "ks-html-mode") { mode = data.mode; hover = null; if (mode === "view") select(null); schedule(); }
+  if (data.type === "ks-html-context-command") {
+    if (locked || !menuTarget || !document.hasFocus()) return;
+    menuTarget.focus();
+    if ((menuTarget instanceof HTMLInputElement || menuTarget instanceof HTMLTextAreaElement) && menuField && menuTarget.value === menuField.value) menuTarget.setSelectionRange(menuField.start, menuField.end);
+    else if (menuRange) { const selection = getSelection(); selection?.removeAllRanges(); selection?.addRange(menuRange); }
+    if (data.action === "selectAll") {
+      if (menuTarget instanceof HTMLInputElement || menuTarget instanceof HTMLTextAreaElement) menuTarget.select();
+      else { const range = document.createRange(); range.selectNodeContents(menuTarget); const selection = getSelection(); selection?.removeAllRanges(); selection?.addRange(range); }
+    } else document.execCommand(data.action, false, data.action === "insertText" ? data.text : undefined);
+  }
+  else if (data.type === "ks-html-mode") { mode = data.mode; hover = null; if (mode === "view") select(null); schedule(); }
   else if (data.type === "ks-html-lock") {
     locked = data.locked;
     if (locked) { finishEdit(true); hover = null; schedule(); }

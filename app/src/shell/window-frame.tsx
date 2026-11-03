@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent, type React
 import { IconButton, Maximize2, Minus, Minimize2, ScreenShare, Settings, X, openContextMenu, useShareView, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
 import { ProcessConsent } from "./process-consent";
+import { windowMenuEntries } from "./window-menu";
 
 export interface WindowFrameProps {
   area: { width: number; height: number };
@@ -62,13 +63,10 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
   const changeSize = () => isMaximized ? onRestore(appWindow.id) : onMaximize(appWindow.id);
   const closeWindow = () => void onCall({ op: "window.close", window_id: appWindow.id });
   const titleMenu: MenuEntry[] = [
-    ...(shareable ? [{ id: "share", label: sharing ? "같이 보기 끄기" : "같이 보기", checked: sharing, onSelect: toggleShare }] : []),
-    ...(hasSettings && settingsAvailable ? [{ id: "settings", label: "앱 설정", onSelect: toggleSettings }] : []),
-    ...((shareable || (hasSettings && settingsAvailable)) ? [{ type: "separator" as const, id: "window-separator" }] : []),
-    { id: "minimize", label: "창 최소화", onSelect: () => onMinimize(appWindow.id) },
-    { id: "maximize", label: isMaximized ? "이전 크기로 복원" : "창 최대화", onSelect: changeSize },
-    { type: "separator", id: "close-separator" },
-    { id: "close", label: "창 닫기", onSelect: closeWindow },
+    ...(shareable ? [{ id: "share", label: "같이 보기", checked: sharing, onSelect: toggleShare }] : []),
+    ...(hasSettings && settingsAvailable ? [{ id: "settings", label: "앱 설정", checked: settingsOpen, onSelect: toggleSettings }] : []),
+    ...((shareable || (hasSettings && settingsAvailable)) ? [{ type: "separator" as const, id: "title-actions-separator" }] : []),
+    ...windowMenuEntries(appWindow, { minimize: () => onMinimize(appWindow.id), raise: () => void onCall({ op: "window.raise", window_id: appWindow.id }), maximize: () => onMaximize(appWindow.id), restore: () => onRestore(appWindow.id), close: closeWindow }),
   ];
 
   useEffect(() => { if (!hasSettings) { setSettingsOpen(false); setSettingsProblem(null); } }, [hasSettings]);
