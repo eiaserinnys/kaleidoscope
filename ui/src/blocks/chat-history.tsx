@@ -8,7 +8,7 @@ import { markResponding } from "../profiler/chat-responding";
 
 export type ChatPendingMessage = { text: string; attachments: DraftAttachment[]; afterResponse?: boolean };
 
-export function ChatHistory({ items, pending, delta, busy, tool, historyRef, followTail, onReachTop, renderAttachment, renderPendingAttachment, queued = null, footer = null }: {
+export function ChatHistory({ items, pending, delta, busy, tool, historyRef, followTail, onReachTop, renderAttachment, renderPendingAttachment, queued = null, footer = null, hideThinking = false }: {
   items: ConversationItem[];
   pending: ChatPendingMessage | null;
   delta: string;
@@ -21,6 +21,7 @@ export function ChatHistory({ items, pending, delta, busy, tool, historyRef, fol
   renderPendingAttachment: (attachment: DraftAttachment, index: number) => ReactNode;
   queued?: ReactNode;
   footer?: ReactNode;
+  hideThinking?: boolean;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef(0);
@@ -60,7 +61,7 @@ export function ChatHistory({ items, pending, delta, busy, tool, historyRef, fol
       <ChatItems items={items} renderAttachment={renderAttachment} />
       {!pending?.afterResponse ? pendingRow : null}
       {delta ? <div className="ks-agent-chat-assistant"><div className="ks-agent-chat-assistant-content"><MarkdownText>{delta}</MarkdownText></div></div> : null}
-      {(busy || pending !== null) && !delta ? (
+      {(busy || pending !== null) && !delta && !hideThinking ? (
         <div className="ks-agent-chat-working">
           <ThinkingOrb aria-label="생각 중입니다" size={20} state="working" theme="auto" />
           <span>생각 중입니다…{tool ? ` · ${tool}` : ""}</span>

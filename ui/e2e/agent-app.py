@@ -111,6 +111,11 @@ def main():
                 box.fill('permission')
                 box.press('Enter')
                 app.get_by_text('파일 수정', exact=True).wait_for(timeout=30000)
+                footer = app.locator('.ks-agent-chat-footer')
+                title_rect = footer.get_by_text('파일 수정', exact=True).bounding_box()
+                button_rect = footer.get_by_role('button', name='허용', exact=True).bounding_box()
+                assert title_rect and button_rect and abs(title_rect['x'] - button_rect['x']) <= 1
+                assert app.locator('.ks-agent-chat-working').count() == 0
                 capture(sb, app, '13-chat-responding')
                 app.get_by_role('button', name='앱 설정').click()
                 app.get_by_text('응답이 끝나면 바꿀 수 있습니다', exact=True).wait_for()

@@ -690,6 +690,8 @@
   gap: var(--ks-space-2);
 }
 
+.ks-agent-chat-footer .ks-data-stack-item > .ks-data-text { padding: 0; }
+
 .ks-agent-chat-input-area {
   display: flex;
   min-width: 0;

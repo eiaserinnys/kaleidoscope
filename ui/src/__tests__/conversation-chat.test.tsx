@@ -364,6 +364,19 @@ describe("대화 제공자 화면", () => {
 });
 
 describe("공용 대화 부품", () => {
+  it("사용자의 답을 기다리는 footer에서는 생각 중 표시를 숨긴다", () => {
+    const props = {
+      items: [], pending: null, delta: "", busy: true, tool: null,
+      historyRef: createRef<HTMLDivElement>(), followTail: { current: true },
+      renderAttachment: () => null, renderPendingAttachment: () => null,
+      footer: <button type="button">허용</button>,
+    };
+    const { rerender } = render(<ChatHistory {...props} hideThinking />);
+    expect(screen.queryByLabelText("생각 중입니다")).toBeNull();
+    rerender(<ChatHistory {...props} />);
+    expect(screen.getByLabelText("생각 중입니다")).toBeTruthy();
+  });
+
   it("응답 중 보낸 대기 말은 진행 글과 이미 줄 선 말 뒤에 놓는다", () => {
     render(<ChatHistory
       items={[item("one", "기록")]} pending={{ text: "새 대기 말", attachments: [], afterResponse: true }} delta="진행 글" busy tool={null}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Block, ChatClient, ConversationAttachment, ConversationItem, CoreError } from "../contract/contract";
 import type { ClientChatAttachment, ClientChatQueuedMessage } from "../data/client-chat";
 import { useWindowData } from "../data/window-data";
@@ -61,8 +61,20 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
   const coalescedDelta = useFrameCoalesced(setDelta);
   const historyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
+  const [waitingForFooter, setWaitingForFooter] = useState(false);
   const followTail = useRef(true);
   const [sending, setSending] = useState(false);
+
+  useLayoutEffect(() => {
+    const footer = footerRef.current;
+    if (!footer) { setWaitingForFooter(false); return; }
+    const refresh = () => setWaitingForFooter(Boolean(footer.querySelector('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])')));
+    refresh();
+    const observer = new MutationObserver(refresh);
+    observer.observe(footer, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled"] });
+    return () => observer.disconnect();
+  }, [block.footer]);
 
   useEffect(() => {
     if (chat.loading) {
@@ -197,7 +209,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
 
   const footer = <>
     {chat.loading ? <div className="ks-agent-chat-working"><ThinkingOrb aria-label="불러오는 중" size={20} state="working" theme="auto" /><span>불러오는 중…</span></div> : null}
-    {block.footer ? renderBlock(block.footer, context, `${pointer}/footer`) : null}
+    {block.footer ? <div className="ks-agent-chat-footer" ref={footerRef}>{renderBlock(block.footer, context, `${pointer}/footer`)}</div> : null}
   </>;
   const pendingForDisplay = pending?.generation === chat.generation && !chat.queued.some((message) => message.id === pending.requestId)
     && !chat.items.some((item) => matchesPending(item, pending)) ? pending : null;
@@ -214,6 +226,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
       renderAttachment={renderAttachment}
       renderPendingAttachment={(attachment, index) => <PendingAttachment key={index} attachment={attachment} onPreview={setPreview} />}
       queued={chat.queued.map(renderQueuedMessage)}
+      hideThinking={waitingForFooter}
       footer={footer}
     />
     <ChatComposer
