@@ -27,3 +27,7 @@
 .ks-agent-session-command {
   white-space: pre-wrap;
 }
+
+.ks-error-id {
+  overflow-wrap: normal;
+}

@@ -22,11 +22,12 @@ export function AppSettings({ context, open, onClose, onProblem }: { context: Bl
   const [applyStatus, setApplyStatus] = useState<ConversationApplyStatus>("applying");
   const [showApplyNotice, setShowApplyNotice] = useState(false);
   const problems = useRef(new Map<string, SettingsProblem>());
+  const noticeOwner = useRef({}).current;
   const wasOpen = useRef(open);
-  const showProblem = (problem: SettingsProblem | undefined) => { if (problem) data.setNotice(problem); };
+  const showProblem = (problem: SettingsProblem | undefined) => { if (problem) data.setOwnedNotice(problem, noticeOwner); };
   const reportProblem = (id: string, problem: SettingsProblem | null) => {
     const previous = problems.current.get(id);
-    if (previous && previous !== problem) data.clearNoticeIf(previous);
+    if (previous && previous !== problem) data.clearNoticeIf(previous, noticeOwner);
     if (problem) problems.current.set(id, problem); else problems.current.delete(id);
     onProblem?.(problems.current.values().next().value ?? null);
     if (!open && problem) showProblem(problem);

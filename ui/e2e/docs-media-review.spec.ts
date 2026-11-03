@@ -73,6 +73,47 @@ test("이미지 수신 실패를 알리고 다시 받기로 복구한다", async
   }
 });
 
+test("좁은 이미지 칸의 오류 코드는 밑줄 뒤에서만 줄바꿈하고 전체를 선택해 복사한다", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1024, height: 800 } });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const page = await context.newPage();
+  await page.goto("/?preview=block-gallery");
+  await page.route("**/assets/landscape.png**", (route) => route.abort());
+  await page.getByRole("tab", { name: "미디어", exact: true }).click();
+  await page.getByText("landscape.png", { exact: true }).click();
+  const image = page.locator(".ks-image-view");
+  await image.evaluate((element) => { Object.assign((element as HTMLElement).style, { width: "160px", height: "240px" }); });
+  const code = image.locator(".ks-error-id");
+  await expect(code).toHaveText("SHELL_CALL_UNEXPECTED_FAILURE");
+  const lines = await code.evaluate((element) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const characters: Array<{ text: string; x: number; y: number; left: number; right: number }> = [];
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      for (let index = 0; index < (node.textContent ?? "").length; index += 1) {
+        const range = document.createRange();
+        range.setStart(node, index); range.setEnd(node, index + 1);
+        const rect = range.getBoundingClientRect();
+        characters.push({ text: node.textContent![index], x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, left: rect.left, right: rect.right });
+      }
+    }
+    const starts = characters.flatMap((character, index) => index && character.y > characters[index - 1].y + 1 ? [characters[index - 1].text] : []);
+    return { starts, first: characters[0], last: characters.at(-1)! };
+  });
+  expect(lines.starts.length).toBeGreaterThan(0);
+  expect(lines.starts.every((character) => character === "_")).toBe(true);
+  await page.mouse.dblclick(lines.last.x, lines.last.y);
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe("SHELL_CALL_UNEXPECTED_FAILURE");
+  await page.keyboard.press("Control+C");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("SHELL_CALL_UNEXPECTED_FAILURE");
+  await page.mouse.move(lines.first.left, lines.first.y);
+  await page.mouse.down();
+  await page.mouse.move(lines.last.right, lines.last.y, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe("SHELL_CALL_UNEXPECTED_FAILURE");
+  await context.close();
+});
+
 test("손상된 소리를 알리고 다른 파일 선택으로 복구한다", async ({ browser }, info) => {
   for (const width of [400, 1440]) {
     const context = await browser.newContext({ viewport: { width, height: 800 } });

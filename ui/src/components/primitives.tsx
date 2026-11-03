@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from "react";
+import { Fragment, type MouseEvent, type ReactNode } from "react";
 import type { CoreError } from "../contract/contract";
 
 export interface ButtonProps {
@@ -125,7 +125,8 @@ export function Notice({
 }
 
 export function ErrorId({ id }: { id: string }) {
-  return <code className="ks-error-id">{id}</code>;
+  const parts = id.split("_");
+  return <code className="ks-error-id">{parts.map((part, index) => <Fragment key={index}>{part}{index < parts.length - 1 ? <>_<wbr /></> : null}</Fragment>)}</code>;
 }
 
 export function ErrorNotice({ error, actions }: { error: CoreError; actions?: [ReactNode] | [ReactNode, ReactNode] }) {
