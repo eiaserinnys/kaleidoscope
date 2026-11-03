@@ -85,8 +85,8 @@ fn item_menu_requires_current_block_set_and_rejects_invalid_entries() {
 fn item_menu_copy_text_is_local_and_must_be_alone() {
     for mut ui in blocks() {
         for action in [
-            json!({"copy_text":{"expr":"$item.url"}}),
-            json!([{"copy_text":{"expr":"$item.url"}}]),
+            json!({"copy_text":{"item":"url"}}),
+            json!([{"copy_text":{"item":"url"}}]),
         ] {
             ui["item_menu"] = json!([{"label":"주소 복사", "on_select":action}]);
             let parsed = parse_app_definition(&definition(ui.clone(), 19).to_string())
@@ -99,9 +99,18 @@ fn item_menu_copy_text_is_local_and_must_be_alone() {
             assert!(data::ui_actions(&parsed).is_empty());
         }
         ui["item_menu"] = json!([{"label":"주소 복사", "on_select":[
-            {"copy_text":{"expr":"$item.url"}}, {"set_state":"selected"}
+            {"copy_text":{"item":"url"}}, {"set_state":"selected"}
         ]}]);
         assert!(parse_app_definition(&definition(ui, 19).to_string()).is_err());
+    }
+}
+
+#[test]
+fn item_menu_copy_text_rejects_expressions() {
+    for mut ui in blocks() {
+        ui["item_menu"] = json!([{"label":"복사", "on_select":{"copy_text":{"expr":"$item.url"}}}]);
+        let error = parse_app_definition(&definition(ui, 19).to_string()).expect_err("item_menu copy_text expression must fail");
+        assert!(error.details.iter().any(|detail| detail.contains("행마다 계산하지 않습니다")), "{error:?}");
     }
 }
 

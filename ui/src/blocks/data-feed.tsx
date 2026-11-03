@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Block, FeedEntry } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { validColor } from "../components/badge";
@@ -6,6 +6,7 @@ import { DataState } from "../components/data-state";
 import { isMedia, MediaThumbnail } from "../components/media-thumbnail";
 import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
+import { useItemMenu } from "./item-menu";
 import { MarkdownText } from "./markdown-text";
 import { Badges, GroupHeading, NoItems, VirtualSurface, asArray, asBadges, groups, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
 import { IconButton } from "../components/primitives";
@@ -51,6 +52,29 @@ function flattenFeedEntries(entries: FeedEntry[]): FlattenedFeedItem[] {
   return flattened;
 }
 type Row = { kind: "heading"; title: string; meta?: string; groupKey: string; collapsed: boolean } | { kind: "entry"; item: FlattenedFeedItem; index: number };
+type FeedHandlers = {
+  focus: (index: number) => void;
+  keyDown: (event: React.KeyboardEvent<HTMLElement>, index: number, entry: FeedEntry) => void;
+  choose: (entry: FeedEntry) => void;
+  menu: (event: React.MouseEvent<HTMLElement>, entry: FeedEntry) => void;
+  toggle: (key: string) => void;
+  copy: (target: string, text: string) => React.ReactNode;
+};
+const FeedRow = memo(function FeedRow({ item, index, count, collapsed, active, focused, selectable, copy, columns, format, collapsible, handlers }: { item: FlattenedFeedItem; index: number; count: number; collapsed: boolean; active: boolean; focused: boolean; selectable: boolean; copy: boolean; columns: boolean; format: string | undefined; collapsible: boolean; feedback: string; handlers: React.RefObject<FeedHandlers> }) {
+  const entry = item.entry;
+  const canCollapse = collapsible || item.replyCount > 0;
+  const collapseLabel = collapsed ? item.replyCount ? `답글 ${item.replyCount}개 펴기` : "본문 펴기" : item.replyCount ? `답글 ${item.replyCount}개 접기` : "접기";
+  return <article aria-setsize={count} aria-posinset={index + 1} className={`ks-feed-entry${item.depth > 0 ? " ks-feed-entry-nested" : ""}${collapsed ? " is-collapsed" : ""}${active ? " is-selected" : ""}${selectable ? " is-selectable" : ""}`} aria-current={active ? "true" : undefined} data-depth={item.depth} style={{ "--ks-feed-depth": Math.min(item.depth, 6) } as React.CSSProperties} data-focus-index={index} tabIndex={focused ? 0 : -1} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => { if (event.target === event.currentTarget) handlers.current.keyDown(event, index, entry); }} onClick={() => handlers.current.choose(entry)} onContextMenu={(event) => handlers.current.menu(event, entry)}>
+    {isMedia(entry.image) && <MediaThumbnail media={entry.image} size={24} className="ks-feed-avatar" />}
+    <div className="ks-feed-content"><div className={`ks-feed-header${copy || canCollapse ? " is-copy" : ""}`}>
+      <div className="ks-feed-ident"><div className="ks-feed-name-line">{typeof entry.name === "string" && <strong style={validColor(entry.color) ? { color: entry.color } : undefined}>{entry.name}</strong>}<Badges values={entry.badges} />{(collapsed || item.replyCount > 0) && <Badges values={[collapsed ? item.replyCount > 0 ? `답글 ${item.replyCount}개 접힘` : "접힘" : `답글 ${item.replyCount}`]} />}</div>
+        {typeof entry.meta === "string" && (copy ? <span className="ks-feed-meta-copy"><span className="ks-view-meta">{entry.meta}</span>{!collapsed && handlers.current.copy(JSON.stringify([entry.key, "meta"]), entry.meta)}</span> : <span className="ks-view-meta">{entry.meta}</span>)}</div>
+      <div className="ks-feed-head-actions">{canCollapse && <IconButton className="ks-feed-collapse-btn" aria-label={collapseLabel} title={collapseLabel} onClick={(event) => { event.stopPropagation(); handlers.current.toggle(entry.key); }}><DataIcon name={collapsed ? "chevron-right" : "chevron-down"} /></IconButton>}</div>
+    </div>
+    {!collapsed && <div className={`ks-feed-body tone-${entry.tone ?? "default"}${columns ? " is-columns" : ""}`}>{(typeof entry.body === "string" ? [entry.body] : entry.body).map((line, part) => copy ? <div className="ks-feed-copy-cell" key={part}>{format === "markdown" ? <MarkdownText>{line}</MarkdownText> : line}{handlers.current.copy(JSON.stringify([entry.key, "body", part]), line)}</div> : <div key={part}>{format === "markdown" ? <MarkdownText>{line}</MarkdownText> : line}</div>)}</div>}
+    </div>
+  </article>;
+});
 export function FeedBlock({ block, context, pointer }: { block: Extract<Block, { type: "feed" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/entries`, block.entries);
   if (value.status !== "ready") return <DataState value={value} />;
@@ -58,6 +82,7 @@ export function FeedBlock({ block, context, pointer }: { block: Extract<Block, {
 }
 function FeedReady({ block, context, pointer, value }: { block: Extract<Block, { type: "feed" }>; context: BlockContext; pointer: string; value: unknown }) {
   const data = useWindowData();
+  const menu = useItemMenu(block.item_menu, pointer);
   const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(() => new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   const rows = useMemo(() => {
@@ -82,7 +107,7 @@ function FeedReady({ block, context, pointer, value }: { block: Extract<Block, {
     });
     return next;
   }, [value, block.grouped, collapsedGroups, collapsedKeys]);
-  const items = useMemo(() => block.on_select ? rows.flatMap((row) => row.kind === "entry" ? [row.item.entry] : []) : [], [rows, block.on_select]);
+  const items = useMemo(() => rows.flatMap((row) => row.kind === "entry" ? [row.item.entry] : []), [rows]);
   const entryRows = useMemo(() => rows.flatMap((row, index) => row.kind === "entry" ? [index] : []), [rows]);
   const { scroll, virtual } = useVirtualRows(rows.length, 72);
   const [copyFeedback, setCopyFeedback] = useState<Record<string, "copied" | "failed">>({});
@@ -123,7 +148,8 @@ function FeedReady({ block, context, pointer, value }: { block: Extract<Block, {
   const selected = block.selected ? selectedValue : null;
   const rowOf = (index: number) => entryRows[index] ?? 0;
   const roving = useRoving(items, selected, scroll, virtual, rowOf);
-  if (block.on_select && items.length) keepRovingRow(virtual, rowOf(roving.focus));
+  const handlers = useRef<FeedHandlers>(null!);
+  if (items.length) keepRovingRow(virtual, rowOf(roving.focus));
   const atEnd = useRef(true); const lastCount = useRef(0);
   useLayoutEffect(() => { if (block.follow && atEnd.current && rows.length > lastCount.current && rows.length) virtual.scrollToIndex(rows.length - 1, { align: "end" }); lastCount.current = rows.length; }, [rows.length, block.follow, virtual]);
   if (!rows.some((row) => row.kind === "entry" || row.kind === "heading")) return <NoItems />;
@@ -138,9 +164,17 @@ function FeedReady({ block, context, pointer, value }: { block: Extract<Block, {
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
   });
+  handlers.current = {
+    focus: roving.setFocus,
+    keyDown: (event, index, entry) => roving.keyDown(event, index, () => choose(entry)),
+    choose,
+    menu: (event, entry) => { if (!event.defaultPrevented) menu.open(event, event.currentTarget, entry as unknown as JsonValue, entry.key, "본문 복사", typeof entry.body === "string" ? entry.body : entry.body.join("\n\n")); },
+    toggle: toggleEntry,
+    copy: copyButton,
+  };
   const vrows = virtual.getVirtualItems(); const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
   const heading = block.grouped ? rows.slice(0, first + 1).reverse().find((r) => r.kind === "heading") : undefined;
-  return <div className="ks-data-view ks-feed" ref={scroll} role="feed" onScroll={(e) => { const el = e.currentTarget; const line = parseFloat(getComputedStyle(el).lineHeight) || 21; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight <= line; }}>
+  return <><div className="ks-data-view ks-feed" ref={scroll} role="feed" onScroll={(e) => { const el = e.currentTarget; const line = parseFloat(getComputedStyle(el).lineHeight) || 21; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight <= line; }}>
     {heading?.kind === "heading" && first > 0 && <div className="ks-view-sticky"><GroupHeading title={heading.title} meta={heading.meta} /></div>}
     <VirtualSurface virtual={virtual}>{vrows.map((v) => {
       const row = rows[v.index];
@@ -152,31 +186,10 @@ function FeedReady({ block, context, pointer, value }: { block: Extract<Block, {
           <span className="ks-feed-group-chevron" aria-hidden="true"><DataIcon name={row.collapsed ? "chevron-right" : "chevron-down"} /></span>
         </div> : <GroupHeading title={row.title} meta={row.meta} /> : (() => {
           const entry = row.item.entry;
-          const collapsed = collapsedKeys.has(entry.key);
-          const canCollapse = block.collapsible || row.item.replyCount > 0;
-          const collapseLabel = collapsed
-            ? row.item.replyCount ? `답글 ${row.item.replyCount}개 펴기` : "본문 펴기"
-            : row.item.replyCount ? `답글 ${row.item.replyCount}개 접기` : "접기";
-          return <article aria-setsize={entryRows.length} aria-posinset={row.index + 1} className={`ks-feed-entry${row.item.depth > 0 ? " ks-feed-entry-nested" : ""}${collapsed ? " is-collapsed" : ""}${entry.key === selected ? " is-selected" : ""}${block.on_select ? " is-selectable" : ""}`} aria-current={entry.key === selected ? "true" : undefined} data-depth={row.item.depth} style={{ "--ks-feed-depth": Math.min(row.item.depth, 6) } as React.CSSProperties} data-focus-index={block.on_select ? row.index : undefined} tabIndex={block.on_select ? roving.focus === row.index ? 0 : -1 : undefined} onFocus={block.on_select ? () => roving.setFocus(row.index) : undefined} onKeyDown={block.on_select ? (event) => { if (event.target === event.currentTarget) roving.keyDown(event, row.index, () => choose(entry)); } : undefined} onClick={() => choose(entry)}>
-            {isMedia(entry.image) && <MediaThumbnail media={entry.image} size={24} className="ks-feed-avatar" />}
-            <div className="ks-feed-content"><div className={`ks-feed-header${block.copy || canCollapse ? " is-copy" : ""}`}>
-              <div className="ks-feed-ident"><div className="ks-feed-name-line">{typeof entry.name === "string" && <strong style={validColor(entry.color) ? { color: entry.color } : undefined}>{entry.name}</strong>}<Badges values={entry.badges} />{(collapsed || row.item.replyCount > 0) && <Badges values={[collapsed ? row.item.replyCount > 0 ? `답글 ${row.item.replyCount}개 접힘` : "접힘" : `답글 ${row.item.replyCount}`]} />}</div>
-                {typeof entry.meta === "string" && (block.copy
-                  ? <span className="ks-feed-meta-copy"><span className="ks-view-meta">{entry.meta}</span>{!collapsed && copyButton(JSON.stringify([entry.key, "meta"]), entry.meta)}</span>
-                  : <span className="ks-view-meta">{entry.meta}</span>)}</div>
-              <div className="ks-feed-head-actions">
-                {canCollapse && <IconButton className="ks-feed-collapse-btn" aria-label={collapseLabel} title={collapseLabel} onClick={(event) => { event.stopPropagation(); toggleEntry(entry.key); }}>
-                  <DataIcon name={collapsed ? "chevron-right" : "chevron-down"} />
-                </IconButton>}
-              </div>
-            </div>
-            {!collapsed && <div className={`ks-feed-body tone-${entry.tone ?? "default"}${block.columns ? " is-columns" : ""}`}>{(typeof entry.body === "string" ? [entry.body] : entry.body).map((line, index) => block.copy
-              ? <div className="ks-feed-copy-cell" key={index}>{block.format === "markdown" ? <MarkdownText>{line}</MarkdownText> : line}{copyButton(JSON.stringify([entry.key, "body", index]), line)}</div>
-              : <div key={index}>{block.format === "markdown" ? <MarkdownText>{line}</MarkdownText> : line}</div>)}</div>}
-            </div>
-          </article>;
+          const feedback = JSON.stringify([copyFeedback[JSON.stringify([entry.key, "meta"])], ...(typeof entry.body === "string" ? [entry.body] : entry.body).map((_, index) => copyFeedback[JSON.stringify([entry.key, "body", index])])]);
+          return <FeedRow item={row.item} index={row.index} count={entryRows.length} collapsed={collapsedKeys.has(entry.key)} active={entry.key === selected} focused={roving.focus === row.index} selectable={Boolean(block.on_select)} copy={Boolean(block.copy)} columns={Boolean(block.columns)} format={block.format} collapsible={Boolean(block.collapsible)} feedback={feedback} handlers={handlers} />;
         })()}
       </div>;
     })}</VirtualSurface>
-  </div>;
+  </div>{menu.dialog}</>;
 }

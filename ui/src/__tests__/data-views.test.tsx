@@ -322,10 +322,10 @@ it("keeps one feed keyboard entry point after a focused entry disappears", async
   expect(feed.querySelector('[tabindex="0"]')?.textContent).toContain("첫 내용");
 });
 
-it("does not add tab stops to a feed without selection", async () => {
+it("allows the keyboard to reach a feed without selection for its item menu", async () => {
   setup({ type: "feed", entries: [{ key: "a", body: "읽기 전용" }] });
   const entry = (await screen.findByText("읽기 전용")).closest("article")!;
-  expect(entry.hasAttribute("tabindex")).toBe(false);
+  expect(entry.getAttribute("tabindex")).toBe("0");
 });
 
 it("shows each property binding status and its recovery action", async () => {

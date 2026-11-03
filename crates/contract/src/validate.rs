@@ -840,6 +840,9 @@ fn validate_ui_binding(
                 message: MessageKey::Item(_)
             })
     ) {
+        if at.strip_suffix("/copy_text").is_some_and(is_item_menu_action) {
+            return;
+        }
         if at.ends_with("/save_file/suggested_name") {
             details.push(format!("{at}: 항목 바인딩은 동작의 값에 쓸 수 없습니다"));
             return;
@@ -1527,6 +1530,7 @@ fn validate_actions(
         }
         Actions::CopyText(action) => {
             validate_copy_text_location(definition, details, at);
+            validate_item_menu_copy_text(&action.copy_text, details, at);
             if definition.requires.blocks < 18 {
                 details.push(
                     "글 복사 동작은 블록 세트 18판이라 requires.blocks가 18 이상이어야 합니다"
@@ -1585,6 +1589,7 @@ fn validate_actions(
                     }
                     Action::CopyText(action) => {
                         validate_copy_text_location(definition, details, &at);
+                        validate_item_menu_copy_text(&action.copy_text, details, &at);
                         if list.len() != 1 {
                             details.push(format!("{at}: 글 복사 동작은 단독으로 써야 합니다"));
                         }
@@ -1756,12 +1761,12 @@ fn validate_actions(
     }
 }
 
-fn validate_copy_text_location(definition: &AppDefinition, details: &mut Vec<String>, at: &str) {
+fn item_menu_block_pointer(at: &str) -> Option<&str> {
     let action_pointer = match at.rsplit_once('/') {
         Some((parent, index)) if index.bytes().all(|byte| byte.is_ascii_digit()) => parent,
         _ => at,
     };
-    let menu_block_pointer = action_pointer
+    action_pointer
         .strip_suffix("/on_select")
         .and_then(|pointer| {
             let (menu_pointer, index) = pointer.rsplit_once('/')?;
@@ -1769,8 +1774,21 @@ fn validate_copy_text_location(definition: &AppDefinition, details: &mut Vec<Str
                 return None;
             }
             menu_pointer.strip_suffix("/item_menu")
-        });
-    let is_item_menu = menu_block_pointer.is_some_and(|pointer| {
+        })
+}
+
+fn is_item_menu_action(at: &str) -> bool {
+    item_menu_block_pointer(at).is_some()
+}
+
+fn validate_item_menu_copy_text(binding: &Binding, details: &mut Vec<String>, at: &str) {
+    if is_item_menu_action(at) && matches!(binding, Binding::Expr(_)) {
+        details.push(format!("{at}: item_menu의 copy_text는 {{\"item\":\"필드\"}}로 항목 값을 가리키세요. 식은 행마다 계산하지 않습니다"));
+    }
+}
+
+fn validate_copy_text_location(definition: &AppDefinition, details: &mut Vec<String>, at: &str) {
+    let is_item_menu = item_menu_block_pointer(at).is_some_and(|pointer| {
         serde_json::to_value(definition)
             .ok()
             .and_then(|value| value.pointer(pointer).cloned())

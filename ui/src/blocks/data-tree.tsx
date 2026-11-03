@@ -8,6 +8,7 @@ import { TreeView } from "../components/tree/tree-view";
 import type { TreeNode, TreeRowModel } from "../components/tree/tree-model";
 import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
+import { useItemMenu } from "./item-menu";
 import { Badges, NoItems, asArray, isObject } from "./data-view-common";
 import { useWindowStateValue } from "../data/window-state";
 
@@ -97,6 +98,7 @@ export function TreeBlock({ block, context, pointer }: { block: DataTreeBlockDat
 
 function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockData; context: BlockContext; pointer: string; value: unknown }) {
   const data = useWindowData();
+  const menu = useItemMenu(block.item_menu, pointer);
   const nodes = useMemo(() => tree(value, block.by === "path"), [value, block.by]);
   const selectedValue = useWindowStateValue(context, block.selected?.state ?? null);
   const selected = typeof selectedValue === "string" ? selectedValue : null;
@@ -126,13 +128,14 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
   };
 
   if (!nodes.length) return <NoItems />;
-  return <TreeView
+  return <><TreeView
     className="ks-data-view ks-data-tree"
     expanded={expanded}
     label="트리"
     nodes={nodes}
     onActivate={activate}
     onExpandedChange={toggle}
+    onContextMenu={(row, anchor, _point, _focus, event) => { if (row) { const item = row.node.data as TreeItem | undefined; menu.open(event, anchor, item as unknown as JsonValue | undefined, item?.key ?? row.id, "제목 복사", row.node.label); } }}
     selectedId={selected === null ? null : `item:${selected}`}
-  />;
+  />{menu.dialog}</>;
 }
