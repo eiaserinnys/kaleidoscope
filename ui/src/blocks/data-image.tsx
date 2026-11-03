@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Block, MediaRef } from "../contract/contract";
 import { useBinding } from "../data/window-data";
 import { useMedia } from "../data/use-media";
@@ -6,6 +6,7 @@ import { DataState, useFolderPick } from "../components/data-state";
 import { DataIcon } from "../components/data-icons";
 import { cropStyle, isMedia } from "../components/media-thumbnail";
 import { Button, EmptyState, ErrorId, IconButton } from "../components/primitives";
+import { PreviewContext } from "./preview-context";
 
 type Data = Extract<Block, { type: "image" }>;
 export function imageRequestSize(width: number, height: number, ratio: number, zoom: number): number {
@@ -14,10 +15,21 @@ export function imageRequestSize(width: number, height: number, ratio: number, z
 }
 export function ImageBlock({ block, pointer }: { block: Data; pointer: string }) {
   const binding = useBinding(`${pointer}/src`, block.src);
-  if (binding.status !== "ready") return <DataState value={binding} />;
-  return <ImageView media={isMedia(binding.value) ? binding.value : null} fit={block.fit ?? "contain"} zoomable={!!block.zoom} />;
+  const preview = useContext(PreviewContext);
+  const bindingError = binding.status === "failed" ? `${binding.message} (${binding.id})` : binding.status === "login_required" ? "로그인이 필요합니다" : null;
+  useEffect(() => { if (binding.status !== "ready") preview?.(bindingError); }, [preview, binding.status, bindingError]);
+  if (binding.status === "loading") return <div className="ks-image-view"><ImageLoading /></div>;
+  if (binding.status !== "ready") return preview ? <div className="ks-image-view"><PreviewFailure error={bindingError ?? "이미지를 불러오지 못했습니다"} /></div> : <DataState value={binding} />;
+  return <ImageView media={isMedia(binding.value) ? binding.value : null} fit={block.fit ?? "contain"} zoomable={!!block.zoom && !preview} />;
+}
+function ImageLoading() {
+  return <div className="ks-data-progress is-indeterminate" role="progressbar" aria-label="이미지를 불러오는 중"><span className="ks-data-progress-value" /></div>;
+}
+function PreviewFailure({ error }: { error: string }) {
+  return <span title={error} role="img" aria-label={error}><DataIcon name="triangle-alert" size="inline" /></span>;
 }
 function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "contain" | "cover"; zoomable: boolean }) {
+  const preview = useContext(PreviewContext);
   const folder = useFolderPick();
   const host = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
@@ -67,6 +79,8 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   const factor = sourceWidth && sourceHeight ? (fit === "cover" ? Math.max(size.width / sourceWidth, size.height / sourceHeight) : Math.min(size.width / sourceWidth, size.height / sourceHeight)) : 0;
   const compact = size.height < 200;
   const failure = result.status === "failed" ? folder.error ?? result.error : null;
+  const previewError = failure ? `${failure.message} (${failure.id})` : null;
+  useEffect(() => { preview?.(previewError); }, [preview, previewError]);
   const layoutKey = JSON.stringify([key, size.width, size.height, failure?.id, failure?.message]);
   const short = size.width < 258 || (size.width < 300 && size.height < 200) || overflowKey === layoutKey;
   const chooseFolder = result.status === "failed" && result.error.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && media && "permission" in media;
@@ -82,8 +96,8 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   }, [failure, short, layoutKey]);
   return <div className={`ks-image-view${zoomable ? " is-zoomable" : ""}`} ref={host} tabIndex={zoomable && media ? 0 : undefined} onKeyDown={onKeyDown} onPointerDown={down} onPointerMove={move} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }} onDoubleClick={() => { if (zoomable) adjust(1); }}>
     {!media ? <EmptyState icon={<DataIcon name="image" size="empty" />} />
-      : result.status === "loading" ? <DataState value={{ status: "loading" }} />
-      : result.status === "failed" ? short
+      : result.status === "loading" ? <ImageLoading />
+      : result.status === "failed" ? preview ? <PreviewFailure error={previewError!} /> : short
         ? <EmptyState text={<><span title={failure!.message}>이미지를 불러오지 못했습니다</span>{failure!.id ? <> <ErrorId id={failure!.id} /></> : null}</>} action={action} />
         : chooseFolder ? <div className={compact ? "ks-data-state-compact" : "ks-data-state"}><EmptyState icon={<DataIcon name="triangle-alert" size={compact ? "inline" : "empty"} />} text={<>{failure!.message}{failure!.id ? <> <ErrorId id={failure!.id} /></> : null}</>} action={action} /></div>
         : <DataState value={{ status: "failed", id: result.error.id, message: result.error.message, retry: [] }} compact={compact} onRetry={result.retry} />

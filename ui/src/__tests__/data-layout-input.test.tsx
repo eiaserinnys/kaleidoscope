@@ -298,10 +298,12 @@ it("restores focus to the opener after the confirmed action finishes", async () 
   const opener = await screen.findByRole("button", { name: "확인" }) as HTMLButtonElement;
   await userEvent.click(opener);
   await userEvent.click(screen.getByRole("dialog").querySelectorAll("button")[1]);
-  expect(opener.disabled).toBe(true);
+  expect(opener.disabled).toBe(false);
+  expect(opener.getAttribute("aria-disabled")).toBe("true");
   await act(async () => { release(); await waiting; });
   await waitFor(() => expect(document.activeElement).toBe(opener));
   expect(opener.disabled).toBe(false);
+  expect(opener.hasAttribute("aria-disabled")).toBe(false);
 });
 
 it("section 머리는 제목과 메타 원천 상태를 반복하지 않는다", async () => {

@@ -1,0 +1,77 @@
+{
+  "id": "sample-grid",
+  "name": "표본 격자",
+  "description": "입력 폭과 선택 가능한 표본 카드를 보여주는 예제입니다.",
+  "requires": { "blocks": 19, "modules": { "assets": 1 } },
+  "assets": [
+    { "id": "builtin-weather-clear", "version": 1 },
+    { "id": "builtin-weather-cloudy", "version": 1 }
+  ],
+  "permissions": [],
+  "state": {
+    "count": 4,
+    "title": "날씨 견본",
+    "sample_text": "표본",
+    "query": "표본",
+    "swatches": [
+      {
+        "id": "sun",
+        "label": "햇살이 스며드는 밝고 부드러운 원형 장식 표본 카드",
+        "image": { "asset": "builtin-weather-clear" },
+        "selected": true
+      },
+      {
+        "id": "cloud",
+        "label": "옅은 구름과 여백을 살린 차분하고 은은한 회색 장식 표본 카드",
+        "image": { "asset": "builtin-weather-cloudy" },
+        "selected": false
+      }
+    ]
+  },
+  "ui": {
+    "type": "section",
+    "title": null,
+    "child": {
+      "type": "stack",
+      "direction": "column",
+      "children": [
+        {
+          "type": "stack",
+          "direction": "row",
+          "wrap": true,
+          "gap": "small",
+          "children": [
+            { "type": "input", "kind": "number", "columns": 4, "label": "번호", "value": { "state": "count" }, "on_change": { "set_state": "count" }, "min": 1, "max": 20, "step": 1 },
+            { "type": "input", "kind": "text", "label": "제목", "value": { "state": "title" }, "on_change": { "set_state": "title" } }
+          ]
+        },
+        {
+          "type": "stack",
+          "direction": "row",
+          "wrap": true,
+          "gap": "small",
+          "children": [
+            { "type": "input", "kind": "text", "columns": 4, "label": "문구", "value": { "state": "sample_text" }, "on_change": { "set_state": "sample_text" } },
+            { "type": "input", "kind": "search", "columns": 4, "label": "검색", "value": { "state": "query" }, "on_change": { "set_state": "query" } }
+          ]
+        },
+        {
+          "type": "repeat",
+          "items": { "state": "swatches" },
+          "key": "id",
+          "layout": "grid",
+          "grid": { "columns": "auto" },
+          "template": {
+            "type": "button",
+            "variant": "chip",
+            "prefix": "색",
+            "label": { "item": "label" },
+            "preview": { "type": "image", "src": { "item": "image" } },
+            "pressed": { "item": "selected" },
+            "on_click": [{ "set_state": "swatches", "value": { "expr": "$append([], $map($state.swatches, function($swatch) { $merge([$swatch, {'selected': $swatch.id = $item.id}]) }))" } }]
+          }
+        }
+      ]
+    }
+  }
+}

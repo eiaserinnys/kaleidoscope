@@ -99,7 +99,8 @@ function RepeatReady({ block, context, pointer, entries, parent, follow }: {
       const pane = parseFloat(style.getPropertyValue("--ks-pane-min-size"));
       const gap = parseFloat(style.getPropertyValue("--ks-space-3"));
       if (!Number.isFinite(pane) || !Number.isFinite(gap) || pane <= 0) return;
-      setColumns(Math.max(1, Math.floor((element.clientWidth + gap) / (pane + gap))));
+      const width = element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      setColumns(Math.max(1, Math.floor((width + gap) / (pane + gap))));
     };
     resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => observer.disconnect();
   }, [layout, block.grid?.columns]);

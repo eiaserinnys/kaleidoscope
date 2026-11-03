@@ -1909,6 +1909,7 @@ pub enum Block {
         disabled: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
+        #[schemars(description = "읽기 전용 그림. preview 안 블록의 조작부는 그리지 않는다.")]
         preview: Option<Box<Block>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
