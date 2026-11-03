@@ -43,8 +43,16 @@ export function TourBlock({ block, context, pointer }: { block: TourBlockData; c
   const target = useSyncExternalStore(subscribe, getSnapshot, () => null);
   const title = useBinding(`${pointer}/steps/${index}/title`, step?.title ?? null);
   const body = useBinding(`${pointer}/steps/${index}/body`, step?.body ?? null);
+  const previousLabel = useBinding(`${pointer}/labels/previous`, block.labels?.previous ?? null);
+  const nextLabel = useBinding(`${pointer}/labels/next`, block.labels?.next ?? null);
+  const doneLabel = useBinding(`${pointer}/labels/done`, block.labels?.done ?? null);
+  const skipLabel = useBinding(`${pointer}/labels/skip`, block.labels?.skip ?? null);
   const titleText = title.status === "ready" && title.value !== null ? display(title.value) : "";
   const bodyText = body.status === "ready" && body.value !== null ? display(body.value) : "";
+  const previousText = boundLabel(previousLabel, "이전");
+  const nextText = boundLabel(nextLabel, "다음");
+  const doneText = boundLabel(doneLabel, "끝내기");
+  const skipText = boundLabel(skipLabel, "건너뛰기");
   const host = target?.closest<HTMLElement>(".ks-data-window") ?? null;
   const overlay = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
@@ -146,11 +154,11 @@ export function TourBlock({ block, context, pointer }: { block: TourBlockData; c
       <h2 className="ks-tour-title" id={`${pointer.replaceAll("/", "-")}-tour-title`}>{titleText}</h2>
       {bodyText ? <div className="ks-tour-body">{bodyText}</div> : null}
       <div className="ks-tour-actions">
-        <Button disabled={!previousStep} onClick={() => onStep(previousStep)}>이전</Button>
+        <Button disabled={!previousStep} onClick={() => onStep(previousStep)}>{previousText}</Button>
         {isLast
-          ? <Button variant="emphasis" onClick={() => onClose("completed")}>끝내기</Button>
-          : <Button variant="emphasis" onClick={() => onStep(nextStep)}>다음</Button>}
-        <Button onClick={() => onClose("skipped")}>건너뛰기</Button>
+          ? <Button variant="emphasis" onClick={() => onClose("completed")}>{doneText}</Button>
+          : <Button variant="emphasis" onClick={() => onStep(nextStep)}>{nextText}</Button>}
+        <Button onClick={() => onClose("skipped")}>{skipText}</Button>
       </div>
     </section>
   </div>, host);
@@ -158,4 +166,8 @@ export function TourBlock({ block, context, pointer }: { block: TourBlockData; c
 
 function display(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value, null, 2) ?? "null";
+}
+
+function boundLabel(value: ReturnType<typeof useBinding>, fallback: string): string {
+  return value.status === "ready" && value.value !== null && value.value !== undefined ? display(value.value) : fallback;
 }

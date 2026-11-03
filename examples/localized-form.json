@@ -7,6 +7,8 @@
   "state": {
     "language": "ko",
     "dialog_open": false,
+    "tour_open": false,
+    "tour_step": "language",
     "enabled": false,
     "amount": 2,
     "color": "#4968a8",
@@ -18,7 +20,18 @@
       "language_label": "표시 언어",
       "open_form": "양식 열기",
       "dialog_title": "연락처 정보",
+      "dialog_close": "닫기",
+      "dialog_cancel": "취소",
       "save": "저장",
+      "open_tour": "안내 보기",
+      "tour_previous": "이전",
+      "tour_next": "다음",
+      "tour_done": "끝내기",
+      "tour_skip": "건너뛰기",
+      "tour_language_title": "언어 선택",
+      "tour_language_body": "표시 언어를 바꾸면 앱의 안내와 단추도 함께 바뀝니다.",
+      "tour_name_title": "이름 입력",
+      "tour_name_body": "이름을 입력하고 선택한 언어의 안내를 확인합니다.",
       "details_tab": "기본 설정",
       "more_tab": "안내",
       "more_content": "라벨과 입력 안내가 선택한 언어로 바뀝니다.",
@@ -36,7 +49,18 @@
       "language_label": "Display language",
       "open_form": "Open form",
       "dialog_title": "Contact details",
+      "dialog_close": "Close",
+      "dialog_cancel": "Cancel",
       "save": "Save",
+      "open_tour": "Show guide",
+      "tour_previous": "Previous",
+      "tour_next": "Next",
+      "tour_done": "Done",
+      "tour_skip": "Skip",
+      "tour_language_title": "Choose a language",
+      "tour_language_body": "Changing the display language also changes the app's guidance and buttons.",
+      "tour_name_title": "Enter a name",
+      "tour_name_body": "Enter a name and review the guidance in the selected language.",
       "details_tab": "Settings",
       "more_tab": "About",
       "more_content": "Labels and input hints follow the selected language.",
@@ -54,7 +78,18 @@
       "language_label": "表示言語",
       "open_form": "フォームを開く",
       "dialog_title": "連絡先",
+      "dialog_close": "閉じる",
+      "dialog_cancel": "キャンセル",
       "save": "保存",
+      "open_tour": "案内を見る",
+      "tour_previous": "前へ",
+      "tour_next": "次へ",
+      "tour_done": "完了",
+      "tour_skip": "スキップ",
+      "tour_language_title": "言語を選ぶ",
+      "tour_language_body": "表示言語を変えると、案内とボタンも切り替わります。",
+      "tour_name_title": "名前を入力",
+      "tour_name_body": "名前を入力し、選択した言語の案内を確認します。",
       "details_tab": "設定",
       "more_tab": "案内",
       "more_content": "ラベルと入力案内が選択した言語に変わります。",
@@ -97,19 +132,30 @@
         "type": "dialog",
         "open": { "state": "dialog_open" },
         "title": { "message": "dialog_title" },
+        "close_label": { "message": "dialog_close" },
+        "cancel_label": { "message": "dialog_cancel" },
         "on_close": [{ "set_state": "dialog_open", "value": false }],
         "child": {
           "type": "stack",
           "direction": "column",
           "children": [
             {
-              "type": "select",
-              "value": { "state": "language" },
-              "on_change": { "set_state": "language" },
-              "options": { "client": "language_options" },
-              "label": { "message": "language_label" }
+              "type": "anchor",
+              "id": "language",
+              "child": {
+                "type": "select",
+                "value": { "state": "language" },
+                "on_change": { "set_state": "language" },
+                "options": { "client": "language_options" },
+                "label": { "message": "language_label" }
+              }
             },
-          {
+            {
+              "type": "button",
+              "label": { "message": "open_tour" },
+              "on_click": [{ "set_state": "tour_open", "value": true }]
+            },
+            {
               "type": "tabs",
               "tabs": [
                 {
@@ -139,11 +185,15 @@
                         "label": { "message": "color" }
                       },
                       {
-                        "type": "input",
-                        "value": { "state": "name" },
-                        "on_change": { "set_state": "name" },
-                        "label": { "message": "name_label" },
-                        "placeholder": { "message": "name_hint" }
+                        "type": "anchor",
+                        "id": "name",
+                        "child": {
+                          "type": "input",
+                          "value": { "state": "name" },
+                          "on_change": { "set_state": "name" },
+                          "label": { "message": "name_label" },
+                          "placeholder": { "message": "name_hint" }
+                        }
                       },
                       {
                         "type": "select",
@@ -169,6 +219,33 @@
               "type": "button",
               "label": { "message": "save" },
               "on_click": [{ "set_state": "dialog_open", "value": false }]
+            },
+            {
+              "type": "tour",
+              "open": { "state": "tour_open" },
+              "step": { "state": "tour_step" },
+              "steps": [
+                {
+                  "key": "language",
+                  "target": "language",
+                  "title": { "message": "tour_language_title" },
+                  "body": { "message": "tour_language_body" }
+                },
+                {
+                  "key": "name",
+                  "target": "name",
+                  "title": { "message": "tour_name_title" },
+                  "body": { "message": "tour_name_body" }
+                }
+              ],
+              "labels": {
+                "previous": { "message": "tour_previous" },
+                "next": { "message": "tour_next" },
+                "done": { "message": "tour_done" },
+                "skip": { "message": "tour_skip" }
+              },
+              "on_step": [{ "set_state": "tour_step", "value": { "expr": "$event" } }],
+              "on_close": [{ "set_state": "tour_open", "value": false }]
             }
           ]
         }

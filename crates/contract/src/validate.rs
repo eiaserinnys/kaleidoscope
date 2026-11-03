@@ -49,7 +49,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     }
     if uses_block_set_16_bindings(&definition.ui) && definition.requires.blocks < 16 {
         details.push(
-            "tabs[].label, toggle.label, slider.label, color.label, input.label, input.placeholder, select.label, select.placeholder의 바인딩은 블록 세트 16판이라 requires.blocks가 16 이상이어야 합니다".into(),
+            "탭·입력 블록 라벨, dialog.close_label, dialog.cancel_label, tour.labels의 바인딩은 블록 세트 16판이라 requires.blocks가 16 이상이어야 합니다".into(),
         );
     }
     if !cached && definition.agent.is_none() {
@@ -147,6 +147,20 @@ fn uses_block_set_16_bindings(ui: &Block) -> bool {
                 label.as_ref().is_some_and(needs_block_set_16)
                     || placeholder.as_ref().is_some_and(needs_block_set_16)
             }
+            Block::Dialog {
+                close_label,
+                cancel_label,
+                ..
+            } => {
+                close_label.as_ref().is_some_and(needs_block_set_16)
+                    || cancel_label.as_ref().is_some_and(needs_block_set_16)
+            }
+            Block::Tour { labels, .. } => labels.as_ref().is_some_and(|labels| {
+                [&labels.previous, &labels.next, &labels.done, &labels.skip]
+                    .into_iter()
+                    .flatten()
+                    .any(needs_block_set_16)
+            }),
             _ => false,
         };
     });

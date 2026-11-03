@@ -1377,17 +1377,26 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         Block::Dialog {
             open,
             title,
+            close_label,
+            cancel_label,
             on_close,
             ..
         } => {
             bind!("open", open);
             bind!("title", title);
+            if let Some(label) = close_label {
+                bind!("close_label", label);
+            }
+            if let Some(label) = cancel_label {
+                bind!("cancel_label", label);
+            }
             act!("on_close", on_close);
         }
         Block::Tour {
             open,
             step,
             steps,
+            labels,
             on_step,
             on_close,
         } => {
@@ -1396,6 +1405,20 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             for (index, item) in steps.iter().enumerate() {
                 bind!(format!("steps/{index}/title"), &item.title);
                 bind!(format!("steps/{index}/body"), &item.body);
+            }
+            if let Some(labels) = labels {
+                if let Some(label) = &labels.previous {
+                    bind!("labels/previous", label);
+                }
+                if let Some(label) = &labels.next {
+                    bind!("labels/next", label);
+                }
+                if let Some(label) = &labels.done {
+                    bind!("labels/done", label);
+                }
+                if let Some(label) = &labels.skip {
+                    bind!("labels/skip", label);
+                }
             }
             act!("on_step", on_step);
             act!("on_close", on_close);

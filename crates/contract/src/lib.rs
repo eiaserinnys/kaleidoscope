@@ -266,8 +266,8 @@ pub const CONTRACT_VERSION: u32 = 26;
 /// - 13판: 파일 또는 저장소 문서 모음을 뿌리로 하는 읽기 전용 `folder`.
 /// - 14판: `canvas.surface`, `repeat`, `when`, `dialog`, `tour`, `anchor`, `progress`와 입력·배치 확장(v0.6.12).
 /// - 15판: `tabs.header`, `tabs.keep_mounted`, `tabs.collapsible`, `folder.header`, `state_migrate`, `opens.set_state`.
-/// - 16판: `tabs[].label`, `toggle.label`, `slider.label`, `color.label`, `input.label`, `input.placeholder`,
-///   `select.label`, `select.placeholder`의 바인딩. 평문 문자열은 이전 판과 같은 wire 모양이다.
+/// - 16판: 탭과 입력 블록 라벨, `dialog.close_label`, `dialog.cancel_label`, `tour.labels`의 바인딩.
+///   평문 문자열은 이전 판과 같은 wire 모양이다.
 pub const BLOCK_SET_VERSION: u32 = 16;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
@@ -862,6 +862,24 @@ pub struct TourStep {
     pub body: Binding,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct TourLabels {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub previous: Option<Binding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub next: Option<Binding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub done: Option<Binding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub skip: Option<Binding>,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "contract.ts")]
@@ -1183,6 +1201,12 @@ pub enum Block {
     Dialog {
         open: Binding,
         title: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        close_label: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        cancel_label: Option<Binding>,
         child: Box<Block>,
         on_close: Actions,
     },
@@ -1190,6 +1214,9 @@ pub enum Block {
         open: Binding,
         step: Binding,
         steps: Vec<TourStep>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        labels: Option<TourLabels>,
         on_step: Actions,
         on_close: Actions,
     },
@@ -1898,6 +1925,10 @@ enum RawBlock {
     Dialog {
         open: Binding,
         title: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        close_label: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cancel_label: Option<Binding>,
         child: Box<Block>,
         on_close: Actions,
     },
@@ -1905,6 +1936,8 @@ enum RawBlock {
         open: Binding,
         step: Binding,
         steps: Vec<TourStep>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        labels: Option<TourLabels>,
         on_step: Actions,
         on_close: Actions,
     },
@@ -2533,11 +2566,15 @@ impl From<RawBlock> for Block {
             RawBlock::Dialog {
                 open,
                 title,
+                close_label,
+                cancel_label,
                 child,
                 on_close,
             } => Block::Dialog {
                 open,
                 title,
+                close_label,
+                cancel_label,
                 child,
                 on_close,
             },
@@ -2545,12 +2582,14 @@ impl From<RawBlock> for Block {
                 open,
                 step,
                 steps,
+                labels,
                 on_step,
                 on_close,
             } => Block::Tour {
                 open,
                 step,
                 steps,
+                labels,
                 on_step,
                 on_close,
             },

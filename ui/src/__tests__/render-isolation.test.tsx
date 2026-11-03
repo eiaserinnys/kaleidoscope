@@ -158,6 +158,47 @@ const localizedLabelsDefinition: AppDefinition = {
   },
 };
 
+const localizedDialogTourDefinition: AppDefinition = {
+  id: "localized-dialog-tour",
+  name: "다국어 대화상자와 안내",
+  requires: { blocks: 16, modules: {} },
+  permissions: [],
+  state: { language: "en", dialog_open: true, tour_open: true, tour_step: "first" },
+  messages: {
+    en: {
+      close: "Close", cancel: "Cancel", previous: "Previous", next: "Next", done: "Done", skip: "Skip",
+    },
+    ko: {
+      close: "닫기", cancel: "취소", previous: "이전", next: "다음", done: "끝내기", skip: "건너뛰기",
+    },
+  },
+  locale: { state: "language" },
+  ui: {
+    type: "stack", direction: "column", children: [
+      {
+        type: "dialog", open: { state: "dialog_open" }, title: "Dialog",
+        close_label: { message: "close" }, cancel_label: { message: "cancel" },
+        child: { type: "text", value: "Stable dialog content" }, on_close: [{ set_state: "dialog_open", value: false }],
+      },
+      { type: "anchor", id: "guide-target", child: { type: "text", value: "Stable guide target" } },
+      {
+        type: "tour", open: { state: "tour_open" }, step: { state: "tour_step" },
+        steps: [
+          { key: "first", target: "guide-target", title: "Guide", body: "Guide body" },
+          { key: "last", target: "guide-target", title: "Summary", body: "Summary body" },
+        ],
+        labels: {
+          previous: { message: "previous" }, next: { message: "next" },
+          done: { message: "done" }, skip: { message: "skip" },
+        },
+        on_step: [{ set_state: "tour_step", value: { expr: "$event" } }],
+        on_close: [{ set_state: "tour_open", value: false }],
+      },
+      { type: "text", value: "Unrelated content" },
+    ],
+  },
+};
+
 function testSnapshot(definitions: AppDefinition[] = [definition], firstState: Record<string, JsonValue> = { first: null, second: null, compound: null }): ShellSnapshot {
   const snapshot = makeTestSnapshot({ definitions });
   const first = snapshot.shared.windows[0];
@@ -472,6 +513,45 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     expect(screen.getAllByText("하나 고르기").length).toBeGreaterThan(0);
     expect(blockWrapperRenders.get("window-a\0/ui") ?? 0).toBe(0);
     expect(calls.some((call) => call.windowId === "window-a" && call.pointer === "/ui/tabs/0/child/children/5")).toBe(false);
+    store.dispose();
+  });
+
+  it("대화상자와 안내 단추 라벨은 locale을 따르고 내부의 고정 글은 다시 그리지 않는다", async () => {
+    const { store } = await setup([localizedDialogTourDefinition], {
+      language: "en", dialog_open: true, tour_open: true, tour_step: "first",
+    });
+    const tourButtons = (name: string) => [...document.querySelectorAll(".ks-tour-actions button")]
+      .filter((button) => button.textContent?.trim() === name);
+    expect(screen.getAllByRole("button", { name: "Close" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(2);
+    expect(tourButtons("Previous")).toHaveLength(2);
+    expect(tourButtons("Next")).toHaveLength(2);
+    expect(tourButtons("Skip")).toHaveLength(2);
+    calls.length = 0;
+
+    await setState(store, "window-a", "tour_step", "last");
+    await waitFor(() => expect(tourButtons("Done")).toHaveLength(1));
+    expect(tourButtons("Next")).toHaveLength(1);
+    await setState(store, "window-a", "tour_step", "first");
+    await waitFor(() => expect(tourButtons("Next")).toHaveLength(2));
+    calls.length = 0;
+
+    await setState(store, "window-a", "language", "ko");
+
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "닫기" })).toHaveLength(1));
+    expect(screen.getAllByRole("button", { name: "취소" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "닫기" }).length + screen.getAllByRole("button", { name: "Close" }).length).toBe(2);
+    expect(tourButtons("이전")).toHaveLength(1);
+    expect(tourButtons("다음")).toHaveLength(1);
+    expect(tourButtons("건너뛰기")).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(1);
+    expect(countFor("window-a", "/ui/children/0/child")).toBe(0);
+    expect(countFor("window-a", "/ui/children/1/child")).toBe(0);
+    expect(countFor("window-a", "/ui/children/3")).toBe(0);
+
+    await setState(store, "window-a", "tour_step", "last");
+    await waitFor(() => expect(tourButtons("끝내기")).toHaveLength(1));
+    expect(tourButtons("Done")).toHaveLength(0);
     store.dispose();
   });
 
