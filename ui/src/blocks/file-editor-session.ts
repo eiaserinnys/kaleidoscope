@@ -1,5 +1,5 @@
 import type { CoreError } from "../contract/contract";
-import { SHELL_EDITOR_DOCUMENT_DELETED, SHELL_FILE_MARKDOWN_STORAGE_INVALID } from "../contract/shell-errors";
+import { SHELL_EDITOR_ITEM_DELETED, SHELL_FILE_MARKDOWN_STORAGE_INVALID } from "../contract/shell-errors";
 import { toCoreError, type CoreTransport } from "../core/core-transport";
 import type { ShellStore } from "../core/shell-store";
 
@@ -155,7 +155,7 @@ export class FileEditorSession {
     this.clearTimer();
     if (!this.snapshot.dirty) { void this.load(null); return; }
     this.deleted = true;
-    this.update({ status: "unsaved", conflict: SHELL_EDITOR_DOCUMENT_DELETED(), error: null });
+    this.update({ status: "unsaved", conflict: SHELL_EDITOR_ITEM_DELETED(), error: null });
   }
 
   getSnapshot = (): FileEditorSnapshot => this.snapshot;

@@ -48,11 +48,11 @@ error_catalog! { ENTRIES;
         message: "코어가 요청에 실패 응답을 보냈습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.",
         fix: "쉘을 다시 시작한 뒤 다시 시도하세요"
     }
-    SHELL_EDITOR_DOCUMENT_DELETED() {
+    SHELL_EDITOR_ITEM_DELETED() {
         class: Conflict,
-        place: "편집 중인 문서 삭제",
-        cause: "저장하지 않은 문서가 삭제됐다",
-        message: "편집 중인 문서가 삭제되어 저장하지 못했습니다. 내용을 복사해 다른 문서에 저장하세요.",
+        place: "편집 중인 항목 삭제",
+        cause: "저장하지 않은 파일 또는 문서가 삭제됐다",
+        message: "편집 중인 항목이 삭제되어 저장하지 못했습니다. 내용을 복사해 다른 문서에 저장하세요.",
         fix: "내용을 복사해 다른 문서에 저장하세요"
     }
     SHELL_THREAD_READ_INVALID(name) {
