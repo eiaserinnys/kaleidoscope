@@ -11,8 +11,12 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
   const data = useWindowData();
   const open = useBinding(`${pointer}/open`, block.open);
   const title = useBinding(`${pointer}/title`, block.title);
+  const closeLabel = useBinding(`${pointer}/close_label`, block.close_label ?? null);
+  const cancelLabel = useBinding(`${pointer}/cancel_label`, block.cancel_label ?? null);
   const isOpen = open.status === "ready" && open.value === true;
   const titleText = title.status === "ready" && title.value !== null ? display(title.value) : "";
+  const closeText = boundLabel(closeLabel, "닫기");
+  const cancelText = boundLabel(cancelLabel, "취소");
   const root = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const wasOpen = useRef(false);
@@ -53,7 +57,8 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
       host={host}
       title={titleText}
       body={renderBlock(block.child, context, childPointer)}
-      ok="닫기"
+      ok={closeText}
+      cancelLabel={cancelText}
       onCancel={close}
       onConfirm={close}
     /> : null}
@@ -62,4 +67,8 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
 
 function display(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value, null, 2) ?? "null";
+}
+
+function boundLabel(value: ReturnType<typeof useBinding>, fallback: string): string {
+  return value.status === "ready" && value.value !== null && value.value !== undefined ? display(value.value) : fallback;
 }

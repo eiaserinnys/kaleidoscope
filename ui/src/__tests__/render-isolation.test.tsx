@@ -19,6 +19,7 @@ import { AppWindowContent } from "../render/app-window-content";
 import { mockVirtualLayout } from "./virtual-layout";
 
 const rowRenders = vi.hoisted(() => new Map<string, number>());
+const blockWrapperRenders = vi.hoisted(() => new Map<string, number>());
 vi.mock("../components/tree/tree-row", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../components/tree/tree-row")>();
   const { memo } = await import("react");
@@ -42,7 +43,12 @@ vi.mock("../blocks/data-layout", async (importOriginal) => {
     fallbackProbe.current?.(props.context.window.id, props.pointer, "text");
     return <actual.TextBlock {...props} />;
   }
-  return { ...actual, StackBlock, TextBlock };
+  function TabsBlock(props: Parameters<typeof actual.TabsBlock>[0]) {
+    const key = `${props.context.window.id}\0${props.pointer}`;
+    blockWrapperRenders.set(key, (blockWrapperRenders.get(key) ?? 0) + 1);
+    return <actual.TabsBlock {...props} />;
+  }
+  return { ...actual, StackBlock, TextBlock, TabsBlock };
 });
 
 vi.mock("../data/window-data", async (importOriginal) => {
@@ -126,6 +132,73 @@ const localizedDefinition: AppDefinition = {
   },
 };
 
+const localizedLabelsDefinition: AppDefinition = {
+  id: "localized-controls",
+  name: "다국어 컨트롤",
+  requires: { blocks: 16, modules: {} },
+  permissions: [],
+  state: { language: "en", enabled: false, amount: 2, color: "#123456", name: "", choice: null },
+  messages: {
+    en: { overview: "Overview", enabled: "Enabled", amount: "Amount", color: "Color", name: "Name", name_hint: "Type a name", choice: "Choice", choice_hint: "Select choice" },
+    ko: { overview: "개요", enabled: "사용", amount: "양", color: "색", name: "이름", name_hint: "이름 입력", choice: "선택", choice_hint: "하나 고르기" },
+  },
+  locale: { state: "language" },
+  ui: {
+    type: "tabs", tabs: [
+      { label: { message: "overview" }, child: { type: "stack", direction: "column", children: [
+        { type: "toggle", value: { state: "enabled" }, on_change: { set_state: "enabled" }, label: { message: "enabled" } },
+        { type: "slider", value: { state: "amount" }, on_change: { set_state: "amount" }, label: { message: "amount" }, min: 0, max: 10 },
+        { type: "color", value: { state: "color" }, on_change: { set_state: "color" }, label: { message: "color" } },
+        { type: "input", value: { state: "name" }, on_change: { set_state: "name" }, label: { message: "name" }, placeholder: { message: "name_hint" } },
+        { type: "select", value: { state: "choice" }, on_change: { set_state: "choice" }, options: ["one", "two"], label: { message: "choice" }, placeholder: { message: "choice_hint" } },
+        { type: "text", value: "Stable content" },
+      ] } },
+      { label: "Other", child: { type: "text", value: "Other content" } },
+    ],
+  },
+};
+
+const localizedDialogTourDefinition: AppDefinition = {
+  id: "localized-dialog-tour",
+  name: "다국어 대화상자와 안내",
+  requires: { blocks: 16, modules: {} },
+  permissions: [],
+  state: { language: "en", dialog_open: true, tour_open: true, tour_step: "first" },
+  messages: {
+    en: {
+      close: "Close", cancel: "Cancel", previous: "Previous", next: "Next", done: "Done", skip: "Skip",
+    },
+    ko: {
+      close: "닫기", cancel: "취소", previous: "이전", next: "다음", done: "끝내기", skip: "건너뛰기",
+    },
+  },
+  locale: { state: "language" },
+  ui: {
+    type: "stack", direction: "column", children: [
+      {
+        type: "dialog", open: { state: "dialog_open" }, title: "Dialog",
+        close_label: { message: "close" }, cancel_label: { message: "cancel" },
+        child: { type: "text", value: "Stable dialog content" }, on_close: [{ set_state: "dialog_open", value: false }],
+      },
+      { type: "anchor", id: "guide-target", child: { type: "text", value: "Stable guide target" } },
+      {
+        type: "tour", open: { state: "tour_open" }, step: { state: "tour_step" },
+        steps: [
+          { key: "first", target: "guide-target", title: "Guide", body: "Guide body" },
+          { key: "last", target: "guide-target", title: "Summary", body: "Summary body" },
+        ],
+        labels: {
+          previous: { message: "previous" }, next: { message: "next" },
+          done: { message: "done" }, skip: { message: "skip" },
+        },
+        on_step: [{ set_state: "tour_step", value: { expr: "$event" } }],
+        on_close: [{ set_state: "tour_open", value: false }],
+      },
+      { type: "text", value: "Unrelated content" },
+    ],
+  },
+};
+
 function testSnapshot(definitions: AppDefinition[] = [definition], firstState: Record<string, JsonValue> = { first: null, second: null, compound: null }): ShellSnapshot {
   const snapshot = makeTestSnapshot({ definitions });
   const first = snapshot.shared.windows[0];
@@ -180,6 +253,7 @@ if (!globalThis.ResizeObserver) {
 
 async function setup(definitions: AppDefinition[] = [definition], firstState: Record<string, JsonValue> = { first: null, second: null, compound: null }) {
   calls.length = 0;
+  blockWrapperRenders.clear();
   const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;
   if (probe) probe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
   else {
@@ -257,6 +331,44 @@ afterEach(() => {
 });
 
 describe("실제 Shell의 블록 렌더 격리", () => {
+  it("입력 라벨 바인딩이 비어 있다가 채워져도 입력 노드와 포커스를 유지한다", async () => {
+    const inputDefinition: AppDefinition = {
+      id: "bound-input-label", name: "입력 라벨", requires: { blocks: 16, modules: {} }, permissions: [],
+      state: { draft: "", label: null },
+      ui: { type: "input", value: { state: "draft" }, label: { state: "label" }, on_change: { set_state: "draft" }, commit: "submit" },
+    };
+    const { store } = await setup([inputDefinition], { draft: "", label: null });
+    const input = document.querySelector<HTMLInputElement>('.ks-data-window[data-ks-app-id="bound-input-label"] input.ks-text-input')!;
+    input.focus();
+    await userEvent.type(input, "typed");
+
+    await setState(store, "window-a", "label", "Name");
+    await screen.findByText("Name");
+
+    expect(document.querySelector('.ks-data-window[data-ks-app-id="bound-input-label"] input.ks-text-input')).toBe(input);
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("typed");
+    store.dispose();
+  });
+
+  it("선택 라벨 바인딩이 비어 있다가 채워져도 선택 노드와 포커스를 유지한다", async () => {
+    const selectDefinition: AppDefinition = {
+      id: "bound-select-label", name: "선택 라벨", requires: { blocks: 16, modules: {} }, permissions: [],
+      state: { choice: "one", label: null },
+      ui: { type: "select", value: { state: "choice" }, label: { state: "label" }, options: ["one", "two"], on_change: { set_state: "choice" } },
+    };
+    const { store } = await setup([selectDefinition], { choice: "one", label: null });
+    const select = document.querySelectorAll<HTMLButtonElement>('.ks-data-window[data-ks-app-id="bound-select-label"] button')[0]!;
+    select.focus();
+
+    await setState(store, "window-a", "label", "Choice");
+    await screen.findByText("Choice");
+
+    expect(document.querySelector('.ks-data-window[data-ks-app-id="bound-select-label"] .ks-select-field button')).toBe(select);
+    expect(document.activeElement).toBe(select);
+    store.dispose();
+  });
+
   it("트리 끝 액션을 갱신해도 기존 내용 행은 다시 그리지 않는다", () => {
     let rendered = 0;
     function Leading() { rendered += 1; return <span>내용 아이콘</span>; }
@@ -407,6 +519,77 @@ describe("실제 Shell의 블록 렌더 격리", () => {
       "/ui/children/0",
     ]);
     expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
+  it("탭 라벨과 입력 라벨·자리표시자가 locale을 따르며 탭 본문은 다시 그리지 않는다", async () => {
+    const { store } = await setup([localizedLabelsDefinition], {
+      language: "en", enabled: false, amount: 2, color: "#123456", name: "", choice: null,
+    });
+    expect(screen.getAllByRole("tab", { name: "Overview" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("tab", { name: "Other" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Enabled").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Amount").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Color").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Name").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Choice").length).toBeGreaterThan(0);
+    expect(screen.getAllByPlaceholderText("Type a name").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Select choice").length).toBeGreaterThan(0);
+    blockWrapperRenders.clear();
+    calls.length = 0;
+
+    await setState(store, "window-a", "language", "ko");
+
+    expect((await screen.findAllByRole("tab", { name: "개요" })).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("tab", { name: "Other" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("사용").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("양").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("색").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("이름").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("선택").length).toBeGreaterThan(0);
+    expect(screen.getAllByPlaceholderText("이름 입력").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("하나 고르기").length).toBeGreaterThan(0);
+    expect(blockWrapperRenders.get("window-a\0/ui") ?? 0).toBe(0);
+    expect(calls.some((call) => call.windowId === "window-a" && call.pointer === "/ui/tabs/0/child/children/5")).toBe(false);
+    store.dispose();
+  });
+
+  it("대화상자와 안내 단추 라벨은 locale을 따르고 내부의 고정 글은 다시 그리지 않는다", async () => {
+    const { store } = await setup([localizedDialogTourDefinition], {
+      language: "en", dialog_open: true, tour_open: true, tour_step: "first",
+    });
+    const tourButtons = (name: string) => [...document.querySelectorAll(".ks-tour-actions button")]
+      .filter((button) => button.textContent?.trim() === name);
+    expect(screen.getAllByRole("button", { name: "Close" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(2);
+    expect(tourButtons("Previous")).toHaveLength(2);
+    expect(tourButtons("Next")).toHaveLength(2);
+    expect(tourButtons("Skip")).toHaveLength(2);
+    calls.length = 0;
+
+    await setState(store, "window-a", "tour_step", "last");
+    await waitFor(() => expect(tourButtons("Done")).toHaveLength(1));
+    expect(tourButtons("Next")).toHaveLength(1);
+    await setState(store, "window-a", "tour_step", "first");
+    await waitFor(() => expect(tourButtons("Next")).toHaveLength(2));
+    calls.length = 0;
+
+    await setState(store, "window-a", "language", "ko");
+
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "닫기" })).toHaveLength(1));
+    expect(screen.getAllByRole("button", { name: "취소" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "닫기" }).length + screen.getAllByRole("button", { name: "Close" }).length).toBe(2);
+    expect(tourButtons("이전")).toHaveLength(1);
+    expect(tourButtons("다음")).toHaveLength(1);
+    expect(tourButtons("건너뛰기")).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(1);
+    expect(countFor("window-a", "/ui/children/0/child")).toBe(0);
+    expect(countFor("window-a", "/ui/children/1/child")).toBe(0);
+    expect(countFor("window-a", "/ui/children/3")).toBe(0);
+
+    await setState(store, "window-a", "tour_step", "last");
+    await waitFor(() => expect(tourButtons("끝내기")).toHaveLength(1));
+    expect(tourButtons("Done")).toHaveLength(0);
     store.dispose();
   });
 

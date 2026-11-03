@@ -1,4 +1,4 @@
-import { useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { memo, useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useDormant, useWindowData } from "../data/window-data";
@@ -65,7 +65,7 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
     {collapsed ? <span className="ks-file-tree-expand"><IconButton aria-label="목록 펼치기" onClick={togglePane}><PanelLeftOpen /></IconButton></span> : null}
     {showHeader ? <div className="ks-data-tab-header">
       <div className="ks-data-tab-list" role="tablist">
-        {block.tabs.map((tab, n) => <button className={`ks-button ks-button-default${n === index ? " is-selected" : ""}`} role="tab" aria-selected={n === index} tabIndex={n === focused ? 0 : -1} key={n} ref={(element) => { refs.current[n] = element; }} onFocus={() => setFocused(n)} onKeyDown={(event) => keyDown(event, n)} onClick={() => select(n)}>{tab.label}</button>)}
+        {block.tabs.map((tab, n) => <button className={`ks-button ks-button-default${n === index ? " is-selected" : ""}`} role="tab" aria-selected={n === index} tabIndex={n === focused ? 0 : -1} key={n} ref={(element) => { refs.current[n] = element; }} onFocus={() => setFocused(n)} onKeyDown={(event) => keyDown(event, n)} onClick={() => select(n)}><BoundTabLabel pointer={`${pointer}/tabs/${n}/label`} binding={tab.label} /></button>)}
       </div>
       {block.collapsible && pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
     </div> : null}
@@ -77,17 +77,8 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
     {block.keep_mounted ? block.tabs.map((tab, tabIndex) => {
       const selectedTab = tabIndex === index;
       if (!selectedTab && !visited.has(tabIndex)) return null;
-      return <div
-        aria-label={showHeader ? undefined : tab.label}
-        className="ks-data-tab-panel"
-        hidden={!selectedTab || collapsed}
-        inert={!selectedTab || collapsed}
-        key={tabIndex}
-        role="tabpanel"
-      >{renderChild(tabIndex)}</div>;
-    }) : <div aria-label={showHeader ? undefined : block.tabs[index].label} className="ks-data-tab-panel" hidden={collapsed} inert={collapsed} role="tabpanel">
-      {renderChild(index)}
-    </div>}
+      return <BoundTabPanel key={tabIndex} pointer={`${pointer}/tabs/${tabIndex}/label`} binding={tab.label} showHeader={showHeader} selected={selectedTab} collapsed={collapsed}>{renderChild(tabIndex)}</BoundTabPanel>;
+    }) : <BoundTabPanel pointer={`${pointer}/tabs/${index}/label`} binding={block.tabs[index].label} showHeader={showHeader} selected={true} collapsed={collapsed}>{renderChild(index)}</BoundTabPanel>}
   </div>;
 }
 
@@ -125,6 +116,29 @@ function DormantPointer({ pointer, dormant }: { pointer: string; dormant: boolea
   useDormant(pointer, dormant);
   return null;
 }
+
+function tabLabelText(value: ReturnType<typeof useBinding>): string {
+  return value.status === "ready" && value.value !== null && value.value !== undefined ? display(value.value) : "";
+}
+
+const BoundTabLabel = memo(function BoundTabLabel({ pointer, binding }: {
+  pointer: string;
+  binding: Extract<Block, { type: "tabs" }>["tabs"][number]["label"];
+}) {
+  return <>{tabLabelText(useBinding(pointer, binding))}</>;
+});
+
+const BoundTabPanel = memo(function BoundTabPanel({ pointer, binding, showHeader, selected, collapsed, children }: {
+  pointer: string;
+  binding: Extract<Block, { type: "tabs" }>["tabs"][number]["label"];
+  showHeader: boolean;
+  selected: boolean;
+  collapsed: boolean;
+  children: ReactNode;
+}) {
+  const label = tabLabelText(useBinding(pointer, binding));
+  return <div aria-label={showHeader ? undefined : label} className="ks-data-tab-panel" hidden={!selected || collapsed} inert={!selected || collapsed} role="tabpanel">{children}</div>;
+});
 
 export function TextBlock({ block, context, pointer }: Props<"text">) {
   const data = useWindowData();
