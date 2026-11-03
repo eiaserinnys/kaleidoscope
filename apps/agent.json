@@ -2,17 +2,19 @@
   "id": "agent",
   "name": "에이전트",
   "requires": {
-    "blocks": 8,
+    "blocks": 19,
     "modules": {
-      "local_agent": 1,
       "files": 1,
       "storage": 1,
-      "worker": 1
+      "worker": 1,
+      "assets": 1,
+      "client": 4,
+      "process": 1
     }
   },
   "permissions": [
     {
-      "module": "local_agent",
+      "module": "process",
       "id": "run",
       "label": "에이전트 실행"
     },
@@ -135,20 +137,307 @@
     ]
   },
   "ui": {
-    "type": "chat",
-    "permission": "run",
-    "root": {
-      "permission": "work"
-    },
-    "agents": {
-      "expr": "$storage.agents"
-    },
-    "selected": {
-      "state": "agent_id"
-    },
-    "on_select": {
-      "set_state": "agent_id"
-    }
+    "type": "stack",
+    "direction": "column",
+    "gap": "none",
+    "children": [
+      {
+        "type": "when",
+        "value": {
+          "client": "show_start"
+        },
+        "child": {
+          "type": "stack",
+          "direction": "column",
+          "gap": "large",
+          "children": [
+            {
+              "type": "when",
+              "value": {
+                "client": "show_loading"
+              },
+              "child": {
+                "type": "notice",
+                "kind": "loading",
+                "message": ""
+              }
+            },
+            {
+              "type": "when",
+              "value": {
+                "client": "show_agents"
+              },
+              "child": {
+                "type": "stack",
+                "direction": "column",
+                "gap": "small",
+                "children": [
+                  {
+                    "type": "repeat",
+                    "items": {
+                      "client": "agents"
+                    },
+                    "key": "id",
+                    "template": {
+                      "type": "button",
+                      "label": {
+                        "item": "label"
+                      },
+                      "on_click": {
+                        "client": "choose_agent"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "when",
+              "value": {
+                "client": "show_empty"
+              },
+              "child": {
+                "type": "stack",
+                "direction": "column",
+                "gap": "large",
+                "children": [
+                  {
+                    "type": "text",
+                    "value": "등록된 에이전트가 없습니다"
+                  },
+                  {
+                    "type": "button",
+                    "label": "기본 목록으로 되돌리기",
+                    "on_click": {
+                      "client": "reset_agents"
+                    },
+                    "variant": "primary"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "when",
+              "value": {
+                "client": "show_selected"
+              },
+              "child": {
+                "type": "stack",
+                "direction": "column",
+                "gap": "small",
+                "children": [
+                  {
+                    "type": "when",
+                    "value": {
+                      "client": "show_back"
+                    },
+                    "child": {
+                      "type": "button",
+                      "icon": "arrow-left",
+                      "label": {
+                        "client": "agent_label"
+                      },
+                      "on_click": {
+                        "client": "back_agent"
+                      }
+                    }
+                  },
+                  {
+                    "type": "when",
+                    "value": {
+                      "client": "show_single"
+                    },
+                    "child": {
+                      "type": "text",
+                      "value": {
+                        "client": "agent_label"
+                      }
+                    }
+                  },
+                  {
+                    "type": "when",
+                    "value": {
+                      "client": "show_picked_folder"
+                    },
+                    "child": {
+                      "type": "button",
+                      "label": {
+                        "client": "folder_label"
+                      },
+                      "on_click": {
+                        "client": "pick_folder"
+                      },
+                      "icon": "folder"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "when",
+              "value": {
+                "client": "show_pick_folder"
+              },
+              "child": {
+                "type": "button",
+                "label": "폴더 선택",
+                "on_click": {
+                  "client": "pick_folder"
+                },
+                "variant": "primary"
+              }
+            },
+            {
+              "type": "when",
+              "value": {
+                "client": "show_retry"
+              },
+              "child": {
+                "type": "button",
+                "label": "다시 시도",
+                "on_click": {
+                  "client": "retry"
+                },
+                "variant": "primary"
+              }
+            },
+            {
+              "type": "when",
+              "value": {
+                "client": "show_starting"
+              },
+              "child": {
+                "type": "progress",
+                "value": null,
+                "max": 1
+              }
+            },
+            {
+              "type": "when",
+              "value": {
+                "client": "show_login_error"
+              },
+              "child": {
+                "type": "notice",
+                "kind": "error",
+                "message": {
+                  "client": "error_message"
+                },
+                "error_id": {
+                  "client": "error_id"
+                }
+              }
+            },
+            {
+              "type": "when",
+              "value": {
+                "client": "show_login"
+              },
+              "child": {
+                "type": "stack",
+                "direction": "column",
+                "gap": "small",
+                "children": [
+                  {
+                    "type": "repeat",
+                    "items": {
+                      "client": "auth_methods"
+                    },
+                    "key": "id",
+                    "template": {
+                      "type": "button",
+                      "label": {
+                        "item": "name"
+                      },
+                      "on_click": {
+                        "client": "authenticate"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "when",
+              "value": {
+                "client": "show_failed"
+              },
+              "child": {
+                "type": "notice",
+                "kind": "error",
+                "message": {
+                  "client": "error_message"
+                },
+                "error_id": {
+                  "client": "error_id"
+                },
+                "actions": [
+                  {
+                    "label": "다시 시도",
+                    "on_click": {
+                      "client": "retry"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "place": "center"
+        }
+      },
+      {
+        "type": "when",
+        "value": {
+          "client": "show_chat"
+        },
+        "child": {
+          "type": "chat",
+          "client": {
+            "channel": "conversation",
+            "on_send": "send",
+            "on_cancel": "cancel",
+            "on_attachment": "attachment"
+          },
+          "footer": {
+            "type": "repeat",
+            "items": {
+              "client": "permissions"
+            },
+            "key": "id",
+            "template": {
+              "type": "stack",
+              "direction": "column",
+              "gap": "small",
+              "children": [
+                {
+                  "type": "text",
+                  "value": {
+                    "item": "title"
+                  }
+                },
+                {
+                  "type": "repeat",
+                  "items": {
+                    "item": "options"
+                  },
+                  "key": "id",
+                  "template": {
+                    "type": "button",
+                    "label": {
+                      "item": "label"
+                    },
+                    "on_click": {
+                      "client": "answer"
+                    }
+                  },
+                  "layout": "row"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
   },
   "worker": {
     "runtime": "python3",
@@ -158,5 +447,311 @@
       "ask",
       "reset_session"
     ]
+  },
+  "assets": [
+    {
+      "id": "builtin-agent-client",
+      "version": 1
+    }
+  ],
+  "client": {
+    "runtime": "javascript",
+    "entry": {
+      "id": "builtin-agent-client",
+      "version": 1
+    },
+    "inputs": {},
+    "outputs": {
+      "show_start": {
+        "default": true
+      },
+      "show_loading": {
+        "default": true
+      },
+      "show_agents": {
+        "default": false
+      },
+      "show_empty": {
+        "default": false
+      },
+      "show_folder": {
+        "default": false
+      },
+      "show_starting": {
+        "default": false
+      },
+      "show_login": {
+        "default": false
+      },
+      "show_failed": {
+        "default": false
+      },
+      "show_chat": {
+        "default": false
+      },
+      "show_retry": {
+        "default": false
+      },
+      "show_back": {
+        "default": false
+      },
+      "show_selected": {
+        "default": false
+      },
+      "show_single": {
+        "default": false
+      },
+      "show_picked_folder": {
+        "default": false
+      },
+      "show_login_error": {
+        "default": false
+      },
+      "show_pick_folder": {
+        "default": false
+      },
+      "agents": {
+        "default": []
+      },
+      "agent_options": {
+        "default": []
+      },
+      "selected": {
+        "default": null
+      },
+      "agent_label": {
+        "default": ""
+      },
+      "folder_label": {
+        "default": "폴더 선택"
+      },
+      "window_title": {
+        "default": "에이전트"
+      },
+      "window_meta": {
+        "default": null
+      },
+      "settings_available": {
+        "default": false
+      },
+      "busy": {
+        "default": false
+      },
+      "controls": {
+        "default": []
+      },
+      "permissions": {
+        "default": []
+      },
+      "auth_methods": {
+        "default": []
+      },
+      "has_error": {
+        "default": false
+      },
+      "error_message": {
+        "default": ""
+      },
+      "error_id": {
+        "default": null
+      }
+    },
+    "channels": [
+      "conversation"
+    ],
+    "actions": [
+      "choose_agent",
+      "back_agent",
+      "pick_folder",
+      "retry",
+      "reset_agents",
+      "authenticate",
+      "configure",
+      "settings_agent",
+      "answer",
+      "cancel",
+      "send",
+      "attachment"
+    ],
+    "commands": {},
+    "state_keys": [
+      "agent_id"
+    ],
+    "storage_entries": [
+      "agents"
+    ],
+    "process_permissions": [
+      "run"
+    ],
+    "device_storage": {
+      "prefixes": [
+        "record/",
+        "attachments/",
+        "transient/"
+      ],
+      "scope": "window"
+    },
+    "capabilities": [
+      "instructions",
+      "context_capture"
+    ]
+  },
+  "settings": {
+    "available": {
+      "client": "settings_available"
+    },
+    "ui": {
+      "type": "stack",
+      "direction": "column",
+      "gap": "large",
+      "children": [
+        {
+          "type": "stack",
+          "direction": "column",
+          "gap": "small",
+          "children": [
+            {
+              "type": "when",
+              "value": {
+                "client": "busy"
+              },
+              "child": {
+                "type": "notice",
+                "kind": "info",
+                "message": "응답이 끝나면 바꿀 수 있습니다",
+                "actions": [
+                  {
+                    "label": "멈춤",
+                    "on_click": {
+                      "client": "cancel"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "repeat",
+              "items": {
+                "client": "controls"
+              },
+              "key": "id",
+              "template": {
+                "type": "stack",
+                "direction": "column",
+                "gap": "none",
+                "children": [
+                  {
+                    "type": "when",
+                    "value": {
+                      "item": "is_select"
+                    },
+                    "child": {
+                      "type": "select",
+                      "label": {
+                        "item": "label"
+                      },
+                      "value": {
+                        "item": "value"
+                      },
+                      "options": {
+                        "item": "options"
+                      },
+                      "disabled": {
+                        "client": "busy"
+                      },
+                      "on_change": {
+                        "client": "configure"
+                      }
+                    }
+                  },
+                  {
+                    "type": "when",
+                    "value": {
+                      "item": "is_boolean"
+                    },
+                    "child": {
+                      "type": "toggle",
+                      "label": {
+                        "item": "label"
+                      },
+                      "value": {
+                        "item": "checked"
+                      },
+                      "disabled": {
+                        "client": "busy"
+                      },
+                      "on_change": {
+                        "client": "configure"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "type": "stack",
+          "direction": "column",
+          "gap": "small",
+          "children": [
+            {
+              "type": "text",
+              "value": "바꾸면 새 세션으로 시작합니다",
+              "style": "meta"
+            },
+            {
+              "type": "select",
+              "label": "에이전트",
+              "value": {
+                "client": "selected"
+              },
+              "options": {
+                "client": "agent_options"
+              },
+              "disabled": {
+                "client": "busy"
+              },
+              "on_change": {
+                "client": "settings_agent"
+              }
+            },
+            {
+              "type": "stack",
+              "direction": "row",
+              "gap": "medium",
+              "children": [
+                {
+                  "type": "text",
+                  "value": "작업 폴더"
+                },
+                {
+                  "type": "button",
+                  "label": {
+                    "client": "folder_label"
+                  },
+                  "on_click": {
+                    "client": "pick_folder"
+                  },
+                  "icon": "folder",
+                  "variant": "default",
+                  "disabled": {
+                    "client": "busy"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "window_title": {
+    "title": {
+      "client": "window_title"
+    },
+    "meta": {
+      "client": "window_meta"
+    }
   }
 }

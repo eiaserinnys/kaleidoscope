@@ -6,6 +6,7 @@ import { flattenTreeModel } from "./tree-model";
 import { TreeRow } from "./tree-row";
 import type { ReactNode } from "react";
 import { SHELL_TREE_CONTROL_HEIGHT_MISSING } from "../../contract/shell-errors";
+import { isUnclaimedFocus } from "../focus-rescue";
 
 function sameValue(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
@@ -328,7 +329,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
       ?.querySelector<HTMLElement>("[role=treeitem]");
     if (!row) return;
     const active = document.activeElement;
-    if (active !== document.body && !scrollRef.current?.contains(active)) {
+    if (!isUnclaimedFocus(active) && !scrollRef.current?.contains(active)) {
       setPendingFocus(null);
       return;
     }

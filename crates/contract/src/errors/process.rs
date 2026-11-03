@@ -6,10 +6,10 @@ error_catalog! { ENTRIES;
     PROCESS_START_WINDOW_MISSING() { class: NotFound, place: "프로그램 실행", cause: "창이 없다", message: "프로그램을 실행할 창을 찾지 못했습니다. 창을 다시 여세요.", fix: "창을 다시 여세요" }
     PROCESS_START_DESKTOP_MISSING() { class: NotFound, place: "프로그램 실행 작업 조회", cause: "창이 속한 데스크톱이 없다", message: "프로그램을 실행할 창의 데스크톱을 찾지 못했습니다. 앱을 다시 여세요.", fix: "앱을 다시 여세요" }
     PROCESS_START_APP_VERSION_MISSING() { class: NotFound, place: "프로그램 실행 앱 조회", cause: "창의 앱 버전이 없다", message: "프로그램을 실행할 앱 버전을 찾지 못했습니다. 앱을 다시 여세요.", fix: "앱을 다시 여세요" }
-    PROCESS_START_PERMISSION_UNDECLARED(permission) { class: PermissionDenied, place: "프로그램 실행 권한", cause: "앱이 실행 권한을 선언하지 않았다", message: "실행 권한 {permission}이 앱에 선언되지 않았습니다. 앱 정의를 고치세요.", fix: "앱 정의에 실행 권한을 선언하세요" }
-    PROCESS_START_CLIENT_PERMISSION_UNDECLARED(permission) { class: PermissionDenied, place: "클라이언트 실행 권한", cause: "클라이언트가 실행 권한을 선언하지 않았다", message: "클라이언트에 실행 권한 {permission}이 선언되지 않았습니다. 앱 정의를 고치세요.", fix: "client.process_permissions에 권한을 선언하세요" }
+    PROCESS_START_PERMISSION_UNDECLARED(permission) { class: PermissionDenied, place: "프로그램 실행 권한", cause: "앱이 실행 권한을 선언하지 않았다", message: "실행 권한 {permission}이(가) 앱에 선언되지 않았습니다. 앱 정의를 고치세요.", fix: "앱 정의에 실행 권한을 선언하세요" }
+    PROCESS_START_CLIENT_PERMISSION_UNDECLARED(permission) { class: PermissionDenied, place: "클라이언트 실행 권한", cause: "클라이언트가 실행 권한을 선언하지 않았다", message: "클라이언트에 실행 권한 {permission}이(가) 선언되지 않았습니다. 앱 정의를 고치세요.", fix: "client.process_permissions에 권한을 선언하세요" }
     PROCESS_START_APP_CHANGED() { class: Conflict, place: "프로그램 실행 허용", cause: "허용 대기 중 창의 앱이 바뀌었다", message: "허용을 기다리는 동안 창의 앱이 바뀌었습니다. 새 앱에서 다시 실행하세요.", fix: "새 앱에서 다시 실행하세요" }
-    PROCESS_START_SERVICE_UNKNOWN(service) { class: InvalidRequest, place: "프로그램 서비스 선택", cause: "지원하지 않는 서비스 이름이다", message: "프로그램 서비스 {service}를 알 수 없습니다. 앱 코드에서 지원하는 서비스 이름을 사용하세요.", fix: "앱 코드의 서비스 이름을 고치세요" }
+    PROCESS_START_SERVICE_UNKNOWN(service) { class: InvalidRequest, place: "프로그램 서비스 선택", cause: "지원하지 않는 서비스 이름이다", message: "프로그램 서비스 {service}을(를) 알 수 없습니다. 앱 코드에서 지원하는 서비스 이름을 사용하세요.", fix: "앱 코드의 서비스 이름을 고치세요" }
     PROCESS_START_SERVICE_VERSION_REQUIRED() { class: InvalidRequest, place: "프로그램 도구 서비스 판 확인", cause: "앱이 도구 중계에 필요한 판을 선언하지 않았다", message: "프로그램 도구 중계에는 블록 세트 18판과 client 4판이 필요합니다. 앱 정의의 requires를 고치세요.", fix: "앱 정의에 블록 세트 18판과 client 4판을 선언하세요" }
     PROCESS_RELAY_LISTEN_FAILED() { class: Io, place: "도구 중계 시작", cause: "로컬 중계 포트를 열지 못했다", message: "프로그램의 도구 중계를 열지 못했습니다. 프로그램을 다시 시작하세요.", fix: "프로그램을 다시 시작하세요" }
     PROCESS_RELAY_CLIENT_FAILED() { class: Io, place: "도구 중계 준비", cause: "HTTP 클라이언트를 만들지 못했다", message: "프로그램의 도구 연결을 준비하지 못했습니다. 프로그램을 다시 시작하세요.", fix: "프로그램을 다시 시작하세요" }
@@ -19,10 +19,10 @@ error_catalog! { ENTRIES;
     PROCESS_RELAY_METHOD_INVALID() { class: InvalidRequest, place: "도구 중계 방식", cause: "지원하지 않는 HTTP 방식이다", message: "프로그램 도구 요청 방식을 지원하지 않습니다. 앱 코드에서 GET, POST 또는 DELETE를 사용하세요.", fix: "지원하는 요청 방식을 사용하세요" }
     PROCESS_RELAY_BODY_INVALID() { class: InvalidRequest, place: "도구 중계 본문", cause: "요청 본문이 너무 크거나 중간에 끊겼다", message: "프로그램 도구 요청 본문을 읽지 못했습니다. 요청 크기와 연결을 확인한 뒤 다시 시도하세요.", fix: "요청 크기와 연결을 확인하세요" }
     PROCESS_RELAY_UPSTREAM_FAILED() { class: Unavailable, place: "도구 중계 서버 요청", cause: "연결된 서버에 요청을 전달하지 못했다", message: "연결된 서버에 프로그램 도구 요청을 전달하지 못했습니다. 서버 연결을 확인하고 다시 시도하세요.", fix: "서버 연결을 확인하세요" }
-    PROCESS_START_COMMAND_NOT_FOUND(command) { class: NotFound, place: "프로그램 실행", cause: "명령을 찾지 못했다", message: "프로그램 {command}을 찾지 못했습니다. 이 PC에 설치되어 있는지 확인하세요.", fix: "이 PC에 설치되어 있는지 확인하세요" }
-    PROCESS_START_SPAWN_NOT_FOUND(command, reason) { class: NotFound, place: "프로그램 프로세스 생성", cause: "프로그램 실행에 필요한 파일이 없다", message: "프로그램 {command}을 실행하는 데 필요한 파일을 찾지 못했습니다. 설치와 실행 환경을 확인하세요. 원인: {reason}", fix: "설치와 실행 환경을 확인하세요" }
-    PROCESS_START_SPAWN_PERMISSION_DENIED(command, reason) { class: PermissionDenied, place: "프로그램 실행", cause: "운영체제가 프로그램 실행 권한을 거부했다", message: "프로그램 {command}을 실행할 권한이 없습니다. 이 PC의 실행 권한을 확인하세요. 원인: {reason}", fix: "이 PC의 실행 권한을 확인하세요" }
-    PROCESS_START_SPAWN_FAILED(command, reason) { class: Io, place: "프로그램 실행", cause: "운영체제가 프로세스를 시작하지 못했다", message: "프로그램 {command}을 실행하지 못했습니다. 원인을 확인한 뒤 다시 실행하세요. 원인: {reason}", fix: "원인을 확인한 뒤 다시 실행하세요" }
+    PROCESS_START_COMMAND_NOT_FOUND(command) { class: NotFound, place: "프로그램 실행", cause: "명령을 찾지 못했다", message: "프로그램 {command}을(를) 찾지 못했습니다. 이 PC에 설치되어 있는지 확인하세요.", fix: "이 PC에 설치되어 있는지 확인하세요" }
+    PROCESS_START_SPAWN_NOT_FOUND(command, reason) { class: NotFound, place: "프로그램 프로세스 생성", cause: "프로그램 실행에 필요한 파일이 없다", message: "프로그램 {command}을(를) 실행하는 데 필요한 파일을 찾지 못했습니다. 설치와 실행 환경을 확인하세요. 원인: {reason}", fix: "설치와 실행 환경을 확인하세요" }
+    PROCESS_START_SPAWN_PERMISSION_DENIED(command, reason) { class: PermissionDenied, place: "프로그램 실행", cause: "운영체제가 프로그램 실행 권한을 거부했다", message: "프로그램 {command}을(를) 실행할 권한이 없습니다. 이 PC의 실행 권한을 확인하세요. 원인: {reason}", fix: "이 PC의 실행 권한을 확인하세요" }
+    PROCESS_START_SPAWN_FAILED(command, reason) { class: Io, place: "프로그램 실행", cause: "운영체제가 프로세스를 시작하지 못했다", message: "프로그램 {command}을(를) 실행하지 못했습니다. 원인을 확인한 뒤 다시 실행하세요. 원인: {reason}", fix: "원인을 확인한 뒤 다시 실행하세요" }
     PROCESS_START_PERMISSION_CANCELLED() { class: Unavailable, place: "프로그램 실행 허용 대기", cause: "허용 요청이 닫혔다", message: "프로그램 실행 허용 요청이 닫혔습니다. 창을 다시 열고 실행하세요.", fix: "창을 다시 열고 실행하세요" }
     PROCESS_START_WORKER_STOPPED() { class: Unavailable, place: "프로그램 실행 준비", cause: "프로세스 실행기가 시작 결과를 보내지 못했다", message: "프로그램 실행기를 준비하지 못했습니다. 프로그램을 다시 실행하세요.", fix: "프로그램을 다시 실행하세요" }
     PROCESS_RESPOND_REQUEST_MISSING() { class: NotFound, place: "프로그램 실행 허용 응답", cause: "허용 요청이 없다", message: "프로그램 실행 허용 요청을 찾지 못했습니다. 프로그램을 다시 실행하세요.", fix: "프로그램을 다시 실행하세요" }

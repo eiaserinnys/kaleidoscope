@@ -13,6 +13,7 @@ it("서버 전환을 해당 창의 프레임에 알린다", async () => {
   const runtime = new ClientRuntime(store, data, { assets:[] } as unknown as AppDefinition, client as never);
   await runtime.start();
   const frame = document.querySelector("iframe")!;
+  expect(frame.tabIndex).toBe(-1);
   const post = vi.spyOn(frame.contentWindow!, "postMessage");
   receive({ event: "process.services_changed", window_id: "other", handle: "other-handle" });
   expect(post).not.toHaveBeenCalled();

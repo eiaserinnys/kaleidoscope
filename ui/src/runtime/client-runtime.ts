@@ -73,6 +73,7 @@ export class ClientRuntime {
       this.token = crypto.randomUUID();
       const state = this.state();
       const frame = document.createElement("iframe");
+      frame.tabIndex = -1;
       frame.setAttribute("sandbox", "allow-scripts");
       frame.setAttribute("allow", "autoplay");
       frame.setAttribute("title", "클라이언트 런타임");
@@ -320,7 +321,11 @@ export class ClientRuntime {
       delete this.ownWrites[entry];
       this.pendingRevisions[entry] = read.result.revision;
       this.send({ type: "ks-sandbox-storage-sync", entry, content: read.result.content, revision: read.result.revision });
-    } catch (error) { this.data.setNotice(toCoreError(error)); }
+    } catch (error) {
+      const problem = toCoreError(error);
+      if (this.ready) this.send({ type: "ks-sandbox-storage-sync", entry, error: problem.message, errorId: problem.id, errorCode: problem.code });
+      else this.data.setNotice(problem);
+    }
   }
 
   private receive = (event: MessageEvent) => {

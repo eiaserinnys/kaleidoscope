@@ -42,6 +42,7 @@ fn main() {
         }
     }
     let mut authenticated = false;
+    let mut login_attempts = 0;
     let mut pending = Value::Null;
     let mut image_count = 0usize;
     for line in io::stdin().lock().lines() {
@@ -84,10 +85,22 @@ fn main() {
         let id = value["id"].clone();
         match method {
             "initialize" if scenario.contains("hang") => {}
-            "initialize" => emit(
-                json!({"jsonrpc":"2.0","id":id,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":!scenario.contains("no_load"),"promptCapabilities":{"image":!scenario.contains("no_image")},"mcpCapabilities":{"http":!scenario.contains("no_http")}},"authMethods":[{"id":"login","name":"로그인"},{"id":"terminal","name":"터미널","type":"terminal","args":[]}]}}),
-            ),
+            "initialize" => {
+                if scenario.contains("delay_start") {
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                }
+                emit(
+                    json!({"jsonrpc":"2.0","id":id,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":!scenario.contains("no_load"),"promptCapabilities":{"image":!scenario.contains("no_image")},"mcpCapabilities":{"http":!scenario.contains("no_http")}},"authMethods":[{"id":"login","name":"로그인"},{"id":"terminal","name":"터미널","type":"terminal","args":[]}]}}),
+                );
+            }
             "authenticate" => {
+                login_attempts += 1;
+                if scenario.contains("auth_fail_once") && login_attempts == 1 {
+                    emit(
+                        json!({"jsonrpc":"2.0","id":id,"error":{"code":-32603,"message":"login failed"}}),
+                    );
+                    continue;
+                }
                 authenticated = true;
                 emit(json!({"jsonrpc":"2.0","id":id,"result":{}}));
             }
@@ -121,6 +134,18 @@ fn main() {
                 }
                 if scenario.contains("model_config") {
                     result["configOptions"] = json!([{"id":"new-model","name":"모델","category":"model","type":"select","currentValue":"x","options":[{"value":"x","name":"X"}]}]);
+                }
+                if scenario.contains("many_controls") {
+                    let options: Vec<Value> = (0..12)
+                        .map(|index| {
+                            if index % 2 == 0 {
+                                json!({"id":format!("option-{index}"),"name":format!("설정 항목 {index}"),"type":"select","currentValue":"a","options":[{"value":"a","name":"아주 긴 선택 값이 이어집니다"}]})
+                            } else {
+                                json!({"id":format!("option-{index}"),"name":format!("응답 중 추가 설정을 허용합니다 {index}"),"type":"boolean","currentValue":true})
+                            }
+                        })
+                        .collect();
+                    result["configOptions"] = Value::Array(options);
                 }
                 emit(json!({"jsonrpc":"2.0","id":id,"result":result}));
             }
@@ -180,7 +205,10 @@ fn main() {
                         .unwrap();
                     }
                 }
-                if text.contains("fail-turn") {
+                if text.contains("end-mid-turn") {
+                    update(json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"종료 전 응답"}}));
+                    return;
+                } else if text.contains("fail-turn") {
                     update(
                         json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"OLD"}}),
                     );
@@ -191,6 +219,14 @@ fn main() {
                     update(
                         json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"NEW"}}),
                     );
+                    emit(json!({"jsonrpc":"2.0","id":id,"result":{"stopReason":"end_turn"}}));
+                } else if text.contains("stream") {
+                    for index in 0..80 {
+                        update(
+                            json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("[{index:02}]")}}),
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
                     emit(json!({"jsonrpc":"2.0","id":id,"result":{"stopReason":"end_turn"}}));
                 } else if text.contains("permission") {
                     pending = id;

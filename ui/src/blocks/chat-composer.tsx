@@ -80,7 +80,7 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
         value={draft}
       />
       {busy && onCancel
-        ? <IconButton aria-label="멈춤" onClick={onCancel}><SquareIcon absoluteStrokeWidth aria-hidden="true" size={ICON_SIZE.control} strokeWidth={1.5} /></IconButton>
+        ? <IconButton aria-label="멈춤" onClick={(event) => { onCancel(); if (event.detail === 0) inputRef.current?.focus(); }}><SquareIcon absoluteStrokeWidth aria-hidden="true" size={ICON_SIZE.control} strokeWidth={1.5} /></IconButton>
         : <IconButton aria-label="보내기" disabled={disabled || (!draft.trim() && !attachments.length) || busy} onClick={() => onSend(true)}><ArrowUp /></IconButton>}
     </div>
   </div>;

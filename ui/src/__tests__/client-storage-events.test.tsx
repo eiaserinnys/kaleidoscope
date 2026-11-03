@@ -47,3 +47,39 @@ it("문서 이동은 무시하고 고정 저장 항목 변경과 스냅샷을 �
     store.dispose();
   }
 });
+
+it("프레임 준비 전 오류는 창에 알리고 준비 뒤 오류는 항목과 함께 프레임에 보낸다", async () => {
+  const definition: AppDefinition = {
+    id: "client-storage-errors", name: "저장 오류 시험", requires: { blocks: 12, modules: { assets: 1, client: 1, storage: 1 } },
+    permissions: [], state: {}, assets: [{ id: "script", version: 1 }],
+    storage: { entries: [{ id: "draft", key: "draft", kind: "md", label: "문서", presentation: "hidden", default: "" }] },
+    client: { runtime: "javascript", entry: { id: "script", version: 1 }, inputs: {}, outputs: {}, actions: [], commands: {}, state_keys: [], storage_entries: ["draft"] },
+    ui: { type: "text", value: "시험" },
+  };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const store = createShellStore(transport);
+  await store.ready;
+  const call = store.call.bind(store);
+  const problem = { id: "STORAGE_READ_FAILED", code: "unavailable", message: "저장소를 읽지 못했습니다", details: [] };
+  vi.spyOn(store, "call").mockImplementation(async (request) => {
+    if (request.op === "data.media") return { op: "data.media", media: { mime: "text/javascript", data_base64: btoa(""), width: null, height: null } } as CoreReply;
+    if (request.op === "storage.get") throw problem;
+    return call(request);
+  });
+  const data = new WindowData(store, "viewer-window", definition);
+  const runtime = new ClientRuntime(store, data, definition, definition.client!);
+  await runtime.start();
+  try {
+    const frame = document.querySelector(".ks-client-frames iframe") as HTMLIFrameElement;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    transport.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "snapshot", snapshot: { bucket_id: "bucket", items: [] } } });
+    await waitFor(() => expect(data.getNotice()).toBe(problem.message));
+    data.setNotice(null);
+    window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token: (runtime as any).token, type: "ks-sandbox-ready" } }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-sandbox-storage-sync", entry: "draft", error: problem.message, errorId: problem.id, errorCode: problem.code }), "*"));
+    expect(data.getNotice()).toBeNull();
+  } finally {
+    await runtime.stop();
+    store.dispose();
+  }
+});

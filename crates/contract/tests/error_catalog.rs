@@ -20,6 +20,24 @@ fn conversation_binding_errors_use_the_workspace_name_once() {
     assert!(saved.message.starts_with("작업 이름 작업 1:"));
 }
 
+#[test]
+fn process_names_use_particles_for_both_consonant_and_vowel_endings() {
+    for name in ["cli", "프로그램"] {
+        for error in [
+            errors::PROCESS_START_COMMAND_NOT_FOUND(name),
+            errors::PROCESS_START_SPAWN_NOT_FOUND(name, "원인"),
+            errors::PROCESS_START_SPAWN_PERMISSION_DENIED(name, "원인"),
+            errors::PROCESS_START_SPAWN_FAILED(name, "원인"),
+            errors::PROCESS_START_SERVICE_UNKNOWN(name),
+        ] {
+            assert!(error.message.contains(&format!("{name}을(를)")), "{}", error.message);
+        }
+        for error in [errors::PROCESS_START_PERMISSION_UNDECLARED(name), errors::PROCESS_START_CLIENT_PERMISSION_UNDECLARED(name)] {
+            assert!(error.message.contains(&format!("{name}이(가)")), "{}", error.message);
+        }
+    }
+}
+
 fn valid_code(id: &str) -> bool {
     id.split('_').count() >= 3
         && id.split('_').all(|part| !part.is_empty())

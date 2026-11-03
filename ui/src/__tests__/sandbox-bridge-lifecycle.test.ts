@@ -9,7 +9,7 @@ it("저장본을 수락했을 때만 revision을 갱신하고 닫기 전에 저�
   const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
   new Function(code)();
-  const api = (window as unknown as { kaleidoscope: { onStorageChange: (entry: string, listener: () => boolean) => () => void; setStorage: (entry: string, content: string) => Promise<unknown> } }).kaleidoscope;
+  const api = (window as unknown as { kaleidoscope: { onStorageChange: (entry: string, listener: () => boolean, onError?: (error: Error & { id: string; code: string }) => void) => () => void; setStorage: (entry: string, content: string) => Promise<unknown> } }).kaleidoscope;
   const host = (data: object) => window.dispatchEvent(new MessageEvent("message", { source: window, data }));
   const reject = api.onStorageChange("draft", () => false);
   host({ type: "ks-sandbox-storage-sync", entry: "draft", content: "다른 문서", revision: "r2" });
@@ -18,6 +18,18 @@ it("저장본을 수락했을 때만 revision을 갱신하고 닫기 전에 저�
   api.onStorageChange("draft", () => true);
   host({ type: "ks-sandbox-storage-sync", entry: "draft", content: "다른 문서", revision: "r2" });
   expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-sandbox-storage-applied", entry: "draft", revision: "r2" }), "*");
+  const received = vi.fn(), alsoReceived = vi.fn();
+  const unsubscribe = api.onStorageChange("draft", () => true, received);
+  const unsubscribeOther = api.onStorageChange("draft", () => true, alsoReceived);
+  post.mockClear();
+  const problem = { type: "ks-sandbox-storage-sync", entry: "draft", error: "저장소를 읽지 못했습니다", errorId: "STORAGE_READ_FAILED", errorCode: "unavailable" };
+  host(problem);
+  expect(received).toHaveBeenCalledWith(expect.objectContaining({ id: "STORAGE_READ_FAILED", code: "unavailable", message: problem.error }));
+  expect(alsoReceived).toHaveBeenCalledOnce();
+  expect(post.mock.calls.some(([value]) => value.type === "ks-client-notice")).toBe(false);
+  unsubscribe(); unsubscribeOther();
+  host(problem);
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-notice", error: true, errorId: problem.errorId, errorCode: problem.errorCode, message: problem.error }), "*");
   window.addEventListener("pagehide", () => { void api.setStorage("draft", "마지막 편집"); }, { once: true });
   host({ type: "ks-sandbox-flush", requestId: "close" });
   const write = post.mock.calls.map(([value]) => value).find((value) => value.type === "ks-sandbox-storage-set");

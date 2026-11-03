@@ -34,6 +34,8 @@ fn connected(core: &Core, mode: ServerMode) -> bool {
     matches!(core.handle(CoreRequest::StateGet {}).unwrap(), CoreReply::StateGet { snapshot } if matches!(snapshot.link, LinkStatus::Connected { mode: actual, .. } if actual == mode))
 }
 fn open_agent(core: &Core) -> (String, String, String) {
+    let definition_json = include_str!("../../core/src/tests/fixtures/local-agent.json");
+    call(core, json!({"op":"app.import","definition_json":definition_json}));
     let state = call(core, json!({"op":"state.get"}));
     let workspace = state["snapshot"]["shared"]["workspaces"][0]["id"]
         .as_str()
@@ -45,13 +47,13 @@ fn open_agent(core: &Core) -> (String, String, String) {
         .to_owned();
     let window = call(
         core,
-        json!({"op":"window.open","desktop_id":desktop,"app_id":"agent"}),
+        json!({"op":"window.open","desktop_id":desktop,"app_id":"test-agent"}),
     )["window"]["id"]
         .as_str()
         .unwrap()
         .to_owned();
     call(core, json!({"op":"data.attach","window_id":window}));
-    let definition: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
+    let definition: Value = serde_json::from_str(definition_json).unwrap();
     let defaults = definition["storage"]["entries"][0]["default"]
         .as_array()
         .unwrap();

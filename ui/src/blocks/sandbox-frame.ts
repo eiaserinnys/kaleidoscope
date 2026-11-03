@@ -88,7 +88,7 @@ function bridgeSource(init: SandboxInit): string {
         pendingWrites.add(write); write.then(() => pendingWrites.delete(write), () => pendingWrites.delete(write));
         return write;
       },
-      onStorageChange(entry, listener) { const set = storageListeners.get(entry) || new Set(); set.add(listener); storageListeners.set(entry, set); return () => set.delete(listener); },
+      onStorageChange(entry, listener, onError) { const listeners = storageListeners.get(entry) || new Map(); listeners.set(listener, onError); storageListeners.set(entry, listeners); return () => listeners.delete(listener); },
       get inputs() { return inputs; },
       onLifecycle(listener) { lifecycleListeners.add(listener); if (lifecycle) listener(lifecycle); return () => lifecycleListeners.delete(listener); },
       onInputs(listener) { inputListeners.add(listener); return () => inputListeners.delete(listener); },
@@ -250,8 +250,14 @@ function bridgeSource(init: SandboxInit): string {
       if (data.type === 'ks-sandbox-state-sync') { state = { ...data.state }; stateListeners.forEach(fn => fn({ ...state })); }
       if (data.type === 'ks-sandbox-storage-sync') {
         const listeners = storageListeners.get(data.entry);
+        if (data.error) {
+          const handlers = [...(listeners?.values() || [])].filter(fn => typeof fn === 'function');
+          if (handlers.length) handlers.forEach(fn => fn(fail({ id: data.errorId, code: data.errorCode, message: data.error })));
+          else send('ks-client-notice', { message: data.error, error: true, errorId: data.errorId, errorCode: data.errorCode });
+          return;
+        }
         if (listeners?.size) {
-          const accepted = [...listeners].map(fn => fn(data.content)).every(result => result !== false);
+          const accepted = [...listeners.keys()].map(fn => fn(data.content)).every(result => result !== false);
           if (accepted && data.revision !== undefined) send('ks-sandbox-storage-applied', { entry: data.entry, revision: data.revision });
         }
       }

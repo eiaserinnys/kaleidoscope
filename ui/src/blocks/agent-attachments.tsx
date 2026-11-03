@@ -87,7 +87,7 @@ export function HistoryAttachmentView({ attachment, cacheKey, load, open, onPrev
   if (attachment.mime.startsWith("image/") && !failed) {
     return src
       ? <button type="button" className="ks-agent-attachment-image" aria-label={attachment.name} onClick={(event) => onPreview({ src, name: attachment.name, trigger: event.currentTarget })}><img src={src} alt="" /></button>
-      : <div className="ks-agent-attachment-placeholder" aria-label={attachment.name} />;
+      : <div className="ks-agent-attachment-image ks-agent-attachment-placeholder" aria-label={attachment.name} />;
   }
   return <button type="button" className="ks-agent-attachment-chip ks-agent-attachment-file" disabled={opening} onClick={() => void handleOpen()} aria-label={attachment.name}>
     <span className="ks-agent-attachment-chip-preview"><FileIcon /></span><span className="ks-agent-attachment-name" title={attachment.name}>{attachment.name}</span>

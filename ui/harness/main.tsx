@@ -39,6 +39,13 @@ installShellDragGuard();
 const htmlReport = htmlReportJson as AppDefinition;
 const workspacePas = workspacePasJson as unknown as AppDefinition;
 const agentApp = agentJson as unknown as AppDefinition;
+// 이전 local_agent 정의도 아직 지원하므로 상태별 테스트는 해당 계약을 고정한다.
+const legacyAgentApp: AppDefinition = {
+  id: "agent", name: "에이전트", requires: { blocks: 8, modules: { local_agent: 1, files: 1, storage: 1 } },
+  permissions: [{ module: "local_agent", id: "run", label: "에이전트 실행" }, { module: "files", id: "work", access: "readwrite", label: "작업 폴더" }],
+  state: { agent_id: null }, storage: agentApp.storage,
+  ui: { type: "chat", permission: "run", root: { permission: "work" }, agents: { expr: "$storage.agents" }, selected: { state: "agent_id" }, on_select: { set_state: "agent_id" } },
+};
 const clientChatScriptUrl = URL.createObjectURL(new Blob([clientChatSource], { type: "text/javascript" }));
 const clientChatApp = {
   id: "client-chat-test", name: "클라이언트 채팅 시험",
@@ -97,7 +104,8 @@ const historyCount = historyParam !== null && Number.isInteger(Number(historyPar
 if (conversationMode) workspacePas.agent = {
   protocol: "conversation-v1", permission: "conversation", base_path: "api", namespace: "test", profile: "test", collection: "test", model_order: [], selected_model: "", title_template: "", initial_instruction_template: "", instructions_template: "", thread_entry: "thread",
 };
-const definitions = [mdEditor, htmlReport, workspacePas, agentApp, clientChatApp, dataLayoutApp, gallery, dataViewsApp, storageDocument, ...previewDefinitions];
+const phaseAgent = new URLSearchParams(window.location.search).has("agent-phase") ? legacyAgentApp : agentApp;
+const definitions = [mdEditor, htmlReport, workspacePas, phaseAgent, clientChatApp, dataLayoutApp, gallery, dataViewsApp, storageDocument, ...previewDefinitions];
 const timestamp = "2026-10-28T00:00:00Z";
 const agentHarnessParams = new URLSearchParams(window.location.search);
 const agentPhases = ["choosing_agent", "choosing_folder", "awaiting_permission", "starting", "login_required", "ready", "responding", "failed", "ended"] as const;

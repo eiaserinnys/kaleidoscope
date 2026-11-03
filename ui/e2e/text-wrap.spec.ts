@@ -215,7 +215,7 @@ test("긴 사용자 말, 알림, 오류와 도구 이름이 360 폭 기록 안�
   for (const [scrollWidth, clientWidth] of widths.text) expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 });
 
-test("기본 에이전트의 실행 명령과 오류 명령이 360 폭 안에 든다", async ({ page }) => {
+test("이전 에이전트의 실행 명령과 오류 명령이 360 폭 안에 든다", async ({ page }) => {
   await page.setViewportSize({ width: 392, height: 732 });
   await page.goto("/?preview=agent&agent-phase=awaiting_permission");
   await page.addStyleTag({ content: ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }" });

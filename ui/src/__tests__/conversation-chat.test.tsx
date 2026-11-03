@@ -364,6 +364,37 @@ describe("대화 제공자 화면", () => {
 });
 
 describe("공용 대화 부품", () => {
+  it("생각 중은 줄 선 말과 넘어가기 전 말 뒤에 놓는다", () => {
+    render(<ChatHistory items={[]} pending={{ text: "새 말", attachments: [], afterResponse: true }} delta="" busy tool={null}
+      historyRef={createRef<HTMLDivElement>()} followTail={{ current: true }}
+      renderAttachment={() => null} renderPendingAttachment={() => null} queued={<div>줄 선 말</div>} />);
+    const rows = [...screen.getByRole("log").querySelector(".ks-agent-chat-content")!.children].map((node) => node.textContent);
+    expect(rows).toEqual(["줄 선 말", "새 말", "생각 중입니다…"]);
+  });
+  it("사용자의 답을 기다리는 footer에서는 생각 중 표시를 숨긴다", () => {
+    const props = {
+      items: [], pending: null, delta: "", busy: true, tool: null,
+      historyRef: createRef<HTMLDivElement>(), followTail: { current: true },
+      renderAttachment: () => null, renderPendingAttachment: () => null,
+      footer: <button type="button">허용</button>,
+    };
+    const { rerender } = render(<ChatHistory {...props} hideThinking />);
+    expect(screen.queryByLabelText("생각 중입니다")).toBeNull();
+    rerender(<ChatHistory {...props} />);
+    expect(screen.getByLabelText("생각 중입니다")).toBeTruthy();
+  });
+
+  it("응답 중 보낸 대기 말은 진행 글과 이미 줄 선 말 뒤에 놓는다", () => {
+    render(<ChatHistory
+      items={[item("one", "기록")]} pending={{ text: "새 대기 말", attachments: [], afterResponse: true }} delta="진행 글" busy tool={null}
+      historyRef={createRef<HTMLDivElement>()} followTail={{ current: true }}
+      renderAttachment={() => null} renderPendingAttachment={() => null}
+      queued={<div>먼저 줄 선 말</div>}
+    />);
+    const rows = [...screen.getByRole("log").querySelector(".ks-agent-chat-content")!.children].map((node) => node.textContent);
+    expect(rows).toEqual(["기록", "진행 글", "먼저 줄 선 말", "새 대기 말"]);
+  });
+
   it("기록, 진행 줄, footer를 기존 순서로 그린다", () => {
     const historyRef = createRef<HTMLDivElement>();
     render(<ChatHistory
@@ -392,6 +423,16 @@ describe("공용 대화 부품", () => {
     fireEvent.keyDown(input, { key: "Enter", keyCode: 229, isComposing: true });
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledWith();
+  });
+
+  it("기록 그림은 불러오는 중과 표시된 뒤 같은 틀을 쓴다", async () => {
+    const attachment = { id: "0", name: "기록.png", mime: "image/png" };
+    let resolveLoad!: (value: { mime: string; data_base64: string }) => void;
+    const load = () => new Promise<{ mime: string; data_base64: string }>((resolve) => { resolveLoad = resolve; });
+    const { container } = render(<HistoryAttachmentView attachment={attachment} cacheKey={["frame-test"]} load={load} open={async () => {}} onPreview={() => {}} onError={() => {}} />);
+    expect(container.querySelector(".ks-agent-attachment-placeholder")?.classList.contains("ks-agent-attachment-image")).toBe(true);
+    await act(async () => resolveLoad({ mime: "image/png", data_base64: "YQ==" }));
+    expect(screen.getByRole("button", { name: "기록.png" }).classList.contains("ks-agent-attachment-image")).toBe(true);
   });
 
   it("히스토리 첨부 캐시는 운송 범위가 다르면 분리한다", async () => {

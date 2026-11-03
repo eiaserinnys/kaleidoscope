@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { AppSettings } from "../settings/app-settings";
 import { WindowDataProvider, useWindowData, useDormant, useBinding, type WindowData } from "../data/window-data";
 import { ClientShareSignal, WindowNotice } from "../data/window-notice";
@@ -8,6 +8,7 @@ import type { ShellStore } from "../core/shell-store";
 import type { CoreError, Rect } from "../contract/contract";
 import { useShellSelector } from "../core/shell-store";
 import { registerAppShortcuts } from "../runtime/shortcuts";
+import { focusRescued } from "../components/focus-rescue";
 import { renderBlock } from "./render-block";
 import * as shellErrors from "../contract/shell-errors";
 
@@ -80,6 +81,51 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
   context: BlockContext; settingsOpen: boolean; settingsVisited: boolean; onSettingsClose: () => void; onSettingsProblem?: (problem: CoreError | string | null) => void; onWindowHeader?: (title: string, meta: string | null) => void; onSettingsAvailable?: (available: boolean) => void; onWindowData?: (data: WindowData | null) => void;
 }) {
   const data = useWindowData();
+  const host = useRef<HTMLDivElement | null>(null);
+  const setHost = useCallback((element: HTMLDivElement | null) => {
+    host.current = element;
+    data.setClientHost(element);
+  }, [data]);
+  useEffect(() => {
+    const content = host.current;
+    if (!content) return;
+    const scope = content.closest<HTMLElement>(".ks-window-frame") ?? content;
+    let focused: HTMLElement | null = null;
+    let restore = false;
+    let pointer = false;
+    const onPointer = () => { pointer = true; };
+    const onKey = () => { pointer = false; };
+    const onFocus = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || target.classList.contains("ks-window-content")) return;
+      focused = target;
+      restore = false;
+    };
+    const observer = new MutationObserver(() => {
+      const active = document.activeElement;
+      const lost = active === document.body || (active instanceof HTMLElement && active.classList.contains("ks-window-content") && scope.contains(active));
+      if (focused && !scope.contains(focused)) { focused = null; restore = lost; }
+      if (!restore || !lost) return;
+      // 포인터로 시작한 화면 전환에는 키보드 초점 테두리를 만들지 않는다.
+      if (pointer) { restore = false; return; }
+      const controls = Array.from(content.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'));
+      const visible = controls.filter((element) => element.tabIndex >= 0 && !element.closest("[hidden], [inert], [aria-hidden='true']")
+        && (typeof element.checkVisibility !== "function" || element.checkVisibility({ visibilityProperty: true })));
+      const target = visible.find((element) => element.classList.contains("ks-button-emphasis"))
+        ?? visible.find((element) => element.classList.contains("ks-agent-chat-input")) ?? visible[0];
+      if (target) { restore = false; focusRescued(target); }
+    });
+    scope.addEventListener("focusin", onFocus);
+    scope.addEventListener("pointerdown", onPointer, true);
+    scope.addEventListener("keydown", onKey, true);
+    observer.observe(scope, { childList: true, subtree: true });
+    return () => {
+      scope.removeEventListener("focusin", onFocus);
+      scope.removeEventListener("pointerdown", onPointer, true);
+      scope.removeEventListener("keydown", onKey, true);
+      observer.disconnect();
+    };
+  }, [data]);
   const hasSettings = Boolean(context.definition.settings)
     || (context.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false);
   useEffect(() => {
@@ -89,7 +135,7 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
   useDormant("/ui", settingsOpen);
   useDormant("/settings/ui", Boolean(context.definition.settings) && !settingsOpen);
   useEffect(() => { data.setClientDormant(settingsOpen); }, [data, settingsOpen]);
-  return <div ref={data.setClientHost} className="ks-app-window-content ks-data-window" data-ks-app-id={context.window.app_id} data-window-id={context.window.id}>
+  return <div ref={setHost} className="ks-app-window-content ks-data-window" data-ks-app-id={context.window.app_id} data-window-id={context.window.id}>
     <WindowFrameBindings context={context} onWindowHeader={onWindowHeader} onSettingsAvailable={onSettingsAvailable} />
     <ClientShareSignal />
     <AppShortcuts context={context} active={!settingsOpen} />
