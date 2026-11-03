@@ -258,6 +258,24 @@ pub struct DeviceStorage {
 pub enum ClientCapability {
     Share,
     KeepAwake,
+    Instructions,
+    ContextCapture,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ContextAttachments {
+    pub count: usize,
+    #[ts(type = "number")]
+    pub bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ContextImage {
+    pub name: String,
+    pub mime: String,
+    pub bytes: Vec<u8>,
 }
 
 /// 격리 클라이언트와 호스트 사이의 요청.
@@ -265,6 +283,12 @@ pub enum ClientCapability {
 #[serde(tag = "type")]
 #[ts(export, export_to = "contract.ts")]
 pub enum ClientBridgeRequest {
+    #[serde(rename = "ks-client-instructions")]
+    Instructions { #[serde(rename = "requestId")] request_id: String, kind: String },
+    #[serde(rename = "ks-client-context-prepare")]
+    ContextPrepare { #[serde(rename = "requestId")] request_id: String, channel: String, attachments: ContextAttachments, #[serde(rename = "request_id")] send_request_id: String },
+    #[serde(rename = "ks-client-context-commit")]
+    ContextCommit { #[serde(rename = "requestId")] request_id: String, ticket: String },
     #[serde(rename = "ks-client-http-read")]
     HttpRead {
         #[serde(rename = "requestId")]

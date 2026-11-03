@@ -6,7 +6,7 @@ use kaleidoscope_contract::{
     CoreError, CoreEvent,
 };
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, VecDeque},
     path::PathBuf,
     sync::{Arc, Mutex, Weak},
 };
@@ -37,6 +37,8 @@ pub(super) struct Running {
     pub permission: String,
     pub handle: String,
     pub cwd: String,
+    pub scope: Mutex<PathBuf>,
+    pub services: Mutex<BTreeMap<String, Option<String>>>,
     pub state: Arc<Mutex<State>>,
     pub space: Arc<Notify>,
     pub stop_tx: mpsc::UnboundedSender<()>,
@@ -51,6 +53,7 @@ impl Running {
         permission: String,
         spec: ProcessSpec,
         cwd: PathBuf,
+        scope: PathBuf,
     ) -> Result<Arc<Self>, CoreError> {
         let handle = uuid::Uuid::new_v4().to_string();
         let (tx, mut rx) = mpsc::unbounded_channel();
@@ -155,6 +158,8 @@ impl Running {
                 permission,
                 handle,
                 cwd: cwd.to_string_lossy().into_owned(),
+                scope: Mutex::new(scope),
+                services: Mutex::new(BTreeMap::new()),
                 state,
                 space,
                 stop_tx,

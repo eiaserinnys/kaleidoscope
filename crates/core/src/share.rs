@@ -643,7 +643,8 @@ pub(crate) fn capture_for_send(
     inner: &Inner,
     workspace_id: &str,
     conversation: &str,
-    existing: &[ConversationUpload],
+    existing_count: usize,
+    existing_bytes: u64,
 ) -> (Vec<ConversationUpload>, Vec<(String, String)>) {
     let mut isolated = std::mem::take(&mut *inner.isolated_captures.lock().unwrap());
     let candidates = {
@@ -695,24 +696,15 @@ pub(crate) fn capture_for_send(
                 .collect::<Vec<_>>()
         }
     };
-    let mut attachments = existing.to_vec();
-    let mut total = 0u64;
-    for attachment in existing {
-        let Ok(bytes) = STANDARD.decode(&attachment.data_base64) else {
-            return (attachments, Vec::new());
-        };
-        if bytes.len() as u64 > AGENT_ATTACHMENT_MAX_BYTES {
-            return (attachments, Vec::new());
-        }
-        total = total.saturating_add(bytes.len() as u64);
-    }
+    let mut attachments = Vec::new();
+    let mut total = existing_bytes;
     if total > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES {
         return (attachments, Vec::new());
     }
     let web = inner.host.web();
     let mut sent = Vec::new();
     for (id, bounds, app_name, has_web, occluded, image_base64, previous_hash) in candidates {
-        if attachments.len() >= AGENT_ATTACHMENTS_MAX {
+        if existing_count.saturating_add(attachments.len()) >= AGENT_ATTACHMENTS_MAX {
             break;
         }
         let png = if let Some(capture) = isolated.remove(&id) {

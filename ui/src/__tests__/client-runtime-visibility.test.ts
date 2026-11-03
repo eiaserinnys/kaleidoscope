@@ -277,10 +277,14 @@ describe("client runtime host services", () => {
     receive(frame, actualToken, "ks-client-can-share", { requestId: "1", file_id: "file-1" });
     receive(frame, actualToken, "ks-client-share", { requestId: "2", file_id: "file-1", title: "메모" });
     receive(frame, actualToken, "ks-client-keep-awake", { requestId: "3", enabled: true });
+    receive(frame, actualToken, "ks-client-instructions", { requestId: "4", kind: "app_authoring" });
+    receive(frame, actualToken, "ks-client-context-prepare", { requestId: "5", request_id: "send", channel: "chat", attachments: { count: 0, bytes: 0 } });
+    receive(frame, actualToken, "ks-client-context-commit", { requestId: "6", ticket: "ticket" });
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
     expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-reply", requestId: "1", error: expect.any(String) }), "*");
     expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-reply", requestId: "2", error: expect.any(String) }), "*");
     expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-reply", requestId: "3", error: expect.any(String) }), "*");
+    for (const requestId of ["4", "5", "6"]) expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-reply", requestId, error: expect.any(String) }), "*");
     expect(bytes).not.toHaveBeenCalled();
     await runtime.stop();
   });

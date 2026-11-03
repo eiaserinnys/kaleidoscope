@@ -32,7 +32,7 @@ pub struct ProcessSnapshot {
     pub after: u64,
     pub checkpoint: Option<serde_json::Value>,
     pub cwd: String,
-    pub services: BTreeMap<String, String>,
+    pub services: BTreeMap<String, Option<String>>,
     pub exit: Option<ProcessExit>,
 }
 
@@ -49,7 +49,7 @@ pub enum ProcessStartResult {
     Started {
         handle: String,
         cwd: String,
-        services: BTreeMap<String, String>,
+        services: BTreeMap<String, Option<String>>,
     },
     Cancelled {
         status: String,

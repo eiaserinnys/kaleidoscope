@@ -20,6 +20,21 @@ fn accepted(value: &Value) -> bool {
 }
 
 #[test]
+fn instructions_and_context_require_block_18_and_client_4() {
+    for capability in ["instructions", "context_capture"] {
+        let mut app = definition(json!({"type":"text","value":"시험"}));
+        app["client"]["capabilities"] = json!([capability]);
+        app["requires"]["blocks"] = json!(17);
+        app["requires"]["modules"]["client"] = json!(3);
+        assert!(!accepted(&app));
+        app["requires"]["blocks"] = json!(18);
+        assert!(!accepted(&app));
+        app["requires"]["modules"]["client"] = json!(4);
+        assert!(accepted(&app));
+    }
+}
+
+#[test]
 fn client_outputs_drive_controls_and_timeline() {
     let app = definition(json!({"type":"stack","direction":"column","children":[
         {"type":"slider","value":{"client":"value"},"on_change":{"client":"change"},"min":0,"max":10},

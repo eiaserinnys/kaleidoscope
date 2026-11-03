@@ -12,6 +12,7 @@ import { registerSandboxFlush } from "../blocks/sandbox-flush";
 import { BrowserFiles } from "./client-files";
 import { ClientHostServices } from "./client-host-services";
 import { processRequest } from "./client-process";
+import { prepareShareForSend } from "../share/share-view";
 import * as shellErrors from "../contract/shell-errors";
 
 type Client = NonNullable<AppDefinition["client"]>;
@@ -88,6 +89,7 @@ export class ClientRuntime {
       window.addEventListener("message", this.receive);
       this.unsubscribeStorage = this.store.subscribeEvents((event) => {
         if (event.event === "process.ready" && event.window_id === this.data.windowId && this.client.process_permissions !== undefined) this.send({ type: "ks-process-ready", handle: event.handle });
+        if (event.event === "process.services_changed" && event.window_id === this.data.windowId && this.client.process_permissions !== undefined) this.send({ type: "ks-process-services-changed", handle: event.handle });
         if (event.event !== "storage.update" || event.window_id !== this.data.windowId) return;
         for (const entry of this.client.storage_entries) {
           if (
@@ -355,7 +357,16 @@ export class ClientRuntime {
     else if (message.type === "ks-client-process" && this.client.process_permissions !== undefined) {
       void processRequest(this.store, this.data.windowId, message.method, message.params).then((result) => this.reply(message.requestId, result)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     }
-    else if (message.type === "ks-client-command") {
+    else if (message.type === "ks-client-instructions") {
+      if (!this.hostServices.hasCapability("instructions")) this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_INSTRUCTIONS_CAPABILITY_UNDECLARED());
+      else void this.store.call({ op: "host.instructions", window_id: this.data.windowId, kind: message.kind }).then(({ text, hash }) => this.reply(message.requestId, { text, hash })).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
+    } else if (message.type === "ks-client-context-prepare") {
+      if (!this.hostServices.hasCapability("context_capture")) this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_CONTEXT_CAPABILITY_UNDECLARED());
+      else void prepareShareForSend(this.store).then(() => this.store.call({ op: "context.prepare", window_id: this.data.windowId, request_id: message.request_id, channel: message.channel, attachments: message.attachments })).then(({ text, images, ticket }) => this.reply(message.requestId, { text, images, ticket })).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
+    } else if (message.type === "ks-client-context-commit") {
+      if (!this.hostServices.hasCapability("context_capture")) this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_CONTEXT_CAPABILITY_UNDECLARED());
+      else void this.store.call({ op: "context.commit", window_id: this.data.windowId, ticket: message.ticket }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
+    } else if (message.type === "ks-client-command") {
       if (typeof message.name !== "string" || !Object.hasOwn(this.client.commands, message.name)) this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_COMMAND_UNDECLARED({ name: String(message.name) }));
       else void this.store.call({ op: "client.command", window_id: this.data.windowId, name: message.name, event: message.event ?? null }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-save-prompt") {

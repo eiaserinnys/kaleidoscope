@@ -270,7 +270,7 @@ pub const CONTRACT_VERSION: u32 = 28;
 /// - 16판: 탭과 입력 블록 라벨, `dialog.close_label`, `dialog.cancel_label`, `tour.labels`의 바인딩.
 ///   평문 문자열은 이전 판과 같은 wire 모양이다.
 /// - 17판: 클라이언트 process 실행 권한.
-/// - 18판: 클라이언트 채널과 대화 블록의 `client` 및 `footer`.
+/// - 18판: 클라이언트 채널과 대화 블록의 `client` 및 `footer`, 도구 중계, 지침과 같이 보기 준비.
 pub const BLOCK_SET_VERSION: u32 = 18;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
@@ -4235,6 +4235,13 @@ pub enum CoreRequest {
     #[serde(rename = "share.unfreeze")]
     ShareUnfreeze {},
 
+    #[serde(rename = "host.instructions")]
+    HostInstructions { window_id: String, kind: String },
+    #[serde(rename = "context.prepare")]
+    ContextPrepare { window_id: String, request_id: String, channel: String, attachments: client::ContextAttachments },
+    #[serde(rename = "context.commit")]
+    ContextCommit { window_id: String, ticket: String },
+
     /// 프로세스 명령. 허용 응답은 쉘에서만 보낸다.
     #[serde(rename = "process.start")]
     ProcessStart { window_id: String, key: String, permission: String, spec: process::ProcessSpec, cwd_permission: String, #[serde(default)] services: Vec<String> },
@@ -4927,6 +4934,12 @@ pub enum CoreReply {
 
     #[serde(rename = "process.start")]
     ProcessStart { result: process::ProcessStartResult },
+    #[serde(rename = "host.instructions")]
+    HostInstructions { text: String, hash: String },
+    #[serde(rename = "context.prepare")]
+    ContextPrepare { text: Option<String>, images: Vec<client::ContextImage>, ticket: String },
+    #[serde(rename = "context.commit")]
+    ContextCommit {},
     #[serde(rename = "process.respond_permission")]
     ProcessRespondPermission {},
     #[serde(rename = "process.attach")]
@@ -5144,6 +5157,8 @@ pub enum CoreEvent {
     /// 프로세스 출력을 읽거나 종료를 확인할 수 있다.
     #[serde(rename = "process.ready")]
     ProcessReady { window_id: String, handle: String },
+    #[serde(rename = "process.services_changed")]
+    ProcessServicesChanged { window_id: String, handle: String },
     /// (계약 20판) 로컬 에이전트 창의 상태 변경. 세대가 다른 업데이트는 화면이 넘긴다.
     #[serde(rename = "local_agent.update")]
     LocalAgentUpdate {

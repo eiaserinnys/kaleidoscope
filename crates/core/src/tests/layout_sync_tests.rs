@@ -320,7 +320,7 @@ fn another_core_keeps_synced_share_baselines_before_view_arrives() {
     assert!(text.contains("새로 같이 봄"));
     crate::share::mark_sent_text(&first.inner, "thread", sent);
     let (attachments, visuals) =
-        crate::share::capture_for_send(&first.inner, &workspace_id, "thread", &[]);
+        crate::share::capture_for_send(&first.inner, &workspace_id, "thread", 0, 0);
     assert_eq!(attachments.len(), 1);
     crate::share::mark_sent_visuals(&first.inner, "thread", visuals);
 
@@ -356,7 +356,7 @@ fn another_core_keeps_synced_share_baselines_before_view_arrives() {
             .contains("그대로")
     );
     let (same_attachments, _) =
-        crate::share::capture_for_send(&second.inner, &workspace_id, "thread", &[]);
+        crate::share::capture_for_send(&second.inner, &workspace_id, "thread", 0, 0);
     assert!(same_attachments.is_empty());
 }
 

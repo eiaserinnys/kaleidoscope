@@ -29,7 +29,7 @@ function bridgeSource(init: SandboxInit): string {
     let state = { ...config.state }, nextRequest = 0, shareText = '', shareImage = '', shareCanvas = null, explicitText = false;
     const stateListeners = new Set(), storageListeners = new Map(), pending = new Map(), pendingWrites = new Set();
     const send = (type, body = {}, transfer) => transfer ? parent.postMessage({ token, type, ...body }, '*', transfer) : parent.postMessage({ token, type, ...body }, '*');
-    const lifecycleListeners = new Set(), pendingLifecycle = new Set(), processListeners = new Set();
+    const lifecycleListeners = new Set(), pendingLifecycle = new Set(), processListeners = new Set(), processServicesListeners = new Set();
     let lifecycle = null;
     const inputListeners = new Set(), handlers = new Map(), surfaceListeners = new Map(), surfaces = new Map();
     let activeActions = 0;
@@ -148,6 +148,15 @@ function bridgeSource(init: SandboxInit): string {
         report();
       },
     };
+    if (config.capabilities?.includes('instructions')) {
+      window.kaleidoscope.host.instructions = kind => clientRequest('ks-client-instructions', { kind });
+    }
+    if (config.capabilities?.includes('context_capture')) {
+      window.kaleidoscope.context = {
+        async prepare(params) { const result = await clientRequest('ks-client-context-prepare', params); return { ...result, images: result.images.map(image => ({ ...image, bytes: Uint8Array.from(image.bytes) })) }; },
+        commit(ticket) { return clientRequest('ks-client-context-commit', { ticket }); },
+      };
+    }
     if (config.processEnabled) {
       const call = (method, params) => clientRequest('ks-client-process', { method, params });
       window.kaleidoscope.process = {
@@ -159,6 +168,7 @@ function bridgeSource(init: SandboxInit): string {
         close_input(params) { return call('close_input', params); },
         stop(params) { return call('stop', params); },
         onReady(listener) { processListeners.add(listener); return () => processListeners.delete(listener); },
+        onServicesChanged(listener) { processServicesListeners.add(listener); return () => processServicesListeners.delete(listener); },
       };
     }
     window.addEventListener('message', event => {
@@ -192,6 +202,7 @@ function bridgeSource(init: SandboxInit): string {
       if (data.type === 'ks-client-ping') send('ks-client-pong');
       if (data.type === 'ks-client-reply') { const job = pending.get(data.requestId); if (job) { pending.delete(data.requestId); data.error ? job.reject(fail({ id: data.errorId, code: data.errorCode, message: data.error })) : job.resolve(data.result); } }
       if (data.type === 'ks-process-ready') processListeners.forEach(fn => fn(data.handle));
+      if (data.type === 'ks-process-services-changed') processServicesListeners.forEach(fn => fn(data.handle));
       if (data.type === 'ks-client-surface') {
         if (data.phase === 'detach') {
           if (surfaces.get(data.id)?.generation === data.generation) { surfaces.delete(data.id); surfaceListeners.get(data.id)?.forEach(fn => fn(null)); }

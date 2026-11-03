@@ -137,9 +137,14 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             let ctx = context::resolve(inner, &window_id, &generation)?
                 .ok_or_else(|| errors::AGENT_SEND_CONTEXT_INVALID())?;
             let key = format!("local-agent:{window_id}");
-            let (all, visuals_sent) =
-                share::capture_for_send(inner, &ctx.workspace, &key, &attachments);
-            let visuals = all[attachments.len()..].to_vec();
+            let bytes = attachments.iter().try_fold(0u64, |total, attachment| {
+                let bytes = STANDARD.decode(&attachment.data_base64).ok()?;
+                (bytes.len() as u64 <= kaleidoscope_contract::AGENT_ATTACHMENT_MAX_BYTES)
+                    .then_some(total.saturating_add(bytes.len() as u64))
+            }).unwrap_or(kaleidoscope_contract::AGENT_ATTACHMENTS_TOTAL_MAX_BYTES + 1);
+            let (visuals, visuals_sent) = share::capture_for_send(
+                inner, &ctx.workspace, &key, attachments.len(), bytes,
+            );
             let prepared = share::prepare_text(inner, &ctx.workspace, &key);
             let queued = worker.lock().unwrap().send(PromptInput {
                 request_id: request_id.clone(),

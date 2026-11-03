@@ -2,6 +2,24 @@ import { expect, it, vi } from "vitest";
 import { sandboxSource } from "../blocks/sandbox-frame";
 import tauriConfig from "../../../app/src-tauri/tauri.conf.json";
 
+it("선언된 지침과 같이 보기 요청은 프레임을 통해 전달된다", () => {
+  vi.useFakeTimers();
+  const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험", capabilities: ["instructions", "context_capture"] as any });
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
+  const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
+  const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  new Function(code)();
+  const sdk = (window as any).kaleidoscope;
+  void sdk.host.instructions("app_authoring");
+  void sdk.context.prepare({ request_id: "말-1", channel: "chat", attachments: { count: 2, bytes: 123 } });
+  void sdk.context.commit("ticket-1");
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-instructions", kind: "app_authoring" }), "*");
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-context-prepare", request_id: "말-1", channel: "chat", attachments: { count: 2, bytes: 123 } }), "*");
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-context-commit", ticket: "ticket-1" }), "*");
+  vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+});
+
 it("공통 프레임 브리지는 로컬 출력과 동작 및 표면 API를 제공한다", () => {
   vi.useFakeTimers();
   const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험" });

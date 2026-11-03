@@ -541,6 +541,12 @@ fn validate_client(definition: &AppDefinition, details: &mut Vec<String>) {
         return;
     };
     validate_module_version("client", 1, definition, details, "/client");
+    if client.capabilities.as_ref().is_some_and(|capabilities| capabilities.iter().any(|capability| matches!(capability, crate::client::ClientCapability::Instructions | crate::client::ClientCapability::ContextCapture))) {
+        validate_module_version("client", 4, definition, details, "/client/capabilities");
+        if definition.requires.blocks < 18 {
+            details.push("/client/capabilities: 지침과 같이 보기 준비는 블록 세트 18판이 필요합니다".into());
+        }
+    }
     if let Some(permissions) = &client.process_permissions {
         validate_module_version("client", 3, definition, details, "/client/process_permissions");
         validate_module_version("process", 1, definition, details, "/client/process_permissions");
