@@ -72,3 +72,5 @@ storage.entries는 JSON 또는 Markdown 항목의 키, 스키마, 기본값을 �
 
 파일 권한은 files 1판에서 폴더 안 항목을 나열하고 읽고 씁니다. files 2판의 pc 범위는 읽기 전용입니다. files 3판은 readwrite + folder 권한에서 폴더 생성, 이름 변경, 이동, 복사와 삭제를 할 수 있습니다. 삭제는 기본적으로 시스템 휴지통을 사용하며, 휴지통을 사용할 수 없으면 오류로 끝납니다. 영구 삭제는 별도 요청입니다. 이름이 겹치면 덮어쓰지 않으며 복사만 자동으로 「- 복사본」 이름을 붙입니다. files.reveal과 files.path는 읽기 권한으로 쓸 수 있습니다.
 worker.webhook은 외부 POST 트리거를 선언합니다. enabled_entry는 기본값이 false인 전역 불리언 저장 항목이며, token_secret을 지정하면 미리 시크릿을 설정해야 호출할 수 있습니다. 응답을 http_response로 정하고 defer로 선언된 동작을 뒤에 실행할 수 있습니다. worker.calls에 다른 앱 id를 선언하면 파이썬에서 kaleidoscope_worker.call_app과 read_app_storage를 사용할 수 있습니다. 자기 호출, 순환 호출과 네 단계 초과 호출은 거부됩니다.
+
+앱 정의의 settings와 window_title은 블록 세트 18판이 필요합니다. settings.ui는 앱 설정 패널의 블록 트리이며, 있으면 storage.entries의 presentation:settings 자동 폼 대신 이 트리를 표시합니다. settings.available은 선택 바인딩이고 생략하면 설정 버튼이 보이며, false면 버튼을 숨기고 열린 설정을 닫습니다. window_title.title은 창 제목 바인딩이고 meta는 제목 옆에 표시할 선택 바인딩입니다. 바인딩 포인터는 /settings/available, /settings/ui 아래, /window_title/title과 /window_title/meta입니다.

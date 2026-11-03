@@ -1225,6 +1225,22 @@ pub fn all_ui_bindings(definition: &AppDefinition) -> Vec<(String, &Binding)> {
             out.push((pointer, binding));
         }
     });
+    if let Some(settings) = &definition.settings {
+        if let Some(available) = &settings.available {
+            out.push(("/settings/available".into(), available));
+        }
+        walk(&settings.ui, "/settings/ui", &mut |pointer, slot| {
+            if let Slot::Binding(binding) = slot {
+                out.push((pointer, binding));
+            }
+        });
+    }
+    if let Some(title) = &definition.window_title {
+        out.push(("/window_title/title".into(), &title.title));
+        if let Some(meta) = &title.meta {
+            out.push(("/window_title/meta".into(), meta));
+        }
+    }
     if let Some(storage) = &definition.storage {
         for (index, entry) in storage.entries.iter().enumerate() {
             if let Some(choices) = &entry.choices {
@@ -1289,6 +1305,13 @@ pub fn all_ui_actions(definition: &AppDefinition) -> Vec<(String, &Actions)> {
             out.push((pointer, actions));
         }
     });
+    if let Some(settings) = &definition.settings {
+        walk(&settings.ui, "/settings/ui", &mut |pointer, slot| {
+            if let Slot::Actions(actions) = slot {
+                out.push((pointer, actions));
+            }
+        });
+    }
     out
 }
 
@@ -1308,6 +1331,17 @@ pub fn walk_blocks<'a>(block: &'a Block, pointer: &str, visit: &mut dyn FnMut(&s
     visit(pointer, block);
     for (child_pointer, child) in child_blocks(block, pointer) {
         walk_blocks(child, &child_pointer, visit);
+    }
+}
+
+/// 앱 본문과 사용자 설정 트리의 블록을 각각 정의 포인터로 돈다.
+pub fn walk_definition_blocks<'a>(
+    definition: &'a AppDefinition,
+    visit: &mut dyn FnMut(&str, &'a Block),
+) {
+    walk_blocks(&definition.ui, "/ui", visit);
+    if let Some(settings) = &definition.settings {
+        walk_blocks(&settings.ui, "/settings/ui", visit);
     }
 }
 

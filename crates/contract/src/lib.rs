@@ -806,8 +806,38 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub locale: Option<StateRef>,
+    /// (블록 세트 18판) 앱 설정 화면. 저장소의 `presentation: settings` 자동 폼보다 우선한다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub settings: Option<SettingsDecl>,
+    /// (블록 세트 18판) 창 제목과 메타 글. 각 창에서 바인딩을 따로 계산한다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub window_title: Option<WindowTitleDecl>,
     /// 창 안을 채우는 블록 트리의 뿌리.
     pub ui: Block,
+}
+
+/// 앱 정의의 사용자 지정 설정 패널.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct SettingsDecl {
+    pub ui: Block,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub available: Option<data::Binding>,
+}
+
+/// 앱 창의 데이터 바인딩 제목과 선택 메타 글.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct WindowTitleDecl {
+    pub title: data::Binding,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub meta: Option<data::Binding>,
 }
 
 /// 앱 창에 등록하는 키 조합.

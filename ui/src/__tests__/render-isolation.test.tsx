@@ -354,6 +354,36 @@ afterEach(() => {
 });
 
 describe("실제 Shell의 블록 렌더 격리", () => {
+  it("창 제목 바인딩 변경은 해당 창 머리만 다시 그린다", async () => {
+    const titleDefinition: AppDefinition = {
+      id: "window-title-render-isolation", name: "기본 제목",
+      requires: { blocks: 18, modules: {} }, permissions: [],
+      state: { title: "기본 제목", meta: "기본 메타" },
+      window_title: { title: { state: "title" }, meta: { state: "meta" } },
+      ui: { type: "text", value: "본문 고정" },
+    };
+    const { store } = await setup([titleDefinition], { title: "창 A", meta: "작업 공간 A" });
+    await setState(store, "window-b", "title", "창 B");
+    await setState(store, "window-b", "meta", "작업 공간 B");
+    await settleRenders();
+    expect(screen.getByText("창 A")).toBeTruthy();
+    expect(screen.getByText("창 B")).toBeTruthy();
+    expect(screen.getByText("작업 공간 A")).toBeTruthy();
+    expect(screen.getByText("작업 공간 B")).toBeTruthy();
+
+    calls.length = 0;
+    await setState(store, "window-a", "title", "새 창 A 제목");
+    await setState(store, "window-a", "meta", "새 작업 공간 A");
+    await settleRenders();
+
+    expect(screen.getByText("새 창 A 제목")).toBeTruthy();
+    expect(screen.getByText("새 작업 공간 A")).toBeTruthy();
+    expect(screen.getByText("창 B")).toBeTruthy();
+    expect(screen.getByText("작업 공간 B")).toBeTruthy();
+    expect(calls).toEqual([]);
+    store.dispose();
+  });
+
   it("입력 라벨 바인딩이 비어 있다가 채워져도 입력 노드와 포커스를 유지한다", async () => {
     const inputDefinition: AppDefinition = {
       id: "bound-input-label", name: "입력 라벨", requires: { blocks: 16, modules: {} }, permissions: [],

@@ -11,6 +11,7 @@ import { Button, ErrorNotice, IconButton, Notice, StatusText } from "../componen
 import { Select, Toggle, equalOption, optionValue } from "../components/select-toggle";
 import { TextInput } from "../components/text-input";
 import { SettingsEntrySession } from "./settings-entry-session";
+import { renderBlock } from "../render/render-block";
 
 type SettingsProblem = CoreError | string;
 export function AppSettings({ context, open, onClose, onProblem }: { context: BlockContext; open: boolean; onClose: () => void; onProblem?: (problem: SettingsProblem | null) => void }) {
@@ -61,6 +62,7 @@ export function AppSettings({ context, open, onClose, onProblem }: { context: Bl
     return () => { active = false; unsubscribe(); };
   }, [context.store, context.window.id, context.window.app_id, context.definition.agent, open]);
   const entries = context.definition.storage?.entries ?? [];
+  const settingsTree = context.definition.settings?.ui;
   const groups = [false, true].map((workspace) => entries.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry.presentation === "settings" && entry.key.includes("{workspace_id}") === workspace));
   const close = () => { if (document.activeElement instanceof HTMLElement && root.current?.contains(document.activeElement)) document.activeElement.blur(); onClose(); };
   return <div className="ks-app-settings" data-ks-overlay data-ks-share-skip hidden={!open} ref={root} onKeyDown={(event) => {
@@ -71,7 +73,7 @@ export function AppSettings({ context, open, onClose, onProblem }: { context: Bl
       restoreRetryFocus.current = true;
       setApplyStatus("applying");
       void context.store.call({ op: "conversation.apply_retry", window_id: context.window.id }).catch(() => setApplyStatus("unapplied"));
-    }}>{applyStatus === "applying" ? <span className="ks-settings-apply-progress" role="status" aria-label="적용 중"><LoaderCircle size="inline" className="ks-settings-apply-spinner" /></span> : null}다시 시도</Button>]}>대화에 적용 안 됨</Notice></section> : null}{groups.map((items, group) => items.length ? <section className="ks-settings-group" key={group}>
+    }}>{applyStatus === "applying" ? <span className="ks-settings-apply-progress" role="status" aria-label="적용 중"><LoaderCircle size="inline" className="ks-settings-apply-spinner" /></span> : null}다시 시도</Button>]}>대화에 적용 안 됨</Notice></section> : null}{settingsTree ? <div className="ks-settings-custom">{renderBlock(settingsTree, context, "/settings/ui")}</div> : groups.map((items, group) => items.length ? <section className="ks-settings-group" key={group}>
       <h3 className="ks-data-section-title">{group ? "이 작업" : "모든 작업"}</h3>
       {items.map(({ entry, index }) => <SettingsEntry key={entry.id} context={context} entry={entry} index={index} open={open} onProblem={reportProblem} />)}
     </section> : null)}</div>

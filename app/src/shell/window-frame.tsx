@@ -10,13 +10,14 @@ export interface WindowFrameProps {
   sharing: boolean;
   shareable: boolean;
   hasSettings?: boolean;
+  settingsAvailableInitially?: boolean;
   store: ShellStore;
   onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
   onMinimize: (windowId: string) => void;
   onMaximize: (windowId: string) => void;
   onRestore: (windowId: string) => void;
   window: AppWindow;
-  children: ReactNode | ((settingsOpen: boolean, closeSettings: () => void, reportProblem: (problem: CoreError | string | null) => void, visited: boolean) => ReactNode);
+  children: ReactNode | ((settingsOpen: boolean, closeSettings: () => void, reportProblem: (problem: CoreError | string | null) => void, visited: boolean, reportWindowHeader: (title: string, meta: string | null) => void, reportSettingsAvailable: (available: boolean) => void) => ReactNode);
 }
 
 type Gesture = {
@@ -31,14 +32,23 @@ type Gesture = {
 const MIN_WIDTH = "--ks-window-min-width";
 const MIN_HEIGHT = "--ks-window-min-height";
 
-export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSettings, store, onCall, onMinimize, onMaximize, onRestore, window: appWindow, children }: WindowFrameProps) {
+export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSettings, settingsAvailableInitially = true, store, onCall, onMinimize, onMaximize, onRestore, window: appWindow, children }: WindowFrameProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [frameHost, setFrameHost] = useState<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsVisited, setSettingsVisited] = useState(false);
   const [settingsProblem, setSettingsProblem] = useState<CoreError | string | null>(null);
+  const [settingsAvailable, setSettingsAvailable] = useState(settingsAvailableInitially);
+  const [windowHeader, setWindowHeader] = useState<{ title: string; meta: string | null } | null>(null);
   const settingsButton = useRef<HTMLSpanElement>(null);
   const closeSettings = useCallback(() => { setSettingsOpen(false); requestAnimationFrame(() => settingsButton.current?.querySelector<HTMLButtonElement>("button")?.focus()); }, []);
+  const reportWindowHeader = useCallback((title: string, meta: string | null) => {
+    setWindowHeader((current) => current?.title === title && current.meta === meta ? current : { title, meta });
+  }, []);
+  const reportSettingsAvailable = useCallback((available: boolean) => {
+    setSettingsAvailable(available);
+    if (!available) { setSettingsOpen(false); setSettingsProblem(null); }
+  }, []);
   const isMaximized = Boolean(appWindow.maximized);
   const isMinimized = Boolean(appWindow.minimized);
   useShareView({ windowId: appWindow.id, root: contentRef, enabled: sharing && !settingsOpen, store });
@@ -175,10 +185,13 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
           }}
           ref={titleRef}
         >
-          <span className="ks-window-title" title={appName}>{appName}</span>
+          <div className="ks-window-title-group">
+            <span className="ks-window-title" title={windowHeader?.title ?? appName}>{windowHeader?.title ?? appName}</span>
+            {windowHeader?.meta ? <span className="ks-window-title-meta" title={windowHeader.meta}>{windowHeader.meta}</span> : null}
+          </div>
           <div className="ks-window-title-actions">
           {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} tone="share" pressed={sharing} onClick={() => void onCall({ op: "share.set", window_id: appWindow.id, on: !sharing })}><ScreenShare /></IconButton> : null}
-          {hasSettings ? <span ref={settingsButton}><IconButton aria-label={settingsProblem ? `앱 설정: ${typeof settingsProblem === "string" ? settingsProblem : settingsProblem.message}` : "앱 설정"} pressed={settingsOpen} onClick={() => { if (settingsOpen) closeSettings(); else { setSettingsVisited(true); setSettingsOpen(true); } }}><Settings /></IconButton></span> : null}
+          {hasSettings && settingsAvailable ? <span ref={settingsButton}><IconButton aria-label={settingsProblem ? `앱 설정: ${typeof settingsProblem === "string" ? settingsProblem : settingsProblem.message}` : "앱 설정"} pressed={settingsOpen} onClick={() => { if (settingsOpen) closeSettings(); else { setSettingsVisited(true); setSettingsOpen(true); } }}><Settings /></IconButton></span> : null}
           <IconButton aria-label="창 최소화" title="창 최소화" onClick={() => onMinimize(appWindow.id)}><Minus /></IconButton>
           <IconButton
             aria-label={isMaximized ? "이전 크기로 복원" : "창 최대화"}
@@ -197,7 +210,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
           </div>
         </header>
         <div className="ks-window-content" ref={contentRef} tabIndex={-1}>
-          {typeof children === "function" ? children(settingsOpen, closeSettings, setSettingsProblem, settingsVisited) : children}
+          {typeof children === "function" ? children(settingsOpen, closeSettings, setSettingsProblem, settingsVisited, reportWindowHeader, reportSettingsAvailable) : children}
         </div>
         <ProcessConsent store={store} windowId={appWindow.id} host={frameHost} />
       </div>
