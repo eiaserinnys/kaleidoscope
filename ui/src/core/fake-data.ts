@@ -19,6 +19,7 @@ function childBlocks(block: Block, pointer: string): Array<[string, Block]> {
 function actionSlots(block: Block, pointer = "/ui"): Set<string> {
   const slots = new Set<string>();
   const add = (field: string, present = true) => { if (present) slots.add(`${pointer}/${field}`); };
+  if ("item_menu" in block) block.item_menu?.forEach((_, index) => add(`item_menu/${index}/on_select`));
   switch (block.type) {
     case "button_grid": add("on_press"); break;
     case "tree": if (block.items !== undefined) add("on_select", block.on_select !== undefined); break;

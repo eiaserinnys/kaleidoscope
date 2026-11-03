@@ -4,11 +4,22 @@ import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { openContextMenu, writeMenuClipboard } from "../components/context-menu";
 import { Dialog } from "../components/dialog";
 import { DataState } from "../components/data-state";
+import { isUnclaimedFocus } from "../components/focus-rescue";
 import type { MenuEntry } from "../components/menu";
 import { ItemScopeProvider, useItemScope } from "../data/item-scope";
 import { useBinding, useWindowData } from "../data/window-data";
 
-type Pending = { entry: ItemMenuEntry; index: number; item: JsonValue; key: string; anchor: HTMLElement };
+type Pending = { entry: ItemMenuEntry; index: number; item: JsonValue; key: string; anchor: HTMLElement; container: HTMLElement | null; rowIndex: string | undefined; tree: boolean };
+
+function restoreAfterAction({ anchor, container, rowIndex, tree }: Pending) {
+  // 동작을 기다리는 사이 사용자가 옮긴 초점은 그대로 둔다.
+  if (!isUnclaimedFocus(document.activeElement) || !container?.isConnected) return;
+  const row = (index: number) => container.querySelector<HTMLElement>(tree
+    ? `[role="treeitem"][data-index="${index}"]`
+    : `[data-focus-index="${index}"]`);
+  const target = anchor.isConnected ? anchor : rowIndex === undefined ? null : row(Number(rowIndex)) ?? row(Number(rowIndex) - 1);
+  target?.focus({ preventScroll: true });
+}
 
 function Confirmation({ pending, pointer, onCancel, onConfirm }: { pending: Pending; pointer: string; onCancel: () => void; onConfirm: () => void }) {
   const body = useBinding(`${pointer}/item_menu/${pending.index}/confirm/body`, pending.entry.confirm?.body ?? null);
@@ -24,6 +35,8 @@ export function useItemMenu(entries: ItemMenuEntry[] | undefined, pointer: strin
   const parent = useItemScope();
   const [pending, setPending] = useState<Pending | null>(null);
   const restoreAnchor = useRef<HTMLElement | null>(null);
+  const stopRestore = useRef<() => void>(() => {});
+  useLayoutEffect(() => () => stopRestore.current(), []);
   useLayoutEffect(() => {
     if (!pending && restoreAnchor.current) {
       restoreAnchor.current.focus({ preventScroll: true });
@@ -32,15 +45,18 @@ export function useItemMenu(entries: ItemMenuEntry[] | undefined, pointer: strin
   }, [pending]);
   const run = useCallback((entry: Pending) => {
     const scope = { item: entry.item, parent_item: parent?.item, key: entry.key, index: 0, instance: entry.anchor };
-    void data.act(`${pointer}/item_menu/${entry.index}/on_select`, entry.key, entry.item, undefined, scope);
+    return data.act(`${pointer}/item_menu/${entry.index}/on_select`, entry.key, entry.item, undefined, scope);
   }, [data, parent, pointer]);
   const open = useCallback((event: MouseEvent | ReactMouseEvent<HTMLElement> | undefined, anchor: HTMLElement, item: JsonValue | undefined, key: string, copyLabel: string, copyText: string) => {
     anchor.focus({ preventScroll: true });
+    const container = anchor.closest<HTMLElement>('.ks-data-view, [role="tree"]');
+    const tree = anchor.getAttribute("role") === "treeitem";
+    const rowIndex = tree ? anchor.dataset.index : anchor.dataset.focusIndex;
     const menu: MenuEntry[] = item === undefined ? [] : (entries ?? []).map((entry, index) => ({
       id: `item-menu-${index}`, label: entry.label, danger: entry.danger,
       onSelect: () => {
-        const chosen = { entry, index, item, key, anchor };
-        if (entry.confirm) setPending(chosen); else run(chosen);
+        const chosen = { entry, index, item, key, anchor, container, rowIndex, tree };
+        if (entry.confirm) setPending(chosen); else void run(chosen);
       },
     }));
     if (menu.length) menu.push({ id: "item-menu-separator", type: "separator" });
@@ -54,7 +70,33 @@ export function useItemMenu(entries: ItemMenuEntry[] | undefined, pointer: strin
   const close = useCallback(() => setPending(null), []);
   const confirm = useCallback(() => {
     if (!pending) return;
-    run(pending);
+    stopRestore.current();
+    let stopped = false;
+    let frame: number | undefined;
+    let observer: MutationObserver | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = () => {
+      stopped = true;
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      observer?.disconnect();
+      clearTimeout(timer);
+    };
+    stopRestore.current = stop;
+    void run(pending).then(() => {
+      if (stopped) return;
+      frame = requestAnimationFrame(() => {
+        restoreAfterAction(pending);
+        if (!pending.anchor.isConnected || !pending.container?.isConnected) { stop(); return; }
+        // 명령 응답보다 상태 이벤트가 늦으면 실제 행 제거를 한 번 기다린다.
+        observer = new MutationObserver(() => {
+          if (pending.anchor.isConnected) return;
+          stop();
+          restoreAfterAction(pending);
+        });
+        observer.observe(pending.container, { childList: true, subtree: true });
+        timer = setTimeout(stop, 3000);
+      });
+    });
     restoreAnchor.current = pending.anchor;
     setPending(null);
   }, [pending, run]);

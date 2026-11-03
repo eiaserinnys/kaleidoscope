@@ -12,15 +12,53 @@ import { makeTestSeed, mdViewerDefinition } from "./fixtures";
 beforeEach(mockVirtualLayout);
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-function setup(ui: Block) {
-  const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 19, modules: {} }, permissions: [], state: { choice: null }, ui };
-  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+function setup(ui: Block, state: AppDefinition["state"] = {}) {
+  const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 19, modules: {} }, permissions: [], state: { choice: null, ...state }, ui };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = definition.state ?? {};
+  const transport = createFakeTransport(seed);
   const calls = vi.spyOn(transport, "call");
   render(<><ContextMenuHost /><AppWindowContent store={createShellStore(transport)} windowId="viewer-window" /></>);
   return calls;
 }
 
 const menu = [{ label: "고르기", on_select: { set_state: "choice" } }];
+for (const mode of ["복구", "사용자 초점", "만료"] as const) {
+  it(`늦게 사라지는 행의 관찰: ${mode}`, async () => {
+    const write = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: write } });
+    setup({ type: "list", items: [{ key: "a", title: "하나" }, { key: "b", title: "둘" }, { key: "c", title: "셋" }], item_menu: [{ label: "지우기", confirm: { title: "지울까요?" }, on_select: { copy_text: "시험" } }] });
+    const target = await screen.findByRole("option", { name: "둘" });
+    const next = screen.getByRole("option", { name: "셋" });
+    fireEvent.contextMenu(target);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "지우기" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "지우기" }));
+    await waitFor(() => expect(write).toHaveBeenCalled());
+    // Promise와 다음 프레임이 지난 뒤에 상태 이벤트가 도착하는 상황이다.
+    await new Promise((resolve) => setTimeout(resolve, mode === "만료" ? 3200 : 80));
+    const other = screen.getByRole("option", { name: "하나" });
+    if (mode === "사용자 초점") other.focus();
+    next.dataset.focusIndex = "1";
+    target.remove();
+    if (mode === "복구") await waitFor(() => expect(document.activeElement).toBe(next));
+    else {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(document.activeElement).not.toBe(next);
+      if (mode === "사용자 초점") expect(document.activeElement).toBe(other);
+    }
+  });
+}
+it("확정 동작이 행을 지우면 다음 행, 마지막이면 앞 행으로 초점을 돌린다", async () => {
+  setup({ type: "list", items: { state: "rows" }, item_menu: [{ label: "지우기", danger: true, confirm: { title: "지울까요?" }, on_select: [{ set_state: "rows", value: { expr: "[$state.rows[key != $event]]" } }] }] },
+    { rows: [{ key: "a", title: "하나" }, { key: "b", title: "둘" }, { key: "c", title: "셋" }] });
+  for (const [target, next] of [["둘", "셋"], ["셋", "하나"]]) {
+    fireEvent.contextMenu(await screen.findByRole("option", { name: target }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "지우기" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "지우기" }));
+    await waitFor(() => expect(screen.queryByRole("option", { name: target })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("option", { name: next })));
+  }
+});
 const cases: Array<{ block: Block; role: string; name: string; copy: string; expected: string }> = [
   { block: { type: "list", items: [{ key: "a", title: "목록" }], item_menu: menu }, role: "option", name: "목록", copy: "제목 복사", expected: "목록" },
   { block: { type: "table", rows: [{ key: "a", title: "표", count: 1234 }], columns: [{ field: "title", label: "이름" }, { field: "count", label: "수", format: "number" }], item_menu: menu }, role: "row", name: "표 1,234", copy: "행 복사", expected: "표\t1,234" },

@@ -2,6 +2,27 @@ import { expect, test } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
+test("확정 삭제 뒤 다음 행에서 키보드 탐색을 이어간다", async ({ page }) => {
+  await page.goto("/?preview=data-views-test");
+  const app = page.getByTestId("app-window-data-views-test");
+  await app.getByRole("tab", { name: "지우기 시험" }).click();
+  const row = (name: string) => app.getByRole("option", { name, exact: true });
+  for (const [target, next, keyboard] of [["항목 3", "항목 4", false], ["항목 5", "항목 6", true]] as const) {
+    if (keyboard) { await row(target).focus(); await page.keyboard.press("Shift+F10"); }
+    else await row(target).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "지우기" }).click();
+    const dialog = page.getByRole("dialog");
+    if (keyboard) { await page.keyboard.press("Tab"); await page.keyboard.press("Enter"); }
+    else await dialog.getByRole("button", { name: "지우기" }).click();
+    await expect(row(target)).toHaveCount(0);
+    await expect(row(next)).toBeFocused();
+  }
+  await page.keyboard.press("ArrowDown");
+  await expect(row("항목 7")).toBeFocused();
+  const output = process.env.KS_ITEM_MENU_CAPTURE_DIR;
+  if (output) { mkdirSync(output, { recursive: true }); await page.screenshot({ path: join(output, "delete-next-row.png") }); }
+});
+
 test("우클릭과 키보드 메뉴가 해당 행의 주소와 제목을 복사한다", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/?preview=data-views-test");
