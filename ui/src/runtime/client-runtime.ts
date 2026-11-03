@@ -73,6 +73,7 @@ export class ClientRuntime {
       this.token = crypto.randomUUID();
       const state = this.state();
       const frame = document.createElement("iframe");
+      frame.tabIndex = -1;
       frame.setAttribute("sandbox", "allow-scripts");
       frame.setAttribute("allow", "autoplay");
       frame.setAttribute("title", "클라이언트 런타임");

@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -37,6 +37,22 @@ it("기존 블록 이름을 정본 이름과 모드로 정규화한다", () => {
 });
 
 describe("app definition renderer", () => {
+  it("창의 포커스된 조작이 사라지면 남은 첫 조작으로 포커스를 옮긴다", async () => {
+    const definition: AppDefinition = {
+      id: "focus-test", name: "초점", requires: { blocks: 14, modules: {} }, permissions: [], state: { visible: true },
+      ui: { type: "stack", direction: "column", children: [
+        { type: "when", value: { state: "visible" }, child: { type: "button", label: "선택", on_click: { set_state: "visible", value: false } } },
+        { type: "button", label: "다음", on_click: { set_state: "visible", value: true } },
+      ] },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    render(<AppWindowContent store={store} windowId="viewer-window" />);
+    const first = await screen.findByRole("button", { name: "선택" });
+    first.focus();
+    await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { visible: false } }); });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "다음" })));
+  });
+
   it("shows an unknown block error while rendering its sibling block", async () => {
     const definition: AppDefinition = {
       ...mdEditorDefinition,
