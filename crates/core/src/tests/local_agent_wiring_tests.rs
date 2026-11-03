@@ -38,7 +38,7 @@ fn literal_agent_binding_reaches_execution_consent() {
     let host = Arc::new(FakeHost::default());
     host.choose(Some(folder.path().into()));
     let mut definition: Value =
-        serde_json::from_str(include_str!("../../../../apps/agent.json")).unwrap();
+        serde_json::from_str(include_str!("fixtures/local-agent.json")).unwrap();
     definition["id"] = json!("test-agent-literal");
     definition["ui"]["agents"] = json!([{
         "id": "test-agent",
@@ -88,7 +88,7 @@ fn binding_test_spec(temp: &TempDir, args: Value) -> Value {
 
 fn binding_test_definition(id: &str) -> Value {
     let mut definition: Value =
-        serde_json::from_str(include_str!("../../../../apps/agent.json")).unwrap();
+        serde_json::from_str(include_str!("fixtures/local-agent.json")).unwrap();
     definition["id"] = json!(id);
     definition
 }
@@ -211,7 +211,7 @@ fn local_agent_window_lifecycle_and_generation() {
     let host = Arc::new(FakeHost::default());
     host.choose(Some(folder.path().into()));
     let mut definition: Value =
-        serde_json::from_str(include_str!("../../../../apps/agent.json")).unwrap();
+        serde_json::from_str(include_str!("fixtures/local-agent.json")).unwrap();
     definition["id"] = json!("test-agent");
     let calls = temp.path().join("calls");
     definition["storage"]["entries"][0]["default"] = json!([{
@@ -320,7 +320,7 @@ fn local_agent_window_lifecycle_and_generation() {
 
 fn fake_definition(temp: &Path) -> Value {
     let mut definition: Value =
-        serde_json::from_str(include_str!("../../../../apps/agent.json")).unwrap();
+        serde_json::from_str(include_str!("fixtures/local-agent.json")).unwrap();
     definition["id"] = json!("test-agent");
     definition["storage"]["entries"][0]["default"] = json!([{
         "id":"one", "name":"시험", "command":super::local_agent_tests::agent_binary(), "args":[],

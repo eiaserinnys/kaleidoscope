@@ -257,7 +257,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     let apps = snapshot(&core).shared.apps;
     for (id, version) in [
         ("profiler", 2),
-        ("agent", 3),
+        ("agent", 4),
         ("slackbot", 2),
         ("explorer", 3),
         ("md-editor", 4),
@@ -407,6 +407,23 @@ fn retired_windows_from_another_device_are_deleted_during_sync() {
 #[test]
 fn local_agent_is_available_and_reads_defaults_before_linking() {
     let temp = TempDir::new().unwrap();
+    let definition = include_str!("tests/fixtures/local-agent.json");
+    let core = open_core(temp.path(), vec![definition.into()], &Arc::new(FakeHost::default()));
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "test-agent");
+    let value = crate::app_storage::read(&core.inner, &window, "agents").unwrap();
+    assert!(!value.exists);
+    assert_eq!(value.revision, None);
+    assert!(!value.content.as_array().unwrap().is_empty());
+    assert!(matches!(
+        core.handle(CoreRequest::LocalAgentAttach { window_id: window }),
+        Ok(CoreReply::LocalAgentAttach { snapshot }) if snapshot.phase == kaleidoscope_contract::local_agent::LocalAgentPhase::ChoosingAgent
+    ));
+}
+
+#[test]
+fn builtin_agent_reads_defaults_before_linking() {
+    let temp = TempDir::new().unwrap();
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
     let (_, desktop) = active_ids(&core);
     let window = open_window(&core, &desktop, "agent");
@@ -414,8 +431,23 @@ fn local_agent_is_available_and_reads_defaults_before_linking() {
     assert!(!value.exists);
     assert_eq!(value.revision, None);
     assert!(!value.content.as_array().unwrap().is_empty());
-    assert!(
-        matches!(core.handle(CoreRequest::LocalAgentAttach { window_id: window }), Ok(CoreReply::LocalAgentAttach { snapshot }) if snapshot.phase == kaleidoscope_contract::local_agent::LocalAgentPhase::ChoosingAgent)
+    let state = snapshot(&core);
+    let definition = &state
+        .shared
+        .app_versions
+        .iter()
+        .find(|version| version.app_id == "agent" && version.version == 4)
+        .unwrap()
+        .definition;
+    assert_eq!(definition.requires.blocks, 19);
+    assert_eq!(
+        definition
+            .client
+            .as_ref()
+            .unwrap()
+            .process_permissions
+            .as_deref(),
+        Some(["run".to_owned()].as_slice())
     );
 }
 
