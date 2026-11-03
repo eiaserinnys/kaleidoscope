@@ -447,7 +447,9 @@ fn windows_process_cmd_terminates_descendants_in_unicode_cwd() {
         panic!("시작 결과")
     };
     let spawn_returned = started.elapsed();
-    let deadline = Instant::now() + Duration::from_secs(30);
+    // 이 시험은 멈춤이 자손까지 끝내는지를 본다. CI 러너에서 PowerShell 첫 기동이
+    // 30초를 넘긴 일이 있어(cmd_started 뒤 worker_started 없음) 기동 대기는 넉넉히 둔다.
+    let deadline = Instant::now() + Duration::from_secs(120);
     while !work.join("child.pid").exists() {
         assert!(Instant::now() < deadline, "자손 시작 시간 초과\n{}", windows_process_diagnostics(&core, &window, &handle, &work, requested_at, started, spawn_returned));
         thread::sleep(Duration::from_millis(50));
