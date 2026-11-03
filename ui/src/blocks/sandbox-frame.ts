@@ -1,7 +1,7 @@
 import type { ClientCapability } from "../contract/contract";
 import * as shellErrors from "../contract/shell-errors";
 
-type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string; inputs?: Record<string, unknown>; capabilities?: ClientCapability[]; actions?: string[]; processEnabled?: boolean; errors?: ReturnType<typeof sandboxErrors> };
+type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string; inputs?: Record<string, unknown>; capabilities?: ClientCapability[]; actions?: string[]; channels?: string[]; processEnabled?: boolean; errors?: ReturnType<typeof sandboxErrors> };
 
 export function sandboxErrors() {
   return {
@@ -91,6 +91,12 @@ function bridgeSource(init: SandboxInit): string {
       onLifecycle(listener) { lifecycleListeners.add(listener); if (lifecycle) listener(lifecycle); return () => lifecycleListeners.delete(listener); },
       onInputs(listener) { inputListeners.add(listener); return () => inputListeners.delete(listener); },
       publish(patch) { send('ks-client-publish', { patch }); },
+      chat: { publish(channel, envelope) {
+        if (typeof channel !== 'string' || !config.channels?.includes(channel)) return false;
+        const bytes = envelope && envelope.kind === 'attachment' && envelope.bytes instanceof ArrayBuffer ? [envelope.bytes] : undefined;
+        send('ks-client-chat-publish', { channel, envelope }, bytes);
+        return true;
+      } },
       handle(name, listener) { handlers.set(name, listener); },
       command(name, event) { return clientRequest('ks-client-command', { name, event }); },
       surfaces: { on(id, listener) {
@@ -168,7 +174,21 @@ function bridgeSource(init: SandboxInit): string {
         });
       }
       if (data.type === 'ks-client-inputs') { inputs = data.inputs; inputListeners.forEach(fn => fn(inputs, data.changed)); }
-      if (data.type === 'ks-client-action' && config.actions?.includes(data.name)) { const handler = handlers.get(data.name); if (handler) { activeActions += 1; Promise.resolve().then(() => handler(data.context)).catch(error => { const detail = error && typeof error === 'object' ? error : {}; send('ks-client-notice', { message: typeof detail.message === 'string' ? detail.message : String(error), error: true, errorId: detail.id, errorCode: detail.code }); }).finally(() => { activeActions -= 1; }); } }
+      if (data.type === 'ks-client-action' && config.actions?.includes(data.name)) {
+        const handler = handlers.get(data.name), requestId = typeof data.requestId === 'string' ? data.requestId : null;
+        if (!handler) { if (requestId) send('ks-client-action-result', { requestId, ok: false, error: '클라이언트 동작이 등록되지 않았습니다' }); }
+        else {
+          activeActions += 1;
+          Promise.resolve().then(() => handler(data.context)).then(() => {
+            if (requestId) send('ks-client-action-result', { requestId, ok: true });
+          }).catch(error => {
+            const detail = error && typeof error === 'object' ? error : {};
+            const message = typeof detail.message === 'string' ? detail.message : String(error);
+            if (requestId) send('ks-client-action-result', { requestId, ok: false, error: message, errorId: detail.id, errorCode: detail.code });
+            else send('ks-client-notice', { message, error: true, errorId: detail.id, errorCode: detail.code });
+          }).finally(() => { activeActions -= 1; });
+        }
+      }
       if (data.type === 'ks-client-ping') send('ks-client-pong');
       if (data.type === 'ks-client-reply') { const job = pending.get(data.requestId); if (job) { pending.delete(data.requestId); data.error ? job.reject(fail({ id: data.errorId, code: data.errorCode, message: data.error })) : job.resolve(data.result); } }
       if (data.type === 'ks-process-ready') processListeners.forEach(fn => fn(data.handle));

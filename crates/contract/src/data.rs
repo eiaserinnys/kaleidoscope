@@ -1328,6 +1328,9 @@ pub fn child_blocks<'a>(block: &'a Block, pointer: &str) -> Vec<(String, &'a Blo
                 child.as_ref(),
             )))
             .collect(),
+        Block::Chat {
+            footer: Some(footer), ..
+        } => vec![(format!("{pointer}/footer"), footer.as_ref())],
         _ => Vec::new(),
     }
 }
@@ -1708,11 +1711,11 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
         }
         Block::Image { src, .. } | Block::Media { src, .. } => bind!("src", src),
-        Block::Chat {
-            agents: Some(agents),
-            ..
-        } => bind!("agents", agents),
-        Block::Chat { agents: None, .. } => {}
+        Block::Chat { agents, .. } => {
+            if let Some(agents) = agents {
+                bind!("agents", agents);
+            }
+        }
         Block::HtmlView {
             value: Some(value), ..
         } => bind!("value", value),

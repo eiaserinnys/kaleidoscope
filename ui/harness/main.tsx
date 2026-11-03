@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { App, AppDefinition, AppVersion, AppWindow, LocalAgentSnapshot, ShellSnapshot } from "../src/contract/contract";
+import type { WindowData } from "../src/data/window-data";
 import {
   AppWindowContent,
   createFakeTransport,
@@ -28,6 +29,7 @@ import marketJson from "../../apps/market.json";
 import profilerJson from "../../apps/profiler.json";
 import readerJson from "../../apps/reader.json";
 import pluginsDocument from "./fixtures/create-plugins.txt?raw";
+import clientChatSource from "./fixtures/client-chat.js?raw";
 import { exposeDocsHarness, galleryForDocs } from "./docs-media-test";
 import { makeLongConversation } from "./chat-long-history";
 
@@ -36,6 +38,22 @@ installShellDragGuard();
 const htmlReport = htmlReportJson as AppDefinition;
 const workspacePas = workspacePasJson as unknown as AppDefinition;
 const agentApp = agentJson as unknown as AppDefinition;
+const clientChatScriptUrl = URL.createObjectURL(new Blob([clientChatSource], { type: "text/javascript" }));
+const clientChatApp = {
+  id: "client-chat-test", name: "클라이언트 채팅 시험",
+  requires: { blocks: 18, modules: { assets: 1, client: 4 } },
+  permissions: [], state: {},
+  assets: [{ id: "client-chat-fixture", version: 1 }, { id: "client-chat-image", version: 1 }],
+  client: {
+    runtime: "javascript", entry: { id: "client-chat-fixture", version: 1 }, inputs: {},
+    outputs: { footer: { default: "도구 승인 기본값" } }, channels: ["thread"],
+    actions: ["send", "cancel", "attachment"], commands: {}, state_keys: [], storage_entries: [],
+  },
+  ui: {
+    type: "chat", client: { channel: "thread", on_send: "send", on_cancel: "cancel", on_attachment: "attachment" },
+    footer: { type: "text", value: { client: "footer" }, style: "body" },
+  },
+} as unknown as AppDefinition;
 const visualPreviewDefinitions = [earthJson, marketJson, profilerJson, readerJson].map((definition) => definition as unknown as AppDefinition);
 const shellSelectionApp: AppDefinition = {
   id: "shell-selection-test", name: "선택 간격 시험", requires: { blocks: 10, modules: {} }, permissions: [],
@@ -78,7 +96,7 @@ const historyCount = historyParam !== null && Number.isInteger(Number(historyPar
 if (conversationMode) workspacePas.agent = {
   protocol: "conversation-v1", permission: "conversation", base_path: "api", namespace: "test", profile: "test", collection: "test", model_order: [], selected_model: "", title_template: "", initial_instruction_template: "", instructions_template: "", thread_entry: "thread",
 };
-const definitions = [mdEditor, htmlReport, workspacePas, agentApp, dataLayoutApp, gallery, dataViewsApp, storageDocument, ...previewDefinitions];
+const definitions = [mdEditor, htmlReport, workspacePas, agentApp, clientChatApp, dataLayoutApp, gallery, dataViewsApp, storageDocument, ...previewDefinitions];
 const timestamp = "2026-10-28T00:00:00Z";
 const agentHarnessParams = new URLSearchParams(window.location.search);
 const agentPhases = ["choosing_agent", "choosing_folder", "awaiting_permission", "starting", "login_required", "ready", "responding", "failed", "ended"] as const;
@@ -153,10 +171,10 @@ const initialSnapshot: ShellSnapshot = {
     app_versions: appVersions,
     workspaces: [{ id: "workspace-1", name: "kaleidoscope", created_at: timestamp, updated_at: timestamp }],
     desktops: [{ id: "desktop-1", workspace_id: "workspace-1", name: "작업", position: 0, created_at: timestamp, updated_at: timestamp }],
-  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(htmlReport, "html-report-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4), makeWindow(gallery, "gallery-window", 5), makeWindow(dataViewsApp, "views-window", 6), makeWindow(storageDocument, "storage-window", 7), agentWindow, ...previewDefinitions.map((definition, index) => makeWindow(definition, `${definition.id}-window`, 9 + index))],
+  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(htmlReport, "html-report-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4), makeWindow(gallery, "gallery-window", 5), makeWindow(dataViewsApp, "views-window", 6), makeWindow(storageDocument, "storage-window", 7), agentWindow, makeWindow(clientChatApp, "client-chat-window", 8), ...previewDefinitions.map((definition, index) => makeWindow(definition, `${definition.id}-window`, 9 + index))],
   },
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [], pc_access: [], local_agent_access: [], process_access: [] },
-  supported: { blocks: 10, modules: { files: 1, storage: 1 } },
+  supported: { blocks: 18, modules: { assets: 1, client: 4, files: 1, storage: 1 } },
   link: { state: "unlinked" },
   sharing: [],
   update: { state: "unavailable" },
@@ -255,7 +273,7 @@ const fakeTransport = createFakeTransport({
   storage: [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }],
   localAgent: fakeLocalAgent,
   data: { sources: { pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [{ kind: "file", name: "tone.wav", path: "tone.wav", ext: "wav", size: 128044, modified: timestamp }, { kind: "file", name: "tone-second.wav", path: "tone-second.wav", ext: "wav", size: 128044, modified: timestamp }] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
-  media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone },
+  media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone, "client-chat-fixture": clientChatScriptUrl, "client-chat-image": sampleOne },
   folder: { root_path: "/fake/docs", root_name: "문서" },
   conversation: conversationMode || pasMode ? {
     thread: conversationMode === "start" || conversationMode === "login-start" || pasMode === "empty" ? null : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false },
@@ -292,7 +310,39 @@ const fakeTransport = createFakeTransport({
 const coreUrl = new URLSearchParams(window.location.search).get("core");
 const transport = coreUrl ? createHttpTransport(coreUrl) : fakeTransport;
 const store = createShellStore(transport);
+let clientChatWindowData: WindowData | null = null;
+let holdClientChatSnapshot = false;
+const captureClientChatWindowData = (data: WindowData | null) => { clientChatWindowData = data; };
 if (!coreUrl) {
+  const clientChatCalls: Array<{ name: string; event: unknown }> = [];
+  window.addEventListener("message", (event) => {
+    const frame = document.querySelector<HTMLIFrameElement>(".ks-client-frames iframe");
+    if (event.source !== frame?.contentWindow) return;
+    if (event.data?.type === "chat-test-attachment-held") {
+      clientChatCalls.push({ name: "attachment-held", event: {} });
+      return;
+    }
+    if (event.data?.type === "chat-test-snapshot-request") {
+      if (holdClientChatSnapshot) { holdClientChatSnapshot = false; return; }
+      frame.contentWindow?.postMessage({ type: "chat-test-continue-snapshot" }, "*");
+      return;
+    }
+    if (event.data?.type !== "chat-test-call") return;
+    clientChatCalls.push({ name: String(event.data.name), event: event.data.event });
+  });
+  Object.assign(window, { clientChatHarness: {
+    calls: () => [...clientChatCalls],
+    clear: () => { clientChatCalls.length = 0; },
+    coreCalls: () => fakeTransport.getCalls().length,
+    control: (type: string) => document.querySelector<HTMLIFrameElement>(".ks-client-frames iframe")?.contentWindow?.postMessage({ type }, "*"),
+    pauseNextSnapshot: () => { holdClientChatSnapshot = true; },
+    restartClient: async () => { await clientChatWindowData?.restartClient(); },
+    clientGeneration: () => clientChatWindowData?.getClientGeneration() ?? 0,
+    chatState: () => {
+      const state = clientChatWindowData?.getClientChat("thread");
+      return state ? { loading: state.loading, busy: state.busy, items: state.items.length, queued: state.queued.length, attachments: state.attachments.size } : null;
+    },
+  } });
   exposeDocsHarness(fakeTransport, store);
   Object.assign(window, { conversationHarness: {
     emit: fakeTransport.emit,
@@ -322,6 +372,7 @@ function Harness() {
   const galleryWindow = snapshot?.shared.windows.find((item) => item.app_id === "block-gallery");
   const pasWindow = snapshot?.shared.windows.find((item) => item.app_id === "workspace-pas" || (coreUrl && snapshot.shared.app_versions.some((version) => version.app_id === item.app_id && version.version === item.app_version && version.definition.agent)));
   const storageWindow = snapshot?.shared.windows.find((item) => item.app_id === "storage-document");
+  const clientChatWindow = snapshot?.shared.windows.find((item) => item.app_id === "client-chat-test");
 
   return (
     <main className="ks-harness">
@@ -358,6 +409,10 @@ function Harness() {
           <header className="ks-harness-window-header">agent_session</header>
           <div className="ks-harness-window-content">{agentAppWindow ? <AppWindowContent store={store} windowId={agentAppWindow.id} /> : null}</div>
         </section>
+        <section aria-label="client-chat-test" className={`ks-harness-window${previewOnly && previewAppId !== "client-chat-test" ? " is-hidden" : ""}`} data-app-id="client-chat-test" data-testid="app-window-client-chat">
+          <header className="ks-harness-window-header">client-chat-test</header>
+          <div className="ks-harness-window-content">{clientChatWindow ? <AppWindowContent store={store} windowId={clientChatWindow.id} onWindowData={captureClientChatWindowData} /> : null}</div>
+        </section>
         <section aria-label="data-controls" className={`ks-harness-window${previewOnly && previewAppId !== "data-controls" ? " is-hidden" : ""}`} data-app-id="data-controls" data-testid="app-window-data-controls">
           <header className="ks-harness-window-header">범용 블록</header>
           <div className="ks-harness-window-content">{dataWindow ? <AppWindowContent store={store} windowId={dataWindow.id} /> : null}</div>
@@ -387,7 +442,7 @@ function Harness() {
         remoteEdits.current += 1;
         await fakeTransport.call({ op: "storage.write", window_id: "storage-window", entry: "memo", content: `# 다른 기기의 문서 ${remoteEdits.current}`, expected_revision: result.revision });
       }}>다른 기기에서 수정</button> : null}
-      {!coreUrl && !(previewOnly && (previewAppId === "agent" || previewAppId === "data-controls" || previewAppId === "block-gallery" || previewAppId === "data-views-test")) ? <FakeFilePanel transport={fakeTransport} /> : null}
+      {!coreUrl && !(previewOnly && (previewAppId === "agent" || previewAppId === "client-chat-test" || previewAppId === "data-controls" || previewAppId === "block-gallery" || previewAppId === "data-views-test")) ? <FakeFilePanel transport={fakeTransport} /> : null}
     </main>
   );
 }

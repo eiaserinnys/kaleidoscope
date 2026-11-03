@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import type { AppDefinition, Binding, BindingValue, CoreError, DataView, EventModifiers, PickFilesSpec, SaveFileSpec, ShellSnapshot, SourceStatus } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
+import { applyClientChatEnvelope, emptyClientChatState, type ClientChatAttachment, type ClientChatEnvelope, type ClientChatState } from "./client-chat";
 import * as shellErrors from "../contract/shell-errors";
 import { CLIENT_OUTPUT_MAX_BYTES } from "../contract/limits";
 import { toCoreError } from "../core/core-transport";
@@ -38,6 +39,10 @@ export class WindowData {
   readonly mediaCache = new Map<string, Promise<string>>();
   private values: DataView["values"] = {};
   private clientValues: Record<string, BindingValue> = {};
+  private clientChatValues = new Map<string, ClientChatState>();
+  private pendingClientChatValues = new Map<string, ClientChatState>();
+  private clientChatFrames = new Map<string, number>();
+  private clientChatListeners = new Map<string, Set<() => void>>();
   private sources: DataView["sources"] = emptySources;
   private sourceMeta: NonNullable<DataView["source_meta"]> = {};
   private listeners = new Map<string, Set<() => void>>();
@@ -95,6 +100,64 @@ export class WindowData {
       this.listeners.get(`@client/${name}`)?.forEach((listener) => listener());
     }
   };
+  getClientChat = (channel: string) => this.clientChatValues.get(channel) ?? emptyClientChatState;
+  takeClientChatAttachment = (channel: string, requestId: string): ClientChatAttachment | undefined => {
+    const state = this.getClientChat(channel);
+    const attachment = state.attachments.get(requestId);
+    if (!attachment) return undefined;
+    const attachments = new Map(state.attachments);
+    attachments.delete(requestId);
+    this.clientChatValues.set(channel, { ...state, attachments });
+    return attachment;
+  };
+  subscribeClientChat = (channel: string, listener: () => void) => {
+    let listeners = this.clientChatListeners.get(channel);
+    if (!listeners) { listeners = new Set(); this.clientChatListeners.set(channel, listeners); }
+    listeners.add(listener);
+    return () => { listeners?.delete(listener); if (!listeners?.size) this.clientChatListeners.delete(channel); };
+  };
+  publishClientChat = (channel: string, envelope: ClientChatEnvelope) => {
+    if (!(this.definition.client?.channels ?? []).includes(channel)) return;
+    const current = this.pendingClientChatValues.get(channel) ?? this.clientChatValues.get(channel) ?? emptyClientChatState;
+    this.pendingClientChatValues.set(channel, applyClientChatEnvelope(current, envelope));
+    if (this.clientChatFrames.has(channel)) return;
+    const frame = requestAnimationFrame(() => {
+      this.clientChatFrames.delete(channel);
+      const next = this.pendingClientChatValues.get(channel);
+      this.pendingClientChatValues.delete(channel);
+      if (!next) return;
+      this.clientChatValues.set(channel, next);
+      this.clientChatListeners.get(channel)?.forEach((listener) => listener());
+    });
+    this.clientChatFrames.set(channel, frame);
+  };
+  private resetClientChats() {
+    const channels = new Set([
+      ...(this.definition.client?.channels ?? []),
+      ...this.clientChatValues.keys(),
+      ...this.pendingClientChatValues.keys(),
+      ...this.clientChatFrames.keys(),
+      ...this.clientChatListeners.keys(),
+    ]);
+    const generations = new Map<string, number>();
+    for (const channel of channels) {
+      generations.set(channel, Math.max(
+        this.clientChatValues.get(channel)?.generation ?? 0,
+        this.pendingClientChatValues.get(channel)?.generation ?? 0,
+      ) + 1);
+    }
+    this.clientChatFrames.forEach((frame) => cancelAnimationFrame(frame));
+    this.clientChatFrames.clear();
+    this.pendingClientChatValues.clear();
+    for (const channel of channels) {
+      this.clientChatValues.set(channel, { ...emptyClientChatState, generation: generations.get(channel)! });
+      this.clientChatListeners.get(channel)?.forEach((listener) => listener());
+    }
+  }
+  requestClientAction = (name: string, event: unknown, transfer?: Transferable[]) => {
+    if (!this.runtime) return Promise.reject(shellErrors.SHELL_CLIENT_ACTION_FAILED({ reason: "클라이언트 실행이 준비되지 않았습니다" }));
+    return this.runtime.requestAction(name, event, transfer);
+  };
   subscribeSources = (listener: () => void) => { this.sourceListeners.add(listener); return () => this.sourceListeners.delete(listener); };
   getSources = () => this.sources;
   getSourceMeta = () => this.sourceMeta;
@@ -130,6 +193,7 @@ export class WindowData {
     const previous = this.runtime; this.runtime = null;
     if (previous) await previous.stop();
     if (!this.active) { this.restarting = false; return; }
+    this.resetClientChats();
     this.surfaces.clear();
     this.clientFailed = false; this.setNotice(null);
     this.publishClient(Object.fromEntries(Object.entries(this.definition.client.outputs).map(([name, output]) => [name, output.default])));

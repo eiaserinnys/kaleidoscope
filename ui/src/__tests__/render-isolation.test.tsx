@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { Profiler, useEffect, useState } from "react";
 import { TreeView } from "../components/tree/tree-view";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +11,8 @@ import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore, shareShellSnapshot, shareStructure } from "../core/shell-store";
 import * as windowData from "../data/window-data";
+import { useWindowData, WindowDataProvider, type WindowData } from "../data/window-data";
+import type { BlockContext } from "../blocks/block-context";
 import { TimelineBlock } from "../blocks/timeline";
 import * as renderBlockModule from "../render/render-block";
 import { ClientRuntime } from "../runtime/client-runtime";
@@ -50,6 +52,8 @@ vi.mock("../blocks/data-layout", async (importOriginal) => {
   }
   return { ...actual, StackBlock, TextBlock, TabsBlock };
 });
+
+vi.mock("thinking-orbs", () => ({ ThinkingOrb: () => <span aria-hidden="true" /> }));
 
 vi.mock("../data/window-data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../data/window-data")>();
@@ -108,6 +112,25 @@ const chatDefinition: AppDefinition = {
     protocol: "conversation-v1", permission: "login", base_path: "api", namespace: "n", profile: "p",
     collection: "c", model_order: [], selected_model: "", title_template: "", initial_instruction_template: "",
     instructions_template: "", thread_entry: "thread",
+  },
+};
+
+const clientChatDefinition: AppDefinition = {
+  id: "client-chat-isolation", name: "클라이언트 채팅 격리",
+  requires: { blocks: 18, modules: { assets: 1, client: 4 } }, permissions: [], state: {},
+  assets: [{ id: "chat-isolation", version: 1 }],
+  client: {
+    runtime: "javascript", entry: { id: "chat-isolation", version: 1 }, inputs: {}, outputs: {},
+    channels: ["thread"], actions: ["send", "cancel", "attachment"], commands: {}, state_keys: [], storage_entries: [],
+  },
+  ui: {
+    type: "stack", direction: "column", children: [
+      {
+        type: "chat", client: { channel: "thread", on_send: "send", on_cancel: "cancel", on_attachment: "attachment" },
+        footer: { type: "text", value: "격리 바닥글" },
+      },
+      { type: "text", value: "채팅 바깥 블록" },
+    ],
   },
 };
 
@@ -485,6 +508,107 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     const { store } = await setupChatWindow();
     for (let i = 0; i < 10; i += 1) await setState(store, "window-a", "first", `changed-${i}`);
     expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
+  it("클라이언트 채팅 글 조각 10개와 100개는 다시 그리는 횟수가 비례하지 않는다", async () => {
+    calls.length = 0;
+    const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;
+    if (probe) probe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
+    const snapshot = testSnapshot([clientChatDefinition], {});
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const store = createShellStore(transport);
+    await store.ready;
+    const first = snapshot.shared.windows[0]!;
+    const second = snapshot.shared.windows[1]!;
+    const contextFor = (appWindow: typeof first): BlockContext => ({
+      store,
+      window: { id: appWindow.id, app_id: appWindow.app_id, app_version: appWindow.app_version, desktop_id: appWindow.desktop_id },
+      definition: clientChatDefinition,
+    });
+    let dataA: WindowData | null = null;
+    let dataB: WindowData | null = null;
+    let commitsA = 0;
+    let commitsB = 0;
+    function Capture({ save }: { save: (data: WindowData) => void }) {
+      const data = useWindowData();
+      useEffect(() => save(data), [data, save]);
+      return null;
+    }
+    const commitTraceA: Array<{ activity: string; streamedText: string; cancelVisible: boolean }> = [];
+    render(<>
+      <WindowDataProvider store={store} windowId={first.id} definition={clientChatDefinition}>
+        <Capture save={(data) => { dataA = data; }} />
+        <Profiler id="chat-window-a" onRender={() => {
+          commitsA += 1;
+          const history = document.querySelector(".ks-agent-chat-history");
+          commitTraceA.push({
+            activity: history?.querySelector(".ks-agent-chat-working")?.textContent ?? "",
+            streamedText: history?.querySelector(".ks-agent-chat-assistant")?.textContent ?? "",
+            cancelVisible: !!document.querySelector('button[aria-label="멈춤"]'),
+          });
+        }}>
+          {renderBlockModule.renderBlock(clientChatDefinition.ui, contextFor(first))}
+        </Profiler>
+      </WindowDataProvider>
+      <WindowDataProvider store={store} windowId={second.id} definition={clientChatDefinition}>
+        <Capture save={(data) => { dataB = data; }} />
+        <Profiler id="chat-window-b" onRender={() => { commitsB += 1; }}>
+          {renderBlockModule.renderBlock(clientChatDefinition.ui, contextFor(second))}
+        </Profiler>
+      </WindowDataProvider>
+    </>);
+    await waitFor(() => expect(dataA && dataB).toBeTruthy());
+    await settleRenders();
+    const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const measureBurst = async (count: number) => {
+      await act(async () => {
+        dataA!.publishClientChat("thread", { kind: "snapshot", items: [], stream_id: null, text: "", busy: false, tool: null, queued: [] });
+        await nextFrame();
+      });
+      await act(async () => { await nextFrame(); });
+      await act(async () => { await nextFrame(); });
+      calls.length = 0;
+      commitsA = 0;
+      commitsB = 0;
+      commitTraceA.length = 0;
+      const coreCallsBefore = transport.getCalls().length;
+      await act(async () => {
+        dataA!.publishClientChat("thread", { kind: "event", event: { kind: "activity", busy: true, tool: "응답 생성" } });
+        await nextFrame();
+      });
+      await act(async () => { await nextFrame(); });
+      await act(async () => {
+        for (let index = 0; index < count; index += 1) {
+          dataA!.publishClientChat("thread", { kind: "event", event: { kind: "text", stream_id: "rapid", text: `조각 ${index + 1}` } });
+        }
+        await nextFrame();
+      });
+      await act(async () => { await nextFrame(); });
+      await act(async () => { await nextFrame(); });
+      return {
+        commits: commitsA,
+        otherWindowCommits: commitsB,
+        outsideChatRenders: calls.filter((call) => call.pointer === "/ui/children/0/footer" || call.pointer === "/ui/children/1"),
+        coreCalls: transport.getCalls().length - coreCallsBefore,
+        trace: [...commitTraceA],
+      };
+    };
+
+    const ten = await measureBurst(10);
+    expect(document.body.textContent).toContain("조각 10");
+    const hundred = await measureBurst(100);
+    expect(document.body.textContent).toContain("조각 100");
+    expect(ten.commits).toBe(hundred.commits);
+    expect(ten.commits * 2).toBeLessThan(10);
+    expect(hundred.commits * 2).toBeLessThan(100);
+    expect(ten.otherWindowCommits).toBe(0);
+    expect(hundred.otherWindowCommits).toBe(0);
+    expect(ten.outsideChatRenders).toEqual([]);
+    expect(hundred.outsideChatRenders).toEqual([]);
+    expect(ten.coreCalls).toBe(0);
+    expect(hundred.coreCalls).toBe(0);
+    console.log(JSON.stringify({ "10_events": ten, "100_events": hundred }));
     store.dispose();
   });
 

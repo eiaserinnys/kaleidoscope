@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo } from "react";
 import { AppSettings } from "../settings/app-settings";
-import { WindowDataProvider, useWindowData, useDormant } from "../data/window-data";
+import { WindowDataProvider, useWindowData, useDormant, type WindowData } from "../data/window-data";
 import { ClientShareSignal, WindowNotice } from "../data/window-notice";
 import type { BlockContext, WindowIdentity } from "../blocks/block-context";
 import { ErrorNotice, StatusText } from "../components/primitives";
@@ -19,6 +19,7 @@ export const AppWindowContent = memo(function AppWindowContent({
   settingsVisited = false,
   onSettingsClose = () => undefined,
   onSettingsProblem,
+  onWindowData,
 }: {
   store: ShellStore;
   windowId: string;
@@ -27,6 +28,7 @@ export const AppWindowContent = memo(function AppWindowContent({
   settingsVisited?: boolean;
   onSettingsClose?: () => void;
   onSettingsProblem?: (problem: CoreError | string | null) => void;
+  onWindowData?: (data: WindowData | null) => void;
 }) {
   const window = useShellSelector(store, (snapshot) => {
     const item = snapshot?.shared.windows.find((candidate) => candidate.id === windowId);
@@ -51,7 +53,7 @@ export const AppWindowContent = memo(function AppWindowContent({
   const hasSettings = version.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false;
   if (version.definition.requires.blocks < 4 && !hasSettings && !version.definition.agent) return <div className="ks-app-window-content" data-ks-app-id={window.app_id}>{renderBlock(version.definition.ui, context)}</div>;
   return <WindowDataProvider store={store} windowId={window.id} definition={version.definition}>
-    <WindowBody context={context} settingsOpen={settingsOpen} settingsVisited={settingsVisited} onSettingsClose={onSettingsClose} onSettingsProblem={onSettingsProblem} />
+    <WindowBody context={context} settingsOpen={settingsOpen} settingsVisited={settingsVisited} onSettingsClose={onSettingsClose} onSettingsProblem={onSettingsProblem} onWindowData={onWindowData} />
   </WindowDataProvider>;
 });
 
@@ -69,11 +71,15 @@ function AppShortcuts({ context, active }: { context: BlockContext; active: bool
   return null;
 }
 
-function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, onSettingsProblem }: {
-  context: BlockContext; settingsOpen: boolean; settingsVisited: boolean; onSettingsClose: () => void; onSettingsProblem?: (problem: CoreError | string | null) => void;
+function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, onSettingsProblem, onWindowData }: {
+  context: BlockContext; settingsOpen: boolean; settingsVisited: boolean; onSettingsClose: () => void; onSettingsProblem?: (problem: CoreError | string | null) => void; onWindowData?: (data: WindowData | null) => void;
 }) {
   const data = useWindowData();
   const hasSettings = context.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false;
+  useEffect(() => {
+    onWindowData?.(data);
+    return () => onWindowData?.(null);
+  }, [data, onWindowData]);
   useDormant("/ui", settingsOpen);
   useEffect(() => { data.setClientDormant(settingsOpen); }, [data, settingsOpen]);
   return <div ref={data.setClientHost} className="ks-app-window-content ks-data-window" data-ks-app-id={context.window.app_id}>

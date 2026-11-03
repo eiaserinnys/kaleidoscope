@@ -1,6 +1,7 @@
 import type { AppDefinition, Binding, BindingValue, ClientActionContext, ClientLifecycle, EventModifiers, PickFilesSpec, SaveFileSpec } from "../contract/contract";
 import type { ItemScope } from "../data/item-scope";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
+import type { ClientChatEnvelope } from "../data/client-chat";
 import { CLIENT_PING_TIMEOUT_SECS } from "../contract/limits";
 import type { ShellStore } from "../core/shell-store";
 import { isCoreError, toCoreError } from "../core/core-transport";
@@ -33,6 +34,7 @@ export class ClientRuntime {
   private unsubscribeVisibility?: () => void;
   private unregister?: () => void;
   private pending = new Map<string, (ok: boolean) => void>();
+  private actionReplies = new Map<string, { resolve: () => void; reject: (error: unknown) => void }>();
   private revisions: Record<string, string | null> = {};
   private pendingRevisions: Record<string, string | null> = {};
   private ownWrites: Record<string, string> = {};
@@ -72,7 +74,7 @@ export class ClientRuntime {
       frame.setAttribute("sandbox", "allow-scripts");
       frame.setAttribute("allow", "autoplay");
       frame.setAttribute("title", "클라이언트 런타임");
-      frame.srcdoc = clientSource(script, { token: this.token, state, stateKeys: this.client.state_keys, storageEntries: this.client.storage_entries, inputs: this.inputs(), capabilities: this.client.capabilities ?? [], actions: this.client.actions, processEnabled: this.client.process_permissions !== undefined, errors: sandboxErrors() });
+      frame.srcdoc = clientSource(script, { token: this.token, state, stateKeys: this.client.state_keys, storageEntries: this.client.storage_entries, inputs: this.inputs(), capabilities: this.client.capabilities ?? [], actions: this.client.actions, channels: this.client.channels ?? [], processEnabled: this.client.process_permissions !== undefined, errors: sandboxErrors() });
       frame.addEventListener("load", () => {
         if (this.loaded) { this.ready = false; this.token = ""; this.data.failClient(shellErrors.SHELL_CLIENT_FRAME_NAVIGATED()); void this.stop(); }
         else this.loaded = true;
@@ -211,6 +213,18 @@ export class ClientRuntime {
     return true;
   }
 
+  requestAction(name: string, event: unknown, transfer?: Transferable[]): Promise<void> {
+    if (!this.client.actions.includes(name) || !this.frame) {
+      return Promise.reject(shellErrors.SHELL_CLIENT_ACTION_FAILED({ reason: `앱 동작 ${name}을 실행할 수 없습니다` }));
+    }
+    const requestId = crypto.randomUUID();
+    const context = { event } as ClientActionContext;
+    return new Promise((resolve, reject) => {
+      this.actionReplies.set(requestId, { resolve, reject });
+      this.send({ type: "ks-client-action", name, context, requestId }, transfer);
+    });
+  }
+
   async pick(spec: PickFilesSpec, scope?: ItemScope): Promise<boolean> {
     try {
       const result = this.store.nativeFiles
@@ -315,11 +329,27 @@ export class ClientRuntime {
     else if (message.type === "ks-client-publish" && message.patch && typeof message.patch === "object") {
       Object.assign(this.patch, message.patch);
       if (this.patchFrame === null) this.patchFrame = requestAnimationFrame(() => { this.patchFrame = null; const patch = this.patch; this.patch = {}; this.data.publishClient(patch); });
+    } else if (message.type === "ks-client-chat-publish"
+      && typeof message.channel === "string"
+      && (this.client.channels ?? []).includes(message.channel)
+      && message.envelope && typeof message.envelope === "object") {
+      this.data.publishClientChat(message.channel, message.envelope as ClientChatEnvelope);
     } else if (message.type === "ks-client-notice" && typeof message.message === "string") {
       if (message.error) {
         const forwarded = { id: message.errorId, code: message.errorCode, message: message.message, details: [] };
         this.data.setNotice(isCoreError(forwarded) ? forwarded : shellErrors.SHELL_CLIENT_ACTION_FAILED({ reason: message.message }));
       } else this.data.setStatus(message.message);
+    }
+    else if (message.type === "ks-client-action-result" && typeof message.requestId === "string") {
+      const pending = this.actionReplies.get(message.requestId);
+      if (pending) {
+        this.actionReplies.delete(message.requestId);
+        if (message.ok === true) pending.resolve();
+        else {
+          const problem = { id: message.errorId, code: message.errorCode, message: message.error, details: [] };
+          pending.reject(isCoreError(problem) ? problem : shellErrors.SHELL_CLIENT_ACTION_FAILED({ reason: typeof message.error === "string" ? message.error : "클라이언트 동작이 실패했습니다" }));
+        }
+      }
     }
     else if (message.type === "ks-sandbox-flushed") { this.pending.get(message.requestId)?.(message.ok === true); this.pending.delete(message.requestId); }
     else if (message.type === "ks-client-process" && this.client.process_permissions !== undefined) {
@@ -482,6 +512,8 @@ export class ClientRuntime {
     if (windows?.get(this.data.windowId) === this) windows.delete(this.data.windowId);
     for (const finish of this.snapshots.values()) finish("");
     this.snapshots.clear();
+    for (const pending of this.actionReplies.values()) pending.reject(shellErrors.SHELL_CLIENT_ACTION_FAILED({ reason: "클라이언트가 종료되었습니다" }));
+    this.actionReplies.clear();
     this.beginClosing();
     await this.flush();
     this.hostServices.dispose();
