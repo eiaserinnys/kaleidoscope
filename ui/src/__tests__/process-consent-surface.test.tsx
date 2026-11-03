@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { WindowFrame } from "../../../app/src/shell/window-frame";
 import type { CoreEvent, CoreRequest, ShellSnapshot } from "../contract/contract";
@@ -101,10 +102,28 @@ it("스크롤 본문은 키보드로 진입하고 명령과 환경이 설명에 
 
 it.each([true, false])("응답 %s 뒤 요청 전 포커스로 돌아간다", (allow) => {
   const { a, call, emit } = setup();
-  const previous = screen.getByLabelText("입력 A"); previous.focus(); emit();
+  const previous = screen.getByRole("button", { name: "실행 A" }); previous.focus(); emit();
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: allow ? "허용" : "취소" }));
   expect(call).toHaveBeenCalledWith({ op: "process.respond_permission", window_id: a.id, request_id: "request", allow });
   expect(document.activeElement).toBe(previous);
+});
+
+it.each([true, false])("뒤 창에서 뜬 표면에 응답 %s 뒤 같은 창 내용에 머문다", async (allow) => {
+  const user = userEvent.setup();
+  const { a, call, change, emit } = setup("viewer-window");
+  const other = screen.getByLabelText("입력 B");
+  await user.click(other);
+  await user.keyboard("앞 창 입력");
+  emit();
+  expect(document.activeElement).toBe(other);
+  const frame = screen.getByTestId("app-window-md-editor");
+  await user.click(frame.querySelector<HTMLElement>(".ks-window-consent-overlay")!);
+  change((snapshot) => ({ ...snapshot, shared: { ...snapshot.shared, windows: snapshot.shared.windows.map((window) => window.id === a.id ? { ...window, z: 3 } : window) } }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: allow ? "허용" : "취소" }));
+  expect(call).toHaveBeenCalledWith({ op: "process.respond_permission", window_id: a.id, request_id: "request", allow });
+  expect(document.activeElement).toBe(frame.querySelector(".ks-window-content"));
+  await user.keyboard("뒤로 보내지 않을 글");
+  expect((other as HTMLInputElement).value).toBe("앞 창 입력");
 });
 
 it("최소화 복원과 데스크톱 복귀 시 앞 창의 표면으로 포커스한다", () => {

@@ -26,7 +26,12 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
       if (!windowModal) document.removeEventListener("keydown", onKey);
       const focusedInside = root.current?.contains(document.activeElement);
       background.forEach((element) => { element.removeAttribute("inert"); });
-      if (windowModal ? focusedInside : restore.current) previous?.focus(windowModal ? { preventScroll: true } : undefined);
+      if (windowModal) {
+        if (focusedInside) {
+          const target = previous && host.contains(previous) ? previous : background[0];
+          target?.focus({ preventScroll: true });
+        }
+      } else if (restore.current) previous?.focus();
     };
   }, [host, onCancel, inertSelector, windowModal]);
   useLayoutEffect(() => {

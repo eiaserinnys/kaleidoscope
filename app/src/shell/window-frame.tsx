@@ -196,7 +196,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
           </IconButton>
           </div>
         </header>
-        <div className="ks-window-content" ref={contentRef}>
+        <div className="ks-window-content" ref={contentRef} tabIndex={-1}>
           {typeof children === "function" ? children(settingsOpen, closeSettings, setSettingsProblem, settingsVisited) : children}
           {settingsProblem && !settingsOpen ? <div className="ks-window-settings-notice" data-ks-share-skip><Notice role="alert" data-ks-overlay>{settingsProblem}</Notice></div> : null}
         </div>
