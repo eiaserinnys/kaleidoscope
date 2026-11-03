@@ -26,6 +26,7 @@ export async function processRequest(store: ShellStore, window_id: string, metho
     }
     case "close_input": await store.call({ op: "process.close_input", window_id, handle: params.handle }); return null;
     case "stop": await store.call({ op: "process.stop", window_id, handle: params.handle }); return null;
+    case "file_uri": return (await store.call({ op: "process.file_uri", window_id, blob_key: params.blob_key })).uri;
     default: throw shellErrors.SHELL_CLIENT_COMMAND_UNDECLARED({ name: String(method) });
   }
 }

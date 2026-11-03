@@ -250,6 +250,18 @@ pub struct TimelineEdit {
 #[ts(export, export_to = "contract.ts")]
 pub struct DeviceStorage {
     pub prefixes: Vec<String>,
+    #[serde(default)]
+    #[ts(optional, as = "Option<DeviceStorageScope>")]
+    pub scope: DeviceStorageScope,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum DeviceStorageScope {
+    #[default]
+    App,
+    Window,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]

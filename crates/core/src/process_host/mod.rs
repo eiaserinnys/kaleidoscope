@@ -1,14 +1,15 @@
 //! 창과 실행 권한에 묶인 기기 프로세스 호스트.
 mod stream;
 mod relay;
-use crate::{app_commands, files, Inner};
+use crate::{app_commands, client_blobs, files, Inner};
 use kaleidoscope_contract::{
     errors,
     process::{spec_hash, ProcessAccess, ProcessSnapshot, ProcessStartResult},
     CoreError, CoreEvent, CoreReply, CoreRequest, PermissionDecl, LinkStatus,
 };
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
+    path::PathBuf,
     sync::{mpsc, Arc, Mutex},
 };
 use stream::{Input, Running, READ_LIMIT};
@@ -22,8 +23,26 @@ struct Pending {
 pub(crate) struct Processes {
     running: Mutex<HashMap<String, Arc<Running>>>,
     pending: Mutex<HashMap<String, Pending>>,
+    windows: Mutex<HashSet<(String, String)>>,
+    window_storage_archive: Mutex<Option<PathBuf>>,
     start: Mutex<()>,
     relay: Mutex<Option<relay::Relay>>,
+}
+
+impl Processes {
+    pub(crate) fn with_windows(
+        windows: impl IntoIterator<Item = (String, String)>,
+    ) -> Self {
+        Self {
+            windows: Mutex::new(windows.into_iter().collect()),
+            ..Self::default()
+        }
+    }
+}
+
+pub(crate) fn initialize_window_storage_archive(inner: &Inner) {
+    *inner.processes.window_storage_archive.lock().unwrap() =
+        Some(crate::server_switch::active_archive(inner));
 }
 
 fn context(
@@ -354,6 +373,9 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             p.stop();
             Ok(CoreReply::ProcessStop {})
         }
+        CoreRequest::ProcessFileUri { window_id, blob_key } => Ok(CoreReply::ProcessFileUri {
+            uri: client_blobs::file_uri(inner, &window_id, &blob_key)?,
+        }),
         _ => unreachable!(),
     }
 }
@@ -361,6 +383,25 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
 pub(crate) fn state_changed(inner: &Arc<Inner>) {
     let _guard = inner.processes.start.lock().unwrap();
     let scope = crate::server_switch::active_archive(inner);
+    let deleted_windows = {
+        let state = inner.state.lock().unwrap();
+        let current = state
+            .shared
+            .windows
+            .iter()
+            .map(|window| (window.app_id.clone(), window.id.clone()))
+            .collect::<HashSet<_>>();
+        let mut previous = inner.processes.windows.lock().unwrap();
+        let mut previous_archive = inner.processes.window_storage_archive.lock().unwrap();
+        let deleted = if previous_archive.as_ref() == Some(&scope) {
+            previous.difference(&current).cloned().collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        *previous = current;
+        *previous_archive = Some(scope.clone());
+        deleted
+    };
     {
         let state = inner.state.lock().unwrap();
         inner.processes.pending.lock().unwrap().retain(|_, pending| {
@@ -382,6 +423,9 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
             revoke(inner, &handle);
             p.stop();
         }
+    }
+    for (app_id, window_id) in deleted_windows {
+        client_blobs::remove_window_storage(&scope, &app_id, &window_id);
     }
 }
 

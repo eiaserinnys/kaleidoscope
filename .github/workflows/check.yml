@@ -74,3 +74,5 @@ jobs:
       - run: cargo check -p kaleidoscope-app
       - run: cargo test -p kaleidoscope-app --lib --features e2e
       - run: cargo test -p kaleidoscope-core windows_process_cmd_terminates_descendants_in_unicode_cwd -- --test-threads=2
+      - name: Verify process file URI with a Unicode Windows path
+        run: cargo test -p kaleidoscope-core process_file_uri_returns_only_a_window_blob_file_address -- --test-threads=2
