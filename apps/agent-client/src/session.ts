@@ -63,10 +63,15 @@ export class AgentSession {
     return next;
   }
 
+  private redact(text: string): string {
+    for (const address of [this.tools, this.state.servicesUsed]) if (address) text = text.split(address).join("[도구 주소]");
+    return text;
+  }
+
   private background(task: Promise<unknown>): void {
     void task.catch((error: unknown) => {
       const problem = error as { id?: unknown; code?: unknown; message?: unknown } | null;
-      const reason = typeof problem?.message === "string" ? problem.message : String(error);
+      const reason = this.redact(typeof problem?.message === "string" ? problem.message : String(error));
       const failure = typeof problem?.id === "string" && typeof problem.code === "string"
         ? { id: problem.id, code: problem.code, message: reason, reason }
         : { id: "AGENT_ACP_PROTOCOL_FAILED", reason };
@@ -306,6 +311,7 @@ export class AgentSession {
         const message = decoded.messages[index] as { id?: string | number; error?: unknown };
         const request = message.id === undefined ? undefined : this.state.pending[String(message.id)];
         this.state = reduceMessage(this.state, message, `stream-${this.state.generation}-${this.after}-${index}`);
+        if (this.state.failure) this.state = { ...this.state, failure: { ...this.state.failure, reason: this.redact(this.state.failure.reason) } };
         if (request && !message.error && request.kind === "initialize" && this.spec?.auth_methods) {
           this.state = { ...this.state, authMethods: this.state.authMethods.filter((method) => this.spec!.auth_methods!.includes(method.id)) };
         }

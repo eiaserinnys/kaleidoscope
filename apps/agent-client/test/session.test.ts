@@ -130,6 +130,18 @@ test("실행 중인 에이전트가 종료되면 프로토콜 오류와 다른 �
   assert.ok(f.snapshots.at(-1).failure.message.includes("시험"));
 });
 
+test("에이전트 오류에 도구 중계 주소가 담겨도 화면에 내보내지 않는다", async () => {
+  const f = fixture();
+  const session = new AgentSession(f.host as any);
+  await session.attach();
+  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: { mcpCapabilities: { http: true } } } });
+  await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "session" } });
+  await session.send({ id: "one", text: "말", attachments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, error: { code: -32603, message: "failed http://tools/old" } });
+  assert.ok(!f.snapshots.at(-1).failure.reason.includes("http://tools/old"));
+});
+
 test("큐를 순서대로 보내고 첫 말에만 지침과 같이 보기 및 첨부를 넣는다", async () => {
   const f = fixture();
   let guides = 0, commits = 0;
