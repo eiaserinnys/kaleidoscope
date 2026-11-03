@@ -60,6 +60,18 @@ it("자동 격자는 item_width 단계로 열 수를 정하고 창 폭이 바뀌
     expect(found).toHaveLength(3);
     return found;
   });
+  const originalRect = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    if (!this.classList.contains("ks-repeat-grid-width-probe")) return originalRect.call(this);
+    const parent = this.parentElement!;
+    const widthVariable = this.style.width.match(/var\((--[^)]+)\)/)?.[1];
+    const gapValue = this.style.marginInlineEnd;
+    const gapVariable = gapValue.match(/var\((--[^)]+)\)/)?.[1];
+    const width = Number.parseFloat(parent.style.getPropertyValue(widthVariable ?? ""));
+    const gap = Number.parseFloat(gapVariable ? parent.style.getPropertyValue(gapVariable) : gapValue);
+    if (Number.isFinite(gap)) this.style.marginInlineEnd = `${gap}px`;
+    return { x: 0, y: 0, top: 0, left: 0, right: width, bottom: 0, width, height: 0, toJSON() {} } as DOMRect;
+  });
   grids.forEach((grid) => {
     grid.style.setProperty("--ks-repeat-grid-item-width-small", "128px");
     grid.style.setProperty("--ks-repeat-grid-item-width-medium", "160px");

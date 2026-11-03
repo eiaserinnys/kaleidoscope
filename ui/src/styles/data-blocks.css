@@ -162,7 +162,7 @@
 .ks-data-tab-panel .ks-color-control { display: grid; grid-template-columns: var(--ks-control-height) 1fr; }
 .ks-data-tab-panel .ks-color-code, .ks-data-tab-panel .ks-slider-value { text-align: right; }
 .ks-data-tab-panel .ks-data-button:not(:has(.ks-icon-button)), .ks-data-tab-panel .ks-data-button:not(:has(.ks-icon-button)) > .ks-button { display: flex; width: 100%; }
-.ks-data-tab-panel .ks-data-stack.is-row:not(:has(> .ks-data-stack-item.is-fill)) > .ks-data-stack-item { flex: 1 1 0; }
+.ks-data-tab-panel .ks-data-stack.is-row:not(.has-explicit-fill) > .ks-data-stack-item { flex: 1 1 0; }
 .ks-color-field.is-disabled { opacity: .5; cursor: default; }
 .ks-color-field.is-disabled .ks-color-input { cursor: default; }
 .ks-slider { min-width: calc(var(--ks-space-6) * 3); accent-color: var(--ks-color-accent); }

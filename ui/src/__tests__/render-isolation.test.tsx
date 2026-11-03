@@ -959,6 +959,20 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     grid.style.setProperty("--ks-repeat-grid-item-width-small", "128px");
     grid.style.setProperty("--ks-space-3", "12px");
     grid.style.padding = "0px";
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (!this.classList.contains("ks-repeat-grid-width-probe")) return originalRect.call(this);
+      const parent = this.parentElement!;
+      const widthVariable = this.style.width.match(/var\((--[^)]+)\)/)?.[1];
+      const gapValue = this.style.marginInlineEnd;
+      const gapVariable = gapValue.match(/var\((--[^)]+)\)/)?.[1];
+      const width = Number.parseFloat(parent.style.getPropertyValue(widthVariable ?? ""));
+      const gap = Number.parseFloat(gapVariable ? parent.style.getPropertyValue(gapVariable) : gapValue);
+      if (Number.isFinite(gap)) this.style.marginInlineEnd = `${gap}px`;
+      return { x: 0, y: 0, top: 0, left: 0, right: width, bottom: 0, width, height: 0, toJSON() {} } as DOMRect;
+    });
+    const fixedBlocks = screen.getAllByText("고정 블록");
+    expect(fixedBlocks).toHaveLength(2);
     const resize = async (next: number) => {
       width = next;
       await act(async () => {
@@ -971,7 +985,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     await resize(900);
     await waitFor(() => expect(grid.querySelector<HTMLElement>(".ks-repeat-content")?.style.gridTemplateColumns).toBe("repeat(6, minmax(0, 1fr))"));
     expect(countFor("window-a", "/ui/children/1")).toBe(0);
-    expect(screen.getByText("고정 블록")).toBeTruthy();
+    expect(screen.getAllByText("고정 블록")).toEqual(fixedBlocks);
     store.dispose();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -1112,7 +1126,19 @@ describe("실제 Shell의 블록 렌더 격리", () => {
       unobserve(target: Element) { this.entry.targets.delete(target); }
     });
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => width);
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => ({ width, height: width / 2 } as DOMRect));
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("ks-repeat-grid-width-probe")) {
+        const parent = this.parentElement!;
+        const widthVariable = this.style.width.match(/var\((--[^)]+)\)/)?.[1];
+        const gapVariable = this.style.marginInlineEnd.match(/var\((--[^)]+)\)/)?.[1];
+        const pane = Number.parseFloat(parent.style.getPropertyValue(widthVariable ?? ""));
+        const gap = Number.parseFloat(parent.style.getPropertyValue(gapVariable ?? ""));
+        if (Number.isFinite(gap)) this.style.marginInlineEnd = `${gap}px`;
+        return { x: 0, y: 0, top: 0, left: 0, right: pane, bottom: 0, width: pane, height: 0, toJSON() {} } as DOMRect;
+      }
+      return { ...originalRect.call(this), width, height: width / 2 } as DOMRect;
+    });
     const rows = [{ id: "a", surface: "preview-a" }, { id: "b", surface: "preview-b" }];
     const definition: AppDefinition = {
       id: "auto-preview-isolation", name: "자동 열 미리보기", requires: { blocks: 19, modules: { assets: 1, client: 1 } },
@@ -1141,7 +1167,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
       expect(found?.querySelectorAll(".ks-canvas")).toHaveLength(2);
       return found!;
     });
-    grid.style.setProperty("--ks-pane-min-size", "160px");
+    grid.style.setProperty("--ks-repeat-grid-item-width-medium", "160px");
     grid.style.setProperty("--ks-space-3", "12px");
     grid.style.padding = "0px";
     const resize = async (next: number) => {
@@ -1159,6 +1185,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     view.unmount(); store.dispose();
     if (originalTransfer) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", originalTransfer);
     else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 

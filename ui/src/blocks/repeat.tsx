@@ -92,18 +92,32 @@ function RepeatReady({ block, context, pointer, entries, parent, follow }: {
   useEffect(() => {
     if (layout !== "grid" || !scroll.current) return;
     const element = scroll.current;
+    if (typeof block.grid?.columns === "number") {
+      setColumns(block.grid.columns);
+      return;
+    }
+    const itemWidth = block.grid?.item_width ?? "medium";
+    const probe = element.ownerDocument.createElement("span");
+    probe.className = "ks-repeat-grid-width-probe";
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.position = "absolute";
+    probe.style.visibility = "hidden";
+    probe.style.pointerEvents = "none";
+    probe.style.boxSizing = "border-box";
+    probe.style.width = `var(--ks-repeat-grid-item-width-${itemWidth})`;
+    probe.style.height = "0";
+    probe.style.marginInlineEnd = "var(--ks-space-3)";
+    element.append(probe);
     const resize = () => {
       if (!element.clientWidth) return;
-      if (typeof block.grid?.columns === "number") { setColumns(block.grid.columns); return; }
       const style = getComputedStyle(element);
-      const itemWidth = block.grid?.item_width ?? "medium";
-      const pane = parseFloat(style.getPropertyValue(`--ks-repeat-grid-item-width-${itemWidth}`));
-      const gap = parseFloat(style.getPropertyValue("--ks-space-3"));
+      const pane = probe.getBoundingClientRect().width;
+      const gap = parseFloat(getComputedStyle(probe).marginInlineEnd);
       if (!Number.isFinite(pane) || !Number.isFinite(gap) || pane <= 0) return;
       const gridWidth = element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
       setColumns(Math.max(1, Math.floor((gridWidth + gap) / (pane + gap))));
     };
-    resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => observer.disconnect();
+    resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => { observer.disconnect(); probe.remove(); };
   }, [layout, block.grid?.columns, block.grid?.item_width]);
   const rowSize = layout === "grid" ? columns : 1;
   const itemKey = useCallback((index: number) => entries[index].key, [entries]);
