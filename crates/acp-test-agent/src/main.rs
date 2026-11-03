@@ -42,6 +42,7 @@ fn main() {
         }
     }
     let mut authenticated = false;
+    let mut login_attempts = 0;
     let mut pending = Value::Null;
     let mut image_count = 0usize;
     for line in io::stdin().lock().lines() {
@@ -84,10 +85,22 @@ fn main() {
         let id = value["id"].clone();
         match method {
             "initialize" if scenario.contains("hang") => {}
-            "initialize" => emit(
-                json!({"jsonrpc":"2.0","id":id,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":!scenario.contains("no_load"),"promptCapabilities":{"image":!scenario.contains("no_image")},"mcpCapabilities":{"http":!scenario.contains("no_http")}},"authMethods":[{"id":"login","name":"로그인"},{"id":"terminal","name":"터미널","type":"terminal","args":[]}]}}),
-            ),
+            "initialize" => {
+                if scenario.contains("delay_start") {
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                }
+                emit(
+                    json!({"jsonrpc":"2.0","id":id,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":!scenario.contains("no_load"),"promptCapabilities":{"image":!scenario.contains("no_image")},"mcpCapabilities":{"http":!scenario.contains("no_http")}},"authMethods":[{"id":"login","name":"로그인"},{"id":"terminal","name":"터미널","type":"terminal","args":[]}]}}),
+                );
+            }
             "authenticate" => {
+                login_attempts += 1;
+                if scenario.contains("auth_fail_once") && login_attempts == 1 {
+                    emit(
+                        json!({"jsonrpc":"2.0","id":id,"error":{"code":-32603,"message":"login failed"}}),
+                    );
+                    continue;
+                }
                 authenticated = true;
                 emit(json!({"jsonrpc":"2.0","id":id,"result":{}}));
             }
@@ -194,7 +207,9 @@ fn main() {
                     emit(json!({"jsonrpc":"2.0","id":id,"result":{"stopReason":"end_turn"}}));
                 } else if text.contains("stream") {
                     for index in 0..80 {
-                        update(json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("[{index:02}]")}}));
+                        update(
+                            json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("[{index:02}]")}}),
+                        );
                         std::thread::sleep(std::time::Duration::from_millis(100));
                     }
                     emit(json!({"jsonrpc":"2.0","id":id,"result":{"stopReason":"end_turn"}}));

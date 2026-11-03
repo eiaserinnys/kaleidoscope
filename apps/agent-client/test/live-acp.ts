@@ -86,3 +86,16 @@ test("실제 가짜 ACP 프로세스의 로그인 뒤 세션 시작", async (t) 
   await f.waitFor(() => f.view()?.phase === "ready");
   assert.ok(f.writes.some((message) => message.method === "authenticate"));
 });
+
+test("로그인 실패 뒤 같은 선택을 다시 시도해 세션을 시작한다", async (t) => {
+  const f = fixture("auth_fail_once");
+  t.after(f.close);
+  const session = new AgentSession(f.host as any);
+  await session.start({ name: "시험", command: binary!, args: [], env: {} });
+  await f.waitFor(() => f.view()?.phase === "login");
+  await session.authenticate("login");
+  await f.waitFor(() => f.view()?.phase === "login" && f.view()?.failure);
+  assert.equal(f.view().failure.id, "AGENT_LOGIN_AUTHENTICATE_FAILED");
+  await session.authenticate("login");
+  await f.waitFor(() => f.view()?.phase === "ready");
+});
