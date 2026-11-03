@@ -57,10 +57,10 @@ fn block_set_18_schema_exposes_new_fields_and_types() {
 }
 
 #[test]
-fn block_set_18_increments_contract_and_supported_module_versions() {
-    assert_eq!(CONTRACT_VERSION, 28);
+fn current_contract_versions_include_block_set_19() {
+    assert_eq!(CONTRACT_VERSION, 29);
     let supported = Supported::current();
     assert_eq!(supported.blocks, BLOCK_SET_VERSION);
-    assert_eq!(supported.blocks, 18);
+    assert_eq!(supported.blocks, 19);
     assert_eq!(supported.modules.get("client"), Some(&4));
 }

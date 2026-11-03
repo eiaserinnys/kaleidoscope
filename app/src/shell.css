@@ -282,7 +282,9 @@
   box-shadow: 0 0 0 2px var(--ks-color-share), var(--ks-shadow-window);
 }
 
-.ks-window-title-actions { display: flex; }
+.ks-window-title-actions { display: flex; flex: 0 0 auto; }
+
+.ks-window-title-group { display: flex; min-width: 0; flex: 1 1 auto; align-items: baseline; gap: var(--ks-space-2); }
 
 .ks-window-titlebar {
   display: flex;
@@ -302,11 +304,24 @@
 }
 
 .ks-window-title {
+  flex: 0 0 auto;
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   color: var(--ks-color-muted);
   font-size: var(--ks-type-title);
   font-weight: 600;
+  line-height: var(--ks-line-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ks-window-title-meta {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--ks-color-muted);
+  font-size: var(--ks-type-meta);
   line-height: var(--ks-line-body);
   text-overflow: ellipsis;
   white-space: nowrap;

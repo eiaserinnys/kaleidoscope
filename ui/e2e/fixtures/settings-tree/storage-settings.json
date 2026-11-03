@@ -1,0 +1,30 @@
+{
+  "id": "storage-settings-fixture",
+  "name": "자동 설정 기준",
+  "requires": { "blocks": 6, "modules": { "storage": 2 } },
+  "permissions": [],
+  "state": {},
+  "storage": {
+    "entries": [
+      {
+        "id": "model",
+        "key": "model",
+        "kind": "json",
+        "schema": { "type": "string", "enum": ["Sonnet 4.5", "Opus 4.5"] },
+        "default": "Sonnet 4.5",
+        "label": "모델",
+        "presentation": "settings"
+      },
+      {
+        "id": "new_session",
+        "key": "new_session",
+        "kind": "json",
+        "schema": { "type": "boolean" },
+        "default": true,
+        "label": "새 세션으로 시작",
+        "presentation": "settings"
+      }
+    ]
+  },
+  "ui": { "type": "text", "value": "기존 저장소 설정 자동 폼" }
+}

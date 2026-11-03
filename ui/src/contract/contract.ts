@@ -160,6 +160,14 @@ shortcuts?: Array<Shortcut>,
  */
 messages?: { [key in string]: { [key in string]: string } }, locale?: StateRef, 
 /**
+ * (블록 세트 19판) 앱 설정 화면. 저장소의 `presentation: settings` 자동 폼보다 우선한다.
+ */
+settings?: SettingsDecl, 
+/**
+ * (블록 세트 19판) 창 제목과 메타 글. 각 창에서 바인딩을 따로 계산한다.
+ */
+window_title?: WindowTitleDecl, 
+/**
  * 창 안을 채우는 블록 트리의 뿌리.
  */
 ui: Block, };
@@ -1092,6 +1100,11 @@ export type SetStorageSpec = { entry: string, doc?: StringOrStateRef,
 value?: Binding, };
 
 /**
+ * 앱 정의의 사용자 지정 설정 패널.
+ */
+export type SettingsDecl = { ui: Block, available?: Binding, };
+
+/**
  * 기기 사이에 맞출 상태. 2단계 동기화의 단위다.
  */
 export type SharedState = { apps: Array<App>, app_versions: Array<AppVersion>, workspaces: Array<Workspace>, desktops: Array<Desktop>, windows: Array<AppWindow>, };
@@ -1372,6 +1385,11 @@ title: string,
  * 페이지를 읽는 중인가.
  */
 loading: boolean, can_go_back: boolean, can_go_forward: boolean, };
+
+/**
+ * 앱 창의 데이터 바인딩 제목과 선택 메타 글.
+ */
+export type WindowTitleDecl = { title: Binding, meta?: Binding, };
 
 /**
  * 서버 워커의 선언된 동작을 호출한다.

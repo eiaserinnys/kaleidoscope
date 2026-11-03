@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo } from "react";
 import { AppSettings } from "../settings/app-settings";
-import { WindowDataProvider, useWindowData, useDormant, type WindowData } from "../data/window-data";
+import { WindowDataProvider, useWindowData, useDormant, useBinding, type WindowData } from "../data/window-data";
 import { ClientShareSignal, WindowNotice } from "../data/window-notice";
 import type { BlockContext, WindowIdentity } from "../blocks/block-context";
 import { ErrorNotice, StatusText } from "../components/primitives";
@@ -19,6 +19,8 @@ export const AppWindowContent = memo(function AppWindowContent({
   settingsVisited = false,
   onSettingsClose = () => undefined,
   onSettingsProblem,
+  onWindowHeader,
+  onSettingsAvailable,
   onWindowData,
 }: {
   store: ShellStore;
@@ -28,6 +30,8 @@ export const AppWindowContent = memo(function AppWindowContent({
   settingsVisited?: boolean;
   onSettingsClose?: () => void;
   onSettingsProblem?: (problem: CoreError | string | null) => void;
+  onWindowHeader?: (title: string, meta: string | null) => void;
+  onSettingsAvailable?: (available: boolean) => void;
   onWindowData?: (data: WindowData | null) => void;
 }) {
   const window = useShellSelector(store, (snapshot) => {
@@ -50,10 +54,11 @@ export const AppWindowContent = memo(function AppWindowContent({
   if (!window) return <div className="ks-app-content-error"><ErrorNotice error={shellErrors.SHELL_APP_WINDOW_NOT_FOUND()} /></div>;
   if (!version || !context) return <div className="ks-app-content-error"><ErrorNotice error={shellErrors.SHELL_APP_VERSION_NOT_FOUND()} /></div>;
 
-  const hasSettings = version.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false;
+  const hasSettings = Boolean(version.definition.settings)
+    || (version.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false);
   if (version.definition.requires.blocks < 4 && !hasSettings && !version.definition.agent) return <div className="ks-app-window-content" data-ks-app-id={window.app_id}>{renderBlock(version.definition.ui, context)}</div>;
   return <WindowDataProvider store={store} windowId={window.id} definition={version.definition}>
-    <WindowBody context={context} settingsOpen={settingsOpen} settingsVisited={settingsVisited} onSettingsClose={onSettingsClose} onSettingsProblem={onSettingsProblem} onWindowData={onWindowData} />
+    <WindowBody context={context} settingsOpen={settingsOpen} settingsVisited={settingsVisited} onSettingsClose={onSettingsClose} onSettingsProblem={onSettingsProblem} onWindowHeader={onWindowHeader} onSettingsAvailable={onSettingsAvailable} onWindowData={onWindowData} />
   </WindowDataProvider>;
 });
 
@@ -71,22 +76,46 @@ function AppShortcuts({ context, active }: { context: BlockContext; active: bool
   return null;
 }
 
-function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, onSettingsProblem, onWindowData }: {
-  context: BlockContext; settingsOpen: boolean; settingsVisited: boolean; onSettingsClose: () => void; onSettingsProblem?: (problem: CoreError | string | null) => void; onWindowData?: (data: WindowData | null) => void;
+function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, onSettingsProblem, onWindowHeader, onSettingsAvailable, onWindowData }: {
+  context: BlockContext; settingsOpen: boolean; settingsVisited: boolean; onSettingsClose: () => void; onSettingsProblem?: (problem: CoreError | string | null) => void; onWindowHeader?: (title: string, meta: string | null) => void; onSettingsAvailable?: (available: boolean) => void; onWindowData?: (data: WindowData | null) => void;
 }) {
   const data = useWindowData();
-  const hasSettings = context.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false;
+  const hasSettings = Boolean(context.definition.settings)
+    || (context.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false);
   useEffect(() => {
     onWindowData?.(data);
     return () => onWindowData?.(null);
   }, [data, onWindowData]);
   useDormant("/ui", settingsOpen);
+  useDormant("/settings/ui", Boolean(context.definition.settings) && !settingsOpen);
   useEffect(() => { data.setClientDormant(settingsOpen); }, [data, settingsOpen]);
   return <div ref={data.setClientHost} className="ks-app-window-content ks-data-window" data-ks-app-id={context.window.app_id}>
+    <WindowFrameBindings context={context} onWindowHeader={onWindowHeader} onSettingsAvailable={onSettingsAvailable} />
     <ClientShareSignal />
     <AppShortcuts context={context} active={!settingsOpen} />
     <div className="ks-data-window-body" hidden={settingsOpen} inert={settingsOpen || undefined}>{renderBlock(context.definition.ui, context)}</div>
     {hasSettings && settingsVisited ? <AppSettings key={context.window.app_version} context={context} open={settingsOpen} onClose={onSettingsClose} onProblem={onSettingsProblem} /> : null}
     <div className="ks-data-window-notice"><WindowNotice /></div>
   </div>;
+}
+
+function WindowFrameBindings({ context, onWindowHeader, onSettingsAvailable }: {
+  context: BlockContext;
+  onWindowHeader?: (title: string, meta: string | null) => void;
+  onSettingsAvailable?: (available: boolean) => void;
+}) {
+  const titleBinding = context.definition.window_title?.title ?? context.definition.name;
+  const metaBinding = context.definition.window_title?.meta ?? "";
+  const title = useBinding("/window_title/title", titleBinding);
+  const meta = useBinding("/window_title/meta", metaBinding);
+  const settings = context.definition.settings;
+  const available = useBinding("/settings/available", settings?.available ?? true);
+  const titleText = title.status === "ready" && typeof title.value === "string" ? title.value : context.definition.name;
+  const metaText = meta.status === "ready" && typeof meta.value === "string" ? meta.value : null;
+  const settingsIsAvailable = settings?.available === undefined
+    || (available.status === "ready" && available.value === true);
+
+  useEffect(() => { onWindowHeader?.(titleText, metaText); }, [onWindowHeader, titleText, metaText]);
+  useEffect(() => { onSettingsAvailable?.(settingsIsAvailable); }, [onSettingsAvailable, settingsIsAvailable]);
+  return null;
 }

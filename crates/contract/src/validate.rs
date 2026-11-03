@@ -38,6 +38,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
             .and_then(Value::as_object)
             .is_some_and(|opens| opens.contains_key("set_state"));
     let uses_new_chat_client_fields = uses_block_set_18_chat_fields(&value);
+    let uses_block_set_19_definition_fields = uses_block_set_19_definition_fields(&value);
     let uses_device_storage_scope = value.pointer("/client/device_storage/scope").is_some();
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
@@ -49,13 +50,19 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
                 .into(),
         );
     }
-    if uses_block_set_16_bindings(&definition.ui) && definition.requires.blocks < 16 {
+    if uses_block_set_16_bindings(&definition) && definition.requires.blocks < 16 {
         details.push(
             "탭·입력 블록 라벨, dialog.close_label, dialog.cancel_label, tour.labels의 바인딩은 블록 세트 16판이라 requires.blocks가 16 이상이어야 합니다".into(),
         );
     }
     if uses_new_chat_client_fields && definition.requires.blocks < 18 {
-        details.push("client.channels와 chat.client, chat.footer는 블록 세트 18판이라 requires.blocks가 18 이상이어야 합니다".into());
+        details.push("client.channels, chat.client와 chat.footer는 블록 세트 18판이라 requires.blocks가 18 이상이어야 합니다".into());
+    }
+    if uses_block_set_19_definition_fields && definition.requires.blocks < 19 {
+        details.push(
+            "settings와 window_title은 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다"
+                .into(),
+        );
     }
     if uses_block_set_18_ui_fields(&definition.ui) && definition.requires.blocks < 18 {
         details.push(
@@ -75,7 +82,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         );
     }
     if !cached && definition.agent.is_none() {
-        data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
+        data::walk_definition_blocks(&definition, &mut |pointer, block| {
             if matches!(block, Block::Chat { .. })
                 && !block.is_local_agent_chat()
                 && !block.is_client_chat()
@@ -159,6 +166,10 @@ fn uses_block_set_18_chat_fields(value: &Value) -> bool {
     client_channels || value.get("ui").is_some_and(uses_chat_client_fields)
 }
 
+fn uses_block_set_19_definition_fields(value: &Value) -> bool {
+    value.get("settings").is_some() || value.get("window_title").is_some()
+}
+
 fn uses_chat_client_fields(value: &Value) -> bool {
     match value {
         Value::Object(object) => {
@@ -171,9 +182,9 @@ fn uses_chat_client_fields(value: &Value) -> bool {
     }
 }
 
-fn uses_block_set_16_bindings(ui: &Block) -> bool {
+fn uses_block_set_16_bindings(definition: &AppDefinition) -> bool {
     let mut uses_new_binding = false;
-    data::walk_blocks(ui, "/ui", &mut |_, block| {
+    data::walk_definition_blocks(definition, &mut |_, block| {
         let needs_block_set_16 = |binding: &Binding| {
             !matches!(binding, Binding::Literal(Value::String(_)))
         };
@@ -400,7 +411,7 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
     let mut when_pointers = Vec::new();
     let mut named_blocks = Vec::new();
     let mut repeat_templates: Vec<String> = Vec::new();
-    data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
+    data::walk_definition_blocks(definition, &mut |pointer, block| {
         if matches!(block, Block::When { .. }) {
             when_pointers.push(pointer.to_owned());
         }
@@ -682,7 +693,7 @@ fn validate_ui_binding(
             return;
         }
         let mut depth = 0;
-        data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
+        data::walk_definition_blocks(definition, &mut |pointer, block| {
             if matches!(block, Block::Repeat { .. }) {
                 let template = format!("{pointer}/template");
                 if at == template || at.starts_with(&format!("{template}/")) {
@@ -724,7 +735,13 @@ fn validate_ui_binding(
         return;
     }
     if let Binding::Client(reference) = binding {
-        if !(at == "/ui" || at.starts_with("/ui/"))
+        let can_read_client_output = at == "/ui"
+            || at.starts_with("/ui/")
+            || at == "/settings/available"
+            || at == "/settings/ui"
+            || at.starts_with("/settings/ui/")
+            || matches!(at, "/window_title/title" | "/window_title/meta");
+        if !can_read_client_output
             || definition.requires.blocks < 12
             || definition
                 .requires
@@ -1615,7 +1632,9 @@ fn validate_client_action(
     file: bool,
 ) {
     let click = at.ends_with("/on_click") || at.ends_with("/on_click/0");
-    if !(at.starts_with("/ui/") || (!file && at.starts_with("/shortcuts/")))
+    if !(at.starts_with("/ui/")
+        || at.starts_with("/settings/ui/")
+        || (!file && at.starts_with("/shortcuts/")))
         || (file && !click)
         || definition.requires.blocks < 12
         || definition

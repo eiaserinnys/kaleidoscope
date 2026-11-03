@@ -191,7 +191,10 @@ const DesktopWindow = memo(function DesktopWindow({ appWindow, area, isTop, onCa
     return {
       appName: version?.definition.name ?? app?.name ?? appWindow.app_id,
       shareable: !version || !containsAgentChat(version.definition.ui),
-      hasSettings: version?.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false,
+      hasSettings: Boolean(version?.definition.settings)
+        || (version?.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false),
+      settingsAvailableInitially: version?.definition.settings?.available === undefined
+        || version.definition.settings.available === true,
     };
   }, sameDetails);
   const sharing = useShellSelector(store, (snapshot) => snapshot?.sharing.includes(appWindow.id) ?? false);
@@ -201,12 +204,14 @@ const DesktopWindow = memo(function DesktopWindow({ appWindow, area, isTop, onCa
   }, [appWindow.desktop_id, getNewWindowRect, store]);
 
   return <WindowFrame
+    key={`${appWindow.id}:${appWindow.app_version}`}
     area={area}
     appName={details.appName}
     isTop={isTop}
     sharing={sharing}
     shareable={details.shareable}
     hasSettings={details.hasSettings}
+    settingsAvailableInitially={details.settingsAvailableInitially}
     store={store}
     onCall={onCall}
     onMinimize={(windowId) => { void onCall({ op: "window.minimize", window_id: windowId }); }}
@@ -214,11 +219,13 @@ const DesktopWindow = memo(function DesktopWindow({ appWindow, area, isTop, onCa
     onRestore={(windowId) => { void onCall({ op: "window.restore", window_id: windowId }); }}
     window={appWindow}
   >
-    {(settingsOpen, closeSettings, reportProblem, visited) => <AppWindowContent
+    {(settingsOpen, closeSettings, reportProblem, visited, reportWindowHeader, reportSettingsAvailable) => <AppWindowContent
       settingsOpen={settingsOpen}
       settingsVisited={visited}
       onSettingsClose={closeSettings}
       onSettingsProblem={reportProblem}
+      onWindowHeader={reportWindowHeader}
+      onSettingsAvailable={reportSettingsAvailable}
       newWindowRect={newWindowRect}
       store={store}
       windowId={appWindow.id}
@@ -232,8 +239,9 @@ function windowTitle(window: AppWindow, snapshot: ShellSnapshot | null): string 
   )?.definition.name ?? snapshot?.shared.apps.find((app) => app.id === window.app_id)?.name ?? window.app_id;
 }
 
-function sameDetails(left: { appName: string; shareable: boolean; hasSettings: boolean }, right: { appName: string; shareable: boolean; hasSettings: boolean }) {
-  return left.appName === right.appName && left.shareable === right.shareable && left.hasSettings === right.hasSettings;
+function sameDetails(left: { appName: string; shareable: boolean; hasSettings: boolean; settingsAvailableInitially: boolean }, right: { appName: string; shareable: boolean; hasSettings: boolean; settingsAvailableInitially: boolean }) {
+  return left.appName === right.appName && left.shareable === right.shareable && left.hasSettings === right.hasSettings
+    && left.settingsAvailableInitially === right.settingsAvailableInitially;
 }
 
 function sameReferences<T>(left: readonly T[], right: readonly T[]): boolean {
