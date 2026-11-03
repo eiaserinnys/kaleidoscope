@@ -43,10 +43,15 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     let uses_new_dialog_footer_fields = value
         .get("ui")
         .is_some_and(uses_dialog_footer_fields);
+    let uses_new_block_set_19_fields = value
+        .get("ui")
+        .is_some_and(uses_block_set_19_fields);
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
 
-    let mut details = validate(&definition);
+    let validation = validate(&definition);
+    let missing_when_condition = validation.missing_when_condition;
+    let mut details = validation.details;
     if uses_new_definition_fields && definition.requires.blocks < 15 {
         details.push(
             "tabs.header, tabs.keep_mounted, tabs.collapsible, folder.header, state_migrate와 opens.set_state는 블록 세트 15판이라 requires.blocks가 15 이상이어야 합니다"
@@ -78,6 +83,9 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     if uses_new_dialog_footer_fields && definition.requires.blocks < 19 {
         details.push("dialog.on_confirm과 dialog.danger는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
     }
+    if uses_new_block_set_19_fields && definition.requires.blocks < 19 {
+        details.push("input.columns, button.preview, button.prefix, 동적 PropertyField.label, format swatches, properties.layout, canvas.loading, when.min_width와 when.max_width는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
+    }
     if uses_device_storage_scope {
         validate_module_version(
             "client",
@@ -99,6 +107,8 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     }
     if details.is_empty() {
         Ok(definition)
+    } else if missing_when_condition {
+        Err(crate::errors::APP_DEFINITION_WHEN_CONDITION_MISSING().and_details(details))
     } else {
         Err(crate::errors::APP_DEFINITION_CHECK_FAILED().and_details(details))
     }
@@ -257,8 +267,46 @@ fn uses_dialog_footer_fields(ui: &Value) -> bool {
     }
 }
 
-fn validate(definition: &AppDefinition) -> Vec<String> {
+fn uses_block_set_19_fields(ui: &Value) -> bool {
+    match ui {
+        Value::Object(object) => {
+            let uses_field = match object.get("type").and_then(Value::as_str) {
+                Some("input") => object.contains_key("columns"),
+                Some("button") => object.contains_key("preview") || object.contains_key("prefix"),
+                Some("properties") => {
+                    object.contains_key("layout")
+                        || object
+                            .get("fields")
+                            .and_then(Value::as_array)
+                            .is_some_and(|fields| {
+                                fields.iter().any(|field| {
+                                    field.get("label").is_some_and(|label| !label.is_string())
+                                        || field.get("format").and_then(Value::as_str)
+                                            == Some("swatches")
+                                })
+                            })
+                }
+                Some("canvas") => object.contains_key("loading"),
+                Some("when") => {
+                    object.contains_key("min_width") || object.contains_key("max_width")
+                }
+                _ => false,
+            };
+            uses_field || object.values().any(uses_block_set_19_fields)
+        }
+        Value::Array(values) => values.iter().any(uses_block_set_19_fields),
+        _ => false,
+    }
+}
+
+struct ValidationResult {
+    details: Vec<String>,
+    missing_when_condition: bool,
+}
+
+fn validate(definition: &AppDefinition) -> ValidationResult {
     let mut details = Vec::new();
+    let mut missing_when_condition = false;
     if !valid_id(&definition.id) {
         details.push(format!("앱 id가 올바르지 않습니다: {}", definition.id));
     }
@@ -433,8 +481,14 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
     let mut named_blocks = Vec::new();
     let mut repeat_templates: Vec<String> = Vec::new();
     data::walk_definition_blocks(definition, &mut |pointer, block| {
-        if matches!(block, Block::When { .. }) {
+        if let Block::When { value, min_width, max_width, .. } = block {
             when_pointers.push(pointer.to_owned());
+            if value.is_none() && min_width.is_none() && max_width.is_none() {
+                missing_when_condition = true;
+                details.push(format!(
+                    "{pointer}: when에는 value, min_width, max_width 중 하나 이상이 필요합니다"
+                ));
+            }
         }
         if matches!(block, Block::Repeat { .. }) {
             repeat_templates.push(format!("{pointer}/template"));
@@ -529,7 +583,10 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
         validate_ui_binding(binding, definition, &mut details, &pointer);
     }
     validate_exprs(definition, &mut details);
-    details
+    ValidationResult {
+        details,
+        missing_when_condition,
+    }
 }
 
 fn validate_v14_definition(definition: &AppDefinition, details: &mut Vec<String>) {
@@ -2634,13 +2691,17 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 validate_control_binding(selected, definition, details, at);
             }
         }
-        Block::Properties { fields } => {
+        Block::Properties { fields, .. } => {
             if fields.is_empty() {
                 details.push(format!("{at}: properties에는 줄이 하나 이상 필요합니다"));
             }
         }
         Block::Input {
-            value, rows, label, ..
+            value,
+            rows,
+            columns,
+            label,
+            ..
         } => {
             validate_control_binding(value, definition, details, at);
             if label.is_some() && definition.requires.blocks < 12 {
@@ -2653,6 +2714,9 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 if definition.requires.blocks < 11 {
                     details.push(format!("{at}: input.rows는 blocks 11 이상이 필요합니다"));
                 }
+            }
+            if columns.is_some_and(|columns| columns == 0) {
+                details.push(format!("{at}: input.columns는 양수여야 합니다"));
             }
         }
         Block::Select {
@@ -2690,7 +2754,12 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 validate_actions(&action.on_click, definition, details, &format!("{action_at}/on_click"));
             }
         }
-        Block::Button { label, icon, .. } => {
+        Block::Button {
+            label,
+            icon,
+            preview,
+            ..
+        } => {
             if definition.requires.blocks < 12
                 && (!matches!(label, Binding::Literal(_))
                     || icon
@@ -2712,6 +2781,20 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                     .is_none_or(|name| !data::ICON_NAMES.contains(&name))
                 {
                     details.push(format!("{at}: 쉘에 없는 아이콘입니다: {value}"));
+                }
+            }
+            if let Some(preview) = preview {
+                match preview.as_ref() {
+                    Block::Image { .. }
+                    | Block::Canvas {
+                        on_pointer: None, ..
+                    } => {}
+                    Block::Canvas { .. } => details.push(format!(
+                        "{at}/preview: canvas 미리보기는 on_pointer 없이 읽기 전용이어야 합니다"
+                    )),
+                    _ => details.push(format!(
+                        "{at}/preview: button.preview는 canvas 또는 image여야 합니다"
+                    )),
                 }
             }
         }

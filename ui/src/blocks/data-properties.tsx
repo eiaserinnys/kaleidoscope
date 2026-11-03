@@ -19,7 +19,7 @@ function Property({ field, pointer }: { field: PropertyField; pointer: string })
   else if (field.format === "code") content = <code>{display(value.value)}</code>;
   else if (field.format === "date") content = dateText(value.value);
   else content = display(value.value);
-  return <><dt>{field.label}</dt><dd>{content}</dd></>;
+  return <><dt>{field.label as string}</dt><dd>{content}</dd></>;
 }
 export function PropertiesBlock({ block, pointer }: { block: Extract<Block, { type: "properties" }>; pointer: string }) {
   return <div className="ks-properties-container"><dl className="ks-properties">{block.fields.map((field, index) => <Property key={index} field={field} pointer={`${pointer}/fields/${index}/value`} />)}</dl></div>;

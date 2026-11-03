@@ -1349,6 +1349,10 @@ pub fn walk_definition_blocks<'a>(
 pub fn child_blocks<'a>(block: &'a Block, pointer: &str) -> Vec<(String, &'a Block)> {
     match block {
         Block::Repeat { template, .. } => vec![(format!("{pointer}/template"), template.as_ref())],
+        Block::Button {
+            preview: Some(preview),
+            ..
+        } => vec![(format!("{pointer}/preview"), preview.as_ref())],
         Block::When { child, .. } | Block::Dialog { child, .. } | Block::Anchor { child, .. } => {
             vec![(format!("{pointer}/child"), child.as_ref())]
         }
@@ -1430,7 +1434,11 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
                 bind!(format!("tabs/{index}/label"), &tab.label);
             }
         }
-        Block::When { value, .. } => bind!("value", value),
+        Block::When { value, .. } => {
+            if let Some(value) = value {
+                bind!("value", value);
+            }
+        }
         Block::Dialog {
             open,
             title,
@@ -1493,12 +1501,16 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         Block::Anchor { .. } => {}
         Block::Canvas {
             surface,
+            loading,
             aspect_ratio,
             description,
             on_pointer,
             ..
         } => {
             bind!("surface", surface);
+            if let Some(value) = loading {
+                bind!("loading", value);
+            }
             if let Some(value) = aspect_ratio {
                 bind!("aspect_ratio", value);
             }
@@ -1654,8 +1666,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
                 act!("on_select", on_select);
             }
         }
-        Block::Properties { fields } => {
+        Block::Properties { fields, .. } => {
             for (index, field) in fields.iter().enumerate() {
+                bind!(format!("fields/{index}/label"), &field.label);
                 bind!(format!("fields/{index}/value"), &field.value);
             }
         }
@@ -1763,6 +1776,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             confirm,
             disabled,
             pressed,
+            prefix,
             ..
         } => {
             if let Some(value) = pressed {
@@ -1771,6 +1785,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             bind!("label", label);
             if let Some(icon) = icon {
                 bind!("icon", icon);
+            }
+            if let Some(prefix) = prefix {
+                bind!("prefix", prefix);
             }
             act!("on_click", on_click);
             if let Some(body) = confirm.as_ref().and_then(|confirm| confirm.body.as_ref()) {

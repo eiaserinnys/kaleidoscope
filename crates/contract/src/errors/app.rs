@@ -226,6 +226,13 @@ error_catalog! { ENTRIES;
         message: "앱 정의가 검사를 통과하지 못했습니다. 함께 표시된 항목을 고친 뒤 다시 시도하세요.",
         fix: "함께 표시된 항목과 JSON 경로를 고치세요"
     }
+    APP_DEFINITION_WHEN_CONDITION_MISSING() {
+        class: InvalidAppDefinition,
+        place: "앱 정의 when 조건 검사",
+        cause: "when 블록에 조건이 하나도 없다",
+        message: "when 블록에는 value, min_width, max_width 중 하나 이상이 필요합니다. 조건을 추가한 뒤 다시 시도하세요.",
+        fix: "when 블록에 value, min_width, max_width 중 하나 이상을 지정하세요"
+    }
     APP_DEFINITION_REQUIRES_NEWER_SHELL() {
         class: UnsupportedApp,
         place: "앱 정의 호환성 검사",
