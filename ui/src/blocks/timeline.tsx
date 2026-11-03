@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Actions, Block, EventModifiers, TimelineViewport } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { IconButton } from "../components/primitives";
@@ -92,7 +92,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   const selection = useBinding(`${pointer}/selection`, block.selection ?? null);
   const snap = useBinding(`${pointer}/snap`, block.snap ?? null);
   const viewportBinding = useBinding(`${pointer}/viewport`, block.viewport ?? null);
-  const root = useRef<HTMLDivElement>(null), body = useRef<HTMLDivElement>(null), playhead = useRef<HTMLDivElement>(null), ruler = useRef<HTMLDivElement>(null), rulerMeasure = useRef<HTMLSpanElement>(null), scroll = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null), body = useRef<HTMLDivElement>(null), playhead = useRef<HTMLDivElement>(null), ruler = useRef<HTMLDivElement>(null), scroll = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null), previewFrame = useRef<number | null>(null), pendingPreview = useRef<{ edit: Edit; modifiers: EventModifiers } | null>(null);
   const seekFrame = useRef<number | null>(null), pendingSeek = useRef<number | null>(null);
   const viewportFrame = useRef<number | null>(null), pendingViewport = useRef<TimelineViewport | null>(null);
@@ -122,8 +122,38 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   const zoom = seconds > 0 ? seconds / viewportSpan : 1;
   const maxZoom = Math.max(1, seconds / 2);
   const canChangeViewport = !hasViewportBinding || !!block.on_viewport;
-  const [rulerMetrics, setRulerMetrics] = useState({ width: 0, minimumSpacing: 0 });
-  const step = rulerStep(seconds, zoom, block.controls !== undefined || hasViewportBinding, rulerMetrics.width, rulerMetrics.minimumSpacing);
+  const rulerMetrics = useRef({ width: 0, minimumSpacing: 0 });
+  const [, setRulerRevision] = useState(0);
+  const viewportControls = block.controls !== undefined || hasViewportBinding;
+  const step = rulerStep(seconds, zoom, viewportControls, rulerMetrics.current.width, rulerMetrics.current.minimumSpacing);
+  const currentStep = useRef(step);
+  currentStep.current = step;
+  const attachScroll = useCallback((scroller: HTMLDivElement | null) => {
+    scroll.current = scroller;
+    if (!scroller) return;
+    const update = () => {
+      const measure = scroller.querySelector<HTMLElement>(".ks-timeline-ruler-measure");
+      const firstLabel = scroller.querySelector<HTMLElement>(".ks-timeline-ruler > span");
+      if (!measure) return;
+      const bounds = scroller.getBoundingClientRect();
+      const style = getComputedStyle(scroller);
+      const width = Math.max(0, bounds.width - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0));
+      const labelWidth = measure.getBoundingClientRect().width;
+      const gap = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ks-space-1")) || 0;
+      const leadingPadding = firstLabel ? Number.parseFloat(getComputedStyle(firstLabel).paddingInlineStart) || 0 : 0;
+      const minimumSpacing = labelWidth > 0 ? labelWidth * 1.5 + gap + leadingPadding : 0;
+      rulerMetrics.current = { width, minimumSpacing };
+      const nextStep = rulerStep(seconds, zoom, viewportControls, width, minimumSpacing);
+      if (nextStep !== currentStep.current) {
+        currentStep.current = nextStep;
+        setRulerRevision((revision) => revision + 1);
+      }
+    };
+    update();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(scroller);
+    return () => { observer?.disconnect(); scroll.current = null; };
+  }, [seconds, zoom, viewportControls]);
   const sendViewport = useMemo(() => createSerialSend(async (next: TimelineViewport) => {
     const accepted = await data.act(`${pointer}/on_viewport`, next);
     if (!accepted && sameViewport(draftViewportRef.current, next)) {
@@ -197,27 +227,6 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
       element.removeEventListener("scroll", onScroll);
     };
   }, [duration.status, tracks.status]);
-  useLayoutEffect(() => {
-    const scroller = scroll.current, measure = rulerMeasure.current, rulerElement = ruler.current;
-    if (!scroller || !measure || !rulerElement) return;
-    const update = () => {
-      const bounds = scroller.getBoundingClientRect();
-      const style = getComputedStyle(scroller);
-      const width = Math.max(0, bounds.width - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0));
-      const labelWidth = measure.getBoundingClientRect().width;
-      const gap = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ks-space-1")) || 0;
-      const firstLabel = rulerElement.querySelector<HTMLElement>(":scope > span");
-      const leadingPadding = firstLabel ? Number.parseFloat(getComputedStyle(firstLabel).paddingInlineStart) || 0 : 0;
-      const minimumSpacing = labelWidth > 0 ? labelWidth * 1.5 + gap + leadingPadding : 0;
-      setRulerMetrics((previous) => previous.width === width && previous.minimumSpacing === minimumSpacing
-        ? previous
-        : { width, minimumSpacing });
-    };
-    update();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
-    observer?.observe(scroller);
-    return () => observer?.disconnect();
-  }, [seconds]);
   useLayoutEffect(() => {
     const scroller = scroll.current, content = body.current;
     if (!scroller || !content || seconds <= 0) return;
@@ -368,8 +377,8 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   const bodyWidth = seconds > 0 ? `${seconds / viewportSpan * 100}%` : "100%";
   return <div className="ks-timeline" ref={root}>
     <div className={`ks-timeline-layout${block.controls === true ? " has-controls" : ""}`}><div className="ks-timeline-labels"><div className="ks-timeline-ruler-label">{showControls ? <><IconButton aria-label="축소" disabled={!canChangeViewport || zoom <= 1} onClick={() => zoomBy(1 / 1.6)}><DataIcon name="minus" size="inline" /></IconButton><IconButton aria-label="확대" disabled={!canChangeViewport || zoom >= maxZoom} onClick={() => zoomBy(1.6)}><DataIcon name="plus" size="inline" /></IconButton>{block.controls === true ? <IconButton aria-label="전체 맞춤" disabled={!canChangeViewport || (viewportRange.start === 0 && viewportRange.end === seconds)} onClick={() => changeViewport({ start: 0, end: seconds })}><DataIcon name="maximize-2" size="inline" /></IconButton> : null}</> : null}</div>{trackData.map((track) => <div key={track.id}><span>{track.label ?? track.id}</span>{track.locked ? <DataIcon name="lock" size="inline" /> : null}</div>)}</div>
-      <div className="ks-timeline-scroll" ref={scroll}><div className="ks-timeline-body" ref={body} style={{ width: bodyWidth }}>
-        <span ref={rulerMeasure} className="ks-timeline-ruler-measure" aria-hidden="true">{rulerTime(seconds)}</span>
+      <div className="ks-timeline-scroll" ref={attachScroll}><div className="ks-timeline-body" ref={body} style={{ width: bodyWidth }}>
+        <span className="ks-timeline-ruler-measure" aria-hidden="true">{rulerTime(seconds)}</span>
         <div className="ks-timeline-ruler" ref={ruler} role="slider" aria-label="재생 위치" aria-valuemin={0} aria-valuemax={Math.round(seconds * 100) / 100} aria-valuenow={Math.round(currentTime * 100) / 100} tabIndex={block.on_seek ? 0 : -1} onKeyDown={(event) => { if (!block.on_seek || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return; event.preventDefault(); const increment = event.shiftKey ? 0.1 : snapValue?.step && snapValue.step > 0 ? snapValue.step : 1; void data.act(`${pointer}/on_seek`, Math.max(0, Math.min(seconds, currentTime + (event.key === "ArrowRight" ? increment : -increment)))); }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); seek(event, true); }} onPointerMove={(event) => { if (event.buttons) seek(event); }} onPointerUp={(event) => seek(event, true)} onPointerCancel={() => flushSeek()}>
           {rulerTicks.map((tick) => <span key={tick} className={seconds > 0 && tick / seconds >= 0.96 ? "is-end" : undefined} style={{ left: percent(tick) }}>{rulerTime(tick)}</span>)}
         </div>

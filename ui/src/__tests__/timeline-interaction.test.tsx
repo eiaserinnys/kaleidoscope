@@ -1,16 +1,19 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { Profiler } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { TimelineBlock } from "../blocks/timeline";
 
-const runtime = vi.hoisted(() => ({ act: vi.fn().mockResolvedValue(true), bindings: {} as Record<string, unknown> }));
+const runtime = vi.hoisted(() => ({ act: vi.fn().mockResolvedValue(true), bindings: {} as Record<string, unknown>, loadingTracks: false }));
 vi.mock("../data/window-data", () => ({
   useWindowData: () => runtime,
-  useBinding: (pointer: string, value: unknown) => ({ status: "ready", value: runtime.bindings[pointer] ?? value }),
+  useBinding: (pointer: string, value: unknown) => pointer === "/ui/tracks" && runtime.loadingTracks
+    ? { status: "loading" }
+    : { status: "ready", value: runtime.bindings[pointer] ?? value },
 }));
 vi.mock("../share/visible", () => ({ useShareDescriber: () => {} }));
-vi.mock("../data/window-state", () => ({ useWindowVisible: () => true }));
+vi.mock("../data/window-state", () => ({ useWindowVisible: () => true, useWindowGrants: () => [] }));
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); runtime.act.mockClear(); runtime.bindings = {}; });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); runtime.act.mockClear(); runtime.bindings = {}; runtime.loadingTracks = false; });
 
 const block = {
   type: "timeline" as const, duration: 10, position: 0,
@@ -153,6 +156,54 @@ it("새 viewport 기능을 쓰지 않는 6분 시간축은 60초 눈금을 유�
 it("새 viewport 기능을 쓰는 6분 시간축은 겹침 완화 눈금을 쓴다", () => {
   const view = render(<TimelineBlock block={{ ...viewportBlock, duration: 360, viewport: { start: 0, end: 360 } }} pointer="/ui" context={context} />);
   expect(view.container.querySelectorAll(".ks-timeline-ruler > span")).toHaveLength(4);
+});
+
+it("트랙이 늦게 도착하거나 다시 로딩돼도 실제 눈금을 측정하고 간격이 바뀔 때만 다시 그린다", () => {
+  let width = 220;
+  const observers: { callback: ResizeObserverCallback; target: Element | null }[] = [];
+  class TestResizeObserver {
+    record: { callback: ResizeObserverCallback; target: Element | null };
+    constructor(callback: ResizeObserverCallback) { this.record = { callback, target: null }; observers.push(this.record); }
+    observe(target: Element) { this.record.target = target; }
+    disconnect() { this.record.target = null; }
+  }
+  vi.stubGlobal("ResizeObserver", TestResizeObserver);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    return { left: 0, width: this.classList.contains("ks-timeline-scroll") ? width : this.classList.contains("ks-timeline-ruler-measure") ? 65 : width } as DOMRect;
+  });
+  runtime.loadingTracks = true;
+  runtime.bindings["/ui/tracks"] = block.tracks;
+  let renders = 0;
+  const timeline = () => <Profiler id="timeline" onRender={() => { renders++; }}><TimelineBlock block={{ ...block, duration: 30, tracks: { expr: "$data.schedule.tracks" } }} pointer="/ui" context={context} /></Profiler>;
+  const view = render(timeline());
+  expect(screen.getByRole("status", { name: "불러오는 중" })).toBeTruthy();
+  const labels = () => Array.from(view.container.querySelectorAll(".ks-timeline-ruler > span"), (element) => element.textContent);
+  const resize = (nextWidth: number) => {
+    width = nextWidth;
+    const observer = observers.find((entry) => entry.target === view.container.querySelector(".ks-timeline-scroll"));
+    expect(observer).toBeDefined();
+    act(() => observer!.callback([], {} as ResizeObserver));
+  };
+
+  runtime.loadingTracks = false;
+  view.rerender(timeline());
+  expect(labels()).toEqual(["00:00.0", "00:15.0", "00:30.0"]);
+  const rendersBeforeSameStep = renders;
+  resize(230);
+  expect(renders).toBe(rendersBeforeSameStep);
+  resize(700);
+  expect(labels()).toEqual(["00:00.0", "00:10.0", "00:20.0", "00:30.0"]);
+
+  const previousScroller = view.container.querySelector(".ks-timeline-scroll");
+  runtime.loadingTracks = true;
+  view.rerender(timeline());
+  expect(observers.some((observer) => observer.target === previousScroller)).toBe(false);
+  width = 220;
+  runtime.loadingTracks = false;
+  view.rerender(timeline());
+  expect(labels()).toEqual(["00:00.0", "00:15.0", "00:30.0"]);
+  resize(700);
+  expect(labels()).toEqual(["00:00.0", "00:10.0", "00:20.0", "00:30.0"]);
 });
 
 it("Shift 휠은 구간 길이를 유지하며 가로로 이동한다", () => {
