@@ -1,4 +1,4 @@
-param([string]$Out, [switch]$SelfTest)
+﻿param([string]$Out, [switch]$SelfTest)
 $ErrorActionPreference = 'Stop'
 try {
 Add-Type -AssemblyName System.Drawing
