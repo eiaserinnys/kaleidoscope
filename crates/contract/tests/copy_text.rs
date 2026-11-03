@@ -13,7 +13,7 @@ fn definition(ui: Value, blocks: u32) -> Value {
 }
 
 fn copy_button(action: Value) -> Value {
-    json!({"type": "button", "label": "복사", "on_click": action})
+    json!({"type": "button", "label": "복사", "icon": "copy", "on_click": action})
 }
 
 #[test]
@@ -70,4 +70,26 @@ fn copy_text_expression_uses_the_action_binding_pointer() {
                 && serde_json::to_value(binding).unwrap() == json!({"expr":"$state.target"})
         }));
     }
+}
+
+#[test]
+fn copy_text_is_limited_to_icon_button_clicks() {
+    let action = json!({"copy_text": {"expr": "$state.target"}});
+    parse_app_definition(&definition(copy_button(action.clone()), 19).to_string())
+        .expect("icon button on_click should allow copy_text");
+
+    let iconless = json!({"type":"button","label":"복사","on_click":action});
+    assert!(parse_app_definition(&definition(iconless, 19).to_string()).is_err());
+
+    let list = json!({"type":"list","items":[],"on_select":action});
+    assert!(parse_app_definition(&definition(list, 19).to_string()).is_err());
+
+    let mut shortcut = definition(json!({"type":"text","value":"내용"}), 19);
+    shortcut["requires"]["modules"] = json!({"assets":1,"client":2});
+    shortcut["assets"] = json!([{"id":"client-code","version":1}]);
+    shortcut["client"] = json!({"runtime":"javascript","entry":{"id":"client-code","version":1}});
+    shortcut["shortcuts"] = json!([
+        {"code":"KeyC","modifiers":[],"action":action}
+    ]);
+    assert!(parse_app_definition(&shortcut.to_string()).is_err());
 }

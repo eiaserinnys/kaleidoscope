@@ -1343,6 +1343,7 @@ fn validate_actions(
             );
         }
         Actions::CopyText(action) => {
+            validate_copy_text_location(definition, details, at);
             if definition.requires.blocks < 19 {
                 details.push(
                     "글 복사 동작은 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다"
@@ -1400,6 +1401,7 @@ fn validate_actions(
                         );
                     }
                     Action::CopyText(action) => {
+                        validate_copy_text_location(definition, details, &at);
                         if list.len() != 1 {
                             details.push(format!("{at}: 글 복사 동작은 단독으로 써야 합니다"));
                         }
@@ -1568,6 +1570,40 @@ fn validate_actions(
                 }
             }
         }
+    }
+}
+
+fn validate_copy_text_location(definition: &AppDefinition, details: &mut Vec<String>, at: &str) {
+    let block_pointer = at.strip_suffix("/on_click").or_else(|| {
+        let (action_pointer, index) = at.rsplit_once('/')?;
+        if !index.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        action_pointer.strip_suffix("/on_click")
+    });
+    let Some(ui_pointer) = block_pointer.and_then(|pointer| pointer.strip_prefix("/ui")) else {
+        details.push(format!(
+            "{at}: copy_text는 아이콘이 있는 단추의 on_click에만 쓸 수 있습니다"
+        ));
+        return;
+    };
+    let has_icon = serde_json::to_value(&definition.ui)
+        .ok()
+        .and_then(|ui| {
+            if ui_pointer.is_empty() {
+                Some(ui)
+            } else {
+                ui.pointer(ui_pointer).cloned()
+            }
+        })
+        .is_some_and(|block| {
+            block.get("type").and_then(Value::as_str) == Some("button")
+                && block.get("icon").is_some_and(|icon| !icon.is_null())
+        });
+    if !has_icon {
+        details.push(format!(
+            "{at}: copy_text는 아이콘이 있는 단추의 on_click에만 쓸 수 있습니다"
+        ));
     }
 }
 

@@ -324,7 +324,7 @@ export function ButtonBlock({ block, pointer }: Props<"button">) {
     setBusy(true);
     const succeeded = await data.act(`${pointer}/on_click`, null, undefined, modifiers);
     setBusy(false);
-    if (succeeded && copyTextAction(block.on_click) && (ICON_NAMES as readonly string[]).includes(iconText)) {
+    if (succeeded && copyTextAction(block.on_click)) {
       setCopySucceeded(true);
       if (copyTimer.current) clearTimeout(copyTimer.current);
       copyTimer.current = setTimeout(() => { setCopySucceeded(false); copyTimer.current = null; }, 1500);
@@ -337,17 +337,14 @@ export function ButtonBlock({ block, pointer }: Props<"button">) {
       opener.current?.querySelector<HTMLButtonElement>(":scope > button")?.focus();
     }
   });
-  const labelText = label.status === "ready" && typeof label.value === "string" ? label.value : "";
-  const iconText = icon.status === "ready" && typeof icon.value === "string" ? icon.value : "";
-  const pressedValue = block.pressed !== undefined && pressed.status === "ready" ? Boolean(pressed.value) : undefined;
   const hasIcon = (ICON_NAMES as readonly string[]).includes(iconText);
-  const copied = copySucceeded && copyTextAction(block.on_click) && hasIcon;
+  const copied = copySucceeded && copyTextAction(block.on_click);
   const contents = <>{hasIcon ? <DataIcon name={copied ? "check" : iconText} /> : null}{!block.icon_only ? <span className="ks-truncate-label">{labelText}</span> : null}</>;
   const host = opener.current?.closest<HTMLElement>(".ks-data-window");
   return <span ref={opener} className={`ks-data-button is-${block.variant ?? "default"}`}>{block.icon_only
     ? <IconButton aria-label={labelText} pressed={pressedValue} disabled={busy || unavailable} onClick={(event) => { const modifiers = eventModifiers(event); if (block.confirm) { confirmModifiers.current = modifiers; setConfirm(true); } else void run(false, modifiers); }}>{contents}</IconButton>
     : <Button aria-pressed={pressedValue} variant={block.variant === "primary" ? "emphasis" : "default"} disabled={busy || unavailable} onClick={(event) => { const modifiers = eventModifiers(event); if (block.confirm) { confirmModifiers.current = modifiers; setConfirm(true); } else void run(false, modifiers); }}>{contents}</Button>}
-    {copied ? <span aria-live="polite" className="ks-accessible-hidden" role="status">복사했습니다</span> : null}
+    <span aria-live="polite" className="ks-accessible-hidden" role="status">{copied ? "복사했습니다" : ""}</span>
     {confirm && block.confirm && host ? <Dialog host={host} title={block.confirm.title} ok={block.confirm.ok ?? labelText} danger={block.variant === "danger"} onCancel={close} onConfirm={() => void run(true, confirmModifiers.current)} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} /> : null}
   </span>;
 }

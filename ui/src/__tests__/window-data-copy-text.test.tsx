@@ -2,7 +2,7 @@ import { useState, useSyncExternalStore } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import type { AppDefinition } from "../contract/contract";
+import type { AppDefinition, Binding } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { useWindowData, WindowDataProvider } from "../data/window-data";
@@ -16,11 +16,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function setup() {
+function setup(binding: Binding = { expr: "$state.target" }, appFields: Record<string, unknown> = {}) {
   const definition = {
-    id: "md-viewer", name: "복사 시험", requires: { blocks: 18, modules: {} }, permissions: [],
+    id: "md-viewer", name: "복사 시험", requires: { blocks: 19, modules: {} }, permissions: [],
     state: { target: "https://example.com/page" },
-    ui: { type: "button", label: "복사", on_click: { copy_text: { expr: "$state.target" } } },
+    ...appFields,
+    ui: { type: "button", label: "복사", icon: "copy", on_click: { copy_text: binding } },
   } as unknown as AppDefinition;
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   const store = createShellStore(transport);
@@ -28,7 +29,9 @@ function setup() {
     const data = useWindowData();
     const [result, setResult] = useState("");
     const noticeId = useSyncExternalStore(data.subscribeNotice, data.getNoticeId);
+    const scope = { item: { url: "https://example.com/item" }, parent_item: { url: "https://example.com/parent" }, key: "row", index: 0, instance: {} };
     return <><button onClick={async () => setResult(String(await data.act("/ui/on_click", null)))}>실행</button>
+      <button onClick={async () => setResult(String(await data.act("/ui/on_click", null, undefined, undefined, scope)))}>항목 실행</button>
       <output data-testid="result">{result}</output><output data-testid="notice">{noticeId ?? ""}</output></>;
   }
   render(<WindowDataProvider store={store} windowId="viewer-window" definition={definition}><Harness /></WindowDataProvider>);
@@ -56,14 +59,14 @@ it("copy_text는 코어 호출 없이 바인딩 글을 한 번 복사한다", as
   store.dispose();
 });
 
-it("비문자열은 SHELL_COPY_TEXT_EMPTY로 알린다", async () => {
+it("비문자열은 SHELL_COPY_TEXT_NOT_TEXT로 알린다", async () => {
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn() } });
   const { transport, store } = setup();
   await publishCopyValue(transport, 42);
 
   await userEvent.click(screen.getByRole("button", { name: "실행" }));
   expect(screen.getByTestId("result").textContent).toBe("false");
-  expect(screen.getByTestId("notice").textContent).toBe("SHELL_COPY_TEXT_EMPTY");
+  expect(screen.getByTestId("notice").textContent).toBe("SHELL_COPY_TEXT_NOT_TEXT");
   store.dispose();
 });
 
@@ -86,5 +89,42 @@ it("클립보드 거부는 SHELL_COPY_TEXT_WRITE_FAILED로 알린다", async () 
   await userEvent.click(screen.getByRole("button", { name: "실행" }));
   expect(screen.getByTestId("result").textContent).toBe("false");
   expect(screen.getByTestId("notice").textContent).toBe("SHELL_COPY_TEXT_WRITE_FAILED");
+  store.dispose();
+});
+
+it("반복 항목 바인딩은 WindowData.act에서 항목 값을 복사한다", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  const { store } = setup({ item: "url" });
+
+  await userEvent.click(screen.getByRole("button", { name: "항목 실행" }));
+  expect(writeText).toHaveBeenCalledTimes(1);
+  expect(writeText).toHaveBeenCalledWith("https://example.com/item");
+  store.dispose();
+});
+
+it("중첩 반복의 부모 항목 바인딩은 WindowData.act에서 부모 값을 복사한다", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  const { store } = setup({ parent_item: "url" });
+
+  await userEvent.click(screen.getByRole("button", { name: "항목 실행" }));
+  expect(writeText).toHaveBeenCalledTimes(1);
+  expect(writeText).toHaveBeenCalledWith("https://example.com/parent");
+  store.dispose();
+});
+
+it("message 바인딩은 WindowData.act에서 현재 언어의 글을 복사한다", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  const { store } = setup({ message: "share_url" }, {
+    state: { target: "https://example.com/page", language: "ko" },
+    messages: { ko: { share_url: "공유할 주소" }, en: { share_url: "Share URL" } },
+    locale: { state: "language" },
+  });
+
+  await userEvent.click(screen.getByRole("button", { name: "실행" }));
+  expect(writeText).toHaveBeenCalledTimes(1);
+  expect(writeText).toHaveBeenCalledWith("공유할 주소");
   store.dispose();
 });

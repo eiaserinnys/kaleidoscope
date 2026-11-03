@@ -648,15 +648,22 @@ error_catalog! { ENTRIES;
     SHELL_COPY_TEXT_EMPTY() {
         class: InvalidRequest,
         place: "화면 글 복사",
-        cause: "copy_text 바인딩이 비어 있거나 문자열이 아니다",
+        cause: "copy_text 바인딩이 빈 문자열이다",
         message: "복사할 글이 없습니다. 앱 정의의 copy_text 값이 빈 글이 아닌지 확인하세요.",
         fix: "앱 정의의 copy_text 값에 복사할 글을 넣으세요"
+    }
+    SHELL_COPY_TEXT_NOT_TEXT() {
+        class: InvalidRequest,
+        place: "화면 글 복사",
+        cause: "copy_text 바인딩 값이 문자열이 아니다",
+        message: "복사할 값이 글이 아닙니다. 앱 정의의 copy_text가 글을 내는 바인딩인지 확인하세요.",
+        fix: "앱 정의의 copy_text가 글을 내는 바인딩인지 확인하세요"
     }
     SHELL_COPY_TEXT_WRITE_FAILED(reason) {
         class: Io,
         place: "화면 글 클립보드 쓰기",
         cause: "브라우저가 클립보드 쓰기를 거부했다",
-        message: "클립보드에 쓰지 못했습니다. 원인: {reason}",
-        fix: "클립보드 권한을 확인한 뒤 다시 시도하세요"
+        message: "클립보드에 쓰지 못했습니다. 클립보드 권한을 확인한 뒤 다시 누르세요. 원인: {reason}",
+        fix: "클립보드 권한을 확인한 뒤 다시 누르세요"
     }
 }
