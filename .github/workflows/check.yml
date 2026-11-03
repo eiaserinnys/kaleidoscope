@@ -73,3 +73,4 @@ jobs:
       - run: pnpm --dir app build
       - run: cargo check -p kaleidoscope-app
       - run: cargo test -p kaleidoscope-app --lib --features e2e
+      - run: cargo test -p kaleidoscope-core windows_process_cmd_terminates_descendants_in_unicode_cwd -- --test-threads=2

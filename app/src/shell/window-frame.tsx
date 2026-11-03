@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { IconButton, Maximize2, Minus, Minimize2, Notice, ScreenShare, Settings, X, useShareView, type ShellStore, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
+import { ProcessConsent } from "./process-consent";
 
 export interface WindowFrameProps {
   area: { width: number; height: number };
@@ -32,6 +33,7 @@ const MIN_HEIGHT = "--ks-window-min-height";
 
 export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSettings, store, onCall, onMinimize, onMaximize, onRestore, window: appWindow, children }: WindowFrameProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const [frameHost, setFrameHost] = useState<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsVisited, setSettingsVisited] = useState(false);
   const [settingsProblem, setSettingsProblem] = useState<string | null>(null);
@@ -158,7 +160,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
         zIndex: appWindow.z,
       }}
     >
-      <div className="ks-window-frame">
+      <div className="ks-window-frame" ref={setFrameHost}>
         <header
           className={`ks-window-titlebar${isTop ? " ks-window-titlebar-active" : ""}`}
           onPointerDown={(event) => {
@@ -198,6 +200,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
           {typeof children === "function" ? children(settingsOpen, closeSettings, setSettingsProblem, settingsVisited) : children}
           {settingsProblem && !settingsOpen ? <div className="ks-window-settings-notice" data-ks-share-skip><Notice role="alert" data-ks-overlay>{settingsProblem}</Notice></div> : null}
         </div>
+        <ProcessConsent store={store} windowId={appWindow.id} host={frameHost} />
       </div>
       {!isMaximized ? <div
         aria-hidden="true"

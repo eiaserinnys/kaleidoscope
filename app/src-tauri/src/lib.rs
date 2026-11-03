@@ -230,7 +230,7 @@ async fn core_bytes(
                 &bytes,
             )
             .map(|()| Vec::new()),
-        "client.http_read" | "client.blob_put" => {
+        "client.http_read" | "client.blob_put" | "process.write" => {
             core.client_binary(&operation, &window, &handle, &bytes)
         }
         _ => Err(errors::SHELL_IPC_OPERATION_UNSUPPORTED()),

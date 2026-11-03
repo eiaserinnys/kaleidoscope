@@ -91,6 +91,7 @@ export function makeTestSnapshot(options: {
       grants: options.grants ?? [],
       pc_access: [],
       local_agent_access: [],
+      process_access: [],
     },
     supported: { blocks: 1, modules: { files: 1 } },
     embedded_available: false,

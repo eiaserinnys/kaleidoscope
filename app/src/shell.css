@@ -396,3 +396,7 @@
 .shell-server-guide { font-size: var(--ks-type-body); line-height: var(--ks-line-body); color: var(--ks-color-muted); text-wrap: pretty; }
 .shell-server-skipped, .shell-server-skipped-list { margin-block-start: var(--ks-space-1); }
 .shell-server-skipped-list { display: flex; flex-direction: column; gap: var(--ks-space-1); }
+.ks-window-consent-overlay { inset: 0; z-index: 3; padding: var(--ks-space-2); }
+.ks-window-consent-overlay .ks-dialog { display: flex; max-height: 100%; flex-direction: column; min-height: 0; }
+.ks-window-consent-overlay .ks-dialog-body { min-height: 0; overflow: auto; white-space: normal; display: flex; flex-direction: column; gap: var(--ks-space-2); }
+.ks-window-consent-overlay .ks-process-env { color: var(--ks-color-muted); font-size: var(--ks-type-meta); }

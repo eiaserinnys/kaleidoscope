@@ -1,0 +1,25 @@
+{
+  "id": "process-fixture",
+  "name": "프로세스 시험",
+  "requires": { "blocks": 16, "modules": { "assets": 1, "client": 3, "process": 1, "files": 1 } },
+  "permissions": [
+    { "module": "process", "id": "run", "label": "프로그램 실행" },
+    { "module": "files", "id": "work", "access": "readwrite", "label": "시험 폴더" }
+  ],
+  "state": { "command": "python3", "script": "" },
+  "assets": [{ "id": "process-fixture-client", "version": 1 }],
+  "client": {
+    "runtime": "javascript", "entry": { "id": "process-fixture-client", "version": 1 },
+    "inputs": { "command": { "state": "command" }, "script": { "state": "script" } },
+    "outputs": { "status": { "default": "대기" }, "number": { "default": -1 }, "pid": { "default": "" }, "partial": { "default": 0 }, "error": { "default": "" } },
+    "actions": ["start"], "process_permissions": ["run"]
+  },
+  "ui": { "type": "stack", "direction": "column", "children": [
+    { "type": "button", "label": "실행", "on_click": { "client": "start" } },
+    { "type": "text", "value": { "client": "status" } },
+    { "type": "text", "value": { "client": "number" } },
+    { "type": "text", "value": { "client": "pid" } },
+    { "type": "text", "value": { "client": "partial" } },
+    { "type": "text", "value": { "client": "error" } }
+  ] }
+}

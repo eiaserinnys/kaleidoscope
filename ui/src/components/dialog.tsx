@@ -2,13 +2,13 @@ import { useId, useLayoutEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./primitives";
 
-export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm }: { host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: () => void }) {
+export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm, overlayClassName = "", inertSelector = ":scope > .ks-data-window-body, :scope > .ks-data-window-notice" }: { host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: () => void; overlayClassName?: string; inertSelector?: string }) {
   const titleId = useId();
   const root = useRef<HTMLDivElement>(null);
   const restore = useRef(true);
   useLayoutEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const background = host.querySelectorAll<HTMLElement>(":scope > .ks-data-window-body, :scope > .ks-data-window-notice");
+    const background = host.querySelectorAll<HTMLElement>(inertSelector);
     background.forEach((element) => { element.setAttribute("inert", ""); });
     root.current?.querySelector<HTMLButtonElement>(".ks-dialog-confirm button")?.focus();
     const onKey = (event: KeyboardEvent) => {
@@ -26,8 +26,8 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
       background.forEach((element) => { element.removeAttribute("inert"); });
       if (restore.current) previous?.focus();
     };
-  }, [host, onCancel]);
-  return createPortal(<div className="ks-dialog-overlay" data-ks-overlay onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+  }, [host, onCancel, inertSelector]);
+  return createPortal(<div className={`ks-dialog-overlay ${overlayClassName}`} data-ks-overlay onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
     <div className="ks-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root}>
       <div className="ks-dialog-title" id={titleId}>{title}</div>
       {body != null ? <div className="ks-dialog-body">{body}</div> : null}

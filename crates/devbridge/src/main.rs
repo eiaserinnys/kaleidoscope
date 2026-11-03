@@ -269,7 +269,7 @@ async fn post_core_bytes(
                 .client_write_export(&window, &handle, *offset, &body)
                 .map(|()| Vec::new()),
         },
-        "client.http_read" | "client.blob_put" => {
+        "client.http_read" | "client.blob_put" | "process.write" => {
             core.client_binary(&operation, &window, &handle, &body)
         }
         operation => {

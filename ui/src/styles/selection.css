@@ -28,6 +28,8 @@ textarea,
 .ks-inline-error,
 .ks-unknown-block,
 .ks-agent-session-command,
+.ks-process-command,
+.ks-process-env,
 .ks-agent-session-env,
 .ks-metric-subvalue {
   user-select: text;

@@ -24,6 +24,8 @@ mod link;
 mod logins;
 mod media;
 mod oauth;
+mod os_process;
+mod process_host;
 mod profiler;
 mod registry_client;
 mod registry_events;
@@ -201,6 +203,7 @@ pub(crate) struct Inner {
     pub(crate) layout_signal: LayoutSignal,
     pub(crate) data_runtimes: data_runtime::DataRuntimes,
     pub(crate) local_agents: local_agent::LocalAgents,
+    pub(crate) processes: process_host::Processes,
     pub(crate) conversation_streams: conversation_stream::Streams,
     pub(crate) conversation_sends: Mutex<HashSet<String>>,
     pub(crate) isolated_captures: Mutex<HashMap<String, share::IsolatedCapture>>,
@@ -250,6 +253,7 @@ pub struct Core {
 impl Drop for Core {
     fn drop(&mut self) {
         if self.owner {
+            process_host::shutdown(&self.inner);
             local_agent::shutdown(&self.inner);
             if let Err(err) = self.flush_storage() {
                 eprintln!("상태를 저장할 수 없습니다: {}", err.message);
@@ -386,6 +390,7 @@ impl Core {
             },
             data_runtimes: data_runtime::DataRuntimes::default(),
             local_agents: local_agent::LocalAgents::default(),
+            processes: process_host::Processes::default(),
             conversation_streams: conversation_stream::Streams::default(),
             conversation_sends: Mutex::new(HashSet::new()),
             isolated_captures: Mutex::new(HashMap::new()),
@@ -508,6 +513,14 @@ impl Core {
                 result.extend_from_slice(&bytes);
                 Ok(result)
             }
+            "process.write" => {
+                let size = body.get(..4).and_then(|head| <[u8; 4]>::try_from(head).ok()).map(u32::from_be_bytes).ok_or_else(errors::PROCESS_WRITE_CHECKPOINT_INVALID)? as usize;
+                let checkpoint = body.get(4..4 + size).ok_or_else(errors::PROCESS_WRITE_CHECKPOINT_INVALID)?;
+                let checkpoint = serde_json::from_slice(checkpoint).map_err(|_| errors::PROCESS_WRITE_CHECKPOINT_INVALID())?;
+                let bytes = body.get(4 + size..).ok_or_else(errors::PROCESS_WRITE_CHECKPOINT_INVALID)?.to_vec();
+                process_host::handle(&self.inner, CoreRequest::ProcessWrite { window_id: window.into(), handle: handle.into(), bytes, checkpoint })?;
+                Ok(Vec::new())
+            }
             _ => Err(errors::DESK_CLIENT_BINARY_OPERATION_UNKNOWN(operation)),
         }
     }
@@ -596,6 +609,14 @@ impl Core {
             | CoreRequest::StorageWrite { .. }
             | CoreRequest::StorageReset { .. }
             | CoreRequest::StorageMove { .. }) => app_storage::handle(&self.inner, request),
+            request @ (CoreRequest::ProcessStart { .. }
+            | CoreRequest::ProcessRespondPermission { .. }
+            | CoreRequest::ProcessAttach { .. }
+            | CoreRequest::ProcessRead { .. }
+            | CoreRequest::ProcessAck { .. }
+            | CoreRequest::ProcessWrite { .. }
+            | CoreRequest::ProcessCloseInput { .. }
+            | CoreRequest::ProcessStop { .. }) => process_host::handle(&self.inner, request),
             request @ (CoreRequest::LocalAgentAttach { .. }
             | CoreRequest::LocalAgentDetach { .. }
             | CoreRequest::LocalAgentAllow { .. }
@@ -818,6 +839,7 @@ impl Core {
 
     pub fn shutdown(&self) {
         client_files::release_all(&self.inner);
+        process_host::shutdown(&self.inner);
         local_agent::shutdown(&self.inner);
         if let Err(err) = self.flush_storage() {
             eprintln!("상태를 저장할 수 없습니다: {}", err.message);
@@ -1110,6 +1132,7 @@ impl Inner {
         data_runtime::state_changed(self);
         conversation_stream::state_changed(self);
         local_agent::state_changed(self);
+        process_host::state_changed(self);
     }
 }
 

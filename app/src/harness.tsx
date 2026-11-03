@@ -170,7 +170,7 @@ const snapshot: ShellSnapshot = {
     ],
     windows,
   },
-  device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: shareScenario === "editor" ? [{ window_id: "md-editor-window", permission: "docs", root_path: "/fake/docs", root_name: "문서", granted_at: timestamp }] : [], pc_access: [], local_agent_access: [] },
+  device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: shareScenario === "editor" ? [{ window_id: "md-editor-window", permission: "docs", root_path: "/fake/docs", root_name: "문서", granted_at: timestamp }] : [], pc_access: [], local_agent_access: [], process_access: [] },
   supported: { blocks: 10, modules: { files: 2, web: 1, local_agent: 1, storage: 2, assets: 1, http: 1 } },
   link: linkStatus(shareScenario ? "connected" : new URLSearchParams(window.location.search).get("link")),
   sharing: [],

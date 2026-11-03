@@ -33,6 +33,7 @@ mod layout_sync_tests;
 mod pc_tests;
 mod profiler_concurrency_tests;
 mod profiler_tests;
+mod process_tests;
 mod server_switch_tests;
 mod share_capture_tests;
 

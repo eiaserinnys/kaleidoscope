@@ -10,6 +10,7 @@ import { clientSource, sandboxErrors } from "../blocks/sandbox-frame";
 import { registerSandboxFlush } from "../blocks/sandbox-flush";
 import { BrowserFiles } from "./client-files";
 import { ClientHostServices } from "./client-host-services";
+import { processRequest } from "./client-process";
 import * as shellErrors from "../contract/shell-errors";
 
 type Client = NonNullable<AppDefinition["client"]>;
@@ -71,7 +72,7 @@ export class ClientRuntime {
       frame.setAttribute("sandbox", "allow-scripts");
       frame.setAttribute("allow", "autoplay");
       frame.setAttribute("title", "클라이언트 런타임");
-      frame.srcdoc = clientSource(script, { token: this.token, state, stateKeys: this.client.state_keys, storageEntries: this.client.storage_entries, inputs: this.inputs(), capabilities: this.client.capabilities ?? [], actions: this.client.actions, errors: sandboxErrors() });
+      frame.srcdoc = clientSource(script, { token: this.token, state, stateKeys: this.client.state_keys, storageEntries: this.client.storage_entries, inputs: this.inputs(), capabilities: this.client.capabilities ?? [], actions: this.client.actions, processEnabled: this.client.process_permissions !== undefined, errors: sandboxErrors() });
       frame.addEventListener("load", () => {
         if (this.loaded) { this.ready = false; this.token = ""; this.data.failClient(shellErrors.SHELL_CLIENT_FRAME_NAVIGATED()); void this.stop(); }
         else this.loaded = true;
@@ -84,6 +85,7 @@ export class ClientRuntime {
       windows.set(this.data.windowId, this);
       window.addEventListener("message", this.receive);
       this.unsubscribeStorage = this.store.subscribeEvents((event) => {
+        if (event.event === "process.ready" && event.window_id === this.data.windowId && this.client.process_permissions !== undefined) this.send({ type: "ks-process-ready", handle: event.handle });
         if (event.event !== "storage.update" || event.window_id !== this.data.windowId) return;
         for (const entry of this.client.storage_entries) {
           if (
@@ -320,6 +322,9 @@ export class ClientRuntime {
       } else this.data.setStatus(message.message);
     }
     else if (message.type === "ks-sandbox-flushed") { this.pending.get(message.requestId)?.(message.ok === true); this.pending.delete(message.requestId); }
+    else if (message.type === "ks-client-process" && this.client.process_permissions !== undefined) {
+      void processRequest(this.store, this.data.windowId, message.method, message.params).then((result) => this.reply(message.requestId, result)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
+    }
     else if (message.type === "ks-client-command") {
       if (typeof message.name !== "string" || !Object.hasOwn(this.client.commands, message.name)) this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_COMMAND_UNDECLARED({ name: String(message.name) }));
       else void this.store.call({ op: "client.command", window_id: this.data.windowId, name: message.name, event: message.event ?? null }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
