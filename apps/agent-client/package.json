@@ -6,6 +6,7 @@
   "license": "MIT",
   "scripts": {
     "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=60000 --test-concurrency=2 test/*.test.ts",
+    "test:live": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=60000 test/live-acp.ts",
     "typecheck": "tsc --noEmit",
     "build": "node scripts/build.mjs",
     "verify": "node scripts/build.mjs --check"
