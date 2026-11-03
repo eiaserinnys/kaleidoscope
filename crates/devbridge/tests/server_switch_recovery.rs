@@ -78,6 +78,19 @@ fn config(dir: &Path, info: &EmbeddedServer, remote: &str) -> CoreConfig {
         }),
     }
 }
+fn open_md_editor(core: &Core) -> String {
+    let state = call(core, json!({"op":"state.get"}));
+    let desktop = state["snapshot"]["shared"]["desktops"][0]["id"]
+        .as_str()
+        .unwrap();
+    call(
+        core,
+        json!({"op":"window.open","desktop_id":desktop,"app_id":"md-editor"}),
+    )["window"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
 fn server_config(dir: &Path, prefix: &str) -> EmbeddedConfig {
     EmbeddedConfig {
         db_path: dir.join(format!("{prefix}.db")),
@@ -229,8 +242,7 @@ async fn pas_connection_is_available_during_both_server_switch_directions() {
         wait_for(|| connected(&core, ServerMode::Embedded));
         let local_window = import_pas(&core);
 
-        let remote_recovery =
-            watch_pas_on_next_connected(&core, remote_window, ServerMode::Remote);
+        let remote_recovery = watch_pas_on_next_connected(&core, remote_window, ServerMode::Remote);
         call(
             &core,
             json!({"op":"link.start","server_url":remote.server_url}),
@@ -328,6 +340,97 @@ async fn real_embedded_agent_and_remote_switch() {
         wait_for(|| call(&core, json!({"op":"local_agent.attach","window_id":window}))["snapshot"]["phase"] == "ready");
         call(&core, json!({"op":"link.start","server_url":remote.server_url}));
         wait_for(|| connected(&core, ServerMode::Remote));
+        core.shutdown();
+    }).await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn storage_list_and_get_recover_during_startup_and_both_server_switches() {
+    let temp = tempfile::tempdir().unwrap();
+    let local = EmbeddedServer::start(server_config(temp.path(), "storage-race-local"))
+        .await
+        .unwrap();
+    let remote = EmbeddedServer::start(server_config(temp.path(), "storage-race-remote"))
+        .await
+        .unwrap();
+    let root = temp.path().to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let device = root.join("storage-race-device");
+        std::fs::create_dir_all(&device).unwrap();
+        std::fs::write(
+            device.join("link.json"),
+            serde_json::to_vec(&json!({
+                "format": 1,
+                "mode": "remote",
+                "server_url": remote.server_url,
+                "device_id": remote.device_id,
+                "device_name": "시험",
+                "token": remote.token
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let host = Arc::new(TestHost(root.clone()));
+        let core = Arc::new(Core::open(config(&device, &local, &remote.server_url), host.clone()).unwrap());
+        wait_for(|| connected(&core, ServerMode::Remote));
+        let remote_window = open_md_editor(&core);
+        call(&core, json!({"op":"storage.write","window_id":remote_window,"entry":"documents","doc":"race.md","content":"remote","expected_revision":null}));
+        call(&core, json!({"op":"link.use_local"}));
+        wait_for(|| connected(&core, ServerMode::Embedded));
+        let local_window = open_md_editor(&core);
+        call(&core, json!({"op":"storage.write","window_id":local_window,"entry":"documents","doc":"race.md","content":"local","expected_revision":null}));
+        core.shutdown();
+        drop(core);
+
+        // 저장 링크가 있는 상태로 다시 연 직후, AppsSnapshot 대기 없이 목록과 본문을 요청한다.
+        let core = Arc::new(Core::open(config(&device, &local, &remote.server_url), host).unwrap());
+        let list_core = Arc::clone(&core);
+        let list_window = local_window.clone();
+        let list = thread::spawn(move || {
+            list_core.handle(CoreRequest::StorageList { window_id: list_window, entry: "documents".into() })
+        });
+        let get_core = Arc::clone(&core);
+        let get_window = local_window.clone();
+        let document = thread::spawn(move || {
+            get_core.handle(CoreRequest::StorageGet { window_id: get_window, entry: "documents".into(), doc: Some("race.md".into()) })
+        });
+        assert!(matches!(list.join().unwrap().unwrap(), CoreReply::StorageList { result } if result.items.iter().any(|item| item.doc == "race.md")));
+        assert!(matches!(document.join().unwrap().unwrap(), CoreReply::StorageGet { result } if result.content == json!("local")));
+
+        let weak = Arc::downgrade(&core);
+        let event_remote_window = remote_window.clone();
+        let event_local_window = local_window.clone();
+        let (switch_tx, switch_rx) = std::sync::mpsc::channel();
+        core.subscribe(Box::new(move |event| {
+            let kaleidoscope_contract::CoreEvent::StateChanged { snapshot } = event else { return; };
+            let LinkStatus::Offline { mode, reason: None, .. } = &snapshot.link else { return; };
+            let mode = *mode;
+            let Some(core) = weak.upgrade() else { return; };
+            let tx = switch_tx.clone();
+            let window = match mode {
+                ServerMode::Remote => event_remote_window.clone(),
+                ServerMode::Embedded => event_local_window.clone(),
+            };
+            thread::spawn(move || {
+                let list = core.handle(CoreRequest::StorageList { window_id: window.clone(), entry: "documents".into() });
+                let document = core.handle(CoreRequest::StorageGet { window_id: window, entry: "documents".into(), doc: Some("race.md".into()) });
+                let _ = tx.send((mode, list, document));
+            });
+        }));
+
+        call(&core, json!({"op":"link.start","server_url":remote.server_url}));
+        wait_for(|| connected(&core, ServerMode::Remote));
+        let (mode, list, document) = switch_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(mode, ServerMode::Remote);
+        assert!(matches!(list.unwrap(), CoreReply::StorageList { result } if result.items.iter().any(|item| item.doc == "race.md")));
+        assert!(matches!(document.unwrap(), CoreReply::StorageGet { result } if result.content == json!("remote")));
+
+        call(&core, json!({"op":"link.use_local"}));
+        wait_for(|| connected(&core, ServerMode::Embedded));
+        let (mode, list, document) = switch_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(mode, ServerMode::Embedded);
+        assert!(matches!(list.unwrap(), CoreReply::StorageList { result } if result.items.iter().any(|item| item.doc == "race.md")));
+        assert!(matches!(document.unwrap(), CoreReply::StorageGet { result } if result.content == json!("local")));
         core.shutdown();
     }).await.unwrap();
 }

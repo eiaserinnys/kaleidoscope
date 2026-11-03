@@ -912,6 +912,56 @@ describe("folder block", () => {
     await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(6));
   });
 
+  it.each(["connected", "snapshot"] as const)("retries a failed collection list after %s", async (recovery) => {
+    let unavailable = true;
+    const { store, transport, call } = setup(storageFolderDefinition(), (transport) => {
+      const originalCall = transport.call.bind(transport);
+      vi.spyOn(transport, "call").mockImplementation(async (request) => {
+        if (request.op !== "storage.list") return originalCall(request);
+        if (unavailable) throw {
+          id: "STORAGE_SERVER_NOT_CONNECTED",
+          code: "unavailable",
+          message: "저장소 서버 연결 대기",
+          details: [],
+        };
+        return {
+          op: "storage.list",
+          result: {
+            bucket_id: "folder-storage-test",
+            items: [{ doc: "notes/guide.md", revision: "r1", updated_at: "now", byte_size: 4 as unknown as bigint }],
+          },
+        };
+      });
+    });
+
+    expect((await screen.findByRole("alert")).textContent).toContain("저장소 서버 연결 대기");
+    expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(1);
+    unavailable = false;
+
+    await act(async () => {
+      if (recovery === "connected") {
+        const snapshot = structuredClone(store.getSnapshot()!);
+        snapshot.link = {
+          state: "connected",
+          mode: "embedded",
+          server_url: "http://127.0.0.1:4000",
+          device_name: "시험",
+        };
+        transport.emit({ event: "state.changed", snapshot });
+      } else {
+        transport.emit({
+          event: "storage.update",
+          window_id: "viewer-window",
+          update: { kind: "snapshot", snapshot: { bucket_id: "folder-storage-test", items: [] } },
+        });
+      }
+    });
+
+    await screen.findByRole("treeitem", { name: "guide.md" });
+    await waitFor(() => expect(call.mock.calls.filter(([request]) => request.op === "storage.list")).toHaveLength(2));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("normalizes both legacy file-tree shapes into the folder renderer", () => {
     for (const block of [
       { type: "file_tree", root: { permission: "docs" }, selected: { state: "selected" }, on_select: { set_state: "selected" } },

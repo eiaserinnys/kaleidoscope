@@ -99,6 +99,7 @@ pub(crate) fn start(
     let (current, changed) = {
         let mut state = inner.state.lock().unwrap();
         if inner.generation.load(Ordering::SeqCst) == generation {
+            inner.link_connecting.store(false, Ordering::SeqCst);
             (true, set_link_locked(&mut state, pairing))
         } else {
             (false, false)
@@ -134,11 +135,12 @@ pub(crate) fn cancel(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
             false
         } else {
             inner.generation.fetch_add(1, Ordering::SeqCst);
-            inner.layout_signal.notify();
+            inner.link_connecting.store(false, Ordering::SeqCst);
             set_link_locked(&mut state, LinkStatus::Unlinked {})
         }
     };
     if changed {
+        inner.layout_signal.notify();
         emit_state(inner);
     }
     Ok(CoreReply::LinkCancel {})
@@ -153,15 +155,16 @@ pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
     let changed = {
         let mut state = inner.state.lock().unwrap();
         inner.generation.fetch_add(1, Ordering::SeqCst);
-        inner.layout_signal.notify();
         storage::remove_link(&inner.data_dir)?;
         inner.flusher.clear_sync();
         crate::sync_state::remove(&inner.data_dir)?;
         *inner.link_file.lock().unwrap() = None;
         state.sync = Default::default();
+        inner.link_connecting.store(false, Ordering::SeqCst);
         set_link_locked(&mut state, LinkStatus::Unlinked {})
     };
     if changed {
+        inner.layout_signal.notify();
         emit_state(inner);
     }
     Ok(CoreReply::LinkUnlink {})
@@ -330,7 +333,11 @@ fn set_unlinked_if_current(inner: &Arc<Inner>, generation: u64) {
     let changed = {
         let mut state = inner.state.lock().unwrap();
         if inner.generation.load(Ordering::SeqCst) == generation {
-            set_link_locked(&mut state, LinkStatus::Unlinked {})
+            let changed = set_link_locked(&mut state, LinkStatus::Unlinked {});
+            if changed {
+                inner.link_connecting.store(false, Ordering::SeqCst);
+            }
+            changed
         } else {
             false
         }
@@ -342,6 +349,7 @@ fn set_unlinked_if_current(inner: &Arc<Inner>, generation: u64) {
 }
 
 pub(crate) fn start_stream(inner: Arc<Inner>, generation: u64, file: LinkFile) {
+    inner.link_connecting.store(true, Ordering::SeqCst);
     thread::Builder::new()
         .name("kaleidoscope-registry-events".into())
         .spawn(move || run_stream(inner, generation, file))
@@ -449,6 +457,7 @@ pub(crate) fn set_offline(
         if inner.generation.load(Ordering::SeqCst) != generation {
             false
         } else {
+            inner.link_connecting.store(false, Ordering::SeqCst);
             set_link_locked(
                 &mut state,
                 LinkStatus::Offline {
@@ -479,6 +488,7 @@ pub(crate) fn token_rejected(inner: &Arc<Inner>, mut file: LinkFile) {
             return;
         }
         inner.generation.fetch_add(1, Ordering::SeqCst);
+        inner.link_connecting.store(false, Ordering::SeqCst);
         inner.layout_signal.notify();
         if file.mode == kaleidoscope_contract::ServerMode::Remote {
             // 연결 거부 뒤에도 현재 배치의 서버 소유권과 미전송 변경을 보존한다.

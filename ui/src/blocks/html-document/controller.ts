@@ -26,6 +26,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const docState = useWindowStateValue(context, block.selected_doc?.state ?? null);
   const revState = useWindowStateValue(context, block.selected_revision?.state ?? null);
   const [docs, setDocs] = useState<{ name: string; revisions: number[] }[]>([]);
+  const [storageReadRetry, setStorageReadRetry] = useState(0);
   const [active, setActive] = useState<{ name: string; rev: number } | null>(null);
   const [thread, setThread] = useState<Thread>(emptyThread);
   const [source, setSource] = useState("");
@@ -75,6 +76,10 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
       return Boolean(snapshot.shared.app_versions.find((app) => app.app_id === item.app_id && app.version === item.app_version)?.definition.agent);
     }).sort((left, right) => Number(right.desktop_id === context.window.desktop_id) - Number(left.desktop_id === context.window.desktop_id) || right.z - left.z)[0]?.id ?? null;
   });
+  const linkTarget = useShellSelector(store, (snapshot) => snapshot?.link.state === "connected"
+    ? `${snapshot.link.mode}:${snapshot.link.server_url}`
+    : null);
+  const previousLinkTarget = useRef(linkTarget);
   const send = useCallback((message: ParentToFrame) => frame.current?.contentWindow?.postMessage(message, "*"), []);
   useEffect(() => {
     const media = window.matchMedia?.("(prefers-color-scheme: dark)");
@@ -105,15 +110,37 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
       if (activeRef.current?.name === name) setFailure({ value: toCoreError(reason), source: "thread" });
     }
   }, [entry, store, windowId]);
+  useEffect(() => {
+    const previous = previousLinkTarget.current;
+    if (previous === linkTarget || linkTarget === null || !visible) {
+      if (linkTarget === null || visible) previousLinkTarget.current = linkTarget;
+      return;
+    }
+    previousLinkTarget.current = linkTarget;
+    cache.current.clear();
+    void refreshList();
+    if (activeRef.current) {
+      void refreshThread(activeRef.current.name);
+      if (failure?.source === "load") setStorageReadRetry((value) => value + 1);
+    }
+  }, [failure?.source, linkTarget, refreshList, refreshThread, visible]);
   useEffect(() => { if (visible) { void refreshList(); if (activeRef.current) void refreshThread(activeRef.current.name); } }, [visible, refreshList, refreshThread]);
   useEffect(() => store.subscribeEvents((event) => {
     if (!visible || event.event !== "storage.update" || event.window_id !== windowId) return;
-    if (event.update.kind === "snapshot") { void refreshList(); if (activeRef.current) void refreshThread(activeRef.current.name); return; }
+    if (event.update.kind === "snapshot") {
+      cache.current.clear();
+      void refreshList();
+      if (activeRef.current) {
+        void refreshThread(activeRef.current.name);
+        if (failure?.source === "load") setStorageReadRetry((value) => value + 1);
+      }
+      return;
+    }
     if (event.update.kind !== "changed" || event.update.changed.item.entry_id !== entry) return;
     const key = event.update.changed.item.key; const name = activeRef.current?.name;
     if (name && key.endsWith(`/${name}/thread.json`)) void refreshThread(name);
     else if (/\/r[1-9]\d*\.html$/.test(key)) void refreshList();
-  }), [entry, refreshList, refreshThread, store, visible, windowId]);
+  }), [entry, failure?.source, refreshList, refreshThread, store, visible, windowId]);
   useEffect(() => {
     if (lockedRef.current) return;
     if (!docs.length) { if (!dirtyRef.current) setActive(null); return; }
@@ -155,7 +182,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
       } catch (reason) { if (sequence === readSequence.current) setFailure({ value: toCoreError(reason), source: "load" }); }
     };
     void load(); return () => { readSequence.current++; };
-  }, [active?.name, active?.rev, entry, refreshThread, store, windowId]);
+  }, [active?.name, active?.rev, entry, refreshThread, storageReadRetry, store, windowId]);
   const comments = useMemo(() => active ? thread.comments.filter((comment) => comment.rev <= active.rev) : [], [thread, active]);
   const reviewComments = comments.filter((comment) => comment.status === "needs_agent_review");
   const hasUnsentReview = reviewComments.some((comment) => sentReviews[active?.name ?? ""]?.[comment.id] !== reviewSignature(comment));

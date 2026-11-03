@@ -1306,12 +1306,15 @@ fn app_storage_unavailable_never_looks_like_a_null_default() {
     let core = open_core(temp.path(), vec![definition], &host);
     let (_, desktop) = active_ids(&core);
     let window = open_window(&core, &desktop, "storage-app");
+    let link_file = connected_link_file();
+    *core.inner.link_file.lock().unwrap() = Some(link_file.clone());
     core.inner.state.lock().unwrap().link = LinkStatus::Offline {
-        mode: kaleidoscope_contract::ServerMode::Remote,
-        server_url: "https://registry.test".into(),
-        device_name: "test-device".into(),
+        mode: link_file.mode,
+        server_url: link_file.server_url,
+        device_name: link_file.device_name,
         reason: None,
     };
+    assert!(!core.inner.link_connecting.load(Ordering::SeqCst));
     let error = crate::app_storage::read(&core.inner, &window, "choice").unwrap_err();
     assert_eq!(error.id.as_deref(), Some("STORAGE_SERVER_NOT_CONNECTED"));
     assert_eq!(error.code, ErrorCode::Unavailable);
@@ -1333,6 +1336,94 @@ fn app_storage_unavailable_never_looks_like_a_null_default() {
             .unwrap();
         matches!(view, CoreReply::DataAttach { view } if matches!(view.values.get("/ui/value"), Some(BindingValue::Failed { .. })))
     });
+}
+
+#[test]
+fn app_storage_list_and_get_wait_for_apps_snapshot_during_startup() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let registry = registry_client();
+    let definition = json!({
+        "id":"storage-startup-race","name":"저장소 시작 경합 시험",
+        "requires":{"blocks":6,"modules":{"storage":3}},
+        "state":{},"permissions":[],
+        "storage":{"entries":[{"id":"documents","key":"documents","collection":true,"kind":"md","default":"","label":"문서","presentation":"hidden"}]},
+        "ui":{"type":"text","value":"시험"}
+    }).to_string();
+    let core = Arc::new(open_core_with_client(
+        temp.path(),
+        vec![definition],
+        &host,
+        registry,
+    ));
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "storage-startup-race");
+    let link_file = connected_link_file();
+    *core.inner.link_file.lock().unwrap() = Some(link_file.clone());
+    core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: link_file.mode,
+        server_url: link_file.server_url,
+        device_name: link_file.device_name,
+        reason: None,
+    };
+    core.inner.link_connecting.store(true, Ordering::SeqCst);
+
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (finished_tx, finished_rx) = std::sync::mpsc::channel();
+    for request in [
+        CoreRequest::StorageList {
+            window_id: window.clone(),
+            entry: "documents".into(),
+        },
+        CoreRequest::StorageGet {
+            window_id: window.clone(),
+            entry: "documents".into(),
+            doc: Some("notes.md".into()),
+        },
+    ] {
+        let core = core.clone();
+        let started = started_tx.clone();
+        let finished = finished_tx.clone();
+        std::thread::spawn(move || {
+            started.send(()).unwrap();
+            finished.send(core.handle(request)).unwrap();
+        });
+    }
+    started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    assert!(matches!(
+        finished_rx.recv_timeout(Duration::from_millis(50)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    ));
+    assert!(matches!(
+        finished_rx.recv_timeout(Duration::from_millis(50)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    ));
+
+    assert!(crate::registry_events::apply_event(
+        &core.inner,
+        0,
+        kaleidoscope_contract::registry::DeviceEvent::AppsSnapshot {
+            apps: vec![],
+            deleted: vec![]
+        },
+    ));
+    let first = finished_rx
+        .recv_timeout(Duration::from_secs(1))
+        .unwrap()
+        .unwrap();
+    let second = finished_rx
+        .recv_timeout(Duration::from_secs(1))
+        .unwrap()
+        .unwrap();
+    assert!([&first, &second].iter().any(|reply| matches!(
+        reply,
+        CoreReply::StorageList { result } if result.items.len() == 1 && result.items[0].doc == "notes.md"
+    )));
+    assert!([&first, &second].iter().any(|reply| matches!(
+        reply,
+        CoreReply::StorageGet { result } if result.content == json!("# 시험 문서")
+    )));
 }
 
 #[test]

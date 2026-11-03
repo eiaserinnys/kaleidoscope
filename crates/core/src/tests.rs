@@ -1758,6 +1758,40 @@ impl RegistryClient for FakeRegistryClient {
             exists: value.is_some(),
         })
     }
+    fn storage_collection_list(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+    ) -> Result<kaleidoscope_contract::app_storage::CollectionListReply, RegistryError> {
+        Ok(kaleidoscope_contract::app_storage::CollectionListReply {
+            bucket_id: "bucket".into(),
+            items: vec![kaleidoscope_contract::app_storage::CollectionItem {
+                doc: "notes.md".into(),
+                revision: "r1".into(),
+                updated_at: "now".into(),
+                byte_size: 7,
+            }],
+        })
+    }
+    fn storage_document_get(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+    ) -> Result<kaleidoscope_contract::app_storage::StorageReadReply, RegistryError> {
+        Ok(kaleidoscope_contract::app_storage::StorageReadReply {
+            kind: kaleidoscope_contract::app_storage::StorageKind::Md,
+            content: json!("# 시험 문서"),
+            revision: Some("r1".into()),
+            exists: true,
+        })
+    }
     fn storage_write(
         &self,
         _: &str,

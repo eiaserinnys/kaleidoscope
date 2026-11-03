@@ -111,10 +111,15 @@ export function FileBrowserTree({
     readOnly,
   }), [permission, permissionAccess, providedBackend, readOnly, rootPath, scope, store, window.id]);
   const collection = backend.kind === "collection";
+  const linkTarget = useShellSelector(store, (snapshot) => snapshot?.link.state === "connected"
+    ? `${snapshot.link.mode}:${snapshot.link.server_url}`
+    : null);
+  const previousLinkTarget = useRef(linkTarget);
   const multiSelect = actionsEnabled && (backend.capabilities.move || backend.capabilities.copy || backend.capabilities.trash || backend.capabilities.permanentDelete);
   const activeRoot = collection ? "" : rootPath;
   const hasRoot = collection || (scope === "pc" ? pcAccess : grant !== null);
   const rootName = backendLabel ?? (scope === "pc" ? permissionLabel : grant?.root_name ?? "");
+
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [entriesByDirectory, setEntriesByDirectory] = useState<Record<string, FolderEntry[]>>({});
   const entriesByDirectoryRef = useRef(entriesByDirectory);
@@ -175,6 +180,19 @@ export function FileBrowserTree({
   }, [activeRoot, backend]);
 
   useEffect(() => {
+    const previous = previousLinkTarget.current;
+    previousLinkTarget.current = linkTarget;
+    if (!collection || previous === linkTarget || linkTarget === null) return;
+    if (windowVisible) {
+      staleDirectories.current.delete("");
+      void loadDirectory("");
+    } else {
+      refreshPending.current = true;
+      staleDirectories.current.add("");
+    }
+  }, [collection, linkTarget, loadDirectory, windowVisible]);
+
+  useEffect(() => {
     currentRoot.current = `${backend.identity}\0${activeRoot ?? "<none>"}`;
     setEntriesByDirectory({});
     setErrors({});
@@ -230,9 +248,9 @@ export function FileBrowserTree({
   useEffect(() => store.subscribeEvents((event) => {
     if (!backend.matchesEvent(event)) return;
     if (collection) {
-      if (event.event !== "storage.update" || event.update.kind === "snapshot") return;
+      if (event.event !== "storage.update") return;
       const update = event.update;
-      if (selectedStateKey) {
+      if (selectedStateKey && update.kind !== "snapshot") {
         const stored = readWindowState(context)[selectedStateKey];
         const selected = typeof stored === "string" ? stored : null;
         let next = selected;

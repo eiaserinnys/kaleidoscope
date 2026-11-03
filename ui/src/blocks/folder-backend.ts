@@ -255,10 +255,10 @@ export function createCollectionFolderBackend({
     editorAddress: (doc) => ({ kind: "document", store, windowId, entry, doc }),
     matchesEvent: (event) => {
       if (event.event !== "storage.update") return false;
-      if (event.update.kind === "snapshot") return false;
+      if (event.update.kind === "snapshot") return event.window_id === windowId;
       return event.update.kind === "changed"
-        ? event.update.changed.bucket_id === bucketId && event.update.changed.item.entry_id === entry
-        : event.update.moved.bucket_id === bucketId && event.update.moved.entry_id === entry;
+        ? (bucketId === null || event.update.changed.bucket_id === bucketId) && event.update.changed.item.entry_id === entry
+        : (bucketId === null || event.update.moved.bucket_id === bucketId) && event.update.moved.entry_id === entry;
     },
   });
 }
