@@ -3,161 +3,161 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "저장소용 앱 정의 조회",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "앱 {app_id}: 저장소 작업에 필요한 앱 정의를 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "앱 {app_id}: 서버에서 앱 정의를 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_DOCUMENT_LIST_DATABASE_FAILED(entry_id) {
         class: Server,
         place: "저장소 문서 목록 조회",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "저장 항목 {entry_id}: 문서 목록을 읽기 위한 서버 저장소 작업을 시작하지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "저장 항목 {entry_id}: 서버에서 문서 목록을 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_DOCUMENT_READ_DATABASE_FAILED(doc) {
         class: Server,
         place: "저장소 문서 읽기",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "문서 {doc}: 문서를 읽기 위한 서버 저장소 작업을 시작하지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "문서 {doc}: 서버에서 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_WORKSPACE_CHECK_DATABASE_FAILED() {
         class: Server,
         place: "저장소 작업 접근 확인",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "저장 항목의 작업 접근을 서버 저장소에서 확인하지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "서버에서 이 저장 항목의 작업을 확인하지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_ITEM_LOAD_DATABASE_FAILED(key) {
         class: Server,
         place: "저장 항목 불러오기",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "저장 항목 {key}: 값을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "저장 항목 {key}: 서버에서 값을 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_PUBLISH_CHECK_DATABASE_FAILED(app_id) {
         class: Server,
         place: "앱 등록 전 저장 항목 확인",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "앱 {app_id}: 앱 등록 전 저장 항목을 서버 저장소에서 확인하지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "앱 {app_id}: 앱을 올리기 전에 서버에서 저장 항목을 확인하지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_ITEM_LIST_DATABASE_FAILED(app_id) {
         class: Server,
         place: "저장 항목 목록 조회",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "앱 {app_id}: 저장 항목 목록을 읽기 위한 서버 저장소 작업을 시작하지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "앱 {app_id}: 서버에서 저장 항목 목록을 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_ITEM_READ_DATABASE_FAILED(entry_id) {
         class: Server,
         place: "저장 항목 읽기",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "저장 항목 {entry_id}: 값을 읽기 위한 서버 저장소 작업을 시작하지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "저장 항목 {entry_id}: 서버에서 값을 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_ITEM_WRITE_DATABASE_FAILED(entry_id) {
         class: Server,
         place: "저장 항목 쓰기",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "저장 항목 {entry_id}: 값을 서버 저장소에 쓰지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "저장 항목 {entry_id}: 서버에 값을 쓰지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_ITEM_RESET_DATABASE_FAILED(entry_id) {
         class: Server,
         place: "저장 항목 초기화",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "저장 항목 {entry_id}: 값을 서버 저장소에서 초기화하지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "저장 항목 {entry_id}: 서버에서 값을 초기화하지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_SNAPSHOT_LIST_DATABASE_FAILED(app) {
         class: Server,
         place: "저장 항목 스냅샷 조회",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "앱 {app}: 저장 항목 목록을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "앱 {app}: 서버에서 저장 항목 목록을 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_WORKSPACE_DELETE_DATABASE_FAILED() {
         class: Server,
         place: "작업 삭제 시 저장 항목 정리",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "작업을 지우면서 저장 항목을 서버 저장소에서 정리하지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "작업을 지우면서 서버에서 저장 항목을 정리하지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_APP_VALUE_DOCUMENT_LIST_DATABASE_FAILED(prefix) {
         class: Server,
         place: "기본 앱 문서 목록 조회",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "문서 모음 {prefix}: 목록을 읽기 위한 서버 저장소 작업을 시작하지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "문서 모음 {prefix}: 서버에서 목록을 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_APP_VALUES_WORKSPACE_DELETE_DATABASE_FAILED() {
         class: Server,
         place: "작업 삭제 시 기본 앱 저장값 정리",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "작업을 지우면서 기본 앱의 저장값을 서버 저장소에서 정리하지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "작업을 지우면서 서버에서 기본 앱의 저장값을 정리하지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_APP_VALUES_LIST_DATABASE_FAILED(app_id) {
         class: Server,
         place: "기본 앱 저장값 목록 조회",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "앱 {app_id}: 저장값 목록을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "앱 {app_id}: 서버에서 저장값 목록을 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_APP_VALUE_DOCUMENT_READ_DATABASE_FAILED(key) {
         class: Server,
         place: "기본 앱 문서 읽기",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "저장 항목 {key}: 문서를 읽기 위한 서버 저장소 작업을 시작하지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "저장 항목 {key}: 서버에서 문서를 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_APP_VALUE_WRITE_DATABASE_FAILED(key) {
         class: Server,
         place: "기본 앱 저장값 쓰기",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "저장 항목 {key}: 값을 서버 저장소에 쓰지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "저장 항목 {key}: 서버에 값을 쓰지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_APP_VALUE_RESET_DATABASE_FAILED(key) {
         class: Server,
         place: "기본 앱 저장값 초기화",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "저장 항목 {key}: 값을 서버 저장소에서 초기화하지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "저장 항목 {key}: 서버에서 값을 초기화하지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_COLLECTION_LIST_DATABASE_FAILED(prefix) {
         class: Server,
         place: "문서 모음 목록 조회",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "문서 모음 {prefix}: 목록을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "문서 모음 {prefix}: 서버에서 목록을 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_COLLECTION_WRITE_DATABASE_FAILED(doc) {
         class: Server,
         place: "문서 모음 쓰기",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "문서 {doc}: 내용을 서버 저장소에 쓰지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "문서 {doc}: 서버에 내용을 쓰지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_COLLECTION_RESET_DATABASE_FAILED(doc) {
         class: Server,
         place: "문서 모음 초기화",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "문서 {doc}: 내용을 서버 저장소에서 초기화하지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "문서 {doc}: 서버에서 내용을 초기화하지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_COLLECTION_MOVE_DATABASE_FAILED(doc) {
         class: Server,
         place: "문서 모음 이름 변경",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "문서 {doc}: 이름을 서버 저장소에서 바꾸지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "문서 {doc}: 서버에서 이름을 바꾸지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_WRITE_SCHEMA_MISMATCH(key, reason) {
         class: InvalidRequest,
         place: "저장소 내용 검사",
         cause: "쓴 값이 항목에 선언된 JSON 스키마를 만족하지 않는다",
-        message: "저장 항목 {key}의 값이 앱 선언과 맞지 않습니다. {reason} 값을 고쳐 다시 저장하세요.",
+        message: "저장 항목 {key}의 값이 앱 선언과 맞지 않습니다. 값을 고쳐 다시 저장하세요. 원인: {reason}",
         fix: "앱 정의의 저장소 스키마와 저장하는 값을 대조해 고치세요"
     }
     STORAGE_WRITE_SCHEMA_MISSING(key) {
@@ -178,78 +178,78 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "저장소 JSON 항목 검사",
         cause: "직렬화한 JSON 값이 허용 크기를 넘는다",
-        message: "저장 항목 {key}의 JSON 값이 {max_bytes}바이트를 넘습니다. 값을 줄인 뒤 다시 저장하세요.",
+        message: "저장 항목 {key}의 JSON 값이 허용 크기 {limit}보다 큽니다. 값을 줄인 뒤 다시 저장하세요.",
         fix: "저장할 JSON 값을 허용 크기 안으로 줄이세요"
     }
     STORAGE_WRITE_MD_TOO_LARGE(key, max_bytes) {
         class: InvalidRequest,
         place: "저장소 Markdown 항목 검사",
         cause: "Markdown 원문이 허용 크기를 넘는다",
-        message: "저장 항목 {key}의 Markdown 원문이 {max_bytes} UTF-8 바이트를 넘습니다. 내용을 줄인 뒤 다시 저장하세요.",
-        fix: "Markdown 내용을 허용 크기 안으로 줄이세요"
+        message: "저장 항목 {key}의 마크다운 글이 허용 크기 {limit}보다 큽니다. 내용을 줄인 뒤 다시 저장하세요.",
+        fix: "마크다운 내용을 허용 크기 안으로 줄이세요"
     }
     STORAGE_WRITE_MD_NOT_STRING(key) {
         class: InvalidRequest,
         place: "저장소 Markdown 항목 검사",
         cause: "Markdown 값이 문자열이 아니다",
-        message: "저장 항목 {key}의 Markdown 값이 문자열이 아닙니다. 문자열로 바꾼 뒤 다시 저장하세요.",
-        fix: "Markdown 저장값을 문자열로 바꾸세요"
+        message: "저장 항목 {key}의 마크다운 값이 글이 아닙니다. 글로 바꾼 뒤 다시 저장하세요.",
+        fix: "마크다운 저장값을 글로 바꾸세요"
     }
     STORAGE_SERVER_UNAUTHORIZED() {
         class: Server,
         place: "저장소 서버 요청",
         cause: "서버가 저장소 인증을 거부했다",
-        message: "kaleidoscope 서버가 저장소 인증을 거부했습니다. 서버 연결을 다시 확인하세요.",
-        fix: "기기 연결을 다시 확인하세요"
+        message: "서버가 이 기기의 인증을 거부했습니다. 서버 연결에서 기기를 다시 연결하세요.",
+        fix: "서버 연결에서 기기를 다시 연결하세요"
     }
     STORAGE_SERVER_NOT_FOUND() {
         class: Server,
         place: "저장소 서버 요청",
         cause: "서버가 저장소 요청 대상을 찾지 못했다",
-        message: "kaleidoscope 서버에서 저장소 요청 대상을 찾지 못했습니다. 앱과 저장 항목을 확인한 뒤 다시 시도하세요.",
-        fix: "앱과 저장 항목이 현재 선언에 있는지 확인하세요"
+        message: "서버에 이 앱이나 저장 항목이 없습니다. 앱이 서버에서 지워졌을 수 있습니다. 앱 열기에서 앱이 있는지 확인하세요.",
+        fix: "앱 열기에서 앱이 있는지 확인하세요"
     }
     STORAGE_SERVER_REQUEST_FAILED() {
         class: Server,
         place: "저장소 서버 요청",
         cause: "서버 요청이 네트워크 또는 서버 오류로 끝났다",
-        message: "kaleidoscope 서버가 저장소 요청을 처리하지 못했습니다. 연결을 확인한 뒤 다시 시도하세요.",
+        message: "서버와 저장소 요청을 주고받지 못했습니다. 서버 연결 상태를 확인한 뒤 다시 시도하세요.",
         fix: "서버 연결 상태를 확인하고 다시 시도하세요"
     }
     STORAGE_WINDOW_NOT_FOUND(window_id) {
         class: NotFound,
         place: "창 저장소 접근",
         cause: "저장소를 열 창이 현재 상태에 없다",
-        message: "창 ID {window_id}: 저장소를 열 수 없습니다. 창 목록을 새로고침한 뒤 다시 시도하세요.",
-        fix: "창 목록을 새로고침하세요"
+        message: "저장소를 열 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
+        fix: "앱 열기에서 앱을 다시 여세요"
     }
     STORAGE_DESKTOP_NOT_FOUND(desktop_id) {
         class: NotFound,
         place: "창 저장소 작업 확인",
         cause: "창의 데스크톱이 현재 상태에 없다",
-        message: "데스크톱 ID {desktop_id}: 창에서 사용할 데스크톱을 찾지 못했습니다. 창을 다시 열어 시도하세요.",
-        fix: "창을 다시 여세요"
+        message: "창이 속한 데스크톱이 더 이상 없습니다. 다른 기기에서 지웠을 수 있습니다. 앱 열기에서 앱을 다시 여세요.",
+        fix: "앱 열기에서 앱을 다시 여세요"
     }
     STORAGE_APP_VERSION_NOT_FOUND(app_id, version) {
         class: NotFound,
         place: "앱 저장소 선언 조회",
         cause: "창에서 사용하는 앱 버전이 없다",
-        message: "앱 ID {app_id}, 버전 {version}: 저장소에 필요한 앱 버전이 없습니다. 앱을 다시 가져와 시도하세요.",
-        fix: "앱을 다시 가져오세요"
+        message: "앱 {app_id}의 {version}판 정의가 이 쉘에 없어 저장소를 열지 못했습니다. 앱 정의 가져오기로 앱을 다시 가져오세요.",
+        fix: "앱 정의 가져오기로 다시 가져오거나 에이전트에게 앱을 다시 올려 달라고 하세요"
     }
     STORAGE_DECLARATION_MISSING(app_id) {
         class: InvalidRequest,
         place: "앱 저장소 선언 조회",
         cause: "앱 정의에 저장소가 선언되지 않았다",
-        message: "앱 ID {app_id}: 저장소가 선언되지 않았습니다. 저장소를 선언한 뒤 다시 시도하세요.",
-        fix: "앱 정의의 저장소 선언을 확인하세요"
+        message: "앱 ID {app_id}: 저장소가 선언되지 않았습니다. 앱 정의에 storage를 선언하세요.",
+        fix: "앱 정의에 storage를 선언하세요"
     }
     STORAGE_ENTRY_NOT_DECLARED(entry_id) {
         class: InvalidRequest,
         place: "앱 저장 항목 조회",
         cause: "요청한 항목 id가 앱 정의에 없다",
-        message: "저장 항목 {entry_id}: 앱 정의에 없습니다. 선언된 항목을 골라 다시 시도하세요.",
-        fix: "앱에 선언된 저장 항목 id를 사용하세요"
+        message: "저장 항목 {entry_id}: 앱 정의에 없습니다. 앱 정의 storage.entries에 더하거나 선언된 항목 ID를 쓰세요.",
+        fix: "앱 정의 storage.entries에 더하거나 선언된 항목 ID를 쓰세요"
     }
     STORAGE_COLLECTION_LIST_REQUIRED(entry_id) {
         class: InvalidRequest,
@@ -311,15 +311,15 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "작업별 저장 키 만들기",
         cause: "저장 키에 작업 id가 필요하지만 전달되지 않았다",
-        message: "작업별 저장 키를 만들려면 작업 id가 필요합니다: {key}. 작업을 선택한 뒤 다시 시도하세요.",
-        fix: "작업을 선택하세요"
+        message: "작업별 저장 키에 작업 ID가 없습니다: {key}. workspace_id를 지정해 다시 요청하세요.",
+        fix: "workspace_id를 지정하세요"
     }
     STORAGE_WORKSPACE_KEY_INVALID(key) {
         class: InvalidRequest,
         place: "작업별 저장 키 만들기",
         cause: "작업 id를 넣은 저장 키가 선언과 맞지 않는다",
-        message: "작업 id를 넣은 저장 키가 앱 선언과 맞지 않습니다: {key}. 앱 정의와 작업 id를 확인하세요.",
-        fix: "앱 정의의 저장 키와 작업 id를 확인하세요"
+        message: "작업 ID를 넣은 저장 키가 앱 선언과 맞지 않습니다: {key}. 앱 정의와 작업 ID를 확인하세요.",
+        fix: "앱 정의의 저장 키와 작업 ID를 확인하세요"
     }
     STORAGE_WORKSPACE_NOT_OWNED(workspace_id) {
         class: NotFound,
@@ -332,50 +332,50 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "저장값 읽기",
         cause: "저장된 항목의 종류가 앱 선언과 다르다",
-        message: "저장 항목 {key}의 종류가 앱 선언과 다릅니다. 저장소 상태를 확인하고 다시 시도하세요.",
-        fix: "저장 항목 선언과 저장된 종류를 확인하세요"
+        message: "저장 항목 {key}의 종류가 앱 선언과 다릅니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "앱 정의의 kind를 저장된 종류에 맞추거나 reset_app_storage로 값을 되돌리세요"
     }
     STORAGE_RECEIVED_KIND_MISMATCH(key) {
         class: InvalidRequest,
         place: "서버 저장값 읽기",
         cause: "서버가 보낸 저장 항목 종류가 앱 선언과 다르다",
-        message: "저장 항목 {key}의 종류가 서버 응답과 앱 선언에서 다릅니다. 저장소를 새로고침한 뒤 다시 읽으세요.",
-        fix: "서버 응답과 앱 선언의 저장 항목 종류를 확인하세요"
+        message: "저장 항목 {key}의 종류가 서버 응답과 앱 선언에서 다릅니다. 쉘을 다시 시작해 앱 정의를 다시 받으세요.",
+        fix: "쉘을 다시 시작하세요"
     }
     STORAGE_STORED_CONTENT_INVALID(key) {
         class: Server,
         place: "저장값 읽기",
         cause: "저장된 항목을 JSON으로 읽을 수 없다",
-        message: "저장 항목 {key}의 내용을 읽을 수 없습니다. 저장소 상태를 확인하고 다시 시도하세요.",
-        fix: "저장소의 저장값을 확인하세요"
+        message: "저장 항목 {key}의 내용을 읽을 수 없습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "write_app_storage로 값을 다시 쓰거나 reset_app_storage로 되돌리세요"
     }
     STORAGE_STORED_KIND_MISSING(key) {
         class: InvalidRequest,
         place: "서버 저장값 읽기",
         cause: "서버 응답에 저장 항목 종류가 없다",
-        message: "저장 항목 {key}의 종류가 서버 응답에 없습니다. 서버 연결을 새로고침한 뒤 다시 읽으세요.",
-        fix: "서버 연결을 새로고침하고 다시 읽으세요"
+        message: "서버 응답에 저장 항목 {key}의 종류가 없습니다. 쉘과 서버를 업데이트한 뒤 다시 시도하세요.",
+        fix: "쉘과 서버를 업데이트하세요"
     }
     STORAGE_STORED_CONTENT_MISSING(key) {
         class: InvalidRequest,
         place: "서버 저장값 읽기",
         cause: "서버 응답에 저장 항목 내용이 없다",
-        message: "저장 항목 {key}의 내용이 서버 응답에 없습니다. 서버 연결을 새로고침한 뒤 다시 읽으세요.",
-        fix: "서버 연결을 새로고침하고 다시 읽으세요"
+        message: "서버 응답에 저장 항목 {key}의 내용이 없습니다. 쉘과 서버를 업데이트한 뒤 다시 시도하세요.",
+        fix: "쉘과 서버를 업데이트하세요"
     }
     STORAGE_DOCUMENT_READ_NOT_FOUND(doc) {
         class: NotFound,
         place: "저장 문서 읽기",
         cause: "문서 모음에 요청한 문서가 없다",
-        message: "저장 문서를 찾을 수 없습니다: {doc}. 문서 목록을 새로고침한 뒤 다시 시도하세요.",
-        fix: "문서 목록을 새로고침하세요"
+        message: "저장 문서를 찾을 수 없습니다: {doc}. 저장 문서 목록에서 새로 고침을 선택하세요.",
+        fix: "저장 문서 목록에서 새로 고침을 선택하세요"
     }
     STORAGE_DOCUMENT_MOVE_SOURCE_NOT_FOUND(doc) {
         class: NotFound,
         place: "저장 문서 이름 변경",
         cause: "이름을 바꾸려는 원본 문서가 없다",
-        message: "이름을 바꿀 저장 문서를 찾을 수 없습니다: {doc}. 문서 목록을 새로고침한 뒤 다시 시도하세요.",
-        fix: "문서 목록을 새로고침하세요"
+        message: "이름을 바꿀 저장 문서를 찾을 수 없습니다: {doc}. 저장 문서 목록에서 새로 고침을 선택하세요.",
+        fix: "저장 문서 목록에서 새로 고침을 선택하세요"
     }
     STORAGE_DOCUMENT_KEY_INVALID(doc) {
         class: InvalidRequest,
@@ -395,43 +395,43 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "저장 문서 요청 검사",
         cause: "문서 이름이 허용된 형식이 아니다",
-        message: "저장 문서 이름이 허용된 형식이 아닙니다: {doc}. 문서 이름을 고쳐 다시 시도하세요.",
-        fix: "문서 이름에 허용된 문자와 경로를 사용하세요"
+        message: "저장 문서 이름을 쓸 수 없습니다: {doc}. 파일 이름으로 쓸 수 있는 이름으로 고치세요.",
+        fix: "파일 이름으로 쓸 수 있는 이름으로 고치세요"
     }
     STORAGE_DOCUMENT_READ_KIND_MISMATCH(doc) {
         class: Server,
         place: "저장 문서 읽기",
         cause: "저장된 문서 종류가 항목 선언과 다르다",
-        message: "저장 문서 {doc}의 종류가 앱 선언과 다릅니다. 문서 목록을 새로고침한 뒤 다시 시도하세요.",
-        fix: "저장 문서 종류와 항목 선언을 확인하세요"
+        message: "저장 문서 {doc}의 종류가 앱 선언과 다릅니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "앱 정의의 kind를 저장된 종류에 맞추세요"
     }
     STORAGE_DOCUMENT_MOVE_KIND_MISMATCH(doc) {
         class: Server,
         place: "저장 문서 이름 변경",
         cause: "이름을 바꾸려는 문서 종류가 항목 선언과 다르다",
-        message: "저장 문서 {doc}의 종류가 앱 선언과 다릅니다. 문서 목록을 새로고침한 뒤 다시 시도하세요.",
-        fix: "저장 문서 종류와 항목 선언을 확인하세요"
+        message: "저장 문서 {doc}의 종류가 앱 선언과 달라 이름을 바꾸지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "앱 정의의 kind를 저장된 종류에 맞추세요"
     }
     STORAGE_DOCUMENT_SERIALIZATION_FAILED(doc) {
         class: Server,
         place: "저장 문서 쓰기",
         cause: "저장할 문서 내용을 JSON으로 직렬화할 수 없다",
-        message: "저장 문서 {doc}의 내용을 저장 형식으로 만들지 못했습니다. 내용을 고친 뒤 다시 저장하세요.",
-        fix: "저장 문서 내용을 JSON으로 표현할 수 있게 고치세요"
+        message: "저장 문서 {doc}의 내용을 저장 형식으로 만들지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_DOCUMENT_REVISION_FAILED(doc) {
         class: InvalidRequest,
         place: "저장 문서 revision 만들기",
         cause: "문서 내용을 바탕으로 revision을 만들 수 없다",
-        message: "저장 문서 {doc}의 변경 확인값을 만들지 못했습니다. 문서 내용을 고친 뒤 다시 저장하세요.",
-        fix: "문서 내용을 확인하세요"
+        message: "저장 문서 {doc}의 변경 확인값을 만들지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_PREVIEW_VALUE_INVALID(key) {
         class: Server,
         place: "저장값 미리 보기",
         cause: "저장된 값이 앱 선언과 맞지 않아 미리 보기를 만들 수 없다",
-        message: "저장 항목 {key}의 값이 앱 선언과 맞지 않아 미리 보기를 만들 수 없습니다. 저장값을 확인하세요.",
-        fix: "저장 항목 값과 앱 선언을 확인하세요"
+        message: "저장 항목 {key}의 값이 앱 선언과 맞지 않아 미리 보기를 만들 수 없습니다. read_app_storage로 값을 읽어 앱 선언에 맞게 고치세요.",
+        fix: "read_app_storage로 값을 읽어 앱 선언에 맞게 고치세요"
     }
     STORAGE_SERVER_WRITE_CONFLICT() {
         class: Conflict,
@@ -479,8 +479,8 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "저장소 명령 검사",
         cause: "요청이 저장소에서 지원하지 않는 명령이다",
-        message: "저장소에서 지원하지 않는 명령입니다. 저장소 읽기, 쓰기, 초기화 또는 문서 이동을 요청하세요.",
-        fix: "저장소에서 지원하는 명령을 사용하세요"
+        message: "저장소 명령이 쉘 안에서 잘못 전달됐습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
+        fix: "쉘을 업데이트하세요"
     }
     STORAGE_HTTP_DOCUMENT_READ_REQUIRED() {
         class: InvalidRequest,
@@ -514,22 +514,22 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "작업 문맥 저장값 조회",
         cause: "Markdown 저장 항목의 문맥 metadata를 만들지 못했다",
-        message: "저장 항목 {entry_id}의 문맥 정보를 찾지 못했습니다. 앱 저장소를 새로고침한 뒤 다시 시도하세요.",
-        fix: "앱 저장소를 새로고침하세요"
+        message: "저장 항목 {entry_id}: 목록을 읽는 사이 사라졌습니다. 다시 시도하세요.",
+        fix: "다시 시도하세요"
     }
     STORAGE_VALUES_KIND_UNKNOWN(key, kind) {
         class: Server,
         place: "기본 앱 저장값 목록 읽기",
         cause: "저장된 항목 종류가 지원 값이 아니다",
-        message: "저장 항목 {key}의 종류 {kind}: 지원하지 않는 저장 형식입니다. 저장소 상태를 확인하세요.",
-        fix: "저장된 항목 종류를 확인하세요"
+        message: "저장 항목 {key}의 종류 {kind}: 지원하지 않는 저장 형식입니다. reset_app_storage로 값을 되돌리세요.",
+        fix: "reset_app_storage로 값을 되돌리세요"
     }
     STORAGE_VALUES_RESPONSE_SERIALIZATION_FAILED() {
         class: Server,
         place: "기본 앱 저장값 목록 응답 만들기",
         cause: "저장값 목록을 JSON 응답으로 만들지 못했다",
-        message: "저장값 목록을 응답으로 만들지 못했습니다. 다시 시도하세요.",
-        fix: "저장값 목록을 다시 요청하세요"
+        message: "저장값 목록을 응답으로 만들지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_APP_VALUE_APP_NOT_BUILTIN(app_id) {
         class: InvalidRequest,
@@ -549,7 +549,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "기본 앱 JSON 저장값 크기 검사",
         cause: "기본 앱 JSON 저장값이 허용 크기를 넘는다",
-        message: "저장 항목 {key}의 JSON 값이 {max_bytes}바이트를 넘습니다. 값을 줄인 뒤 다시 저장하세요.",
+        message: "저장 항목 {key}의 JSON 값이 허용 크기 {limit}보다 큽니다. 값을 줄인 뒤 다시 저장하세요.",
         fix: "JSON 값을 허용 크기 안으로 줄이세요"
     }
     STORAGE_APP_VALUE_JSON_SERIALIZATION_FAILED(key) {
@@ -563,15 +563,15 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "기본 앱 Markdown 저장값 크기 검사",
         cause: "기본 앱 Markdown 저장값이 허용 크기를 넘는다",
-        message: "저장 항목 {key}의 Markdown 원문이 {max_bytes} UTF-8 바이트를 넘습니다. 내용을 줄인 뒤 다시 저장하세요.",
-        fix: "Markdown 내용을 허용 크기 안으로 줄이세요"
+        message: "저장 항목 {key}의 마크다운 글이 허용 크기 {limit}보다 큽니다. 내용을 줄인 뒤 다시 저장하세요.",
+        fix: "마크다운 내용을 허용 크기 안으로 줄이세요"
     }
     STORAGE_APP_VALUE_MD_NOT_STRING(key) {
         class: InvalidRequest,
         place: "기본 앱 Markdown 저장값 검사",
         cause: "기본 앱 Markdown 저장값이 문자열이 아니다",
-        message: "저장 항목 {key}의 Markdown 값이 문자열이 아닙니다. 문자열로 바꾼 뒤 다시 저장하세요.",
-        fix: "Markdown 저장값을 문자열로 바꾸세요"
+        message: "저장 항목 {key}의 마크다운 값이 글이 아닙니다. 글로 바꾼 뒤 다시 저장하세요.",
+        fix: "마크다운 저장값을 글로 바꾸세요"
     }
     STORAGE_APP_VALUE_KIND_MISMATCH(key) {
         class: InvalidRequest,
@@ -591,8 +591,8 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "기본 앱 저장 revision 만들기",
         cause: "저장값 revision을 만들 수 없다",
-        message: "저장 항목 {key}의 변경 확인값을 만들지 못했습니다. 저장값 형식을 고친 뒤 다시 시도하세요.",
-        fix: "저장값 형식을 확인하세요"
+        message: "저장 항목 {key}의 변경 확인값을 만들지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_APP_VALUE_WRITE_CONFLICT(key) {
         class: Conflict,
@@ -612,8 +612,8 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "기본 앱 저장값 쓰기",
         cause: "저장값을 JSON으로 직렬화할 수 없다",
-        message: "저장 항목 {key}: 저장 형식으로 만들지 못했습니다. 저장값을 다시 만들고 시도하세요.",
-        fix: "저장값을 다시 만들고 시도하세요"
+        message: "저장 항목 {key}: 저장 형식으로 만들지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_MOVE_OPERATION_INVALID(operation) {
         class: InvalidRequest,
@@ -640,71 +640,71 @@ error_catalog! { ENTRIES;
         class: NotFound,
         place: "서버 저장 항목 목록 조회",
         cause: "요청한 앱이 현재 계정에 없다",
-        message: "앱 ID {app_id}: 저장 항목 목록을 만들 앱을 찾지 못했습니다. 앱 목록을 새로고침하고 다시 시도하세요.",
+        message: "앱 ID {app_id}: 저장 항목 목록을 만들 앱을 찾지 못했습니다. 앱 열기나 list_apps에서 현재 앱을 확인하세요.",
         fix: "현재 계정의 앱 id를 사용하세요"
     }
     STORAGE_READ_APP_NOT_FOUND(app_id) {
         class: NotFound,
         place: "서버 저장 항목 읽기",
         cause: "읽을 저장 항목이 속한 앱이 현재 계정에 없다",
-        message: "앱 ID {app_id}: 읽을 저장 항목이 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 읽으세요.",
+        message: "앱 ID {app_id}: 읽을 저장 항목이 속한 앱을 찾지 못했습니다. 앱 열기나 list_apps에서 현재 앱을 확인하세요.",
         fix: "현재 계정의 앱에서 저장 항목을 읽으세요"
     }
     STORAGE_WRITE_APP_NOT_FOUND(app_id) {
         class: NotFound,
         place: "서버 저장 항목 쓰기",
         cause: "쓸 저장 항목이 속한 앱이 현재 계정에 없다",
-        message: "앱 ID {app_id}: 저장할 항목이 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 저장하세요.",
+        message: "앱 ID {app_id}: 저장할 항목이 속한 앱을 찾지 못했습니다. 앱 열기나 list_apps에서 현재 앱을 확인하세요.",
         fix: "현재 계정의 앱에 저장 항목을 쓰세요"
     }
     STORAGE_RESET_APP_NOT_FOUND(app_id) {
         class: NotFound,
         place: "서버 저장 항목 초기화",
         cause: "초기화할 저장 항목이 속한 앱이 현재 계정에 없다",
-        message: "앱 ID {app_id}: 초기화할 항목이 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 초기화하세요.",
+        message: "앱 ID {app_id}: 초기화할 항목이 속한 앱을 찾지 못했습니다. 앱 열기나 list_apps에서 현재 앱을 확인하세요.",
         fix: "현재 계정의 앱에서 저장 항목을 초기화하세요"
     }
     STORAGE_DOCUMENT_LIST_APP_NOT_FOUND(app_id) {
         class: NotFound,
         place: "저장 문서 목록 조회",
         cause: "문서 목록을 조회할 앱이 현재 계정에 없다",
-        message: "앱 ID {app_id}: 문서 목록을 조회할 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 시도하세요.",
+        message: "앱 ID {app_id}: 문서 목록을 조회할 앱을 찾지 못했습니다. 앱 열기나 list_apps에서 현재 앱을 확인하세요.",
         fix: "현재 계정의 앱에서 문서 목록을 조회하세요"
     }
     STORAGE_DOCUMENT_READ_APP_NOT_FOUND(app_id) {
         class: NotFound,
         place: "저장 문서 읽기",
         cause: "읽을 문서가 속한 앱이 현재 계정에 없다",
-        message: "앱 ID {app_id}: 읽을 문서가 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 읽으세요.",
+        message: "앱 ID {app_id}: 읽을 문서가 속한 앱을 찾지 못했습니다. 앱 열기나 list_apps에서 현재 앱을 확인하세요.",
         fix: "현재 계정의 앱에서 문서를 읽으세요"
     }
     STORAGE_DOCUMENT_WRITE_APP_NOT_FOUND(app_id) {
         class: NotFound,
         place: "저장 문서 쓰기",
         cause: "쓸 문서가 속한 앱이 현재 계정에 없다",
-        message: "앱 ID {app_id}: 저장할 문서가 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 저장하세요.",
+        message: "앱 ID {app_id}: 저장할 문서가 속한 앱을 찾지 못했습니다. 앱 열기나 list_apps에서 현재 앱을 확인하세요.",
         fix: "현재 계정의 앱에 문서를 쓰세요"
     }
     STORAGE_DOCUMENT_RESET_APP_NOT_FOUND(app_id) {
         class: NotFound,
         place: "저장 문서 초기화",
         cause: "초기화할 문서가 속한 앱이 현재 계정에 없다",
-        message: "앱 ID {app_id}: 초기화할 문서가 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 초기화하세요.",
+        message: "앱 ID {app_id}: 초기화할 문서가 속한 앱을 찾지 못했습니다. 앱 열기나 list_apps에서 현재 앱을 확인하세요.",
         fix: "현재 계정의 앱에서 문서를 초기화하세요"
     }
     STORAGE_DOCUMENT_MOVE_APP_NOT_FOUND(app_id) {
         class: NotFound,
         place: "저장 문서 이름 변경",
         cause: "이름을 바꿀 문서가 속한 앱이 현재 계정에 없다",
-        message: "앱 ID {app_id}: 이름을 바꿀 문서가 속한 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 시도하세요.",
+        message: "앱 ID {app_id}: 이름을 바꿀 문서가 속한 앱을 찾지 못했습니다. 앱 열기나 list_apps에서 현재 앱을 확인하세요.",
         fix: "현재 계정의 앱에서 문서 이름을 바꾸세요"
     }
     STORAGE_MCP_LOOKUP_APP_NOT_FOUND(app_id) {
         class: NotFound,
         place: "저장소 MCP 앱 조회",
         cause: "저장소를 조회할 앱이 현재 계정에 없다",
-        message: "앱 ID {app_id}: 저장소를 조회할 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 조회하세요.",
-        fix: "현재 계정의 앱을 지정하세요"
+        message: "앱 ID {app_id}: 저장소를 조회할 앱을 찾지 못했습니다. list_apps로 현재 앱 ID를 확인하세요.",
+        fix: "list_apps로 현재 앱 ID를 확인하세요"
     }
     STORAGE_APP_DECLARATION_NOT_FOUND(app_id) {
         class: NotFound,
@@ -717,8 +717,8 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "저장값 쓰기",
         cause: "저장할 값을 JSON으로 직렬화할 수 없다",
-        message: "저장 항목 {key}: 저장 형식으로 만들지 못했습니다. 저장값을 다시 만들고 시도하세요.",
-        fix: "저장값을 다시 만들고 시도하세요"
+        message: "저장 항목 {key}: 저장 형식으로 만들지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_ITEM_WRITE_CONFLICT(key) {
         class: Conflict,
@@ -738,8 +738,8 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "저장 revision 만들기",
         cause: "저장값 revision을 만들 수 없다",
-        message: "저장 항목 {key}의 변경 확인값을 만들지 못했습니다. 저장값 형식을 확인한 뒤 다시 시도하세요.",
-        fix: "저장값 형식을 확인하세요"
+        message: "저장 항목 {key}의 변경 확인값을 만들지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "서버 로그에서 이 오류 코드를 찾으세요"
     }
     STORAGE_SERVER_NOT_CONNECTED() {
         class: Unavailable,
@@ -808,8 +808,8 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "저장 문서 이름 변경 요청",
         cause: "원본 또는 대상 문서 이름이 허용된 형식이 아니다",
-        message: "원본 또는 새 문서 이름이 허용된 형식이 아닙니다. 문서 이름을 고쳐 다시 시도하세요.",
-        fix: "원본과 새 문서 이름을 확인하세요"
+        message: "문서 이름을 바꿀 수 없습니다. 원본 {from}, 새 이름 {to} 가운데 쓸 수 없는 이름이 있습니다. 파일 이름으로 쓸 수 있는 이름으로 고치세요.",
+        fix: "파일 이름으로 쓸 수 있는 이름으로 고치세요"
     }
     STORAGE_VALUE_NOT_FOUND(key) {
         class: NotFound,
@@ -822,7 +822,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "저장소 MCP 요청 검사",
         cause: "고정 저장 항목 요청에 entry_id가 없거나 key와 함께 지정되었다",
-        message: "저장소 {action} 요청에 entry_id가 없거나 key와 함께 지정되었습니다. entry_id만 지정해 다시 요청하세요.",
+        message: "저장소 {action} 요청은 entry_id 하나만 받습니다. key를 빼고 entry_id만 지정해 다시 요청하세요.",
         fix: "entry_id를 하나 지정하고 key는 생략하세요"
     }
     STORAGE_MCP_WRITE_KIND_NOT_ALLOWED() {
@@ -878,7 +878,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "저장소 revision 조회",
         cause: "앱에 선언되지 않은 저장 항목의 revision을 요청했다",
-        message: "저장 항목을 찾을 수 없습니다: {entry}. 앱에 선언된 항목을 선택하세요.",
-        fix: "앱에 선언된 저장 항목을 사용하세요"
+        message: "저장 항목을 찾을 수 없습니다: {entry}. 앱 정의의 저장 항목 이름을 고치세요.",
+        fix: "앱 정의의 저장 항목 이름을 고치세요"
     }
 }

@@ -3,29 +3,29 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "워커 주기 실행 계정 조회",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "워커 주기 실행에 필요한 계정 목록을 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "워커 주기 실행에 필요한 계정 목록을 서버에서 읽지 못했습니다. 서버 로그에서 이 오류 코드를 찾으세요.",
+        fix: "서버 로그에서 이 오류 코드를 찾으세요"
     }
     WORKER_WEBHOOK_SECRET_READ_DATABASE_FAILED(app) {
         class: Server,
         place: "워커 웹훅 인증 정보 조회",
         cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "앱 {app}: 웹훅 인증 정보를 서버 저장소에서 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "앱 {app}: 서버에서 웹훅 인증 정보를 읽지 못했습니다. 서버 로그에서 이 오류 코드를 찾으세요.",
+        fix: "서버 로그에서 이 오류 코드를 찾으세요"
     }
     WORKER_WEBHOOK_REQUEST_UNAVAILABLE() {
         class: Server,
         place: "웹훅 요청 처리",
         cause: "웹훅 요청을 처리하는 서버 작업을 마치지 못했다",
-        message: "웹훅 요청을 처리하지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.",
-        fix: "서버 상태를 확인하세요"
+        message: "서버가 웹훅 요청을 끝내지 못했습니다. 잠시 뒤 다시 보내세요.",
+        fix: "잠시 뒤 다시 보내고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     WORKER_APP_NOT_FOUND(app_id) {
         class: NotFound,
         place: "워커 정의 조회",
         cause: "워커를 사용할 앱이 현재 레지스트리에 없다",
-        message: "앱 ID {app_id}: 워커를 사용할 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 시도하세요.",
-        fix: "현재 레지스트리에 있는 앱 ID를 사용하세요"
+        message: "앱 ID {app_id}: 워커를 사용할 앱을 찾지 못했습니다. list_apps로 현재 앱 ID를 확인하세요.",
+        fix: "list_apps로 현재 앱 ID를 확인하세요"
     }
     WORKER_DEFINITION_MISSING(app_id) {
         class: InvalidRequest,
@@ -52,7 +52,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "워커 시크릿 설정",
         cause: "시크릿 값이 허용 바이트 수를 넘는다",
-        message: "앱 ID {app_id}의 시크릿 {secret_id}: 값이 {max_bytes}바이트를 넘습니다. 값을 줄여 다시 저장하세요.",
+        message: "앱 ID {app_id}의 시크릿 {secret_id}: 값이 허용 크기 {limit}보다 큽니다. 값을 줄여 다시 저장하세요.",
         fix: "시크릿 값을 허용 크기 안으로 줄이세요"
     }
     WORKER_SECRET_ENV_REFERENCE_FORBIDDEN(app_id, secret_id) {
@@ -66,36 +66,36 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "워커 시크릿 저장",
         cause: "시크릿 값을 데이터베이스에 저장하지 못했다",
-        message: "앱 ID {app_id}의 시크릿 {secret_id}: 데이터베이스에 저장하지 못했습니다. 잠시 뒤 다시 저장하세요.",
-        fix: "데이터베이스 상태를 확인하고 다시 저장하세요"
+        message: "앱 ID {app_id}의 시크릿 {secret_id}: 서버에 저장하지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요.",
+        fix: "잠시 뒤 다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     WORKER_SECRET_LIST_DATABASE_FAILED(app_id, secret_id) {
         class: Server,
         place: "워커 시크릿 설정 조회",
         cause: "시크릿 설정을 데이터베이스에서 읽지 못했다",
-        message: "앱 ID {app_id}의 시크릿 {secret_id}: 설정을 데이터베이스에서 읽지 못했습니다. 잠시 뒤 다시 조회하세요.",
-        fix: "데이터베이스 상태를 확인하고 다시 조회하세요"
+        message: "앱 ID {app_id}의 시크릿 {secret_id}: 서버에서 설정을 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요.",
+        fix: "잠시 뒤 다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     WORKER_SECRET_DELETE_DATABASE_FAILED(app_id, secret_id) {
         class: Server,
         place: "워커 시크릿 삭제",
         cause: "시크릿 설정을 데이터베이스에서 지우지 못했다",
-        message: "앱 ID {app_id}의 시크릿 {secret_id}: 설정을 지우지 못했습니다. 잠시 뒤 다시 삭제하세요.",
-        fix: "데이터베이스 상태를 확인하고 다시 삭제하세요"
+        message: "앱 ID {app_id}의 시크릿 {secret_id}: 서버에서 설정을 지우지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요.",
+        fix: "잠시 뒤 다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     WORKER_RUN_WORKSPACE_CHECK_DATABASE_FAILED(app_id) {
         class: Server,
         place: "워커 실행 전 작업 확인",
         cause: "작업 소유자를 확인할 데이터베이스 트랜잭션을 시작하지 못했다",
-        message: "앱 ID {app_id}: 워커 실행에 필요한 작업 정보를 확인하지 못했습니다. 잠시 뒤 다시 실행하세요.",
-        fix: "데이터베이스 상태를 확인하고 워커를 다시 실행하세요"
+        message: "앱 ID {app_id}: 서버에서 워커 실행에 필요한 작업 정보를 확인하지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요.",
+        fix: "잠시 뒤 다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     WORKER_RUN_SECRET_READ_DATABASE_FAILED(app_id, secret_id) {
         class: Server,
         place: "워커 실행 시크릿 조회",
         cause: "실행할 워커의 시크릿 설정을 데이터베이스에서 읽지 못했다",
-        message: "앱 ID {app_id}의 시크릿 {secret_id}: 워커 실행에 필요한 설정을 읽지 못했습니다. 잠시 뒤 다시 실행하세요.",
-        fix: "데이터베이스 상태를 확인하고 워커를 다시 실행하세요"
+        message: "앱 ID {app_id}의 시크릿 {secret_id}: 서버에서 워커 실행에 필요한 설정을 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요.",
+        fix: "잠시 뒤 다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     WORKER_ACTION_NOT_DECLARED(app_id, action) {
         class: InvalidRequest,
@@ -115,8 +115,8 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "워커 상태 폴더 준비",
         cause: "워커 상태 폴더를 만들지 못했다",
-        message: "앱 ID {app_id}: 워커 상태 폴더를 만들지 못했습니다. 서버 저장 경로의 공간과 권한을 확인하세요.",
-        fix: "서버 저장 경로의 디스크 공간과 쓰기 권한을 확인하세요"
+        message: "앱 ID {app_id}: 워커 상태 폴더를 만들지 못했습니다. 서버의 디스크 공간과 읽기 전용 여부를 확인하세요.",
+        fix: "서버의 디스크 공간과 읽기 전용 여부를 확인하세요"
     }
     WORKER_INPUT_SERIALIZE_FAILED(app_id) {
         class: Server,
@@ -129,21 +129,21 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "워커 코드 준비",
         cause: "임시 코드 폴더를 만들지 못했다",
-        message: "앱 ID {app_id}: 워커 코드 폴더를 준비하지 못했습니다. 서버 임시 저장 공간을 확인하세요.",
-        fix: "서버 임시 저장 공간과 권한을 확인하세요"
+        message: "앱 ID {app_id}: 워커 코드 폴더를 준비하지 못했습니다. 서버 임시 폴더의 디스크 공간을 확인하세요.",
+        fix: "서버 임시 폴더의 디스크 공간과 읽기 전용 여부를 확인하세요"
     }
     WORKER_CODE_FILE_WRITE_FAILED(app_id) {
         class: Server,
         place: "워커 코드 준비",
         cause: "워커 실행 파일을 임시 폴더에 쓰지 못했다",
-        message: "앱 ID {app_id}: 워커 실행 파일을 준비하지 못했습니다. 서버 임시 저장 공간을 확인하세요.",
-        fix: "서버 임시 저장 공간과 권한을 확인하세요"
+        message: "앱 ID {app_id}: 워커 실행 파일을 준비하지 못했습니다. 서버 임시 폴더의 디스크 공간을 확인하세요.",
+        fix: "서버 임시 폴더의 디스크 공간과 읽기 전용 여부를 확인하세요"
     }
     WORKER_OUTPUT_STATUS_FAILED(app_id, stderr) {
         class: Server,
         place: "워커 실행 결과 확인",
         cause: "워커 프로세스가 실패 상태로 끝났다",
-        message: "앱 ID {app_id}: 워커 실행이 실패했습니다. stderr: {stderr}. 워커 코드를 확인하세요.",
+        message: "앱 ID {app_id}: 워커 실행이 실패했습니다. 워커 코드를 확인하세요. stderr: {stderr}",
         fix: "전달된 stderr를 확인하고 워커 코드를 고치세요"
     }
     WORKER_OUTPUT_PARSE_FAILED(app_id) {
@@ -199,8 +199,8 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "워커 프로세스 통신",
         cause: "워커 입력 또는 출력을 주고받다 실패했다",
-        message: "워커 실행 중 입력과 출력을 처리하지 못했습니다. 서버 프로세스 상태를 확인하세요.",
-        fix: "서버 프로세스 상태와 워커 입력을 확인하세요"
+        message: "워커와 입력과 출력을 주고받지 못했습니다. 서버 로그에서 이 오류 코드를 찾으세요.",
+        fix: "서버 로그에서 이 오류 코드를 찾으세요"
     }
     WORKER_WEBHOOK_WORKER_MISSING(app_id) {
         class: NotFound,
@@ -227,8 +227,8 @@ error_catalog! { ENTRIES;
         class: Unauthorized,
         place: "워커 웹훅 시크릿 설정 확인",
         cause: "웹훅이 사용할 시크릿 값이 서버에 저장되지 않았거나 비어 있다",
-        message: "앱 ID {app_id}의 웹훅 시크릿 {secret_id}: 서버에 값이 설정되지 않았습니다. 워커 시크릿 설정에 값을 저장한 뒤 다시 요청하세요.",
-        fix: "워커 시크릿 설정에 값을 저장하세요"
+        message: "앱 ID {app_id}의 웹훅 시크릿 {secret_id}: 서버에 값이 설정되지 않았습니다. set_app_secret으로 값을 저장한 뒤 다시 요청하세요.",
+        fix: "set_app_secret으로 값을 저장하세요"
     }
     WORKER_WEBHOOK_TOKEN_INVALID(app_id) {
         class: Unauthorized,

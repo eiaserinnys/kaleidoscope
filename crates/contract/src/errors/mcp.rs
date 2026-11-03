@@ -3,15 +3,15 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "upload_app 입력 준비",
         cause: "앱 정의를 서버 요청용 JSON으로 만들지 못했다",
-        message: "앱 정의를 upload_app 요청으로 바꾸지 못했습니다. 앱 정의를 확인한 뒤 다시 올리세요.",
-        fix: "앱 정의를 확인하고 다시 올리세요"
+        message: "definition 값을 JSON 문자열로 바꾸지 못했습니다. definition을 JSON 객체로 넘기세요.",
+        fix: "definition을 JSON 객체로 넘기세요"
     }
     MCP_GET_ASSET_NOT_FOUND(asset_id, version) {
         class: NotFound,
         place: "get_asset 자산 판 조회",
         cause: "요청한 자산 판이 없다",
-        message: "자산 ID {asset_id}의 {version}판을 찾지 못했습니다. 자산 목록에서 판을 확인해 다시 조회하세요.",
-        fix: "등록된 자산 ID와 판을 지정하세요"
+        message: "자산 ID {asset_id}의 {version}판을 찾지 못했습니다. list_assets에서 판을 확인해 다시 조회하세요.",
+        fix: "list_assets에서 등록된 자산 ID와 판을 확인하세요"
     }
     MCP_DELETE_APP_BUILTIN(app_id) {
         class: InvalidAppDefinition,
@@ -24,15 +24,15 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "delete_app 앱 조회",
         cause: "삭제할 앱이 현재 계정에 없거나 이미 삭제되었다",
-        message: "앱 ID {app_id}: 삭제할 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 삭제하세요.",
-        fix: "현재 계정의 앱 ID를 확인하세요"
+        message: "앱 ID {app_id}: 삭제할 앱을 찾지 못했습니다. list_apps로 현재 앱 ID를 확인하세요.",
+        fix: "list_apps로 현재 앱 ID를 확인하세요"
     }
     MCP_DELETE_APP_DATABASE_FAILED(app_id) {
         class: Server,
         place: "delete_app 데이터베이스 처리",
         cause: "앱 삭제 상태를 기록하거나 연결된 창을 읽지 못했다",
-        message: "앱 ID {app_id}: 데이터베이스 오류로 삭제 처리에 실패했습니다. 잠시 뒤 다시 삭제하세요.",
-        fix: "데이터베이스 상태를 확인하고 다시 삭제하세요"
+        message: "앱 ID {app_id}: 서버에서 앱을 지우지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요.",
+        fix: "잠시 뒤 다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
     MCP_GET_APP_VERSION_NOT_FOUND(app_id, version) {
         class: NotFound,
@@ -45,15 +45,15 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "get_app 앱 판 조회",
         cause: "요청한 앱 또는 판이 없다",
-        message: "앱 ID {app_id}: 요청한 앱이나 판을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 조회하세요.",
-        fix: "현재 계정에 등록된 앱 ID와 판을 지정하세요"
+        message: "앱 ID {app_id}: 요청한 앱이나 판을 찾지 못했습니다. list_apps로 현재 앱 ID와 판을 확인하세요.",
+        fix: "list_apps로 현재 앱 ID와 판을 확인하세요"
     }
     MCP_OPEN_APP_NOT_FOUND(app_id) {
         class: Server,
         place: "open_app 앱 조회",
         cause: "열려는 앱이 현재 계정에 없다",
-        message: "앱 ID {app_id}: 열 앱을 찾지 못했습니다. 앱 목록을 새로고침한 뒤 다시 여세요.",
-        fix: "현재 계정에 등록된 앱 ID를 지정하세요"
+        message: "앱 ID {app_id}: 열 앱을 찾지 못했습니다. list_apps로 현재 앱 ID를 확인하세요.",
+        fix: "list_apps로 현재 앱 ID를 확인하세요"
     }
     MCP_GET_WORKSPACE_ID_REQUIRED() {
         class: Server,

@@ -10,29 +10,29 @@ error_catalog! { ENTRIES;
         class: NotFound,
         place: "앱 미리 보기",
         cause: "미리 볼 앱이 계정에 없다",
-        message: "앱 ID {app_id}: 찾을 수 없어 미리 보지 못했습니다. 앱 목록에서 현재 ID를 확인하세요.",
-        fix: "현재 앱 ID를 확인하세요"
+        message: "앱 ID {app_id}: 찾을 수 없어 미리 보지 못했습니다. list_apps로 현재 ID를 확인하세요.",
+        fix: "list_apps로 현재 앱 ID를 확인하세요"
     }
     APP_PREVIEW_DEFINITION_SERIALIZE_FAILED() {
         class: Server,
         place: "앱 정의 미리 보기 입력 변환",
         cause: "받은 앱 정의 값을 JSON으로 바꾸지 못했다",
-        message: "앱 정의를 미리 보기 요청으로 바꾸지 못했습니다. 입력 값을 확인한 뒤 다시 시도하세요.",
-        fix: "앱 정의 입력을 확인하세요"
+        message: "definition 값을 JSON 문자열로 바꾸지 못했습니다. definition을 JSON 객체로 넘기세요.",
+        fix: "definition을 JSON 객체로 넘기세요"
     }
     APP_PREVIEW_STORAGE_KIND_SERIALIZE_FAILED(app_id, key) {
         class: Server,
         place: "앱 미리 보기 저장 항목 종류 읽기",
         cause: "앱 저장 항목 종류를 JSON 값으로 바꾸지 못했다",
-        message: "앱 ID {app_id}, 저장 항목 {key}: 종류를 읽지 못했습니다. 서버 상태를 확인하세요.",
-        fix: "서버 상태를 확인하세요"
+        message: "앱 ID {app_id}, 저장 항목 {key}: 서버가 저장 종류를 읽지 못했습니다. 서버 로그에서 이 오류 코드를 찾으세요.",
+        fix: "서버 로그에서 이 오류 코드를 찾으세요"
     }
     APP_PREVIEW_STORAGE_VALUE_JSON_INVALID(app_id, key) {
         class: Server,
         place: "앱 미리 보기 저장값 JSON 읽기",
         cause: "저장된 앱 값이 올바른 JSON이 아니다",
-        message: "앱 ID {app_id}, 저장 항목 {key}: 저장된 값을 JSON으로 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "앱 ID {app_id}, 저장 항목 {key}: 저장된 값이 JSON이 아니라 읽지 못했습니다. write_app_storage로 값을 다시 쓰거나 reset_app_storage로 되돌리세요.",
+        fix: "write_app_storage로 다시 쓰거나 reset_app_storage로 되돌리세요"
     }
     APP_PREVIEW_ARGUMENTS_INVALID() {
         class: InvalidRequest,
@@ -52,15 +52,15 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "보고된 창 미리 보기",
         cause: "기기에서 보고한 창 상태가 없다",
-        message: "창 ID {window_id}: 배치 보고가 없어 미리 볼 상태를 찾지 못했습니다. 기기 배치를 다시 보고한 뒤 시도하세요.",
-        fix: "기기 배치를 다시 보고하세요"
+        message: "창 ID {window_id}: 서버에 보고된 상태가 없어 미리 보지 못했습니다. 그 창을 연 쉘이 서버에 연결됐는지 확인하거나 state 인자로 상태를 직접 넘기세요.",
+        fix: "쉘 연결을 확인하거나 state 인자로 창 상태를 넘기세요"
     }
     APP_PREVIEW_WINDOW_NOT_FOUND(window_id, app_id) {
         class: NotFound,
         place: "앱 창 상태 조회",
         cause: "현재 계정의 창과 보고된 배치에서 창을 찾지 못했다",
-        message: "창 ID {window_id}: 앱 ID {app_id}의 미리 보기 상태를 찾지 못했습니다. 현재 기기 배치를 다시 보고한 뒤 시도하세요.",
-        fix: "현재 기기 배치를 다시 보고하세요"
+        message: "창 ID {window_id}: 현재 계정의 작업과 보고된 배치에 없어 앱 ID {app_id}의 저장값을 미리 보지 못했습니다. get_workspace로 창 ID를 확인하세요.",
+        fix: "get_workspace로 창 ID를 확인하세요"
     }
     APP_PREVIEW_WINDOW_APP_MISMATCH(window_id, app_id) {
         class: InvalidRequest,
@@ -94,50 +94,50 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "기본 앱 실행 설정 검사",
         cause: "설정의 앱 ID가 기본 앱 ID가 아니다",
-        message: "앱 ID {app_id}: 기본 앱 실행 설정에 등록할 수 없습니다. 기본 앱 ID를 확인하세요.",
-        fix: "등록된 기본 앱 ID를 사용하세요"
+        message: "서버가 모르는 기본 앱 ID입니다: {app_id}. 쉘이 서버보다 새 판일 수 있습니다. 서버를 업데이트하세요.",
+        fix: "서버를 업데이트하세요"
     }
     APP_BUILTIN_SPEC_VERSION_INVALID(app_id, version) {
         class: InvalidRequest,
         place: "기본 앱 실행 설정 판 검사",
         cause: "기본 앱 실행 설정의 판이 0이다",
-        message: "기본 앱 ID {app_id}, 실행 설정 판 {version}: 올바르지 않습니다. 1 이상의 판을 보내세요.",
-        fix: "1 이상의 판을 지정하세요"
+        message: "기본 앱 ID {app_id}: 쉘이 보낸 실행 설정 판 {version}은 쓸 수 없습니다. 쉘을 업데이트하세요.",
+        fix: "쉘을 업데이트하세요"
     }
     APP_BUILTIN_SPEC_STORAGE_SERIALIZE_FAILED(app_id) {
         class: Server,
         place: "기본 앱 저장소 설정 저장",
         cause: "저장소 설정을 JSON으로 바꾸지 못했다",
-        message: "기본 앱 ID {app_id}의 저장소 설정을 저장 형식으로 바꾸지 못했습니다. 서버 상태를 확인하세요.",
-        fix: "서버 상태를 확인하세요"
+        message: "기본 앱 ID {app_id}의 저장소 설정을 서버 저장 형식으로 바꾸지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "에이전트에게 이 오류 코드를 전하세요"
     }
     APP_BUILTIN_SPEC_WORKER_SERIALIZE_FAILED(app_id) {
         class: Server,
         place: "기본 앱 워커 설정 저장",
         cause: "워커 설정을 JSON으로 바꾸지 못했다",
-        message: "기본 앱 ID {app_id}의 워커 설정을 저장 형식으로 바꾸지 못했습니다. 서버 상태를 확인하세요.",
-        fix: "서버 상태를 확인하세요"
+        message: "기본 앱 ID {app_id}의 워커 설정을 서버 저장 형식으로 바꾸지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "에이전트에게 이 오류 코드를 전하세요"
     }
     APP_BUILTIN_SPEC_STORAGE_JSON_INVALID(app_id) {
         class: Server,
         place: "기본 앱 저장소 설정 읽기",
         cause: "저장된 저장소 설정이 올바른 JSON이 아니다",
-        message: "기본 앱 ID {app_id}의 저장소 설정을 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "기본 앱 ID {app_id}: 서버에 저장된 저장소 설정을 읽지 못했습니다. 쉘을 다시 시작해 설정을 다시 등록하세요.",
+        fix: "쉘을 다시 시작해 설정을 다시 등록하세요"
     }
     APP_BUILTIN_SPEC_WORKER_JSON_INVALID(app_id) {
         class: Server,
         place: "기본 앱 워커 설정 읽기",
         cause: "저장된 워커 설정이 올바른 JSON이 아니다",
-        message: "기본 앱 ID {app_id}의 워커 설정을 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "기본 앱 ID {app_id}: 서버에 저장된 워커 설정을 읽지 못했습니다. 쉘을 다시 시작해 설정을 다시 등록하세요.",
+        fix: "쉘을 다시 시작해 설정을 다시 등록하세요"
     }
     APP_BUILTIN_SPEC_RECORD_INVALID(app_id) {
         class: Server,
         place: "기본 앱 실행 설정 읽기",
         cause: "저장된 기본 앱 설정이 앱 실행 설정 형식에 맞지 않는다",
-        message: "기본 앱 ID {app_id}의 실행 설정을 읽지 못했습니다. 서버 저장소 상태를 확인하세요.",
-        fix: "서버 저장소 상태를 확인하세요"
+        message: "기본 앱 ID {app_id}: 서버에 저장된 실행 설정을 읽지 못했습니다. 쉘을 다시 시작해 설정을 다시 등록하세요.",
+        fix: "쉘을 다시 시작해 설정을 다시 등록하세요"
     }
     APP_BUILTIN_SPEC_FILE_READ_NOT_FOUND(app_id) {
         class: Server,
@@ -150,8 +150,8 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "기본 앱 정의 파일 읽기",
         cause: "기본 앱 정의 파일을 읽지 못했다",
-        message: "기본 앱 정의 파일 {app_id}.json을 읽지 못했습니다. 파일 권한과 디스크 상태를 확인하세요.",
-        fix: "파일 권한과 디스크 상태를 확인하세요"
+        message: "기본 앱 정의 파일 {app_id}.json을 읽지 못했습니다. 파일 관리자에서 열리는지 확인하세요.",
+        fix: "파일 관리자에서 열리는지 확인하세요"
     }
     APP_BUILTIN_SPEC_FILE_ID_MISMATCH(app_id, declared_id) {
         class: InvalidAppDefinition,
@@ -164,8 +164,8 @@ error_catalog! { ENTRIES;
         class: NotFound,
         place: "기본 앱 실행 설정 조회",
         cause: "기본 앱 실행 설정이 등록되지 않았다",
-        message: "기본 앱 ID {app_id}: 실행 설정을 찾지 못했습니다. 기본 앱 설정을 등록한 뒤 다시 시도하세요.",
-        fix: "기본 앱 설정을 등록하세요"
+        message: "기본 앱 ID {app_id}: 서버에 실행 설정이 없습니다. 이 앱이 들어 있는 쉘을 서버에 연결한 뒤 다시 시도하세요.",
+        fix: "이 기본 앱이 들어 있는 쉘을 서버에 연결하세요"
     }
     APP_BUILTIN_STORAGE_ENTRY_NOT_DECLARED(app_id, key) {
         class: InvalidRequest,
@@ -206,29 +206,29 @@ error_catalog! { ENTRIES;
         class: InvalidAppDefinition,
         place: "앱 정의 JSON 읽기",
         cause: "JSON 문법이 올바르지 않다",
-        message: "앱 정의 JSON을 읽지 못했습니다: {reason}. JSON 문법을 고친 뒤 다시 올리세요.",
-        fix: "앱 정의의 JSON 구문을 고친 뒤 다시 올리세요"
+        message: "앱 정의 JSON의 문법이 틀렸습니다. 문법을 고친 뒤 다시 시도하세요. 원인: {reason}",
+        fix: "앱 정의의 JSON 문법을 고치세요"
     }
     APP_DEFINITION_FORMAT_INVALID(reason) {
         class: InvalidAppDefinition,
         place: "앱 정의 구조 읽기",
         cause: "JSON 값이 앱 정의 형식에 맞지 않는다",
-        message: "앱 정의의 형식이 올바르지 않습니다: {reason}. 해당 필드를 고친 뒤 다시 올리세요.",
-        fix: "안내된 필드와 값을 고친 뒤 다시 올리세요"
+        message: "앱 정의의 필드나 값이 형식에 맞지 않습니다. 원인에 나온 필드를 고친 뒤 다시 시도하세요. 원인: {reason}",
+        fix: "원인에 나온 필드를 고치세요"
     }
     APP_DEFINITION_CHECK_FAILED() {
         class: InvalidAppDefinition,
         place: "앱 정의 의미 검사",
         cause: "앱 정의가 권한, 상태, 바인딩 또는 블록 검사에 걸렸다",
-        message: "앱 정의가 검사에 걸렸습니다. 아래 항목을 고친 뒤 다시 올리세요.",
-        fix: "아래 항목과 JSON 경로를 고쳐 다시 올리세요"
+        message: "앱 정의가 검사를 통과하지 못했습니다. 함께 표시된 항목을 고친 뒤 다시 시도하세요.",
+        fix: "함께 표시된 항목과 JSON 경로를 고치세요"
     }
     APP_DEFINITION_REQUIRES_NEWER_SHELL() {
         class: UnsupportedApp,
         place: "앱 정의 호환성 검사",
         cause: "앱 정의가 이 쉘에서 지원하지 않는 블록 또는 모듈 판을 요구한다",
-        message: "앱 정의가 이 쉘보다 새 기능을 요구합니다. 쉘을 업데이트한 뒤 다시 올리세요.",
-        fix: "쉘을 업데이트하거나 앱 정의의 요구 판을 낮추세요"
+        message: "앱 정의의 requires가 이 쉘이나 서버보다 새 판을 요구합니다. 쉘에서 가져왔다면 쉘을, 서버에 올렸다면 서버를 업데이트하세요. 또는 앱 정의의 requires를 낮추세요.",
+        fix: "낡은 쪽을 업데이트하거나 앱 정의의 requires를 낮추세요"
     }
     APP_IMPORT_SERVER_NOT_CONNECTED() {
         class: Server,
