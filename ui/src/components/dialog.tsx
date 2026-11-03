@@ -41,7 +41,7 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   const content = body != null ? <div className="ks-dialog-body" id={windowModal ? bodyId : undefined}>{body}</div> : null;
   return createPortal(<div className={`ks-dialog-overlay ${overlayClassName}`} data-ks-overlay onMouseDown={(event) => { if (!windowModal && event.target === event.currentTarget) onCancel(); }}>
     <div className="ks-dialog" role="dialog" aria-modal={windowModal ? active : true} aria-labelledby={titleId} aria-describedby={windowModal && body != null ? bodyId : undefined} tabIndex={windowModal ? -1 : undefined} onKeyDown={windowModal ? onKey : undefined} ref={root}>
-      {windowModal ? <div className="ks-dialog-scroll" tabIndex={0}>{heading}{content}</div> : <>{heading}{content}</>}
+      {heading}{content != null ? <div className="ks-dialog-scroll" tabIndex={windowModal ? 0 : undefined}>{content}</div> : null}
       <div className="ks-dialog-actions">{showCancel ? <Button onClick={onCancel}>{cancelLabel}</Button> : null}<span className={`ks-dialog-confirm${danger ? " is-danger" : ""}`}><Button onClick={() => { if (!windowModal) restore.current = false; onConfirm(); }} variant={danger ? "default" : "emphasis"}>{ok}</Button></span></div>
     </div>
   </div>, host);

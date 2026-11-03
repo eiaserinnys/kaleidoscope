@@ -54,6 +54,7 @@
   --ks-color-selection: #e4ecfb;
   --ks-color-focus: #4c7ed1;
   --ks-color-danger: #a9363d;
+  --ks-color-danger-contrast: #ffffff;
   --ks-color-danger-surface: #fff0f0;
   --ks-color-notice: #edf3ff;
   --ks-color-code: #f0f2f6;
@@ -77,6 +78,7 @@
     --ks-color-selection: #2b3a58;
     --ks-color-focus: #94b5ff;
     --ks-color-danger: #ff9ba1;
+    --ks-color-danger-contrast: #15203a;
     --ks-color-danger-surface: #3a2227;
     --ks-color-notice: #26334b;
     --ks-color-code: #252c36;

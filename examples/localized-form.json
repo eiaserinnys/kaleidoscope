@@ -21,7 +21,6 @@
       "open_form": "양식 열기",
       "dialog_title": "연락처 정보",
       "dialog_close": "닫기",
-      "save": "저장",
       "open_tour": "안내 보기",
       "tour_previous": "이전",
       "tour_next": "다음",
@@ -49,7 +48,6 @@
       "open_form": "Open form",
       "dialog_title": "Contact details",
       "dialog_close": "Close",
-      "save": "Save",
       "open_tour": "Show guide",
       "tour_previous": "Previous",
       "tour_next": "Next",
@@ -77,7 +75,6 @@
       "open_form": "フォームを開く",
       "dialog_title": "連絡先",
       "dialog_close": "閉じる",
-      "save": "保存",
       "open_tour": "案内を見る",
       "tour_previous": "前へ",
       "tour_next": "次へ",
@@ -210,11 +207,6 @@
                   }
                 }
               ]
-            },
-            {
-              "type": "button",
-              "label": { "message": "save" },
-              "on_click": [{ "set_state": "dialog_open", "value": false }]
             },
             {
               "type": "tour",
