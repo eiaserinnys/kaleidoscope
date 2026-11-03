@@ -46,7 +46,7 @@ export function initialState(): State {
 
 export function reserveRequest(state: State, kind: string, params: unknown): [State, number] {
   const id = state.nextId;
-  return [{ ...state, nextId: id + 1, phase: kind === "prompt" ? "responding" : state.phase,
+  return [{ ...state, nextId: id + 1, phase: kind === "prompt" ? "responding" : kind === "authenticate" ? "starting" : state.phase,
     replay: kind === "load" ? true : state.replay, pending: { ...state.pending, [id]: { kind, params } } }, id];
 }
 

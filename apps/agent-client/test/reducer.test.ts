@@ -96,3 +96,12 @@ test("기존 모델 설정 성공은 응답 뒤 표시 값을 갱신한다", () 
   state = reduceMessage(state, { jsonrpc: "2.0", id, result: {} }, "unused");
   assert.equal(state.controls[0].value, "b");
 });
+
+test("로그인 요청을 보내는 동안에는 시작 상태이고 실패하면 로그인 선택으로 돌아간다", () => {
+  let state = { ...initialState(), phase: "login" as const };
+  let id: number;
+  [state, id] = reserveRequest(state, "authenticate", { methodId: "login" });
+  assert.equal(state.phase, "starting");
+  state = reduceMessage(state, { jsonrpc: "2.0", id, error: { code: -32603, message: "failed" } }, "unused");
+  assert.equal(state.phase, "login");
+});

@@ -121,8 +121,21 @@ export class AgentSession {
   }
 
   replace(spec: Spec): Promise<boolean> {
-    this.spec = spec;
-    return this.retry();
+    return this.serial(async () => {
+      if (this.handle) await this.host.process.stop({ handle: this.handle });
+      this.handle = null;
+      this.spec = spec;
+      const started = await this.launch();
+      if (started) { await this.drain(); await this.pump(); }
+      return started;
+    });
+  }
+
+  stop(): Promise<void> {
+    return this.serial(async () => {
+      if (this.handle) await this.host.process.stop({ handle: this.handle });
+      this.handle = null;
+    });
   }
 
   private async launch(): Promise<boolean> {
@@ -192,7 +205,7 @@ export class AgentSession {
   }
 
   authenticate(id: string): Promise<void> {
-    return this.serial(async () => { await this.request("authenticate", "authenticate", { methodId: id }); });
+    return this.serial(async () => { await this.request("authenticate", "authenticate", { methodId: id }); this.publish(); });
   }
 
   configure(id: string, value: string | boolean): Promise<void> {
