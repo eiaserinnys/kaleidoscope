@@ -364,6 +364,17 @@ describe("대화 제공자 화면", () => {
 });
 
 describe("공용 대화 부품", () => {
+  it("응답 중 보낸 대기 말은 진행 글과 이미 줄 선 말 뒤에 놓는다", () => {
+    render(<ChatHistory
+      items={[item("one", "기록")]} pending={{ text: "새 대기 말", attachments: [], afterResponse: true }} delta="진행 글" busy tool={null}
+      historyRef={createRef<HTMLDivElement>()} followTail={{ current: true }}
+      renderAttachment={() => null} renderPendingAttachment={() => null}
+      queued={<div>먼저 줄 선 말</div>}
+    />);
+    const rows = [...screen.getByRole("log").querySelector(".ks-agent-chat-content")!.children].map((node) => node.textContent);
+    expect(rows).toEqual(["기록", "진행 글", "먼저 줄 선 말", "새 대기 말"]);
+  });
+
   it("기록, 진행 줄, footer를 기존 순서로 그린다", () => {
     const historyRef = createRef<HTMLDivElement>();
     render(<ChatHistory

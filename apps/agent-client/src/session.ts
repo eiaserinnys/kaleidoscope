@@ -416,7 +416,7 @@ export class AgentSession {
 
   private publish(): void {
     this.host.publish({ phase: this.state.phase, items: this.history.items, stream_id: this.state.stream.id, text: this.state.stream.text,
-      busy: this.state.phase === "responding", tool: this.state.tools.at(-1)?.title ?? null,
+      busy: this.state.phase === "responding" || (this.state.phase === "ready" && this.state.queue.length > 0), tool: this.state.tools.at(-1)?.title ?? null,
       queued: this.state.queue.map((item) => ({ ...item, attachments: item.attachments.map(({ id, name, mime }) => ({ id, name, mime })) })),
       permissions: this.state.permissions, controls: this.state.controls, authMethods: this.state.authMethods, failure: this.state.failure });
   }

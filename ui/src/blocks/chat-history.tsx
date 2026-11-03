@@ -6,9 +6,9 @@ import { MarkdownText } from "./markdown-text";
 import type { DraftAttachment } from "./agent-attachments";
 import { markResponding } from "../profiler/chat-responding";
 
-export type ChatPendingMessage = { text: string; attachments: DraftAttachment[] };
+export type ChatPendingMessage = { text: string; attachments: DraftAttachment[]; afterResponse?: boolean };
 
-export function ChatHistory({ items, pending, delta, busy, tool, historyRef, followTail, onReachTop, renderAttachment, renderPendingAttachment, footer = null }: {
+export function ChatHistory({ items, pending, delta, busy, tool, historyRef, followTail, onReachTop, renderAttachment, renderPendingAttachment, queued = null, footer = null }: {
   items: ConversationItem[];
   pending: ChatPendingMessage | null;
   delta: string;
@@ -19,6 +19,7 @@ export function ChatHistory({ items, pending, delta, busy, tool, historyRef, fol
   onReachTop?: () => void;
   renderAttachment: (attachment: ConversationAttachment, item: ConversationItem, index: number) => ReactNode;
   renderPendingAttachment: (attachment: DraftAttachment, index: number) => ReactNode;
+  queued?: ReactNode;
   footer?: ReactNode;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -53,10 +54,11 @@ export function ChatHistory({ items, pending, delta, busy, tool, historyRef, fol
     if (history.scrollTop <= threshold) onReachTop?.();
   };
 
+  const pendingRow = pending !== null ? <div className="ks-agent-chat-user is-pending">{pending.text}{pending.attachments.length ? <div className={`ks-agent-attachment-history${pending.text ? " has-text" : ""}`}>{pending.attachments.map((attachment, index) => renderPendingAttachment(attachment, index))}</div> : null}</div> : null;
   return <div aria-label="대화 기록" className="ks-agent-chat-history" onScroll={handleScroll} ref={historyRef} role="log">
     <div className="ks-agent-chat-content" ref={contentRef}>
       <ChatItems items={items} renderAttachment={renderAttachment} />
-      {pending !== null ? <div className="ks-agent-chat-user is-pending">{pending.text}{pending.attachments.length ? <div className={`ks-agent-attachment-history${pending.text ? " has-text" : ""}`}>{pending.attachments.map((attachment, index) => renderPendingAttachment(attachment, index))}</div> : null}</div> : null}
+      {!pending?.afterResponse ? pendingRow : null}
       {delta ? <div className="ks-agent-chat-assistant"><div className="ks-agent-chat-assistant-content"><MarkdownText>{delta}</MarkdownText></div></div> : null}
       {(busy || pending !== null) && !delta ? (
         <div className="ks-agent-chat-working">
@@ -64,6 +66,8 @@ export function ChatHistory({ items, pending, delta, busy, tool, historyRef, fol
           <span>생각 중입니다…{tool ? ` · ${tool}` : ""}</span>
         </div>
       ) : null}
+      {queued}
+      {pending?.afterResponse ? pendingRow : null}
       {footer}
     </div>
   </div>;

@@ -165,7 +165,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
     const requestId = crypto.randomUUID();
     setSending(true);
     followTail.current = true;
-    setPending({ requestId, generation: chat.generation, text, attachments: submittedAttachments, knownIds: new Set(chat.items.map((item) => item.id)) });
+    setPending({ requestId, generation: chat.generation, text, attachments: submittedAttachments, knownIds: new Set(chat.items.map((item) => item.id)), afterResponse: chat.busy || chat.queued.length > 0 });
     setDraft("");
     setAttachments([]);
     setActionError(null);
@@ -197,7 +197,6 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
 
   const footer = <>
     {chat.loading ? <div className="ks-agent-chat-working"><ThinkingOrb aria-label="불러오는 중" size={20} state="working" theme="auto" /><span>불러오는 중…</span></div> : null}
-    {chat.queued.map(renderQueuedMessage)}
     {block.footer ? renderBlock(block.footer, context, `${pointer}/footer`) : null}
   </>;
   const pendingForDisplay = pending?.generation === chat.generation && !chat.queued.some((message) => message.id === pending.requestId)
@@ -214,6 +213,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
       followTail={followTail}
       renderAttachment={renderAttachment}
       renderPendingAttachment={(attachment, index) => <PendingAttachment key={index} attachment={attachment} onPreview={setPreview} />}
+      queued={chat.queued.map(renderQueuedMessage)}
       footer={footer}
     />
     <ChatComposer

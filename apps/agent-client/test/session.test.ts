@@ -87,7 +87,9 @@ test("같은 프로세스에 다시 붙으면 진행 중인 승인과 큐를 복
   assert.equal(f.writes.at(-1).result.outcome.optionId, "yes");
   assert.ok(f.snapshots.at(-1).items.some((item: any) => item.kind === "notice" && item.text.includes("허용")));
   const firstPrompt = f.writes.find((message) => message.method === "session/prompt");
+  const beforeHandoff = f.snapshots.length;
   await f.emit({ jsonrpc: "2.0", id: firstPrompt.id, result: { stopReason: "end_turn" } });
+  assert.ok(f.snapshots.slice(beforeHandoff).every((view) => view.busy), "줄 선 말을 이어 보내는 동안 생각 중 상태를 유지해야 합니다");
   const prompts = f.writes.filter((message) => message.method === "session/prompt");
   assert.equal(prompts.length, 2);
   assert.equal(prompts[1].params.prompt.some((part: any) => part.text?.startsWith("안내문")), false);
