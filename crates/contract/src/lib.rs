@@ -273,7 +273,7 @@ pub const CONTRACT_VERSION: u32 = 29;
 /// - 18판: 클라이언트 채널과 대화 블록의 `client` 및 `footer`, 도구 중계, 지침과 같이 보기 준비, 창 범위 기기 저장소와
 ///   `process.file_uri`, stack 가운데 배치, notice, select와 toggle의 비활성 바인딩, 단독 동작 `copy_text`(아이콘이 있는
 ///   단추의 on_click에서 바인딩이 낸 글을 기기 클립보드에 쓴다).
-/// - 19판: 앱 정의의 `settings` 설정 트리와 `window_title` 창 제목 및 메타 바인딩.
+/// - 19판: 앱 정의의 `settings` 설정 트리와 `window_title` 창 제목 및 메타 바인딩, `dialog.on_confirm`과 `dialog.danger`.
 pub const BLOCK_SET_VERSION: u32 = 19;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
@@ -1254,6 +1254,12 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         cancel_label: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_confirm: Option<Actions>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        #[ts(optional, as = "Option<bool>")]
+        danger: bool,
         child: Box<Block>,
         on_close: Actions,
     },
@@ -2008,6 +2014,10 @@ enum RawBlock {
         close_label: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cancel_label: Option<Binding>,
+        #[serde(default)]
+        on_confirm: Option<Actions>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        danger: bool,
         child: Box<Block>,
         on_close: Actions,
     },
@@ -2666,6 +2676,8 @@ impl From<RawBlock> for Block {
                 title,
                 close_label,
                 cancel_label,
+                on_confirm,
+                danger,
                 child,
                 on_close,
             } => Block::Dialog {
@@ -2673,6 +2685,8 @@ impl From<RawBlock> for Block {
                 title,
                 close_label,
                 cancel_label,
+                on_confirm,
+                danger,
                 child,
                 on_close,
             },

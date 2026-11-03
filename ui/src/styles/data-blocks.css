@@ -175,9 +175,9 @@
 .ks-select-button { max-width: 100%; min-width: 0; }
 .ks-data-button.is-chip > .ks-button,
 .ks-data-button.is-chip > .ks-icon-button { border-radius: var(--ks-space-4); }
-.ks-data-button.is-ghost > .ks-button, .ks-data-button.is-danger > .ks-button, .ks-dialog-confirm.is-danger .ks-button { border-color: transparent; background: transparent; }
-.ks-data-button.is-danger > .ks-button, .ks-data-button.is-danger > .ks-icon-button, .ks-dialog-confirm.is-danger .ks-button { color: var(--ks-color-danger); }
-.ks-data-button.is-danger > button:hover:not(:disabled), .ks-dialog-confirm.is-danger button:hover:not(:disabled) { background: var(--ks-color-danger-surface); }
+.ks-data-button.is-ghost > .ks-button, .ks-data-button.is-danger > .ks-button { border-color: transparent; background: transparent; }
+.ks-data-button.is-danger > .ks-button, .ks-data-button.is-danger > .ks-icon-button { color: var(--ks-color-danger); }
+.ks-data-button.is-danger > button:hover:not(:disabled) { background: var(--ks-color-danger-surface); }
 .ks-metrics-container { container-type: inline-size; width: 100%; min-width: 0; }
 .ks-metrics { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; min-width: 0; gap: var(--ks-space-2); padding: var(--ks-space-3); }
 .ks-metrics-grid { display: grid; grid-template-columns: repeat(var(--ks-metrics-columns, auto-fit), minmax(min(100%, calc(var(--ks-space-6) * 2 + var(--ks-space-3))), 1fr)); min-width: 0; gap: var(--ks-space-2); }
@@ -305,10 +305,13 @@
   .ks-properties .ks-data-state-compact .ks-empty-state-text { flex: 1 1 calc(100% - var(--ks-space-5)); }
 }
 .ks-dialog-overlay { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; padding: var(--ks-space-4); background: color-mix(in srgb, var(--ks-color-text) 35%, transparent); }
-.ks-dialog { width: min(100%, var(--ks-window-min-width)); border-radius: var(--ks-radius-large); background: var(--ks-color-surface); box-shadow: var(--ks-shadow-popover); padding: var(--ks-space-4); }
-.ks-dialog-title { font-size: var(--ks-type-title); font-weight: 600; }
+.ks-dialog { display: flex; width: min(100%, var(--ks-window-min-width)); max-height: 100%; min-height: 0; flex-direction: column; overflow: hidden; border-radius: var(--ks-radius-large); background: var(--ks-color-surface); box-shadow: var(--ks-shadow-popover); padding: var(--ks-space-4); }
+.ks-dialog-title { flex: 0 0 auto; font-size: var(--ks-type-title); font-weight: 600; }
+.ks-dialog-scroll { --ks-dialog-ring: calc(var(--ks-focus-width) + var(--ks-focus-offset)); min-height: 0; flex: 1 1 auto; overflow: auto; padding: 0 var(--ks-dialog-ring) var(--ks-dialog-ring); margin: 0 calc(-1 * var(--ks-dialog-ring)) calc(-1 * var(--ks-dialog-ring)); scroll-padding: var(--ks-dialog-ring); }
+.ks-dialog-scroll:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
+.ks-dialog-confirm.is-danger .ks-button { border-color: var(--ks-color-danger); background-color: var(--ks-color-danger); color: var(--ks-color-danger-contrast); }
 .ks-dialog-body { margin-top: var(--ks-space-2); white-space: pre-wrap; }
-.ks-dialog-actions { display: flex; justify-content: flex-end; gap: var(--ks-space-2); margin-top: var(--ks-space-4); }
+.ks-dialog-actions { display: flex; flex: 0 0 auto; justify-content: flex-end; gap: var(--ks-space-2); margin-top: var(--ks-space-4); }
 .ks-tour-overlay { position: absolute; inset: var(--ks-space-3); z-index: 2; pointer-events: none; }
 .ks-tour-spotlight { position: absolute; z-index: 0; border-radius: var(--ks-radius-small); outline: var(--ks-focus-width) solid var(--ks-color-accent); box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--ks-color-text) 35%, transparent); pointer-events: none; }
 .ks-tour-card { position: absolute; z-index: 1; display: flex; width: min(100%, var(--ks-window-min-width)); max-height: 100%; flex-direction: column; gap: var(--ks-space-2); overflow: auto; padding: var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-large); background: var(--ks-color-surface); box-shadow: var(--ks-shadow-popover); color: var(--ks-color-text); pointer-events: auto; }

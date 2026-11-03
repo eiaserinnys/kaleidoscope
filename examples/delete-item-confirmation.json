@@ -1,0 +1,36 @@
+{
+  "id": "delete-item-confirmation",
+  "name": "항목 삭제 확인",
+  "description": "위험 확인 대화상자의 확인과 취소 동작을 보여 준다.",
+  "requires": { "blocks": 19, "modules": {} },
+  "permissions": [],
+  "state": {
+    "dialog_open": false,
+    "status": "보관 중"
+  },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "children": [
+      { "type": "text", "value": { "state": "status" } },
+      {
+        "type": "button",
+        "label": "보관 항목 지우기",
+        "on_click": [{ "set_state": "dialog_open", "value": true }]
+      },
+      {
+        "type": "dialog",
+        "open": { "state": "dialog_open" },
+        "title": "이 항목을 지울까요?",
+        "close_label": "지우기",
+        "danger": true,
+        "child": { "type": "text", "value": "삭제하면 보관 목록에서 사라집니다." },
+        "on_close": [{ "set_state": "dialog_open", "value": false }],
+        "on_confirm": [
+          { "set_state": "status", "value": "삭제됨" },
+          { "set_state": "dialog_open", "value": false }
+        ]
+      }
+    ]
+  }
+}
