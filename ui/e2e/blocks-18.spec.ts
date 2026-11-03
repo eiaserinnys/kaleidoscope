@@ -153,10 +153,10 @@ test("말줄임 라벨은 본문 줄 높이를 쓰고 버튼·고르기 높이�
       expect(metric.lineHeight).toBe(metric.bodyLineHeight);
       expect(metric.controlHeight).toBe(metric.tokenControlHeight);
     }
-    await captureReview(page, '[data-testid="app-window-blocks-18-truncate-glyphs"] .ks-data-button > button', "truncate-button-antigravity-actual-2x");
+    await captureReview(page, '[data-testid="app-window-blocks-18-truncate-glyphs"] .ks-data-button > button', "truncate-button-descenders-actual-2x");
     await captureReview(page, '[data-testid="app-window-blocks-18-truncate-glyphs"] .ks-select-button', "truncate-select-opus-actual-2x");
     await page.addStyleTag({ content: ".ks-truncate-label, .ks-select-choice-label { display: contents !important; overflow: visible !important; }" });
-    await captureReview(page, '[data-testid="app-window-blocks-18-truncate-glyphs"] .ks-data-button > button', "truncate-button-antigravity-bare-text-2x");
+    await captureReview(page, '[data-testid="app-window-blocks-18-truncate-glyphs"] .ks-data-button > button', "truncate-button-descenders-bare-text-2x");
     await captureReview(page, '[data-testid="app-window-blocks-18-truncate-glyphs"] .ks-select-button', "truncate-select-opus-bare-text-2x");
 
     await page.goto("/?preview=workspace-pas&conversation=start");
