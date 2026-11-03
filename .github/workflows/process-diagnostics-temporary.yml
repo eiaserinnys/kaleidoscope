@@ -1,0 +1,74 @@
+name: Temporary Windows process measurement
+on:
+  push:
+    branches: [feat/process-services]
+
+jobs:
+  measure:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - name: 진단 검증과 양쪽 각 10회 측정
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $head = $env:GITHUB_SHA
+          $main = '43923446225c21839bad8e13ede01eb787bcda82'
+          $oldHead = '2c72927371ee49f58b27ea78582ef0177792088a'
+          $patch = Join-Path $env:RUNNER_TEMP 'process-diagnostics.patch'
+          git diff $oldHead $head -- crates/core/src/tests/process_tests.rs crates/core/src/tests/fixtures/process/child.cmd crates/core/src/tests/fixtures/process/worker.ps1 | Out-File -Encoding utf8 $patch
+          if ($LASTEXITCODE -ne 0) { throw '진단 패치를 만들지 못했습니다' }
+
+          $worker = 'crates/core/src/tests/fixtures/process/worker.ps1'
+          $backup = Join-Path $env:RUNNER_TEMP 'worker.ps1'
+          Copy-Item $worker $backup
+          try {
+            $fixture = Get-Content -Raw $worker
+            $original = "$" + "p = Start-Process ping.exe -ArgumentList '127.0.0.1','-n','120' -PassThru -WindowStyle Hidden"
+            if (-not $fixture.Contains($original)) { throw '진단 검증용 fixture 지점을 찾지 못했습니다' }
+            $fixture.Replace($original, "throw 'forced-diagnostic-check'") | Set-Content -NoNewline -Encoding utf8 $worker
+            $output = & cargo test -p kaleidoscope-core windows_process_cmd_terminates_descendants_in_unicode_cwd -- --test-threads=2 --nocapture 2>&1
+            $code = $LASTEXITCODE
+            $output | ForEach-Object { Write-Host $_ }
+            $log = $output -join "`n"
+            if ($code -eq 0 -or $log -notmatch 'forced-diagnostic-check' -or $log -notmatch 'cmd_started=' -or $log -notmatch '파일 목록:' -or $log -notmatch 'stdout:' -or $log -notmatch 'stderr:' -or $log -notmatch '경과:') {
+              throw '강제 실패의 진단 출력 검증 실패'
+            }
+            Write-Host 'DIAGNOSTICS_SELF_CHECK=PASS'
+          } finally {
+            Copy-Item $backup $worker -Force
+          }
+
+          $failures = 0
+          foreach ($side in @('head', 'main')) {
+            if ($side -eq 'main') {
+              git checkout --detach $main
+              if ($LASTEXITCODE -ne 0) { throw 'main 체크아웃 실패' }
+              git apply --check $patch
+              if ($LASTEXITCODE -ne 0) { throw 'main에 같은 진단 패치를 적용할 수 없습니다' }
+              git apply $patch
+              if ($LASTEXITCODE -ne 0) { throw 'main 진단 패치 적용 실패' }
+            }
+            & cargo test -p kaleidoscope-core --no-run
+            if ($LASTEXITCODE -ne 0) { throw "$side 시험 빌드 실패" }
+            $sideFailures = 0
+            for ($i = 1; $i -le 10; $i++) {
+              Write-Host "MEASUREMENT_BEGIN side=$side run=$i"
+              $output = & cargo test -p kaleidoscope-core windows_process_cmd_terminates_descendants_in_unicode_cwd -- --test-threads=2 --nocapture 2>&1
+              $code = $LASTEXITCODE
+              $output | ForEach-Object { Write-Host $_ }
+              $log = $output -join "`n"
+              if ($log -notmatch 'running 1 test' -or $log -notmatch 'test result: (ok|FAILED)\. [01] passed; [01] failed') { throw "$side $i 회차에서 시험 실행을 확인하지 못했습니다" }
+              if ($code -ne 0) { $sideFailures++ }
+              Write-Host "MEASUREMENT_END side=$side run=$i exit=$code"
+            }
+            Write-Host "MEASUREMENT_RESULT side=$side failures=$sideFailures total=10"
+            "- $side`: $sideFailures / 10 실패" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+            $failures += $sideFailures
+          }
+          if ($failures -gt 0) { exit 1 }
