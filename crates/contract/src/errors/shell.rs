@@ -673,12 +673,19 @@ error_catalog! { ENTRIES;
         message: "{item} 작업을 하지 못했습니다. {alternative}. 원인: {reason}",
         fix: "실패한 메뉴 항목에 맞는 단축키를 누르세요"
     }
-    SHELL_MENU_IMAGE_CLIPBOARD_WRITE_FAILED(item, reason) {
+    SHELL_MENU_IMAGE_CONVERT_FAILED(reason) {
+        class: Io,
+        place: "메뉴 이미지 읽기와 변환",
+        cause: "이미지를 읽거나 PNG로 변환하지 못했다",
+        message: "이미지를 복사할 수 있게 바꾸지 못했습니다. 그림이 다 보인 뒤 다시 복사하세요. 원인: {reason}",
+        fix: "그림이 다 보인 뒤 다시 복사하세요"
+    }
+    SHELL_MENU_IMAGE_CLIPBOARD_WRITE_FAILED(reason) {
         class: Io,
         place: "메뉴 이미지 클립보드 쓰기",
-        cause: "이미지를 PNG로 변환하거나 클립보드에 쓰지 못했다",
-        message: "{item} 작업을 하지 못했습니다. 원인: {reason}",
-        fix: "원인을 확인하세요"
+        cause: "브라우저가 이미지 클립보드 쓰기를 거부했다",
+        message: "이미지를 클립보드에 쓰지 못했습니다. 잠시 뒤 다시 복사하세요. 원인: {reason}",
+        fix: "잠시 뒤 다시 복사하세요"
     }
     SHELL_MENU_CLIPBOARD_READ_FAILED(reason) {
         class: Io,

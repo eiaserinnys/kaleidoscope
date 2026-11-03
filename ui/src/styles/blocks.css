@@ -674,6 +674,7 @@
   max-width: 100%;
   min-width: 0;
 }
+.ks-agent-chat-assistant:focus-visible { outline-offset: var(--ks-space-2); border-radius: var(--ks-radius-large); }
 
 .ks-agent-chat-assistant-content .ks-markdown-text > :last-child { margin-block-end: 0; }
 

@@ -142,5 +142,9 @@ it("PNG는 그대로 쓰고 다른 이미지는 캔버스 PNG로 변환하며 �
   expect(await menu.writeMenuImage(image, "이미지 복사")).toBe(true);
   expect(drawImage).toHaveBeenCalled(); expect(written[1]["image/png"]).toBe(output);
   expect(await menu.writeMenuImage(image, "이미지 복사")).toBe(false);
-  expect(onError).toHaveBeenCalledWith(expect.objectContaining({ id: "SHELL_MENU_IMAGE_CLIPBOARD_WRITE_FAILED", message: expect.stringContaining("원인: 읽기 실패") }));
+  expect(onError).toHaveBeenCalledWith(expect.objectContaining({ id: "SHELL_MENU_IMAGE_CONVERT_FAILED", message: "이미지를 복사할 수 있게 바꾸지 못했습니다. 그림이 다 보인 뒤 다시 복사하세요. 원인: 읽기 실패" }));
+  fetcher.mockResolvedValueOnce({ blob: async () => png });
+  vi.mocked(navigator.clipboard.write).mockRejectedValueOnce(new Error("권한 거부"));
+  expect(await menu.writeMenuImage(image, "이미지 복사")).toBe(false);
+  expect(onError).toHaveBeenCalledWith(expect.objectContaining({ id: "SHELL_MENU_IMAGE_CLIPBOARD_WRITE_FAILED", message: "이미지를 클립보드에 쓰지 못했습니다. 잠시 뒤 다시 복사하세요. 원인: 권한 거부" }));
 });
