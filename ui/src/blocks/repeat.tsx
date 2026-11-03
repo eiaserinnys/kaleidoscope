@@ -96,14 +96,15 @@ function RepeatReady({ block, context, pointer, entries, parent, follow }: {
       if (!element.clientWidth) return;
       if (typeof block.grid?.columns === "number") { setColumns(block.grid.columns); return; }
       const style = getComputedStyle(element);
-      const pane = parseFloat(style.getPropertyValue("--ks-pane-min-size"));
+      const itemWidth = block.grid?.item_width ?? "medium";
+      const pane = parseFloat(style.getPropertyValue(`--ks-repeat-grid-item-width-${itemWidth}`));
       const gap = parseFloat(style.getPropertyValue("--ks-space-3"));
       if (!Number.isFinite(pane) || !Number.isFinite(gap) || pane <= 0) return;
-      const width = element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      setColumns(Math.max(1, Math.floor((width + gap) / (pane + gap))));
+      const gridWidth = element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      setColumns(Math.max(1, Math.floor((gridWidth + gap) / (pane + gap))));
     };
     resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => observer.disconnect();
-  }, [layout, block.grid?.columns]);
+  }, [layout, block.grid?.columns, block.grid?.item_width]);
   const rowSize = layout === "grid" ? columns : 1;
   const itemKey = useCallback((index: number) => entries[index].key, [entries]);
   const { virtual } = useVirtualRows(Math.ceil(entries.length / rowSize), DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, horizontal, layout === "grid" ? undefined : itemKey, viewport);

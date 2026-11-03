@@ -933,6 +933,50 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("자동 격자 칸 폭을 바꿔도 같은 창의 다른 블록은 다시 그리지 않는다", async () => {
+    mockVirtualLayout();
+    let width = 327.5;
+    const observers: { callback: ResizeObserverCallback; targets: Set<Element> }[] = [];
+    vi.stubGlobal("ResizeObserver", class {
+      entry: { callback: ResizeObserverCallback; targets: Set<Element> };
+      constructor(callback: ResizeObserverCallback) { this.entry = { callback, targets: new Set() }; observers.push(this.entry); }
+      observe(target: Element) { this.entry.targets.add(target); }
+      disconnect() { this.entry.targets.clear(); }
+      unobserve(target: Element) { this.entry.targets.delete(target); }
+    });
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => width);
+    const rows = [{ id: "one" }, { id: "two" }];
+    const repeat: AppDefinition = {
+      id: "repeat-grid-render-isolation", name: "격자 렌더 격리", requires: { blocks: 19, modules: {} }, permissions: [],
+      state: { rows }, ui: { type: "stack", direction: "column", children: [
+        { type: "repeat", key: "id", items: { state: "rows" }, layout: "grid", grid: { columns: "auto", item_width: "small" },
+          template: { type: "text", value: { item: "id" } } },
+        { type: "text", value: "고정 블록" },
+      ] },
+    };
+    const { store } = await setup([repeat], { rows });
+    const grid = document.querySelector<HTMLElement>('[data-window-id="window-a"] .ks-repeat')!;
+    grid.style.setProperty("--ks-repeat-grid-item-width-small", "128px");
+    grid.style.setProperty("--ks-space-3", "12px");
+    grid.style.padding = "0px";
+    const resize = async (next: number) => {
+      width = next;
+      await act(async () => {
+        observers.filter(({ targets }) => targets.has(grid)).forEach(({ callback }) => callback([], {} as ResizeObserver));
+      });
+    };
+    await resize(327.5);
+    expect(grid.querySelector<HTMLElement>(".ks-repeat-content")?.style.gridTemplateColumns).toBe("repeat(2, minmax(0, 1fr))");
+    calls.length = 0;
+    await resize(900);
+    await waitFor(() => expect(grid.querySelector<HTMLElement>(".ks-repeat-content")?.style.gridTemplateColumns).toBe("repeat(6, minmax(0, 1fr))"));
+    expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    expect(screen.getByText("고정 블록")).toBeTruthy();
+    store.dispose();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it("반복 캔버스 한 행을 다시 마운트해도 다른 행은 다시 그리지 않는다", async () => {
     const rows = Array.from({ length: 10 }, (_, index) => ({ id: String(index), surface: `tile-${index}` }));
     const repeat: AppDefinition = { id: "canvas-isolation", name: "표면 격리", requires: { blocks: 14, modules: {} }, permissions: [],

@@ -881,11 +881,23 @@ pub enum RepeatColumns {
     Auto(RepeatAuto),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum RepeatGridItemWidth {
+    Small,
+    Medium,
+    Large,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct RepeatGrid {
     pub columns: RepeatColumns,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub item_width: Option<RepeatGridItemWidth>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]

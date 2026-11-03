@@ -25,6 +25,9 @@
   --ks-icon-button-size: 28px;
   --ks-split-handle-size: 16px;
   --ks-pane-min-size: 160px;
+  --ks-repeat-grid-item-width-small: calc(var(--ks-space-6) * 4);
+  --ks-repeat-grid-item-width-medium: var(--ks-pane-min-size);
+  --ks-repeat-grid-item-width-large: calc(var(--ks-pane-min-size) * 1.5);
   --ks-feed-column-min: 18em;
   --ks-line-width: 1px;
   --ks-focus-width: 2px;

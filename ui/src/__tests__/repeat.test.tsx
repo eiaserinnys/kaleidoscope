@@ -31,6 +31,63 @@ it.each(["column", "row"] as const)("가상 %s에서 앞 항목을 지워도 남
   store.dispose();
 });
 
+it("자동 격자는 item_width 단계로 열 수를 정하고 창 폭이 바뀌면 다시 계산한다", async () => {
+  let width = 327.5;
+  const observers: { callback: ResizeObserverCallback; targets: Set<Element> }[] = [];
+  vi.stubGlobal("ResizeObserver", class {
+    entry: { callback: ResizeObserverCallback; targets: Set<Element> };
+    constructor(callback: ResizeObserverCallback) { this.entry = { callback, targets: new Set() }; observers.push(this.entry); }
+    observe(target: Element) { this.entry.targets.add(target); }
+    disconnect() { this.entry.targets.clear(); }
+    unobserve(target: Element) { this.entry.targets.delete(target); }
+  });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => width);
+  const rows = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
+  const widths = ["small", "medium", "large"] as const;
+  const definition: AppDefinition = {
+    id: "repeat-grid-widths", name: "격자 칸 폭", requires: { blocks: 19, modules: {} }, permissions: [], state: { rows },
+    ui: { type: "stack", direction: "column", children: widths.map((item_width) => ({
+      type: "repeat" as const, key: "id", items: { state: "rows" }, layout: "grid" as const,
+      grid: { columns: "auto" as const, item_width }, template: { type: "text" as const, value: { item: "id" } },
+    })) },
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = definition.state;
+  const store = createShellStore(createFakeTransport(seed));
+  const view = render(<AppWindowContent store={store} windowId="viewer-window" />);
+  const grids = await waitFor(() => {
+    const found = [...document.querySelectorAll<HTMLElement>(".ks-repeat.is-grid")];
+    expect(found).toHaveLength(3);
+    return found;
+  });
+  grids.forEach((grid) => {
+    grid.style.setProperty("--ks-repeat-grid-item-width-small", "128px");
+    grid.style.setProperty("--ks-repeat-grid-item-width-medium", "160px");
+    grid.style.setProperty("--ks-repeat-grid-item-width-large", "240px");
+    grid.style.setProperty("--ks-space-3", "12px");
+    grid.style.padding = "0px";
+  });
+  const resize = async (next: number) => {
+    width = next;
+    await act(async () => {
+      observers.filter(({ targets }) => [...targets].some((target) => grids.includes(target as HTMLElement)))
+        .forEach(({ callback }) => callback([], {} as ResizeObserver));
+    });
+  };
+  const columns = (grid: HTMLElement) => grid.querySelector<HTMLElement>(".ks-repeat-content")?.style.gridTemplateColumns;
+  await resize(327.5);
+  expect(grids.map(columns)).toEqual(Array(3).fill("repeat(2, minmax(0, 1fr))").map((value, index) => index === 0 ? value : "repeat(1, minmax(0, 1fr))"));
+  await resize(900);
+  expect(grids.map(columns)).toEqual([
+    "repeat(6, minmax(0, 1fr))",
+    "repeat(5, minmax(0, 1fr))",
+    "repeat(3, minmax(0, 1fr))",
+  ]);
+  view.unmount();
+  store.dispose();
+  vi.unstubAllGlobals();
+});
+
 it("item을 포함한 여러 필드의 리터럴은 그대로 표시한다", async () => {
   const definition: AppDefinition = { id: "literal-item", name: "리터럴", requires: { blocks: 14, modules: {} },
     permissions: [], state: {}, ui: { type: "text", value: { item: "원래 값", label: "그대로" } } };

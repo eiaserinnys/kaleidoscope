@@ -1047,7 +1047,9 @@ export type RepeatAuto = "auto";
 
 export type RepeatColumns = number | RepeatAuto;
 
-export type RepeatGrid = { columns: RepeatColumns, };
+export type RepeatGrid = { columns: RepeatColumns, item_width?: RepeatGridItemWidth, };
+
+export type RepeatGridItemWidth = "small" | "medium" | "large";
 
 export type RepeatLayout = "row" | "column" | "grid";
 
