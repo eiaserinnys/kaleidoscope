@@ -270,7 +270,8 @@ pub const CONTRACT_VERSION: u32 = 28;
 /// - 16판: 탭과 입력 블록 라벨, `dialog.close_label`, `dialog.cancel_label`, `tour.labels`의 바인딩.
 ///   평문 문자열은 이전 판과 같은 wire 모양이다.
 /// - 17판: 클라이언트 process 실행 권한.
-/// - 18판: 클라이언트 채널과 대화 블록의 `client` 및 `footer`, 도구 중계, 지침과 같이 보기 준비.
+/// - 18판: 클라이언트 채널과 대화 블록의 `client` 및 `footer`, 도구 중계, 지침과 같이 보기 준비, stack 가운데 배치,
+///   notice, select와 toggle의 비활성 바인딩.
 pub const BLOCK_SET_VERSION: u32 = 18;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
@@ -290,7 +291,7 @@ pub const BLOCK_SET_VERSION: u32 = 18;
 /// - `client` 1판: 창별 격리 프레임의 로직과 로컬 출력.
 /// - `client` 2판: HTTP 권한, 기기 저장소와 기본 런타임 기능.
 /// - `client` 3판: 로컬 process 실행 권한.
-/// - `client` 4판: 채팅 채널과 앱 작성 지침·같이 보기 준비 기능.
+/// - `client` 4판: 채팅 채널과 앱 작성 지침·같이 보기 준비 기능, 앱 정의에서 선언한 폴더 권한의 선택과 grant 변경 알림.
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("files", 3),
     ("agent", 3),
@@ -1573,6 +1574,10 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         wrap: Option<bool>,
+        /// (18판) 창 가운데 세로 기둥에 자식을 놓는다. 폭과 넘침 처리는 쉘이 정한다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        place: Option<StackPlace>,
         children: Vec<Block>,
     },
     /// (4판) 탭. 고른 탭의 자식만 그린다. `selected`를 주면 고른 탭의 순서(0부터)를 창 상태에서 읽고 바꿀 때
@@ -1785,12 +1790,32 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         placeholder: Option<Binding>,
+        /// (18판) 참이면 이 고르기를 사용할 수 없다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        disabled: Option<Binding>,
     },
     /// (4판) 켜고 끄기. 바꾸면 `on_change`가 `$event`(참이나 거짓)로 돈다.
     Toggle {
         value: Binding,
         on_change: Actions,
         label: Binding,
+        /// (18판) 참이면 이 켜고 끄기를 사용할 수 없다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        disabled: Option<Binding>,
+    },
+    /// (18판) 일반 상태, 오류, 로딩 안내와 선택 동작을 보여준다.
+    Notice {
+        message: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        error_id: Option<Binding>,
+        #[serde(default)]
+        #[ts(optional, as = "Option<NoticeKind>")]
+        kind: NoticeKind,
+        #[serde(default)]
+        actions: Vec<NoticeAction>,
     },
     /// (4판) 단추. 누르면 `on_click`이 돈다(`$event`는 null). 도는 동안 단추는 쉬고, 실패하면 창 아래에 오류
     /// 한 줄이 보인다. `confirm`이 있으면 확인 대화상자에서 확인했을 때만 돈다. `icon_only`면 아이콘만 보이고
@@ -2225,6 +2250,8 @@ enum RawBlock {
         fill: Option<u32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         wrap: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        place: Option<StackPlace>,
         children: Vec<Block>,
     },
     /// (4판) 탭. 고른 탭의 자식만 그린다. `selected`를 주면 고른 탭의 순서(0부터)를 창 상태에서 읽고 바꿀 때
@@ -2405,12 +2432,25 @@ enum RawBlock {
         style: SelectStyle,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         placeholder: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        disabled: Option<Binding>,
     },
     /// (4판) 켜고 끄기. 바꾸면 `on_change`가 `$event`(참이나 거짓)로 돈다.
     Toggle {
         value: Binding,
         on_change: Actions,
         label: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        disabled: Option<Binding>,
+    },
+    Notice {
+        message: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error_id: Option<Binding>,
+        #[serde(default)]
+        kind: NoticeKind,
+        #[serde(default)]
+        actions: Vec<NoticeAction>,
     },
     /// (4판) 단추. 누르면 `on_click`이 돈다(`$event`는 null). 도는 동안 단추는 쉬고, 실패하면 창 아래에 오류
     /// 한 줄이 보인다. `confirm`이 있으면 확인 대화상자에서 확인했을 때만 돈다. `icon_only`면 아이콘만 보이고
@@ -2820,12 +2860,14 @@ impl From<RawBlock> for Block {
                 gap,
                 fill,
                 wrap,
+                place,
                 children,
             } => Block::Stack {
                 direction,
                 gap,
                 fill,
                 wrap,
+                place,
                 children,
             },
             RawBlock::Tabs {
@@ -2985,6 +3027,7 @@ impl From<RawBlock> for Block {
                 label,
                 style,
                 placeholder,
+                disabled,
             } => Block::Select {
                 value,
                 on_change,
@@ -2992,15 +3035,24 @@ impl From<RawBlock> for Block {
                 label,
                 style,
                 placeholder,
+                disabled,
             },
             RawBlock::Toggle {
                 value,
                 on_change,
                 label,
+                disabled,
             } => Block::Toggle {
                 value,
                 on_change,
                 label,
+                disabled,
+            },
+            RawBlock::Notice { message, error_id, kind, actions } => Block::Notice {
+                message,
+                error_id,
+                kind,
+                actions,
             },
             RawBlock::Button {
                 pressed,
@@ -3185,6 +3237,7 @@ impl Block {
     /// 이 블록이 처음 생긴 블록 세트 판. 정의의 `requires.blocks`는 쓴 블록의 이 값 이상이어야 한다.
     pub fn introduced_in(&self) -> u32 {
         match self {
+            Block::Notice { .. } => 18,
             Block::Repeat { .. }
             | Block::When { .. }
             | Block::Dialog { .. }
@@ -3296,6 +3349,7 @@ impl Block {
             Block::Input { .. } => "input",
             Block::Select { .. } => "select",
             Block::Toggle { .. } => "toggle",
+            Block::Notice { .. } => "notice",
             Block::Button { .. } => "button",
             Block::Code { .. } => "code",
             Block::Image { .. } => "image",
@@ -3339,6 +3393,31 @@ pub enum Gap {
     #[default]
     Medium,
     Large,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum StackPlace {
+    Center,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum NoticeKind {
+    #[default]
+    Info,
+    Error,
+    Loading,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct NoticeAction {
+    pub label: Binding,
+    pub on_click: Actions,
 }
 
 /// 탭 하나.

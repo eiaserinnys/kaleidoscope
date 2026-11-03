@@ -44,6 +44,7 @@ export class ClientRuntime {
   private patch: Record<string, JsonValue> = {};
   private patchFrame: number | null = null;
   private previousInputs: Record<string, string> = {};
+  private previousGrants = "";
   private surfaces = new Map<string, { message: Record<string, unknown>; sent: boolean; sentVisible?: boolean }>();
   private files = new BrowserFiles();
   private hostServices: ClientHostServices;
@@ -75,7 +76,7 @@ export class ClientRuntime {
       frame.setAttribute("sandbox", "allow-scripts");
       frame.setAttribute("allow", "autoplay");
       frame.setAttribute("title", "클라이언트 런타임");
-      frame.srcdoc = clientSource(script, { token: this.token, state, stateKeys: this.client.state_keys, storageEntries: this.client.storage_entries, inputs: this.inputs(), capabilities: this.client.capabilities ?? [], actions: this.client.actions, channels: this.client.channels ?? [], processEnabled: this.client.process_permissions !== undefined, errors: sandboxErrors() });
+      frame.srcdoc = clientSource(script, { token: this.token, state, stateKeys: this.client.state_keys, storageEntries: this.client.storage_entries, inputs: this.inputs(), capabilities: this.client.capabilities ?? [], actions: this.client.actions, channels: this.client.channels ?? [], filePermissions: this.filePermissions(), processEnabled: this.client.process_permissions !== undefined, errors: sandboxErrors() });
       frame.addEventListener("load", () => {
         if (this.loaded) { this.ready = false; this.token = ""; this.data.failClient(shellErrors.SHELL_CLIENT_FRAME_NAVIGATED()); void this.stop(); }
         else this.loaded = true;
@@ -113,6 +114,7 @@ export class ClientRuntime {
   }
 
   private syncPingVisibility = () => {
+    this.syncGrants();
     this.scheduleLifecycle();
     const visible = isWindowVisible(this.store.getSnapshot(), this.data.windowId);
     if (visible === this.pingVisible) return;
@@ -198,6 +200,7 @@ export class ClientRuntime {
 
   sync() {
     if (!this.frame) return;
+    this.syncGrants();
     const inputs = this.inputs();
     const signatures = Object.fromEntries(Object.entries(inputs).map(([name, value]) => [name, JSON.stringify(value)]));
     const changed = Object.keys(signatures).filter((name) => signatures[name] !== this.previousInputs[name]);
@@ -206,6 +209,24 @@ export class ClientRuntime {
       this.send({ type: "ks-client-inputs", inputs, changed });
     }
     this.send({ type: "ks-sandbox-state-sync", state: this.state() });
+  }
+
+  private filePermissions() {
+    return (this.definition.permissions ?? [])
+      .filter((permission) => permission.module === "files" && (permission.scope ?? "folder") === "folder")
+      .map((permission) => permission.id);
+  }
+
+  private syncGrants() {
+    if (!this.frame || !this.ready) return;
+    const allowed = new Set(this.filePermissions());
+    const grants = Object.fromEntries((this.store.getSnapshot()?.device.grants ?? [])
+      .filter((grant) => grant.window_id === this.data.windowId && allowed.has(grant.permission))
+      .map((grant) => [grant.permission, grant.root_name]));
+    const signature = JSON.stringify(grants);
+    if (signature === this.previousGrants) return;
+    this.previousGrants = signature;
+    this.send({ type: "ks-client-grants", grants });
   }
 
   action(name: string, event: JsonValue, item?: JsonValue, args?: JsonValue, scope?: ItemScope, modifiers?: EventModifiers) {
@@ -369,6 +390,10 @@ export class ClientRuntime {
     } else if (message.type === "ks-client-command") {
       if (typeof message.name !== "string" || !Object.hasOwn(this.client.commands, message.name)) this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_COMMAND_UNDECLARED({ name: String(message.name) }));
       else void this.store.call({ op: "client.command", window_id: this.data.windowId, name: message.name, event: message.event ?? null }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
+    } else if (message.type === "ks-client-pick-folder") {
+      void this.store.call({ op: "files.pick_folder", window_id: this.data.windowId, permission: message.permission as string })
+        .then((reply) => this.reply(message.requestId, reply.op === "files.pick_folder" ? reply.grant?.root_name ?? null : null))
+        .catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-save-prompt") {
       const task = async () => {
         if (typeof message.suggested_name !== "string" || typeof message.mime !== "string") throw shellErrors.SHELL_CLIENT_SAVE_PROMPT_INPUT_INVALID();

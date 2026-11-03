@@ -526,6 +526,13 @@ error_catalog! { ENTRIES;
         message: "파일 저장 대화상자는 앱 동작 안에서 열어야 합니다. 앱 코드를 고치세요.",
         fix: "앱 코드를 고치세요"
     }
+    SHELL_CLIENT_PICK_FOLDER_ACTION_REQUIRED() {
+        class: InvalidRequest,
+        place: "앱 폴더 선택",
+        cause: "앱 동작 밖에서 폴더 선택 대화상자를 열었다",
+        message: "폴더 선택은 앱 동작 안에서 요청해야 합니다. 앱 코드를 고치세요.",
+        fix: "앱 코드를 고치세요"
+    }
     SHELL_WINDOW_GEOMETRY_TOKEN_INVALID() {
         class: Io,
         place: "새 앱 창 크기 계산",

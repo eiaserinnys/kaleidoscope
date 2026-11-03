@@ -28,6 +28,7 @@ function actionSlots(block: Block, pointer = "/ui"): Set<string> {
     case "text": add("on_click", block.on_click !== undefined); add("on_double_click", block.on_double_click !== undefined); break;
     case "select": case "toggle": case "slider": case "color": add("on_change"); break;
     case "button": add("on_click"); break;
+    case "notice": (block.actions ?? []).forEach((_, index) => add(`actions/${index}/on_click`)); break;
   }
   for (const [childPointer, child] of childBlocks(block, pointer)) {
     for (const slot of actionSlots(child, childPointer)) slots.add(slot);

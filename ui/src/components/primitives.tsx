@@ -103,7 +103,7 @@ export function Notice({
   "data-ks-overlay": overlay,
 }: {
   children: ReactNode;
-  actions?: [ReactNode] | [ReactNode, ReactNode];
+  actions?: ReactNode[];
   details?: ReactNode;
   errorId?: string | null;
   onDismiss?: () => void;
@@ -111,7 +111,7 @@ export function Notice({
   "data-ks-overlay"?: boolean;
 }) {
   return (
-    <div className="ks-notice" data-ks-overlay={overlay || undefined} role={role} onKeyDown={onDismiss ? (event) => {
+    <div className={`ks-notice${actions && actions.length > 1 ? " has-multiple-actions" : ""}`} data-ks-overlay={overlay || undefined} role={role} onKeyDown={onDismiss ? (event) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
@@ -129,7 +129,7 @@ export function ErrorId({ id }: { id: string }) {
   return <code className="ks-error-id">{parts.map((part, index) => <Fragment key={index}>{part}{index < parts.length - 1 ? <>_<wbr /></> : null}</Fragment>)}</code>;
 }
 
-export function ErrorNotice({ error, actions }: { error: CoreError; actions?: [ReactNode] | [ReactNode, ReactNode] }) {
+export function ErrorNotice({ error, actions }: { error: CoreError; actions?: ReactNode[] }) {
   return <Notice role="alert" errorId={error.id} actions={actions}>{error.message}</Notice>;
 }
 

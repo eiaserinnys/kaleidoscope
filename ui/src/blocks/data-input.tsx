@@ -274,6 +274,7 @@ export function SelectBlock({ block, pointer }: Props<"select">) {
   const value = useBinding(`${pointer}/value`, block.value);
   const label = useBinding(`${pointer}/label`, block.label ?? null);
   const placeholder = useBinding(`${pointer}/placeholder`, block.placeholder ?? null);
+  const disabled = useBinding(`${pointer}/disabled`, block.disabled ?? false);
   const hasLabel = block.label != null;
   const labelText = hasLabel ? bindingText(label) : undefined;
   const placeholderText = block.placeholder === undefined ? undefined : bindingText(placeholder);
@@ -285,7 +286,7 @@ export function SelectBlock({ block, pointer }: Props<"select">) {
     if (validGroup(entry)) return [{ name: entry.name, options: entry.options.filter(validOption).map(toChoice) }];
     return validOption(entry) ? [{ name: "", options: [toChoice(entry)] }] : [];
   });
-  const props = { value: value.status === "ready" ? value.value : null, placeholder: placeholderText, segmented: block.style === "segmented", label: labelText, onChange: (next: JsonValue) => { void data.act(`${pointer}/on_change`, next); } };
+  const props = { value: value.status === "ready" ? value.value : null, placeholder: placeholderText, segmented: block.style === "segmented", label: labelText, disabled: disabled.status !== "ready" || Boolean(disabled.value), onChange: (next: JsonValue) => { void data.act(`${pointer}/on_change`, next); } };
   const select = hasGroups ? <Select {...props} groups={groups} /> : <Select {...props} items={entries.filter(validOption)} />;
   return hasLabel ? <label className="ks-field ks-select-field"><span className="ks-field-label" data-ks-share-skip="">{labelText}</span>{select}</label> : select;
 }
@@ -294,7 +295,8 @@ export function ToggleBlock({ block, pointer }: Props<"toggle">) {
   const data = useWindowData();
   const value = useBinding(`${pointer}/value`, block.value);
   const label = useBinding(`${pointer}/label`, block.label);
-  return <Toggle checked={value.status === "ready" && Boolean(value.value)} label={block.label != null ? bindingText(label) : undefined} labelVisible={block.label != null} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} />;
+  const disabled = useBinding(`${pointer}/disabled`, block.disabled ?? false);
+  return <Toggle checked={value.status === "ready" && Boolean(value.value)} disabled={value.status !== "ready" || disabled.status !== "ready" || Boolean(disabled.value)} label={block.label != null ? bindingText(label) : undefined} labelVisible={block.label != null} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} />;
 }
 
 export function ButtonBlock({ block, pointer }: Props<"button">) {
@@ -321,7 +323,7 @@ export function ButtonBlock({ block, pointer }: Props<"button">) {
   const labelText = label.status === "ready" && typeof label.value === "string" ? label.value : "";
   const iconText = icon.status === "ready" && typeof icon.value === "string" ? icon.value : "";
   const pressedValue = block.pressed !== undefined && pressed.status === "ready" ? Boolean(pressed.value) : undefined;
-  const contents = <>{(ICON_NAMES as readonly string[]).includes(iconText) ? <DataIcon name={iconText} /> : null}{!block.icon_only ? labelText : null}</>;
+  const contents = <>{(ICON_NAMES as readonly string[]).includes(iconText) ? <DataIcon name={iconText} /> : null}{!block.icon_only ? <span className="ks-truncate-label">{labelText}</span> : null}</>;
   const host = opener.current?.closest<HTMLElement>(".ks-data-window");
   return <span ref={opener} className={`ks-data-button is-${block.variant ?? "default"}`}>{block.icon_only
     ? <IconButton aria-label={labelText} pressed={pressedValue} disabled={busy || unavailable} onClick={(event) => { const modifiers = eventModifiers(event); if (block.confirm) { confirmModifiers.current = modifiers; setConfirm(true); } else void run(false, modifiers); }}>{contents}</IconButton>

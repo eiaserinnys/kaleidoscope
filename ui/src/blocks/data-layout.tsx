@@ -15,8 +15,9 @@ import { SplitPaneContext } from "./split-pane-context";
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 
 export function StackBlock({ block, context, pointer }: Props<"stack">) {
-  const fill = block.fill ?? block.children.length - 1;
-  return <div className={`ks-data-stack is-${block.direction} gap-${block.gap ?? "none"}${block.wrap ? " is-wrap" : ""}`}>
+  const fill = block.place === "center" ? -1 : block.fill ?? block.children.length - 1;
+  const direction = block.place === "center" ? "column" : block.direction;
+  return <div className={`ks-data-stack is-${direction} gap-${block.gap ?? "none"}${block.wrap && block.place !== "center" ? " is-wrap" : ""}${block.place === "center" ? " is-center" : ""}`}>
     {block.children.map((child, index) => <div className={`ks-data-stack-item${index === fill ? " is-fill" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/children/${index}`)}</div>)}
   </div>;
 }

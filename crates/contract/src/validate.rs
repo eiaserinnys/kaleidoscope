@@ -37,7 +37,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
             .get("opens")
             .and_then(Value::as_object)
             .is_some_and(|opens| opens.contains_key("set_state"));
-    let uses_new_chat_client_fields = uses_block_set_18_fields(&value);
+    let uses_new_chat_client_fields = uses_block_set_18_chat_fields(&value);
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
 
@@ -55,6 +55,11 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     }
     if uses_new_chat_client_fields && definition.requires.blocks < 18 {
         details.push("client.channels와 chat.client, chat.footer는 블록 세트 18판이라 requires.blocks가 18 이상이어야 합니다".into());
+    }
+    if uses_block_set_18_ui_fields(&definition.ui) && definition.requires.blocks < 18 {
+        details.push(
+            "stack.place, select.disabled, toggle.disabled와 notice는 블록 세트 18판이라 requires.blocks가 18 이상이어야 합니다".into(),
+        );
     }
     if !cached && definition.agent.is_none() {
         data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
@@ -133,7 +138,7 @@ fn uses_versioned_block_fields(value: &Value) -> bool {
     }
 }
 
-fn uses_block_set_18_fields(value: &Value) -> bool {
+fn uses_block_set_18_chat_fields(value: &Value) -> bool {
     let client_channels = value
         .get("client")
         .and_then(Value::as_object)
@@ -192,6 +197,19 @@ fn uses_block_set_16_bindings(ui: &Block) -> bool {
         };
     });
     uses_new_binding
+}
+
+fn uses_block_set_18_ui_fields(ui: &Block) -> bool {
+    let mut uses_new_field = false;
+    data::walk_blocks(ui, "/ui", &mut |_, block| {
+        uses_new_field |= match block {
+            Block::Stack { place, .. } => place.is_some(),
+            Block::Select { disabled, .. } | Block::Toggle { disabled, .. } => disabled.is_some(),
+            Block::Notice { .. } => true,
+            _ => false,
+        };
+    });
+    uses_new_field
 }
 
 fn validate(definition: &AppDefinition) -> Vec<String> {
@@ -2521,9 +2539,13 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             value,
             label,
             options,
+            disabled,
             ..
         } => {
             validate_control_binding(value, definition, details, at);
+            if let Some(disabled) = disabled {
+                validate_control_binding(disabled, definition, details, at);
+            }
             let grouped = matches!(options, Binding::Literal(Value::Array(items)) if items.iter().any(|item| item.get("name").is_some() && item.get("options").is_some()));
             if (label.is_some() || grouped) && definition.requires.blocks < 12 {
                 details.push(format!(
@@ -2531,7 +2553,23 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 ));
             }
         }
-        Block::Toggle { value, .. } => validate_control_binding(value, definition, details, at),
+        Block::Toggle { value, disabled, .. } => {
+            validate_control_binding(value, definition, details, at);
+            if let Some(disabled) = disabled {
+                validate_control_binding(disabled, definition, details, at);
+            }
+        }
+        Block::Notice { message, error_id, actions, .. } => {
+            validate_ui_binding(message, definition, details, at);
+            if let Some(error_id) = error_id {
+                validate_ui_binding(error_id, definition, details, at);
+            }
+            for (index, action) in actions.iter().enumerate() {
+                let action_at = format!("{at}/actions/{index}");
+                validate_ui_binding(&action.label, definition, details, &action_at);
+                validate_actions(&action.on_click, definition, details, &format!("{action_at}/on_click"));
+            }
+        }
         Block::Button { label, icon, .. } => {
             if definition.requires.blocks < 12
                 && (!matches!(label, Binding::Literal(_))
