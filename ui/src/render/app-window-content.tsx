@@ -91,7 +91,6 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
     if (!content) return;
     const scope = content.closest<HTMLElement>(".ks-window-frame") ?? content;
     let focused: HTMLElement | null = null;
-    let contentRoot: HTMLElement = content;
     let focusPath: Array<{ ancestor: HTMLElement; controlIndex: number }> = [];
     let inContent = false;
     let restore = false;
@@ -106,9 +105,8 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       if (!(target instanceof HTMLElement) || target.classList.contains("ks-window-content")) return;
       focused = target;
       inContent = content.contains(target);
-      contentRoot = content.querySelector<HTMLElement>(".ks-data-window-body")?.firstElementChild as HTMLElement | null ?? content;
       focusPath = [];
-      for (let ancestor = target.parentElement; ancestor && content.contains(ancestor) && ancestor !== contentRoot; ancestor = ancestor.parentElement) {
+      for (let ancestor = target.parentElement; ancestor && content.contains(ancestor); ancestor = ancestor.parentElement) {
         focusPath.push({ ancestor, controlIndex: visibleControls(ancestor).indexOf(target) });
       }
       restore = false;

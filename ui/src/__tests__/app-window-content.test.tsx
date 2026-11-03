@@ -86,6 +86,21 @@ describe("app definition renderer", () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("option", { name: "Beta" })));
   });
 
+  it("목록이 창 내용의 뿌리여도 삭제 뒤 이웃으로 초점을 옮긴다", async () => {
+    const definition: AppDefinition = {
+      id: "focus-root-list", name: "목록 초점", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { items: [{ key: "a", title: "Alpha" }, { key: "b", title: "Beta" }] },
+      ui: { type: "list", items: { state: "items" } },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    render(<AppWindowContent store={store} windowId="viewer-window" />);
+    const first = await screen.findByRole("option", { name: "Alpha" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "Delete" });
+    await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { items: [{ key: "b", title: "Beta" }] } }); });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("option", { name: "Beta" })));
+  });
+
   async function focusFixture(markup: string) {
     const definition: AppDefinition = {
       id: "focus-fixture", name: "초점 시험", requires: { blocks: 14, modules: {} },
