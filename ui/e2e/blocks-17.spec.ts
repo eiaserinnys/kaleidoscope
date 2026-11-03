@@ -16,6 +16,10 @@ async function capture(page: Page, id: string, mode: string) {
   await page.getByTestId(`app-window-${id}`).screenshot({ path: join(output, `${id}-${mode}.png`) });
 }
 
+async function hideHarnessDevPanel(page: Page) {
+  await page.addStyleTag({ content: ".ks-harness-dev-panel { display: none !important; }" });
+}
+
 async function fitSmallWindow(page: Page) {
   await page.setViewportSize({ width: 400, height: 280 });
   await page.addStyleTag({ content: `
@@ -36,7 +40,7 @@ async function assertScene(page: Page, id: string) {
     await expect(app.getByRole("button", { name: "Gemini CLI" })).toBeVisible();
     await expect(app.getByRole("button", { name: "Antigravity" })).toBeVisible();
   } else if (id === "blocks-17-04") {
-    await expect(app.getByRole("alert")).toContainText("저장소 항목을 읽지 못했습니다");
+    await expect(app.getByRole("alert")).toContainText("저장 항목 agents: 값을 읽기 위한 서버 저장소 작업을 시작하지 못했습니다.");
     await expect(app.getByText("STORAGE_ITEM_READ_DATABASE_FAILED")).toBeVisible();
     await expect(app.getByRole("button", { name: "다시 시도" })).toBeVisible();
   } else if (id === "blocks-17-05") {
@@ -53,6 +57,7 @@ test("블록 17의 네 시작 화면을 넓은 창, 최소 창, 다크 모드에
     await page.emulateMedia({ colorScheme: "light" });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/?preview=${scene.id}`);
+    await hideHarnessDevPanel(page);
     await assertScene(page, scene.id);
     await capture(page, scene.id, "wide");
 
@@ -67,6 +72,7 @@ test("블록 17의 네 시작 화면을 넓은 창, 최소 창, 다크 모드에
     await page.emulateMedia({ colorScheme: "dark" });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/?preview=${scene.id}`);
+    await hideHarnessDevPanel(page);
     await assertScene(page, scene.id);
     await capture(page, scene.id, "wide-dark");
   }
@@ -75,6 +81,7 @@ test("블록 17의 네 시작 화면을 넓은 창, 최소 창, 다크 모드에
 test("공용 선택기와 단추의 긴 글은 잘리고 기존 화면의 짧은 글은 그대로 보인다", async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 720 });
   await page.goto("/?preview=blocks-17-ellipsis");
+  await hideHarnessDevPanel(page);
   const app = page.getByTestId("app-window-blocks-17-ellipsis");
   const choice = app.locator(".ks-select-choice-label");
   const buttonLabel = app.locator(".ks-data-button .ks-truncate-label");
@@ -101,6 +108,7 @@ test("공용 선택기와 단추의 긴 글은 잘리고 기존 화면의 짧은
 
   await page.setViewportSize({ width: 400, height: 280 });
   await page.goto("/?preview=data-controls");
+  await hideHarnessDevPanel(page);
   const existing = page.getByTestId("app-window-data-controls");
   await expect(existing.getByRole("button", { name: "실행" })).toBeVisible();
   await expect(existing.getByRole("button", { name: "삭제" })).toBeVisible();

@@ -24,7 +24,7 @@ const definitions = [
       type: "stack", direction: "column", gap: "medium", place: "center",
       children: [{
         type: "notice", kind: "error",
-        message: "저장소 항목을 읽지 못했습니다. 저장소 상태를 확인한 뒤 다시 시도하세요.",
+        message: "저장 항목 agents: 값을 읽기 위한 서버 저장소 작업을 시작하지 못했습니다. 서버 저장소 상태를 확인하세요.",
         error_id: "STORAGE_ITEM_READ_DATABASE_FAILED",
         actions: [{ label: "다시 시도", on_click: [{ set_state: "retry", value: true }] }],
       }],

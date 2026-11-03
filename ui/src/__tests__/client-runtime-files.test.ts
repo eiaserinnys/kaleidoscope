@@ -24,6 +24,7 @@ it("client 폴더 선택은 코어 권한 확인을 거쳐 이름만 돌려주�
     nativeFiles: true,
     call: vi.fn(async (request: any) => {
       if (request.op === "data.media") return { op: "data.media", media: { mime: "text/javascript", data_base64: "" } };
+      if (request.op === "client.release") return { op: "client.release" };
       if (request.op === "files.pick_folder" && request.permission === "docs") {
         current = { ...current, device: { ...current.device, grants: [declared, pc] } };
         listeners.forEach((listener) => listener());
@@ -40,7 +41,8 @@ it("client 폴더 선택은 코어 권한 확인을 거쳐 이름만 돌려주�
     ],
   } as unknown as AppDefinition;
   const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: ["pick"], commands: {} };
-  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), clientHost: null } as unknown as WindowData, definition, client as never);
+  const setNotice = vi.fn();
+  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setNotice, clientHost: null } as unknown as WindowData, definition, client as never);
   await runtime.start();
   const frame = document.querySelector("iframe")!;
   const post = vi.spyOn(frame.contentWindow!, "postMessage");
@@ -63,5 +65,14 @@ it("client 폴더 선택은 코어 권한 확인을 거쳐 이름만 돌려주�
 
   receive("denied", "undeclared");
   await vi.waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-reply", requestId: "denied", errorId: "FILE_ACCESS_PERMISSION_UNDECLARED", errorCode: "permission_denied" }), "*"));
-  await runtime.stop();
+  const stopping = runtime.stop();
+  const flush = post.mock.calls.map(([message]) => message).find((message) => message.type === "ks-sandbox-flush");
+  expect(flush).toBeTruthy();
+  window.dispatchEvent(new MessageEvent("message", {
+    source: frame.contentWindow,
+    origin: "null",
+    data: { token, type: "ks-sandbox-flushed", requestId: flush.requestId, ok: true },
+  }));
+  await stopping;
+  expect(setNotice).not.toHaveBeenCalled();
 });
