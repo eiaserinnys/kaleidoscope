@@ -331,7 +331,14 @@ fn legacy_model_and_config_controls_restore() {
     worker
         .configure(&control.id, AgentControlValue::String("model-b".into()))
         .unwrap();
-    until(|| method_count(dir.path(), "session/set_model") == 1);
+    until(|| {
+        worker
+            .snapshot()
+            .controls
+            .iter()
+            .any(|c| c.id == control.id && c.value == AgentControlValue::String("model-b".into()))
+    });
+    assert_eq!(method_count(dir.path(), "session/set_model"), 1);
     worker.shutdown();
     let worker = WorkerHandle::start(config(dir.path(), "legacy"), Arc::new(|_| {}));
     wait(&worker, LocalAgentPhase::Ready);

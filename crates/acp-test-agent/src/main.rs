@@ -69,7 +69,9 @@ fn main() {
                 .append(true)
                 .open(path)
                 .unwrap();
-            writeln!(file, "{summary}").unwrap();
+            let mut line = summary.to_string();
+            line.push('\n');
+            file.write_all(line.as_bytes()).unwrap();
         }
         if method.is_empty() && value["id"] == json!("permission-1") {
             update(
