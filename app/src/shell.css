@@ -1,3 +1,15 @@
+:root {
+  --ks-wallpaper: url("./assets/wallpaper.webp");
+  --ks-wallpaper-blur: url("./assets/wallpaper-blur.webp");
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ks-wallpaper: url("./assets/wallpaper-dark.webp");
+    --ks-wallpaper-blur: url("./assets/wallpaper-blur-dark.webp");
+  }
+}
+
 .app-root {
   position: relative;
   display: flex;
@@ -21,7 +33,7 @@
 }
 
 .app-root::before {
-  background: var(--ks-color-background) url("./assets/wallpaper.webp") center / cover no-repeat;
+  background: var(--ks-color-background) var(--ks-wallpaper) center / cover no-repeat;
 }
 
 .app-root::after {
@@ -29,7 +41,6 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  .app-root::before { filter: brightness(.42) saturate(.8); }
   .app-root::after { display: none; }
 }
 
@@ -151,7 +162,7 @@
   border: var(--ks-line-width) solid transparent;
   border-radius: var(--ks-radius-small);
   background: transparent;
-  color: var(--ks-color-muted);
+  color: var(--ks-color-text);
   cursor: pointer;
   font-size: var(--ks-type-body);
   line-height: var(--ks-line-body);
@@ -278,7 +289,7 @@
   border: var(--ks-line-width) solid transparent;
   border-radius: var(--ks-radius-small);
   background: transparent;
-  color: var(--ks-color-muted);
+  color: var(--ks-color-text);
   cursor: pointer;
   font-family: var(--ks-font-family);
   font-size: var(--ks-type-body);
@@ -304,7 +315,7 @@
 }
 
 .ks-taskbar-item[data-state="minimized"] {
-  color: var(--ks-color-muted);
+  color: var(--ks-color-text);
 }
 
 .ks-taskbar-item-label {
@@ -349,9 +360,14 @@
   overflow: hidden;
   border: var(--ks-line-width) solid var(--ks-color-glass-edge);
   border-radius: var(--ks-radius-window);
-  background: var(--ks-material-window);
+  background-image:
+    linear-gradient(var(--ks-material-window), var(--ks-material-window)),
+    var(--ks-wallpaper-blur);
+  background-attachment: scroll, fixed;
+  background-position: center, center;
+  background-repeat: repeat, no-repeat;
+  background-size: auto, cover;
   box-shadow: var(--ks-shadow-window);
-  backdrop-filter: blur(var(--ks-blur-window)) saturate(1.05);
 }
 
 .ks-window-frame-active { border-color: var(--ks-color-window-active-edge); }

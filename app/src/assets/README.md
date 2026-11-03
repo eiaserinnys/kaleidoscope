@@ -1,1 +1,1 @@
-Source: `Kaleidoscope-Optical-Studio.zip` supplied by the director; `wallpaper.png` converted to WebP at quality 82.
+Source: `Kaleidoscope-Optical-Studio.zip` supplied by the director; `wallpaper.png` converted to the light `wallpaper.webp`, dark `wallpaper-dark.webp`, and half-resolution blurred `wallpaper-blur.webp` / `wallpaper-blur-dark.webp` assets by `make_wallpapers.py` at WebP quality 82.

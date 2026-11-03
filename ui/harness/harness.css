@@ -1,9 +1,5 @@
 body {
   background-color: var(--ks-color-background);
-  background-image: url("../../app/src/assets/wallpaper.webp");
-  background-position: center;
-  background-size: cover;
-  background-attachment: fixed;
   padding: var(--ks-space-4);
 }
 
@@ -52,9 +48,8 @@ body {
   overflow: hidden;
   border: var(--ks-line-width) solid var(--ks-color-glass-edge);
   border-radius: var(--ks-radius-window);
-  background: var(--ks-material-window);
+  background: var(--ks-material-window-body);
   box-shadow: var(--ks-shadow-window);
-  backdrop-filter: blur(var(--ks-blur-window)) saturate(1.05);
 }
 
 .ks-harness-window.is-hidden { display: none; }
