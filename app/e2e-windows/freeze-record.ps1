@@ -64,8 +64,9 @@ public class FreezeRecorder {
    return text;
   } catch(Exception) { return null; }
  }
- // 창 테두리 재래스터 안티앨리어싱의 실측 최대 채널 차이는 4/255다.
+ // 둥근 모서리 재래스터 잔차는 실측 2픽셀·12/255, 시계 숫자 하나는 30픽셀이다.
  const int ProtectedThreshold=8;
+ const int ProtectedNoisePixels=16;
  public static int[] ProtectedDiff(byte[] a,byte[] b,string json) {
   int width=GetSystemMetrics(0),height=GetSystemMetrics(1);
   var work=GetWorkArea();
@@ -86,6 +87,7 @@ public class FreezeRecorder {
    }
    maxDelta=Math.Max(maxDelta,delta);
   }
+  if(n<=ProtectedNoisePixels) { n=0; minX=minY=maxX=maxY=-1; }
   return new[]{n,raw,maxDelta,minX,minY,maxX,maxY};
  }
  public static void HideConsole() { ShowWindow(GetConsoleWindow(),0); }
@@ -126,7 +128,15 @@ if ($SelfTest) {
     $changed[$offset + 12] = 255
     $testRegion = ('{{"client_x":{0},"client_y":{1},"client_width":4,"client_height":1,"exclude_x":{2},"exclude_y":{1},"exclude_width":1,"exclude_height":1}}' -f $x, $y, ($x + 3))
     $measured = [FreezeRecorder]::ProtectedDiff($reference, $changed, $testRegion)
-    if ($measured[0] -ne 1 -or $measured[1] -ne 3 -or $measured[2] -ne 9 -or $measured[3] -ne ($x + 2) -or $measured[4] -ne $y -or $measured[5] -ne ($x + 2) -or $measured[6] -ne $y) { throw "보호 영역 차이 판정 실패: $measured" }
+    if ($measured[0] -ne 0 -or $measured[1] -ne 3 -or $measured[2] -ne 9 -or $measured[3] -ne -1 -or $measured[4] -ne -1 -or $measured[5] -ne -1 -or $measured[6] -ne -1) { throw "보호 영역 차이 판정 실패: $measured" }
+    $noise = [byte[]]::new($reference.Length)
+    for ($i = 0; $i -lt 16; $i++) { $noise[$offset + $i * 4] = 9 }
+    $noiseRegion = ('{{"client_x":{0},"client_y":{1},"client_width":17,"client_height":1,"exclude_x":-1,"exclude_y":-1,"exclude_width":0,"exclude_height":0}}' -f $x, $y)
+    $measured16 = [FreezeRecorder]::ProtectedDiff($reference, $noise, $noiseRegion)
+    if ($measured16[0] -ne 0 -or $measured16[1] -ne 16 -or $measured16[2] -ne 9 -or $measured16[3] -ne -1 -or $measured16[4] -ne -1 -or $measured16[5] -ne -1 -or $measured16[6] -ne -1) { throw "16픽셀 잔차 판정 실패: $measured16" }
+    $noise[$offset + 16 * 4] = 9
+    $measured17 = [FreezeRecorder]::ProtectedDiff($reference, $noise, $noiseRegion)
+    if ($measured17[0] -ne 17 -or $measured17[1] -ne 17 -or $measured17[2] -ne 9 -or $measured17[3] -ne $x -or $measured17[4] -ne $y -or $measured17[5] -ne ($x + 16) -or $measured17[6] -ne $y) { throw "17픽셀 변화 판정 실패: $measured17" }
     if ($work[3] -lt $height) {
       $outside = [byte[]]::new($reference.Length)
       $outside[(($height - 1) * $width + $x) * 4] = 255
