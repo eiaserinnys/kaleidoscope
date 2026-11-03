@@ -1,4 +1,4 @@
-use super::{FakeHost, active_ids, import, open_core, open_window};
+use super::{active_ids, import, open_core, open_window, FakeHost};
 use crate::Core;
 use crate::{connections, registry_events};
 use kaleidoscope_contract::{
@@ -113,7 +113,7 @@ fn missing_connection_after_snapshot_keeps_the_registered_error() {
     );
     assert_eq!(
         error.message,
-        "연결 provider 설정을 찾지 못했습니다. 연결을 설정한 뒤 다시 시도하세요."
+        "연결 provider 설정을 찾지 못했습니다. 에이전트에게 이 오류 코드를 전하세요."
     );
 
     let login_error = connections::login(&core.inner, &window, "api").unwrap_err();
@@ -123,7 +123,7 @@ fn missing_connection_after_snapshot_keeps_the_registered_error() {
     );
     assert_eq!(
         login_error.message,
-        "로그인할 연결 설정을 찾지 못했습니다. 연결을 설정한 뒤 다시 시도하세요."
+        "연결 provider 설정을 찾지 못했습니다. 에이전트에게 이 오류 코드를 전하세요."
     );
 
     let restore_error =
@@ -137,7 +137,7 @@ fn missing_connection_after_snapshot_keeps_the_registered_error() {
     );
     assert_eq!(
         restore_error.message,
-        "대화 제공자 연결 provider: 사용할 수 없습니다. 앱의 연결 설정을 확인하세요."
+        "대화 제공자 연결 provider: 사용할 수 없습니다. 에이전트에게 이 오류 코드를 전하세요."
     );
     assert!(started.elapsed() < Duration::from_secs(1));
 }
