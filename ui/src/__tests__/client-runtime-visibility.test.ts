@@ -102,23 +102,58 @@ describe("client runtime visibility ping", () => {
     vi.useFakeTimers();
     let now = 10_000;
     vi.spyOn(Date, "now").mockImplementation(() => now);
+    vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-000000000000");
     const store = {
       getSnapshot: () => snapshot(true), subscribe: () => () => undefined,
       subscribeEvents: () => () => undefined,
       call: vi.fn(async () => ({ op: "data.media", media: { mime: "text/javascript", data_base64: "Y29uc29sZS5sb2coMSk=" } })),
       nativeFiles: false,
     } as unknown as ShellStore;
-    const failClient = vi.fn();
-    const data = { windowId: "window-1", failClient } as unknown as WindowData;
+    const failClient = vi.fn(), setStatus = vi.fn();
+    const data = { windowId: "window-1", failClient, setStatus } as unknown as WindowData;
     const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: [], commands: {} };
     const runtime = new ClientRuntime(store, data, { assets: [] } as unknown as AppDefinition, client as never);
     await runtime.start();
+    const frame = document.querySelector("iframe")!;
 
     for (let tick = 0; tick < 3; tick++) {
-      now += CLIENT_PING_TIMEOUT_SECS * 500 + 20;
+      now += 2000;
+      window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token: "wrong", type: "ks-client-notice", message: "진행" } }));
+      now += 520;
       await vi.advanceTimersByTimeAsync(CLIENT_PING_TIMEOUT_SECS * 500);
     }
+    expect(setStatus).not.toHaveBeenCalled();
     expect(failClient).toHaveBeenCalledWith(shellErrors.SHELL_CLIENT_UNRESPONSIVE());
+    await runtime.stop();
+  });
+
+  it("pong이 늦어도 인증된 프레임 메시지가 도착하면 살아 있는 것으로 본다", async () => {
+    vi.useFakeTimers();
+    let now = 10_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const token = "00000000-0000-4000-8000-000000000000";
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(token);
+    const store = {
+      getSnapshot: () => snapshot(true), subscribe: () => () => undefined,
+      subscribeEvents: () => () => undefined,
+      call: vi.fn(async () => ({ op: "data.media", media: { mime: "text/javascript", data_base64: "Y29uc29sZS5sb2coMSk=" } })),
+      nativeFiles: false,
+    } as unknown as ShellStore;
+    const failClient = vi.fn(), setStatus = vi.fn();
+    const data = { windowId: "window-1", failClient, setStatus } as unknown as WindowData;
+    const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: [], commands: {} };
+    const runtime = new ClientRuntime(store, data, { assets: [] } as unknown as AppDefinition, client as never);
+    await runtime.start();
+    const frame = document.querySelector("iframe")!;
+
+    for (let tick = 0; tick < 3; tick++) {
+      now += 2000;
+      window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token, type: "ks-client-notice", message: "진행" } }));
+      now += 500;
+      await vi.advanceTimersByTimeAsync(CLIENT_PING_TIMEOUT_SECS * 500);
+    }
+    expect(setStatus).toHaveBeenCalledTimes(3);
+    expect(failClient).not.toHaveBeenCalled();
     await runtime.stop();
   });
 });

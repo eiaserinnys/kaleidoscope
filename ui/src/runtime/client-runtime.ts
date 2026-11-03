@@ -287,8 +287,10 @@ export class ClientRuntime {
   private receive = (event: MessageEvent) => {
     if (!this.token || event.source !== this.frame?.contentWindow || event.origin !== "null" || event.data?.token !== this.token) return;
     const message = event.data;
-    if (message.type === "ks-sandbox-ready") { this.ready = true; this.lastPong = Date.now(); this.sendLifecycle("ready"); this.sync(); for (const id of this.surfaces.keys()) this.sendSurface(id); for (const entry of this.client.storage_entries) void this.syncStorage(entry); }
-    else if (message.type === "ks-client-pong") this.lastPong = Date.now();
+    // 인증된 프레임의 모든 메시지는 프레임이 동작 중이라는 증거다.
+    this.lastPong = Date.now();
+    if (message.type === "ks-sandbox-ready") { this.ready = true; this.sendLifecycle("ready"); this.sync(); for (const id of this.surfaces.keys()) this.sendSurface(id); for (const entry of this.client.storage_entries) void this.syncStorage(entry); }
+    else if (message.type === "ks-client-pong") return;
     else if (message.type === "ks-sandbox-storage-applied" && this.client.storage_entries.includes(message.entry) && this.pendingRevisions[message.entry] === message.revision) {
       this.revisions[message.entry] = message.revision; delete this.pendingRevisions[message.entry];
     }
