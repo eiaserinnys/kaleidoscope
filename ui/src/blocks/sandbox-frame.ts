@@ -201,12 +201,12 @@ function bridgeSource(init: SandboxInit): string {
       }
       if (data.type === 'ks-client-inputs') { inputs = data.inputs; inputListeners.forEach(fn => fn(inputs, data.changed)); }
       if (data.type === 'ks-client-grants') {
-        const next = data.grants && typeof data.grants === 'object' ? data.grants : {};
+        const previousGrants = grants;
+        grants = data.grants && typeof data.grants === 'object' ? data.grants : {};
         for (const permission of config.filePermissions || []) {
-          const previous = grants[permission] ?? null, current = next[permission] ?? null;
+          const previous = previousGrants[permission] ?? null, current = grants[permission] ?? null;
           if (previous !== current) for (const listener of grantListeners.get(permission) || []) listener(current);
         }
-        grants = next;
       }
       if (data.type === 'ks-client-action' && config.actions?.includes(data.name)) {
         const handler = handlers.get(data.name), requestId = typeof data.requestId === 'string' ? data.requestId : null;
