@@ -1,0 +1,97 @@
+{
+  "id": "layout-alignment",
+  "name": "화면 설정",
+  "requires": { "blocks": 19, "modules": {} },
+  "permissions": [],
+  "state": {
+    "name": "작업 화면",
+    "description": "이 설명은 좁은 창에서 여러 줄로 이어지며 이름은 첫 줄에 맞춥니다.",
+    "dialog_open": false,
+    "changed": false
+  },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "children": [
+      {
+        "type": "section",
+        "title": "표시 설정",
+        "child": {
+          "type": "tabs",
+          "tabs": [
+        {
+          "label": "일반",
+          "child": {
+            "type": "stack",
+            "direction": "column",
+            "gap": "small",
+            "children": [
+              {
+                "type": "stack",
+                "direction": "row",
+                "align": "baseline",
+                "gap": "small",
+                "wrap": true,
+                "children": [
+                  {
+                    "type": "input",
+                    "value": { "state": "name" },
+                    "on_change": { "set_state": "name" },
+                    "label": "표시 이름",
+                    "columns": 8
+                  },
+                  {
+                    "type": "text",
+                    "value": "목록과 창 제목에 쓰는 이름입니다."
+                  }
+                ]
+              },
+              {
+                "type": "stack",
+                "direction": "row",
+                "align": "center",
+                "gap": "small",
+                "wrap": true,
+                "children": [
+                  { "type": "button", "label": "이전", "on_click": [{ "set_state": "changed", "value": true }] },
+                  { "type": "text", "value": "2 / 5" },
+                  { "type": "button", "label": "다음", "on_click": [{ "set_state": "changed", "value": false }] }
+                ]
+              },
+              {
+                "type": "stack",
+                "direction": "row",
+                "align": "baseline",
+                "gap": "small",
+                "wrap": true,
+                "children": [
+                  { "type": "text", "value": "설명" },
+                  { "type": "text", "value": { "state": "description" } }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "label": "도움말",
+          "child": { "type": "text", "value": "설정은 언제든 바꿀 수 있습니다." }
+        }
+          ]
+        }
+      },
+      {
+        "type": "dialog",
+        "open": { "state": "dialog_open" },
+        "title": "설정 도움말",
+        "child": {
+          "type": "stack",
+          "direction": "column",
+          "children": [
+            { "type": "text", "value": "이 도움말은 표시 설정을 설명합니다." }
+          ]
+        },
+        "on_close": [{ "set_state": "dialog_open", "value": false }]
+      }
+    ]
+  }
+}

@@ -1635,6 +1635,10 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         place: Option<StackPlace>,
+        /// (19판) 교차축 정렬. `place:"center"`이면 가운데 배치가 정렬보다 우선한다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        align: Option<StackAlign>,
         children: Vec<Block>,
     },
     /// (4판) 탭. 고른 탭의 자식만 그린다. `selected`를 주면 고른 탭의 순서(0부터)를 창 상태에서 읽고 바꿀 때
@@ -2340,6 +2344,8 @@ enum RawBlock {
         wrap: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         place: Option<StackPlace>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        align: Option<StackAlign>,
         children: Vec<Block>,
     },
     /// (4판) 탭. 고른 탭의 자식만 그린다. `selected`를 주면 고른 탭의 순서(0부터)를 창 상태에서 읽고 바꿀 때
@@ -2969,6 +2975,7 @@ impl From<RawBlock> for Block {
                 fill,
                 wrap,
                 place,
+                align,
                 children,
             } => Block::Stack {
                 direction,
@@ -2976,6 +2983,7 @@ impl From<RawBlock> for Block {
                 fill,
                 wrap,
                 place,
+                align,
                 children,
             },
             RawBlock::Tabs {
@@ -3515,6 +3523,17 @@ pub enum Gap {
 #[ts(export, export_to = "contract.ts")]
 pub enum StackPlace {
     Center,
+}
+
+/// `stack` 자식의 교차축 정렬. 생략하면 flex의 기존 늘이기 동작을 유지한다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum StackAlign {
+    Start,
+    Center,
+    End,
+    Baseline,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
