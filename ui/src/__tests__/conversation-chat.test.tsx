@@ -111,7 +111,7 @@ describe("대화 제공자 화면", () => {
     await waitFor(() => expect(state.call.mock.calls.filter(([request]) => request.op === "conversation.get")).toHaveLength(2));
   });
   it("연결 스냅샷 누락 오류는 다시 시도하면 대화를 불러온다", async () => {
-    const message = "연결 soulstream 설정을 찾지 못했습니다. 연결을 설정한 뒤 다시 시도하세요.";
+    const message = "연결 provider 설정을 찾지 못했습니다. 연결을 설정한 뒤 다시 시도하세요.";
     let connected = false;
     const state = setup(async (request) => {
       if (request.op !== "conversation.get") throw new Error(request.op);

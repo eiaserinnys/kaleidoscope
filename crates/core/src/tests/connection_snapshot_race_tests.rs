@@ -14,7 +14,7 @@ fn connection_app() -> String {
         "id":"connection-snapshot-race",
         "name":"연결 스냅샷 경합 시험",
         "requires":{"blocks":4,"modules":{"connection":1}},
-        "permissions":[{"module":"connection","id":"api","connection":"soulstream","access":"readwrite","label":"API"}],
+        "permissions":[{"module":"connection","id":"api","connection":"provider","access":"readwrite","label":"API"}],
         "state":{},
         "ui":{"type":"text","value":"ready"}
     })
@@ -33,9 +33,9 @@ fn core_with_connection_window(temp: &TempDir) -> (Core, String) {
     (core, window)
 }
 
-fn soulstream_connection() -> ConnectionInfo {
+fn provider_connection() -> ConnectionInfo {
     ConnectionInfo {
-        name: "soulstream".into(),
+        name: "provider".into(),
         kind: ConnectionKind::Oauth,
         base_url: "https://example.test".into(),
         writable: true,
@@ -80,12 +80,12 @@ fn authorize_waits_for_the_connections_snapshot_after_apps_snapshot() {
         &core.inner,
         0,
         DeviceEvent::ConnectionsSnapshot {
-            connections: vec![soulstream_connection()],
+            connections: vec![provider_connection()],
         }
     ));
     assert_eq!(
         receiver.recv_timeout(Duration::from_secs(1)).unwrap(),
-        Ok("soulstream".into())
+        Ok("provider".into())
     );
     lookup.join().unwrap();
 }
@@ -113,7 +113,7 @@ fn missing_connection_after_snapshot_keeps_the_registered_error() {
     );
     assert_eq!(
         error.message,
-        "연결 soulstream 설정을 찾지 못했습니다. 연결을 설정한 뒤 다시 시도하세요."
+        "연결 provider 설정을 찾지 못했습니다. 연결을 설정한 뒤 다시 시도하세요."
     );
 
     let login_error = connections::login(&core.inner, &window, "api").unwrap_err();
@@ -127,7 +127,7 @@ fn missing_connection_after_snapshot_keeps_the_registered_error() {
     );
 
     let restore_error =
-        match crate::conversation_http::Client::restore(&core.inner, "soulstream", "api") {
+        match crate::conversation_http::Client::restore(&core.inner, "provider", "api") {
             Err(error) => error,
             Ok(_) => panic!("연결 설정이 없는 상태에서 제공자 복원이 성공했습니다"),
         };
@@ -137,7 +137,7 @@ fn missing_connection_after_snapshot_keeps_the_registered_error() {
     );
     assert_eq!(
         restore_error.message,
-        "대화 제공자 연결 soulstream: 사용할 수 없습니다. 앱의 연결 설정을 확인하세요."
+        "대화 제공자 연결 provider: 사용할 수 없습니다. 앱의 연결 설정을 확인하세요."
     );
     assert!(started.elapsed() < Duration::from_secs(1));
 }

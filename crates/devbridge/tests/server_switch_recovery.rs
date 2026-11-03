@@ -86,7 +86,7 @@ fn server_config(dir: &Path, prefix: &str) -> EmbeddedConfig {
     }
 }
 
-fn seed_soulstream_connection(dir: &Path, prefix: &str) {
+fn seed_provider_connection(dir: &Path, prefix: &str) {
     let db = rusqlite::Connection::open(dir.join(format!("{prefix}.db"))).unwrap();
     let account: String = db
         .query_row(
@@ -96,7 +96,7 @@ fn seed_soulstream_connection(dir: &Path, prefix: &str) {
         )
         .unwrap();
     db.execute(
-        "INSERT INTO connections(account_id,name,kind,base_url,writable,paths,headers,description,updated_at) VALUES(?1,'soulstream','oauth','https://example.test',1,'[]','{}','','now')",
+        "INSERT INTO connections(account_id,name,kind,base_url,writable,paths,headers,description,updated_at) VALUES(?1,'provider','oauth','https://example.test',1,'[]','{}','','now')",
         [account],
     )
     .unwrap();
@@ -105,7 +105,7 @@ fn seed_soulstream_connection(dir: &Path, prefix: &str) {
 fn import_pas(core: &Core) -> String {
     let mut definition: Value =
         serde_json::from_str(include_str!("../../../examples/workspace-pas-v2.json")).unwrap();
-    definition["permissions"][0]["connection"] = json!("soulstream");
+    definition["permissions"][0]["connection"] = json!("provider");
     call(
         core,
         json!({"op":"app.import","definition_json":definition.to_string()}),
@@ -168,14 +168,14 @@ fn watch_pas_on_next_connected(
     receiver
 }
 
-fn assert_soulstream_connection_was_found(result: Result<Value, (Option<String>, String)>) {
+fn assert_provider_connection_was_found(result: Result<Value, (Option<String>, String)>) {
     let (id, message) = result.unwrap_err();
     assert_eq!(
         id.as_deref(),
         Some("CONV_HTTP_LOGIN_INFO_MISSING"),
         "{message}"
     );
-    assert!(message.contains("soulstream"), "{message}");
+    assert!(message.contains("provider"), "{message}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -189,8 +189,8 @@ async fn pas_connection_is_available_during_both_server_switch_directions() {
         .unwrap();
     let root = temp.path().to_path_buf();
     tokio::task::spawn_blocking(move || {
-        seed_soulstream_connection(&root, "pas-local");
-        seed_soulstream_connection(&root, "pas-remote");
+        seed_provider_connection(&root, "pas-local");
+        seed_provider_connection(&root, "pas-remote");
 
         let device = root.join("pas-device");
         std::fs::create_dir_all(&device).unwrap();
@@ -236,7 +236,7 @@ async fn pas_connection_is_available_during_both_server_switch_directions() {
             json!({"op":"link.start","server_url":remote.server_url}),
         );
         wait_for(|| connected(&core, ServerMode::Remote));
-        assert_soulstream_connection_was_found(
+        assert_provider_connection_was_found(
             remote_recovery
                 .recv_timeout(Duration::from_secs(5))
                 .unwrap(),
@@ -245,7 +245,7 @@ async fn pas_connection_is_available_during_both_server_switch_directions() {
         let local_recovery = watch_pas_on_next_connected(&core, local_window, ServerMode::Embedded);
         call(&core, json!({"op":"link.use_local"}));
         wait_for(|| connected(&core, ServerMode::Embedded));
-        assert_soulstream_connection_was_found(
+        assert_provider_connection_was_found(
             local_recovery.recv_timeout(Duration::from_secs(5)).unwrap(),
         );
         core.shutdown();
