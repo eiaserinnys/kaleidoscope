@@ -25,7 +25,7 @@ async function captureReview(page: Page, selector: string, name: string) {
 
 async function openReviewPage(browser: Browser, url: string) {
   const context = await browser.newContext({
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: test.info().project.use.baseURL,
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 2,
   });
@@ -135,7 +135,7 @@ test("공용 선택기와 단추의 긴 글은 잘리고 기존 화면의 짧은
   await capture(page, "data-controls", "before-narrow");
 });
 
-test("말줄임 라벨은 본문 줄 높이를 쓰고 버튼·고르기 높이는 유지한다", async ({ browser }) => {
+test("말줄임 라벨은 단추의 줄 높이를 물려받고 버튼·고르기 높이는 유지한다", async ({ browser }) => {
   const { context, page } = await openReviewPage(browser, "/?preview=blocks-18-truncate-glyphs");
   try {
     const app = page.getByTestId("app-window-blocks-18-truncate-glyphs");
@@ -144,13 +144,13 @@ test("말줄임 라벨은 본문 줄 높이를 쓰고 버튼·고르기 높이�
       const control = node.closest("button");
       return {
         lineHeight: getComputedStyle(node).lineHeight,
-        bodyLineHeight: getComputedStyle(document.body).lineHeight,
+        controlLineHeight: control ? getComputedStyle(control).lineHeight : null,
         controlHeight: control ? getComputedStyle(control).height : null,
         tokenControlHeight: getComputedStyle(document.documentElement).getPropertyValue("--ks-control-height").trim(),
       };
     })));
     for (const metric of metrics) {
-      expect(metric.lineHeight).toBe(metric.bodyLineHeight);
+      expect(metric.lineHeight).toBe(metric.controlLineHeight);
       expect(metric.controlHeight).toBe(metric.tokenControlHeight);
     }
     await captureReview(page, '[data-testid="app-window-blocks-18-truncate-glyphs"] .ks-data-button > button', "truncate-button-descenders-actual-2x");
