@@ -981,7 +981,9 @@ button.ks-agent-attachment-chip-preview,
 
 .ks-agent-attachment-image {
   display: block;
+  width: calc(var(--ks-control-height) * 8);
   max-width: 100%;
+  aspect-ratio: 8 / 5;
   border: 0;
   border-radius: var(--ks-radius-small);
   background: transparent;
@@ -990,17 +992,13 @@ button.ks-agent-attachment-chip-preview,
 
 .ks-agent-attachment-image img {
   display: block;
-  max-width: 100%;
-  max-height: calc(var(--ks-control-height) * 6);
+  width: 100%;
+  height: 100%;
   border-radius: var(--ks-radius-small);
   object-fit: contain;
 }
 
 .ks-agent-attachment-placeholder {
-  width: 100%;
-  min-width: calc(var(--ks-control-height) * 4);
-  height: calc(var(--ks-control-height) * 6);
-  border-radius: var(--ks-radius-small);
   background: var(--ks-color-surface);
 }
 

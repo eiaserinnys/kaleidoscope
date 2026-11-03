@@ -418,6 +418,16 @@ describe("공용 대화 부품", () => {
     expect(onSend).toHaveBeenCalledWith();
   });
 
+  it("기록 그림은 불러오는 중과 표시된 뒤 같은 틀을 쓴다", async () => {
+    const attachment = { id: "0", name: "기록.png", mime: "image/png" };
+    let resolveLoad!: (value: { mime: string; data_base64: string }) => void;
+    const load = () => new Promise<{ mime: string; data_base64: string }>((resolve) => { resolveLoad = resolve; });
+    const { container } = render(<HistoryAttachmentView attachment={attachment} cacheKey={["frame-test"]} load={load} open={async () => {}} onPreview={() => {}} onError={() => {}} />);
+    expect(container.querySelector(".ks-agent-attachment-placeholder")?.classList.contains("ks-agent-attachment-image")).toBe(true);
+    await act(async () => resolveLoad({ mime: "image/png", data_base64: "YQ==" }));
+    expect(screen.getByRole("button", { name: "기록.png" }).classList.contains("ks-agent-attachment-image")).toBe(true);
+  });
+
   it("히스토리 첨부 캐시는 운송 범위가 다르면 분리한다", async () => {
     const attachment = { id: "0", name: "사진.png", mime: "image/png" };
     const loadConversation = vi.fn(async () => ({ mime: "image/png", data_base64: "YQ==" }));

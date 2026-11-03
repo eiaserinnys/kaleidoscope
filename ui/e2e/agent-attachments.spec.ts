@@ -42,9 +42,14 @@ for (const { width, theme } of [{ width: 360, theme: "dark" }, { width: 720, the
     await input.fill("");
     await input.press("Enter");
     await expect(chat.locator(".ks-agent-chat-user.is-pending img")).toBeVisible();
+    const pendingImage = chat.locator(".ks-agent-chat-user.is-pending .ks-agent-attachment-image");
+    const pendingSize = await pendingImage.evaluate((element) => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height }));
     if (evidence) await page.screenshot({ path: `${evidence}/${width}-${theme}-pending.png` });
     const historyImage = chat.locator(".ks-agent-chat-user:not(.is-pending)").getByRole("button", { name: "붙여넣은 이미지.png" });
     await expect(historyImage.locator("img")).toHaveAttribute("src", /^data:image\/png;base64,/);
+    const historySize = await historyImage.evaluate((element) => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height }));
+    expect(Math.abs(historySize.width - pendingSize.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(historySize.height - pendingSize.height)).toBeLessThanOrEqual(1);
     await historyImage.click();
     await expect(page.getByRole("dialog")).toBeVisible();
     if (evidence) await page.screenshot({ path: `${evidence}/${width}-${theme}-preview.png` });

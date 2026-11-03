@@ -41,8 +41,8 @@ describe("app definition renderer", () => {
     const definition: AppDefinition = {
       id: "focus-test", name: "초점", requires: { blocks: 14, modules: {} }, permissions: [], state: { visible: true },
       ui: { type: "stack", direction: "column", children: [
-        { type: "when", value: { state: "visible" }, child: { type: "button", label: "선택", on_click: { set_state: "visible", value: false } } },
-        { type: "button", label: "다음", on_click: { set_state: "visible", value: true } },
+        { type: "when", value: { state: "visible" }, child: { type: "button", label: "선택", on_click: [{ set_state: "visible", value: false }] } },
+        { type: "button", label: "다음", on_click: [{ set_state: "visible", value: true }] },
       ] },
     };
     const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
