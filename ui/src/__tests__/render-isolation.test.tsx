@@ -991,6 +991,59 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
   });
 
+  it("가상 반복에서 preview 단추 행이 돌아오면 해당 캔버스 표면을 다시 붙인다", async () => {
+    mockVirtualLayout();
+    const rows = Array.from({ length: 80 }, (_, index) => ({ id: String(index), surface: `preview-${index}`, label: `견본 ${index}` }));
+    const definition: AppDefinition = {
+      id: "virtual-preview-isolation", name: "반복 카드 격리",
+      requires: { blocks: 19, modules: { assets: 1, client: 1 } }, permissions: [], state: { rows }, assets: [{ id: "script", version: 1 }],
+      client: { runtime: "javascript", entry: { id: "script", version: 1 }, inputs: {}, outputs: {}, actions: [], commands: {}, state_keys: [], storage_entries: [] },
+      ui: { type: "repeat", key: "id", items: { state: "rows" }, virtual: true, template: {
+        type: "button", label: { item: "label" }, preview: { type: "canvas", surface: { item: "surface" }, aspect_ratio: 1 }, on_click: [],
+      } },
+    };
+    const snapshot = makeTestSnapshot({ definitions: [definition] });
+    snapshot.shared.windows[0].id = "window-preview";
+    snapshot.shared.windows[0].state = { rows };
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const call = transport.call.bind(transport);
+    vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "data.media"
+      ? { op: "data.media", media: { mime: "text/javascript", data_base64: btoa(""), width: null, height: null } } as CoreReply
+      : call(request));
+    vi.spyOn(ClientRuntime.prototype, "surface");
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 320, height: 180 } as DOMRect);
+    const originalTransfer = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "transferControlToOffscreen");
+    Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", { configurable: true, value: () => ({}) });
+    const store = createShellStore(transport);
+    const view = render(<Shell store={store} />);
+    await store.ready;
+    const row = await waitFor(() => {
+      const found = document.querySelector('[data-testid="app-window-virtual-preview-isolation"] [data-repeat-key="0"] .ks-data-button-card');
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    const scroll = document.querySelector<HTMLElement>('[data-testid="app-window-virtual-preview-isolation"] .ks-repeat')!;
+    const firstCanvas = row.querySelector(".ks-canvas");
+    const messages = () => vi.mocked(ClientRuntime.prototype.surface).mock.calls.map(([message]) => message).filter((message) => message.id === "preview-0");
+    scroll.scrollTop = 1600;
+    fireEvent.scroll(scroll);
+    await waitFor(() => expect(scroll.querySelector('[data-repeat-key="0"]')).toBeNull());
+    await waitFor(() => expect(messages().some((message) => message.phase === "detach")).toBe(true));
+    scroll.scrollTop = 0;
+    fireEvent.scroll(scroll);
+    const nextCanvas = await waitFor(() => {
+      const found = scroll.querySelector<HTMLElement>('[data-repeat-key="0"] .ks-canvas');
+      expect(found).not.toBeNull();
+      return found;
+    });
+    expect(nextCanvas).not.toBe(firstCanvas);
+    expect(messages().filter((message) => message.phase === "attach").length).toBeGreaterThan(1);
+    view.unmount();
+    store.dispose();
+    if (originalTransfer) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", originalTransfer);
+    else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
+  });
+
   it("숨긴 반복 영역은 행 값이 바뀌어도 다시 그리지 않는다", async () => {
     const hiddenRepeat: AppDefinition = {
       id: "hidden-repeat-isolation", name: "숨긴 반복 격리", requires: { blocks: 14, modules: {} }, permissions: [],

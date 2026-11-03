@@ -1,0 +1,50 @@
+{
+  "id": "sample-grid",
+  "name": "표본 격자",
+  "description": "입력 폭과 선택 가능한 그림 카드를 보여주는 예제입니다.",
+  "requires": { "blocks": 19, "modules": {} },
+  "permissions": [],
+  "state": { "count": 4, "ocean_selected": true, "clay_selected": false },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "children": [
+      {
+        "type": "stack",
+        "direction": "row",
+        "wrap": true,
+        "gap": "small",
+        "children": [
+          { "type": "input", "kind": "number", "columns": 4, "label": "표본 수", "value": { "state": "count" }, "on_change": { "set_state": "count" }, "min": 1, "max": 20, "step": 1 },
+          { "type": "text", "value": "수치 입력은 지정한 글자 폭을 유지하고 이 설명은 남은 공간에서 줄바꿈됩니다." }
+        ]
+      },
+      {
+        "type": "stack",
+        "direction": "row",
+        "wrap": true,
+        "gap": "small",
+        "children": [
+          {
+            "type": "button",
+            "variant": "chip",
+            "prefix": "색",
+            "label": "해질녘 얕은 바다를 닮은 부드러운 유리빛 청록색 견본 카드",
+            "preview": { "type": "canvas", "surface": "ocean-swatch", "aspect_ratio": 1.5 },
+            "pressed": { "state": "ocean_selected" },
+            "on_click": [{ "set_state": "ocean_selected", "value": { "expr": "!$state.ocean_selected" } }]
+          },
+          {
+            "type": "button",
+            "variant": "chip",
+            "prefix": "색",
+            "label": "오래 달군 가마에서 나온 따뜻한 흙빛 점토를 닮은 견본 카드",
+            "preview": { "type": "canvas", "surface": "clay-swatch", "aspect_ratio": 1.5 },
+            "pressed": { "state": "clay_selected" },
+            "on_click": [{ "set_state": "clay_selected", "value": { "expr": "!$state.clay_selected" } }]
+          }
+        ]
+      }
+    ]
+  }
+}

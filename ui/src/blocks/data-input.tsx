@@ -1,5 +1,5 @@
 import { eventModifiers } from "../runtime/shortcuts";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import type { Block, SelectOption } from "../contract/contract";
 import { ICON_NAMES } from "../contract/limits";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -16,6 +16,7 @@ import { asArray } from "./data-view-common";
 import { createSerialSend, createThrottledSend } from "../data/throttled-send";
 import { isWindowTop, useWindowVisible } from "../data/window-state";
 import { isClock, useClockPosition } from "../data/clock";
+import { renderBlock } from "../render/render-block";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 const uninitializedFocus = Symbol("uninitialized focus");
@@ -134,7 +135,8 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     onCompositionStart: () => { composing.current = true; }, onCompositionEnd: () => { composing.current = false; },
   };
   const numericValue = block.kind === "number" && draft.trim() !== "" && Number.isFinite(Number(draft)) ? Number(draft) : undefined;
-  const input = <div className={`ks-data-input${block.kind === "search" ? " is-search" : ""}${(block.rows ?? 0) >= 2 ? " has-rows" : ""}`}>
+  const input = <div className={`ks-data-input${block.kind === "search" ? " is-search" : ""}${(block.rows ?? 0) >= 2 ? " has-rows" : ""}${block.columns !== undefined ? ` has-columns${block.kind === "number" && !customSpinbutton ? " is-native-number" : ""}` : ""}`}
+    style={block.columns !== undefined ? { "--ks-input-columns": `${block.columns}ch` } as CSSProperties : undefined}>
     {block.kind === "search" ? <span className="ks-data-input-search"><DataIcon name="search" size="inline" /></span> : null}
     {multiline ? <textarea {...props} ref={textarea} rows={block.rows ?? 1} /> : <input {...props}
       ref={inputElement}
@@ -299,22 +301,26 @@ export function ToggleBlock({ block, pointer }: Props<"toggle">) {
   return <Toggle checked={value.status === "ready" && Boolean(value.value)} disabled={value.status !== "ready" || disabled.status !== "ready" || Boolean(disabled.value)} label={block.label != null ? bindingText(label) : undefined} labelVisible={block.label != null} onChange={(value) => { void data.act(`${pointer}/on_change`, value); }} />;
 }
 
-export function ButtonBlock({ block, pointer }: Props<"button">) {
+export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const data = useWindowData();
   const label = useBinding(`${pointer}/label`, block.label);
   const icon = useBinding(`${pointer}/icon`, block.icon ?? null);
+  const prefix = useBinding(`${pointer}/prefix`, block.prefix ?? null);
   const pressed = useBinding(`${pointer}/pressed`, block.pressed ?? null);
   const disabled = useBinding(`${pointer}/disabled`, block.disabled ?? false);
   const body = useBinding(`${pointer}/confirm/body`, block.confirm?.body ?? null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copySucceeded, setCopySucceeded] = useState(false);
-  const opener = useRef<HTMLSpanElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const setOpener = useCallback((node: HTMLElement | null) => { opener.current = node; }, []);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoreAfterAction = useRef(false);
   const confirmModifiers = useRef<ReturnType<typeof eventModifiers> | undefined>(undefined);
   const close = useCallback(() => setConfirm(false), []);
   const labelText = label.status === "ready" && typeof label.value === "string" ? label.value : "";
+  const prefixText = block.prefix !== undefined ? bindingText(prefix) : "";
+  const accessibleName = prefixText ? `${prefixText}: ${labelText}` : labelText;
   const iconText = icon.status === "ready" && typeof icon.value === "string" ? icon.value : "";
   const pressedValue = block.pressed !== undefined && pressed.status === "ready" ? Boolean(pressed.value) : undefined;
   useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
@@ -334,18 +340,45 @@ export function ButtonBlock({ block, pointer }: Props<"button">) {
   useLayoutEffect(() => {
     if (!busy && !unavailable && restoreAfterAction.current) {
       restoreAfterAction.current = false;
-      opener.current?.querySelector<HTMLButtonElement>(":scope > button")?.focus();
+      opener.current?.querySelector<HTMLButtonElement>(".ks-data-button-card-action, :scope > button")?.focus();
     }
   });
   const hasIcon = (ICON_NAMES as readonly string[]).includes(iconText);
   const copied = copySucceeded && copyTextAction(block.on_click);
-  const contents = <>{hasIcon ? <DataIcon name={copied ? "check" : iconText} /> : null}{!block.icon_only ? <span className="ks-truncate-label">{labelText}</span> : null}</>;
+  const buttonLabel = prefixText
+    ? <><span className="ks-data-button-prefix">{prefixText}</span><span className="ks-data-button-label is-emphasized ks-truncate-label">{labelText}</span></>
+    : <span className="ks-data-button-label ks-truncate-label">{labelText}</span>;
+  const contents = <>{hasIcon ? <DataIcon name={copied ? "check" : iconText} /> : null}{!block.icon_only ? buttonLabel : null}</>;
+  const onClick = (event: MouseEvent<HTMLButtonElement>) => {
+    const modifiers = eventModifiers(event);
+    if (block.confirm) { confirmModifiers.current = modifiers; setConfirm(true); }
+    else void run(false, modifiers);
+  };
   const host = opener.current?.closest<HTMLElement>(".ks-data-window");
-  return <span ref={opener} className={`ks-data-button is-${block.variant ?? "default"}`}>{block.icon_only
-    ? <IconButton aria-label={labelText} pressed={pressedValue} disabled={busy || unavailable} onClick={(event) => { const modifiers = eventModifiers(event); if (block.confirm) { confirmModifiers.current = modifiers; setConfirm(true); } else void run(false, modifiers); }}>{contents}</IconButton>
-    : <Button aria-pressed={pressedValue} variant={block.variant === "primary" ? "emphasis" : "default"} disabled={busy || unavailable} onClick={(event) => { const modifiers = eventModifiers(event); if (block.confirm) { confirmModifiers.current = modifiers; setConfirm(true); } else void run(false, modifiers); }}>{contents}</Button>}
-    <span aria-live="polite" className="ks-accessible-hidden" role="status">{copied ? "복사했습니다" : ""}</span>
-    {confirm && block.confirm && host ? <Dialog host={host} title={block.confirm.title} ok={block.confirm.ok ?? labelText} danger={block.variant === "danger"} onCancel={close} onConfirm={() => void run(true, confirmModifiers.current)} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} /> : null}
+  const status = <span aria-live="polite" className="ks-accessible-hidden" role="status">{copied ? "복사했습니다" : ""}</span>;
+  const dialog = confirm && block.confirm && host
+    ? <Dialog host={host} title={block.confirm.title} ok={block.confirm.ok ?? labelText} danger={block.variant === "danger"} onCancel={close} onConfirm={() => void run(true, confirmModifiers.current)} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} />
+    : null;
+  const className = `ks-data-button is-${block.variant ?? "default"}`;
+  if (block.preview) return <div ref={setOpener} className={`${className} has-preview`}>
+    <div className={`ks-data-button-card${pressedValue ? " is-selected" : ""}${busy || unavailable ? " is-disabled" : ""}`}>
+      <div className="ks-data-button-card-content" aria-hidden="true">
+        <div className="ks-data-button-card-preview">{renderBlock(block.preview, context, `${pointer}/preview`)}</div>
+        <div className="ks-data-button-card-label">
+          {prefixText ? <span className="ks-data-button-prefix">{prefixText}</span> : null}
+          <span className="ks-data-button-label is-emphasized">{labelText}</span>
+        </div>
+      </div>
+      <Button aria-label={accessibleName} className="ks-data-button-card-action" aria-pressed={pressedValue} disabled={busy || unavailable} onClick={onClick}>
+        <span className="ks-accessible-hidden">{accessibleName}</span>
+      </Button>
+    </div>
+    {status}{dialog}
+  </div>;
+  return <span ref={setOpener} className={className}>{block.icon_only
+    ? <IconButton aria-label={accessibleName} pressed={pressedValue} disabled={busy || unavailable} onClick={onClick}>{contents}</IconButton>
+    : <Button aria-label={accessibleName} aria-pressed={pressedValue} variant={block.variant === "primary" ? "emphasis" : "default"} disabled={busy || unavailable} onClick={onClick}>{contents}</Button>}
+    {status}{dialog}
   </span>;
 }
 
