@@ -46,6 +46,18 @@ pub(crate) fn web_place_mark() -> usize {
     UI_PLACES_COMPLETED.lock().unwrap().len()
 }
 
+pub(crate) fn wait_web_live(window_id: &str) -> Result<(), String> {
+    wait_until("web child live", || {
+        Ok(UI_PLACES_COMPLETED
+            .lock()
+            .unwrap()
+            .iter()
+            .rev()
+            .find(|(id, _)| id == window_id)
+            .is_some_and(|(_, visible)| *visible))
+    })
+}
+
 pub(crate) fn wait_web_hidden(window_id: &str, mark: usize) -> Result<(), String> {
     wait_until("web child hidden", || {
         let places = UI_PLACES_COMPLETED.lock().unwrap();
@@ -54,6 +66,15 @@ pub(crate) fn wait_web_hidden(window_id: &str, mark: usize) -> Result<(), String
             .rev()
             .find(|(id, _)| id == window_id)
             .is_some_and(|(_, visible)| !visible))
+    })
+    .map_err(|error| {
+        let places = UI_PLACES_COMPLETED.lock().unwrap();
+        let completed: Vec<_> = places[mark..]
+            .iter()
+            .filter(|(id, _)| id == window_id)
+            .map(|(_, visible)| *visible)
+            .collect();
+        format!("{error}; completed places (visible): {completed:?}")
     })
 }
 
