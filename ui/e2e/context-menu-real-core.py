@@ -13,7 +13,7 @@ result = {"delayed": 0}
 
 def delay_core(route):
     request = route.request
-    if request.method == "POST" and request.post_data_json.get("op") == "window.set_state":
+    if request.method == "POST" and request.post_data_json.get("op") == "data.act":
         response = route.fetch()
         result["delayed"] += 1
         time.sleep(0.4)
