@@ -26,3 +26,15 @@ it("새 viewport 기능을 쓰면 긴 구간 눈금을 줄이고, 기존 6분 �
   expect(rulerStep(360, 1)).toBe(60);
   expect(rulerStep(360, 1, true)).toBe(120);
 });
+
+it("최소 폭과 확대 상태에서도 시간축 라벨 사이에 간격을 둔다", () => {
+  const narrow = rulerStep(28_800, 1, true, 230, 94);
+  expect(narrow).toBeGreaterThan(7_200);
+  expect(narrow * 230 / 28_800).toBeGreaterThanOrEqual(94);
+
+  const zoomed = rulerStep(28_800, 1.6, true, 230, 94);
+  expect(zoomed * 1.6 * 230 / 28_800).toBeGreaterThanOrEqual(94);
+
+  const wide = rulerStep(28_800, 1, true, 900, 94);
+  expect(wide).toBe(7_200);
+});

@@ -60,9 +60,10 @@ it("시간축 구간은 잘리지 않은 접근 이름과 tooltip을 제공한�
 
 it("오른쪽 끝에 있는 눈금만 끝 맞춤한다", () => {
   const view = render(<TimelineBlock block={{ ...block, duration: 14.02 }} pointer="/ui" context={context} />);
-  expect(screen.getByText("00:10.0").className).not.toContain("is-end");
+  expect(view.container.querySelector('.ks-timeline-ruler > span:not(.is-end)')?.textContent).toBe("00:00.0");
+  expect(Array.from(view.container.querySelectorAll<HTMLSpanElement>(".ks-timeline-ruler > span")).find((item) => item.textContent === "00:10.0")?.className).not.toContain("is-end");
   view.rerender(<TimelineBlock block={{ ...block, duration: 10 }} pointer="/ui" context={context} />);
-  expect(screen.getByText("00:10.0").className).toContain("is-end");
+  expect(Array.from(view.container.querySelectorAll<HTMLSpanElement>(".ks-timeline-ruler > span")).find((item) => item.textContent === "00:10.0")?.className).toContain("is-end");
 });
 
 it("확대 단추와 휠은 포인터 아래 시각을 유지하고 축소·맞춤 단추가 동작한다", () => {
