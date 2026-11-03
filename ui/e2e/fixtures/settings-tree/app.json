@@ -14,14 +14,9 @@
     "ultracode": false,
     "agent": "Default",
     "new_session": true,
+    "cli": "Claude Code",
     "test_controls": false,
-    "busy": false,
-    "long_values": false,
-    "sandbox": "Workspace only",
-    "web_search": true,
-    "co_authored_by": true,
-    "output_style": "Explanatory",
-    "thinking_budget": "Automatic"
+    "busy": false
   },
   "assets": [{ "id": "settings-tree-client", "version": 1 }],
   "client": {
@@ -51,154 +46,117 @@
     "ui": {
       "type": "stack",
       "direction": "column",
-      "gap": "medium",
+      "gap": "large",
       "children": [
         {
-          "type": "when",
-          "value": { "client": "busy" },
-          "child": {
-            "type": "notice",
-            "message": "응답이 끝나면 바꿀 수 있습니다",
-            "kind": "info",
-            "actions": [
-              { "label": "멈춤", "on_click": { "client": "stop_response" } }
-            ]
-          }
-        },
-        {
-          "type": "select",
-          "label": "Mode",
-          "value": { "state": "mode" },
-          "disabled": { "client": "busy" },
-          "options": [
-            { "value": "Auto", "label": "Auto" },
-            { "value": "Manual", "label": "Manual" }
-          ],
-          "on_change": { "set_state": "mode" }
-        },
-        {
-          "type": "select",
-          "label": "Model",
-          "value": { "state": "model" },
-          "disabled": { "client": "busy" },
-          "options": [
-            { "value": "Default (recommended)", "label": "Default (recommended)" },
-            { "value": "claude-opus-4-1-2025-long-model-name", "label": "claude-opus-4-1-2025-long-model-name" },
-            { "value": "Sonnet", "label": "Sonnet" },
-            { "value": "Opus", "label": "Opus" }
-          ],
-          "on_change": { "set_state": "model" }
-        },
-        {
-          "type": "select",
-          "label": "Effort",
-          "value": { "state": "effort" },
-          "disabled": { "client": "busy" },
-          "options": [
-            { "value": "Low", "label": "Low" },
-            { "value": "Medium", "label": "Medium" },
-            { "value": "High", "label": "High" }
-          ],
-          "on_change": { "set_state": "effort" }
-        },
-        {
-          "type": "toggle",
-          "label": "Fast mode",
-          "value": { "state": "fast_mode" },
-          "disabled": { "client": "busy" },
-          "on_change": { "set_state": "fast_mode" }
-        },
-        {
-          "type": "toggle",
-          "label": "Ultracode",
-          "value": { "state": "ultracode" },
-          "disabled": { "client": "busy" },
-          "on_change": { "set_state": "ultracode" }
-        },
-        { "type": "text", "value": "바꾸면 새 세션으로 시작합니다", "style": "meta" },
-        {
-          "type": "select",
-          "label": "Agent",
-          "value": { "state": "agent" },
-          "options": [
-            { "value": "Default", "label": "Default" },
-            { "value": "Roselin", "label": "Roselin" }
-          ],
-          "on_change": { "set_state": "agent" }
-        },
-        {
           "type": "stack",
-          "direction": "row",
-          "gap": "medium",
+          "direction": "column",
+          "gap": "small",
           "children": [
-            { "type": "text", "value": "작업 폴더" },
-            { "type": "button", "icon": "folder", "label": { "client": "folder" }, "variant": "ghost", "on_click": { "client": "noop" } }
+            {
+              "type": "when",
+              "value": { "client": "busy" },
+              "child": {
+                "type": "notice",
+                "message": "응답이 끝나면 바꿀 수 있습니다",
+                "kind": "info",
+                "actions": [{ "label": "멈춤", "on_click": { "client": "stop_response" } }]
+              }
+            },
+            {
+              "type": "select",
+              "label": "Mode",
+              "value": { "state": "mode" },
+              "disabled": { "client": "busy" },
+              "options": [{ "value": "Auto", "label": "Auto" }, { "value": "Manual", "label": "Manual" }],
+              "on_change": { "set_state": "mode" }
+            },
+            {
+              "type": "select",
+              "label": "Model",
+              "value": { "state": "model" },
+              "disabled": { "client": "busy" },
+              "options": [
+                { "value": "Default (recommended)", "label": "Default (recommended)" },
+                { "value": "claude-opus-4-1-2025-long-model-name", "label": "claude-opus-4-1-2025-long-model-name" }
+              ],
+              "on_change": { "set_state": "model" }
+            },
+            {
+              "type": "select",
+              "label": "Effort",
+              "value": { "state": "effort" },
+              "disabled": { "client": "busy" },
+              "options": [{ "value": "Low", "label": "Low" }, { "value": "Medium", "label": "Medium" }, { "value": "High", "label": "High" }],
+              "on_change": { "set_state": "effort" }
+            },
+            {
+              "type": "toggle",
+              "label": "Fast mode",
+              "value": { "state": "fast_mode" },
+              "disabled": { "client": "busy" },
+              "on_change": { "set_state": "fast_mode" }
+            },
+            {
+              "type": "toggle",
+              "label": "Ultracode",
+              "value": { "state": "ultracode" },
+              "disabled": { "client": "busy" },
+              "on_change": { "set_state": "ultracode" }
+            },
+            {
+              "type": "select",
+              "label": "Agent",
+              "value": { "state": "agent" },
+              "disabled": { "client": "busy" },
+              "options": [{ "value": "Default", "label": "Default" }, { "value": "Roselin", "label": "Roselin" }],
+              "on_change": { "set_state": "agent" }
+            }
           ]
         },
         {
-          "type": "when",
-          "value": { "state": "long_values" },
-          "child": {
-            "type": "stack",
-            "direction": "column",
-            "gap": "medium",
-            "children": [
-              {
-                "type": "toggle",
-                "label": "Allow web search while background tasks are running",
-                "value": { "state": "web_search" },
-                "on_change": { "set_state": "web_search" }
-              },
-              {
-                "type": "select",
-                "label": "Sandbox write access to network paths outside the workspace",
-                "value": { "state": "sandbox" },
-                "options": [
-                  { "value": "Workspace only", "label": "Workspace only" },
-                  { "value": "Workspace and network paths", "label": "Workspace and network paths" }
-                ],
-                "on_change": { "set_state": "sandbox" }
-              },
-              {
-                "type": "select",
-                "label": "Output style",
-                "value": { "state": "output_style" },
-                "options": [
-                  { "value": "Explanatory", "label": "Explanatory" },
-                  { "value": "Concise", "label": "Concise" }
-                ],
-                "on_change": { "set_state": "output_style" }
-              },
-              {
-                "type": "toggle",
-                "label": "Include co-authored-by trailer",
-                "value": { "state": "co_authored_by" },
-                "on_change": { "set_state": "co_authored_by" }
-              },
-              {
-                "type": "select",
-                "label": "Thinking budget",
-                "value": { "state": "thinking_budget" },
-                "options": [
-                  { "value": "Automatic", "label": "Automatic" },
-                  { "value": "High", "label": "High" }
-                ],
-                "on_change": { "set_state": "thinking_budget" }
+          "type": "stack",
+          "direction": "column",
+          "gap": "small",
+          "children": [
+            { "type": "text", "value": "바꾸면 새 세션으로 시작합니다", "style": "meta" },
+            {
+              "type": "select",
+              "label": "에이전트",
+              "value": { "state": "cli" },
+              "disabled": { "client": "busy" },
+              "options": [{ "value": "Claude Code", "label": "Claude Code" }, { "value": "Codex", "label": "Codex" }],
+              "on_change": { "set_state": "cli" }
+            },
+            {
+              "type": "stack",
+              "direction": "row",
+              "gap": "medium",
+              "children": [
+                { "type": "text", "value": "작업 폴더" },
+                {
+                  "type": "button",
+                  "icon": "folder",
+                  "label": { "client": "folder" },
+                  "variant": "default",
+                  "disabled": { "client": "busy" },
+                  "on_click": { "client": "noop" }
+                }
+              ]
+            },
+            {
+              "type": "when",
+              "value": { "state": "test_controls" },
+              "child": {
+                "type": "stack",
+                "direction": "column",
+                "children": [
+                  { "type": "text", "value": { "client": "tick" } },
+                  { "type": "button", "label": "설정 버튼 숨기기", "on_click": { "client": "disable_settings" } }
+                ]
               }
-            ]
-          }
-        },
-        {
-          "type": "when",
-          "value": { "state": "test_controls" },
-          "child": {
-            "type": "stack",
-            "direction": "column",
-            "children": [
-              { "type": "text", "value": { "client": "tick" } },
-              { "type": "button", "label": "설정 버튼 숨기기", "on_click": { "client": "disable_settings" } }
-            ]
-          }
+            }
+          ]
         }
       ]
     }

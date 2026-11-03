@@ -1,4 +1,5 @@
 """실제 코어와 쉘에서 앱 설정 트리, 창 제목, 저장소 자동 폼을 확인하고 캡처한다."""
+import argparse
 import base64
 import functools
 import hashlib
@@ -46,6 +47,14 @@ def counter(locator, selector):
     return max(numbers) if numbers else None
 
 
+def selected_after_doubleclick(page, locator):
+    page.evaluate("getSelection().removeAllRanges()")
+    locator.dblclick()
+    selected = page.evaluate("getSelection().toString()")
+    page.evaluate("getSelection().removeAllRanges()")
+    return selected
+
+
 def set_rect(sb, window_id, width, height):
     result = sb.core({"op": "window.set_rect", "window_id": window_id,
                       "rect": {"x": 20, "y": 20, "width": width, "height": height}})
@@ -54,6 +63,10 @@ def set_rect(sb, window_id, width, height):
 
 
 def main():
+    global OUTPUT
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output", type=Path, default=OUTPUT)
+    OUTPUT = parser.parse_args().output
     OUTPUT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="ks-settings-tree-") as directory:
         sb = sandbox.Sandbox(ROOT, OUTPUT, Path(directory) / "folder")
@@ -108,7 +121,47 @@ def main():
                 app.get_by_role("heading", name="앱 설정").wait_for()
                 assert app.locator(".ks-data-window-body").get_attribute("hidden") is not None
                 page.wait_for_timeout(300)
+                fast_mode_default = app.get_by_role("switch", name="Fast mode", exact=True).get_attribute("aria-checked")
+                assert fast_mode_default == "false", f"시안 기본 상태와 다릅니다: Fast mode={fast_mode_default}"
+                result["assertions"].append({"fixture_fast_mode_default": fast_mode_default})
                 save(page, "14-settings--wide.png")
+                selection_targets = {
+                    "Mode 라벨": app.locator(".ks-settings-custom .ks-field-label").filter(has_text="Mode").first,
+                    "Fast mode 라벨": app.get_by_role("switch", name="Fast mode").locator(":scope > span:last-child"),
+                    "설정 메타": app.locator(".ks-settings-custom .ks-data-text.is-meta").first,
+                    "작업 폴더 라벨": app.locator(".ks-settings-custom .ks-data-stack.is-row > .ks-data-stack-item > .ks-data-text").first,
+                }
+                selection_results = {}
+                for label, target in selection_targets.items():
+                    selected = selected_after_doubleclick(page, target)
+                    user_select = target.evaluate("element => getComputedStyle(element).userSelect")
+                    assert selected == "", f"{label}이 더블클릭으로 선택됩니다: {selected!r}"
+                    assert user_select == "none", f"{label}의 user-select가 {user_select}입니다"
+                    selection_results[label] = {"selected": selected, "user_select": user_select}
+                meta_metrics = app.locator(".ks-settings-custom .ks-data-text.is-meta").first.evaluate(
+                    """element => {
+                      const box = element.getBoundingClientRect();
+                      const item = element.closest('.ks-data-stack-item');
+                      const next = item?.nextElementSibling?.querySelector('.ks-field')?.getBoundingClientRect();
+                      const label = element.closest('.ks-settings-custom')
+                        .querySelector('.ks-data-stack.is-row > .ks-data-stack-item > .ks-data-text').getBoundingClientRect();
+                      return {
+                        padding:getComputedStyle(element).padding,
+                        left:box.left,
+                        labelLeft:label.left,
+                        rowGap:parseFloat(getComputedStyle(item.parentElement).rowGap),
+                        nextGap:next ? next.top - box.bottom : null
+                      };
+                    }"""
+                )
+                assert meta_metrics["padding"] == "0px", meta_metrics
+                assert meta_metrics["left"] == meta_metrics["labelLeft"], meta_metrics
+                assert meta_metrics["nextGap"] == meta_metrics["rowGap"], meta_metrics
+                result["assertions"].append({"settings_labels_are_not_selectable": selection_results,
+                                             "meta_row_has_no_extra_padding": meta_metrics})
+                sb.set_state(window_id, {"fast_mode": False})
+                wait_until(lambda: app.get_by_role("switch", name="Fast mode", exact=True).get_attribute("aria-checked") == "false",
+                           10, "Fast mode 시안 기본 상태를 복원하지 못했습니다")
                 page.emulate_media(color_scheme="dark")
                 page.wait_for_timeout(100)
                 save(page, "14-settings--wide--dark.png")
@@ -166,6 +219,17 @@ def main():
                     assert app.get_by_role("button", name=label, exact=True).is_disabled(), label
                 for label in ["Fast mode", "Ultracode"]:
                     assert app.get_by_role("switch", name=label, exact=True).is_disabled(), label
+                for label in ["Agent", "에이전트"]:
+                    assert app.get_by_role("button", name=label, exact=True).is_disabled(), label
+                folder_button = app.locator(".ks-settings-custom .ks-data-button > .ks-button")
+                assert folder_button.is_disabled(), "작업 폴더 단추"
+                fast_toggle = app.get_by_role("switch", name="Fast mode", exact=True)
+                locked_toggle = fast_toggle.evaluate("""element => ({
+                  opacity:getComputedStyle(element).opacity,
+                  labelOpacity:getComputedStyle(element.querySelector(':scope > span:last-child')).opacity,
+                  trackOpacity:getComputedStyle(element.querySelector('.ks-data-toggle-track')).opacity
+                })""")
+                assert locked_toggle == {"opacity": "1", "labelOpacity": "1", "trackOpacity": "0.56"}, locked_toggle
                 assert app.get_by_role("button", name="멈춤", exact=True).is_enabled()
                 set_rect(sb, window_id, 900, 650)
                 page.emulate_media(color_scheme="light")
@@ -178,7 +242,7 @@ def main():
                 page.emulate_media(color_scheme="dark")
                 page.wait_for_timeout(100)
                 save(page, "15-settings-locked--wide--dark.png")
-                result["assertions"].append("busy state disables Mode, Model, Effort, Fast mode and Ultracode")
+                result["assertions"].append("busy state disables Mode, Model, Effort, Fast mode, Ultracode, Agent, 에이전트 and 작업 폴더")
 
                 app.get_by_role("button", name="멈춤", exact=True).click()
                 wait_until(lambda: not app.get_by_text("응답이 끝나면 바꿀 수 있습니다", exact=True).is_visible(), 10,
@@ -189,26 +253,21 @@ def main():
                     assert app.get_by_role("switch", name=label, exact=True).is_enabled(), label
 
                 model_block = next(
-                    block for block in definition["settings"]["ui"]["children"]
+                    block for block in definition["settings"]["ui"]["children"][0]["children"]
                     if block.get("label") == "Model"
                 )
                 long_model = max((option["value"] for option in model_block["options"]), key=len)
                 long_folder = "kaleidoscope-workspace-with-a-very-long-project-folder-name-for-ellipsis"
-                sb.set_state(window_id, {
-                    "long_values": True,
-                    "model": long_model,
-                    "folder": long_folder,
-                })
+                sb.set_state(window_id, {"model": long_model, "folder": long_folder})
                 wait_until(lambda: long_folder in app.locator(".ks-settings-custom").inner_text(),
                            10, "긴 폴더 이름이 설정 버튼에 반영되지 않았습니다")
-                wait_until(lambda: app.get_by_role("button", name="Sandbox write access to network paths outside the workspace").is_visible(),
-                           10, "긴 라벨의 설정 행이 보이지 않습니다")
                 model_label = app.get_by_role("button", name="Model", exact=True).locator(".ks-select-choice-label")
                 folder_label = app.locator(".ks-settings-custom .ks-data-button .ks-truncate-label")
                 measure = "element => ({clientWidth:element.clientWidth, scrollWidth:element.scrollWidth, overflow:getComputedStyle(element).textOverflow})"
                 long_metrics = {
                     "model": model_label.evaluate(measure),
                     "folder": folder_label.evaluate(measure),
+                    "folderIconFlexShrink": app.locator(".ks-settings-custom .ks-data-button .ks-button > svg").evaluate("element => getComputedStyle(element).flexShrink"),
                 }
                 assert long_model in model_label.text_content()
                 assert long_folder in folder_label.text_content()
@@ -216,6 +275,7 @@ def main():
                 assert long_metrics["folder"]["scrollWidth"] > long_metrics["folder"]["clientWidth"], long_metrics
                 assert long_metrics["model"]["overflow"] == "ellipsis", long_metrics
                 assert long_metrics["folder"]["overflow"] == "ellipsis", long_metrics
+                assert long_metrics["folderIconFlexShrink"] == "0", long_metrics
                 result["assertions"].append({"shared_ellipsis_for_long_model_and_folder": long_metrics})
                 set_rect(sb, window_id, 900, 650)
                 page.emulate_media(color_scheme="light")
@@ -228,7 +288,6 @@ def main():
                 page.emulate_media(color_scheme="dark")
                 page.wait_for_timeout(100)
                 save(page, "16-settings-long--wide--dark.png")
-                result["assertions"].append({"long_toggle_label": "Allow web search while background tasks are running"})
                 page.emulate_media(color_scheme="light")
 
                 snapshot = sb.snapshot()
@@ -293,7 +352,20 @@ def main():
                 toggle.wait_for()
                 page.wait_for_timeout(300)
                 save(page, "storage-settings--after.png")
-                result["assertions"].append("storage presentation=settings still opens the automatic select and toggle controls")
+                storage_toggle = toggle.evaluate("""element => ({
+                  width:element.getBoundingClientRect().width,
+                  left:element.getBoundingClientRect().left,
+                  flexDirection:getComputedStyle(element).flexDirection,
+                  trackWidth:element.querySelector('.ks-data-toggle-track').getBoundingClientRect().width,
+                  contentLeft:(() => {
+                    const scroll=element.closest('.ks-app-settings').querySelector('.ks-app-settings-scroll');
+                    return scroll.getBoundingClientRect().left + parseFloat(getComputedStyle(scroll).paddingLeft);
+                  })()
+                })""")
+                assert storage_toggle["width"] == 32 and storage_toggle["trackWidth"] == 32, storage_toggle
+                assert storage_toggle["flexDirection"] == "row", storage_toggle
+                assert storage_toggle["left"] == storage_toggle["contentLeft"], storage_toggle
+                result["assertions"].append({"storage_presentation_settings_retains_main_toggle_layout": storage_toggle})
                 result["captures"] = sorted(path.name for path in OUTPUT.glob("*.png"))
                 result["console"] = sb.console[-30:]
                 browser.close()

@@ -4,9 +4,9 @@
 .ks-app-settings h2 { font-size: var(--ks-type-title); font-weight: 600; }
 .ks-app-settings-scroll { min-height: 0; overflow: auto; padding: var(--ks-space-3); }
 .ks-settings-custom { width: 100%; max-width: calc(var(--ks-window-min-width) * 2); }
-.ks-app-settings .ks-data-stack { height: auto; }
-.ks-app-settings .ks-field,
-.ks-app-settings .ks-data-stack.is-row {
+.ks-settings-custom .ks-data-stack { height: auto; }
+.ks-settings-custom .ks-field,
+.ks-settings-custom .ks-data-stack.is-row {
   display: grid;
   width: 100%;
   grid-template-columns: minmax(0, 1fr) minmax(0, var(--ks-workspace-label-max-width));
@@ -14,17 +14,21 @@
   gap: var(--ks-space-2);
   min-height: var(--ks-control-height);
 }
-.ks-app-settings .ks-field > :last-child,
-.ks-app-settings .ks-data-stack.is-row > .ks-data-stack-item { min-width: 0; }
-.ks-app-settings .ks-field > .ks-button,
-.ks-app-settings .ks-data-stack.is-row .ks-button { width: 100%; min-width: 0; justify-content: space-between; text-align: start; }
-.ks-app-settings .ks-data-stack.is-row .ks-data-button { display: flex; min-width: 0; }
-.ks-app-settings .ks-data-stack.is-row .ks-data-button .ks-button { justify-content: flex-start; gap: var(--ks-space-2); }
-.ks-app-settings .ks-data-stack.is-row .ks-data-stack-item > .ks-data-text { padding: 0; overflow: visible; }
-.ks-app-settings .ks-data-toggle { display: flex; width: 100%; flex-direction: row-reverse; justify-content: space-between; text-align: start; font-size: var(--ks-type-body); color: var(--ks-color-text); }
-.ks-app-settings .ks-data-toggle > span:last-child { min-width: 0; }
-.ks-app-settings .ks-data-toggle-track { flex: 0 0 auto; }
-.ks-app-settings .ks-field > .ks-button > svg { flex: 0 0 auto; }
+.ks-settings-custom .ks-field > :last-child,
+.ks-settings-custom .ks-data-stack.is-row > .ks-data-stack-item { min-width: 0; }
+.ks-settings-custom .ks-field > .ks-button,
+.ks-settings-custom .ks-data-stack.is-row .ks-button { width: 100%; min-width: 0; justify-content: space-between; text-align: start; }
+.ks-settings-custom .ks-data-stack.is-row .ks-data-button { display: flex; min-width: 0; }
+.ks-settings-custom .ks-data-stack.is-row .ks-data-button .ks-button { justify-content: flex-start; gap: var(--ks-space-2); }
+.ks-settings-custom .ks-data-stack-item > .ks-data-text { padding: 0; }
+.ks-settings-custom .ks-data-stack.is-row .ks-data-stack-item > .ks-data-text { overflow: visible; }
+.ks-settings-custom .ks-data-toggle { display: flex; width: 100%; flex-direction: row-reverse; justify-content: space-between; text-align: start; font-size: var(--ks-type-body); color: var(--ks-color-text); }
+.ks-settings-custom .ks-data-toggle > span:last-child { min-width: 0; }
+.ks-settings-custom .ks-data-toggle-track { flex: 0 0 auto; }
+.ks-settings-custom .ks-field > .ks-button > svg,
+.ks-settings-custom .ks-data-button > .ks-button > svg { flex: 0 0 auto; }
+.ks-settings-custom .ks-data-toggle:disabled { opacity: 1; }
+.ks-settings-custom .ks-data-toggle:disabled .ks-data-toggle-track { opacity: 0.56; }
 .ks-settings-group + .ks-settings-group { margin-top: var(--ks-space-5); }
 .ks-settings-apply-progress { display: inline-flex; margin-right: var(--ks-space-1); }
 .ks-settings-apply-spinner { animation: ks-settings-spin 1s linear infinite; }
