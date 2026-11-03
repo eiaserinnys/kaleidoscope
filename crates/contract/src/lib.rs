@@ -1242,7 +1242,11 @@ pub enum Block {
         template: Box<Block>,
     },
     When {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(
+            default,
+            deserialize_with = "present_binding",
+            skip_serializing_if = "Option::is_none"
+        )]
         #[ts(optional)]
         value: Option<Binding>,
         /// (19판) 창 본문 너비가 CSS px 기준으로 이 값 이상일 때 자식을 그린다.
@@ -2033,7 +2037,11 @@ enum RawBlock {
         template: Box<Block>,
     },
     When {
-        #[serde(default)]
+        #[serde(
+            default,
+            deserialize_with = "present_binding",
+            skip_serializing_if = "Option::is_none"
+        )]
         value: Option<Binding>,
         #[serde(default)]
         min_width: Option<u32>,

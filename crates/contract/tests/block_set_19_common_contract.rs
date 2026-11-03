@@ -1,6 +1,6 @@
 use kaleidoscope_contract::{
     BLOCK_SET_VERSION, app_definition_schema,
-    data::{self, Binding},
+    data::{self, Binding}, Block,
     validate::{parse_app_definition, parse_cached_app_definition},
 };
 use serde_json::{Value, json};
@@ -135,6 +135,33 @@ fn when_requires_a_value_or_width_condition_with_a_registered_error() {
     assert!(error.details.iter().any(|detail| {
         detail.contains("/ui") && detail.contains("value, min_width, max_width")
     }), "{error:?}");
+}
+
+#[test]
+fn legacy_null_value_when_round_trips_through_block_and_cached_definition() {
+    let ui = json!({"type": "when", "value": null, "child": button()});
+    let block: Block = serde_json::from_value(ui.clone()).unwrap();
+    assert!(matches!(
+        &block,
+        Block::When {
+            value: Some(Binding::Literal(Value::Null)),
+            min_width: None,
+            max_width: None,
+            ..
+        }
+    ));
+    let serialized_block = serde_json::to_value(block).unwrap();
+    assert_eq!(serialized_block.get("value"), Some(&Value::Null));
+
+    let legacy = definition(ui, 14);
+    let parsed = parse_app_definition(&legacy.to_string()).unwrap();
+    let serialized = serde_json::to_value(parsed).unwrap();
+    assert_eq!(serialized.pointer("/ui/value"), Some(&Value::Null));
+
+    let cached = parse_cached_app_definition(&serialized.to_string()).unwrap();
+    let cached_serialized = serde_json::to_value(cached).unwrap();
+    assert_eq!(cached_serialized.pointer("/ui/value"), Some(&Value::Null));
+    assert_eq!(cached_serialized, serialized);
 }
 
 #[test]
