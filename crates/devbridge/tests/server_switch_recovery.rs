@@ -86,6 +86,174 @@ fn server_config(dir: &Path, prefix: &str) -> EmbeddedConfig {
     }
 }
 
+fn seed_provider_connection(dir: &Path, prefix: &str) {
+    let db = rusqlite::Connection::open(dir.join(format!("{prefix}.db"))).unwrap();
+    let account: String = db
+        .query_row(
+            "SELECT account_id FROM mcp_principal WHERE id=1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    db.execute(
+        "INSERT INTO connections(account_id,name,kind,base_url,writable,paths,headers,description,updated_at) VALUES(?1,'provider','oauth','https://example.test',1,'[]','{}','','now')",
+        [account],
+    )
+    .unwrap();
+}
+
+fn import_pas(core: &Core) -> String {
+    let mut definition: Value =
+        serde_json::from_str(include_str!("../../../examples/workspace-pas-v2.json")).unwrap();
+    definition["permissions"][0]["connection"] = json!("provider");
+    call(
+        core,
+        json!({"op":"app.import","definition_json":definition.to_string()}),
+    );
+    let state = call(core, json!({"op":"state.get"}));
+    let desktop = state["snapshot"]["device"]["active_desktop_ids"]
+        .as_object()
+        .unwrap()
+        .values()
+        .next()
+        .unwrap()
+        .as_str()
+        .unwrap();
+    call(
+        core,
+        json!({"op":"window.open","desktop_id":desktop,"app_id":"workspace-pas-v2"}),
+    )["window"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+fn watch_pas_on_next_connected(
+    core: &Arc<Core>,
+    window_id: String,
+    mode: ServerMode,
+) -> std::sync::mpsc::Receiver<Result<Value, (Option<String>, String)>> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let triggered = Arc::new(AtomicBool::new(false));
+    let weak = Arc::downgrade(core);
+    let callback_window = window_id;
+    core.subscribe(Box::new(move |event| {
+        let kaleidoscope_contract::CoreEvent::StateChanged { snapshot } = event else {
+            return;
+        };
+        if !matches!(&snapshot.link, LinkStatus::Connected { mode: actual, .. } if *actual == mode)
+            || triggered.swap(true, Ordering::SeqCst)
+        {
+            return;
+        }
+        let Some(core) = weak.upgrade() else {
+            return;
+        };
+        let sender = sender.clone();
+        let window_id = callback_window.clone();
+        thread::spawn(move || {
+            let request = CoreRequest::ConversationGet {
+                window_id,
+                profile: None,
+            };
+            let result = core
+                .handle(request)
+                .map(serde_json::to_value)
+                .map_err(|error| (error.id, error.message))
+                .and_then(|result| result.map_err(|error| (None, error.to_string())));
+            sender.send(result).unwrap();
+        });
+    }));
+    receiver
+}
+
+fn assert_provider_connection_was_found(result: Result<Value, (Option<String>, String)>) {
+    let (id, message) = result.unwrap_err();
+    assert_eq!(
+        id.as_deref(),
+        Some("CONV_HTTP_LOGIN_INFO_MISSING"),
+        "{message}"
+    );
+    assert!(message.contains("provider"), "{message}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pas_connection_is_available_during_both_server_switch_directions() {
+    let temp = tempfile::tempdir().unwrap();
+    let local = EmbeddedServer::start(server_config(temp.path(), "pas-local"))
+        .await
+        .unwrap();
+    let remote = EmbeddedServer::start(server_config(temp.path(), "pas-remote"))
+        .await
+        .unwrap();
+    let root = temp.path().to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        seed_provider_connection(&root, "pas-local");
+        seed_provider_connection(&root, "pas-remote");
+
+        let device = root.join("pas-device");
+        std::fs::create_dir_all(&device).unwrap();
+        std::fs::write(
+            device.join("link.json"),
+            serde_json::to_vec(&json!({
+                "format":1,
+                "mode":"remote",
+                "server_url":remote.server_url,
+                "device_id":remote.device_id,
+                "device_name":"시험",
+                "token":remote.token
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let core = Arc::new(
+            Core::open(
+                config(&device, &local, &remote.server_url),
+                Arc::new(TestHost(root.clone())),
+            )
+            .unwrap(),
+        );
+        wait_for(|| connected(&core, ServerMode::Remote));
+
+        let remote_window = import_pas(&core);
+        let initial = core
+            .handle(CoreRequest::ConversationGet {
+                window_id: remote_window.clone(),
+                profile: None,
+            })
+            .unwrap_err();
+        assert_eq!(initial.id.as_deref(), Some("CONV_HTTP_LOGIN_INFO_MISSING"));
+
+        call(&core, json!({"op":"link.use_local"}));
+        wait_for(|| connected(&core, ServerMode::Embedded));
+        let local_window = import_pas(&core);
+
+        let remote_recovery =
+            watch_pas_on_next_connected(&core, remote_window, ServerMode::Remote);
+        call(
+            &core,
+            json!({"op":"link.start","server_url":remote.server_url}),
+        );
+        wait_for(|| connected(&core, ServerMode::Remote));
+        assert_provider_connection_was_found(
+            remote_recovery
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap(),
+        );
+
+        let local_recovery = watch_pas_on_next_connected(&core, local_window, ServerMode::Embedded);
+        call(&core, json!({"op":"link.use_local"}));
+        wait_for(|| connected(&core, ServerMode::Embedded));
+        assert_provider_connection_was_found(
+            local_recovery.recv_timeout(Duration::from_secs(5)).unwrap(),
+        );
+        core.shutdown();
+    })
+    .await
+    .unwrap();
+}
+
 fn agent_binary() -> PathBuf {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let target = std::env::var_os("CARGO_TARGET_DIR")

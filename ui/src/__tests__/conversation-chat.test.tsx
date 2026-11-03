@@ -68,6 +68,11 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
       nextSnapshot.shared.windows[0].state.changed_by_other_window = true;
       act(() => transport.emit({ event: "state.changed", snapshot: nextSnapshot }));
     },
+    updateLink: (link: ShellSnapshot["link"]) => {
+      const nextSnapshot = structuredClone(snapshot);
+      nextSnapshot.link = link;
+      act(() => transport.emit({ event: "state.changed", snapshot: nextSnapshot }));
+    },
   };
 }
 const get = (value: ConversationThread | null = thread, profile = "profile-a"): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles, start: { profile, model: "m" } });
@@ -80,6 +85,7 @@ beforeEach(() => { vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockRetur
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 async function setupMarkdownRenderCounter() {
+  markdownRenderCount.value = 0;
   const items = Array.from({ length: 24 }, (_, index) => item(`markdown-${index}`, `기록 ${index}`));
   const state = setup(async (request) => request.op === "conversation.get" ? { ...get(), items } : (() => { throw new Error(request.op); })());
   await waitFor(() => expect(markdownRenderCount.value).toBe(items.length));
@@ -97,6 +103,26 @@ describe("대화 제공자 화면", () => {
     const state = await setupMarkdownRenderCounter();
     state.updateSnapshot();
     expect(markdownRenderCount.value).toBe(0);
+  });
+  it("연결된 서버 대상이 바뀌면 대화를 다시 불러온다", async () => {
+    const state = setup(async (request) => request.op === "conversation.get" ? get() : (() => { throw new Error(request.op); })());
+    await screen.findByText("기록");
+    state.updateLink({ state: "connected", mode: "remote", server_url: "https://other.test", device_name: "시험" });
+    await waitFor(() => expect(state.call.mock.calls.filter(([request]) => request.op === "conversation.get")).toHaveLength(2));
+  });
+  it("연결 스냅샷 누락 오류는 다시 시도하면 대화를 불러온다", async () => {
+    const message = "연결 provider 설정을 찾지 못했습니다. 연결을 설정한 뒤 다시 시도하세요.";
+    let connected = false;
+    const state = setup(async (request) => {
+      if (request.op !== "conversation.get") throw new Error(request.op);
+      if (!connected) throw { id: "CONN_AUTHORIZE_CONNECTION_MISSING", code: "server", message, details: [] };
+      return get();
+    });
+    expect(await screen.findByText(message)).toBeTruthy();
+    connected = true;
+    fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+    expect(await screen.findByText("기록")).toBeTruthy();
+    expect(state.call.mock.calls.filter(([request]) => request.op === "conversation.get")).toHaveLength(2);
   });
   it("text update 한 번은 진행 글만 파싱한다", async () => {
     const state = await setupMarkdownRenderCounter();

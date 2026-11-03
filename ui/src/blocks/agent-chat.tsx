@@ -30,6 +30,9 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const workspaceId = useShellSelector(context.store, (snapshot) =>
     snapshot?.shared.desktops.find((item) => item.id === context.window.desktop_id)?.workspace_id ?? "");
   const connected = useShellSelector(context.store, (snapshot) => snapshot?.link.state === "connected");
+  const linkTarget = useShellSelector(context.store, (snapshot) => snapshot?.link.state === "connected"
+    ? `${snapshot.link.mode}:${snapshot.link.server_url}`
+    : "");
   const sharedWindows = useShellSelector(context.store, (snapshot) => selectSharedWindows(snapshot, workspaceId), sameSharedWindows);
   const [agent, setAgent] = useState(false);
   const [items, setItems] = useState<ConversationItem[]>([]);
@@ -185,7 +188,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         setLoading(false);
       }
     }
-  }, [acknowledge, applyConversation, connected, context.store, workspaceId, hasProvider, windowId, appVersion, handleError, coalescedDelta]);
+  }, [acknowledge, applyConversation, connected, linkTarget, context.store, workspaceId, hasProvider, windowId, appVersion, handleError, coalescedDelta]);
 
   useEffect(() => {
     void load();

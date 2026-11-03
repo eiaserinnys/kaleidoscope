@@ -130,7 +130,9 @@ pub(crate) fn activate(
     storage::save_link(&inner.data_dir, &file)?;
     *inner.link_file.lock().unwrap() = Some(file);
     inner.connections.lock().unwrap().clear();
+    inner.connections_snapshot_epoch.store(0, Ordering::SeqCst);
     inner.conversation_snapshot_epoch.store(0, Ordering::SeqCst);
+    inner.layout_signal.notify();
     let event = inner.state_event_locked(&state);
     drop(state);
     inner.emit_state(&event);

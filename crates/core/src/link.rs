@@ -109,6 +109,7 @@ pub(crate) fn start(
         }
     };
     if changed {
+        inner.layout_signal.notify();
         emit_state(inner);
     }
     if current {
@@ -137,6 +138,7 @@ pub(crate) fn cancel(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
             false
         } else {
             inner.generation.fetch_add(1, Ordering::SeqCst);
+            inner.layout_signal.notify();
             set_link_locked(&mut state, LinkStatus::Unlinked {})
         }
     };
@@ -155,6 +157,7 @@ pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
     let changed = {
         let mut state = inner.state.lock().unwrap();
         inner.generation.fetch_add(1, Ordering::SeqCst);
+        inner.layout_signal.notify();
         storage::remove_link(&inner.data_dir)?;
         inner.flusher.clear_sync();
         crate::sync_state::remove(&inner.data_dir)?;
@@ -337,6 +340,7 @@ fn set_unlinked_if_current(inner: &Arc<Inner>, generation: u64) {
         }
     };
     if changed {
+        inner.layout_signal.notify();
         emit_state(inner);
     }
 }
@@ -431,6 +435,7 @@ pub(crate) fn set_offline(inner: &Arc<Inner>, generation: u64, file: &LinkFile, 
         }
     };
     if changed {
+        inner.layout_signal.notify();
         emit_state(inner);
     }
 }
@@ -448,6 +453,7 @@ pub(crate) fn token_rejected(inner: &Arc<Inner>, mut file: LinkFile) {
             return;
         }
         inner.generation.fetch_add(1, Ordering::SeqCst);
+        inner.layout_signal.notify();
         if file.mode == kaleidoscope_contract::ServerMode::Remote {
             // 연결 거부 뒤에도 현재 배치의 서버 소유권과 미전송 변경을 보존한다.
             file.revoked = true;

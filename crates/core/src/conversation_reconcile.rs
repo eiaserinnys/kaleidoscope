@@ -185,6 +185,7 @@ fn run(inner: &Arc<Inner>) {
     let epoch = inner.layout_connection_epoch.load(Ordering::SeqCst);
     let ready = connected
         && epoch != 0
+        && inner.connections_snapshot_epoch.load(Ordering::SeqCst) == epoch
         && inner.conversation_snapshot_epoch.load(Ordering::SeqCst) == epoch
         && !workspaces.is_empty();
     let path = inner.data_dir.join("conversation-applied.json");

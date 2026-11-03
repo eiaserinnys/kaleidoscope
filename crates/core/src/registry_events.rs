@@ -296,6 +296,11 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 *current = connections;
                 changed
             };
+            let epoch = inner.layout_connection_epoch.load(Ordering::SeqCst);
+            inner
+                .connections_snapshot_epoch
+                .store(epoch, Ordering::SeqCst);
+            inner.layout_signal.notify();
             if !changed.is_empty() {
                 crate::data_runtime::connections_changed(inner, &changed);
             }
