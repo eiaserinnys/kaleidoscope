@@ -680,5 +680,25 @@ error_catalog! { ENTRIES;
         message: "붙여넣기를 하지 못했습니다. Ctrl+V로 붙여넣으세요. 원인: {reason}",
         fix: "Ctrl+V로 붙여넣으세요"
     }
-
+    SHELL_MESSAGE_ITEM_KEY_MISSING(path) {
+        class: InvalidRequest,
+        place: "화면 message.item 바인딩 읽기",
+        cause: "현재 자료 항목에서 message.item 경로의 값이 없거나 null이다",
+        message: "자료 항목의 {path} 경로에 문자열 키가 없습니다. 목록 자료에서 메시지 키를 확인하세요.",
+        fix: "목록 자료에서 message.item 경로가 문자열 키를 가리키도록 고치세요"
+    }
+    SHELL_MESSAGE_ITEM_KEY_NOT_STRING(path) {
+        class: InvalidRequest,
+        place: "화면 message.item 바인딩 읽기",
+        cause: "현재 자료 항목에서 message.item 경로의 값이 문자열이 아니다",
+        message: "자료 항목의 {path} 경로 값이 문자열이 아닙니다. 목록 자료에서 문자열 키를 확인하세요.",
+        fix: "목록 자료에서 message.item 경로 값을 문자열 키로 고치세요"
+    }
+    SHELL_MESSAGE_KEY_NOT_FOUND(locale, key) {
+        class: NotFound,
+        place: "화면 메시지 바인딩 읽기",
+        cause: "현재 언어와 기본 언어 사전에 메시지 키가 없다",
+        message: "언어 {locale}의 messages에 {key} 키가 없습니다. messages에 번역을 추가하거나 목록 자료의 키를 고치세요.",
+        fix: "messages에 해당 번역을 추가하거나 자료 항목의 키를 고치세요"
+    }
 }

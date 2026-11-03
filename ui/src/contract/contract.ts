@@ -254,7 +254,7 @@ export type Binding = StateRef | ExprRef | ClientRef | ItemRef | ParentItemRef |
 /**
  * 식 바인딩 하나의 값. `status`로 가른다. 규칙은 이 모듈 머리글의 「원천의 상태와 값의 상태」에 있다.
  */
-export type BindingValue = { "status": "ready", value: JsonValue, } | { "status": "loading", } | { "status": "failed", message: string, id?: string, retry: Array<string>, } | { "status": "login_required", permission: string, };
+export type BindingValue = { "status": "ready", value: JsonValue, } | { "status": "loading", } | { "status": "failed", message: string, id?: string, retry: Array<string>, details?: Array<string>, } | { "status": "login_required", permission: string, };
 
 /**
  * 블록. 블록 세트 4판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
@@ -910,9 +910,11 @@ export type MediaKind = "audio" | "video";
  */
 export type MediaRef = ResourceMediaRef | AssetMediaRef;
 
+export type MessageKey = string | ItemRef;
+
 export type MessageReceipt = { request_id: string, status: ReceiptStatus, error?: ConversationError, };
 
-export type MessageRef = { message: string, };
+export type MessageRef = { message: MessageKey, };
 
 export type MetricAlign = "start" | "end";
 

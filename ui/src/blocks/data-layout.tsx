@@ -2,9 +2,9 @@ import { memo, useContext, useEffect, useLayoutEffect, useRef, useState, type Ke
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useDormant, useWindowData } from "../data/window-data";
-import { DataState } from "../components/data-state";
+import { BindingFailureNotice, DataState, isMessageBindingFailure } from "../components/data-state";
 import { ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen } from "../components/icons";
-import { IconButton } from "../components/primitives";
+import { ErrorId, IconButton } from "../components/primitives";
 import { MarkdownText } from "./markdown-text";
 import { renderBlock } from "../render/render-block";
 import { patchWindowState, useWindowStateValue, useWindowVisible } from "../data/window-state";
@@ -107,6 +107,7 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
         : block.actions?.length ? <div className="ks-data-section-heading">{titleText}{metaText}</div> : <>{titleText}{metaText}</>}
       {actions?.length ? <div className="ks-data-section-actions">{actions}</div> : null}
     </div>
+    <BindingFailureNotice value={title} />
     <DormantPointer dormant={collapsed} pointer={`${pointer}/child`} />
     {!collapsed ? <div className="ks-data-section-child">{renderBlock(block.child, context, `${pointer}/child`)}</div> : null}
   </section>;
@@ -119,8 +120,10 @@ function DormantPointer({ pointer, dormant }: { pointer: string; dormant: boolea
   return null;
 }
 
-function tabLabelText(value: ReturnType<typeof useBinding>): string {
-  return value.status === "ready" && value.value !== null && value.value !== undefined ? display(value.value) : "";
+function tabLabelText(value: ReturnType<typeof useBinding>): ReactNode {
+  if (value.status === "ready") return value.value !== null && value.value !== undefined ? display(value.value) : "";
+  if (isMessageBindingFailure(value)) return <span className="ks-inline-error" role="alert">{value.message} <ErrorId id={value.id} /></span>;
+  return "";
 }
 
 const BoundTabLabel = memo(function BoundTabLabel({ pointer, binding }: {
@@ -138,7 +141,10 @@ const BoundTabPanel = memo(function BoundTabPanel({ pointer, binding, showHeader
   collapsed: boolean;
   children: ReactNode;
 }) {
-  const label = tabLabelText(useBinding(pointer, binding));
+  const value = useBinding(pointer, binding);
+  const label = value.status === "ready"
+    ? value.value !== null && value.value !== undefined ? display(value.value) : ""
+    : isMessageBindingFailure(value) ? value.message : "";
   return <div aria-label={showHeader ? undefined : label} className="ks-data-tab-panel" hidden={!selected || collapsed} inert={!selected || collapsed} role="tabpanel">{children}</div>;
 });
 

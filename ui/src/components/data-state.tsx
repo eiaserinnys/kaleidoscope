@@ -5,7 +5,7 @@ import { useWindowData } from "../data/window-data";
 import { useWindowGrants } from "../data/window-state";
 import { DataIcon } from "./data-icons";
 import { FolderOpen } from "./icons";
-import { Button, EmptyState, ErrorId } from "./primitives";
+import { Button, EmptyState, ErrorId, Notice } from "./primitives";
 
 export function useFolderPick() {
   const data = useWindowData();
@@ -17,6 +17,21 @@ export function useFolderPick() {
       .catch((reason: unknown) => setError(toCoreError(reason)));
   };
   return { error, pick, clear: () => setError(null) };
+}
+
+const messageBindingErrorIds = new Set([
+  "SHELL_MESSAGE_ITEM_KEY_MISSING",
+  "SHELL_MESSAGE_ITEM_KEY_NOT_STRING",
+  "SHELL_MESSAGE_KEY_NOT_FOUND",
+]);
+
+export function isMessageBindingFailure(value: BindingValue): value is Extract<BindingValue, { status: "failed" }> & { id: string } {
+  return value.status === "failed" && value.id !== undefined && messageBindingErrorIds.has(value.id);
+}
+
+export function BindingFailureNotice({ value }: { value: BindingValue }) {
+  if (!isMessageBindingFailure(value)) return null;
+  return <Notice role="alert" errorId={value.id}>{value.message}</Notice>;
 }
 
 export function DataState({ value, compact = false, onRetry, onLogin }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; onRetry?: () => void; onLogin?: () => void }) {

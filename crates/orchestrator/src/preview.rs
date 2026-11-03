@@ -452,7 +452,10 @@ impl McpServer {
             None,
         );
         for (pointer, value) in &mut evaluated {
-            if let BindingValue::Failed { message, id, retry } = value {
+            if let BindingValue::Failed {
+                message, id, retry, ..
+            } = value
+            {
                 if id.is_none() && retry.is_empty() {
                     let error =
                         kaleidoscope_contract::errors::DATA_BINDING_EXPR_FAILED(pointer, &*message);
@@ -476,7 +479,16 @@ impl McpServer {
         }
         if kaleidoscope_contract::data::all_ui_bindings(&definition)
             .iter()
-            .any(|(_, binding)| matches!(binding, Binding::Item(_) | Binding::ParentItem(_)))
+            .any(|(_, binding)| {
+                matches!(
+                    binding,
+                    Binding::Item(_)
+                        | Binding::ParentItem(_)
+                        | Binding::Message(kaleidoscope_contract::data::MessageRef {
+                            message: kaleidoscope_contract::data::MessageKey::Item(_),
+                        })
+                )
+            })
         {
             notes.push("반복 항목 값은 창의 런타임에서 계산합니다".into());
         }
@@ -493,6 +505,7 @@ impl McpServer {
                             message: error.message,
                             id: error.id,
                             retry: Vec::new(),
+                            details: (!error.details.is_empty()).then_some(error.details),
                         }
                     }),
                     Binding::State(reference) => BindingValue::Ready {
@@ -506,20 +519,20 @@ impl McpServer {
                             .map(|output| output.default.clone())
                             .unwrap_or(Value::Null),
                     },
-                    Binding::Item(_) | Binding::ParentItem(_) => {
-                        BindingValue::Ready { value: Value::Null }
-                    }
-                    Binding::Message(reference) => {
+                    Binding::Item(_)
+                    | Binding::ParentItem(_)
+                    | Binding::Message(kaleidoscope_contract::data::MessageRef {
+                        message: kaleidoscope_contract::data::MessageKey::Item(_),
+                    }) => BindingValue::Ready { value: Value::Null },
+                    Binding::Message(kaleidoscope_contract::data::MessageRef {
+                        message: kaleidoscope_contract::data::MessageKey::Key(key),
+                    }) => {
                         let locale = definition.locale.as_ref().expect("검사된 locale");
                         let language = definition.state[&locale.state]
                             .as_str()
                             .expect("검사된 기본 언어");
                         BindingValue::Ready {
-                            value: Value::String(
-                                definition.messages.as_ref().expect("검사된 메시지")[language]
-                                    [&reference.message]
-                                    .clone(),
-                            ),
+                            value: Value::String(definition.messages.as_ref().expect("검사된 메시지")[language][key].clone()),
                         }
                     }
                     Binding::Literal(value) => BindingValue::Ready {
@@ -764,13 +777,21 @@ fn binding_result(
             output["truncated"] = json!(truncated);
         }
         BindingValue::Loading {} => output["status"] = json!("loading"),
-        BindingValue::Failed { message, id, retry } => {
+        BindingValue::Failed {
+            message,
+            id,
+            retry,
+            details,
+        } => {
             output["status"] = json!("failed");
             output["message"] = json!(message);
             if let Some(id) = id {
                 output["id"] = json!(id);
             }
             output["retry"] = json!(retry);
+            if let Some(details) = details {
+                output["details"] = json!(details);
+            }
         }
         BindingValue::LoginRequired { permission } => {
             output["status"] = json!("login_required");
