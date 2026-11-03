@@ -119,10 +119,17 @@ export class ClientRuntime {
     }
     // 숨겨진 동안의 시간은 응답 제한에 포함하지 않는다.
     this.lastPong = Date.now();
+    let lastTick = this.lastPong;
+    const interval = CLIENT_PING_TIMEOUT_SECS * 500;
     this.ping = setInterval(() => {
-      if (Date.now() - this.lastPong > CLIENT_PING_TIMEOUT_SECS * 1000) { this.data.failClient(shellErrors.SHELL_CLIENT_UNRESPONSIVE()); void this.stop(); return; }
+      const now = Date.now();
+      // 호스트가 긴 작업으로 타이머를 제때 실행하지 못한 시간은 앱의 응답 대기에 넣지 않는다.
+      // 브라우저의 50ms 미만 타이머 흔들림은 정상 간격으로 취급한다.
+      if (now - lastTick > interval + 50) this.lastPong = now;
+      lastTick = now;
+      if (now - this.lastPong > CLIENT_PING_TIMEOUT_SECS * 1000) { this.data.failClient(shellErrors.SHELL_CLIENT_UNRESPONSIVE()); void this.stop(); return; }
       this.send({ type: "ks-client-ping" });
-    }, CLIENT_PING_TIMEOUT_SECS * 500);
+    }, interval);
   };
 
   private onDocumentVisibilityChange = () => {
