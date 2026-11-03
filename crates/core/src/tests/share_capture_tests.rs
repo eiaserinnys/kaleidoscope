@@ -8,7 +8,7 @@ fn instructions_require_capability_and_return_the_canonical_guide() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
     let client = json!({
-        "id":"instructions-fixture", "name":"지침 시험", "requires":{"blocks":17,"modules":{"assets":1,"client":3}},
+        "id":"instructions-fixture", "name":"지침 시험", "requires":{"blocks":18,"modules":{"assets":1,"client":4}},
         "assets":[{"id":"client-code","version":1}],
         "client":{"runtime":"javascript","entry":{"id":"client-code","version":1},"capabilities":["instructions"]},
         "ui":{"type":"text","value":"시험"}
@@ -37,7 +37,7 @@ fn client_context_preserves_skipped_capture_and_request_identity() {
         unfreeze_calls: AtomicUsize::new(0),
     });
     let client = json!({
-        "id":"context-fixture", "name":"맥락 시험", "requires":{"blocks":17,"modules":{"assets":1,"client":3}},
+        "id":"context-fixture", "name":"맥락 시험", "requires":{"blocks":18,"modules":{"assets":1,"client":4}},
         "assets":[{"id":"client-code","version":1}],
         "client":{"runtime":"javascript","entry":{"id":"client-code","version":1},"capabilities":["context_capture","instructions"]},
         "ui":{"type":"text","value":"시험"}

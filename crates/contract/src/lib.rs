@@ -270,7 +270,7 @@ pub const CONTRACT_VERSION: u32 = 28;
 /// - 16판: 탭과 입력 블록 라벨, `dialog.close_label`, `dialog.cancel_label`, `tour.labels`의 바인딩.
 ///   평문 문자열은 이전 판과 같은 wire 모양이다.
 /// - 17판: 클라이언트 process 실행 권한.
-/// - 18판: 클라이언트 채널과 대화 블록의 `client` 및 `footer`.
+/// - 18판: 클라이언트 채널과 대화 블록의 `client` 및 `footer`, 도구 중계, 지침과 같이 보기 준비.
 pub const BLOCK_SET_VERSION: u32 = 18;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).

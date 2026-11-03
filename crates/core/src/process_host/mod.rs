@@ -31,6 +31,7 @@ fn context(
     window: &str,
     permission: &str,
     cwd_permission: &str,
+    tools: bool,
 ) -> Result<(String, std::path::PathBuf, String), CoreError> {
     let state = inner.state.lock().unwrap();
     let item = state
@@ -48,6 +49,9 @@ fn context(
                 format!("app_version: {}", item.app_version),
             ])
         })?;
+    if tools && (definition.requires.blocks < 18 || definition.requires.modules.get("client").copied().unwrap_or(0) < 4) {
+        return Err(errors::PROCESS_START_SERVICE_VERSION_REQUIRED());
+    }
     if !definition
         .permissions
         .iter()
@@ -123,7 +127,8 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             if let Some(service) = services.iter().find(|service| service.as_str() != "tools") {
                 return Err(errors::PROCESS_START_SERVICE_UNKNOWN(service));
             }
-            let (app_id, _, _) = context(inner, &window_id, &permission, &cwd_permission)?;
+            let tools = services.iter().any(|service| service == "tools");
+            let (app_id, _, _) = context(inner, &window_id, &permission, &cwd_permission, tools)?;
             if let Some(p) = by_key(inner, &window_id, &key) {
                 if p.state.lock().unwrap().exit.is_none() {
                     return Ok(CoreReply::ProcessStart {
@@ -149,7 +154,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 let (tx, rx) = mpsc::sync_channel(1);
                 {
                     let _guard = inner.processes.start.lock().unwrap();
-                    context(inner, &window_id, &permission, &cwd_permission)?;
+                    context(inner, &window_id, &permission, &cwd_permission, tools)?;
                     inner.processes.pending.lock().unwrap().insert(
                         request_id.clone(),
                         Pending {
@@ -175,7 +180,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                     });
                 }
                 let _guard = inner.processes.start.lock().unwrap();
-                let (current_app, _, _) = context(inner, &window_id, &permission, &cwd_permission)?;
+                let (current_app, _, _) = context(inner, &window_id, &permission, &cwd_permission, tools)?;
                 if current_app != app_id {
                     return Err(errors::PROCESS_START_APP_CHANGED());
                 }
@@ -192,7 +197,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 }
             }
             let _guard = inner.processes.start.lock().unwrap();
-            let (_, cwd, workspace) = context(inner, &window_id, &permission, &cwd_permission)?;
+            let (_, cwd, workspace) = context(inner, &window_id, &permission, &cwd_permission, tools)?;
             if let Some(p) = by_key(inner, &window_id, &key) {
                 if p.state.lock().unwrap().exit.is_none() {
                     return Ok(CoreReply::ProcessStart {
@@ -209,7 +214,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             }
             let scope = crate::server_switch::active_archive(inner);
             let p = Running::launch(inner, window_id, key, permission, spec, cwd, scope)?;
-            if services.iter().any(|service| service == "tools") {
+            if tools {
                 let connected = matches!(inner.state.lock().unwrap().link, LinkStatus::Connected { .. });
                 let link = if connected { inner.link_file.lock().unwrap().clone().filter(|link| !link.revoked) } else { None };
                 let address = if let Some(link) = link {

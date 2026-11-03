@@ -458,13 +458,20 @@ fn tool_services_follow_process_window_and_server_lifetimes() {
     let host = Arc::new(FakeHost::default());
     host.choose(Some(folder.path().into()));
     let definition = json!({
-        "id":"process-services-fixture", "name":"서비스 시험", "requires":{"blocks":17,"modules":{"assets":1,"client":3,"process":1,"files":1}},
+        "id":"process-services-fixture", "name":"서비스 시험", "requires":{"blocks":18,"modules":{"assets":1,"client":4,"process":1,"files":1}},
         "permissions":[{"module":"process","id":"run","label":"실행"},{"module":"files","id":"work","label":"작업","access":"readwrite"}],
         "assets":[{"id":"client-code","version":1}], "client":{"runtime":"javascript","entry":{"id":"client-code","version":1},"process_permissions":["run"]},
         "ui":{"type":"text","value":"시험"}
     });
-    let core = open_core(temp.path(), vec![definition.to_string()], &host);
+    let mut old_definition = definition.clone();
+    old_definition["id"] = json!("process-services-old");
+    old_definition["requires"]["blocks"] = json!(17);
+    old_definition["requires"]["modules"]["client"] = json!(3);
+    let core = open_core(temp.path(), vec![definition.to_string(), old_definition.to_string()], &host);
     let (_, desktop) = active_ids(&core);
+    let old_window = open_window(&core, &desktop, "process-services-old");
+    let error = core.handle(CoreRequest::ProcessStart { window_id: old_window, key: "old".into(), permission: "run".into(), cwd_permission: "work".into(), services: vec!["tools".into()], spec: ProcessSpec { name: "시험".into(), command: "cat".into(), args: vec![], env: BTreeMap::new() } }).unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("PROCESS_START_SERVICE_VERSION_REQUIRED"));
     let link = LinkFile { revoked: false, mode: ServerMode::Remote, format: 1,
         server_url: "http://127.0.0.1:1".into(), device_id: "device".into(), device_name: "시험".into(), token: "secret-device-token".into() };
     *core.inner.link_file.lock().unwrap() = Some(link.clone());

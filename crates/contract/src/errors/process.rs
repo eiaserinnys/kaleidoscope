@@ -6,6 +6,7 @@ error_catalog! { ENTRIES;
     PROCESS_START_CLIENT_PERMISSION_UNDECLARED(permission) { class: PermissionDenied, place: "클라이언트 실행 권한", cause: "클라이언트가 실행 권한을 선언하지 않았다", message: "클라이언트에 실행 권한 {permission}이 선언되지 않았습니다. 앱 정의를 고치세요.", fix: "client.process_permissions에 권한을 선언하세요" }
     PROCESS_START_APP_CHANGED() { class: Conflict, place: "프로그램 실행 허용", cause: "허용 대기 중 창의 앱이 바뀌었다", message: "허용을 기다리는 동안 창의 앱이 바뀌었습니다. 새 앱에서 다시 실행하세요.", fix: "새 앱에서 다시 실행하세요" }
     PROCESS_START_SERVICE_UNKNOWN(service) { class: InvalidRequest, place: "프로그램 서비스 선택", cause: "지원하지 않는 서비스 이름이다", message: "프로그램 서비스 {service}를 알 수 없습니다. 앱 코드에서 지원하는 서비스 이름을 사용하세요.", fix: "앱 코드의 서비스 이름을 고치세요" }
+    PROCESS_START_SERVICE_VERSION_REQUIRED() { class: InvalidRequest, place: "프로그램 도구 서비스 판 확인", cause: "앱이 도구 중계에 필요한 판을 선언하지 않았다", message: "프로그램 도구 중계에는 블록 세트 18판과 client 4판이 필요합니다. 앱 정의의 requires를 고치세요.", fix: "앱 정의에 블록 세트 18판과 client 4판을 선언하세요" }
     PROCESS_RELAY_LISTEN_FAILED() { class: Io, place: "도구 중계 시작", cause: "로컬 중계 포트를 열지 못했다", message: "프로그램의 도구 중계를 열지 못했습니다. 프로그램을 다시 시작하세요.", fix: "프로그램을 다시 시작하세요" }
     PROCESS_RELAY_CLIENT_FAILED() { class: Io, place: "도구 중계 준비", cause: "HTTP 클라이언트를 만들지 못했다", message: "프로그램의 도구 연결을 준비하지 못했습니다. 프로그램을 다시 시작하세요.", fix: "프로그램을 다시 시작하세요" }
     PROCESS_RELAY_CREDENTIAL_INVALID() { class: PermissionDenied, place: "도구 중계 주소 확인", cause: "중계 주소가 폐기되었거나 올바르지 않다", message: "프로그램의 도구 연결이 만료되었습니다. 프로그램을 다시 시작하세요.", fix: "프로그램을 다시 시작하세요" }
