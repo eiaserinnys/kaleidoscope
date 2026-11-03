@@ -340,7 +340,7 @@ describe("shell server link control", () => {
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "연결 해제됨" }));
     expect(screen.getByText("원격 연결 거부됨")).toBeTruthy();
-    expect(screen.getByText("원격 서버 연결이 해제되었습니다. 다시 접속하려면 주소를 입력해주세요.")).toBeTruthy();
+    expect(screen.getByText("서버가 이 기기의 연결을 거부했습니다. 같은 주소로 다시 연결하거나 주소를 바꿔 주세요.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "내 PC 앱과 데이터 가져오기" })).toBeNull();
     const input = screen.getByRole("textbox", { name: "원격 서버 URL" }) as HTMLInputElement;
     expect((screen.getByRole("button", { name: "원격 서버 연결" }) as HTMLButtonElement).disabled).toBe(false);

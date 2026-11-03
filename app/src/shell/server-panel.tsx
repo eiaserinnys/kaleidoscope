@@ -64,10 +64,10 @@ export function ServerPanel({ snapshot, anchor, onClose, call }: {
       </div>
       {snapshot.embedded_available && <Button disabled={busy || link.state !== "connected"} onClick={() => void run({ op: "link.sync_local_to_remote" })}>내 PC 앱과 데이터 가져오기</Button>}
     </> : <>
-      {link.state === "connected" && link.mode === "embedded" && <div className="shell-server-meta-group"><span className="shell-server-meta">현재는 클라이언트에 내장된 서버에 연결되어 동작 중입니다. 원격 서버에 접속하려면 주소를 입력해주세요.</span></div>}
-      {link.state === "offline" && link.mode === "embedded" && <div className="shell-server-meta-group"><span className="shell-server-meta">{link.reason}</span><span className="shell-server-meta">원격 서버에 접속하려면 주소를 입력해주세요.</span></div>}
-      {link.state === "revoked" && <div className="shell-server-meta-group"><span className="shell-server-meta">원격 서버 연결이 해제되었습니다. 다시 접속하려면 주소를 입력해주세요.</span></div>}
-      {link.state === "unlinked" && <div className="shell-server-meta-group"><span className="shell-server-meta">연결된 서버가 없습니다. 원격 서버에 접속하려면 주소를 입력해주세요.</span></div>}
+      {link.state === "connected" && link.mode === "embedded" && <div className="shell-server-meta-group"><span className="shell-server-guide">현재는 클라이언트에 내장된 서버에 연결되어 동작 중입니다. 원격 서버에 접속하려면 주소를 입력해주세요.</span></div>}
+      {link.state === "offline" && link.mode === "embedded" && <div className="shell-server-meta-group"><span className="shell-server-meta">{link.reason}</span><span className="shell-server-guide">원격 서버에 접속하려면 주소를 입력해주세요.</span></div>}
+      {link.state === "revoked" && <div className="shell-server-meta-group"><span className="shell-server-guide">서버가 이 기기의 연결을 거부했습니다. 같은 주소로 다시 연결하거나 주소를 바꿔 주세요.</span></div>}
+      {link.state === "unlinked" && <div className="shell-server-meta-group"><span className="shell-server-guide">연결된 서버가 없습니다. 원격 서버에 접속하려면 주소를 입력해주세요.</span></div>}
       <TextInput aria-label="원격 서버 URL" type="url" placeholder="https://server.example" persistent commitOnBlur={false} value={url} onEdit={setUrl} onCommit={startRemote} onCancel={() => setUrl("")} disabled={busy} />
       <Button disabled={busy || !trimmedUrl} onClick={() => startRemote(url)}>원격 서버 연결</Button>
     </>}
