@@ -49,6 +49,7 @@
         "template": {
           "type": "stack",
           "direction": "row",
+          "align": "baseline",
           "gap": "medium",
           "children": [
             { "type": "text", "value": { "message": { "item": "label_key" } } },

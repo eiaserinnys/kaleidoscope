@@ -3,6 +3,7 @@ import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useDormant, useWindowData } from "../data/window-data";
 import { BindingFailureNotice, DataState, isMessageBindingFailure } from "../components/data-state";
+import { DataIcon } from "../components/data-icons";
 import { ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen } from "../components/icons";
 import { ErrorId, IconButton } from "../components/primitives";
 import { MarkdownText } from "./markdown-text";
@@ -152,7 +153,7 @@ export function TextBlock({ block, context, pointer }: Props<"text">) {
   const data = useWindowData();
   const value = useBinding(`${pointer}/value`, block.value);
   if (value.status !== "ready") {
-    if (isMessageBindingFailure(value)) return <div aria-label={value.message} role="alert" title={value.message}><DataState value={{ ...value, message: "" }} compact /></div>;
+    if (isMessageBindingFailure(value)) return <div className="ks-data-text is-body ks-data-text-error" role="alert"><DataIcon name="triangle-alert" size="inline" /><span>{value.message} <ErrorId id={value.id} /></span></div>;
     return <DataState value={value} />;
   }
   if (block.format === "time" && isClock(value.value)) return <ClockText block={block} context={context} pointer={pointer} clock={value.value} data={data} />;

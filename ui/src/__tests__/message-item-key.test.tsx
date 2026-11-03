@@ -136,3 +136,28 @@ it("자료 키 실패를 각각 구분하고 일반 단추와 미리보기 카�
   expect(prefixFailureButton.hasAttribute("disabled")).toBe(true);
   store.dispose();
 });
+
+it("실패한 글은 원인과 코드를 보이고 단추와 카드에도 오류를 표시한다", async () => {
+  const app = definition({
+    type: "repeat", items: { state: "rows" }, key: "id", virtual: false,
+    template: { type: "stack", direction: "row", children: [
+      { type: "text", value: itemMessage("label_key") },
+      { type: "button", label: itemMessage("label_key"), on_click: [] },
+      { type: "button", label: itemMessage("label_key"), preview: { type: "text", value: "미리보기" }, on_click: [] },
+    ] },
+  } as never);
+  app.state.rows = [{ id: "missing", label_key: null }];
+  const { store, windowId } = setup(app);
+  render(<AppWindowContent store={store} windowId={windowId} />);
+  await waitFor(() => expect(document.querySelectorAll(".ks-error-id")).toHaveLength(3));
+  const textError = document.querySelector(".ks-data-text[role=alert]")!;
+  expect(textError.textContent).toContain("SHELL_MESSAGE_ITEM_KEY_MISSING");
+  expect(textError.textContent).toContain("메시지");
+  const buttonFailure = document.querySelector(".ks-data-button-failure-item")!;
+  expect(buttonFailure.querySelector("button:disabled svg")).toBeTruthy();
+  expect(buttonFailure.querySelectorAll("svg")).toHaveLength(1);
+  const cardFailure = document.querySelector(".ks-data-button-card-label .ks-data-button-card-failure")!;
+  expect(cardFailure.querySelector(".ks-error-id")).toBeTruthy();
+  expect(cardFailure.closest("[inert], [aria-hidden=true]")).toBeNull();
+  store.dispose();
+});

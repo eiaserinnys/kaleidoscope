@@ -359,7 +359,7 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const buttonLabel = prefixText
     ? <><span className="ks-data-button-prefix">{prefixText}</span><span className="ks-data-button-label is-emphasized ks-truncate-label">{labelText}</span></>
     : <span className="ks-data-button-label ks-truncate-label">{labelText}</span>;
-  const contents = <>{hasIcon ? <DataIcon name={copied ? "check" : iconText} /> : null}{!block.icon_only ? buttonLabel : null}</>;
+  const contents = <>{bindingFailure ? <DataIcon name="triangle-alert" /> : hasIcon ? <DataIcon name={copied ? "check" : iconText} /> : null}{!block.icon_only ? buttonLabel : null}</>;
   const onClick = (event: MouseEvent<HTMLButtonElement>) => {
     if (busyRef.current) return;
     const modifiers = eventModifiers(event);
@@ -377,17 +377,17 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const className = `ks-data-button is-${block.variant ?? "default"}`;
   if (block.preview) return <div ref={setOpener} className={`${className} has-preview`}>
     <div className={`ks-data-button-card${pressedValue ? " is-selected" : ""}${busy || unavailable ? " is-disabled" : ""}`} title={previewError ?? undefined}>
-      <div className="ks-data-button-card-content" aria-hidden="true" inert>
-        <div className="ks-data-button-card-preview"><PreviewContext.Provider value={setPreviewError}>{renderBlock(block.preview, context, `${pointer}/preview`)}</PreviewContext.Provider></div>
-        <div className={`ks-data-button-card-label${bindingFailure ? " is-failure" : ""}`}>
+      <div className="ks-data-button-card-content">
+        <div className="ks-data-button-card-preview" aria-hidden="true" inert><PreviewContext.Provider value={setPreviewError}>{renderBlock(block.preview, context, `${pointer}/preview`)}</PreviewContext.Provider></div>
+        <div aria-hidden={bindingFailure ? undefined : true} className={`ks-data-button-card-label${bindingFailure ? " is-failure" : ""}`}>
           {!bindingFailure && prefixText ? <><span className="ks-data-button-prefix">{prefixText}</span><wbr /></> : null}
           {!bindingFailure ? <span className="ks-data-button-label is-emphasized">{labelText}</span> : null}
+          {previewFailure}
         </div>
       </div>
       <Button aria-label={accessibleName} className="ks-data-button-card-action" aria-pressed={pressedValue} disabled={unavailable} aria-disabled={busy || undefined} onClick={onClick}>
         <span className="ks-accessible-hidden">{accessibleName}</span>
       </Button>
-      {previewFailure}
     </div>
     {status}{dialog}
   </div>;
@@ -398,7 +398,7 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   </span>;
   return bindingFailure
     ? <div aria-label={bindingFailure.message} className="ks-data-button-failure-item" role="alert" title={bindingFailure.message}>
-      {control}<DataState value={{ ...bindingFailure, message: "" }} compact />
+      {control}<div className="ks-data-state-compact"><ErrorId id={bindingFailure.id} /></div>
     </div>
     : control;
 }
