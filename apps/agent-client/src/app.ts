@@ -14,7 +14,7 @@ type Bridge = {
   setStorage(entry: string, value: unknown): Promise<void>;
   getState(key: string): unknown;
   setState(key: string, value: unknown): void;
-  onStorageChange(entry: string, listener: (value: unknown) => void): void;
+  onStorageChange(entry: string, listener: (value: unknown) => void, onError?: (error: unknown) => void): void;
   onLifecycle(listener: (event: { phase: string }) => unknown): void;
   handle(name: string, listener: (context: Action) => unknown): void;
   publish(value: Record<string, unknown>): void;
@@ -32,6 +32,8 @@ export class AppClient {
   private retry = false;
   private choosingFolder = false;
   private restoring = false;
+  private storageReady = false;
+  private storageFailure = false;
   private error: { id: string | null; message: string } | null = null;
   private lastItems: SessionView["items"] | null = null;
   private lastQueue = "";
@@ -55,8 +57,8 @@ export class AppClient {
       publish: (view) => this.receive(view), uuid: () => crypto.randomUUID(), now: () => new Date().toISOString(),
     };
     this.session = new AgentSession(host);
-    client.onLifecycle((event) => event.phase === "ready" ? this.initialize() : undefined);
-    client.onStorageChange("agents", (value) => { this.agents = value as Agent[]; this.update(); });
+    client.onStorageChange("agents", (value) => { void this.acceptAgents(value); }, (error) => { this.storageFailure = true; this.showError(error); });
+    client.onLifecycle((event) => { if (event.phase === "ready") this.update(); });
     client.files.on_grant("work", (folder) => { this.folder = folder; this.update(); if (folder && this.restoring && !this.choosingFolder) void this.restore(); });
     client.handle("choose_agent", ({ item }) => this.chooseAgent(String(item?.id ?? "")));
     client.handle("back_agent", () => this.backAgent());
@@ -72,19 +74,34 @@ export class AppClient {
     client.handle("attachment", ({ event }) => this.attachment(event));
   }
 
-  private async initialize(): Promise<void> {
+  private async acceptAgents(value: unknown): Promise<void> {
+    this.agents = value as Agent[];
+    if (this.storageReady) {
+      if (this.storageFailure) {
+        this.storageFailure = false;
+        this.error = null;
+        this.stage = this.view ? "session" : this.selected ? "folder" : "agents";
+      }
+      this.update();
+      return;
+    }
+    this.storageReady = true;
+    this.storageFailure = false;
+    this.error = null;
+    const selected = this.client.getState("agent_id");
+    this.selected = this.agents.find((agent) => agent.id === selected) ?? (this.agents.length === 1 ? this.agents[0] : null);
+    this.folder = this.client.files.grant("work");
+    this.stage = this.selected ? "folder" : "agents";
+    this.restoring = !!this.selected;
+    this.update();
+    if (this.selected && this.folder) await this.restore();
+  }
+
+  private async retryStorage(): Promise<void> {
     this.stage = "loading";
     this.update();
-    try {
-      this.agents = await this.client.getStorage("agents") as Agent[];
-      const selected = this.client.getState("agent_id");
-      this.selected = this.agents.find((agent) => agent.id === selected) ?? (this.agents.length === 1 ? this.agents[0] : null);
-      this.folder = this.client.files.grant("work");
-      this.stage = this.selected ? "folder" : "agents";
-      this.restoring = !!this.selected;
-      this.update();
-      if (this.selected && this.folder) await this.restore();
-    } catch (error) { this.showError(error); }
+    try { await this.acceptAgents(await this.client.getStorage("agents")); }
+    catch (error) { this.storageFailure = true; this.showError(error); }
   }
 
   private async restore(): Promise<void> {
@@ -141,7 +158,7 @@ export class AppClient {
   }
 
   private async retryStart(): Promise<void> {
-    if (!this.selected) { await this.initialize(); return; }
+    if (this.storageFailure || !this.selected) { await this.retryStorage(); return; }
     this.stage = "session";
     this.error = null;
     this.retry = false;
@@ -162,7 +179,7 @@ export class AppClient {
   }
 
   private async resetAgents(): Promise<void> {
-    try { await this.client.setStorage("agents", this.defaults); await this.initialize(); }
+    try { await this.client.setStorage("agents", this.defaults); await this.acceptAgents(this.defaults); }
     catch (error) { this.showError(error); }
   }
 

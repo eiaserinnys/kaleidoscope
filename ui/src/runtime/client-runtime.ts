@@ -320,7 +320,11 @@ export class ClientRuntime {
       delete this.ownWrites[entry];
       this.pendingRevisions[entry] = read.result.revision;
       this.send({ type: "ks-sandbox-storage-sync", entry, content: read.result.content, revision: read.result.revision });
-    } catch (error) { this.data.setNotice(toCoreError(error)); }
+    } catch (error) {
+      const problem = toCoreError(error);
+      if (this.ready) this.send({ type: "ks-sandbox-storage-sync", entry, error: problem.message, errorId: problem.id, errorCode: problem.code });
+      else this.data.setNotice(problem);
+    }
   }
 
   private receive = (event: MessageEvent) => {
