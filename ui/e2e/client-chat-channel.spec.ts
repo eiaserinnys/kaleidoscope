@@ -73,9 +73,20 @@ test("클라이언트 채팅 채널의 기록, 입력, 첨부, 바닥글과 리�
   await page.evaluate(() => window.clientChatHarness.control("chat-test-queue-to-history"));
   await expect(app.getByText("큐 중복 시험", { exact: true })).toHaveCount(1);
 
-  const coreCallsBeforeTyping = await page.evaluate(() => window.clientChatHarness.coreCalls());
+  // 앞선 조작의 호출이 기준을 읽은 뒤에 도착하지 않게 잠잠해진 뒤 기준을 잡고,
+  // 입력이 늦게 일으키는 호출도 잡도록 입력 뒤에도 같은 시간을 기다린다.
+  const settledCoreCalls = () => page.evaluate(() => new Promise<number>((resolve) => {
+    let last = window.clientChatHarness.coreCalls();
+    const check = () => {
+      const now = window.clientChatHarness.coreCalls();
+      if (now === last) resolve(now);
+      else { last = now; setTimeout(check, 500); }
+    };
+    setTimeout(check, 500);
+  }));
+  const coreCallsBeforeTyping = await settledCoreCalls();
   await input.fill("실패");
-  expect(await page.evaluate(() => window.clientChatHarness.coreCalls())).toBe(coreCallsBeforeTyping);
+  expect(await settledCoreCalls()).toBe(coreCallsBeforeTyping);
   await input.press("Enter");
   await expect(input).toHaveValue("실패");
   await expect(app.getByRole("alert")).toContainText("요청을 보내지 못했습니다");

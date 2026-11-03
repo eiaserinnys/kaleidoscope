@@ -334,7 +334,8 @@ if (!coreUrl) {
   Object.assign(window, { clientChatHarness: {
     calls: () => [...clientChatCalls],
     clear: () => { clientChatCalls.length = 0; },
-    coreCalls: () => fakeTransport.getCalls().length,
+    // 성능 측정기가 주기마다 보내는 profiler.report는 사용자 조작과 무관해 세지 않는다.
+    coreCalls: () => fakeTransport.getCalls().filter((call) => call.op !== "profiler.report").length,
     control: (type: string) => document.querySelector<HTMLIFrameElement>(".ks-client-frames iframe")?.contentWindow?.postMessage({ type }, "*"),
     pauseNextSnapshot: () => { holdClientChatSnapshot = true; },
     restartClient: async () => { await clientChatWindowData?.restartClient(); },
