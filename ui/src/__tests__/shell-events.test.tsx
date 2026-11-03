@@ -299,6 +299,7 @@ describe("shell server link control", () => {
     const spy = vi.spyOn(transport, "call");
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "내 PC 서버" }));
+    expect(screen.getByText("현재는 클라이언트에 내장된 서버에 연결되어 동작 중입니다. 원격 서버에 접속하려면 주소를 입력해주세요.")).toBeTruthy();
     const input = screen.getByRole("textbox", { name: "원격 서버 URL" });
     const connect = screen.getByRole("button", { name: "원격 서버 연결" }) as HTMLButtonElement;
     expect(connect.disabled).toBe(true);
@@ -339,6 +340,7 @@ describe("shell server link control", () => {
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "연결 해제됨" }));
     expect(screen.getByText("원격 연결 거부됨")).toBeTruthy();
+    expect(screen.getByText("서버가 이 기기의 연결을 거부했습니다. 같은 주소로 다시 연결하거나 주소를 바꿔 주세요.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "내 PC 앱과 데이터 가져오기" })).toBeNull();
     const input = screen.getByRole("textbox", { name: "원격 서버 URL" }) as HTMLInputElement;
     expect((screen.getByRole("button", { name: "원격 서버 연결" }) as HTMLButtonElement).disabled).toBe(false);
@@ -353,6 +355,7 @@ describe("shell server link control", () => {
     render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "연결 해제됨" }));
     expect(screen.getByText("서버 연결")).toBeTruthy();
+    expect(screen.getByText("연결된 서버가 없습니다. 원격 서버에 접속하려면 주소를 입력해주세요.")).toBeTruthy();
     expect(screen.queryByText("내 PC 내장 서버")).toBeNull(); store.dispose();
   });
   it("copies a pairing code and updates the open panel on approval", async () => {
