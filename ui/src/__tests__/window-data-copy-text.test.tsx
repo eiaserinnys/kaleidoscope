@@ -18,7 +18,7 @@ afterEach(() => {
 
 function setup(binding: Binding = { expr: "$state.target" }, appFields: Record<string, unknown> = {}) {
   const definition = {
-    id: "md-viewer", name: "복사 시험", requires: { blocks: 20, modules: {} }, permissions: [],
+    id: "md-viewer", name: "복사 시험", requires: { blocks: 18, modules: {} }, permissions: [],
     state: { target: "https://example.com/page" },
     ...appFields,
     ui: { type: "button", label: "복사", icon: "copy", on_click: { copy_text: binding } },
