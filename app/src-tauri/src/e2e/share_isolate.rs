@@ -129,8 +129,8 @@ pub(super) fn scenario(
             spec,
         } = event
         {
-            if window_id == permission_window_id {
-                let _ = permission_tx.send((request_id, spec));
+            if window_id == &permission_window_id {
+                let _ = permission_tx.send((request_id.clone(), spec.clone()));
             }
         }
     }));

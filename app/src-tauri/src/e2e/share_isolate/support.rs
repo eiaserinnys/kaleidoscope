@@ -155,7 +155,7 @@ pub(super) fn surface_code(minimized: bool) -> String {
 }
 
 pub(super) fn agent_definition(out: &Path, agent_bin: &Path) -> Value {
-    let mut definition: Value = serde_json::from_str(include_str!("../../../../apps/agent.json"))
+    let mut definition: Value = serde_json::from_str(include_str!("../../../../../apps/agent.json"))
         .expect("built-in agent app definition is valid JSON");
     definition["id"] = json!(AGENT_APP_ID);
     definition["name"] = json!("Share capture agent E2E");
