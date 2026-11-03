@@ -1707,8 +1707,12 @@ pub enum Block {
         on_select: Option<Actions>,
     },
     /// (4판) 속성 이름과 값의 목록(상세 보기). 값이 null이거나 빈 글이면 그 줄을 뺀다. 값을 고르고 복사할 수 있다.
+    /// (19판) `layout: "rows"`는 좁은 폭에서도 이름과 값을 두 열로 둔다.
     Properties {
         fields: Vec<PropertyField>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        layout: Option<PropertiesLayout>,
     },
     /// (4판) 흐름. 대화 기록, 대사, 로그처럼 이름과 본문이 이어지는 것. `entries`는 [`data::FeedEntry`] 배열이고,
     /// `grouped`면 [`data::Group`]`<FeedEntry>` 배열이다(묶음 머리에 제목과 부가 정보). 본문은 줄바꿈을 지키고
@@ -1771,6 +1775,7 @@ pub enum Block {
     /// (입력한 글, `number`면 숫자나 null)로 돈다. 입력 중에는 상태가 바뀌어도 글을 덮지 않는다. `search`는 앞에
     /// 돋보기, 글이 있으면 끝에 지우기 단추가 붙는다. `multiline`이면 한 줄로 시작해 글을 따라 자란다(최대 8줄).
     /// Enter는 `on_submit`이 있으면 그것을 부른다(`multiline`에서는 Ctrl+Enter). 한글 조합 중의 Enter는 보내지 않는다.
+    /// (19판) `columns`는 보일 문자 수로 폭을 정하며, 양수여야 하고 지정한 폭보다 줄어들지 않는다.
     Input {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -1807,6 +1812,9 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         rows: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        columns: Option<u16>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         placeholder: Option<Binding>,
@@ -1858,7 +1866,8 @@ pub enum Block {
     },
     /// (4판) 단추. 누르면 `on_click`이 돈다(`$event`는 null). 도는 동안 단추는 쉬고, 실패하면 창 아래에 오류
     /// 한 줄이 보인다. `confirm`이 있으면 확인 대화상자에서 확인했을 때만 돈다. `icon_only`면 아이콘만 보이고
-    /// `label`은 도움말과 읽어 주기에 쓴다. `disabled`가 참이면 누를 수 없다.
+    /// `label`은 도움말과 읽어 주기에 쓴다. `disabled`가 참이면 누를 수 없다. (19판) `preview`는 canvas 또는
+    /// image 미리보기고 조작하지 않는다. `prefix`는 label 앞에 둘 보조 바인딩이다.
     Button {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -1880,6 +1889,12 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         disabled: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        preview: Option<Box<Block>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        prefix: Option<Binding>,
     },
 
     // ----- 블록 세트 4판: 문서와 미디어 -----
@@ -2367,8 +2382,11 @@ enum RawBlock {
         on_select: Option<Actions>,
     },
     /// (4판) 속성 이름과 값의 목록(상세 보기). 값이 null이거나 빈 글이면 그 줄을 뺀다. 값을 고르고 복사할 수 있다.
+    /// (19판) `layout: "rows"`는 좁은 폭에서도 이름과 값을 두 열로 둔다.
     Properties {
         fields: Vec<PropertyField>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        layout: Option<PropertiesLayout>,
     },
     /// (4판) 흐름. 대화 기록, 대사, 로그처럼 이름과 본문이 이어지는 것. `entries`는 [`data::FeedEntry`] 배열이고,
     /// `grouped`면 [`data::Group`]`<FeedEntry>` 배열이다(묶음 머리에 제목과 부가 정보). 본문은 줄바꿈을 지키고
@@ -2445,6 +2463,8 @@ enum RawBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rows: Option<u8>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        columns: Option<u16>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         placeholder: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_submit: Option<Actions>,
@@ -2513,6 +2533,10 @@ enum RawBlock {
         confirm: Option<Confirm>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         disabled: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preview: Option<Box<Block>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prefix: Option<Binding>,
     },
 
     // ----- 블록 세트 4판: 문서와 미디어 -----
@@ -2974,7 +2998,7 @@ impl From<RawBlock> for Block {
                 selected,
                 on_select,
             },
-            RawBlock::Properties { fields } => Block::Properties { fields },
+            RawBlock::Properties { fields, layout } => Block::Properties { fields, layout },
             RawBlock::Feed {
                 entries,
                 grouped,
@@ -3023,6 +3047,7 @@ impl From<RawBlock> for Block {
                 kind,
                 multiline,
                 rows,
+                columns,
                 placeholder,
                 on_submit,
             } => Block::Input {
@@ -3039,6 +3064,7 @@ impl From<RawBlock> for Block {
                 kind,
                 multiline,
                 rows,
+                columns,
                 placeholder,
                 on_submit,
             },
@@ -3064,6 +3090,7 @@ impl From<RawBlock> for Block {
                 kind,
                 multiline: true,
                 rows,
+                columns: None,
                 placeholder,
                 on_submit,
             },
@@ -3110,6 +3137,8 @@ impl From<RawBlock> for Block {
                 on_click,
                 confirm,
                 disabled,
+                preview,
+                prefix,
             } => Block::Button {
                 pressed,
                 label,
@@ -3119,6 +3148,8 @@ impl From<RawBlock> for Block {
                 on_click,
                 confirm,
                 disabled,
+                preview,
+                prefix,
             },
             RawBlock::Code {
                 value,
@@ -3550,7 +3581,7 @@ pub struct SortSpec {
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct PropertyField {
-    pub label: String,
+    pub label: Binding,
     pub value: Binding,
     #[serde(default)]
     #[ts(optional, as = "Option<FieldFormat>")]
@@ -3573,6 +3604,16 @@ pub enum FieldFormat {
     Date,
     /// 고정폭 글(식별자, 경로).
     Code,
+    /// 색 문자열 배열을 읽기 전용 색 견본으로 표시한다.
+    Swatches,
+}
+
+/// 속성 이름과 값을 나란히 보이는 배치.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum PropertiesLayout {
+    Rows,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]

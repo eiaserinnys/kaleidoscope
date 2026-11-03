@@ -324,7 +324,7 @@ collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": 
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
-meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: Binding, on_select?: Actions, } | { "type": "properties", fields: Array<PropertyField>, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
+meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: Binding, on_select?: Actions, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
 /**
  * (블록 세트 7판) 본문 문단(`body`가 배열일 때)을 같은 너비의 칸으로 나란히 놓는다. 창이 좁아 칸마다
  * 최소 너비를 지킬 수 없으면 위아래로 쌓는다. 예: 여러 문단 비교.
@@ -338,7 +338,7 @@ copy?: boolean,
 /**
  * (블록 세트 10판) 대댓글과 긴 항목의 접기·펴기를 켠다.
  */
-collapsible?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", on_click?: Actions, on_double_click?: Actions, value: Binding, format?: DisplayTextFormat, style?: TextStyle, } | { "type": "input", min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, kind?: InputKind, multiline?: boolean, rows?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, style?: SelectStyle, placeholder?: Binding, 
+collapsible?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", on_click?: Actions, on_double_click?: Actions, value: Binding, format?: DisplayTextFormat, style?: TextStyle, } | { "type": "input", min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, kind?: InputKind, multiline?: boolean, rows?: number, columns?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, style?: SelectStyle, placeholder?: Binding, 
 /**
  * (18판) 참이면 이 고르기를 사용할 수 없다.
  */
@@ -346,7 +346,7 @@ disabled?: Binding, } | { "type": "toggle", value: Binding, on_change: Actions, 
 /**
  * (18판) 참이면 이 켜고 끄기를 사용할 수 없다.
  */
-disabled?: Binding, } | { "type": "notice", message: Binding, error_id?: Binding, kind?: NoticeKind, actions: Array<NoticeAction>, } | { "type": "button", pressed?: Binding, label: Binding, icon?: Binding, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, } | { "type": "code", value?: Binding, file?: FileRef, language?: CodeLanguage, read_only?: boolean, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "button_grid", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
+disabled?: Binding, } | { "type": "notice", message: Binding, error_id?: Binding, kind?: NoticeKind, actions: Array<NoticeAction>, } | { "type": "button", pressed?: Binding, label: Binding, icon?: Binding, icon_only?: boolean, variant?: ButtonVariant, on_click: Actions, confirm?: Confirm, disabled?: Binding, preview?: Block, prefix?: Binding, } | { "type": "code", value?: Binding, file?: FileRef, language?: CodeLanguage, read_only?: boolean, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "button_grid", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
 
 export type ButtonVariant = "default" | "primary" | "danger" | "ghost" | "chip";
 
@@ -682,7 +682,7 @@ children?: Array<FeedEntry>, };
 /**
  * 속성 값을 보이는 방법.
  */
-export type FieldFormat = "text" | "markdown" | "badge" | "date" | "code";
+export type FieldFormat = "text" | "markdown" | "badge" | "date" | "code" | "swatches";
 
 export type FileAccept = { mime: string, extensions: Array<string>, };
 
@@ -1007,9 +1007,14 @@ export type ProcessStartResult = { handle: string, cwd: string, services: { [key
 export type ProfilesReply = { profiles: Array<ConversationProfile>, };
 
 /**
+ * 속성 이름과 값을 나란히 보이는 배치.
+ */
+export type PropertiesLayout = "rows";
+
+/**
  * 속성 한 줄.
  */
-export type PropertyField = { label: string, value: Binding, format?: FieldFormat, };
+export type PropertyField = { label: Binding, value: Binding, format?: FieldFormat, };
 
 export type QueuedMessage = { id: string, text: string, attachments: Array<ConversationAttachment>, };
 
