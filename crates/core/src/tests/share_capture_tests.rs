@@ -23,7 +23,7 @@ fn instructions_require_capability_and_return_the_canonical_guide() {
     let reply = serde_json::to_value(core.handle(request(&allowed)).unwrap()).unwrap();
     assert_eq!(reply["text"], kaleidoscope_contract::APP_AUTHORING_GUIDE);
     assert!(!reply["hash"].as_str().unwrap().is_empty());
-    assert!(core.handle(request(&denied)).is_err());
+    assert_eq!(core.handle(request(&denied)).unwrap_err().id.as_deref(), Some("APP_INSTRUCTIONS_CAPABILITY_UNDECLARED"));
 }
 
 #[test]

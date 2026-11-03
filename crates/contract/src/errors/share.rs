@@ -1,14 +1,11 @@
 error_catalog! { ENTRIES;
     SHARE_CONTEXT_WINDOW_NOT_FOUND() { class: NotFound, place: "같이 보기 준비 창", cause: "앱 창이 없다", message: "같이 보기를 준비할 앱 창이 없습니다. 앱을 다시 여세요.", fix: "앱을 다시 여세요" }
-    SHARE_INSTRUCTIONS_WINDOW_NOT_FOUND() { class: NotFound, place: "지침 읽기 창", cause: "앱 창이 없다", message: "지침을 읽을 앱 창이 없습니다. 앱을 다시 여세요.", fix: "앱을 다시 여세요" }
     SHARE_CLIENT_APP_NOT_FOUND() { class: NotFound, place: "클라이언트 기능 앱 조회", cause: "창의 앱 정의가 없다", message: "클라이언트 기능을 사용할 앱 정의가 없습니다. 앱을 다시 여세요.", fix: "앱을 다시 여세요" }
     SHARE_CONTEXT_ID_EMPTY() { class: InvalidRequest, place: "같이 보기 준비 식별자", cause: "요청 ID나 채널이 비었다", message: "같이 보기 요청 ID 또는 채널이 비었습니다. 앱 코드에서 둘 다 지정하세요.", fix: "요청 ID와 채널을 지정하세요" }
     SHARE_CLIENT_DESKTOP_NOT_FOUND() { class: NotFound, place: "클라이언트 기능 데스크톱 조회", cause: "창이 속한 데스크톱이 없다", message: "앱 창이 속한 데스크톱을 찾지 못했습니다. 앱을 다시 여세요.", fix: "앱을 다시 여세요" }
     SHARE_CONTEXT_CAPABILITY_UNDECLARED() { class: PermissionDenied, place: "같이 보기 준비 권한", cause: "앱이 같이 보기 기능을 선언하지 않았다", message: "앱이 같이 보기 준비 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.", fix: "client.capabilities에 context_capture를 선언하세요" }
     SHARE_CONTEXT_REQUEST_CHANGED() { class: InvalidRequest, place: "같이 보기 준비 재요청", cause: "같은 요청의 첨부 개수나 크기가 달라졌다", message: "같은 요청의 첨부 개수나 크기가 달라졌습니다. 새 request_id로 다시 준비하세요.", fix: "새 request_id로 다시 준비하세요" }
     SHARE_CONTEXT_TICKET_NOT_FOUND() { class: NotFound, place: "같이 보기 전송 확인", cause: "이 창의 준비 표가 없다", message: "이 창에서 같이 보기 준비 결과를 찾지 못했습니다. 다시 준비한 뒤 보내세요.", fix: "다시 준비한 뒤 보내세요" }
-    SHARE_INSTRUCTIONS_CAPABILITY_UNDECLARED() { class: PermissionDenied, place: "지침 읽기 권한", cause: "앱이 지침 기능을 선언하지 않았다", message: "앱이 지침 읽기 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.", fix: "client.capabilities에 instructions를 선언하세요" }
-    SHARE_INSTRUCTIONS_KIND_UNKNOWN(kind) { class: InvalidRequest, place: "지침 종류", cause: "지원하지 않는 지침 종류다", message: "지침 종류 {kind}를 찾지 못했습니다. 앱 코드에서 app_authoring을 사용하세요.", fix: "앱 코드에서 app_authoring을 사용하세요" }
     SHARE_SET_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "같이 보기 켜기와 끄기",

@@ -39,7 +39,7 @@ fn authorize(
         .iter()
         .find(|item| item.id == window)
         .ok_or_else(|| match capability {
-            ClientCapability::Instructions => errors::SHARE_INSTRUCTIONS_WINDOW_NOT_FOUND(),
+            ClientCapability::Instructions => errors::APP_INSTRUCTIONS_WINDOW_NOT_FOUND(),
             _ => errors::SHARE_CONTEXT_WINDOW_NOT_FOUND(),
         })?;
     let definition = app_commands::definition_for(&state.shared, &item.app_id, item.app_version)
@@ -51,7 +51,7 @@ fn authorize(
         .is_some_and(|capabilities| capabilities.contains(&capability))
     {
         return Err(match capability {
-            ClientCapability::Instructions => errors::SHARE_INSTRUCTIONS_CAPABILITY_UNDECLARED(),
+            ClientCapability::Instructions => errors::APP_INSTRUCTIONS_CAPABILITY_UNDECLARED(),
             _ => errors::SHARE_CONTEXT_CAPABILITY_UNDECLARED(),
         });
     }
@@ -69,7 +69,7 @@ pub(crate) fn handle(inner: &Inner, request: CoreRequest) -> Result<CoreReply, C
         CoreRequest::HostInstructions { window_id, kind } => {
             authorize(inner, &window_id, ClientCapability::Instructions)?;
             if kind != "app_authoring" {
-                return Err(errors::SHARE_INSTRUCTIONS_KIND_UNKNOWN(kind));
+                return Err(errors::APP_INSTRUCTIONS_KIND_UNKNOWN(kind));
             }
             let text = kaleidoscope_contract::APP_AUTHORING_GUIDE.to_owned();
             let hash = format!("{:x}", Sha256::digest(text.as_bytes()));

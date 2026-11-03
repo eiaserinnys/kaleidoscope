@@ -186,7 +186,7 @@ async fn forward(State(shared): State<Arc<Shared>>, request: Request) -> Respons
     };
     let mut outgoing = shared
         .client
-        .request(method, &binding.upstream)
+        .request(method.clone(), &binding.upstream)
         .bearer_auth(&binding.token)
         .header(
             kaleidoscope_contract::registry::WORKSPACE_HEADER,
@@ -209,6 +209,7 @@ async fn forward(State(shared): State<Arc<Shared>>, request: Request) -> Respons
         _ = revoked.changed() => return rejected(StatusCode::FORBIDDEN, errors::PROCESS_RELAY_CREDENTIAL_INVALID()),
     };
     let status = response.status();
+    eprintln!("프로그램 도구 중계: {method} HTTP {}", status.as_u16());
     let mut result = Response::builder().status(status);
     for name in [
         "content-type",
