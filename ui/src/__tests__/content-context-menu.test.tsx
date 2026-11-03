@@ -8,6 +8,7 @@ import { ImageBlock } from "../blocks/data-image";
 import { CodeViewBlock } from "../blocks/code-view";
 import { EditorView } from "@codemirror/view";
 import * as windowData from "../data/window-data";
+import { PreviewContext } from "../blocks/preview-context";
 
 vi.mock("../data/window-data", async (importOriginal) => ({
   ...await importOriginal<typeof import("../data/window-data")>(),
@@ -122,6 +123,14 @@ it("이미지 블록의 그림은 우클릭과 키보드 메뉴로 복사한다"
   fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
   const host = container.querySelector<HTMLElement>(".ks-image-view")!; host.focus(); fireEvent.keyDown(host, { key: "F10", shiftKey: true });
   expect(screen.getByRole("menuitem", { name: "이미지 복사" })).toBeTruthy();
+});
+
+it("단추 미리보기 안의 그림에는 초점과 자체 메뉴가 없다", async () => {
+  const { container } = render(<><menu.ContextMenuHost /><PreviewContext.Provider value={() => {}}><ImageBlock block={{ type: "image", src: { asset: "image" } } as never} pointer="/image" /></PreviewContext.Provider></>);
+  const image = await waitFor(() => { const value = container.querySelector("img"); expect(value).toBeTruthy(); return value!; });
+  expect(container.querySelector(".ks-image-view")?.hasAttribute("tabindex")).toBe(false);
+  fireEvent.contextMenu(image);
+  expect(screen.queryByRole("menuitem", { name: "이미지 복사" })).toBeNull();
 });
 
 it("PNG는 그대로 쓰고 다른 이미지는 캔버스 PNG로 변환하며 실패를 알린다", async () => {
