@@ -542,7 +542,7 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "연결 중계 요청",
         cause: "원천 서버가 제한 시간 안에 응답하지 않았다",
-        message: "연결 {connection}의 서버 {host}가 시간 안에 응답하지 않았습니다. 잠시 뒤 다시 시도하세요.",
+        message: "연결 {connection}: 서버가 시간 안에 응답하지 않았습니다. 잠시 뒤 다시 시도하세요. 서버: {host}",
         fix: "잠시 뒤 다시 시도하세요"
     }
     CONN_PAIR_START_NAME_INVALID() {
