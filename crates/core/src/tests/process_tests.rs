@@ -544,6 +544,12 @@ fn tool_services_follow_process_window_and_server_lifetimes() {
     assert_eq!((event_window, event_handle), (window.clone(), handle.clone()));
     assert!(!event.contains("secret-device-token"));
     assert_eq!(http.get(&old).send().unwrap().status(), 403);
+    let during_switch = core.handle(CoreRequest::ProcessAttach { window_id: window.clone(), key: "switch".into() }).unwrap();
+    assert!(matches!(during_switch, CoreReply::ProcessAttach { process: None }));
+    let read_error = core.handle(CoreRequest::ProcessRead { window_id: window.clone(), handle: handle.clone(), after: 0, max_bytes: 1024 }).unwrap_err();
+    assert_eq!(read_error.id.as_deref(), Some("PROCESS_READ_HANDLE_MISSING"));
+    let stop_error = core.handle(CoreRequest::ProcessStop { window_id: window.clone(), handle: handle.clone() }).unwrap_err();
+    assert_eq!(stop_error.id.as_deref(), Some("PROCESS_STOP_HANDLE_MISSING"));
     crate::server_switch::activate(&core.inner, link, 0).unwrap();
     let restored = core.handle(CoreRequest::ProcessAttach { window_id: window.clone(), key: "switch".into() }).unwrap();
     assert!(matches!(restored, CoreReply::ProcessAttach { process: Some(process) } if process.services["tools"].is_none()));
