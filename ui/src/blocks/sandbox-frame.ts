@@ -1,12 +1,13 @@
 import type { ClientCapability } from "../contract/contract";
 import * as shellErrors from "../contract/shell-errors";
 
-type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string; inputs?: Record<string, unknown>; capabilities?: ClientCapability[]; actions?: string[]; channels?: string[]; processEnabled?: boolean; errors?: ReturnType<typeof sandboxErrors> };
+type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string; inputs?: Record<string, unknown>; capabilities?: ClientCapability[]; actions?: string[]; channels?: string[]; filePermissions?: string[]; processEnabled?: boolean; errors?: ReturnType<typeof sandboxErrors> };
 
 export function sandboxErrors() {
   return {
     storageEntryUndeclared: shellErrors.SHELL_CLIENT_STORAGE_ENTRY_UNDECLARED({ entry: "__ENTRY__" }),
     savePromptActionRequired: shellErrors.SHELL_CLIENT_SAVE_PROMPT_ACTION_REQUIRED(),
+    pickFolderActionRequired: shellErrors.SHELL_CLIENT_PICK_FOLDER_ACTION_REQUIRED(),
     canShareCapabilityUndeclared: shellErrors.SHELL_CLIENT_FRAME_CAN_SHARE_CAPABILITY_UNDECLARED(),
     canShareActionRequired: shellErrors.SHELL_CLIENT_CAN_SHARE_ACTION_REQUIRED(),
     shareCapabilityUndeclared: shellErrors.SHELL_CLIENT_FRAME_SHARE_CAPABILITY_UNDECLARED(),
@@ -27,13 +28,14 @@ function bridgeSource(init: SandboxInit): string {
     const token = config.token;
     const fail = (error) => Object.assign(new Error(error.message), { id: error.id, code: error.code });
     let state = { ...config.state }, nextRequest = 0, shareText = '', shareImage = '', shareCanvas = null, explicitText = false;
-    const stateListeners = new Set(), storageListeners = new Map(), pending = new Map(), pendingWrites = new Set();
+    const stateListeners = new Set(), storageListeners = new Map(), grantListeners = new Map(), pending = new Map(), pendingWrites = new Set();
     const send = (type, body = {}, transfer) => transfer ? parent.postMessage({ token, type, ...body }, '*', transfer) : parent.postMessage({ token, type, ...body }, '*');
     const lifecycleListeners = new Set(), pendingLifecycle = new Set(), processListeners = new Set(), processServicesListeners = new Set();
     let lifecycle = null;
     const inputListeners = new Set(), handlers = new Map(), surfaceListeners = new Map(), surfaces = new Map();
     let activeActions = 0;
     let inputs = config.inputs || {};
+    let grants = {};
     const clientRequest = (type, body = {}, transfer) => new Promise((resolve, reject) => {
       const requestId = String(++nextRequest); pending.set(requestId, { resolve, reject });
       send(type, { requestId, ...body }, transfer);
@@ -114,6 +116,20 @@ function bridgeSource(init: SandboxInit): string {
           if (!activeActions) return Promise.reject(fail(config.errors.savePromptActionRequired));
           return clientRequest('ks-client-save-prompt', { suggested_name, mime });
         },
+        pick_folder(permission) {
+          if (!activeActions) return Promise.reject(fail(config.errors.pickFolderActionRequired));
+          return clientRequest('ks-client-pick-folder', { permission });
+        },
+        grant(permission) {
+          return config.filePermissions?.includes(permission) ? grants[permission] ?? null : null;
+        },
+        on_grant(permission, listener) {
+          if (!config.filePermissions?.includes(permission) || typeof listener !== 'function') return () => {};
+          const listeners = grantListeners.get(permission) || new Set();
+          listeners.add(listener);
+          grantListeners.set(permission, listeners);
+          return () => listeners.delete(listener);
+        },
       },
       host: {
         can_share(file_id) {
@@ -184,6 +200,14 @@ function bridgeSource(init: SandboxInit): string {
         });
       }
       if (data.type === 'ks-client-inputs') { inputs = data.inputs; inputListeners.forEach(fn => fn(inputs, data.changed)); }
+      if (data.type === 'ks-client-grants') {
+        const next = data.grants && typeof data.grants === 'object' ? data.grants : {};
+        for (const permission of config.filePermissions || []) {
+          const previous = grants[permission] ?? null, current = next[permission] ?? null;
+          if (previous !== current) for (const listener of grantListeners.get(permission) || []) listener(current);
+        }
+        grants = next;
+      }
       if (data.type === 'ks-client-action' && config.actions?.includes(data.name)) {
         const handler = handlers.get(data.name), requestId = typeof data.requestId === 'string' ? data.requestId : null;
         if (!handler) { if (requestId) send('ks-client-action-result', { requestId, ok: false, error: '클라이언트 동작이 등록되지 않았습니다' }); }

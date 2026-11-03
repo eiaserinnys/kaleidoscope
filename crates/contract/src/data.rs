@@ -1662,6 +1662,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             on_change,
             label,
             placeholder,
+            disabled,
             ..
         } => {
             bind!("value", value);
@@ -1673,13 +1674,29 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             if let Some(placeholder) = placeholder {
                 bind!("placeholder", placeholder);
             }
+            if let Some(disabled) = disabled {
+                bind!("disabled", disabled);
+            }
         }
         Block::Toggle {
-            value, on_change, label
+            value, on_change, label, disabled
         } => {
             bind!("value", value);
             act!("on_change", on_change);
             bind!("label", label);
+            if let Some(disabled) = disabled {
+                bind!("disabled", disabled);
+            }
+        }
+        Block::Notice { message, error_id, actions, .. } => {
+            bind!("message", message);
+            if let Some(error_id) = error_id {
+                bind!("error_id", error_id);
+            }
+            for (index, action) in actions.iter().enumerate() {
+                bind!(format!("actions/{index}/label"), &action.label);
+                act!(format!("actions/{index}/on_click"), &action.on_click);
+            }
         }
         Block::Button {
             label,

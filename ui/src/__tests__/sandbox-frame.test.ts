@@ -98,6 +98,38 @@ it("host 기능과 저장 대화상자는 capability와 선언 액션 안에서 
   vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
 });
 
+it("폴더 선택은 client 동작 안에서만 요청하고 선언 권한 grant 변화만 알린다", async () => {
+  vi.useFakeTimers();
+  const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험", actions: ["pick-folder"], filePermissions: ["docs"] });
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
+  const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
+  const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  new Function(code)();
+  const sdk = (window as any).kaleidoscope;
+  const changes: Array<string | null> = [];
+  sdk.files.on_grant("docs", (name: string | null) => changes.push(name));
+  sdk.files.on_grant("undeclared", () => changes.push("불가"));
+  expect(sdk.files.grant("docs")).toBeNull();
+  expect(sdk.files.grant("undeclared")).toBeNull();
+  await expect(sdk.files.pick_folder("docs")).rejects.toMatchObject({ id: "SHELL_CLIENT_PICK_FOLDER_ACTION_REQUIRED" });
+
+  sdk.handle("pick-folder", () => { void sdk.files.pick_folder("docs").catch(() => undefined); });
+  window.dispatchEvent(new MessageEvent("message", { source: window, data: { token: "시험", type: "ks-client-action", name: "pick-folder", context: {} } }));
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-pick-folder", permission: "docs" }), "*");
+
+  const grantEvent = (grants: object) => window.dispatchEvent(new MessageEvent("message", { source: window, data: { token: "시험", type: "ks-client-grants", grants } }));
+  grantEvent({ docs: "작업 폴더", undeclared: "비공개" });
+  expect(sdk.files.grant("docs")).toBe("작업 폴더");
+  expect(changes).toEqual(["작업 폴더"]);
+  grantEvent({});
+  expect(sdk.files.grant("docs")).toBeNull();
+  expect(changes).toEqual(["작업 폴더", null]);
+  vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+});
+
 it("선언되지 않은 client 동작 메시지는 handler와 host API를 열지 않는다", async () => {
   vi.useFakeTimers();
   const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험", capabilities: ["keep_awake"], actions: [] });

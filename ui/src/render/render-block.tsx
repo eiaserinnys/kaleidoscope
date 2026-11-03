@@ -11,6 +11,7 @@ import { InputBlock, SelectBlock, ToggleBlock, ButtonBlock, SliderBlock, ColorBl
 import { ListBlock } from "../blocks/data-list";
 import { TableBlock } from "../blocks/data-table";
 import { PropertiesBlock } from "../blocks/data-properties";
+import { NoticeBlock } from "../blocks/data-notice";
 import { TreeBlock } from "../blocks/data-tree";
 import type { DataTreeBlockData } from "../blocks/data-tree";
 import { FeedBlock } from "../blocks/data-feed";
@@ -96,6 +97,7 @@ function BlockContent({ block: normalized, context, pointer }: { block: Block; c
     case "list": return <ListBlock block={normalized} context={context} pointer={pointer} />;
     case "table": return <TableBlock block={normalized} context={context} pointer={pointer} />;
     case "properties": return <PropertiesBlock block={normalized} pointer={pointer} />;
+    case "notice": return <NoticeBlock block={normalized} pointer={pointer} />;
     case "feed": return <FeedBlock block={normalized} context={context} pointer={pointer} />;
     case "text": return <TextBlock block={normalized} context={context} pointer={pointer} />;
     case "input": return <InputBlock block={normalized} context={context} pointer={pointer} />;

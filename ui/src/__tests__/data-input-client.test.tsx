@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { ButtonBlock, ColorBlock, InputBlock, SelectBlock } from "../blocks/data-input";
+import { ButtonBlock, ColorBlock, InputBlock, SelectBlock, ToggleBlock } from "../blocks/data-input";
 
 const runtime = vi.hoisted(() => ({ values: {} as Record<string, unknown>, act: vi.fn().mockResolvedValue(true) }));
 vi.mock("../data/window-data", () => ({
@@ -53,4 +53,28 @@ it("수정 키를 눌러 단추를 누르면 동작에 그대로 전한다", () 
   render(<ButtonBlock block={button as never} context={{} as never} pointer="/button" />);
   fireEvent.click(screen.getByRole("button", { name: "선택" }), { shiftKey: true });
   expect(runtime.act).toHaveBeenCalledWith("/button/on_click", null, undefined, { shift: true, alt: false, ctrl: false, meta: false });
+});
+
+it("비활성 선택기와 토글은 disabled 접근성 상태를 내고 조작되지 않는다", () => {
+  runtime.values = { disabled: true };
+  const select = { type: "select", label: "환경", value: "local", on_change: { client: "select" }, options: ["local", "remote"], disabled: { client: "disabled" } };
+  const toggle = { type: "toggle", label: "자동 저장", value: true, on_change: { client: "toggle" }, disabled: { client: "disabled" } };
+  render(<><SelectBlock block={select as never} context={{} as never} pointer="/select" /><ToggleBlock block={toggle as never} context={{} as never} pointer="/toggle" /></>);
+
+  const selectButton = screen.getByRole("button", { name: "환경" }) as HTMLButtonElement;
+  const toggleButton = screen.getByRole("switch", { name: "자동 저장" }) as HTMLButtonElement;
+  expect(selectButton.disabled).toBe(true);
+  expect(toggleButton.disabled).toBe(true);
+  fireEvent.click(selectButton);
+  fireEvent.click(toggleButton);
+  expect(screen.queryByRole("menuitem")).toBeNull();
+  expect(runtime.act).not.toHaveBeenCalled();
+});
+
+it("공용 select와 버튼 블록은 축약 가능한 라벨 요소를 쓴다", () => {
+  const select = { type: "select", value: "long", on_change: { client: "select" }, options: [{ value: "long", label: "아주 길어서 좁은 창에서 한 줄 말줄임이 필요한 선택지" }] };
+  const button = { type: "button", label: "아주 길어서 좁은 창에서 한 줄 말줄임이 필요한 단추", on_click: { client: "run" } };
+  render(<><SelectBlock block={select as never} context={{} as never} pointer="/select" /><ButtonBlock block={button as never} context={{} as never} pointer="/button" /></>);
+  expect(document.querySelector(".ks-select-button .ks-select-choice-label")).toBeTruthy();
+  expect(document.querySelector(".ks-data-button .ks-truncate-label")?.textContent).toContain("아주 길어서");
 });
