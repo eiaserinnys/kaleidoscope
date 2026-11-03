@@ -24,6 +24,10 @@ fn app_authoring_guide_explains_boundaries_before_reference_section() {
         })
         .collect();
     assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
+    let capabilities = &guide[positions[2]..positions[3]];
+    let limits = &guide[positions[3]..positions[4]];
+    assert!(capabilities.contains("사용자가 허용한 이 PC의 프로그램"));
+    assert!(limits.contains("허용한 프로그램은 일반 프로그램처럼 사용자 계정의 파일 권한"));
     // MCP instructions were observed truncating near 6,850 bytes, so keep the boundary guidance intact.
     assert!(positions[6] < 6_800, "참조 시작 바이트: {}", positions[6]);
 }
