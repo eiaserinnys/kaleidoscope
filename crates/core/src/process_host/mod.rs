@@ -417,10 +417,9 @@ pub(crate) fn server_changed(inner: &Arc<Inner>) {
     for process in processes {
         let mut services = process.services.lock().unwrap();
         if let Some(tools) = services.get_mut("tools") {
-            if tools.take().is_some() {
-                drop(services);
-                inner.emit(&CoreEvent::ProcessServicesChanged { window_id: process.window.clone(), handle: process.handle.clone() });
-            }
+            *tools = None;
+            drop(services);
+            inner.emit(&CoreEvent::ProcessServicesChanged { window_id: process.window.clone(), handle: process.handle.clone() });
         }
     }
 }

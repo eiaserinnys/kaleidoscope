@@ -497,13 +497,17 @@ fn tool_services_follow_process_window_and_server_lifetimes() {
     let (tx, rx) = mpsc::channel();
     core.subscribe(Box::new(move |event| { if let CoreEvent::ProcessServicesChanged { window_id, handle } = event { let _ = tx.send((window_id.clone(), handle.clone(), serde_json::to_string(event).unwrap())); } }));
     let replacement = LinkFile { server_url: "http://127.0.0.1:2".into(), ..link.clone() };
-    crate::server_switch::activate(&core.inner, replacement, 0).unwrap();
+    crate::server_switch::activate(&core.inner, replacement.clone(), 0).unwrap();
     let (event_window, event_handle, event) = rx.recv_timeout(Duration::from_secs(5)).unwrap();
-    assert_eq!((event_window, event_handle), (window.clone(), handle));
+    assert_eq!((event_window, event_handle), (window.clone(), handle.clone()));
     assert!(!event.contains("secret-device-token"));
     assert_eq!(http.get(&old).send().unwrap().status(), 403);
     crate::server_switch::activate(&core.inner, link, 0).unwrap();
-    let restored = core.handle(CoreRequest::ProcessAttach { window_id: window, key: "switch".into() }).unwrap();
+    let restored = core.handle(CoreRequest::ProcessAttach { window_id: window.clone(), key: "switch".into() }).unwrap();
     assert!(matches!(restored, CoreReply::ProcessAttach { process: Some(process) } if process.services["tools"].is_none()));
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| { if let CoreEvent::ProcessServicesChanged { window_id, handle } = event { let _ = tx.send((window_id.clone(), handle.clone())); } }));
+    crate::server_switch::activate(&core.inner, replacement, 0).unwrap();
+    assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), (window, handle));
     core.shutdown();
 }
