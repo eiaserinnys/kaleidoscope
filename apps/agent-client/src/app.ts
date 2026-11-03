@@ -251,7 +251,7 @@ export class AppClient {
       show_retry: this.retry, show_back: this.agents.length > 1,
       show_selected: !!this.selected && this.stage !== "agents" && this.stage !== "loading",
       show_single: !!this.selected && this.agents.length <= 1,
-      show_picked_folder: !!this.folder && this.stage !== "folder" && this.stage !== "agents" && this.stage !== "loading",
+      show_picked_folder: !!this.folder && (this.stage !== "folder" || this.retry) && this.stage !== "agents" && this.stage !== "loading",
       show_login_error: phase === "login" && !!failure,
       show_pick_folder: this.stage === "folder" && !this.retry,
       agents: this.agents.map(({ id, name }) => ({ id, label: name })), agent_options: this.agents.map(({ id, name }) => ({ value: id, label: name })),
