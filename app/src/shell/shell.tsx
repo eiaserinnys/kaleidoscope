@@ -29,6 +29,7 @@ import {
   type Workspace,
 } from "@kaleidoscope/ui";
 import { ServerPanel, serverLabel } from "./server-panel";
+import { BrandMark } from "./brand-mark";
 import { DesktopArea } from "./desktop-area";
 import { importAppDefinition } from "./import-definition";
 import { makeNewWindowRect } from "./window-geometry";
@@ -110,7 +111,7 @@ export function Shell({ store }: { store: ShellStore }) {
 
   const linkAnchor = menu?.kind === "link" ? menu.anchor : null;
   const serverButton = snapshot ? (
-    <Button className="shell-link-button" onClick={(event) => openLinkMenu(event.currentTarget)} aria-label={serverLabel(snapshot)} aria-expanded={linkAnchor !== null}>
+    <Button className="ks-button-quiet shell-link-button" onClick={(event) => openLinkMenu(event.currentTarget)} aria-label={serverLabel(snapshot)} aria-expanded={linkAnchor !== null}>
       <span aria-hidden="true" className={`shell-server-dot is-${snapshot.link.state}`} />
       <span className="ks-truncate">{serverLabel(snapshot)}</span>
     </Button>
@@ -123,7 +124,7 @@ export function Shell({ store }: { store: ShellStore }) {
 
   if (!activeWorkspace || !activeDesktop) {
     return <main className="app-root">
-      <header className="ks-shell-bar"><div className="ks-shell-actions">{serverButton}</div></header>
+      <header className="ks-shell-bar"><BrandMark /><div className="ks-shell-actions">{serverButton}</div></header>
       <EmptyState
         icon={<LayoutGrid size="empty" />}
         text={snapshot.link.state === "connected" ? "작업 없음" : "서버에 연결하는 중"}
@@ -279,6 +280,7 @@ export function Shell({ store }: { store: ShellStore }) {
     <main className="app-root">
       <ContextMenuHost onError={setNotice} />
       <header className="ks-shell-bar">
+        <BrandMark />
         <div className="ks-workspace-control">
           {renamingWorkspaceId === activeWorkspace.id ? (
             <TextInput
@@ -291,7 +293,7 @@ export function Shell({ store }: { store: ShellStore }) {
               value={activeWorkspace.name}
             />
           ) : (
-            <Button onClick={(event) => openWorkspaceMenu(event.currentTarget)}>
+            <Button className="ks-button-quiet" onClick={(event) => openWorkspaceMenu(event.currentTarget)}>
               <span className="ks-workspace-name" title={activeWorkspace.name}>{activeWorkspace.name}</span>
               <ChevronDown className="ks-shell-chevron" size="inline" />
             </Button>

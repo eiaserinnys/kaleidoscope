@@ -181,7 +181,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
         zIndex: appWindow.z,
       }}
     >
-      <div className="ks-window-frame" ref={setFrameHost}>
+      <div className={`ks-window-frame${isTop ? " ks-window-frame-active" : ""}`} ref={setFrameHost}>
         <header
           className={`ks-window-titlebar${isTop ? " ks-window-titlebar-active" : ""}`}
           onContextMenu={(event) => openContextMenu(event, titleMenu)}
@@ -203,22 +203,22 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
             {windowHeader?.meta ? <span className="ks-window-title-meta" title={windowHeader.meta}>{windowHeader.meta}</span> : null}
           </div>
           <div className="ks-window-title-actions">
-          {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} tone="share" pressed={sharing} onClick={toggleShare}><ScreenShare /></IconButton> : null}
-          {hasSettings && settingsAvailable ? <span ref={settingsButton}><IconButton aria-label={settingsProblem ? `앱 설정: ${typeof settingsProblem === "string" ? settingsProblem : settingsProblem.message}` : "앱 설정"} pressed={settingsOpen} onClick={toggleSettings}><Settings /></IconButton></span> : null}
-          <IconButton aria-label="창 최소화" title="창 최소화" onClick={() => onMinimize(appWindow.id)}><Minus /></IconButton>
+          {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} tone="share" pressed={sharing} onClick={toggleShare}><ScreenShare size="chrome" /></IconButton> : null}
+          {hasSettings && settingsAvailable ? <span ref={settingsButton}><IconButton aria-label={settingsProblem ? `앱 설정: ${typeof settingsProblem === "string" ? settingsProblem : settingsProblem.message}` : "앱 설정"} pressed={settingsOpen} onClick={toggleSettings}><Settings size="chrome" /></IconButton></span> : null}
+          <IconButton aria-label="창 최소화" title="창 최소화" onClick={() => onMinimize(appWindow.id)}><Minus size="chrome" /></IconButton>
           <IconButton
             aria-label={isMaximized ? "이전 크기로 복원" : "창 최대화"}
             title={isMaximized ? "이전 크기로 복원" : "창 최대화"}
             onClick={changeSize}
           >
-            {isMaximized ? <Minimize2 /> : <Maximize2 />}
+            {isMaximized ? <Minimize2 size="chrome" /> : <Maximize2 size="chrome" />}
           </IconButton>
           <IconButton
             aria-label="창 닫기"
             onClick={closeWindow}
             title="창 닫기"
           >
-            <X />
+            <X size="chrome" />
           </IconButton>
           </div>
         </header>
