@@ -41,12 +41,11 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     let uses_block_set_19_definition_fields = uses_block_set_19_definition_fields(&value);
     let uses_message_item_key = value.get("ui").is_some_and(uses_message_item_key);
     let uses_device_storage_scope = value.pointer("/client/device_storage/scope").is_some();
-    let uses_new_dialog_footer_fields = value
-        .get("ui")
-        .is_some_and(uses_dialog_footer_fields);
-    let uses_new_block_set_19_fields = value
-        .get("ui")
-        .is_some_and(uses_block_set_19_fields);
+    let uses_new_dialog_footer_fields = value.get("ui").is_some_and(uses_dialog_footer_fields);
+    let uses_new_block_set_19_fields = value.get("ui").is_some_and(uses_block_set_19_fields)
+        || value
+            .pointer("/settings/ui")
+            .is_some_and(uses_block_set_19_fields);
     let uses_new_block_set_20_fields = value
         .get("ui")
         .is_some_and(uses_block_set_20_fields)
@@ -116,7 +115,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         details.push("dialog.on_confirm과 dialog.danger는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
     }
     if uses_new_block_set_19_fields && definition.requires.blocks < 19 {
-        details.push("stack.align, input.columns, button.preview, button.prefix, 동적 PropertyField.label, format swatches, properties.layout, canvas.loading, when.min_width와 when.max_width는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
+        details.push("stack.align, input.columns, button.preview, button.prefix, 동적 PropertyField.label, format swatches, properties.layout, canvas.loading, when.min_width, when.max_width와 item_menu는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
     }
     if uses_new_block_set_20_fields && definition.requires.blocks < 20 {
         details.push("repeat.grid.item_width는 블록 세트 20판이라 requires.blocks가 20 이상이어야 합니다".into());
@@ -321,6 +320,9 @@ fn uses_block_set_19_fields(ui: &Value) -> bool {
                                             == Some("swatches")
                                 })
                             })
+                }
+                Some("list" | "table" | "tree" | "feed" | "thread") => {
+                    object.contains_key("item_menu")
                 }
                 Some("canvas") => object.contains_key("loading"),
                 Some("when") => {
@@ -1755,6 +1757,29 @@ fn validate_actions(
 }
 
 fn validate_copy_text_location(definition: &AppDefinition, details: &mut Vec<String>, at: &str) {
+    let action_pointer = match at.rsplit_once('/') {
+        Some((parent, index)) if index.bytes().all(|byte| byte.is_ascii_digit()) => parent,
+        _ => at,
+    };
+    let menu_block_pointer = action_pointer
+        .strip_suffix("/on_select")
+        .and_then(|pointer| {
+            let (menu_pointer, index) = pointer.rsplit_once('/')?;
+            if index.is_empty() || !index.bytes().all(|byte| byte.is_ascii_digit()) {
+                return None;
+            }
+            menu_pointer.strip_suffix("/item_menu")
+        });
+    let is_item_menu = menu_block_pointer.is_some_and(|pointer| {
+        serde_json::to_value(definition)
+            .ok()
+            .and_then(|value| value.pointer(pointer).cloned())
+            .and_then(|block| block.get("type").and_then(Value::as_str).map(str::to_owned))
+            .is_some_and(|kind| matches!(kind.as_str(), "list" | "table" | "tree" | "feed"))
+    });
+    if is_item_menu {
+        return;
+    }
     let block_pointer = at.strip_suffix("/on_click").or_else(|| {
         let (action_pointer, index) = at.rsplit_once('/')?;
         if !index.bytes().all(|byte| byte.is_ascii_digit()) {
@@ -1764,7 +1789,7 @@ fn validate_copy_text_location(definition: &AppDefinition, details: &mut Vec<Str
     });
     let Some(ui_pointer) = block_pointer.and_then(|pointer| pointer.strip_prefix("/ui")) else {
         details.push(format!(
-            "{at}: copy_text는 아이콘이 있는 단추의 on_click에만 쓸 수 있습니다"
+            "{at}: copy_text는 아이콘이 있는 단추의 on_click 또는 항목 메뉴의 on_select에만 쓸 수 있습니다"
         ));
         return;
     };
@@ -1783,7 +1808,7 @@ fn validate_copy_text_location(definition: &AppDefinition, details: &mut Vec<Str
         });
     if !has_icon {
         details.push(format!(
-            "{at}: copy_text는 아이콘이 있는 단추의 on_click에만 쓸 수 있습니다"
+            "{at}: copy_text는 아이콘이 있는 단추의 on_click 또는 항목 메뉴의 on_select에만 쓸 수 있습니다"
         ));
     }
 }
@@ -1938,6 +1963,22 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             "{at}: {} 블록은 블록 세트 {introduced_in}판이라 requires.blocks가 {introduced_in} 이상이어야 합니다",
             block.type_name()
         ));
+    }
+    let item_menu = match block {
+        Block::List { item_menu, .. }
+        | Block::Table { item_menu, .. }
+        | Block::Tree { item_menu, .. }
+        | Block::Feed { item_menu, .. } => item_menu.as_ref(),
+        _ => None,
+    };
+    if let Some(entries) = item_menu {
+        for (index, entry) in entries.iter().enumerate() {
+            if entry.label.trim().is_empty() {
+                details.push(format!(
+                    "{at}/item_menu/{index}/label: 메뉴 항목의 이름이 비어 있습니다"
+                ));
+            }
+        }
     }
     let uses_v14_fields = match block {
         Block::Canvas { surface, .. } => !matches!(surface, Binding::Literal(Value::String(_))),

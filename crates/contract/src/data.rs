@@ -1832,6 +1832,21 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         | Block::Stack { .. }
         | Block::Toolbar { .. } => {}
     }
+    let item_menu = match block {
+        Block::List { item_menu, .. }
+        | Block::Table { item_menu, .. }
+        | Block::Tree { item_menu, .. }
+        | Block::Feed { item_menu, .. } => item_menu,
+        _ => return slots,
+    };
+    if let Some(entries) = item_menu {
+        for (index, entry) in entries.iter().enumerate() {
+            act!(format!("item_menu/{index}/on_select"), &entry.on_select);
+            if let Some(body) = entry.confirm.as_ref().and_then(|confirm| confirm.body.as_ref()) {
+                bind!(format!("item_menu/{index}/confirm/body"), body);
+            }
+        }
+    }
     slots
 }
 

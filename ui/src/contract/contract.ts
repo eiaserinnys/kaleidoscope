@@ -284,7 +284,11 @@ sizes?: Array<number>, children: Array<Block>, } | { "type": "tree", items?: Bin
 /**
  * 보일 파일 확장자(점 없이, 소문자). 비어 있으면 모든 파일. 폴더는 늘 보인다.
  */
-extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, } | { "type": "folder", root: FolderRoot, 
+extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, 
+/**
+ * (19판) 데이터 항목의 메뉴. 동작 문맥은 `on_select`와 같다.
+ */
+item_menu?: Array<ItemMenuEntry>, } | { "type": "folder", root: FolderRoot, 
 /**
  * (15판) 거짓이면 폴더 머리 줄을 숨긴다.
  */
@@ -340,7 +344,7 @@ collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": 
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
-meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: Binding, on_select?: Actions, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
+meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
 /**
  * (블록 세트 7판) 본문 문단(`body`가 배열일 때)을 같은 너비의 칸으로 나란히 놓는다. 창이 좁아 칸마다
  * 최소 너비를 지킬 수 없으면 위아래로 쌓는다. 예: 여러 문단 비교.
@@ -354,7 +358,7 @@ copy?: boolean,
 /**
  * (블록 세트 10판) 대댓글과 긴 항목의 접기·펴기를 켠다.
  */
-collapsible?: boolean, selected?: StateRef, on_select?: Actions, } | { "type": "text", on_click?: Actions, on_double_click?: Actions, value: Binding, format?: DisplayTextFormat, style?: TextStyle, } | { "type": "input", min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, kind?: InputKind, multiline?: boolean, rows?: number, columns?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, style?: SelectStyle, placeholder?: Binding, 
+collapsible?: boolean, selected?: StateRef, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "text", on_click?: Actions, on_double_click?: Actions, value: Binding, format?: DisplayTextFormat, style?: TextStyle, } | { "type": "input", min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, kind?: InputKind, multiline?: boolean, rows?: number, columns?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, style?: SelectStyle, placeholder?: Binding, 
 /**
  * (18판) 참이면 이 고르기를 사용할 수 없다.
  */
@@ -468,7 +472,7 @@ field: string, label: string, width?: ColumnWidth, format?: CellFormat, };
 export type ColumnWidth = "narrow" | "medium" | "wide" | "fill";
 
 /**
- * 단추를 누른 뒤 묻는 확인 대화상자. `ok`가 없으면 단추의 `label`을 쓴다.
+ * 단추 또는 메뉴 항목을 누른 뒤 묻는 확인 대화상자. `ok`가 없으면 해당 `label`을 쓴다.
  */
 export type Confirm = { title: string, body?: Binding, ok?: string, };
 
@@ -833,6 +837,11 @@ export type InputFormat = { kind: InputFormatKind, digits: number, };
 export type InputFormatKind = "decimal";
 
 export type InputKind = "text" | "search" | "number";
+
+/**
+ * 항목 메뉴의 동작. `$event`는 블록의 `on_select`와 같은 항목 키(트리도 같은 값), `$item`은 항목이다.
+ */
+export type ItemMenuEntry = { label: string, on_select: Actions, danger?: boolean, confirm?: Confirm, };
 
 export type ItemRef = { item: string, };
 
