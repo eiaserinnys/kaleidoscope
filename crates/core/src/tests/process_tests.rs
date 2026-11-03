@@ -1,6 +1,26 @@
 use super::*;
 use kaleidoscope_contract::process::{ProcessSpec, ProcessStartResult};
 
+#[test]
+fn binary_process_write_identifies_each_invalid_checkpoint() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(temp.path(), vec![], &host);
+    for (body, expected) in [
+        (vec![], "PROCESS_WRITE_HEADER_MISSING"),
+        (vec![0, 0, 0, 2, b'{'], "PROCESS_WRITE_CHECKPOINT_TRUNCATED"),
+        (
+            vec![0, 0, 0, 1, b'x'],
+            "PROCESS_WRITE_CHECKPOINT_JSON_INVALID",
+        ),
+    ] {
+        let error = core
+            .client_binary("process.write", "window", "handle", &body)
+            .unwrap_err();
+        assert_eq!(error.id.as_deref(), Some(expected));
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn consent_and_checkpoint_follow_the_window() {

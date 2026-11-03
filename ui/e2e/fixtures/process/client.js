@@ -40,7 +40,7 @@
   client.handle("start", async () => {
     try {
       const inputs = client.inputs;
-      const result = await api.start({ key: "main", permission: "run", cwd_permission: "work", spec: { name: "시험 프로그램", command: inputs.command.value, args: ["-u", inputs.script.value], env: {} } });
+      const result = await api.start({ key: "main", permission: "run", cwd_permission: "work", spec: { name: "시험 프로그램", command: inputs.command.value, args: ["-u", inputs.script.value], env: { PROCESS_FIXTURE_MODE: "test" } } });
       if (result.status === "cancelled") { publish("취소됨"); return; }
       handle = result.handle;
       publish("실행 중");

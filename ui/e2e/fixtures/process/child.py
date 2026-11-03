@@ -25,7 +25,7 @@ while True:
         time.sleep(0.0001)
     os.write(1, data[7:])
     number += 1
-    if number % 500 == 0:
+    if Path("burst").exists() or number % 500 == 0:
         progress.write_text(str(number), encoding="utf-8")
     if number % 100 == 0 and not Path("burst").exists():
         time.sleep(0.05)

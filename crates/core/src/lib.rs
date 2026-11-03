@@ -514,10 +514,10 @@ impl Core {
                 Ok(result)
             }
             "process.write" => {
-                let size = body.get(..4).and_then(|head| <[u8; 4]>::try_from(head).ok()).map(u32::from_be_bytes).ok_or_else(errors::PROCESS_WRITE_CHECKPOINT_INVALID)? as usize;
-                let checkpoint = body.get(4..4 + size).ok_or_else(errors::PROCESS_WRITE_CHECKPOINT_INVALID)?;
-                let checkpoint = serde_json::from_slice(checkpoint).map_err(|_| errors::PROCESS_WRITE_CHECKPOINT_INVALID())?;
-                let bytes = body.get(4 + size..).ok_or_else(errors::PROCESS_WRITE_CHECKPOINT_INVALID)?.to_vec();
+                let size = body.get(..4).and_then(|head| <[u8; 4]>::try_from(head).ok()).map(u32::from_be_bytes).ok_or_else(errors::PROCESS_WRITE_HEADER_MISSING)? as usize;
+                let checkpoint = body.get(4..4 + size).ok_or_else(errors::PROCESS_WRITE_CHECKPOINT_TRUNCATED)?;
+                let checkpoint = serde_json::from_slice(checkpoint).map_err(|_| errors::PROCESS_WRITE_CHECKPOINT_JSON_INVALID())?;
+                let bytes = body[4 + size..].to_vec();
                 process_host::handle(&self.inner, CoreRequest::ProcessWrite { window_id: window.into(), handle: handle.into(), bytes, checkpoint })?;
                 Ok(Vec::new())
             }

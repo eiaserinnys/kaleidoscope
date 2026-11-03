@@ -36,20 +36,32 @@ fn context(
         .windows
         .iter()
         .find(|item| item.id == window)
-        .ok_or_else(|| errors::PROCESS_START_WINDOW_MISSING().and_details(vec![format!("window_id: {window}")]))?;
+        .ok_or_else(|| {
+            errors::PROCESS_START_WINDOW_MISSING().and_details(vec![format!("window_id: {window}")])
+        })?;
     let definition = app_commands::definition_for(&state.shared, &item.app_id, item.app_version)
-        .ok_or_else(|| errors::PROCESS_START_PERMISSION_MISSING(permission))?;
+        .ok_or_else(|| {
+            errors::PROCESS_START_APP_VERSION_MISSING().and_details(vec![
+                format!("app_id: {}", item.app_id),
+                format!("app_version: {}", item.app_version),
+            ])
+        })?;
     if !definition
         .permissions
         .iter()
         .any(|decl| matches!(decl, PermissionDecl::Process { id, .. } if id == permission))
-        || !definition
-            .client
-            .as_ref()
-            .and_then(|client| client.process_permissions.as_ref())
-            .is_some_and(|ids| ids.iter().any(|id| id == permission))
     {
-        return Err(errors::PROCESS_START_PERMISSION_MISSING(permission));
+        return Err(errors::PROCESS_START_PERMISSION_UNDECLARED(permission));
+    }
+    if !definition
+        .client
+        .as_ref()
+        .and_then(|client| client.process_permissions.as_ref())
+        .is_some_and(|ids| ids.iter().any(|id| id == permission))
+    {
+        return Err(errors::PROCESS_START_CLIENT_PERMISSION_UNDECLARED(
+            permission,
+        ));
     }
     Ok((
         item.app_id.clone(),
@@ -158,7 +170,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 let _guard = inner.processes.start.lock().unwrap();
                 let (current_app, _) = context(inner, &window_id, &permission, &cwd_permission)?;
                 if current_app != app_id {
-                    return Err(errors::PROCESS_START_PERMISSION_MISSING(&permission));
+                    return Err(errors::PROCESS_START_APP_CHANGED());
                 }
                 let mut state = inner.state.lock().unwrap();
                 state.device.process_access.push(ProcessAccess {

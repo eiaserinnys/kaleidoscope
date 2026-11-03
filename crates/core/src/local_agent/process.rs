@@ -21,7 +21,8 @@ impl Process {
             &config.spec.args,
             &config.spec.env,
             &config.cwd,
-        )?;
+        )
+        .map_err(crate::os_process::SpawnFailure::into_io)?;
         let input = child
             .stdin()
             .take()

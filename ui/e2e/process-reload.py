@@ -70,6 +70,21 @@ def stopped(pids):
     return True
 
 
+def geometry(page):
+    return page.evaluate("""() => {
+      const bounds = (selector) => {
+        const rect = document.querySelector(selector).getBoundingClientRect();
+        return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+      };
+      return { window: bounds('.ks-window'), overlay: bounds('.ks-window-consent-overlay'),
+        dialog: bounds('.ks-window-consent-overlay .ks-dialog'), title: bounds('.ks-window-consent-overlay .ks-dialog-title'),
+        command: bounds('.ks-window-consent-overlay .ks-process-command'), environment: bounds('.ks-window-consent-overlay .ks-process-env'),
+        actions: bounds('.ks-window-consent-overlay .ks-dialog-actions'),
+        cancel: bounds('.ks-window-consent-overlay .ks-dialog-actions button:first-child'),
+        allow: bounds('.ks-window-consent-overlay .ks-dialog-confirm button') };
+    }""")
+
+
 def run():
     output = ROOT.parents[1] / ".local/tmp/card933/process"
     output.mkdir(parents=True, exist_ok=True)
@@ -105,6 +120,7 @@ def run():
                 dialog = app.get_by_role("dialog")
                 dialog.wait_for()
                 page.screenshot(path=str(output / "permission-wide-light.png"))
+                metrics = {"wide_light": geometry(page)}
                 page.set_viewport_size({"width": 1920, "height": 1080})
                 page.screenshot(path=str(output / "permission-xl-light.png"))
                 page.set_viewport_size({"width": 1440, "height": 900})
@@ -112,9 +128,12 @@ def run():
                 page.screenshot(path=str(output / "permission-wide-dark.png"))
                 page.set_viewport_size({"width": 520, "height": 680})
                 sb.core({"op": "window.set_rect", "window_id": report["window_id"], "rect": {"x": 10, "y": 10, "width": 360, "height": 480}})
+                page.wait_for_timeout(200)
                 page.screenshot(path=str(output / "permission-narrow-dark.png"))
+                metrics["narrow_dark"] = geometry(page)
                 page.emulate_media(color_scheme="light")
                 page.screenshot(path=str(output / "permission-narrow-light.png"))
+                (output / "permission-metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
                 page.set_viewport_size({"width": 1440, "height": 900})
                 sb.core({"op": "window.set_rect", "window_id": report["window_id"], "rect": {"x": 12, "y": 12, "width": 1100, "height": 700}})
                 dialog.get_by_role("button", name="취소").click()
@@ -128,10 +147,21 @@ def run():
                 sb.core({"op":"window.minimize", "window_id":report["window_id"]})
                 assert all(psutil.pid_exists(pid) and psutil.Process(pid).status() != psutil.STATUS_ZOMBIE for pid in running_pids), "최소화할 때 프로세스가 끝났습니다"
                 sb.core({"op":"window.restore", "window_id":report["window_id"]})
+                current = sb.snapshot()
+                workspace = current["device"]["active_workspace_id"]
+                original_desktop = current["device"]["active_desktop_ids"][workspace]
+                other_desktop = sb.core({"op":"desktop.create", "workspace_id":workspace, "name":"다른 화면"})["desktop"]["id"]
+                assert all(psutil.pid_exists(pid) and psutil.Process(pid).status() != psutil.STATUS_ZOMBIE for pid in running_pids), "다른 데스크톱을 열 때 프로세스가 끝났습니다"
+                sb.core({"op":"desktop.activate", "desktop_id":original_desktop})
+                other_window = sb.core({"op":"window.open", "desktop_id":original_desktop, "app_id":"md-editor", "rect":{"x":30,"y":30,"width":450,"height":500}})["window"]["id"]
+                sb.core({"op":"window.close", "window_id":other_window})
+                assert all(psutil.pid_exists(pid) and psutil.Process(pid).status() != psutil.STATUS_ZOMBIE for pid in running_pids), "다른 창을 조작할 때 프로세스가 끝났습니다"
+                sb.core({"op":"desktop.delete", "desktop_id":other_desktop})
                 before = wait_until(lambda: (v if (v := values(page)) and v["number"] > before["number"] and v["partial"] > 0 else None), 30, "복원 후 출력이 멈췄습니다")
                 page.reload(wait_until="domcontentloaded")
                 resumed = wait_until(lambda: (v if (v := values(page)) and v["number"] > before["number"] and v["pid"] else None), 30, "리로드 후 재연결 실패")
                 assert resumed["pid"] == before["pid"] and not resumed["error"], (before, resumed)
+                print(f"리로드: pid={before['pid']}, 줄={before['number']}→{resumed['number']}, 미완성={before['partial']}바이트", flush=True)
                 (folder / "pause").touch()
                 paused = wait_until(lambda: int((folder / "paused.txt").read_text()) if (folder / "paused.txt").exists() else None, 10, "출력 일시 정지 실패")
                 wait_until(lambda: (v if (v := values(page)) and v["number"] >= paused - 1 else None), 15, "프레임이 이전 출력을 다 읽지 못했습니다")
@@ -150,13 +180,15 @@ def run():
                     if current > starting and time.monotonic() - stable_since > 2:
                         break
                     time.sleep(0.2)
-                assert (last - starting) * 190 >= 8 * 1024 * 1024 - 200000, (starting, last)
+                written = sum(len(f"{before['pid']}|{number}|") + 181 for number in range(starting, last))
+                print(f"프레임 부재 중 출력: {written}바이트, 줄={starting}→{last}", flush=True)
+                assert written >= 8 * 1024 * 1024, {"start": starting, "end": last, "bytes": written}
                 retry = app.get_by_role("button", name="다시 시작")
                 retry.wait_for(timeout=30000)
                 retry.click()
                 restored = wait_until(lambda: (v if (v := values(page)) and v["number"] >= last and v["pid"] else None), 90, "ping 실패 뒤 재연결 실패")
                 assert restored["pid"] == before["pid"] and not restored["error"], (before, restored)
-                assert progress(folder / "progress.txt") > last
+                wait_until(lambda: progress(folder / "progress.txt") > last, 15, "재연결 뒤 자식 출력이 다시 시작되지 않았습니다")
                 page.set_viewport_size({"width": 520, "height": 680})
                 page.screenshot(path=str(output / "restored-narrow-light.png"))
                 pids = [int(value) for value in (folder / "pids.txt").read_text().split()]

@@ -3,13 +3,27 @@ use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
 use std::{collections::BTreeMap, io, path::Path, process::Stdio};
 use tokio::process::Command;
 
+pub(crate) enum SpawnFailure {
+    Resolve(io::Error),
+    Spawn(io::Error),
+}
+
+impl SpawnFailure {
+    pub(crate) fn into_io(self) -> io::Error {
+        match self {
+            Self::Resolve(error) | Self::Spawn(error) => error,
+        }
+    }
+}
+
 pub(crate) fn spawn(
     command: &str,
     args: &[String],
     env: &BTreeMap<String, String>,
     cwd: &Path,
-) -> io::Result<Box<dyn ChildWrapper>> {
-    let path = which::which(command).map_err(|e| io::Error::new(io::ErrorKind::NotFound, e))?;
+) -> Result<Box<dyn ChildWrapper>, SpawnFailure> {
+    let path = which::which(command)
+        .map_err(|e| SpawnFailure::Resolve(io::Error::new(io::ErrorKind::NotFound, e)))?;
     let mut command = Command::new(path);
     command
         .args(args)
@@ -29,5 +43,5 @@ pub(crate) fn spawn(
         wrapped.wrap(flags);
     }
     wrapped.wrap(KillOnDrop);
-    wrapped.spawn()
+    wrapped.spawn().map_err(SpawnFailure::Spawn)
 }

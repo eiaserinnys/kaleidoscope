@@ -79,8 +79,13 @@ impl Running {
             rt.block_on(async move {
                 let mut child = match crate::os_process::spawn(&spec.command, &spec.args, &spec.env, &task_cwd) {
                     Ok(child) => child,
-                    Err(error) => {
-                        let error = if error.kind() == std::io::ErrorKind::NotFound { errors::PROCESS_START_COMMAND_NOT_FOUND(&spec.command) } else { errors::PROCESS_START_SPAWN_FAILED(&spec.command, error) };
+                    Err(failure) => {
+                        let error = match failure {
+                            crate::os_process::SpawnFailure::Resolve(_) => errors::PROCESS_START_COMMAND_NOT_FOUND(&spec.command),
+                            crate::os_process::SpawnFailure::Spawn(error) if error.kind() == std::io::ErrorKind::NotFound => errors::PROCESS_START_SPAWN_NOT_FOUND(&spec.command, error),
+                            crate::os_process::SpawnFailure::Spawn(error) if error.kind() == std::io::ErrorKind::PermissionDenied => errors::PROCESS_START_SPAWN_PERMISSION_DENIED(&spec.command, error),
+                            crate::os_process::SpawnFailure::Spawn(error) => errors::PROCESS_START_SPAWN_FAILED(&spec.command, error),
+                        };
                         let _ = ready_tx.send(Err(error));
                         return;
                     }
