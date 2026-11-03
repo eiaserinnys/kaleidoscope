@@ -17,6 +17,7 @@ import { createSerialSend, createThrottledSend } from "../data/throttled-send";
 import { isWindowTop, useWindowVisible } from "../data/window-state";
 import { isClock, useClockPosition } from "../data/clock";
 import { renderBlock } from "../render/render-block";
+import { PreviewContext } from "./preview-context";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 const uninitializedFocus = Symbol("uninitialized focus");
@@ -311,6 +312,8 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const body = useBinding(`${pointer}/confirm/body`, block.confirm?.body ?? null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [copySucceeded, setCopySucceeded] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
   const setOpener = useCallback((node: HTMLElement | null) => { opener.current = node; }, []);
@@ -325,10 +328,13 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const pressedValue = block.pressed !== undefined && pressed.status === "ready" ? Boolean(pressed.value) : undefined;
   useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
   const run = async (restore: boolean, modifiers?: ReturnType<typeof eventModifiers>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     restoreAfterAction.current = restore;
     setConfirm(false);
     setBusy(true);
     const succeeded = await data.act(`${pointer}/on_click`, null, undefined, modifiers);
+    busyRef.current = false;
     setBusy(false);
     if (succeeded && copyTextAction(block.on_click)) {
       setCopySucceeded(true);
@@ -350,6 +356,7 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
     : <span className="ks-data-button-label ks-truncate-label">{labelText}</span>;
   const contents = <>{hasIcon ? <DataIcon name={copied ? "check" : iconText} /> : null}{!block.icon_only ? buttonLabel : null}</>;
   const onClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (busyRef.current) return;
     const modifiers = eventModifiers(event);
     if (block.confirm) { confirmModifiers.current = modifiers; setConfirm(true); }
     else void run(false, modifiers);
@@ -361,23 +368,23 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
     : null;
   const className = `ks-data-button is-${block.variant ?? "default"}`;
   if (block.preview) return <div ref={setOpener} className={`${className} has-preview`}>
-    <div className={`ks-data-button-card${pressedValue ? " is-selected" : ""}${busy || unavailable ? " is-disabled" : ""}`}>
+    <div className={`ks-data-button-card${pressedValue ? " is-selected" : ""}${busy || unavailable ? " is-disabled" : ""}`} title={previewError ?? undefined}>
       <div className="ks-data-button-card-content" aria-hidden="true" inert>
-        <div className="ks-data-button-card-preview">{renderBlock(block.preview, context, `${pointer}/preview`)}</div>
+        <div className="ks-data-button-card-preview"><PreviewContext.Provider value={setPreviewError}>{renderBlock(block.preview, context, `${pointer}/preview`)}</PreviewContext.Provider></div>
         <div className="ks-data-button-card-label">
-          {prefixText ? <span className="ks-data-button-prefix">{prefixText}</span> : null}
+          {prefixText ? <><span className="ks-data-button-prefix">{prefixText}</span><wbr /></> : null}
           <span className="ks-data-button-label is-emphasized">{labelText}</span>
         </div>
       </div>
-      <Button aria-label={accessibleName} className="ks-data-button-card-action" aria-pressed={pressedValue} disabled={busy || unavailable} onClick={onClick}>
+      <Button aria-label={accessibleName} className="ks-data-button-card-action" aria-pressed={pressedValue} disabled={unavailable} aria-disabled={busy || undefined} onClick={onClick}>
         <span className="ks-accessible-hidden">{accessibleName}</span>
       </Button>
     </div>
     {status}{dialog}
   </div>;
   return <span ref={setOpener} className={className}>{block.icon_only
-    ? <IconButton aria-label={accessibleName} pressed={pressedValue} disabled={busy || unavailable} onClick={onClick}>{contents}</IconButton>
-    : <Button aria-label={accessibleName} aria-pressed={pressedValue} variant={block.variant === "primary" ? "emphasis" : "default"} disabled={busy || unavailable} onClick={onClick}>{contents}</Button>}
+    ? <IconButton aria-label={accessibleName} pressed={pressedValue} disabled={unavailable} aria-disabled={busy || undefined} onClick={onClick}>{contents}</IconButton>
+    : <Button aria-label={accessibleName} aria-pressed={pressedValue} variant={block.variant === "primary" ? "emphasis" : "default"} disabled={unavailable} aria-disabled={busy || undefined} onClick={onClick}>{contents}</Button>}
     {status}{dialog}
   </span>;
 }

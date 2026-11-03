@@ -10,6 +10,7 @@
   "permissions": [],
   "state": {
     "count": 4,
+    "title": "날씨 견본",
     "sample_text": "표본",
     "query": "표본",
     "swatches": [
@@ -40,8 +41,8 @@
           "wrap": true,
           "gap": "small",
           "children": [
-            { "type": "input", "kind": "number", "columns": 4, "label": "표본 수", "value": { "state": "count" }, "on_change": { "set_state": "count" }, "min": 1, "max": 20, "step": 1 },
-            { "type": "text", "value": "수치 입력은 지정한 글자 폭을 유지하고 이 설명은 남은 공간에서 줄바꿈됩니다." }
+            { "type": "input", "kind": "number", "columns": 4, "label": "번호", "value": { "state": "count" }, "on_change": { "set_state": "count" }, "min": 1, "max": 20, "step": 1 },
+            { "type": "input", "kind": "text", "label": "제목", "value": { "state": "title" }, "on_change": { "set_state": "title" } }
           ]
         },
         {
@@ -59,13 +60,13 @@
           "items": { "state": "swatches" },
           "key": "id",
           "layout": "grid",
-          "grid": { "columns": 2 },
+          "grid": { "columns": "auto" },
           "template": {
             "type": "button",
             "variant": "chip",
             "prefix": "색",
             "label": { "item": "label" },
-            "preview": { "type": "image", "src": { "item": "image" }, "zoom": true },
+            "preview": { "type": "image", "src": { "item": "image" } },
             "pressed": { "item": "selected" },
             "on_click": [{ "set_state": "swatches", "value": { "expr": "$append([], $map($state.swatches, function($swatch) { $merge([$swatch, {'selected': $swatch.id = $item.id}]) }))" } }]
           }

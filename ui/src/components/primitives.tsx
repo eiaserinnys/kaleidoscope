@@ -14,6 +14,7 @@ export interface ButtonProps {
   "aria-label"?: string;
   "aria-invalid"?: boolean;
   "aria-describedby"?: string;
+  "aria-disabled"?: boolean;
 }
 
 export function Button({
@@ -29,6 +30,7 @@ export function Button({
   "aria-label": label,
   "aria-invalid": invalid,
   "aria-describedby": describedBy,
+  "aria-disabled": ariaDisabled,
 }: ButtonProps) {
   return (
     <button
@@ -39,6 +41,7 @@ export function Button({
       aria-label={label}
       aria-invalid={invalid}
       aria-describedby={describedBy}
+      aria-disabled={ariaDisabled}
       onClick={onClick}
       type={type}
       title={title}
@@ -57,13 +60,15 @@ export interface IconButtonProps {
   pressed?: boolean;
   tone?: "share";
   className?: string;
+  "aria-disabled"?: boolean;
 }
 
-export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className }: IconButtonProps) {
+export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className, "aria-disabled": ariaDisabled }: IconButtonProps) {
   return (
     <button
       aria-label={label}
       aria-pressed={pressed}
+      aria-disabled={ariaDisabled}
       className={`ks-icon-button${tone === "share" ? " ks-icon-button-share" : ""}${className ? ` ${className}` : ""}`}
       disabled={disabled}
       onClick={onClick}

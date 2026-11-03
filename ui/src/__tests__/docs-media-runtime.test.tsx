@@ -196,6 +196,43 @@ it("이미지 요청 실패를 알리고 다시 받으면 성공한다", async (
   expect(calls).toBe(2);
 });
 
+it("미리보기 이미지는 대기 막대를 보이고 실패해도 조작부를 그리지 않는다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 500, height: 400 } as DOMRect);
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 19, modules: {} }, permissions: [], state: {}, ui: {
+    type: "button", label: "견본", on_click: [], preview: { type: "image", zoom: true, src: { permission: "media", path: "image.png" } },
+  } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  let fail!: (reason: unknown) => void;
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media"
+    ? new Promise((_resolve, reject) => { fail = reject; }) as never : original(request as never));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await waitFor(() => expect(fail).toBeTypeOf("function"));
+  expect(view.container.querySelector(".ks-image-view .ks-data-progress.is-indeterminate")).toBeTruthy();
+  await act(async () => fail({ id: "FILE_PATH_NOT_FOUND", code: "not_found", message: "이미지 없음", details: [] }));
+  await waitFor(() => expect(view.container.querySelector(".ks-image-view [title*='FILE_PATH_NOT_FOUND']")).toBeTruthy());
+  expect(view.container.querySelector(".ks-data-button-card")?.getAttribute("title")).toContain("FILE_PATH_NOT_FOUND");
+  expect(view.container.querySelector(".ks-data-button-card-preview button")).toBeNull();
+  expect(view.container.querySelector(".ks-image-controls")).toBeNull();
+});
+
+it("확대를 선언한 미리보기 이미지도 그림만 표시한다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 500, height: 400 } as DOMRect);
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 19, modules: {} }, permissions: [], state: {}, ui: {
+    type: "button", label: "견본", on_click: [], preview: { type: "image", zoom: true, src: { permission: "media", path: "image.png" } },
+  } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media"
+    ? Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "YQ==", width: 1, height: 1 } }) as never : original(request as never));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await waitFor(() => expect(view.container.querySelector(".ks-image-frame img")).toBeTruthy());
+  expect(view.container.querySelector(".ks-image-controls")).toBeNull();
+  expect(view.container.querySelector(".ks-image-view")?.hasAttribute("tabindex")).toBe(false);
+});
+
 it("이미지 폴더 미선택 오류는 넓은 칸과 작은 칸에서 폴더를 고른 뒤 다시 받는다", async () => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   for (const width of [500, 200]) {

@@ -12,6 +12,7 @@
 .ks-image-view.is-zoomable { touch-action: none; }
 .ks-image-view .ks-data-state, .ks-image-view .ks-data-state-compact, .ks-image-view > .ks-empty-state { box-sizing: border-box; padding-inline: var(--ks-space-3); }
 .ks-image-view .ks-data-state { width: 100%; min-width: 0; }
+.ks-image-view > .ks-data-progress { width: min(50%, calc(var(--ks-pane-min-size) / 2)); background: var(--ks-color-hover); }
 .ks-image-frame { position: relative; flex: none; overflow: hidden; transform-origin: center; }
 .ks-image-frame img { position: absolute; inset: 0; width: 100%; height: 100%; }
 .ks-image-controls { position: absolute; right: var(--ks-space-3); bottom: var(--ks-space-3); display: flex; border-radius: var(--ks-radius-small); background: var(--ks-color-surface); box-shadow: var(--ks-shadow-popover); }
