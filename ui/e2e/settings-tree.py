@@ -150,12 +150,82 @@ def main():
                 wait_until(lambda: not app.locator(".ks-app-settings").is_visible(), 10, "available=false인데 설정 패널이 열려 있습니다")
                 app.get_by_role("button", name="설정 버튼 다시 표시").click()
                 app.get_by_role("button", name="앱 설정").wait_for()
-                body_after = counter(app, ".ks-data-window-body")
-                assert body_after is not None and body_after > tick_after, (body_after, tick_after)
+                body_after = wait_until(
+                    lambda: (value if (value := counter(app, ".ks-data-window-body")) is not None and value > tick_after else None),
+                    10, "설정을 닫은 뒤 본문이 새 client 출력을 표시하지 않았습니다",
+                )
                 result["assertions"].append({"client_continues_in_settings": {"before": tick_before, "after": tick_after},
                                              "available_hides_gear_and_closes_panel": True,
                                              "body_shows_latest_tick_after_close": body_after})
                 sb.set_state(window_id, {"test_controls": False})
+
+                sb.set_state(window_id, {"busy": True})
+                gear.click()
+                app.get_by_text("응답이 끝나면 바꿀 수 있습니다", exact=True).wait_for()
+                for label in ["Mode", "Model", "Effort"]:
+                    assert app.get_by_role("button", name=label, exact=True).is_disabled(), label
+                for label in ["Fast mode", "Ultracode"]:
+                    assert app.get_by_role("switch", name=label, exact=True).is_disabled(), label
+                assert app.get_by_role("button", name="멈춤", exact=True).is_enabled()
+                set_rect(sb, window_id, 900, 650)
+                page.emulate_media(color_scheme="light")
+                page.wait_for_timeout(300)
+                save(page, "15-settings-locked--wide.png")
+                set_rect(sb, window_id, 360, 240)
+                page.wait_for_timeout(300)
+                save(page, "15-settings-locked--narrow.png")
+                set_rect(sb, window_id, 900, 650)
+                page.emulate_media(color_scheme="dark")
+                page.wait_for_timeout(100)
+                save(page, "15-settings-locked--wide--dark.png")
+                result["assertions"].append("busy state disables Mode, Model, Effort, Fast mode and Ultracode")
+
+                app.get_by_role("button", name="멈춤", exact=True).click()
+                wait_until(lambda: not app.get_by_text("응답이 끝나면 바꿀 수 있습니다", exact=True).is_visible(), 10,
+                           "멈춤 뒤 응답 중 안내가 닫히지 않았습니다")
+                for label in ["Mode", "Model", "Effort"]:
+                    assert app.get_by_role("button", name=label, exact=True).is_enabled(), label
+                for label in ["Fast mode", "Ultracode"]:
+                    assert app.get_by_role("switch", name=label, exact=True).is_enabled(), label
+
+                long_model = "claude-opus-4-1-2025-long-model-name"
+                long_folder = "kaleidoscope-workspace-with-a-very-long-project-folder-name-for-ellipsis"
+                sb.set_state(window_id, {
+                    "long_values": True,
+                    "model": long_model,
+                    "folder": long_folder,
+                })
+                wait_until(lambda: long_folder in app.locator(".ks-settings-custom").inner_text(),
+                           10, "긴 폴더 이름이 설정 버튼에 반영되지 않았습니다")
+                wait_until(lambda: app.get_by_role("button", name="Sandbox write access to network paths outside the workspace").is_visible(),
+                           10, "긴 라벨의 설정 행이 보이지 않습니다")
+                model_label = app.get_by_role("button", name="Model", exact=True).locator(".ks-select-choice-label")
+                folder_label = app.locator(".ks-settings-custom .ks-data-button .ks-truncate-label")
+                measure = "element => ({clientWidth:element.clientWidth, scrollWidth:element.scrollWidth, overflow:getComputedStyle(element).textOverflow})"
+                long_metrics = {
+                    "model": model_label.evaluate(measure),
+                    "folder": folder_label.evaluate(measure),
+                }
+                assert long_model in model_label.text_content()
+                assert long_folder in folder_label.text_content()
+                assert long_metrics["model"]["scrollWidth"] > long_metrics["model"]["clientWidth"], long_metrics
+                assert long_metrics["folder"]["scrollWidth"] > long_metrics["folder"]["clientWidth"], long_metrics
+                assert long_metrics["model"]["overflow"] == "ellipsis", long_metrics
+                assert long_metrics["folder"]["overflow"] == "ellipsis", long_metrics
+                result["assertions"].append({"shared_ellipsis_for_long_model_and_folder": long_metrics})
+                set_rect(sb, window_id, 900, 650)
+                page.emulate_media(color_scheme="light")
+                page.wait_for_timeout(300)
+                save(page, "16-settings-long--wide.png")
+                set_rect(sb, window_id, 360, 240)
+                page.wait_for_timeout(300)
+                save(page, "16-settings-long--narrow.png")
+                set_rect(sb, window_id, 900, 650)
+                page.emulate_media(color_scheme="dark")
+                page.wait_for_timeout(100)
+                save(page, "16-settings-long--wide--dark.png")
+                result["assertions"].append({"long_toggle_label": "Allow web search while background tasks are running"})
+                page.emulate_media(color_scheme="light")
 
                 snapshot = sb.snapshot()
                 workspace = snapshot["device"]["active_workspace_id"]
@@ -231,6 +301,8 @@ def main():
             result["logs"] = str(sb.tmp)
             result["captures"] = sorted(path.name for path in OUTPUT.glob("*.png"))
             (OUTPUT / "result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+            if "error" not in result:
+                print(f"{len(result['assertions'])} passed: settings availability, busy locks, shared ellipsis, per-window titles and legacy settings", flush=True)
             print(f"result {OUTPUT / 'result.json'}", flush=True)
 
 
