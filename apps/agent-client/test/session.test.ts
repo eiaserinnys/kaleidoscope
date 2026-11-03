@@ -7,6 +7,7 @@ const decoder = new TextDecoder();
 function fixture() {
   const blobs = new Map<string, Uint8Array>();
   let checkpoint: unknown = null, after = 0, buffer = new Uint8Array(), handle = "p1", tools: string | null = "http://tools/old";
+  let nextUuid = 0;
   let callback = (_handle: string) => {}, serviceCallback = (_handle: string) => {};
   const writes: any[] = [], snapshots: any[] = [];
   const process = {
@@ -24,7 +25,7 @@ function fixture() {
     instructions: async () => "안내문",
     prepare: async () => ({ text: null, images: [], ticket: "ticket" }), commit: async () => {},
     publish: (value: any) => { snapshots.push(structuredClone(value)); },
-    uuid: () => "fixed", now: () => "now",
+    uuid: () => `generation-${++nextUuid}`, now: () => "now",
   };
   async function emit(message: unknown) {
     const bytes = encoder.encode(`${JSON.stringify(message)}\n`);
@@ -215,4 +216,28 @@ test("이전 세션 load를 거절하면 안내를 기록하고 새 세션을 �
   assert.equal(f.writes.at(-1).method, "session/new");
   await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessionId: "new" } });
   assert.ok(f.snapshots.at(-1).items.some((item: any) => item.text.includes("앞 대화를 이어받지 못했습니다")));
+});
+
+test("프로세스 교체 뒤에도 이전 응답과 새 응답을 서로 다른 기록으로 보존한다", async () => {
+  const f = fixture();
+  const session = new AgentSession(f.host as any);
+  await session.attach({ name: "시험", command: "agent", args: [], env: {} });
+  const capabilities = { loadSession: true, mcpCapabilities: { http: true } };
+  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: capabilities } });
+  await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "session" } });
+  await session.send({ id: "one", text: "first", attachments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const first = f.writes.at(-1);
+  const chunk = (text: string) => ({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } } } });
+  await f.emit(chunk("이전"));
+  await f.emit({ jsonrpc: "2.0", id: first.id, result: { stopReason: "end_turn" } });
+  await f.revokeTools();
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { agentCapabilities: capabilities } });
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessionId: "session" } });
+  await session.send({ id: "two", text: "second", attachments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const second = f.writes.at(-1);
+  await f.emit(chunk("새 응답"));
+  await f.emit({ jsonrpc: "2.0", id: second.id, result: { stopReason: "end_turn" } });
+  assert.deepEqual(f.snapshots.at(-1).items.filter((item: any) => item.kind === "assistant").map((item: any) => item.text), ["이전", "새 응답"]);
 });

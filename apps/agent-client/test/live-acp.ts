@@ -53,8 +53,15 @@ test("실제 가짜 ACP 프로세스의 승인 중 재접속과 큐", async (t) 
   await first.start(spec);
   await f.waitFor(() => f.view()?.phase === "ready");
   const pid = f.pid();
-  await first.send({ id: "one", text: "permission", attachments: [] });
+  await first.configure("toggle", true);
+  await f.waitFor(() => f.view()?.controls.some((control: any) => control.id === "toggle" && control.value === true));
+  await first.send({ id: "one", text: "permission", attachments: [
+    { name: "image.png", mime: "image/png", bytes: new Uint8Array([1, 2]) },
+    { name: "note.txt", mime: "text/plain", bytes: new Uint8Array([3]) },
+  ] });
   await f.waitFor(() => f.view()?.permissions.length === 1);
+  const prompt = f.writes.find((item) => item.method === "session/prompt");
+  assert.deepEqual(prompt.params.prompt.map((item: any) => item.type), ["text", "text", "image", "resource_link"]);
   await first.send({ id: "two", text: "next", attachments: [] });
   const resumed = new AgentSession(f.host as any);
   assert.equal(await resumed.attach(spec), true);

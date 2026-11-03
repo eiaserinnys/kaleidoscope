@@ -80,7 +80,7 @@ export class AgentSession {
       this.after = process.after;
       this.cwd = process.cwd;
       this.tools = process.services.tools ?? null;
-      this.state = process.checkpoint ?? { ...initialState(), sessionId: this.history.sessionId };
+      this.state = process.checkpoint ?? { ...initialState(), generation: this.host.uuid(), sessionId: this.history.sessionId };
       this.checkpointKeys = [this.state.streamKey, this.state.partialKey].filter((key): key is string => !!key);
       if (this.state.streamKey) {
         const bytes = await this.host.blobs.read(this.state.streamKey);
@@ -149,7 +149,7 @@ export class AgentSession {
     this.after = 0;
     this.tools = result.services?.tools ?? null;
     await this.history.bind(JSON.stringify({ name, command, args, env: Object.fromEntries(Object.entries(env).sort()) }), this.cwd);
-    this.state = { ...initialState(), sessionId: this.history.sessionId, queue: this.state.queue };
+    this.state = { ...initialState(), generation: this.host.uuid(), sessionId: this.history.sessionId, queue: this.state.queue };
     this.publish();
     return true;
   }
@@ -298,7 +298,7 @@ export class AgentSession {
       for (let index = 0; index < decoded.messages.length; index++) {
         const message = decoded.messages[index] as { id?: string | number; error?: unknown };
         const request = message.id === undefined ? undefined : this.state.pending[String(message.id)];
-        this.state = reduceMessage(this.state, message, `stream-${this.after}-${index}`);
+        this.state = reduceMessage(this.state, message, `stream-${this.state.generation}-${this.after}-${index}`);
         if (request && !message.error && request.kind === "initialize" && this.spec?.auth_methods) {
           this.state = { ...this.state, authMethods: this.state.authMethods.filter((method) => this.spec!.auth_methods!.includes(method.id)) };
         }

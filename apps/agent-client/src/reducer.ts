@@ -9,6 +9,7 @@ export type Item = { id: string; kind: "assistant" | "user" | "notice" | "error"
 export type RpcReply = { jsonrpc: "2.0"; id: string | number; result?: unknown; error?: { code: number; message: string } };
 export type State = {
   schema: 1;
+  generation: string;
   nextId: number;
   pending: Record<string, Pending>;
   sessionId: string | null;
@@ -37,7 +38,7 @@ export type State = {
 };
 
 export function initialState(): State {
-  return { schema: 1, nextId: 1, pending: {}, sessionId: null,
+  return { schema: 1, generation: "", nextId: 1, pending: {}, sessionId: null,
     capabilities: { loadSession: false, image: false, http: false }, authMethods: [], controls: [], permissions: [], queue: [],
     stream: { id: null, text: "" }, tools: [], partial: [], partialKey: null, streamKey: null, guideSent: false,
     phase: "starting", replay: false, needsNew: false, initialized: false, failure: null,
