@@ -859,3 +859,40 @@ async fn relay_preserves_403_rate_limit_without_retry_time() {
     assert_eq!(received.rate_limit.unwrap().retry_after_secs, None);
     server.abort();
 }
+
+#[tokio::test]
+async fn relay_write_denial_identifies_app_permission_and_connection_setting() {
+    let state = AppState::in_memory("secret");
+    add_relay(&state, "http://127.0.0.1:1");
+    let request = || ConnectionRequest {
+        app_id: "test".into(),
+        method: HttpMethod::Post,
+        path: "/items".into(),
+        query: Default::default(),
+        body: None,
+        accept: ConnectionAccept::Json,
+    };
+    let (status, error) = state
+        .relay_preview_request("board", request(), FileAccess::Read)
+        .await
+        .unwrap_err();
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(error.id.as_deref(), Some("CONN_RELAY_APP_WRITE_DENIED"));
+    assert_eq!(
+        error.code,
+        kaleidoscope_contract::ErrorCode::PermissionDenied
+    );
+    let (status, error) = state
+        .relay_preview_request("board", request(), FileAccess::Readwrite)
+        .await
+        .unwrap_err();
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(
+        error.id.as_deref(),
+        Some("CONN_RELAY_CONNECTION_WRITE_DENIED")
+    );
+    assert_eq!(
+        error.code,
+        kaleidoscope_contract::ErrorCode::PermissionDenied
+    );
+}

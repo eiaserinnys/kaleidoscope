@@ -226,7 +226,7 @@ if (harnessParams.has("reset-review") || pcAllowErrorScenario) {
   const call = transport.call.bind(transport);
   transport.call = (async (request: CoreRequest) => {
     if (pcAllowErrorScenario && request.op === "files.allow_pc") {
-      return Promise.reject({ code: "permission_denied", message: "허용할 수 없습니다", details: [] });
+      return Promise.reject({ id: "FILE_ACCESS_PERMISSION_UNDECLARED", code: "permission_denied", message: "허용할 수 없습니다", details: [] });
     }
     if (request.op === "storage.reset") await new Promise((resolve) => setTimeout(resolve, 1200));
     return call(request);

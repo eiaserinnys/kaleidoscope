@@ -156,9 +156,9 @@ impl AppState {
             |(kind, base_url, writable, paths, headers, issuer, scopes, resource, description)| {
                 let kind = parse_kind(&kind)?;
                 let paths = serde_json::from_str(&paths)
-                    .map_err(|_| errors::CONN_SETTING_PATHS_INVALID())?;
+                    .map_err(|_| errors::CONN_SETTING_PATHS_INVALID(name))?;
                 let headers = serde_json::from_str(&headers)
-                    .map_err(|_| errors::CONN_SETTING_HEADERS_INVALID())?;
+                    .map_err(|_| errors::CONN_SETTING_HEADERS_INVALID(name))?;
                 Ok(ConnectionRecord {
                     info: ConnectionInfo {
                         name: name.into(),
@@ -224,18 +224,18 @@ impl AppState {
             })?;
             Ok(ConnectionRecord {
                 info: ConnectionInfo {
-                    name,
+                    name: name.clone(),
                     kind: parse_kind(&kind)?,
                     base_url,
                     writable,
                     paths: serde_json::from_str(&paths)
-                        .map_err(|_| errors::CONN_SETTING_LIST_PATHS_INVALID())?,
+                        .map_err(|_| errors::CONN_SETTING_LIST_PATHS_INVALID(&name))?,
                     issuer,
                     scopes,
                     resource,
                 },
                 headers: serde_json::from_str(&headers)
-                    .map_err(|_| errors::CONN_SETTING_LIST_HEADERS_INVALID())?,
+                    .map_err(|_| errors::CONN_SETTING_LIST_HEADERS_INVALID(&name))?,
                 description,
             })
         })
@@ -330,15 +330,15 @@ fn validate_registration(input: &ConnectionRegistration) -> Result<(), CoreError
     if let Some(headers) = &input.headers {
         for (name, value) in headers {
             let name = HeaderName::from_bytes(name.as_bytes())
-                .map_err(|_| errors::CONN_SETTING_HEADER_NAME_INVALID())?;
+                .map_err(|_| errors::CONN_SETTING_HEADER_NAME_INVALID(name))?;
             if matches!(
                 name.as_str(),
                 "host" | "content-length" | "connection" | "transfer-encoding"
             ) {
-                return Err(errors::CONN_SETTING_HEADER_RESERVED());
+                return Err(errors::CONN_SETTING_HEADER_RESERVED(name.as_str()));
             }
             if HeaderValue::from_str(value).is_err() {
-                return Err(errors::CONN_SETTING_HEADER_VALUE_INVALID());
+                return Err(errors::CONN_SETTING_HEADER_VALUE_INVALID(name.as_str()));
             }
         }
     }
@@ -369,6 +369,6 @@ fn parse_kind(value: &str) -> Result<ConnectionKind, CoreError> {
     match value {
         "relay" => Ok(ConnectionKind::Relay),
         "oauth" => Ok(ConnectionKind::Oauth),
-        _ => Err(errors::CONN_SETTING_KIND_INVALID()),
+        _ => Err(errors::CONN_SETTING_KIND_INVALID(value)),
     }
 }

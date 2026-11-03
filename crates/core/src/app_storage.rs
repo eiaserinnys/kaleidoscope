@@ -36,14 +36,18 @@ pub(crate) fn context(
         .windows
         .iter()
         .find(|w| w.id == window_id)
-        .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_WINDOW_NOT_FOUND(window_id))?;
+        .ok_or_else(|| {
+            kaleidoscope_contract::errors::STORAGE_WINDOW_NOT_FOUND()
+                .and_details(vec![format!("window_id: {}", window_id)])
+        })?;
     let desktop = state
         .shared
         .desktops
         .iter()
         .find(|d| d.id == window.desktop_id)
         .ok_or_else(|| {
-            kaleidoscope_contract::errors::STORAGE_DESKTOP_NOT_FOUND(&window.desktop_id)
+            kaleidoscope_contract::errors::STORAGE_DESKTOP_NOT_FOUND()
+                .and_details(vec![format!("desktop_id: {}", &window.desktop_id)])
         })?;
     let definition =
         app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
@@ -86,8 +90,19 @@ pub(crate) fn map_error(inner: &Arc<Inner>, file: &LinkFile, err: RegistryError)
             kaleidoscope_contract::errors::STORAGE_SERVER_UNAUTHORIZED()
         }
         RegistryError::NotFound => kaleidoscope_contract::errors::STORAGE_SERVER_NOT_FOUND(),
-        RegistryError::Failure { detail, .. } => {
-            kaleidoscope_contract::errors::STORAGE_SERVER_REQUEST_FAILED().and_details(vec![detail
+        RegistryError::Failure { stage, detail } => {
+            let error = match stage {
+                crate::registry_client::FailureStage::Send => {
+                    kaleidoscope_contract::errors::STORAGE_SERVER_REQUEST_SEND_FAILED()
+                }
+                crate::registry_client::FailureStage::Status => {
+                    kaleidoscope_contract::errors::STORAGE_SERVER_REQUEST_STATUS_FAILED()
+                }
+                crate::registry_client::FailureStage::Read => {
+                    kaleidoscope_contract::errors::STORAGE_SERVER_REQUEST_READ_FAILED()
+                }
+            };
+            error.and_details(vec![detail
                 .lines()
                 .next()
                 .unwrap_or(&detail)
@@ -198,7 +213,10 @@ fn read_with_doc(
                 .windows
                 .iter()
                 .find(|w| w.id == window)
-                .ok_or_else(|| kaleidoscope_contract::errors::STORAGE_WINDOW_NOT_FOUND(window))?;
+                .ok_or_else(|| {
+                    kaleidoscope_contract::errors::STORAGE_WINDOW_NOT_FOUND()
+                        .and_details(vec![format!("window_id: {}", window)])
+                })?;
             let definition =
                 app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
                     .ok_or_else(|| {
@@ -606,7 +624,9 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             expected_revision,
         } => {
             if !contract::valid_collection_doc(&from) || !contract::valid_collection_doc(&to) {
-                return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_NAME_INVALID());
+                return Err(
+                    kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_NAME_INVALID(&from, &to),
+                );
             }
             let ctx = context(inner, &window_id, Some(&entry))?;
             let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();

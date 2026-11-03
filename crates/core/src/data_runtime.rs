@@ -939,10 +939,16 @@ pub(crate) fn attach(
             .windows
             .iter()
             .find(|window| window.id == window_id)
-            .ok_or_else(|| errors::DATA_RUNTIME_ATTACH_WINDOW_NOT_FOUND(window_id))?;
+            .ok_or_else(|| {
+                errors::DATA_RUNTIME_ATTACH_WINDOW_NOT_FOUND()
+                    .and_details(vec![format!("window: {}", window_id)])
+            })?;
         let definition =
             app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                .ok_or_else(|| errors::DATA_RUNTIME_ATTACH_APP_NOT_FOUND(window_id))?;
+                .ok_or_else(|| {
+                    errors::DATA_RUNTIME_ATTACH_APP_NOT_FOUND()
+                        .and_details(vec![format!("window: {}", window_id)])
+                })?;
         let version = window.app_version;
         let using_defaults = crate::app_storage::uses_defaults_for(
             &state,
@@ -1022,7 +1028,10 @@ pub(crate) fn dormant(
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
         windows
             .get_mut(window_id)
-            .ok_or_else(|| errors::DATA_RUNTIME_DORMANT_WINDOW_NOT_FOUND(window_id))?
+            .ok_or_else(|| {
+                errors::DATA_RUNTIME_DORMANT_WINDOW_NOT_FOUND()
+                    .and_details(vec![format!("window: {}", window_id)])
+            })?
             .dormant = dormant;
     }
     run_due(inner, Some(window_id));
@@ -1048,9 +1057,10 @@ pub(crate) fn refresh(
 ) -> Result<(), CoreError> {
     let pending = {
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
-        let runtime = windows
-            .get_mut(window_id)
-            .ok_or_else(|| errors::DATA_RUNTIME_REFRESH_WINDOW_NOT_FOUND(window_id))?;
+        let runtime = windows.get_mut(window_id).ok_or_else(|| {
+            errors::DATA_RUNTIME_REFRESH_WINDOW_NOT_FOUND()
+                .and_details(vec![format!("window: {}", window_id)])
+        })?;
         let mut selected: std::collections::BTreeSet<String> = if names.is_empty() {
             runtime.compiled.source_order().iter().cloned().collect()
         } else {

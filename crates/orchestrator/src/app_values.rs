@@ -26,7 +26,9 @@ fn content_size(key: &str, kind: StorageKind, content: &Value) -> Result<(), Cor
                 return Err(
                     kaleidoscope_contract::errors::STORAGE_APP_VALUE_JSON_TOO_LARGE(
                         key,
-                        contract::STORAGE_JSON_MAX_BYTES,
+                        kaleidoscope_contract::size::format_byte_limit(
+                            (contract::STORAGE_JSON_MAX_BYTES) as u64,
+                        ),
                     ),
                 );
             }
@@ -39,7 +41,9 @@ fn content_size(key: &str, kind: StorageKind, content: &Value) -> Result<(), Cor
                 return Err(
                     kaleidoscope_contract::errors::STORAGE_APP_VALUE_MD_TOO_LARGE(
                         key,
-                        contract::STORAGE_MD_MAX_BYTES,
+                        kaleidoscope_contract::size::format_byte_limit(
+                            (contract::STORAGE_MD_MAX_BYTES) as u64,
+                        ),
                     ),
                 );
             }

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   Button,
+  SHELL_WINDOW_CLOSE_UNSAVED,
+  SHELL_UPDATE_RESTART_UNSAVED,
   BUILTIN_APP_IDS,
   ChevronDown,
   EmptyState,
@@ -62,7 +64,7 @@ export function Shell({ store }: { store: ShellStore }) {
   const runCommand = useCallback(async (request: CoreRequest): Promise<CoreReply | undefined> => {
     try {
       if (request.op === "window.close" && !await flushSandboxes(request.window_id)) {
-        setNotice({ code: "io", message: "저장하지 못한 내용이 있어 창을 닫지 않았습니다", details: [] });
+        setNotice(SHELL_WINDOW_CLOSE_UNSAVED());
         return undefined;
       }
       const reply = await store.call(request as never) as CoreReply;
@@ -177,7 +179,7 @@ export function Shell({ store }: { store: ShellStore }) {
       { id: "workspace-separator", type: "separator" },
       {
         id: "workspace-create",
-        label: "새 워크스페이스",
+        label: "새 작업",
         onSelect: async () => {
           const reply = await runCommand({ op: "workspace.create", name: nextName("작업", workspaces.map((item) => item.name)) });
           if (reply?.op === "workspace.create") setRenamingWorkspaceId(reply.workspace.id);
@@ -227,7 +229,7 @@ export function Shell({ store }: { store: ShellStore }) {
     closeMenu();
     setRestartingUpdate(true);
     if (!await flushEditors() || !await flushSandboxes()) {
-      setNotice({ code: "io", message: "저장하지 못한 편집이 있어 다시 시작하지 않았습니다", details: [] });
+      setNotice(SHELL_UPDATE_RESTART_UNSAVED());
       setRestartingUpdate(false);
       return;
     }
@@ -278,7 +280,7 @@ export function Shell({ store }: { store: ShellStore }) {
         <div className="ks-workspace-control">
           {renamingWorkspaceId === activeWorkspace.id ? (
             <TextInput
-              aria-label="워크스페이스 이름"
+              aria-label="작업 이름"
               onCancel={() => setRenamingWorkspaceId(null)}
               onCommit={(name) => {
                 setRenamingWorkspaceId(null);

@@ -129,7 +129,8 @@ pub(super) async fn put_share(
     let Ok(Json(upload)) = body else {
         return http::error_response(
             StatusCode::BAD_REQUEST,
-            kaleidoscope_contract::errors::SHARE_UPLOAD_BODY_INVALID(&window_id),
+            kaleidoscope_contract::errors::SHARE_UPLOAD_BODY_INVALID()
+                .and_details(vec![format!("window: {}", &window_id)]),
         );
     };
     if upload.workspace_id.trim().is_empty() {

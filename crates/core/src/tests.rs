@@ -3388,3 +3388,26 @@ mod web_tests;
 
 mod local_agent_tests;
 mod local_agent_wiring_tests;
+
+#[test]
+fn storage_request_errors_report_the_failure_stage() {
+    use crate::registry_client::{FailureStage, RegistryError};
+    let dir = tempfile::tempdir().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(dir.path(), vec![], &host);
+    let file = connected_link_file();
+    for (stage, id) in [
+        (FailureStage::Send, "STORAGE_SERVER_REQUEST_SEND_FAILED"),
+        (FailureStage::Status, "STORAGE_SERVER_REQUEST_STATUS_FAILED"),
+        (FailureStage::Read, "STORAGE_SERVER_REQUEST_READ_FAILED"),
+    ] {
+        let error = crate::app_storage::map_error(
+            &core.inner,
+            &file,
+            RegistryError::failure(stage, "원인"),
+        );
+        assert_eq!(error.id.as_deref(), Some(id));
+        assert_eq!(error.code, ErrorCode::Server);
+        assert_eq!(error.details, ["원인"]);
+    }
+}

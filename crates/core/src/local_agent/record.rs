@@ -132,7 +132,12 @@ pub(crate) fn attachment_bytes(
         .attachments
         .get(attachment_id)
         .filter(|a| a.item_id == item_id)
-        .ok_or_else(|| errors::AGENT_ATTACHMENT_NOT_FOUND(item_id, attachment_id))?;
+        .ok_or_else(|| {
+            errors::AGENT_ATTACHMENT_NOT_FOUND().and_details(vec![
+                format!("item_id: {}", item_id),
+                format!("attachment_id: {}", attachment_id),
+            ])
+        })?;
     let path = dir.join("attachments").join(&a.filename);
     let bytes = std::fs::read(&path).map_err(|e| {
         let reason = e.to_string();

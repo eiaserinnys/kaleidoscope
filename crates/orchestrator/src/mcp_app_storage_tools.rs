@@ -654,7 +654,10 @@ impl super::McpServer {
             || !kaleidoscope_contract::app_storage::valid_collection_doc(&args.to_doc)
         {
             return Ok(json_error(
-                kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_NAME_INVALID(),
+                kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_NAME_INVALID(
+                    &args.from_doc,
+                    &args.to_doc,
+                ),
             ));
         }
         if kaleidoscope_contract::builtin::is_builtin(&args.app_id) {

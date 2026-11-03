@@ -323,13 +323,15 @@ pub(crate) fn shutdown(inner: &Inner) {
 
 fn worker(inner: &Inner, window: &str, generation: &str) -> Result<Worker, CoreError> {
     let windows = inner.local_agents.windows.lock().unwrap();
-    let c = windows
-        .get(window)
-        .ok_or_else(|| errors::AGENT_REQUEST_CONTROLLER_MISSING(window))?;
+    let c = windows.get(window).ok_or_else(|| {
+        errors::AGENT_REQUEST_CONTROLLER_MISSING()
+            .and_details(vec![format!("window_id: {}", window)])
+    })?;
     if c.generation != generation {
-        return Err(errors::AGENT_REQUEST_GENERATION_STALE(window));
+        return Err(errors::AGENT_REQUEST_GENERATION_STALE()
+            .and_details(vec![format!("window_id: {}", window)]));
     }
-    c.worker
-        .clone()
-        .ok_or_else(|| errors::AGENT_REQUEST_WORKER_MISSING(window))
+    c.worker.clone().ok_or_else(|| {
+        errors::AGENT_REQUEST_WORKER_MISSING().and_details(vec![format!("window_id: {}", window)])
+    })
 }

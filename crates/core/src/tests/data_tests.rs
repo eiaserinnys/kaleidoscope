@@ -704,7 +704,7 @@ fn missing_media_file_preserves_registered_file_error() {
     assert_eq!(error.id.as_deref(), Some("FILE_PATH_NOT_FOUND"));
     assert_eq!(
         error.message,
-        "경로 missing.png: 파일이나 상위 폴더를 찾을 수 없습니다. 경로가 올바른지 확인하세요."
+        "경로 missing.png: 파일이나 상위 폴더를 찾을 수 없습니다. 파일 관리자에서 경로를 확인하세요."
     );
     assert!(error.details.iter().any(|detail| !detail.is_empty()));
 }
@@ -972,7 +972,7 @@ fn source_safety_failed_refresh_keeps_value_and_reports_error_in_layout() {
                     message,
                     ..
                 }) if id.as_deref() == Some("DATA_SOURCE_RESPONSE_STATUS_FAILED")
-                    && message == "원천 items의 요청 경로는 /old입니다. 서버가 성공 응답을 보내지 않아 원천을 읽지 못했습니다. 주소와 서버 상태를 확인하세요."
+                    && message == "원천 items: 서버가 성공 응답을 보내지 않아 읽지 못했습니다. 다시 받기를 누르고, 계속되면 앱 정의의 주소를 확인하세요. 경로: /old"
             ) {
                 assert!(!view.values.contains_key("/ui/children/0/items"));
                 failed = true;

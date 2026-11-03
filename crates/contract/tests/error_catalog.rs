@@ -17,7 +17,7 @@ fn codes() -> Vec<&'static str> {
 #[test]
 fn conversation_binding_errors_use_the_workspace_name_once() {
     let saved = errors::CONV_CONTEXT_SAVED_BINDING_MISMATCH("작업 1");
-    assert!(saved.message.starts_with("작업 1:"));
+    assert!(saved.message.starts_with("작업 이름 작업 1:"));
 }
 
 fn valid_code(id: &str) -> bool {
@@ -95,19 +95,19 @@ fn file_root_and_new_file_errors_explain_their_distinct_causes() {
     assert_eq!(missing_root.code, ErrorCode::NotFound);
     assert_eq!(
         missing_root.message,
-        "파일 권한 docs: 선택한 폴더를 찾을 수 없습니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요."
+        "선택한 폴더를 찾을 수 없습니다. 옮겨졌거나 지워졌으면 폴더를 다시 고르거나 앱을 다시 여세요. 폴더: docs"
     );
 
     let changed_root = errors::FILE_ACCESS_ROOT_CHANGED("docs");
     assert_eq!(changed_root.code, ErrorCode::PathOutsideRoot);
     assert_eq!(
         changed_root.message,
-        "파일 권한 docs: 선택한 위치가 폴더가 아니거나 다른 곳을 가리킵니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요."
+        "선택한 폴더의 경로가 더 이상 그 폴더를 가리키지 않습니다. 폴더를 다시 고르거나 앱을 다시 여세요. 폴더: docs"
     );
 
     assert_eq!(
         errors::FILE_CREATE_FILE_OPEN_NOT_FOUND("docs/new.md").message,
-        "파일 docs/new.md: 새 파일을 만들 위치를 찾지 못했습니다. 대상 폴더가 있는지 확인한 뒤 앱을 다시 열거나 폴더를 다시 고르세요."
+        "파일 docs/new.md: 새 파일을 만들 폴더를 찾지 못했습니다. 파일 관리자에서 경로를 확인하세요."
     );
 }
 
@@ -291,7 +291,7 @@ fn storage_schema_mismatch_message_includes_validation_reason() {
     assert_eq!(error.id.as_deref(), Some("STORAGE_WRITE_SCHEMA_MISMATCH"));
     assert_eq!(
         error.message,
-        "저장 항목 settings.theme의 값이 앱 선언과 맞지 않습니다. JSON path /color: expected string 값을 고쳐 다시 저장하세요."
+        "저장 항목 settings.theme의 값이 앱 선언과 맞지 않습니다. 값을 고쳐 다시 저장하세요. 원인: JSON path /color: expected string"
     );
     assert!(error.details.is_empty());
 }
@@ -302,20 +302,20 @@ fn app_definition_parse_errors_show_reason_and_next_step_once() {
         (
             "{",
             "APP_DEFINITION_JSON_INVALID",
-            "앱 정의 JSON을 읽지 못했습니다: ",
-            ". JSON 문법을 고친 뒤 다시 올리세요.",
+            "앱 정의 JSON의 문법이 틀렸습니다. 문법을 고친 뒤 다시 시도하세요. 원인: ",
+            "원인: ",
         ),
         (
             "{}",
             "APP_DEFINITION_FORMAT_INVALID",
-            "앱 정의의 형식이 올바르지 않습니다: ",
-            ". 해당 필드를 고친 뒤 다시 올리세요.",
+            "앱 정의의 필드나 값이 형식에 맞지 않습니다. 원인에 나온 필드를 고친 뒤 다시 시도하세요. 원인: ",
+            "원인: ",
         ),
     ] {
         let error = parse_app_definition(definition).unwrap_err();
         assert_eq!(error.id.as_deref(), Some(id));
         assert!(error.message.starts_with(beginning), "{}", error.message);
-        assert!(error.message.ends_with(ending), "{}", error.message);
+        assert!(error.message.split_once(ending).is_some_and(|(_, reason)| !reason.is_empty()), "{}", error.message);
         assert!(error.details.is_empty(), "{error:?}");
     }
 }
@@ -368,7 +368,7 @@ fn storage_validation_reasons_identify_value_and_fixable_cause() {
             json!("a".repeat(kaleidoscope_contract::app_storage::STORAGE_JSON_MAX_BYTES)),
             Ok((
                 "STORAGE_WRITE_JSON_TOO_LARGE",
-                "저장 항목 settings/value의 JSON 값이 1048576바이트를 넘습니다. 값을 줄인 뒤 다시 저장하세요.",
+                "저장 항목 settings/value의 JSON 값이 허용 크기 1MB보다 큽니다. 값을 줄인 뒤 다시 저장하세요.",
             )),
         ),
     ];

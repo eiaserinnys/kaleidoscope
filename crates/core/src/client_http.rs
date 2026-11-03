@@ -18,7 +18,10 @@ pub(crate) fn read(
             .windows
             .iter()
             .find(|w| w.id == window)
-            .ok_or_else(|| errors::DATA_CLIENT_HTTP_WINDOW_NOT_FOUND(window))?;
+            .ok_or_else(|| {
+                errors::DATA_CLIENT_HTTP_WINDOW_NOT_FOUND()
+                    .and_details(vec![format!("window: {}", window)])
+            })?;
         let definition =
             app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
                 .ok_or_else(|| errors::DATA_CLIENT_HTTP_APP_NOT_FOUND(&window.app_id))?;

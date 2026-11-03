@@ -140,7 +140,8 @@ impl Context {
                 .iter()
                 .find(|w| w.id == window_id)
                 .ok_or_else(|| {
-                    kaleidoscope_contract::errors::CONV_CONTEXT_WINDOW_NOT_FOUND(window_id)
+                    kaleidoscope_contract::errors::CONV_CONTEXT_WINDOW_NOT_FOUND()
+                        .and_details(vec![format!("window: {}", window_id)])
                 })?;
             let desktop = state
                 .shared
@@ -148,9 +149,8 @@ impl Context {
                 .iter()
                 .find(|d| d.id == window.desktop_id)
                 .ok_or_else(|| {
-                    kaleidoscope_contract::errors::CONV_CONTEXT_DESKTOP_NOT_FOUND(
-                        &window.desktop_id,
-                    )
+                    kaleidoscope_contract::errors::CONV_CONTEXT_DESKTOP_NOT_FOUND()
+                        .and_details(vec![format!("desktop: {}", &window.desktop_id)])
                 })?;
             let workspace = state
                 .shared
@@ -159,9 +159,8 @@ impl Context {
                 .find(|w| w.id == desktop.workspace_id)
                 .cloned()
                 .ok_or_else(|| {
-                    kaleidoscope_contract::errors::CONV_CONTEXT_WORKSPACE_NOT_FOUND(
-                        &desktop.workspace_id,
-                    )
+                    kaleidoscope_contract::errors::CONV_CONTEXT_WORKSPACE_NOT_FOUND()
+                        .and_details(vec![format!("workspace_id: {}", &desktop.workspace_id)])
                 })?;
             let definition =
                 app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
@@ -338,7 +337,12 @@ impl Context {
         };
         if thread.id != id {
             return Err(
-                kaleidoscope_contract::errors::CONV_CONTEXT_ADOPTED_THREAD_MISMATCH(id, &thread.id),
+                kaleidoscope_contract::errors::CONV_CONTEXT_ADOPTED_THREAD_MISMATCH().and_details(
+                    vec![
+                        format!("saved_thread: {}", id),
+                        format!("returned_thread: {}", &thread.id),
+                    ],
+                ),
             );
         }
         Ok(Some(thread))

@@ -8,12 +8,18 @@ const fakeFiles = new Set(["ui/src/core/fake-data.ts", "ui/src/core/fake-transpo
 
 function violations(path: string, source: string): string[] {
   path = path.replaceAll("\\", "/");
-  return source.split("\n").flatMap((line, index) => {
+  const results = source.split("\n").flatMap((line, index) => {
     if (!/\bnew\s+Error\s*\(/.test(line)) return [];
     if (path === "ui/src/blocks/sandbox-frame.ts" &&
         line.trim() === "const fail = (error) => Object.assign(new Error(error.message), { id: error.id, code: error.code });") return [];
     return [`${path}:${index + 1}`];
   });
+  const unregistered = /\{\s*code\s*:\s*["'][^"']+["']\s*,\s*message\s*:/g;
+  for (const match of source.matchAll(unregistered)) {
+    const line = source.slice(0, match.index).split("\n").length;
+    results.push(`${path}:${line}`);
+  }
+  return results;
 }
 
 function scan(dir: string): string[] {
@@ -38,6 +44,12 @@ describe("등록된 오류", () => {
     expect(violations("ui\\src\\blocks\\sandbox-frame.ts", "const fail = (error) => Object.assign(new Error(error.message), { id: error.id, code: error.code });"))
       .toEqual([]);
     expect(violations("ui\\src\\fake-feature.ts", 'throw new Error("x")')).toEqual(["ui/src/fake-feature.ts:1"]);
+  });
+
+  it("코드가 없는 오류 객체도 찾아낸다", () => {
+    expect(violations("ui/src/example.ts", 'throw { code: "io", message: "실패", details: [] }')).toEqual(["ui/src/example.ts:1"]);
+    expect(violations("ui/src/example.ts", 'setNotice({\n code: "io", message: "실패", details: [] })')).toEqual(["ui/src/example.ts:1"]);
+    expect(violations("ui/src/example.ts", 'throw { id: "SHELL_X", code: "io", message: "실패", details: [] }')).toEqual([]);
   });
 
   it("fake가 포함된 다른 파일과 폴더도 검사한다", () => {

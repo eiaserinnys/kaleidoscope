@@ -358,7 +358,7 @@ fn login_timeout_maps_to_invalid_request() {
     assert_eq!(error.id.as_deref(), Some("CONN_LOGIN_CALLBACK_TIMEOUT"));
     assert_eq!(
         error.message,
-        "연결 example 로그인이 시간 안에 끝나지 않았습니다. 브라우저에서 인증을 마친 뒤 다시 시도하세요."
+        "연결 example 로그인이 시간 안에 끝나지 않았습니다. 다시 로그인하고 브라우저에서 인증을 끝까지 마치세요."
     );
 }
 

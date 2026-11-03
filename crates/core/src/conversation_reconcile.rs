@@ -1,17 +1,17 @@
 //! 저장 설정과 동기화된 작업을 대화 제공자의 현재 대화에 맞춘다.
 use std::collections::{BTreeMap, HashMap};
-use std::sync::{Arc, Mutex, atomic::Ordering};
+use std::sync::{atomic::Ordering, Arc, Mutex};
 use std::thread;
 
 use kaleidoscope_contract::{
-    ConversationApplyStatus as Status, CoreError, CoreEvent, CoreReply, CoreRequest, LinkStatus,
     conversation::{PatchThreadRequest, ThreadInfoReply, ThreadListReply},
+    ConversationApplyStatus as Status, CoreError, CoreEvent, CoreReply, CoreRequest, LinkStatus,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::{Inner, app_commands, conversation_context::Context, storage};
+use crate::{app_commands, conversation_context::Context, storage, Inner};
 
 #[derive(Default)]
 pub(crate) struct Runtime {
@@ -62,18 +62,16 @@ pub(crate) fn schedule(inner: &Arc<Inner>) {
     state.running = true;
     drop(state);
     let inner = Arc::clone(inner);
-    thread::spawn(move || {
-        loop {
-            {
-                let mut state = inner.conversation_reconcile.state.lock().unwrap();
-                if !state.dirty {
-                    state.running = false;
-                    return;
-                }
-                state.dirty = false;
+    thread::spawn(move || loop {
+        {
+            let mut state = inner.conversation_reconcile.state.lock().unwrap();
+            if !state.dirty {
+                state.running = false;
+                return;
             }
-            run(&inner);
+            state.dirty = false;
         }
+        run(&inner);
     });
 }
 
@@ -292,7 +290,8 @@ fn reconcile_app(
                         None::<&Value>,
                     )?
                     .ok_or_else(|| {
-                        kaleidoscope_contract::errors::CONV_RECONCILE_THREAD_MISSING(&reference.id)
+                        kaleidoscope_contract::errors::CONV_RECONCILE_THREAD_MISSING()
+                            .and_details(vec![format!("thread: {}", &reference.id)])
                     })?;
                 if info.thread.external.namespace != namespace {
                     return Err(kaleidoscope_contract::errors::CONV_RECONCILE_NAMESPACE_CONFLICT());
@@ -317,9 +316,8 @@ fn reconcile_app(
                     )?;
                     if reply.is_none() {
                         return Err(
-                            kaleidoscope_contract::errors::CONV_RECONCILE_ARCHIVE_NOT_FOUND(
-                                &reference.id,
-                            ),
+                            kaleidoscope_contract::errors::CONV_RECONCILE_ARCHIVE_NOT_FOUND()
+                                .and_details(vec![format!("thread: {}", &reference.id)]),
                         );
                     }
                 }
@@ -330,7 +328,10 @@ fn reconcile_app(
             }
         }
         if let Some(thread) = expected.iter().next() {
-            return Err(kaleidoscope_contract::errors::CONV_RECONCILE_BOUND_THREAD_MISSING(thread));
+            return Err(
+                kaleidoscope_contract::errors::CONV_RECONCILE_BOUND_THREAD_MISSING()
+                    .and_details(vec![format!("thread: {}", thread)]),
+            );
         }
     }
     Ok(())
@@ -438,7 +439,8 @@ fn apply_thread(
         )?;
         if reply.is_none() {
             return Err(
-                kaleidoscope_contract::errors::CONV_RECONCILE_PATCH_NOT_FOUND(&info.thread.id),
+                kaleidoscope_contract::errors::CONV_RECONCILE_PATCH_NOT_FOUND()
+                    .and_details(vec![format!("thread: {}", &info.thread.id)]),
             );
         }
         applied.threads.insert(

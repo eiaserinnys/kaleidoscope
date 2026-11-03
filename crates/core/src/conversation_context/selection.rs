@@ -1,14 +1,14 @@
-use super::{Context, required_string, required_string_allow_empty, same_model_group};
-use crate::{Inner, app_storage};
+use super::{required_string, required_string_allow_empty, same_model_group, Context};
+use crate::{app_storage, Inner};
 use kaleidoscope_contract::{
-    CoreError, ErrorCode,
     app_storage::{ExpectedRevision, StorageWriteRequest},
     conversation::{
         ConversationThread, EnsureThreadReply, EnsureThreadRequest, ExecutionThreadRequest,
         ThreadByKeyReply,
     },
+    CoreError, ErrorCode,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -184,17 +184,17 @@ impl Context {
             )?;
             let updated = updated
                 .ok_or_else(|| {
-                    kaleidoscope_contract::errors::CONV_SELECTION_MODEL_UPDATE_TARGET_MISSING(
-                        &thread.id,
-                    )
+                    kaleidoscope_contract::errors::CONV_SELECTION_MODEL_UPDATE_TARGET_MISSING()
+                        .and_details(vec![format!("thread: {}", &thread.id)])
                 })?
                 .thread;
             if updated.id != thread.id {
                 return Err(
-                    kaleidoscope_contract::errors::CONV_SELECTION_MODEL_PATCH_THREAD_MISMATCH(
-                        &thread.id,
-                        &updated.id,
-                    ),
+                    kaleidoscope_contract::errors::CONV_SELECTION_MODEL_PATCH_THREAD_MISMATCH()
+                        .and_details(vec![
+                            format!("requested_thread: {}", &thread.id),
+                            format!("returned_thread: {}", &updated.id),
+                        ]),
                 );
             }
             return Ok((updated, Vec::new()));
@@ -229,10 +229,11 @@ impl Context {
             })?;
         if reply.thread.id != thread.id {
             return Err(
-                kaleidoscope_contract::errors::CONV_SELECTION_PROFILE_SWITCH_THREAD_MISMATCH(
-                    &thread.id,
-                    &reply.thread.id,
-                ),
+                kaleidoscope_contract::errors::CONV_SELECTION_PROFILE_SWITCH_THREAD_MISMATCH()
+                    .and_details(vec![
+                        format!("requested_thread: {}", &thread.id),
+                        format!("returned_thread: {}", &reply.thread.id),
+                    ]),
             );
         }
         Ok((reply.thread, reply.notices))

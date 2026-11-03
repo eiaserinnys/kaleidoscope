@@ -208,7 +208,7 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
     assert_eq!(error.code, ErrorCode::Conflict);
     assert_eq!(
         error.message,
-        "파일 renamed.txt: 처음 읽은 뒤 내용이 바뀌어 저장하지 못했습니다. 다시 불러온 뒤 수정하고 저장하거나 덮어쓰기를 선택하세요."
+        "파일 renamed.txt: 처음 읽은 뒤 내용이 바뀌어 저장하지 못했습니다. 다시 불러오기로 새 내용을 받거나 덮어쓰기로 내 내용을 저장하세요."
     );
 
     fs::write(root.join("deleted-before-save.txt"), "remove me").unwrap();
@@ -227,7 +227,7 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
     assert_eq!(error.code, ErrorCode::Conflict);
     assert_eq!(
         error.message,
-        "파일 deleted-before-save.txt: 처음 읽은 뒤 삭제되어 저장하지 못했습니다. 덮어쓰기를 선택해 파일을 다시 저장하세요."
+        "파일 deleted-before-save.txt: 처음 읽은 뒤 삭제되어 저장하지 못했습니다. 덮어쓰기를 누르면 내 내용으로 다시 만듭니다."
     );
     assert!(error.details.iter().any(|detail| !detail.is_empty()));
 
@@ -426,7 +426,7 @@ fn missing_granted_folder_keeps_not_found_class_and_os_diagnostic() {
     assert_eq!(error.code, ErrorCode::NotFound);
     assert_eq!(
         error.message,
-        "파일 권한 docs: 선택한 폴더를 찾을 수 없습니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요."
+        format!("선택한 폴더를 찾을 수 없습니다. 옮겨졌거나 지워졌으면 폴더를 다시 고르거나 앱을 다시 여세요. 폴더: {}", root.display())
     );
     assert!(error
         .details
@@ -455,7 +455,7 @@ fn replaced_granted_folder_keeps_path_outside_root_class() {
     assert_eq!(error.code, ErrorCode::PathOutsideRoot);
     assert_eq!(
         error.message,
-        "파일 권한 docs: 선택한 위치가 폴더가 아니거나 다른 곳을 가리킵니다. 대상 폴더가 있는지 확인하고 앱을 다시 열거나 폴더를 다시 고르세요."
+        format!("선택한 폴더의 경로가 더 이상 그 폴더를 가리키지 않습니다. 폴더를 다시 고르거나 앱을 다시 여세요. 폴더: {}", root.display())
     );
 }
 

@@ -80,7 +80,7 @@ fn restart_requires_ready_and_reports_install_failure() {
     assert_eq!(error.id.as_deref(), Some("DESK_UPDATE_INSTALL_FAILED"));
     assert_eq!(
         error.message,
-        "업데이트를 설치하지 못했습니다. 네트워크와 설치 권한을 확인한 뒤 다시 시도하세요."
+        "업데이트를 설치하지 못했습니다. 디스크 공간을 확인한 뒤 쉘을 다시 시작하세요. 쉘이 새 판을 다시 받습니다."
     );
     match core.handle(CoreRequest::StateGet {}).unwrap() {
         CoreReply::StateGet { snapshot } => assert_eq!(

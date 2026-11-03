@@ -296,13 +296,13 @@ pub(crate) fn login(
             .find(|decl| decl.id() == permission)
         {
             Some(PermissionDecl::Connection { connection, .. }) => connection.clone(),
-            _ => return Err(errors::CONN_LOGIN_PERMISSION_MISSING()),
+            _ => return Err(errors::CONN_LOGIN_PERMISSION_MISSING(permission)),
         }
     };
     let info = find_connection(inner, &connection_name)
-        .ok_or_else(errors::CONN_LOGIN_CONNECTION_MISSING)?;
+        .ok_or_else(|| errors::CONN_LOGIN_CONNECTION_MISSING(&connection_name))?;
     if info.kind != ConnectionKind::Oauth {
-        return Err(errors::CONN_LOGIN_NOT_OAUTH());
+        return Err(errors::CONN_LOGIN_NOT_OAUTH(&connection_name));
     }
     {
         let mut active = inner.login_in_progress.lock().unwrap();
@@ -356,10 +356,10 @@ pub(crate) fn authorize(
             connection, access, ..
         }) = declaration
         else {
-            return Err(errors::CONN_AUTHORIZE_PERMISSION_MISSING());
+            return Err(errors::CONN_AUTHORIZE_PERMISSION_MISSING(permission));
         };
         if method != HttpMethod::Get && *access != FileAccess::Readwrite {
-            return Err(errors::CONN_AUTHORIZE_READ_ONLY());
+            return Err(errors::CONN_AUTHORIZE_READ_ONLY(permission));
         }
         (window.app_id.clone(), connection.clone())
     };
@@ -438,7 +438,11 @@ fn oauth_request(
             RequestError::Core(error)
         })?;
     if bytes.len() as u64 > limit {
-        return Err(errors::CONN_REQUEST_OAUTH_RESPONSE_TOO_LARGE(&info.name).into());
+        return Err(errors::CONN_REQUEST_OAUTH_RESPONSE_TOO_LARGE(
+            &info.name,
+            kaleidoscope_contract::size::format_byte_limit(limit),
+        )
+        .into());
     }
     let mut reply = ConnectionReply {
         status,
@@ -465,8 +469,8 @@ fn oauth_request(
     Ok(reply)
 }
 
-pub(crate) fn response_error(reply: &ConnectionReply) -> CoreError {
-    let mut error = errors::CONN_REQUEST_SERVER_RESPONSE_FAILED();
+pub(crate) fn response_error(reply: &ConnectionReply, permission: &str) -> CoreError {
+    let mut error = errors::CONN_REQUEST_SERVER_RESPONSE_FAILED(permission);
     error.details = vec![format!("HTTP {}", reply.status)];
     error
 }

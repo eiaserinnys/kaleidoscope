@@ -220,6 +220,7 @@ pub mod errors;
 pub mod file_name;
 pub mod local_agent;
 pub mod registry;
+pub mod size;
 pub mod validate;
 pub mod worker;
 

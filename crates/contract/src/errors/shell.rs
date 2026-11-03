@@ -1,4 +1,60 @@
 error_catalog! { ENTRIES;
+    SHELL_APP_IMPORT_REPLY_INVALID() {
+        class: Io,
+        place: "앱 정의 가져오기 응답",
+        cause: "가져오기 응답의 종류가 예상과 다르다",
+        message: "앱 정의를 가져온 결과를 확인하지 못했습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.",
+        fix: "쉘을 다시 시작한 뒤 다시 시도하세요"
+    }
+    SHELL_WINDOW_CLOSE_UNSAVED() {
+        class: Io,
+        place: "창 닫기 전 저장",
+        cause: "열린 내용의 저장을 마치지 못했다",
+        message: "저장하지 못한 내용이 있어 창을 닫지 않았습니다. 내용을 저장한 뒤 다시 닫으세요.",
+        fix: "내용을 저장한 뒤 다시 닫으세요"
+    }
+    SHELL_UPDATE_RESTART_UNSAVED() {
+        class: Io,
+        place: "업데이트 재시작 전 저장",
+        cause: "편집 중인 내용의 저장을 마치지 못했다",
+        message: "저장하지 못한 편집이 있어 다시 시작하지 않았습니다. 내용을 저장한 뒤 다시 시작하세요.",
+        fix: "내용을 저장한 뒤 다시 시작하세요"
+    }
+    SHELL_STATE_REPLY_INVALID() {
+        class: Io,
+        place: "쉘 초기 상태 응답",
+        cause: "상태 응답의 종류가 예상과 다르다",
+        message: "쉘 상태를 불러오지 못했습니다. 쉘을 다시 시작하세요.",
+        fix: "쉘을 다시 시작하세요"
+    }
+    SHELL_HTTP_EXTERNAL_SCHEME_INVALID() {
+        class: InvalidRequest,
+        place: "브라우저 외부 주소 열기",
+        cause: "외부 주소가 HTTP 또는 HTTPS가 아니다",
+        message: "이 링크는 웹 주소가 아니라 열 수 없습니다. HTTP 또는 HTTPS 주소를 사용하세요.",
+        fix: "HTTP 또는 HTTPS 주소를 사용하세요"
+    }
+    SHELL_HTTP_ERROR_REPLY_INVALID() {
+        class: Io,
+        place: "코어 HTTP 오류 응답 읽기",
+        cause: "코어의 오류 응답이 예상한 형식과 다르다",
+        message: "코어의 오류 응답을 읽지 못했습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.",
+        fix: "쉘을 다시 시작한 뒤 다시 시도하세요"
+    }
+    SHELL_HTTP_REQUEST_FAILED() {
+        class: Io,
+        place: "코어 HTTP 요청",
+        cause: "코어가 요청에 실패 응답을 보냈다",
+        message: "코어가 요청에 실패 응답을 보냈습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.",
+        fix: "쉘을 다시 시작한 뒤 다시 시도하세요"
+    }
+    SHELL_EDITOR_ITEM_DELETED() {
+        class: Conflict,
+        place: "편집 중인 항목 삭제",
+        cause: "저장하지 않은 파일 또는 문서가 삭제됐다",
+        message: "편집 중인 항목이 삭제되어 저장하지 못했습니다. 내용을 복사해 다른 문서에 저장하세요.",
+        fix: "내용을 복사해 다른 문서에 저장하세요"
+    }
     SHELL_THREAD_READ_INVALID(name) {
         class: InvalidRequest,
         place: "HTML 문서 커멘트 기록 읽기",
@@ -185,8 +241,8 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "창 데이터 접근",
         cause: "창 데이터 연결 없이 데이터 블록을 렌더링했다",
-        message: "창 데이터가 연결되지 않아 화면을 그릴 수 없습니다. 쉘을 다시 열어 보세요.",
-        fix: "쉘을 다시 열어 보세요"
+        message: "창 데이터가 연결되지 않아 화면을 그릴 수 없습니다. 쉘을 다시 시작하세요.",
+        fix: "쉘을 다시 시작하세요"
     }
     SHELL_CLIENT_BINDING_DATA_CONTEXT_MISSING() {
         class: Io,
@@ -325,7 +381,7 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱 공개 자료 읽기",
         cause: "현재 쉘에 이진 요청 전송 기능이 없다",
-        message: "이 쉘에서는 앱이 공개 자료를 읽을 수 없습니다. 최신 쉘로 업데이트한 뒤 다시 시도하세요.",
+        message: "이 쉘에서는 앱이 공개 자료를 읽을 수 없습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
         fix: "쉘을 업데이트하세요"
     }
     SHELL_CLIENT_BLOB_INPUT_INVALID() {
@@ -339,7 +395,7 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "앱 저장 항목에 파일 쓰기",
         cause: "현재 쉘에 이진 요청 전송 기능이 없다",
-        message: "이 쉘에서는 파일을 앱 저장 항목에 쓸 수 없습니다. 최신 쉘로 업데이트한 뒤 다시 시도하세요.",
+        message: "이 쉘에서는 파일을 앱 저장 항목에 쓸 수 없습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
         fix: "쉘을 업데이트하세요"
     }
     SHELL_CLIENT_BLOB_BYTES_REQUIRED() {
@@ -412,12 +468,12 @@ error_catalog! { ENTRIES;
         message: "앱이 넘긴 파일 쓰기 위치 {offset}: 0 이상의 정수가 아닙니다. 앱 코드를 고치세요.",
         fix: "앱 코드를 고치세요"
     }
-    SHELL_CLIENT_FILE_WRITE_TOO_LARGE() {
+    SHELL_CLIENT_FILE_WRITE_TOO_LARGE(limit) {
         class: Io,
         place: "앱 파일 내보내기 쓰기",
         cause: "브라우저 임시 파일 크기가 64MiB를 넘었다",
-        message: "이 브라우저에서는 64MB보다 큰 파일을 내보낼 수 없습니다. 64MB 이하로 나누어 저장하세요.",
-        fix: "파일을 64MB 이하로 나누어 저장하세요"
+        message: "이 브라우저에서는 허용 크기 {limit}보다 큰 파일을 내보낼 수 없습니다. 더 작은 파일로 나누어 저장하세요.",
+        fix: "파일을 {limit} 이하로 나누어 저장하세요"
     }
     SHELL_CLIENT_FILE_TRUNCATE_TARGET_MISSING() {
         class: Io,
@@ -433,12 +489,12 @@ error_catalog! { ENTRIES;
         message: "앱이 넘긴 새 파일 크기 {size}: 0 이상의 정수가 아닙니다. 앱 코드를 고치세요.",
         fix: "앱 코드를 고치세요"
     }
-    SHELL_CLIENT_FILE_TRUNCATE_TOO_LARGE() {
+    SHELL_CLIENT_FILE_TRUNCATE_TOO_LARGE(limit) {
         class: Io,
         place: "앱 파일 내보내기 크기 변경",
         cause: "브라우저 임시 파일 크기가 64MiB를 넘었다",
-        message: "이 브라우저에서는 64MB보다 큰 파일을 내보낼 수 없습니다. 64MB 이하로 나누어 저장하세요.",
-        fix: "파일을 64MB 이하로 나누어 저장하세요"
+        message: "이 브라우저에서는 허용 크기 {limit}보다 큰 파일을 내보낼 수 없습니다. 더 작은 파일로 나누어 저장하세요.",
+        fix: "파일을 {limit} 이하로 나누어 저장하세요"
     }
     SHELL_CLIENT_FILE_CLOSE_TARGET_MISSING() {
         class: Io,
@@ -507,29 +563,29 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "파일 경로 응답 확인",
         cause: "코어 응답이 요청한 파일 경로와 다르다",
-        message: "파일 경로 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.",
-        fix: "쉘을 새 판으로 올리세요"
+        message: "파일 경로 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
+        fix: "쉘을 업데이트하세요"
     }
     SHELL_FILE_MOVE_REPLY_INVALID() {
         class: Io,
         place: "파일 이동 응답 확인",
         cause: "코어 응답이 요청한 파일 이동과 다르다",
-        message: "파일 이동 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.",
-        fix: "쉘을 새 판으로 올리세요"
+        message: "파일 이동 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
+        fix: "쉘을 업데이트하세요"
     }
     SHELL_FILE_COPY_REPLY_INVALID() {
         class: Io,
         place: "파일 복사 응답 확인",
         cause: "코어 응답이 요청한 파일 복사와 다르다",
-        message: "파일 복사 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.",
-        fix: "쉘을 새 판으로 올리세요"
+        message: "파일 복사 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
+        fix: "쉘을 업데이트하세요"
     }
     SHELL_FILE_REMOVE_REPLY_INVALID() {
         class: Io,
         place: "파일 삭제 응답 확인",
         cause: "코어 응답이 요청한 파일 삭제와 다르다",
-        message: "파일 삭제 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 새 판으로 올린 뒤 다시 시도하세요.",
-        fix: "쉘을 새 판으로 올리세요"
+        message: "파일 삭제 응답이 쉘이 예상한 형식과 다릅니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
+        fix: "쉘을 업데이트하세요"
     }
     SHELL_FILE_STORAGE_LIST_REPLY_INVALID() {
         class: Io,
@@ -542,8 +598,8 @@ error_catalog! { ENTRIES;
         class: Io,
         place: "저장 문서 이름 바꾸기 판 확인",
         cause: "이름을 바꿀 저장 문서의 판 정보가 목록 응답에 없다",
-        message: "저장 문서 이름을 바꾸는 데 필요한 판 정보를 받지 못했습니다. 쉘을 새 판으로 올리세요.",
-        fix: "쉘을 새 판으로 올리세요"
+        message: "저장 문서 이름을 바꾸는 데 필요한 판 정보를 받지 못했습니다. 쉘을 업데이트하세요.",
+        fix: "쉘을 업데이트하세요"
     }
     SHELL_FILE_STORAGE_REMOVE_REVISION_MISSING() {
         class: NotFound,

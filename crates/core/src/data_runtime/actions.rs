@@ -37,9 +37,10 @@ pub(crate) fn act(
 ) -> Result<CoreReply, CoreError> {
     let item = {
         let windows = inner.data_runtimes.windows.lock().unwrap();
-        let runtime = windows
-            .get(window_id)
-            .ok_or_else(|| errors::DATA_ACT_ACTION_WINDOW_NOT_FOUND(window_id))?;
+        let runtime = windows.get(window_id).ok_or_else(|| {
+            errors::DATA_ACT_ACTION_WINDOW_NOT_FOUND()
+                .and_details(vec![format!("window: {}", window_id)])
+        })?;
         let mut button_grid = None;
         data::walk_blocks(
             &runtime.definition.ui,
@@ -70,9 +71,8 @@ pub(crate) fn act(
                 data::Binding::Expr(_) => match runtime.last.values.get(&binding_pointer) {
                     Some(BindingValue::Ready { value }) => value.clone(),
                     _ => {
-                        return Err(errors::DATA_ACT_BUTTON_GRID_EXPR_NOT_READY(
-                            &binding_pointer,
-                        ))
+                        return Err(errors::DATA_ACT_BUTTON_GRID_EXPR_NOT_READY()
+                            .and_details(vec![format!("pointer: {}", &binding_pointer)]))
                     }
                 },
                 data::Binding::Client(_)
@@ -94,12 +94,13 @@ pub(crate) fn act(
             let button = buttons
                 .into_iter()
                 .find(|button| button.key == key)
-                .ok_or_else(|| errors::DATA_ACT_BUTTON_GRID_KEY_NOT_FOUND(&binding_pointer, key))?;
+                .ok_or_else(|| {
+                    errors::DATA_ACT_BUTTON_GRID_KEY_NOT_FOUND(key)
+                        .and_details(vec![format!("pointer: {}", &binding_pointer)])
+                })?;
             if button.disabled {
-                return Err(errors::DATA_ACT_BUTTON_GRID_KEY_DISABLED(
-                    &binding_pointer,
-                    key,
-                ));
+                return Err(errors::DATA_ACT_BUTTON_GRID_KEY_DISABLED(key)
+                    .and_details(vec![format!("pointer: {}", &binding_pointer)]));
             }
             serde_json::to_value(button)
                 .map_err(|_| errors::DATA_ACT_BUTTON_GRID_SERIALIZE_FAILED(&binding_pointer))?
@@ -109,9 +110,10 @@ pub(crate) fn act(
     };
     let len = {
         let windows = inner.data_runtimes.windows.lock().unwrap();
-        let runtime = windows
-            .get(window_id)
-            .ok_or_else(|| errors::DATA_ACT_ACTION_WINDOW_MISSING(window_id))?;
+        let runtime = windows.get(window_id).ok_or_else(|| {
+            errors::DATA_ACT_ACTION_WINDOW_MISSING()
+                .and_details(vec![format!("window: {}", window_id)])
+        })?;
         runtime
             .compiled
             .actions_len(pointer)
@@ -123,9 +125,10 @@ pub(crate) fn act(
     for index in 0..len {
         let step = (|| -> Result<Step, CoreError> {
             let windows = inner.data_runtimes.windows.lock().unwrap();
-            let runtime = windows
-                .get(window_id)
-                .ok_or_else(|| errors::DATA_ACT_WINDOW_NOT_FOUND(window_id))?;
+            let runtime = windows.get(window_id).ok_or_else(|| {
+                errors::DATA_ACT_WINDOW_NOT_FOUND()
+                    .and_details(vec![format!("window: {}", window_id)])
+            })?;
             if let Some(error) = runtime.action_storage_error(pointer, index) {
                 return Err(error);
             }
@@ -171,7 +174,8 @@ pub(crate) fn act(
                         .iter()
                         .find(|window| window.id == window_id)
                         .ok_or_else(|| {
-                            errors::DATA_ACT_WORKER_WINDOW_NOT_FOUND(window_id, &worker_action)
+                            errors::DATA_ACT_WORKER_WINDOW_NOT_FOUND(&worker_action)
+                                .and_details(vec![format!("window: {}", window_id)])
                         })?;
                     let desktop = state
                         .shared
@@ -179,7 +183,8 @@ pub(crate) fn act(
                         .iter()
                         .find(|desktop| desktop.id == window.desktop_id)
                         .ok_or_else(|| {
-                            errors::DATA_ACT_WORKER_DESKTOP_NOT_FOUND(window_id, &worker_action)
+                            errors::DATA_ACT_WORKER_DESKTOP_NOT_FOUND(&worker_action)
+                                .and_details(vec![format!("window: {}", window_id)])
                         })?;
                     if !matches!(state.link, LinkStatus::Connected { .. }) {
                         return Err(errors::DATA_ACT_WORKER_SERVER_NOT_CONNECTED(&worker_action));
@@ -214,9 +219,10 @@ pub(crate) fn act(
             Step::SetState { key, value } => {
                 let (declared, valid) = {
                     let windows = inner.data_runtimes.windows.lock().unwrap();
-                    let runtime = windows
-                        .get(window_id)
-                        .ok_or_else(|| errors::DATA_ACT_STATE_WINDOW_NOT_FOUND(window_id))?;
+                    let runtime = windows.get(window_id).ok_or_else(|| {
+                        errors::DATA_ACT_STATE_WINDOW_NOT_FOUND()
+                            .and_details(vec![format!("window: {}", window_id)])
+                    })?;
                     let mut next = runtime.state.clone();
                     next.extend(pending.clone());
                     next.insert(key.clone(), value.clone());
@@ -232,7 +238,11 @@ pub(crate) fn act(
                 }
                 if !valid {
                     let _ = flush_pending_state(inner, window_id, &mut pending, &mut pending_steps);
-                    return Err(errors::DATA_ACT_STATE_TOO_LARGE());
+                    return Err(errors::DATA_ACT_STATE_TOO_LARGE(
+                        kaleidoscope_contract::size::format_byte_limit(
+                            kaleidoscope_contract::WINDOW_STATE_MAX_BYTES as u64,
+                        ),
+                    ));
                 }
                 pending.insert(key, value);
                 pending_steps += 1;
@@ -248,7 +258,10 @@ pub(crate) fn act(
                     let windows = inner.data_runtimes.windows.lock().unwrap();
                     windows
                         .get(window_id)
-                        .ok_or_else(|| errors::DATA_ACT_STORAGE_WINDOW_NOT_FOUND(window_id))?
+                        .ok_or_else(|| {
+                            errors::DATA_ACT_STORAGE_WINDOW_NOT_FOUND()
+                                .and_details(vec![format!("window: {}", window_id)])
+                        })?
                         .revision(&entry)?
                 };
                 let revision = crate::app_storage::write(
@@ -286,7 +299,7 @@ pub(crate) fn act(
                     }
                 })?;
                 if !(200..300).contains(&reply.status) {
-                    return Err(connections::response_error(&reply));
+                    return Err(connections::response_error(&reply, &permission));
                 }
                 super::connection_changed(inner, &permission);
             }

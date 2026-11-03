@@ -71,6 +71,7 @@ pub(crate) fn pick(
         if metadata.len() > CLIENT_PICK_FILE_MAX_BYTES {
             return Err(kaleidoscope_contract::errors::FILE_CLIENT_PICK_TOO_LARGE(
                 &path.display().to_string(),
+                kaleidoscope_contract::size::format_byte_limit(CLIENT_PICK_FILE_MAX_BYTES),
             ));
         }
         let name = path
@@ -154,6 +155,7 @@ pub(crate) fn read(inner: &Inner, window: &str, id: &str) -> Result<Vec<u8>, Cor
     if bytes.len() as u64 > CLIENT_PICK_FILE_MAX_BYTES {
         return Err(kaleidoscope_contract::errors::FILE_CLIENT_READ_TOO_LARGE(
             name,
+            kaleidoscope_contract::size::format_byte_limit(CLIENT_PICK_FILE_MAX_BYTES),
         ));
     }
     Ok(bytes)
@@ -198,6 +200,7 @@ pub(crate) fn register(
         return Err(
             kaleidoscope_contract::errors::FILE_CLIENT_REGISTER_TOO_LARGE(
                 &path.display().to_string(),
+                kaleidoscope_contract::size::format_byte_limit(CLIENT_PICK_FILE_MAX_BYTES),
             ),
         );
     }

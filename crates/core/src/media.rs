@@ -119,10 +119,16 @@ pub(crate) fn get(
                     .windows
                     .iter()
                     .find(|item| item.id == window_id)
-                    .ok_or_else(|| errors::MEDIA_LOAD_WINDOW_NOT_FOUND(window_id))?;
+                    .ok_or_else(|| {
+                        errors::MEDIA_LOAD_WINDOW_NOT_FOUND()
+                            .and_details(vec![format!("window: {}", window_id)])
+                    })?;
                 let definition =
                     app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                        .ok_or_else(|| errors::MEDIA_LOAD_APP_DEFINITION_NOT_FOUND(window_id))?;
+                        .ok_or_else(|| {
+                            errors::MEDIA_LOAD_APP_DEFINITION_NOT_FOUND()
+                                .and_details(vec![format!("window: {}", window_id)])
+                        })?;
                 let dependency = definition
                     .assets
                     .iter()
@@ -231,10 +237,16 @@ pub(crate) fn get(
             .windows
             .iter()
             .find(|item| item.id == window_id)
-            .ok_or_else(|| errors::MEDIA_LOAD_WINDOW_NOT_FOUND(window_id))?;
+            .ok_or_else(|| {
+                errors::MEDIA_LOAD_WINDOW_NOT_FOUND()
+                    .and_details(vec![format!("window: {}", window_id)])
+            })?;
         let definition =
             app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                .ok_or_else(|| errors::MEDIA_LOAD_APP_DEFINITION_NOT_FOUND(window_id))?;
+                .ok_or_else(|| {
+                    errors::MEDIA_LOAD_APP_DEFINITION_NOT_FOUND()
+                        .and_details(vec![format!("window: {}", window_id)])
+                })?;
         definition
             .permissions
             .iter()
@@ -416,7 +428,10 @@ pub(crate) fn get(
             (bytes, reply.mime)
         };
         if bytes.len() as u64 > data::MEDIA_MAX_BYTES {
-            return Err(errors::MEDIA_LOAD_DATA_TOO_LARGE(&target));
+            return Err(errors::MEDIA_LOAD_DATA_TOO_LARGE(
+                kaleidoscope_contract::size::format_byte_limit(data::MEDIA_MAX_BYTES),
+                &target,
+            ));
         }
         let (width, height) = dimensions(&bytes, &mime);
         let entry = Entry {

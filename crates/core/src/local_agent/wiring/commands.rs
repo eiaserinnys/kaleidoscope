@@ -13,9 +13,10 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             }
             reconcile(inner, &window_id);
             let windows = inner.local_agents.windows.lock().unwrap();
-            let c = windows
-                .get(&window_id)
-                .ok_or_else(|| errors::AGENT_ATTACH_CONTROLLER_NOT_FOUND(&window_id))?;
+            let c = windows.get(&window_id).ok_or_else(|| {
+                errors::AGENT_ATTACH_CONTROLLER_NOT_FOUND()
+                    .and_details(vec![format!("window_id: {}", &window_id)])
+            })?;
             let ctx = context::resolve(inner, &window_id, &c.generation)?
                 .ok_or_else(|| errors::AGENT_ATTACH_CONTEXT_INVALID())?;
             Ok(CoreReply::LocalAgentAttach {
@@ -182,7 +183,10 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 .and_then(|item| item.attachments.iter().find(|a| a.id == attachment_id))
                 .map(|a| crate::attachment::safe_attachment_name(&a.name))
                 .ok_or_else(|| {
-                    errors::AGENT_ATTACHMENT_HISTORY_MISSING(&item_id, &attachment_id)
+                    errors::AGENT_ATTACHMENT_HISTORY_MISSING().and_details(vec![
+                        format!("item_id: {}", &item_id),
+                        format!("attachment_id: {}", &attachment_id),
+                    ])
                 })?;
             let dir = inner.data_dir.join("attachments").join(format!(
                 "{:x}",

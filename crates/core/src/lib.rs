@@ -292,11 +292,12 @@ impl Core {
     ) -> Result<Core, CoreError> {
         let started = std::time::Instant::now();
         fs::create_dir_all(&config.data_dir).map_err(|error| {
-            if error.kind() == io::ErrorKind::NotFound {
-                errors::DESK_DATA_DIRECTORY_CREATE_NOT_FOUND()
+            let mapped = if error.kind() == io::ErrorKind::NotFound {
+                errors::DESK_DATA_DIRECTORY_CREATE_NOT_FOUND(config.data_dir.display())
             } else {
-                errors::DESK_DATA_DIRECTORY_CREATE_FAILED()
-            }
+                errors::DESK_DATA_DIRECTORY_CREATE_FAILED(config.data_dir.display())
+            };
+            mapped.and_details(vec![error.to_string()])
         })?;
 
         let link_file = server_switch::startup_link(&config)?;
@@ -735,7 +736,9 @@ impl Core {
                 let parsed =
                     url::Url::parse(&url).map_err(|_| errors::DESK_EXTERNAL_OPEN_URL_INVALID())?;
                 if !matches!(parsed.scheme(), "http" | "https") {
-                    return Err(errors::DESK_EXTERNAL_OPEN_SCHEME_UNSUPPORTED());
+                    return Err(errors::DESK_EXTERNAL_OPEN_SCHEME_UNSUPPORTED(
+                        parsed.scheme(),
+                    ));
                 }
                 if parsed.host_str().is_none() {
                     return Err(errors::DESK_EXTERNAL_OPEN_URL_INVALID());
@@ -751,7 +754,8 @@ impl Core {
                         .iter()
                         .any(|window| window.id == window_id)
                     {
-                        return Err(errors::DESK_EXTERNAL_OPEN_WINDOW_NOT_FOUND(&window_id));
+                        return Err(errors::DESK_EXTERNAL_OPEN_WINDOW_NOT_FOUND()
+                            .and_details(vec![format!("window_id: {}", &window_id)]));
                     }
                 }
                 self.inner.host.open_url(&url).map_err(|error| {
@@ -899,7 +903,10 @@ impl Core {
                 .windows
                 .iter()
                 .find(|window| window.id == window_id)
-                .ok_or_else(|| errors::DESK_WINDOW_STATE_WINDOW_NOT_FOUND(window_id))?
+                .ok_or_else(|| {
+                    errors::DESK_WINDOW_STATE_WINDOW_NOT_FOUND()
+                        .and_details(vec![format!("window_id: {}", window_id)])
+                })?
                 .state
                 .clone();
             next.extend(entries);
@@ -969,7 +976,7 @@ impl Core {
             files::permission(&state, window_id, permission, false)?;
             if files::scope(&state, window_id, permission)? == kaleidoscope_contract::FilesScope::Pc
             {
-                return Err(errors::DESK_FOLDER_PICK_PC_SCOPE_INVALID());
+                return Err(errors::DESK_FOLDER_PICK_PC_SCOPE_INVALID(permission));
             }
         }
 
@@ -1026,7 +1033,10 @@ impl Core {
             .windows
             .iter()
             .find(|w| w.id == window_id)
-            .ok_or_else(|| errors::DESK_PC_ACCESS_WINDOW_NOT_FOUND(window_id))?;
+            .ok_or_else(|| {
+                errors::DESK_PC_ACCESS_WINDOW_NOT_FOUND()
+                    .and_details(vec![format!("window_id: {}", window_id)])
+            })?;
         let app_id = window.app_id.clone();
         let app_version = window.app_version;
         let app_name = state
@@ -1038,7 +1048,8 @@ impl Core {
             .unwrap_or(app_id.as_str());
         let definition = app_commands::definition_for(&state.shared, &app_id, app_version)
             .ok_or_else(|| {
-                errors::DESK_PC_ACCESS_APP_VERSION_NOT_FOUND(app_name, &app_id, app_version)
+                errors::DESK_PC_ACCESS_APP_VERSION_NOT_FOUND(app_name, app_version)
+                    .and_details(vec![format!("app_id: {}", &app_id)])
             })?;
         if !definition.permissions.iter().any(|p| matches!(p,
             kaleidoscope_contract::PermissionDecl::Files { id, scope: FilesScope::Pc, .. } if id == permission)) {

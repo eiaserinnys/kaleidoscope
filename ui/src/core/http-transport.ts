@@ -1,4 +1,5 @@
-import type { CoreError, CoreEvent, CoreRequest } from "../contract/contract";
+import { SHELL_HTTP_EXTERNAL_SCHEME_INVALID, SHELL_HTTP_ERROR_REPLY_INVALID, SHELL_HTTP_REQUEST_FAILED } from "../contract/shell-errors";
+import type { CoreEvent, CoreRequest } from "../contract/contract";
 import { isCoreError, toCoreError, type CoreTransport, type ReplyFor, type RequestFor } from "./core-transport";
 
 export function createHttpTransport(baseUrl: string): CoreTransport {
@@ -19,7 +20,7 @@ export function createHttpTransport(baseUrl: string): CoreTransport {
     try {
       if (request.op === "external.open") {
         const url = new URL((request as RequestFor<"external.open">).url);
-        if (url.protocol !== "http:" && url.protocol !== "https:") throw { code: "invalid_request", message: "주소가 올바르지 않습니다", details: [] } satisfies CoreError;
+        if (url.protocol !== "http:" && url.protocol !== "https:") throw SHELL_HTTP_EXTERNAL_SCHEME_INVALID();
         globalThis.window.open(url.href, "_blank", "noopener,noreferrer");
         return { op: "external.open" } as ReplyFor<K>;
       }
@@ -33,10 +34,10 @@ export function createHttpTransport(baseUrl: string): CoreTransport {
         const error: unknown = await response.json();
         throw isCoreError(error)
           ? error
-          : { code: "io", message: "코어 오류 응답을 읽을 수 없습니다", details: [] } satisfies CoreError;
+          : SHELL_HTTP_ERROR_REPLY_INVALID();
       }
       if (!response.ok) {
-        throw { code: "io", message: `코어 요청 실패 (${response.status})`, details: [] } satisfies CoreError;
+        throw { ...SHELL_HTTP_REQUEST_FAILED(), details: [`HTTP ${response.status}`] };
       }
       return await response.json() as ReplyFor<K>;
     } catch (error) {

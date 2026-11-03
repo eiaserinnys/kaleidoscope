@@ -127,8 +127,8 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await expect(page.getByRole("menu")).toBeVisible();
   await captureMatrix("workspace-menu");
 
-  await page.getByRole("menuitem", { name: "새 워크스페이스" }).click();
-  const newWorkspaceInput = page.getByRole("textbox", { name: "워크스페이스 이름" });
+  await page.getByRole("menuitem", { name: "새 작업" }).click();
+  const newWorkspaceInput = page.getByRole("textbox", { name: "작업 이름" });
   await expect(newWorkspaceInput).toHaveValue("작업 2");
   const newWorkspaceSelection = await newWorkspaceInput.evaluate((input: HTMLInputElement) => [input.selectionStart, input.selectionEnd]);
   expect(newWorkspaceSelection).toEqual([0, "작업 2".length]);
@@ -137,7 +137,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
 
   await page.getByRole("button", { name: "작업 2" }).click();
   await page.getByRole("menuitem", { name: "이름 바꾸기" }).click();
-  const workspaceRenameInput = page.getByRole("textbox", { name: "워크스페이스 이름" });
+  const workspaceRenameInput = page.getByRole("textbox", { name: "작업 이름" });
   const workspaceSelection = await workspaceRenameInput.evaluate((input: HTMLInputElement) => [input.selectionStart, input.selectionEnd]);
   expect(workspaceSelection).toEqual([0, "작업 2".length]);
   await page.keyboard.press("Escape");
