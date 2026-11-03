@@ -947,7 +947,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => width);
     const rows = [{ id: "one" }, { id: "two" }];
     const repeat: AppDefinition = {
-      id: "repeat-grid-render-isolation", name: "격자 렌더 격리", requires: { blocks: 19, modules: {} }, permissions: [],
+      id: "repeat-grid-render-isolation", name: "격자 렌더 격리", requires: { blocks: 20, modules: {} }, permissions: [],
       state: { rows }, ui: { type: "stack", direction: "column", children: [
         { type: "repeat", key: "id", items: { state: "rows" }, layout: "grid", grid: { columns: "auto", item_width: "small" },
           template: { type: "text", value: { item: "id" } } },

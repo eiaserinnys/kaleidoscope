@@ -46,6 +46,12 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     let uses_new_block_set_19_fields = value
         .get("ui")
         .is_some_and(uses_block_set_19_fields);
+    let uses_new_block_set_20_fields = value
+        .get("ui")
+        .is_some_and(uses_block_set_20_fields)
+        || value
+            .pointer("/settings/ui")
+            .is_some_and(uses_block_set_20_fields);
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
 
@@ -104,7 +110,10 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         details.push("dialog.on_confirm과 dialog.danger는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
     }
     if uses_new_block_set_19_fields && definition.requires.blocks < 19 {
-        details.push("stack.align, input.columns, button.preview, button.prefix, 동적 PropertyField.label, format swatches, properties.layout, canvas.loading, when.min_width와 when.max_width, repeat.grid.item_width는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
+        details.push("stack.align, input.columns, button.preview, button.prefix, 동적 PropertyField.label, format swatches, properties.layout, canvas.loading, when.min_width와 when.max_width는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
+    }
+    if uses_new_block_set_20_fields && definition.requires.blocks < 20 {
+        details.push("repeat.grid.item_width는 블록 세트 20판이라 requires.blocks가 20 이상이어야 합니다".into());
     }
     if uses_device_storage_scope {
         validate_module_version(
@@ -311,15 +320,26 @@ fn uses_block_set_19_fields(ui: &Value) -> bool {
                 Some("when") => {
                     object.contains_key("min_width") || object.contains_key("max_width")
                 }
-                Some("repeat") => object
-                    .get("grid")
-                    .and_then(Value::as_object)
-                    .is_some_and(|grid| grid.contains_key("item_width")),
                 _ => false,
             };
             uses_field || object.values().any(uses_block_set_19_fields)
         }
         Value::Array(values) => values.iter().any(uses_block_set_19_fields),
+        _ => false,
+    }
+}
+
+fn uses_block_set_20_fields(value: &Value) -> bool {
+    match value {
+        Value::Object(object) => {
+            (object.get("type").and_then(Value::as_str) == Some("repeat")
+                && object
+                    .get("grid")
+                    .and_then(Value::as_object)
+                    .is_some_and(|grid| grid.contains_key("item_width")))
+                || object.values().any(uses_block_set_20_fields)
+        }
+        Value::Array(values) => values.iter().any(uses_block_set_20_fields),
         _ => false,
     }
 }

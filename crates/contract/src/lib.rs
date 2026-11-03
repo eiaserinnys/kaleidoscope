@@ -274,7 +274,8 @@ pub const CONTRACT_VERSION: u32 = 29;
 ///   `process.file_uri`, stack 가운데 배치, notice, select와 toggle의 비활성 바인딩, 단독 동작 `copy_text`(아이콘이 있는
 ///   단추의 on_click에서 바인딩이 낸 글을 기기 클립보드에 쓴다).
 /// - 19판: 앱 정의의 `settings` 설정 트리와 `window_title` 창 제목 및 메타 바인딩, `dialog.on_confirm`과 `dialog.danger`.
-pub const BLOCK_SET_VERSION: u32 = 19;
+/// - 20판: 자동 열 격자 칸의 최소 폭을 고르는 `repeat.grid.item_width`.
+pub const BLOCK_SET_VERSION: u32 = 20;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -881,6 +882,7 @@ pub enum RepeatColumns {
     Auto(RepeatAuto),
 }
 
+/// 자동 열 격자 칸의 최소 폭. (블록 세트 20판)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "contract.ts")]

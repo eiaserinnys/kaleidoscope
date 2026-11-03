@@ -2,7 +2,7 @@
   "id": "repeat-grid-item-width",
   "name": "표식 고르기",
   "description": "자동 격자의 칸 폭을 세 단계로 바꿔 봅니다.",
-  "requires": { "blocks": 19, "modules": { "assets": 1 } },
+  "requires": { "blocks": 20, "modules": { "assets": 1 } },
   "assets": [
     { "id": "builtin-weather-clear", "version": 1 },
     { "id": "builtin-weather-cloudy", "version": 1 }

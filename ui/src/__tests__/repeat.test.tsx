@@ -45,7 +45,7 @@ it("자동 격자는 item_width 단계로 열 수를 정하고 창 폭이 바뀌
   const rows = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
   const widths = ["small", "medium", "large"] as const;
   const definition: AppDefinition = {
-    id: "repeat-grid-widths", name: "격자 칸 폭", requires: { blocks: 19, modules: {} }, permissions: [], state: { rows },
+    id: "repeat-grid-widths", name: "격자 칸 폭", requires: { blocks: 20, modules: {} }, permissions: [], state: { rows },
     ui: { type: "stack", direction: "column", children: widths.map((item_width) => ({
       type: "repeat" as const, key: "id", items: { state: "rows" }, layout: "grid" as const,
       grid: { columns: "auto" as const, item_width }, template: { type: "text" as const, value: { item: "id" } },
