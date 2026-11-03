@@ -307,8 +307,8 @@
 .ks-dialog-overlay { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; padding: var(--ks-space-4); background: color-mix(in srgb, var(--ks-color-text) 35%, transparent); }
 .ks-dialog { display: flex; width: min(100%, var(--ks-window-min-width)); max-height: 100%; min-height: 0; flex-direction: column; overflow: hidden; border-radius: var(--ks-radius-large); background: var(--ks-color-surface); box-shadow: var(--ks-shadow-popover); padding: var(--ks-space-4); }
 .ks-dialog-title { flex: 0 0 auto; font-size: var(--ks-type-title); font-weight: 600; }
-.ks-dialog-scroll { min-height: 0; flex: 1 1 auto; overflow: auto; }
-.ks-dialog-confirm.is-danger .ks-button { border-color: var(--ks-color-danger); background: var(--ks-color-danger); color: var(--ks-color-danger-contrast); }
+.ks-dialog-scroll { --ks-dialog-ring: calc(var(--ks-focus-width) + var(--ks-focus-offset)); min-height: 0; flex: 1 1 auto; overflow: auto; padding: var(--ks-dialog-ring); margin: calc(-1 * var(--ks-dialog-ring)); scroll-padding: var(--ks-dialog-ring); }
+.ks-dialog-confirm.is-danger .ks-button { border-color: var(--ks-color-danger); background-color: var(--ks-color-danger); color: var(--ks-color-danger-contrast); }
 .ks-dialog-body { margin-top: var(--ks-space-2); white-space: pre-wrap; }
 .ks-dialog-actions { display: flex; flex: 0 0 auto; justify-content: flex-end; gap: var(--ks-space-2); margin-top: var(--ks-space-4); }
 .ks-tour-overlay { position: absolute; inset: var(--ks-space-3); z-index: 2; pointer-events: none; }
