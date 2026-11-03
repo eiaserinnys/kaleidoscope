@@ -8,7 +8,7 @@ export const SHELL_STATE_REPLY_INVALID = (): CoreError => ({ id: "SHELL_STATE_RE
 export const SHELL_HTTP_EXTERNAL_SCHEME_INVALID = (): CoreError => ({ id: "SHELL_HTTP_EXTERNAL_SCHEME_INVALID", code: "invalid_request", message: `이 링크는 웹 주소가 아니라 열 수 없습니다. HTTP 또는 HTTPS 주소를 사용하세요.`, details: [] });
 export const SHELL_HTTP_ERROR_REPLY_INVALID = (): CoreError => ({ id: "SHELL_HTTP_ERROR_REPLY_INVALID", code: "io", message: `코어의 오류 응답을 읽지 못했습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.`, details: [] });
 export const SHELL_HTTP_REQUEST_FAILED = (): CoreError => ({ id: "SHELL_HTTP_REQUEST_FAILED", code: "io", message: `코어가 요청에 실패 응답을 보냈습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.`, details: [] });
-export const SHELL_EDITOR_DOCUMENT_DELETED = (): CoreError => ({ id: "SHELL_EDITOR_DOCUMENT_DELETED", code: "conflict", message: `편집 중인 문서가 삭제되어 저장하지 못했습니다. 내용을 복사해 다른 문서에 저장하세요.`, details: [] });
+export const SHELL_EDITOR_ITEM_DELETED = (): CoreError => ({ id: "SHELL_EDITOR_ITEM_DELETED", code: "conflict", message: `편집 중인 항목이 삭제되어 저장하지 못했습니다. 내용을 복사해 다른 문서에 저장하세요.`, details: [] });
 export const SHELL_THREAD_READ_INVALID = (args: { name: string }): CoreError => ({ id: "SHELL_THREAD_READ_INVALID", code: "invalid_request", message: `문서 ${args.name}의 커멘트 기록을 읽지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.`, details: [] });
 export const SHELL_CALL_UNEXPECTED_FAILURE = (args: { reason: string }): CoreError => ({ id: "SHELL_CALL_UNEXPECTED_FAILURE", code: "io", message: `쉘에서 예상하지 못한 오류가 났습니다. 다시 시도하세요. 원인: ${args.reason}`, details: [] });
 export const SHELL_IPC_OPERATION_HEADER_INVALID = (): CoreError => ({ id: "SHELL_IPC_OPERATION_HEADER_INVALID", code: "invalid_request", message: `파일을 주고받지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.`, details: [] });
