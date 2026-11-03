@@ -185,6 +185,29 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
         }
     }));
     record(log, "start", json!({}))?;
+    #[cfg(windows)]
+    {
+        let (tx, rx) = mpsc::channel();
+        app.get_webview("main")
+            .ok_or("main webview missing")?
+            .with_webview(move |native| {
+                let result = (|| unsafe {
+                    let settings = native.controller().CoreWebView2()?.Settings()?;
+                    let mut enabled = windows::core::BOOL(0);
+                    settings.AreDefaultContextMenusEnabled(&mut enabled)?;
+                    windows::core::Result::Ok(enabled.as_bool())
+                })();
+                let _ = tx.send(result.map_err(|error| error.to_string()));
+            })
+            .map_err(|error| error.to_string())?;
+        let enabled = rx
+            .recv_timeout(Duration::from_secs(10))
+            .map_err(|error| error.to_string())??;
+        if enabled {
+            return Err("main webview default context menu is enabled".into());
+        }
+        record(log, "main.context_menu", json!({"enabled": enabled}))?;
+    }
     // 메인 웹뷰가 초기 상태를 읽어 창을 그릴 시간을 준다.
     thread::sleep(Duration::from_secs(3));
     let main = app.get_window("main").ok_or("main window missing")?;

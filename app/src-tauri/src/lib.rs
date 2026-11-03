@@ -1,7 +1,11 @@
+#[cfg(any(windows, test))]
+mod context_menu;
 #[cfg(feature = "e2e")]
 mod e2e;
 #[cfg(windows)]
 mod freeze_cover;
+#[cfg(windows)]
+mod native_webview;
 mod updater;
 #[cfg(windows)]
 mod web_host;
@@ -245,6 +249,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            #[cfg(windows)]
+            native_webview::configure_main(app.handle())?;
             let data_dir = app.path().app_data_dir()?;
             let device_name = env::var("COMPUTERNAME")
                 .or_else(|_| env::var("HOSTNAME"))
