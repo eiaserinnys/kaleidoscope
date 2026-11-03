@@ -5782,7 +5782,7 @@ mod tests {
         });
         let definition = validate::parse_app_definition(&definition.to_string())
             .expect("U6 필드를 사용하는 정의는 유효하다");
-        assert_eq!(CONTRACT_VERSION, 29);
+        assert_eq!(CONTRACT_VERSION, 30);
         let Block::Tabs {
             header,
             keep_mounted,

@@ -17,15 +17,15 @@ fn copy_button(action: Value) -> Value {
 }
 
 #[test]
-fn copy_text_is_a_local_single_action_and_requires_block_set_nineteen() {
-    assert_eq!(CONTRACT_VERSION, 29);
-    assert_eq!(BLOCK_SET_VERSION, 19);
+fn copy_text_is_a_local_single_action_and_requires_block_set_twenty() {
+    assert_eq!(CONTRACT_VERSION, 30);
+    assert_eq!(BLOCK_SET_VERSION, 20);
     let binding = json!({"expr": "$state.target"});
     for action in [
         json!({"copy_text": binding}),
         json!([{"copy_text": binding}]),
     ] {
-        let parsed = parse_app_definition(&definition(copy_button(action), 19).to_string())
+        let parsed = parse_app_definition(&definition(copy_button(action), 20).to_string())
             .unwrap_or_else(|error| panic!("copy_text should parse: {error:?}"));
         let actions = data::all_ui_actions(&parsed);
         assert_eq!(actions.len(), 1);
@@ -38,7 +38,7 @@ fn copy_text_is_a_local_single_action_and_requires_block_set_nineteen() {
             {"copy_text": {"expr": "$state.target"}},
             {"set_state": "target", "value": "changed"}
         ])),
-        19,
+        20,
     );
     assert!(parse_app_definition(&mixed.to_string()).is_err());
 
@@ -46,7 +46,7 @@ fn copy_text_is_a_local_single_action_and_requires_block_set_nineteen() {
         json!({"copy_text": {"expr": "$state.target"}}),
         json!([{"copy_text": {"expr": "$state.target"}}]),
     ] {
-        let old = definition(copy_button(action), 18);
+        let old = definition(copy_button(action), 19);
         assert!(parse_app_definition(&old.to_string()).is_err());
     }
 }
@@ -63,7 +63,7 @@ fn copy_text_expression_uses_the_action_binding_pointer() {
         (action.clone(), "/ui/on_click/copy_text"),
         (json!([action]), "/ui/on_click/0/copy_text"),
     ] {
-        let parsed = parse_app_definition(&definition(copy_button(action), 19).to_string())
+        let parsed = parse_app_definition(&definition(copy_button(action), 20).to_string())
             .unwrap_or_else(|error| panic!("copy_text should parse: {error:?}"));
         assert!(data::ui_bindings(&parsed).iter().any(|(pointer, binding)| {
             pointer == expected
@@ -75,16 +75,16 @@ fn copy_text_expression_uses_the_action_binding_pointer() {
 #[test]
 fn copy_text_is_limited_to_icon_button_clicks() {
     let action = json!({"copy_text": {"expr": "$state.target"}});
-    parse_app_definition(&definition(copy_button(action.clone()), 19).to_string())
+    parse_app_definition(&definition(copy_button(action.clone()), 20).to_string())
         .expect("icon button on_click should allow copy_text");
 
     let iconless = json!({"type":"button","label":"복사","on_click":action});
-    assert!(parse_app_definition(&definition(iconless, 19).to_string()).is_err());
+    assert!(parse_app_definition(&definition(iconless, 20).to_string()).is_err());
 
     let list = json!({"type":"list","items":[],"on_select":action});
-    assert!(parse_app_definition(&definition(list, 19).to_string()).is_err());
+    assert!(parse_app_definition(&definition(list, 20).to_string()).is_err());
 
-    let mut shortcut = definition(json!({"type":"text","value":"내용"}), 19);
+    let mut shortcut = definition(json!({"type":"text","value":"내용"}), 20);
     shortcut["requires"]["modules"] = json!({"assets":1,"client":2});
     shortcut["assets"] = json!([{"id":"client-code","version":1}]);
     shortcut["client"] = json!({"runtime":"javascript","entry":{"id":"client-code","version":1}});

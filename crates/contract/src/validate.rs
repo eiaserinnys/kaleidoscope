@@ -1344,9 +1344,9 @@ fn validate_actions(
         }
         Actions::CopyText(action) => {
             validate_copy_text_location(definition, details, at);
-            if definition.requires.blocks < 19 {
+            if definition.requires.blocks < 20 {
                 details.push(
-                    "글 복사 동작은 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다"
+                    "글 복사 동작은 블록 세트 20판이라 requires.blocks가 20 이상이어야 합니다"
                         .into(),
                 );
             }
@@ -1405,9 +1405,9 @@ fn validate_actions(
                         if list.len() != 1 {
                             details.push(format!("{at}: 글 복사 동작은 단독으로 써야 합니다"));
                         }
-                        if definition.requires.blocks < 19 {
+                        if definition.requires.blocks < 20 {
                             details.push(
-                                "글 복사 동작은 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다"
+                                "글 복사 동작은 블록 세트 20판이라 requires.blocks가 20 이상이어야 합니다"
                                     .into(),
                             );
                         }
