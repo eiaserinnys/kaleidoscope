@@ -331,6 +331,44 @@ afterEach(() => {
 });
 
 describe("실제 Shell의 블록 렌더 격리", () => {
+  it("입력 라벨 바인딩이 비어 있다가 채워져도 입력 노드와 포커스를 유지한다", async () => {
+    const inputDefinition: AppDefinition = {
+      id: "bound-input-label", name: "입력 라벨", requires: { blocks: 16, modules: {} }, permissions: [],
+      state: { draft: "", label: null },
+      ui: { type: "input", value: { state: "draft" }, label: { state: "label" }, on_change: { set_state: "draft" }, commit: "submit" },
+    };
+    const { store } = await setup([inputDefinition], { draft: "", label: null });
+    const input = document.querySelector<HTMLInputElement>('.ks-data-window[data-ks-app-id="bound-input-label"] input.ks-text-input')!;
+    input.focus();
+    await userEvent.type(input, "typed");
+
+    await setState(store, "window-a", "label", "Name");
+    await screen.findByText("Name");
+
+    expect(document.querySelector('.ks-data-window[data-ks-app-id="bound-input-label"] input.ks-text-input')).toBe(input);
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("typed");
+    store.dispose();
+  });
+
+  it("선택 라벨 바인딩이 비어 있다가 채워져도 선택 노드와 포커스를 유지한다", async () => {
+    const selectDefinition: AppDefinition = {
+      id: "bound-select-label", name: "선택 라벨", requires: { blocks: 16, modules: {} }, permissions: [],
+      state: { choice: "one", label: null },
+      ui: { type: "select", value: { state: "choice" }, label: { state: "label" }, options: ["one", "two"], on_change: { set_state: "choice" } },
+    };
+    const { store } = await setup([selectDefinition], { choice: "one", label: null });
+    const select = document.querySelectorAll<HTMLButtonElement>('.ks-data-window[data-ks-app-id="bound-select-label"] button')[0]!;
+    select.focus();
+
+    await setState(store, "window-a", "label", "Choice");
+    await screen.findByText("Choice");
+
+    expect(document.querySelector('.ks-data-window[data-ks-app-id="bound-select-label"] .ks-select-field button')).toBe(select);
+    expect(document.activeElement).toBe(select);
+    store.dispose();
+  });
+
   it("트리 끝 액션을 갱신해도 기존 내용 행은 다시 그리지 않는다", () => {
     let rendered = 0;
     function Leading() { rendered += 1; return <span>내용 아이콘</span>; }
