@@ -1,7 +1,7 @@
 {
   "id": "settings-tree-fixture",
   "name": "Claude Code",
-  "requires": { "blocks": 18, "modules": { "assets": 1, "client": 4 } },
+  "requires": { "blocks": 19, "modules": { "assets": 1, "client": 4 } },
   "permissions": [],
   "state": {
     "title": "Claude Code",

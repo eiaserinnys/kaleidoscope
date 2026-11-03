@@ -38,6 +38,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
             .and_then(Value::as_object)
             .is_some_and(|opens| opens.contains_key("set_state"));
     let uses_new_chat_client_fields = uses_block_set_18_chat_fields(&value);
+    let uses_block_set_19_definition_fields = uses_block_set_19_definition_fields(&value);
     let uses_device_storage_scope = value.pointer("/client/device_storage/scope").is_some();
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
@@ -55,7 +56,13 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         );
     }
     if uses_new_chat_client_fields && definition.requires.blocks < 18 {
-        details.push("settings, window_title, client.channels, chat.client와 chat.footer는 블록 세트 18판이라 requires.blocks가 18 이상이어야 합니다".into());
+        details.push("client.channels, chat.client와 chat.footer는 블록 세트 18판이라 requires.blocks가 18 이상이어야 합니다".into());
+    }
+    if uses_block_set_19_definition_fields && definition.requires.blocks < 19 {
+        details.push(
+            "settings와 window_title은 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다"
+                .into(),
+        );
     }
     if uses_block_set_18_ui_fields(&definition.ui) && definition.requires.blocks < 18 {
         details.push(
@@ -152,12 +159,15 @@ fn uses_versioned_block_fields(value: &Value) -> bool {
 }
 
 fn uses_block_set_18_chat_fields(value: &Value) -> bool {
-    let definition_fields = value.get("settings").is_some() || value.get("window_title").is_some();
     let client_channels = value
         .get("client")
         .and_then(Value::as_object)
         .is_some_and(|client| client.contains_key("channels"));
-    definition_fields || client_channels || value.get("ui").is_some_and(uses_chat_client_fields)
+    client_channels || value.get("ui").is_some_and(uses_chat_client_fields)
+}
+
+fn uses_block_set_19_definition_fields(value: &Value) -> bool {
+    value.get("settings").is_some() || value.get("window_title").is_some()
 }
 
 fn uses_chat_client_fields(value: &Value) -> bool {

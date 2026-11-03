@@ -47,7 +47,7 @@ fn definition(blocks: u64) -> Value {
 #[test]
 fn settings_ui_and_window_title_bindings_and_actions_are_collected_at_their_definition_pointers() {
     let app =
-        parse_app_definition(&definition(18).to_string()).expect("settings and title bindings");
+        parse_app_definition(&definition(19).to_string()).expect("settings and title bindings");
     let bindings = data::all_ui_bindings(&app);
     for pointer in [
         "/settings/available",
@@ -67,18 +67,25 @@ fn settings_ui_and_window_title_bindings_and_actions_are_collected_at_their_defi
 }
 
 #[test]
-fn settings_and_window_title_fields_require_block_set_18() {
-    let error = parse_app_definition(&definition(17).to_string())
-        .expect_err("new definition fields require block set 18");
-    assert!(
-        error.details.iter().any(|detail| detail.contains("18판")),
-        "{error:?}"
-    );
+fn settings_and_window_title_fields_require_block_set_19() {
+    for field in ["settings", "window_title"] {
+        let mut value = definition(18);
+        value.as_object_mut().unwrap().remove(field);
+        let error = match parse_app_definition(&value.to_string()) {
+            Err(error) => error,
+            Ok(_) => panic!("{field} must require block set 19"),
+        };
+        assert!(
+            error.details.iter().any(|detail| detail.contains("19판")),
+            "{field}: {error:?}"
+        );
+    }
+    parse_app_definition(&definition(19).to_string()).expect("block set 19 supports new fields");
 }
 
 #[test]
 fn settings_and_window_title_bindings_and_actions_are_validated() {
-    let mut invalid_binding = definition(18);
+    let mut invalid_binding = definition(19);
     invalid_binding["settings"]["available"] = json!({"client": "missing"});
     let error =
         parse_app_definition(&invalid_binding.to_string()).expect_err("unknown output must fail");
@@ -90,7 +97,7 @@ fn settings_and_window_title_bindings_and_actions_are_validated() {
         "{error:?}"
     );
 
-    let mut invalid_action = definition(18);
+    let mut invalid_action = definition(19);
     invalid_action["settings"]["ui"]["children"][1]["on_click"] = json!({"client": "missing"});
     let error =
         parse_app_definition(&invalid_action.to_string()).expect_err("unknown action must fail");

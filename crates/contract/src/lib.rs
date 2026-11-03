@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 28판, 261103)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 29판, 261103)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -240,7 +240,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 28;
+pub const CONTRACT_VERSION: u32 = 29;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -273,7 +273,8 @@ pub const CONTRACT_VERSION: u32 = 28;
 /// - 18판: 클라이언트 채널과 대화 블록의 `client` 및 `footer`, 도구 중계, 지침과 같이 보기 준비, 창 범위 기기 저장소와
 ///   `process.file_uri`, stack 가운데 배치, notice, select와 toggle의 비활성 바인딩, 단독 동작 `copy_text`(아이콘이 있는
 ///   단추의 on_click에서 바인딩이 낸 글을 기기 클립보드에 쓴다).
-pub const BLOCK_SET_VERSION: u32 = 18;
+/// - 19판: 앱 정의의 `settings` 설정 트리와 `window_title` 창 제목 및 메타 바인딩.
+pub const BLOCK_SET_VERSION: u32 = 19;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -806,11 +807,11 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub locale: Option<StateRef>,
-    /// (블록 세트 18판) 앱 설정 화면. 저장소의 `presentation: settings` 자동 폼보다 우선한다.
+    /// (블록 세트 19판) 앱 설정 화면. 저장소의 `presentation: settings` 자동 폼보다 우선한다.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub settings: Option<SettingsDecl>,
-    /// (블록 세트 18판) 창 제목과 메타 글. 각 창에서 바인딩을 따로 계산한다.
+    /// (블록 세트 19판) 창 제목과 메타 글. 각 창에서 바인딩을 따로 계산한다.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub window_title: Option<WindowTitleDecl>,
@@ -5806,7 +5807,7 @@ mod tests {
         });
         let definition = validate::parse_app_definition(&definition.to_string())
             .expect("U6 필드를 사용하는 정의는 유효하다");
-        assert_eq!(CONTRACT_VERSION, 28);
+        assert_eq!(CONTRACT_VERSION, 29);
         let Block::Tabs {
             header,
             keep_mounted,
