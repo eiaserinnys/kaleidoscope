@@ -37,6 +37,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
             .get("opens")
             .and_then(Value::as_object)
             .is_some_and(|opens| opens.contains_key("set_state"));
+    let uses_new_chat_client_fields = uses_block_set_17_fields(&value);
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
 
@@ -52,9 +53,15 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
             "탭·입력 블록 라벨, dialog.close_label, dialog.cancel_label, tour.labels의 바인딩은 블록 세트 16판이라 requires.blocks가 16 이상이어야 합니다".into(),
         );
     }
+    if uses_new_chat_client_fields && definition.requires.blocks < 17 {
+        details.push("client.channels와 chat.client, chat.footer는 블록 세트 17판이라 requires.blocks가 17 이상이어야 합니다".into());
+    }
     if !cached && definition.agent.is_none() {
         data::walk_blocks(&definition.ui, "/ui", &mut |pointer, block| {
-            if matches!(block, Block::Chat { .. }) && !block.is_local_agent_chat() {
+            if matches!(block, Block::Chat { .. })
+                && !block.is_local_agent_chat()
+                && !block.is_client_chat()
+            {
                 details.push(format!("{pointer}: chat에는 대화 제공자가 필요합니다"));
             }
         });
@@ -122,6 +129,26 @@ fn uses_versioned_block_fields(value: &Value) -> bool {
             uses_field || object.values().any(uses_versioned_block_fields)
         }
         Value::Array(values) => values.iter().any(uses_versioned_block_fields),
+        _ => false,
+    }
+}
+
+fn uses_block_set_17_fields(value: &Value) -> bool {
+    let client_channels = value
+        .get("client")
+        .and_then(Value::as_object)
+        .is_some_and(|client| client.contains_key("channels"));
+    client_channels || value.get("ui").is_some_and(uses_chat_client_fields)
+}
+
+fn uses_chat_client_fields(value: &Value) -> bool {
+    match value {
+        Value::Object(object) => {
+            (object.get("type").and_then(Value::as_str) == Some("chat")
+                && (object.contains_key("client") || object.contains_key("footer")))
+                || object.values().any(uses_chat_client_fields)
+        }
+        Value::Array(values) => values.iter().any(uses_chat_client_fields),
         _ => false,
     }
 }
@@ -553,12 +580,25 @@ fn validate_client(definition: &AppDefinition, details: &mut Vec<String>) {
         .inputs
         .keys()
         .chain(client.outputs.keys())
+        .chain(client.channels.iter())
         .chain(client.actions.iter())
         .chain(client.commands.keys())
     {
         if !data::valid_source_name(name) {
             details.push(format!("/client: 이름이 올바르지 않습니다: {name}"));
         }
+    }
+    let mut channels = HashSet::new();
+    for channel in &client.channels {
+        if !channels.insert(channel) {
+            details.push(format!("/client/channels: 채널 이름이 겹칩니다: {channel}"));
+        }
+    }
+    if !client.channels.is_empty() && definition.requires.blocks < 17 {
+        details.push("/client/channels: 블록 세트 17판이 필요합니다".into());
+    }
+    if !client.channels.is_empty() {
+        validate_module_version("client", 3, definition, details, "/client/channels");
     }
     for (name, value) in &client.inputs {
         let at = format!("/client/inputs/{name}");
@@ -2196,8 +2236,41 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             agents,
             selected,
             on_select,
+            client: chat_client,
+            footer,
         } => {
-            if !block.is_local_agent_chat() {
+            if let Some(chat_client) = chat_client {
+                if permission.is_some()
+                    || root.is_some()
+                    || agents.is_some()
+                    || selected.is_some()
+                    || on_select.is_some()
+                {
+                    details.push(format!("{at}: chat.client은 제공자 모드와 로컬 에이전트 모드 필드와 함께 쓸 수 없습니다"));
+                }
+                if definition.agent.is_some() {
+                    details.push(format!("{at}: chat.client은 앱의 대화 제공자 설정과 함께 쓸 수 없습니다"));
+                }
+                validate_module_version("client", 3, definition, details, at);
+                let Some(client) = &definition.client else {
+                    details.push(format!("{at}: chat.client에는 앱 정의의 client가 필요합니다"));
+                    return;
+                };
+                if !client.channels.iter().any(|channel| channel == &chat_client.channel) {
+                    details.push(format!("{at}/client/channel: 선언되지 않은 client 채널입니다: {}", chat_client.channel));
+                }
+                for (field, action) in [
+                    ("on_send", &chat_client.on_send),
+                    ("on_cancel", &chat_client.on_cancel),
+                    ("on_attachment", &chat_client.on_attachment),
+                ] {
+                    if !client.actions.iter().any(|declared| declared == action) {
+                        details.push(format!("{at}/client/{field}: client.actions에 선언되지 않은 동작입니다: {action}"));
+                    }
+                }
+            } else if footer.is_some() {
+                details.push(format!("{at}: chat.footer에는 chat.client 연결이 필요합니다"));
+            } else if !block.is_local_agent_chat() {
                 if !definition.requires.modules.contains_key("agent") {
                     details.push(format!(
                         "{at}: chat이 사용하는 agent 모듈을 requires.modules에 선언해야 합니다"

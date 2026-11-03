@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { Profiler, useEffect, useState } from "react";
 import { TreeView } from "../components/tree/tree-view";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +11,8 @@ import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore, shareShellSnapshot, shareStructure } from "../core/shell-store";
 import * as windowData from "../data/window-data";
+import { useWindowData, WindowDataProvider, type WindowData } from "../data/window-data";
+import type { BlockContext } from "../blocks/block-context";
 import { TimelineBlock } from "../blocks/timeline";
 import * as renderBlockModule from "../render/render-block";
 import { ClientRuntime } from "../runtime/client-runtime";
@@ -108,6 +110,20 @@ const chatDefinition: AppDefinition = {
     protocol: "conversation-v1", permission: "login", base_path: "api", namespace: "n", profile: "p",
     collection: "c", model_order: [], selected_model: "", title_template: "", initial_instruction_template: "",
     instructions_template: "", thread_entry: "thread",
+  },
+};
+
+const clientChatDefinition: AppDefinition = {
+  id: "client-chat-isolation", name: "클라이언트 채팅 격리",
+  requires: { blocks: 17, modules: { assets: 1, client: 3 } }, permissions: [], state: {},
+  assets: [{ id: "chat-isolation", version: 1 }],
+  client: {
+    runtime: "javascript", entry: { id: "chat-isolation", version: 1 }, inputs: {}, outputs: {},
+    channels: ["thread"], actions: ["send", "cancel", "attachment"], commands: {}, state_keys: [], storage_entries: [],
+  },
+  ui: {
+    type: "chat", client: { channel: "thread", on_send: "send", on_cancel: "cancel", on_attachment: "attachment" },
+    footer: { type: "text", value: "격리 바닥글" },
   },
 };
 
@@ -485,6 +501,66 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     const { store } = await setupChatWindow();
     for (let i = 0; i < 10; i += 1) await setState(store, "window-a", "first", `changed-${i}`);
     expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
+  it("클라이언트 채팅 글 조각 100개는 한 프레임에 해당 채팅만 다시 그린다", async () => {
+    const snapshot = testSnapshot([clientChatDefinition], {});
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const store = createShellStore(transport);
+    await store.ready;
+    const first = snapshot.shared.windows[0]!;
+    const second = snapshot.shared.windows[1]!;
+    const contextFor = (appWindow: typeof first): BlockContext => ({
+      store,
+      window: { id: appWindow.id, app_id: appWindow.app_id, app_version: appWindow.app_version, desktop_id: appWindow.desktop_id },
+      definition: clientChatDefinition,
+    });
+    let dataA: WindowData | null = null;
+    let dataB: WindowData | null = null;
+    let commitsA = 0;
+    let commitsB = 0;
+    function Capture({ save }: { save: (data: WindowData) => void }) {
+      const data = useWindowData();
+      useEffect(() => save(data), [data, save]);
+      return null;
+    }
+    const chatBlock = clientChatDefinition.ui as Extract<AppDefinition["ui"], { type: "chat" }>;
+    render(<>
+      <WindowDataProvider store={store} windowId={first.id} definition={clientChatDefinition}>
+        <Capture save={(data) => { dataA = data; }} />
+        <Profiler id="chat-window-a" onRender={() => { commitsA += 1; }}>
+          {renderBlockModule.renderBlock(chatBlock, contextFor(first))}
+        </Profiler>
+      </WindowDataProvider>
+      <WindowDataProvider store={store} windowId={second.id} definition={clientChatDefinition}>
+        <Capture save={(data) => { dataB = data; }} />
+        <Profiler id="chat-window-b" onRender={() => { commitsB += 1; }}>
+          {renderBlockModule.renderBlock(chatBlock, contextFor(second))}
+        </Profiler>
+      </WindowDataProvider>
+    </>);
+    await waitFor(() => expect(dataA && dataB).toBeTruthy());
+    await settleRenders();
+    calls.length = 0;
+    commitsA = 0;
+    commitsB = 0;
+    const coreCalls = transport.getCalls().length;
+
+    await act(async () => {
+      for (let index = 0; index < 100; index += 1) {
+        dataA!.publishClientChat("thread", { kind: "event", event: { kind: "text", stream_id: "rapid", text: `조각 ${index + 1}` } });
+      }
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+    await settleRenders();
+
+    expect(document.body.textContent).toContain("조각 100");
+    expect(commitsA).toBeGreaterThan(0);
+    expect(commitsA).toBeLessThanOrEqual(2);
+    expect(commitsB).toBe(0);
+    expect(calls.some((call) => call.pointer === "/ui/footer")).toBe(false);
+    expect(transport.getCalls()).toHaveLength(coreCalls);
     store.dispose();
   });
 

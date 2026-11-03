@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 26판, 261102)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 27판, 261103)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -269,7 +269,7 @@ pub const CONTRACT_VERSION: u32 = 27;
 /// - 15판: `tabs.header`, `tabs.keep_mounted`, `tabs.collapsible`, `folder.header`, `state_migrate`, `opens.set_state`.
 /// - 16판: 탭과 입력 블록 라벨, `dialog.close_label`, `dialog.cancel_label`, `tour.labels`의 바인딩.
 ///   평문 문자열은 이전 판과 같은 wire 모양이다.
-/// - 17판: 클라이언트의 process 실행 권한.
+/// - 17판: 클라이언트 process 실행 권한, 클라이언트 채널과 대화 블록의 `client` 및 `footer`.
 pub const BLOCK_SET_VERSION: u32 = 17;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
@@ -1480,6 +1480,14 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_select: Option<SetState>,
+        /// (블록 세트 17판) 대화 기록과 입력을 클라이언트 채널 및 동작에 연결한다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        client: Option<client::ChatClient>,
+        /// (블록 세트 17판) 기록과 입력 사이에 그릴 앱 정의 블록.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        footer: Option<Box<Block>>,
     },
     /// (블록 세트 3판) 웹 페이지 하나를 띄우는 웹 화면. `requires.modules`에 `web`이 있어야 하고 정의에
     /// 하나까지 둘 수 있다. 위에 뒤로, 앞으로, 새로고침 단추와 페이지 제목 줄이 있고, `address_bar`면 제목 자리에
@@ -2136,6 +2144,10 @@ enum RawBlock {
         selected: Option<StateRef>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_select: Option<SetState>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        client: Option<client::ChatClient>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        footer: Option<Box<RawBlock>>,
     },
     /// (블록 세트 3판) 웹 페이지 하나를 띄우는 웹 화면. `requires.modules`에 `web`이 있어야 하고 정의에
     /// 하나까지 둘 수 있다. 위에 뒤로, 앞으로, 새로고침 단추와 페이지 제목 줄이 있고, `address_bar`면 제목 자리에
@@ -2766,12 +2778,16 @@ impl From<RawBlock> for Block {
                 agents,
                 selected,
                 on_select,
+                client,
+                footer,
             } => Block::Chat {
                 permission,
                 root,
                 agents,
                 selected,
                 on_select,
+                client,
+                footer: footer.map(|child| Box::new((*child).into())),
             },
             RawBlock::WebView {
                 url,
@@ -3121,6 +3137,8 @@ impl From<RawBlock> for Block {
                 agents: None,
                 selected: None,
                 on_select: None,
+                client: None,
+                footer: None,
             },
             RawBlock::AgentSession {
                 permission,
@@ -3134,6 +3152,8 @@ impl From<RawBlock> for Block {
                 agents: Some(agents),
                 selected: Some(selected),
                 on_select: Some(on_select),
+                client: None,
+                footer: None,
             },
             RawBlock::Keypad {
                 columns,
@@ -3183,6 +3203,9 @@ impl Block {
             } => 6,
             Block::Markdown { value: Some(_), .. } => 4,
             Block::Markdown { .. } => 1,
+            Block::Chat {
+                client: Some(_), ..
+            } => 17,
             Block::Chat { .. } if !self.is_local_agent_chat() => 2,
             Block::Chat { .. } => 8,
             Block::Map { .. } => 10,
@@ -3228,6 +3251,11 @@ impl Block {
                     ..
                 }
         )
+    }
+
+    /// 클라이언트 채널을 사용하는 대화 블록인지 판단한다.
+    pub fn is_client_chat(&self) -> bool {
+        matches!(self, Block::Chat { client: Some(_), .. })
     }
 
     /// JSON의 `type` 이름.

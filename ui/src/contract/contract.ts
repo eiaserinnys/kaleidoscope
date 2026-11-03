@@ -268,7 +268,15 @@ extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Action
 /**
  * (15판) 거짓이면 폴더 머리 줄을 숨긴다.
  */
-header?: boolean, extensions?: Array<string>, selected?: StateRef, on_select?: Actions, read_only?: boolean, } | { "type": "markdown", file?: FileRef, document?: DocumentRef, value?: Binding, read_only?: boolean, } | { "type": "html_view", document?: DocumentRef, file?: FileRef, value?: Binding, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "chat", permission?: string, root?: FolderRef, agents?: Binding, selected?: StateRef, on_select?: SetState, } | { "type": "web_view", 
+header?: boolean, extensions?: Array<string>, selected?: StateRef, on_select?: Actions, read_only?: boolean, } | { "type": "markdown", file?: FileRef, document?: DocumentRef, value?: Binding, read_only?: boolean, } | { "type": "html_view", document?: DocumentRef, file?: FileRef, value?: Binding, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "chat", permission?: string, root?: FolderRef, agents?: Binding, selected?: StateRef, on_select?: SetState, 
+/**
+ * (블록 세트 17판) 대화 기록과 입력을 클라이언트 채널 및 동작에 연결한다.
+ */
+client?: ChatClient, 
+/**
+ * (블록 세트 17판) 기록과 입력 사이에 그릴 앱 정의 블록.
+ */
+footer?: Block, } | { "type": "web_view", 
 /**
  * 열 주소. 상태에서 읽거나(`{ "state": "url" }`) 정의에 적는다(`"https://example.com"`).
  */
@@ -348,6 +356,11 @@ export type ChartPoint = { x: string, y?: number | null, open?: number, high?: n
 
 export type ChartSeries = { key: string, name: string, points: Array<ChartPoint>, };
 
+/**
+ * (블록 세트 17판) `chat` 블록이 클라이언트 채널과 사용자 조작을 연결한다.
+ */
+export type ChatClient = { channel: string, on_send: string, on_cancel: string, on_attachment: string, };
+
 export type ClientAction = { client: string, args?: JsonValue, };
 
 export type ClientActionContext = { event: JsonValue, item?: JsonValue, parent_item?: JsonValue, key?: JsonValue, index?: number, args?: JsonValue, modifiers?: EventModifiers, };
@@ -361,7 +374,11 @@ export type ClientBridgeRequest = { "type": "ks-client-http-read", requestId: st
 
 export type ClientCapability = "share" | "keep_awake";
 
-export type ClientDecl = { runtime: ClientRuntime, entry: AssetDep, inputs: { [key in string]: Binding }, outputs: { [key in string]: ClientOutput }, actions: Array<string>, commands: { [key in string]: Actions }, state_keys: Array<string>, storage_entries: Array<string>, http_permissions?: Array<string>, process_permissions?: Array<string>, device_storage?: DeviceStorage, capabilities?: Array<ClientCapability>, };
+export type ClientDecl = { runtime: ClientRuntime, entry: AssetDep, inputs: { [key in string]: Binding }, outputs: { [key in string]: ClientOutput }, 
+/**
+ * (블록 세트 17판) `window.kaleidoscope.chat.publish`가 보낼 수 있는 채널.
+ */
+channels?: Array<string>, actions: Array<string>, commands: { [key in string]: Actions }, state_keys: Array<string>, storage_entries: Array<string>, http_permissions?: Array<string>, process_permissions?: Array<string>, device_storage?: DeviceStorage, capabilities?: Array<ClientCapability>, };
 
 export type ClientFile = { id: string, name: string, size: bigint, mime: string, };
 

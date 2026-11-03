@@ -78,6 +78,7 @@ pub(super) fn resolve(
             agents: Some(agents),
             selected: Some(selected),
             on_select: Some(_),
+            ..
         } = block
         {
             found = Some((

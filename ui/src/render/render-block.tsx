@@ -18,6 +18,7 @@ import { AgentChatBlock } from "../blocks/agent-chat";
 import type { AgentChatBlockData } from "../blocks/agent-chat";
 import { AgentSessionBlock } from "../blocks/agent-session";
 import type { AgentSessionBlockData } from "../blocks/agent-session";
+import { ClientChatBlock, type ClientChatBlockData } from "../blocks/client-chat";
 import { WebViewBlock } from "../blocks/web-view";
 import { ExplorerBlock } from "../blocks/explorer";
 import { CodeEditorBlock } from "../blocks/code-editor";
@@ -83,9 +84,11 @@ function BlockContent({ block: normalized, context, pointer }: { block: Block; c
     case "sandbox":
       return <SandboxBlock block={normalized} context={context} pointer={pointer} />;
     case "chat":
-      return normalized.permission !== undefined || normalized.root !== undefined || normalized.agents !== undefined || normalized.selected !== undefined || normalized.on_select !== undefined
-        ? <AgentSessionBlock block={normalized as AgentSessionBlockData} context={context} pointer={pointer} />
-        : <AgentChatBlock block={normalized as AgentChatBlockData} context={context} />;
+      return normalized.client
+        ? <ClientChatBlock block={normalized as ClientChatBlockData} context={context} pointer={pointer} />
+        : normalized.permission !== undefined || normalized.root !== undefined || normalized.agents !== undefined || normalized.selected !== undefined || normalized.on_select !== undefined
+          ? <AgentSessionBlock block={normalized as AgentSessionBlockData} context={context} pointer={pointer} />
+          : <AgentChatBlock block={normalized as AgentChatBlockData} context={context} />;
     case "stack": return <StackBlock block={normalized} context={context} pointer={pointer} />;
     case "tabs": return <TabsBlock block={normalized} context={context} pointer={pointer} />;
     case "toolbar": return <ToolbarBlock block={normalized} context={context} pointer={pointer} />;
