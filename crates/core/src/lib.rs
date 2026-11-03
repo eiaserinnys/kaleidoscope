@@ -360,6 +360,12 @@ impl Core {
             state.shared.workspaces.push(workspace);
             state.shared.desktops.push(desktop);
         }
+        let process_windows = state
+            .shared
+            .windows
+            .iter()
+            .map(|window| (window.app_id.clone(), window.id.clone()))
+            .collect::<HashSet<_>>();
 
         let inner = Arc::new(Inner {
             embedded_server: config.embedded_server,
@@ -394,7 +400,7 @@ impl Core {
             },
             data_runtimes: data_runtime::DataRuntimes::default(),
             local_agents: local_agent::LocalAgents::default(),
-            processes: process_host::Processes::default(),
+            processes: process_host::Processes::with_windows(process_windows),
             client_services: client_services::ClientServices::default(),
             conversation_streams: conversation_stream::Streams::default(),
             conversation_sends: Mutex::new(HashSet::new()),
@@ -404,6 +410,7 @@ impl Core {
             login_in_progress: Mutex::new(HashSet::new()),
             media_cache: media::MediaCache::default(),
         });
+        process_host::initialize_window_storage_archive(&inner);
         storage::start_flusher(&inner);
         local_agent::start_events(&inner);
         {
@@ -621,7 +628,8 @@ impl Core {
             | CoreRequest::ProcessAck { .. }
             | CoreRequest::ProcessWrite { .. }
             | CoreRequest::ProcessCloseInput { .. }
-            | CoreRequest::ProcessStop { .. }) => process_host::handle(&self.inner, request),
+            | CoreRequest::ProcessStop { .. }
+            | CoreRequest::ProcessFileUri { .. }) => process_host::handle(&self.inner, request),
             request @ (CoreRequest::LocalAgentAttach { .. }
             | CoreRequest::LocalAgentDetach { .. }
             | CoreRequest::LocalAgentAllow { .. }

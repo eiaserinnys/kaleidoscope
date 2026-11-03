@@ -1,4 +1,8 @@
 error_catalog! { ENTRIES;
+    PROCESS_FILE_URI_CLIENT_PERMISSION_UNDECLARED(app) { class: PermissionDenied, place: "창 파일 주소 조회 권한", cause: "앱 클라이언트가 프로그램 실행 권한을 선언하지 않았다", message: "앱 {app}의 client.process_permissions가 없어 저장 파일 주소를 돌려줄 수 없습니다. 앱 정의에 프로그램 실행 권한을 선언하세요.", fix: "앱 정의에 client.process_permissions를 선언하세요" }
+    PROCESS_FILE_URI_WINDOW_STORAGE_REQUIRED(app) { class: PermissionDenied, place: "창 파일 주소 조회 범위", cause: "창 범위 저장소가 선언되지 않았다", message: "앱 {app}의 client.device_storage.scope가 window가 아니어서 창 파일 주소를 돌려줄 수 없습니다. 앱 정의에서 window로 설정하세요.", fix: "앱 정의에서 client.device_storage.scope를 window로 설정하세요" }
+    PROCESS_FILE_URI_BLOB_NOT_FOUND(key) { class: NotFound, place: "창 파일 주소 조회", cause: "창 범위 저장소에 파일이 없다", message: "저장 키 {key}에 해당하는 창 파일이 없습니다. 먼저 이 창의 기기 저장소에 파일을 쓰세요.", fix: "이 창의 기기 저장소에 파일을 쓰세요" }
+    PROCESS_FILE_URI_PATH_INVALID() { class: InvalidRequest, place: "창 파일 주소 변환", cause: "저장 파일 경로가 file URI로 바뀌지 않는다", message: "창 저장 파일 경로를 프로그램에 넘길 file:// 주소로 바꾸지 못했습니다. 저장 위치를 확인하세요.", fix: "저장 위치를 확인하세요" }
     PROCESS_START_WINDOW_MISSING() { class: NotFound, place: "프로그램 실행", cause: "창이 없다", message: "프로그램을 실행할 창을 찾지 못했습니다. 창을 다시 여세요.", fix: "창을 다시 여세요" }
     PROCESS_START_DESKTOP_MISSING() { class: NotFound, place: "프로그램 실행 작업 조회", cause: "창이 속한 데스크톱이 없다", message: "프로그램을 실행할 창의 데스크톱을 찾지 못했습니다. 앱을 다시 여세요.", fix: "앱을 다시 여세요" }
     PROCESS_START_APP_VERSION_MISSING() { class: NotFound, place: "프로그램 실행 앱 조회", cause: "창의 앱 버전이 없다", message: "프로그램을 실행할 앱 버전을 찾지 못했습니다. 앱을 다시 여세요.", fix: "앱을 다시 여세요" }

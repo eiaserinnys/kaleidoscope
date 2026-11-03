@@ -183,6 +183,7 @@ function bridgeSource(init: SandboxInit): string {
         write(params) { const bytes = new Uint8Array(params.bytes).slice().buffer; return clientRequest('ks-client-process', { method: 'write', params: { ...params, bytes } }, [bytes]); },
         close_input(params) { return call('close_input', params); },
         stop(params) { return call('stop', params); },
+        file_uri(blob_key) { return call('file_uri', { blob_key }); },
         onReady(listener) { processListeners.add(listener); return () => processListeners.delete(listener); },
         onServicesChanged(listener) { processServicesListeners.add(listener); return () => processServicesListeners.delete(listener); },
       };

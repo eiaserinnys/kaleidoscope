@@ -1,7 +1,7 @@
 //! 기기와 서버, 앱 범위의 바이너리 보관.
 use crate::{app_commands, client_files, server_switch, Inner};
 use kaleidoscope_contract::{
-    client::{ClientFile, CLIENT_PICK_FILE_MAX_BYTES},
+    client::{ClientFile, DeviceStorageScope, CLIENT_PICK_FILE_MAX_BYTES},
     errors, CoreError,
 };
 use std::{
@@ -25,12 +25,12 @@ fn location(inner: &Inner, window: &str, key: &str) -> Result<(PathBuf, PathBuf)
     let definition =
         app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
             .ok_or_else(|| errors::DATA_CLIENT_BLOB_APP_NOT_FOUND(&window.app_id))?;
-    let prefixes = definition
+    let storage = definition
         .client
         .as_ref()
         .and_then(|c| c.device_storage.as_ref())
-        .map(|s| &s.prefixes)
         .ok_or_else(|| errors::DATA_CLIENT_BLOB_STORAGE_NOT_DECLARED(&window.app_id))?;
+    let prefixes = &storage.prefixes;
     if key.is_empty()
         || key.contains('\\')
         || !Path::new(key)
@@ -43,10 +43,72 @@ fn location(inner: &Inner, window: &str, key: &str) -> Result<(PathBuf, PathBuf)
     if !prefixes.iter().any(|prefix| key.starts_with(prefix)) {
         return Err(errors::DATA_CLIENT_BLOB_PREFIX_DENIED(key, &window.app_id));
     }
-    let root = server_switch::active_archive(inner)
-        .join("client-blobs")
-        .join(&window.app_id);
+    let root = match storage.scope {
+        DeviceStorageScope::App => server_switch::active_archive(inner)
+            .join("client-blobs")
+            .join(&window.app_id),
+        DeviceStorageScope::Window => server_switch::active_archive(inner)
+            .join("client-blobs")
+            .join(".windows")
+            .join(&window.app_id)
+            .join(&window.id),
+    };
     Ok((root.clone(), root.join(key)))
+}
+
+pub(crate) fn file_uri(inner: &Inner, window_id: &str, key: &str) -> Result<String, CoreError> {
+    {
+        let state = inner.state.lock().unwrap();
+        let window = state
+            .shared
+            .windows
+            .iter()
+            .find(|window| window.id == window_id)
+            .ok_or_else(|| {
+                errors::DATA_CLIENT_BLOB_WINDOW_NOT_FOUND()
+                    .and_details(vec![format!("window: {window_id}")])
+            })?;
+        let definition =
+            app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
+                .ok_or_else(|| errors::DATA_CLIENT_BLOB_APP_NOT_FOUND(&window.app_id))?;
+        let client = definition.client.as_ref();
+        if !client
+            .and_then(|client| client.process_permissions.as_ref())
+            .is_some_and(|permissions| !permissions.is_empty())
+        {
+            return Err(errors::PROCESS_FILE_URI_CLIENT_PERMISSION_UNDECLARED(
+                &window.app_id,
+            ));
+        }
+        if !client
+            .and_then(|client| client.device_storage.as_ref())
+            .is_some_and(|storage| storage.scope == DeviceStorageScope::Window)
+        {
+            return Err(errors::PROCESS_FILE_URI_WINDOW_STORAGE_REQUIRED(
+                &window.app_id,
+            ));
+        }
+    }
+    let (_, path) = location(inner, window_id, key)?;
+    if !path.is_file() {
+        return Err(errors::PROCESS_FILE_URI_BLOB_NOT_FOUND(key));
+    }
+    url::Url::from_file_path(&path)
+        .map(|url| url.to_string())
+        .map_err(|_| errors::PROCESS_FILE_URI_PATH_INVALID())
+}
+
+pub(crate) fn remove_window_storage(archive: &Path, app_id: &str, window_id: &str) {
+    let path = archive
+        .join("client-blobs")
+        .join(".windows")
+        .join(app_id)
+        .join(window_id);
+    if let Err(error) = fs::remove_dir_all(path) {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            eprintln!("삭제된 창 저장소를 지우지 못했습니다: {error}");
+        }
+    }
 }
 
 pub(crate) fn put(

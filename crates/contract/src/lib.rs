@@ -270,8 +270,8 @@ pub const CONTRACT_VERSION: u32 = 28;
 /// - 16판: 탭과 입력 블록 라벨, `dialog.close_label`, `dialog.cancel_label`, `tour.labels`의 바인딩.
 ///   평문 문자열은 이전 판과 같은 wire 모양이다.
 /// - 17판: 클라이언트 process 실행 권한.
-/// - 18판: 클라이언트 채널과 대화 블록의 `client` 및 `footer`, 도구 중계, 지침과 같이 보기 준비, stack 가운데 배치,
-///   notice, select와 toggle의 비활성 바인딩.
+/// - 18판: 클라이언트 채널과 대화 블록의 `client` 및 `footer`, 도구 중계, 지침과 같이 보기 준비, 창 범위 기기 저장소와
+///   `process.file_uri`, stack 가운데 배치, notice, select와 toggle의 비활성 바인딩.
 pub const BLOCK_SET_VERSION: u32 = 18;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
@@ -291,7 +291,8 @@ pub const BLOCK_SET_VERSION: u32 = 18;
 /// - `client` 1판: 창별 격리 프레임의 로직과 로컬 출력.
 /// - `client` 2판: HTTP 권한, 기기 저장소와 기본 런타임 기능.
 /// - `client` 3판: 로컬 process 실행 권한.
-/// - `client` 4판: 채팅 채널과 앱 작성 지침·같이 보기 준비 기능, 앱 정의에서 선언한 폴더 권한의 선택과 grant 변경 알림.
+/// - `client` 4판: 채팅 채널과 앱 작성 지침·같이 보기 준비 기능, 앱 정의에서 선언한 폴더 권한의 선택과 grant 변경 알림,
+///   창 범위 기기 저장소와 프로그램 파일 주소.
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("files", 3),
     ("agent", 3),
@@ -4338,6 +4339,9 @@ pub enum CoreRequest {
     ProcessCloseInput { window_id: String, handle: String },
     #[serde(rename = "process.stop")]
     ProcessStop { window_id: String, handle: String },
+    /// (클라이언트 4판) 창 범위 저장소 파일의 `file://` 주소를 돌려준다.
+    #[serde(rename = "process.file_uri")]
+    ProcessFileUri { window_id: String, blob_key: String },
 
     /// (계약 20판) 기기 로컬 에이전트 창 명령. 자세한 응답과 세대 규칙은 [`local_agent`]에 있다.
     #[serde(rename = "local_agent.attach")]
@@ -5033,6 +5037,8 @@ pub enum CoreReply {
     ProcessCloseInput {},
     #[serde(rename = "process.stop")]
     ProcessStop {},
+    #[serde(rename = "process.file_uri")]
+    ProcessFileUri { uri: String },
 
     #[serde(rename = "local_agent.attach")]
     LocalAgentAttach {
