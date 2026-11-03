@@ -320,6 +320,7 @@
   flex: 1 1 auto;
   overflow: hidden;
 }
+.ks-window-content:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
 
 .ks-window-settings-notice { position: absolute; inset-inline: var(--ks-space-3); bottom: var(--ks-space-3); }
 
