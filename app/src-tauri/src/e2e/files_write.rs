@@ -20,19 +20,10 @@ pub(super) fn scenario(
     log: &mut File,
 ) -> Result<(), String> {
     let mut errors = Vec::new();
-    if let Err(error) = core_scenario(core, folder, log) {
+    if let Err(error) = core_scenario(app, core, folder, log) {
         record(
             log,
             "files-write.core-error",
-            json!({"passed": false, "error": error}),
-        )?;
-        errors.push(error);
-    }
-    #[cfg(windows)]
-    if let Err(error) = super::folder_drag::scenario(app, core, folder, log) {
-        record(
-            log,
-            "files-write.drag",
             json!({"passed": false, "error": error}),
         )?;
         errors.push(error);
@@ -58,7 +49,14 @@ pub(super) fn scenario(
     )
 }
 
-fn core_scenario(core: &Core, folder: &Path, log: &mut File) -> Result<(), String> {
+fn core_scenario(
+    app: &AppHandle,
+    core: &Core,
+    folder: &Path,
+    log: &mut File,
+) -> Result<(), String> {
+    #[cfg(not(windows))]
+    let _ = app;
     if !folder.is_dir() {
         return Err(format!("test folder is missing: {}", folder.display()));
     }
@@ -221,6 +219,12 @@ fn core_scenario(core: &Core, folder: &Path, log: &mut File) -> Result<(), Strin
             "files-write.trash",
             json!({"source_absent": true, "used_system_trash": true}),
         )?;
+        Ok(())
+    });
+    // 외부 OS 창을 여는 reveal은 네이티브 입력을 모두 보낸 뒤에 시험한다.
+    #[cfg(windows)]
+    check!("files-write.drag", {
+        super::folder_drag::scenario(app, core, folder, log)?;
         Ok(())
     });
     check!("files-write.reveal", {
