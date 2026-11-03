@@ -132,6 +132,7 @@ fn register(view: &Webview, app: AppHandle, id: String, page: Page) -> Result<()
         let result = (|| unsafe {
             let native = native.controller().CoreWebView2()?;
             let mut token = 0;
+            crate::native_webview::register_child_menu(&native)?;
             macro_rules! event {
                 ($method:ident, $handler:ident, $loading:expr) => {{
                     let app = app.clone();
