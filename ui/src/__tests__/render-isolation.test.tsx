@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Profiler, useEffect, useState } from "react";
 import { TreeView } from "../components/tree/tree-view";
 import userEvent from "@testing-library/user-event";
@@ -241,6 +241,26 @@ function testSnapshot(definitions: AppDefinition[] = [definition], firstState: R
   });
   snapshot.device.active_desktop_ids["workspace-1"] = "desktop-1";
   return snapshot;
+}
+
+function dialogFooterDefinition(options: { onConfirm?: boolean; danger?: boolean; cancelLabel?: boolean } = {}): AppDefinition {
+  const dialog: Record<string, unknown> = {
+    type: "dialog",
+    open: { state: "open" },
+    title: options.danger ? "위험 확인" : options.onConfirm ? "변경 확인" : "안내",
+    close_label: options.onConfirm ? "확인" : "닫기",
+    child: { type: "text", value: "대화상자 내용" },
+    on_close: [{ set_state: "open", value: false }],
+  };
+  if (options.cancelLabel) dialog.cancel_label = "취소";
+  if (options.onConfirm) dialog.on_confirm = [{ set_state: "confirmed", value: true }];
+  if (options.danger !== undefined) dialog.danger = options.danger;
+  return {
+    id: "dialog-footer", name: "대화상자 바닥 단추",
+    requires: { blocks: 19, modules: {} }, permissions: [],
+    state: { open: true, confirmed: false },
+    ui: dialog as unknown as AppDefinition["ui"],
+  };
 }
 
 function countFor(windowId: string, pointer?: string) {
@@ -527,6 +547,38 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("확인 동작이 없는 대화상자는 취소 없이 닫기 단추 하나를 보인다", async () => {
+    const { store, transport } = await setup([dialogFooterDefinition({ cancelLabel: true })], { open: true, confirmed: false });
+    const dialog = (await screen.findAllByRole("dialog", { name: "안내" }))[0];
+    expect(within(dialog).getAllByRole("button")).toHaveLength(1);
+    await userEvent.click(within(dialog).getByRole("button", { name: "닫기" }));
+    expect(transport.getCalls().some((call) => call.op === "data.act" && call.pointer === "/ui/on_close")).toBe(true);
+    store.dispose();
+  });
+
+  it("확인 대화상자는 취소와 확인 동작을 나누고 Escape는 닫기 동작을 부른다", async () => {
+    const { store, transport } = await setup([dialogFooterDefinition({ onConfirm: true, cancelLabel: true })], { open: true, confirmed: false });
+    const dialog = (await screen.findAllByRole("dialog", { name: "변경 확인" }))[0];
+    expect(within(dialog).getAllByRole("button")).toHaveLength(2);
+    await userEvent.click(within(dialog).getByRole("button", { name: "취소" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "확인" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    const actions = transport.getCalls().filter((call) => call.op === "data.act").map((call) => call.pointer);
+    expect(actions).toContain("/ui/on_close");
+    expect(actions).toContain("/ui/on_confirm");
+    expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
+  it("위험 확인은 공용 대화상자 단추에 위험 표시를 적용한다", async () => {
+    const { store, transport } = await setup([dialogFooterDefinition({ onConfirm: true, danger: true })], { open: true, confirmed: false });
+    const dialog = (await screen.findAllByRole("dialog", { name: "위험 확인" }))[0];
+    expect(dialog.querySelector(".ks-dialog-confirm.is-danger")).not.toBeNull();
+    await userEvent.click(within(dialog).getByRole("button", { name: "확인" }));
+    expect(transport.getCalls().some((call) => call.op === "data.act" && call.pointer === "/ui/on_confirm")).toBe(true);
+    store.dispose();
+  });
+
   it("창 A 상태 변경은 창 B 블록을 다시 그리지 않는다", async () => {
     const { store } = await setup();
     for (let i = 0; i < 10; i += 1) await setState(store, "window-a", "first", `changed-${i}`);
@@ -715,7 +767,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     const tourButtons = (name: string) => [...document.querySelectorAll(".ks-tour-actions button")]
       .filter((button) => button.textContent?.trim() === name);
     expect(screen.getAllByRole("button", { name: "Close" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(2);
+    expect(screen.queryAllByRole("button", { name: "Cancel" })).toHaveLength(0);
     expect(tourButtons("Previous")).toHaveLength(2);
     expect(tourButtons("Next")).toHaveLength(2);
     expect(tourButtons("Skip")).toHaveLength(2);
@@ -731,12 +783,12 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     await setState(store, "window-a", "language", "ko");
 
     await waitFor(() => expect(screen.getAllByRole("button", { name: "닫기" })).toHaveLength(1));
-    expect(screen.getAllByRole("button", { name: "취소" })).toHaveLength(1);
+    expect(screen.queryAllByRole("button", { name: "취소" })).toHaveLength(0);
     expect(screen.getAllByRole("button", { name: "닫기" }).length + screen.getAllByRole("button", { name: "Close" }).length).toBe(2);
     expect(tourButtons("이전")).toHaveLength(1);
     expect(tourButtons("다음")).toHaveLength(1);
     expect(tourButtons("건너뛰기")).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(1);
+    expect(screen.queryAllByRole("button", { name: "Cancel" })).toHaveLength(0);
     expect(countFor("window-a", "/ui/children/0/child")).toBe(0);
     expect(countFor("window-a", "/ui/children/1/child")).toBe(0);
     expect(countFor("window-a", "/ui/children/3")).toBe(0);

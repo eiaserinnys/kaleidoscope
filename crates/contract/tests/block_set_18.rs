@@ -64,3 +64,12 @@ fn current_contract_versions_include_block_set_19() {
     assert_eq!(supported.blocks, 19);
     assert_eq!(supported.modules.get("client"), Some(&4));
 }
+
+#[test]
+fn block_set_18_remains_supported_by_current_contract() {
+    assert_eq!(CONTRACT_VERSION, 29);
+    let supported = Supported::current();
+    assert_eq!(supported.blocks, BLOCK_SET_VERSION);
+    assert!(supported.blocks >= 18);
+    assert_eq!(supported.modules.get("client"), Some(&4));
+}

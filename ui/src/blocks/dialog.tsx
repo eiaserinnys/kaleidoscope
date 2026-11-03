@@ -22,6 +22,7 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
   const wasOpen = useRef(false);
   const [host, setHost] = useState<HTMLElement | null>(null);
   const childPointer = `${pointer}/child`;
+  const hasConfirm = block.on_confirm !== undefined;
 
   useDormant(childPointer, !isOpen);
 
@@ -51,6 +52,7 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
   }, [isOpen]);
 
   const close = useCallback(() => { void data.act(`${pointer}/on_close`, null); }, [data, pointer]);
+  const confirm = useCallback(() => { void data.act(`${pointer}/on_confirm`, null); }, [data, pointer]);
 
   return <div ref={root} style={{ display: "contents" }}>
     {isOpen && host ? <Dialog
@@ -58,9 +60,11 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
       title={titleText}
       body={renderBlock(block.child, context, childPointer)}
       ok={closeText}
+      danger={block.danger}
+      showCancel={hasConfirm}
       cancelLabel={cancelText}
       onCancel={close}
-      onConfirm={close}
+      onConfirm={hasConfirm ? confirm : close}
     /> : null}
   </div>;
 }

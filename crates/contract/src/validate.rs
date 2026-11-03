@@ -40,6 +40,9 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     let uses_new_chat_client_fields = uses_block_set_18_chat_fields(&value);
     let uses_block_set_19_definition_fields = uses_block_set_19_definition_fields(&value);
     let uses_device_storage_scope = value.pointer("/client/device_storage/scope").is_some();
+    let uses_new_dialog_footer_fields = value
+        .get("ui")
+        .is_some_and(uses_dialog_footer_fields);
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
 
@@ -71,6 +74,9 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     }
     if uses_device_storage_scope && definition.requires.blocks < 18 {
         details.push("client.device_storage.scope는 블록 세트 18판이라 requires.blocks가 18 이상이어야 합니다".into());
+    }
+    if uses_new_dialog_footer_fields && definition.requires.blocks < 19 {
+        details.push("dialog.on_confirm과 dialog.danger는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
     }
     if uses_device_storage_scope {
         validate_module_version(
@@ -234,6 +240,21 @@ fn uses_block_set_18_ui_fields(ui: &Block) -> bool {
         };
     });
     uses_new_field
+}
+
+fn uses_dialog_footer_fields(ui: &Value) -> bool {
+    match ui {
+        Value::Object(object) => {
+            let is_footer_field = object
+                .get("type")
+                .and_then(Value::as_str)
+                .is_some_and(|kind| kind == "dialog")
+                && (object.contains_key("on_confirm") || object.contains_key("danger"));
+            is_footer_field || object.values().any(uses_dialog_footer_fields)
+        }
+        Value::Array(values) => values.iter().any(uses_dialog_footer_fields),
+        _ => false,
+    }
 }
 
 fn validate(definition: &AppDefinition) -> Vec<String> {

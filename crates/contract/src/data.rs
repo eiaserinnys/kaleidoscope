@@ -1436,6 +1436,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             title,
             close_label,
             cancel_label,
+            on_confirm,
             on_close,
             ..
         } => {
@@ -1446,6 +1447,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
             if let Some(label) = cancel_label {
                 bind!("cancel_label", label);
+            }
+            if let Some(actions) = on_confirm {
+                act!("on_confirm", actions);
             }
             act!("on_close", on_close);
         }
