@@ -51,6 +51,18 @@ async fn invoke(
     }
 }
 
+fn pre_auth_error(error: CoreError) -> CoreError {
+    if matches!(
+        error.code,
+        ErrorCode::Unauthorized | ErrorCode::NotFound | ErrorCode::InvalidRequest
+    ) {
+        return error;
+    }
+    super::log_core_error(&error, "500");
+    eprintln!("웹훅 요청 오류 상세: {:?}", error.details);
+    kaleidoscope_contract::errors::WORKER_WEBHOOK_REQUEST_UNAVAILABLE()
+}
+
 async fn invoke_inner(
     state: AppState,
     app: String,
@@ -59,20 +71,21 @@ async fn invoke_inner(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, CoreError> {
-    let account = state.mcp_account_id()?;
+    let account = state.mcp_account_id().map_err(pre_auth_error)?;
     let (_, worker) = state.worker_definition(&app).map_err(|error| {
-        if error.code == ErrorCode::InvalidRequest {
+        pre_auth_error(if error.code == ErrorCode::InvalidRequest {
             kaleidoscope_contract::errors::WORKER_WEBHOOK_WORKER_MISSING(&app)
         } else {
             error
-        }
+        })
     })?;
     let webhook = worker
         .webhook
         .ok_or_else(|| kaleidoscope_contract::errors::WORKER_WEBHOOK_NOT_CONFIGURED(&app))?;
     if let Some(entry) = webhook.enabled_entry {
         if state
-            .read_app_storage(&account, &app, &entry, None)?
+            .read_app_storage(&account, &app, &entry, None)
+            .map_err(pre_auth_error)?
             .content
             != json!(true)
         {
@@ -81,7 +94,8 @@ async fn invoke_inner(
     }
     if let Some(secret) = webhook.token_secret {
         let stored: Option<String> = state
-            .lock_db()?
+            .lock_db()
+            .map_err(pre_auth_error)?
             .query_row(
                 "SELECT value FROM app_secrets WHERE account_id=?1 AND app_id=?2 AND secret_id=?3",
                 params![account, app, secret],
@@ -89,13 +103,10 @@ async fn invoke_inner(
             )
             .optional()
             .map_err(|error| {
-                let detail = db_error_with(
+                pre_auth_error(db_error_with(
                     error,
                     kaleidoscope_contract::errors::WORKER_WEBHOOK_SECRET_READ_DATABASE_FAILED(&app),
-                );
-                super::log_core_error(&detail, "500");
-                eprintln!("웹훅 저장소 오류 상세: {:?}", detail.details);
-                kaleidoscope_contract::errors::WORKER_WEBHOOK_REQUEST_UNAVAILABLE()
+                ))
             })?;
         let auth = headers
             .get(header::AUTHORIZATION)

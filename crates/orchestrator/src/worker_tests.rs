@@ -44,30 +44,49 @@ async fn webhook_error(
 }
 
 #[tokio::test]
-async fn webhook_secret_database_failure_hides_internal_error_from_public_response() {
-    let (state, _) = setup(CODE);
-    let mut app: Value = serde_json::from_str(&definition(CODE)).unwrap();
-    app["worker"]["webhook"] = json!({"token_secret":"token"});
-    state
-        .publish_app(&app.to_string(), "test", false, None)
-        .unwrap();
-    state
-        .lock_db()
-        .unwrap()
-        .execute("DROP TABLE app_secrets", [])
-        .unwrap();
-    let request = Request::builder()
-        .method("POST")
-        .uri("/api/webhooks/worker-test")
-        .body(Body::from("{}"))
-        .unwrap();
-    let (status, error) = webhook_error(router(state).oneshot(request).await.unwrap()).await;
-    assert_eq!(status, axum::http::StatusCode::INTERNAL_SERVER_ERROR);
-    assert_eq!(
-        error.id.as_deref(),
-        Some("WORKER_WEBHOOK_REQUEST_UNAVAILABLE")
-    );
-    assert!(error.details.is_empty());
+async fn webhook_pre_auth_database_failures_share_a_public_response() {
+    let mut previous = None;
+    for table in [
+        "mcp_principal",
+        "app_versions",
+        "app_storage_items",
+        "app_secrets",
+    ] {
+        let (state, account) = setup(CODE);
+        let mut app: Value = serde_json::from_str(&definition(CODE)).unwrap();
+        app["worker"]["webhook"] = json!({"enabled_entry":"enabled","token_secret":"token"});
+        state
+            .publish_app(&app.to_string(), "test", false, None)
+            .unwrap();
+        state
+            .write_app_storage(&account, "worker-test", "enabled", None, json!(true), None)
+            .unwrap();
+        state
+            .set_app_secret(&account, "worker-test", "token", "test-token")
+            .unwrap();
+        state
+            .lock_db()
+            .unwrap()
+            .execute(&format!("DROP TABLE {table}"), [])
+            .unwrap();
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/webhooks/worker-test")
+            .body(Body::from("{}"))
+            .unwrap();
+        let (status, error) = webhook_error(router(state).oneshot(request).await.unwrap()).await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{table}");
+        assert_eq!(
+            error.id.as_deref(),
+            Some("WORKER_WEBHOOK_REQUEST_UNAVAILABLE"),
+            "{table}"
+        );
+        assert!(error.details.is_empty(), "{table}");
+        if let Some(previous) = &previous {
+            assert_eq!(&error, previous, "{table}");
+        }
+        previous = Some(error);
+    }
 }
 
 #[tokio::test]
