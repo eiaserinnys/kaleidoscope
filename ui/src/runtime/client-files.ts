@@ -61,7 +61,7 @@ export class BrowserFiles {
     if (sink.stream) { await sink.stream.write({ type: "write", position: offset, data }); return; }
     const previous = sink.bytes!;
     const end = offset + data.byteLength;
-    if (end > BLOB_LIMIT) throw shellErrors.SHELL_CLIENT_FILE_WRITE_TOO_LARGE();
+    if (end > BLOB_LIMIT) throw shellErrors.SHELL_CLIENT_FILE_WRITE_TOO_LARGE({ limit: formatByteLimit(BLOB_LIMIT) });
     if (end > previous.length) { sink.bytes = new Uint8Array(end); sink.bytes.set(previous); }
     sink.bytes!.set(new Uint8Array(data), offset);
   }
@@ -71,7 +71,7 @@ export class BrowserFiles {
     if (!sink) throw shellErrors.SHELL_CLIENT_FILE_TRUNCATE_TARGET_MISSING();
     if (!Number.isSafeInteger(size) || size < 0) throw shellErrors.SHELL_CLIENT_FILE_TRUNCATE_SIZE_INVALID({ size: String(size) });
     if (sink.stream) { await sink.stream.truncate(size); return; }
-    if (size > BLOB_LIMIT) throw shellErrors.SHELL_CLIENT_FILE_TRUNCATE_TOO_LARGE();
+    if (size > BLOB_LIMIT) throw shellErrors.SHELL_CLIENT_FILE_TRUNCATE_TOO_LARGE({ limit: formatByteLimit(BLOB_LIMIT) });
     const next = new Uint8Array(size);
     next.set(sink.bytes!.subarray(0, size));
     sink.bytes = next;

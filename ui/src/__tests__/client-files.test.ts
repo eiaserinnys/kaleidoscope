@@ -77,3 +77,15 @@ it("save_prompt 출력은 닫은 뒤 같은 창의 파일 읽기 대상으로 �
   expect(new TextDecoder().decode(await files.read(save.sink!))).toBe("저장 내용");
   await files.dispose();
 });
+
+it("브라우저 내보내기의 크기 제한을 쓰기와 크기 변경 오류에 표시한다", async () => {
+  const files = new BrowserFiles();
+  const { sink } = await files.save("결과.bin", "application/octet-stream");
+  const limit = 64 * 1024 * 1024;
+  await expect(files.write(sink!, limit + 1, new ArrayBuffer(0))).rejects.toMatchObject({
+    id: "SHELL_CLIENT_FILE_WRITE_TOO_LARGE", message: expect.stringContaining("64MB"),
+  });
+  await expect(files.truncate(sink!, limit + 1)).rejects.toMatchObject({
+    id: "SHELL_CLIENT_FILE_TRUNCATE_TOO_LARGE", message: expect.stringContaining("64MB"),
+  });
+});

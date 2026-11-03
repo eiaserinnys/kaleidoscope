@@ -468,12 +468,12 @@ error_catalog! { ENTRIES;
         message: "앱이 넘긴 파일 쓰기 위치 {offset}: 0 이상의 정수가 아닙니다. 앱 코드를 고치세요.",
         fix: "앱 코드를 고치세요"
     }
-    SHELL_CLIENT_FILE_WRITE_TOO_LARGE() {
+    SHELL_CLIENT_FILE_WRITE_TOO_LARGE(limit) {
         class: Io,
         place: "앱 파일 내보내기 쓰기",
         cause: "브라우저 임시 파일 크기가 64MiB를 넘었다",
-        message: "이 브라우저에서는 64MB보다 큰 파일을 내보낼 수 없습니다. 64MB 이하로 나누어 저장하세요.",
-        fix: "파일을 64MB 이하로 나누어 저장하세요"
+        message: "이 브라우저에서는 허용 크기 {limit}보다 큰 파일을 내보낼 수 없습니다. 더 작은 파일로 나누어 저장하세요.",
+        fix: "파일을 {limit} 이하로 나누어 저장하세요"
     }
     SHELL_CLIENT_FILE_TRUNCATE_TARGET_MISSING() {
         class: Io,
@@ -489,12 +489,12 @@ error_catalog! { ENTRIES;
         message: "앱이 넘긴 새 파일 크기 {size}: 0 이상의 정수가 아닙니다. 앱 코드를 고치세요.",
         fix: "앱 코드를 고치세요"
     }
-    SHELL_CLIENT_FILE_TRUNCATE_TOO_LARGE() {
+    SHELL_CLIENT_FILE_TRUNCATE_TOO_LARGE(limit) {
         class: Io,
         place: "앱 파일 내보내기 크기 변경",
         cause: "브라우저 임시 파일 크기가 64MiB를 넘었다",
-        message: "이 브라우저에서는 64MB보다 큰 파일을 내보낼 수 없습니다. 64MB 이하로 나누어 저장하세요.",
-        fix: "파일을 64MB 이하로 나누어 저장하세요"
+        message: "이 브라우저에서는 허용 크기 {limit}보다 큰 파일을 내보낼 수 없습니다. 더 작은 파일로 나누어 저장하세요.",
+        fix: "파일을 {limit} 이하로 나누어 저장하세요"
     }
     SHELL_CLIENT_FILE_CLOSE_TARGET_MISSING() {
         class: Io,
