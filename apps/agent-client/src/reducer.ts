@@ -49,7 +49,7 @@ export function initialState(): State {
 export function reserveRequest(state: State, kind: string, params: unknown): [State, number] {
   const id = state.nextId;
   return [{ ...state, nextId: id + 1, phase: kind === "prompt" ? "responding" : kind === "authenticate" ? "starting" : state.phase,
-    replay: kind === "load" ? true : state.replay, pending: { ...state.pending, [id]: { kind, params } } }, id];
+    failure: kind === "prompt" ? null : state.failure, replay: kind === "load" ? true : state.replay, pending: { ...state.pending, [id]: { kind, params } } }, id];
 }
 
 export function enqueue(state: State, message: Queued): State {
@@ -141,7 +141,7 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
     if (request.kind === "load") return { ...next, phase: "starting", replay: false, needsNew: true };
     if (request.kind === "authenticate") return { ...next, phase: "login", failure: { id: "AGENT_LOGIN_AUTHENTICATE_FAILED", reason } };
     const finished = request.kind === "prompt" ? finishText(next) : next;
-    return { ...finished, phase: "failed", replay: false, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason }, tools: [] };
+    return { ...finished, phase: request.kind === "prompt" ? "ready" : "failed", replay: false, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason }, permissions: [], tools: [] };
   }
   if (!message.result) return next;
   if (request.kind === "initialize") {

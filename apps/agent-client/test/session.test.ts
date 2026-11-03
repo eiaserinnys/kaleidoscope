@@ -239,7 +239,7 @@ test("긴 진행 글은 checkpoint에 파일 참조로 남기고 재접속 때 �
   assert.equal(f.snapshots.at(-1).text, `${text}나`);
 });
 
-test("실패한 응답의 조각을 기록에 남기고 다시 시도하면 이전 세션을 불러온다", async () => {
+test("실패한 한 턴은 글과 오류를 남기고 같은 세션에서 다음 말을 받는다", async () => {
   const f = fixture();
   const session = new AgentSession(f.host as any);
   await session.attach({ name: "시험", command: "agent", args: [], env: {} });
@@ -250,12 +250,14 @@ test("실패한 응답의 조각을 기록에 남기고 다시 시도하면 이�
   const prompt = f.writes.at(-1);
   await f.emit({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "남은 글" } } } });
   await f.emit({ jsonrpc: "2.0", id: prompt.id, error: { code: -32603, message: "오류" } });
-  assert.equal(f.snapshots.at(-1).phase, "failed");
+  assert.equal(f.snapshots.at(-1).phase, "ready");
+  assert.equal(f.snapshots.at(-1).failure.id, "AGENT_ACP_PROTOCOL_FAILED");
   assert.equal(f.snapshots.at(-1).items.at(-1).text, "남은 글");
-  await session.retry();
-  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { agentCapabilities: { loadSession: true } } });
-  assert.equal(f.writes.at(-1).method, "session/load");
+  await session.send({ id: "two", text: "다음 말", attachments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(f.writes.at(-1).method, "session/prompt");
   assert.equal(f.writes.at(-1).params.sessionId, "session");
+  assert.equal(f.snapshots.at(-1).failure, null);
 });
 
 test("입력 검사는 기존 에이전트 제한과 오류 식별자를 유지한다", async () => {

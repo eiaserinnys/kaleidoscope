@@ -214,6 +214,11 @@ export class AppClient {
         id: view.failure.id, code: view.failure.code ?? "local_agent_failed", message: this.failureMessage(view.failure), details: [],
       } });
     }
+    if (view.failure && view.phase === "ready" && previous?.phase === "responding") {
+      this.client.chat.publish("conversation", { kind: "error", error: {
+        id: view.failure.id, code: view.failure.code ?? "local_agent_failed", message: `에이전트 응답을 받지 못했습니다. 다시 보내세요. 원인: ${view.failure.reason}`, details: [],
+      } });
+    }
     this.update();
   }
 

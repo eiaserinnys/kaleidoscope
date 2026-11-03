@@ -91,10 +91,10 @@
     "id": "builtin-agent-client",
     "version": 1,
     "format": "javascript",
-    "sha256": "019c813df7dd698e1d2bc7a3ad81ae411bc0f7a80a8a03e9cff74d766bc629cb",
+    "sha256": "1265fb5764c3f70ec4b3bef5ced87430fb7c8ac484d1a3b440dcc8d9df44398c",
     "source": "apps/agent-client",
     "license": "MIT",
-    "byte_size": 31809,
+    "byte_size": 32180,
     "created_at": "2026-11-03T00:00:00Z",
     "path": "agent/client.js"
   }
