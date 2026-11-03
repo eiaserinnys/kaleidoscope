@@ -266,7 +266,13 @@ impl Client {
             })?;
         self.record_network(&target, status, bytes.len(), started);
         if bytes.len() as u64 > kaleidoscope_contract::AGENT_ATTACHMENT_MAX_BYTES {
-            return Err(kaleidoscope_contract::errors::CONV_HTTP_ATTACHMENT_TOO_LARGE());
+            return Err(
+                kaleidoscope_contract::errors::CONV_HTTP_ATTACHMENT_TOO_LARGE(
+                    kaleidoscope_contract::size::format_byte_limit(
+                        kaleidoscope_contract::AGENT_ATTACHMENT_MAX_BYTES,
+                    ),
+                ),
+            );
         }
         Ok((name, mime, bytes))
     }

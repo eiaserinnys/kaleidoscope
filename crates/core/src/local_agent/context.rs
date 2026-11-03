@@ -53,13 +53,18 @@ pub(super) fn resolve(
         .windows
         .iter()
         .find(|w| w.id == id)
-        .ok_or_else(|| errors::AGENT_CONTEXT_WINDOW_NOT_FOUND(id))?;
+        .ok_or_else(|| {
+            errors::AGENT_CONTEXT_WINDOW_NOT_FOUND().and_details(vec![format!("window_id: {}", id)])
+        })?;
     let desktop = state
         .shared
         .desktops
         .iter()
         .find(|d| d.id == window.desktop_id)
-        .ok_or_else(|| errors::AGENT_CONTEXT_DESKTOP_NOT_FOUND(&window.desktop_id))?;
+        .ok_or_else(|| {
+            errors::AGENT_CONTEXT_DESKTOP_NOT_FOUND()
+                .and_details(vec![format!("desktop_id: {}", &window.desktop_id)])
+        })?;
     let definition =
         app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
             .ok_or_else(|| {

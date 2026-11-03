@@ -293,7 +293,8 @@ impl AppState {
                 )
             })?
             .ok_or_else(|| {
-                kaleidoscope_contract::errors::SERVER_DEVICE_ACCOUNT_NOT_FOUND(device_id)
+                kaleidoscope_contract::errors::SERVER_DEVICE_ACCOUNT_NOT_FOUND()
+                    .and_details(vec![format!("device_id: {}", device_id)])
             })
     }
 

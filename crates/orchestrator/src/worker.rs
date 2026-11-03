@@ -1,8 +1,8 @@
 //! 앱별 서버 워커 실행, 시크릿과 주기 트리거.
 use super::*;
 use kaleidoscope_contract::worker::{
-    WORKER_SECRET_MAX_BYTES, WORKER_TIMEOUT_DEFAULT_SECS, WorkerDecl, WorkerInvokeReply,
-    WorkerInvokeRequest, WorkerStatus,
+    WorkerDecl, WorkerInvokeReply, WorkerInvokeRequest, WorkerStatus, WORKER_SECRET_MAX_BYTES,
+    WORKER_TIMEOUT_DEFAULT_SECS,
 };
 use std::{collections::BTreeMap, time::Instant};
 
@@ -60,7 +60,7 @@ impl AppState {
             return Err(kaleidoscope_contract::errors::WORKER_SECRET_TOO_LARGE(
                 app_id,
                 secret_id,
-                WORKER_SECRET_MAX_BYTES,
+                kaleidoscope_contract::size::format_byte_limit((WORKER_SECRET_MAX_BYTES) as u64),
             ));
         }
         if value.contains("${env:") {

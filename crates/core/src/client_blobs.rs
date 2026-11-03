@@ -18,7 +18,10 @@ fn location(inner: &Inner, window: &str, key: &str) -> Result<(PathBuf, PathBuf)
         .windows
         .iter()
         .find(|w| w.id == window)
-        .ok_or_else(|| errors::DATA_CLIENT_BLOB_WINDOW_NOT_FOUND(window))?;
+        .ok_or_else(|| {
+            errors::DATA_CLIENT_BLOB_WINDOW_NOT_FOUND()
+                .and_details(vec![format!("window: {}", window)])
+        })?;
     let definition =
         app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
             .ok_or_else(|| errors::DATA_CLIENT_BLOB_APP_NOT_FOUND(&window.app_id))?;
@@ -112,7 +115,10 @@ pub(crate) fn put(
             error
         })?;
         if size > CLIENT_PICK_FILE_MAX_BYTES {
-            return Err(errors::DATA_CLIENT_BLOB_TOO_LARGE(key));
+            return Err(errors::DATA_CLIENT_BLOB_TOO_LARGE(
+                key,
+                kaleidoscope_contract::size::format_byte_limit(CLIENT_PICK_FILE_MAX_BYTES),
+            ));
         }
         output.flush().map_err(|e| {
             let mut error = if e.kind() == std::io::ErrorKind::NotFound {

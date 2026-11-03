@@ -1,11 +1,11 @@
 //! 대화 명령을 창의 제공자와 저장소에 연결한다.
-use crate::{Inner, conversation_context::Context};
-use base64::{Engine, engine::general_purpose::STANDARD};
+use crate::{conversation_context::Context, Inner};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::{
-    CoreError, CoreReply, CoreRequest,
     conversation::{
         ConversationModel, ConversationProfile, ModelsReply, ProfilesReply, ThreadItemsReply,
     },
+    CoreError, CoreReply, CoreRequest,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -306,7 +306,10 @@ fn history_client(
             &query,
             None::<&Value>,
         )?
-        .ok_or_else(|| kaleidoscope_contract::errors::CONV_CONVERSATION_HISTORY_NOT_FOUND(id))?;
+        .ok_or_else(|| {
+            kaleidoscope_contract::errors::CONV_CONVERSATION_HISTORY_NOT_FOUND()
+                .and_details(vec![format!("thread: {}", id)])
+        })?;
     for item in &mut reply.items {
         crate::share::strip_legacy_share_from_item(item);
     }
@@ -322,8 +325,8 @@ mod tests {
         io::{BufRead, BufReader, Write},
         net::TcpListener,
         sync::{
-            Arc,
             atomic::{AtomicUsize, Ordering},
+            Arc,
         },
         thread,
         time::{Duration, Instant},
@@ -428,13 +431,11 @@ mod tests {
         assert!(peak.load(Ordering::SeqCst) > 1);
         let spans = client.profiler.snapshot("network");
         assert_eq!(spans["recent_spans"].as_array().unwrap().len(), 3);
-        assert!(
-            spans["recent_spans"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|span| span["target"] == "GET /threads/{id}/items")
-        );
+        assert!(spans["recent_spans"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|span| span["target"] == "GET /threads/{id}/items"));
         assert_eq!(spans["categories"][0]["label"], "네트워크 요청");
     }
 }

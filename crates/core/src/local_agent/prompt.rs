@@ -44,12 +44,14 @@ pub(super) fn validate(input: &PromptInput) -> Result<(), CoreError> {
         total += bytes.len() as u64;
         if bytes.len() as u64 > AGENT_ATTACHMENT_MAX_BYTES {
             return Err(errors::AGENT_PROMPT_ATTACHMENT_TOO_LARGE(
-                AGENT_ATTACHMENT_MAX_BYTES,
+                kaleidoscope_contract::size::format_byte_limit((AGENT_ATTACHMENT_MAX_BYTES) as u64),
             ));
         }
         if total > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES {
             return Err(errors::AGENT_PROMPT_ATTACHMENTS_TOTAL_TOO_LARGE(
-                AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
+                kaleidoscope_contract::size::format_byte_limit(
+                    (AGENT_ATTACHMENTS_TOTAL_MAX_BYTES) as u64,
+                ),
             ));
         }
     }

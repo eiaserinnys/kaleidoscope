@@ -68,7 +68,12 @@ pub(crate) fn fetch_named(
                     error
                 })?;
             if bytes.len() as u64 > data::SOURCE_MAX_BYTES {
-                return Err(errors::DATA_SOURCE_FILE_TOO_LARGE(source, source_path).into());
+                return Err(errors::DATA_SOURCE_FILE_TOO_LARGE(
+                    source,
+                    kaleidoscope_contract::size::format_byte_limit(data::SOURCE_MAX_BYTES),
+                    source_path,
+                )
+                .into());
             }
             decode(source, source_path, bytes, *format).map_err(Into::into)
         }
@@ -234,20 +239,21 @@ fn walk(
     if !visited.insert(directory.to_path_buf()) {
         return Ok(());
     }
+    let display_path = directory.display();
     for entry in fs::read_dir(directory).map_err(|err| {
         let mut error = if err.kind() == std::io::ErrorKind::NotFound {
-            errors::DATA_SOURCE_FOLDER_NOT_FOUND(source, relative)
+            errors::DATA_SOURCE_FOLDER_NOT_FOUND(source, &display_path)
         } else {
-            errors::DATA_SOURCE_FOLDER_READ_FAILED(source, relative)
+            errors::DATA_SOURCE_FOLDER_READ_FAILED(source, &display_path)
         };
         error.details = vec![err.to_string()];
         error
     })? {
         let entry = entry.map_err(|err| {
             let mut error = if err.kind() == std::io::ErrorKind::NotFound {
-                errors::DATA_SOURCE_FOLDER_ENTRY_NOT_FOUND(source, relative)
+                errors::DATA_SOURCE_FOLDER_ENTRY_NOT_FOUND(source, &display_path)
             } else {
-                errors::DATA_SOURCE_FOLDER_ENTRY_READ_FAILED(source, relative)
+                errors::DATA_SOURCE_FOLDER_ENTRY_READ_FAILED(source, &display_path)
             };
             error.details = vec![err.to_string()];
             error

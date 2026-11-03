@@ -15,7 +15,7 @@ pub(crate) fn import(
 ) -> Result<CoreReply, CoreError> {
     let definition = app_definition::parse_app_definition(&definition_json)?;
     if kaleidoscope_contract::builtin::is_builtin(&definition.id) {
-        return Err(errors::DESK_APP_IMPORT_BUILTIN());
+        return Err(errors::DESK_APP_IMPORT_BUILTIN(&definition.id));
     }
     if !crate::supported().renders_app(&definition) {
         return Err(errors::DESK_APP_IMPORT_UNSUPPORTED_SHELL());

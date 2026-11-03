@@ -1,12 +1,12 @@
 error_catalog! { ENTRIES;
-    AGENT_CONTEXT_WINDOW_NOT_FOUND(window_id) {
+    AGENT_CONTEXT_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "에이전트 창 설정 조회",
         cause: "에이전트 창이 현재 배치에 없다",
         message: "에이전트 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
-    AGENT_CONTEXT_DESKTOP_NOT_FOUND(desktop_id) {
+    AGENT_CONTEXT_DESKTOP_NOT_FOUND() {
         class: NotFound,
         place: "에이전트 작업 조회",
         cause: "에이전트 창의 데스크톱이 현재 배치에 없다",
@@ -27,7 +27,7 @@ error_catalog! { ENTRIES;
         message: "에이전트 설정이 올바르지 않습니다. 설정을 고친 뒤 다시 선택하세요. 원인: {reason}",
         fix: "앱 정의의 에이전트 설정을 고치세요"
     }
-    AGENT_ATTACH_CONTROLLER_NOT_FOUND(window_id) {
+    AGENT_ATTACH_CONTROLLER_NOT_FOUND() {
         class: NotFound,
         place: "에이전트 대화창 연결",
         cause: "연결할 창의 에이전트 실행기가 없다",
@@ -69,7 +69,7 @@ error_catalog! { ENTRIES;
         message: "이 창의 앱에 에이전트 대화창 설정이 없습니다. 앱 정의에 에이전트 대화 블록을 추가하세요.",
         fix: "앱 정의에 에이전트 대화 블록을 추가하세요"
     }
-    AGENT_ATTACHMENT_HISTORY_MISSING(item_id, attachment_id) {
+    AGENT_ATTACHMENT_HISTORY_MISSING() {
         class: NotFound,
         place: "에이전트 첨부 열기",
         cause: "대화 기록에 첨부 파일 이름이 없다",
@@ -153,14 +153,14 @@ error_catalog! { ENTRIES;
         message: "에이전트 허용 요청의 응답을 기록하지 못했습니다. 디스크 공간과 읽기 전용 여부를 확인한 뒤 다시 선택하세요. 원인: {reason}",
         fix: "디스크 공간과 읽기 전용 여부를 확인하세요"
     }
-    AGENT_PERMISSION_REPLY_REQUEST_NOT_FOUND(request_id) {
+    AGENT_PERMISSION_REPLY_REQUEST_NOT_FOUND() {
         class: InvalidRequest,
         place: "에이전트 권한 응답",
         cause: "응답할 권한 요청이 더 이상 대기 중이지 않다",
         message: "이 허용 요청은 더 이상 대기 중이지 않습니다. 새 요청이 오면 다시 선택하세요.",
         fix: "새 허용 요청이 오면 선택하세요"
     }
-    AGENT_PERMISSION_REPLY_OPTION_NOT_FOUND(option_id) {
+    AGENT_PERMISSION_REPLY_OPTION_NOT_FOUND() {
         class: InvalidRequest,
         place: "에이전트 권한 응답",
         cause: "요청에 선택한 권한 선택지가 없다",
@@ -181,14 +181,14 @@ error_catalog! { ENTRIES;
         message: "에이전트가 준비되지 않아 설정을 바꿀 수 없습니다. 준비가 끝난 뒤 다시 선택하세요.",
         fix: "에이전트가 준비된 뒤 설정을 바꾸세요"
     }
-    AGENT_CONTROL_UPDATE_ID_NOT_FOUND(control_id) {
+    AGENT_CONTROL_UPDATE_ID_NOT_FOUND() {
         class: InvalidRequest,
         place: "에이전트 설정 변경",
         cause: "요청한 설정 항목이 없다",
         message: "이 에이전트 설정은 지금 선택할 수 없습니다. 표시된 설정에서 다시 고르세요.",
         fix: "표시된 설정에서 다시 고르세요"
     }
-    AGENT_CONTROL_UPDATE_VALUE_INVALID(control_id) {
+    AGENT_CONTROL_UPDATE_VALUE_INVALID() {
         class: InvalidRequest,
         place: "에이전트 설정 변경",
         cause: "선택한 값이 해당 설정의 선택지와 다르다",
@@ -202,7 +202,7 @@ error_catalog! { ENTRIES;
         message: "에이전트가 로그인 요청을 기다리고 있지 않습니다. 로그인 요청이 표시되면 다시 선택하세요.",
         fix: "에이전트가 로그인 요청을 표시하면 선택하세요"
     }
-    AGENT_AUTHENTICATE_METHOD_NOT_FOUND(method_id) {
+    AGENT_AUTHENTICATE_METHOD_NOT_FOUND() {
         class: InvalidRequest,
         place: "에이전트 로그인",
         cause: "요청한 로그인 방법이 선택지에 없다",
@@ -230,21 +230,21 @@ error_catalog! { ENTRIES;
         message: "에이전트 실행이 끊겨 다시 시작하지 못했습니다. 이 창을 닫고 앱을 다시 여세요.",
         fix: "이 창을 닫고 앱을 다시 여세요"
     }
-    AGENT_REQUEST_CONTROLLER_MISSING(window_id) {
+    AGENT_REQUEST_CONTROLLER_MISSING() {
         class: InvalidRequest,
         place: "에이전트 명령 연결",
         cause: "창에 연결된 에이전트 실행기가 없다",
         message: "이 창에 연결된 에이전트 실행이 없습니다. 이 창을 닫고 앱을 다시 여세요.",
         fix: "이 창을 닫고 앱을 다시 여세요"
     }
-    AGENT_REQUEST_GENERATION_STALE(window_id) {
+    AGENT_REQUEST_GENERATION_STALE() {
         class: InvalidRequest,
         place: "에이전트 명령 연결",
         cause: "명령의 실행 세대가 현재 실행기와 다르다",
         message: "에이전트 실행 상태가 바뀌었습니다. 다시 시도하세요.",
         fix: "다시 시도하세요"
     }
-    AGENT_REQUEST_WORKER_MISSING(window_id) {
+    AGENT_REQUEST_WORKER_MISSING() {
         class: InvalidRequest,
         place: "에이전트 명령 연결",
         cause: "창에 실행 중인 에이전트 워커가 없다",
@@ -293,14 +293,14 @@ error_catalog! { ENTRIES;
         message: "첨부 파일 데이터를 읽지 못했습니다. 파일을 다시 선택해 보내세요.",
         fix: "파일을 다시 선택하세요"
     }
-    AGENT_PROMPT_ATTACHMENT_TOO_LARGE(max_bytes) {
+    AGENT_PROMPT_ATTACHMENT_TOO_LARGE(limit) {
         class: InvalidRequest,
         place: "에이전트 첨부 검사",
         cause: "첨부 파일 하나가 허용 크기를 넘었다",
         message: "에이전트 첨부 파일 하나가 허용 크기 {limit}보다 큽니다. 파일 크기를 줄이세요.",
         fix: "첨부 파일 크기를 줄이세요"
     }
-    AGENT_PROMPT_ATTACHMENTS_TOTAL_TOO_LARGE(max_bytes) {
+    AGENT_PROMPT_ATTACHMENTS_TOTAL_TOO_LARGE(limit) {
         class: InvalidRequest,
         place: "에이전트 첨부 검사",
         cause: "첨부 파일의 합계가 허용 크기를 넘었다",
@@ -377,7 +377,7 @@ error_catalog! { ENTRIES;
         message: "에이전트 첨부를 저장하지 못했습니다. 디스크 공간과 읽기 전용 여부를 확인하세요. 원인: {reason}",
         fix: "디스크 공간과 읽기 전용 여부를 확인하세요"
     }
-    AGENT_ATTACHMENT_NOT_FOUND(item_id, attachment_id) {
+    AGENT_ATTACHMENT_NOT_FOUND() {
         class: NotFound,
         place: "에이전트 첨부 파일 조회",
         cause: "대화 기록에 첨부 파일이 없다",

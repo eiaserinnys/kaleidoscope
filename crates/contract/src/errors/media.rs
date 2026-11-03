@@ -6,14 +6,14 @@ error_catalog! { ENTRIES;
         message: "축소 크기가 0이라 미디어를 불러오지 못했습니다. 1 이상의 크기로 다시 요청하세요. 미디어: {media}",
         fix: "축소 크기를 1 이상으로 지정하세요"
     }
-    MEDIA_LOAD_WINDOW_NOT_FOUND(window) {
+    MEDIA_LOAD_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "앱 창의 미디어 불러오기",
         cause: "미디어를 요청한 창이 없다",
         message: "미디어를 요청한 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
-    MEDIA_LOAD_APP_DEFINITION_NOT_FOUND(window) {
+    MEDIA_LOAD_APP_DEFINITION_NOT_FOUND() {
         class: NotFound,
         place: "앱 창의 미디어 불러오기",
         cause: "창에 적용할 앱 정의가 없다",
@@ -265,7 +265,7 @@ error_catalog! { ENTRIES;
         message: "공개 주소의 미디어 응답을 읽지 못했습니다. 서버 응답 형식을 확인하세요. 미디어: {media}",
         fix: "서버의 미디어 응답 형식을 확인하세요"
     }
-    MEDIA_LOAD_DATA_TOO_LARGE(media) {
+    MEDIA_LOAD_DATA_TOO_LARGE(limit, media) {
         class: Io,
         place: "앱 창의 미디어 크기 확인",
         cause: "미디어가 허용 크기를 넘었다",

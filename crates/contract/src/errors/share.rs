@@ -1,5 +1,5 @@
 error_catalog! { ENTRIES;
-    SHARE_SET_WINDOW_NOT_FOUND(window) {
+    SHARE_SET_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "같이 보기 켜기와 끄기",
         cause: "같이 보기를 바꿀 창이 없다",
@@ -20,14 +20,14 @@ error_catalog! { ENTRIES;
         message: "같이 보기 대상 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요. 창: {window}",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
-    SHARE_VIEW_TEXT_TOO_LARGE(window) {
+    SHARE_VIEW_TEXT_TOO_LARGE(limit, window) {
         class: InvalidRequest,
         place: "같이 보기 글 크기 확인",
         cause: "대상 창의 글이 허용 크기를 넘었다",
         message: "같이 보기 글이 허용 크기 {limit}보다 커서 보내지 못했습니다. 창에 보이는 글을 줄인 뒤 다시 보내세요. 창: {window}",
         fix: "창에 보이는 글을 줄이세요"
     }
-    SHARE_VIEW_IMAGE_TOO_LARGE(window) {
+    SHARE_VIEW_IMAGE_TOO_LARGE(limit, window) {
         class: InvalidRequest,
         place: "같이 보기 이미지 크기 확인",
         cause: "대상 창의 이미지 데이터가 허용 크기를 넘었다",
@@ -48,7 +48,7 @@ error_catalog! { ENTRIES;
         message: "같이 보기 대상 창의 화면을 캡처하지 못했습니다. 이 창을 닫고 앱을 다시 여세요. 창: {window}",
         fix: "이 창을 닫고 앱을 다시 여세요"
     }
-    SHARE_UPLOAD_BODY_INVALID(window) {
+    SHARE_UPLOAD_BODY_INVALID() {
         class: InvalidRequest,
         place: "같이 보기 업로드 본문 확인",
         cause: "업로드 본문을 같이 보기 자료로 읽지 못했다",

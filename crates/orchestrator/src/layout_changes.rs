@@ -16,7 +16,8 @@ pub(super) fn validate_changes_error(changes: &LayoutChanges) -> Result<(), Core
             .iter()
             .find(|id| id.trim().is_empty() || id.len() > MAX_ID_LEN)
         {
-            return Err(errors::SERVER_LAYOUT_CHANGE_SHARING_ID_INVALID(id));
+            return Err(errors::SERVER_LAYOUT_CHANGE_SHARING_ID_INVALID()
+                .and_details(vec![format!("id: {}", id)]));
         }
         if desktop
             .last_sent_context
@@ -26,7 +27,9 @@ pub(super) fn validate_changes_error(changes: &LayoutChanges) -> Result<(), Core
             .any(|text| text.len() > kaleidoscope_contract::SHARE_TEXT_MAX_BYTES)
         {
             return Err(errors::SERVER_LAYOUT_CHANGE_CONTEXT_TOO_LARGE(
-                kaleidoscope_contract::SHARE_TEXT_MAX_BYTES,
+                kaleidoscope_contract::size::format_byte_limit(
+                    (kaleidoscope_contract::SHARE_TEXT_MAX_BYTES) as u64,
+                ),
             ));
         }
     }

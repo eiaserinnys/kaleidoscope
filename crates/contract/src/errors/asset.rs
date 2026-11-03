@@ -48,7 +48,7 @@ error_catalog! { ENTRIES;
         message: "자산 라이선스를 입력하지 않아 등록하지 못했습니다. 라이선스를 적어 다시 올리세요.",
         fix: "자산 라이선스를 입력하세요"
     }
-    ASSET_UPLOAD_ENCODING_TOO_LARGE(asset) {
+    ASSET_UPLOAD_ENCODING_TOO_LARGE(limit, asset) {
         class: InvalidRequest,
         place: "자산 업로드 크기 검사",
         cause: "인코딩된 자산 데이터가 허용 크기를 넘었다",
@@ -62,7 +62,7 @@ error_catalog! { ENTRIES;
         message: "데이터가 Base64 형식이 아니어서 자산을 등록하지 못했습니다. 파일을 다시 인코딩해 올리세요. 자산: {asset}",
         fix: "자산 데이터를 Base64로 인코딩하세요"
     }
-    ASSET_UPLOAD_BYTES_TOO_LARGE(asset) {
+    ASSET_UPLOAD_BYTES_TOO_LARGE(limit, asset) {
         class: InvalidRequest,
         place: "자산 업로드 크기 검사",
         cause: "디코딩한 자산 데이터가 허용 크기를 넘었다",

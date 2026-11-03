@@ -35,13 +35,19 @@ pub fn validate_upload(upload: &AssetUpload) -> Result<Vec<u8>, CoreError> {
         return Err(errors::ASSET_UPLOAD_LICENSE_REQUIRED());
     }
     if upload.data_base64.len() as u64 > ((MEDIA_MAX_BYTES + 2) / 3) * 4 {
-        return Err(errors::ASSET_UPLOAD_ENCODING_TOO_LARGE(&upload.id));
+        return Err(errors::ASSET_UPLOAD_ENCODING_TOO_LARGE(
+            kaleidoscope_contract::size::format_byte_limit(((MEDIA_MAX_BYTES + 2) / 3) * 4),
+            &upload.id,
+        ));
     }
     let bytes = STANDARD.decode(&upload.data_base64).map_err(|error| {
         errors::ASSET_UPLOAD_ENCODING_INVALID(&upload.id).and_details(vec![error.to_string()])
     })?;
     if bytes.len() as u64 > MEDIA_MAX_BYTES {
-        return Err(errors::ASSET_UPLOAD_BYTES_TOO_LARGE(&upload.id));
+        return Err(errors::ASSET_UPLOAD_BYTES_TOO_LARGE(
+            kaleidoscope_contract::size::format_byte_limit(MEDIA_MAX_BYTES),
+            &upload.id,
+        ));
     }
     if format!("{:x}", Sha256::digest(&bytes)) != upload.sha256 {
         return Err(errors::ASSET_UPLOAD_HASH_MISMATCH(&upload.id));
@@ -58,7 +64,7 @@ fn validate_bytes_for(format: AssetFormat, bytes: &[u8], asset: &str) -> Result<
     match format {
         AssetFormat::Javascript => {
             return std::str::from_utf8(bytes).map(|_| ()).map_err(|error| {
-                    errors::ASSET_UPLOAD_JAVASCRIPT_ENCODING_INVALID(asset)
+                errors::ASSET_UPLOAD_JAVASCRIPT_ENCODING_INVALID(asset)
                     .and_details(vec![error.to_string()])
             });
         }

@@ -65,7 +65,9 @@ pub(super) async fn post_layout_changes(
             return http::error_response(
                 StatusCode::BAD_REQUEST,
                 errors::SERVER_LAYOUT_CHANGE_STATE_TOO_LARGE(
-                    kaleidoscope_contract::WINDOW_STATE_MAX_BYTES,
+                    kaleidoscope_contract::size::format_byte_limit(
+                        (kaleidoscope_contract::WINDOW_STATE_MAX_BYTES) as u64,
+                    ),
                 ),
             );
         }

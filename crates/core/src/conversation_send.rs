@@ -1,18 +1,17 @@
 //! 접수 전 메시지를 기기에 보존하고 동일 요청 id로 영수증에 수렴한다.
 use crate::{
-    Inner,
     conversation_context::{Context, ContextSnapshot},
     conversation_http::Client,
-    share, storage,
+    share, storage, Inner,
 };
-use base64::{Engine, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::{
-    AGENT_ATTACHMENT_MAX_BYTES, AGENT_ATTACHMENTS_MAX, AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
-    CONVERSATION_MESSAGE_MAX_CHARS, CoreError, CoreEvent, CoreReply, ErrorCode,
     conversation::{
         ConversationError, ConversationErrorCode, ConversationUpload, MessageReceipt,
         ReceiptStatus, SendMessageRequest,
     },
+    CoreError, CoreEvent, CoreReply, ErrorCode, AGENT_ATTACHMENTS_MAX,
+    AGENT_ATTACHMENTS_TOTAL_MAX_BYTES, AGENT_ATTACHMENT_MAX_BYTES, CONVERSATION_MESSAGE_MAX_CHARS,
 };
 use kaleidoscope_data::share::SentView;
 use serde::{Deserialize, Serialize};
@@ -20,7 +19,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Weak, mpsc};
+use std::sync::{mpsc, Arc, Weak};
 use std::thread;
 use std::time::Duration;
 
@@ -76,10 +75,20 @@ pub(crate) fn send(
             .map_err(|_| kaleidoscope_contract::errors::CONV_SEND_ATTACHMENT_ENCODING_INVALID())?;
         total += bytes.len() as u64;
         if bytes.len() as u64 > AGENT_ATTACHMENT_MAX_BYTES {
-            return Err(kaleidoscope_contract::errors::CONV_SEND_ATTACHMENT_TOO_LARGE());
+            return Err(
+                kaleidoscope_contract::errors::CONV_SEND_ATTACHMENT_TOO_LARGE(
+                    kaleidoscope_contract::size::format_byte_limit(AGENT_ATTACHMENT_MAX_BYTES),
+                ),
+            );
         }
         if total > AGENT_ATTACHMENTS_TOTAL_MAX_BYTES {
-            return Err(kaleidoscope_contract::errors::CONV_SEND_ATTACHMENTS_TOO_LARGE());
+            return Err(
+                kaleidoscope_contract::errors::CONV_SEND_ATTACHMENTS_TOO_LARGE(
+                    kaleidoscope_contract::size::format_byte_limit(
+                        AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
+                    ),
+                ),
+            );
         }
     }
     let conversation = format!("{}\0{}", ctx.storage.app, ctx.workspace.id);
@@ -455,8 +464,8 @@ fn finish(
 mod tests {
     use super::provider_error;
     use kaleidoscope_contract::{
-        ErrorCode,
         conversation::{ConversationError, ConversationErrorCode},
+        ErrorCode,
     };
 
     #[test]

@@ -121,29 +121,30 @@ pub(crate) fn list(
         let directory = resolve_path(&inner.data_dir, &root, dir, true, false)?;
         (root, directory, dir)
     };
+    let display_dir = directory.display();
     let mut entries = Vec::new();
     for entry in fs::read_dir(&directory).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
-            kaleidoscope_contract::errors::FILE_LIST_DIRECTORY_NOT_FOUND(dir)
+            kaleidoscope_contract::errors::FILE_LIST_DIRECTORY_NOT_FOUND(&display_dir)
                 .and_details(vec![error.to_string()])
         } else {
-            kaleidoscope_contract::errors::FILE_LIST_DIRECTORY_IO(dir)
+            kaleidoscope_contract::errors::FILE_LIST_DIRECTORY_IO(&display_dir)
                 .and_details(vec![error.to_string()])
         }
     })? {
         let entry = entry.map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {
-                kaleidoscope_contract::errors::FILE_LIST_ENTRY_NOT_FOUND(dir)
+                kaleidoscope_contract::errors::FILE_LIST_ENTRY_NOT_FOUND(&display_dir)
                     .and_details(vec![error.to_string()])
             } else {
-                kaleidoscope_contract::errors::FILE_LIST_ENTRY_IO(dir)
+                kaleidoscope_contract::errors::FILE_LIST_ENTRY_IO(&display_dir)
                     .and_details(vec![error.to_string()])
             }
         })?;
         let name = entry
             .file_name()
             .into_string()
-            .map_err(|_| kaleidoscope_contract::errors::FILE_LIST_NAME_NOT_TEXT(dir))?;
+            .map_err(|_| kaleidoscope_contract::errors::FILE_LIST_NAME_NOT_TEXT(&display_dir))?;
         if name.starts_with('.') {
             continue;
         }
@@ -236,7 +237,10 @@ pub(crate) fn read(
             }
         })?;
     if bytes.len() as u64 > FILE_READ_MAX_BYTES {
-        return Err(kaleidoscope_contract::errors::FILE_READ_TOO_LARGE(path));
+        return Err(kaleidoscope_contract::errors::FILE_READ_TOO_LARGE(
+            path,
+            kaleidoscope_contract::size::format_byte_limit(FILE_READ_MAX_BYTES),
+        ));
     }
     let text = String::from_utf8(bytes.clone())
         .map_err(|_| kaleidoscope_contract::errors::FILE_READ_NOT_TEXT(path))?;
@@ -268,7 +272,7 @@ pub(crate) fn granted_root(
     let stored_root = PathBuf::from(&grant.root_path);
     let root = fs::canonicalize(&stored_root).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
-            kaleidoscope_contract::errors::FILE_ACCESS_ROOT_NOT_FOUND(permission_id)
+            kaleidoscope_contract::errors::FILE_ACCESS_ROOT_NOT_FOUND(stored_root.display())
                 .and_details(vec![error.to_string()])
         } else {
             kaleidoscope_contract::errors::FILE_PATH_IO(&stored_root.display().to_string())
@@ -277,7 +281,7 @@ pub(crate) fn granted_root(
     })?;
     if root != stored_root || !root.is_dir() {
         return Err(kaleidoscope_contract::errors::FILE_ACCESS_ROOT_CHANGED(
-            permission_id,
+            stored_root.display(),
         ));
     }
     Ok(root)
@@ -356,7 +360,7 @@ pub(crate) fn open(
         .iter()
         .find(|a| a.id == app_id)
         .ok_or_else(|| {
-            kaleidoscope_contract::errors::FILE_OPEN_APP_NOT_FOUND()
+            kaleidoscope_contract::errors::FILE_OPEN_APP_NOT_FOUND(app_id)
                 .and_details(vec![format!("app_id: {app_id}")])
         })?;
     let definition =
@@ -368,7 +372,7 @@ pub(crate) fn open(
                 ])
             })?;
     let opens = definition.opens.ok_or_else(|| {
-        kaleidoscope_contract::errors::FILE_OPEN_APP_CANNOT_OPEN()
+        kaleidoscope_contract::errors::FILE_OPEN_APP_CANNOT_OPEN(app_id)
             .and_details(vec![format!("file_path: {path}")])
     })?;
     let extension = Path::new(path)
@@ -378,7 +382,7 @@ pub(crate) fn open(
         .to_lowercase();
     if !opens.extensions.contains(&extension) {
         return Err(
-            kaleidoscope_contract::errors::FILE_OPEN_APP_CANNOT_OPEN().and_details(vec![
+            kaleidoscope_contract::errors::FILE_OPEN_APP_CANNOT_OPEN(app_id).and_details(vec![
                 format!("file_path: {path}"),
                 format!("extension: {extension}"),
             ]),

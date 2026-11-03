@@ -63,7 +63,10 @@ pub(crate) fn load_link(data_dir: &Path) -> Result<Option<LinkFile>, CoreError> 
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(_) => return Err(errors::DESK_LOCAL_LINK_READ_FAILED()),
+        Err(error) => {
+            return Err(errors::DESK_LOCAL_LINK_READ_FAILED(path.display())
+                .and_details(vec![error.to_string()]))
+        }
     };
 
     match serde_json::from_slice::<LinkFile>(&bytes) {
@@ -83,7 +86,10 @@ pub(crate) fn remove_link(data_dir: &Path) -> Result<(), CoreError> {
     match fs::remove_file(data_dir.join("link.json")) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(_) => Err(errors::DESK_LOCAL_LINK_REMOVE_FAILED()),
+        Err(error) => Err(errors::DESK_LOCAL_LINK_REMOVE_FAILED(
+            data_dir.join("link.json").display(),
+        )
+        .and_details(vec![error.to_string()])),
     }
 }
 
@@ -95,7 +101,8 @@ pub(crate) fn load_file<T: DeserializeOwned + Default>(
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(T::default()),
         Err(error) => {
-            return Err(errors::DESK_LOCAL_STATE_READ_FAILED().and_details(vec![error.to_string()]));
+            return Err(errors::DESK_LOCAL_STATE_READ_FAILED(path.display())
+                .and_details(vec![error.to_string()]));
         }
     };
 
@@ -103,7 +110,7 @@ pub(crate) fn load_file<T: DeserializeOwned + Default>(
         Ok(value) => Ok(value),
         Err(_) => {
             let broken_path = broken_path(path, file_name);
-            fs::rename(path, broken_path).map_err(recovery_rename_error)?;
+            fs::rename(path, broken_path).map_err(|error| recovery_rename_error(error, path))?;
             Ok(T::default())
         }
     }
@@ -116,7 +123,8 @@ fn broken_path(path: &Path, file_name: &str) -> PathBuf {
 
 fn move_broken_if_present(path: &Path, file_name: &str) -> Result<(), CoreError> {
     if path.exists() {
-        fs::rename(path, broken_path(path, file_name)).map_err(recovery_rename_error)?;
+        fs::rename(path, broken_path(path, file_name))
+            .map_err(|error| recovery_rename_error(error, path))?;
     }
     Ok(())
 }
@@ -177,29 +185,29 @@ pub(crate) fn save_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), Co
     let temp_path = path.with_file_name(format!(".{file_name}.tmp-{}", Uuid::new_v4()));
     fs::write(&temp_path, bytes).map_err(|error| {
         let mapped = if error.kind() == std::io::ErrorKind::NotFound {
-            errors::DESK_LOCAL_STATE_TEMP_WRITE_NOT_FOUND()
+            errors::DESK_LOCAL_STATE_TEMP_WRITE_NOT_FOUND(path.parent().unwrap_or(path).display())
         } else {
-            errors::DESK_LOCAL_STATE_TEMP_WRITE_FAILED()
+            errors::DESK_LOCAL_STATE_TEMP_WRITE_FAILED(path.parent().unwrap_or(path).display())
         };
         mapped.and_details(vec![error.to_string()])
     })?;
     if let Err(error) = fs::rename(&temp_path, path) {
         let _ = fs::remove_file(&temp_path);
         let mapped = if error.kind() == std::io::ErrorKind::NotFound {
-            errors::DESK_LOCAL_STATE_REPLACE_NOT_FOUND()
+            errors::DESK_LOCAL_STATE_REPLACE_NOT_FOUND(path.parent().unwrap_or(path).display())
         } else {
-            errors::DESK_LOCAL_STATE_REPLACE_FAILED()
+            errors::DESK_LOCAL_STATE_REPLACE_FAILED(path.display())
         };
         return Err(mapped.and_details(vec![error.to_string()]));
     }
     Ok(())
 }
 
-fn recovery_rename_error(error: std::io::Error) -> CoreError {
+fn recovery_rename_error(error: std::io::Error, path: &Path) -> CoreError {
     let mapped = if error.kind() == std::io::ErrorKind::NotFound {
-        errors::DESK_LOCAL_STATE_RECOVERY_RENAME_NOT_FOUND()
+        errors::DESK_LOCAL_STATE_RECOVERY_RENAME_NOT_FOUND(path.display())
     } else {
-        errors::DESK_LOCAL_STATE_RECOVERY_RENAME_FAILED()
+        errors::DESK_LOCAL_STATE_RECOVERY_RENAME_FAILED(path.display())
     };
     mapped.and_details(vec![error.to_string()])
 }

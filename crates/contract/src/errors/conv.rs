@@ -48,21 +48,21 @@ error_catalog! { ENTRIES;
         message: "대화 제공자 연결 {connection}: 읽기 전용입니다. set_connection에서 writable을 켜세요.",
         fix: "set_connection에서 writable을 켜세요"
     }
-    CONV_CONTEXT_WINDOW_NOT_FOUND(window) {
+    CONV_CONTEXT_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "대화 창 열기",
         cause: "대상 창이 없다",
         message: "대화 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
-    CONV_CONTEXT_DESKTOP_NOT_FOUND(desktop) {
+    CONV_CONTEXT_DESKTOP_NOT_FOUND() {
         class: NotFound,
         place: "대화 작업 확인",
         cause: "창이 속한 데스크톱이 없다",
         message: "대화 창이 속한 데스크톱이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
-    CONV_CONTEXT_WORKSPACE_NOT_FOUND(workspace_id) {
+    CONV_CONTEXT_WORKSPACE_NOT_FOUND() {
         class: NotFound,
         place: "대화 작업 확인",
         cause: "데스크톱이 속한 작업이 없다",
@@ -104,7 +104,7 @@ error_catalog! { ENTRIES;
         message: "작업 이름 {workspace}: 저장된 대화 연결 정보가 현재 설정과 맞지 않습니다. 에이전트에게 이 오류 코드를 전하세요.",
         fix: "에이전트에게 이 오류 코드를 전하세요"
     }
-    CONV_CONTEXT_ADOPTED_THREAD_MISMATCH(saved_thread, returned_thread) {
+    CONV_CONTEXT_ADOPTED_THREAD_MISMATCH() {
         class: BindingConflict,
         place: "기존 대화 연결 복구",
         cause: "제공자가 요청한 대화와 다른 대화를 반환했다",
@@ -181,21 +181,21 @@ error_catalog! { ENTRIES;
         message: "작업 이름 {workspace}: 전환할 대화가 없습니다. 먼저 대화를 만드세요.",
         fix: "먼저 대화를 만드세요"
     }
-    CONV_SELECTION_MODEL_UPDATE_TARGET_MISSING(thread) {
+    CONV_SELECTION_MODEL_UPDATE_TARGET_MISSING() {
         class: NotFound,
         place: "대화 모델 갱신",
         cause: "모델 목록 확인 뒤 대화 갱신 요청에서 대화를 찾지 못했다",
         message: "모델을 바꾸려는 대화가 더 이상 없습니다. 다시 시도하세요.",
         fix: "다시 시도하세요"
     }
-    CONV_SELECTION_MODEL_PATCH_THREAD_MISMATCH(requested_thread, returned_thread) {
+    CONV_SELECTION_MODEL_PATCH_THREAD_MISMATCH() {
         class: BindingConflict,
         place: "대화 모델 갱신",
         cause: "모델 갱신에서 제공자가 다른 대화를 반환했다",
         message: "모델을 바꾸는 중 제공자가 다른 대화를 돌려줬습니다. 이 창을 닫고 앱을 다시 여세요.",
         fix: "이 창을 닫고 앱을 다시 여세요"
     }
-    CONV_SELECTION_PROFILE_SWITCH_THREAD_MISMATCH(requested_thread, returned_thread) {
+    CONV_SELECTION_PROFILE_SWITCH_THREAD_MISMATCH() {
         class: BindingConflict,
         place: "대화 프로필 전환",
         cause: "프로필 전환에서 제공자가 다른 대화를 반환했다",
@@ -237,7 +237,7 @@ error_catalog! { ENTRIES;
         message: "대화 제공자가 대화 목록을 보내지 않았습니다. 다시 시도를 누르고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
         fix: "제공자 연결과 프로필 설정을 확인하세요"
     }
-    CONV_RECONCILE_THREAD_MISSING(thread) {
+    CONV_RECONCILE_THREAD_MISSING() {
         class: NotFound,
         place: "대화 정합화",
         cause: "목록에 있는 제공자 대화가 조회되지 않는다",
@@ -251,14 +251,14 @@ error_catalog! { ENTRIES;
         message: "제공자가 다른 작업의 대화를 돌려줬습니다. 에이전트에게 이 오류 코드를 전하세요.",
         fix: "대화 제공자 연결 설정을 확인하세요"
     }
-    CONV_RECONCILE_ARCHIVE_NOT_FOUND(thread) {
+    CONV_RECONCILE_ARCHIVE_NOT_FOUND() {
         class: NotFound,
         place: "이전 작업 대화 보관",
         cause: "보관 요청한 대화를 제공자가 찾지 못했다",
         message: "이전 작업의 대화를 제공자에서 찾지 못해 보관하지 못했습니다. 이미 지워졌을 수 있습니다. 추가 조치는 필요하지 않습니다.",
         fix: "추가 조치는 필요하지 않습니다"
     }
-    CONV_RECONCILE_BOUND_THREAD_MISSING(thread) {
+    CONV_RECONCILE_BOUND_THREAD_MISSING() {
         class: NotFound,
         place: "대화 연결 정합화",
         cause: "저장된 연결이 가리키는 대화가 목록에 없다",
@@ -286,7 +286,7 @@ error_catalog! { ENTRIES;
         message: "대화 설정 변경 내용을 비교하지 못했습니다. 앱 설정 값을 확인한 뒤 다시 저장하세요.",
         fix: "앱 설정 값을 확인하세요"
     }
-    CONV_RECONCILE_PATCH_NOT_FOUND(thread) {
+    CONV_RECONCILE_PATCH_NOT_FOUND() {
         class: NotFound,
         place: "제공자 대화 설정 갱신",
         cause: "설정 갱신 중 대화를 찾지 못했다",
@@ -335,14 +335,14 @@ error_catalog! { ENTRIES;
         message: "대화 첨부 데이터를 읽을 수 없습니다. 파일을 다시 첨부하세요.",
         fix: "파일을 다시 첨부하세요"
     }
-    CONV_SEND_ATTACHMENT_TOO_LARGE() {
+    CONV_SEND_ATTACHMENT_TOO_LARGE(limit) {
         class: InvalidRequest,
         place: "대화 첨부 보내기",
         cause: "첨부 하나가 허용 크기를 넘었다",
         message: "대화 첨부 하나가 허용 크기 {limit}보다 큽니다. 더 작은 파일을 첨부하세요.",
         fix: "더 작은 파일을 첨부하세요"
     }
-    CONV_SEND_ATTACHMENTS_TOO_LARGE() {
+    CONV_SEND_ATTACHMENTS_TOO_LARGE(limit) {
         class: InvalidRequest,
         place: "대화 첨부 보내기",
         cause: "첨부 전체가 허용 크기를 넘었다",
@@ -580,7 +580,7 @@ error_catalog! { ENTRIES;
         message: "대화 제공자 {provider}: 지금 요청을 받을 수 없습니다. 잠시 뒤 다시 시도하세요. 원인: {reason}",
         fix: "잠시 뒤 다시 시도하세요"
     }
-    CONV_HTTP_ATTACHMENT_TOO_LARGE() {
+    CONV_HTTP_ATTACHMENT_TOO_LARGE(limit) {
         class: InvalidRequest,
         place: "대화 첨부 받기",
         cause: "제공자 첨부가 허용 크기를 넘었다",
@@ -671,7 +671,7 @@ error_catalog! { ENTRIES;
         message: "대화 제공자가 프로필 목록을 보내지 않았습니다. 다시 시도를 누르고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
         fix: "제공자 연결과 프로필 설정을 확인하세요"
     }
-    CONV_CONVERSATION_HISTORY_NOT_FOUND(thread) {
+    CONV_CONVERSATION_HISTORY_NOT_FOUND() {
         class: NotFound,
         place: "대화 기록 불러오기",
         cause: "제공자가 대화 기록을 반환하지 않았다",

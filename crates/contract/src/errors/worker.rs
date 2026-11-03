@@ -48,7 +48,7 @@ error_catalog! { ENTRIES;
         message: "앱 ID {app_id}의 시크릿 {secret_id}: 값이 비어 있습니다. 값을 입력해 다시 저장하세요.",
         fix: "비어 있지 않은 시크릿 값을 입력하세요"
     }
-    WORKER_SECRET_TOO_LARGE(app_id, secret_id, max_bytes) {
+    WORKER_SECRET_TOO_LARGE(app_id, secret_id, limit) {
         class: InvalidRequest,
         place: "워커 시크릿 설정",
         cause: "시크릿 값이 허용 바이트 수를 넘는다",

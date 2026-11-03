@@ -264,7 +264,8 @@ pub(crate) fn set(
             .find(|window| window.id == window_id)
             .map(|window| window.desktop_id.clone())
         else {
-            return Err(errors::SHARE_SET_WINDOW_NOT_FOUND(window_id));
+            return Err(errors::SHARE_SET_WINDOW_NOT_FOUND()
+                .and_details(vec![format!("window: {}", window_id)]));
         };
         let title = window_name(&state, window_id);
         let desktop_index = state
@@ -338,14 +339,20 @@ pub(crate) fn view(
             return Ok(CoreReply::ShareView {});
         }
         if view.text.len() > SHARE_TEXT_MAX_BYTES {
-            return Err(errors::SHARE_VIEW_TEXT_TOO_LARGE(&title));
+            return Err(errors::SHARE_VIEW_TEXT_TOO_LARGE(
+                kaleidoscope_contract::size::format_byte_limit(SHARE_TEXT_MAX_BYTES as u64),
+                &title,
+            ));
         }
         if view
             .image_base64
             .as_ref()
             .is_some_and(|image| image.len() as u64 > SHARE_IMAGE_MAX_BASE64_BYTES)
         {
-            return Err(errors::SHARE_VIEW_IMAGE_TOO_LARGE(&title));
+            return Err(errors::SHARE_VIEW_IMAGE_TOO_LARGE(
+                kaleidoscope_contract::size::format_byte_limit(SHARE_IMAGE_MAX_BYTES),
+                &title,
+            ));
         }
         state.share.views.insert(window_id.to_owned(), view.clone());
         if !connected(inner, &state)

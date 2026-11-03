@@ -226,7 +226,7 @@ error_catalog! { ENTRIES;
     APP_DEFINITION_REQUIRES_NEWER_SHELL() {
         class: UnsupportedApp,
         place: "앱 정의 호환성 검사",
-        cause: "앱 정의가 이 쉘에서 지원하지 않는 블록 또는 모듈 판을 요구한다",
+        cause: "앱 정의가 이 쉘이나 서버에서 지원하지 않는 블록 또는 모듈 판을 요구한다",
         message: "앱 정의의 requires가 이 쉘이나 서버보다 새 판을 요구합니다. 쉘에서 가져왔다면 쉘을, 서버에 올렸다면 서버를 업데이트하세요. 또는 앱 정의의 requires를 낮추세요.",
         fix: "낡은 쪽을 업데이트하거나 앱 정의의 requires를 낮추세요"
     }

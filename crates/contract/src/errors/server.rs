@@ -146,7 +146,7 @@ error_catalog! { ENTRIES;
         message: "서버 데이터베이스를 사용할 수 없습니다. 서버를 다시 시작해야 합니다. 에이전트에게 이 오류 코드를 전하세요.",
         fix: "서버를 다시 시작하세요"
     }
-    SERVER_DEVICE_ACCOUNT_NOT_FOUND(device_id) {
+    SERVER_DEVICE_ACCOUNT_NOT_FOUND() {
         class: Server,
         place: "연결 기기 계정 조회",
         cause: "등록된 기기의 계정 정보를 찾지 못했다",
@@ -573,14 +573,14 @@ error_catalog! { ENTRIES;
         message: "기기 배치 변경 형식이 올바르지 않습니다. 쉘을 업데이트하세요.",
         fix: "쉘을 업데이트하세요"
     }
-    SERVER_LAYOUT_CHANGE_SHARING_ID_INVALID(id) {
+    SERVER_LAYOUT_CHANGE_SHARING_ID_INVALID() {
         class: InvalidRequest,
         place: "기기 배치 변경의 공유 창 검사",
         cause: "공유 대상 창 id가 비었거나 허용 길이를 넘는다",
         message: "같이 보기 창 정보가 올바르지 않습니다. 쉘을 업데이트하세요.",
         fix: "쉘을 업데이트하세요"
     }
-    SERVER_LAYOUT_CHANGE_CONTEXT_TOO_LARGE(max_bytes) {
+    SERVER_LAYOUT_CHANGE_CONTEXT_TOO_LARGE(limit) {
         class: InvalidRequest,
         place: "기기 배치 변경의 공유 문맥 검사",
         cause: "공유 문맥 글이 허용 크기를 넘는다",
@@ -594,7 +594,7 @@ error_catalog! { ENTRIES;
         message: "창 상태를 읽을 수 있는 형식으로 만들지 못했습니다. 쉘을 업데이트하세요.",
         fix: "쉘을 업데이트하세요"
     }
-    SERVER_LAYOUT_CHANGE_STATE_TOO_LARGE(max_bytes) {
+    SERVER_LAYOUT_CHANGE_STATE_TOO_LARGE(limit) {
         class: InvalidRequest,
         place: "기기 배치 변경의 창 상태 크기 검사",
         cause: "창 상태가 허용 크기를 넘는다",
