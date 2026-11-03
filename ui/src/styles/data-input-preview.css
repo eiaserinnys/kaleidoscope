@@ -1,10 +1,12 @@
 .ks-data-input.has-columns {
-  --ks-input-columns-size: calc(var(--ks-input-columns) + 2 * var(--ks-space-2) + 2 * var(--ks-line-width));
+  --ks-input-columns-base-size: calc(var(--ks-input-columns) + 2 * var(--ks-space-2) + 2 * var(--ks-line-width));
+  --ks-input-columns-size: var(--ks-input-columns-base-size);
   width: var(--ks-input-columns-size);
   min-width: var(--ks-input-columns-size);
   flex: 0 0 var(--ks-input-columns-size);
 }
-.ks-data-input.has-columns.is-native-number { --ks-input-columns-size: calc(var(--ks-input-columns) + 2 * var(--ks-space-2) + 2 * var(--ks-line-width) + var(--ks-space-4)); }
+.ks-data-input.has-columns.is-native-number { --ks-input-columns-size: calc(var(--ks-input-columns-base-size) + var(--ks-space-4)); }
+.ks-data-input.has-columns.is-search { --ks-input-columns-size: calc(var(--ks-input-columns) + 2 * (var(--ks-icon-button-size) + var(--ks-space-1)) + 2 * var(--ks-line-width)); }
 .ks-data-input.has-columns:not(.ks-data-tab-panel *) { width: var(--ks-input-columns-size); min-width: var(--ks-input-columns-size); flex: 0 0 var(--ks-input-columns-size); }
 .ks-data-input.has-columns .ks-text-input { width: var(--ks-input-columns-size); min-width: var(--ks-input-columns-size); flex: 0 0 var(--ks-input-columns-size); }
 .ks-data-tab-panel .ks-input-field > .ks-data-input.has-columns { width: var(--ks-input-columns-size); min-width: var(--ks-input-columns-size); flex: 0 0 var(--ks-input-columns-size); }

@@ -362,7 +362,7 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const className = `ks-data-button is-${block.variant ?? "default"}`;
   if (block.preview) return <div ref={setOpener} className={`${className} has-preview`}>
     <div className={`ks-data-button-card${pressedValue ? " is-selected" : ""}${busy || unavailable ? " is-disabled" : ""}`}>
-      <div className="ks-data-button-card-content" aria-hidden="true">
+      <div className="ks-data-button-card-content" aria-hidden="true" inert>
         <div className="ks-data-button-card-preview">{renderBlock(block.preview, context, `${pointer}/preview`)}</div>
         <div className="ks-data-button-card-label">
           {prefixText ? <span className="ks-data-button-prefix">{prefixText}</span> : null}

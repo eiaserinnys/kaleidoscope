@@ -96,6 +96,19 @@ it("columns 입력은 보일 문자 수와 숫자 조작부 폭을 전달한다"
   expect(field.value).toBe("1234");
 });
 
+it("search columns는 같은 문자 수와 검색 아이콘·지우기 조작부를 유지한다", () => {
+  const plain = { type: "input", kind: "text", columns: 4, value: "표본", on_change: { client: "plain" } };
+  const search = { type: "input", kind: "search", columns: 4, value: "표본", on_change: { client: "search" } };
+  const view = render(<><InputBlock block={plain as never} context={{} as never} pointer="/plain" /><InputBlock block={search as never} context={{} as never} pointer="/search" /></>);
+  const plainInput = view.container.querySelector(".ks-data-input.has-columns:not(.is-search)") as HTMLDivElement;
+  const searchInput = view.container.querySelector(".ks-data-input.has-columns.is-search") as HTMLDivElement;
+  expect(plainInput.style.getPropertyValue("--ks-input-columns")).toBe("4ch");
+  expect(searchInput.style.getPropertyValue("--ks-input-columns")).toBe("4ch");
+  expect(searchInput.classList.contains("is-search")).toBe(true);
+  expect(searchInput.querySelector(".ks-data-input-search")).toBeTruthy();
+  expect(searchInput.querySelector(".ks-data-input-clear")).toBeTruthy();
+});
+
 it("preview 단추는 그림과 이름을 한 선택 가능한 카드로 묶고 prefix를 접근 이름에 넣는다", () => {
   const preview = { type: "canvas", surface: "tile", aspect_ratio: 1 };
   const context = {} as never;
@@ -115,4 +128,20 @@ it("preview 단추는 그림과 이름을 한 선택 가능한 카드로 묶고 
   expect(previewRender).toHaveBeenCalledWith(preview, context, "/button/preview");
   fireEvent.click(action);
   expect(runtime.act).toHaveBeenCalledWith("/button/on_click", null, undefined, { shift: false, alt: false, ctrl: false, meta: false });
+});
+
+it("image preview의 포커스 가능한 자식은 inert이고 탭 순서에는 카드 단추만 남는다", () => {
+  previewRender.mockImplementation(() => <><button aria-label="확대" /><button aria-label="다시 시도" /></>);
+  const image = { type: "image", src: { asset: "sample" } };
+  const button = { type: "button", label: "견본", preview: image, on_click: { client: "choose" } };
+  const view = render(<ButtonBlock block={button as never} context={{} as never} pointer="/button" />);
+  const content = view.container.querySelector(".ks-data-button-card-content") as HTMLDivElement;
+  const cardButton = screen.getByRole("button", { name: "견본" });
+  const tabStops = [...view.container.querySelectorAll("button")].filter((item) => !item.closest("[inert]") && !item.disabled);
+
+  expect(content.hasAttribute("inert")).toBe(true);
+  expect(content.querySelectorAll("button")).toHaveLength(2);
+  expect(cardButton.closest(".ks-data-button-card")).toBeTruthy();
+  expect(content.contains(cardButton)).toBe(false);
+  expect(tabStops).toEqual([cardButton]);
 });
