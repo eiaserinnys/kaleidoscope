@@ -6,8 +6,8 @@ import { renderBlock } from "../render/render-block";
 export type WhenBlockData = Extract<Block, { type: "when" }>;
 
 export function WhenBlock({ block, context, pointer }: { block: WhenBlockData; context: BlockContext; pointer: string }) {
-  const value = useBinding(`${pointer}/value`, block.value);
-  const visible = value.status === "ready" && value.value === true;
+  const value = useBinding(`${pointer}/value`, block.value ?? null);
+  const visible = block.value !== undefined && value.status === "ready" && value.value === true;
   const childPointer = `${pointer}/child`;
   useDormant(childPointer, !visible);
   return visible ? renderBlock(block.child, context, childPointer) : null;

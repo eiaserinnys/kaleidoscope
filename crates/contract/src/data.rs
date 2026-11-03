@@ -1434,7 +1434,11 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
                 bind!(format!("tabs/{index}/label"), &tab.label);
             }
         }
-        Block::When { value, .. } => bind!("value", value),
+        Block::When { value, .. } => {
+            if let Some(value) = value {
+                bind!("value", value);
+            }
+        }
         Block::Dialog {
             open,
             title,
@@ -1497,12 +1501,16 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         Block::Anchor { .. } => {}
         Block::Canvas {
             surface,
+            loading,
             aspect_ratio,
             description,
             on_pointer,
             ..
         } => {
             bind!("surface", surface);
+            if let Some(value) = loading {
+                bind!("loading", value);
+            }
             if let Some(value) = aspect_ratio {
                 bind!("aspect_ratio", value);
             }

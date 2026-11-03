@@ -1242,7 +1242,17 @@ pub enum Block {
         template: Box<Block>,
     },
     When {
-        value: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        value: Option<Binding>,
+        /// (19판) 창 본문 너비가 CSS px 기준으로 이 값 이상일 때 자식을 그린다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        min_width: Option<u32>,
+        /// (19판) 창 본문 너비가 CSS px 기준으로 이 값 이하일 때 자식을 그린다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        max_width: Option<u32>,
         child: Box<Block>,
     },
     Dialog {
@@ -1287,6 +1297,10 @@ pub enum Block {
     /// (12판) 클라이언트가 그리는 픽셀 표면.
     Canvas {
         surface: Binding,
+        /// (19판) 참이면 표준 로딩 표현을 보인다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        loading: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         aspect_ratio: Option<Binding>,
@@ -2019,7 +2033,12 @@ enum RawBlock {
         template: Box<Block>,
     },
     When {
-        value: Binding,
+        #[serde(default)]
+        value: Option<Binding>,
+        #[serde(default)]
+        min_width: Option<u32>,
+        #[serde(default)]
+        max_width: Option<u32>,
         child: Box<Block>,
     },
     Dialog {
@@ -2057,6 +2076,8 @@ enum RawBlock {
     },
     Canvas {
         surface: Binding,
+        #[serde(default)]
+        loading: Option<Binding>,
         #[serde(default)]
         aspect_ratio: Option<Binding>,
         #[serde(default)]
@@ -2694,7 +2715,12 @@ impl From<RawBlock> for Block {
                 follow_pause_ms,
                 template,
             },
-            RawBlock::When { value, child } => Block::When { value, child },
+            RawBlock::When { value, min_width, max_width, child } => Block::When {
+                value,
+                min_width,
+                max_width,
+                child,
+            },
             RawBlock::Dialog {
                 open,
                 title,
@@ -2733,12 +2759,14 @@ impl From<RawBlock> for Block {
             RawBlock::Progress { value, max, label } => Block::Progress { value, max, label },
             RawBlock::Canvas {
                 surface,
+                loading,
                 aspect_ratio,
                 fit,
                 description,
                 on_pointer,
             } => Block::Canvas {
                 surface,
+                loading,
                 aspect_ratio,
                 fit,
                 description,

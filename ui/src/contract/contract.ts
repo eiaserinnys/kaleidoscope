@@ -264,7 +264,19 @@ export type BindingValue = { "status": "ready", value: JsonValue, } | { "status"
  * 데이터 블록은 그 상태를 그 자리에 보인다. 4판 블록은 쉘의 토큰과 공통 부품만으로 그리고, 앱이 색이나 크기를
  * 정하지 않는다(항목의 `color`와 배지 색만 예외).
  */
-export type Block = { "type": "repeat", items: Binding, key: string, layout?: RepeatLayout, grid?: RepeatGrid, virtual?: boolean, follow_key?: Binding, follow_pause_ms?: number, template: Block, } | { "type": "when", value: Binding, child: Block, } | { "type": "dialog", open: Binding, title: Binding, close_label?: Binding, cancel_label?: Binding, on_confirm?: Actions, danger?: boolean, child: Block, on_close: Actions, } | { "type": "tour", open: Binding, step: Binding, steps: Array<TourStep>, labels?: TourLabels, on_step: Actions, on_close: Actions, } | { "type": "anchor", id: string, child: Block, } | { "type": "progress", value: Binding, max: number, label?: Binding, } | { "type": "canvas", surface: Binding, aspect_ratio?: Binding, fit?: CanvasFit, description?: Binding, on_pointer?: Actions, } | { "type": "timeline", viewport?: Binding, on_viewport?: Actions, controls?: boolean, duration: Binding, position: Binding, tracks: Binding, markers?: Binding, ticks?: Binding, selection?: Binding, snap?: Binding, read_only?: boolean, on_seek?: Actions, on_select?: Actions, on_edit?: Actions, } | { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: Binding, on_change: Actions, label?: Binding, min: number, max: number, step?: number, } | { "type": "color", value: Binding, on_change: Actions, label?: Binding, disabled?: Binding, } | { "type": "split", direction: SplitDirection, 
+export type Block = { "type": "repeat", items: Binding, key: string, layout?: RepeatLayout, grid?: RepeatGrid, virtual?: boolean, follow_key?: Binding, follow_pause_ms?: number, template: Block, } | { "type": "when", value?: Binding, 
+/**
+ * (19판) 창 본문 너비가 CSS px 기준으로 이 값 이상일 때 자식을 그린다.
+ */
+min_width?: number, 
+/**
+ * (19판) 창 본문 너비가 CSS px 기준으로 이 값 이하일 때 자식을 그린다.
+ */
+max_width?: number, child: Block, } | { "type": "dialog", open: Binding, title: Binding, close_label?: Binding, cancel_label?: Binding, on_confirm?: Actions, danger?: boolean, child: Block, on_close: Actions, } | { "type": "tour", open: Binding, step: Binding, steps: Array<TourStep>, labels?: TourLabels, on_step: Actions, on_close: Actions, } | { "type": "anchor", id: string, child: Block, } | { "type": "progress", value: Binding, max: number, label?: Binding, } | { "type": "canvas", surface: Binding, 
+/**
+ * (19판) 참이면 표준 로딩 표현을 보인다.
+ */
+loading?: Binding, aspect_ratio?: Binding, fit?: CanvasFit, description?: Binding, on_pointer?: Actions, } | { "type": "timeline", viewport?: Binding, on_viewport?: Actions, controls?: boolean, duration: Binding, position: Binding, tracks: Binding, markers?: Binding, ticks?: Binding, selection?: Binding, snap?: Binding, read_only?: boolean, on_seek?: Actions, on_select?: Actions, on_edit?: Actions, } | { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: Binding, on_change: Actions, label?: Binding, min: number, max: number, step?: number, } | { "type": "color", value: Binding, on_change: Actions, label?: Binding, disabled?: Binding, } | { "type": "split", direction: SplitDirection, 
 /**
  * 자식마다의 상대 크기. 없으면 똑같이 나눈다.
  */

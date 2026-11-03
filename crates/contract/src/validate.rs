@@ -49,7 +49,9 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
 
-    let mut details = validate(&definition);
+    let validation = validate(&definition);
+    let missing_when_condition = validation.missing_when_condition;
+    let mut details = validation.details;
     if uses_new_definition_fields && definition.requires.blocks < 15 {
         details.push(
             "tabs.header, tabs.keep_mounted, tabs.collapsible, folder.header, state_migrate와 opens.set_state는 블록 세트 15판이라 requires.blocks가 15 이상이어야 합니다"
@@ -82,7 +84,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         details.push("dialog.on_confirm과 dialog.danger는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
     }
     if uses_new_block_set_19_fields && definition.requires.blocks < 19 {
-        details.push("input.columns, button.preview, button.prefix, 동적 PropertyField.label, format swatches와 properties.layout은 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
+        details.push("input.columns, button.preview, button.prefix, 동적 PropertyField.label, format swatches, properties.layout, canvas.loading, when.min_width와 when.max_width는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
     }
     if uses_device_storage_scope {
         validate_module_version(
@@ -105,6 +107,8 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     }
     if details.is_empty() {
         Ok(definition)
+    } else if missing_when_condition {
+        Err(crate::errors::APP_DEFINITION_WHEN_CONDITION_MISSING().and_details(details))
     } else {
         Err(crate::errors::APP_DEFINITION_CHECK_FAILED().and_details(details))
     }
@@ -282,6 +286,10 @@ fn uses_block_set_19_fields(ui: &Value) -> bool {
                                 })
                             })
                 }
+                Some("canvas") => object.contains_key("loading"),
+                Some("when") => {
+                    object.contains_key("min_width") || object.contains_key("max_width")
+                }
                 _ => false,
             };
             uses_field || object.values().any(uses_block_set_19_fields)
@@ -291,8 +299,14 @@ fn uses_block_set_19_fields(ui: &Value) -> bool {
     }
 }
 
-fn validate(definition: &AppDefinition) -> Vec<String> {
+struct ValidationResult {
+    details: Vec<String>,
+    missing_when_condition: bool,
+}
+
+fn validate(definition: &AppDefinition) -> ValidationResult {
     let mut details = Vec::new();
+    let mut missing_when_condition = false;
     if !valid_id(&definition.id) {
         details.push(format!("앱 id가 올바르지 않습니다: {}", definition.id));
     }
@@ -467,8 +481,14 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
     let mut named_blocks = Vec::new();
     let mut repeat_templates: Vec<String> = Vec::new();
     data::walk_definition_blocks(definition, &mut |pointer, block| {
-        if matches!(block, Block::When { .. }) {
+        if let Block::When { value, min_width, max_width, .. } = block {
             when_pointers.push(pointer.to_owned());
+            if value.is_none() && min_width.is_none() && max_width.is_none() {
+                missing_when_condition = true;
+                details.push(format!(
+                    "{pointer}: when에는 value, min_width, max_width 중 하나 이상이 필요합니다"
+                ));
+            }
         }
         if matches!(block, Block::Repeat { .. }) {
             repeat_templates.push(format!("{pointer}/template"));
@@ -563,7 +583,10 @@ fn validate(definition: &AppDefinition) -> Vec<String> {
         validate_ui_binding(binding, definition, &mut details, &pointer);
     }
     validate_exprs(definition, &mut details);
-    details
+    ValidationResult {
+        details,
+        missing_when_condition,
+    }
 }
 
 fn validate_v14_definition(definition: &AppDefinition, details: &mut Vec<String>) {

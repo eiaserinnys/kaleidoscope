@@ -65,6 +65,13 @@ fn every_new_common_field_requires_block_set_19() {
         "layout": "rows",
         "fields": [{"label": "이름", "value": "값"}]
     });
+    let canvas_loading = json!({
+        "type": "canvas",
+        "surface": "stage",
+        "loading": {"state": "confirmed"}
+    });
+    let when_min_width = json!({"type": "when", "min_width": 480, "child": button()});
+    let when_max_width = json!({"type": "when", "max_width": 720, "child": button()});
 
     let cases = [
         ("input.columns", input.take(), false),
@@ -73,6 +80,9 @@ fn every_new_common_field_requires_block_set_19() {
         ("PropertyField.label binding", property_label, false),
         ("FieldFormat.swatches", swatches, false),
         ("properties.layout", properties_rows, false),
+        ("canvas.loading", canvas_loading, true),
+        ("when.min_width", when_min_width, false),
+        ("when.max_width", when_max_width, false),
         (
             "canvas button.preview",
             {
@@ -107,6 +117,111 @@ fn every_new_common_field_requires_block_set_19() {
     }
 
     assert_eq!(BLOCK_SET_VERSION, 19);
+}
+
+#[test]
+fn when_requires_a_value_or_width_condition_with_a_registered_error() {
+    let empty_when = json!({"type": "when", "child": button()});
+    let error = parse_app_definition(&definition(empty_when, 19).to_string())
+        .expect_err("when without any condition must fail validation");
+
+    assert_eq!(
+        error.id.as_deref(),
+        Some("APP_DEFINITION_WHEN_CONDITION_MISSING"),
+        "{error:?}"
+    );
+    assert!(error.message.contains("min_width"), "{error:?}");
+    assert!(error.message.contains("max_width"), "{error:?}");
+    assert!(error.details.iter().any(|detail| {
+        detail.contains("/ui") && detail.contains("value, min_width, max_width")
+    }), "{error:?}");
+}
+
+#[test]
+fn width_conditions_round_trip_and_value_only_wire_stays_unchanged() {
+    let width_when = json!({
+        "type": "when",
+        "min_width": 480,
+        "max_width": 960,
+        "child": button()
+    });
+    let parsed = parse_app_definition(&definition(width_when, 19).to_string()).unwrap();
+    let serialized = serde_json::to_value(&parsed).unwrap();
+    assert_eq!(serialized["ui"]["min_width"], 480);
+    assert_eq!(serialized["ui"]["max_width"], 960);
+    assert!(serialized["ui"].get("value").is_none());
+    assert_eq!(
+        serde_json::to_value(parse_cached_app_definition(&serialized.to_string()).unwrap())
+            .unwrap(),
+        serialized
+    );
+
+    let legacy = definition(
+        json!({"type": "when", "value": true, "child": button()}),
+        18,
+    );
+    let parsed = parse_app_definition(&legacy.to_string()).unwrap();
+    let serialized = serde_json::to_value(&parsed).unwrap();
+    assert_eq!(serialized["ui"]["type"], "when");
+    assert_eq!(serialized["ui"]["value"], legacy["ui"]["value"]);
+    assert!(serialized["ui"].get("min_width").is_none());
+    assert!(serialized["ui"].get("max_width").is_none());
+    assert_eq!(
+        serde_json::to_value(parse_cached_app_definition(&serialized.to_string()).unwrap())
+            .unwrap(),
+        serialized
+    );
+}
+
+#[test]
+fn width_when_conditions_define_separate_surface_and_anchor_scopes() {
+    for kind in ["canvas", "anchor"] {
+        let named = || match kind {
+            "canvas" => json!({"type": "canvas", "surface": "stage", "aspect_ratio": 1}),
+            "anchor" => json!({
+                "type": "anchor",
+                "id": "stage",
+                "child": {"type": "text", "value": "표적"}
+            }),
+            _ => unreachable!(),
+        };
+        let ui = json!({
+            "type": "stack",
+            "direction": "column",
+            "children": [
+                {"type": "when", "min_width": 640, "child": named()},
+                {"type": "when", "max_width": 639, "child": named()}
+            ]
+        });
+        let mut value = definition(ui, 19);
+        if kind == "canvas" {
+            value = canvas_preview_definition(value);
+        }
+        parse_app_definition(&value.to_string()).unwrap_or_else(|error| {
+            panic!("width when branches should have independent {kind} names: {error:?}")
+        });
+
+        let same_branch = json!({
+            "type": "when",
+            "min_width": 640,
+            "child": {
+                "type": "stack",
+                "direction": "column",
+                "children": [named(), named()]
+            }
+        });
+        let mut value = definition(same_branch, 19);
+        if kind == "canvas" {
+            value = canvas_preview_definition(value);
+        }
+        let error = parse_app_definition(&value.to_string())
+            .expect_err("names duplicated in one width when branch must still fail");
+        assert!(error.details.iter().any(|detail| match kind {
+            "canvas" => detail.contains("canvas 표면 이름이 비었거나 중복됩니다"),
+            "anchor" => detail.contains("anchor id가 비었거나 중복됩니다"),
+            _ => unreachable!(),
+        }), "{error:?}");
+    }
 }
 
 #[test]
@@ -157,14 +272,18 @@ fn preview_and_new_bindings_are_collected_inside_repeat_scope() {
         "children": [
             {
                 "type": "repeat",
-                "items": [{"id": "one", "name": "이름", "prefix": "기법", "surface": null}],
+                "items": [{"id": "one", "name": "이름", "prefix": "기법", "surface": null, "loading": false}],
                 "key": "id",
                 "layout": "column",
                 "template": {
                     "type": "button",
                     "label": {"item": "name"},
                     "prefix": {"item": "prefix"},
-                    "preview": {"type": "image", "src": {"item": "surface"}},
+                    "preview": {
+                        "type": "canvas",
+                        "surface": {"item": "surface"},
+                        "loading": {"item": "loading"}
+                    },
                     "on_click": [{"set_state": "confirmed", "value": true}]
                 }
             },
@@ -175,7 +294,8 @@ fn preview_and_new_bindings_are_collected_inside_repeat_scope() {
             }
         ]
     });
-    let parsed = parse_app_definition(&definition(ui, 19).to_string()).unwrap();
+    let parsed = parse_app_definition(&canvas_preview_definition(definition(ui, 19)).to_string())
+        .unwrap();
 
     let mut walked = Vec::new();
     data::walk_blocks(&parsed.ui, "/ui", &mut |pointer, _| {
@@ -195,7 +315,11 @@ fn preview_and_new_bindings_are_collected_inside_repeat_scope() {
             .map(|(_, value)| *value)
     };
     assert!(matches!(
-        binding_at("/ui/children/0/template/preview/src"),
+        binding_at("/ui/children/0/template/preview/surface"),
+        Some(Binding::Item(_))
+    ));
+    assert!(matches!(
+        binding_at("/ui/children/0/template/preview/loading"),
         Some(Binding::Item(_))
     ));
     assert!(matches!(
@@ -263,6 +387,26 @@ fn new_fields_round_trip_and_old_defaults_keep_their_wire_shape() {
     let cached = parse_cached_app_definition(&serialized.to_string()).unwrap();
     assert_eq!(serde_json::to_value(cached).unwrap(), serialized);
 
+    let canvas = json!({
+        "type": "canvas",
+        "surface": "stage",
+        "loading": {"state": "confirmed"}
+    });
+    let parsed = parse_app_definition(
+        &canvas_preview_definition(definition(canvas, 19)).to_string(),
+    )
+    .unwrap();
+    let serialized = serde_json::to_value(parsed).unwrap();
+    assert_eq!(serialized["ui"]["loading"], json!({"state": "confirmed"}));
+
+    let canvas_without_loading = json!({"type": "canvas", "surface": "stage"});
+    let parsed = parse_app_definition(
+        &canvas_preview_definition(definition(canvas_without_loading, 18)).to_string(),
+    )
+    .unwrap();
+    let serialized = serde_json::to_value(parsed).unwrap();
+    assert!(serialized["ui"].get("loading").is_none());
+
     let legacy = definition(
         json!({
             "type": "stack",
@@ -291,7 +435,16 @@ fn new_fields_round_trip_and_old_defaults_keep_their_wire_shape() {
 fn generated_schema_exposes_block_set_19_contract() {
     assert_eq!(BLOCK_SET_VERSION, 19);
     let schema = app_definition_schema().to_string();
-    for field in ["columns", "preview", "prefix", "swatches", "rows"] {
+    for field in [
+        "columns",
+        "preview",
+        "prefix",
+        "swatches",
+        "rows",
+        "loading",
+        "min_width",
+        "max_width",
+    ] {
         assert!(schema.contains(field), "schema missing {field}");
     }
     assert!(schema.contains("label"));
