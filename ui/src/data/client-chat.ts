@@ -23,6 +23,7 @@ export type ClientChatEnvelope =
 export type ClientChatAttachment = { mime: string; bytes: ArrayBuffer };
 
 export type ClientChatState = {
+  generation: number;
   loading: boolean;
   items: ConversationItem[];
   stream_id: string | null;
@@ -35,7 +36,7 @@ export type ClientChatState = {
 };
 
 export const emptyClientChatState: ClientChatState = {
-  loading: true, items: [], stream_id: null, text: "", busy: false, tool: null, queued: [], error: null, attachments: new Map(),
+  generation: 0, loading: true, items: [], stream_id: null, text: "", busy: false, tool: null, queued: [], error: null, attachments: new Map(),
 };
 
 function uniqueItems(items: ConversationItem[]) {

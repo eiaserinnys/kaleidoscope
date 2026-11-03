@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { App, AppDefinition, AppVersion, AppWindow, LocalAgentSnapshot, ShellSnapshot } from "../src/contract/contract";
+import type { WindowData } from "../src/data/window-data";
 import {
   AppWindowContent,
   createFakeTransport,
@@ -309,11 +310,24 @@ const fakeTransport = createFakeTransport({
 const coreUrl = new URLSearchParams(window.location.search).get("core");
 const transport = coreUrl ? createHttpTransport(coreUrl) : fakeTransport;
 const store = createShellStore(transport);
+let clientChatWindowData: WindowData | null = null;
+let holdClientChatSnapshot = false;
+const captureClientChatWindowData = (data: WindowData | null) => { clientChatWindowData = data; };
 if (!coreUrl) {
   const clientChatCalls: Array<{ name: string; event: unknown }> = [];
   window.addEventListener("message", (event) => {
     const frame = document.querySelector<HTMLIFrameElement>(".ks-client-frames iframe");
-    if (event.source !== frame?.contentWindow || event.data?.type !== "chat-test-call") return;
+    if (event.source !== frame?.contentWindow) return;
+    if (event.data?.type === "chat-test-attachment-held") {
+      clientChatCalls.push({ name: "attachment-held", event: {} });
+      return;
+    }
+    if (event.data?.type === "chat-test-snapshot-request") {
+      if (holdClientChatSnapshot) { holdClientChatSnapshot = false; return; }
+      frame.contentWindow?.postMessage({ type: "chat-test-continue-snapshot" }, "*");
+      return;
+    }
+    if (event.data?.type !== "chat-test-call") return;
     clientChatCalls.push({ name: String(event.data.name), event: event.data.event });
   });
   Object.assign(window, { clientChatHarness: {
@@ -321,6 +335,13 @@ if (!coreUrl) {
     clear: () => { clientChatCalls.length = 0; },
     coreCalls: () => fakeTransport.getCalls().length,
     control: (type: string) => document.querySelector<HTMLIFrameElement>(".ks-client-frames iframe")?.contentWindow?.postMessage({ type }, "*"),
+    pauseNextSnapshot: () => { holdClientChatSnapshot = true; },
+    restartClient: async () => { await clientChatWindowData?.restartClient(); },
+    clientGeneration: () => clientChatWindowData?.getClientGeneration() ?? 0,
+    chatState: () => {
+      const state = clientChatWindowData?.getClientChat("thread");
+      return state ? { loading: state.loading, busy: state.busy, items: state.items.length, queued: state.queued.length, attachments: state.attachments.size } : null;
+    },
   } });
   exposeDocsHarness(fakeTransport, store);
   Object.assign(window, { conversationHarness: {
@@ -390,7 +411,7 @@ function Harness() {
         </section>
         <section aria-label="client-chat-test" className={`ks-harness-window${previewOnly && previewAppId !== "client-chat-test" ? " is-hidden" : ""}`} data-app-id="client-chat-test" data-testid="app-window-client-chat">
           <header className="ks-harness-window-header">client-chat-test</header>
-          <div className="ks-harness-window-content">{clientChatWindow ? <AppWindowContent store={store} windowId={clientChatWindow.id} /> : null}</div>
+          <div className="ks-harness-window-content">{clientChatWindow ? <AppWindowContent store={store} windowId={clientChatWindow.id} onWindowData={captureClientChatWindowData} /> : null}</div>
         </section>
         <section aria-label="data-controls" className={`ks-harness-window${previewOnly && previewAppId !== "data-controls" ? " is-hidden" : ""}`} data-app-id="data-controls" data-testid="app-window-data-controls">
           <header className="ks-harness-window-header">범용 블록</header>

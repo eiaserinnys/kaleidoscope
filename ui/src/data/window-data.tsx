@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import type { AppDefinition, Binding, BindingValue, CoreError, DataView, EventModifiers, PickFilesSpec, SaveFileSpec, ShellSnapshot, SourceStatus } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
-import { applyClientChatEnvelope, emptyClientChatState, type ClientChatEnvelope, type ClientChatState } from "./client-chat";
+import { applyClientChatEnvelope, emptyClientChatState, type ClientChatAttachment, type ClientChatEnvelope, type ClientChatState } from "./client-chat";
 import * as shellErrors from "../contract/shell-errors";
 import { CLIENT_OUTPUT_MAX_BYTES } from "../contract/limits";
 import { toCoreError } from "../core/core-transport";
@@ -101,6 +101,15 @@ export class WindowData {
     }
   };
   getClientChat = (channel: string) => this.clientChatValues.get(channel) ?? emptyClientChatState;
+  takeClientChatAttachment = (channel: string, requestId: string): ClientChatAttachment | undefined => {
+    const state = this.getClientChat(channel);
+    const attachment = state.attachments.get(requestId);
+    if (!attachment) return undefined;
+    const attachments = new Map(state.attachments);
+    attachments.delete(requestId);
+    this.clientChatValues.set(channel, { ...state, attachments });
+    return attachment;
+  };
   subscribeClientChat = (channel: string, listener: () => void) => {
     let listeners = this.clientChatListeners.get(channel);
     if (!listeners) { listeners = new Set(); this.clientChatListeners.set(channel, listeners); }
@@ -122,6 +131,29 @@ export class WindowData {
     });
     this.clientChatFrames.set(channel, frame);
   };
+  private resetClientChats() {
+    const channels = new Set([
+      ...(this.definition.client?.channels ?? []),
+      ...this.clientChatValues.keys(),
+      ...this.pendingClientChatValues.keys(),
+      ...this.clientChatFrames.keys(),
+      ...this.clientChatListeners.keys(),
+    ]);
+    const generations = new Map<string, number>();
+    for (const channel of channels) {
+      generations.set(channel, Math.max(
+        this.clientChatValues.get(channel)?.generation ?? 0,
+        this.pendingClientChatValues.get(channel)?.generation ?? 0,
+      ) + 1);
+    }
+    this.clientChatFrames.forEach((frame) => cancelAnimationFrame(frame));
+    this.clientChatFrames.clear();
+    this.pendingClientChatValues.clear();
+    for (const channel of channels) {
+      this.clientChatValues.set(channel, { ...emptyClientChatState, generation: generations.get(channel)! });
+      this.clientChatListeners.get(channel)?.forEach((listener) => listener());
+    }
+  }
   requestClientAction = (name: string, event: unknown, transfer?: Transferable[]) => {
     if (!this.runtime) return Promise.reject(shellErrors.SHELL_CLIENT_ACTION_FAILED({ reason: "클라이언트 실행이 준비되지 않았습니다" }));
     return this.runtime.requestAction(name, event, transfer);
@@ -161,6 +193,7 @@ export class WindowData {
     const previous = this.runtime; this.runtime = null;
     if (previous) await previous.stop();
     if (!this.active) { this.restarting = false; return; }
+    this.resetClientChats();
     this.surfaces.clear();
     this.clientFailed = false; this.setNotice(null);
     this.publishClient(Object.fromEntries(Object.entries(this.definition.client.outputs).map(([name, output]) => [name, output.default])));

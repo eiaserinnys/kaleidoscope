@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 
 type ClientChatHarnessCall = {
   name: string;
-  event: { text?: string; stream_id?: string | null; attachments?: Array<{ byte_length: number; first_byte: number }> };
+  event: { request_id?: string; text?: string; stream_id?: string | null; attachments?: Array<{ byte_length: number; first_byte: number }> };
 };
 
 declare global {
@@ -12,6 +12,10 @@ declare global {
       calls: () => ClientChatHarnessCall[];
       control: (type: string) => void;
       coreCalls: () => number;
+      pauseNextSnapshot: () => void;
+      restartClient: () => Promise<void>;
+      clientGeneration: () => number;
+      chatState: () => { loading: boolean; busy: boolean; items: number; queued: number; attachments: number } | null;
     };
   }
 }
@@ -59,6 +63,16 @@ test("클라이언트 채팅 채널의 기록, 입력, 첨부, 바닥글과 리�
   await openedAttachment.close();
 
   const input = app.getByRole("textbox", { name: "메시지" });
+  await input.fill("큐 중복 시험");
+  await input.press("Enter");
+  await expect(app.getByText("큐 중복 시험", { exact: true })).toHaveCount(1);
+  const queueRequestId = await page.evaluate(() => window.clientChatHarness.calls().find((call) => call.name === "send" && call.event.text === "큐 중복 시험")?.event.request_id);
+  expect(queueRequestId).toBeTruthy();
+  await page.evaluate(() => window.clientChatHarness.control("chat-test-queue-ack"));
+  await expect(app.getByText("큐 중복 시험", { exact: true })).toHaveCount(1);
+  await page.evaluate(() => window.clientChatHarness.control("chat-test-queue-to-history"));
+  await expect(app.getByText("큐 중복 시험", { exact: true })).toHaveCount(1);
+
   const coreCallsBeforeTyping = await page.evaluate(() => window.clientChatHarness.coreCalls());
   await input.fill("실패");
   expect(await page.evaluate(() => window.clientChatHarness.coreCalls())).toBe(coreCallsBeforeTyping);
@@ -92,4 +106,60 @@ test("클라이언트 채팅 채널의 기록, 입력, 첨부, 바닥글과 리�
   await expect(reloadedApp.getByText("파일을 살펴봐 줘")).toBeVisible();
   await expect(reloadedApp.getByText("이미지에서 글자를 찾고 있습니다. 응답 조각이 도착했습니다.")).toBeVisible();
   await expect(reloadedApp.locator(".ks-agent-chat-history").getByText("도구 승인 대기")).toBeVisible();
+});
+
+test("클라이언트 채팅 큐 승인과 기록 전환에서 보낸 글을 한 번만 그린다", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 820 });
+  await page.goto("/?preview=client-chat-test");
+  const app = page.getByTestId("app-window-client-chat");
+  await expect(app.getByText("파일을 살펴봐 줘")).toBeVisible();
+
+  const input = app.getByRole("textbox", { name: "메시지" });
+  await input.fill("큐 중복 시험");
+  await input.press("Enter");
+  await expect(app.getByText("큐 중복 시험", { exact: true })).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => window.clientChatHarness.calls().some((call) => call.name === "send" && call.event.text === "큐 중복 시험"))).toBe(true);
+  await page.evaluate(() => window.clientChatHarness.control("chat-test-queue-ack"));
+  await expect(app.getByText("큐 중복 시험", { exact: true })).toHaveCount(1);
+  await page.evaluate(() => window.clientChatHarness.control("chat-test-queue-to-history"));
+  await expect(app.getByText("큐 중복 시험", { exact: true })).toHaveCount(1);
+});
+
+test("클라이언트 재시작은 대기 중인 채팅 상태를 초기화한다", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 820 });
+  await page.goto("/?preview=client-chat-test");
+  const app = page.getByTestId("app-window-client-chat");
+  await expect(app.getByText("이미지에서 글자를 찾고 있습니다. 응답 조각이 도착했습니다.")).toBeVisible();
+  await expect(app.getByRole("button", { name: "멈춤" })).toBeVisible();
+
+  const attachmentCallCount = await page.evaluate(() => window.clientChatHarness.calls().filter((call) => call.name === "attachment").length);
+  await page.evaluate(() => window.clientChatHarness.control("chat-test-hold-next-attachment"));
+  await expect.poll(() => page.evaluate(() => window.clientChatHarness.calls().some((call) => call.name === "attachment-held"))).toBe(true);
+  await app.getByRole("button", { name: "메모.txt" }).click();
+  await expect.poll(() => page.evaluate(() => window.clientChatHarness.calls().filter((call) => call.name === "attachment").length)).toBe(attachmentCallCount + 1);
+
+  const input = app.getByRole("textbox", { name: "메시지" });
+  await input.fill("재시작 대기");
+  await input.press("Enter");
+  await expect(app.getByText("재시작 대기", { exact: true })).toHaveCount(1);
+  const oldGeneration = await page.evaluate(() => window.clientChatHarness.clientGeneration());
+  await page.evaluate(() => window.clientChatHarness.pauseNextSnapshot());
+  await page.evaluate(() => window.clientChatHarness.restartClient());
+  await expect.poll(() => page.evaluate(() => window.clientChatHarness.clientGeneration())).toBe(oldGeneration + 1);
+  await expect(app.getByText("불러오는 중…")).toBeVisible();
+  await expect(app.getByText("파일을 살펴봐 줘", { exact: true })).toHaveCount(0);
+  await expect(app.getByText("이미지에서 글자를 찾고 있습니다. 응답 조각이 도착했습니다.", { exact: true })).toHaveCount(0);
+  await expect(app.locator(".ks-agent-chat-history").getByText("재시작 대기", { exact: true })).toHaveCount(0);
+  await expect(app.getByRole("button", { name: "멈춤" })).toHaveCount(0);
+  expect(await page.evaluate(() => window.clientChatHarness.chatState())).toEqual({ loading: true, busy: false, items: 0, queued: 0, attachments: 0 });
+});
+
+test("첨부 응답은 사용한 뒤 채널 상태에서 비운다", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 820 });
+  await page.goto("/?preview=client-chat-test");
+  const app = page.getByTestId("app-window-client-chat");
+  await app.getByRole("button", { name: "표식.png" }).waitFor({ state: "visible" });
+  await app.getByRole("button", { name: "표식.png" }).click();
+  await expect(page.getByRole("dialog", { name: "표식.png" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.clientChatHarness.chatState()?.attachments)).toBe(0);
 });

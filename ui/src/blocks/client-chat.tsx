@@ -12,7 +12,7 @@ import { toCoreError } from "../core/core-transport";
 import { ThinkingOrb } from "thinking-orbs";
 
 export type ClientChatBlockData = Extract<Block, { type: "chat" }> & { client: ChatClient };
-type PendingMessage = ChatPendingMessage & { knownIds: Set<string> };
+type PendingMessage = ChatPendingMessage & { requestId: string; generation: number; knownIds: Set<string> };
 
 function toBase64(bytes: ArrayBuffer) {
   const data = new Uint8Array(bytes);
@@ -22,7 +22,9 @@ function toBase64(bytes: ArrayBuffer) {
 }
 
 function matchesPending(item: ConversationItem, pending: PendingMessage) {
-  if (item.kind !== "user" || item.text !== pending.text || pending.knownIds.has(item.id)) return false;
+  if (item.kind !== "user" || pending.knownIds.has(item.id)) return false;
+  if (item.id === pending.requestId) return true;
+  if (item.text !== pending.text) return false;
   const expected = pending.attachments.map((attachment) => attachment.name).sort();
   const actual = (item.attachments ?? []).map((attachment) => attachment.name).sort();
   return expected.length === actual.length && expected.every((name, index) => name === actual[index]);
@@ -63,25 +65,47 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
+    if (chat.loading) {
+      coalescedDelta.cancel();
+      setDelta("");
+      setPending(null);
+      return;
+    }
     if (chat.stream_id || chat.text) coalescedDelta.schedule(chat.text);
     else {
       coalescedDelta.flush();
       setDelta("");
     }
-  }, [chat.stream_id, chat.text, coalescedDelta]);
+  }, [chat.loading, chat.stream_id, chat.text, coalescedDelta]);
 
   useEffect(() => {
-    setPending((current) => current && chat.items.some((item) => matchesPending(item, current)) ? null : current);
-  }, [chat.items]);
+    setPending((current) => current && (
+      current.generation !== chat.generation
+      || chat.items.some((item) => matchesPending(item, current))
+      || chat.queued.some((message) => message.id === current.requestId)
+    ) ? null : current);
+  }, [chat.generation, chat.items, chat.queued]);
 
   const requestAttachment = useCallback((itemId: string, attachment: ConversationAttachment) => {
     const requestId = crypto.randomUUID();
-    return new Promise<ClientChatAttachment>((resolve, reject) => {
+    const generation = data.getClientChat(channelName).generation;
+    return new Promise<ClientChatAttachment | null>((resolve, reject) => {
       let actionFinished = false;
+      let settled = false;
       let unsubscribe: () => void = () => undefined;
       const finish = () => {
-        const payload = data.getClientChat(channelName).attachments.get(requestId);
-        if (!actionFinished || !payload) return;
+        if (settled) return;
+        const state = data.getClientChat(channelName);
+        if (state.generation !== generation) {
+          settled = true;
+          unsubscribe();
+          resolve(null);
+          return;
+        }
+        if (!actionFinished) return;
+        const payload = data.takeClientChatAttachment(channelName, requestId);
+        if (!payload) return;
+        settled = true;
         unsubscribe();
         resolve(payload);
       };
@@ -94,6 +118,8 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
         actionFinished = true;
         finish();
       }, (reason) => {
+        if (settled) return;
+        settled = true;
         unsubscribe();
         reject(reason);
       });
@@ -103,15 +129,15 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
   const renderAttachment = useCallback((attachment: ConversationAttachment, item: ConversationItem) => <HistoryAttachmentView
     key={`${item.id}:${attachment.id}`}
     attachment={attachment}
-    cacheKey={["client-chat", context.window.id, item.id, attachment.id]}
+    cacheKey={["client-chat", context.window.id, channelName, chat.generation, item.id, attachment.id]}
     load={async () => {
       const payload = await requestAttachment(item.id, attachment);
-      return { mime: payload.mime, data_base64: toBase64(payload.bytes) };
+      return payload ? { mime: payload.mime, data_base64: toBase64(payload.bytes) } : { mime: attachment.mime, data_base64: "" };
     }}
-    open={async () => openPayload(await requestAttachment(item.id, attachment), attachment.name)}
+    open={async () => { const payload = await requestAttachment(item.id, attachment); if (payload) openPayload(payload, attachment.name); }}
     onPreview={setPreview}
     onError={(reason) => setActionError(toCoreError(reason))}
-  />, [context.window.id, requestAttachment]);
+  />, [channelName, context.window.id, chat.generation, requestAttachment]);
 
   const renderQueuedMessage = useCallback((message: ClientChatQueuedMessage) => <div className="ks-agent-chat-user is-pending" key={message.id}>
     {message.text}
@@ -119,17 +145,17 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
       {message.attachments.map((attachment) => <HistoryAttachmentView
         key={`${message.id}:${attachment.id}`}
         attachment={attachment}
-        cacheKey={["client-chat-queued", context.window.id, message.id, attachment.id]}
+        cacheKey={["client-chat-queued", context.window.id, channelName, chat.generation, message.id, attachment.id]}
         load={async () => {
           const payload = await requestAttachment(message.id, attachment);
-          return { mime: payload.mime, data_base64: toBase64(payload.bytes) };
+          return payload ? { mime: payload.mime, data_base64: toBase64(payload.bytes) } : { mime: attachment.mime, data_base64: "" };
         }}
-        open={async () => openPayload(await requestAttachment(message.id, attachment), attachment.name)}
+        open={async () => { const payload = await requestAttachment(message.id, attachment); if (payload) openPayload(payload, attachment.name); }}
         onPreview={setPreview}
         onError={(reason) => setActionError(toCoreError(reason))}
       />)}
     </div> : null}
-  </div>, [context.window.id, requestAttachment]);
+  </div>, [channelName, context.window.id, chat.generation, requestAttachment]);
 
   const send = async (returnFocus = false) => {
     const submittedDraft = draft;
@@ -139,7 +165,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
     const requestId = crypto.randomUUID();
     setSending(true);
     followTail.current = true;
-    setPending({ text, attachments: submittedAttachments, knownIds: new Set(chat.items.map((item) => item.id)) });
+    setPending({ requestId, generation: chat.generation, text, attachments: submittedAttachments, knownIds: new Set(chat.items.map((item) => item.id)) });
     setDraft("");
     setAttachments([]);
     setActionError(null);
@@ -174,12 +200,14 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
     {chat.queued.map(renderQueuedMessage)}
     {block.footer ? renderBlock(block.footer, context, `${pointer}/footer`) : null}
   </>;
+  const pendingForDisplay = pending?.generation === chat.generation && !chat.queued.some((message) => message.id === pending.requestId)
+    && !chat.items.some((item) => matchesPending(item, pending)) ? pending : null;
 
   return <section className="ks-agent-chat">
     <ChatHistory
       items={chat.items}
-      pending={pending}
-      delta={delta}
+      pending={pendingForDisplay}
+      delta={chat.loading ? "" : delta}
       busy={chat.busy}
       tool={chat.tool}
       historyRef={historyRef}
