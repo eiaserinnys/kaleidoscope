@@ -362,9 +362,10 @@ pub(super) fn wait_for_recorder(out: &Path, log: &mut File) -> Result<(), String
     let mut phases = BTreeMap::<String, usize>::new();
     let mut phase_peaks = BTreeMap::<String, (usize, usize, usize)>::new();
     let mut phase_elapsed = BTreeMap::<String, (f64, f64)>::new();
+    let mut first_change = None;
     for row in &rows {
         let columns = row.split(',').collect::<Vec<_>>();
-        if columns.len() != 7 {
+        if columns.len() != 8 {
             return Err(format!("invalid screen recorder row: {row}"));
         }
         let elapsed = columns[1]
@@ -380,6 +381,12 @@ pub(super) fn wait_for_recorder(out: &Path, log: &mut File) -> Result<(), String
             .parse::<usize>()
             .map_err(|error| error.to_string())?;
         let phase = columns[6].to_owned();
+        if first_change.is_none() && protected > 0 && measured_phases.contains(&phase.as_str()) {
+            first_change = Some(format!(
+                "phase={phase}, frame={}, ms={}, bbox={}",
+                columns[0], columns[1], columns[7]
+            ));
+        }
         phase_peaks
             .entry(phase.clone())
             .and_modify(|peak| {
@@ -429,7 +436,7 @@ pub(super) fn wait_for_recorder(out: &Path, log: &mut File) -> Result<(), String
                     .then_some(phase)
             })
             .collect::<Vec<_>>();
-        return Err(format!("protected screen pixels changed during isolation: {max_protected_pixels}; phases={changed:?}"));
+        return Err(format!("protected screen pixels changed during isolation: {max_protected_pixels}; phases={changed:?}; first_change={}", first_change.unwrap_or_default()));
     }
     let durations = phase_elapsed
         .iter()

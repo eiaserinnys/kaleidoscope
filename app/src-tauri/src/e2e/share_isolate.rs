@@ -315,6 +315,8 @@ pub(super) fn scenario(
         share(core, &a_id, false)?;
         share(core, &web_id, true)?;
         restore(core, &web_id)?;
+        // live를 거쳐야 다시 덮일 때 자식 웹뷰를 숨기는 호출이 나온다.
+        ui::wait_web_live(&web_id)?;
         minimize(core, &a_id)?;
         let hide_mark = ui::web_place_mark();
         set_agent_rect(app, core, &agent_window_id, web_over)?;
@@ -436,11 +438,15 @@ pub(super) fn scenario(
                 ..layout.web
             },
         )?;
+        ui::wait_web_live(&web_id)?;
+        let hide_mark = ui::web_place_mark();
         set_agent_rect(app, core, &agent_window_id, web_over)?;
         raise(core, &agent_window_id)?;
         share(core, &a_id, true)?;
         wait_share_view(&a_id, true, Some("A_VISIBLE_MARKER"))?;
         wait_share_view(&web_id, true, None)?;
+        // 입력 칸이 자식 웹뷰 영역 안에 있어 숨기 전에 클릭하면 웹뷰가 받는다.
+        ui::wait_web_hidden(&web_id, hide_mark)?;
         let images = expect_images(
             send_prompt(
                 app,
