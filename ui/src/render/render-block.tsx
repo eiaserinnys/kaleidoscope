@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from "react";
+import { Component, memo, type ReactNode } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "../blocks/block-context";
 import { FolderBlock } from "../blocks/folder";
@@ -41,6 +41,8 @@ import { TourBlock } from "../blocks/tour";
 import { RepeatBlock } from "../blocks/repeat";
 import { BlockRenderContext, useBlockRenderProbe } from "./render-probe";
 import { useItemScope } from "../data/item-scope";
+import { Notice } from "../components/primitives";
+import { SHELL_BLOCK_RENDER_FAILED } from "../contract/shell-errors";
 
 export { renderProbe } from "./render-probe";
 
@@ -49,12 +51,30 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
 }
 
 const BlockNode = memo(function BlockNode({ block, context, pointer }: { block: Block; context: BlockContext; pointer: string }) {
+  return <BlockBoundary block={block}><BlockNodeContent block={block} context={context} pointer={pointer} /></BlockBoundary>;
+});
+
+class BlockBoundary extends Component<{ block: Block; children: ReactNode }, { block: Block; error: unknown; failed: boolean }> {
+  state = { block: this.props.block, error: null as unknown, failed: false };
+  static getDerivedStateFromError(error: unknown) { return { error, failed: true }; }
+  static getDerivedStateFromProps(props: { block: Block }, state: { block: Block }) {
+    return props.block !== state.block ? { block: props.block, error: null, failed: false } : null;
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    const reason = this.state.error instanceof Error ? this.state.error.message : String(this.state.error);
+    const error = SHELL_BLOCK_RENDER_FAILED({ block: this.props.block.type, reason });
+    return <Notice role="alert" errorId={error.id}>{error.message}</Notice>;
+  }
+}
+
+function BlockNodeContent({ block, context, pointer }: { block: Block; context: BlockContext; pointer: string }) {
   const normalized = normalizeBlock(block);
   const scope = useItemScope();
   return <BlockRenderContext.Provider value={{ windowId: context.window.id, pointer, type: normalized.type, instance: scope?.instance }}>
     <BlockContent block={normalized} context={context} pointer={pointer} />
   </BlockRenderContext.Provider>;
-});
+}
 
 function BlockContent({ block: normalized, context, pointer }: { block: Block; context: BlockContext; pointer: string }) {
   useBlockRenderProbe();

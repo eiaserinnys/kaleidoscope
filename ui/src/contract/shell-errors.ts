@@ -1,6 +1,7 @@
 // 생성물이다. `cargo test -p kaleidoscope-contract`가 오류 등록부에서 만든다. 손으로 고치지 않는다.
 import type { CoreError } from "./contract";
 
+export const SHELL_BLOCK_RENDER_FAILED = (args: { block: string; reason: string }): CoreError => ({ id: "SHELL_BLOCK_RENDER_FAILED", code: "invalid_request", message: `${args.block} 블록을 그리지 못했습니다. 앱 정의에서 이 블록의 값과 필드를 확인하세요. 원인: ${args.reason}`, details: [] });
 export const SHELL_MESSAGE_SEND_SOURCE_MISSING = (): CoreError => ({ id: "SHELL_MESSAGE_SEND_SOURCE_MISSING", code: "not_found", message: `보내던 창이 닫혀 메시지를 보낼 수 없습니다. 문서를 다시 열어 보내세요.`, details: [] });
 export const SHELL_MESSAGE_SEND_NO_RECEIVER = (): CoreError => ({ id: "SHELL_MESSAGE_SEND_NO_RECEIVER", code: "not_found", message: `메시지를 받을 수 있는 앱이 없습니다. 수신 가능한 앱을 설치한 뒤 다시 보내세요.`, details: [] });
 export const SHELL_MESSAGE_SEND_NOT_CONFIGURED = (args: { app: string }): CoreError => ({ id: "SHELL_MESSAGE_SEND_NOT_CONFIGURED", code: "invalid_request", message: `${args.app}에 보낼 대화가 없습니다. 열린 앱에서 대화를 시작한 뒤 다시 보내세요.`, details: [] });

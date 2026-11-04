@@ -1,4 +1,5 @@
 error_catalog! { ENTRIES;
+    SHELL_BLOCK_RENDER_FAILED(block, reason) { class: InvalidRequest, place: "블록 화면 그리기", cause: "블록을 그리는 중 예외가 발생했다", message: "{block} 블록을 그리지 못했습니다. 앱 정의에서 이 블록의 값과 필드를 확인하세요. 원인: {reason}", fix: "앱 정의에서 이 블록의 값과 필드를 확인하세요" }
     SHELL_MESSAGE_SEND_SOURCE_MISSING() { class: NotFound, place: "메시지 보낸 창 찾기", cause: "보낸 창이 사라졌다", message: "보내던 창이 닫혀 메시지를 보낼 수 없습니다. 문서를 다시 열어 보내세요.", fix: "송신 창을 다시 여세요" }
     SHELL_MESSAGE_SEND_NO_RECEIVER() { class: NotFound, place: "메시지 받을 앱 찾기", cause: "메시지를 받을 수 있는 앱이 없다", message: "메시지를 받을 수 있는 앱이 없습니다. 수신 가능한 앱을 설치한 뒤 다시 보내세요.", fix: "수신 가능한 앱을 설치하세요" }
     SHELL_MESSAGE_SEND_NOT_CONFIGURED(app) { class: InvalidRequest, place: "대화에 메시지 보내기", cause: "받는 대화가 없다", message: "{app}에 보낼 대화가 없습니다. 열린 앱에서 대화를 시작한 뒤 다시 보내세요.", fix: "받는 앱에서 대화를 시작하세요" }

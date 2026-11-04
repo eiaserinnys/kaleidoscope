@@ -104,7 +104,7 @@ export function createDateTimeFormat(locale?: string) {
   };
   return {
     locale: resolved, parseDate, parseTime,
-    formatDate: (value: string | null) => value && parseISODate(value) ? dateFormatter.formatToParts(dateObject(value)).map((part) => part.type === "year" ? part.value.padStart(4, digits[0]) : part.value).join("") : "",
-    formatTime: (value: string | null) => { if (!value || !parseISOTime(value)) return ""; const [hour, minute] = value.split(":").map(Number); const date = utcDate(2026, 1, 1); date.setUTCHours(hour, minute); return timeFormatter.format(date); },
+    formatDate: (value: string | null) => value ? dateFormatter.formatToParts(dateObject(value)).map((part) => part.type === "year" ? part.value.padStart(4, digits[0]) : part.value).join("") : "",
+    formatTime: (value: string | null) => { if (value === null) return ""; const [hour, minute] = value.split(":").map(Number); const date = utcDate(2026, 1, 1); date.setUTCHours(hour, minute); return timeFormatter.format(date); },
   };
 }
