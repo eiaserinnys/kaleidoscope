@@ -37,6 +37,18 @@ for (const width of [1200, 360]) {
     for (let i = 0; i < 12 && await timeline.getAttribute("data-scale") !== "month"; i++) await app.getByRole("button", { name: "축소" }).click();
     await expect(timeline).toHaveAttribute("data-scale", "month");
     await capture(page, `dates-${width}-month`);
+    await app.getByRole("button", { name: "전체 맞춤" }).click();
+    const zoomMetrics = () => timeline.evaluate((root) => {
+      const scroller = root.querySelector<HTMLElement>(".ks-dates-scroll")!;
+      const corner = root.querySelector<HTMLElement>(".ks-dates-corner")!;
+      const axis = root.querySelector<HTMLElement>(".ks-dates-axis")!;
+      return { left: scroller.scrollLeft, width: parseFloat(axis.style.width), visible: scroller.clientWidth - corner.getBoundingClientRect().width };
+    });
+    const fit = await zoomMetrics();
+    await app.getByRole("button", { name: "확대" }).click();
+    const enlarged = await zoomMetrics();
+    const expectedLeft = (fit.left + fit.visible / 2) * enlarged.width / fit.width - enlarged.visible / 2;
+    expect(Math.abs(enlarged.left - expectedLeft)).toBeLessThanOrEqual(1);
     await app.getByRole("button", { name: "확대" }).click({ clickCount: 4 });
     const scroll = timeline.locator(".ks-dates-scroll");
     const corner = timeline.locator(".ks-dates-corner");
@@ -72,6 +84,13 @@ test("응답을 기다릴 때 일정표의 로딩 상태를 표시한다", async
     harness.emit({ event: "state.changed", snapshot });
   });
   await expect(app.getByRole("status")).toBeVisible();
+  await page.evaluate(async () => {
+    const harness = (window as any).__ksHarness;
+    const { snapshot } = await harness.call({ op: "state.get" });
+    const appWindow = snapshot.shared.windows.find((item: any) => item.app_id === "block-gallery");
+    const { view } = await harness.call({ op: "data.attach", window_id: appWindow.id });
+    harness.emit({ event: "data.update", window_id: appWindow.id, view });
+  });
   await capture(page, "dates-loading");
   await expect(app.locator(".ks-timeline-dates")).toBeVisible();
 });

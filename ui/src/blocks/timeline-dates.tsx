@@ -95,7 +95,7 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
   const [preview, setPreview] = useState<Edit | null>(null), [dragging, setDragging] = useState(false);
   const [metrics, setMetrics] = useState({ width: 0, height: 0, left: 0, row: 1, header: 0, day: 1, week: 1, month: 1 });
   const [offset, setOffset] = useState({ x: 0, y: 0 }), [px, setPx] = useState(0);
-  const initialized = useRef(false);
+  const initialized = useRef(false), pendingScroll = useRef<number | null>(null);
   const tracks = useMemo(() => readTracks(tracksValue, block.lanes ?? "pack"), [tracksValue, block.lanes]);
   const markers = useMemo(() => readMarkers(markerValue), [markerValue]);
   const offDays = useMemo(() => new Set(Array.isArray(daysValue) ? daysValue.flatMap((value) => { const day = dateToDay(value); return day === null ? [] : [day]; }) : []), [daysValue]);
@@ -122,6 +122,19 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
   const to = Math.min(range.end, range.start + Math.ceil((offset.x + lineWidth) / pxDay) + 2);
   const rows = visibleRows(Math.max(0, offset.y - metrics.header), metrics.height, metrics.row, rowCount);
 
+  const applyScale = (nextPx: number, left: number) => {
+    pendingScroll.current = left;
+    setPx(nextPx);
+    setOffset((old) => ({ ...old, x: left }));
+  };
+  useLayoutEffect(() => {
+    const element = scroll.current;
+    if (!element || pendingScroll.current === null) return;
+    element.scrollLeft = pendingScroll.current;
+    pendingScroll.current = null;
+    setOffset((old) => old.x === element.scrollLeft ? old : { ...old, x: element.scrollLeft });
+  });
+
   useLayoutEffect(() => {
     const element = scroll.current;
     if (!element) return;
@@ -146,9 +159,9 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
     const initialPx = bound ? lineWidth / (bound.end - bound.start + 1) : metrics.day;
     const nextPx = Math.max(minPx, Math.min(maxPx, initialPx));
     const first = bound?.start ?? (today >= range.start && today <= range.end ? monday(today - 7) : range.start);
-    scroll.current.scrollLeft = Math.max(0, (first - range.start) * nextPx);
+    applyScale(nextPx, Math.max(0, (first - range.start) * nextPx));
     if (bound) sentViewport.current = `${bound.start}:${bound.end}`;
-    setPx(nextPx); setOffset({ x: scroll.current.scrollLeft, y: scroll.current.scrollTop });
+
     initialized.current = true;
   }, [metrics, bound?.start, bound?.end, lineWidth, minPx, maxPx, range.start, range.end, today]);
 
@@ -158,14 +171,14 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
       const fallback = latestViewport.current;
       const nextPx = Math.max(minPx, Math.min(maxPx, lineWidth / (fallback.end - fallback.start + 1)));
       sentViewport.current = `${fallback.start}:${fallback.end}`;
-      setPx(nextPx); scroll.current.scrollLeft = Math.max(0, (fallback.start - range.start) * nextPx);
+      applyScale(nextPx, Math.max(0, (fallback.start - range.start) * nextPx));
     }
   }), [data, pointer, minPx, maxPx, lineWidth, range.start]);
   useLayoutEffect(() => {
     if (!initialized.current || !bound || !scroll.current || pendingViewport.current || sendViewport.idle()) return;
     const nextPx = Math.max(minPx, Math.min(maxPx, lineWidth / (bound.end - bound.start + 1)));
     const nextX = Math.max(0, (bound.start - range.start) * nextPx);
-    setPx(nextPx); scroll.current.scrollLeft = nextX; setOffset((old) => ({ ...old, x: nextX }));
+    applyScale(nextPx, nextX);
   }, [bound?.start, bound?.end, minPx, maxPx, lineWidth, range.start, sendViewport]);
   const flushViewport = useCallback(() => {
     if (viewportFrame.current !== null) cancelAnimationFrame(viewportFrame.current);
@@ -190,7 +203,7 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
     const nextPx = Math.max(minPx, Math.min(maxPx, pxDay * factor));
     const anchor = (element.scrollLeft + fraction * lineWidth) / pxDay;
     const nextX = Math.max(0, anchor * nextPx - fraction * lineWidth);
-    setPx(nextPx); element.scrollLeft = nextX; setOffset((old) => ({ ...old, x: nextX })); queueViewport(nextX, nextPx);
+    applyScale(nextPx, nextX); queueViewport(nextX, nextPx);
   };
   useEffect(() => {
     const element = scroll.current; if (!element) return;
