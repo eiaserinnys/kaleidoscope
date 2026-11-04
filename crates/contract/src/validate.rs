@@ -80,6 +80,17 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
 
     validate_store_contract(&definition)?;
 
+    if definition.client.as_ref().and_then(|client| client.capabilities.as_ref())
+        .is_some_and(|capabilities| capabilities.contains(&crate::client::ClientCapability::ReceiveMessage))
+        && (definition.requires.blocks < crate::RECEIVE_MESSAGE_BLOCK_SET_VERSION
+            || definition.requires.modules.get("client").copied().unwrap_or(0) < crate::RECEIVE_MESSAGE_CLIENT_VERSION)
+    {
+        return Err(crate::errors::APP_RECEIVE_MESSAGE_REQUIRES_VERSION(
+            crate::RECEIVE_MESSAGE_BLOCK_SET_VERSION,
+            crate::RECEIVE_MESSAGE_CLIENT_VERSION,
+        ));
+    }
+
     if let Some(icon) = &definition.icon {
         if icon.version == 0 {
             return Err(crate::errors::APP_ICON_VERSION_INVALID(
