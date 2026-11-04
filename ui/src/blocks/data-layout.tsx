@@ -15,8 +15,19 @@ import { SplitPaneContext } from "./split-pane-context";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 
+export function isMultilineInput(block: Extract<Block, { type: "input" }>): boolean {
+  return Boolean(block.multiline || (block.rows ?? 0) >= 2);
+}
+
+function isFixedHeightControl(block: Block | undefined): boolean {
+  return block !== undefined && (block.type === "input" ? !isMultilineInput(block) :
+    ["button", "select", "toggle", "slider", "color", "toolbar"].includes(block.type));
+}
+
 export function StackBlock({ block, context, pointer }: Props<"stack">) {
-  const fill = block.place === "center" ? -1 : block.fill ?? block.children.length - 1;
+  const last = block.children.length - 1;
+  const fill = block.place === "center" ? -1 : block.fill ??
+    (block.direction === "column" && isFixedHeightControl(block.children[last]) ? -1 : last);
   const explicitFill = block.place !== "center" && block.fill !== undefined;
   const direction = block.place === "center" ? "column" : block.direction;
   const align = block.place === "center" || block.align === undefined ? "" : ` align-${block.align}`;
