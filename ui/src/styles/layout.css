@@ -25,35 +25,33 @@
 }
 
 .ks-split-row > .ks-split-handle {
-  margin-inline-start: calc((var(--ks-line-width) - var(--ks-split-handle-size)) / 2);
+  margin-inline-start: calc(-1 * var(--ks-scrollbar-thumb-inset));
 }
 
 .ks-split-column .ks-split-handle {
   width: 100%;
   height: var(--ks-split-handle-size);
   align-self: start;
-  margin-block-start: calc((var(--ks-line-width) - var(--ks-split-handle-size)) / 2);
+  margin-block-start: calc(-1 * var(--ks-scrollbar-thumb-inset));
   cursor: row-resize;
 }
 
 .ks-split-handle::after {
   position: absolute;
   top: 0;
-  left: 50%;
+  left: var(--ks-scrollbar-thumb-inset);
   width: var(--ks-line-width);
   height: 100%;
   background: var(--ks-color-border);
   content: "";
   pointer-events: none;
-  transform: translateX(-50%);
 }
 
 .ks-split-column .ks-split-handle::after {
-  top: 50%;
+  top: var(--ks-scrollbar-thumb-inset);
   left: 0;
   width: 100%;
   height: var(--ks-line-width);
-  transform: translateY(-50%);
 }
 
 .ks-split-handle:hover::after,

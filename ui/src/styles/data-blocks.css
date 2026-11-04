@@ -211,8 +211,10 @@
 .ks-data-button.is-chip > .ks-button,
 .ks-data-button.is-chip > .ks-icon-button { border-radius: var(--ks-space-4); }
 .ks-data-button.is-chip > .ks-button[aria-pressed="true"] { border-color: var(--ks-color-accent); }
-.ks-data-button.is-ghost > .ks-button { border-color: transparent; background: transparent; }
-.ks-data-button.is-danger > .ks-button { border-color: var(--ks-color-danger); background: var(--ks-color-surface); }
+.ks-data-button.is-ghost > .ks-button, .ks-data-button.is-danger > .ks-button { border-color: transparent; background: transparent; }
+.ks-data-toolbar:has(> .ks-data-toolbar-group > .ks-data-toolbar-item > :is(.ks-data-button.is-default, .ks-data-button.is-primary) > .ks-button) > .ks-data-toolbar-group > .ks-data-toolbar-item > .ks-data-button.is-danger > .ks-button,
+.ks-data-stack.is-row:has(> .ks-data-stack-item > :is(.ks-data-button.is-default, .ks-data-button.is-primary) > .ks-button) > .ks-data-stack-item > .ks-data-button.is-danger > .ks-button,
+.ks-data-section-actions:has(> .ks-data-section-action > :is(.ks-data-button.is-default, .ks-data-button.is-primary) > .ks-button) > .ks-data-section-action > .ks-data-button.is-danger > .ks-button { border-color: var(--ks-color-danger); background: var(--ks-color-surface); }
 .ks-data-button.is-danger > .ks-button, .ks-data-button.is-danger > .ks-icon-button { color: var(--ks-color-danger); }
 .ks-data-button.is-danger > button:hover:not(:disabled) { background: var(--ks-color-danger-surface); }
 .ks-metrics-container { container-type: inline-size; width: 100%; min-width: 0; }
