@@ -27,7 +27,7 @@
 .ks-data-stack-item.is-fill { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; }
 .ks-data-stack-item:has(> .ks-data-stack.is-center) { flex: 1 1 auto; }
 .ks-data-stack-item:not(.is-fill) > .ks-data-stack.is-center { height: 100%; }
-.ks-data-stack.gap-small > .ks-data-stack-item > .ks-repeat:not(.is-grid) > .ks-repeat-content { gap: var(--ks-space-2); }
+.ks-data-stack.gap-small > .ks-data-stack-item > .ks-repeat:not(.is-grid):not([class*="gap-"]) > .ks-repeat-content { gap: var(--ks-space-2); }
 .ks-data-stack-item.is-fill:has(> .ks-split) { min-height: var(--ks-pane-min-size); }
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column { height: auto; min-height: 100%; }
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column:not(.has-explicit-fill) > .ks-data-stack-item.is-fill { flex: 0 0 auto; overflow: visible; }
@@ -38,9 +38,13 @@
 .ks-data-stack-item:not(.is-fill) > .ks-data-view { height: auto; overflow: visible; }
 .ks-data-tabs { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
 .ks-data-tab-header { container-type: inline-size; display: flex; width: 100%; min-width: 0; flex: 0 0 auto; align-items: center; gap: var(--ks-space-2); padding-inline: var(--ks-space-3); }
-.ks-data-tab-list { display: flex; min-width: 0; flex: 1 1 auto; gap: var(--ks-space-1); overflow-x: auto; padding-block: var(--ks-space-2); padding-inline: var(--ks-space-1); margin-inline: calc(-1 * var(--ks-space-1)); }
+.ks-data-tab-list { position: relative; display: flex; min-width: 0; flex: 1 1 auto; gap: var(--ks-space-1); overflow: hidden; padding-block: var(--ks-space-2); padding-inline: var(--ks-space-1); margin-inline: calc(-1 * var(--ks-space-1)); }
 .ks-data-tab-panel { padding-inline: var(--ks-space-3); }
 .ks-data-tab-list .ks-button { flex: 0 0 auto; font-size: var(--ks-type-meta); white-space: nowrap; }
+.ks-data-tab-list .ks-button.is-constrained { flex: 0 1 auto; min-width: 0; }
+.ks-data-tab-list > .ks-icon-button { align-self: center; }
+.ks-data-tab-list .ks-button.is-overflow { position: absolute; inset-inline-start: 0; visibility: hidden; }
+.ks-data-tab-more-probe { position: absolute; inset-inline-start: 0; visibility: hidden; width: var(--ks-icon-button-size); }
 .ks-data-tab-panel { flex: 1 1 auto; min-height: 0; overflow: auto; padding-block-end: var(--ks-space-3); }
 @container (max-width: 150px) { .ks-data-tab-header:has(> .ks-file-tree-collapse) .ks-data-tab-list .ks-button { padding-inline: var(--ks-space-2); } }
 .ks-data-tabs.is-collapsed > .ks-file-tree-expand { display: grid; width: var(--ks-icon-button-size); height: var(--ks-icon-button-size); flex: 0 0 var(--ks-icon-button-size); place-items: center; }
@@ -91,8 +95,20 @@
 .ks-data-section > .ks-data-section-header { padding-block-start: var(--ks-space-2); }
 .ks-data-section:has(> .ks-data-section-header:empty) { padding-block-start: var(--ks-space-2); }
 .ks-data-section-child > .ks-chart, .ks-data-section-child > .ks-map { padding-block-start: var(--ks-space-2); }
-.ks-data-tab-panel .ks-split-row > .ks-split-pane:first-child { padding-inline-end: var(--ks-space-3); }
-.ks-data-tab-panel .ks-split-row > .ks-split-pane:last-child { padding-inline-start: var(--ks-space-3); }
+.ks-data-tab-panel .ks-split-row > .ks-split-pane:not(:last-child) { padding-inline-end: var(--ks-space-3); }
+.ks-data-tab-panel .ks-split-row > .ks-split-pane:not(:first-child) { padding-inline-start: var(--ks-space-3); }
+.ks-split.is-stacked { display: flex; flex-direction: column; overflow-y: auto; }
+.ks-split.is-stacked > .ks-split-pane { flex: 0 0 auto; overflow: visible; }
+.ks-split.is-stacked > .ks-split-pane:not(:has(> .ks-split.is-stacked)):has(:is(
+  .ks-list, .ks-table-scroll, .ks-data-tree, .ks-feed, .ks-explorer-icons, .ks-repeat.is-virtual,
+  .ks-explorer, .ks-file-tree, .ks-code-view, .ks-markdown-editor, .ks-markdown-view,
+  .ks-agent-chat, .ks-html-view, .ks-web-view, .ks-canvas, .ks-map, .ks-chart, .ks-timeline,
+  .ks-split:not(.is-stacked)
+)) { height: calc(var(--ks-pane-min-size) * 2); }
+.ks-split.is-stacked > .ks-split-pane > .ks-split.is-stacked { height: auto; }
+.ks-split.is-stacked > .ks-split-handle { display: none; }
+.ks-split.is-stacked > .ks-split-pane:not(:last-child) { padding-bottom: var(--ks-space-2); }
+.ks-split.is-stacked > .ks-split-pane:not(:first-child) { border-top: var(--ks-line-width) solid var(--ks-color-border); padding-top: var(--ks-space-2); }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-chart { padding-inline: 0; padding-block-end: var(--ks-space-3); }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-map { padding-inline: 0; }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-properties { padding-inline: 0; padding-block: var(--ks-space-2) var(--ks-space-3); }
@@ -104,30 +120,38 @@
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-data-stack-item > .ks-data-text,
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-timeline-labels > div { padding-inline: 0; }
 .ks-data-tab-panel .ks-data-section-child > .ks-properties-container > .ks-properties { padding-block-start: var(--ks-space-1); }
-/* 탭과 첫 내용 사이 간격은 탭 줄이 소유한다. 패널의 첫 내용은 위 여백을 더하지 않는다. */
+/* 첫 내용 간격은 탭 줄이나 쌓인 칸이 소유한다. 내용은 위 여백을 더하지 않는다. */
 :is(
+  .ks-split.is-stacked > .ks-split-pane:not(:first-child),
   .ks-data-tab-panel,
   .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
   .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
 ) > .ks-data-section > .ks-data-section-header,
 :is(
+  .ks-split.is-stacked > .ks-split-pane:not(:first-child),
   .ks-data-tab-panel,
   .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
   .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
 ) > .ks-properties-container > .ks-properties,
 :is(
+  .ks-split.is-stacked > .ks-split-pane:not(:first-child),
   .ks-data-tab-panel,
   .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
   .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
 ) > :is(.ks-feed, .ks-markdown-view, .ks-metrics, .ks-chart, .ks-map, .ks-data-tree, .ks-keypad),
 :is(
+  .ks-split.is-stacked > .ks-split-pane:not(:first-child),
   .ks-data-tab-panel,
   .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
   .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
 ) > .ks-code-view .cm-content { padding-block-start: 0; }
 .ks-data-section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .ks-data-section-heading { display: flex; flex: 1 1 0; flex-wrap: wrap; min-width: 0; align-items: center; gap: var(--ks-space-2); row-gap: var(--ks-space-1); }

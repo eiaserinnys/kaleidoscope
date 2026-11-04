@@ -261,6 +261,34 @@ error_catalog! { ENTRIES;
         message: "{pointer}: repeat.grid.item_width는 grid.columns가 auto일 때만 쓸 수 있습니다. 고정 열 수를 유지하려면 item_width를 지우세요.",
         fix: "{pointer}/grid/item_width를 지우거나 {pointer}/grid/columns를 auto로 바꾸세요"
     }
+    APP_SPLIT_COLUMN_BELOW_DIRECTION_INVALID(pointer) {
+        class: InvalidAppDefinition,
+        place: "split 반응형 방향 검사",
+        cause: "column_below를 column 방향 split에 썼다",
+        message: "{pointer}: split.column_below는 direction이 row인 split에만 씁니다. 앱 정의의 direction을 row로 바꾸거나 column_below를 지우세요.",
+        fix: "앱 정의의 direction을 row로 바꾸거나 column_below를 지우세요"
+    }
+    APP_SPLIT_COLUMN_BELOW_ZERO(pointer) {
+        class: InvalidAppDefinition,
+        place: "split 반응형 폭 검사",
+        cause: "column_below에 0을 썼다",
+        message: "{pointer}: split.column_below는 0보다 커야 합니다. 앱 정의에서 양수로 바꾸세요.",
+        fix: "앱 정의의 column_below를 양수로 바꾸세요"
+    }
+    APP_SPLIT_COLUMN_BELOW_VERSION_REQUIRED(pointer, version) {
+        class: InvalidAppDefinition,
+        place: "split 반응형 방향 판 검사",
+        cause: "column_below를 쓰는 앱의 블록 세트 요구 판이 낮다",
+        message: "{pointer}: split.column_below에는 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 올리세요.",
+        fix: "앱 정의의 requires.blocks를 {version} 이상으로 올리세요"
+    }
+    APP_REPEAT_GAP_VERSION_REQUIRED(pointer, version) {
+        class: InvalidAppDefinition,
+        place: "repeat 간격 판 검사",
+        cause: "repeat.gap을 쓰는 앱의 블록 세트 요구 판이 낮다",
+        message: "{pointer}: repeat.gap에는 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 올리세요.",
+        fix: "앱 정의의 requires.blocks를 {version} 이상으로 올리세요"
+    }
     APP_DEFINITION_WHEN_CONDITION_MISSING() {
         class: InvalidAppDefinition,
         place: "앱 정의 when 조건 검사",

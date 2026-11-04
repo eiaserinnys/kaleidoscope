@@ -101,6 +101,40 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         }
     }
 
+    let mut layout_error = None;
+    data::walk_definition_blocks(&definition, &mut |pointer, block| {
+        if layout_error.is_some() {
+            return;
+        }
+        let version = crate::LAYOUT_FIELDS_BLOCK_SET_VERSION;
+        layout_error = match block {
+            Block::Split {
+                column_below: Some(width),
+                ..
+            } if *width == 0 => Some(crate::errors::APP_SPLIT_COLUMN_BELOW_ZERO(pointer)),
+            Block::Split {
+                direction,
+                column_below: Some(_),
+                ..
+            } if *direction != crate::SplitDirection::Row => Some(
+                crate::errors::APP_SPLIT_COLUMN_BELOW_DIRECTION_INVALID(pointer),
+            ),
+            Block::Split {
+                column_below: Some(_),
+                ..
+            } if definition.requires.blocks < version => Some(
+                crate::errors::APP_SPLIT_COLUMN_BELOW_VERSION_REQUIRED(pointer, version),
+            ),
+            Block::Repeat { gap: Some(_), .. } if definition.requires.blocks < version => Some(
+                crate::errors::APP_REPEAT_GAP_VERSION_REQUIRED(pointer, version),
+            ),
+            _ => None,
+        };
+    });
+    if let Some(error) = layout_error {
+        return Err(error);
+    }
+
     let mut fixed_grid_item_width = None;
     data::walk_definition_blocks(&definition, &mut |pointer, block| {
         if let Block::Repeat {

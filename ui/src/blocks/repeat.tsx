@@ -109,7 +109,8 @@ function RepeatReady({ block, context, pointer, entries, parent, follow, more }:
     probe.style.boxSizing = "border-box";
     probe.style.width = `var(--ks-repeat-grid-item-width-${itemWidth})`;
     probe.style.height = "0";
-    probe.style.marginInlineEnd = "var(--ks-space-3)";
+    const gapToken = { none: "0", small: "var(--ks-space-2)", medium: "var(--ks-space-3)", large: "var(--ks-space-5)" };
+    probe.style.marginInlineEnd = block.gap ? gapToken[block.gap] : "var(--ks-space-3)";
     element.append(probe);
     const resize = () => {
       if (!element.clientWidth) return;
@@ -121,7 +122,7 @@ function RepeatReady({ block, context, pointer, entries, parent, follow, more }:
       setColumns(Math.max(1, Math.floor((gridWidth + gap) / (pane + gap))));
     };
     resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => { observer.disconnect(); probe.remove(); };
-  }, [layout, block.grid?.columns, block.grid?.item_width]);
+  }, [layout, block.grid?.columns, block.grid?.item_width, block.gap]);
   const rowSize = layout === "grid" ? columns : 1;
   const itemKey = useCallback((index: number) => entries[index].key, [entries]);
   const { virtual } = useVirtualRows(Math.ceil(entries.length / rowSize), DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, horizontal, layout === "grid" ? undefined : itemKey, viewport);
@@ -148,14 +149,14 @@ function RepeatReady({ block, context, pointer, entries, parent, follow, more }:
   };
   const row = (entry: Entry) => <Row key={entry.key} item={entry.item} itemKey={entry.key} index={entry.index} parent={parent} template={block.template} context={context} pointer={pointer} />;
   const gridStyle = layout === "grid" ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined;
-  return <div ref={scroll} className={`ks-data-view ks-repeat is-${layout}`} onWheel={pause} onTouchMove={pause}
+  return <div ref={scroll} className={`ks-data-view ks-repeat is-${layout}${block.virtual ? " is-virtual" : ""}${block.gap ? ` gap-${block.gap}` : ""}`} onWheel={pause} onTouchMove={pause}
     onPointerDown={(event) => { if (event.target === event.currentTarget) { draggingScrollbar.current = true; pause(); } }}
     onPointerUp={() => { draggingScrollbar.current = false; }} onPointerCancel={() => { draggingScrollbar.current = false; }}
     onScroll={() => { if (draggingScrollbar.current) pause(); }}
     onKeyDown={(event) => { if (event.target === event.currentTarget && ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) pause(); }}>
     {block.virtual ? <div style={horizontal ? { width: virtual.getTotalSize(), height: "100%", position: "relative" } : { height: virtual.getTotalSize(), width: "100%", position: "relative" }}>
       {virtualRows.map((virtualRow) => <div key={virtualRow.key} data-index={virtualRow.index} ref={virtual.measureElement}
-        className={layout === "grid" ? "ks-repeat-grid-row" : undefined}
+        className={`ks-repeat-virtual-row${layout === "grid" ? " ks-repeat-grid-row" : ""}${virtualRow.index === Math.ceil(entries.length / rowSize) - 1 ? " is-last" : ""}`}
         style={{ position: "absolute", top: 0, left: 0, ...(horizontal ? { height: "100%", transform: `translateX(${virtualRow.start - (viewport?.margin ?? 0)}px)` } : { width: "100%", transform: `translateY(${virtualRow.start - (viewport?.margin ?? 0)}px)` }), ...gridStyle }}>
         {entries.slice(virtualRow.index * rowSize, (virtualRow.index + 1) * rowSize).map(row)}
       </div>)}

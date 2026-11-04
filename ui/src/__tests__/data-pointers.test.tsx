@@ -415,3 +415,34 @@ it("only rerenders the subscriber of the changed data pointer", async () => {
   expect(renders.a).toBeGreaterThan(before.a);
   expect(renders.b).toBe(before.b);
 });
+
+it("탭 화살표와 Home, End는 선택을 바꾸고 탭과 패널을 연결한다", async () => {
+  const definition: AppDefinition = { id: "keyboard-tabs", name: "탭", requires: { blocks: 15, modules: {} }, permissions: [], state: { selected: 0 },
+    ui: { type: "tabs", selected: { state: "selected" }, on_change: { set_state: "selected" }, tabs: [
+      { label: "첫 탭", child: { type: "text", value: "첫 내용" } },
+      { label: "둘째 탭", child: { type: "text", value: "둘째 내용" } },
+      { label: "끝 탭", child: { type: "text", value: "끝 내용" } },
+    ] } };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { selected: 0 };
+  const store = createShellStore(createFakeTransport(seed));
+  render(<AppWindowContent store={store} windowId="viewer-window" />);
+  const first = await screen.findByRole("tab", { name: "첫 탭" });
+  for (const tab of screen.getAllByRole("tab")) {
+    const panel = document.getElementById(tab.getAttribute("aria-controls")!);
+    expect(panel?.getAttribute("aria-labelledby")).toBe(tab.id);
+  }
+  first.focus();
+  await userEvent.keyboard("{ArrowRight}");
+  const second = screen.getByRole("tab", { name: "둘째 탭" });
+  await waitFor(() => expect(second.getAttribute("aria-selected")).toBe("true"));
+  const panel = screen.getByRole("tabpanel");
+  expect(second.getAttribute("aria-controls")).toBe(panel.id);
+  expect(panel.getAttribute("aria-labelledby")).toBe(second.id);
+  expect(panel.textContent).toContain("둘째 내용");
+  await userEvent.keyboard("{End}");
+  await waitFor(() => expect(screen.getByRole("tab", { name: "끝 탭" }).getAttribute("aria-selected")).toBe("true"));
+  await userEvent.keyboard("{Home}");
+  await waitFor(() => expect(first.getAttribute("aria-selected")).toBe("true"));
+  store.dispose();
+});

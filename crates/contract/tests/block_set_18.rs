@@ -1,4 +1,4 @@
-use kaleidoscope_contract::{app_definition_schema, validate::parse_app_definition, Supported, BLOCK_SET_VERSION, CONTRACT_VERSION};
+use kaleidoscope_contract::{app_definition_schema, validate::parse_app_definition, Supported, BLOCK_SET_VERSION, CONTRACT_VERSION, LAYOUT_FIELDS_BLOCK_SET_VERSION};
 use serde_json::{json, Value};
 
 fn definition(ui: Value, blocks: u64) -> Value {
@@ -61,7 +61,8 @@ fn current_contract_versions_include_realtime() {
     assert_eq!(CONTRACT_VERSION, 32);
     let supported = Supported::current();
     assert_eq!(supported.blocks, BLOCK_SET_VERSION);
-    assert_eq!(supported.blocks, kaleidoscope_contract::APP_ICON_BLOCK_SET_VERSION);
+    assert!(supported.blocks >= kaleidoscope_contract::APP_ICON_BLOCK_SET_VERSION);
+    assert!(supported.blocks >= LAYOUT_FIELDS_BLOCK_SET_VERSION);
     assert!(supported.blocks >= kaleidoscope_contract::realtime::REALTIME_BLOCK_SET_VERSION);
     assert_eq!(supported.modules.get("client"), Some(&kaleidoscope_contract::realtime::REALTIME_CLIENT_VERSION));
 }
@@ -73,4 +74,46 @@ fn block_set_18_remains_supported_by_current_contract() {
     assert_eq!(supported.blocks, BLOCK_SET_VERSION);
     assert!(supported.blocks >= 18);
     assert!(supported.modules.get("client").is_some_and(|version| *version >= 4));
+}
+
+#[test]
+fn responsive_split_and_repeat_gap_require_their_block_set() {
+    let split = json!({"type":"split", "direction":"row", "column_below":700, "children":[{"type":"text","value":"a"},{"type":"text","value":"b"}]});
+    let repeat = json!({"type":"repeat", "items":[], "key":"id", "gap":"large", "template":{"type":"text","value":"x"}});
+    for (ui, code) in [
+        (split.clone(), "APP_SPLIT_COLUMN_BELOW_VERSION_REQUIRED"),
+        (repeat.clone(), "APP_REPEAT_GAP_VERSION_REQUIRED"),
+    ] {
+        let error =
+            parse_app_definition(&definition(ui.clone(), LAYOUT_FIELDS_BLOCK_SET_VERSION as u64 - 1).to_string())
+                .unwrap_err();
+        assert_eq!(error.id.as_deref(), Some(code));
+        let parsed =
+            parse_app_definition(&definition(ui.clone(), LAYOUT_FIELDS_BLOCK_SET_VERSION as u64).to_string())
+                .unwrap();
+        let serialized = serde_json::to_value(parsed).unwrap();
+        for field in ["column_below", "gap"] {
+            if let Some(value) = ui.get(field) {
+                assert_eq!(&serialized["ui"][field], value);
+            }
+        }
+    }
+    let mut column = split.clone();
+    column["direction"] = json!("column");
+    assert_eq!(
+        parse_app_definition(&definition(column, LAYOUT_FIELDS_BLOCK_SET_VERSION as u64).to_string())
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("APP_SPLIT_COLUMN_BELOW_DIRECTION_INVALID")
+    );
+    let mut zero = split;
+    zero["column_below"] = json!(0);
+    assert_eq!(
+        parse_app_definition(&definition(zero, LAYOUT_FIELDS_BLOCK_SET_VERSION as u64).to_string())
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("APP_SPLIT_COLUMN_BELOW_ZERO")
+    );
 }
