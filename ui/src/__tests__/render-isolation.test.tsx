@@ -22,6 +22,7 @@ import * as shellErrors from "../contract/shell-errors";
 import { grantFor, makeTestSeed, makeTestSnapshot } from "./fixtures";
 import { AppWindowContent } from "../render/app-window-content";
 import { mockVirtualLayout } from "./virtual-layout";
+import { useDefaultMessageApp } from "../shell/message-target";
 
 const rowRenders = vi.hoisted(() => new Map<string, number>());
 const tileRenders = vi.hoisted(() => new Map<string, number>());
@@ -1731,4 +1732,22 @@ describe("표 칸 렌더 격리", () => {
     expect(cellSpy).toHaveBeenCalledTimes(1);
     cellSpy.mockRestore(); rowSpy.mockRestore(); store.dispose();
   });
+});
+
+it("기본 메시지 앱 구독은 창 상태 변경으로 다시 그리지 않는다", async () => {
+  const receiver = { ...definition, id: "receiver", name: "받는 앱", agent: {} } as unknown as AppDefinition;
+  const seed = makeTestSeed({ definitions: [definition, receiver] });
+  seed.snapshot.shared.windows[0].id = "window-a";
+  seed.snapshot.shared.preferences = { revision: 1, default_message_app_id: receiver.id, asked_message_app_ids: [] };
+  const transport = createFakeTransport(seed);
+  const store = createShellStore(transport);
+  await store.ready;
+  let renders = 0;
+  function Probe() { renders++; const app = useDefaultMessageApp(store); return <span>{app?.name}</span>; }
+  render(<Probe />);
+  expect(screen.getByText("받는 앱")).toBeTruthy();
+  const before = renders;
+  await act(async () => { await store.call({ op: "window.set_state", window_id: "window-a", state: { first: "변경", second: null, compound: null } }); });
+  expect(renders).toBe(before);
+  store.dispose();
 });

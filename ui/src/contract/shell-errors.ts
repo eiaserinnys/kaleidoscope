@@ -1,6 +1,11 @@
 // 생성물이다. `cargo test -p kaleidoscope-contract`가 오류 등록부에서 만든다. 손으로 고치지 않는다.
 import type { CoreError } from "./contract";
 
+export const SHELL_MESSAGE_SEND_SOURCE_MISSING = (): CoreError => ({ id: "SHELL_MESSAGE_SEND_SOURCE_MISSING", code: "not_found", message: `보내던 창이 닫혀 메시지를 보낼 수 없습니다. 문서를 다시 열어 보내세요.`, details: [] });
+export const SHELL_MESSAGE_SEND_NO_RECEIVER = (): CoreError => ({ id: "SHELL_MESSAGE_SEND_NO_RECEIVER", code: "not_found", message: `메시지를 받을 수 있는 앱이 없습니다. 수신 가능한 앱을 설치한 뒤 다시 보내세요.`, details: [] });
+export const SHELL_MESSAGE_SEND_NOT_CONFIGURED = (args: { app: string }): CoreError => ({ id: "SHELL_MESSAGE_SEND_NOT_CONFIGURED", code: "invalid_request", message: `${args.app}에 보낼 대화가 없습니다. 열린 앱에서 대화를 시작한 뒤 다시 보내세요.`, details: [] });
+export const SHELL_MESSAGE_SEND_NOT_READY = (args: { app: string; reason: string }): CoreError => ({ id: "SHELL_MESSAGE_SEND_NOT_READY", code: "invalid_request", message: `${args.app}에서 메시지를 받지 못했습니다. ${args.reason}`, details: [] });
+export const SHELL_MESSAGE_SEND_WINDOW_NOT_SHOWN = (args: { app: string }): CoreError => ({ id: "SHELL_MESSAGE_SEND_WINDOW_NOT_SHOWN", code: "unavailable", message: `${args.app} 창을 열었지만 화면에 나타나지 않아 보내지 못했습니다. 창이 보이면 다시 보내세요.`, details: [] });
 export const SHELL_MESSAGE_RECEIVER_START_TIMEOUT = (args: { app: string }): CoreError => ({ id: "SHELL_MESSAGE_RECEIVER_START_TIMEOUT", code: "unavailable", message: `${args.app}의 메시지 수신이 준비되지 않았습니다. 열린 앱의 상태를 확인한 뒤 다시 보내세요.`, details: [] });
 export const SHELL_MESSAGE_RECEIVER_CLOSED = (args: { app: string }): CoreError => ({ id: "SHELL_MESSAGE_RECEIVER_CLOSED", code: "not_found", message: `${args.app}의 받는 창이 종료되어 보내기를 끝내지 못했습니다. 창을 다시 열고 받은 내용을 확인하세요.`, details: [] });
 export const SHELL_MESSAGE_RECEIVE_REPLY_TIMEOUT = (args: { app: string }): CoreError => ({ id: "SHELL_MESSAGE_RECEIVE_REPLY_TIMEOUT", code: "unavailable", message: `${args.app}의 접수 응답을 받지 못했습니다. 중복해서 보내기 전에 받는 창을 확인하세요.`, details: [] });

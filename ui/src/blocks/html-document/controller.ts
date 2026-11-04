@@ -12,6 +12,8 @@ import type { AnchorStatus, FrameSelection, FrameToParent, ParentToFrame } from 
 import { emptyThread, readThread, writeThreadChange } from "./storage";
 import { THREE_COLUMN_MIN } from "./metrics";
 import * as shellErrors from "../../contract/shell-errors";
+import { useDefaultMessageApp } from "../../shell/message-target";
+import { sendToDefaultAgent } from "../../shell/send-message";
 import { anchorRevision, anchorRevisionFor, listRevisions, type Comment, type Thread, type ThreadChange } from "./thread";
 
 type HtmlBlock = Extract<Block, { type: "html_view" }> & { document: DocumentRef };
@@ -72,14 +74,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  const agentWindow = useShellSelector(store, (snapshot) => {
-    if (!snapshot) return null;
-    const workspace = snapshot.shared.desktops.find((desktop) => desktop.id === context.window.desktop_id)?.workspace_id;
-    return snapshot.shared.windows.filter((item) => {
-      if (snapshot.shared.desktops.find((desktop) => desktop.id === item.desktop_id)?.workspace_id !== workspace) return false;
-      return Boolean(snapshot.shared.app_versions.find((app) => app.app_id === item.app_id && app.version === item.app_version)?.definition.agent);
-    }).sort((left, right) => Number(right.desktop_id === context.window.desktop_id) - Number(left.desktop_id === context.window.desktop_id) || right.z - left.z)[0]?.id ?? null;
-  });
+  const messageApp = useDefaultMessageApp(store);
   const linkTarget = useShellSelector(store, (snapshot) => snapshot?.link.state === "connected"
     ? `${snapshot.link.mode}:${snapshot.link.server_url}`
     : null);
@@ -418,17 +413,17 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     return lines.join("\n");
   }, [active, comments, context.definition.name, edits, entry, latest, results, selection, text]);
   const sendAgent = useCallback(async () => {
-    if (!agentWindow || !active || !hasUnsentReview || sending) return;
+    if (!messageApp || !active || !hasUnsentReview || sending) return;
     const name = active.name;
     const sent = Object.fromEntries(reviewComments.map((comment) => [comment.id, reviewSignature(comment)]));
     setSending(true);
     try {
-      await store.call({ op: "conversation.send", window_id: agentWindow, request_id: crypto.randomUUID(), text: share(false), attachments: [] });
+      await sendToDefaultAgent({ store, fromWindowId: windowId, requestId: crypto.randomUUID(), text: share(false) });
       setSentReviews((previous) => ({ ...previous, [name]: { ...previous[name], ...sent } }));
       setFailure((previous) => previous?.source === "send" ? null : previous);
     }
     catch (reason) { setFailure({ value: toCoreError(reason), source: "send" }); }
     finally { setSending(false); }
-  }, [active, agentWindow, hasUnsentReview, reviewComments, sending, share, store]);
-  return { active, docs, latest, thread, comments, selection, results, source, error: failure?.value ?? null, errorSource: failure?.source, retryList, retryLoad: () => setStorageReadRetry((value) => value + 1), saveFailed: failure?.source === "save", loaded, saving: saving || savingRevision, locked, sending, sentReview, hasUnsentReview, reviewComments, mode, setMode, face, setFace, narrow, compact, activeComment, setActiveComment, openComment, propertyGroups, setPropertyGroups, frame, root, dirty, undo, redo, edits, pendingChange, setPendingChange, choose, confirmChange, keyAction, record, previewStyle, editStyle, editText, undoEdit, redoEdit, addComment, writeChange, saveRevision, send, share, sendAgent, agentWindow };
+  }, [active, messageApp, hasUnsentReview, reviewComments, sending, share, store, windowId]);
+  return { active, docs, latest, thread, comments, selection, results, source, error: failure?.value ?? null, errorSource: failure?.source, retryList, retryLoad: () => setStorageReadRetry((value) => value + 1), saveFailed: failure?.source === "save", loaded, saving: saving || savingRevision, locked, sending, sentReview, hasUnsentReview, reviewComments, mode, setMode, face, setFace, narrow, compact, activeComment, setActiveComment, openComment, propertyGroups, setPropertyGroups, frame, root, dirty, undo, redo, edits, pendingChange, setPendingChange, choose, confirmChange, keyAction, record, previewStyle, editStyle, editText, undoEdit, redoEdit, addComment, writeChange, saveRevision, send, share, sendAgent, messageApp };
 }

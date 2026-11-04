@@ -1,7 +1,7 @@
 import { memo, useCallback, useRef, useState, type MouseEvent } from "react";
 import { Check, Ellipsis, MessageSquare, RotateCcw } from "../../components/icons";
 import { Menu } from "../../components/menu";
-import { Button, EmptyState, IconButton, StatusText } from "../../components/primitives";
+import { Button, EmptyState, IconButton } from "../../components/primitives";
 import type { AnchorStatus } from "../html-bridge/frame-protocol";
 import type { useHtmlDocument } from "./controller";
 import { Compose, Group, Target } from "./parts";
@@ -69,6 +69,6 @@ export function CommentFace({ model }: { model: Model }) {
       {resolved.length ? <Group title="해결됨" count={resolved.length} open={resolvedOpen} onToggle={() => setResolvedOpen((value) => !value)}>{resolved.map(card)}</Group> : null}
       {!model.comments.length && !model.selection ? <div className="ks-html-rail-empty"><EmptyState icon={<MessageSquare size="empty" />} text="요소나 글을 고르세요" /></div> : null}
     </div>
-    {model.reviewComments.length ? <div className="ks-html-rail-foot"><Button disabled={!model.agentWindow || !model.hasUnsentReview || model.sending} onClick={() => void model.sendAgent()}>{model.sentReview ? <><Check size="inline" />보냈습니다</> : `에이전트에게 보내기 ${model.reviewComments.length}`}</Button>{!model.agentWindow ? <StatusText>대화 창이 없습니다</StatusText> : null}</div> : null}
+    {model.reviewComments.length ? <div className="ks-html-rail-foot"><Button title={model.messageApp ? `받는 앱: ${model.messageApp.name}` : undefined} disabled={!model.messageApp || !model.hasUnsentReview || model.sending} onClick={() => void model.sendAgent()}>{model.sentReview ? <><Check size="inline" />보냈습니다</> : `에이전트에게 보내기 ${model.reviewComments.length}`}</Button></div> : null}
   </>;
 }

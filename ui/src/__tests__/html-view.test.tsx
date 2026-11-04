@@ -184,11 +184,28 @@ it("최신 리비전을 따라간 창은 다시 열 때도 최신을 본다", as
   await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.selected_revision).toBeNull());
 });
 
+it("받을 앱이 없으면 보내기 단추가 비활성이다", async () => {
+  const seed = makeTestSeed({ definitions: [definition as AppDefinition] });
+  const base = createFakeTransport(seed);
+  const call = async (request: CoreRequest) => {
+    if (request.op === "storage.list") return { op: "storage.list", result: { items: [{ doc: "시안/r1.html" }, { doc: "시안/thread.json" }] } };
+    if (request.op === "storage.get" && request.doc === "시안/r1.html") return { op: "storage.get", result: { content: "<h1>시안</h1>", revision: "r1" } };
+    if (request.op === "storage.get") return { op: "storage.get", result: { content: JSON.stringify({ revisions: {}, comments: [{ id: "one", rev: 1, status: "needs_agent_review", anchor: testAnchor, comment: "고쳐 주세요", created_at: "now", resolved_rev: null, replies: [] }] }), revision: "r1" } };
+    return base.call(request as never);
+  };
+  render(<AppWindowContent store={createShellStore({ ...base, call: call as CoreTransport["call"] })} windowId="viewer-window" />);
+  await userEvent.click(await screen.findByRole("button", { name: "고르기" }));
+  const button = await screen.findByRole("button", { name: "에이전트에게 보내기 1" }) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  expect(screen.queryByText("대화 창이 없습니다")).toBeNull();
+});
+
 it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보낸다", async () => {
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, right: 300, bottom: 200, x: 0, y: 0, width: 300, height: 200, toJSON() {} });
   const agent = { id: "agent", name: "채팅", requires: { blocks: 1, modules: {} }, permissions: [], state: {}, agent: {}, ui: { type: "text", text: "" } } as unknown as AppDefinition;
   const seed = makeTestSeed({ definitions: [definition as AppDefinition, agent] });
+  seed.snapshot.shared.preferences = { revision: 1, default_message_app_id: agent.id, asked_message_app_ids: [] };
   seed.snapshot.shared.windows[1].id = "agent-window";
   seed.snapshot.shared.windows[1].z = 1;
   seed.snapshot.shared.windows.push({ ...seed.snapshot.shared.windows[1], id: "top-agent-window", z: 2 });
@@ -196,7 +213,7 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   seed.snapshot.shared.windows.push({ ...seed.snapshot.shared.windows[1], id: "other-desktop-agent", desktop_id: "other-desktop", z: 99 });
   const base = createFakeTransport(seed);
   const files = new Map<string, { content: string; revision: string }>([["시안/r1.html", { content: "<h1>제목</h1>", revision: "html1" }]]);
-  const sent: CoreRequest[] = []; let seq = 0; let failMetadata = false; let htmlWrites = 0;
+  const sent: CoreRequest[] = []; let seq = 0; let failMetadata = false; let htmlWrites = 0; let failSend = true;
   const call = async (request: CoreRequest) => {
     if (request.op === "storage.list") return { op: "storage.list", result: { bucket_id: "bucket", items: [...files].map(([doc, value]) => ({ doc, revision: value.revision, updated_at: "now", byte_size: value.content.length })) } };
     if (request.op === "storage.get" && request.doc) { const item = files.get(request.doc); if (!item) throw { code: "not_found", message: "없음", details: [] }; return { op: "storage.get", result: { kind: "md", content: item.content, revision: item.revision, exists: true } }; }
@@ -205,7 +222,7 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
       if (request.doc.endsWith("thread.json") && failMetadata) { failMetadata = false; throw { code: "io", message: "메타 저장 오류", details: [] }; }
       const current = files.get(request.doc); if ((request.expected_revision ?? null) !== (current?.revision ?? null)) throw { code: "conflict", message: "충돌", details: [] }; const revision = `rev${++seq}`; files.set(request.doc, { content: String(request.content), revision }); return { op: "storage.write", revision };
     }
-    if (request.op === "conversation.send") { sent.push(request); return { op: "conversation.send" }; }
+    if (request.op === "conversation.send") { if (failSend) { failSend = false; throw { id: "CONV_SEND_THREAD_NOT_FOUND", code: "not_found", message: "대화 없음", details: [] }; } sent.push(request); return { op: "conversation.send" }; }
     return base.call(request as never);
   };
   const transport: CoreTransport = { ...base, call: call as CoreTransport["call"] };
@@ -265,6 +282,10 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   const dialog = await screen.findByRole("dialog");
   await user.click(within(dialog).getByRole("button", { name: "취소" }));
   expect(screen.getByRole("button", { name: "리비전" }).textContent).toContain("v1");
+  expect(screen.getByRole("button", { name: "에이전트에게 보내기 1" }).getAttribute("title")).toBe("받는 앱: 채팅");
+  await user.click(screen.getByRole("button", { name: "에이전트에게 보내기 1" }));
+  expect((await screen.findByRole("alert")).textContent).toContain("SHELL_MESSAGE_SEND_NOT_CONFIGURED");
+  expect((screen.getByRole("button", { name: "에이전트에게 보내기 1" }) as HTMLButtonElement).disabled).toBe(false);
   await user.click(screen.getByRole("button", { name: "에이전트에게 보내기 1" }));
   await waitFor(() => expect(sent).toHaveLength(1));
   const request = sent[0]; if (request.op !== "conversation.send") throw new Error("전송 명령 누락");
