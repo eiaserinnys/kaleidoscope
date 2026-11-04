@@ -79,7 +79,7 @@ export interface TreeViewProps {
   endAction?: { label: string; leading?: ReactNode; onActivate: () => void };
   onExpandedChange: (id: string, expanded: boolean) => void;
   onActivate: (row: TreeRowModel, activation: TreeActivation) => void;
-  onContextMenu?: (row: TreeRowModel | null, target: HTMLElement, point: { x: number; y: number }, focus: TreeFocusController) => void;
+  onContextMenu?: (row: TreeRowModel | null, target: HTMLElement, point: { x: number; y: number }, focus: TreeFocusController, event?: MouseEvent<HTMLElement>) => void;
   onCommandKeyDown?: (row: TreeRowModel | null, event: KeyboardEvent<HTMLElement>, focus: TreeFocusController) => boolean;
   onDoubleClick?: (row: TreeRowModel, target: HTMLElement) => void;
   menuTargetId?: string | null;
@@ -227,7 +227,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     if (handlers.current.selection && !handlers.current.selection.includes(row.id)) selectionAnchor.current = row.id;
     event.preventDefault();
     event.stopPropagation();
-    handlers.current.onContextMenu(row.id === END_ACTION_ID ? null : row, event.currentTarget, { x: event.clientX, y: event.clientY }, focus);
+    handlers.current.onContextMenu(row.id === END_ACTION_ID ? null : row, event.currentTarget, { x: event.clientX, y: event.clientY }, focus, event);
   }, [focus]);
   const doubleClick = useCallback((row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => handlers.current.onDoubleClick?.(row, event.currentTarget), []);
 
@@ -417,7 +417,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
       const rowId = target.closest<HTMLElement>("[data-tree-row]")?.dataset.treeRow;
       const row = flat.find((candidate) => candidate.id === rowId);
       const rowData = row?.node.data as { directoryPath?: string } | undefined;
-      handlers.current.onContextMenu(row?.node.content === undefined || rowData?.directoryPath ? row ?? null : null, event.currentTarget, { x: event.clientX, y: event.clientY }, focus);
+      handlers.current.onContextMenu(row?.node.content === undefined || rowData?.directoryPath ? row ?? null : null, event.currentTarget, { x: event.clientX, y: event.clientY }, focus, event);
     }}
     onKeyDown={(event) => {
       if (event.target !== event.currentTarget) return;

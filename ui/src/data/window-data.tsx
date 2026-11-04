@@ -546,7 +546,7 @@ export function useOptionalWindowData(): WindowData | null {
   return useMemo(() => {
     if (!value || !scope) return value;
     const proxy = Object.create(value) as WindowData;
-    proxy.act = (pointer, event, item, modifiers) => value.act(pointer, event, item, modifiers, scope);
+    proxy.act = (pointer, event, item, modifiers, localScope) => value.act(pointer, event, item, modifiers, localScope ?? scope);
     return proxy;
   }, [value, scope]);
 }

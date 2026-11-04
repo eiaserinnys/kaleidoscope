@@ -274,7 +274,8 @@ pub const CONTRACT_VERSION: u32 = 29;
 ///   `process.file_uri`, stack 가운데 배치, notice, select와 toggle의 비활성 바인딩, 단독 동작 `copy_text`(아이콘이 있는
 ///   단추의 on_click에서 바인딩이 낸 글을 기기 클립보드에 쓴다).
 /// - 19판: 앱 정의의 `settings` 설정 트리와 `window_title` 창 제목 및 메타 바인딩, `dialog.on_confirm`과 `dialog.danger`.
-/// - 20판: 자동 열 격자 칸의 최소 폭을 고르는 `repeat.grid.item_width`.
+/// - 20판: 자동 열 격자 칸의 최소 폭을 고르는 `repeat.grid.item_width`,
+///   `list`, `table`, `tree`, `feed`의 `item_menu`.
 pub const BLOCK_SET_VERSION: u32 = 20;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
@@ -1462,6 +1463,10 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_select: Option<Actions>,
+        /// (20판) 데이터 항목의 메뉴. 동작 문맥은 `on_select`와 같다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        item_menu: Option<Vec<ItemMenuEntry>>,
     },
     /// (13판) 파일 폴더 또는 선언된 저장소 문서 모음을 읽고 항목을 고른다.
     /// PC 전체 권한은 탐색기만 받는다. `read_only`는 쓰기 UI를 보이지 않게 한다.
@@ -1725,6 +1730,9 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_select: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        item_menu: Option<Vec<ItemMenuEntry>>,
     },
     /// (4판) 표. `rows`는 객체 배열이고 각 행에 `key`(문자열)가 있다. 칸은 `columns`의 `field`로 행에서 읽는다.
     /// 열 머리를 누르면 오름차순, 내림차순, 처음 순서로 돈다(저장하지 않음, `sort`가 처음 모습). 머리는 위에
@@ -1741,6 +1749,9 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_select: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        item_menu: Option<Vec<ItemMenuEntry>>,
     },
     /// (4판) 속성 이름과 값의 목록(상세 보기). 값이 null이거나 빈 글이면 그 줄을 뺀다. 값을 고르고 복사할 수 있다.
     /// (19판) `layout: "rows"`는 좁은 폭에서도 이름과 값을 두 열로 둔다.
@@ -1787,6 +1798,9 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_select: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        item_menu: Option<Vec<ItemMenuEntry>>,
     },
     /// (4판) 글. 값이 문자열이 아니면 JSON으로 보인다. `format`이 `markdown`이면 마크다운으로 그린다(HTML은
     /// 그리지 않는다). 글을 고르고 복사할 수 있다. 넘치면 그 칸 안에서 스크롤한다.
@@ -2210,6 +2224,8 @@ enum RawBlock {
         selected: Option<StateRef>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_select: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        item_menu: Option<Vec<ItemMenuEntry>>,
     },
     Folder {
         root: FolderRoot,
@@ -2417,6 +2433,8 @@ enum RawBlock {
         selected: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_select: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        item_menu: Option<Vec<ItemMenuEntry>>,
     },
     /// (4판) 표. `rows`는 객체 배열이고 각 행에 `key`(문자열)가 있다. 칸은 `columns`의 `field`로 행에서 읽는다.
     /// 열 머리를 누르면 오름차순, 내림차순, 처음 순서로 돈다(저장하지 않음, `sort`가 처음 모습). 머리는 위에
@@ -2430,6 +2448,8 @@ enum RawBlock {
         selected: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_select: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        item_menu: Option<Vec<ItemMenuEntry>>,
     },
     /// (4판) 속성 이름과 값의 목록(상세 보기). 값이 null이거나 빈 글이면 그 줄을 뺀다. 값을 고르고 복사할 수 있다.
     /// (19판) `layout: "rows"`는 좁은 폭에서도 이름과 값을 두 열로 둔다.
@@ -2467,6 +2487,8 @@ enum RawBlock {
         selected: Option<StateRef>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_select: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        item_menu: Option<Vec<ItemMenuEntry>>,
     },
     /// (4판) 글. 값이 문자열이 아니면 JSON으로 보인다. `format`이 `markdown`이면 마크다운으로 그린다(HTML은
     /// 그리지 않는다). 글을 고르고 복사할 수 있다. 넘치면 그 칸 안에서 스크롤한다.
@@ -2893,6 +2915,7 @@ impl From<RawBlock> for Block {
                 by,
                 selected,
                 on_select,
+                item_menu,
             } => Block::Tree {
                 items,
                 root,
@@ -2900,6 +2923,7 @@ impl From<RawBlock> for Block {
                 by,
                 selected,
                 on_select,
+                item_menu,
             },
             RawBlock::Folder {
                 root,
@@ -3037,12 +3061,14 @@ impl From<RawBlock> for Block {
                 grouped,
                 selected,
                 on_select,
+                item_menu,
             } => Block::List {
                 items,
                 layout,
                 grouped,
                 selected,
                 on_select,
+                item_menu,
             },
             RawBlock::Table {
                 rows,
@@ -3050,12 +3076,14 @@ impl From<RawBlock> for Block {
                 sort,
                 selected,
                 on_select,
+                item_menu,
             } => Block::Table {
                 rows,
                 columns,
                 sort,
                 selected,
                 on_select,
+                item_menu,
             },
             RawBlock::Properties { fields, layout } => Block::Properties { fields, layout },
             RawBlock::Feed {
@@ -3068,6 +3096,7 @@ impl From<RawBlock> for Block {
                 collapsible,
                 selected,
                 on_select,
+                item_menu,
             } => Block::Feed {
                 entries,
                 grouped,
@@ -3078,6 +3107,7 @@ impl From<RawBlock> for Block {
                 collapsible,
                 selected,
                 on_select,
+                item_menu,
             },
             RawBlock::Text {
                 on_click,
@@ -3281,6 +3311,7 @@ impl From<RawBlock> for Block {
                 by: TreeBy::default(),
                 selected: Some(selected),
                 on_select: Some(Actions::One(on_select)),
+                item_menu: None,
             },
             RawBlock::MarkdownEditor { file, document } => Block::Markdown {
                 file,
@@ -3761,7 +3792,22 @@ pub enum ButtonVariant {
     Chip,
 }
 
-/// 단추를 누른 뒤 묻는 확인 대화상자. `ok`가 없으면 단추의 `label`을 쓴다.
+/// 항목 메뉴의 동작. `$event`는 블록의 `on_select`와 같은 항목 키(트리도 같은 값), `$item`은 항목이다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ItemMenuEntry {
+    pub label: String,
+    pub on_select: Actions,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub danger: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub confirm: Option<Confirm>,
+}
+
+/// 단추 또는 메뉴 항목을 누른 뒤 묻는 확인 대화상자. `ok`가 없으면 해당 `label`을 쓴다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]

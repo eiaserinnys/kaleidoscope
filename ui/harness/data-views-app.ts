@@ -1,7 +1,7 @@
 import type { AppDefinition } from "../src/contract/contract";
 
 const entries = Array.from({ length: 35 }, (_, index) => ({ key: String(index), name: "기록", body: `내용 ${index + 1}` }));
-const items = Array.from({ length: 1000 }, (_, index) => ({ key: String(index), title: `항목 ${index + 1}` }));
+const items = Array.from({ length: 1000 }, (_, index) => ({ key: String(index), title: `항목 ${index + 1}`, url: `https://example.com/${index + 1}` }));
 const grid = Array.from({ length: 24 }, (_, index) => ({ key: String(index), title: `그림 ${index + 1}`, image: { permission: "media", path: index % 2 ? "shapes.png" : "landscape.png" } }));
 const rows = Array.from({ length: 70 }, (_, index) => ({ key: String(index), name: `행 ${index + 1}`, status: "길게 표시되는 진행 상태 배지", a: index, b: index + 1, c: index + 2, d: index + 3, e: index + 4 }));
 const surfaceCards = Array.from({ length: 240 }, (_, index) => ({ key: String(index), surface: `sample-${index}`, title: `견본 ${index + 1}`, aspect: index === 0 ? 9 / 16 : 1.6 }));
@@ -9,11 +9,11 @@ const surfaceCards = Array.from({ length: 240 }, (_, index) => ({ key: String(in
 export const dataViewsApp: AppDefinition = {
   id: "data-views-test",
   name: "보기 시험",
-  requires: { blocks: 7, modules: { files: 1 } },
+  requires: { blocks: 20, modules: { files: 1 } },
   permissions: [{ id: "media", module: "files", access: "read", label: "그림" }],
-  state: { tab: 0, choice: null, feed: entries, cards_open: false },
+  state: { tab: 0, choice: null, feed: entries, cards_open: false, delete_rows: items.slice(0, 8) },
   ui: { type: "tabs", selected: { state: "tab" }, on_change: { set_state: "tab" }, tabs: [
-    { label: "긴 목록", child: { type: "list", items, selected: { state: "choice" }, on_select: { set_state: "choice" } } },
+    { label: "긴 목록", child: { type: "list", items, selected: { state: "choice" }, on_select: { set_state: "choice" }, item_menu: [{ label: "주소 복사", on_select: { copy_text: { item: "url" } } }, { label: "지우기", danger: true, confirm: { title: "지울까요?", body: { item: "title" }, ok: "지우기" }, on_select: { copy_text: { item: "url" } } }] } },
     { label: "격자 시험", child: { type: "list", layout: "grid", items: grid, selected: { state: "choice" }, on_select: { set_state: "choice" } } },
     { label: "표 시험", child: { type: "table", rows, columns: [
       { field: "name", label: "이름", width: "wide" },
@@ -56,5 +56,6 @@ export const dataViewsApp: AppDefinition = {
     { label: "채움 표면 시험", child: { type: "stack", direction: "column", fill: 0, children: [
       { type: "anchor", id: "stage", child: { type: "canvas", surface: "stage", aspect_ratio: 9 / 16 } }, { type: "text", value: "도구" },
     ] } },
+    { label: "지우기 시험", child: { type: "list", items: { state: "delete_rows" }, item_menu: [{ label: "지우기", danger: true, confirm: { title: "지울까요?", ok: "지우기" }, on_select: [{ set_state: "delete_rows", value: { expr: "[$state.delete_rows[key != $event]]" } }] }] } },
   ] },
 };

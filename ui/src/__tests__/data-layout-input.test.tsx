@@ -138,6 +138,15 @@ it("confirms before acting and escape cancels", async () => {
   await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "data.act", window_id: "editor-window", pointer: "/ui/children/4/on_click", event: null, modifiers: { shift: false, alt: false, ctrl: false, meta: false } }));
 });
 
+it("위험 단추의 확인 대화상자는 취소에 먼저 초점을 둔다", async () => {
+  const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 4, modules: {} }, state: { choice: null }, ui: { type: "button", label: "지우기", variant: "danger", on_click: { set_state: "choice" }, confirm: { title: "지울까요?" } } };
+  const seed = makeTestSeed({ definitions: [definition] });
+  const transport = createFakeTransport(seed);
+  render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
+  fireEvent.click(await screen.findByRole("button", { name: "지우기" }));
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "취소" }));
+});
+
 it("applies a data update only to the named window and pointer", async () => {
   const { transport } = setup();
   await screen.findByPlaceholderText("입력");

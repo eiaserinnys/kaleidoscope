@@ -1,4 +1,4 @@
-.ks-list-row:focus-visible, .ks-table-row:focus-visible, .ks-data-tree .ks-row:focus-visible, .ks-file-tree-list:focus-visible, .ks-file-tree-list .ks-row:focus-visible, .ks-feed-entry.is-selectable:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
+.ks-list-row:focus-visible, .ks-table-row:focus-visible, .ks-data-tree .ks-row:focus-visible, .ks-file-tree-list:focus-visible, .ks-file-tree-list .ks-row:focus-visible, .ks-feed-entry:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
 .ks-file-tree-list .ks-row[data-menu-target] { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); }
 .ks-file-tree-list .ks-file-tree-row.is-open-file { box-shadow: inset var(--ks-focus-width) 0 var(--ks-color-accent); }
 .ks-file-tree-list [data-drop-state="valid"], .ks-file-tree-list[data-drop-state="valid"] { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); }
