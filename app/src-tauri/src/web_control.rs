@@ -142,6 +142,34 @@ fn parse_key(input: &str) -> Option<KeySpec> {
 fn supports_action(action: &contract::WindowAction) -> bool {
     !matches!(action, contract::WindowAction::Point { .. })
 }
+fn current_target(
+    state: &WindowControlState,
+    number: u32,
+    old: &TargetEntry,
+) -> Option<TargetEntry> {
+    state
+        .targets
+        .get(&number)
+        .filter(|entry| entry.backend_node_id == old.backend_node_id && entry.role == old.role)
+        .cloned()
+}
+const VISIBLE_POINT_JS: &str = r#"function() {
+    const box = this.getBoundingClientRect();
+    let left = Math.max(0, box.left), top = Math.max(0, box.top);
+    let right = Math.min(window.innerWidth, box.right), bottom = Math.min(window.innerHeight, box.bottom);
+    for (let parent = this.parentElement; parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent), rect = parent.getBoundingClientRect();
+        if (/(auto|scroll|hidden|clip)/.test(style.overflowX)) { left = Math.max(left, rect.left); right = Math.min(right, rect.right); }
+        if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) { top = Math.max(top, rect.top); bottom = Math.min(bottom, rect.bottom); }
+    }
+    if (right - left <= 0.5 || bottom - top <= 0.5) return null;
+    for (const [fx, fy] of [[0.5,0.5],[0.2,0.2],[0.8,0.2],[0.2,0.8],[0.8,0.8]]) {
+        const x = left + (right-left)*fx, y = top + (bottom-top)*fy;
+        const hit = document.elementFromPoint(x,y);
+        if (hit === this || this.contains(hit)) return {x,y};
+    }
+    return null;
+}"#;
 // PURE_TEST_END
 
 #[cfg(feature = "e2e")]
@@ -317,7 +345,10 @@ fn read_view(
             let Ok(model) = call(view, "DOM.getBoxModel", json!({"backendNodeId":backend})) else {
                 continue;
             };
-            let Some((center_x, center_y)) = visible_bounds(&model, width, height) else {
+            if visible_bounds(&model, width, height).is_none() {
+                continue;
+            }
+            let Ok(Some((center_x, center_y))) = visible_point(view, id, backend) else {
                 continue;
             };
             let number = state.number(backend);
@@ -364,18 +395,26 @@ fn read_view(
             line
         } else if matches!(role, "StaticText" | "heading") && !name.is_empty() {
             if let Some(backend) = backend {
+                let parent_backend = nodes
+                    .iter()
+                    .find(|parent| parent["nodeId"] == node["parentId"])
+                    .and_then(|parent| parent["backendDOMNodeId"].as_i64());
                 let model = call(view, "DOM.getBoxModel", json!({"backendNodeId":backend}))
                     .or_else(|_| {
-                        let parent = nodes
-                            .iter()
-                            .find(|parent| parent["nodeId"] == node["parentId"])
-                            .and_then(|parent| parent["backendDOMNodeId"].as_i64())
-                            .ok_or_else(|| "parent".to_owned())?;
+                        let parent = parent_backend.ok_or_else(|| "parent".to_owned())?;
                         call(view, "DOM.getBoxModel", json!({"backendNodeId":parent}))
                             .map_err(|_| "parent".to_owned())
                     });
                 let Ok(model) = model else { continue };
                 if visible_bounds(&model, width, height).is_none() {
+                    continue;
+                }
+                let element = if role == "StaticText" {
+                    parent_backend.unwrap_or(backend)
+                } else {
+                    backend
+                };
+                if !matches!(visible_point(view, id, element), Ok(Some(_))) {
                     continue;
                 }
             }
@@ -461,6 +500,11 @@ fn function(
         return Err(input_error(id, "script"));
     }
     Ok(result["result"]["value"].clone())
+}
+fn visible_point(view: &Webview, id: &str, backend: i64) -> Result<Option<(f64, f64)>, CoreError> {
+    let object = resolve(view, id, backend)?;
+    let result = function(view, id, &object, VISIBLE_POINT_JS, vec![])?;
+    Ok(result["x"].as_f64().zip(result["y"].as_f64()))
 }
 fn dispatch(
     view: &Webview,
@@ -703,6 +747,29 @@ pub(crate) fn control(
                     false,
                 );
             }
+            let entry = match (number, entry) {
+                (Some(number), Some(old)) => match current_target(state, number, &old) {
+                    Some(current) => Some(current),
+                    None => {
+                        let label = number.to_string();
+                        if state.targets.contains_key(&number)
+                            || call(
+                                view,
+                                "DOM.getBoxModel",
+                                json!({"backendNodeId":old.backend_node_id}),
+                            )
+                            .is_err()
+                        {
+                            return error(
+                                errors::SHELL_WINDOW_CONTROL_REFERENCE_STALE(&label),
+                                false,
+                            );
+                        }
+                        return error(errors::SHELL_WINDOW_CONTROL_TARGET_HIDDEN(&label), false);
+                    }
+                },
+                _ => None,
+            };
             let center = if let Some(entry) = &entry {
                 let n = number.unwrap().to_string();
                 let model = match call(
@@ -724,18 +791,25 @@ pub(crate) fn control(
                     Err(e) => return error(ax_error(id, e), false),
                 };
                 let dimensions = &viewport["result"]["value"];
-                let point = visible_bounds(
+                if visible_bounds(
                     &model,
                     dimensions["width"].as_f64().unwrap_or(0.0),
                     dimensions["height"].as_f64().unwrap_or(0.0),
-                );
-                if point.is_none() {
+                )
+                .is_none()
+                {
                     return error(errors::SHELL_WINDOW_CONTROL_TARGET_HIDDEN(&n), false);
                 }
                 if entry.disabled {
                     return error(errors::SHELL_WINDOW_CONTROL_TARGET_DISABLED(&n), false);
                 }
-                point
+                match visible_point(view, id, entry.backend_node_id) {
+                    Ok(Some(point)) => Some(point),
+                    Ok(None) => {
+                        return error(errors::SHELL_WINDOW_CONTROL_TARGET_HIDDEN(&n), false)
+                    }
+                    Err(e) => return error(e, false),
+                }
             } else {
                 None
             };
@@ -806,5 +880,27 @@ mod product_tests {
             target: None,
             key: "Enter".into()
         }));
+    }
+
+    #[test]
+    fn action_uses_current_readonly_and_disabled_state_for_same_node() {
+        let old = TargetEntry {
+            backend_node_id: 42,
+            role: "textbox".into(),
+            ..Default::default()
+        };
+        let mut state = WindowControlState::default();
+        state.targets.insert(
+            1,
+            TargetEntry {
+                readonly: true,
+                disabled: true,
+                ..old.clone()
+            },
+        );
+        let current = current_target(&state, 1, &old).unwrap();
+        assert!(current.readonly && current.disabled);
+        state.targets.get_mut(&1).unwrap().backend_node_id = 43;
+        assert!(current_target(&state, 1, &old).is_none());
     }
 }

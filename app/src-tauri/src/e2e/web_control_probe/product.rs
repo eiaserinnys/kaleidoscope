@@ -7,7 +7,7 @@ use kaleidoscope_core::WebHost;
 
 fn observe(view: &Webview) -> Result<Value, String> {
     let result = cdp(view, ProbeCall::Evaluate(
-        "({clicks:document.querySelector('#clicks').textContent, input:document.querySelector('#input').value, keys:document.querySelector('#keys').textContent, choice:document.querySelector('#choice').value, scroll:document.querySelector('#scroll').scrollTop})".into(),
+        "({clicks:document.querySelector('#clicks').textContent, partials:document.querySelector('#partials').textContent, input:document.querySelector('#input').value, keys:document.querySelector('#keys').textContent, choice:document.querySelector('#choice').value, scroll:document.querySelector('#scroll').scrollTop})".into(),
     ))?;
     Ok(result["result"]["value"].clone())
 }
@@ -86,6 +86,35 @@ fn act(
     )
 }
 
+fn expect_rejection(
+    host: &crate::web_host::TauriWebHost,
+    id: &str,
+    observation: &WindowObservation,
+    action: WindowAction,
+    expected: &str,
+    probe: &mut FocusProbe<'_>,
+    foreground: bool,
+) -> Result<(), String> {
+    let operation = WindowControlOperation::Act {
+        view_id: observation.view_id.clone(),
+        action,
+        image: false,
+    };
+    let (result, focus) = with_focus(probe, foreground, || {
+        host.control(id, &operation).map_err(|e| e.message)
+    });
+    if !foreground && focus["status"] != "된다" {
+        return Err(format!("거절 동작이 포커스를 바꿈: {focus}"));
+    }
+    match result? {
+        WindowControlResult::Error {
+            error,
+            applied: false,
+        } if error.id.as_deref() == Some(expected) => Ok(()),
+        other => Err(format!("예상한 거절 {expected} 대신 {other:?}")),
+    }
+}
+
 pub(super) fn phase(
     host: &crate::web_host::TauriWebHost,
     view: &Webview,
@@ -108,9 +137,88 @@ pub(super) fn phase(
             probe,
             foreground,
         )?;
+        let image_observation = observation.clone();
+        if observation.text.contains("Clipped button")
+            || observation.text.contains("Covered button")
+        {
+            return Err("가려지거나 잘린 요소에 조작 번호가 붙음".into());
+        }
+        let input = target(&observation, "textbox", "Probe input")?;
+        cdp(
+            view,
+            ProbeCall::Evaluate("document.querySelector('#input').readOnly = true".into()),
+        )?;
+        expect_rejection(
+            host,
+            id,
+            &observation,
+            WindowAction::Type {
+                target: input,
+                text: "wrong".into(),
+                mode: TextMode::Replace,
+            },
+            "SHELL_WINDOW_CONTROL_TARGET_READONLY",
+            probe,
+            foreground,
+        )?;
+        if observe(view)?["input"] != before["input"] {
+            return Err("읽기 전용 입력의 값이 바뀜".into());
+        }
+        cdp(
+            view,
+            ProbeCall::Evaluate("document.querySelector('#input').readOnly = false".into()),
+        )?;
+        observation = request(
+            host,
+            id,
+            WindowControlOperation::Read { image: false },
+            probe,
+            foreground,
+        )?;
+        let disabled = target(&observation, "button", "Probe button")?;
+        cdp(
+            view,
+            ProbeCall::Evaluate("document.querySelector('#button').disabled = true".into()),
+        )?;
+        expect_rejection(
+            host,
+            id,
+            &observation,
+            WindowAction::Click {
+                target: disabled,
+                gesture: None,
+            },
+            "SHELL_WINDOW_CONTROL_TARGET_DISABLED",
+            probe,
+            foreground,
+        )?;
+        cdp(
+            view,
+            ProbeCall::Evaluate("document.querySelector('#button').disabled = false".into()),
+        )?;
+        observation = request(
+            host,
+            id,
+            WindowControlOperation::Read { image: false },
+            probe,
+            foreground,
+        )?;
+        let partial = target(&observation, "button", "Partial button")?;
+        observation = act(
+            host,
+            id,
+            &observation,
+            WindowAction::Click {
+                target: partial,
+                gesture: None,
+            },
+            false,
+            probe,
+            foreground,
+        )?;
         let png = STANDARD
             .decode(
-                observation
+                image_observation
                     .image_base64
                     .as_deref()
                     .ok_or("제품 읽기 PNG 없음")?,
@@ -124,7 +232,10 @@ pub(super) fn phase(
         if !decoded.pixels().any(|pixel| pixel != first) {
             return Err("제품 읽기 그림이 단색임".into());
         }
-        let geometry = observation.geometry.as_ref().ok_or("제품 읽기 크기 없음")?;
+        let geometry = image_observation
+            .geometry
+            .as_ref()
+            .ok_or("제품 읽기 크기 없음")?;
         if width != geometry.pixel_width
             || height != geometry.pixel_height
             || width.max(height) > 1600
@@ -240,6 +351,7 @@ pub(super) fn phase(
                 .ok_or_else(|| format!("카운터 오류: {field}"))
         };
         if count(&after, "clicks")? != count(&before, "clicks")? + 1
+            || count(&after, "partials")? != count(&before, "partials")? + 1
             || after["input"] != "replace+append"
             || after["choice"] != "two"
             || count(&after, "keys")? != count(&before, "keys")? + 1

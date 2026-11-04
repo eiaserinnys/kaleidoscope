@@ -56,6 +56,8 @@ jobs:
       - name: 웹 화면 DevTools 실측 데이터 초기화
         shell: pwsh
         run: ./app/e2e-windows/reset-app-data.ps1
+      - name: 웹 화면 가시 조작점 시험
+        run: node --test --test-timeout=60000 app/src-tauri/src/e2e/web_control_probe/visible-point.test.cjs
       - name: 웹 화면 DevTools 실측
         shell: pwsh
         run: |

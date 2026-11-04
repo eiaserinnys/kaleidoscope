@@ -9,9 +9,15 @@
 <p id="clicks">click-count 0</p>
 <p id="inputs">input-count 0</p>
 <p id="keys">enter-count 0</p>
+<p id="partials">partial-count 0</p>
+<div style="height: 14px; overflow: hidden"><button id="partial">Partial button</button></div>
+<div style="height: 14px; overflow: hidden"><button style="margin-top: 60px">Clipped button</button></div>
+<div style="position: relative; width: 140px"><button>Covered button</button><div style="position: absolute; inset: 0; background: white"></div></div>
 <div id="scroll" style="height: 80px; overflow: auto"><button id="scroll-target">Scroll target</button><div style="height: 500px"></div></div>
 <script>
 let clicks = 0, inputs = 0, keys = 0;
+let partials = 0;
+document.querySelector('#partial').addEventListener('click', () => { document.querySelector('#partials').textContent = `partial-count ${++partials}`; });
 document.querySelector('#button').addEventListener('click', () => { document.querySelector('#clicks').textContent = `click-count ${++clicks}`; });
 document.querySelector('#input').addEventListener('input', () => { document.querySelector('#inputs').textContent = `input-count ${++inputs}`; });
 document.addEventListener('keydown', event => { if (event.key === 'Enter') document.querySelector('#keys').textContent = `enter-count ${++keys}`; });
