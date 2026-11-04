@@ -685,6 +685,9 @@ impl Core {
             CoreRequest::AppImport { definition_json } => {
                 link::import_app(&self.inner, definition_json)
             }
+            CoreRequest::AppIcon { app_id, app_version } => Ok(CoreReply::AppIcon {
+                media: media::app_icon(&self.inner, &app_id, app_version)?,
+            }),
             request @ (CoreRequest::ConversationGet { .. }
             | CoreRequest::ConversationHistory { .. }
             | CoreRequest::ConversationCreate { .. }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { IconButton, Maximize2, Minus, Minimize2, ScreenShare, Settings, X, forgetNumbered, openContextMenu, useShareView, windowActionActive, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
+import { AppIcon, IconButton, Maximize2, Minus, Minimize2, ScreenShare, Settings, X, forgetNumbered, openContextMenu, useShareView, windowActionActive, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
 import { ProcessConsent } from "./process-consent";
 import { windowMenuEntries } from "./window-menu";
@@ -200,6 +200,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
           }}
           ref={titleRef}
         >
+          <AppIcon store={store} appId={appWindow.app_id} appVersion={appWindow.app_version} size="chrome" />
           <div className="ks-window-title-group">
             <span className="ks-window-title" title={windowHeader?.title ?? appName}>{windowHeader?.title ?? appName}</span>
             {windowHeader?.meta ? <span className="ks-window-title-meta" title={windowHeader.meta}>{windowHeader.meta}</span> : null}

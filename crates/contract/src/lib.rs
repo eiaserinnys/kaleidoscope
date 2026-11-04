@@ -245,7 +245,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 34;
+pub const CONTRACT_VERSION: u32 = 35;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -4220,6 +4220,10 @@ pub enum CoreRequest {
     #[serde(rename = "app.import")]
     AppImport { definition_json: String },
 
+    /// 설치된 앱의 지정한 판이 선언한 아이콘을 읽는다. 창을 만들지 않는다.
+    #[serde(rename = "app.icon")]
+    AppIcon { app_id: String, app_version: u32 },
+
     /// 오케스트레이터 연결을 시작한다. 서버에 연결 코드를 받아 `pairing`으로 가고, 응답에 코드를 준다.
     /// server_url을 생략하거나 비우면 호스트의 기본 원격 주소를 쓴다. 보관한 연결이 있으면 재사용한다.
     /// 서버에 닿지 않으면 `server`.
@@ -5287,6 +5291,9 @@ pub enum CoreReply {
 
     #[serde(rename = "app.import")]
     AppImport { app: App, version: AppVersion },
+
+    #[serde(rename = "app.icon")]
+    AppIcon { media: Option<data::MediaData> },
 
     #[serde(rename = "link.start")]
     LinkStart {

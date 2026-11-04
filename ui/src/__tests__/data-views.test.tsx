@@ -15,15 +15,24 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
-function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4) {
+function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4, media?: Record<string, string>) {
   const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks, modules: {} }, permissions: [], state, ui };
   const seed = makeTestSeed({ definitions: [definition] });
   seed.snapshot.shared.windows[0].state = { ...state };
-  const transport = createFakeTransport(seed);
+  const transport = createFakeTransport({ ...seed, media });
   const calls = vi.spyOn(transport, "call");
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   return { calls, transport };
 }
+it.each(["rows", "grid", "icons"] as const)("%s의 SVG는 아이콘 배치에서만 테마색으로 칠한다", async (layout) => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 32, 32));
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"><path d="M0 0h24"/></svg>';
+  setup({ type: "list", layout, items: [{ key: "a", title: "단색 앱", image: { asset: "logo" } }] }, {}, 30,
+    { logo: `data:image/svg+xml;base64,${btoa(svg)}` });
+  const row = await screen.findByRole("option", { name: "단색 앱" });
+  await waitFor(() => expect(row.querySelector(layout === "icons" ? "span.ks-app-icon" : "img")).not.toBeNull());
+  if (layout === "icons") expect((row.querySelector(".ks-app-icon") as HTMLElement).style.mask).toContain("data:image/svg+xml");
+});
 it.each(["list", "grid"] as const)("%s 목록은 배지와 날짜의 순서를 유지한다", async (layout) => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   setup({ type: "list", ...(layout === "grid" ? { layout } : {}), items: [{ key: "a", title: "항목", meta: "날짜", badges: [{ text: "표식" }] }] });

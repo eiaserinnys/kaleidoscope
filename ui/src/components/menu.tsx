@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ownerOf } from "../share/overlay-owner";
 import { useAnchoredOverlay } from "./anchored-overlay";
@@ -14,6 +14,7 @@ export interface MenuItem {
   checked?: boolean;
   description?: string;
   shortcut?: string;
+  leading?: ReactNode;
 }
 
 export interface MenuHeading {
@@ -137,6 +138,7 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
           aria-keyshortcuts={item.shortcut?.replace(/\bCtrl\b/g, "Control")}
           type="button"
         >
+          {item.leading ? <span className="ks-menu-item-leading">{item.leading}</span> : null}
           <span className="ks-menu-item-copy"><span className="ks-menu-item-label">{item.label}</span>{item.description ? <span className="ks-menu-item-description">{item.description}</span> : null}</span>
           {item.checked ? <span aria-hidden="true" className="ks-menu-check">✓</span> : item.shortcut ? <span aria-hidden="true" className="ks-menu-shortcut">{item.shortcut}</span> : null}
         </button>

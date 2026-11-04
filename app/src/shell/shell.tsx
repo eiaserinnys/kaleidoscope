@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   Button,
+  AppIcon,
   ContextMenuHost,
   SHELL_DESKTOP_DELETE_UNSAVED,
   SHELL_WINDOW_CLOSE_UNSAVED,
@@ -168,6 +169,7 @@ export function Shell({ store }: { store: ShellStore }) {
     const appEntries = (apps: typeof builtinApps) => apps.map((app) => ({
         id: `app-${app.id}`,
         label: app.name,
+        leading: <AppIcon store={store} appId={app.id} appVersion={app.current_version} size="control" />,
         onSelect: () => {
           const latest = store.getSnapshot();
           if (!latest) return;

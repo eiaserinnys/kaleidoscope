@@ -45,11 +45,11 @@ test("아이콘 목록과 탐색기가 같은 칸을 쓰고 방향키와 메뉴�
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?preview=data-views-test");
   const app = page.getByTestId("app-window-data-views-test");
-  await app.getByRole("tab", { name: "아이콘 시험" }).click();
+  await selectTab(app, "아이콘 시험");
   const list = app.getByRole("listbox", { name: "목록" });
   const first = list.getByRole("option", { name: "계산기 플러스" });
   await expect(first).toBeVisible();
-  await expect(first.locator("img")).toBeVisible();
+  await expect(first.locator("span.ks-app-icon")).toHaveCSS("mask-image", /data:image\/svg/);
   const metrics: Record<string, unknown> = {};
   for (const [width, expected] of [[360, 3], [1000, 9]] as const) {
     await list.evaluate((element, value) => { element.style.width = `${value}px`; }, width);
@@ -77,10 +77,10 @@ test("아이콘 목록과 탐색기가 같은 칸을 쓰고 방향키와 메뉴�
     await capture(page, `icons-viewport-${width}`);
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  await app.getByRole("tab", { name: "빈 아이콘" }).click();
+  await selectTab(app, "빈 아이콘");
   await expect(app.getByText("없음", { exact: true })).toBeVisible();
   await capture(page, "icons-empty");
-  await app.getByRole("tab", { name: "탐색기 확인" }).click();
+  await selectTab(app, "탐색기 확인");
   await app.getByRole("button", { name: "그림 고르기" }).click();
   await app.getByRole("button", { name: "아이콘 보기" }).click();
   const explorer = app.getByRole("listbox", { name: "폴더 내용" });

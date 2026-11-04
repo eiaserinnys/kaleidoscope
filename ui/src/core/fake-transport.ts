@@ -355,6 +355,18 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       case "data.act":
         await data.act(request.window_id, request.pointer, request.event ?? null, request.item);
         return { op: "data.act", sequence };
+      case "app.icon": {
+        const definition = snapshot.shared.app_versions.find((item) => item.app_id === request.app_id && item.version === request.app_version)?.definition;
+        if (!definition) return fail("not_found", "앱 정의를 찾을 수 없습니다");
+        if (!definition.icon) return { op: "app.icon", media: null };
+        const url = seed.media?.[definition.icon.asset];
+        if (!url) return fail("not_found", "아이콘을 찾을 수 없습니다");
+        const response = await fetch(url);
+        if (!response.ok) return fail("not_found", "아이콘을 찾을 수 없습니다");
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const encoded = btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+        return { op: "app.icon", media: { mime: response.headers.get("content-type")?.split(";")[0] || "image/png", data_base64: encoded, width: null, height: null } };
+      }
       case "data.media": {
         const url = seed.media?.[("asset" in request.media ? request.media.asset : request.media.path)];
         if (!url) return fail("not_found", "미디어를 찾을 수 없습니다");

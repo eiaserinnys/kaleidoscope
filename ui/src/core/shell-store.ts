@@ -9,6 +9,7 @@ import { trackWindowAction, windowActionActive } from "../share/action-context";
 
 export interface ShellStore {
   call: CoreTransport["call"];
+  iconCache: Map<string, Promise<{ url: string; mask: boolean } | null>>;
   getSnapshot(): ShellSnapshot | null;
   getError(): CoreError | null;
   reached(sequence: number): Promise<void> | null;
@@ -31,11 +32,17 @@ export function createShellStore(transport: CoreTransport): ShellStore {
   };
   const listeners = new Set<() => void>();
   const eventListeners = new Set<(event: CoreEvent) => void>();
+  const iconCache: ShellStore["iconCache"] = new Map();
   const notify = () => {
     for (const listener of listeners) listener();
   };
   const unsubscribe = transport.subscribe((event: CoreEvent) => {
     if (event.event === "state.changed") {
+      const previousLink = snapshot?.link;
+      const nextLink = event.snapshot.link;
+      const previousServer = previousLink && "server_url" in previousLink ? previousLink.server_url : "";
+      const nextServer = "server_url" in nextLink ? nextLink.server_url : "";
+      if (previousServer !== nextServer || (nextLink.state === "unlinked" && previousLink?.state !== "unlinked")) iconCache.clear();
       snapshot = shareShellSnapshot(snapshot, event.snapshot);
       error = null;
       notify();
@@ -60,6 +67,7 @@ export function createShellStore(transport: CoreTransport): ShellStore {
   });
 
   return {
+    iconCache,
     nativeFiles: transport.nativeFiles,
     bytes: transport.bytes?.bind(transport),
     call: ((request: Parameters<CoreTransport["call"]>[0]) => {

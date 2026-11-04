@@ -232,6 +232,10 @@
   flex-direction: column;
 }
 
+.ks-menu-item-leading { display: flex; flex: 0 0 auto; }
+.ks-menu-item-leading + .ks-menu-item-copy { flex: 1 1 auto; }
+.ks-app-icon { flex-shrink: 0; }
+
 .ks-menu-item:hover:not(:disabled),
 .ks-menu-item:focus-visible:not(:disabled) {
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
