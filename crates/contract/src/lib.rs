@@ -294,7 +294,10 @@ pub const CONTRACT_VERSION: u32 = 35;
 /// - 32판: 단추 강조 바인딩과 움직이는 그림 아이콘.
 /// - 33판: 입력 선택지와 선택지 설명.
 /// - 34판: timeline 날짜 눈금과 줄 배치.
-pub const BLOCK_SET_VERSION: u32 = TIMELINE_DATES_BLOCK_SET_VERSION;
+/// - 35판: 날짜와 시간 입력.
+pub const BLOCK_SET_VERSION: u32 = INPUT_DATE_TIME_BLOCK_SET_VERSION;
+/// 날짜와 시간 입력의 첫 블록 세트 판.
+pub const INPUT_DATE_TIME_BLOCK_SET_VERSION: u32 = 35;
 /// 메시지 수신 능력을 처음 지원하는 블록 세트와 client 모듈 판.
 pub const RECEIVE_MESSAGE_BLOCK_SET_VERSION: u32 = 29;
 pub const RECEIVE_MESSAGE_CLIENT_VERSION: u32 = 6;
@@ -3980,6 +3983,8 @@ pub enum InputKind {
     Text,
     Search,
     Number,
+    Date,
+    Time,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]

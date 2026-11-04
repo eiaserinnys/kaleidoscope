@@ -89,15 +89,21 @@ export interface IconButtonProps {
   "aria-disabled"?: boolean;
   "aria-busy"?: boolean;
   "data-ks-user-consent"?: boolean;
+  "aria-haspopup"?: "dialog" | "listbox";
+  "aria-expanded"?: boolean;
+  "aria-controls"?: string;
 }
 
-export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className, tooltip, tooltipEnabled, variant, tabIndex, onPointerDown, onPointerUp, onPointerCancel, onLostPointerCapture, onBlur, "aria-disabled": ariaDisabled, "aria-busy": ariaBusy, "data-ks-user-consent": userConsent }: IconButtonProps) {
+export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className, tooltip, tooltipEnabled, variant, tabIndex, onPointerDown, onPointerUp, onPointerCancel, onLostPointerCapture, onBlur, "aria-disabled": ariaDisabled, "aria-busy": ariaBusy, "data-ks-user-consent": userConsent, "aria-haspopup": hasPopup, "aria-expanded": expanded, "aria-controls": controls }: IconButtonProps) {
   const button = (
     <button
       aria-label={label}
       aria-pressed={pressed}
       aria-disabled={ariaDisabled}
       aria-busy={ariaBusy}
+      aria-haspopup={hasPopup}
+      aria-expanded={expanded}
+      aria-controls={controls}
       data-ks-user-consent={userConsent || undefined}
       className={`ks-icon-button${tone === "share" ? " ks-icon-button-share" : ""}${variant === "embedded" ? " is-embedded" : ""}${className ? ` ${className}` : ""}`}
       disabled={disabled}

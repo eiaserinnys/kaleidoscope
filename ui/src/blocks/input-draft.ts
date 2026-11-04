@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import type { Block } from "../contract/contract";
+import type { JsonValue } from "../contract/serde_json/JsonValue";
 import type { useWindowData } from "../data/window-data";
 import { registerPendingFlush } from "../share/pending-flush";
+import type { Parsed } from "./input-date-time";
 
 
 export function decimalDigits(digits: number): number { return Math.max(0, Math.min(20, Math.trunc(digits))); }
@@ -14,14 +16,15 @@ export function inputDraft(value: unknown, kind: string | undefined, format: Ext
 
 type Input = Extract<Block, { type: "input" }>;
 type Ref<T> = RefObject<T>;
-export function useInputDraft({ block, pointer, data, readOnly, initialDraft, change, finish, send, prepare, timer, timerValue, unregisterFlush, inputElement, textarea, edited, spinPending, afterSpin, composing, optionsOnly, optionValues }: {
+export function useInputDraft({ block, pointer, data, readOnly, initialDraft, toEventValue, change, finish, send, prepare, timer, timerValue, unregisterFlush, inputElement, textarea, edited, spinPending, afterSpin, composing, optionsOnly, optionValues, codec }: {
   block: Input; pointer: string; data: ReturnType<typeof useWindowData>; readOnly: boolean; initialDraft: string;
-  change: (value: string) => void; finish: (sync?: boolean) => void;
+  toEventValue: (value: string) => JsonValue; change: (value: string) => void; finish: (sync?: boolean) => void;
   send: (value: string, coalesce?: boolean) => Promise<void>; prepare: Ref<() => void>;
   timer: Ref<ReturnType<typeof setTimeout> | null>; timerValue: Ref<string>; unregisterFlush: Ref<(() => void) | null>;
   inputElement: Ref<HTMLInputElement | null>; textarea: Ref<HTMLTextAreaElement | null>; edited: Ref<boolean>; spinPending: Ref<boolean>; afterSpin: Ref<() => void>;
   composing: Ref<boolean>;
   optionsOnly: boolean; optionValues: string[] | null;
+  codec?: { parse: (value: string) => Parsed; format: (value: string | null) => string };
 }) {
   const accepted = useRef(initialDraft);
   const pendingAccepted = useRef<{ value: string } | null>(null);
@@ -37,12 +40,34 @@ export function useInputDraft({ block, pointer, data, readOnly, initialDraft, ch
     const wasSpin = spinPending.current;
     edited.current = false;
     spinPending.current = false;
-    const sent = send(value, false);
+    const normalized = codec ? toEventValue(value) : null;
+    if (codec) {
+      const formatted = codec.format(typeof normalized === "string" ? normalized : null);
+      accepted.current = formatted;
+      pendingAccepted.current = formatted === initialDraft && !pendingAccepted.current ? null : { value: formatted };
+    }
+    const sent = send(codec ? (typeof normalized === "string" ? normalized : "") : value, false);
     const pending = wasSpin ? sent.finally(() => afterSpin.current()) : sent;
     pendingSend.current = pending;
     return pending;
-  }, [send]);
+  }, [send, toEventValue, codec, initialDraft]);
   const settle = (value: string, barrier = false): boolean => {
+    if (codec) {
+      if (readOnly) return true;
+      if (!edited.current) { if (!barrier) change(accepted.current); return true; }
+      const parsed = codec.parse(value);
+      if (parsed.valid && (!barrier || block.commit !== "submit")) {
+        const formatted = codec.format(parsed.value);
+        if (formatted !== accepted.current) void sendDraft(value);
+        else { if (timer.current) clearTimeout(timer.current); timer.current = null; unregisterFlush.current?.(); unregisterFlush.current = null; edited.current = false; }
+        if (!barrier) change(formatted);
+        return true;
+      }
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null; unregisterFlush.current?.(); unregisterFlush.current = null;
+      edited.current = false; change(accepted.current);
+      return false;
+    }
     if (!edited.current || readOnly) return true;
     if (!optionsOnly) { sendDraft(value); return true; }
     if ((!barrier || block.commit !== "submit") && optionValues?.includes(value)) {
@@ -57,7 +82,7 @@ export function useInputDraft({ block, pointer, data, readOnly, initialDraft, ch
     change(accepted.current);
     return false;
   };
-  prepare.current = () => { if (block.options !== undefined && composing.current) return; if (optionsOnly && edited.current) settle(timerValue.current, true); else if (edited.current && (timer.current || spinPending.current)) void sendDraft(timerValue.current); };
+  prepare.current = () => { if ((block.options !== undefined || codec) && composing.current) return; if ((optionsOnly || codec) && edited.current) settle(timerValue.current, true); else if (edited.current && (timer.current || spinPending.current)) void sendDraft(timerValue.current); };
   const markChanged = (value: string, mode: "normal" | "debounce" | "hold" = "normal") => {
     if (readOnly) return;
     edited.current = true;
@@ -67,11 +92,11 @@ export function useInputDraft({ block, pointer, data, readOnly, initialDraft, ch
     timer.current = null;
     unregisterFlush.current?.(); unregisterFlush.current = null;
     spinPending.current = mode !== "normal";
-    if (block.options !== undefined && composing.current) return;
-    if (mode !== "hold" && (mode !== "normal" || (!optionsOnly && (block.commit ?? "debounce") === "debounce"))) {
+    if ((block.options !== undefined || codec) && composing.current) return;
+    if (mode !== "hold" && (mode !== "normal" || (!optionsOnly && (!codec || codec.parse(value).valid) && (block.commit ?? "debounce") === "debounce"))) {
       timer.current = setTimeout(() => { void sendDraft(timerValue.current); }, 300);
     }
-    if (mode !== "normal" || optionsOnly || (block.commit ?? "debounce") === "debounce") {
+    if (mode !== "normal" || codec || optionsOnly || (block.commit ?? "debounce") === "debounce") {
       const element = inputElement.current ?? textarea.current;
       if (element) unregisterFlush.current = registerPendingFlush(element, () => { prepare.current(); return pendingSend.current ?? Promise.resolve(); });
     }
@@ -81,7 +106,7 @@ export function useInputDraft({ block, pointer, data, readOnly, initialDraft, ch
     timer.current = setTimeout(() => { void sendDraft(timerValue.current); }, 300);
   };
   const commit = (value: string) => settle(value);
-  const choose = (value: string) => { if (readOnly) return; accepted.current = value; pendingAccepted.current = value === initialDraft && !pendingAccepted.current ? null : { value }; change(value); void sendDraft(value); };
+  const choose = (value: string) => { if (readOnly) return; const formatted = codec ? codec.format(value) : value; accepted.current = formatted; pendingAccepted.current = formatted === initialDraft && !pendingAccepted.current ? null : { value: formatted }; change(formatted); void sendDraft(value); };
   const canSyncExternal = () => pendingAccepted.current === null;
   const cancel = () => {
     if (timer.current) clearTimeout(timer.current);

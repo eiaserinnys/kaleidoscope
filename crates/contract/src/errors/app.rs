@@ -13,6 +13,13 @@ error_catalog! { ENTRIES;
         message: "메시지 수신 능력에 필요한 판이 선언되지 않았습니다. requires.blocks를 {blocks}, client를 {client} 이상으로 고치세요",
         fix: "메시지 수신에 필요한 블록 세트와 client 판을 선언하세요"
     }
+    APP_INPUT_DATE_TIME_VERSION_LOW(at, required, required_min) { class: InvalidAppDefinition, place: "날짜와 시간 입력 블록 판 검사", cause: "날짜와 시간 입력을 지원하지 않는 블록 판", message: "{at}의 날짜와 시간 입력은 블록 세트 {required}판부터입니다. requires.blocks를 {required_min} 이상으로 고치세요.", fix: "requires.blocks를 필요한 판 이상으로 고치세요" }
+    APP_INPUT_DATE_MULTILINE_INVALID(at) { class: InvalidAppDefinition, place: "날짜 입력 줄 수 검사", cause: "여러 줄 날짜 입력", message: "{at}의 날짜 입력은 한 줄이어야 합니다. multiline과 여러 줄 rows를 빼세요.", fix: "multiline과 여러 줄 rows를 빼세요" }
+    APP_INPUT_TIME_MULTILINE_INVALID(at) { class: InvalidAppDefinition, place: "시간 입력 줄 수 검사", cause: "여러 줄 시간 입력", message: "{at}의 시간 입력은 한 줄이어야 합니다. multiline과 여러 줄 rows를 빼세요.", fix: "multiline과 여러 줄 rows를 빼세요" }
+    APP_INPUT_DATE_STEP_UNSUPPORTED(at) { class: InvalidAppDefinition, place: "날짜 입력 간격 검사", cause: "날짜 입력에 step 선언", message: "{at}의 날짜 입력은 step을 쓰지 않습니다. step을 빼세요.", fix: "step을 빼세요" }
+    APP_INPUT_DATE_BOUND_INVALID(at, field, value) { class: InvalidAppDefinition, place: "날짜 입력 범위 검사", cause: "날짜 범위 형식이나 실재 날짜가 아님", message: "{at}/{field}의 날짜 {value}를 읽을 수 없습니다. 실재 날짜를 YYYY-MM-DD로 고치세요.", fix: "실재 날짜를 YYYY-MM-DD로 고치세요" }
+    APP_INPUT_TIME_BOUND_INVALID(at, field, value) { class: InvalidAppDefinition, place: "시간 입력 범위 검사", cause: "시각 범위 형식이나 값이 잘못됨", message: "{at}/{field}의 시각 {value}를 읽을 수 없습니다. 00:00부터 23:59 사이 HH:mm으로 고치세요.", fix: "시각을 HH:mm으로 고치세요" }
+    APP_INPUT_TIME_STEP_INVALID(at) { class: InvalidAppDefinition, place: "시간 입력 간격 검사", cause: "분 간격이 양의 정수가 아님", message: "{at}/step은 분 단위 양의 정수여야 합니다. step을 고치거나 빼서 30분 간격을 쓰세요.", fix: "step을 양의 정수로 고치거나 빼세요" }
     APP_INPUT_OPTIONS_VERSION_LOW(at, required, required_min) { class: InvalidAppDefinition, place: "입력 선택지 블록 판 검사", cause: "선택지를 지원하지 않는 블록 판", message: "{at}의 입력 선택지는 블록 세트 {required}판부터입니다. requires.blocks를 {required_min} 이상으로 고치세요.", fix: "requires.blocks를 필요한 판 이상으로 고치세요" }
     APP_SELECT_DESCRIPTION_VERSION_LOW(at, required, required_min) { class: InvalidAppDefinition, place: "선택지 설명 블록 판 검사", cause: "선택지 설명을 지원하지 않는 블록 판", message: "{at}의 선택지 description은 블록 세트 {required}판부터입니다. requires.blocks를 {required_min} 이상으로 고치세요.", fix: "requires.blocks를 필요한 판 이상으로 고치세요" }
     APP_INPUT_OPTIONS_KIND_INVALID(at) { class: InvalidAppDefinition, place: "입력 선택지 종류 검사", cause: "텍스트나 검색이 아닌 입력에 선택지 선언", message: "{at}의 options는 text와 search 입력에서만 쓸 수 있습니다. kind를 고치거나 options를 빼세요.", fix: "kind를 고치거나 options를 빼세요" }

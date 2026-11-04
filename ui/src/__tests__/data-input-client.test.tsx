@@ -186,7 +186,7 @@ it("서식 없는 소수 step도 부동소수 오차 없이 증감한다", () =>
 
 const runtime = vi.hoisted(() => ({ values: {} as Record<string, unknown>, loading: false, act: vi.fn().mockResolvedValue(true), holdInput: () => () => undefined }));
 const previewRender = vi.hoisted(() => vi.fn());
-vi.mock("../data/window-state", async (importOriginal) => ({ ...(await importOriginal<typeof import("../data/window-state")>()), useWindowVisible: () => true }));
+vi.mock("../data/window-state", async (importOriginal) => ({ ...(await importOriginal<typeof import("../data/window-state")>()), useWindowVisible: () => true, useWindowStateValue: () => null }));
 vi.mock("../render/render-block", () => ({ renderBlock: (...args: unknown[]) => previewRender(...args) }));
 vi.mock("../data/window-data", () => ({
   useWindowData: () => runtime,

@@ -6,7 +6,7 @@ vi.mock("../data/window-data", () => ({
   useWindowData: () => ({ act: vi.fn().mockResolvedValue(true), holdInput: () => () => undefined, store: { getSnapshot: () => ({}) } }),
   useBinding: (_pointer: string, value: unknown) => ({ status: "ready", value }),
 }));
-vi.mock("../data/window-state", () => ({ useWindowVisible: () => true, isWindowTop: () => true }));
+vi.mock("../data/window-state", () => ({ useWindowVisible: () => true, isWindowTop: () => true, useWindowStateValue: () => null }));
 const context = { store: {} as never, window: { id: "w", app_id: "app", app_version: 1, desktop_id: "d" }, definition: {} as never };
 const common = { label: "이름", value: "red", on_change: { set_state: "value" } };
 afterEach(cleanup);

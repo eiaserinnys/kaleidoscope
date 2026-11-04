@@ -25,6 +25,14 @@ function setup(optionsOnly = false) {
   return { store, spy, transport, originalCall };
 }
 
+it("일반 자동완성은 이름과 다른 선택값을 계속 표시한다", async () => {
+  setup();
+  const input = await screen.findByRole("combobox");
+  fireEvent.focus(input);
+  const selected = screen.getByRole("option", { selected: true });
+  expect(selected.querySelector(".ks-menu-item-description")?.textContent).toBe("value-1");
+});
+
 it("504개 중 입력으로 거르고 방향키와 Enter로 고른 뒤 버튼이 그 값을 읽는다", async () => {
   const { store, spy } = setup(true);
   const input = await screen.findByRole("combobox") as HTMLInputElement;

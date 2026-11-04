@@ -1,9 +1,10 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { AppDefinition } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
+import { selectElement } from "../share/action-select";
 import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -191,4 +192,64 @@ it("포커스를 지킨 제출에서 바깥 값 변경만 반영하고 여러 �
   fireEvent.keyDown(note, { key: "Enter", ctrlKey: true });
   await waitFor(() => expect(note.value).toBe(""));
   expect(document.activeElement).toBe(note);
+});
+
+it.each([
+  ["날짜 직접 입력", "date", "type", "2026-11-23"],
+  ["달력 선택", "date", "choose", "2026-11-21"],
+  ["시간 직접 입력", "time", "type", "15:30"],
+  ["시간 목록 선택", "time", "choose", "16:00"],
+] as const)("%s 뒤 단추는 입력 응답과 상태를 기다린다", async (_name, kind, mode, nextValue) => {
+  const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 35, modules: {} },
+    state: { draft: kind === "date" ? "2026-11-20" : "14:00", saved: "" },
+    ui: { type: "stack", direction: "column", children: [
+      { type: "input", kind, label: "값", value: { state: "draft" }, on_change: { set_state: "draft" } },
+      { type: "button", label: "확인", on_click: [{ set_state: "saved", value: { expr: "$state.draft" } }] },
+    ] },
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { ...definition.state };
+  const transport = createFakeTransport(seed);
+  const subscribe = transport.subscribe.bind(transport);
+  let releaseEvent = () => {};
+  let eventHeld = false;
+  transport.subscribe = (listener) => subscribe((event) => {
+    if (event.event === "state.changed" && event.snapshot.shared.windows[0].state.draft === nextValue && !eventHeld) {
+      eventHeld = true; releaseEvent = () => listener(event);
+    } else listener(event);
+  });
+  const originalCall = transport.call.bind(transport);
+  const spy = vi.spyOn(transport, "call");
+  let releaseCall!: () => void;
+  let releaseReply!: () => void;
+  const call = new Promise<void>((resolve) => { releaseCall = resolve; });
+  const reply = new Promise<void>((resolve) => { releaseReply = resolve; });
+  spy.mockImplementation(async (request) => {
+    if (request.op === "data.act" && request.event === nextValue) { await call; const response = await originalCall(request); await reply; return response; }
+    return originalCall(request);
+  });
+  const store = createShellStore(transport);
+  render(<AppWindowContent store={store} windowId="editor-window" />);
+  const input = await screen.findByRole(kind === "date" ? "textbox" : "combobox", { name: "값" });
+  fireEvent.focus(input);
+  if (mode === "type") fireEvent.change(input, { target: { value: nextValue } });
+  else if (kind === "date") {
+    fireEvent.keyDown(input, { key: "ArrowDown", altKey: true });
+    fireEvent.click(within(await screen.findByRole("dialog")).getByText("21", { selector: "button" }));
+  } else {
+    act(() => { expect(selectElement("editor-window", input, { by: "value", value: nextValue })).toBeUndefined(); });
+  }
+  fireEvent.click(screen.getByRole("button", { name: "확인" }));
+  await waitFor(() => expect(spy.mock.calls.some(([r]) => r.op === "data.act" && r.event === nextValue)).toBe(true));
+  const clicked = () => spy.mock.calls.some(([r]) => r.op === "data.act" && r.pointer.endsWith("on_click"));
+  expect(clicked()).toBe(false);
+  await act(async () => { releaseCall(); await call; });
+  await waitFor(() => expect(eventHeld).toBe(true));
+  expect(clicked()).toBe(false);
+  await act(async () => { releaseReply(); await reply; });
+  await act(async () => { await Promise.resolve(); });
+  expect(clicked()).toBe(false);
+  await act(async () => { releaseEvent(); });
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.saved).toBe(nextValue));
+  expect(spy.mock.calls.filter(([r]) => r.op === "data.act" && r.pointer.endsWith("on_change") && r.event === nextValue)).toHaveLength(1);
 });
