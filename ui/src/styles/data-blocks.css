@@ -18,16 +18,6 @@
 .ks-data-tab-panel:has(> .ks-file-tree-ungranted),
 .ks-data-tab-panel:has(> .ks-markdown-editor),
 .ks-data-tab-panel:has(> .ks-markdown-view) { padding: 0; }
-.ks-data-tab-panel > .ks-data-stack.is-column:not(:has(.ks-split, .ks-canvas, .ks-data-view, .ks-data-state, .ks-timeline, .ks-chart, .ks-map)),
-.ks-data-section-child > .ks-data-stack.is-column:not(:has(.ks-split, .ks-canvas, .ks-data-view, .ks-data-state, .ks-timeline, .ks-chart, .ks-map)) { height: auto; }
-.ks-data-tab-panel > .ks-data-stack.is-column:not(:has(.ks-split, .ks-canvas, .ks-data-view, .ks-data-state, .ks-timeline, .ks-chart, .ks-map)) > .ks-data-stack-item.is-fill,
-.ks-data-section-child > .ks-data-stack.is-column:not(:has(.ks-split, .ks-canvas, .ks-data-view, .ks-data-state, .ks-timeline, .ks-chart, .ks-map)) > .ks-data-stack-item.is-fill { flex: 0 0 auto; overflow: visible; }
-.ks-data-tab-panel > .ks-data-stack.is-column.has-fill-list,
-.ks-data-section-child > .ks-data-stack.is-column.has-fill-list { height: 100%; }
-.ks-data-tab-panel > .ks-data-stack.is-column.has-fill-list > .ks-data-stack-item.is-fill,
-.ks-data-section-child > .ks-data-stack.is-column.has-fill-list > .ks-data-stack-item.is-fill { flex: 1 1 0; overflow: auto; }
-:is(.ks-data-tab-panel, .ks-data-section-child) > .ks-data-stack.is-column.has-textarea-fill { height: 100%; }
-:is(.ks-data-tab-panel, .ks-data-section-child) > .ks-data-stack.is-column > .ks-data-stack-item.is-fill:has(> :is(.ks-data-input, .ks-input-field) textarea) { flex: 1 1 0; overflow: auto; }
 .ks-data-toolbar { display: flex; min-width: 0; height: var(--ks-bar-height); min-height: var(--ks-bar-height); max-height: var(--ks-bar-height); flex-shrink: 0; align-items: flex-start; gap: var(--ks-space-2); overflow-x: auto; overflow-y: hidden; scroll-padding-inline: var(--ks-space-3); padding: var(--ks-space-2) var(--ks-space-3) var(--ks-space-1); border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
 .ks-data-toolbar::-webkit-scrollbar { height: var(--ks-space-1); }
 .ks-data-toolbar::-webkit-scrollbar-thumb { border: 0; }
@@ -68,8 +58,6 @@
 .ks-data-section-child > .ks-data-stack { height: auto; }
 .ks-data-section-child > .ks-data-stack.is-column.has-fill-list { height: 100%; }
 .ks-data-section-child > .ks-data-stack.is-column.has-textarea-fill { height: 100%; }
-.ks-data-section-child > .ks-data-stack.is-column:has(> .ks-data-stack-item.is-fill > :is(.ks-data-view, .ks-data-state)) { height: 100%; min-height: 100%; }
-.ks-data-section-child > .ks-data-stack.is-column > .ks-data-stack-item.is-fill:has(> :is(.ks-data-view, .ks-data-state)) { min-height: var(--ks-pane-min-size); }
 .ks-split-pane > .ks-data-section > .ks-data-section-child > .ks-data-skeleton { padding-block: var(--ks-space-3); }
 .ks-split-pane > .ks-data-skeleton { box-sizing: border-box; padding: var(--ks-space-3); }
 .ks-data-section-header { display: flex; flex-wrap: wrap; width: 100%; align-items: center; gap: var(--ks-space-2); row-gap: var(--ks-space-1); }
@@ -106,33 +94,25 @@
 :is(
   .ks-split.is-stacked > .ks-split-pane:not(:first-child),
   .ks-data-tab-panel,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
   .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane,
   .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
 ) > .ks-data-section > .ks-data-section-header,
 :is(
   .ks-split.is-stacked > .ks-split-pane:not(:first-child),
   .ks-data-tab-panel,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
   .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane,
   .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
 ) > .ks-properties-container > .ks-properties,
 :is(
   .ks-split.is-stacked > .ks-split-pane:not(:first-child),
   .ks-data-tab-panel,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
   .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane,
   .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
 ) > :is(.ks-feed, .ks-markdown-view, .ks-metrics, .ks-chart, .ks-map, .ks-data-tree, .ks-keypad),
 :is(
   .ks-split.is-stacked > .ks-split-pane:not(:first-child),
   .ks-data-tab-panel,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
   .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane,
   .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
 ) > .ks-code-view .cm-content { padding-block-start: 0; }
 .ks-data-section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }

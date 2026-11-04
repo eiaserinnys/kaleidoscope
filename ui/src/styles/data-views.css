@@ -133,6 +133,10 @@
   .ks-properties:not(.is-rows) dd { margin-top: var(--ks-space-1); }
   .ks-data-tab-panel .ks-field:not(.is-label-top):not(.is-label-hidden) { display: flex; flex-direction: column; align-items: stretch; gap: var(--ks-space-1); }
   .ks-data-tab-panel .ks-field:not(.is-label-top):not(.is-label-hidden) > :not(.ks-field-label) { width: 100%; }
+  .ks-data-tab-panel .ks-slider-field:not(.is-label-top):not(.is-label-hidden) { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .ks-data-tab-panel .ks-slider-field:not(.is-label-top):not(.is-label-hidden) > .ks-field-label { grid-column: 1 / -1; }
+  .ks-data-tab-panel .ks-slider-field:not(.is-label-top):not(.is-label-hidden) > .ks-slider-value { width: auto; }
+  .ks-data-tab-panel .ks-slider-field.is-value-hidden:not(.is-label-top):not(.is-label-hidden) { grid-template-columns: minmax(0, 1fr); }
   .ks-data-tab-panel .ks-input-field:not(.is-label-top):not(.is-label-hidden) > .ks-field-label { margin-block-start: 0; }
   .ks-data-tab-panel .ks-data-stack-item.is-fill > .ks-input-field:not(.is-label-top):not(.is-label-hidden) > .ks-data-input:has(> textarea) { flex: 1 1 auto; height: auto; min-height: var(--ks-control-height); }
 }
