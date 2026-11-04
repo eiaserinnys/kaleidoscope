@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 
 fn definition() -> Value {
     json!({
-        "id":"paging-test", "name":"쪽 넘김 시험", "requires":{"blocks":21,"modules":{"http":1}},
+        "id":"paging-test", "name":"쪽 넘김 시험", "requires":{"blocks":22,"modules":{"http":1}},
         "permissions":[{"module":"http","id":"api","label":"API","base_url":"https://example.com","paths":["/items"]}],
         "state":{},
         "sources":{"items":{"kind":"request","permission":"api","path":"/items","refresh_secs":30,
@@ -14,11 +14,11 @@ fn definition() -> Value {
 
 #[test]
 fn page_decl_is_versioned_and_round_trips() {
-    let app = parse_app_definition(&definition().to_string()).expect("21판 원천의 page 선언");
+    let app = parse_app_definition(&definition().to_string()).expect("22판 원천의 page 선언");
     let result = serde_json::to_value(&app).unwrap();
     assert_eq!(result["sources"]["items"]["page"], definition()["sources"]["items"]["page"]);
     let mut old = definition();
-    old["requires"]["blocks"] = json!(20);
+    old["requires"]["blocks"] = json!(21);
     assert!(parse_app_definition(&old.to_string()).is_err());
 }
 

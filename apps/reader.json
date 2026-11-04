@@ -3,7 +3,7 @@
   "name": "해커뉴스",
   "description": "해커뉴스 이야기와 토론을 읽습니다",
   "requires": {
-    "blocks": 21,
+    "blocks": 22,
     "modules": {
       "http": 1
     }

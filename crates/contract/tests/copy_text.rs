@@ -19,7 +19,7 @@ fn copy_button(action: Value) -> Value {
 #[test]
 fn copy_text_is_a_local_single_action_and_requires_block_set_eighteen() {
     assert_eq!(CONTRACT_VERSION, 29);
-    assert_eq!(BLOCK_SET_VERSION, 21);
+    assert_eq!(BLOCK_SET_VERSION, 22);
     let binding = json!({"expr": "$state.target"});
     for action in [
         json!({"copy_text": binding}),

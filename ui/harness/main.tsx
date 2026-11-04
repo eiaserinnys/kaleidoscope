@@ -140,7 +140,7 @@ const initialSnapshot: ShellSnapshot = {
     windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(htmlReport, "html-report-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4), makeWindow(gallery, "gallery-window", 5), makeWindow(dataViewsApp, "views-window", 6), makeWindow(storageDocument, "storage-window", 7), makeWindow(clientChatApp, "client-chat-window", 8), ...previewDefinitions.map((definition, index) => makeWindow(definition, `${definition.id}-window`, 9 + index))],
   },
   device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [], pc_access: [], process_access: [] },
-  supported: { blocks: 21, modules: { assets: 1, client: 4, files: 1, storage: 1 } },
+  supported: { blocks: 22, modules: { assets: 1, client: 4, files: 1, storage: 1 } },
   link: { state: "unlinked" },
   sharing: [],
   update: { state: "unavailable" },

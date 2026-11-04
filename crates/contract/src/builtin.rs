@@ -139,7 +139,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         name: "해커뉴스",
         version: 4,
         updated_at: "2026-11-04T00:00:00Z",
-        blocks: 21,
+        blocks: 22,
         modules: &[("http", 1)],
         assets: &[],
     },

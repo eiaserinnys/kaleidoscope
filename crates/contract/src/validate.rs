@@ -1185,8 +1185,8 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
         match source {
             SourceDecl::Request { path, query, page, .. } => {
                 if let Some(page) = page {
-                    if definition.requires.blocks < 21 {
-                        details.push(format!("{at}/page: 쪽 넘김은 블록 세트 21판이라 requires.blocks가 21 이상이어야 합니다"));
+                    if definition.requires.blocks < 22 {
+                        details.push(format!("{at}/page: 쪽 넘김은 블록 세트 22판이라 requires.blocks가 22 이상이어야 합니다"));
                     }
                     if page.param.is_empty() {
                         details.push(format!("{at}/page/param: 다음 쪽 query 키를 입력하세요"));

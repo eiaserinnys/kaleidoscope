@@ -5,7 +5,7 @@ const items = (start: number) => Array.from({ length: 30 }, (_, offset) => ({ ke
 const stories = (start: number) => Array.from({ length: 30 }, (_, offset) => ({ objectID: String(start + offset), title: `시험 이야기 ${start + offset}`, author: "작성자", points: start + offset, num_comments: 2 }));
 
 export const pagingApp: AppDefinition = {
-  id: "paging-test", name: "쪽 넘김 시험", requires: { blocks: 21, modules: { connection: 1 } },
+  id: "paging-test", name: "쪽 넘김 시험", requires: { blocks: 22, modules: { connection: 1 } },
   permissions: [{ module: "connection", id: "api", connection: "example", label: "API", access: "read" }, { module: "connection", id: "alternate", connection: "example", label: "다른 연결", access: "read" }],
   state: { tab: 0 },
   sources: {
@@ -30,7 +30,7 @@ export const pagingApp: AppDefinition = {
 };
 
 export const pagingComparisonApp: AppDefinition = {
-  id: "paging-comparison", name: "기존 오류 화면", requires: { blocks: 21, modules: { connection: 1 } },
+  id: "paging-comparison", name: "기존 오류 화면", requires: { blocks: 22, modules: { connection: 1 } },
   permissions: [{ module: "connection", id: "api", connection: "example", label: "API", access: "read" }],
   state: { locale: "ko" }, locale: { state: "locale" }, messages: { ko: {} },
   sources: { failed: { kind: "request", permission: "api", path: "/failed" } },

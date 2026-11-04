@@ -35,7 +35,7 @@ fn reader_is_hacker_news_only() {
         ["feed_kind", "query", "search_input", "selected_story"]
     );
     assert_eq!(definition.name, "해커뉴스");
-    assert_eq!(definition.requires.blocks, 21);
+    assert_eq!(definition.requires.blocks, 22);
     assert_eq!(serde_json::to_value(&definition.sources["stories"]).unwrap()["page"], json!({"param":"page","next":"page + 1 < nbPages ? page + 1 : null","items":"hits"}));
 
     let mut types = Vec::new();

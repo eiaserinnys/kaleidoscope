@@ -272,7 +272,7 @@ pub const CONTRACT_VERSION: u32 = 29;
 ///   `list`, `table`, `tree`, `feed`의 `item_menu`.
 /// - 21판: input, select, slider, color의 `label_position`과 slider의 `show_value`.
 /// - 22판: request 원천의 `page`(쪽 넘김)와 목록 블록의 다음 쪽 받기, `data.more`.
-pub const BLOCK_SET_VERSION: u32 = 21;
+pub const BLOCK_SET_VERSION: u32 = 22;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).

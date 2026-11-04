@@ -3,7 +3,7 @@ use kaleidoscope_contract::registry::ConnectionKind;
 
 fn definition(next: &str) -> String {
     json!({
-        "id":"paging", "name":"쪽 넘김 시험", "requires":{"blocks":21,"modules":{"connection":1}},
+        "id":"paging", "name":"쪽 넘김 시험", "requires":{"blocks":22,"modules":{"connection":1}},
         "permissions":[{"module":"connection","id":"api","connection":"example","access":"read","label":"API"}],
         "state":{"query":"one"},
         "sources":{"items":{"kind":"request","permission":"api","path":"/old", "query":{"q":{"state":"query"}},
