@@ -3,6 +3,29 @@ import type { AppDefinition } from "../../src/contract/contract";
 const base = { requires: { blocks: 20, modules: {} }, permissions: [] };
 const rows = Array.from({ length: 30 }, (_, i) => ({ id: String(i), name: `항목 ${i}` }));
 export const shellDefectFixtures = [
+  { ...base, id: "list-row-fit-940", name: "목록 줄 축소", state: {}, ui: { type: "list", grouped: true, items: [{ title: "묶음", items: Array.from({ length: 20 }, (_, i) => ({ key: String(i), title: `@작성자_${i}`, subtitle: "말줄임으로 표시할 아주 긴 부제입니다. ".repeat(8), color: "#804080", meta: "11/03", badges: ["고치는 중"] })) }] } },
+  ...(["grid", "icons"] as const).map((layout) => ({ ...base, requires: { blocks: 30, modules: {} }, id: `layout-940-${layout}`, name: "그림 목록", state: {}, ui: { type: "tabs", tabs: [
+    { label: "그림", child: { type: "stack", direction: "column", children: [
+      { type: "input", label: "찾기", label_position: "top", value: "", on_change: [] },
+      { type: "list", layout, items: Array.from({ length: 6 }, (_, i) => ({ key: String(i), title: `그림 ${i + 1}` })) },
+    ] } },
+  ] } })),
+  { ...base, id: "layout-940", name: "목록 배치", state: { open: false, search: "", rows: [
+    { key: "a", title: "목록의 긴 제목을 끝까지 볼 수 있어야 합니다", subtitle: "긴 부제도 볼 수 있어야 합니다", meta: "2026년 11월 5일 오후", badges: ["긴 배지 하나", "긴 배지 둘", "긴 배지 셋"] },
+  ] }, ui: { type: "stack", direction: "column", children: [
+    { type: "button", label: "선택 열기", on_click: [{ set_state: "open", value: true }] },
+    { type: "list", grouped: true, items: [{ title: "목록 묶음", items: [{ key: "a", title: "목록의 긴 제목을 끝까지 볼 수 있어야 합니다", subtitle: "긴 부제도 볼 수 있어야 합니다", meta: "2026년 11월 5일 오후", badges: ["긴 배지 하나", "긴 배지 둘", "긴 배지 셋"] }] }] },
+    { type: "feed", grouped: true, entries: [{ title: "피드 묶음", items: [{ key: "f", name: "아주 길고 긴 작성자의 표시 이름입니다 표시 이름", meta: "@longusername", badges: ["운영자"], body: "본문" }] }] },
+    { type: "dialog", title: "선택", open: { state: "open" }, on_close: [{ set_state: "open", value: false }], child: { type: "stack", direction: "column", children: [
+      { type: "input", kind: "search", placeholder: "찾기", value: { state: "search" }, on_change: { set_state: "search" } },
+      { type: "button", label: "결과 비우기", on_click: [{ set_state: "rows", value: [] }] },
+      { type: "list", layout: "grid", items: { state: "rows" } },
+    ] } },
+  ] } },
+  { ...base, id: "layout-940-table", name: "표 선택", state: { open: false }, ui: { type: "stack", direction: "column", children: [
+    { type: "button", label: "표 열기", on_click: [{ set_state: "open", value: true }] },
+    { type: "dialog", title: "표 선택", open: { state: "open" }, on_close: [{ set_state: "open", value: false }], child: { type: "section", title: "항목", child: { type: "table", columns: [{ field: "title", label: "제목" }], rows: [{ key: "a", title: "하나" }] } } },
+  ] } },
   { ...base, requires: { blocks: 21, modules: {} }, id: "input-autogrow-fixture", name: "여러 줄 입력", state: { text: "", fixed: "" }, ui: { type: "tabs", tabs: [
     { label: "입력", child: { type: "stack", direction: "column", gap: "small", children: [
       { type: "input", label: "한국어", multiline: true, value: { state: "text" }, on_change: { set_state: "text" } },

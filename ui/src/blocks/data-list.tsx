@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Block, ListItem } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { DataState } from "../components/data-state";
@@ -23,10 +23,42 @@ type ListHandlers = {
   menu: (event: React.MouseEvent<HTMLElement>, item: ListItem) => void;
 };
 const ListRow = memo(function ListRow({ item, index, length, active, focused, grid, icons, handlers, readOnly }: { item: ListItem; index: number; length: number; active: boolean; focused: boolean; grid: boolean; icons: boolean; handlers: React.RefObject<ListHandlers>; readOnly: boolean }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const row = ref.current;
+    if (!row || grid || icons) return;
+    const group = row.querySelector<HTMLElement>(":scope > .ks-view-badges");
+    const badges = [...(group?.children ?? [])] as HTMLElement[];
+    const meta = row.querySelector<HTMLElement>(":scope > .ks-view-meta");
+    const content = row.querySelector<HTMLElement>(":scope > .ks-list-content")!;
+    const update = () => {
+      content.style.minWidth = "";
+      if (group) group.style.display = "";
+      badges.forEach(badge => { badge.style.display = ""; });
+      if (meta) meta.style.display = "";
+      const style = getComputedStyle(row);
+      const available = row.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      const fits = () => {
+        const widths = [...row.children].map(child => child.getBoundingClientRect().width).filter(width => width > 0);
+        return widths.reduce((sum, width) => sum + width, 0) + Math.max(0, widths.length - 1) * parseFloat(style.columnGap) <= available + 0.5;
+      };
+      // 최소 제목 폭을 남긴 뒤 배지, 시각 순으로 통째로 자리를 돌려준다.
+      for (let i = badges.length - 1; i >= 0 && !fits(); i -= 1) {
+        badges[i].style.display = "none";
+        if (i === 0 && group) group.style.display = "none";
+      }
+      if (meta && !fits()) meta.style.display = "none";
+      if (!fits()) content.style.minWidth = "0";
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(row);
+    update();
+    return () => observer.disconnect();
+  }, [item, grid, icons]);
   if (icons) return <IconTile name={item.title} icon={isMedia(item.image) ? <MediaThumbnail media={item.image} size={ICON_SIZE.tile} icon /> : <LayoutGrid size="tile" />} selected={active}
     role="option" aria-setsize={length} aria-posinset={index + 1} aria-selected={active} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1}
     onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={() => handlers.current.choose(item)} onContextMenu={(event) => handlers.current.menu(event, item)} />;
-  return <button type="button" role="option" aria-setsize={length} aria-posinset={index + 1} aria-selected={active} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={() => handlers.current.choose(item)} onContextMenu={(event) => handlers.current.menu(event, item)}>
+  return <button ref={ref} type="button" role="option" aria-setsize={length} aria-posinset={index + 1} aria-selected={active} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={() => handlers.current.choose(item)} onContextMenu={(event) => handlers.current.menu(event, item)}>
     {grid ? <MediaThumbnail media={isMedia(item.image) ? item.image : null} size={160} /> : isMedia(item.image) ? <MediaThumbnail media={item.image} size={32} /> : validColor(item.color) ? <span className="ks-list-color" style={{ background: item.color }} /> : null}
     <span className="ks-list-content"><span className="ks-list-title">{item.title}</span>{typeof item.subtitle === "string" && <span className="ks-view-meta">{item.subtitle}</span>}</span>
     {!grid && <Badges values={item.badges} />}{typeof item.meta === "string" && <span className="ks-view-meta">{item.meta}</span>}{grid && <Badges values={item.badges} />}
@@ -60,7 +92,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
       const style = getComputedStyle(element);
       const pane = parseFloat(style.getPropertyValue("--ks-pane-min-size")) || 160;
       const gap = parseFloat(style.getPropertyValue("--ks-space-3")) || 12;
-      setColumns(Math.max(1, Math.floor((element.clientWidth - gap) / (pane + gap))));
+      setColumns(Math.max(1, Math.floor((element.clientWidth + gap) / (pane + gap))));
     };
     resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => observer.disconnect();
   }, [grid, scroll]);

@@ -361,7 +361,12 @@ test("견본의 다섯 보기와 다크 배지 캡처", async ({ page }) => {
     const valueBox = await app.locator(".ks-properties dd").first().boundingBox();
     if (width === 400) expect(valueBox!.y).toBeGreaterThan(labelBox!.y);
     else expect(valueBox!.y).toBe(labelBox!.y);
-    const fits = await app.locator(".ks-list-row > .ks-view-meta, .ks-list-row .ks-badge").evaluateAll((elements) => elements.every((element) => element.scrollWidth <= element.clientWidth));
+    const fits = await app.locator(".ks-list-row .ks-badge").evaluateAll((elements) => elements.every((element) => {
+      if (getComputedStyle(element).visibility === "hidden") return true;
+      const badge = element.getBoundingClientRect();
+      const group = element.parentElement!.getBoundingClientRect();
+      return badge.left >= group.left && badge.right <= group.right + 0.5;
+    }));
     expect(fits).toBe(true);
     await capture(page, `gallery-list-${width}`);
     await app.getByRole("tab", { name: "표와 트리" }).click();
