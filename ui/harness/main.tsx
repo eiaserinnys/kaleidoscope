@@ -34,6 +34,7 @@ import clientChatSource from "./fixtures/client-chat.js?raw";
 import { exposeDocsHarness, galleryForDocs } from "./docs-media-test";
 import { makeLongConversation } from "./chat-long-history";
 import { blockSet18Fixtures } from "../e2e/fixtures/blocks-18";
+import { previewGridFixtures } from "../e2e/fixtures/preview-grid";
 
 const mdEditor = mdEditorJson as AppDefinition;
 installShellDragGuard();
@@ -87,7 +88,7 @@ const shellSelectionApp: AppDefinition = {
     ] },
   ] },
 };
-const previewDefinitions = [...visualPreviewDefinitions, ...blockSet18Fixtures, shellSelectionApp];
+const previewDefinitions = [...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, shellSelectionApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},

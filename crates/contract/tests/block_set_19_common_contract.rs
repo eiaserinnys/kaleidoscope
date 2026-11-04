@@ -116,7 +116,7 @@ fn every_new_common_field_requires_block_set_19() {
             .unwrap_or_else(|error| panic!("{field} must be accepted in block set 19: {error:?}"));
     }
 
-    assert_eq!(BLOCK_SET_VERSION, 19);
+    assert_eq!(BLOCK_SET_VERSION, 20);
 }
 
 #[test]
@@ -460,7 +460,7 @@ fn new_fields_round_trip_and_old_defaults_keep_their_wire_shape() {
 
 #[test]
 fn generated_schema_exposes_block_set_19_contract() {
-    assert_eq!(BLOCK_SET_VERSION, 19);
+    assert_eq!(BLOCK_SET_VERSION, 20);
     let schema = app_definition_schema().to_string();
     for field in [
         "columns",

@@ -1,0 +1,86 @@
+{
+  "id": "repeat-grid-item-width",
+  "name": "표식 고르기",
+  "description": "자동 격자의 칸 폭을 세 단계로 바꿔 봅니다.",
+  "requires": { "blocks": 20, "modules": { "assets": 1 } },
+  "assets": [
+    { "id": "builtin-weather-clear", "version": 1 },
+    { "id": "builtin-weather-cloudy", "version": 1 }
+  ],
+  "permissions": [],
+  "state": {
+    "selection": "sun",
+    "size": 0,
+    "marks": [
+      { "id": "sun", "label": "햇살", "image": { "asset": "builtin-weather-clear" } },
+      { "id": "cloud", "label": "구름", "image": { "asset": "builtin-weather-cloudy" } },
+      { "id": "moon", "label": "달", "image": { "asset": "builtin-weather-clear" } },
+      { "id": "star", "label": "별", "image": { "asset": "builtin-weather-clear" } },
+      { "id": "rain", "label": "비", "image": { "asset": "builtin-weather-cloudy" } },
+      { "id": "wind", "label": "바람", "image": { "asset": "builtin-weather-cloudy" } },
+      { "id": "snow", "label": "눈", "image": { "asset": "builtin-weather-clear" } },
+      { "id": "fog", "label": "안개", "image": { "asset": "builtin-weather-cloudy" } }
+    ]
+  },
+  "ui": {
+    "type": "tabs",
+    "selected": { "state": "size" },
+    "on_change": { "set_state": "size" },
+    "tabs": [
+      {
+        "label": "작게",
+        "child": {
+          "type": "repeat",
+          "items": { "state": "marks" },
+          "key": "id",
+          "layout": "grid",
+          "grid": { "columns": "auto", "item_width": "small" },
+          "template": {
+            "type": "button",
+            "variant": "chip",
+            "label": { "item": "label" },
+            "preview": { "type": "image", "src": { "item": "image" } },
+            "pressed": { "expr": "$state.selection = $item.id" },
+            "on_click": [{ "set_state": "selection", "value": { "expr": "$item.id" } }]
+          }
+        }
+      },
+      {
+        "label": "보통",
+        "child": {
+          "type": "repeat",
+          "items": { "state": "marks" },
+          "key": "id",
+          "layout": "grid",
+          "grid": { "columns": "auto", "item_width": "medium" },
+          "template": {
+            "type": "button",
+            "variant": "chip",
+            "label": { "item": "label" },
+            "preview": { "type": "image", "src": { "item": "image" } },
+            "pressed": { "expr": "$state.selection = $item.id" },
+            "on_click": [{ "set_state": "selection", "value": { "expr": "$item.id" } }]
+          }
+        }
+      },
+      {
+        "label": "크게",
+        "child": {
+          "type": "repeat",
+          "items": { "state": "marks" },
+          "key": "id",
+          "layout": "grid",
+          "grid": { "columns": "auto", "item_width": "large" },
+          "template": {
+            "type": "button",
+            "variant": "chip",
+            "label": { "item": "label" },
+            "preview": { "type": "image", "src": { "item": "image" } },
+            "pressed": { "expr": "$state.selection = $item.id" },
+            "on_click": [{ "set_state": "selection", "value": { "expr": "$item.id" } }]
+          }
+        }
+      }
+    ]
+  }
+}

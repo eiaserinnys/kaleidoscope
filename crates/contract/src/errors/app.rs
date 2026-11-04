@@ -226,6 +226,13 @@ error_catalog! { ENTRIES;
         message: "앱 정의가 검사를 통과하지 못했습니다. 함께 표시된 항목을 고친 뒤 다시 시도하세요.",
         fix: "함께 표시된 항목과 JSON 경로를 고치세요"
     }
+    APP_REPEAT_GRID_ITEM_WIDTH_FIXED_COLUMNS(pointer) {
+        class: InvalidAppDefinition,
+        place: "repeat 격자 칸 폭 검사",
+        cause: "repeat.grid.item_width가 자동 열 수가 아닌 고정 열 수와 함께 쓰였다",
+        message: "{pointer}: repeat.grid.item_width는 grid.columns가 auto일 때만 쓸 수 있습니다. 고정 열 수를 유지하려면 item_width를 지우세요.",
+        fix: "{pointer}/grid/item_width를 지우거나 {pointer}/grid/columns를 auto로 바꾸세요"
+    }
     APP_DEFINITION_WHEN_CONDITION_MISSING() {
         class: InvalidAppDefinition,
         place: "앱 정의 when 조건 검사",

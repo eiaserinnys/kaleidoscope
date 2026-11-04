@@ -17,9 +17,10 @@ interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; c
 
 export function StackBlock({ block, context, pointer }: Props<"stack">) {
   const fill = block.place === "center" ? -1 : block.fill ?? block.children.length - 1;
+  const explicitFill = block.place !== "center" && block.fill !== undefined;
   const direction = block.place === "center" ? "column" : block.direction;
   const align = block.place === "center" || block.align === undefined ? "" : ` align-${block.align}`;
-  return <div className={`ks-data-stack is-${direction} gap-${block.gap ?? "none"}${block.wrap && block.place !== "center" ? " is-wrap" : ""}${block.place === "center" ? " is-center" : ""}${align}`}>
+  return <div className={`ks-data-stack is-${direction} gap-${block.gap ?? "none"}${block.wrap && block.place !== "center" ? " is-wrap" : ""}${block.place === "center" ? " is-center" : ""}${explicitFill ? " has-explicit-fill" : ""}${align}`}>
     {block.children.map((child, index) => <div className={`ks-data-stack-item${index === fill ? " is-fill" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/children/${index}`)}</div>)}
   </div>;
 }

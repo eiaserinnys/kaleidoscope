@@ -32,6 +32,23 @@ it("stack.align maps cross-axis alignment and center placement keeps precedence"
   expect(container.firstElementChild?.classList.contains("align-baseline")).toBe(false);
 });
 
+it("distinguishes an explicit stack fill from the default last child", () => {
+  const defaultFill = render(<StackBlock
+    block={{ type: "stack", direction: "row", children: [] }}
+    context={{} as BlockContext}
+    pointer="/ui"
+  />);
+  expect(defaultFill.container.firstElementChild?.classList.contains("has-explicit-fill")).toBe(false);
+  defaultFill.unmount();
+
+  const explicitFill = render(<StackBlock
+    block={{ type: "stack", direction: "row", fill: 0, children: [] }}
+    context={{} as BlockContext}
+    pointer="/ui"
+  />);
+  expect(explicitFill.container.firstElementChild?.classList.contains("has-explicit-fill")).toBe(true);
+});
+
 function setup(rows?: number) {
   const definition: AppDefinition = {
     ...mdEditorDefinition, requires: { blocks: 4, modules: {} },

@@ -1049,7 +1049,12 @@ export type RepeatAuto = "auto";
 
 export type RepeatColumns = number | RepeatAuto;
 
-export type RepeatGrid = { columns: RepeatColumns, };
+export type RepeatGrid = { columns: RepeatColumns, item_width?: RepeatGridItemWidth, };
+
+/**
+ * 자동 열 격자 칸의 최소 폭. (블록 세트 20판)
+ */
+export type RepeatGridItemWidth = "small" | "medium" | "large";
 
 export type RepeatLayout = "row" | "column" | "grid";
 

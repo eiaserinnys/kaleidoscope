@@ -966,6 +966,64 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("자동 격자 칸 폭을 바꿔도 같은 창의 다른 블록은 다시 그리지 않는다", async () => {
+    mockVirtualLayout();
+    let width = 327.5;
+    const observers: { callback: ResizeObserverCallback; targets: Set<Element> }[] = [];
+    vi.stubGlobal("ResizeObserver", class {
+      entry: { callback: ResizeObserverCallback; targets: Set<Element> };
+      constructor(callback: ResizeObserverCallback) { this.entry = { callback, targets: new Set() }; observers.push(this.entry); }
+      observe(target: Element) { this.entry.targets.add(target); }
+      disconnect() { this.entry.targets.clear(); }
+      unobserve(target: Element) { this.entry.targets.delete(target); }
+    });
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => width);
+    const rows = [{ id: "one" }, { id: "two" }];
+    const repeat: AppDefinition = {
+      id: "repeat-grid-render-isolation", name: "격자 렌더 격리", requires: { blocks: 20, modules: {} }, permissions: [],
+      state: { rows }, ui: { type: "stack", direction: "column", children: [
+        { type: "repeat", key: "id", items: { state: "rows" }, layout: "grid", grid: { columns: "auto", item_width: "small" },
+          template: { type: "text", value: { item: "id" } } },
+        { type: "text", value: "고정 블록" },
+      ] },
+    };
+    const { store } = await setup([repeat], { rows });
+    const grid = document.querySelector<HTMLElement>('[data-window-id="window-a"] .ks-repeat')!;
+    grid.style.setProperty("--ks-repeat-grid-item-width-small", "128px");
+    grid.style.setProperty("--ks-space-3", "12px");
+    grid.style.padding = "0px";
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (!this.classList.contains("ks-repeat-grid-width-probe")) return originalRect.call(this);
+      const parent = this.parentElement!;
+      const widthVariable = this.style.width.match(/var\((--[^)]+)\)/)?.[1];
+      const gapValue = this.style.marginInlineEnd;
+      const gapVariable = gapValue.match(/var\((--[^)]+)\)/)?.[1];
+      const width = Number.parseFloat(parent.style.getPropertyValue(widthVariable ?? ""));
+      const gap = Number.parseFloat(gapVariable ? parent.style.getPropertyValue(gapVariable) : gapValue);
+      if (Number.isFinite(gap)) this.style.marginInlineEnd = `${gap}px`;
+      return { x: 0, y: 0, top: 0, left: 0, right: width, bottom: 0, width, height: 0, toJSON() {} } as DOMRect;
+    });
+    const fixedBlocks = screen.getAllByText("고정 블록");
+    expect(fixedBlocks).toHaveLength(2);
+    const resize = async (next: number) => {
+      width = next;
+      await act(async () => {
+        observers.filter(({ targets }) => targets.has(grid)).forEach(({ callback }) => callback([], {} as ResizeObserver));
+      });
+    };
+    await resize(327.5);
+    expect(grid.querySelector<HTMLElement>(".ks-repeat-content")?.style.gridTemplateColumns).toBe("repeat(2, minmax(0, 1fr))");
+    calls.length = 0;
+    await resize(900);
+    await waitFor(() => expect(grid.querySelector<HTMLElement>(".ks-repeat-content")?.style.gridTemplateColumns).toBe("repeat(6, minmax(0, 1fr))"));
+    expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    expect(screen.getAllByText("고정 블록")).toEqual(fixedBlocks);
+    store.dispose();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it("반복 캔버스 한 행을 다시 마운트해도 다른 행은 다시 그리지 않는다", async () => {
     const rows = Array.from({ length: 10 }, (_, index) => ({ id: String(index), surface: `tile-${index}` }));
     const repeat: AppDefinition = { id: "canvas-isolation", name: "표면 격리", requires: { blocks: 14, modules: {} }, permissions: [],
@@ -1101,7 +1159,19 @@ describe("실제 Shell의 블록 렌더 격리", () => {
       unobserve(target: Element) { this.entry.targets.delete(target); }
     });
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => width);
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => ({ width, height: width / 2 } as DOMRect));
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("ks-repeat-grid-width-probe")) {
+        const parent = this.parentElement!;
+        const widthVariable = this.style.width.match(/var\((--[^)]+)\)/)?.[1];
+        const gapVariable = this.style.marginInlineEnd.match(/var\((--[^)]+)\)/)?.[1];
+        const pane = Number.parseFloat(parent.style.getPropertyValue(widthVariable ?? ""));
+        const gap = Number.parseFloat(parent.style.getPropertyValue(gapVariable ?? ""));
+        if (Number.isFinite(gap)) this.style.marginInlineEnd = `${gap}px`;
+        return { x: 0, y: 0, top: 0, left: 0, right: pane, bottom: 0, width: pane, height: 0, toJSON() {} } as DOMRect;
+      }
+      return { ...originalRect.call(this), width, height: width / 2 } as DOMRect;
+    });
     const rows = [{ id: "a", surface: "preview-a" }, { id: "b", surface: "preview-b" }];
     const definition: AppDefinition = {
       id: "auto-preview-isolation", name: "자동 열 미리보기", requires: { blocks: 19, modules: { assets: 1, client: 1 } },
@@ -1130,7 +1200,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
       expect(found?.querySelectorAll(".ks-canvas")).toHaveLength(2);
       return found!;
     });
-    grid.style.setProperty("--ks-pane-min-size", "160px");
+    grid.style.setProperty("--ks-repeat-grid-item-width-medium", "160px");
     grid.style.setProperty("--ks-space-3", "12px");
     grid.style.padding = "0px";
     const resize = async (next: number) => {
@@ -1148,6 +1218,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     view.unmount(); store.dispose();
     if (originalTransfer) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", originalTransfer);
     else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
