@@ -224,7 +224,7 @@ test("넘친 목록에서 삭제 확인을 열고 닫아도 창 스크롤이 유
   expect(await frame.evaluate((node) => node.scrollTop)).toBe(0);
 });
 
-type ToolbarScenario = "split" | "variants" | "jizura" | "ktx" | "label";
+type ToolbarScenario = "split" | "tabsplit" | "variants" | "jizura" | "ktx" | "label";
 async function showToolbarScenario(page: import("@playwright/test").Page, width: number, scenario: ToolbarScenario) {
   await page.setViewportSize({ width: width + 40, height: 1000 });
   await page.goto("/?preview=data-controls");
@@ -255,7 +255,10 @@ async function showToolbarScenario(page: import("@playwright/test").Page, width:
       column([toolbar([text("카테고리")]), text("전체 · 설치됨", "body")]),
       column([toolbar([input("앱 찾기")], [icon()]), text("앱 목록", "body")]),
       column([toolbar([text("kaleidoscope 랜딩 페이지 시안 3판 디렉터 검토본")], [text("제작자", "meta")]), text("앱 설명", "body"), toolbar([], [button("설치", { variant:"primary" })])]),
-    ] } : kind === "variants" ? column([
+    ] } : kind === "tabsplit" ? { type:"tabs", tabs:[{ label:"목록", child:{ type:"split", direction:"row", sizes:[50,50], column_below:500, children:[
+      column([toolbar([text("카테고리")]), text("전체", "body")]),
+      column([toolbar([input("앱 찾기")], [icon()]), text("앱 목록", "body")]),
+    ] } }] } : kind === "variants" ? column([
       toolbar([text("카테고리")]), toolbar([input("앱 찾기")]), toolbar([select("dropdown")]),
       toolbar([select("segmented")]), toolbar([button("설치", { variant:"primary" })]), toolbar([icon()]),
       toolbar([input("앱 찾기")], [icon()]), toolbar([text("kaleidoscope 랜딩 페이지 시안 3판 디렉터 검토본")], [select("dropdown")]),
@@ -270,6 +273,7 @@ async function showToolbarScenario(page: import("@playwright/test").Page, width:
   }, scenario);
   const app = page.getByTestId("app-window-data-controls");
   if (scenario === "split") await expect(app.getByText("카테고리", { exact: true })).toBeVisible();
+  if (scenario === "tabsplit") await expect(app.locator(".ks-data-toolbar")).toHaveCount(2);
   if (scenario === "variants") await expect(app.locator(".ks-data-toolbar")).toHaveCount(9);
   if (scenario === "jizura") await expect(app.getByRole("button", { name: "사용법 안내" })).toBeAttached();
   if (scenario === "ktx") await expect(app.getByPlaceholder("HH:MM~HH:MM")).toBeAttached();
@@ -504,5 +508,16 @@ test("기본 앱의 두 줄 전환은 실측한 막대 경계에서 일어난다
     await style.evaluate((node, width) => { node.textContent = `.ks-harness-apps.is-preview .ks-harness-window { width:${width + 3}px; height:240px; }`; }, boundary);
     await expect(app.locator(".ks-data-window")).toHaveJSProperty("clientWidth", boundary + 1);
     await expect(app.locator(".ks-data-toolbar")).toHaveCount(wide);
+  }
+});
+
+test("탭 안 분할의 도구 막대는 쌓인 칸과 나란한 칸에서 높이를 유지한다", async ({ page }) => {
+  for (const width of [360, 1000]) {
+    const app = await showToolbarScenario(page, width, "tabsplit");
+    const split = app.locator(".ks-split");
+    if (width === 360) await expect(split).toHaveClass(/is-stacked/);
+    else await expect(split).not.toHaveClass(/is-stacked/);
+    await checkToolbarGeometry(app);
+    await capture(page, `revision-tabsplit-${width}`);
   }
 });
