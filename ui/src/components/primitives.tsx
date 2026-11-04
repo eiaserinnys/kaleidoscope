@@ -77,6 +77,7 @@ export interface IconButtonProps {
   tone?: "share";
   className?: string;
   variant?: "embedded";
+  tabIndex?: number;
   onPointerDown?: React.PointerEventHandler<HTMLButtonElement>;
   onPointerUp?: React.PointerEventHandler<HTMLButtonElement>;
   onPointerCancel?: React.PointerEventHandler<HTMLButtonElement>;
@@ -86,7 +87,7 @@ export interface IconButtonProps {
   "data-ks-user-consent"?: boolean;
 }
 
-export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className, tooltip, tooltipEnabled, variant, onPointerDown, onPointerUp, onPointerCancel, onLostPointerCapture, onBlur, "aria-disabled": ariaDisabled, "data-ks-user-consent": userConsent }: IconButtonProps) {
+export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className, tooltip, tooltipEnabled, variant, tabIndex, onPointerDown, onPointerUp, onPointerCancel, onLostPointerCapture, onBlur, "aria-disabled": ariaDisabled, "data-ks-user-consent": userConsent }: IconButtonProps) {
   const button = (
     <button
       aria-label={label}
@@ -95,6 +96,7 @@ export function IconButton({ "aria-label": label, children, disabled, onClick, t
       data-ks-user-consent={userConsent || undefined}
       className={`ks-icon-button${tone === "share" ? " ks-icon-button-share" : ""}${variant === "embedded" ? " is-embedded" : ""}${className ? ` ${className}` : ""}`}
       disabled={disabled}
+      tabIndex={tabIndex}
       onClick={onClick}
       onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel} onLostPointerCapture={onLostPointerCapture} onBlur={onBlur}
       type="button"

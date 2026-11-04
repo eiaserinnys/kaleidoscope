@@ -52,7 +52,7 @@ export function SpinButtons({ ref, increment, onEnd, atMin, atMax, readOnly, vis
   };
   const button = (direction: 1 | -1) => {
     const label = direction === 1 ? "늘리기" : "줄이기";
-    return <IconButton aria-label={label} tooltip={label} variant="embedded" disabled={readOnly || (direction === 1 ? atMax : atMin)}
+    return <IconButton aria-label={label} title="" tabIndex={-1} variant="embedded" disabled={readOnly || (direction === 1 ? atMax : atMin)}
       onPointerDown={(event) => start(event, direction)} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onBlur={end}
       onClick={(event) => { if (event.detail !== 0 && consumeClick.current) { consumeClick.current = false; return; } consumeClick.current = false; incrementRef.current(direction, false); }}>
       {direction === 1 ? <ChevronUp size="inline" /> : <ChevronDown size="inline" />}

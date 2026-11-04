@@ -57,6 +57,16 @@ it("스핀 경계와 읽기 전용 상태는 해당 단추를 잠근다", () => 
   expect((screen.getByRole("button", { name: "줄이기" }) as HTMLButtonElement).disabled).toBe(true);
 });
 
+it("스핀 단추는 툴팁과 탭 순서 없이 접근성 이름을 유지한다", () => {
+  const input = { type: "input", kind: "number", spin: true, value: 1, on_change: { client: "change" } };
+  render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+  for (const name of ["늘리기", "줄이기"]) {
+    const button = screen.getByRole("button", { name });
+    expect(button.getAttribute("tabindex")).toBe("-1");
+    expect(button.getAttribute("title") || "").toBe("");
+  }
+});
+
 it("짧게 누르면 놓고 300ms 뒤 한 번만 보낸다", async () => {
   vi.useFakeTimers(); vi.stubGlobal("PointerEvent", MouseEvent);
   try {

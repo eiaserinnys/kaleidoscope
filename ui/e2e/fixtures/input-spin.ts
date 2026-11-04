@@ -12,7 +12,7 @@ export const inputSpinApp = {
     } },
     { type: "input", kind: "number", spin: true, label: "조정", value: { state: "amount" }, min: 0, max: 50, step: 1, on_change: { set_state: "amount" } },
     { type: "input", kind: "number", spin: true, label: "빈 값", value: { state: "blank" }, on_change: { set_state: "blank" } },
-    { type: "input", kind: "number", spin: true, label: "한도", value: { state: "limit" }, min: 0, max: 5, on_change: { set_state: "limit" } },
+    { type: "input", kind: "number", spin: true, columns: 6, label: "한도", value: { state: "limit" }, min: 0, max: 5, on_change: { set_state: "limit" } },
     { type: "input", kind: "number", spin: true, label: "읽기 전용", value: { state: "locked" }, read_only: true, on_change: { set_state: "locked" } },
   ] },
 } as unknown as AppDefinition;
