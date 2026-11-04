@@ -1,6 +1,6 @@
 [package]
 name = "kaleidoscope-app"
-version = "0.6.35"
+version = "0.6.36"
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
