@@ -10,7 +10,7 @@ import { AppWindowContent } from "../render/app-window-content";
 import { describeVisible } from "../share/visible";
 import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it("stack.align maps cross-axis alignment and center placement keeps precedence", () => {
   for (const align of ["start", "center", "end", "baseline"] as const) {
@@ -68,6 +68,12 @@ it.each([
   ["가로 고르기", { type: "stack", direction: "row", children: [fillText, { type: "select", value: { state: "value" }, on_change: { set_state: "value" }, options: ["a"] }] }, [1], false],
   ["명시한 목록", { type: "stack", direction: "column", fill: 0, children: [fillList, fillButton] }, [0], true],
   ["명시한 단추", { type: "stack", direction: "column", fill: 1, children: [fillList, fillButton] }, [1], true],
+  ["명시한 인접 폭 조건", { type: "stack", direction: "column", fill: 0, children: [{ type: "when", min_width: 1200, child: fillList }, { type: "when", max_width: 1199, child: fillList }] }, [0, 1], true],
+  ["명시한 폭 조건 사이 다른 블록", { type: "stack", direction: "column", fill: 1, children: [fillToolbar, { type: "when", min_width: 1200, child: fillList }, fillText, { type: "when", max_width: 1199, child: fillList }] }, [1], true],
+  ["암묵 폭 조건 채움", { type: "stack", direction: "column", children: [fillToolbar, { type: "when", min_width: 1200, child: fillList }, { type: "when", max_width: 1199, child: fillList }] }, [2], false],
+  ["폭 조건 없는 명시 채움", { type: "stack", direction: "column", fill: 0, children: [{ type: "when", value: true, child: fillList }, { type: "when", value: true, child: fillText }, { type: "when", value: true, child: fillButton }] }, [0], true],
+  ["폭 조건 없는 이웃", { type: "stack", direction: "column", fill: 0, children: [{ type: "when", min_width: 1200, child: fillList }, { type: "when", value: true, child: fillText }] }, [0], true],
+  ["명시한 폭 조건 양옆", { type: "stack", direction: "column", fill: 1, children: [{ type: "when", max_width: 500, child: fillList }, { type: "when", min_width: 501, child: fillList }, { type: "when", min_width: 1200, child: fillList }] }, [0, 1, 2], true],
   ["가운데 배치의 명시 fill", { type: "stack", direction: "column", place: "center", fill: 1, children: [fillList, fillButton] }, [], false],
   ["가로 단추 줄", { type: "stack", direction: "column", children: [fillText, fillList, { type: "stack", direction: "row", children: [fillButton, fillButton] }] }, [], false],
   ["조건 단추", { type: "stack", direction: "column", children: [fillText, fillList, { type: "when", value: true, child: fillButton }] }, [], false],
@@ -83,6 +89,7 @@ it.each([
     fillToolbar,
   ] as Block[]).map((control) => [control.type, { type: "stack", direction: "column", children: [fillText, control] }, [], false]),
 ] as Array<[string, Block, number[], boolean]>)("stack fill: %s", async (_name, stack, expected, explicit) => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   const definition: AppDefinition = { ...mdEditorDefinition, state: { value: "" }, ui: stack };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   const view = render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
