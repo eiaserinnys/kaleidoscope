@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { selectTab } from "./tab-helper";
 
 async function selectText(page: Page, target: Locator) {
   const rect = await target.evaluate((element) => {
@@ -23,8 +24,8 @@ async function selectText(page: Page, target: Locator) {
 }
 
 for (const [name, index, pointer] of [
-  ["탭 상태", 6, "/ui/tabs/6/child/children/1/items"],
-  ["구역 상태", 7, "/ui/tabs/7/child/child/children/1/items"],
+  ["탭 상태", 8, "/ui/tabs/8/child/children/1/items"],
+  ["구역 상태", 9, "/ui/tabs/9/child/child/children/1/items"],
 ] as const) {
   test(`${name}의 찾기 아래 실패 상태가 남은 칸을 채운다`, async ({ page }) => {
     await page.setViewportSize({ width: 800, height: 700 });
@@ -54,11 +55,41 @@ for (const [name, index, pointer] of [
   });
 }
 
+test("좁은 칸의 긴 오류는 위쪽부터 보이고 다시 받기까지 스크롤된다", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 700 });
+  await page.goto("/?preview=paging-test");
+  const app = page.getByTestId("app-window-paging-test");
+  await selectTab(app, "탭 상태");
+  const panel = app.getByRole("tabpanel");
+  await expect(panel.getByRole("option", { name: "항목 1", exact: true })).toBeVisible();
+  await page.evaluate(() => (window as any).conversationHarness.emit({ event: "data.update", window_id: "paging-test-window", view: {
+    sources: {}, values: { "/ui/tabs/8/child/children/1/items": { status: "failed", message: "서버 오류와 원인을 확인하세요. ".repeat(40), retry: ["list_items"] } },
+  } }));
+  const state = panel.locator(".ks-data-state");
+  await expect(state).toBeVisible();
+  const fill = state.locator("..");
+  const first = await state.evaluate((el) => {
+    const parent = el.parentElement!.getBoundingClientRect();
+    const icon = el.querySelector(".ks-empty-state-icon")!.getBoundingClientRect();
+    return { top: parent.top, iconTop: icon.top, scrollHeight: el.parentElement!.scrollHeight, clientHeight: el.parentElement!.clientHeight };
+  });
+  expect(first.iconTop).toBeGreaterThanOrEqual(first.top);
+  expect(first.scrollHeight).toBeGreaterThan(first.clientHeight);
+  await fill.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+  const last = await state.evaluate((el) => {
+    const parent = el.parentElement!.getBoundingClientRect();
+    const button = el.querySelector("button")!.getBoundingClientRect();
+    return { bottom: parent.bottom, buttonBottom: button.bottom, scrollTop: el.parentElement!.scrollTop };
+  });
+  expect(last.scrollTop).toBeGreaterThan(0);
+  expect(last.buttonBottom).toBeLessThanOrEqual(last.bottom);
+});
+
 test("이전 값 알림의 문구는 끌어 선택하고 단추는 선택하지 않는다", async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 700 });
   await page.goto("/?preview=paging-test");
   const app = page.getByTestId("app-window-paging-test");
-  await expect(app.getByRole("tab", { name: "목록" })).toBeVisible();
+  await expect(app.getByRole("tab", { name: "목록", exact: true })).toBeVisible();
   await page.evaluate(() => (window as any).conversationHarness.emit({ event: "data.update", window_id: "paging-test-window", view: {
     sources: { list_items: { state: "failed", has_value: true, message: "원인: 서버 오류", id: "SOURCE_ERROR" } }, values: {},
   } }));
