@@ -1485,7 +1485,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
   it("날짜 시간축 스크롤은 다른 창을 다시 그리거나 코어를 부르지 않는다", async () => {
     const timeline = { type: "timeline" as const, scale: "dates" as const, today: false,
       tracks: [{ id: "track", items: [{ id: "item", label: "구간", start: "2026-11-01", end: "2026-11-07" }] }] };
-    const app: AppDefinition = { id: "dates-isolation", name: "날짜 격리", requires: { blocks: 27, modules: {} },
+    const app: AppDefinition = { id: "dates-isolation", name: "날짜 격리", requires: { blocks: 31, modules: {} },
       permissions: [], state: {}, ui: timeline };
     const snapshot = testSnapshot([app], {});
     const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
