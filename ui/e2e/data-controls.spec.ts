@@ -49,7 +49,7 @@ test("범용 블록의 탭, 입력, 확인과 상태를 조작한다", async ({ 
   const remove = app.getByRole("button", { name: "삭제" });
   await remove.click();
   const dialog = app.getByRole("dialog");
-  await expect(dialog.getByRole("button", { name: "삭제" })).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "취소" })).toBeFocused();
   await capture(page, "wide-dialog");
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
@@ -99,11 +99,11 @@ test("확인 대화상자와 실패한 구역 머리의 조작을 격리한다",
   const confirm = dialog.getByRole("button", { name: "삭제" });
   await expect(app.locator(".ks-data-window-body")).toHaveAttribute("inert", "");
   await expect(app.locator(".ks-data-window-notice")).toHaveAttribute("inert", "");
-  await expect(confirm).toBeFocused();
-  await page.keyboard.press("Tab");
   await expect(cancel).toBeFocused();
-  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
   await expect(confirm).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(cancel).toBeFocused();
   await capture(page, "dialog-trapped");
   await page.keyboard.press("Escape");
   await expect(opener).toBeFocused();
