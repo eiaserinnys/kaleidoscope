@@ -58,7 +58,7 @@ fn block_set_18_schema_exposes_new_fields_and_types() {
 
 #[test]
 fn current_contract_versions_include_realtime() {
-    assert_eq!(CONTRACT_VERSION, 30);
+    assert_eq!(CONTRACT_VERSION, 31);
     let supported = Supported::current();
     assert_eq!(supported.blocks, BLOCK_SET_VERSION);
     assert_eq!(supported.blocks, kaleidoscope_contract::realtime::REALTIME_BLOCK_SET_VERSION);
@@ -67,6 +67,7 @@ fn current_contract_versions_include_realtime() {
 
 #[test]
 fn block_set_18_remains_supported_by_current_contract() {
+    assert_eq!(CONTRACT_VERSION, 31);
     let supported = Supported::current();
     assert_eq!(supported.blocks, BLOCK_SET_VERSION);
     assert!(supported.blocks >= 18);

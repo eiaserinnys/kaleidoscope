@@ -218,7 +218,9 @@ pub mod realtime;
 pub mod registry;
 pub mod size;
 pub mod validate;
+pub mod window_control;
 pub mod worker;
+pub use window_control::*;
 
 use data::{Actions, Binding, SourceDecl};
 
@@ -235,7 +237,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 30;
+pub const CONTRACT_VERSION: u32 = 31;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -3964,6 +3966,20 @@ pub enum PathValue {
 #[serde(tag = "op", deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub enum CoreRequest {
+    #[serde(rename = "window.control.respond")]
+    WindowControlRespond { response: WindowControlResponse },
+    #[serde(rename = "window.control.capture")]
+    WindowControlCapture {
+        request_id: String,
+        window_id: String,
+        bounds: Rect,
+    },
+    #[serde(rename = "web.control")]
+    WebControl {
+        request_id: String,
+        window_id: String,
+        operation: WindowControlOperation,
+    },
     /// 상태 전체를 읽는다. 화면이 켜질 때 한 번 부른다.
     #[serde(rename = "state.get")]
     StateGet {},
@@ -5169,6 +5185,16 @@ pub enum CoreReply {
     #[serde(rename = "web.detach")]
     WebDetach {},
 
+    #[serde(rename = "window.control.respond")]
+    WindowControlRespond {},
+    #[serde(rename = "window.control.capture")]
+    WindowControlCapture {
+        image_base64: String,
+        geometry: WindowGeometry,
+    },
+    #[serde(rename = "web.control")]
+    WebControl { result: WindowControlResult },
+
     #[serde(rename = "conversation.get")]
     ConversationGet {
         thread: Option<conversation::ConversationThread>,
@@ -5362,6 +5388,8 @@ pub enum FileKind {
 #[serde(tag = "event")]
 #[ts(export, export_to = "contract.ts")]
 pub enum CoreEvent {
+    #[serde(rename = "window.control")]
+    WindowControl { request: WindowControlRequest },
     /// 공유 상태나 기기 상태, 연결 상태가 바뀌었다. 화면은 저장소를 이 snapshot으로 바꾼다.
     #[serde(rename = "state.changed")]
     StateChanged { snapshot: ShellSnapshot },
@@ -5966,7 +5994,7 @@ mod tests {
         });
         let definition = validate::parse_app_definition(&definition.to_string())
             .expect("U6 필드를 사용하는 정의는 유효하다");
-        assert_eq!(CONTRACT_VERSION, 30);
+        assert_eq!(CONTRACT_VERSION, 31);
         let Block::Tabs {
             header,
             keep_mounted,

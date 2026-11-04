@@ -1,4 +1,8 @@
 error_catalog! { ENTRIES;
+    WEB_CONTROL_PLATFORM_UNSUPPORTED(window) { class: Unavailable, place: "웹 화면 창 제어 환경 확인", cause: "이 환경은 웹 화면 창 제어를 지원하지 않는다", message: "이 환경은 {window} 웹 화면 창의 읽기와 조작을 지원하지 않습니다. Windows 쉘에서 요청하세요.", fix: "Windows 쉘에서 요청하세요" }
+    WEB_CONTROL_AX_READ_FAILED(window, reason) { class: Io, place: "웹 화면 접근성 트리 읽기", cause: "접근성 트리를 읽지 못했다", message: "{window} 웹 화면의 요소를 읽지 못했습니다. 화면을 다시 읽고 원인을 확인하세요. 원인: {reason}", fix: "화면을 다시 읽고 원인을 확인하세요" }
+    WEB_CONTROL_INPUT_FAILED(window, reason) { class: Io, place: "웹 화면 입력 전송", cause: "웹뷰가 입력을 처리하지 못했다", message: "{window} 웹 화면에 입력을 보내지 못했습니다. 화면을 다시 읽고 결과를 확인하세요. 원인: {reason}", fix: "화면을 다시 읽고 결과를 확인하세요" }
+    WEB_CONTROL_NODE_RESOLVE_FAILED(window, reason) { class: Io, place: "웹 화면 요소 확인", cause: "접근성 요소를 입력 대상으로 찾지 못했다", message: "{window} 웹 화면의 입력 대상을 찾지 못했습니다. 화면을 다시 읽고 새 번호를 쓰세요. 원인: {reason}", fix: "화면을 다시 읽고 새 번호를 쓰세요" }
     WEB_REQUEST_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "웹 화면 요청의 창 조회",

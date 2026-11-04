@@ -302,7 +302,9 @@ pub const REGISTRY_HEADER: &str = "x-kaleidoscope-registry";
 /// 기기 토큰을 쓴 MCP 호출의 작업 기본값.
 pub const WORKSPACE_HEADER: &str = "x-kaleidoscope-workspace";
 /// 이 빌드가 아는 레지스트리 판.
-pub const REGISTRY_VERSION: u32 = 11;
+pub const REGISTRY_VERSION: u32 = 12;
+/// 창 제어 응답: `POST /api/device/window-control/{request_id}`, 기기 bearer 인증과 `WindowControlResponse` 본문을 쓴다.
+pub const DEVICE_WINDOW_CONTROL_PATH: &str = "/api/device/window-control";
 pub const APP_VALUES_REGISTRY_VERSION: u32 = 10;
 /// 배치를 동기화하는 레지스트리 판. 서버는 [`REGISTRY_HEADER`]가 이 값 이상인 연결과 배치를 맞춘다.
 pub const LAYOUT_SYNC_REGISTRY_VERSION: u32 = 6;
@@ -566,6 +568,10 @@ pub struct ConnectionReply {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "event")]
 pub enum DeviceEvent {
+    #[serde(rename = "window.control")]
+    WindowControl {
+        request: crate::WindowControlRequest,
+    },
     /// 연결 직후 한 번. 레지스트리의 모든 앱의 지금 버전.
     #[serde(rename = "apps.snapshot")]
     AppsSnapshot {

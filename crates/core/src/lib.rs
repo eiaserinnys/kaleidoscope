@@ -594,6 +594,15 @@ impl Core {
             | CoreRequest::RealtimeRelease { .. }) => {
                 realtime_host::dispatch::handle(&self.inner, request)
             }
+            CoreRequest::WindowControlRespond { response } => {
+                Err(errors::SHARE_CONTROL_RESPONSE_UNEXPECTED()
+                    .and_details(vec![format!("request_id: {}", response.request_id)]))
+            }
+            CoreRequest::WindowControlCapture { request_id, .. }
+            | CoreRequest::WebControl { request_id, .. } => {
+                Err(errors::SHARE_CONTROL_RESPONSE_UNEXPECTED()
+                    .and_details(vec![format!("request_id: {request_id}")]))
+            }
             CoreRequest::ProfilerReport { inputs, frames } => {
                 self.inner.profiler.report(inputs, frames);
                 Ok(CoreReply::ProfilerReport {})

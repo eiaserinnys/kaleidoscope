@@ -1,4 +1,10 @@
 error_catalog! { ENTRIES;
+    SHARE_CONTROL_WINDOW_NOT_FOUND(window) { class: NotFound, place: "창 제어 대상 창 조회", cause: "기기에 대상 창이 없다", message: "이 기기에서 {window} 창을 찾지 못했습니다. 창을 다시 열고 같이 보기를 켜세요.", fix: "창을 다시 열고 같이 보기를 켜세요" }
+    SHARE_CONTROL_NOT_SHARED(window) { class: PermissionDenied, place: "창 제어 같이 보기 확인", cause: "기기에서 창의 같이 보기가 꺼져 있다", message: "이 기기에서 {window} 창의 같이 보기가 꺼져 있습니다. 사용자가 켠 뒤 다시 요청하세요.", fix: "사용자가 같이 보기를 켠 뒤 다시 요청하세요" }
+    SHARE_CONTROL_DESKTOP_INACTIVE(window) { class: InvalidRequest, place: "창 제어 데스크톱 확인", cause: "대상 창이 현재 데스크톱에 없다", message: "{window} 창은 현재 데스크톱에 없습니다. 사용자가 해당 데스크톱으로 이동한 뒤 요청하세요.", fix: "사용자가 해당 데스크톱으로 이동한 뒤 요청하세요" }
+    SHARE_CONTROL_REQUEST_EXPIRED(window) { class: InvalidRequest, place: "창 제어 실행 기한 확인", cause: "실행 전에 요청 기한이 지났다", message: "{window} 창의 조작 요청 기한이 지났습니다. 현재 창을 다시 읽으세요.", fix: "현재 창을 다시 읽으세요" }
+    SHARE_CONTROL_RESPONSE_UNEXPECTED() { class: InvalidRequest, place: "창 제어 대기 요청 확인", cause: "대응하는 코어 대기 요청이 없다", message: "이 창 제어 요청에 대응하는 대기 요청이 없습니다. 현재 요청 ID를 확인하세요.", fix: "현재 요청 ID를 확인하세요" }
+    SHARE_CONTROL_IMAGE_UNAVAILABLE(window) { class: Unavailable, place: "창 제어 격리 그림 캡처", cause: "격리 그림을 얻지 못했다", message: "이 환경에서 {window} 창의 격리 그림을 얻지 못했습니다. image를 끄고 글을 읽거나 지원되는 쉘에서 요청하세요.", fix: "image를 끄거나 지원되는 쉘에서 요청하세요" }
     SHARE_CONTEXT_WINDOW_NOT_FOUND() { class: NotFound, place: "같이 보기 준비 창", cause: "앱 창이 없다", message: "같이 보기를 준비할 앱 창이 없습니다. 앱을 다시 여세요.", fix: "앱을 다시 여세요" }
     SHARE_CLIENT_APP_NOT_FOUND() { class: NotFound, place: "클라이언트 기능 앱 조회", cause: "창의 앱 정의가 없다", message: "클라이언트 기능을 사용할 앱 정의가 없습니다. 앱을 다시 여세요.", fix: "앱을 다시 여세요" }
     SHARE_CONTEXT_ID_EMPTY() { class: InvalidRequest, place: "같이 보기 준비 식별자", cause: "요청 ID나 채널이 비었다", message: "같이 보기 요청 ID 또는 채널이 비었습니다. 앱 코드에서 둘 다 지정하세요.", fix: "요청 ID와 채널을 지정하세요" }
