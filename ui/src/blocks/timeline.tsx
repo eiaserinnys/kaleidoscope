@@ -8,6 +8,7 @@ import { useBinding, useWindowData } from "../data/window-data";
 import { useWindowVisible } from "../data/window-state";
 import { createSerialSend } from "../data/throttled-send";
 import { useShareDescriber } from "../share/visible";
+import { capturePointer } from "../share/pointer-capture";
 import { eventModifiers } from "../runtime/shortcuts";
 import { clockPosition, isClock } from "../data/clock";
 import type { BlockContext } from "./block-context";
@@ -280,7 +281,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     event.stopPropagation();
     if (block.on_select) void data.act(`${pointer}/on_select`, { ids: [edit.id] });
     if (!editable || block.read_only || !block.on_edit || !body.current || seconds <= 0) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
+    capturePointer(event);
     gesture.current = { pointerId: event.pointerId, x: event.clientX, width: body.current.getBoundingClientRect().width, original: edit, current: edit };
   };
   const move = (event: PointerEvent<HTMLElement>) => {
@@ -381,7 +382,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     <div className={`ks-timeline-layout${block.controls === true ? " has-controls" : ""}`}><div className="ks-timeline-labels"><div className="ks-timeline-ruler-label">{showControls ? <><IconButton aria-label="축소" disabled={!canChangeViewport || zoom <= 1} onClick={() => zoomBy(1 / 1.6)}><DataIcon name="minus" size="inline" /></IconButton><IconButton aria-label="확대" disabled={!canChangeViewport || zoom >= maxZoom} onClick={() => zoomBy(1.6)}><DataIcon name="plus" size="inline" /></IconButton>{block.controls === true ? <IconButton aria-label="전체 맞춤" disabled={!canChangeViewport || (viewportRange.start === 0 && viewportRange.end === seconds)} onClick={() => changeViewport({ start: 0, end: seconds })}><DataIcon name="maximize-2" size="inline" /></IconButton> : null}</> : null}</div>{trackData.map((track) => <div key={track.id}><span>{track.label ?? track.id}</span>{track.locked ? <DataIcon name="lock" size="inline" /> : null}</div>)}</div>
       <div className="ks-timeline-scroll" ref={attachScroll}><div className="ks-timeline-body" ref={body} style={{ width: bodyWidth }}>
         <span className="ks-timeline-ruler-measure" aria-hidden="true">{rulerTime(seconds).replace(/\d/g, "0")}</span>
-        <div className="ks-timeline-ruler" ref={ruler} role="slider" aria-label="재생 위치" aria-valuemin={0} aria-valuemax={Math.round(seconds * 100) / 100} aria-valuenow={Math.round(currentTime * 100) / 100} tabIndex={block.on_seek ? 0 : -1} onKeyDown={(event) => { if (!block.on_seek || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return; event.preventDefault(); const increment = event.shiftKey ? 0.1 : snapValue?.step && snapValue.step > 0 ? snapValue.step : 1; void data.act(`${pointer}/on_seek`, Math.max(0, Math.min(seconds, currentTime + (event.key === "ArrowRight" ? increment : -increment)))); }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); seek(event, true); }} onPointerMove={(event) => { if (event.buttons) seek(event); }} onPointerUp={(event) => seek(event, true)} onPointerCancel={() => flushSeek()}>
+        <div className="ks-timeline-ruler" ref={ruler} role="slider" aria-label="재생 위치" aria-valuemin={0} aria-valuemax={Math.round(seconds * 100) / 100} aria-valuenow={Math.round(currentTime * 100) / 100} tabIndex={block.on_seek ? 0 : -1} onKeyDown={(event) => { if (!block.on_seek || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return; event.preventDefault(); const increment = event.shiftKey ? 0.1 : snapValue?.step && snapValue.step > 0 ? snapValue.step : 1; void data.act(`${pointer}/on_seek`, Math.max(0, Math.min(seconds, currentTime + (event.key === "ArrowRight" ? increment : -increment)))); }} onPointerDown={(event) => { capturePointer(event); seek(event, true); }} onPointerMove={(event) => { if (event.buttons) seek(event); }} onPointerUp={(event) => seek(event, true)} onPointerCancel={() => flushSeek()}>
           {rulerTicks.map((tick) => <span key={tick} className={seconds > 0 && tick / seconds >= 0.96 ? "is-end" : undefined} style={{ left: percent(tick) }}>{rulerTime(tick)}</span>)}
         </div>
         {tickData.map((tick, index) => <span key={index} className="ks-timeline-tick" style={{ left: percent(tick) }} />)}

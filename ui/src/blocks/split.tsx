@@ -3,6 +3,7 @@ import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { renderBlock } from "../render/render-block";
 import { SplitPaneContext } from "./split-pane-context";
+import { capturePointer } from "../share/pointer-capture";
 
 type SplitBlockData = Extract<Block, { type: "split" }>;
 
@@ -74,7 +75,7 @@ export function SplitPanes({ direction, sizes, children }: { direction: SplitBlo
       pairWeight,
       minPaneSize,
     };
-    if ("setPointerCapture" in event.currentTarget) event.currentTarget.setPointerCapture(event.pointerId);
+    capturePointer(event);
     event.preventDefault();
   }
 

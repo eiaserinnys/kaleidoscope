@@ -8,6 +8,7 @@ import { cropStyle, isMedia } from "../components/media-thumbnail";
 import { Button, EmptyState, ErrorId, IconButton } from "../components/primitives";
 import { PreviewContext } from "./preview-context";
 import { openContextMenu, writeMenuImage } from "../components/context-menu";
+import { capturePointer } from "../share/pointer-capture";
 
 type Data = Extract<Block, { type: "image" }>;
 export function imageRequestSize(width: number, height: number, ratio: number, zoom: number): number {
@@ -70,7 +71,7 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   };
   const down = (event: PointerEvent<HTMLDivElement>) => {
     if (!zoomable || scale <= 1 || event.button !== 0) return;
-    drag.current = { x: event.clientX, y: event.clientY, offsetX: offset.x, offsetY: offset.y }; event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = { x: event.clientX, y: event.clientY, offsetX: offset.x, offsetY: offset.y }; capturePointer(event);
   };
   const move = (event: PointerEvent<HTMLDivElement>) => { if (drag.current) setOffset({ x: drag.current.offsetX + event.clientX - drag.current.x, y: drag.current.offsetY + event.clientY - drag.current.y }); };
   const crop = media?.crop;

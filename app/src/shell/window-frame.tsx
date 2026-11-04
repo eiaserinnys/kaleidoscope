@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { IconButton, Maximize2, Minus, Minimize2, ScreenShare, Settings, X, forgetNumbered, openContextMenu, useShareView, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
+import { IconButton, Maximize2, Minus, Minimize2, ScreenShare, Settings, X, forgetNumbered, openContextMenu, useShareView, windowActionActive, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
 import { ProcessConsent } from "./process-consent";
 import { windowMenuEntries } from "./window-menu";
@@ -168,7 +168,8 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
       data-minimized={isMinimized ? "true" : "false"}
       data-testid={`app-window-${appWindow.app_id}`}
       inert={isMinimized}
-      onPointerDownCapture={() => {
+      onPointerDownCapture={(event) => {
+        if (!event.nativeEvent.isTrusted && windowActionActive(appWindow.id)) return;
         if (!isTop) void onCall({ op: "window.raise", window_id: appWindow.id });
       }}
       onPointerMove={moveGesture}

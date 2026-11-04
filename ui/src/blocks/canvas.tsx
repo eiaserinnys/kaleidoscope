@@ -3,6 +3,7 @@ import type { Block } from "../contract/contract";
 import { useBinding, useWindowData } from "../data/window-data";
 import { createSerialSend } from "../data/throttled-send";
 import { useShareDescriber } from "../share/visible";
+import { capturePointer } from "../share/pointer-capture";
 import * as shellErrors from "../contract/shell-errors";
 import { progressIndicator } from "./progress";
 
@@ -91,7 +92,7 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     const bounds = root.current.getBoundingClientRect();
     const point = canvasPoint(rect.current, event.clientX - bounds.left, event.clientY - bounds.top);
     if (phase === "down" && !point) return;
-    if (phase === "down") event.currentTarget.setPointerCapture(event.pointerId);
+    if (phase === "down") capturePointer(event);
     const x = Math.max(0, Math.min(1, (event.clientX - bounds.left - rect.current.x) / rect.current.width));
     const y = Math.max(0, Math.min(1, (event.clientY - bounds.top - rect.current.y) / rect.current.height));
     const value = { phase, pointer_id: event.pointerId, x, y, buttons: event.buttons, shift: event.shiftKey, alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey };

@@ -118,6 +118,7 @@ pub(super) fn scenario(
         "web.loaded",
         json!({"window_id":web_id,"url":web_page.url}),
     )?;
+    let web_hide_mark = ui::web_place_mark();
     let setup_agent_window_id = open_window(core, &desktop_id, AGENT_APP_ID, layout.agent)?;
     write_test_agent_settings(core, &setup_agent_window_id, out, &agent_bin)?;
     call(
@@ -181,6 +182,7 @@ pub(super) fn scenario(
         &format!("return !!document.querySelector('{consent} .ks-dialog-confirm button');"),
         "agent process consent",
     )?;
+    ui::wait_web_hidden(&web_id, web_hide_mark)?;
     let bounds = ui::evaluate(app, &format!("const button=document.querySelector('{consent} .ks-dialog-confirm button');const r=button.getBoundingClientRect();return {{x:r.left+r.width/2,y:r.top+r.height/2}};"))?;
     let window = app.get_window("main").ok_or("main window not found")?;
     window.set_focus().map_err(|error| error.to_string())?;
@@ -189,6 +191,20 @@ pub(super) fn scenario(
     let x = position.x + (bounds["x"].as_f64().ok_or("consent x missing")? * scale).round() as i32;
     let y = position.y + (bounds["y"].as_f64().ok_or("consent y missing")? * scale).round() as i32;
     native_input::click(x, y)?;
+    // 첫 누름이 창 활성화에 쓰였으면 현재 위치를 다시 재서 한 번 더 누른다.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+    let mut consent_open = true;
+    while std::time::Instant::now() < deadline {
+        consent_open = ui::evaluate(app, &format!("return !!document.querySelector('{consent}');"))?.as_bool().unwrap_or(true);
+        if !consent_open { break; }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    if consent_open {
+        let bounds = ui::evaluate(app, &format!("const button=document.querySelector('{consent} .ks-dialog-confirm button');const r=button.getBoundingClientRect();return {{x:r.left+r.width/2,y:r.top+r.height/2}};"))?;
+        let x = position.x + (bounds["x"].as_f64().ok_or("consent x missing")? * scale).round() as i32;
+        let y = position.y + (bounds["y"].as_f64().ok_or("consent y missing")? * scale).round() as i32;
+        native_input::click(x, y)?;
+    }
     record(
         log,
         "agent.permission",

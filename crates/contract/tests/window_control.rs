@@ -14,6 +14,7 @@ fn roundtrip<T: serde::de::DeserializeOwned + serde::Serialize>(value: Value) {
 fn six_actions_roundtrip_and_reject_unknown_fields() {
     for action in [
         json!({"kind":"click","target":1}),
+        json!({"kind":"click","target":1,"gesture":"double_click"}),
         json!({"kind":"type","target":2,"text":"안녕","mode":"append"}),
         json!({"kind":"select","target":3,"choice":{"by":"value","value":42}}),
         json!({"kind":"scroll","direction":"down","amount":100}),

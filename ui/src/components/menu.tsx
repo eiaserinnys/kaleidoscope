@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ownerOf, registerOverlay } from "../share/overlay-owner";
+import { preserveWindowActionFocus, windowActionActive } from "../share/action-context";
 
 export interface MenuItem {
   type?: "item";
@@ -68,21 +69,27 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
     const focusTarget = checked && !checked.disabled
       ? checked
       : itemRefs.current.find((item) => item && !item.disabled);
-    if (checked) focusTarget?.focus({ preventScroll: true });
-    else focusTarget?.focus();
+    if (!owner || !preserveWindowActionFocus(owner)) {
+      if (checked) focusTarget?.focus({ preventScroll: true });
+      else focusTarget?.focus();
+    }
 
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
+      const targetOwner = target instanceof Element ? ownerOf(target) : undefined;
+      if (!event.isTrusted && targetOwner && windowActionActive(targetOwner) && targetOwner !== owner) return;
       if (menuRef.current?.contains(target) || (anchorPoint === undefined && keyboardRect === undefined && anchor.contains(target))) return;
       onClose();
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
+      const targetOwner = event.target instanceof Element ? ownerOf(event.target) : undefined;
+      if (!event.isTrusted && targetOwner && windowActionActive(targetOwner) && targetOwner !== owner) return;
       if (event.key === "Escape") {
         event.preventDefault();
         onClose();
-        anchor.focus();
+        if (!owner || !preserveWindowActionFocus(owner)) anchor.focus();
         return;
       }
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -92,10 +99,10 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
         .filter(({ item }) => item && !item.disabled);
       if (enabled.length === 0) return;
       event.preventDefault();
-      const current = enabled.findIndex(({ item }) => item === document.activeElement);
+      const current = enabled.findIndex(({ item }) => item === (event.isTrusted ? document.activeElement : event.target));
       const delta = event.key === "ArrowDown" ? 1 : -1;
       const next = (current + delta + enabled.length) % enabled.length;
-      enabled[next].item?.focus();
+      if (!owner || !preserveWindowActionFocus(owner)) enabled[next].item?.focus();
     };
 
     document.addEventListener("pointerdown", onPointerDown);
@@ -117,7 +124,8 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
         event.preventDefault();
         event.stopPropagation();
         onClose();
-        anchor.focus();
+        const owner = ownerOf(anchor);
+        if (!owner || !preserveWindowActionFocus(owner)) anchor.focus();
       }}
       ref={menuRef}
       role="menu"
@@ -135,7 +143,8 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
           key={item.id}
           onClick={() => {
             if (item.disabled) return;
-            anchor.focus();
+            const owner = ownerOf(anchor);
+            if (!owner || !preserveWindowActionFocus(owner)) anchor.focus();
             item.onSelect?.();
             onClose();
           }}

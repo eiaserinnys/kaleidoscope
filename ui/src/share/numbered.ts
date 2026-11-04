@@ -50,7 +50,7 @@ function identity(element: HTMLElement): string {
 
 function visible(element: HTMLElement): boolean {
   for (let node: HTMLElement | null = element; node; node = node.parentElement) {
-    if (node.hidden || node.hasAttribute("inert") || node.getAttribute("aria-hidden") === "true" || node.hasAttribute("data-ks-share-skip")) return false;
+    if (node.hidden || (node.hasAttribute("inert") && node.getAttribute("data-minimized") !== "true") || node.getAttribute("aria-hidden") === "true" || node.hasAttribute("data-ks-share-skip")) return false;
     const style = getComputedStyle(node);
     if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
   }
@@ -76,7 +76,7 @@ function label(element: HTMLElement): string {
   return describeVisible(element, true).text.replace(/\s+/g, " ").trim();
 }
 
-export function describeNumbered(windowId: string, root: HTMLElement): { text: string; visual: boolean; image_base64?: string } {
+export function describeNumbered(windowId: string, root: HTMLElement, publish = true): { text: string; visual: boolean; image_base64?: string } {
   let table = tables.get(windowId);
   if (!table || table.root !== root) {
     table = { elements: new WeakMap(), visible: new Map(), next: 1, root };
@@ -104,7 +104,7 @@ export function describeNumbered(windowId: string, root: HTMLElement): { text: s
     }
   }
   const descriptions = roots.filter((surface) => visible(surface) && !inConsent(surface)).map((surface) => describeVisible(surface, true));
-  current.visible = entries;
+  if (publish) current.visible = entries;
   return {
     text: limitShareText([...lines, ...descriptions.map((item) => item.text)].filter(Boolean).join("\n")),
     visual: descriptions.some((item) => item.visual),

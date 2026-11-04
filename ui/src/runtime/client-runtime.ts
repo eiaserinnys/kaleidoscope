@@ -15,6 +15,7 @@ import { processRequest } from "./client-process";
 import { ClientRealtime } from "./client-realtime";
 import { prepareShareForSend } from "../share/share-view";
 import * as shellErrors from "../contract/shell-errors";
+import { trackWindowAction, windowActionActive } from "../share/action-context";
 
 type Client = NonNullable<AppDefinition["client"]>;
 const escapePointer = (value: string) => value.replace(/~/g, "~0").replace(/\//g, "~1");
@@ -246,7 +247,12 @@ export class ClientRuntime {
   action(name: string, event: JsonValue, item?: JsonValue, args?: JsonValue, scope?: ItemScope, modifiers?: EventModifiers) {
     if (!this.client.actions.includes(name) || !this.frame) return false;
     const context: ClientActionContext = { event, ...(item === undefined ? {} : { item }), ...(args === undefined ? {} : { args }), ...(scope ? { parent_item: scope.parent_item, key: scope.key, index: scope.index } : {}), ...(modifiers === undefined ? {} : { modifiers }) };
-    this.send({ type: "ks-client-action", name, context });
+    if (windowActionActive(this.data.windowId)) {
+      const requestId = crypto.randomUUID();
+      const pending = new Promise<void>((resolve, reject) => { this.actionReplies.set(requestId, { resolve, reject }); });
+      void trackWindowAction(this.data.windowId, pending).catch((error) => this.data.setNotice(toCoreError(error)));
+      this.send({ type: "ks-client-action", name, context, requestId });
+    } else this.send({ type: "ks-client-action", name, context });
     return true;
   }
 

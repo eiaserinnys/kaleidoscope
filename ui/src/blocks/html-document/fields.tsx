@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { capturePointer } from "../../share/pointer-capture";
 
 type NumberFieldProps = {
   label: string; prop: string; value: string; step?: number; min?: number; max?: number; unit?: string; span?: string; box?: string;
@@ -39,7 +40,7 @@ export function NumberField({ label, prop, value, step = 1, min, max, unit, span
     if (event.button !== 0) return;
     const parsed = Number.parseFloat(draft);
     drag.current = { x: event.clientX, base: Number.isFinite(parsed) ? parsed : prop === "line-height" ? 1.2 : 0, value: draft, moved: false };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    capturePointer(event);
     if (!box) event.preventDefault();
   };
   const onMove = (event: PointerEvent<HTMLElement>) => {

@@ -1,6 +1,8 @@
 import type { EventModifiers, KeypadButton, Shortcut } from "../contract/contract";
 import type { BlockContext } from "../blocks/block-context";
 import { isWindowVisible } from "../data/window-state";
+import { ownerOf } from "../share/overlay-owner";
+import { windowActionActive } from "../share/action-context";
 
 export function eventModifiers(event: Pick<MouseEvent, "shiftKey" | "altKey" | "ctrlKey" | "metaKey">): EventModifiers {
   return { shift: event.shiftKey, alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey };
@@ -35,13 +37,15 @@ function matches(event: KeyboardEvent, shortcut: Shortcut): boolean {
 }
 
 function onKeyDown(event: KeyboardEvent) {
-  if (event.key === "Tab") grids.forEach((entry) => entry.clearFocus());
+  const targetOwner = event.target instanceof Element ? ownerOf(event.target) : undefined;
+  const controlled = !event.isTrusted && !!targetOwner && windowActionActive(targetOwner);
+  if (event.key === "Tab") grids.forEach((entry) => { if (!controlled || entry.context.window.id === targetOwner) entry.clearFocus(); });
   const target = event.target instanceof Element ? event.target : null;
   if (event.defaultPrevented || event.isComposing || typing(target)) return;
   const overlays = document.querySelectorAll('[role="dialog"], [role="menu"], dialog[open]');
-  if ([...overlays].some((overlay) => !overlay.closest('[hidden], [inert], [aria-hidden="true"]'))) return;
+  if ([...overlays].some((overlay) => (!controlled || ownerOf(overlay) === targetOwner) && !overlay.closest('[hidden], [inert], [aria-hidden="true"]'))) return;
   for (const tour of tours) {
-    if (!topWindow(tour.context)) continue;
+    if (controlled ? tour.context.window.id !== targetOwner : !topWindow(tour.context)) continue;
     if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       if (event.key === "ArrowLeft") tour.handlers.previous();
       else if (event.key === "ArrowRight" || event.key === "Enter") tour.handlers.next();
@@ -52,12 +56,12 @@ function onKeyDown(event: KeyboardEvent) {
     return;
   }
   for (const app of apps) {
-    if (!topWindow(app.context)) continue;
+    if (controlled ? app.context.window.id !== targetOwner : !topWindow(app.context)) continue;
     const index = app.shortcuts.findIndex((shortcut) => matches(event, shortcut));
     if (index >= 0) { event.preventDefault(); app.run(index, eventModifiers(event)); return; }
   }
   if (event.ctrlKey || event.metaKey || event.altKey) return;
-  const eligible = [...grids].filter((entry) => topWindow(entry.context) && !entry.root.closest('[hidden], [inert], [aria-hidden="true"]'));
+  const eligible = [...grids].filter((entry) => (controlled ? entry.context.window.id === targetOwner : topWindow(entry.context)) && !entry.root.closest('[hidden], [inert], [aria-hidden="true"]'));
   const focusedGrid = target?.closest(".ks-keypad");
   const candidates = eligible.flatMap((entry) => {
     if (focusedGrid && focusedGrid !== entry.root) return [];

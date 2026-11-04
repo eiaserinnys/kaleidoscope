@@ -14,6 +14,7 @@ import { Button, ErrorId, IconButton } from "../components/primitives";
 import { display, isMultilineInput } from "./data-layout";
 import { asArray } from "./data-view-common";
 import { createSerialSend, createThrottledSend } from "../data/throttled-send";
+import { registerPendingFlush } from "../share/pending-flush";
 import { isWindowTop, useWindowVisible } from "../data/window-state";
 import { isClock, useClockPosition } from "../data/clock";
 import { renderBlock } from "../render/render-block";
@@ -60,13 +61,14 @@ export function InputBlock({ block, pointer }: Props<"input">) {
   const { draft, change, finish, holding, send } = useLocalDraft<string>(initialDraft, pointer, { sendOnChange: false, resetOnFailure: false, syncOnSuccess: true, toJson: toEventValue });
   const [focused, setFocused] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unregisterFlush = useRef<(() => void) | null>(null);
   const inputElement = useRef<HTMLInputElement | null>(null);
   const textarea = useRef<HTMLTextAreaElement | null>(null);
   const composing = useRef(false);
   const edited = useRef(false);
   const previousFocus = useRef<JsonValue | typeof uninitializedFocus>(uninitializedFocus);
   const customSpinbutton = block.kind === "number" && (block.format?.kind === "decimal" || block.focus !== undefined);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); unregisterFlush.current?.(); }, []);
   useEffect(() => {
     if (focus.status !== "ready") return;
     if (previousFocus.current === uninitializedFocus) { previousFocus.current = focus.value; return; }
@@ -86,21 +88,28 @@ export function InputBlock({ block, pointer }: Props<"input">) {
   const sendDraft = useCallback((value: string) => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
+    unregisterFlush.current?.(); unregisterFlush.current = null;
     edited.current = false;
     const normalized = toEventValue(value);
     change(typeof normalized === "number" ? inputDraft(normalized, block.kind, block.format) : value);
-    send(value, false);
+    return send(value, false);
   }, [block.kind, block.format, change, send, toEventValue]);
   const markChanged = (value: string) => {
     edited.current = true;
     change(value);
     if (timer.current) clearTimeout(timer.current);
-    if ((block.commit ?? "debounce") === "debounce") timer.current = setTimeout(() => sendDraft(value), 300);
+    unregisterFlush.current?.(); unregisterFlush.current = null;
+    if ((block.commit ?? "debounce") === "debounce") {
+      timer.current = setTimeout(() => { void sendDraft(value); }, 300);
+      const element = inputElement.current ?? textarea.current;
+      if (element) unregisterFlush.current = registerPendingFlush(element, () => sendDraft(value));
+    }
   };
   const commit = (value: string) => { if (edited.current) sendDraft(value); };
   const cancel = () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
+    unregisterFlush.current?.(); unregisterFlush.current = null;
     edited.current = false;
     change(initialDraft);
     finish();
