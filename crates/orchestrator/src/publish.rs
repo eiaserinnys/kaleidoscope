@@ -405,6 +405,20 @@ impl AppState {
                 {
                     continue;
                 }
+                if let (Some(workspace_id), None) = (workspace_id, preferred_device) {
+                    let active: Option<String> = tx
+                        .query_row(
+                            "SELECT json_extract(layout, '$.active_workspace_id') FROM device_layouts WHERE device_id=?1",
+                            [id],
+                            |row| row.get(0),
+                        )
+                        .optional()
+                        .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_OPEN_TARGET_DATABASE_FAILED()))?
+                        .flatten();
+                    if active.as_deref() != Some(workspace_id) {
+                        continue;
+                    }
+                }
                 let row: Option<(String, Option<String>)> = tx.query_row("SELECT name,last_active_at FROM devices WHERE id=?1 AND account_id=?2 AND revoked_at IS NULL", params![id, account_id], |r| Ok((r.get(0)?,r.get(1)?))).optional().map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_OPEN_TARGET_DATABASE_FAILED()))?;
                 if let Some((name, active)) = row {
                     values.push((id.clone(), name, active.unwrap_or_default()));
