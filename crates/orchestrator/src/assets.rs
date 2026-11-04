@@ -177,6 +177,40 @@ pub(super) fn verify_client_entry(
     Ok(())
 }
 
+pub(super) fn verify_icon(
+    db: &Connection,
+    account: &str,
+    definition: &AppDefinition,
+) -> Result<(), CoreError> {
+    if let Some(icon) = &definition.icon {
+        let format = if let Some(format) =
+            kaleidoscope_contract::builtin::bundled_asset_format(&icon.asset, icon.version)
+        {
+            format
+        } else {
+            let asset = get_in(db, account, &icon.asset, icon.version, || {
+                kaleidoscope_contract::errors::ASSET_APP_ICON_LOOKUP_FAILED(
+                    &definition.id,
+                    &icon.asset,
+                    icon.version,
+                )
+            })?;
+            asset
+                .ok_or_else(|| {
+                    kaleidoscope_contract::errors::ASSET_APP_ICON_NOT_FOUND(
+                        &definition.id,
+                        &icon.asset,
+                        icon.version,
+                    )
+                })?
+                .0
+                .format
+        };
+        icon.validate_format(&definition.id, format)?;
+    }
+    Ok(())
+}
+
 impl AppState {
     pub(super) fn upload_asset(&self, upload: &AssetUpload) -> Result<AssetMeta, CoreError> {
         let prepared = prepare(upload)?;

@@ -36,7 +36,7 @@ pub fn builtin_apps() -> Vec<RegistryApp> {
                 .find(|(id, _)| *id == identity.id)
                 .expect("기본 앱 정의")
                 .1;
-            let definition = parse_app_definition(json).expect("유효한 기본 앱 정의");
+            let definition = parse_builtin_definition(json).expect("유효한 기본 앱 정의");
             let date = identity.updated_at.to_string();
             RegistryApp {
                 app: App {
@@ -55,6 +55,25 @@ pub fn builtin_apps() -> Vec<RegistryApp> {
             }
         })
         .collect()
+}
+
+fn parse_builtin_definition(
+    json: &str,
+) -> Result<kaleidoscope_contract::AppDefinition, kaleidoscope_contract::CoreError> {
+    let definition = parse_app_definition(json)?;
+    if let Some(icon) = &definition.icon {
+        let format =
+            kaleidoscope_contract::builtin::bundled_asset_format(&icon.asset, icon.version)
+                .ok_or_else(|| {
+                    kaleidoscope_contract::errors::ASSET_APP_ICON_NOT_FOUND(
+                        &definition.id,
+                        &icon.asset,
+                        icon.version,
+                    )
+                })?;
+        icon.validate_format(&definition.id, format)?;
+    }
+    Ok(definition)
 }
 
 pub fn builtin_runtime_specs() -> Vec<kaleidoscope_contract::worker::BuiltinRuntimeSpec> {
@@ -226,9 +245,43 @@ mod tests {
                 &meta.id,
                 meta.version
             ));
+            assert_eq!(
+                kaleidoscope_contract::builtin::bundled_asset_format(&meta.id, meta.version),
+                Some(meta.format)
+            );
             assert_eq!(meta.byte_size, bytes.len() as u64);
             assert_eq!(meta.sha256, format!("{:x}", Sha256::digest(bytes)));
             kaleidoscope_data::asset_validation::validate_bytes(meta.format, bytes).unwrap();
         }
+    }
+
+    #[test]
+    fn builtin_app_icon_obeys_declaration_version_and_format_checks() {
+        let mut app: serde_json::Value =
+            serde_json::from_str(APPS.iter().find(|(id, _)| *id == "weather").unwrap().1).unwrap();
+        app["requires"]["blocks"] =
+            serde_json::json!(kaleidoscope_contract::APP_ICON_BLOCK_SET_VERSION);
+        app["icon"] = serde_json::json!({"asset":"builtin-weather-clear","version":1});
+        assert!(parse_builtin_definition(&app.to_string()).is_ok());
+        app["icon"]["version"] = serde_json::json!(2);
+        assert_eq!(
+            parse_builtin_definition(&app.to_string())
+                .unwrap_err()
+                .id
+                .as_deref(),
+            Some("APP_ICON_VERSION_MISMATCH")
+        );
+        app["assets"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"id":"builtin-agent-client","version":1}));
+        app["icon"] = serde_json::json!({"asset":"builtin-agent-client","version":1});
+        assert_eq!(
+            parse_builtin_definition(&app.to_string())
+                .unwrap_err()
+                .id
+                .as_deref(),
+            Some("ASSET_APP_ICON_FORMAT_INVALID")
+        );
     }
 }

@@ -61,6 +61,46 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
 
+    if let Some(icon) = &definition.icon {
+        if icon.version == 0 {
+            return Err(crate::errors::APP_ICON_VERSION_INVALID(
+                &definition.id,
+                &icon.asset,
+                icon.version,
+            ));
+        }
+        match definition
+            .assets
+            .iter()
+            .find(|asset| asset.id == icon.asset)
+        {
+            None => {
+                return Err(crate::errors::APP_ICON_ASSET_UNDECLARED(
+                    &definition.id,
+                    &icon.asset,
+                    icon.version,
+                ))
+            }
+            Some(asset) if asset.version != icon.version => {
+                return Err(crate::errors::APP_ICON_VERSION_MISMATCH(
+                    &definition.id,
+                    &icon.asset,
+                    icon.version,
+                    asset.version,
+                ))
+            }
+            Some(_) => {}
+        }
+        if definition.requires.blocks < crate::APP_ICON_BLOCK_SET_VERSION {
+            return Err(crate::errors::APP_ICON_BLOCK_SET_REQUIRED(
+                &definition.id,
+                &icon.asset,
+                icon.version,
+                crate::APP_ICON_BLOCK_SET_VERSION,
+            ));
+        }
+    }
+
     let mut fixed_grid_item_width = None;
     data::walk_definition_blocks(&definition, &mut |pointer, block| {
         if let Block::Repeat {

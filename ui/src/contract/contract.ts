@@ -101,7 +101,11 @@ id: string,
 /**
  * 화면에 보이는 이름.
  */
-name: string, description?: string, requires: Requires, 
+name: string, description?: string, 
+/**
+ * 앱 아이콘. assets에 같은 id와 판을 선언한 SVG, PNG 또는 WebP 자산이다.
+ */
+icon?: AppIconRef, requires: Requires, 
 /**
  * 앱이 참조할 수 있는 자산과 고정된 판.
  */
@@ -159,6 +163,11 @@ window_title?: WindowTitleDecl,
  * 창 안을 채우는 블록 트리의 뿌리.
  */
 ui: Block, };
+
+/**
+ * 앱 아이콘이 가리키는 불변 자산.
+ */
+export type AppIconRef = { asset: string, version: number, };
 
 export type AppValueList = { bucket_id: string, items: Array<AppValueMeta>, };
 
